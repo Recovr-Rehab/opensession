@@ -3,7 +3,7 @@ import { statusMenuIcon } from "../../lib/sidebar-lanes";
 import { MINE_STATUS_META, type CtxEntry } from "../../lib/sidebar-types";
 import { snoozePresets } from "../../lib/snoozes";
 import { IconCheck, IconChevronRight, IconMoon, IconStatusRing } from "../icons";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { MenuShortcut } from "../../ui/menu";
 
@@ -70,6 +70,19 @@ export function SidebarCtxMenu({
 	entries: CtxEntry[];
 	onClose: () => void;
 }) {
+	const menuRef = useRef<HTMLDivElement>(null);
+	const [menuPosition, setMenuPosition] = useState({ left: x, top: y });
+	useLayoutEffect(() => {
+		const menu = menuRef.current;
+		if (!menu) return;
+		const gutter = 8;
+		const rect = menu.getBoundingClientRect();
+		setMenuPosition({
+			left: Math.max(gutter, Math.min(x, window.innerWidth - rect.width - gutter)),
+			top: Math.max(gutter, Math.min(y, window.innerHeight - rect.height - gutter)),
+		});
+	}, [x, y, entries]);
+
 	// Flyout state + hover grace so the pointer can
 	// cross the gap between the menu and the panel.
 	const [sub, setSub] = useState<{
@@ -109,8 +122,9 @@ export function SidebarCtxMenu({
 	return createPortal(
 		<>
 			<div
+				ref={menuRef}
 				className="smooth-shadow-ring-md [--smooth-ring-color:var(--popup-ring)] [corner-shape:squircle] [&_button:not(.tab-color-swatch):hover]:bg-hover!"
-				style={{ ...CTX_MENU_STYLE, left: x, top: y }}
+				style={{ ...CTX_MENU_STYLE, ...menuPosition }}
 				onClick={(e) => e.stopPropagation()}
 			>
 				{entries.map((entry, i) => {
