@@ -604,7 +604,8 @@ function envSeedContent(repo: Repo, rel: string): string | null {
   return content;
 }
 
-/** Re-seed env into a pool member about to (re)boot its dev server.
+/** Re-seed env into a pool member about to (re)boot its dev server. Exported
+ *  for tests.
  *
  *  These files carry credentials that rotate, and the boot paths advance the
  *  git tree but never them — so a container keeps whatever was current the day
@@ -614,7 +615,7 @@ function envSeedContent(repo: Repo, rel: string): string | null {
  *
  *  Warn rather than fail: a host file we can't read is no reason to refuse a
  *  reboot, and the member still has its previous copy. */
-async function reseedEnv(c: PoolContainer): Promise<void> {
+export async function reseedEnv(c: PoolContainer): Promise<void> {
   const repo = configuredRepos()[c.repoId];
   if (!repo) return;
   for (const rel of SEED_ENV_FILES) {
@@ -628,8 +629,8 @@ async function reseedEnv(c: PoolContainer): Promise<void> {
 
 /** Same seeding for a docker container that hasn't started yet, where exec
  *  isn't available — `docker cp` needs a path, so the (already gitignored)
- *  content goes through a private temp file. */
-async function copySeedEnvFiles(name: string, repo: Repo): Promise<void> {
+ *  content goes through a private temp file. Exported for tests. */
+export async function copySeedEnvFiles(name: string, repo: Repo): Promise<void> {
   const staging = mkdtempSync(join(tmpdir(), "os-preview-seed-"));
   try {
     for (const rel of SEED_ENV_FILES) {
