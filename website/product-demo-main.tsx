@@ -137,7 +137,43 @@ const sessions: UnifiedSession[] = [
 		workspaceId: "project-release",
 		model: "openai/gpt-5.6-sol",
 	},
+	...([
+		["import-csv", "Import contacts from a CSV", 63, 214, "anthropic/claude-opus-5"],
+		["billing-webhooks", "Retry failed billing webhooks", 88, 240, "openai/gpt-5.6-sol"],
+		["onboarding-empty", "Rewrite the onboarding empty states", 104, 268, "anthropic/claude-sonnet-5"],
+		["flaky-e2e", "Track down the flaky end-to-end test", 132, 310, "anthropic/claude-opus-5"],
+		["audit-log", "Add an audit log to settings", 176, 384, "openai/gpt-5.6-terra"],
+		["image-uploads", "Speed up image uploads", 214, 430, "anthropic/claude-sonnet-5"],
+		["dark-mode-charts", "Fix chart colours in dark mode", 268, 502, "openai/gpt-5.6-sol"],
+		["stale-invites", "Expire stale team invites", 322, 590, "anthropic/claude-opus-5"],
+	] as const).map(([slug, title, activeMinutes, createdMinutes, model]) => ({
+		id: `bks-demo-${slug}`,
+		claudeSessionId: `demo-${slug}`,
+		source: "opensession" as const,
+		branch: `alex/${slug}`,
+		worktreeDir: `/workspace/${slug}`,
+		startedBy: "Alex",
+		title,
+		lastActivity: minutesAgo(activeMinutes),
+		createdAt: minutesAgo(createdMinutes),
+		isRunning: false,
+		transcriptPath: `/demo/${slug}.jsonl`,
+		mode: "code" as const,
+		repo: "opensession",
+		workspaceId: `project-${slug}`,
+		model,
+	})),
 ];
+
+/** Rows carrying activity you have not looked at yet: bold, in the product's
+ *  own unread weight. */
+const unreadSessionIds = new Set([
+	"bks-demo-checkout",
+	"bks-demo-search",
+	"bks-demo-import-csv",
+	"bks-demo-billing-webhooks",
+	"bks-demo-flaky-e2e",
+]);
 
 const demoPresence = [
 	{ user: "Kent", sessionId: activeSessionId },
@@ -194,13 +230,109 @@ const transcripts: Record<string, TranscriptEntry[]> = {
 		},
 		{
 			id: "entry-5",
-			type: "assistant",
-			content:
-				"Presence now appears in every shared workspace. The focused tests pass and pull request #1842 is ready for review.",
-			timestamp: minutesAgo(4),
-			model: "openai/gpt-5.6-sol",
+			type: "tool_use",
+			content: "",
+			timestamp: minutesAgo(34),
+			toolName: "read",
+			toolInput: { filePath: "/workspace/opensession/src/server/ws-hub.ts" },
+			toolUseId: "tool-2",
 			seq: 5,
 			changeSeq: 5,
+		},
+		{
+			id: "entry-6",
+			type: "tool_result",
+			content:
+				"Read 412 lines. Presence is broadcast per session; workspaces have no channel of their own yet.",
+			timestamp: minutesAgo(34),
+			toolName: "read",
+			toolUseId: "tool-2",
+			seq: 6,
+			changeSeq: 6,
+		},
+		{
+			id: "entry-7",
+			type: "assistant",
+			content:
+				"A workspace is just the sessions inside it, so presence can fold up rather than get its own channel. I'll roll each session's viewers into the workspace row and de-duplicate whoever is in two at once.",
+			timestamp: minutesAgo(33),
+			model: "openai/gpt-5.6-sol",
+			seq: 7,
+			changeSeq: 7,
+		},
+		{
+			id: "entry-8",
+			type: "tool_use",
+			content: "",
+			timestamp: minutesAgo(31),
+			toolName: "edit",
+			toolInput: {
+				filePath: "/workspace/opensession/src/frontend/components/Sidebar.tsx",
+				oldString: "const viewers = sessionViewers(row.sessions[0]);",
+				newString: "const viewers = workspaceViewers(row.sessions, currentUser);",
+			},
+			toolUseId: "tool-3",
+			seq: 8,
+			changeSeq: 8,
+		},
+		{
+			id: "entry-9",
+			type: "tool_result",
+			content: "Edited Sidebar.tsx: 1 replacement.",
+			timestamp: minutesAgo(31),
+			toolName: "edit",
+			toolUseId: "tool-3",
+			seq: 9,
+			changeSeq: 9,
+		},
+		{
+			id: "entry-10",
+			type: "user",
+			content: "Overlap the faces when more than one person is in the same workspace.",
+			timestamp: minutesAgo(28),
+			seq: 10,
+			changeSeq: 10,
+		},
+		{
+			id: "entry-11",
+			type: "assistant",
+			content:
+				"Done. The face on top carries a 2px ring in the row's own colour, so the pile reads as a stack on every row state instead of a row of separate avatars.",
+			timestamp: minutesAgo(26),
+			model: "openai/gpt-5.6-sol",
+			seq: 11,
+			changeSeq: 11,
+		},
+		{
+			id: "entry-12",
+			type: "tool_use",
+			content: "",
+			timestamp: minutesAgo(22),
+			toolName: "bash",
+			toolInput: { command: "bun test src/frontend/components/Sidebar.test.tsx" },
+			toolUseId: "tool-4",
+			seq: 12,
+			changeSeq: 12,
+		},
+		{
+			id: "entry-13",
+			type: "tool_result",
+			content: "34 pass, 0 fail. Ran 34 tests across 1 file. [1.42s]",
+			timestamp: minutesAgo(21),
+			toolName: "bash",
+			toolUseId: "tool-4",
+			seq: 13,
+			changeSeq: 13,
+		},
+		{
+			id: "entry-14",
+			type: "assistant",
+			content:
+				"Presence now appears in every shared workspace, and the pull request is up.\n\n- **Sidebar** rolls each session's viewers into the workspace row, deduplicated\n- **Faces overlap** with a ring in the row's colour, so a stack stays legible on hover and selection\n- **Tests** cover the roll-up and the self-suppression rule\n\nPull request #1842 is ready for review.",
+			timestamp: minutesAgo(4),
+			model: "openai/gpt-5.6-sol",
+			seq: 14,
+			changeSeq: 14,
 		},
 	],
 };
@@ -296,7 +428,7 @@ const responseFor = (url: URL, method: string): Response => {
 	if (path === "/api/open-prs") return json({ prs: [] });
 	if (path === "/api/feeds") return json({ feeds: [] });
 	if (path === "/api/todos") return json({ todos: [] });
-	if (path === "/api/pins") return json({ pins: [activeSessionId] });
+	if (path === "/api/pins") return json({ pins: [] });
 	if (path === "/api/ui-prefs") return json({ prefs: {} });
 	if (path === "/api/lanes") return json({ lanes: {} });
 	if (path === "/api/reads") return json({ reads: {} });
@@ -477,6 +609,20 @@ localStorage.setItem("opensession-sidebar-w", "264");
 // One repo, so the sidebar resolves its "auto" grouping to the plain inbox
 // straight away instead of painting repo bands until /api/repos answers.
 localStorage.setItem("opensession-repo-count", "1");
+// Read marks, so a few rows carry the unread weight. A row only counts as
+// unread once it HAS a mark that its activity has since passed, so every other
+// session is marked at its own last activity rather than left unmarked.
+localStorage.setItem(
+	"opensession-reads:alex",
+	JSON.stringify(
+		Object.fromEntries(
+			sessions.map((session) => [
+				session.id,
+				unreadSessionIds.has(session.id) ? minutesAgo(600) : session.lastActivity,
+			]),
+		),
+	),
+);
 localStorage.setItem(
 	"opensession-sidebar-hidden-tools",
 	JSON.stringify([
