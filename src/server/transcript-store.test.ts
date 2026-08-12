@@ -158,7 +158,7 @@ describe("big-entry bounding", () => {
       type: "tool_use",
       toolName: "Bash",
       toolInput: { command: "echo hi", giant: "y".repeat(50_000) },
-      images: [dataUrl, "https://example.com/pic.png"],
+      images: [dataUrl, "https://cdn.tella.tv/pic.png"],
     });
     const res = store.appendTranscriptEvents(sid, [big]);
     expect(res!.inserted).toBe(1);
@@ -191,7 +191,7 @@ describe("big-entry bounding", () => {
       keys: ["command", "giant"],
     });
     expect(wire.images![0]).toBe("os-blob:big-1/0");
-    expect(wire.images![1]).toBe("https://example.com/pic.png"); // http srcs untouched
+    expect(wire.images![1]).toBe("https://cdn.tella.tv/pic.png"); // http srcs untouched
 
     // getFullEntry resolves the unstripped original.
     const full = store.getFullEntry(sid, "big-1")!;

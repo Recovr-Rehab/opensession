@@ -7,8 +7,17 @@ import { withToolPresentations } from "@tellahq/opensession-protocol/tool-presen
 import { SLACK_ID_TO_NAME } from "./shared/user-mappings";
 import { stripContext } from "./prompt-context";
 import { configuredIntegration } from "./config";
-import { isGrepResultOutput } from "./transcript-media";
-export { isGrepResultOutput, sanitizeTranscriptMediaEntry } from "./transcript-media";
+import {
+  isFileReadOutput,
+  isGrepResultOutput,
+  isReservedMediaHost,
+} from "./transcript-media";
+export {
+  isFileReadOutput,
+  isGrepResultOutput,
+  isReservedMediaHost,
+  sanitizeTranscriptMediaEntry,
+} from "./transcript-media";
 
 const SLACK_USERS = SLACK_ID_TO_NAME;
 
@@ -188,7 +197,9 @@ export function extractImplicitMedia(text: string): {
   const images: string[] = [];
   const videos: string[] = [];
   if (!text || text.length > 512_000) return { images, videos };
-  if (isGrepResultOutput(text)) return { images, videos };
+  // Quoted code is not an artifact: search snippets and file listings carry
+  // fixture URLs (see transcript-media.ts for why this stays envelope-shaped).
+  if (isGrepResultOutput(text) || isFileReadOutput(text)) return { images, videos };
   const seen = new Set<string>();
   const add = (src: string, pathLike: string) => {
     if (seen.has(src)) return;
@@ -208,7 +219,9 @@ export function extractImplicitMedia(text: string): {
     }
     add(`/media?path=${encodeURIComponent(p)}`, p);
   }
-  for (const m of text.matchAll(REMOTE_MEDIA_RE)) add(m[1], m[1]);
+  // Reserved documentation/testing names serve nothing, wherever they turn up.
+  for (const m of text.matchAll(REMOTE_MEDIA_RE))
+    if (!isReservedMediaHost(m[1])) add(m[1], m[1]);
   return { images, videos };
 }
 

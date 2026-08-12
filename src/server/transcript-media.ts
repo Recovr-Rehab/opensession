@@ -18,21 +18,65 @@ export function isGrepResultOutput(text: string): boolean {
 }
 
 /**
- * Read-time repair for transcript-v2 rows persisted before grep output was
- * excluded from implicit media detection. Explicit marker media is preserved;
- * only unfeatured media inferred from the search snippets is removed.
+ * The read tool's result envelope. Its body is quoted source, so a URL in it
+ * belongs to the code, not to the session: a ReScript test's
+ * `"https://example.com/image.png"` and a Rust test's
+ * `http://example.com/delayed.mp4` filled a workspace filmstrip with broken
+ * tiles (2026-08-12), the same failure grep output caused a day earlier.
+ *
+ * Kept tied to the envelope for the same reason as grep, and for the same
+ * reason nothing here tries to recognise "code-like" URLs: an MCP tool that
+ * returns a real media URL in its JSON must keep rendering.
+ */
+const READ_RESULT_HEADER = /^<path>[^\n]*<\/path>\r?\n<type>file<\/type>/;
+
+export function isFileReadOutput(text: string): boolean {
+  return READ_RESULT_HEADER.test(text.trimStart());
+}
+
+/**
+ * Names reserved for documentation and testing (RFC 2606, RFC 6761). Nothing
+ * real is ever served from them, so a URL on one is a fixture wherever it was
+ * found — an envelope-independent rule, which is what makes it worth having
+ * next to the two envelope checks above. `.localhost` and `.test` are included
+ * deliberately: the strip renders in the reader's browser, which is not the
+ * machine the agent ran on.
+ */
+const RESERVED_HOST_RE =
+  /(?:^|\.)(?:example\.(?:com|net|org)|example|test|invalid|localhost)$/i;
+
+export function isReservedMediaHost(src: string): boolean {
+  try {
+    return RESERVED_HOST_RE.test(new URL(src).hostname);
+  } catch {
+    // Unparseable as a URL — not something a browser can load either.
+    return true;
+  }
+}
+
+/**
+ * Read-time repair for transcript-v2 rows persisted before these guards
+ * existed. Explicit marker media (`featuredMedia`) is always preserved; only
+ * media *inferred* from quoted code — a search snippet, a file listing, or any
+ * reserved-name URL — is removed. This is the only path that heals the rows
+ * already in the store, so it carries every predicate the extractor applies.
  */
 export function sanitizeTranscriptMediaEntry<T extends TranscriptEntry>(entry: T): T {
-  if (
-    entry.type !== "tool_result" ||
-    !isGrepResultOutput(entry.content || "") ||
-    (!entry.images?.length && !entry.videos?.length)
-  )
+  if (!entry.images?.length && !entry.videos?.length) return entry;
+
+  const content = entry.content || "";
+  const quotedCode =
+    entry.type === "tool_result" &&
+    (isGrepResultOutput(content) || isFileReadOutput(content));
+  const featured = new Set(entry.featuredMedia || []);
+  const keep = (src: string) =>
+    featured.has(src) ||
+    (!quotedCode && !(/^https?:\/\//i.test(src) && isReservedMediaHost(src)));
+  if ((entry.images || []).every(keep) && (entry.videos || []).every(keep))
     return entry;
 
-  const featured = new Set(entry.featuredMedia || []);
-  const images = entry.images?.filter((src) => featured.has(src));
-  const videos = entry.videos?.filter((src) => featured.has(src));
+  const images = entry.images?.filter(keep);
+  const videos = entry.videos?.filter(keep);
   const repaired = { ...entry };
   if (images?.length) repaired.images = images;
   else delete repaired.images;

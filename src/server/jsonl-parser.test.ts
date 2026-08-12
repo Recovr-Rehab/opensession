@@ -658,11 +658,30 @@ describe("implicit media in code search output", () => {
 
   it("still extracts a genuine remote media URL outside grep output", () => {
     expect(
-      extractImplicitMedia("Rendered https://cdn.example.test/renders/demo.mp4"),
+      extractImplicitMedia("Rendered https://cdn.tella.tv/renders/demo.mp4"),
     ).toEqual({
       images: [],
-      videos: ["https://cdn.example.test/renders/demo.mp4"],
+      videos: ["https://cdn.tella.tv/renders/demo.mp4"],
     });
+  });
+
+  it("does not turn URLs in a file read's quoted source into attachments", () => {
+    const readOutput = `<path>/repo/src/timeline.rs</path>
+<type>file</type>
+<content>
+12290:     let poster = "https://cdn.tella.tv/fixtures/image.png";
+12291:     let source = "http://media.invalid/delayed.mp4";
+</content>`;
+    expect(extractImplicitMedia(readOutput)).toEqual({ images: [], videos: [] });
+  });
+
+  it("drops reserved documentation hosts wherever they appear", () => {
+    // No envelope here at all — plain assistant prose.
+    expect(
+      extractImplicitMedia(
+        "Try https://example.com/image.png or http://cdn.example.test/clip.mp4 or http://localhost/a.png",
+      ),
+    ).toEqual({ images: [], videos: [] });
   });
 
   it("repairs old stored rows while preserving explicitly featured media", () => {
@@ -679,6 +698,38 @@ describe("implicit media in code search output", () => {
     expect(repaired.images).toBeUndefined();
     expect(repaired.videos).toEqual([featured]);
     expect(repaired.featuredMedia).toEqual([featured]);
+  });
+
+  it("repairs a stored file-read row and reserved-host media in any entry", () => {
+    const readRow = sanitizeTranscriptMediaEntry({
+      id: "tr-read",
+      type: "tool_result",
+      content: `<path>/repo/src/test.res</path>\n<type>file</type>\n<content>\n1: let src = "https://cdn.tella.tv/image.png"\n</content>`,
+      timestamp: TS,
+      images: ["https://cdn.tella.tv/image.png"],
+    });
+    expect(readRow.images).toBeUndefined();
+
+    // Assistant text gets implicit extraction too, so it needs the same repair.
+    const prose = sanitizeTranscriptMediaEntry({
+      id: "a1",
+      type: "assistant",
+      content: "the fixture is https://example.com/image.png",
+      timestamp: TS,
+      images: ["https://example.com/image.png"],
+    });
+    expect(prose.images).toBeUndefined();
+  });
+
+  it("leaves a clean entry untouched (same object)", () => {
+    const entry = {
+      id: "tr-ok",
+      type: "tool_result" as const,
+      content: "rendered the demo",
+      timestamp: TS,
+      videos: ["https://cdn.tella.tv/renders/demo.mp4"],
+    };
+    expect(sanitizeTranscriptMediaEntry(entry)).toBe(entry);
   });
 });
 

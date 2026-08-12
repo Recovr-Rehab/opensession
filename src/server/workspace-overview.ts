@@ -1,9 +1,10 @@
 /**
  * Workspace overview — the data behind the floating "what is this workspace
- * about" panel in the session viewer: the opening prompt (the first thing a
- * human typed into the workspace's oldest session) plus every piece of media
- * (screenshots from tool results, pasted images, recorded videos) across all
- * member sessions.
+ * about" panel in the session viewer (and the sidebar hover card): the opening
+ * prompt (the first thing a human typed into the workspace's oldest session)
+ * plus the media the workspace PRODUCED — screenshots from tool results,
+ * pasted images, recorded videos — across all member sessions. A URL a tool
+ * merely mentioned is not that; see `isWorkspaceArtifact`.
  *
  * Media is returned as *references*, not bytes: transcript images are base64
  * data URLs that would balloon the JSON to many MB, so each one becomes a
@@ -12,6 +13,7 @@
  * /media, and http(s) image URLs pass through as-is.
  */
 
+import { existsSync } from "fs";
 import { parseTranscriptAsync } from "./jsonl-parser";
 import { mergedSessionTranscriptAsync } from "./sessions";
 import type { TranscriptEntry, UnifiedSession } from "./types";
@@ -59,9 +61,43 @@ function isOpeningPrompt(e: TranscriptEntry): boolean {
 }
 
 function imageSrcFor(sessionId: string, entry: TranscriptEntry, idx: number, raw: string): string {
-  // Only data URLs need the indirection; a real URL renders directly.
-  if (!raw.startsWith("data:")) return raw;
+  // Real bytes need the indirection — inline as a data URL, or held back in
+  // the store behind an `os-blob:` marker (docs/transcripts.md §1), which no
+  // browser can load. Everything else is already a URL the panel can request.
+  if (!raw.startsWith("data:") && !raw.startsWith("os-blob:")) return raw;
   return `/api/sessions/${encodeURIComponent(sessionId)}/transcript-image/${encodeURIComponent(entry.id)}/${idx}`;
+}
+
+/**
+ * Is this src an artifact OF the workspace, rather than something a tool
+ * merely mentioned?
+ *
+ * The transcript already draws this line — implicit media attaches to an entry
+ * but stays folded, and only `featuredMedia` is shown inline — and the panel
+ * has to draw it too, because it is the one surface that promotes every
+ * attachment to a visible tile. Measured across the whole store on 2026-08-12:
+ * of 3,417 remote URLs harvested from tool text, not one had ever been marked
+ * featured, while 533 were `example.com` fixtures and 903 were Slack avatars.
+ * The rest are largely unloadable for a reader anyway (credentialed Slack and
+ * Linear file hosts, expiring signed S3 links), which is what the broken tiles
+ * in the panel were.
+ *
+ * So: bytes we hold, files that still exist, and anything the agent explicitly
+ * marked. A genuine media URL from an MCP tool is the deliberate cost — it
+ * stays in the transcript, and an `OPENSESSION_IMAGE:`/`OPENSESSION_VIDEO:`
+ * marker is how an agent says "show this one".
+ */
+export function isWorkspaceArtifact(src: string, featured: Set<string>): boolean {
+  if (featured.has(src)) return true;
+  if (src.startsWith("data:") || src.startsWith("os-blob:")) return true;
+  if (src.startsWith("/api/sessions/")) return true;
+  const local = src.match(/^(?:\/[a-z-]+)?\/media\?path=([^&]+)$/i);
+  if (!local) return false;
+  try {
+    return existsSync(decodeURIComponent(local[1]));
+  } catch {
+    return false;
+  }
 }
 
 export async function buildWorkspaceOverview(
@@ -97,16 +133,20 @@ export async function buildWorkspaceOverview(
         lastMessage = { content: e.content, sessionId: session.id, at: e.timestamp };
     }
     for (const e of entries) {
+      const featured = new Set(e.featuredMedia || []);
       for (let i = 0; i < (e.images?.length || 0); i++) {
+        const raw = e.images![i];
+        if (!isWorkspaceArtifact(raw, featured)) continue;
         media.push({
           kind: "image",
-          src: imageSrcFor(session.id, e, i, e.images![i]),
+          src: imageSrcFor(session.id, e, i, raw),
           sessionId: session.id,
           sessionTitle: session.title,
           at: e.timestamp,
         });
       }
       for (const v of e.videos || []) {
+        if (!isWorkspaceArtifact(v, featured)) continue;
         media.push({
           kind: "video",
           src: v,
