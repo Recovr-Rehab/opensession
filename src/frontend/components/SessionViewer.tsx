@@ -1375,10 +1375,24 @@ export function SessionViewer({
 	useEffect(
 		() =>
 			addHandler((msg) => {
-				if (msg.type !== "session_note" || msg.sessionId !== session.id) return;
-				setNotes((prev) =>
-					prev.some((n) => n.id === msg.note.id) ? prev : [...prev, msg.note],
-				);
+				if (
+					(msg.type !== "session_note" &&
+						msg.type !== "session_note_deleted") ||
+					msg.sessionId !== session.id
+				)
+					return;
+				if (msg.type === "session_note_deleted") {
+					setNotes((prev) => prev.filter((n) => n.id !== msg.noteId));
+					return;
+				}
+				setNotes((prev) => {
+					const i = prev.findIndex((n) => n.id === msg.note.id);
+					if (i < 0) return [...prev, msg.note];
+					// An edit re-broadcasts the whole note under the same id.
+					const next = [...prev];
+					next[i] = msg.note;
+					return next;
+				});
 			}),
 		[addHandler, session.id],
 	);

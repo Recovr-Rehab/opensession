@@ -12,6 +12,8 @@ const saved = process.env.OPENSESSION_STATE_DIR;
 process.env.OPENSESSION_STATE_DIR = SCRATCH;
 const {
 	addSessionNote,
+	deleteSessionNote,
+	editSessionNote,
 	isValidNoteSession,
 	listSessionNotes,
 	mentionedTeammates,
@@ -51,6 +53,42 @@ describe("session notes", () => {
 		expect(isValidNoteSession("os a")).toBe(false);
 		expect(isValidNoteSession("")).toBe(false);
 		expect(isValidNoteSession(42)).toBe(false);
+	});
+
+	test("only the author can edit a note", () => {
+		const note = addSessionNote("os-owned", "Kent", "mine")!;
+		expect(editSessionNote("os-owned", note.id, "changed", "Michiel")).toEqual({
+			ok: false,
+			reason: "not_author",
+		});
+		expect(listSessionNotes("os-owned")[0]!.text).toBe("mine");
+		// Case and surrounding space don't decide authorship.
+		const ok = editSessionNote("os-owned", note.id, "changed", " kent ");
+		expect(ok.ok).toBe(true);
+		expect(listSessionNotes("os-owned")[0]!.text).toBe("changed");
+		expect(listSessionNotes("os-owned")[0]!.editedAt).toBeGreaterThan(0);
+	});
+
+	test("only the author can delete a note", () => {
+		const note = addSessionNote("os-del", "Kent", "mine")!;
+		expect(deleteSessionNote("os-del", note.id, "Michiel")).toEqual({
+			ok: false,
+			reason: "not_author",
+		});
+		expect(listSessionNotes("os-del")).toHaveLength(1);
+		expect(deleteSessionNote("os-del", note.id, "Kent").ok).toBe(true);
+		expect(listSessionNotes("os-del")).toEqual([]);
+	});
+
+	test("a missing note is not_found, not not_author", () => {
+		expect(deleteSessionNote("os-del", "nope", "Kent")).toEqual({
+			ok: false,
+			reason: "not_found",
+		});
+		expect(editSessionNote("os-del", "nope", "x", "Kent")).toEqual({
+			ok: false,
+			reason: "not_found",
+		});
 	});
 
 	test("mentions never include the sender", () => {

@@ -37,6 +37,8 @@ export interface SessionNote {
 	text: string;
 	/** ms epoch */
 	ts: number;
+	/** ms epoch of the last edit; absent on notes never edited. */
+	editedAt?: number;
 }
 
 /** Session ids are minted by us (`os-<uuidv7>`), but keep the filename mapping
@@ -93,6 +95,59 @@ export function addSessionNote(
 	if (!existsSync(NOTES_DIR)) mkdirSync(NOTES_DIR, { recursive: true });
 	writeJsonAtomic(fileFor(sessionId), { notes: all.slice(-MAX_STORED) });
 	return note;
+}
+
+/** Author check, used by both mutations. Display names are what a note
+ *  carries, so the comparison is case-insensitive on the trimmed name — the
+ *  same shape the rest of the app compares identities with. */
+function isAuthor(note: SessionNote, user: string): boolean {
+	return note.user.trim().toLowerCase() === user.trim().toLowerCase();
+}
+
+/** Outcome of a mutation, so the route can pick its status code: a missing
+ *  note is a 404 and someone else's note is a 403, and the caller shouldn't
+ *  have to re-read the store to tell them apart. */
+export type NoteMutation =
+	| { ok: true; note: SessionNote }
+	| { ok: false; reason: "not_found" | "not_author" };
+
+/**
+ * Edit a note's text. Only its author may: a note is one person speaking, and
+ * a teammate silently rewriting it would make the transcript a record of
+ * something nobody said. `editedAt` is set so the UI can mark it.
+ */
+export function editSessionNote(
+	sessionId: string,
+	noteId: string,
+	text: string,
+	user: string,
+): NoteMutation {
+	const trimmed = text.trim().slice(0, MAX_TEXT_LEN);
+	if (!trimmed) return { ok: false, reason: "not_found" };
+	const all = readAll(sessionId);
+	const note = all.find((n) => n.id === noteId);
+	if (!note) return { ok: false, reason: "not_found" };
+	if (!isAuthor(note, user)) return { ok: false, reason: "not_author" };
+	note.text = trimmed;
+	note.editedAt = Date.now();
+	writeJsonAtomic(fileFor(sessionId), { notes: all });
+	return { ok: true, note };
+}
+
+/** Delete a note. Author-only, for the same reason as editing. */
+export function deleteSessionNote(
+	sessionId: string,
+	noteId: string,
+	user: string,
+): NoteMutation {
+	const all = readAll(sessionId);
+	const note = all.find((n) => n.id === noteId);
+	if (!note) return { ok: false, reason: "not_found" };
+	if (!isAuthor(note, user)) return { ok: false, reason: "not_author" };
+	writeJsonAtomic(fileFor(sessionId), {
+		notes: all.filter((n) => n.id !== noteId),
+	});
+	return { ok: true, note };
 }
 
 /**

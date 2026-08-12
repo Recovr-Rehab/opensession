@@ -217,7 +217,7 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 						variant="session"
 					/>
 				) : block.kind === "note" ? (
-					<NoteBubble note={block.note} />
+					<NoteBubble note={block.note} sessionId={sessionId} />
 				) : block.kind === "footer" ? (
 					<TurnFooter
 						entry={block.entry}

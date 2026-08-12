@@ -490,3 +490,29 @@ export async function postSessionNoteApi(
 	);
 	return data.note;
 }
+
+/** Edit a note. Author-only; the server rejects anyone else with a 403. */
+export async function editSessionNoteApi(
+	sessionId: string,
+	noteId: string,
+	text: string,
+	user: string,
+): Promise<SessionNote> {
+	const data = await request<{ note: SessionNote }>(
+		`/sessions/${encodeURIComponent(sessionId)}/notes/${encodeURIComponent(noteId)}`,
+		{ method: "PATCH", body: { text, user }, label: "Failed to edit note" },
+	);
+	return data.note;
+}
+
+/** Delete a note. Author-only, same as editing. */
+export async function deleteSessionNoteApi(
+	sessionId: string,
+	noteId: string,
+	user: string,
+): Promise<void> {
+	await request<void>(
+		`/sessions/${encodeURIComponent(sessionId)}/notes/${encodeURIComponent(noteId)}?user=${encodeURIComponent(user)}`,
+		{ method: "DELETE", label: "Failed to delete note" },
+	);
+}

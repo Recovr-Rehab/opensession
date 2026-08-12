@@ -910,7 +910,15 @@ export function Composer({
               minimized
                 ? composerTextareaPaddingMinimized
                 : composerTextareaPadding,
-              "placeholder:text-faint",
+              // A neutral grey placeholder on a tinted surface reads cool and
+              // dirty against it, and it loses contrast too: #949494 is 3.03:1
+              // on the ordinary white composer but 2.43:1 on the note fill.
+              // Warming the ink toward the surface fixes both (2.63:1) —
+              // LIGHTENING it, the intuitive move, would have taken it to
+              // 1.82:1 and made it dimmer as well as still cool.
+              noteMode
+                ? "placeholder:text-[color-mix(in_srgb,var(--text-faint)_84%,var(--yellow))]"
+                : "placeholder:text-faint",
               // With the mirror painting the styled draft, the field's own
               // glyphs go transparent and only the caret stays visible.
               hlActive

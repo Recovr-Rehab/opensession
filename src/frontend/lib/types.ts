@@ -290,6 +290,8 @@ export interface SessionNote {
 	text: string;
 	/** ms epoch */
 	ts: number;
+	/** ms epoch of the last edit; absent on notes never edited. */
+	editedAt?: number;
 }
 
 export interface UnifiedSession {
@@ -801,6 +803,7 @@ export type WSServerMessage =
 	// Broadcast to every client, not just the session's watchers, so a client
 	// elsewhere can still tell that a session has new notes.
 	| { type: "session_note"; sessionId: string; note: SessionNote }
+	| { type: "session_note_deleted"; sessionId: string; noteId: string }
 	// Collaborative notes.
 	| { type: "note_state"; noteId: string; update: string }
 	| { type: "note_update"; noteId: string; update: string }
