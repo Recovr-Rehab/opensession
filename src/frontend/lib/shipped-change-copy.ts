@@ -1,30 +1,75 @@
-const PAST_TENSE: Record<string, string> = {
-	add: "added",
-	adopt: "updated",
-	change: "changed",
-	create: "created",
-	fix: "fixed",
-	improve: "improved",
-	make: "made",
-	polish: "polished",
-	redesign: "redesigned",
-	remove: "removed",
-	replace: "replaced",
-	simplify: "simplified",
-	update: "updated",
-	use: "updated",
-};
+function sentence(value: string): string {
+	const clean = value.replace(/\s+/g, " ").trim().replace(/[.!?]+$/, "");
+	return clean ? `${clean.charAt(0).toUpperCase()}${clean.slice(1)}.` : "";
+}
 
-export function suggestedShippedChangeMessage(title: string, repo?: string): string {
+export function shippedChangeOutcome(markdown?: string): string {
+	if (!markdown) return "";
+	const lines = markdown
+		.replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+		.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+		.split(/\n+/)
+		.map((line) =>
+			line
+				.replace(/^\s*(?:#{1,6}|[-*+]|\d+\.)\s+/, "")
+				.replace(/[*_`~]/g, "")
+				.trim(),
+		)
+		.filter(Boolean);
+	for (const raw of lines) {
+		const value = raw
+			.replace(/^Deployment is live\s*[—:-]\s*/i, "")
+			.replace(/^This change\s+/i, "")
+			.trim();
+		if (
+			value.length < 20 ||
+			/^(done|pushed|merged|commit|tests?|verified|pr\s*#|updated and live)\b/i.test(value)
+		)
+			continue;
+		const first = value.split(/(?<=[.!?])\s+/)[0];
+		if (first && !/^we\s+(shipped|updated|added|changed|fixed)\b/i.test(first))
+			return sentence(first);
+	}
+	return "";
+}
+
+function visibleOutcome(value: string): string {
+	const match = value.match(/^(.+?)(\s+(?:in|via|on|through|with)\s+.+)?$/i);
+	const subject = match?.[1]?.trim() || value;
+	const qualifier = match?.[2] || "";
+	const noun = subject.split(/\s+/).at(-1)?.toLowerCase() || "";
+	const verb = noun.endsWith("s") && !noun.endsWith("ss") ? "are" : "is";
+	return `${subject} ${verb} now visible${qualifier}`;
+}
+
+export function suggestedShippedChangeMessage(
+	title: string,
+	repo?: string,
+	context?: string,
+): string {
+	const outcome = shippedChangeOutcome(context);
+	if (outcome) return outcome;
 	const clean = title
 		.replace(/^\[[^\]]+\]\s*/, "")
 		.replace(/[.!?]+$/, "")
 		.replace(repo === "tella-fusion" ? /\bOpenSession\s+/gi : /$^/, "")
 		.trim();
-	if (!clean) return "We shipped an update.";
+	if (!clean) return "The update is now available.";
+	if (/\b(now|is|are|has|have|can)\b/i.test(clean)) return sentence(clean);
 	const [verb, ...rest] = clean.split(/\s+/);
-	const action = PAST_TENSE[verb.toLowerCase()];
-	const change = action ? `${action}${rest.length ? ` ${rest.join(" ")}` : ""}` : `shipped ${clean}`;
-	const product = repo === "tella-fusion" && !/\btella\b/i.test(change) ? " in Tella" : "";
-	return `We ${change}${product}.`;
+	const object = rest.join(" ").trim();
+	const product = repo === "tella-fusion" && !/\btella\b/i.test(clean) ? " in Tella" : "";
+	const lower = verb.toLowerCase();
+	if (lower === "show" && object) return sentence(`${visibleOutcome(object)}${product}`);
+	if (["add", "create"].includes(lower) && object)
+		return sentence(`${object} is now available${product}`);
+	if (["fix"].includes(lower) && object)
+		return sentence(`${object} now works correctly${product}`);
+	if (["remove"].includes(lower) && object)
+		return sentence(`${object} is now removed${product}`);
+	if (["adopt", "change", "make", "replace", "update", "use"].includes(lower) && object)
+		return sentence(`${object} is now updated${product}`);
+	if (["improve", "polish", "redesign", "simplify"].includes(lower) && object)
+		return sentence(`${object} is now improved${product}`);
+	return sentence(`${clean} is now available${product}`);
 }

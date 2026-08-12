@@ -793,10 +793,26 @@ export function SessionViewer({
 	const [shippedChangeStatus, setShippedChangeStatus] = useState<
 		"idle" | "sharing" | "shared"
 	>("idle");
+	const [requestingShippedScreenshot, setRequestingShippedScreenshot] = useState(false);
 	useEffect(
-		() => setShippedChangeStatus("idle"),
+		() => {
+			setShippedChangeStatus("idle");
+			setRequestingShippedScreenshot(false);
+		},
 		[session.id, mergedPr?.number],
 	);
+	const requestShippedScreenshot = useCallback(() => {
+		if (!mergedPr || requestingShippedScreenshot) return;
+		setRequestingShippedScreenshot(true);
+		send({
+			type: "prompt",
+			sessionId: session.id,
+			user: getCurrentUser(),
+			content:
+				"Capture a clear after screenshot of the user-visible change from this merged PR, then publish or update this session's walkthrough with that screenshot. Verify the real UI first. Do not change product code unless the screenshot reveals a regression.",
+		});
+		toast("Screenshot requested");
+	}, [mergedPr, requestingShippedScreenshot, send, session.id]);
 	const sendShippedChangeToSlack = useCallback(async (message: string, channel: string) => {
 		if (!mergedPr) return;
 		setShippedChangeStatus("sharing");
@@ -827,14 +843,20 @@ export function SessionViewer({
 						defaultMessage: suggestedShippedChangeMessage(
 							mergedPr.title || "an update",
 							mergedPr.repo,
+							session.walkthrough?.summary,
 						),
 						screenshot: session.walkthrough?.shots?.find((shot) => shot.after)?.after,
+						requestingScreenshot: requestingShippedScreenshot,
 						status: shippedChangeStatus,
 						onShare: sendShippedChangeToSlack,
+						onRequestScreenshot: requestShippedScreenshot,
 					}
 				: undefined,
 		[
 			mergedPr,
+			requestShippedScreenshot,
+			requestingShippedScreenshot,
+			session.walkthrough?.summary,
 			session.walkthrough?.shots,
 			sendShippedChangeToSlack,
 			shippedChangeStatus,

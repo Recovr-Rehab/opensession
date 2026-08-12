@@ -54,6 +54,7 @@ describe("TranscriptBlocks shipped change action", () => {
 					screenshot: "/tmp/toggle-after.png",
 					status: "idle",
 					onShare: () => {},
+					onRequestScreenshot: () => {},
 				}}
 			/>,
 		);
@@ -72,6 +73,24 @@ describe("TranscriptBlocks shipped change action", () => {
 		expect(html).toContain("rounded-xl bg-panel p-4");
 		expect(html).not.toContain("border-line bg-panel");
 		expect(html).not.toContain("smooth-shadow-sm");
+	});
+
+	test("offers to request visual proof when no screenshot exists", () => {
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				entries={entries}
+				slackShare={{
+					prNumber: 5606,
+					sessionId: "session-1",
+					defaultMessage: "Background names are now visible in tooltips.",
+					status: "idle",
+					onShare: () => {},
+					onRequestScreenshot: () => {},
+				}}
+			/>,
+		);
+		expect(html).toContain("Request screenshot");
+		expect(html).toContain("Add visual proof to this post.");
 	});
 
 	test("does not show the action for a different merged PR", () => {

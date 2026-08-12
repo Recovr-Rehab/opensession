@@ -4,21 +4,26 @@ import { Button } from "../ui/button";
 import { Input, Select } from "../ui/input";
 import { BrandMark } from "./BrandMark";
 import { openLightbox } from "./MediaLightbox";
+import { IconCamera } from "./icons";
 
 export interface ShippedChangeComposerProps {
 	sessionId: string;
 	defaultMessage: string;
 	screenshot?: string;
+	requestingScreenshot?: boolean;
 	status: "idle" | "sharing" | "shared";
 	onShare: (message: string, channel: string) => void;
+	onRequestScreenshot?: () => void;
 }
 
 export function ShippedChangeComposer({
 	sessionId,
 	defaultMessage,
 	screenshot,
+	requestingScreenshot = false,
 	status,
 	onShare,
+	onRequestScreenshot,
 }: ShippedChangeComposerProps) {
 	const [message, setMessage] = useState(defaultMessage);
 	const [channels, setChannels] = useState<Array<{ id: string; name: string }>>([]);
@@ -93,6 +98,19 @@ export function ShippedChangeComposer({
 						/>
 					</button>
 				</figure>
+			)}
+			{!screenshot && onRequestScreenshot && (
+				<div className="mt-3 flex min-h-28 flex-col items-center justify-center gap-2 rounded-md bg-surface px-4 py-3 text-center">
+					<IconCamera size={20} className="text-faint" />
+					<div className="text-supporting text-dim">Add visual proof to this post.</div>
+					<Button
+						size="sm"
+						disabled={requestingScreenshot}
+						onClick={onRequestScreenshot}
+					>
+						{requestingScreenshot ? "Requested" : "Request screenshot"}
+					</Button>
+				</div>
 			)}
 			<div className="mt-3 flex items-center gap-2 phone:flex-col phone:items-stretch">
 				<label className="flex min-w-0 flex-1 items-center gap-2 text-meta text-dim">

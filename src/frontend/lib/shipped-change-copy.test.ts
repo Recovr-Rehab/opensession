@@ -1,22 +1,43 @@
 import { describe, expect, test } from "bun:test";
-import { suggestedShippedChangeMessage } from "./shipped-change-copy";
+import {
+	shippedChangeOutcome,
+	suggestedShippedChangeMessage,
+} from "./shipped-change-copy";
 
 describe("suggestedShippedChangeMessage", () => {
 	test("turns an imperative PR title into a short team update", () => {
 		expect(
 			suggestedShippedChangeMessage("Adopt the OpenSession toggle style", "tella-fusion"),
-		).toBe("We updated the toggle style in Tella.");
+		).toBe("The toggle style is now updated in Tella.");
 	});
 
 	test("does not repeat the product name", () => {
 		expect(suggestedShippedChangeMessage("Update Tella's toggle style", "tella-fusion")).toBe(
-			"We updated Tella's toggle style.",
+			"Tella's toggle style is now updated.",
 		);
 	});
 
-	test("keeps an unfamiliar title editable rather than inventing a verb", () => {
-		expect(suggestedShippedChangeMessage("Toggle polish", "tella-fusion")).toBe(
-			"We shipped Toggle polish in Tella.",
+	test("turns a visibility title into an outcome", () => {
+		expect(suggestedShippedChangeMessage("Show background names via tooltips", "tella-fusion")).toBe(
+			"Background names are now visible via tooltips in Tella.",
 		);
+	});
+
+	test("keeps an unfamiliar title declarative and editable", () => {
+		expect(suggestedShippedChangeMessage("Toggle polish", "tella-fusion")).toBe(
+			"Toggle polish is now available in Tella.",
+		);
+	});
+
+	test("prefers the first outcome from a walkthrough summary", () => {
+		expect(
+			suggestedShippedChangeMessage(
+				"Update backgrounds",
+				"tella-fusion",
+				"Backgrounds now have names that are visible via tooltips.\n\nVerified on mobile.",
+			),
+		).toBe("Backgrounds now have names that are visible via tooltips.");
+		expect(shippedChangeOutcome("Deployment is live — Background names now appear on hover."))
+			.toBe("Background names now appear on hover.");
 	});
 });
