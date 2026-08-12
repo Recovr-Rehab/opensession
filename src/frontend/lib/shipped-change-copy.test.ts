@@ -23,6 +23,12 @@ describe("suggestedShippedChangeMessage", () => {
 		);
 	});
 
+	test("turns a naming title into a product outcome", () => {
+		expect(suggestedShippedChangeMessage("Name built-in video backgrounds", "tella-fusion")).toBe(
+			"Built-in video backgrounds now have names in Tella.",
+		);
+	});
+
 	test("keeps an unfamiliar title declarative and editable", () => {
 		expect(suggestedShippedChangeMessage("Toggle polish", "tella-fusion")).toBe(
 			"Toggle polish is now available in Tella.",
@@ -39,5 +45,17 @@ describe("suggestedShippedChangeMessage", () => {
 		).toBe("Backgrounds now have names that are visible via tooltips.");
 		expect(shippedChangeOutcome("Deployment is live — Background names now appear on hover."))
 			.toBe("Background names now appear on hover.");
+	});
+
+	test("uses an implementation summary to name the concrete outcome", () => {
+		expect(
+			suggestedShippedChangeMessage(
+				"Name built-in video backgrounds",
+				"tella-fusion",
+				"Updated all 40 to their real macOS release names and variants, including:\n\n- Mac Tahoe Beach Dawn",
+			),
+		).toBe(
+			"All 40 built-in video backgrounds now use their real macOS release names and variants.",
+		);
 	});
 });

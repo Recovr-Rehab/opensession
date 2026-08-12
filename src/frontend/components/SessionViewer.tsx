@@ -794,6 +794,7 @@ export function SessionViewer({
 		"idle" | "sharing" | "shared"
 	>("idle");
 	const [requestingShippedScreenshot, setRequestingShippedScreenshot] = useState(false);
+	const shippedScreenshot = session.walkthrough?.shots?.find((shot) => shot.after)?.after;
 	useEffect(
 		() => {
 			setShippedChangeStatus("idle");
@@ -801,6 +802,9 @@ export function SessionViewer({
 		},
 		[session.id, mergedPr?.number],
 	);
+	useEffect(() => {
+		if (shippedScreenshot) setRequestingShippedScreenshot(false);
+	}, [shippedScreenshot]);
 	const requestShippedScreenshot = useCallback(() => {
 		if (!mergedPr || requestingShippedScreenshot) return;
 		setRequestingShippedScreenshot(true);
@@ -845,19 +849,22 @@ export function SessionViewer({
 							mergedPr.repo,
 							session.walkthrough?.summary,
 						),
-						screenshot: session.walkthrough?.shots?.find((shot) => shot.after)?.after,
+						screenshot: shippedScreenshot,
 						requestingScreenshot: requestingShippedScreenshot,
 						status: shippedChangeStatus,
 						onShare: sendShippedChangeToSlack,
-						onRequestScreenshot: requestShippedScreenshot,
+						onRequestScreenshot:
+							connected && !noEngine ? requestShippedScreenshot : undefined,
 					}
 				: undefined,
 		[
 			mergedPr,
 			requestShippedScreenshot,
 			requestingShippedScreenshot,
+			connected,
+			noEngine,
+			shippedScreenshot,
 			session.walkthrough?.summary,
-			session.walkthrough?.shots,
 			sendShippedChangeToSlack,
 			shippedChangeStatus,
 		],

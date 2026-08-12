@@ -3,7 +3,7 @@ function sentence(value: string): string {
 	return clean ? `${clean.charAt(0).toUpperCase()}${clean.slice(1)}.` : "";
 }
 
-export function shippedChangeOutcome(markdown?: string): string {
+export function shippedChangeOutcome(markdown?: string, title?: string): string {
 	if (!markdown) return "";
 	const lines = markdown
 		.replace(/!\[[^\]]*\]\([^)]*\)/g, "")
@@ -27,6 +27,10 @@ export function shippedChangeOutcome(markdown?: string): string {
 		)
 			continue;
 		const first = value.split(/(?<=[.!?])\s+/)[0];
+		const named = title?.replace(/^Name\s+/i, "").replace(/[.!?]+$/, "").trim();
+		const allUpdated = first?.match(/^Updated all (\d+) to (.+?)(?:, including:)?$/i);
+		if (allUpdated && named)
+			return sentence(`All ${allUpdated[1]} ${named} now use ${allUpdated[2]}`);
 		if (first && !/^we\s+(shipped|updated|added|changed|fixed)\b/i.test(first))
 			return sentence(first);
 	}
@@ -47,7 +51,7 @@ export function suggestedShippedChangeMessage(
 	repo?: string,
 	context?: string,
 ): string {
-	const outcome = shippedChangeOutcome(context);
+	const outcome = shippedChangeOutcome(context, title);
 	if (outcome) return outcome;
 	const clean = title
 		.replace(/^\[[^\]]+\]\s*/, "")
@@ -60,6 +64,8 @@ export function suggestedShippedChangeMessage(
 	const object = rest.join(" ").trim();
 	const product = repo === "tella-fusion" && !/\btella\b/i.test(clean) ? " in Tella" : "";
 	const lower = verb.toLowerCase();
+	if (lower === "name" && object)
+		return sentence(`${object} now have names${product}`);
 	if (lower === "show" && object) return sentence(`${visibleOutcome(object)}${product}`);
 	if (["add", "create"].includes(lower) && object)
 		return sentence(`${object} is now available${product}`);
