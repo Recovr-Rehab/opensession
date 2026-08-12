@@ -46,6 +46,7 @@ import { handleModelsRoutes } from "./models";
 import { handleNodesRoutes } from "./nodes";
 import { handleNotesRoutes } from "./notes";
 import { handlePapercutsRoutes } from "./papercuts";
+import { handleLibraryRoutes } from "./library";
 import { handleTodosRoutes } from "./todos";
 import { handleDeskVoiceRoutes } from "./desk-voice";
 import { handleWorkflowsRoutes } from "./workflows";
@@ -110,6 +111,7 @@ export const routeHandlers: RouteHandler[] = [
 	handleNodesRoutes,
 	handleNotesRoutes,
 	handlePapercutsRoutes,
+	handleLibraryRoutes,
 	handleTodosRoutes,
 	handleDeskVoiceRoutes,
 	handleWorkflowsRoutes,

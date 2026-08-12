@@ -28,6 +28,7 @@ import { AuditPanel } from "./settings/AuditPanel";
 import { DeploysPanel } from "./settings/DeploysPanel";
 import { IdentityPanel } from "./settings/IdentityPanel";
 import { IntegrationsPanel } from "./settings/IntegrationsPanel";
+import { LibraryPanel } from "./settings/LibraryPanel";
 import { KeychainPanel } from "./settings/KeychainPanel";
 import { MembersPanel } from "./settings/MembersPanel";
 import { MemoryPanel } from "./settings/MemoryPanel";
@@ -77,6 +78,7 @@ export type SettingsSectionKey =
 	| "members"
 	| "models"
 	| "sandboxes"
+	| "library"
 	| "integrations"
 	| "connections"
 	| "memory"
@@ -304,6 +306,24 @@ const SECTIONS: {
 			<svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4">
 				<path d="M8 1.8l5.2 2.9v6.1L8 13.8l-5.2-3V4.7L8 1.8z" strokeLinejoin="round" />
 				<path d="M2.9 4.9L8 7.7l5.1-2.8M8 7.8v5.8" />
+			</svg>
+		),
+	},
+	{
+		key: "library",
+		label: "Library",
+		group: "Workspace",
+		icon: (
+			<svg
+				width="20"
+				height="20"
+				viewBox="0 0 16 16"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.4"
+			>
+				<path d="M2.6 3.1h2.6v9.8H2.6zM6.4 3.1H9v9.8H6.4z" strokeLinejoin="round" />
+				<path d="M10.5 3.6l2.5.7-2.2 8.4-2.4-.7" strokeLinejoin="round" />
 			</svg>
 		),
 	},
@@ -661,6 +681,7 @@ function SectionPanel({
 			{section === "identity" && <IdentityPanel />}
 			{section === "repos" && <ReposPanel />}
 			{section === "members" && <MembersPanel />}
+			{section === "library" && <LibraryPanel />}
 			{section === "integrations" && <IntegrationsPanel />}
 			{section === "audit" && <AuditPanel />}
 			{section === "models" && <ModelsPanel />}
