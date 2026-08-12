@@ -4123,7 +4123,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						</Tooltip>
 						<Tooltip
 							label="New session"
-							shortcut={isApple ? ["⌘", "N"] : ["Ctrl", "N"]}
+							shortcut={isApple ? ["⌘", "T"] : ["Ctrl", "T"]}
 						>
 						<button
 							className={cn(

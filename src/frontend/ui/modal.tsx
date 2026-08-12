@@ -30,8 +30,8 @@ import { IconX } from "../components/icons";
  *     </Modal.Content>
  *   </Modal.Root>
  *
- * The command palettes (⌘K search, ⌘N new session) use `variant="palette"` —
- * the same mechanics in a top-anchored, wider, full-bleed shell whose own rows
+ * The command palettes use `variant="palette"`: the same mechanics in a
+ * top-anchored, wider, full-bleed shell whose own rows
  * carry the padding and dividers. Pair it with `useEnterOnMount()` when the
  * parent mounts the dialog conditionally.
  */

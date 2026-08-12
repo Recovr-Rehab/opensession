@@ -1225,26 +1225,16 @@ export function App(
 	// the current view has nothing linkable.
 	const copyLinkPathRef = useRef<string | null>(null);
 
-	// ⌘K toggles the command palette; ⌘⇧K the new-session palette; ⌘⇧C copies a
-	// link to the open session/PR. Esc closes whichever palette is open (search's
+	// ⌘K toggles the command palette; ⌘⇧C copies a link to the open session/PR.
+	// Esc closes whichever palette is open (search's
 	// own input also handles Esc, but this covers the case where focus has left
 	// it).
-	//
-	// New session is ⌘⇧K rather than the more obvious ⌘N because ⌘N belongs to
-	// the composer's note mode (Plain's shortcut). The two fought over every
-	// keystroke typed in a session. ⌘⇧K sits next to the palette it opens, and
-	// unlike ⌘⇧N the browser doesn't take it first.
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
 			const k = e.key.toLowerCase();
 			if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && k === "k") {
 				e.preventDefault();
 				setSearchOpen((o) => !o);
-				return;
-			}
-			if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && k === "k") {
-				e.preventDefault();
-				paletteOpenRef.current ? closePalette() : openPalette();
 				return;
 			}
 			if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && k === "j") {
@@ -2903,7 +2893,6 @@ export function App(
 			description: "Start a new ask or code session",
 			category: "Actions",
 			keywords: ["create", "session", "workspace"],
-			shortcut: [mod, appleShortcuts ? "⇧" : "Shift", "K"],
 			icon: <IconPlus size={18} />,
 			run: () => openPalette(),
 		},
@@ -4213,7 +4202,7 @@ export function App(
 					/>
 				)}
 
-				{/* ⌘⇧K new-session palette overlays every view. */}
+				{/* New-session palette overlays every view. */}
 				{palette.open && (
 					<NewSession
 						onBack={closePalette}
