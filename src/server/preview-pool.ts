@@ -589,7 +589,7 @@ async function poolWriteFile(c: PoolContainer, path: string, content: string): P
 
 /** Gitignored files the app needs to boot, carried from the operator-owned
  *  host checkout because git can't. */
-const SEED_ENV_FILES = ["packages/core/webapp/.env.local", ".envrc"];
+export const SEED_ENV_FILES = ["packages/core/webapp/.env.local", ".envrc"];
 
 /** Host content for one seed file, with the dev-auth bypass stripped unless
  *  this repo's previews deliberately keep it. Null when the host has no such

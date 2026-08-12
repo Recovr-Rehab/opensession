@@ -52,6 +52,7 @@ import {
   previewPoolEnabled,
   releasePoolPreview,
   resumePoolSyncIfNeeded,
+  SEED_ENV_FILES,
 } from "./preview-pool";
 import {
   previewScopeSystemdArgs,
@@ -712,6 +713,33 @@ function freshPortsConfText(webappPort: number, comment: string): string {
 
 /** Seed/adopt `<worktree>/.ports.conf` (host fs variant of
  *  seedSandboxPortsConf): rewrite only WEBAPP_PORT when the file exists. */
+/** Restore the gitignored env files a repo's boot script requires.
+ *
+ *  A warm-template refresh deliberately excludes `.env*` from what it seeds
+ *  into a worktree, and nothing else puts them back — the comment there still
+ *  points at a `seedWebappEnv` that no longer exists. tella-fusion's
+ *  `.agents/start.sh` exits 2 on a missing `.env.local`, so the Preview button
+ *  fails outright for any worktree where an agent never happened to run the
+ *  tella-local setup.
+ *
+ *  Only fills gaps: a worktree copy may carry deliberate per-session edits
+ *  (the dev-auth bypass among them), so an existing file is never overwritten. */
+function seedHostEnvFiles(worktreeDir: string, repo: Repo | undefined): void {
+  if (!repo?.repo || resolve(repo.repo) === resolve(worktreeDir)) return;
+  for (const rel of SEED_ENV_FILES) {
+    const dest = join(worktreeDir, rel);
+    const src = join(repo.repo, rel);
+    if (existsSync(dest) || !existsSync(src)) continue;
+    try {
+      mkdirSync(dirname(dest), { recursive: true });
+      writeFileSync(dest, readFileSync(src, "utf8"));
+      console.log(`[preview] seeded ${rel} into ${basename(worktreeDir)}`);
+    } catch (e) {
+      console.warn(`[preview] seeding ${rel} into ${worktreeDir} failed:`, e);
+    }
+  }
+}
+
 function seedHostPortsConf(worktreeDir: string, webappPort: number): void {
   const file = join(worktreeDir, ".ports.conf");
   if (existsSync(file)) {
@@ -814,6 +842,7 @@ export async function startPreview(worktreeDir: string): Promise<PreviewStatus> 
       return status;
     }
     seedHostPortsConf(worktreeDir, port);
+    seedHostEnvFiles(worktreeDir, repoForPath(worktreeDir));
     env.WEBAPP_PORT = String(port);
     env.PREVIEW_URL = `https://${await previewHost()}:${httpsPortFor(port)}`;
     // One-shot sibling hook, stamped per worktree; failure never blocks the
