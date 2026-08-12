@@ -154,6 +154,21 @@ export function QuoteSelection({
 			}
 			const selection = window.getSelection();
 			if (
+				retained &&
+				selection &&
+				!selection.isCollapsed &&
+				selection.rangeCount
+			) {
+				const active = selection.getRangeAt(0);
+				if (
+					retained.startContainer === active.startContainer &&
+					retained.startOffset === active.startOffset &&
+					retained.endContainer === active.endContainer &&
+					retained.endOffset === active.endOffset
+				)
+					return;
+			}
+			if (
 				pressedRetainedRangeRef.current &&
 				retained &&
 				selection
