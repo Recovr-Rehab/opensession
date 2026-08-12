@@ -1,6 +1,11 @@
 # Plugins — design proposal
 
-**Status: proposal. Nothing here is built.** This is the plan for turning
+**Status: the first slice of the library is built; the plugin runtime is a
+proposal.** Settings → Library (`src/server/library.ts`, `LibraryPanel.tsx`)
+browses the catalog described below — 31 entries derived from the recipes
+directory, the automation templates and the integration registry. Everything
+about the runtime, and the server-side feature gate that would make a tool
+switch real, is still design. This is the plan for turning
 Open Session's extension points into a plugin library, and for letting people
 who fork this repository add their own tools — with their own UI — that work
 with their sessions.
