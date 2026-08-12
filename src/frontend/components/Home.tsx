@@ -30,7 +30,6 @@ import {
 import {
   IconArchive,
   IconCheck,
-  IconChevronDown,
   IconDotsHorizontal,
   IconFolder,
   IconGitMerge,
@@ -596,7 +595,7 @@ export function Home({
             <Menu.Root>
               <Menu.Trigger
                 render={
-                  <Button variant="ghost" icon={<IconFolder size={18} />}>
+                  <Button variant="ghost" icon={<IconFolder size={18} />} caret>
                     <span className="max-w-[150px] truncate">
                       {workspaceId === "all"
                         ? "In all workspaces"
@@ -604,7 +603,6 @@ export function Home({
                           ? "Standalone"
                           : `In ${workspaceOptions.find((w) => w.id === workspaceId)?.name ?? "workspace"}`}
                     </span>
-                    <IconChevronDown className="opacity-60" size={18} />
                   </Button>
                 }
               />
@@ -639,11 +637,10 @@ export function Home({
               <Menu.Root>
                 <Menu.Trigger
                   render={
-                    <Button variant="ghost" icon={<IconRepo size={18} />}>
+                    <Button variant="ghost" icon={<IconRepo size={18} />} caret>
                       <span className="max-w-[150px] truncate">
                         {repo === "all" ? "In all repos" : `In ${repoLabel(repo)}`}
                       </span>
-                      <IconChevronDown className="opacity-60" size={18} />
                     </Button>
                   }
                 />

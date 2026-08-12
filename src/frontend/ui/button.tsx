@@ -1,4 +1,5 @@
 import * as React from "react";
+import { IconChevronDown } from "../components/icons";
 import { cn } from "./cn";
 
 /**
@@ -22,6 +23,12 @@ import { cn } from "./cn";
  *  - icon-only buttons go square with symmetric padding and the icon
  *    dead-centered, UNdimmed — there the icon *is* the label;
  *  - press feedback is a whole-button scale tick (Tella: active:scale-97).
+ *
+ * `caret` is the mirror of `icon` for menu triggers: one trailing chevron,
+ * sized off the LABEL rather than the 20px glyph step, with the same 2px
+ * padding pull on its own side. Every "label opens a menu" trigger in the app
+ * was drawing its own chevron at 14, 16, 17 or 18 — the affordance belongs to
+ * the primitive, so the whole family reads as one control.
  */
 
 type Variant =
@@ -60,6 +67,20 @@ const iconLeadPad: Record<Size, string> = {
 	md: "pl-2.5",
 	lg: "pl-3.5",
 };
+
+// Trailing caret + label: the same 2px shave, on the caret's side.
+const caretTrailPad: Record<Size, string> = {
+	xs: "pr-2",
+	sm: "pr-2",
+	md: "pr-2.5",
+	lg: "pr-3.5",
+};
+
+// The caret keys off the label, not the 20px icon step: an iconic-pro glyph at
+// 14 draws an arrow about as tall as the cap height of a 12px label, which is
+// the proportion a dropdown affordance wants. Bigger and it competes with the
+// text it qualifies.
+const caretSize: Record<Size, number> = { xs: 14, sm: 14, md: 16, lg: 18 };
 
 // Icon-only: square hit target, symmetric.
 const iconOnlyPad: Record<Size, string> = {
@@ -144,11 +165,15 @@ export type ButtonProps = React.ComponentPropsWithoutRef<"button"> & {
 	/** Leading icon — pass a 20px glyph from components/icons.tsx. Renders an
 	 * icon-only square button when there are no children. */
 	icon?: React.ReactNode;
+	/** Trailing dropdown chevron, for a button that opens a menu. Inherits the
+	 * button's own color at low strength: a fixed grey caret reads as a dead
+	 * spot next to a red or green label. */
+	caret?: boolean;
 };
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 	function Button(
-		{ variant = "default", size = "md", icon, className, children, ...rest },
+		{ variant = "default", size = "md", icon, caret, className, children, ...rest },
 		ref,
 	) {
 		const hasLabel = children != null && children !== false && children !== "";
@@ -173,6 +198,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 					sizes[size],
 					variants[variant],
 					icon != null && hasLabel && iconLeadPad[size],
+					caret && hasLabel && caretTrailPad[size],
 					iconOnly && iconOnlyPad[size],
 					className,
 				)}
@@ -189,6 +215,12 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 					</span>
 				)}
 				{children}
+				{caret && (
+					<IconChevronDown
+						className="shrink-0 opacity-55"
+						size={caretSize[size]}
+					/>
+				)}
 			</button>
 		);
 	},

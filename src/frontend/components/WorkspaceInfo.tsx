@@ -1023,60 +1023,74 @@ function ReviewerChip({
 		<div className="mt-1.5 grid w-fit min-w-0 gap-1">
 			<Menu.Root>
 				<Menu.Trigger
-					className={cn(
-						"inline-flex w-fit min-w-0 items-center gap-1 rounded-control border border-line bg-control py-1 pl-2 pr-2.5 text-left text-supporting font-medium whitespace-nowrap text-dim outline-none transition-[color,background-color,border-color,scale] hover:border-line-strong hover:text-fg active:scale-[0.96] data-[popup-open]:border-line-strong data-[popup-open]:bg-hover",
-						needsMyReview
-							? "border-red/30 bg-red-soft text-red hover:border-red/50 hover:text-red"
-							: accepted
-								? "text-green"
-								: req
-									? "text-yellow"
-									: "",
-					)}
-					title={
-						needsMyReview
-							? `Review requested by ${req?.by || "a teammate"}`
-							: accepted
-								? `Reviewed by ${accepted.by}`
-								: req
-									? `Review requested by ${req.by}`
-									: "Ask a teammate to review this session"
-					}
-				>
-					{needsMyReview ? (
-						<span className={cn(ACTION_ICON_CLASS, "text-red opacity-80")}>
-							<IconBell size={20} />
-						</span>
-					) : accepted ? (
-						<UserAvatar name={accepted.by} size={20}>
-							<span className="absolute -bottom-px -right-px grid size-4 place-items-center rounded-full border border-panel bg-green text-white shadow-[0_0_0_1px_var(--bg-panel)] [&_svg]:size-3">
-								<IconCheck size={12} />
+					render={
+						<Button
+							variant="ghost"
+							size="sm"
+							caret
+							className={cn(
+								// The panel's interface-copy step, so the chip reads as
+								// part of the meta line it sits under rather than a
+								// control dropped on top of it. `pl-2` is the leading
+								// visual's 2px pull, which `icon` would give us — but
+								// `icon` also dims, and half of these states lead with an
+								// avatar, which must stay at full strength.
+								"max-w-full pl-2 text-supporting",
+								needsMyReview
+									? // The one state that is addressed TO you: a plate is
+										// what separates "act on this" from the three states
+										// that merely report where the review stands, and it
+										// survives where hue alone does not.
+										"border-red/30 bg-red-soft text-red hover:border-red/50 hover:bg-red-soft hover:text-red data-[popup-open]:bg-red-soft data-[popup-open]:text-red"
+									: accepted
+										? "text-green hover:text-green data-[popup-open]:text-green"
+										: req
+											? "text-yellow hover:text-yellow data-[popup-open]:text-yellow"
+											: "",
+							)}
+							title={
+								needsMyReview
+									? `Review requested by ${req?.by || "a teammate"}`
+									: accepted
+										? `Reviewed by ${accepted.by}`
+										: req
+											? `Review requested by ${req.by}`
+											: "Ask a teammate to review this session"
+							}
+						>
+							{needsMyReview ? (
+								<span className={cn(ACTION_ICON_CLASS, "text-red opacity-80")}>
+									<IconBell size={20} />
+								</span>
+							) : accepted ? (
+								<UserAvatar name={accepted.by} size={20}>
+									<span className="absolute -bottom-px -right-px grid size-4 place-items-center rounded-full border border-panel bg-green text-white shadow-[0_0_0_1px_var(--bg-panel)] [&_svg]:size-3">
+										<IconCheck size={12} />
+									</span>
+								</UserAvatar>
+							) : selectedTeam ? (
+								<span className={ACTION_ICON_CLASS}>
+									<IconStack size={20} />
+								</span>
+							) : req ? (
+								<UserAvatar name={req.to} size={20} />
+							) : (
+								<span className={ACTION_ICON_CLASS}>
+									<IconBell size={20} />
+								</span>
+							)}
+							<span className="min-w-0 truncate">
+								{needsMyReview
+									? "Needs your review"
+									: accepted
+										? `Reviewed by ${accepted.by}`
+										: req
+											? `Review: ${targetLabel}`
+											: "Request review"}
 							</span>
-						</UserAvatar>
-					) : selectedTeam ? (
-						<span className={ACTION_ICON_CLASS}>
-							<IconStack size={20} />
-						</span>
-					) : req ? (
-						<UserAvatar name={req.to} size={20} />
-					) : (
-						<span className={ACTION_ICON_CLASS}>
-							<IconBell size={20} />
-						</span>
-					)}
-					<span className="min-w-0 truncate">
-						{needsMyReview
-							? "Needs your review"
-							: accepted
-								? `Reviewed by ${accepted.by}`
-								: req
-									? `Review: ${targetLabel}`
-									: "Request review"}
-					</span>
-					{/* Inherit the chip's own tone at low strength — a fixed grey caret
-					    reads as a dead spot next to a red/green/yellow label. */}
-					<IconChevronDown size={14} className="shrink-0 opacity-55" />
-				</Menu.Trigger>
+						</Button>
+					}
+				/>
 				<Menu.Popup align="start" sideOffset={6} className="min-w-[200px]">
 					{needsMyReview && onReviewPr && (
 						<>

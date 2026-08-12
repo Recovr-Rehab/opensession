@@ -365,7 +365,10 @@ export function TeamLensMenu({
 				{!compact && (
 					<>
 						<span className="truncate max-[860px]:hidden">{label}</span>
-						<IconChevronDown className="shrink-0" size={17} />
+						{/* The Button primitive's `caret` step (ui/button.tsx): this
+						    trigger is a facepile, so it can't be a Button, but the
+						    affordance has to read the same as every other menu. */}
+						<IconChevronDown className="shrink-0 opacity-55" size={16} />
 					</>
 				)}
 			</Menu.Trigger>
