@@ -532,18 +532,22 @@ export const SIDEBAR_WS_TICKER =
  * Teammates focused on this row's work, as an overlapping pile: whoever came
  * later sits on top, tucked a shoulder's width over their neighbour.
  *
- * The face underneath cuts the hole for the one above it with a MASK rather
- * than the usual ring. A ring has to be painted in whatever is behind the row,
- * and a row's backdrop is four different things (sidebar material, hover ink,
- * selected, waiting), so no single colour separates the faces on all of them —
- * which is why this pile used to sit side by side instead. The hole is the
- * next face's own circle plus 1.5px, centred where it lands: 16px wide, tucked
- * 6px, so its centre is 2px past this face's right edge.
+ * The separation is a 2px ring on the face ON TOP, offset left so it only ever
+ * paints over the face beneath — never around the pile, where it would ring
+ * each avatar against a backdrop that is four different things (sidebar
+ * material, hover ink, selected, waiting). Painting it in `--bg-raised` reads
+ * as the row showing through the seam on all four.
+ *
+ * A radial mask on the LOWER face was the first attempt: it needs no colour at
+ * all, since the real backdrop shows through the hole. It loses because a
+ * circular hole under a squircle avatar bites a visible scoop out of the face
+ * beneath, while the ring follows the top face's own silhouette and leaves
+ * both squircles whole.
  */
 export const SIDEBAR_WS_FACES = "flex shrink-0 items-center";
 export const SIDEBAR_WS_FACE =
 	"[&:not(:first-child)]:-ml-1.5 " +
-	"[&:not(:last-child)]:[mask-image:radial-gradient(circle_9.5px_at_calc(100%_+_2px)_50%,transparent_99%,#000_100%)]";
+	"[&:not(:first-child)]:[box-shadow:-2px_0_0_0_var(--bg-raised)]";
 
 /**
  * Slack-style unsent-draft pencil. Its left margin is the call site's: on a
