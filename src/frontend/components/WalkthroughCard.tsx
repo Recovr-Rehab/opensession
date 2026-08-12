@@ -42,13 +42,19 @@ const SHOT_LABEL_SIDE = {
 } as const;
 
 /**
- * One tile of the folded filmstrip, matching the sidebar hover card's strip
- * (components/sidebar/HoverCards.tsx): a whole frame in a 124px landscape box,
- * `object-contain` rather than cropped. A square crop of a 1440px screenshot
- * is a grey band of text, not a picture of anything.
+ * One tile of the folded filmstrip: a whole frame in a landscape box,
+ * `object-contain` rather than cropped, like the sidebar hover card's strip
+ * (components/sidebar/HoverCards.tsx). A square crop of a 1440px screenshot is
+ * a grey band of text, not a picture of anything.
+ *
+ * A thumbnail of a UI is a picture of small things, so the tile is sized to be
+ * read rather than counted: at the hover card's 124px a screenshot is a grey
+ * smudge, and the strip was answering "there are pictures" instead of "here is
+ * what changed". The phone keeps the narrower tile, where the card is only
+ * wide enough for one and a bit either way.
  */
 const STRIP_TILE =
-	"relative block aspect-video w-[124px] shrink-0 cursor-zoom-in snap-start overflow-hidden rounded-sm border border-line bg-surface p-0 outline-none transition-[filter] hover:brightness-[0.97] focus-visible:shadow-[inset_0_0_0_3px_var(--accent-soft)]";
+	"relative block aspect-video w-40 shrink-0 cursor-zoom-in snap-start overflow-hidden rounded-sm border border-line bg-surface p-0 outline-none transition-[filter] desktop:w-56 hover:brightness-[0.97] focus-visible:shadow-[inset_0_0_0_3px_var(--accent-soft)]";
 const STRIP_MEDIA = "h-full w-full object-contain";
 
 /**
