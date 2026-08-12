@@ -2,6 +2,10 @@ import XCTest
 @testable import OS1
 
 final class SessionTests: XCTestCase {
+    private func session(_ json: String) throws -> Session {
+        try JSONDecoder().decode(Session.self, from: Data(json.utf8))
+    }
+
     func testMissingRepoUsesServerDefault() throws {
         let session = try JSONDecoder().decode(
             Session.self,
@@ -19,6 +23,39 @@ final class SessionTests: XCTestCase {
         )
 
         XCTAssertEqual(session.effectiveRepo, "backstage")
+    }
+
+    func testPullRequestContextStatePrioritizesBlockersBeforeMerge() throws {
+        let conflicts = try session(
+            #"{"id":"one","prNumber":42,"prState":"OPEN","prMergeable":"CONFLICTING","prChecks":{"failed":1,"pending":2}}"#
+        )
+        let failing = try session(
+            #"{"id":"two","prNumber":42,"prState":"OPEN","prChecks":{"failed":1,"pending":2}}"#
+        )
+        let running = try session(
+            #"{"id":"three","prNumber":42,"prState":"OPEN","prChecks":{"failed":0,"pending":2}}"#
+        )
+
+        XCTAssertEqual(conflicts.pullRequestContextState, .conflicts)
+        XCTAssertEqual(failing.pullRequestContextState, .failing)
+        XCTAssertEqual(running.pullRequestContextState, .running(2))
+        XCTAssertEqual(running.pullRequestContextState?.label, "2 checks running")
+    }
+
+    func testPullRequestContextStateHandlesReviewAndTerminalStates() throws {
+        let draft = try session(
+            #"{"id":"one","prNumber":42,"prState":"OPEN","prIsDraft":true,"prReviewDecision":"CHANGES_REQUESTED"}"#
+        )
+        let feedback = try session(
+            #"{"id":"two","prNumber":42,"prState":"OPEN","prReviewDecision":"CHANGES_REQUESTED"}"#
+        )
+        let ready = try session(#"{"id":"three","prNumber":42,"prState":"OPEN"}"#)
+        let merged = try session(#"{"id":"four","prNumber":42,"prState":"MERGED"}"#)
+
+        XCTAssertEqual(draft.pullRequestContextState, .draft)
+        XCTAssertEqual(feedback.pullRequestContextState, .changesRequested)
+        XCTAssertEqual(ready.pullRequestContextState, .ready)
+        XCTAssertEqual(merged.pullRequestContextState, .merged)
     }
 
     func testRepositoryOrderUsesFrequencyThenName() throws {

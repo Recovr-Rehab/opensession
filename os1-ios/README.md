@@ -166,7 +166,10 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   failing checks, a draft, requested changes — `POST …/pr-merge`), and
   **Close pull request** (`POST …/pr-close`). The session overflow menu also
   exposes squash, merge-commit and rebase merge actions directly, with the same
-  warnings and confirmation. Each action needs a GitHub credential server-side,
+  warnings and confirmation. A workspace row's long-press menu also rolls the
+  cached PR state into one next action: merge when ready, fix failed checks,
+  resolve conflicts, address feedback, view running checks, or archive after it
+  lands. Each action needs a GitHub credential server-side,
   which with web sign-in on is the signed-in person's own token,
   so an unconnected account gets the server's "connect your GitHub account"
   sentence in the panel rather than a status code. It is

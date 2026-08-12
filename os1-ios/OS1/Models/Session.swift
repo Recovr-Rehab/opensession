@@ -40,7 +40,14 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     var lastActivity: String?
     var prUrl: String?
     var prState: String?
+    /// Rich PR state from the sessions-list cache. These fields let list rows
+    /// offer the same next action as the web status strip without fetching
+    /// every PR individually.
+    var prMergeable: String?
     var prNumber: Int?
+    var prIsDraft: Bool?
+    var prReviewDecision: String?
+    var prChecks: PrChecksSummary?
     var startedBy: String?
     var createdBy: String?
     var createdByLogin: String?
@@ -154,6 +161,58 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     static func parseISO(_ string: String?) -> Date? {
         guard let string else { return nil }
         return isoFractional.date(from: string) ?? isoPlain.date(from: string)
+    }
+}
+
+struct PrChecksSummary: Decodable, Equatable, Hashable {
+    var total: Int?
+    var passed: Int?
+    var failed: Int?
+    var pending: Int?
+}
+
+extension Session {
+    /// The PR fact and next action shown in a workspace row's context menu.
+    /// Precedence matches the web PR strip: never offer Merge over a conflict,
+    /// failed checks, a running check, a draft, or requested changes.
+    enum PullRequestContextState: Equatable {
+        case merged
+        case closed
+        case conflicts
+        case failing
+        case running(Int)
+        case draft
+        case changesRequested
+        case ready
+
+        var label: String {
+            switch self {
+            case .merged: "Merged"
+            case .closed: "Pull request closed"
+            case .conflicts: "Merge conflicts"
+            case .failing: "Checks failed"
+            case let .running(count):
+                "\(count) check\(count == 1 ? "" : "s") running"
+            case .draft: "Draft pull request"
+            case .changesRequested: "Changes requested"
+            case .ready: "Ready to merge"
+            }
+        }
+    }
+
+    var pullRequestContextState: PullRequestContextState? {
+        guard prNumber != nil || prState != nil else { return nil }
+        switch prState ?? "" {
+        case "MERGED": return .merged
+        case "CLOSED": return .closed
+        default: break
+        }
+        if prMergeable == "CONFLICTING" { return .conflicts }
+        if (prChecks?.failed ?? 0) > 0 { return .failing }
+        if (prChecks?.pending ?? 0) > 0 { return .running(prChecks?.pending ?? 0) }
+        if prIsDraft == true { return .draft }
+        if prReviewDecision == "CHANGES_REQUESTED" { return .changesRequested }
+        return .ready
     }
 }
 

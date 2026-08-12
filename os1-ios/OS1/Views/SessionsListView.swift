@@ -107,7 +107,14 @@ struct SessionsListView: View {
     @State private var renamingWorkspace: SidebarWorkspace?
     @State private var renameText = ""
     @State private var detailsWorkspace: SidebarWorkspace?
+    @State private var pendingContextMerge: ContextMerge?
+    @State private var prActionError: String?
     #endif
+
+    private struct ContextMerge {
+        let session: Session
+        let method: String
+    }
 
     struct NewSessionRequest: Identifiable {
         let id = UUID()
@@ -283,6 +290,30 @@ struct SessionsListView: View {
                 )
             } message: { _ in
                 Text("Choose a name for this workspace.")
+            }
+            .confirmationDialog(
+                contextMergeTitle,
+                isPresented: Binding(
+                    get: { pendingContextMerge != nil },
+                    set: { if !$0 { pendingContextMerge = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button(contextMergeButtonLabel) { performContextMerge() }
+                Button("Cancel", role: .cancel) { pendingContextMerge = nil }
+            } message: {
+                Text("This cannot be undone.")
+            }
+            .alert(
+                "Couldn't update pull request",
+                isPresented: Binding(
+                    get: { prActionError != nil },
+                    set: { if !$0 { prActionError = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(prActionError ?? "Please try again.")
             }
             .sheet(item: $detailsWorkspace) { workspace in
                 WorktreeInfoSheet(workspace: workspace, listViewModel: viewModel)
@@ -1430,10 +1461,20 @@ struct SessionsListView: View {
             }
         }
 
-        let prLink = workspace.statusSession.prUrl ?? workspace.sessions.compactMap(\.prUrl).first
-        if let prURL = prLink.flatMap(URL.init(string:)) {
-            Link(destination: prURL) {
-                Label("Open pull request", systemImage: "arrow.triangle.pull")
+        if let session = workspace.pullRequestSession,
+           let state = session.pullRequestContextState {
+            Divider()
+            Label(state.label, systemImage: prStateIcon(state))
+                .disabled(true)
+            prAction(state, session: session, workspace: workspace)
+            if let prURL = session.prUrl.flatMap(URL.init(string:)) {
+                Link(destination: prURL) {
+                    Label {
+                        Text(verbatim: session.prNumber.map { "Open PR #\($0)" } ?? "Open pull request")
+                    } icon: {
+                        Image(systemName: "arrow.triangle.pull")
+                    }
+                }
             }
         }
 
@@ -1470,10 +1511,133 @@ struct SessionsListView: View {
                     Label("Hide from sidebar", systemImage: "eye.slash")
                 }
             }
-            Button(role: .destructive) {
-                archive(workspace)
-            } label: {
+            if workspace.pullRequestSession?.pullRequestContextState?.suggestsArchive != true {
+                Button(role: .destructive) {
+                    archive(workspace)
+                } label: {
+                    Label("Archive", systemImage: "archivebox")
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func prAction(
+        _ state: Session.PullRequestContextState,
+        session: Session,
+        workspace: SidebarWorkspace
+    ) -> some View {
+        switch state {
+        case .merged, .closed:
+            Button(role: .destructive) { archive(workspace) } label: {
                 Label("Archive", systemImage: "archivebox")
+            }
+        case .conflicts:
+            Button {
+                promptForPr(
+                    session,
+                    "Rebase this branch on the latest base branch, resolve the pull request's merge conflicts, run the relevant tests, commit the changes, and push them."
+                )
+            } label: {
+                Label("Resolve conflicts", systemImage: "arrow.triangle.2.circlepath")
+            }
+        case .failing:
+            Button {
+                promptForPr(
+                    session,
+                    "Investigate the failing checks on PR #\(session.prNumber ?? 0), fix the failures, run the relevant tests, commit the changes, and push them."
+                )
+            } label: {
+                Label("Fix checks", systemImage: "wrench.and.screwdriver")
+            }
+        case .running:
+            if let url = session.prUrl.flatMap(URL.init(string:)) {
+                Link(destination: url.appendingPathComponent("checks")) {
+                    Label("View checks", systemImage: "checklist")
+                }
+            }
+        case .draft:
+            EmptyView()
+        case .changesRequested:
+            Button {
+                promptForPr(
+                    session,
+                    "Address the requested changes on PR #\(session.prNumber ?? 0), run the relevant tests, commit the changes, and push them."
+                )
+            } label: {
+                Label("Address feedback", systemImage: "text.bubble")
+            }
+        case .ready:
+            Menu {
+                Button("Squash and merge") { prepareContextMerge(session, method: "squash") }
+                Button("Create a merge commit") { prepareContextMerge(session, method: "merge") }
+                Button("Rebase and merge") { prepareContextMerge(session, method: "rebase") }
+            } label: {
+                Label("Merge pull request", systemImage: "arrow.triangle.merge")
+            }
+        }
+    }
+
+    private func prStateIcon(_ state: Session.PullRequestContextState) -> String {
+        switch state {
+        case .merged: "arrow.triangle.merge"
+        case .closed, .failing: "xmark.circle.fill"
+        case .conflicts: "exclamationmark.triangle.fill"
+        case .running: "clock.fill"
+        case .draft: "pencil.circle.fill"
+        case .changesRequested: "exclamationmark.bubble.fill"
+        case .ready: "checkmark.circle.fill"
+        }
+    }
+
+    private func promptForPr(_ session: Session, _ prompt: String) {
+        let busyMode = UserDefaults.standard.string(forKey: "os1.composer.busySend") ?? "queue"
+        guard Outbox.shared.enqueue(
+            sessionId: session.id,
+            content: prompt,
+            busyMode: busyMode,
+            user: ServerConfig.shared.userName
+        ) != nil else {
+            prActionError = "Too many unsent messages. Send or delete some first."
+            return
+        }
+        HideStore.shared.unhide(for: session)
+        Haptics.play(.send)
+    }
+
+    private func prepareContextMerge(_ session: Session, method: String) {
+        pendingContextMerge = ContextMerge(session: session, method: method)
+    }
+
+    private var contextMergeTitle: String {
+        guard let number = pendingContextMerge?.session.prNumber else {
+            return "Merge pull request?"
+        }
+        return "Merge PR #\(number)?"
+    }
+
+    private var contextMergeButtonLabel: String {
+        switch pendingContextMerge?.method {
+        case "merge": "Create a merge commit"
+        case "rebase": "Rebase and merge"
+        default: "Squash and merge"
+        }
+    }
+
+    private func performContextMerge() {
+        guard let pending = pendingContextMerge else { return }
+        pendingContextMerge = nil
+        Task {
+            do {
+                try await OS1API.mergePr(
+                    sessionId: pending.session.id,
+                    method: pending.method
+                )
+                Haptics.play(.commit)
+                await viewModel.refresh()
+            } catch {
+                prActionError = (error as? LocalizedError)?.errorDescription
+                    ?? error.localizedDescription
             }
         }
     }
@@ -2074,6 +2238,15 @@ struct SessionsListView: View {
         Task {
             await viewModel.refresh()
             isRetrying = false
+        }
+    }
+}
+
+private extension Session.PullRequestContextState {
+    var suggestsArchive: Bool {
+        switch self {
+        case .merged, .closed: true
+        default: false
         }
     }
 }

@@ -924,6 +924,13 @@ struct SidebarWorkspace: Identifiable, Equatable, Sendable {
     }
     var effectiveRepo: String { mainSession.effectiveRepo }
 
+    /// The open PR is the actionable one when sibling tabs have several. Once
+    /// none are open, keep a merged/closed PR so the menu can suggest Archive.
+    var pullRequestSession: Session? {
+        sessions.first { $0.prState == "OPEN" }
+            ?? sessions.first { $0.prNumber != nil || $0.prState != nil }
+    }
+
     /// This row's page on the web app, for sharing: the workspace session URL
     /// when the row is a real workspace, the bare session URL otherwise.
     @MainActor var shareURL: URL? {
