@@ -93,13 +93,7 @@ const SCRATCH_REPO_VALUE = "__scratch__";
    The icon button and the model pill are shared with the composer toolbar, so
    they live in lib/palette-classes.ts rather than being restated here. */
 
-/** The hairline is a cutoff for content passing under the header, so it stays
- *  transparent until the prompt has actually scrolled beneath it. The border
- *  itself is always present: switching the colour keeps the height steady,
- *  where toggling `border-b` would jog the layout by a pixel. */
-const HEADER = "flex items-center justify-between gap-2 border-b border-transparent px-3 py-[11px]";
-/** Merged onto HEADER/FOOTER by `cn()`, which drops the transparent colour. */
-const EDGE_DIVIDER = "border-line";
+const HEADER = "flex items-center justify-between gap-2 border-b border-line px-3 py-[11px]";
 /** Header pickers. `relative` is load-bearing — PaletteSelect's phone branch
  *  stacks an invisible native <select> over the trigger. */
 const TRIGGER =
@@ -121,7 +115,7 @@ const ERROR = "mx-4 mb-2 rounded-md bg-red-soft px-2.5 py-[7px] text-supporting 
    (its label ellipsizes) while the icon buttons and Create keep their size.
    Phones let the row wrap instead of crushing every pill to one letter. */
 const FOOTER =
-	"flex items-center justify-between gap-x-2 gap-y-2 border-t border-transparent px-[11px] py-[9px] phone:flex-wrap max-[560px]:gap-x-1.5 max-[560px]:px-2";
+	"flex items-center justify-between gap-x-2 gap-y-2 border-t border-line px-[11px] py-[9px] phone:flex-wrap max-[560px]:gap-x-1.5 max-[560px]:px-2";
 const FOOTER_LEFT = "flex min-w-0 items-center gap-1.5 max-[560px]:gap-1";
 const FOOTER_RIGHT = "flex min-w-0 items-center gap-1.5 max-[560px]:gap-1 phone:ml-auto";
 const FOOTER_ICON_BTN = cn(paletteIconBtn, "shrink-0 max-[560px]:w-9");
@@ -285,8 +279,6 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   const [images, setImages] = useState<string[]>(() => loadDraft("new-session").images);
   const [files, setFiles] = useState<FileAttachment[]>(() => loadDraft("new-session").files);
   const [creating, setCreating] = useState(false);
-  // Which edges of the prompt have content beyond them, and so earn a hairline.
-  const [edges, setEdges] = useState({ top: false, bottom: false });
   const [error, setError] = useState<string | null>(null);
   const [models, setModels] = useState<ModelOption[]>([]);
   const [defaultModel, setDefaultModel] = useState("");
@@ -702,19 +694,11 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   ];
 
   // The prompt grows naturally; once the palette reaches its viewport cap the
-  // BODY becomes the single scroller, carrying attachments with the text. Each
-  // edge's hairline is the cutoff for text passing under it. Only an image moving
+  // BODY becomes the single scroller, carrying attachments with the text. The
+  // header/footer dividers are enough of a cutoff for text. Only an image moving
   // through the bottom edge gets softened, so its crop does not look accidental.
   const PROMPT_FADE_PX = 28;
   function updatePromptFade(el: HTMLDivElement) {
-    // Each hairline earns its place only while content sits beyond that edge:
-    // a short prompt that fits gets a clean, undivided card.
-    const hidden = el.scrollHeight - el.clientHeight;
-    const next = {
-      top: el.scrollTop > 1,
-      bottom: hidden > 1 && hidden - el.scrollTop > 1,
-    };
-    setEdges((prev) => (prev.top === next.top && prev.bottom === next.bottom ? prev : next));
     const edge = el.getBoundingClientRect().bottom;
     const imageAtEdge = Array.from(el.querySelectorAll("img")).some((image) => {
       const rect = image.getBoundingClientRect();
@@ -727,34 +711,22 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     el.style.setProperty("mask-image", mask);
   }
 
-  // Both effects below key on the scroller NODE rather than on a render pass.
-  // Base UI mounts the popup's children in a later commit than the one that
-  // opens the dialog, so an effect keyed on `prompt` (or on `open`) has already
-  // run and bailed on a null ref by the time the textarea exists — which left a
-  // prefilled or restored prompt clipped at its 132px minimum and unscrollable.
-  const [promptBody, setPromptBody] = useState<HTMLDivElement | null>(null);
-  const attachPromptBody = React.useCallback(
-    (node: HTMLDivElement | null) => {
-      mentions.inputWrapRef.current = node;
-      setPromptBody(node);
-    },
-    [mentions.inputWrapRef],
-  );
-
   useLayoutEffect(() => {
     const textarea = promptRef.current;
-    if (!textarea || !promptBody) return;
+    const body = mentions.inputWrapRef.current;
+    if (!textarea || !body) return;
     textarea.style.height = "0px";
     textarea.style.height = `${textarea.scrollHeight}px`;
-    updatePromptFade(promptBody);
-  }, [promptBody, prompt, images.length, files.length]);
+    updatePromptFade(body);
+  }, [prompt, images.length, files.length]);
 
   useEffect(() => {
-    if (!promptBody) return;
-    const observer = new ResizeObserver(() => updatePromptFade(promptBody));
-    observer.observe(promptBody);
+    const body = mentions.inputWrapRef.current;
+    if (!body) return;
+    const observer = new ResizeObserver(() => updatePromptFade(body));
+    observer.observe(body);
     return () => observer.disconnect();
-  }, [promptBody]);
+  }, [mentions.inputWrapRef]);
 
   // One frame closed so the palette animates in; App mounts us already-open.
   const open = useEnterOnMount();
@@ -789,7 +761,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
         {/* Header: repo (left) · create-from (right). The repo picker is
             always visible — on phones the create-from picker hides until the
             options toggle in the footer opens it. */}
-        <div className={cn(HEADER, edges.top && EDGE_DIVIDER)}>
+        <div className={HEADER}>
           <PaletteSelect
             className={TRIGGER_STRONG}
             title="Repository"
@@ -897,7 +869,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
           }}
           onDragOver={(e) => e.preventDefault()}
           onScroll={(e) => updatePromptFade(e.currentTarget)}
-          ref={attachPromptBody}
+          ref={mentions.inputWrapRef}
         >
           {mentions.popup}
           <textarea
@@ -947,7 +919,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
         )}
 
         {/* Footer toolbar */}
-        <div className={cn(FOOTER, edges.bottom && EDGE_DIVIDER)}>
+        <div className={FOOTER}>
           <div className={FOOTER_LEFT}>
             <Tooltip label="Attach a file">
               <button
