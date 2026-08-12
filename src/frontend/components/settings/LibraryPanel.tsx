@@ -5,7 +5,7 @@ import {
 	type LibraryEntryType,
 } from "../../lib/api/library";
 import { BASE_PATH } from "../../lib/base";
-import { IconTile } from "../BrandTile";
+import { displayName, IconTile } from "../BrandTile";
 import {
 	onSidebarToolsChanged,
 	readHiddenSidebarTools,
@@ -238,7 +238,7 @@ export function LibraryPanel() {
 										<SettingRowDescription>
 											{entry.description}
 											{entry.requires?.length
-												? ` Needs the ${entry.requires.join(", ")} integration.`
+												? ` Needs ${entry.requires.map(displayName).join(" and ")}.`
 												: ""}
 										</SettingRowDescription>
 									</SettingRowText>
