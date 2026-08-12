@@ -58,6 +58,8 @@ import {
 	SIDEBAR_WS_ACTIONS_HOVER,
 	SIDEBAR_WS_ACTIONS_TOUCH,
 	SIDEBAR_WS_DRAFT,
+	SIDEBAR_WS_FACE,
+	SIDEBAR_WS_FACES,
 	SIDEBAR_WS_ROW,
 	SIDEBAR_WS_TIME,
 	SIDEBAR_WS_TIME_HOVER,
@@ -2675,13 +2677,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							currentUser,
 						);
 						if (!viewers.length) return null;
-						// Faces sit side by side rather than stacked: an overlapped pile
-						// needs an opaque ring the color of what's behind it, and a row's
-						// backdrop varies (sidebar material, hover ink, selected, waiting),
-						// so any fixed ring reads as a hard frame on most of them.
 						return (
 							<span
-								className="flex shrink-0 items-center gap-0.5"
+								className={SIDEBAR_WS_FACES}
 								aria-label={`Viewing: ${viewers.join(", ")}`}
 							>
 								{viewers.slice(0, 3).map((viewer) => (
@@ -2689,6 +2687,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 										key={viewer}
 										name={viewer}
 										size={16}
+										className={SIDEBAR_WS_FACE}
 										title={`${viewer} is here`}
 									/>
 								))}

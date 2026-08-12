@@ -529,6 +529,23 @@ export const SIDEBAR_WS_TICKER =
 	"ml-auto min-w-[28px] flex-[0_0_auto] justify-end pr-0.5 text-right text-meta tabular-nums text-yellow group-hover:hidden desktop:min-w-[34px] desktop:pr-1";
 
 /**
+ * Teammates focused on this row's work, as an overlapping pile: whoever came
+ * later sits on top, tucked a shoulder's width over their neighbour.
+ *
+ * The face underneath cuts the hole for the one above it with a MASK rather
+ * than the usual ring. A ring has to be painted in whatever is behind the row,
+ * and a row's backdrop is four different things (sidebar material, hover ink,
+ * selected, waiting), so no single colour separates the faces on all of them —
+ * which is why this pile used to sit side by side instead. The hole is the
+ * next face's own circle plus 1.5px, centred where it lands: 16px wide, tucked
+ * 6px, so its centre is 2px past this face's right edge.
+ */
+export const SIDEBAR_WS_FACES = "flex shrink-0 items-center";
+export const SIDEBAR_WS_FACE =
+	"[&:not(:first-child)]:-ml-1.5 " +
+	"[&:not(:last-child)]:[mask-image:radial-gradient(circle_9.5px_at_calc(100%_+_2px)_50%,transparent_99%,#000_100%)]";
+
+/**
  * Slack-style unsent-draft pencil. Its left margin is the call site's: on a
  * workspace row it pins itself to the right edge, unless a ticker or a snooze
  * countdown already did that pushing.
