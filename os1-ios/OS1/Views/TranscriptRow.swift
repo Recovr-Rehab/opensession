@@ -19,6 +19,7 @@ struct TranscriptRow: View {
     /// Who started this session, for crediting turns that carry no explicit
     /// sender (see `UserBubble`). Nil for automations and sub-agents.
     var owner: String?
+    var onEditMessage: ((TranscriptEntry) -> Void)?
     var onEditNote: ((SessionNote, String) async throws -> Void)?
     var onDeleteNote: ((SessionNote) async throws -> Void)?
 
@@ -34,7 +35,12 @@ struct TranscriptRow: View {
                     state: expansionState("notice-\(entry.id)", false)
                 )
             } else if entry.isUser {
-                UserBubble(entry: entry, sessionId: sessionId, owner: owner)
+                UserBubble(
+                    entry: entry,
+                    sessionId: sessionId,
+                    owner: owner,
+                    onEdit: onEditMessage
+                )
             } else if entry.isAssistant {
                 AssistantMessage(
                     entry: entry,
@@ -284,6 +290,7 @@ struct UserBubble: View {
     /// sender. Nil for automations (whose turns aren't a person's words) and
     /// for sub-agent transcripts.
     var owner: String?
+    var onEdit: ((TranscriptEntry) -> Void)?
 
     /// The name to credit, and whether it came back through Slack. Nil when
     /// this turn is the viewer's own. The rule itself lives in
@@ -348,6 +355,13 @@ struct UserBubble: View {
                                 copyToPasteboard(entry.text)
                             } label: {
                                 Label("Copy message", systemImage: "doc.on.doc")
+                            }
+                            if attribution == nil, let onEdit {
+                                Button {
+                                    onEdit(entry)
+                                } label: {
+                                    Label("Edit and send again", systemImage: "square.and.pencil")
+                                }
                             }
                             TimestampLabel(date: entry.timestampDate)
                         }

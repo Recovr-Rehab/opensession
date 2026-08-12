@@ -37,6 +37,8 @@ interface Props {
 	live?: boolean;
 	/** Assistant messages show a "Fork from here" action when provided. */
 	onFork?: (entryId: string) => void;
+	/** Your own sent messages can be reopened in the composer when provided. */
+	onEditMessage?: (entry: TranscriptEntry) => void;
 	/** Called when a Task/Agent block's "Open sub-agent" affordance is clicked. */
 	onOpenSubagent?: (agentId: string, label: string) => void;
 	/** Session owner (startedBy) — credited on un-attributed user turns. */
@@ -125,6 +127,7 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 	entries,
 	live,
 	onFork,
+	onEditMessage,
 	onOpenSubagent,
 	owner,
 	sessionId,
@@ -281,7 +284,12 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 											) : inner.kind === "footer" ? (
 												<TurnFooter entry={inner.entry} durationMs={inner.durationMs} files={inner.files} assets={inner.assets} onFork={onFork} />
 											) : inner.kind === "entry" && reviewHandoff(inner) === undefined ? (
-												<MessageBubble entry={inner.entry} owner={owner} sessionId={sessionId} />
+												<MessageBubble
+													entry={inner.entry}
+													owner={owner}
+													sessionId={sessionId}
+													onEdit={onEditMessage}
+												/>
 											) : null}
 										</React.Fragment>
 									);
@@ -341,6 +349,7 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 						entry={block.entry}
 						owner={owner}
 						sessionId={sessionId}
+						onEdit={onEditMessage}
 					/>
 				);
 				const showShareAction =

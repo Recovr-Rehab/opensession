@@ -12,6 +12,8 @@ import { extBadge } from "../lib/images";
 import { useOpenAssetPaths } from "../lib/open-asset";
 import { fullTime, shortTime } from "../lib/time";
 import { UserAvatar } from "./UserAvatar";
+import { IconPencil } from "./icons";
+import { personKey } from "../lib/review-queue";
 
 import {
 	fileChipCard,
@@ -293,25 +295,54 @@ function TeammateAvatar({ name }: { name: string }) {
 	);
 }
 
-/** The real time below your own bubble, faded in while the row is hovered —
- * those turns carry no label row to hang a MsgTime off, and a timestamp on
- * every one of them would just be noise while reading.
+/** Put a message you already sent back into the composer, so a typo is a fix
+ * and a re-send rather than a re-type.
  *
- * Hover-capable pointers only: a touch pointer never gets a dead element, and
- * the assistant's time lives in the ⋯ menu there instead. The reveal is
- * opacity-only over an absolutely positioned element — nothing here may change
- * a block's height, or VirtualTranscriptBlock's measured placeholders would
- * mis-size and jump the scroll. The ::selection mask is the same WebKit fix as
- * the label's: a drag-select sweeping past unselectable text paints a phantom
- * highlight without it, and a fully transparent background is ignored. */
-function BubbleHoverTime({ ts }: { ts?: string }) {
-	if (!ts) return null;
-	const label = fullTime(ts);
-	if (!label) return null;
+ * It goes out as a NEW message rather than rewriting the old one. The engine
+ * keeps the turn it already read, and a session is shared — quietly rewriting
+ * a line a teammate read, or that a PR body quotes, is a different promise
+ * than editing your own note.
+ *
+ * Always on the page for touch pointers, where there is no hover to reveal it;
+ * on a mouse it comes up with the rest of the row. */
+function EditAgainButton({ onClick }: { onClick: () => void }) {
 	return (
-		<span className="absolute top-[calc(100%+8px)] right-0 hidden text-meta leading-none font-medium whitespace-nowrap text-faint select-none selection:bg-[rgba(0,0,0,0.01)] [@media(hover:hover)]:block [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:transition-opacity [@media(hover:hover)]:group-hover/bubble:opacity-100">
-			{label}
-		</span>
+		<Tooltip label="Edit and send again">
+			<button
+				type="button"
+				onClick={onClick}
+				aria-label="Edit and send again"
+				className="flex size-7 flex-none cursor-pointer items-center justify-center rounded-sm border-0 bg-transparent p-0 text-faint select-none hover:bg-hover hover:text-dim [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:transition-opacity [@media(hover:hover)]:group-hover/bubble:opacity-100 [@media(hover:hover)]:group-focus-within/bubble:opacity-100"
+			>
+				<IconPencil size={16} />
+			</button>
+		</Tooltip>
+	);
+}
+
+/** The quiet row under your own bubble: the edit action, and the real time.
+ *
+ * Those turns carry no label row to hang a MsgTime off, and a timestamp on
+ * every one of them would just be noise while reading — so the time stays
+ * hover-capable pointers only, where the assistant's equivalent lives in the ⋯
+ * menu instead. The reveal is opacity-only over an absolutely positioned row —
+ * nothing here may change a block's height, or VirtualTranscriptBlock's
+ * measured placeholders would mis-size and jump the scroll. The ::selection
+ * mask is the same WebKit fix as the label's: a drag-select sweeping past
+ * unselectable text paints a phantom highlight without it, and a fully
+ * transparent background is ignored. */
+function BubbleMeta({ ts, onEdit }: { ts?: string; onEdit?: () => void }) {
+	const label = ts ? fullTime(ts) : "";
+	if (!onEdit && !label) return null;
+	return (
+		<div className="absolute top-[calc(100%+2px)] right-0 flex items-center gap-1">
+			{onEdit && <EditAgainButton onClick={onEdit} />}
+			{label && (
+				<span className="hidden text-meta leading-none font-medium whitespace-nowrap text-faint select-none selection:bg-[rgba(0,0,0,0.01)] [@media(hover:hover)]:block [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:transition-opacity [@media(hover:hover)]:group-hover/bubble:opacity-100 [@media(hover:hover)]:group-focus-within/bubble:opacity-100">
+					{label}
+				</span>
+			)}
+		</div>
 	);
 }
 
@@ -326,6 +357,9 @@ interface Props {
 	owner?: string;
 	/** Lets a wire-clamped entry's "Show full message" fetch the full content. */
 	sessionId?: string;
+	/** Offered on your own user turns: puts this message back in the composer.
+	 *  Omitted where there is no composer to put it in (no engine session). */
+	onEdit?: (entry: TranscriptEntry) => void;
 }
 
 /** Inline images carried on an entry (Read-of-image results, pasted images).
@@ -430,6 +464,7 @@ export const MessageBubble = React.memo(function MessageBubble({
 	entry,
 	owner,
 	sessionId,
+	onEdit,
 }: Props) {
 	const me = useCurrentUser();
 	// How this entry reads — an operational notice, someone else's words, or an
@@ -472,7 +507,7 @@ export const MessageBubble = React.memo(function MessageBubble({
 		// way, credit the sender — "You" only when the sender is the current
 		// viewer. Falls back to "You" when the owner is unknown.
 		const sender = e.sender ?? owner;
-		const fromOther = sender && sender !== me ? sender : null;
+		const fromOther = sender && personKey(sender) !== personKey(me) ? sender : null;
 		// Nothing to show: an entry that strips down to just its "[Name] "
 		// delivery attribution is plumbing whose body was fenced context (the
 		// auto-continue nudge). Render nothing rather than a label + identity dot
@@ -496,10 +531,11 @@ export const MessageBubble = React.memo(function MessageBubble({
 					msgRow,
 					"msg-user",
 					msgOwnTurn,
-					// Your own turns hang their time below the bubble, so on
-					// hover-capable pointers the row keeps that much clear of the
-					// next transcript block.
-					!fromOther && "[@media(hover:hover)]:mb-8.75",
+					// Your own turns hang their quiet actions below the bubble. The
+					// edit button is always visible to touch pointers, while a row
+					// with only a timestamp needs the clearance on hover devices.
+					!fromOther &&
+						(onEdit ? "mb-8.75" : "[@media(hover:hover)]:mb-8.75"),
 				)}
 				data-eid={e.id}
 			>
@@ -510,9 +546,14 @@ export const MessageBubble = React.memo(function MessageBubble({
 						<MsgTime ts={e.timestamp} />
 					</div>
 				)}
-				{/* One stack anchors the hover time below both the bubble and attachments. */}
+				{/* One stack anchors the quiet actions below both the bubble and attachments. */}
 				<div className="group/bubble relative flex min-w-0 flex-col">
-					{!fromOther && <BubbleHoverTime ts={e.timestamp} />}
+					{!fromOther && (
+						<BubbleMeta
+							ts={e.timestamp}
+							onEdit={onEdit ? () => onEdit(e) : undefined}
+						/>
+					)}
 					{displayContent && (
 						<ClampedBody
 							className={cn(msgBubbleUser, "markdown")}

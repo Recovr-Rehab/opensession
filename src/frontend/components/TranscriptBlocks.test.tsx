@@ -116,6 +116,33 @@ describe("TranscriptBlocks shipped change action", () => {
 	});
 });
 
+describe("TranscriptBlocks sent message actions", () => {
+	test("offers edit and send again only on the current viewer's messages", () => {
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				owner="Anonymous"
+				onEditMessage={() => {}}
+				entries={[
+					{
+						id: "mine",
+						type: "user",
+						content: "Fix the typo",
+						timestamp: "2026-08-12T12:00:00Z",
+					},
+					{
+						id: "theirs",
+						type: "user",
+						content: "A teammate's message",
+						timestamp: "2026-08-12T12:01:00Z",
+						sender: "Ada",
+					},
+				]}
+			/>,
+		);
+		expect(html.match(/aria-label="Edit and send again"/g)).toHaveLength(1);
+	});
+});
+
 describe("TranscriptBlocks review loops", () => {
 	test("folds review work but leaves a following user request in the conversation", () => {
 		const html = renderToStaticMarkup(

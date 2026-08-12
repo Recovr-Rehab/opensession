@@ -1261,6 +1261,24 @@ final class SendDraftTests: XCTestCase {
         )
     }
 
+    func testEditingSentMessageCopiesItIntoTheNormalComposer() {
+        let entry = TranscriptEntry(
+            id: "u1", type: "user", content: "fix the typo", images: [Self.pngURL]
+        )
+        viewModel.editSentMessageInComposer(entry)
+        XCTAssertEqual(viewModel.draft, "fix the typo")
+        XCTAssertEqual(viewModel.attachedImages.map(\.dataURL), [Self.pngURL])
+    }
+
+    func testEditingSentMessageDoesNotReplaceAnExistingDraft() {
+        viewModel.draft = "keep this"
+        viewModel.editSentMessageInComposer(
+            TranscriptEntry(id: "u1", type: "user", content: "old message")
+        )
+        XCTAssertEqual(viewModel.draft, "keep this")
+        XCTAssertEqual(viewModel.notice, "Send or clear your draft before editing a message.")
+    }
+
     func testEditingQueuedMessageToNothingDiscardsIt() {
         queueTwo()
         viewModel.editQueued(viewModel.queuedItems[0], content: "   ")

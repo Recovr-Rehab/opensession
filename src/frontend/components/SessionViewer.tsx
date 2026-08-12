@@ -1123,6 +1123,7 @@ export function SessionViewer({
 	const [composerPrefill, setComposerPrefill] = useState<{
 		seq: number;
 		text: string;
+		replace?: boolean;
 	} | null>(null);
 	const [editingQueue, setEditingQueue] = useState<{
 		key: string;
@@ -3327,6 +3328,30 @@ export function SessionViewer({
 			text: item.content,
 		}));
 		discardOutbox(item);
+	}
+
+	function editSentMessageInComposer(entry: TranscriptEntry) {
+		const draft = loadDraft(draftKey);
+		if (
+			draft.text.trim() ||
+			images.length ||
+			files.length ||
+			quote ||
+			contextSessions.length
+		) {
+			toast("Send or clear your draft before editing a message");
+			return;
+		}
+		setImages(entry.images ?? []);
+		setFiles((entry.files ?? []).map((file) => ({
+			...file,
+			type: "application/octet-stream",
+		})));
+		setComposerPrefill((current) => ({
+			seq: (current?.seq ?? 0) + 1,
+			text: entry.content,
+			replace: true,
+		}));
 	}
 
 	function discardOutbox(item: PromptOutboxItem) {
@@ -5598,11 +5623,12 @@ export function SessionViewer({
 											<ToolPathRootsProvider value={toolPathRoots}>
 												<LiveSubagentsProvider value={liveSubagents}>
 													<OpenAssetProvider value={openAssetFromTranscript}>
-																<TranscriptBlocks
-																	entries={entries}
-																	live={isBusy}
-																	sessionId={session.id}
-																		reviewResult={reviewLoopResult(session)}
+														<TranscriptBlocks
+															entries={entries}
+															live={isBusy}
+															sessionId={session.id}
+															onEditMessage={editSentMessageInComposer}
+															reviewResult={reviewLoopResult(session)}
 																	walkthrough={sessionWalkthrough}
 															notes={notes}
 															slackShare={shippedChangeShare}

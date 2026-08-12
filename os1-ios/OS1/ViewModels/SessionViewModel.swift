@@ -1042,6 +1042,18 @@ final class SessionViewModel {
         outbox.delete(id: item.id)
     }
 
+    /// Put one of the viewer's sent turns back into the ordinary composer.
+    /// History stays immutable; sending creates a new turn.
+    func editSentMessageInComposer(_ entry: TranscriptEntry) {
+        guard draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              attachedImages.isEmpty else {
+            notice = "Send or clear your draft before editing a message."
+            return
+        }
+        draft = entry.text
+        attachedImages = (entry.images ?? []).compactMap(AttachedImage.init(dataURL:))
+    }
+
     // MARK: - Socket lifecycle
 
     private func connect() {

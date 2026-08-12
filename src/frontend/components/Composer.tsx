@@ -154,9 +154,11 @@ interface Props {
    * One-shot draft injection (e.g. editing a queued message pulls its text
    * back into the composer). Applied when `seq` changes: appended to a
    * non-empty draft, otherwise it becomes the draft; the caret lands at the
-   * end. Works in both controlled and uncontrolled modes.
+   * end. `replace` is for editing an existing queued message, where appending
+   * would accidentally fold a separate draft into that message. Works in both
+   * controlled and uncontrolled modes.
    */
-  prefill?: { seq: number; text: string } | null;
+  prefill?: { seq: number; text: string; replace?: boolean } | null;
   /** Optional action rendered inside the "+" menu, e.g. "schedule message". */
   sendMenu?: (ctx: {
     text: string;
@@ -429,7 +431,7 @@ export function Composer({
   useEffect(() => {
     if (!prefill || prefill.seq === prefillSeqRef.current) return;
     prefillSeqRef.current = prefill.seq;
-    const next = text.trim()
+    const next = !prefill.replace && text.trim()
       ? `${text.replace(/\s+$/, "")}\n${prefill.text}`
       : prefill.text;
     setText(next);

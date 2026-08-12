@@ -282,6 +282,9 @@ struct SessionView: View {
                                     // the web makes the same exception.
                                     owner: viewModel.session.isAutomation
                                         ? nil : viewModel.session.startedBy,
+                                    onEditMessage: { entry in
+                                        viewModel.editSentMessageInComposer(entry)
+                                    },
                                     onEditNote: { note, text in
                                         try await viewModel.editSessionNote(note, text: text)
                                     },
