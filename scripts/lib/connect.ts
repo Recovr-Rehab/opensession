@@ -27,6 +27,7 @@ import { localAutomationToken } from "./local-auth";
 const IDENTITY_PATH = join(OPENSESSION_HOME, "runner.json");
 const HEARTBEAT_MS = 60_000;
 const RUNNER_HOST_ENTRY = resolve(import.meta.dir, "../../src/runner-host/host.ts");
+const RUNNER_SERVICE_LABEL = "dev.tella.opensession.runner";
 
 type Identity = { server: string; id: string; token: string; name: string };
 
@@ -134,10 +135,63 @@ export async function connect(opts: ConnectOptions): Promise<number> {
   ok(`registered as ${name}`, runner.id);
   info(dim(`  credential written to ${IDENTITY_PATH} (0600)`));
 
-  heading("Next");
-  info(`${bold("opensession runner run")}    hold the outbound control channel open`);
-  info(dim("  run it under a service manager to keep this Runner attached across reboots"));
-  return 0;
+	if (await installRunnerService()) return 0;
+	heading("Next");
+	info(`${bold("opensession runner run")}    hold the outbound control channel open`);
+	info(dim("  install a service manager, then run `opensession runner service install`"));
+	return 0;
+}
+
+function runnerCommandPath(): string {
+	return process.argv[1] || "opensession";
+}
+
+function runnerEnvironment(): Record<string, string> {
+	return {
+		PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin",
+		HOME: process.env.HOME || "/tmp",
+	};
+}
+
+/** Rendered separately for a testable, deliberately narrow service contract. */
+export function runnerLaunchdPlist(command = runnerCommandPath(), bun = process.execPath): string {
+	const xml = (value: string) => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+	return `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict><key>Label</key><string>${RUNNER_SERVICE_LABEL}</string><key>ProgramArguments</key><array><string>${xml(bun)}</string><string>${xml(command)}</string><string>runner</string><string>run</string></array><key>RunAtLoad</key><true/><key>KeepAlive</key><true/><key>ProcessType</key><string>Background</string><key>StandardOutPath</key><string>${xml(join(OPENSESSION_HOME, "runner.log"))}</string><key>StandardErrorPath</key><string>${xml(join(OPENSESSION_HOME, "runner.log"))}</string></dict></plist>\n`;
+}
+
+export function runnerSystemdUnit(command = runnerCommandPath(), bun = process.execPath): string {
+	return `[Unit]\nDescription=Open Session Runner\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=simple\nExecStart=${bun} ${command} runner run\nRestart=always\nRestartSec=5\nEnvironment=HOME=${process.env.HOME || "/tmp"}\nEnvironment=PATH=${process.env.PATH || "/usr/local/bin:/usr/bin:/bin"}\n\n[Install]\nWantedBy=default.target\n`;
+}
+
+/** Install a per-user service. Runner credentials and workspaces stay owned by
+ * the attaching user, so this never asks for a system-wide service or sudo. */
+export async function installRunnerService(): Promise<boolean> {
+	try {
+		if (platform() === "darwin") {
+			const path = join(process.env.HOME || "/tmp", "Library", "LaunchAgents", `${RUNNER_SERVICE_LABEL}.plist`);
+			mkdirSync(dirname(path), { recursive: true });
+			await Bun.write(path, runnerLaunchdPlist());
+			const uid = typeof process.getuid === "function" ? process.getuid() : 0;
+			await run(["launchctl", "bootout", `gui/${uid}/${RUNNER_SERVICE_LABEL}`], { quiet: true });
+			const started = await run(["launchctl", "bootstrap", `gui/${uid}`, path], { quiet: true });
+			if (started.code !== 0) throw new Error(started.stderr || "launchctl bootstrap failed");
+			ok("Runner service installed", "LaunchAgent reconnects after restart");
+			return true;
+		}
+		if (platform() === "linux" && Bun.which("systemctl")) {
+			const path = join(process.env.XDG_CONFIG_HOME || join(process.env.HOME || "/tmp", ".config"), "systemd", "user", "opensession-runner.service");
+			mkdirSync(dirname(path), { recursive: true });
+			await Bun.write(path, runnerSystemdUnit());
+			const reload = await run(["systemctl", "--user", "daemon-reload"], { quiet: true });
+			const enabled = await run(["systemctl", "--user", "enable", "--now", "opensession-runner.service"], { quiet: true });
+			if (reload.code !== 0 || enabled.code !== 0) throw new Error(enabled.stderr || reload.stderr || "systemctl user service failed");
+			ok("Runner service installed", "systemd user service reconnects after restart");
+			return true;
+		}
+	} catch (error) {
+		warn("Runner service was not installed", error instanceof Error ? error.message : String(error));
+	}
+	return false;
 }
 
 /**
@@ -203,6 +257,7 @@ export async function runnerRun(): Promise<number> {
         try {
           const proc = Bun.spawn(["bash", "-lc", String(msg.command)], {
             cwd: typeof msg.cwd === "string" && msg.cwd ? msg.cwd : undefined,
+			env: runnerEnvironment(),
             stdout: "pipe",
             stderr: "pipe",
           });

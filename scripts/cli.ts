@@ -25,7 +25,7 @@ import { update } from "./lib/update";
 import { bold, dim, fail, green, heading, info, ok, run, runInherit, warn } from "./lib/ui";
 import { INTEGRATIONS, findIntegration } from "../src/server/integrations/registry";
 import { findRecipe, installRecipe, installedKeys, listRecipes, removeRecipe } from "./lib/recipes";
-import { connect, runnerRun, runnerStatus, runnersList, runnersPair, runnersRemove } from "./lib/connect";
+import { connect, installRunnerService, runnerRun, runnerStatus, runnersList, runnersPair, runnersRemove } from "./lib/connect";
 import { sandbox } from "./lib/sandbox";
 
 const argv = process.argv.slice(2);
@@ -86,6 +86,7 @@ ${bold("Runners")}           ${dim("trusted persistent machines for specialized 
   connect --server <url> --code <code>
                            attach THIS machine to a server
   runner run               stay attached (outbound control channel)
+  runner service install   install the reconnecting user service
   runner status            is this machine attached?
 
 Docs: docs/setup/README.md
@@ -324,8 +325,9 @@ async function main(): Promise<number> {
 
     case "runner":
       if (positional[0] === "run") return await runnerRun();
+			if (positional[0] === "service" && positional[1] === "install") return (await installRunnerService()) ? 0 : 1;
       if (positional[0] === "status" || !positional[0]) return await runnerStatus();
-      fail("usage: opensession runner run|status");
+		fail("usage: opensession runner run|status|service install");
       return 1;
 
     case "runners":
