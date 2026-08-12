@@ -44,8 +44,26 @@ const WS_DIAL_URL = WS_URL
   ? `${WS_URL}${WS_URL.includes("?") ? "&" : "?"}host=${encodeURIComponent(WS_HOST)}`
   : "";
 
-/** An error the opensession side answered with — retrying won't change it. */
-class RpcError extends Error {}
+/**
+ * An error the opensession side answered with. Most are terminal, but an
+ * unknown run token is special: after an opensession restart the detached
+ * engine and this proxy are still alive before boot recovery has re-registered
+ * the token. Retrying that one answer lets the proxy bridge the recovery gap.
+ */
+class RpcError extends Error {
+  constructor(message: string, readonly retryable = false) {
+    super(message);
+  }
+}
+
+function rpcError(status: number, data: any): RpcError {
+  const message = data?.error || `opensession RPC ${status}`;
+  // A token that is genuinely invalid is no more privileged by waiting: this
+  // only gives an in-flight detached run time for the restarted server to
+  // restore its in-memory token registry. All other answered authz/tool
+  // errors remain immediate failures.
+  return new RpcError(message, message === "unauthorized (unknown run token)");
+}
 
 // ── WS transport: one persistent connection, request/response frames by id ───
 // Frames out: {id, path, token, server, tool?, args?}; frames in:
@@ -139,9 +157,9 @@ async function rpcOnceWs(path: string, body: Record<string, unknown>): Promise<a
     }
   });
   const data = res.body;
-  if (res.status !== 200) throw new RpcError(data?.error || `opensession RPC ${res.status}`);
+  if (res.status !== 200) throw rpcError(res.status, data);
   if (data && typeof data === "object" && typeof data.error === "string" && data.error) {
-    throw new RpcError(data.error);
+    throw rpcError(res.status, data);
   }
   return data;
 }
@@ -158,11 +176,11 @@ async function rpcOnceSocket(path: string, body: Record<string, unknown>): Promi
   try {
     data = await res.json();
   } catch {}
-  if (!res.ok) throw new RpcError(data?.error || `opensession RPC ${res.status}`);
+  if (!res.ok) throw rpcError(res.status, data);
   // Long tool calls stream a 200 with heartbeat padding and report failures
   // in the body instead of the status — treat those as answered errors too.
   if (data && typeof data === "object" && typeof data.error === "string" && data.error) {
-    throw new RpcError(data.error);
+    throw rpcError(res.status, data);
   }
   return data;
 }
@@ -170,8 +188,8 @@ async function rpcOnceSocket(path: string, body: Record<string, unknown>): Promi
 /**
  * One RPC to opensession over whichever transport is configured. Connection-
  * level failures (socket gone / WS dropped — opensession restarting) retry
- * until the deadline; anything opensession actually answered surfaces
- * immediately.
+ * until the deadline. Answered errors surface immediately, except an unknown
+ * run token during restart recovery (see rpcError above).
  */
 async function rpc(path: string, body: Record<string, unknown>, timeoutMs = 120_000): Promise<any> {
   const deadline = Date.now() + timeoutMs;
@@ -180,7 +198,7 @@ async function rpc(path: string, body: Record<string, unknown>, timeoutMs = 120_
     try {
       return await (WS_URL ? rpcOnceWs(path, body) : rpcOnceSocket(path, body));
     } catch (e) {
-      if (e instanceof RpcError) throw e;
+      if (e instanceof RpcError && !e.retryable) throw e;
       lastErr = e; // connect failure — opensession likely restarting
     }
     if (Date.now() >= deadline) {
@@ -200,11 +218,11 @@ const server = new Server(
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   // tools/list happens during the engine's MCP init, BEFORE the turn's first
   // output — so its retry budget must stay well under the runner's 90s
-  // liveness guard. With the old 120s default, a dead rpc socket (opensession
-  // down, or the stolen-socket incident 2026-07-17) wedged every interactive
-  // turn into a liveness kill; at 20s the server just comes up with this
-  // proxy marked failed and the run proceeds without opensession-* tools.
-  const data = await rpc("/mcp/list", {}, 20_000);
+  // liveness guard. It must also cover detached-run recovery: adoption plus
+  // reattach can take tens of seconds after the new server opens its socket.
+  // Keep this below the runner's 90s liveness guard, rather than marking the
+  // proxy permanently failed while its token is still being restored.
+  const data = await rpc("/mcp/list", {}, 45_000);
   return { tools: data.tools || [] };
 });
 
