@@ -86,6 +86,7 @@ import {
 	shareShippedChange,
 } from "../lib/api/shipped-changes";
 import { suggestedShippedChangeMessage } from "../lib/shipped-change-copy";
+import { latestFeaturedScreenshot } from "../../shared/shipped-change-media";
 import { useBackSwipe } from "../hooks/useBackSwipe";
 import { dedupeViewers, otherViewers } from "../lib/presence";
 import { personKey, prReviewCompletion } from "../lib/review-queue";
@@ -797,7 +798,7 @@ export function SessionViewer({
 		"idle" | "sharing" | "shared"
 	>("idle");
 	const [requestingShippedScreenshot, setRequestingShippedScreenshot] = useState(false);
-	const shippedScreenshot = session.walkthrough?.shots?.find((shot) => shot.after)?.after;
+	const walkthroughScreenshot = session.walkthrough?.shots?.find((shot) => shot.after)?.after;
 	useEffect(
 		() => {
 			setShippedChangeStatus("idle");
@@ -805,9 +806,6 @@ export function SessionViewer({
 		},
 		[session.id, mergedPr?.number],
 	);
-	useEffect(() => {
-		if (shippedScreenshot) setRequestingShippedScreenshot(false);
-	}, [shippedScreenshot]);
 	const requestShippedScreenshot = useCallback(async () => {
 		if (!mergedPr || requestingShippedScreenshot) return;
 		setRequestingShippedScreenshot(true);
@@ -950,6 +948,10 @@ export function SessionViewer({
 		transcriptViewStore.getSnapshot,
 		transcriptViewStore.getServerSnapshot,
 	);
+	const shippedScreenshot = walkthroughScreenshot || latestFeaturedScreenshot(entries);
+	useEffect(() => {
+		if (shippedScreenshot) setRequestingShippedScreenshot(false);
+	}, [shippedScreenshot]);
 	const setEntries = useCallback(
 		(
 			update:

@@ -124,7 +124,7 @@ export function ShippedChangeComposer({
 					<span className="sr-only">Send to</span>
 					<Select
 						size="sm"
-						className="w-28 border-line/60 phone:w-24"
+						className="w-24 border-line/60 phone:w-20"
 						aria-label="Slack channel"
 						value={channel}
 						disabled={status !== "idle" || channels.length === 0}
@@ -139,9 +139,7 @@ export function ShippedChangeComposer({
 					</Select>
 				</label>
 				<Button
-					size="md"
 					icon={<BrandMark name="slack" size={12} />}
-					className="[&>span:first-child]:opacity-100"
 					disabled={status !== "idle" || !message.trim() || !channel}
 					onClick={() => onShare(message.trim(), channel)}
 				>

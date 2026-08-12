@@ -10,6 +10,7 @@ import {
   shippedChangeOneLiner,
   normalizeShippedChangeMessage,
   validWalkthroughScreenshot,
+  validFeaturedScreenshot,
 } from "./shipped-change-notify";
 
 const scratch: string[] = [];
@@ -55,6 +56,19 @@ describe("shipped visual change selection", () => {
     expect(selectShippedVisualChange(missing, () => false)).toBeNull();
   });
 
+	test("falls back to a featured transcript screenshot", () => {
+		const root = mkdtempSync(join(tmpdir(), "shipped-featured-selection-"));
+		scratch.push(root);
+		const image = join(root, "after.png");
+		writeFileSync(image, "png");
+
+		expect(selectShippedVisualChange(session("featured", "2026-08-12T10:00:00Z", []), () => false, image)).toEqual({
+			sessionId: "featured",
+			screenshot: image,
+			summary: "Why featured matters.",
+		});
+	});
+
   test("accepts only bounded images inside the session walkthrough directory", () => {
     const root = mkdtempSync(join(tmpdir(), "shipped-change-assets-"));
     scratch.push(root);
@@ -68,6 +82,14 @@ describe("shipped visual change selection", () => {
     expect(validWalkthroughScreenshot(inside, "safe-session", root)).toBe(true);
     expect(validWalkthroughScreenshot(outside, "safe-session", root)).toBe(false);
   });
+
+	test("accepts bounded featured screenshots from temporary storage", () => {
+		const root = mkdtempSync(join(tmpdir(), "shipped-featured-"));
+		scratch.push(root);
+		const image = join(root, "after.png");
+		writeFileSync(image, "png");
+		expect(validFeaturedScreenshot(image)).toBe(true);
+	});
 });
 
 describe("shipped change copy", () => {

@@ -18,6 +18,7 @@ import { audit } from "../../server/audit";
 import { stateDir } from "../../server/paths";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import { UPLOADS_DIR } from "../../server/uploads";
+import { homeDir } from "../../server/paths";
 import type { UnifiedSession } from "../../server/types";
 import { postSlackFile, sendSlackMessage } from "../slack/slack-api";
 import { shippedChangesChannel } from "./constants";
@@ -122,16 +123,36 @@ export function validWalkthroughScreenshot(
   }
 }
 
+export function validFeaturedScreenshot(path: string): boolean {
+	try {
+		const candidate = realpathSync(path);
+		const scoped = candidate.startsWith("/tmp/") || candidate.startsWith(`${homeDir()}/`);
+		if (!scoped) return false;
+		const dot = candidate.lastIndexOf(".");
+		if (dot < 0 || !SCREENSHOT_EXTS.has(candidate.slice(dot).toLowerCase())) return false;
+		const stat = statSync(candidate);
+		return stat.isFile() && stat.size > 0 && stat.size <= MAX_SCREENSHOT_BYTES;
+	} catch {
+		return false;
+	}
+}
+
 export function selectShippedVisualChange(
   session: UnifiedSession,
   fileExists: (path: string, sessionId: string) => boolean = validWalkthroughScreenshot,
+  featuredScreenshot?: string,
 ): ShippedVisualChange | null {
-  const screenshot = session.walkthrough?.shots?.find((shot) => shot.after)?.after;
-  if (!screenshot || !fileExists(screenshot, session.id)) return null;
+  const walkthroughScreenshot = session.walkthrough?.shots?.find((shot) => shot.after)?.after;
+  const screenshot = walkthroughScreenshot && fileExists(walkthroughScreenshot, session.id)
+    ? walkthroughScreenshot
+    : featuredScreenshot && validFeaturedScreenshot(featuredScreenshot)
+      ? featuredScreenshot
+      : undefined;
+  if (!screenshot) return null;
   return {
     sessionId: session.id,
     screenshot,
-    summary: session.walkthrough!.summary,
+    summary: session.walkthrough?.summary || "",
   };
 }
 
@@ -183,6 +204,7 @@ export async function shareShippedVisualChange(opts: {
   channel?: string;
   message?: string;
   slackToken?: string;
+  featuredScreenshot?: string;
 }): Promise<{ status: "shared" | "already_shared" }> {
   const channels = shippedChangeChannels();
   const channel = opts.channel || shippedChangesChannel();
@@ -193,7 +215,11 @@ export async function shareShippedVisualChange(opts: {
   if (!opts.slackToken) {
     throw new Error("Connect your Slack account in Settings → My accounts to post as yourself");
   }
-  const visual = selectShippedVisualChange(opts.session);
+  const visual = selectShippedVisualChange(
+    opts.session,
+    validWalkthroughScreenshot,
+    opts.featuredScreenshot,
+  );
   const title = opts.pr.title.replace(/\|/g, "¦");
   const message = normalizeShippedChangeMessage(opts.message) ||
     shippedChangeOneLiner(visual?.summary || "");
