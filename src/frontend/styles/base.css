@@ -207,6 +207,14 @@
 	   yellow throughout — the pulsing run indicators and the "In progress"
 	   lane — because green here means a finished, reviewable result. */
 	--yellow-soft: rgba(210, 153, 34, 0.14);
+	/* Yellow as a SURFACE rather than as ink. `--yellow` is picked to read as
+	   text, so in light mode it is a dark ochre (#9a6700) — mixed down to the
+	   5-15% of a tint it loses its hue and lands as warm grey, which is what
+	   made the note surfaces look washed out. This one is picked to survive
+	   that dilution. Use it for note fills and hatches; keep `--yellow` for
+	   the label sitting on them. On dark the ink is already chromatic enough
+	   to do both jobs. */
+	--yellow-tint: #d29922;
 	--blue: #58a6ff;
 	--blue-soft: rgba(88, 166, 255, 0.13);
 	--red: #f85149;
@@ -372,6 +380,9 @@ html[data-theme="light"] {
 	--green-soft: rgba(26, 127, 55, 0.12);
 	--yellow: #9a6700;
 	--yellow-soft: rgba(154, 103, 0, 0.12);
+	/* See the note on --yellow-tint above: light mode's ink is too dark and too
+	   desaturated to tint with, so the surface yellow is its own colour. */
+	--yellow-tint: #f0b400;
 	--blue: #0969da;
 	--blue-soft: rgba(9, 105, 218, 0.1);
 	--red: #cf222e;

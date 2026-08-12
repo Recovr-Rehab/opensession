@@ -22,6 +22,7 @@ import {
   IconEye,
   IconNote,
   IconStopSquare,
+  IconX,
 } from "./icons";
 import {
   composerBox,
@@ -820,7 +821,7 @@ export function Composer({
         )}
         style={
           noteMode
-            ? tintedSurface("var(--yellow)", 10, 6, 45)
+            ? tintedSurface("var(--yellow-tint)", 10, 6, 45)
             : askMode
               ? tintedSurface("var(--green)", 7, 4, 30)
               : undefined
@@ -1145,9 +1146,17 @@ export function Composer({
                     // three different corners in one 88px row is what made the
                     // toolbar read as assembled rather than designed.
                     className={cn(
-                      "inline-flex min-h-8 items-center gap-1.5 rounded-control px-2.5 text-meta font-medium transition-colors",
+                      // 12px copy against a 14px glyph, matching the model
+                      // pill beside it: at the old 11px-against-15px the label
+                      // read as a caption hung off an icon rather than as the
+                      // name of the mode.
+                      "inline-flex min-h-8 items-center gap-1.5 rounded-control text-[12px] font-medium transition-colors",
+                      // Note mode ends with the ✕, so the chip carries less
+                      // room on the trailing side than ask mode, which is all
+                      // label.
+                      noteMode ? "pl-2.5 pr-1.5" : "px-2.5",
                       noteMode
-                        ? "bg-[color-mix(in_srgb,var(--yellow)_18%,transparent)] text-yellow hover:bg-[color-mix(in_srgb,var(--yellow)_26%,transparent)]"
+                        ? "bg-[color-mix(in_srgb,var(--yellow-tint)_22%,transparent)] text-yellow hover:bg-[color-mix(in_srgb,var(--yellow-tint)_32%,transparent)]"
                         : "bg-[color-mix(in_srgb,var(--green)_18%,transparent)] text-green hover:bg-[color-mix(in_srgb,var(--green)_26%,transparent)]",
                     )}
                     // The marker does the useful thing on click: note mode is a
@@ -1156,10 +1165,25 @@ export function Composer({
                     {...tapProps(() =>
                       noteMode ? onNoteModeChange?.(false) : setMenu("add"),
                     )}
+                    // The visible label names the mode; the accessible name has
+                    // to name the ACTION, since the ✕ that says so is decorative.
+                    aria-label={noteMode ? "Leave note mode" : undefined}
                     disabled={disabled}
                   >
-                    {noteMode ? <IconNote size={15} /> : <IconEye size={15} />}
+                    {noteMode ? <IconNote size={14} /> : <IconEye size={14} />}
                     {noteMode ? "Note" : "Ask"}
+                    {/* Not a nested button — the whole chip is the exit, and
+                        this says so. Without it the only way out of note mode
+                        is knowing that the marker is clickable (or ⌘N), which
+                        is exactly the thing a marker doesn't communicate. */}
+                    {noteMode && (
+                      <span
+                        aria-hidden
+                        className="ml-0.5 inline-flex size-[18px] items-center justify-center rounded-[5px] text-yellow/70"
+                      >
+                        <IconX size={12} />
+                      </span>
+                    )}
                   </button>
                 </Tooltip>
               </motion.div>

@@ -103,6 +103,8 @@
 	--color-green-soft: var(--green-soft);
 	--color-yellow: var(--yellow);
 	--color-yellow-soft: var(--yellow-soft);
+	/* Yellow as a surface, not as ink — see base.css. */
+	--color-yellow-tint: var(--yellow-tint);
 	--color-blue: var(--blue);
 	--color-blue-soft: var(--blue-soft);
 	--color-red: var(--red);

@@ -59,7 +59,7 @@ export function NoteBubble({ note }: { note: SessionNote }) {
 			// WalkthroughCard) so it doesn't crowd whatever follows it.
 			className="mx-auto mb-6 mt-2 w-full max-w-[var(--session-col)] rounded-lg px-4 py-3.5"
 			style={{
-				background: "color-mix(in srgb, var(--yellow) 7%, transparent)",
+				background: "color-mix(in srgb, var(--yellow-tint) 10%, transparent)",
 			}}
 		>
 			<div className="mb-1 flex items-center gap-2">

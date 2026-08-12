@@ -612,13 +612,15 @@ export function PlainReplyBox({
 		}
 	}
 
-	const noteFill = "color-mix(in srgb, var(--composer-surface) 92%, var(--yellow))";
+	// `--yellow-tint`, not `--yellow`: the ink is a dark ochre in light mode and
+	// turns warm grey at these percentages (see base.css).
+	const noteFill = "color-mix(in srgb, var(--composer-surface) 90%, var(--yellow-tint))";
 	const noteSurface: React.CSSProperties | undefined =
 		kind === "note"
 			? {
-					borderColor: "color-mix(in srgb, var(--yellow) 35%, transparent)",
+					borderColor: "color-mix(in srgb, var(--yellow-tint) 45%, transparent)",
 					backgroundColor: noteFill,
-					backgroundImage: `linear-gradient(to bottom, transparent 15%, ${noteFill} 72%), repeating-linear-gradient(45deg, color-mix(in srgb, var(--yellow) 7%, transparent) 0, color-mix(in srgb, var(--yellow) 7%, transparent) 12px, transparent 12px, transparent 24px)`,
+					backgroundImage: `linear-gradient(to bottom, transparent 15%, ${noteFill} 72%), repeating-linear-gradient(45deg, color-mix(in srgb, var(--yellow-tint) 10%, transparent) 0, color-mix(in srgb, var(--yellow-tint) 10%, transparent) 12px, transparent 12px, transparent 24px)`,
 				}
 			: undefined;
 
@@ -719,7 +721,7 @@ export function PlainReplyBox({
 							palettePill,
 							"shrink-0",
 							kind === "note" &&
-								"bg-[color-mix(in_srgb,var(--yellow)_16%,transparent)] text-yellow hover:bg-[color-mix(in_srgb,var(--yellow)_24%,transparent)] hover:text-yellow",
+								"bg-[color-mix(in_srgb,var(--yellow-tint)_22%,transparent)] text-yellow hover:bg-[color-mix(in_srgb,var(--yellow-tint)_32%,transparent)] hover:text-yellow",
 						)}
 						onClick={() => setKind((current) => (current === "note" ? "reply" : "note"))}
 						disabled={sending}
