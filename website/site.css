@@ -46,7 +46,7 @@ button:focus-visible {
 	min-height: 100svh;
 	flex-direction: column;
 	overflow: clip;
-	background: #e2ded9;
+	background: #cfcdc8;
 }
 
 .gradient-fallback,
@@ -60,9 +60,9 @@ button:focus-visible {
 
 .gradient-fallback {
 	background:
-		radial-gradient(circle at 24% 18%, #f6f2ec 0, transparent 38%),
-		radial-gradient(circle at 76% 32%, #e7e9ee 0, transparent 42%),
-		linear-gradient(145deg, #efece7 0%, #e3e2e2 54%, #d8d9db 100%);
+		radial-gradient(circle at 26% 16%, #eceae4 0, transparent 40%),
+		radial-gradient(circle at 74% 34%, #dedcd6 0, transparent 44%),
+		linear-gradient(145deg, #d9d7d1 0%, #cdcbc6 52%, #b8b6b2 100%);
 }
 
 .hero-video {

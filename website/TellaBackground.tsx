@@ -1,5 +1,6 @@
-import pearlPosterUrl from "./pearl-poster.webp";
+import heroPosterUrl from "./hero-poster.webp";
 
+/** Tella's "Silver Silk" background loop. */
 export function TellaBackground() {
 	return (
 		<video
@@ -8,11 +9,11 @@ export function TellaBackground() {
 			loop
 			muted
 			playsInline
-			poster={pearlPosterUrl}
+			poster={heroPosterUrl}
 			aria-hidden="true"
 		>
 			<source
-				src="https://ucarecdn.com/fdcd780a-72a1-4d05-8f1a-8dbd1b4713b0/"
+				src="https://ucarecdn.com/b8c1a712-87c2-4884-8034-77e71fa4d7ac/"
 				type="video/mp4"
 			/>
 		</video>
