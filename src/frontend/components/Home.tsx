@@ -595,7 +595,7 @@ export function Home({
             <Menu.Root>
               <Menu.Trigger
                 render={
-                  <Button icon={<IconFolder size={18} />}>
+                  <Button variant="ghost" icon={<IconFolder size={18} />}>
                     <span className="max-w-[150px] truncate">
                       {workspaceId === "all"
                         ? "In all workspaces"
@@ -638,7 +638,7 @@ export function Home({
               <Menu.Root>
                 <Menu.Trigger
                   render={
-                    <Button icon={<IconRepo size={18} />}>
+                    <Button variant="ghost" icon={<IconRepo size={18} />}>
                       <span className="max-w-[150px] truncate">
                         {repo === "all" ? "In all repos" : `In ${repoLabel(repo)}`}
                       </span>
@@ -674,6 +674,7 @@ export function Home({
                 <Menu.Trigger
                   render={
                     <Button
+                      variant="ghost"
                       aria-label="More filters"
                       icon={<IconDotsHorizontal size={18} />}
                       className={showArchived ? "text-fg" : undefined}

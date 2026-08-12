@@ -96,7 +96,14 @@ const variants: Record<Variant, string> = {
 	// two callers keep working.
 	primary: INK,
 	ink: INK,
-	ghost: "border-transparent text-dim hover:bg-hover hover:text-fg",
+	// No plate at all until you reach for it. A ghost is the right weight for a
+	// control that is *reporting state* as much as inviting a press — a filter
+	// that says "In all workspaces" is mostly a label — so the row stays quiet
+	// and the wash arrives on hover. `data-popup-open` is Base UI's: when the
+	// ghost is a menu trigger it has to stay lit while its own menu is open, or
+	// the thing you just clicked disappears out from under the popup.
+	ghost:
+		"border-transparent text-dim hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg",
 	// Outline green, mirroring `danger` — the affirmative half of the pair
 	// (approve a review, merge, confirm). Green is the second-most reached-for
 	// button color in the app after the accent, so it earns a variant rather
