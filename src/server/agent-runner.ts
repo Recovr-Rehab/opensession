@@ -63,7 +63,12 @@ import {
   resolveModel,
   toOpencodeModel,
 } from "./models";
-import { isTransientRunError, TOOL_RESULT_ENVELOPE_RE, type McpScope } from "./runner-shared";
+import {
+  isProviderOverloadError,
+  isTransientRunError,
+  TOOL_RESULT_ENVELOPE_RE,
+  type McpScope,
+} from "./runner-shared";
 import {
   hostRunBusy,
   hostSteer,
@@ -446,11 +451,11 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
   for (;;) {
     if (wasCancelled()) return;
     let currentEngineId = currentOpts.sessionId;
-    // Why this turn ended, if it did: a usage cap (pool drained) or a transient
-    // infra failure. Both route into the fallback graph so the session keeps
-    // going instead of dead-ending on the error — the "continue without
-    // failing" goal.
-    let failure: { transient: boolean; content?: string } | null = null;
+    // Why this turn ended, if it did: a usage cap (pool drained), a transient
+    // infrastructure failure, or an upstream provider overload. The first two
+    // route into the fallback graph; a provider overload surfaces plainly
+    // because changing models immediately usually hits the same outage.
+    let failure: { transient: boolean; providerOverloaded?: boolean; content?: string } | null = null;
 
     const dry = modelUnavailableReason(currentOpts, currentModel);
     if (dry) {
@@ -470,6 +475,10 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
             failure = { transient: false, content: event.content };
             break;
           }
+          if (isProviderOverloadError(event.content)) {
+            failure = { transient: false, providerOverloaded: true, content: event.content };
+            break;
+          }
           // A non-usage error that looks like infra (server death, wedge, 5xx,
           // network, SQLite contention): the opencode runner already spent its own
           // in-attempt retry, so escalate to the next model rather than failing.
@@ -483,6 +492,18 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
     }
 
     if (!failure || wasCancelled()) return;
+
+    if (failure.providerOverloaded) {
+      yield {
+        type: "error",
+        content:
+          "The model provider is temporarily overloaded. Your session and completed work are preserved. " +
+          "Retry this prompt in a minute.",
+        provider: providerFor(currentModel),
+        model: currentModel,
+      };
+      return;
+    }
 
     // Two models in a row dying the TRANSIENT way is an infrastructure
     // problem (dead rpc socket, wedged bridge, network) — every further rung

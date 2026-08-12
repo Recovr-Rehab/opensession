@@ -209,11 +209,68 @@ describe("fake engine through runAgent", () => {
 		expect(fake.calls).toHaveLength(2);
 	});
 
+	test("recovers from Claude's malformed terminal diagnostic", async () => {
+		const fake = makeFakeEngine([
+			{
+				kind: "error",
+				content:
+					"Claude Code returned an error result: [ede_diagnostic] result_type=user " +
+					"last_content_type=n/a stop_reason=null",
+			},
+			{ kind: "clean", text: ["recovered"] },
+		]);
+		__setEngineForTest(fake.engine);
+		const events = await collect(
+			runAgent({
+				prompt: "p",
+				cwd: "/tmp",
+				mcpServers: [],
+				model: "claude-sonnet-5",
+				fallbackModel: "claude-opus-5",
+				journal: { osSessionId: "bks-test-claude-terminal", kind: "prompt" },
+			}),
+		);
+		expect(fake.calls).toHaveLength(2);
+		expect(events.find((event) => event.type === "model_switch")).toMatchObject({
+			fromModel: "claude-sonnet-5",
+			toModel: "opencode/openai/gpt-5.6-sol",
+			temporaryFallback: true,
+		});
+		expect(events.find((event) => event.type === "text_chunk")).toMatchObject({
+			type: "text_chunk",
+			text: "recovered",
+		});
+		expect(events.at(-1)).toMatchObject({ type: "done" });
+	});
+
+	test("stops on a provider overload without burning a same-provider fallback", async () => {
+		const fake = makeFakeEngine([
+			{ kind: "error", content: "Our servers are currently overloaded. Please try again later." },
+			{ kind: "clean", text: ["should never run"] },
+		]);
+		__setEngineForTest(fake.engine);
+		const events = await collect(
+			runAgent({
+				prompt: "p",
+				cwd: "/tmp",
+				mcpServers: [],
+				model: "gpt-5.6-sol",
+				fallbackModel: "claude-opus-5",
+			}),
+		);
+		expect(fake.calls).toHaveLength(1);
+		expect(events).toHaveLength(2);
+		expect(events.at(-1)?.content).toBe(
+			"The model provider is temporarily overloaded. Your session and completed work are preserved. " +
+				"Retry this prompt in a minute.",
+		);
+	});
+
 	test("journals the selected model behind a transient fallback for restart recovery", async () => {
 		let release!: () => void;
 		const gate = new Promise<void>((resolve) => (release = resolve));
 		const fake = makeFakeEngine([
-			{ kind: "error", content: "Our servers are currently overloaded" },
+			{ kind: "error", content: "fetch failed (socket hang up)" },
 			{ kind: "clean", text: ["recovered"], gate },
 		]);
 		__setEngineForTest(fake.engine);

@@ -3,6 +3,9 @@ import {
   declaredRunFailure,
   hasRunStatusDeclaration,
   isClaudeBridgeLaunchError,
+  isClaudeMalformedTerminalError,
+  isProviderOverloadError,
+  isTransientRunError,
   isUpstreamIdleStallError,
 } from "./runner-shared";
 
@@ -48,6 +51,40 @@ describe("isUpstreamIdleStallError", () => {
     expect(isUpstreamIdleStallError("upstream timeout while connecting")).toBe(false);
     expect(isUpstreamIdleStallError("no data received")).toBe(false);
     expect(isUpstreamIdleStallError("")).toBe(false);
+  });
+});
+
+describe("isClaudeMalformedTerminalError", () => {
+  test("matches Claude's malformed user-terminal diagnostic", () => {
+    expect(
+      isClaudeMalformedTerminalError(
+        "Claude Code returned an error result: [ede_diagnostic] result_type=user last_content_type=n/a stop_reason=null\n" +
+          "Subprocess stderr: Warning: Custom betas are only available for API key users. Ignoring provided betas.",
+      ),
+    ).toBe(true);
+    expect(
+      isTransientRunError(
+        "Claude Code returned an error result: [ede_diagnostic] result_type=user last_content_type=n/a stop_reason=null",
+      ),
+    ).toBe(true);
+  });
+
+  test("does not mistake normal Claude errors or model text for the diagnostic", () => {
+    expect(isClaudeMalformedTerminalError("Claude Code returned an error result: You've hit your weekly limit")).toBe(false);
+    expect(isClaudeMalformedTerminalError("Please explain the ede_diagnostic field")).toBe(false);
+    expect(isClaudeMalformedTerminalError("")).toBe(false);
+  });
+});
+
+describe("isProviderOverloadError", () => {
+  test("matches provider-declared overloads", () => {
+    expect(isProviderOverloadError("Our servers are currently overloaded. Please try again later.")).toBe(true);
+    expect(isProviderOverloadError("overloaded_error")).toBe(true);
+  });
+
+  test("does not match unrelated transient failures", () => {
+    expect(isProviderOverloadError("socket hang up")).toBe(false);
+    expect(isProviderOverloadError("OpenAI usage limit reached")).toBe(false);
   });
 });
 

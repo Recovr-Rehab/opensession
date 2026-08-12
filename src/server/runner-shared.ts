@@ -202,6 +202,7 @@ export function isCodexUsageLimitError(message: string): boolean {
  */
 export function isTransientRunError(message: string | undefined | null): boolean {
   if (!message) return false;
+  if (isClaudeMalformedTerminalError(message)) return true;
   const s = message.toLowerCase();
   // Never treat a user/engine abort as transient — that's an intentional stop.
   if (s.includes("messageabortederror") || s.includes("aborted")) return false;
@@ -238,6 +239,34 @@ export function isTransientRunError(message: string | undefined | null): boolean
     // OpenCode's shared SQLite store under write contention — transient, retry
     // clears it (see the SQLite-statement-failure runbook).
     s.includes("failed to execute statement")
+  );
+}
+
+/**
+ * Claude Code occasionally ends a request with an internal `ede_diagnostic`
+ * instead of a terminal assistant message. This has been observed both during
+ * normal turns and while reattaching a turn after an Open Session restart.
+ *
+ * It is neither a user cancellation nor an account fault: the engine session
+ * remains usable, and a single continuation reliably resumes the work. Its
+ * precise shape is included in isTransientRunError, while this separate
+ * classifier keeps the broad matcher from matching model output that merely
+ * mentions the term.
+ */
+export function isClaudeMalformedTerminalError(message: string | undefined | null): boolean {
+  if (!message) return false;
+  return /claude code returned an error result:\s*\[ede_diagnostic\]\s*result_type=user\b/i.test(
+    message,
+  );
+}
+
+/** A provider-declared overload is capacity pressure upstream, not an engine,
+ * MCP, or network fault on this host. Retrying different models immediately
+ * tends to produce the same error and obscures the real cause. */
+export function isProviderOverloadError(message: string | undefined | null): boolean {
+  if (!message) return false;
+  return /(?:our )?servers? (?:are )?(?:currently )?overloaded|overloaded_error/i.test(
+    message,
   );
 }
 
