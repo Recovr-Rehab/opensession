@@ -483,10 +483,11 @@ export async function postSessionNoteApi(
 	sessionId: string,
 	text: string,
 	user: string,
+	images?: string[],
 ): Promise<SessionNote> {
 	const data = await request<{ note: SessionNote }>(
 		`/sessions/${encodeURIComponent(sessionId)}/notes`,
-		{ method: "POST", body: { text, user }, label: "Failed to add note" },
+		{ method: "POST", body: { text, user, images }, label: "Failed to add note" },
 	);
 	return data.note;
 }

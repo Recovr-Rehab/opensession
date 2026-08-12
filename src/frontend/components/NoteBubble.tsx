@@ -7,6 +7,7 @@ import { deleteSessionNoteApi, editSessionNoteApi } from "../lib/api";
 import { IconDotsHorizontal, IconPencil, IconTrash } from "./icons";
 import { UserAvatar } from "./UserAvatar";
 import { getCurrentUser } from "./UserPicker";
+import { openLightbox } from "./MediaLightbox";
 
 /**
  * A team note interleaved into the session transcript — a human-to-human
@@ -225,9 +226,39 @@ export function NoteBubble({
 					</div>
 				</div>
 			) : (
-				<div className="whitespace-pre-wrap text-body leading-relaxed text-fg">
-					<NoteText text={note.text} />
-				</div>
+				<>
+					{note.text && (
+						<div className="whitespace-pre-wrap text-body leading-relaxed text-fg">
+							<NoteText text={note.text} />
+						</div>
+					)}
+					{!!note.images?.length && (
+						<div className="mt-2 flex flex-wrap gap-2">
+							{note.images.map((src, index) => (
+								<button
+									key={src}
+									type="button"
+									className="focus-ring block cursor-zoom-in rounded-lg leading-[0]"
+									onClick={(event) =>
+										openLightbox(
+											note.images!.map((image) => ({ kind: "image", src: image })),
+											index,
+											event.currentTarget,
+										)
+									}
+									aria-label="Open note image"
+								>
+									<img
+										src={src}
+										alt=""
+										loading="lazy"
+										className="max-h-72 max-w-full rounded-lg border border-line-strong object-contain"
+									/>
+								</button>
+							))}
+						</div>
+					)}
+				</>
 			)}
 		</div>
 	);

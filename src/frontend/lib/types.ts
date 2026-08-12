@@ -288,6 +288,7 @@ export interface SessionNote {
 	id: string;
 	user: string;
 	text: string;
+	images?: string[];
 	/** ms epoch */
 	ts: number;
 	/** ms epoch of the last edit; absent on notes never edited. */

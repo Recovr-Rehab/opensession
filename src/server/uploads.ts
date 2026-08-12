@@ -14,6 +14,7 @@ import {
 	mkdirSync,
 	realpathSync,
 	statSync,
+	unlinkSync,
 	writeFileSync,
 } from "fs";
 import type { ImageInput } from "./run-events";
@@ -47,6 +48,13 @@ const STAGED_UPLOADS_DIR = `${UPLOADS_DIR}/staged`;
 // Cap so a single upload can't OOM the process. The HTTP path streams, but the
 // inline base64/WS path buffers, so keep it modest.
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
+const MAX_INLINE_IMAGES = 6;
+const INLINE_IMAGE_EXTENSIONS: Record<string, string> = {
+	"image/png": ".png",
+	"image/jpeg": ".jpg",
+	"image/gif": ".gif",
+	"image/webp": ".webp",
+};
 // Images still ride the WebSocket frame base64-encoded (~+33%) inside the JSON
 // envelope, and Bun's default WS `maxPayloadLength` is only 16 MB — below the
 // base64 size of a max upload — so a large image silently blew the frame
@@ -85,6 +93,63 @@ function sanitizeFilename(name: string): string {
 	const base = (name.split(/[\\/]/).pop() || "file").replace(/^\.+/, "");
 	const cleaned = base.replace(/[^A-Za-z0-9._ -]/g, "_").trim().slice(0, 120);
 	return cleaned || "file";
+}
+
+/** Persist inline composer images for a non-agent surface such as team notes.
+ * Returns media-route URLs so the owning JSON stays small and the same images
+ * remain readable after a server restart. */
+export function stageInlineImages(
+	sessionId: string,
+	urls?: unknown,
+	subdir = "images",
+): string[] {
+	if (urls === undefined) return [];
+	if (!Array.isArray(urls)) throw new Error("images must be an array");
+	if (urls.length > MAX_INLINE_IMAGES)
+		throw new Error(`too many images (max ${MAX_INLINE_IMAGES})`);
+	const images = urls.map((url) => {
+		if (typeof url !== "string") throw new Error("invalid image");
+		const match = url.match(/^data:([^;]+);base64,(.+)$/s);
+		const extension = match && INLINE_IMAGE_EXTENSIONS[match[1]];
+		if (!match || !extension) throw new Error("unsupported image type");
+		return { data: match[2], extension };
+	});
+	if (!images.length) return [];
+	let totalBytes = 0;
+	for (const image of images) {
+		totalBytes += Buffer.byteLength(image.data, "base64");
+		if (totalBytes > MAX_UPLOAD_BYTES)
+			throw new Error(`images too large (max ${MAX_UPLOAD_BYTES} bytes total)`);
+	}
+	const dir = `${UPLOADS_DIR}/${sanitizeFilename(subdir)}/${sanitizeFilename(sessionId)}`;
+	mkdirSync(dir, { recursive: true });
+	const staged: string[] = [];
+	try {
+		for (const [index, image] of images.entries()) {
+			const data = Buffer.from(image.data, "base64");
+			if (!data.length) throw new Error("empty image");
+			const path = uniqueUploadPath(
+				dir,
+				`${Date.now()}-${index + 1}${image.extension}`,
+			);
+			writeFileSync(path, data);
+			staged.push(`/media?path=${encodeURIComponent(path)}`);
+		}
+		return staged;
+	} catch (error) {
+		removeStagedImages(staged);
+		throw error;
+	}
+}
+
+/** Remove media files previously returned by stageInlineImages. */
+export function removeStagedImages(urls?: string[]): void {
+	for (const url of urls || []) {
+		try {
+			const path = new URL(url, "http://local").searchParams.get("path");
+			if (path && isWithinUploads(path)) unlinkSync(path);
+		} catch {}
+	}
 }
 
 /** Resolve `p` and confirm it lives inside UPLOADS_DIR — guards against a

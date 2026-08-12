@@ -20,8 +20,8 @@ struct ComposerAddMenu: View {
     /// draft rather than opening a picker that can't submit.
     var hasDraft: Bool = false
     var onSchedule: (() -> Void)?
-    /// A note is a human-to-human message, not an attachment carrier. Existing
-    /// staged images stay with the next prompt but don't appear on the note.
+    /// Notes accept images but not arbitrary files. This picker is image-only,
+    /// so it remains available in either composer mode.
     var attachmentsEnabled = true
     /// The session's one-message note mode. It sits beside the ordinary
     /// attachment actions so the same "+" menu owns every composer mode.

@@ -2152,7 +2152,7 @@ private struct SessionInputBar: View {
                     )
             }
 
-            if !noteMode && !viewModel.attachedImages.isEmpty {
+            if !viewModel.attachedImages.isEmpty {
                 AttachedImagesRow(images: viewModel.attachedImages) { image in
                     viewModel.attachedImages.removeAll { $0.id == image.id }
                 }
@@ -2669,9 +2669,7 @@ private struct SessionInputBar: View {
                 // A copied screenshot pastes straight into the attachments
                 // (Cmd+V on Mac, long-press Paste on iOS); text pastes flow
                 // through to the field untouched.
-                .pastesImages(
-                    into: noteMode ? .constant([]) : $viewModel.attachedImages
-                )
+                .pastesImages(into: $viewModel.attachedImages)
 
                 if isSingleRow {
                     // Dictation leads the trailing controls: it belongs to
@@ -2795,7 +2793,7 @@ private struct SessionInputBar: View {
             // Scheduling is a server-side hold on a native session's own queue;
             // an agent-owned session has no such queue to put it on.
             onSchedule: noteMode ? nil : (isNativeSession ? { sheet = .schedule } : nil),
-            attachmentsEnabled: !noteMode,
+            attachmentsEnabled: true,
             noteMode: noteMode,
             onToggleNoteMode: {
                 noteMode.toggle()
@@ -2919,7 +2917,8 @@ private struct SessionInputBar: View {
     private var canSubmit: Bool {
         if noteMode {
             return !addingNote
-                && !viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                && (!viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || !viewModel.attachedImages.isEmpty)
         }
         return viewModel.canSend
     }

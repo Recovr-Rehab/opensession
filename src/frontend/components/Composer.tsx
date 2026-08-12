@@ -101,7 +101,10 @@ interface Props {
    * away — the turn keeps running. Busy sends follow the per-user follow-up
    * preference (default queue: delivered after the run fully finishes);
    * ⌘/Ctrl+Enter or Command/Ctrl-click flips to the non-default action. */
-  onSend: (text: string, opts?: { steer?: boolean }) => boolean | void;
+  onSend: (
+    text: string,
+    opts?: { steer?: boolean },
+  ) => boolean | void | Promise<boolean | void>;
   placeholder?: string;
   disabled?: boolean;
   /** Boolean, or a predicate on the current draft (for uncontrolled mode,
@@ -441,24 +444,32 @@ export function Composer({
   // Fire a send handler with the current draft; in uncontrolled mode a `true`
   // return means "consumed" — clear the draft (falsy keeps it, e.g. offline).
   function fireSend(
-    handler: (t: string, opts?: { steer?: boolean }) => boolean | void,
+    handler: (
+      t: string,
+      opts?: { steer?: boolean },
+    ) => boolean | void | Promise<boolean | void>,
     opts?: { steer?: boolean },
   ) {
     const consumed = handler(text, opts);
-    if (!isControlled && consumed === true) setInnerValue("");
+    if (consumed instanceof Promise) {
+      void consumed.then((result) => {
+        if (!isControlled && result === true) setInnerValue("");
+      });
+    } else if (!isControlled && consumed === true) {
+      setInnerValue("");
+    }
   }
   const isSendDisabled =
     typeof sendDisabled === "function" ? sendDisabled(text) : sendDisabled;
   const imgs = images || [];
   const fls = files || [];
-  // Any attachment affordance (paste/drop/pick + thumbnails) is enabled when the
-  // parent wired up either channel. Notes are text-only — attachments stay
-  // staged for the next prompt instead of riding a note.
-  const canAttach = !noteMode && (!!onImagesChange || !!onFilesChange);
-  // Whether the "+" has anything to show. Deliberately NOT `canAttach`: note
-  // mode turns attachments off, and keying off it would close the whole menu —
-  // and with it the row that leaves note mode — exactly when it's needed,
-  // stranding anyone who doesn't know ⌘N.
+  // Notes accept images but not arbitrary files: images remain team-visible,
+  // while files are agent-readable workspace context and belong to prompts.
+  const canAttachImages = !!onImagesChange;
+  const canAttachFiles = !noteMode && !!onFilesChange;
+  const canAttach = canAttachImages || canAttachFiles;
+  // Whether the "+" has anything to show. Images keep the attachment row
+  // available in note mode, while the mode row remains the way back out.
   const hasAddMenu =
     canAttach || !!onSetGoal || !!onNoteModeChange || !!menuExtra || !!sendMenu;
 
@@ -580,13 +591,29 @@ export function Composer({
 
   async function addFiles(picked: FileList | File[]) {
     if (!canAttach) return;
-    const { images: newImgs, files: newFls, rejected } = await splitAttachments(picked);
+    const selected = Array.from(picked);
+    const noteImageTypes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
+    const allowed = (file: File) =>
+      file.type.startsWith("image/") && (!noteMode || noteImageTypes.has(file.type));
+    const disallowed = canAttachFiles ? [] : selected.filter((file) => !allowed(file));
+    const accepted = canAttachFiles
+      ? selected
+      : selected.filter(allowed);
+    const { images: newImgs, files: newFls, rejected } = await splitAttachments(accepted);
     // Images ride the vision channel; other files need a dedicated file channel
     // (if the parent only wired images, non-image files are simply ignored).
     if (newImgs.length) onImagesChange?.([...imgs, ...newImgs]);
-    if (newFls.length && onFilesChange) onFilesChange([...fls, ...newFls]);
+    if (newFls.length && canAttachFiles) onFilesChange?.([...fls, ...newFls]);
     // Fail loudly rather than dropping oversized/failed uploads silently.
-    if (rejected.length) alert(`Couldn't attach:\n${rejected.join("\n")}`);
+    const failures = [
+      ...rejected,
+      ...disallowed.map((file) =>
+        noteMode
+          ? `${file.name} (notes accept PNG, JPEG, GIF, or WebP images)`
+          : `${file.name} (only images are supported)`,
+      ),
+    ];
+    if (failures.length) alert(`Couldn't attach:\n${failures.join("\n")}`);
   }
 
   function handlePaste(e: React.ClipboardEvent) {
@@ -1038,7 +1065,7 @@ export function Composer({
                         <IconPaperclip size={22} />
                       </span>
                       <span className="grow whitespace-nowrap">
-                        {onFilesChange ? "Attach files" : "Attach an image"}
+                        {canAttachFiles ? "Attach files" : "Attach an image"}
                       </span>
                     </button>
                   )}
@@ -1129,7 +1156,9 @@ export function Composer({
               <input
                 ref={fileInputRef}
                 type="file"
-                {...(onFilesChange ? {} : { accept: "image/*" })}
+                {...(canAttachFiles
+                  ? {}
+                  : { accept: noteMode ? "image/png,image/jpeg,image/gif,image/webp" : "image/*" })}
                 multiple
                 hidden
                 onChange={(e) => {

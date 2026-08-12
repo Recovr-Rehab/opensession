@@ -18,6 +18,7 @@ import {
 	sessionNoteActivity,
 } from "../session-notes";
 import { broadcastToAll } from "../ws-hub";
+import { removeStagedImages, stageInlineImages } from "../uploads";
 
 export async function handleSessionNotesRoutes(
 	ctx: RouteContext,
@@ -55,11 +56,30 @@ export async function handleSessionNotesRoutes(
 		const body = await req.json().catch(() => null);
 		const user = requestUser(ctx, body?.user);
 		const text = typeof body?.text === "string" ? body.text : "";
-		if (!user || !text.trim())
-			return Response.json({ error: "user and text required" }, { status: 400 });
-		const note = addSessionNote(sessionId, user, text);
-		if (!note)
-			return Response.json({ error: "user and text required" }, { status: 400 });
+		if (!user)
+			return Response.json({ error: "user required" }, { status: 400 });
+		let images: string[];
+		try {
+			images = stageInlineImages(sessionId, body?.images, "session-notes");
+		} catch (error) {
+			return Response.json(
+				{ error: error instanceof Error ? error.message : "invalid images" },
+				{ status: 400 },
+			);
+		}
+		if (!text.trim() && images.length === 0)
+			return Response.json({ error: "user and note content required" }, { status: 400 });
+		let note;
+		try {
+			note = addSessionNote(sessionId, user, text, images);
+		} catch (error) {
+			removeStagedImages(images);
+			throw error;
+		}
+		if (!note) {
+			removeStagedImages(images);
+			return Response.json({ error: "user and note content required" }, { status: 400 });
+		}
 		// Everyone gets it live: clients watching this session render it, and
 		// the rest can use the same event for an unread indicator.
 		broadcastToAll({ type: "session_note", sessionId, note });

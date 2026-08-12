@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -19,6 +19,7 @@ const {
 	mentionedTeammates,
 	sessionNoteActivity,
 } = await import("./session-notes");
+const { stageInlineImages } = await import("./uploads");
 if (saved === undefined) delete process.env.OPENSESSION_STATE_DIR;
 else process.env.OPENSESSION_STATE_DIR = saved;
 
@@ -38,6 +39,41 @@ describe("session notes", () => {
 	test("an empty note is not stored", () => {
 		expect(addSessionNote("os-empty", "Kent", "   ")).toBeNull();
 		expect(listSessionNotes("os-empty")).toEqual([]);
+	});
+
+	test("stores images with text and allows image-only notes", () => {
+		const image = "/media?path=%2Ftmp%2Fnote.png";
+		const withText = addSessionNote("os-images", "Kent", "look", [image]);
+		const imageOnly = addSessionNote("os-images", "Kent", "", [image]);
+		expect(withText?.images).toEqual([image]);
+		expect(imageOnly?.text).toBe("");
+		expect(imageOnly?.images).toEqual([image]);
+	});
+
+	test("stages inline image bytes outside the note store and removes them with the note", () => {
+		const urls = stageInlineImages(
+			"os-staged-image",
+			["data:image/png;base64,iVBORw0KGgo="],
+			"session-notes",
+		);
+		const path = new URL(urls[0]!, "http://local").searchParams.get("path")!;
+		expect(existsSync(path)).toBe(true);
+		const note = addSessionNote("os-staged-image", "Kent", "", urls)!;
+		expect(note.images?.[0]).toStartWith("/media?path=");
+		expect(deleteSessionNote("os-staged-image", note.id, "Kent").ok).toBe(true);
+		expect(existsSync(path)).toBe(false);
+	});
+
+	test("rejects unsupported and excessive inline images", () => {
+		expect(() =>
+			stageInlineImages("os-bad-image", ["data:image/svg+xml;base64,PHN2Zz4="]),
+		).toThrow("unsupported image type");
+		expect(() =>
+			stageInlineImages(
+				"os-too-many-images",
+				Array(7).fill("data:image/png;base64,iVBORw0KGgo="),
+			),
+		).toThrow("too many images");
 	});
 
 	test("activity reports the latest note per session", () => {

@@ -98,13 +98,19 @@ enum OS1API {
         return response.notes
     }
 
-    static func addSessionNote(sessionId: String, text: String) async throws -> SessionNote {
+    static func addSessionNote(
+        sessionId: String,
+        text: String,
+        images: [String] = []
+    ) async throws -> SessionNote {
         let encoded = sessionId.addingPercentEncoding(
             withAllowedCharacters: .urlPathAllowed
         ) ?? sessionId
+        var body: [String: Any] = ["text": text, "user": ServerConfig.shared.userName]
+        if !images.isEmpty { body["images"] = images }
         let response: SessionNoteResponse = try await post(
             "/api/sessions/\(encoded)/notes",
-            body: ["text": text, "user": ServerConfig.shared.userName]
+            body: body
         )
         return response.note
     }

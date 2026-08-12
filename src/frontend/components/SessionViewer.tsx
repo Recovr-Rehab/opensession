@@ -3151,7 +3151,10 @@ export function SessionViewer({
 
 	// Returns true when the message was consumed, so the (uncontrolled)
 	// Composer knows to clear its draft; false keeps it for a retry.
-	function handleSend(raw: string, opts?: { steer?: boolean }): boolean {
+	function handleSend(
+		raw: string,
+		opts?: { steer?: boolean },
+	): boolean | Promise<boolean> {
 		const sendStartedAt = performance.now();
 		const typed = raw.trim();
 		// Quoted transcript selections lead the message as blockquotes, so the
@@ -3166,11 +3169,18 @@ export function SessionViewer({
 		// nothing is rendered optimistically here. Notes carry the quoted
 		// selection too (as "> " lines, the same shape a prompt sends).
 		if (noteMode) {
-			if (!typed) return false;
-			postSessionNoteApi(session.id, text, getCurrentUser()).catch(() =>
-				toast("Failed to add note"),
+			if (!typed && imgs.length === 0) return false;
+			return postSessionNoteApi(session.id, text, getCurrentUser(), imgs).then(
+				() => {
+					setImages([]);
+					setQuote(null);
+					return true;
+				},
+				() => {
+					toast("Failed to add note");
+					return false;
+				},
 			);
-			return true;
 		}
 
 		const user = getCurrentUser();
@@ -5757,7 +5767,7 @@ export function SessionViewer({
 									sendDisabled={(text) =>
 										!text.trim() &&
 										images.length === 0 &&
-										files.length === 0 &&
+										(noteMode || files.length === 0) &&
 										!forkFrom
 									}
 									// Ask mode lost its chip when the toolbar collapsed into

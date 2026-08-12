@@ -6,9 +6,8 @@
  * This is a narrow re-implementation of a feature that shipped in July on the
  * native team-chat backend (`session:<id>` channels in the since-deleted
  * src/server/chat.ts) and was removed with it in 5c90eddc. What came back is
- * only the part that was in use: per-session, text-only, append-only. No
- * watercooler, threads, reactions or image attachments — if any of those are
- * wanted again, they are new features rather than a restore.
+ * only the part that was in use: per-session notes with optional images. No
+ * watercooler, threads or reactions.
  *
  * Notes persist per session in `~/.opensession-session-notes/<id>.json` (the
  * flat-file pattern of pins.ts/push.ts). Realtime delivery rides the app
@@ -23,6 +22,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { stateDir } from "./paths";
 import { teamFirstNames } from "./people";
+import { removeStagedImages } from "./uploads";
 
 const NOTES_DIR = stateDir("session-notes");
 
@@ -35,6 +35,8 @@ export interface SessionNote {
 	/** Sender's display name, as resolved from the verified identity. */
 	user: string;
 	text: string;
+	/** Media-route URLs for images attached to the note. */
+	images?: string[];
 	/** ms epoch */
 	ts: number;
 	/** ms epoch of the last edit; absent on notes never edited. */
@@ -63,6 +65,9 @@ function readAll(sessionId: string): SessionNote[] {
 				typeof (n as any).id === "string" &&
 				typeof (n as any).user === "string" &&
 				typeof (n as any).text === "string" &&
+				(!(n as any).images ||
+					(Array.isArray((n as any).images) &&
+						(n as any).images.every((image: unknown) => typeof image === "string"))) &&
 				typeof (n as any).ts === "number",
 		);
 	} catch {
@@ -81,19 +86,23 @@ export function addSessionNote(
 	sessionId: string,
 	user: string,
 	text: string,
+	images: string[] = [],
 ): SessionNote | null {
 	const trimmed = text.trim().slice(0, MAX_TEXT_LEN);
-	if (!trimmed) return null;
+	if (!trimmed && images.length === 0) return null;
 	const note: SessionNote = {
 		id: crypto.randomUUID(),
 		user: user.trim().slice(0, 64),
 		text: trimmed,
+		...(images.length ? { images } : {}),
 		ts: Date.now(),
 	};
 	const all = readAll(sessionId);
 	all.push(note);
+	const removed = all.slice(0, -MAX_STORED);
 	if (!existsSync(NOTES_DIR)) mkdirSync(NOTES_DIR, { recursive: true });
 	writeJsonAtomic(fileFor(sessionId), { notes: all.slice(-MAX_STORED) });
+	for (const old of removed) removeStagedImages(old.images);
 	return note;
 }
 
@@ -147,6 +156,7 @@ export function deleteSessionNote(
 	writeJsonAtomic(fileFor(sessionId), {
 		notes: all.filter((n) => n.id !== noteId),
 	});
+	removeStagedImages(note.images);
 	return { ok: true, note };
 }
 

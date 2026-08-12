@@ -492,11 +492,17 @@ final class SessionViewModel {
 
     func addSessionNote() async -> Bool {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return false }
+        let images = attachedImages.map(\.dataURL)
+        guard !text.isEmpty || !images.isEmpty else { return false }
         do {
-            let note = try await OS1API.addSessionNote(sessionId: session.id, text: text)
+            let note = try await OS1API.addSessionNote(
+                sessionId: session.id,
+                text: text,
+                images: images
+            )
             upsertSessionNote(note)
             draft = ""
+            attachedImages = []
             sendSeq += 1
             return true
         } catch {

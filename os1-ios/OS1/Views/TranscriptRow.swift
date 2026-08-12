@@ -86,6 +86,7 @@ struct TranscriptRow: View {
         case .note(let note):
             SessionNoteRow(
                 note: note,
+                sessionId: sessionId,
                 onEdit: isMine(note) ? { text in
                     guard let onEditNote else { return }
                     try await onEditNote(note, text)
@@ -108,6 +109,7 @@ struct TranscriptRow: View {
 
 private struct SessionNoteRow: View {
     let note: SessionNote
+    let sessionId: String
     var onEdit: ((String) async throws -> Void)?
     var onDelete: (() async throws -> Void)?
 
@@ -118,10 +120,12 @@ private struct SessionNoteRow: View {
 
     init(
         note: SessionNote,
+        sessionId: String,
         onEdit: ((String) async throws -> Void)? = nil,
         onDelete: (() async throws -> Void)? = nil
     ) {
         self.note = note
+        self.sessionId = sessionId
         self.onEdit = onEdit
         self.onDelete = onDelete
         _draft = State(initialValue: note.text)
@@ -202,10 +206,19 @@ private struct SessionNoteRow: View {
                 }
                 .font(.subheadline.weight(.medium))
             } else {
-                Text(note.text)
-                    .font(.body)
-                    .foregroundStyle(OS1VisualStyle.text)
-                    .textSelection(.enabled)
+                if !note.text.isEmpty {
+                    Text(note.text)
+                        .font(.body)
+                        .foregroundStyle(OS1VisualStyle.text)
+                        .textSelection(.enabled)
+                }
+                if let images = note.images, !images.isEmpty {
+                    ConversationImageStrip(
+                        sources: images,
+                        sessionId: sessionId,
+                        size: 160
+                    )
+                }
             }
         }
         .padding(.horizontal, 14)
