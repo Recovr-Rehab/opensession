@@ -505,6 +505,24 @@ describe("run journal", () => {
 		expect(active).toBe(0);
 	});
 
+	it("continues draining recoveries after one worker task throws", async () => {
+		let completed = false;
+		const errorLog = spyOn(console, "error").mockImplementation(() => {});
+		try {
+			await agent.runRecoveryQueue([
+				async () => {
+					throw new Error("unexpected recovery failure");
+				},
+				async () => {
+					completed = true;
+				},
+			]);
+			expect(completed).toBe(true);
+		} finally {
+			errorLog.mockRestore();
+		}
+	});
+
 	it("preserves human-confirmed tool policy across restart drains", async () => {
 		mod.journalSet({
 			runKey: "run-1",

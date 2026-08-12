@@ -1074,14 +1074,46 @@ export function resumeInterruptedRuns(
   const recoveryTask = (
     run: ActiveRunRecord,
     task: () => Promise<void>,
-  ): (() => Promise<void>) => async () => {
-    activeRecoveryWorkerRunKeys.add(run.runKey);
-    try {
-      await task();
-    } finally {
-      activeRecoveryWorkerRunKeys.delete(run.runKey);
-      untrackRecovery(run);
-    }
+  ): (() => Promise<void>) => {
+    // A claimed journal record is intentionally durable, but the recovery
+    // queue is bounded. If every worker gets stuck, a later claim used to
+    // stay busy forever without ever reaching journalStartRecovery. Settle it
+    // explicitly so the person can send the prompt again instead of finding a
+    // permanently spinning session.
+    let started = false;
+    const queuedTooLong = setTimeout(() => {
+      if (started || settledRunKeys.has(run.runKey)) return;
+      console.error(
+        `[runner] Restart recovery for ${run.runKey} waited in the queue for ${BOOT_RECOVERY_QUEUE_WAIT_MS / 60_000} minutes without starting`,
+      );
+      reportRecoveryFailure(
+        run,
+        "Restart recovery did not begin in time, so it was stopped safely. Send the prompt again to continue.",
+      );
+    }, BOOT_RECOVERY_QUEUE_WAIT_MS);
+
+    return async () => {
+      started = true;
+      clearTimeout(queuedTooLong);
+      if (settledRunKeys.has(run.runKey)) return;
+      activeRecoveryWorkerRunKeys.add(run.runKey);
+      try {
+        await task();
+      } catch (error) {
+        // Keep one unexpected recovery failure from stranding the rest of the
+        // boot queue behind it. Normal recovery paths already report their own
+        // failures, so this is only the last-resort guard.
+        console.error(`[runner] Recovery worker crashed for ${run.runKey}:`, error);
+        if (!settledRunKeys.has(run.runKey))
+          reportRecoveryFailure(
+            run,
+            "Restart recovery stopped unexpectedly. Send the prompt again to continue.",
+          );
+      } finally {
+        activeRecoveryWorkerRunKeys.delete(run.runKey);
+        untrackRecovery(run);
+      }
+    };
   };
   const cancelRecoveredEngine = (run: ActiveRunRecord): void => {
     for (const id of [run.claudeSessionId, run.osSessionId, run.runKey]) {
@@ -1456,6 +1488,9 @@ export function resumeInterruptedRuns(
 
 export const MAX_BOOT_RECOVERIES = 32;
 export const BOOT_RECOVERY_CONCURRENCY = 4;
+// Long enough for a busy restart to drain legitimate work, short enough that a
+// claimed-but-never-started recovery cannot make a session look active forever.
+export const BOOT_RECOVERY_QUEUE_WAIT_MS = 10 * 60 * 1000;
 export const MAX_BOOT_RESUME_ATTEMPTS = 2;
 export const MAX_RECOVERY_AGE_MS = 24 * 60 * 60 * 1000;
 
@@ -1566,7 +1601,14 @@ export async function runRecoveryQueue(tasks: Array<() => Promise<void>>): Promi
   const worker = async () => {
     while (next < tasks.length) {
       const task = tasks[next++];
-      await task();
+      try {
+        await task();
+      } catch (error) {
+        // A task normally reports and settles its own error. This guard keeps
+        // a defensive exception from stopping the worker and starving every
+        // remaining claimed recovery behind it.
+        console.error("[runner] Recovery queue task failed:", error);
+      }
     }
   };
   await Promise.all(
