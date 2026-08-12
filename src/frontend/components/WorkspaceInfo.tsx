@@ -1035,7 +1035,7 @@ function ReviewerChip({
 								// visual's 2px pull, which `icon` would give us — but
 								// `icon` also dims, and half of these states lead with an
 								// avatar, which must stay at full strength.
-								"max-w-full pl-2 text-supporting",
+								"max-w-full py-[3px] pl-2 text-supporting",
 								needsMyReview
 									? // The one state addressed TO you swaps the neutral
 										// plate for a red one, so "act on this" separates
