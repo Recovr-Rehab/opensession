@@ -223,8 +223,11 @@ export function RestartOverlay({ connected, addHandler }: Props) {
         // Same floating-surface vocabulary as the scroll-to-bottom pill and the
         // toast this hands off to: glass fill, no border, hairline from the
         // shadow ring — so the restart sequence doesn't change materials
-        // halfway through.
-        className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom,0px)+14px)] left-1/2 z-[200] flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-[999px] bg-popup-glass px-3.5 py-2 text-label font-medium text-fg [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-md"
+        // halfway through. The `sm` tier is the compact-control one the scroll
+        // pill uses: `md` is calibrated for a menu, and its 28px lower layer
+        // casts further below a 34px capsule than the capsule is tall, which
+        // reads as a grey halo rather than a lift.
+        className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom,0px)+14px)] left-1/2 z-[200] flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-[999px] bg-popup-glass px-3.5 py-2 text-label font-medium text-fg [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm"
         role="status"
         aria-live="polite"
       >
