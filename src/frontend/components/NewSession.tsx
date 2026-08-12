@@ -96,8 +96,12 @@ const SCRATCH_REPO_VALUE = "__scratch__";
 /** The hairline is a cutoff for content passing under the header, so it stays
  *  transparent until the prompt has actually scrolled beneath it. The border
  *  itself is always present: switching the colour keeps the height steady,
- *  where toggling `border-b` would jog the layout by a pixel. */
-const HEADER = "flex items-center justify-between gap-2 border-b border-transparent px-4 py-[11px]";
+ *  where toggling `border-b` would jog the layout by a pixel.
+ *
+ *  Padding is asymmetric for the same reason the footer's is: the top is the
+ *  card's own edge, the bottom only a hairline. The pickers are 32px boxes
+ *  that fill on hover, so 16px above them matches the 16px beside them. */
+const HEADER = "flex items-center justify-between gap-2 border-b border-transparent px-4 pt-4 pb-[11px]";
 /** Merged onto HEADER/FOOTER by `cn()`, which drops the transparent colour. */
 const EDGE_DIVIDER = "border-line";
 /** Header pickers. `relative` is load-bearing — PaletteSelect's phone branch
