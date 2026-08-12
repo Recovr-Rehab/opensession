@@ -1,7 +1,7 @@
 import { AGENT_NAME, GITHUB_BOT_NAME } from "../lib/brand";
 import { BASE_PATH } from "../lib/base";
 import { commitPrompt } from "../lib/commit-prompt";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { parsePatchFiles } from "@pierre/diffs";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import { FileDiff } from "@pierre/diffs/react";
@@ -157,21 +157,6 @@ const INFO_LIST_CLASS =
 const INFO_MORE_BUTTON_CLASS =
 	"cursor-pointer bg-panel px-[9px] py-[7px] text-left text-label font-semibold text-faint transition-colors hover:bg-hover hover:text-fg";
 
-function statusBadgeClass(status: DiffFile["status"]): string {
-	switch (statusClass(status)) {
-		case "added":
-			return "bg-green-soft text-green";
-		case "modified":
-			return "bg-[rgba(210,153,34,0.15)] text-yellow";
-		case "deleted":
-			return "bg-red-soft text-red";
-		case "renamed":
-			return "bg-accent-soft text-accent";
-		default:
-			return "bg-surface text-dim";
-	}
-}
-
 const ACTION_BUTTON_CLASS =
 	"flex min-w-0 items-center gap-2 rounded-md px-2.5 py-2 text-left text-supporting font-semibold text-fg outline-none transition-colors hover:bg-hover focus-visible:bg-hover disabled:cursor-default disabled:opacity-50";
 const ACTION_ICON_CLASS =
@@ -232,17 +217,50 @@ function fmtBytes(n: number): string {
 	return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
-const STATUS_CHAR: Record<DiffFile["status"], string> = {
-	added: "A",
-	untracked: "A",
-	modified: "M",
-	deleted: "D",
-	renamed: "R",
+/** A dot: the mark for a file that already existed and was edited. Sized to
+		read as punctuation next to the ± counts rather than as a second glyph. */
+const STATUS_DOT = (
+	<span className="size-[4px] rounded-full bg-current" aria-hidden />
+);
+/**
+ * What the run did to the file, as a mark rather than a letter. A list of
+ * changes is nearly always all modifications, and a column of `M`s spends the
+ * row's loudest pixel saying the one thing every row already agreed on; the
+ * dots settle into that column quietly, and the plus or minus on the one file
+ * the run created or removed is what stands out. `untracked` is a file git
+ * hasn't been told about yet, which to a reader is simply new.
+ */
+const STATUS_MARK: Record<
+	DiffFile["status"],
+	{ label: string; glyph: ReactNode; className: string }
+> = {
+	added: { label: "Added", glyph: "+", className: "bg-green-soft text-green" },
+	untracked: {
+		label: "Added",
+		glyph: "+",
+		className: "bg-green-soft text-green",
+	},
+	// No tint behind the dot: an edit is the default thing a run does, so its
+	// mark should cost the row nothing and leave the tinted plus or minus two
+	// rows down as the thing the eye finds. `yellow-tint` rather than `yellow`
+	// because the dot is a fill, and light mode's text yellow is a dark ochre
+	// that reads as dirt at 4px (see the note in base.css).
+	modified: {
+		label: "Modified",
+		glyph: STATUS_DOT,
+		className: "text-yellow-tint",
+	},
+	deleted: {
+		label: "Deleted",
+		glyph: "−",
+		className: "bg-red-soft text-red",
+	},
+	renamed: {
+		label: "Renamed",
+		glyph: "→",
+		className: "bg-accent-soft text-accent",
+	},
 };
-/** untracked shares the "added" tint. */
-function statusClass(status: DiffFile["status"]): string {
-	return status === "untracked" ? "added" : status;
-}
 
 function relTime(iso?: string): string {
 	if (!iso) return "";
@@ -436,12 +454,15 @@ function FileRow({
 			)}
 		</span>
 	);
+	// The directory is what gives, not the filename: a path long enough to cut
+	// is cut in the middle, so the name — the part being read — stays whole.
 	const path = (
-		<span className="min-w-0 flex-1 truncate text-left text-label">
-			{dir && <span className="text-dim">{dir}</span>}
-			<span className="text-fg">{base}</span>
+		<span className="flex min-w-0 flex-1 items-baseline text-left text-label">
+			{dir && <span className="truncate text-dim">{dir}</span>}
+			<span className="max-w-full shrink-0 truncate text-fg">{base}</span>
 		</span>
 	);
+	const mark = STATUS_MARK[file.status];
 
 	return (
 		<Popover.Root>
@@ -452,18 +473,20 @@ function FileRow({
 				type="button"
 				className="flex min-w-0 items-center gap-2 rounded-md px-[7px] py-[5px] text-left transition-colors hover:bg-hover"
 				onClick={() => onOpenTab?.("changes")}
-				aria-label={`${file.path} — open in Changes`}
+				aria-label={`${file.path} — ${mark.label.toLowerCase()} — open in Changes`}
 			>
-				<span
-					className={cn(
-						"inline-flex size-[18px] shrink-0 items-center justify-center rounded-xs text-[11px] font-bold",
-						statusBadgeClass(file.status),
-					)}
-				>
-					{STATUS_CHAR[file.status]}
-				</span>
 				{path}
 				{stats}
+				<span
+					className={cn(
+						"inline-flex size-[15px] shrink-0 items-center justify-center rounded-xs text-[11px] font-bold leading-none",
+						mark.className,
+					)}
+					title={mark.label}
+					aria-hidden
+				>
+					{mark.glyph}
+				</span>
 			</Popover.Trigger>
 			{meta && (
 				<Popover.Popup
