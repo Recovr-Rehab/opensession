@@ -317,6 +317,41 @@ Design/motion skills can be installed instance-locally under `.agents/skills/`
 has them, read the smallest relevant set before frontend design or motion
 work.
 
+## Writing UI copy
+
+Every string a user reads is UI copy: titles, descriptions, hints, buttons,
+empty states, errors, tooltips. It is designed, not narrated, and the default
+failure here is length. A paragraph that explains the feature correctly still
+fails if nobody reads it.
+
+Follow Apple's Human Interface Guidelines. The rules that decide most cases:
+
+- **Say the one thing.** A description earns one sentence. If a second sentence
+  is doing real work, keep it; if it is restating the first with more nuance,
+  cut it. Prefer "Review open pull requests one at a time." to a sentence that
+  also explains why lists are bad.
+- **Lead with what it does for the reader**, not how it is built. "Shared
+  documents you and your agents edit together" beats "Collaborative documents
+  with live multi-cursor editing, backlinks, and agent read/write through the
+  opensession-notes tools." Implementation detail belongs in the module doc.
+- **Buttons are verbs, one or two words.** Add, Use, Set up, Connect, Retry.
+  Not "Start from this template".
+- **Sentence case** for everything except product names. Not Title Case.
+- **Write to the person**, as "you". Avoid "the user", and avoid the passive.
+- **Do not sell.** No "powerful", "seamless", "simply", "just".
+- **Explain a limit plainly, once.** If a switch does less than it looks like
+  it does, say so in a clause a person can act on, and do not add a roadmap
+  note about what will fix it later.
+- **Never use em dashes in UI copy.** Use a period and a second sentence, a
+  colon when a list follows, or a comma. This is a copy rule, not a code rule:
+  module docs and comments keep the house style.
+- **Terminology comes from CONCEPTS.md.** Project, workspace, session, turn,
+  worktree, automation, goal, action. Do not invent a synonym in one panel.
+
+Read the rendered result at the real width before calling it done, not the
+string in the file. Copy that wraps to four lines under a card is too long
+whatever it says.
+
 ## Frontend rebuilds & restarts
 
 The systemd service runs `bun run opensession.ts`, intentionally without

@@ -47,9 +47,9 @@ const TYPE_LABELS: Record<LibraryEntryType, string> = {
 };
 
 const TYPE_BLURB: Record<LibraryEntryType, string> = {
-	tool: "Surfaces in the sidebar. Everything except Home is off until you add it.",
-	automation: "A prompt plus a trigger — a schedule, an event, or a webhook.",
-	integration: "An external system this instance listens to and acts in.",
+	tool: "Tools appear in your sidebar.",
+	automation: "A prompt and a trigger: a schedule, an event, or a webhook.",
+	integration: "Outside systems this instance can listen to and act in.",
 };
 
 const FILTERS: { key: "all" | LibraryEntryType; label: string }[] = [
@@ -102,7 +102,7 @@ function EntryControl({
 			{entry.install === "guided"
 				? "Set up"
 				: entry.install === "draft"
-					? "Start from this"
+					? "Use"
 					: "Add"}
 		</a>
 	);
@@ -151,7 +151,7 @@ export function LibraryPanel() {
 	const header = (
 		<SettingsHeader
 			title="Library"
-			description="Everything this instance can be extended with, in one place: the tools that appear in your sidebar, the automations that run on a schedule or an event, and the outside systems it can work in. Nothing here is on until you add it."
+			description="Add tools, automations, and integrations to this instance. Nothing is on until you add it."
 		/>
 	);
 
@@ -178,7 +178,7 @@ export function LibraryPanel() {
 			<div className="flex flex-wrap items-center gap-2">
 				<input
 					className={`${settingsInputClass} min-w-0 flex-1`}
-					placeholder="Search the library…"
+					placeholder="Search"
 					value={query}
 					onChange={(e) => setQuery(e.target.value)}
 				/>
@@ -258,11 +258,9 @@ export function LibraryPanel() {
 					<SettingsHint>
 						{group.type === "tool" ? (
 							<>
-								{TYPE_BLURB.tool} These switches are stored in this browser, so
-								they travel with neither your phone nor your teammates — and a
-								tool switched off here still runs everything behind it,
-								including Tasks' reminders and notifications. A real
-								instance-wide switch is the next piece of work.
+								{TYPE_BLURB.tool} These switches are saved in this browser only,
+								and a tool you turn off still sends its reminders and
+								notifications.
 							</>
 						) : (
 							TYPE_BLURB[group.type]

@@ -112,35 +112,35 @@ const CORE_TOOLS: {
 		slug: "tasks",
 		name: "Tasks",
 		description:
-			"A shared task list agents can add to, tick off and be assigned from — with reminders in Slack and on your phone.",
+			"A shared task list agents can add to. Reminders arrive in Slack and on your phone.",
 		category: "Work",
 	},
 	{
 		slug: "notes",
 		name: "Notes",
 		description:
-			"Collaborative documents with live multi-cursor editing, backlinks, and agent read/write through the opensession-notes tools.",
+			"Shared documents you and your agents edit together.",
 		category: "Work",
 	},
 	{
 		slug: "catchup",
 		name: "Catch up",
 		description:
-			"One pass over everything that moved while you were away, so nothing needs hunting down session by session.",
+			"One pass over everything that moved while you were away.",
 		category: "Review",
 	},
 	{
 		slug: "prtinder",
 		name: "PR Tinder",
 		description:
-			"Open pull requests one at a time, decided in a keystroke instead of a list you scroll past.",
+			"Review open pull requests one at a time.",
 		category: "Review",
 	},
 	{
 		slug: "supporttinder",
 		name: "Support Tinder",
 		description:
-			"The same one-at-a-time pass over support tickets waiting on a human.",
+			"Review waiting support tickets one at a time.",
 		category: "Review",
 		requires: ["plain"],
 	},
@@ -148,14 +148,14 @@ const CORE_TOOLS: {
 		slug: "reports",
 		name: "Reports",
 		description:
-			"Durable, structured reports produced by scheduled automations, kept over time so trends are visible.",
+			"Reports from scheduled automations, kept so you can see trends.",
 		category: "Insight",
 	},
 	{
 		slug: "analytics",
 		name: "Analytics",
 		description:
-			"What this instance is actually doing — sessions, models and cost.",
+			"Sessions, models, and cost for this instance.",
 		category: "Insight",
 	},
 ];
@@ -247,19 +247,19 @@ function integrationEntries(): LibraryEntry[] {
 function integrationDescription(id: string): string {
 	switch (id) {
 		case "plain":
-			return "Support tickets become workspaces: triage, drafted replies, and internal notes on the thread.";
+			return "Turn support tickets into workspaces with drafted replies.";
 		case "linear":
-			return "Issues become workspaces, and agents can be assigned work the way a teammate is.";
+			return "Assign issues to agents the way you would a teammate.";
 		case "slack":
-			return "Talk to agents from Slack, watch channels for work, and get answers routed back to the thread.";
+			return "Talk to agents in Slack and get answers in the thread.";
 		case "stripe":
-			return "Read billing context during an investigation. Money-moving tools are stripped from every run.";
+			return "Read billing context while investigating. Agents can never move money.";
 		case "grafana":
-			return "Query logs and metrics, and let a failure signal start an investigation on its own.";
+			return "Query logs and metrics. Failures can start their own investigation.";
 		case "github":
-			return "Pull requests, reviews and checks — the path an agent's work takes to a human.";
+			return "Pull requests, reviews, and checks.";
 		case "codestorage":
-			return "Store session artifacts on a code.storage host instead of this machine.";
+			return "Store session artifacts on a code.storage host.";
 		default:
 			return "";
 	}
