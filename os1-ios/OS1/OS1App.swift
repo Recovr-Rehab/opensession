@@ -110,6 +110,7 @@ struct RootView: View {
                     await NativePreferences.hydrate()
                     await HideStore.shared.hydrate()
                     await PinStore.shared.hydrate()
+                    await LaneStore.shared.hydrate()
                     await ReadsStore.shared.hydrate()
                     try? await Task.sleep(for: .seconds(30))
                 }

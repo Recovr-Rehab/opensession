@@ -140,6 +140,15 @@ enum SettingsAPI {
         return response.hides ?? hides
     }
 
+    /// Per-user sidebar lanes, shared with the web sidebar (session id → the
+    /// lane it is claimed into). Read-only here: claiming is a browser action,
+    /// and this app only asks which rows are yours (see `LaneStore`).
+    static func lanes(user: String) async throws -> [String: String] {
+        struct Response: Decodable, Sendable { var lanes: [String: String]? }
+        let response: Response = try await request("/api/lanes", query: ["user": user])
+        return response.lanes ?? [:]
+    }
+
     /// Per-user pinned rows, shared with the web sidebar's Pinned band (row
     /// keys, in the user's own band order). PUT replaces the whole list.
     static func pins(user: String) async throws -> [String] {

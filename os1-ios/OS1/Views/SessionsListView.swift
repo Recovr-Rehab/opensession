@@ -952,30 +952,13 @@ struct SessionsListView: View {
         )
     }
 
-    /// Identity strings that count as "me": display name, its first token
-    /// (sessions store first names, e.g. "Jaap"), and the GitHub login.
-    private var myNames: Set<String> {
-        var names: Set<String> = []
-        let user = ServerConfig.shared.userName.trimmingCharacters(in: .whitespaces)
-        if !user.isEmpty {
-            names.insert(user.lowercased())
-            if let first = user.split(separator: " ").first {
-                names.insert(first.lowercased())
-            }
-        }
-        let login = ServerConfig.shared.githubLogin
-        if !login.isEmpty { names.insert(login.lowercased()) }
-        return names
-    }
-
-    private func isMine(_ session: Session) -> Bool {
-        guard !session.isAutomation, let by = session.startedBy?.lowercased() else { return false }
-        return myNames.contains(by)
-    }
+    /// What counts as "mine" here — one rule, shared with the Archived sheet.
+    private var peopleLens: PeopleLens { PeopleLens.current() }
 
     private var visibleArchivedSessions: [Session] {
-        viewModel.archivedSessions.filter { session in
-            (peopleFilter != "mine" || isMine(session))
+        let lens = peopleLens
+        return viewModel.archivedSessions.filter { session in
+            (peopleFilter != "mine" || lens.isMine(session))
                 && (repoFilter == "all" || session.effectiveRepo == repoFilter)
         }
     }
@@ -987,6 +970,7 @@ struct SessionsListView: View {
     /// disappear on the tap, not on the next poll.
     private func visibilityFilter() -> (SidebarWorkspace) -> Bool {
         let people = peopleFilter
+        let lens = peopleLens
         let repo = repoFilter
         let query = searchText.trimmingCharacters(in: .whitespaces).lowercased()
         // Rows this person has hidden drop out of the sidebar — except while
@@ -1003,9 +987,7 @@ struct SessionsListView: View {
                 return false
             }
             #endif
-            if people == "mine", !workspace.sessions.contains(where: isMine) {
-                return false
-            }
+            if people == "mine", !lens.owns(workspace) { return false }
             if repo != "all", workspace.effectiveRepo != repo { return false }
             guard !query.isEmpty else { return true }
             if workspace.title.lowercased().contains(query) { return true }
@@ -2296,8 +2278,9 @@ private struct ArchivedSessionsView: View {
 
     private var filteredSessions: [Session] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let lens = PeopleLens.current()
         return sessions.filter { session in
-            if owner == "mine", !isMine(session) { return false }
+            if owner == "mine", !lens.isMine(session) { return false }
             if repo != "all", session.effectiveRepo != repo { return false }
             if reason == "auto", !isAutoArchived(session) { return false }
             if reason == "manual", isAutoArchived(session) { return false }
@@ -2308,16 +2291,6 @@ private struct ArchivedSessionsView: View {
                 .map { $0.lowercased() }
                 .contains { $0.contains(query) }
         }
-    }
-
-    private func isMine(_ session: Session) -> Bool {
-        guard !session.isAutomation, let startedBy = session.startedBy?.lowercased() else {
-            return false
-        }
-        let config = ServerConfig.shared
-        let displayName = config.userName.lowercased()
-        let firstName = displayName.split(separator: " ").first.map(String.init)
-        return startedBy == displayName || startedBy == firstName || startedBy == config.githubLogin.lowercased()
     }
 
     private func isAutoArchived(_ session: Session) -> Bool {
