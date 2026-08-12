@@ -9,6 +9,7 @@ import {
 import { ImageThumbs } from "./ImageThumbs";
 import { FileChips } from "./FileChips";
 import { QuoteContext } from "./QuoteContext";
+import { ComposerContextChip } from "./ComposerContextChip";
 import type { Quote } from "../lib/quotes";
 import { useFileMentions } from "./useFileMentions";
 import {
@@ -22,7 +23,6 @@ import {
   IconEye,
   IconNote,
   IconStopSquare,
-  IconX,
 } from "./icons";
 import {
   composerBox,
@@ -843,6 +843,23 @@ export function Composer({
           </div>
         )}
         <AnimatePresence initial={false}>
+          {/* Note mode is context attached to the next send, exactly like a
+              quoted selection, so it says so in the same place and the same
+              shape rather than as a marker down in the toolbar — where the ✕
+              had to be small enough to fit beside the "+" and the model pill,
+              which made it hard to read and hard to hit. */}
+          {noteMode && (
+            <ComposerContextChip
+              key="note-mode"
+              icon={<IconNote size={15} />}
+              label="Team note"
+              title="Posts to the transcript for the team; the agent won't see it. ⌘N to go back."
+              tone="note"
+              onRemove={() => onNoteModeChange?.(false)}
+              removeLabel="Leave note mode"
+              disabled={disabled}
+            />
+          )}
           {quote && (
             <QuoteContext
               key={quote.id}
@@ -1122,13 +1139,14 @@ export function Composer({
             </motion.div>
           )}
 
-          {/* Active-mode marker. Nothing renders in the ordinary state; when a
+          {/* Ask mode's marker. Nothing renders in the ordinary state; when ask
               mode is on it names itself next to the "+", so the tinted surface
-              isn't the only thing saying which one. Ask mode's only exit cuts a
+              isn't the only thing saying so. Ask mode's only exit cuts a
               worktree, so clicking the marker opens the menu and lets you pick
-              the labelled row instead. */}
+              the labelled row instead. Note mode is not here: it is a chip
+              above the field, with a real ✕ (see ComposerContextChip). */}
           <AnimatePresence initial={false}>
-            {!minimized && (noteMode || askMode) && (
+            {!minimized && askMode && (
               <motion.div
                 key="mode-marker"
                 layout="position"
@@ -1140,13 +1158,7 @@ export function Composer({
                 // order, and the "+" is rendered first.
                 className="composer-pop-wrap relative inline-flex shrink-0 phone:order-[-2]"
               >
-                <Tooltip
-                  label={
-                    noteMode
-                      ? "Note mode — posts to the team; the agent won't see it. ⌘N to go back."
-                      : "Ask mode — this session can read the code but not change it"
-                  }
-                >
+                <Tooltip label="Ask mode — this session can read the code but not change it">
                   <button
                     type="button"
                     // Same "on" language as paletteIconBtnOn: the state
@@ -1161,44 +1173,21 @@ export function Composer({
                     // three different corners in one 88px row is what made the
                     // toolbar read as assembled rather than designed.
                     className={cn(
-                      // 12px copy against a 14px glyph, matching the model
-                      // pill beside it: at the old 11px-against-15px the label
-                      // read as a caption hung off an icon rather than as the
-                      // name of the mode.
-                      "inline-flex min-h-8 items-center gap-1.5 rounded-control text-[12px] font-medium transition-colors",
-                      // Note mode ends with the ✕, so the chip carries less
-                      // room on the trailing side than ask mode, which is all
-                      // label.
-                      noteMode ? "pl-2.5 pr-1.5" : "px-2.5",
-                      noteMode
-                        ? "bg-[color-mix(in_srgb,var(--yellow-tint)_22%,transparent)] text-yellow hover:bg-[color-mix(in_srgb,var(--yellow-tint)_32%,transparent)]"
-                        : "bg-[color-mix(in_srgb,var(--green)_18%,transparent)] text-green hover:bg-[color-mix(in_srgb,var(--green)_26%,transparent)]",
+                      // 12px copy against a 14px glyph, matching the model pill
+                      // beside it: at 11px-against-15px the label read as a
+                      // caption hung off an icon rather than the mode's name.
+                      "inline-flex min-h-8 items-center gap-1.5 rounded-control px-2.5 text-[12px] font-medium transition-colors",
+                      "bg-[color-mix(in_srgb,var(--green)_18%,transparent)] text-green hover:bg-[color-mix(in_srgb,var(--green)_26%,transparent)]",
                     )}
-                    // The marker does the useful thing on click: note mode is a
-                    // reversible toggle, so it turns itself off; ask mode isn't,
-                    // so it opens the menu instead.
-                    {...tapProps(() =>
-                      noteMode ? onNoteModeChange?.(false) : setMenu("add"),
-                    )}
-                    // The visible label names the mode; the accessible name has
-                    // to name the ACTION, since the ✕ that says so is decorative.
-                    aria-label={noteMode ? "Leave note mode" : undefined}
+                    // Ask mode has no one-click exit — leaving it cuts a
+                    // worktree — so the marker opens the menu and lets you pick
+                    // the labelled row. (Note mode, which does, says so with a
+                    // dismissible chip above the field instead.)
+                    {...tapProps(() => setMenu("add"))}
                     disabled={disabled}
                   >
-                    {noteMode ? <IconNote size={14} /> : <IconEye size={14} />}
-                    {noteMode ? "Note" : "Ask"}
-                    {/* Not a nested button — the whole chip is the exit, and
-                        this says so. Without it the only way out of note mode
-                        is knowing that the marker is clickable (or ⌘N), which
-                        is exactly the thing a marker doesn't communicate. */}
-                    {noteMode && (
-                      <span
-                        aria-hidden
-                        className="ml-0.5 inline-flex size-[18px] items-center justify-center rounded-[5px] text-yellow/70"
-                      >
-                        <IconX size={12} />
-                      </span>
-                    )}
+                    <IconEye size={14} />
+                    Ask
                   </button>
                 </Tooltip>
               </motion.div>
