@@ -118,8 +118,7 @@ button:focus-visible {
 	height: 24px;
 }
 
-.site-header nav,
-.site-footer nav {
+.site-header nav {
 	display: flex;
 	align-items: center;
 	gap: 28px;
@@ -127,13 +126,11 @@ button:focus-visible {
 	font-weight: 600;
 }
 
-.site-header nav a:not(.nav-cta),
-.site-footer nav a {
+.site-header nav a:not(.nav-cta) {
 	transition: opacity 160ms ease;
 }
 
-.site-header nav a:not(.nav-cta):hover,
-.site-footer nav a:hover {
+.site-header nav a:not(.nav-cta):hover {
 	opacity: 0.56;
 }
 
@@ -155,8 +152,7 @@ button:focus-visible {
 }
 
 .nav-cta:active,
-.button:active,
-.command-line button:active {
+.button:active {
 	transform: scale(0.96);
 }
 
@@ -527,7 +523,7 @@ button:focus-visible {
 
 .install-copy .section-kicker {
 	grid-column: 1;
-	grid-row: 1 / span 5;
+	grid-row: 1 / -1;
 }
 
 .install-copy h2 {
@@ -545,96 +541,99 @@ button:focus-visible {
 	line-height: 1.6;
 }
 
-.command-line {
+.waitlist-form {
 	display: flex;
+	position: relative;
 	grid-column: 2;
+	max-width: 560px;
 	min-height: 72px;
 	align-items: center;
-	justify-content: space-between;
-	gap: 18px;
+	gap: 10px;
 	margin-top: 50px;
-	padding: 12px 14px 12px 22px;
+	padding: 12px 12px 12px 14px;
 	border: 1px solid #393b41;
 	border-radius: 14px;
 	background: #222328;
 	box-shadow: inset 0 1px rgba(255, 255, 255, 0.025), 0 10px 25px rgba(0, 0, 0, 0.14);
 }
 
-.command-line code {
-	overflow: auto;
-	color: #dfe0e3;
-	font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-	font-size: 13px;
-	line-height: 1.5;
-	white-space: nowrap;
+.waitlist-form input {
+	min-width: 0;
+	flex: 1;
+	padding: 0 10px;
+	border: 0;
+	background: none;
+	color: #f0f1f3;
+	font-size: 15px;
+	outline: none;
 }
 
-.command-line code span {
-	color: #71c596;
+.waitlist-form input::placeholder {
+	color: #75787f;
 }
 
-.command-line button {
+.waitlist-form button {
 	display: inline-flex;
-	min-width: 88px;
-	height: 44px;
+	height: 46px;
 	align-items: center;
 	justify-content: center;
-	gap: 7px;
-	border: 1px solid #46484f;
-	border-radius: 9px;
-	background: #2c2e33;
-	color: #d4d5d8;
+	padding: 0 20px;
+	border: 0;
+	border-radius: 10px;
+	background: #f5f5f4;
+	color: #18191c;
 	cursor: pointer;
-	font-size: 12px;
-	font-weight: 600;
+	font-size: 14px;
+	font-weight: 700;
+	white-space: nowrap;
 	transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1), background-color 160ms ease;
 }
 
-.command-line button:hover {
-	background: #35373d;
+.waitlist-form button:hover {
+	background: #fff;
 }
 
-.install-meta {
+.waitlist-form button:active {
+	transform: scale(0.96);
+}
+
+.waitlist-form button:disabled {
+	background: #83858b;
+	cursor: default;
+}
+
+.waitlist-error {
+	position: absolute;
+	top: calc(100% + 10px);
+	left: 2px;
+	margin: 0;
+	color: #e79a92;
+	font-size: 13px;
+}
+
+.waitlist-done {
 	display: flex;
 	grid-column: 2;
-	gap: 24px;
-	margin-top: 18px;
+	min-height: 72px;
+	align-items: center;
+	gap: 8px;
+	margin: 50px 0 0;
+	color: #9fd8b6;
+	font-size: 16px;
+	font-weight: 600;
+}
+
+.waitlist-note {
+	grid-column: 2;
+	margin: 18px 0 0;
 	color: #838791;
 	font-size: 12px;
 	font-weight: 600;
 }
 
-.install-meta span {
-	display: flex;
-	align-items: center;
-	gap: 6px;
-}
-
-.trust-note {
-	display: flex;
-	grid-column: 2;
-	align-items: flex-start;
-	gap: 10px;
-	margin-top: 42px;
-	padding-top: 24px;
-	border-top: 1px solid #33353a;
-	color: #7f828b;
-}
-
-.trust-note p {
-	max-width: 780px;
-	margin: 0;
-	font-size: 13px;
-	line-height: 1.6;
-}
-
-.trust-note strong {
-	color: #aeb1b8;
-}
-
 .site-footer {
 	display: grid;
-	grid-template-columns: auto 1fr auto;
+	grid-template-columns: auto 1fr;
 	align-items: center;
 	gap: 30px;
 	padding: 36px 0 54px;
@@ -767,34 +766,23 @@ button:focus-visible {
 
 	.install-copy h2,
 	.install-copy > p:last-child,
-	.command-line,
-	.install-meta,
-	.trust-note {
+	.waitlist-form,
+	.waitlist-done,
+	.waitlist-note {
 		grid-column: 1;
 	}
 
-	.command-line {
+	.waitlist-form {
 		align-items: stretch;
 		flex-direction: column;
-		padding: 18px;
+		padding: 14px;
 	}
 
-	.command-line button {
-		align-self: flex-end;
-	}
-
-	.install-meta {
-		align-items: flex-start;
-		flex-direction: column;
-		gap: 8px;
-	}
-
-	.site-footer {
-		grid-template-columns: 1fr auto;
-	}
-
-	.site-footer p {
-		display: none;
+	.waitlist-form input {
+		height: 46px;
+		padding: 0 12px;
+		border-radius: 10px;
+		background: #1b1c20;
 	}
 }
 
@@ -867,20 +855,11 @@ button:focus-visible {
 		border-radius: 26px;
 	}
 
-	.command-line code {
-		font-size: 11px;
-	}
-
 	.site-footer {
 		display: flex;
 		flex-direction: column;
 		align-items: flex-start;
-	}
-
-	.site-footer nav {
-		width: 100%;
-		justify-content: space-between;
-		gap: 16px;
+		gap: 14px;
 	}
 }
 

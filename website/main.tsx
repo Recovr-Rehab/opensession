@@ -1,18 +1,17 @@
+import type { FormEvent } from "react";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import markUrl from "../os1-mac/build/icon-512.png";
-import {
-	IconCheck,
-	IconCopy,
-	IconRepo,
-	IconTerminal,
-} from "../src/frontend/components/icons";
+import { IconCheck } from "../src/frontend/components/icons";
 import "./site.css";
 import { ProductDemo } from "./ProductDemo";
 import { TellaBackground } from "./TellaBackground";
 
-const installCommand =
-	"curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash";
+/**
+ * Where a waitlist signup goes. Until it points at a real collector the form
+ * says so instead of pretending an address was stored.
+ */
+const waitlistEndpoint = "";
 
 const Agentation = lazy(() =>
 	import("agentation").then((module) => ({ default: module.Agentation })),
@@ -44,24 +43,59 @@ const features = [
 	},
 ];
 
-function CopyCommand() {
-	const [copied, setCopied] = useState(false);
-	async function copy() {
-		await navigator.clipboard.writeText(installCommand);
-		setCopied(true);
-		window.setTimeout(() => setCopied(false), 1800);
+function WaitlistForm() {
+	const [email, setEmail] = useState("");
+	const [state, setState] = useState<"idle" | "sending" | "done" | "error">(
+		"idle",
+	);
+
+	async function submit(event: FormEvent) {
+		event.preventDefault();
+		if (state === "sending" || state === "done") return;
+		setState("sending");
+		try {
+			if (!waitlistEndpoint) throw new Error("No waitlist endpoint configured");
+			const response = await fetch(waitlistEndpoint, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ email }),
+			});
+			if (!response.ok) throw new Error(String(response.status));
+			setState("done");
+		} catch {
+			setState("error");
+		}
+	}
+
+	if (state === "done") {
+		return (
+			<p className="waitlist-done" role="status">
+				<IconCheck size={20} /> You are on the list. We will be in touch.
+			</p>
+		);
 	}
 
 	return (
-		<div className="command-line">
-			<code>
-				<span>$</span> {installCommand}
-			</code>
-			<button type="button" onClick={copy} aria-label="Copy install command">
-				{copied ? <IconCheck size={20} /> : <IconCopy size={20} />}
-				<span aria-live="polite">{copied ? "Copied" : "Copy"}</span>
+		<form className="waitlist-form" onSubmit={submit}>
+			<input
+				type="email"
+				name="email"
+				required
+				autoComplete="email"
+				placeholder="you@company.com"
+				aria-label="Email address"
+				value={email}
+				onChange={(event) => setEmail(event.target.value)}
+			/>
+			<button type="submit" disabled={state === "sending"}>
+				{state === "sending" ? "Joining…" : "Join the waitlist"}
 			</button>
-		</div>
+			{state === "error" && (
+				<p className="waitlist-error" role="alert">
+					That did not go through. Try again in a moment.
+				</p>
+			)}
+		</form>
 	);
 }
 
@@ -98,9 +132,8 @@ function LandingPage() {
 					</a>
 					<nav aria-label="Main navigation">
 						<a href="#why">How it works</a>
-						<a href="https://github.com/tellahq/opensession">GitHub</a>
-						<a className="nav-cta" href="#install">
-							Get started
+						<a className="nav-cta" href="#waitlist">
+							Join the waitlist
 						</a>
 					</nav>
 				</header>
@@ -114,19 +147,11 @@ function LandingPage() {
 							parallel and bring your team into every session.
 						</p>
 						<div className="hero-actions">
-							<a className="button button-primary" href="#install">
-								Get started
-							</a>
-							<a
-								className="button button-secondary"
-								href="https://github.com/tellahq/opensession"
-							>
-								View on GitHub <span aria-hidden="true">↗</span>
+							<a className="button button-primary" href="#waitlist">
+								Join the waitlist
 							</a>
 						</div>
 						<div className="proof-line">
-							<span>MIT</span>
-							<i />
 							<span>Use your existing subscriptions</span>
 							<i />
 							<span>Worktrees and sandboxes</span>
@@ -158,35 +183,20 @@ function LandingPage() {
 		</section>
 
 		<main>
-			<section className="install-section page-width" id="install">
+			<section className="install-section page-width" id="waitlist">
 					<div className="install-card">
 						<div className="install-copy">
-							<p className="section-kicker section-kicker-dark">
-								Start on your own machine
-							</p>
-							<h2>Start with one command.</h2>
+							<p className="section-kicker section-kicker-dark">Early access</p>
+							<h2>Join the waitlist.</h2>
 							<p>
-								The installer adds Bun and OpenCode when needed, then connects
-								the model subscriptions and integrations you already use.
+								We are opening Open Session to a few teams at a time. Leave your
+								email and we will tell you when it is your turn.
 							</p>
 						</div>
-						<CopyCommand />
-						<div className="install-meta">
-							<span>
-								<IconTerminal size={20} /> Linux and macOS
-							</span>
-							<span>
-								<IconCheck size={20} /> Setup in under a minute
-							</span>
-						</div>
-						<div className="trust-note">
-							<IconRepo size={20} />
-							<p>
-								<strong>Private by design.</strong> Open Session trusts everyone
-								who can reach it. Keep your instance on Tailscale, behind a VPN,
-								or behind an SSH tunnel.
-							</p>
-						</div>
+						<WaitlistForm />
+						<p className="waitlist-note">
+							One email when your invite is ready. Nothing else.
+						</p>
 					</div>
 				</section>
 			</main>
@@ -196,16 +206,7 @@ function LandingPage() {
 					<Mark small />
 					<span>Open Session</span>
 				</a>
-				<p>The open-source workspace for teams building with agents.</p>
-				<nav aria-label="Footer navigation">
-					<a href="https://github.com/tellahq/opensession">GitHub</a>
-					<a href="https://github.com/tellahq/opensession/tree/main/docs/setup">
-						Docs
-					</a>
-					<a href="https://github.com/tellahq/opensession/blob/main/SECURITY.md">
-						Security
-					</a>
-				</nav>
+				<p>The workspace for teams building with agents.</p>
 			</footer>
 		</>
 	);
