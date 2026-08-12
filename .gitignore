@@ -47,9 +47,16 @@ deploy/sandbox/microvm/.cache-busybox
 # macOS Finder metadata
 .DS_Store
 
-# Vendored third-party agent skills — instance-local, not part of Open Session
-# (MIT content fetched from emilkowalski/skills and jakubkrehel/skills)
+# Vendored third-party agent skills are instance-local. Open Session's own
+# generic skills are tracked below and linked into OpenCode's global skill dir
+# by install.sh.
 .agents/skills/
+!.agents/skills/
+.agents/skills/*
+!.agents/skills/simplify/
+!.agents/skills/simplify/**
+!.agents/skills/pr-autofix/
+!.agents/skills/pr-autofix/**
 .claude/skills
 skills-lock.json
 .css-shots/

@@ -364,6 +364,24 @@ else
     "curl -fsSL https://chatgpt.com/codex/install.sh | sh" "$HOME/.local/bin"
 fi
 
+# Open Session owns a small set of generic skills that should be available in
+# every project. Keep their source in this repository and expose it through
+# OpenCode's standard global skill directory; never copy it into ~/.claude.
+step "Agent skills"
+GLOBAL_SKILLS="$HOME/.config/opencode/skills"
+mkdir -p "$GLOBAL_SKILLS"
+for skill in simplify pr-autofix; do
+  source="$DIR/.agents/skills/$skill"
+  target="$GLOBAL_SKILLS/$skill"
+  [ -d "$source" ] || continue
+  if [ -e "$target" ] && [ ! -L "$target" ]; then
+    warn "$target already exists; leaving it unchanged"
+    continue
+  fi
+  ln -sfn "$source" "$target"
+  good "$skill -> $source"
+done
+
 # ── network ─────────────────────────────────────────────────────────────────
 #
 # Open Session has no authentication and trusts everyone who can reach the

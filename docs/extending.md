@@ -125,6 +125,12 @@ but not live-certified; adding a sixth is easier than making one trustworthy.
 code, no registration. This is the cheapest way to encode "how we do X here" —
 a review checklist, a deployment runbook, a design vocabulary.
 
+Generic skills shipped by Open Session live in this repository under
+`.agents/skills/`. The installer links them into
+`~/.config/opencode/skills/`, so every project can use them without keeping
+source files under `~/.claude/skills`. Product-specific workflows belong in
+that product's repository instead.
+
 If you catch yourself pasting the same three paragraphs into prompts, that is a
 skill.
 
