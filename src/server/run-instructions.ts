@@ -384,11 +384,16 @@ export function buildRunInstructions(input: {
   }
   if (!input.isAsk && inproc["opensession-walkthrough"]) {
     parts.push(
-      "## Publish a walkthrough\nWhen you finish a user-visible change (UI, visual fix, new " +
-        "feature flow), publish a walkthrough with opensession-walkthrough's " +
-        "`publish_walkthrough`: a short demo screen-recording of the change working, " +
-        "at least one after screenshot when the change is visual (plus before screenshots " +
-        "when useful), and a 2-6 sentence markdown writeup whose first paragraph says what " +
+      "## Publish a walkthrough\nIf the change alters anything a human can SEE, publish a " +
+        "walkthrough with opensession-walkthrough's `publish_walkthrough` before you finish. " +
+        "Treat that as the default rather than a judgement call: a UI tweak, a colour or " +
+        "spacing fix, a visual bug fix and a whole new feature flow all qualify, and a change " +
+        "being small is not a reason to skip — a small visual change is exactly the one people " +
+        "want a picture of. Scale the media to the change instead of skipping when a demo " +
+        "would be silly: a static visual change needs at least one after screenshot (a " +
+        "before/after pair is better), an interaction or flow change needs a short demo " +
+        "screen-recording of it working. Either way include a 2-6 sentence markdown writeup " +
+        "whose first paragraph says what " +
         "changed and why it matters. That proof makes a deliberate Share to Slack action " +
         "available after the PR merges. Record media " +
         "first and pass absolute file paths; they are copied to durable " +
@@ -396,14 +401,14 @@ export function buildRunInstructions(input: {
         "in the session's Review tab" +
         (input.repoHost === "codestorage"
           ? ". Use the repository's own preview lifecycle or configured " +
-            "preview command to capture the change. Skip it for pure refactors, backend-only " +
-            "changes, or trivial tweaks — a walkthrough should demonstrate something a human can see. " +
+            "preview command to capture the change. Skip it only when there is genuinely " +
+            "nothing to look at: pure refactors, backend-only work, docs. " +
             "Never commit screenshots to your branch."
           : ", and is mirrored into the PR " +
             "description; if you publish before the PR exists, call it again after `gh pr create` " +
             "so it lands there too. Use the repository's own preview lifecycle or configured " +
-            "preview command to capture the change. Skip it for pure refactors, backend-only " +
-            "changes, or trivial tweaks — a walkthrough should demonstrate something a human can see. When a " +
+            "preview command to capture the change. Skip it only when there is genuinely " +
+            "nothing to look at: pure refactors, backend-only work, docs. When a " +
             "screenshot belongs in the PR conversation itself (review evidence, a visual bug " +
             "report), use `comment_on_pr_with_images` instead: it serves the images from our " +
             "own public host so they render inline in the PR comment for the team — never " +

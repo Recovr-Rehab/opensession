@@ -699,9 +699,21 @@ describe("buildRunInstructions", () => {
       isAsk: false,
       inProcessMcp: { "opensession-walkthrough": {} },
     });
-    expect(s).toContain("at least one after screenshot when the change is visual");
+    expect(s).toContain("a static visual change needs at least one after screenshot");
     expect(s).toContain("why it matters");
     expect(s).toContain("deliberate Share to Slack action");
+  });
+  // Kent kept waiting for walkthroughs on design work that never came: the old
+  // copy read as a judgement call and demanded a screen-recording, which is
+  // absurd for a spacing fix, so runs skipped publishing entirely.
+  test("a small visual change is explicitly not a reason to skip the walkthrough", () => {
+    const s = buildRunInstructions({
+      isAsk: false,
+      inProcessMcp: { "opensession-walkthrough": {} },
+    });
+    expect(s).toContain("Treat that as the default rather than a judgement call");
+    expect(s).toContain("being small is not a reason to skip");
+    expect(s).not.toContain("trivial tweaks");
   });
   test("ask and scratch runs never get a reviewer instruction", () => {
     for (const input of [

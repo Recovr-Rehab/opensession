@@ -44,7 +44,7 @@ export function createWalkthroughMcpServer(ctx: WalkthroughToolContext) {
   const tools = [
     tool(
       "publish_walkthrough",
-      "Publish a walkthrough of this session's change: a demo video, before/after screenshots, and a short writeup. It renders inline in the session and Review tab, and is mirrored into the GitHub PR description. Record the media first using the repository's own preview/capture workflow and pass absolute file paths; files are copied to durable storage, so temp paths are fine. Summary: 2-6 sentences of markdown describing what changed and how it was verified.",
+      "Publish a walkthrough of this session's change: a demo video, before/after screenshots, and a short writeup. Publish one for ANY change a human can see, including small visual tweaks — the video is optional, so an after screenshot (better: a before/after pair) is enough for a static visual change, and a recording is for interactions and flows. It renders inline in the session and Review tab, and is mirrored into the GitHub PR description. Record the media first using the repository's own preview/capture workflow and pass absolute file paths; files are copied to durable storage, so temp paths are fine. Summary: 2-6 sentences of markdown describing what changed and how it was verified.",
       {
         summary: z
           .string()
