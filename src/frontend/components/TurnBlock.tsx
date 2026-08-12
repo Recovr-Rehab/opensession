@@ -264,7 +264,7 @@ function TurnMessage({
       data-eid={entry.id}
     >
       <ClampedBody
-        className={cn(msgBody, "markdown text-dim")}
+        className={cn(msgBody, "markdown text-fg")}
         content={entry.content}
         entry={entry}
         sessionId={sessionId}
