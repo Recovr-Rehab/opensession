@@ -203,7 +203,14 @@ export function buildRunInstructions(input: {
       "`tella-fusion#5528` — rather than a bare `#92`. A qualified reference always " +
       "renders as a chip that opens the review here; a bare number only does when it is " +
       "long enough to be unmistakable, because short `#numbers` in prose are usually a " +
-      "step, a hex colour or a ranking instead."
+      "step, a hex colour or a ranking instead.\n" +
+      // A chip only forms on a COMPLETE id (SESSION_ID_EXACT in markdown.ts),
+      // and shortSessionId already abbreviates the LABEL — so eliding the id in
+      // the source buys no brevity and costs the link.
+      "Never shorten a session id or a session URL: write every character of it. Only a " +
+      "complete id renders as a chip that opens the session, and the renderer already " +
+      "shortens the label for display, so an elided id like `os-019ff524-76d7…` costs the " +
+      "link and gains nothing."
   );
   // Shared-pool runs only: opencode builds its environment block from the
   // server process cwd, which for a pool member is the neutral SHARED_CWD —
