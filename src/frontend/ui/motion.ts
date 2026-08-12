@@ -42,8 +42,11 @@ export const ease: [number, number, number, number] = [0.32, 0.72, 0, 1];
  * everything else. It used to carry `bounce: 0.14`; the overshoot made it the
  * one control that moved differently from its neighbours, and dropping it is
  * what puts the composer in the same system as the CSS transitions around it.
- * Used as the `layout` transition on the composer and the enter/exit of its
- * toolbar chips.
+ *
+ * This is the transition for that ONE morph, not for the composer's size in
+ * general. Everything it is attached to is paired with `layoutDependency` so it
+ * runs on the pill morph and on nothing else. See the note on the composer box
+ * in components/Composer.tsx.
  */
 export const composerMorph: Transition = {
 	type: "spring",
@@ -53,14 +56,19 @@ export const composerMorph: Transition = {
 
 /**
  * Enter for the composer's toolbar chips (model/effort/goal) as it expands — a
- * quick fade + scale from the collapsed baseline. Deliberately no `exit`: on
- * collapse the chips are removed instantly (the container's layout glide carries
- * the motion) so they don't briefly reflow through the reordered single-row.
+ * quick fade from the collapsed baseline. Deliberately no `exit`: on collapse
+ * the chips are removed instantly (the container's layout glide carries the
+ * motion) so they don't briefly reflow through the reordered single-row.
+ *
+ * These chips arrive in the middle of the pill morph, while the whole row is
+ * already re-ordering around them, so they stay quiet: a chip scaling from 0.8
+ * over the morph's full 280ms was a second moving thing competing with the
+ * shape change. It fades at the chip duration, from near its own size.
  */
 export const composerChipMotion = {
-	initial: { opacity: 0, scale: 0.8 },
+	initial: { opacity: 0, scale: 0.96 },
 	animate: { opacity: 1, scale: 1 },
-	transition: composerMorph,
+	transition: { type: "tween", duration: duration.base, ease },
 } as const;
 
 /**

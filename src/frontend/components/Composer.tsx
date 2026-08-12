@@ -806,6 +806,25 @@ export function Composer({
       {attached}
       <motion.div
         layout
+        // `layout` here is for ONE move: the phone pill morphing to and from the
+        // full composer. `layoutDependency` is what keeps it to that move.
+        //
+        // Without it Motion re-measures on every render, and this component
+        // re-renders on every keystroke, so a draft growing by a line was
+        // animated like a state change: the box took a 300ms spring, which
+        // Motion runs as a scaleY on the box (measured 0.84 on the first frame),
+        // and the text slid ~20px up under the caret after the character had
+        // already landed while the toolbar dipped 8px and floated back. Anything
+        // in the box that isn't itself a projection node was squashed for those
+        // 300ms: the attachment rows, the note tint, the vim key bar.
+        //
+        // Keyed to `minimized`, the measure is skipped entirely while you type
+        // (the field just grows, as a textarea does) and taken fresh at the
+        // moment the pill flips, which is the only time this box changes shape
+        // rather than size. On desktop `minimized` never changes, so the box
+        // never measures at all. Content that should still glide animates its
+        // OWN height instead. See ComposerContextChip.
+        layoutDependency={minimized}
         // Pill when collapsed, --composer-radius when expanded (see
         // composerRadius above) — the same corner the queue flap and the
         // mention popup use, so the surfaces that tuck under and hang off this
@@ -895,6 +914,11 @@ export function Composer({
         <motion.div
           layout="position"
           transition={composerMorph}
+          // Same dependency as the box above: these wrappers exist so the
+          // controls glide when the pill re-orders them, and they have to skip
+          // the same renders it does. A wrapper still measuring per keystroke
+          // would spring the field's position against a box that isn't moving.
+          layoutDependency={minimized}
           // Positioned for the code mirror below (and the scroll-fade mask the
           // auto-grow effect writes onto it).
           className={cn(
@@ -1012,6 +1036,7 @@ export function Composer({
             <motion.div
               layout="position"
               transition={composerMorph}
+              layoutDependency={minimized}
               // `composer-pop-wrap` stays as a hook: the outside-click handler
               // above dismisses the menu for any mousedown that isn't inside one.
               className={cn(
@@ -1271,6 +1296,7 @@ export function Composer({
           <motion.div
             layout="position"
             transition={composerMorph}
+            layoutDependency={minimized}
             className={cn(
               "inline-flex shrink-0 items-center",
               minimized && "order-3",
@@ -1318,6 +1344,7 @@ export function Composer({
             <motion.div
               layout="position"
               transition={composerMorph}
+              layoutDependency={minimized}
               className={cn(
                 "relative inline-flex shrink-0 items-stretch",
                 minimized && "order-5",
