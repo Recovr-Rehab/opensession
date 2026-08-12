@@ -838,37 +838,6 @@ export function SessionViewer({
 			toast(error?.message || "Couldn't share the shipped update");
 		}
 	}, [mergedPr, session.id]);
-	const shippedChangeShare = useMemo(
-		() =>
-			mergedPr
-				? {
-						prNumber: mergedPr.number!,
-						sessionId: session.id,
-						defaultMessage: suggestedShippedChangeMessage(
-							mergedPr.title || "an update",
-							mergedPr.repo,
-							session.walkthrough?.summary,
-						),
-						screenshot: shippedScreenshot,
-						requestingScreenshot: requestingShippedScreenshot,
-						status: shippedChangeStatus,
-						onShare: sendShippedChangeToSlack,
-						onRequestScreenshot:
-							connected && !noEngine ? requestShippedScreenshot : undefined,
-					}
-				: undefined,
-		[
-			mergedPr,
-			requestShippedScreenshot,
-			requestingShippedScreenshot,
-			connected,
-			noEngine,
-			shippedScreenshot,
-			session.walkthrough?.summary,
-			sendShippedChangeToSlack,
-			shippedChangeStatus,
-		],
-	);
 	const promotedPr =
 		prPresentation.primary?.source !== "primary"
 			? prPresentation.primary
@@ -3019,6 +2988,37 @@ export function SessionViewer({
 		!session.claudeSessionId &&
 		!session.codexThreadId &&
 		session.source !== "opensession";
+	const shippedChangeShare = useMemo(
+		() =>
+			mergedPr
+				? {
+						prNumber: mergedPr.number!,
+						sessionId: session.id,
+						defaultMessage: suggestedShippedChangeMessage(
+							mergedPr.title || "an update",
+							mergedPr.repo,
+							session.walkthrough?.summary,
+						),
+						screenshot: shippedScreenshot,
+						requestingScreenshot: requestingShippedScreenshot,
+						status: shippedChangeStatus,
+						onShare: sendShippedChangeToSlack,
+						onRequestScreenshot:
+							connected && !noEngine ? requestShippedScreenshot : undefined,
+					}
+				: undefined,
+		[
+			mergedPr,
+			requestShippedScreenshot,
+			requestingShippedScreenshot,
+			connected,
+			noEngine,
+			shippedScreenshot,
+			session.walkthrough?.summary,
+			sendShippedChangeToSlack,
+			shippedChangeStatus,
+		],
+	);
 	// Exact engine-state forks use Claude's SDK forkSession. Other backends can
 	// still fork as a new sibling with a transcript handoff.
 	const canForkSession =
