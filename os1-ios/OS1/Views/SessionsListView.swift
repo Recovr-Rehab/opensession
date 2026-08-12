@@ -109,6 +109,7 @@ struct SessionsListView: View {
     @State private var detailsWorkspace: SidebarWorkspace?
     @State private var pendingContextMerge: ContextMerge?
     @State private var prActionError: String?
+    @State private var slackShare: PrSlackShareRequest?
     #endif
 
     private struct ContextMerge {
@@ -319,6 +320,9 @@ struct SessionsListView: View {
                 WorktreeInfoSheet(workspace: workspace, listViewModel: viewModel)
                     .presentationDetents([.large])
                     .presentationDragIndicator(.visible)
+            }
+            .sheet(item: $slackShare) { request in
+                PrSlackShareSheet(request: request)
             }
             #endif
     }
@@ -1468,6 +1472,17 @@ struct SessionsListView: View {
                 .disabled(true)
             prAction(state, session: session, workspace: workspace)
             if let prURL = session.prUrl.flatMap(URL.init(string:)) {
+                Button {
+                    copyToPasteboard(prURL.absoluteString)
+                    Haptics.play(.selection)
+                } label: {
+                    Label("Copy GitHub link", systemImage: "doc.on.doc")
+                }
+                Button {
+                    slackShare = PrSlackShareRequest(title: workspace.title, url: prURL)
+                } label: {
+                    Label("Share to Slack", systemImage: "paperplane")
+                }
                 Link(destination: prURL) {
                     Label {
                         Text(verbatim: session.prNumber.map { "Open PR #\($0)" } ?? "Open pull request")

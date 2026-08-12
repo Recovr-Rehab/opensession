@@ -68,6 +68,7 @@ struct PrPanelView: View {
     /// that can't be taken back, so it always passes through a dialog.
     @State private var pendingMerge: String?
     @State private var confirmingClose = false
+    @State private var slackShare: PrSlackShareRequest?
 
     enum Chrome { case sheet, pushed }
 
@@ -91,6 +92,9 @@ struct PrPanelView: View {
         }
         // Checks move fast while CI runs; re-fetch on open (server-cached).
         .task { await viewModel.refreshPr() }
+        .sheet(item: $slackShare) { request in
+            PrSlackShareSheet(request: request)
+        }
         #if os(macOS)
         .frame(minWidth: 460, minHeight: 540)
         #endif
@@ -218,6 +222,20 @@ struct PrPanelView: View {
             if let url = pr.url.flatMap(URL.init) {
                 Link(destination: url) {
                     Label("Open on GitHub", systemImage: "arrow.up.right")
+                }
+                Button {
+                    copyToPasteboard(url.absoluteString)
+                    Haptics.play(.selection)
+                } label: {
+                    Label("Copy GitHub link", systemImage: "doc.on.doc")
+                }
+                Button {
+                    slackShare = PrSlackShareRequest(
+                        title: pr.title ?? "PR #\(pr.number)",
+                        url: url
+                    )
+                } label: {
+                    Label("Share to Slack", systemImage: "paperplane")
                 }
             }
         }

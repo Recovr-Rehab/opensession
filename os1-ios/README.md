@@ -166,7 +166,10 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   failing checks, a draft, requested changes — `POST …/pr-merge`), and
   **Close pull request** (`POST …/pr-close`). The session overflow menu also
   exposes squash, merge-commit and rebase merge actions directly, with the same
-  warnings and confirmation. A workspace row's long-press menu also rolls the
+  warnings and confirmation. PR surfaces can copy the GitHub link or open an
+  editable Slack post that appends the link, defaults to `#engineering`, and
+  sends through the signed-in person's Slack account. A workspace row's
+  long-press menu also rolls the
   cached PR state into one next action: merge when ready, fix failed checks,
   resolve conflicts, address feedback, view running checks, or archive after it
   lands. Each action needs a GitHub credential server-side,

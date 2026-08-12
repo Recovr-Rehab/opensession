@@ -9,11 +9,42 @@
  * point); without a grant the route 403s with a pointer to My accounts.
  */
 import type { RouteContext } from "./context";
+import { configuredIntegration } from "../config";
+
+export interface SlackChannelOption {
+	id: string;
+	name: string;
+}
+
+export function configuredSlackChannels(): SlackChannelOption[] {
+	const names = configuredIntegration("slack").channelNames;
+	if (!names || typeof names !== "object" || Array.isArray(names)) return [];
+	return Object.entries(names)
+		.filter(([id, name]) =>
+			/^C[A-Z0-9]+$/.test(id) && typeof name === "string" && name.trim()
+		)
+		.map(([id, name]) => ({ id, name: String(name).trim() }));
+}
+
+export function defaultSlackChannel(
+	channels: SlackChannelOption[],
+): string | undefined {
+	return channels.find((channel) => channel.name.toLowerCase() === "engineering")?.id
+		|| channels[0]?.id;
+}
 
 export async function handleSlackChannelRoutes(
 	ctx: RouteContext,
 ): Promise<Response | undefined> {
 	const { req, url, path } = ctx;
+
+	if (path === "/api/slack/channels" && req.method === "GET") {
+		const channels = configuredSlackChannels();
+		return Response.json({
+			channels,
+			defaultChannel: defaultSlackChannel(channels),
+		});
+	}
 
 	// Viewing the pane marks the channel read (as Slack itself does) — moves
 	// the caller's OWN read cursor via their grant, so the sidebar unread dot
