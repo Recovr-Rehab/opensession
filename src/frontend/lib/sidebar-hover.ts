@@ -158,7 +158,6 @@ export function wsPrInfo(row: WsCardRow) {
 		(b.lastActivity || "").localeCompare(a.lastActivity || ""),
 	);
 	const prSession = newestFirst.find((c) => c.prUrl);
-	const branch = prSession?.branch || newestFirst.find((c) => c.branch)?.branch;
 	const prReady =
 		!!prSession &&
 		prSession.prState === "OPEN" &&
@@ -184,7 +183,7 @@ export function wsPrInfo(row: WsCardRow) {
 					: null,
 			].filter((b): b is string => !!b)
 		: [];
-	return { prSession, branch, prReady, prStatusBits };
+	return { prSession, prReady, prStatusBits };
 }
 
 /** Stills rendered in the hover card's filmstrip. The strip scrolls, so this

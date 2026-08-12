@@ -63,21 +63,20 @@ export function SessionCardBody({ session: s }: { session: UnifiedSession }) {
 
 	return (
 		<>
+			{/* Same head as the workspace card: what changed, not which branch it
+			    changed on. The branch is a row below for anyone who wants it. */}
 			<div className="flex min-w-0 items-center gap-[7px]">
 				<span className={`size-2 shrink-0 rounded-full ${state.dotClass}`} />
-				<span className="min-w-0 flex-1 truncate text-meta text-dim">
-					{s.branch || s.title}
+				<span className="min-w-0 flex-1 truncate text-meta">
+					{s.prAdditions != null && s.prDeletions != null ? (
+						<>
+							<span className="text-green">+{compactNum(s.prAdditions)}</span>{" "}
+							<span className="text-red">-{compactNum(s.prDeletions)}</span>
+						</>
+					) : (
+						<span className="text-dim">{repoName}</span>
+					)}
 				</span>
-				{s.prAdditions != null && s.prDeletions != null && (
-					<span className="shrink-0 text-meta">
-						<span className="text-green">
-							+{compactNum(s.prAdditions)}
-						</span>{" "}
-						<span className="text-red">
-							-{compactNum(s.prDeletions)}
-						</span>
-					</span>
-				)}
 			</div>
 
 			<div className="mt-[5px] text-label font-semibold leading-[1.3]">{s.title}</div>
@@ -300,7 +299,7 @@ export function WsStatusMark({
 	return dot(SIDEBAR_STATUS_DOT.idle);
 }
 
-// The info half of the workspace card: branch + diff + status mark, title,
+// The info half of the workspace card: diff + status mark, title,
 // blocked-question callout, latest-message description, media thumbnails.
 // Rendered inside the hover card (desktop) and the long-press sheet (mobile).
 function WsOverviewInfo({
@@ -310,7 +309,7 @@ function WsOverviewInfo({
 	row: WsCardRow;
 	ov: WorkspaceOverview | null;
 }) {
-	const { prSession, branch } = wsPrInfo(row);
+	const { prSession } = wsPrInfo(row);
 	const meta = MINE_STATUS_META.find((m) => m.key === row.status);
 	const desc = (ov?.lastMessage?.content || ov?.prompt?.content || "")
 		.replace(/\s+/g, " ")
@@ -318,20 +317,27 @@ function WsOverviewInfo({
 	const media = ov?.media || [];
 	return (
 		<>
+			{/* What changed, not where it lives: a generated branch name
+			    ("auto-plain-ticket-triage-202608121249") fills the line, truncates,
+			    and answers nothing the title doesn't. The diff takes its place, and
+			    the repo stands in when there is no PR to size. */}
 			<div className="flex min-w-0 items-center gap-[7px]">
-				<span className="min-w-0 flex-1 truncate text-meta text-dim">
-					{branch || repoLabel(row.sessions[0]?.repo || DEFAULT_REPO_ID)}
-				</span>
-				{prSession?.prAdditions != null && prSession?.prDeletions != null && (
-					<span className="shrink-0 text-meta">
-						<span className="text-green">
-							+{compactNum(prSession.prAdditions)}
-						</span>{" "}
-						<span className="text-red">
-							-{compactNum(prSession.prDeletions)}
+				<span className="min-w-0 flex-1 truncate text-meta">
+					{prSession?.prAdditions != null && prSession?.prDeletions != null ? (
+						<>
+							<span className="text-green">
+								+{compactNum(prSession.prAdditions)}
+							</span>{" "}
+							<span className="text-red">
+								-{compactNum(prSession.prDeletions)}
+							</span>
+						</>
+					) : (
+						<span className="text-dim">
+							{repoLabel(row.sessions[0]?.repo || DEFAULT_REPO_ID)}
 						</span>
-					</span>
-				)}
+					)}
+				</span>
 				<span className="flex shrink-0 items-center" title={meta?.label}>
 					<WsStatusMark row={row} size={22} />
 				</span>
@@ -421,7 +427,7 @@ function WsOverviewInfo({
 	);
 }
 
-// The workspace counterpart of SessionCardBody: branch + diff stats + status
+// The workspace counterpart of SessionCardBody: diff stats + status
 // at a glance, the latest assistant message as a "where things stand" line,
 // screenshot thumbnails from the workspace's sessions, and quick actions
 // (Archive, PR link) — the only card body that carries controls, which is why
@@ -518,7 +524,7 @@ export function WsCardBody({
 }
 
 // The touch counterpart of the workspace card: long-pressing a row raises
-// a bottom sheet with the same overview block (branch + diff + status, title,
+// a bottom sheet with the same overview block (diff + status, title,
 // latest message, thumbnails) followed by thumb-sized action rows — the
 // status-colored main action first (answer / merge / review / archive), then
 // the workspace chores that live behind right-click on desktop (pin, rename,

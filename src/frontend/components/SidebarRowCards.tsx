@@ -171,10 +171,13 @@ export function CardFooter({
 // ── Pull request ────────────────────────────────────────────────────────────
 
 /**
- * The automated review's verdict, worded exactly as its PR comment words it
- * ("approve · 4/5"), so the card and the comment can't be read as two different
- * judgements. Tone follows the verdict; a review the branch has moved past goes
- * faint and says so rather than lending a stale score the same weight.
+ * The automated review's verdict, in the one word a person is looking for:
+ * approved, or what it wants instead. The raw comment's score ("approve · 4/5")
+ * put three tokens on the line to say one thing, so the confidence moved into
+ * the tooltip beside the review's age; only a blocking count changes what to do
+ * next, so that stays out loud. Tone follows the verdict; a review the branch
+ * has moved past goes faint and says so rather than lending a stale verdict the
+ * same weight.
  */
 export function osReviewLabel(review: OsReview): React.ReactNode {
 	const tone =
@@ -183,19 +186,30 @@ export function osReviewLabel(review: OsReview): React.ReactNode {
 			: review.verdict === "request_changes"
 				? "text-red"
 				: "text-dim";
+	const verdict =
+		review.verdict === "approve"
+			? "approved"
+			: review.verdict === "request_changes"
+				? "changes requested"
+				: review.verdict === "comment"
+					? "commented"
+					: "reviewed";
 	const parts = [
-		review.verdict ? review.verdict.replace(/_/g, " ") : "reviewed",
-		typeof review.confidence === "number" ? `${review.confidence}/5` : "",
+		verdict,
 		review.blocking > 0 ? `${review.blocking} blocking` : "",
 		review.stale ? "stale" : "",
 	].filter(Boolean);
+	const confidence =
+		typeof review.confidence === "number"
+			? ` · confidence ${review.confidence}/5`
+			: "";
 	return (
 		<span
 			className={review.stale ? "text-faint" : tone}
 			title={
 				review.stale
-					? `Reviewed ${relativeTime(review.at)}, on a commit this branch has moved past`
-					: `Reviewed ${relativeTime(review.at)}`
+					? `Reviewed ${relativeTime(review.at)}, on a commit this branch has moved past${confidence}`
+					: `Reviewed ${relativeTime(review.at)}${confidence}`
 			}
 		>
 			{parts.join(" · ")}
