@@ -6,7 +6,7 @@ import { Select } from "../ui/input";
 import { toast } from "../ui/toast";
 import { BrandMark } from "./BrandMark";
 import { openLightbox } from "./MediaLightbox";
-import { IconPlus, IconX } from "./icons";
+import { IconChevronDown, IconPlus, IconX } from "./icons";
 import { PixelSpinner } from "./PixelSpinner";
 
 const MAX_SLACK_IMAGE_BYTES = 20 * 1024 * 1024;
@@ -132,7 +132,7 @@ export function ShippedChangeComposer({
 					}}
 				/>
 				{screenshots.length > 0 && (
-					<div className="mt-2 flex gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+					<div className="mt-0.5 flex gap-2 overflow-x-auto pt-2 pr-2 pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
 						{screenshots.map((path, index) => (
 							<div key={path} className="relative shrink-0">
 								<button type="button" aria-label="Open screenshot preview" className="focus-ring block overflow-hidden rounded-md" onClick={(event) => openLightbox(screenshots.map((item) => ({ kind: "image", src: mediaUrl(item) })), index, event.currentTarget)}>
@@ -151,16 +151,17 @@ export function ShippedChangeComposer({
 						{uploading ? <PixelSpinner /> : <IconPlus size={20} />}
 					</button>
 					<div className="flex-1" />
-					<label className="flex items-center">
+					<label className="relative flex items-center">
 						<span className="sr-only">Send to</span>
-						<Select size="sm" className="w-24 phone:w-28" aria-label="Slack channel" value={channel} disabled={status !== "idle" || channels.length === 0} onChange={(event) => setChannel(event.target.value)}>
+						<Select size="md" className="w-28 appearance-none pr-8 phone:w-32" aria-label="Slack channel" value={channel} disabled={status !== "idle" || channels.length === 0} onChange={(event) => setChannel(event.target.value)}>
 							{channels.length === 0 && <option value="">No channels available</option>}
 							{channels.map((candidate) => (
 								<option key={candidate.id} value={candidate.id}>#{candidate.name}</option>
 							))}
 						</Select>
+						<IconChevronDown className="pointer-events-none absolute right-2 text-dim" size={16} />
 					</label>
-					<Button size="sm" icon={<BrandMark name="slack" size={10} />} disabled={status !== "idle" || (!(reconnectRequired || (!canUploadImages && screenshots.length > 0)) && (!message.trim() || !channel || uploading))} onClick={() => reconnectRequired || (!canUploadImages && screenshots.length > 0) ? onReconnectSlack?.() : onShare(message.trim(), channel, screenshots)}>
+					<Button size="md" icon={<BrandMark name="slack" size={12} />} disabled={status !== "idle" || (!(reconnectRequired || (!canUploadImages && screenshots.length > 0)) && (!message.trim() || !channel || uploading))} onClick={() => reconnectRequired || (!canUploadImages && screenshots.length > 0) ? onReconnectSlack?.() : onShare(message.trim(), channel, screenshots)}>
 						{reconnectRequired || (!canUploadImages && screenshots.length > 0) ? "Reconnect" : status === "sharing" ? "Sending…" : "Send"}
 					</Button>
 				</div>

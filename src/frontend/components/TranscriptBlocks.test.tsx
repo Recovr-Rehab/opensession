@@ -72,6 +72,8 @@ describe("TranscriptBlocks shipped change action", () => {
 		expect(html).toContain('aria-label="Add images"');
 		expect(html).toContain('aria-label="Slack channel"');
 		expect(html).toContain("border-line bg-surface");
+		expect(html).toContain("appearance-none pr-8");
+		expect(html).toContain("pointer-events-none absolute right-2");
 		expect(html).toContain("rounded-[var(--composer-radius)]");
 		expect(html).toContain("smooth-shadow-ring-soft");
 		expect(html).not.toContain("rounded-xl bg-panel p-4");
