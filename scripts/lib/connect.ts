@@ -462,20 +462,52 @@ type RunnerPortalRecord = {
 const PORTAL_NAME = /^[a-z][a-z0-9-]{0,62}$/;
 const PORTAL_MIN = 1024;
 const PORTAL_MAX = 19_000;
+/** Keep Runner-owned services in the same interoperable workspace registry as
+ * local and sandbox Portals, without making either supervisor adopt the
+ * other's process. */
+const RUNNER_PORTAL_PREFIX = "# opensession-runner-portal ";
 
 function runnerPortalRegistryPath(workspacePath: string): string {
-	return join(workspacePath, ".opensession-runner-portals.json");
+	return join(workspacePath, ".ports.conf");
+}
+
+export function parseRunnerPortalRegistry(contents: string): RunnerPortalRecord[] {
+	const records: RunnerPortalRecord[] = [];
+	for (const line of contents.split("\n")) {
+		if (!line.startsWith(RUNNER_PORTAL_PREFIX)) continue;
+		try {
+			const portal = JSON.parse(line.slice(RUNNER_PORTAL_PREFIX.length)) as RunnerPortalRecord;
+			if (!portal || !PORTAL_NAME.test(portal.name) || !Number.isInteger(portal.port) || portal.port < PORTAL_MIN || portal.port > PORTAL_MAX || typeof portal.command !== "string") continue;
+			records.push({ ...portal, key: runnerPortalKey(portal.name) });
+		} catch {}
+	}
+	return records;
 }
 
 function readRunnerPortalRegistry(workspacePath: string): RunnerPortalRecord[] {
-	try {
-		const parsed = JSON.parse(readFileSync(runnerPortalRegistryPath(workspacePath), "utf8")) as { portals?: RunnerPortalRecord[] };
-		return Array.isArray(parsed.portals) ? parsed.portals.filter((portal) => PORTAL_NAME.test(portal.name) && Number.isInteger(portal.port) && portal.port >= PORTAL_MIN && portal.port <= PORTAL_MAX) : [];
-	} catch { return []; }
+	try { return parseRunnerPortalRegistry(readFileSync(runnerPortalRegistryPath(workspacePath), "utf8")); }
+	catch { return []; }
+}
+
+export function serializeRunnerPortalRegistry(previousText: string, portals: RunnerPortalRecord[]): string {
+	const generatedKeys = new Set(portals.map((portal) => runnerPortalKey(portal.name)));
+	const kept = previousText.split("\n").filter((line) => {
+		if (line.startsWith(RUNNER_PORTAL_PREFIX)) return false;
+		const key = line.match(/^\s*([A-Z0-9_]+_PORT)\s*=/)?.[1];
+		return !key || !generatedKeys.has(key);
+	});
+	while (kept.at(-1) === "") kept.pop();
+	return [...kept, ...portals.flatMap((portal) => [
+		`${RUNNER_PORTAL_PREFIX}${JSON.stringify({ ...portal, key: runnerPortalKey(portal.name) })}`,
+		`${runnerPortalKey(portal.name)}=${portal.port}`,
+	]), ""].join("\n");
 }
 
 function writeRunnerPortalRegistry(workspacePath: string, portals: RunnerPortalRecord[]): void {
-	writeFileSync(runnerPortalRegistryPath(workspacePath), JSON.stringify({ portals }, null, 2) + "\n", { mode: 0o600 });
+	const path = runnerPortalRegistryPath(workspacePath);
+	let previous = "";
+	try { previous = readFileSync(path, "utf8"); } catch {}
+	writeFileSync(path, serializeRunnerPortalRegistry(previous, portals), { mode: 0o600 });
 }
 
 async function runnerPortListening(port: number): Promise<boolean> {

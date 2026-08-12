@@ -34,6 +34,8 @@ export type KubernetesBootstrapTarget = {
 	context: string;
 	namespace: string;
 	workload: string;
+	/** Reviewed manifest for the dedicated Deployment and persistent volume. */
+	manifestPath: string;
 	container?: string;
 	runnerCommand: string;
 };
@@ -80,10 +82,11 @@ export function parseRunnerBootstrapConfig(value: unknown): RunnerBootstrapConfi
 		const context = string(item.context, 180);
 		const namespace = string(item.namespace, 63);
 		const workload = string(item.workload, 63);
+		const manifestPath = absolutePath(item.manifestPath);
 		const container = string(item.container, 63) ?? undefined;
 		const runnerCommand = executable(item.runnerCommand) ?? "/usr/local/bin/opensession";
-		if (!id || !label || !context || !namespace || !workload || !ID.test(id) || !WORKLOAD.test(namespace) || !WORKLOAD.test(workload) || (container && !WORKLOAD.test(container))) return [];
-		return [{ id, label, context, namespace, workload, container, runnerCommand }];
+		if (!id || !label || !context || !namespace || !workload || !manifestPath || !ID.test(id) || !WORKLOAD.test(namespace) || !WORKLOAD.test(workload) || (container && !WORKLOAD.test(container))) return [];
+		return [{ id, label, context, namespace, workload, manifestPath, container, runnerCommand }];
 	});
 	return { ssh, kubernetes };
 }
@@ -137,9 +140,16 @@ export async function bootstrapSshRunner(targetId: string, code: string): Promis
 export async function bootstrapKubernetesRunner(targetId: string, code: string): Promise<{ target: KubernetesBootstrapTarget; phase: "pairing" }> {
 	const target = configuredRunnerBootstrapTargets().kubernetes.find((candidate) => candidate.id === targetId);
 	if (!target) throw new Error("That Kubernetes Runner target is not configured.");
+	if (!existsSync(target.manifestPath)) throw new Error("The configured Runner workload manifest is unavailable.");
 	const common = ["kubectl", "--context", target.context, "--namespace", target.namespace];
+	const applied = await output([...common, "apply", "--server-side", "--field-manager=opensession-runner-bootstrap", "-f", target.manifestPath]);
+	if (applied.code !== 0) throw new Error(applied.stderr.trim() || "The configured Runner workload could not be deployed.");
 	const ready = await output([...common, "rollout", "status", `deployment/${target.workload}`, "--timeout=60s"]);
-	if (ready.code !== 0) throw new Error(ready.stderr.trim() || "The configured Runner workload is not ready.");
+	if (ready.code !== 0) {
+		const diagnostics = await output([...common, "get", "pods", "-o", "wide"]);
+		const detail = diagnostics.stdout.trim().slice(0, 4_000);
+		throw new Error(`${ready.stderr.trim() || "The configured Runner workload is not ready."}${detail ? ` Scheduling diagnostics:\n${detail}` : ""}`);
+	}
 	const command = connectCommand(target.runnerCommand, configuredServer().publicBaseUrl, code, target.label);
 	const exec = await output([
 		...common, "exec", `deployment/${target.workload}`,

@@ -44,7 +44,11 @@ Kubernetes Runner workload from Settings. These choices appear only when the
 operator has configured `integrations.runnersBootstrap` in the protected
 instance configuration. SSH entries require both a pinned `SHA256:` host
 fingerprint and a dedicated known-hosts file. Kubernetes entries name one
-context, namespace, deployment, and optional container.
+context, namespace, deployment, and optional container, plus a reviewed
+manifest path for that dedicated deployment and its persistent workspace
+volume. Bootstrap applies the manifest with a fixed field manager, waits for
+rollout, and returns bounded pod scheduling diagnostics if it cannot become
+ready.
 
 The migration performs only the reviewed `opensession runner connect` action,
 then the component installs its reconnecting service and dials out normally.
