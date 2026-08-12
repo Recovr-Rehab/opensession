@@ -30,6 +30,7 @@ import {
 	msgMedia,
 	msgOwnTurn,
 	msgRow,
+	msgSystemInline,
 	msgSystemRow,
 	msgSystemText,
 	msgSystemTone,
@@ -182,7 +183,7 @@ function NoticeRow({
 	if (notice.body === "inline") {
 		return (
 			<div className={msgSystemRow} data-eid={entry.id}>
-				<span className={cn(msgSystemText, "text-left italic")}>
+				<span className={cn(msgSystemInline, "text-left italic")}>
 					<span className="font-semibold not-italic">{notice.title}: </span>
 					{entry.content}
 				</span>

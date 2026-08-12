@@ -86,9 +86,20 @@ export const msgStreamingRow = "msg-streaming [overflow-anchor:none]";
 export const msgBodyStreaming =
 	"msg-body msg-body-assistant block text-body leading-6 break-words text-fg";
 
+/**
+ * Type and measure shared by every notice line, pill or not. The
+ * `.msg-system-text` name stays on both variants: base.css's selection policy
+ * names it.
+ */
+const msgSystemBase =
+	"msg-system-text inline-block max-w-[min(560px,100%)] self-center py-1.5 text-center text-meta leading-[1.45] text-faint";
+
 /** The centered notice pill itself. */
-export const msgSystemText =
-	"msg-system-text inline-block max-w-[min(560px,100%)] self-center rounded-row bg-panel px-3.5 py-1.5 text-center text-meta leading-[1.45] text-faint";
+export const msgSystemText = `${msgSystemBase} rounded-row bg-panel px-3.5`;
+
+/** A catch-up line, meaning a recap, reads as an aside in the transcript
+ *  rather than as a card: the muted type, with no surface under it. */
+export const msgSystemInline = msgSystemBase;
 
 /**
  * A toned notice reads as a sentence, not a banner: everything the server and
