@@ -2926,13 +2926,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				>
 					<span className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_LANE_NAME)}>Snoozed</span>
 					<span className={SIDEBAR_LANE_COUNT}>{rows.length}</span>
-					{!open && (
-						<IconChevronDown
-							className={cn(SIDEBAR_GROUP_CHEVRON, SIDEBAR_GROUP_CHEVRON_COLLAPSED)}
-							size={16}
-							style={{ transform: "rotate(-90deg)" }}
-						/>
-					)}
+					<IconChevronDown
+						className={cn(
+							SIDEBAR_GROUP_CHEVRON,
+							!open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
+						)}
+						size={16}
+						style={{ transform: open ? "none" : "rotate(-90deg)" }}
+					/>
 				</button>
 				{rows
 					.filter((r) => open || rowOwnsSelection(r))
@@ -2999,13 +3000,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					>
 						<span className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_LANE_NAME)}>{meta.label}</span>
 						<span className={SIDEBAR_LANE_COUNT}>{items.length + prs.length}</span>
-						{!open && (
-							<IconChevronDown
-								className={cn(SIDEBAR_GROUP_CHEVRON, SIDEBAR_GROUP_CHEVRON_COLLAPSED)}
-								size={16}
-								style={{ transform: "rotate(-90deg)" }}
-							/>
-						)}
+						<IconChevronDown
+							className={cn(
+								SIDEBAR_GROUP_CHEVRON,
+								!open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
+							)}
+							size={16}
+							style={{ transform: open ? "none" : "rotate(-90deg)" }}
+						/>
 					</button>
 					{items
 						.filter((r) => open || rowOwnsSelection(r))
@@ -3119,13 +3121,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							<span className={SIDEBAR_LANE_COUNT}>
 								{b.rows.length + b.prs.length}
 							</span>
-							{!open && (
-								<IconChevronDown
-									className={cn(SIDEBAR_GROUP_CHEVRON, SIDEBAR_GROUP_CHEVRON_COLLAPSED)}
-									size={16}
-									style={{ transform: "rotate(-90deg)" }}
-								/>
-							)}
+							<IconChevronDown
+								className={cn(
+									SIDEBAR_GROUP_CHEVRON,
+									!open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
+								)}
+								size={16}
+								style={{ transform: open ? "none" : "rotate(-90deg)" }}
+							/>
 						</button>
 						{b.rows
 							.filter((r) => open || rowOwnsSelection(r))
