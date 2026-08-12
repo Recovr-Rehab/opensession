@@ -181,55 +181,31 @@ final class CatchUpQueueTests: XCTestCase {
     }
 }
 
-/// What a card SHOWS. The glance is derived from the transcript, and both ends
-/// of it are easy to get wrong: a slash command reads as an opening prompt, and
-/// "latest" is the last assistant message rather than the last entry.
-final class CatchUpPreviewTests: XCTestCase {
-    /// Decoded rather than constructed: `TranscriptEntry` is the wire shape,
-    /// and the preview has to survive the wire.
+@MainActor
+final class CatchUpConversationTests: XCTestCase {
     private func entry(_ id: String, _ type: String, _ content: String) -> TranscriptEntry {
         let object: [String: Any] = ["id": id, "type": type, "content": content]
         let data = try! JSONSerialization.data(withJSONObject: object)
         return try! JSONDecoder().decode(TranscriptEntry.self, from: data)
     }
 
-    func testPreviewSkipsSlashCommandsAndTakesTheLastAssistantMessage() {
-        let preview = CatchUpViewModel.preview(from: [
-            entry("1", "user", "/model claude-opus-5"),
-            entry("2", "user", "Make catch up good on iOS"),
-            entry("3", "assistant", "Looking at the deck now."),
-            entry("4", "tool_use", "bash"),
-            entry("5", "assistant", "Done — the deck ships with undo."),
-            entry("6", "tool_result", "ok"),
-        ])
+    /// Catch Up renders the normal transcript instead of reducing it to an
+    /// opening prompt and latest answer.
+    func testConversationKeepsEveryMessage() {
+        let conversation = CatchUpViewModel.conversation(
+            from: [
+                entry("prompt", "user", "First question"),
+                entry("answer-1", "assistant", "First answer"),
+                entry("follow-up", "user", "Follow-up question"),
+                entry("answer-2", "assistant", "Second answer"),
+            ],
+            session: Session(id: "main")
+        )
 
-        XCTAssertEqual(preview.prompt, "Make catch up good on iOS")
-        XCTAssertEqual(preview.latest, "Done — the deck ships with undo.")
-        XCTAssertFalse(preview.failed)
-    }
-
-    /// A conversation with only an ask still has something worth showing.
-    func testPreviewSurvivesAConversationWithNoReplyYet() {
-        let preview = CatchUpViewModel.preview(from: [
-            entry("1", "user", "Start on the widget"),
-        ])
-
-        XCTAssertEqual(preview.prompt, "Start on the widget")
-        XCTAssertNil(preview.latest)
-    }
-
-    /// A long answer is cut on a line break, not mid-word — the card fades the
-    /// tail out, and a fade over half a word reads as a rendering bug.
-    func testLongTextIsClampedOnALineBreak() {
-        let long = String(repeating: "a line of an answer\n", count: 200)
-        let preview = CatchUpViewModel.preview(from: [
-            entry("1", "assistant", long),
-        ])
-
-        let latest = try? XCTUnwrap(preview.latest)
-        XCTAssertNotNil(latest)
-        XCTAssertLessThan(latest?.count ?? .max, 1_300)
-        XCTAssertFalse(latest?.hasSuffix("\n") ?? true)
-        XCTAssertTrue(latest?.hasSuffix("answer") ?? false)
+        XCTAssertEqual(
+            conversation.blocks.map(\.id),
+            ["prompt", "answer-1", "follow-up", "answer-2"]
+        )
+        XCTAssertFalse(conversation.failed)
     }
 }

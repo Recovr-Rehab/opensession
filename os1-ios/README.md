@@ -76,11 +76,13 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   links labelled with the referenced session's title, and tapping one opens
   that session in the app (falling back to the web app for a session this
   client hasn't polled).
-  Long answers clamp with `Show full message · 12 KB` (wire-clamped entries
-  refetch on demand), system events are toned by severity, and a floating pill
-  offers the way back down — reading `New messages` when output arrived while
-  you were scrolled up. Token-level streaming via `stream_text`, and a
-  horizontally scrollable session tab strip when a workspace/worktree contains
+   Long answers clamp with `Show full message · 12 KB` (wire-clamped entries
+   refetch on demand), system events are toned by severity, and a floating pill
+   offers the way back down — reading `New messages` when output arrived while
+   you were scrolled up. A selected Markdown passage stays highlighted as
+   composer context, then rides with the next prompt, team note, or scheduled
+   message as a block quote. Token-level streaming via `stream_text`, plus a
+   horizontally scrollable session tab strip when a workspace/worktree contains
   multiple sessions. On iOS the trailing nav-bar control is a native overflow
   menu carrying this worktree's actions — new session, worktree details, its pull
   request panel, rename, share link, hide/restore, and archive (which pops back

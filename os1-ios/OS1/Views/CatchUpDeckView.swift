@@ -136,7 +136,7 @@ struct CatchUpDeckView: View {
             ForEach(Array(slots.enumerated()), id: \.element.id) { depth, card in
                 CatchUpCardView(
                     card: card,
-                    preview: model.previews[card.id],
+                    conversation: model.conversations[card.id],
                     isTop: depth == 0,
                     onOpen: { onOpen(card.target) },
                     onReply: onReply

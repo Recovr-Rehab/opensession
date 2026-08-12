@@ -13,7 +13,7 @@ struct CatchUpCard: Identifiable, Equatable, Sendable {
     let repo: String
     /// Every unread session under the row. Read and archive act on these.
     let sessions: [Session]
-    /// The workspace's main chat. This is what the card previews and opens.
+    /// The workspace's main chat. This is what the card renders and opens.
     let target: Session
     let lane: Session.Lane
     let isRunning: Bool

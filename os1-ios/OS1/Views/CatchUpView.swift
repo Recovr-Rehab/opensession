@@ -9,9 +9,8 @@ import SwiftUI
 /// both as a throw and as a button, sharing one motion path so the gesture and
 /// the control never look like two different features.
 ///
-/// The card itself is a GLANCE (what you asked, where things stand), not a
-/// transcript. That is what keeps the gesture pure — nothing inside the card
-/// competes for the drag — and the full conversation stays one tap away.
+/// Each card renders the workspace's main transcript. Vertical drags read it;
+/// horizontal drags decide what happens to the workspace.
 struct CatchUpView: View {
     let list: SessionsListViewModel
     /// Leave the deck for the real conversation. The CALLER closes this screen

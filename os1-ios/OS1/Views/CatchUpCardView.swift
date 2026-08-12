@@ -2,8 +2,7 @@ import SwiftUI
 
 /// One card in the catch-up deck.
 ///
-/// A glance, not a transcript: what you asked, where things stand, and how to
-/// get to the rest. The glance scrolls vertically; the card's decisions swipe
+/// The workspace's main chat in a vertically scrolling card. Decisions swipe
 /// horizontally, so reading never advances the deck by accident.
 ///
 /// Only the top card draws its content. The ones behind are a title and a few
@@ -12,10 +11,12 @@ import SwiftUI
 /// gesture stutter.
 struct CatchUpCardView: View {
     let card: CatchUpCard
-    let preview: CatchUpViewModel.Preview?
+    let conversation: CatchUpViewModel.Conversation?
     let isTop: Bool
     let onOpen: () -> Void
     let onReply: () -> Void
+
+    @State private var folds = FoldStateStore()
 
     private let shape = RoundedRectangle(cornerRadius: 26, style: .continuous)
 
@@ -138,66 +139,46 @@ struct CatchUpCardView: View {
 
     // MARK: - Body
 
-    /// The glance, contained by a vertical scroll view.
-    ///
-    /// Not decoration: a fixed `.frame` does NOT constrain a child that wants
-    /// more room, it just lets it overflow, and a long answer rendered through
-    /// the markdown view is exactly that child. A `ScrollView` takes the size
-    /// it is offered, clips to it, and never reports its content's height
-    /// outward, which is the containment a card needs. It also lets the reader
-    /// reach the rest of the workspace preview without leaving Catch Up.
+    /// The normal transcript inside the card. It starts at the conversation's
+    /// beginning so Catch Up can be read top to bottom without opening it.
     private var bodyColumn: some View {
         ScrollView(.vertical) {
             bodyContent
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .scrollIndicators(.visible)
+        .defaultScrollAnchor(.top)
     }
 
     private var bodyContent: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            if let preview {
-                if preview.failed {
+        LazyVStack(alignment: .leading, spacing: 10) {
+            if let conversation {
+                if conversation.failed {
                     caption("Couldn't load this conversation.")
+                } else if conversation.blocks.isEmpty {
+                    caption("Nothing in this conversation yet.")
                 } else {
-                    if let prompt = preview.prompt {
-                        section("You asked") {
-                            Text(prompt)
-                                .font(.subheadline)
-                                .foregroundStyle(OS1VisualStyle.textNarration)
-                                .lineLimit(3)
-                        }
-                    }
-                    if let latest = preview.latest {
-                        section("Latest") {
-                            MarkdownBody(latest)
-                        }
-                    } else if preview.prompt != nil {
-                        caption("No reply yet.")
-                    } else {
-                        caption("Nothing in this conversation yet.")
+                    ForEach(conversation.blocks) { block in
+                        TranscriptRow(
+                            block: block,
+                            sessionId: card.target.id,
+                            worktreeDir: card.target.worktreeDir,
+                            foldState: { folds.fold(for: $0, preference: "collapsed") },
+                            expansionState: {
+                                folds.expansion(id: $0, defaultExpanded: $1)
+                            },
+                            owner: card.target.isAutomation ? nil : card.target.startedBy
+                        )
+                        .id(block.id)
                     }
                 }
             } else {
-                CatchUpPreviewPlaceholder()
+                CatchUpConversationPlaceholder()
             }
         }
         .padding(.horizontal, 18)
-        .padding(.top, 16)
+        .padding(.vertical, 16)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-    }
-
-    private func section<Content: View>(
-        _ title: String, @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(OS1VisualStyle.textFaint)
-                .textCase(.uppercase)
-                .tracking(0.6)
-            content()
-        }
     }
 
     private func caption(_ text: String) -> some View {
@@ -257,7 +238,7 @@ struct CatchUpCardView: View {
 
 /// What a card shows while its conversation is still loading. Deliberately the
 /// same shapes the loaded card uses, so nothing shifts when the text lands.
-private struct CatchUpPreviewPlaceholder: View {
+private struct CatchUpConversationPlaceholder: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {

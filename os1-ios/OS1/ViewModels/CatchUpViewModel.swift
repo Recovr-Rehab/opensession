@@ -1,9 +1,8 @@
 import Foundation
 import Observation
 
-/// Drives the catch-up deck: a frozen queue of unread workspaces, the glance
-/// each card shows, and the archive / read / keep decisions — with one level of
-/// undo, because two of the three change state and one of those is destructive.
+/// Drives the catch-up deck: a frozen queue of unread workspaces, each main
+/// chat, and the archive / read / keep decisions, with one level of undo.
 @Observable
 @MainActor
 final class CatchUpViewModel {
@@ -19,15 +18,12 @@ final class CatchUpViewModel {
         }
     }
 
-    /// The glance a card shows: what you asked, and where things stand. Not a
-    /// transcript — the deck is for deciding, and the whole conversation is one
-    /// tap away.
-    struct Preview: Equatable, Sendable {
-        var prompt: String?
-        var latest: String?
+    /// The main chat rendered inside a card. The blocks use the normal
+    /// transcript grouping, so answers, work folds, media, and notices read the
+    /// same here as they do after opening the session.
+    struct Conversation: Equatable {
+        var blocks: [TranscriptBlock]
         var failed = false
-
-        var isEmpty: Bool { prompt == nil && latest == nil }
     }
 
     /// A decision that can still be taken back.
@@ -40,7 +36,7 @@ final class CatchUpViewModel {
 
     private(set) var cards: [CatchUpCard] = []
     private(set) var index = 0
-    private(set) var previews: [String: Preview] = [:]
+    private(set) var conversations: [String: Conversation] = [:]
     private(set) var undoable: Undoable?
     /// How many decisions this run — what the finish screen reports.
     private(set) var handled = 0
@@ -193,61 +189,41 @@ final class CatchUpViewModel {
         }
     }
 
-    // MARK: - Previews
+    // MARK: - Conversations
 
-    /// Load the glance for the current card and the one behind it. Prefetching
-    /// the next one is what makes a swipe land on content rather than on a
-    /// placeholder — the whole reason the deck feels immediate.
+    /// Load the current main chat and the one behind it. Prefetching the next
+    /// one makes a swipe land on content rather than a placeholder.
     func prefetch() {
         for card in [current, next].compactMap({ $0 }) {
-            Task { await loadPreview(for: card) }
+            Task { await loadConversation(for: card) }
         }
     }
 
-    func loadPreview(for card: CatchUpCard) async {
-        guard previews[card.id] == nil, !loading.contains(card.id) else { return }
+    func loadConversation(for card: CatchUpCard) async {
+        guard conversations[card.id] == nil, !loading.contains(card.id) else { return }
         loading.insert(card.id)
         defer { loading.remove(card.id) }
         do {
             let entries = try await OS1API.transcript(sessionId: card.target.id)
-            previews[card.id] = Self.preview(from: entries)
+            conversations[card.id] = Self.conversation(
+                from: entries,
+                session: card.target
+            )
         } catch {
-            previews[card.id] = Preview(prompt: nil, latest: nil, failed: true)
+            conversations[card.id] = Conversation(blocks: [], failed: true)
         }
     }
 
-    /// Longest prose a card shows before it fades out. A glance, and a ceiling
-    /// on what the markdown renderer is handed per card.
-    private static let previewCeiling = 1_200
-
-    nonisolated static func preview(from entries: [TranscriptEntry]) -> Preview {
-        // The opening ask, skipping slash commands and image-only sends — the
-        // same rule the workspace overview panel uses server-side.
-        let prompt = entries.first {
-            $0.isUser && $0.notice == nil && isProse($0.text) && !$0.text
-                .trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("/")
-        }
-        let latest = entries.last { $0.isAssistant && isProse($0.text) }
-        return Preview(
-            prompt: prompt.map { clamp($0.text) },
-            latest: latest.map { clamp($0.text) },
-            failed: false
-        )
-    }
-
-    private nonisolated static func isProse(_ text: String) -> Bool {
-        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
-    private nonisolated static func clamp(_ text: String) -> String {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.count > previewCeiling else { return trimmed }
-        let head = trimmed.prefix(previewCeiling)
-        // Cut on a line break so the fade never lands mid-word or, worse,
-        // inside an unclosed markdown fence.
-        if let lastBreak = head.lastIndex(of: "\n"), lastBreak > head.startIndex {
-            return String(head[head.startIndex..<lastBreak])
-        }
-        return String(head)
+    static func conversation(
+        from entries: [TranscriptEntry],
+        session: Session
+    ) -> Conversation {
+        let items = TranscriptGrouping.displayItems(from: entries)
+        return Conversation(blocks: TranscriptGrouping.blocks(
+            from: items,
+            live: session.isRunning == true,
+            worktreeDir: session.worktreeDir,
+            walkthrough: session.walkthrough
+        ))
     }
 }
