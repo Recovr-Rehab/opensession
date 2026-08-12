@@ -2,8 +2,7 @@ import type { SessionSource } from "./types";
 
 /**
  * Source chips — the small pill naming where a session came from (slack,
- * linear, ask), plus the neutral variants the automation link and the
- * "Archived" button wear.
+ * linear, ask), plus the neutral variant the "Archived" button wears.
  *
  * The tone is a LOOKUP, not a built class name. The markup used to spell
  * `` `source-chip source-${session.source}` ``, which works for a stylesheet
@@ -38,12 +37,6 @@ const TONE: Record<string, string> = {
 export function sourceChipTone(source: SessionSource | "ask" | string): string {
 	return TONE[source] ?? "";
 }
-
-/** The automation chip: a neutral pill that is also a link, so it needs the
- *  hover it had and a cap on how much width a long automation name may take. */
-export const SOURCE_CHIP_AUTOMATION =
-	`${NEUTRAL} max-w-[160px] truncate no-underline transition-[background,color] ` +
-	"duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-hover hover:text-fg";
 
 /** The "Archived" chip in the session header — a button, so it carries a
  *  pressed/disabled story the display-only chips don't. Its own padding and

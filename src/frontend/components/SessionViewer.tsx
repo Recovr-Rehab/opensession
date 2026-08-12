@@ -161,6 +161,7 @@ import {
 	IconCopy,
 	IconFile,
 	IconGlobe,
+	IconHistory,
 	IconArrowUpRight,
 } from "./icons";
 import { SessionRelations, type RelatedSession } from "./SessionRelations";
@@ -168,7 +169,6 @@ import { PixelSpinner } from "./PixelSpinner";
 import {
 	SOURCE_CHIP,
 	SOURCE_CHIP_ARCHIVED,
-	SOURCE_CHIP_AUTOMATION,
 	sourceChipTone,
 } from "../lib/source-chip-classes";
 import { Button } from "../ui/button";
@@ -4499,18 +4499,6 @@ export function SessionViewer({
 						</Button>
 					</div>
 				);
-				// Scheduled automations title their sessions "<automation> — <timestamp>",
-				// so naming the automation again beside that title reads as the same
-				// words twice. Fall back to the generic label there — the chip still
-				// marks the session as automated and still links to its settings.
-				const automationLabel =
-					session.automation &&
-					(workspaceName || session.title || "")
-						.trim()
-						.toLowerCase()
-						.startsWith(session.automation.trim().toLowerCase())
-						? "Automation"
-						: session.automation;
 				// Secondary header controls (Linear/Plain links). Inline on desktop;
 				// on phones they fold into the ⋯ menu so the single top bar holds only
 				// ⋯ + the Workspace toggle beside the centered title. The code
@@ -4525,8 +4513,10 @@ export function SessionViewer({
 						{session.automation && inMenu && (
 							<Menu.Item
 								render={<a href={`${BASE_PATH}/automations/${encodeURIComponent(session.automationId || session.automation)}`} />}
+								title={session.automation}
 							>
-								<span className="grow">{automationLabel}</span>
+								<IconHistory size={20} />
+								<span className="grow">Automation</span>
 							</Menu.Item>
 						)}
 						{session.linearIssue?.url && (inMenu ? (
@@ -4656,19 +4646,19 @@ export function SessionViewer({
 							{workspaceName || session.title}
 						</span>
 					)}
-					{/* Which automation produced this session, next to the name it produced
-					    — the same slot the source chips claim, so origin always reads on
-					    the left. Links to the automation's settings. The name is capped
-					    and ellipsized because automation names run long ("App Changelog
-					    Draft (Mac + Windows releases)") and the title matters more. */}
+					{/* Automation runs already live under the Automations band, so repeating
+					    their slug here competes with the workspace title. A quiet recurring
+					    clock keeps the origin visible; its tooltip carries the exact name. */}
 					{session.automation && (
-						<a
-							href={`${BASE_PATH}/automations/${encodeURIComponent(session.automationId || session.automation)}`}
-							className={cn(SOURCE_CHIP, SOURCE_CHIP_AUTOMATION)}
-							title={`Automation · open ${session.automation} settings`}
-						>
-							{automationLabel}
-						</a>
+						<Tooltip label={`Automation · ${session.automation}`} side="bottom">
+							<a
+								href={`${BASE_PATH}/automations/${encodeURIComponent(session.automationId || session.automation)}`}
+								className="-ml-1 inline-flex size-6 shrink-0 items-center justify-center rounded-control text-faint transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-hover hover:text-fg"
+								aria-label={`Open ${session.automation} automation settings`}
+							>
+								<IconHistory size={18} />
+							</a>
+						</Tooltip>
 					)}
 					{/* Sandbox badge: this session's runs execute inside an isolated
 					    container (docker/daytona/e2b). Renders nothing for host sessions
