@@ -35,6 +35,7 @@ type Variant =
 	| "default"
 	| "primary"
 	| "ink"
+	| "soft"
 	| "ghost"
 	| "success"
 	| "danger"
@@ -122,6 +123,13 @@ const variants: Record<Variant, string> = {
 	// two callers keep working.
 	primary: INK,
 	ink: INK,
+	// A plate with no hairline: the filled-chip surface base.css describes as
+	// having "nothing but its fill to read against the page". `default` cannot
+	// simply drop its border, because its fill is paper in light and the border
+	// plus shadow are what say raised; `soft` steps the fill instead, so it
+	// still reads as a pressable thing at a quieter weight, and the hover goes
+	// one more step down the ramp rather than adding an edge.
+	soft: "bg-control border-transparent text-dim hover:bg-active hover:text-fg data-[popup-open]:bg-active data-[popup-open]:text-fg",
 	// No plate at all until you reach for it. A ghost is the right weight for a
 	// control that is *reporting state* as much as inviting a press — a filter
 	// that says "In all workspaces" is mostly a label — so the row stays quiet
@@ -152,6 +160,7 @@ const iconDim: Record<Variant, string> = {
 	default: "opacity-60",
 	primary: "opacity-80",
 	ink: "opacity-80",
+	soft: "opacity-60",
 	ghost: "opacity-60",
 	success: "opacity-80",
 	danger: "opacity-80",

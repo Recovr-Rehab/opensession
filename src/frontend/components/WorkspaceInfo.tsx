@@ -1025,7 +1025,7 @@ function ReviewerChip({
 				<Menu.Trigger
 					render={
 						<Button
-							variant="ghost"
+							variant="soft"
 							size="sm"
 							caret
 							className={cn(
@@ -1037,11 +1037,11 @@ function ReviewerChip({
 								// avatar, which must stay at full strength.
 								"max-w-full pl-2 text-supporting",
 								needsMyReview
-									? // The one state that is addressed TO you: a plate is
-										// what separates "act on this" from the three states
-										// that merely report where the review stands, and it
-										// survives where hue alone does not.
-										"border-red/30 bg-red-soft text-red hover:border-red/50 hover:bg-red-soft hover:text-red data-[popup-open]:bg-red-soft data-[popup-open]:text-red"
+									? // The one state addressed TO you swaps the neutral
+										// plate for a red one, so "act on this" separates
+										// from the states that only report where the review
+										// stands — hue alone is a weak signal at 13px.
+										"bg-red-soft text-red hover:bg-red-soft hover:text-red data-[popup-open]:bg-red-soft data-[popup-open]:text-red"
 									: accepted
 										? "text-green hover:text-green data-[popup-open]:text-green"
 										: req
