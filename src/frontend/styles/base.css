@@ -1013,28 +1013,16 @@ html.wco .app {
 html.wco .sidebar-brand {
 	padding-left: max(env(titlebar-area-x, 78px), calc(var(--sidebar-icon-left) - 8px));
 }
-/* The shell centers its traffic lights on this row. Nudge the sidebar controls
-   down 2px so their visual mass sits on the lights' line; the old 5px offset
-   sat visibly below them. */
-html.wco .sidebar-brand > :is(.sidebar-brand-actions, .wco-nav, button) {
-	position: relative;
-	top: 2px;
-}
-/* The pane's half of the same row takes the same 2px, or the breadcrumb and
-   the PR strip read 2px high against the sidebar beside them. Top padding
-   rather than a transform: these rows are fixed-height flex rows that center
-   their content, so the padding re-centers what is inside them without moving
-   the row's own fill, hairline or drag region. `.pr-bar` carries `py-2`, so
-   its 2px is spelled on top of that — and it takes the 2px back off the
-   bottom, because that row is sized by MIN-height rather than fixed: padding
-   alone grew it past the header beside it and carried its hairline 3px down
-   with it, stepping the line that runs across the top row. */
-html.wco :is(.viewer-header, .detail-topbar-title) {
-	padding-top: 4px;
-}
-html.wco .pr-bar {
-	padding-top: 10px;
-	padding-bottom: 6px;
+/* The shell centers its traffic lights on this row, and everything in it wants
+   to sit 2px below where a 48px row would put it so its visual mass lands on
+   the lights' line. Give the row those 2px at both ends — one taller row —
+   rather than 4px of top padding: padding moved the content without balancing
+   it, so every row in the first band read top-heavy, and on `.pr-bar` (sized
+   by min-height, not fixed) it grew the row past the header beside it and
+   carried its hairline down with it. Nothing inside moves; the row is 4px
+   deeper and its divider sits 4px lower. */
+html.wco {
+	--desktop-header-h: 52px;
 }
 /* The whole first row doubles as the titlebar — everything interactive in it
    opts back out so it stays clickable. */
