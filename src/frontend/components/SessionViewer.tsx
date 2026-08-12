@@ -4760,6 +4760,12 @@ export function SessionViewer({
 								{isPhone && secondaryActions(true)}
 								{(compactHeader || isPhone) && shareAction(true)}
 								{newSessionAction}
+								{transcriptActions}
+								{overflowActions}
+								{archiveAction}
+								{deleteAction}
+								{/* Preview waits for its status request before rendering. Keep it last
+								    so stable session actions never shift when that request settles. */}
 								<PreviewButton
 									session={session}
 									onAttachImage={(img) => setImages((prev) => [...prev, img])}
@@ -4767,10 +4773,6 @@ export function SessionViewer({
 									onOpenTab={onOpenPreviewTab}
 									variant="menu"
 								/>
-								{transcriptActions}
-								{overflowActions}
-								{archiveAction}
-								{deleteAction}
 							</Menu.Popup>
 						</div>
 					</Menu.Root>
