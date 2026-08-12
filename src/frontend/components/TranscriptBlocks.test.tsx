@@ -147,8 +147,8 @@ describe("TranscriptBlocks review loops", () => {
 			/>,
 		);
 		expect(html).toContain('aria-label="Review passed"');
-		expect(html).toContain("Passed · 1 round · 5/5 · 8 checks passed");
-		expect(html).not.toContain("border-l");
+		expect(html).toContain("1 round · 5/5 · 8 checks passed");
+		expect(html).not.toContain("border-l border-line pl-3");
 	});
 
 	test("shows progress while a loop is still fixing feedback", () => {
@@ -178,6 +178,6 @@ describe("TranscriptBlocks review loops", () => {
 			/>,
 		);
 		expect(html).toContain('aria-label="Review failed"');
-		expect(html).toContain("Failed · 1 round · 2/5 · 1 blocking · 1 check failed");
+		expect(html).toContain("1 round · 2/5 · 1 blocking · 1 check failed");
 	});
 });

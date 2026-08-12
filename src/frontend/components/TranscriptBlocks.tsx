@@ -280,7 +280,7 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 												<TurnBlock items={inner.items} toolResults={toolResults} live={Boolean(live && isLast && innerIndex === block.blocks.length - 1)} onOpenSubagent={onOpenSubagent} sessionId={sessionId} />
 											) : inner.kind === "footer" ? (
 												<TurnFooter entry={inner.entry} durationMs={inner.durationMs} files={inner.files} assets={inner.assets} onFork={onFork} />
-											) : inner.kind === "entry" ? (
+											) : inner.kind === "entry" && reviewHandoff(inner) === undefined ? (
 												<MessageBubble entry={inner.entry} owner={owner} sessionId={sessionId} />
 											) : null}
 										</React.Fragment>
