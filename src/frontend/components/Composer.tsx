@@ -865,7 +865,9 @@ export function Composer({
             placeholder={
               minimized
                 ? `Ask ${shortModelLabel(effectiveModel, models)}`
-                : placeholder
+                : quote
+                  ? "Chat with selected text"
+                  : placeholder
             }
             value={text}
             onChange={(e) => {
