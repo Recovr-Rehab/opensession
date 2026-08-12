@@ -707,6 +707,8 @@ describe("buildRunInstructions", () => {
       inProcessMcp: { "opensession-walkthrough": {} },
     });
     expect(s).toContain("a static visual change needs at least one after screenshot");
+    expect(s).toContain("Retina or device-native resolution");
+    expect(s).toContain("`bun scripts/capture-ui.ts`");
     expect(s).toContain("why it matters");
     expect(s).toContain("deliberate Share to Slack action");
   });

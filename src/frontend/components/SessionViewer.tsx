@@ -83,7 +83,6 @@ import {
 import { sessionPrPresentation } from "../lib/session-prs";
 import {
 	requestShippedChangeScreenshot,
-	reconnectSlack,
 	shareShippedChange,
 } from "../lib/api/shipped-changes";
 import { suggestedShippedChangeMessage } from "../lib/shipped-change-copy";
@@ -796,16 +795,14 @@ export function SessionViewer({
 			? prPresentation.primary
 			: undefined;
 	const [shippedChangeStatus, setShippedChangeStatus] = useState<
-		"idle" | "sharing"
+		"idle" | "sharing" | "shared"
 	>("idle");
 	const [requestingShippedScreenshot, setRequestingShippedScreenshot] = useState(false);
-	const [shippedSlackReconnectRequired, setShippedSlackReconnectRequired] = useState(false);
 	const walkthroughScreenshot = session.walkthrough?.shots?.find((shot) => shot.after)?.after;
 	useEffect(
 		() => {
 			setShippedChangeStatus("idle");
 			setRequestingShippedScreenshot(false);
-			setShippedSlackReconnectRequired(false);
 		},
 		[session.id, mergedPr?.number],
 	);
@@ -830,28 +827,17 @@ export function SessionViewer({
 				channel,
 				screenshots,
 			});
-			setShippedChangeStatus("idle");
-			setShippedSlackReconnectRequired(false);
-			toast(result.status === "already_shared" ? "This post was already sent" : "Sent to Slack");
+			setShippedChangeStatus("shared");
+			toast(
+				result.status === "already_shared"
+					? "This change was already shared"
+					: "Shared to Slack",
+			);
 		} catch (error: any) {
 			setShippedChangeStatus("idle");
-			if (error?.status === 403 && /Reconnect Slack/.test(error?.message || "")) {
-				setShippedSlackReconnectRequired(true);
-				toast("Reconnect Slack to add image access");
-			} else {
-				toast(error?.message || "Couldn't share the shipped update");
-			}
+			toast(error?.message || "Couldn't share the shipped update");
 		}
 	}, [mergedPr, session.id]);
-	const reconnectShippedSlack = useCallback(async () => {
-		try {
-			await reconnectSlack();
-			setShippedSlackReconnectRequired(false);
-			toast("Approve image access in Slack, then send again");
-		} catch (error: any) {
-			toast(error?.message || "Couldn't reconnect Slack");
-		}
-	}, []);
 	const promotedPr =
 		prPresentation.primary?.source !== "primary"
 			? prPresentation.primary
@@ -3019,10 +3005,8 @@ export function SessionViewer({
 						),
 						screenshot: shippedScreenshot,
 						requestingScreenshot: requestingShippedScreenshot,
-						reconnectRequired: shippedSlackReconnectRequired,
 						status: shippedChangeStatus,
 						onShare: sendShippedChangeToSlack,
-						onReconnectSlack: reconnectShippedSlack,
 						onRequestScreenshot:
 							connected && !noEngine ? requestShippedScreenshot : undefined,
 					}
@@ -3031,13 +3015,11 @@ export function SessionViewer({
 			mergedPr,
 			requestShippedScreenshot,
 			requestingShippedScreenshot,
-			shippedSlackReconnectRequired,
 			connected,
 			noEngine,
 			shippedScreenshot,
 			session.walkthrough?.summary,
 			sendShippedChangeToSlack,
-			reconnectShippedSlack,
 			shippedChangeStatus,
 		],
 	);

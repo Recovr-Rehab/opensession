@@ -65,15 +65,16 @@ describe("TranscriptBlocks shipped change action", () => {
 			html.indexOf("Deployment finished"),
 		);
 		expect(html).toContain("We updated the toggle style in Tella.");
-		expect(html).toContain("Send to Slack");
+		expect(html).toContain("Post what you shipped");
+		expect(html).toContain("Send to");
 		expect(html).toContain('data-brand="slack"');
 		expect(html).toContain("%2Ftmp%2Ftoggle-after.png");
 		expect(html).toContain('aria-label="Open screenshot preview"');
 		expect(html).toContain('aria-label="Remove screenshot"');
-		expect(html).toContain('aria-label="Add images"');
-		expect(html).toContain("rounded-[var(--composer-radius)]");
-		expect(html).toContain("smooth-shadow-ring-soft");
+		expect(html).toContain("Add image");
+		expect(html).toContain("rounded-xl border border-line/60 bg-transparent p-3");
 		expect(html).not.toContain("rounded-xl bg-panel p-4");
+		expect(html).not.toContain("smooth-shadow-sm");
 	});
 
 	test("offers to request visual proof when no screenshot exists", () => {
@@ -90,8 +91,8 @@ describe("TranscriptBlocks shipped change action", () => {
 				}}
 			/>,
 		);
-		expect(html).toContain('aria-label="Add images"');
-		expect(html).toContain('aria-label="Capture screenshot"');
+		expect(html).toContain("Request screenshot");
+		expect(html).toContain("Add visual proof to this post.");
 	});
 
 	test("keeps screenshot progress inside the Slack composer", () => {
@@ -109,7 +110,7 @@ describe("TranscriptBlocks shipped change action", () => {
 				}}
 			/>,
 		);
-		expect(html).toContain('aria-label="Capturing screenshot"');
+		expect(html).toContain("Capturing screenshot…");
 		expect(html).not.toContain("Requested");
 		expect(html).not.toContain("Capture a clear after screenshot");
 	});

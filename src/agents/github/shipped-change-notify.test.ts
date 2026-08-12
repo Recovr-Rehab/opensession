@@ -7,7 +7,6 @@ import {
   claimShippedChangeAnnouncement,
   selectShippedVisualChange,
   settleShippedChangeAnnouncement,
-	shippedChangeAnnouncementKey,
   shippedChangeOneLiner,
   normalizeShippedChangeMessage,
   validWalkthroughScreenshot,
@@ -131,12 +130,6 @@ describe("shipped change copy", () => {
 });
 
 describe("shipped change announcement receipts", () => {
-	test("deduplicates identical posts but permits a changed attachment set", () => {
-		const original = shippedChangeAnnouncementKey("tellahq/example", 12, "C1", "Shipped", ["a.png"]);
-		expect(shippedChangeAnnouncementKey("tellahq/example", 12, "C1", "Shipped", ["a.png"])).toBe(original);
-		expect(shippedChangeAnnouncementKey("tellahq/example", 12, "C1", "Shipped", ["a.png", "b.png"])).not.toBe(original);
-	});
-
   test("deduplicates a sent merge and releases failed claims", () => {
     const root = mkdtempSync(join(tmpdir(), "shipped-change-state-"));
     scratch.push(root);

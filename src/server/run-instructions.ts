@@ -409,7 +409,9 @@ export function buildRunInstructions(input: {
         "want a picture of. Scale the media to the change instead of skipping when a demo " +
         "would be silly: a static visual change needs at least one after screenshot (a " +
         "before/after pair is better), an interaction or flow change needs a short demo " +
-        "screen-recording of it working. Either way include a 2-6 sentence markdown writeup " +
+        "screen-recording of it working. Capture screenshots at Retina or device-native " +
+        "resolution rather than enlarging a low-resolution image; on this repo, use " +
+        "`bun scripts/capture-ui.ts` for the web UI. Either way include a 2-6 sentence markdown writeup " +
         "whose first paragraph says what " +
         "changed and why it matters. That proof makes a deliberate Share to Slack action " +
         "available after the PR merges. Record media " +

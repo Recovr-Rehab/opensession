@@ -153,9 +153,9 @@ export function WalkthroughCard({
 	return (
 		<div
 			className={cn(
-				// One outline keeps the walkthrough together in both states. The
-				// interior stays flat; only the actual media has another edge.
-				"rounded-xl border border-line/60 bg-transparent p-4",
+				// A small lift separates the finished proof from the live transcript
+				// without turning it into a heavy panel. The media keeps its own edge.
+				"rounded-xl border border-line/60 bg-raised p-4 smooth-shadow-soft",
 				// In the session the card is a transcript block like any other, so it
 				// takes the same centered reading column the turns and footers use
 				// (mx-auto + --session-col) instead of spanning the whole pane. It
