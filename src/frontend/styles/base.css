@@ -1528,9 +1528,11 @@ a.asset-ref:focus-visible {
 	/* Top and bottom are unequal on purpose, and that is what makes them LOOK
 	   equal. The line box hangs 4.6px below the baseline and only 2.6px above
 	   the cap, so symmetric padding leaves the words riding high in the pill
-	   by exactly the 2px difference. Balancing the cap band is the same sum
-	   the PR chip below uses. */
-	padding: 3px 8px 1px 6px;
+	   by exactly the 2px difference. The extra px on top past that is Kent's
+	   eye, not arithmetic: descenders fill the room under the baseline while
+	   nothing fills the room over the caps, so a balanced pill still reads
+	   tight up there. Same sum as the PR chip below. */
+	padding: 4px 8px 1px 6px;
 	line-height: 1.3;
 	cursor: pointer;
 	text-decoration: none;
@@ -1615,7 +1617,7 @@ a.pr-ref {
 	border: 0;
 	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
 	/* Unequal to read as equal, same sum as the session chip above. */
-	padding: 3px 8px 1px 5px;
+	padding: 4px 8px 1px 5px;
 	line-height: 1.3;
 	font-weight: 600;
 	font-variant-numeric: tabular-nums;
