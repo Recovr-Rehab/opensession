@@ -3,9 +3,9 @@ import Foundation
 /// How a queue chip should present a message that isn't necessarily something
 /// the person typed.
 ///
-/// The prompt queue carries agent-to-agent deliveries too — worker reports,
-/// workflow nudges, GitHub review FYIs, a teammate's answer routed back in —
-/// and each is marked with an HTML-comment sentinel and/or an `[attribution]`
+/// The prompt queue also carries worker reports, workflow nudges, GitHub
+/// review feedback, and a teammate's answer routed back in.
+/// Each is marked with an HTML-comment sentinel and/or an `[attribution]`
 /// prefix. The transcript's markdown renderer swallows those; a plain-text
 /// chip shows them raw, so a queued worker report used to read as a literal
 /// `<!--os:worker-report-->` line. Mirrors the web's
@@ -16,15 +16,18 @@ struct QueueMessagePresentation: Equatable {
     /// The message with its delivery sentinels (and the routing prefix that
     /// comes with them) removed. A typed message is passed through untouched.
     let body: String
-    /// GitHub FYIs are informational deliveries — there's nothing to steer,
+    /// GitHub deliveries are informational. There's nothing to steer,
     /// edit, or reorder about them, so the chip only offers a dismiss.
     let isGitHub: Bool
+    /// A review handoff is automated work waiting behind the current turn.
+    let isReviewHandoff: Bool
 
     init(content: String, user: String?) {
         isGitHub = user == "GitHub" || user == "GitHub (automation)"
+        isReviewHandoff = isGitHub && Self.reviewHandoffSentinel.match(content) != nil
 
         // Every marker starts the message, so a couple of prefix tests settle
-        // the ordinary case without touching a regex — this runs for each
+        // the ordinary case without touching a regex. This runs for each
         // visible chip on every composer keystroke.
         if !isGitHub, !Self.mayCarryMarker(content) {
             label = nil
@@ -49,7 +52,7 @@ struct QueueMessagePresentation: Equatable {
 
         // The routing prefix a named teammate's message carries. Stripped only
         // when a sentinel behind it proves this is a delivery rather than
-        // something typed — an ordinary prompt is allowed to open with
+        // something typed. An ordinary prompt is allowed to open with
         // "[WIP] …" and must survive intact.
         let unprefixed = Self.attributionPrefix.match(content)?.rest ?? content
         if Self.workerSentinel.match(unprefixed) != nil {
@@ -58,6 +61,15 @@ struct QueueMessagePresentation: Equatable {
             label = "Workflow"
         } else if Self.sessionNoticeSentinel.match(unprefixed) != nil {
             label = "Heads-up from another session"
+        } else if isReviewHandoff {
+            label = nil
+            let clean = Self.stripLeadingSentinels(content)
+            if let number = Self.reviewPRNumber.match(clean)?.groups.first {
+                body = "PR #\(number) review feedback · Runs after this turn"
+            } else {
+                body = "PR review feedback · Runs after this turn"
+            }
+            return
         } else if isGitHub {
             label = "GitHub"
             body = Self.stripLeadingSentinels(content)
@@ -100,6 +112,8 @@ struct QueueMessagePresentation: Equatable {
     private static let workflowSentinel =
         Pattern("^<!--os:workflow-notice(?::[^\\s>]+)?-->\\s*")
     private static let sessionNoticeSentinel = Pattern("^<!--os:session-notice-->\\s*")
+    private static let reviewHandoffSentinel = Pattern("^<!--os:review-handoff-->\\s*")
+    private static let reviewPRNumber = Pattern("\\bPR #(\\d+)")
     private static let leadingSentinel =
         Pattern("^\\s*<!--os:[a-z-]+(?::[^\\s>]+)?-->\\s*")
 

@@ -117,11 +117,15 @@ export function normalizeLegacyVoiceToolEntries(
  * Same classifier as the durable path, so a message in the queue and the same
  * message a second later in the transcript can't disagree about what it is.
  */
-export function classifyQueuedContent(content?: string): TranscriptEntry {
+export function classifyQueuedContent(
+	content?: string,
+	user?: string,
+): TranscriptEntry {
+	const attributed = user ? `[${user}] ${content ?? ""}` : content ?? "";
 	return classifyEntry({
 		id: "",
 		type: "user",
-		content: content ?? "",
+		content: attributed,
 		timestamp: "",
 	});
 }

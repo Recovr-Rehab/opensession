@@ -17,6 +17,7 @@ final class QueueMessageTests: XCTestCase {
         XCTAssertNil(message.label)
         XCTAssertEqual(message.body, "rebase this on main please")
         XCTAssertFalse(message.isGitHub)
+        XCTAssertFalse(message.isReviewHandoff)
     }
 
     /// The routing prefix is only stripped when a sentinel behind it proves
@@ -65,7 +66,19 @@ final class QueueMessageTests: XCTestCase {
     func testGitHubDeliveryIsFlagged() {
         let message = present("PR #12 was reviewed", user: "GitHub")
         XCTAssertTrue(message.isGitHub)
+        XCTAssertFalse(message.isReviewHandoff)
         XCTAssertEqual(message.label, "GitHub")
         XCTAssertEqual(message.body, "PR #12 was reviewed")
+    }
+
+    func testReviewHandoffExplainsWhyItIsWaiting() {
+        let message = present(
+            "<!--os:review-handoff-->\n🔍 This session's PR #42 has feedback",
+            user: "GitHub"
+        )
+        XCTAssertTrue(message.isGitHub)
+        XCTAssertTrue(message.isReviewHandoff)
+        XCTAssertNil(message.label)
+        XCTAssertEqual(message.body, "PR #42 review feedback · Runs after this turn")
     }
 }

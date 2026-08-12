@@ -261,13 +261,11 @@ export const composerQueueActionDanger =
  *  the row that is not a correction, and the shared hover would have dropped
  *  it back to plain ink. */
 export const composerQueueActionSteer = "text-accent enabled:hover:text-accent";
-/** A status readout, not a control: "Steered", "FYI", "Queueing…". Genuinely
+/** A status readout, not a control: "Steered". Genuinely
  *  round (the stylesheet spelled a bare 999px with no `corner-shape`), so
  *  `rounded-full` rather than `rounded-[999px]`. */
 export const composerQueuePill =
 	"inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-transparent bg-accent-soft px-[13px] text-label font-semibold text-accent";
-/** GitHub FYI: not something you did, so it drops the accent. */
-export const composerQueuePillGithub = "border-line bg-raised text-dim";
 /** Optimistic busy send: a transient readout, not a badge or control. Keeping
  *  it borderless prevents the in-flight state from reading as a pill button. */
 export const composerQueueSendingStatus =

@@ -432,8 +432,8 @@ export function classifyEntry(entry: TranscriptEntry): TranscriptEntry {
         notice: {
           kind: "review-handoff",
           title: handoff.prNumber
-            ? `Review findings · PR #${handoff.prNumber}`
-            : "Review findings",
+            ? `PR #${handoff.prNumber} review feedback`
+            : "PR review feedback",
           tone: "info",
           body: "collapsed",
         },

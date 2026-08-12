@@ -256,7 +256,7 @@ describe("classifyEntry", () => {
 		);
 		expect(c.notice).toMatchObject({
 			kind: "review-handoff",
-			title: "Review findings · PR #42",
+			title: "PR #42 review feedback",
 			body: "collapsed",
 		});
 	});

@@ -2479,16 +2479,20 @@ private struct SessionInputBar: View {
                 )
             }
             ForEach(viewModel.queuedItems) { item in
+                let isGitHub = QueueMessagePresentation(
+                    content: item.content,
+                    user: item.user
+                ).isGitHub
                 QueuedMessageRow(
                     item: item,
                     phase: .queued,
                     showsDivider: item.id != firstRowId,
                     // Steering needs a run to fold into, and the server can't
                     // fold a message that carries files.
-                    onSteer: (viewModel.isRunning && !item.hasFiles)
+                    onSteer: (viewModel.isRunning && !item.hasFiles && !isGitHub)
                         ? { viewModel.steerQueued(item) } : nil,
                     onEdit: { sheet = .editQueued(item) },
-                    onMove: viewModel.canReorder(item)
+                    onMove: (!isGitHub && viewModel.canReorder(item))
                         ? { offset in viewModel.moveQueued(item, by: offset) } : nil,
                     onDelete: { viewModel.deleteQueued(item) }
                 )
@@ -2580,7 +2584,10 @@ private struct SessionInputBar: View {
     }
 
     private var queueTitle: String {
-        let queued = viewModel.queuedItems.count
+        let reviewCount = viewModel.queuedItems.lazy.filter {
+            QueueMessagePresentation(content: $0.content, user: $0.user).isReviewHandoff
+        }.count
+        let queued = viewModel.queuedItems.count - reviewCount
         let inFlight = viewModel.steeredItems.count + viewModel.deliveringItems.count
         let unsent = unsentItems.count
         // Unsent leads: "waiting on your connection" is the more urgent fact,
@@ -2589,7 +2596,12 @@ private struct SessionInputBar: View {
             return "\(unsent) unsent \(unsent == 1 ? "message" : "messages")"
         }
         var parts: [String] = []
-        if queued > 0 { parts.append("\(queued) queued") }
+        if queued > 0 {
+            parts.append("\(queued) \(queued == 1 ? "message" : "messages") queued")
+        }
+        if reviewCount > 0 {
+            parts.append("\(reviewCount) PR \(reviewCount == 1 ? "review" : "reviews") waiting")
+        }
         // Never folded into the "queued" count: these are already committed to
         // the running turn, and calling them queued reads as "my message
         // didn't go through" (the web learned this the hard way).
@@ -3164,7 +3176,7 @@ private struct SessionInputBar: View {
         }
 
         /// Only a message a person typed is editable in place: a worker
-        /// report or a GitHub FYI is routing, and rewriting one would strip
+        /// report or GitHub review feedback is routing, and rewriting one would strip
         /// the prefix the server delivers it by.
         private var canEdit: Bool {
             onEdit != nil && message.label == nil && !item.isLocalEcho
@@ -3284,7 +3296,7 @@ private struct SessionInputBar: View {
             }
             // The row IS the edit affordance now that the pencil is gone —
             // and the only way to read a message the two-line clamp cut off.
-            // Rows with nothing to edit (a worker report, a GitHub FYI, a
+            // Rows with nothing to edit (a worker report, GitHub feedback, a
             // receipt) stay inert rather than opening a sheet on what they
             // can't change.
             .contentShape(Rectangle())

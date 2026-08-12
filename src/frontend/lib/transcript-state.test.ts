@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+	classifyQueuedContent,
 	mergeTranscriptEntries,
 	normalizeLegacyVoiceToolEntries,
 	orderTranscriptEntries,
@@ -109,5 +110,18 @@ describe("transcript client state", () => {
 		expect(normalized[1].toolUseId).toBe("voice-tu-call-1");
 		expect(normalizeLegacyVoiceToolEntries(legacy)[0]).toBe(normalized[0]);
 		expect(normalizeLegacyVoiceToolEntries(normalized)[0]).toBe(normalized[0]);
+	});
+
+	test("classifies an attributed queued review without exposing its marker", () => {
+		const classified = classifyQueuedContent(
+			"<!--os:review-handoff-->\n🔍 This session's PR #42 has feedback",
+			"GitHub",
+		);
+
+		expect(classified.notice).toMatchObject({
+			kind: "review-handoff",
+			title: "PR #42 review feedback",
+		});
+		expect(classified.content).not.toContain("os:review-handoff");
 	});
 });

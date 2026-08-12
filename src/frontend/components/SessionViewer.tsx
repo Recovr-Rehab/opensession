@@ -199,7 +199,6 @@ import {
 	composerQueueItemSeparated,
 	composerQueueList,
 	composerQueuePill,
-	composerQueuePillGithub,
 	composerQueueSendingShimmer,
 	composerQueueSendingStatus,
 	composerQueueTitle,
@@ -3368,16 +3367,21 @@ export function SessionViewer({
 	) {
 		const firstImage = item.images?.[0];
 		const extraImages = Math.max(0, (item.images?.length ?? 0) - 1);
+		const isReview = classified.notice?.kind === "review-handoff";
 		// Who or what this is from, when it isn't the driver typing: a teammate's
 		// name, or a notice's title — but only when that title is a LABEL. A
 		// title-only notice (a workflow nudge, a runner line) is its own body, and
 		// printing it twice is just noise.
-		const from =
-			classified.sender ??
-			(classified.notice?.body ? classified.notice.title : null);
-		const body = classified.content;
+		const from = isReview
+			? null
+			: classified.sender ??
+				(classified.notice?.body ? classified.notice.title : null);
+		const body = isReview
+			? `${classified.notice!.title} · Runs after this turn`
+			: classified.content;
 		return (
 			<div className={composerQueueContent}>
+				{isReview && <IconPullRequest size={18} className="flex-none text-faint" />}
 				{firstImage && (
 					<div className={composerQueueImage}>
 						<img className={composerQueueImageThumb} src={firstImage} alt="" />
@@ -3393,7 +3397,9 @@ export function SessionViewer({
 					)}
 				>
 					{from && <span className={composerQueueFrom}>{from}</span>}
-					{opts.github && <span className={composerQueueFrom}>GitHub</span>}
+					{opts.github && !isReview && (
+						<span className={composerQueueFrom}>GitHub</span>
+					)}
 					{body}
 				</div>
 			</div>
@@ -3462,20 +3468,34 @@ export function SessionViewer({
 	);
 	const hasLiveConversation =
 		pendingBubbles.length > 0 || liveTurnStore.hasText() || isBusy || !!ask;
+	const queuedReviewCount = queued.filter(
+		(item) =>
+			classifyQueuedContent(item.content, item.user).notice?.kind ===
+			"review-handoff",
+	).length;
 
 	const queueCount =
 		queued.length + visibleSteered.length + pendingQueue.length + durableOutbox.length;
 	// Steered receipts are NOT queued — they're already delivered into the
 	// running turn and only shown here until it ends. Calling them "queued"
 	// read as "my message didn't go through" (three times, 2026-07-19).
-	const queuedOnlyCount = queued.length + pendingQueue.length + durableOutbox.length;
+	const queuedMessageCount =
+		queued.length - queuedReviewCount + pendingQueue.length + durableOutbox.length;
 	const queueTitle = waitingForWorkspace
 		? `Setting up your workspace · ${queueCount} queued`
-		: queuedOnlyCount === 0
-			? `${visibleSteered.length} steered into the current turn`
-			: visibleSteered.length === 0
-				? `${queuedOnlyCount} queued ${queuedOnlyCount === 1 ? "message" : "messages"}`
-				: `${queuedOnlyCount} queued · ${visibleSteered.length} steered`;
+		: [
+				queuedMessageCount
+					? `${queuedMessageCount} ${queuedMessageCount === 1 ? "message" : "messages"} queued`
+					: null,
+				queuedReviewCount
+					? `${queuedReviewCount} PR ${queuedReviewCount === 1 ? "review" : "reviews"} waiting`
+					: null,
+				visibleSteered.length
+					? `${visibleSteered.length} steered into the current turn`
+					: null,
+			]
+				.filter(Boolean)
+				.join(" · ");
 	const attachedQueue =
 		queueCount > 0 ? (
 			<div
@@ -3487,7 +3507,7 @@ export function SessionViewer({
 			>
 				<div className={composerQueueTitle}>{queueTitle}</div>
 				{visibleSteered.map((s, i) => {
-					const c = classifyQueuedContent(s.content);
+					const c = classifyQueuedContent(s.content, s.user);
 					return (
 						<div
 							key={`steered-${i}`}
@@ -3543,14 +3563,15 @@ export function SessionViewer({
 					className={composerQueueList}
 				>
 				{queued.map((q, i) => {
-					const c = classifyQueuedContent(q.content);
+					const c = classifyQueuedContent(q.content, q.user);
 					const isGitHub = isGitHubAttribution(q.user);
+					const isReview = c.notice?.kind === "review-handoff";
 					const id = q.id;
 					const key = id || `queued-${i}`;
 					const canSteer = !isGitHub && !queueHasFiles(q);
 					// A one-item queue has nothing to reorder — leave drag off so the
 					// lone message still selects/clicks normally.
-					const canReorder = queued.length > 1;
+					const canReorder = queued.length > 1 && !isGitHub;
 					return (
 						<Reorder.Item
 							as="div"
@@ -3569,12 +3590,7 @@ export function SessionViewer({
 							)}
 						>
 							<div className={composerQueueActions}>
-								{isGitHub ? (
-									<span className={cn(composerQueuePill, composerQueuePillGithub)}>
-										<IconPullRequest size={20} />
-										FYI
-									</span>
-								) : (
+								{!isGitHub ? (
 									<>
 										<Tooltip label="Edit queued message in place">
 											<button
@@ -3586,10 +3602,11 @@ export function SessionViewer({
 											</button>
 										</Tooltip>
 									</>
-								)}
-								<Tooltip label="Delete queued message">
+								) : null}
+								<Tooltip label={isReview ? "Dismiss review feedback" : "Delete queued message"}>
 									<button
 										type="button"
+										aria-label={isReview ? "Dismiss review feedback" : "Delete queued message"}
 										className={cn(
 											composerQueueAction,
 											composerQueueActionDanger,
@@ -3741,7 +3758,7 @@ export function SessionViewer({
 								)}
 							</span>
 						</div>
-						{renderQueueContent(p, classifyQueuedContent(p.content), {
+						{renderQueueContent(p, classifyQueuedContent(p.content, p.user), {
 							tone: "sending",
 						})}
 					</div>
@@ -3772,7 +3789,7 @@ export function SessionViewer({
 								images: item.images,
 								files: item.files,
 							},
-							classifyQueuedContent(item.content),
+							classifyQueuedContent(item.content, item.user),
 							{ tone: "sending" },
 						)}
 						{item.state === "failed" && (
