@@ -2103,6 +2103,7 @@ struct SessionsListView: View {
                     .font(.footnote.weight(.semibold))
                 Text("\(group.workspaces.count)")
                     .font(.caption.monospacedDigit())
+                collapseChevron(group.id)
             }
             .foregroundStyle(OS1VisualStyle.textDim)
             .frame(maxWidth: .infinity, alignment: .leading)

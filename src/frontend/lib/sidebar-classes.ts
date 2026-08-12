@@ -206,6 +206,19 @@ export const SIDEBAR_GROUP_CHEVRON =
 	"shrink-0 text-faint opacity-0 transition-[transform,opacity] group-hover/gh:text-fg group-hover/gh:opacity-100";
 
 /**
+ * A collapsed heading keeps its chevron out of hover. Expanded, the rows below
+ * already say the group is open, so the affordance can stay quiet; collapsed,
+ * nothing on screen distinguishes a group holding fifteen hidden rows from one
+ * that simply has none, and the count alone reads as decoration. The chevron is
+ * the state, so it is what shows.
+ *
+ * It shows at the resting `text-faint`, not the hover colour — present, not
+ * loud. Muting the label instead would say the opposite of what is true: a
+ * collapsed group is hiding work, which is worth more attention, not less.
+ */
+export const SIDEBAR_GROUP_CHEVRON_COLLAPSED = "opacity-100";
+
+/**
  * The count on a group or band heading. Written phone-first for the same
  * reason the containers above are: the rule this replaces bumped to 13px under
  * `max-width: 720px`, and `phone:` compiles to `< 720`.
@@ -330,6 +343,9 @@ export const SIDEBAR_BAND_TOGGLE_INSET =
  * space at the row's right edge, which is invisible.
  */
 export const SIDEBAR_BAND_CHEVRON = "invisible shrink-0 text-faint";
+
+/** The band heading's counterpart to {@link SIDEBAR_GROUP_CHEVRON_COLLAPSED}. */
+export const SIDEBAR_BAND_CHEVRON_COLLAPSED = "visible";
 
 /**
  * The full-width surface a header paints once it is actually pinned. It uses

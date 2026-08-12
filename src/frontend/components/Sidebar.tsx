@@ -10,12 +10,14 @@ import type {
 import {
 	SIDEBAR_ATTN_COUNT,
 	SIDEBAR_BAND_CHEVRON,
+	SIDEBAR_BAND_CHEVRON_COLLAPSED,
 	SIDEBAR_BAND_LABEL,
 	SIDEBAR_BAND_TOGGLE,
 	SIDEBAR_BAND_TOGGLE_INSET,
 	SIDEBAR_AUTO_COG,
 	SIDEBAR_GROUP,
 	SIDEBAR_GROUP_CHEVRON,
+	SIDEBAR_GROUP_CHEVRON_COLLAPSED,
 	SIDEBAR_GROUP_COUNT,
 	SIDEBAR_GROUP_DOT,
 	SIDEBAR_GROUP_HEADER,
@@ -2925,7 +2927,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					<span className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_LANE_NAME)}>Snoozed</span>
 					<span className={SIDEBAR_LANE_COUNT}>{rows.length}</span>
 					<IconChevronDown
-						className={cn(SIDEBAR_GROUP_CHEVRON, "ml-auto")}
+						className={cn(
+							SIDEBAR_GROUP_CHEVRON,
+							"ml-auto",
+							!open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
+						)}
 						size={22}
 						style={{ transform: open ? "none" : "rotate(-90deg)" }}
 					/>
@@ -2997,7 +3003,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						{/* Count rides directly behind the lane name, not pinned right. */}
 						<span className={SIDEBAR_LANE_COUNT}>{items.length + prs.length}</span>
 						<IconChevronDown
-							className={cn(SIDEBAR_GROUP_CHEVRON, "ml-auto")}
+							className={cn(
+								SIDEBAR_GROUP_CHEVRON,
+								"ml-auto",
+								!open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
+							)}
 							size={22}
 							style={{ transform: open ? "none" : "rotate(-90deg)" }}
 						/>
@@ -3115,7 +3125,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								{b.rows.length + b.prs.length}
 							</span>
 							<IconChevronDown
-								className={cn(SIDEBAR_GROUP_CHEVRON, "ml-auto")}
+								className={cn(
+									SIDEBAR_GROUP_CHEVRON,
+									"ml-auto",
+									!open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
+								)}
 								size={22}
 								style={{ transform: open ? "none" : "rotate(-90deg)" }}
 							/>
@@ -3355,7 +3369,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								</span>
 							)}
 							<IconChevronDown
-								className={SIDEBAR_GROUP_CHEVRON}
+								className={cn(
+									SIDEBAR_GROUP_CHEVRON,
+									!open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
+								)}
 								size={22}
 								style={{ transform: open ? "none" : "rotate(-90deg)" }}
 							/>
@@ -3478,7 +3495,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							{items.length}
 						</span>
 						<IconChevronDown
-							className={cn(SIDEBAR_GROUP_CHEVRON, "ml-auto")}
+							className={cn(
+								SIDEBAR_GROUP_CHEVRON,
+								"ml-auto",
+								!groupIsOpen && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
+							)}
 							size={20}
 							style={{
 								transform: groupIsOpen ? "none" : "rotate(-90deg)",
@@ -3649,7 +3670,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							</span>
 						)}
 						<IconChevronDown
-							className={SIDEBAR_GROUP_CHEVRON}
+							className={cn(
+								SIDEBAR_GROUP_CHEVRON,
+								!open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
+							)}
 							size={22}
 							style={{ transform: open ? "none" : "rotate(-90deg)" }}
 						/>
@@ -3781,6 +3805,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								className={cn(
 									SIDEBAR_BAND_CHEVRON,
 									"group-hover/band:visible group-hover/band:text-dim",
+									!toolsOpen && SIDEBAR_BAND_CHEVRON_COLLAPSED,
 								)}
 								size={18}
 								style={{
@@ -4037,6 +4062,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							className={cn(
 								SIDEBAR_BAND_CHEVRON,
 								"group-hover/wstoggle:visible",
+								!workspacesOpen && SIDEBAR_BAND_CHEVRON_COLLAPSED,
 							)}
 							size={18}
 							style={{
@@ -4443,7 +4469,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 										{needsReviewRows.length + requestedPrItems.length}
 									</span>
 									<IconChevronDown
-										className={cn(SIDEBAR_GROUP_CHEVRON, "ml-auto")}
+										className={cn(
+											SIDEBAR_GROUP_CHEVRON,
+											"ml-auto",
+											!open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
+										)}
 										size={22}
 										style={{ transform: open ? "none" : "rotate(-90deg)" }}
 									/>
@@ -4985,6 +5015,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									className={cn(
 										SIDEBAR_BAND_CHEVRON,
 										"group-hover/band:visible group-hover/band:text-dim",
+										!automationsOpen && SIDEBAR_BAND_CHEVRON_COLLAPSED,
 									)}
 									size={18}
 									style={{ transform: automationsOpen ? "none" : "rotate(-90deg)" }}
