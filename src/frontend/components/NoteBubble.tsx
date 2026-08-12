@@ -252,7 +252,7 @@ export function NoteBubble({
 										src={src}
 										alt=""
 										loading="lazy"
-										className="max-h-72 max-w-full rounded-lg border border-line-strong object-contain"
+										className="max-h-60 max-w-full rounded-lg border border-line-strong object-contain"
 									/>
 								</button>
 							))}

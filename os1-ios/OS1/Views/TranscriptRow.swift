@@ -216,7 +216,7 @@ private struct SessionNoteRow: View {
                     ConversationImageStrip(
                         sources: images,
                         sessionId: sessionId,
-                        size: 160
+                        size: 140
                     )
                 }
             }
