@@ -125,10 +125,11 @@ describe("TranscriptBlocks review loops", () => {
 		expect(html).toContain("Review loop · PR #42");
 		expect(html).not.toContain("Fixed the review finding.");
 		expect(html).toContain("Please also update the empty state.");
-		expect(html).not.toContain("Session outcome");
+		expect(html).not.toContain("Review outcome");
+		expect(html).not.toContain("Ready to merge");
 	});
 
-	test("shows the session outcome after the final settled review loop", () => {
+	test("shows the review outcome inside the final settled review loop", () => {
 		const html = renderToStaticMarkup(
 			<TranscriptBlocks
 				entries={[
@@ -138,8 +139,27 @@ describe("TranscriptBlocks review loops", () => {
 				reviewOutcome={{ prNumber: 42, title: "Improve the empty state", confidence: 5, checksPassed: 8 }}
 			/>,
 		);
-		expect(html).toContain("Session outcome");
-		expect(html).toContain("Completed Improve the empty state.");
-		expect(html).toContain("review 5/5 · 8 checks passed");
+		expect(html).toContain("Review outcome");
+		expect(html).toContain("Ready to merge");
+		expect(html).toContain("Review 5/5 · 8 checks passed");
+		// The verdict belongs to the loop it settled, so it renders inside that
+		// section rather than trailing the transcript.
+		const loop = html.slice(html.indexOf("Review loop · PR #42"));
+		expect(loop.slice(0, loop.indexOf("</section>"))).toContain("Ready to merge");
+	});
+
+	test("keeps the outcome off a loop that is still fixing feedback", () => {
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				live
+				entries={[
+					{ id: "review", type: "user", content: "[GitHub] <!--os:review-handoff-->\n🔍 This session's PR #42 was just reviewed and is not merge-ready.", timestamp: "2026-08-12T12:00:00Z" },
+					{ id: "fix", type: "assistant", content: "Fixing the review finding.", timestamp: "2026-08-12T12:01:00Z" },
+				]}
+				reviewOutcome={{ prNumber: 42, title: "Improve the empty state", confidence: 5, checksPassed: 8 }}
+			/>,
+		);
+		expect(html).toContain("Fixing review feedback");
+		expect(html).not.toContain("Ready to merge");
 	});
 });

@@ -10,7 +10,7 @@ import { walkthroughInsertIndex } from "./walkthrough-placement";
 import { normalizeLegacyVoiceToolEntries } from "../lib/transcript-state";
 import { collectWrittenAssets } from "../lib/open-asset";
 import { classifyEntry } from "@tellahq/opensession-protocol/notices";
-import { ReviewLoopBlock, ReviewOutcomeBlock, type ReviewLoopOutcome } from "./ReviewLoopBlock";
+import { ReviewLoopBlock, type ReviewLoopOutcome } from "./ReviewLoopBlock";
 import {
 	ShippedChangeComposer,
 	type ShippedChangeComposerProps,
@@ -51,8 +51,8 @@ interface Props {
 	slackShare?: ShippedChangeComposerProps & {
 		prNumber: number;
 	};
-	/** A fresh, green PR result. Rendered after the final review loop, never as a
-	 * replacement for the most recent fix turn. */
+	/** A fresh, green PR result. Rendered as the final review loop's own
+	 * outcome, never as a replacement for the most recent fix turn. */
 	reviewOutcome?: ReviewLoopOutcome;
 }
 
@@ -251,9 +251,21 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 			{groupedBlocks.map((block, i) => {
 				if (block.kind === "review-loop") {
 					const isLast = i === groupedBlocks.length - 1;
+					const isLive = Boolean(live && isLast);
 					return (
 						<React.Fragment key={`review-loop:${block.blocks[0]?.kind === "entry" ? block.blocks[0].entry.id : i}`}>
-							<ReviewLoopBlock prNumber={block.prNumber} rounds={block.rounds} live={Boolean(live && isLast)}>
+							<ReviewLoopBlock
+								prNumber={block.prNumber}
+								rounds={block.rounds}
+								live={isLive}
+								// A loop still fixing feedback has not settled on anything
+								// yet, whatever GitHub last reported about the PR.
+								outcome={
+									showReviewOutcome && i === lastReviewLoop && !isLive
+										? reviewOutcome
+										: undefined
+								}
+							>
 								{block.blocks.map((inner, innerIndex) => {
 									const innerKey = inner.kind === "turn"
 										? inner.items[0].id
@@ -347,7 +359,6 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 					</React.Fragment>
 				);
 			})}
-			{showReviewOutcome && reviewOutcome && <ReviewOutcomeBlock outcome={reviewOutcome} />}
 		</>
 	);
 });
