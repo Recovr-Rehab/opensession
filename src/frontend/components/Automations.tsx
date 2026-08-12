@@ -20,7 +20,7 @@ import {
 } from "../lib/api";
 import { getCurrentUser } from "./UserPicker";
 import { CheckStatusIcon } from "./CheckStatusIcon";
-import { IconBolt, IconClock, IconHash, IconPlay, IconPlug } from "./icons";
+import { IconBolt, IconClock, IconHash, IconPlayOutline, IconPlug } from "./icons";
 import { AGENT_NAME, PUBLIC_BASE_URL, docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
@@ -356,7 +356,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                   // does what the row does.
                   <span
                     className={cn(
-                      "relative flex shrink-0 cursor-pointer",
+                      "relative flex size-5 shrink-0 self-start cursor-pointer items-start justify-center [&_svg]:size-3.5",
                       a.lastRunStatus === "ok" ? "text-green" : "text-red",
                     )}
                     onClick={() => onSelect(a.id)}
@@ -701,23 +701,26 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
  * reading the line under the name.
  */
 function TriggerIcon({ automation }: { automation: Automation }) {
-  const Icon = automation.slackWatch
-    ? IconHash
+  // Normalize each glyph's drawn height, not just its SVG box. These icons
+  // occupy different proportions of the shared 24px viewBox.
+  const { Icon, scale } = automation.slackWatch
+    ? { Icon: IconHash, scale: "scale-[1.15]" }
     : automation.schedule
-      ? IconClock
+      ? { Icon: IconClock, scale: "scale-[1.15]" }
       : automation.eventKey
-        ? IconBolt
+        ? { Icon: IconBolt, scale: "scale-[1.15]" }
         : automation.webhookEnabled === false
-          ? IconPlay
-          : IconPlug;
+          ? { Icon: IconPlayOutline, scale: "scale-110" }
+          : { Icon: IconPlug, scale: "scale-[1.45]" };
   return (
-    <Icon
-      size={20}
+    <span
       className={cn(
-        "pointer-events-none relative shrink-0 text-faint",
+        "pointer-events-none relative flex size-5 shrink-0 self-start items-start justify-center text-faint",
         !automation.enabled && "opacity-55",
       )}
-    />
+    >
+      <Icon size={20} className={cn("max-w-none origin-top", scale)} />
+    </span>
   );
 }
 
