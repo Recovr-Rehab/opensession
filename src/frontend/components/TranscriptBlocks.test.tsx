@@ -93,6 +93,26 @@ describe("TranscriptBlocks shipped change action", () => {
 		expect(html).toContain("Add visual proof to this post.");
 	});
 
+	test("keeps screenshot progress inside the Slack composer", () => {
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				entries={entries}
+				slackShare={{
+					prNumber: 5606,
+					sessionId: "session-1",
+					defaultMessage: "Background names are now visible in tooltips.",
+					requestingScreenshot: true,
+					status: "idle",
+					onShare: () => {},
+					onRequestScreenshot: () => {},
+				}}
+			/>,
+		);
+		expect(html).toContain("Capturing screenshot…");
+		expect(html).not.toContain("Requested");
+		expect(html).not.toContain("Capture a clear after screenshot");
+	});
+
 	test("does not show the action for a different merged PR", () => {
 		const html = renderToStaticMarkup(
 			<TranscriptBlocks

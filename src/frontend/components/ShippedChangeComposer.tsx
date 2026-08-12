@@ -5,6 +5,7 @@ import { Input, Select } from "../ui/input";
 import { BrandMark } from "./BrandMark";
 import { openLightbox } from "./MediaLightbox";
 import { IconCamera } from "./icons";
+import { PixelSpinner } from "./PixelSpinner";
 
 export interface ShippedChangeComposerProps {
 	sessionId: string;
@@ -101,24 +102,29 @@ export function ShippedChangeComposer({
 				</figure>
 			)}
 			{!screenshot && onRequestScreenshot && (
-				<div className="mt-2.5 flex min-h-24 flex-col items-center justify-center gap-1.5 rounded-control bg-surface px-3 py-2.5 text-center">
-					<IconCamera size={20} className="text-faint" />
-					<div className="text-supporting text-dim">Add visual proof to this post.</div>
-					<Button
-						size="sm"
-						disabled={requestingScreenshot}
-						onClick={onRequestScreenshot}
-					>
-						{requestingScreenshot ? "Requested" : "Request screenshot"}
-					</Button>
+				<div aria-live="polite" className="mt-2.5 flex min-h-24 flex-col items-center justify-center gap-1.5 rounded-control bg-surface px-3 py-2.5 text-center">
+					{requestingScreenshot ? (
+						<>
+							<PixelSpinner className="text-faint" />
+							<div className="text-supporting text-dim">Capturing screenshot…</div>
+						</>
+					) : (
+						<>
+							<IconCamera size={20} className="text-faint" />
+							<div className="text-supporting text-dim">Add visual proof to this post.</div>
+							<Button size="sm" onClick={onRequestScreenshot}>
+								Request screenshot
+							</Button>
+						</>
+					)}
 				</div>
 			)}
-			<div className="mt-2.5 flex items-center gap-2 phone:flex-col phone:items-stretch phone:gap-1.5">
-				<label className="flex min-w-0 flex-1 items-center gap-2 text-meta text-dim">
-					<span className="shrink-0">Send to</span>
+			<div className="mt-2.5 flex items-center justify-end gap-2">
+				<label className="flex items-center">
+					<span className="sr-only">Send to</span>
 					<Select
 						size="sm"
-						className="border-line/60"
+						className="w-28 border-line/60 phone:w-24"
 						aria-label="Slack channel"
 						value={channel}
 						disabled={status !== "idle" || channels.length === 0}
@@ -133,7 +139,7 @@ export function ShippedChangeComposer({
 					</Select>
 				</label>
 				<Button
-					size="sm"
+					size="md"
 					icon={<BrandMark name="slack" size={12} />}
 					className="[&>span:first-child]:opacity-100"
 					disabled={status !== "idle" || !message.trim() || !channel}

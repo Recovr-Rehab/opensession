@@ -19,3 +19,13 @@ export function fetchShippedChangeChannels(sessionId: string): Promise<{
 		label: "Couldn't load Slack channels",
 	});
 }
+
+export function requestShippedChangeScreenshot(
+	sessionId: string,
+): Promise<{ status: "capturing"; workerSessionId: string }> {
+	return request(`/sessions/${encodeURIComponent(sessionId)}/request-shipped-screenshot`, {
+		method: "POST",
+		body: {},
+		label: "Couldn't request a screenshot",
+	});
+}

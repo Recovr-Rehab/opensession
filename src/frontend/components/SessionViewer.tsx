@@ -81,7 +81,10 @@ import {
 	PR_WEBHOOK_FALLBACK_POLL_MS,
 } from "../lib/poll";
 import { sessionPrPresentation } from "../lib/session-prs";
-import { shareShippedChange } from "../lib/api/shipped-changes";
+import {
+	requestShippedChangeScreenshot,
+	shareShippedChange,
+} from "../lib/api/shipped-changes";
 import { suggestedShippedChangeMessage } from "../lib/shipped-change-copy";
 import { useBackSwipe } from "../hooks/useBackSwipe";
 import { dedupeViewers, otherViewers } from "../lib/presence";
@@ -805,18 +808,16 @@ export function SessionViewer({
 	useEffect(() => {
 		if (shippedScreenshot) setRequestingShippedScreenshot(false);
 	}, [shippedScreenshot]);
-	const requestShippedScreenshot = useCallback(() => {
+	const requestShippedScreenshot = useCallback(async () => {
 		if (!mergedPr || requestingShippedScreenshot) return;
 		setRequestingShippedScreenshot(true);
-		send({
-			type: "prompt",
-			sessionId: session.id,
-			user: getCurrentUser(),
-			content:
-				"Capture a clear after screenshot of the user-visible change from this merged PR, then publish or update this session's walkthrough with that screenshot. Verify the real UI first. Do not change product code unless the screenshot reveals a regression.",
-		});
-		toast("Screenshot requested");
-	}, [mergedPr, requestingShippedScreenshot, send, session.id]);
+		try {
+			await requestShippedChangeScreenshot(session.id);
+		} catch (error: any) {
+			setRequestingShippedScreenshot(false);
+			toast(error?.message || "Couldn't request a screenshot");
+		}
+	}, [mergedPr, requestingShippedScreenshot, session.id]);
 	const sendShippedChangeToSlack = useCallback(async (message: string, channel: string) => {
 		if (!mergedPr) return;
 		setShippedChangeStatus("sharing");
