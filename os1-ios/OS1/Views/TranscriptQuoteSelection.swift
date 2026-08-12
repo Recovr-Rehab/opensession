@@ -75,42 +75,9 @@ final class TranscriptQuoteSelection {
     }
     #endif
 
-    fileprivate func tapIsInsideComposerOrQuote(_ point: CGPoint, in window: PlatformWindow) -> Bool {
-        if let marker = composerMarker,
-           marker.window === window,
-           marker.bounds.contains(marker.convert(point, from: nil)) {
-            return true
-        }
-        guard let sourceTextView,
-              sourceTextView.window === window,
-              sourceRange.location != NSNotFound,
-              sourceRange.length > 0
-        else { return false }
-
-        #if os(iOS)
-        guard let start = sourceTextView.position(
-            from: sourceTextView.beginningOfDocument,
-            offset: sourceRange.location
-        ), let end = sourceTextView.position(from: start, offset: sourceRange.length),
-           let range = sourceTextView.textRange(from: start, to: end)
-        else { return false }
-        let localPoint = sourceTextView.convert(point, from: window)
-        return sourceTextView.selectionRects(for: range).contains {
-            $0.rect.insetBy(dx: -3, dy: -3).contains(localPoint)
-        }
-        #else
-        guard let layoutManager = sourceTextView.layoutManager,
-              let textContainer = sourceTextView.textContainer
-        else { return false }
-        let glyphRange = layoutManager.glyphRange(
-            forCharacterRange: sourceRange,
-            actualCharacterRange: nil
-        )
-        var rect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
-        rect.origin.x += sourceTextView.textContainerInset.width
-        rect.origin.y += sourceTextView.textContainerInset.height
-        return rect.insetBy(dx: -3, dy: -3).contains(sourceTextView.convert(point, from: nil))
-        #endif
+    fileprivate func tapIsInsideComposer(_ point: CGPoint, in window: PlatformWindow) -> Bool {
+        guard let marker = composerMarker, marker.window === window else { return false }
+        return marker.bounds.contains(marker.convert(point, from: nil))
     }
 
     private func retainCurrentSelection(matching expected: String) {
@@ -365,7 +332,7 @@ private struct TranscriptQuoteRootMarker: UIViewRepresentable {
         @objc private func tapped(_ recognizer: UITapGestureRecognizer) {
             guard selection.text != nil, let window else { return }
             let point = recognizer.location(in: window)
-            guard !selection.tapIsInsideComposerOrQuote(point, in: window) else { return }
+            guard !selection.tapIsInsideComposer(point, in: window) else { return }
             let generation = selection.stageGeneration
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.selection.stageGeneration == generation else { return }
@@ -476,7 +443,7 @@ private struct TranscriptQuoteRootMarker: NSViewRepresentable {
                 $0.bounds.contains($0.convert(event.locationInWindow, from: nil))
             } ?? false
             if event.type == .leftMouseDown, selection.text != nil,
-               !selection.tapIsInsideComposerOrQuote(event.locationInWindow, in: window) {
+               !selection.tapIsInsideComposer(event.locationInWindow, in: window) {
                 selection.clear()
             }
             if event.type == .leftMouseDown {
