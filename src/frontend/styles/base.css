@@ -758,6 +758,14 @@ body {
 	background: color-mix(in srgb, var(--accent) 32%, transparent);
 }
 
+/* The transcript passage staged as composer context ("Selected text"). It keeps
+   the look of a selection after the click that moves the caret into the
+   composer has collapsed the real one — a highlight registered by
+   QuoteSelection, which has no element of its own to carry a utility. */
+::highlight(quote) {
+	background: color-mix(in srgb, var(--accent) 32%, transparent);
+}
+
 
 /* Text the user may legitimately want to select and copy: message rows and
    their prose, names, system text, code, diffs, inputs. The row wrapper is

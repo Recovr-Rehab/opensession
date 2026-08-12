@@ -864,7 +864,12 @@ export function Composer({
             <QuoteContext
               key={quote.id}
               quote={quote}
-              onRemove={() => onQuoteClear?.()}
+              // Detaching the passage leaves you in the message you were
+              // writing — the ✕ shouldn't cost you the caret as well.
+              onRemove={() => {
+                onQuoteClear?.();
+                textareaRef.current?.focus({ preventScroll: true });
+              }}
               disabled={disabled}
             />
           )}

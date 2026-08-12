@@ -16,11 +16,31 @@ interface Props {
 	disabled?: boolean;
 }
 
+/** Registry name for the staged passage's own highlight — see base.css. */
+const QUOTE_HIGHLIGHT = "quote";
+
+/** Same passage, by DOM position rather than by text. */
+function sameRange(a: Range, b: Range): boolean {
+	return (
+		a.startContainer === b.startContainer &&
+		a.startOffset === b.startOffset &&
+		a.endContainer === b.endContainer &&
+		a.endOffset === b.endOffset
+	);
+}
+
 /**
  * Granola-style transcript context: releasing a text selection immediately
  * stages it for the next message while leaving the browser's native selection
  * intact for copying. Typing or pasting focuses the composer; an ordinary click
  * anywhere clears the ephemeral context.
+ *
+ * The passage keeps its mark while you write the message, but that mark is our
+ * own — a Custom Highlight painted over the retained range, not the browser's
+ * selection. It has to be: clicking into the composer collapses the native
+ * selection, and putting it back (which is what this did until it turned out
+ * you couldn't place a caret) reaches into a focused textarea and resets its
+ * caret and selection on every click.
  */
 export function QuoteSelection({
 	containerRef,
@@ -59,14 +79,7 @@ export function QuoteSelection({
 		)
 			return false;
 		const previous = rangeRef.current;
-		if (
-			previous &&
-			previous.startContainer === range.startContainer &&
-			previous.startOffset === range.startOffset &&
-			previous.endContainer === range.endContainer &&
-			previous.endOffset === range.endOffset
-		)
-			return false;
+		if (previous && sameRange(previous, range)) return false;
 
 		rangeRef.current = range.cloneRange();
 		onQuote(newQuote(text));
@@ -107,6 +120,24 @@ export function QuoteSelection({
 		};
 	}, [capture, containerRef, disabled]);
 
+	// Mark the staged passage independently of focus and of the native
+	// selection, both of which the next click takes away. Browsers without the
+	// Custom Highlight API simply lose the mark once you click; the chip in the
+	// composer still says what is attached.
+	useEffect(() => {
+		const highlights = CSS.highlights;
+		if (!highlights || typeof Highlight === "undefined") return;
+		const range = rangeRef.current;
+		if (!quote || !range) {
+			highlights.delete(QUOTE_HIGHLIGHT);
+			return;
+		}
+		highlights.set(QUOTE_HIGHLIGHT, new Highlight(range));
+		return () => {
+			highlights.delete(QUOTE_HIGHLIGHT);
+		};
+	}, [quote]);
+
 	useEffect(() => {
 		if (quote) {
 			hadQuoteRef.current = true;
@@ -130,52 +161,23 @@ export function QuoteSelection({
 		};
 		const dismiss = (event: MouseEvent) => {
 			if (!quote || event.button !== 0) return;
-			const retained = rangeRef.current;
-			const restoreSelection = () => {
-				if (
-					!retained ||
-					!retained.startContainer.isConnected ||
-					!retained.endContainer.isConnected
-				)
-					return;
-				const selection = window.getSelection();
-				selection?.removeAllRanges();
-				selection?.addRange(retained.cloneRange());
-			};
-			if (
-				event.target instanceof Element &&
-				event.target.closest(".composer")
-			) {
-				if (
-					!event.target.closest('[aria-label="Remove selected text"]')
-				)
-					restoreSelection();
+			// Clicking in the composer is where the passage was heading — placing
+			// a caret or selecting what you typed is never a dismissal.
+			if (event.target instanceof Element && event.target.closest(".composer"))
 				return;
-			}
+			const retained = rangeRef.current;
 			const selection = window.getSelection();
+			// A fresh drag that landed on the same passage isn't one either.
 			if (
 				retained &&
 				selection &&
 				!selection.isCollapsed &&
-				selection.rangeCount
-			) {
-				const active = selection.getRangeAt(0);
-				if (
-					retained.startContainer === active.startContainer &&
-					retained.startOffset === active.startOffset &&
-					retained.endContainer === active.endContainer &&
-					retained.endOffset === active.endOffset
-				)
-					return;
-			}
-			if (
-				pressedRetainedRangeRef.current &&
-				retained &&
-				selection
-			) {
-				setTimeout(restoreSelection, 0);
+				selection.rangeCount &&
+				sameRange(retained, selection.getRangeAt(0))
+			)
 				return;
-			}
+			// Nor is clicking the passage itself, which the highlight still marks.
+			if (pressedRetainedRangeRef.current && retained) return;
 			clear();
 		};
 		document.addEventListener("mousedown", notePress, true);
