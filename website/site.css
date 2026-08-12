@@ -159,9 +159,13 @@ button:focus-visible {
 	text-align: start;
 }
 
+/* The stage is a positioning frame, not a box the window has to fit inside.
+   The window hangs off its bottom-right corner and the hero clips whatever
+   runs past the fold, so it can be taller than the space that is left without
+   ever making the page scroll. */
 .hero-stage {
-	display: flex;
-	align-items: center;
+	position: relative;
+	align-self: stretch;
 	/* The product runs off the right edge of the text column's grid. */
 	margin-inline-end: calc(-1 * max(40px, (100vw - 1240px) / 2 + 16px));
 }
@@ -215,9 +219,17 @@ button:focus-visible {
 
 .preview-wrap {
 	--demo-scale: 1;
-	position: relative;
+	/* Anchored to the corner it comes from, and dipping below the fold: the
+	   window reads as one that carries on past the screen rather than a
+	   screenshot floated in the middle. */
+	position: absolute;
+	top: 0;
+	right: 0;
+	/* Top pinned under the header, bottom past the fold: the window is as tall
+	   as the screen allows and is always cut off, at any height. */
+	bottom: calc(-1 * clamp(88px, 13vh, 170px));
 	width: 100%;
-	height: min(670px, calc(100vh - 130px));
+	min-height: 520px;
 	flex: none;
 	margin: 0;
 	overflow: hidden;
@@ -227,11 +239,6 @@ button:focus-visible {
 	border-radius: 26px;
 	background: #f6f6f4;
 	box-shadow: 0 28px 72px rgba(36, 51, 46, 0.22);
-}
-
-.preview-wrap[data-scaled="true"] {
-	height: auto;
-	aspect-ratio: 20 / 13;
 }
 
 .product-demo-loading {
@@ -488,7 +495,7 @@ button:focus-visible {
 	}
 
 	.preview-wrap {
-		height: min(610px, calc(100vh - 130px));
+		bottom: calc(-1 * clamp(72px, 11vh, 140px));
 	}
 }
 
@@ -518,6 +525,7 @@ button:focus-visible {
 	.hero-stage {
 		display: block;
 		width: 100%;
+		align-self: auto;
 		margin-inline-end: 0;
 	}
 
@@ -532,10 +540,15 @@ button:focus-visible {
 		font-size: 17px;
 	}
 
+	/* Back in the flow, fully visible, and sized by its own proportions: a
+	   phone has no room for a window that runs off the screen. */
 	.preview-wrap {
+		position: static;
 		width: 100%;
-		height: 520px;
+		height: auto;
+		min-height: 0;
 		margin: 0 auto;
+		aspect-ratio: 5 / 4;
 	}
 
 	.waitlist-form {
