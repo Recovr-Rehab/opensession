@@ -193,7 +193,17 @@ export function buildRunInstructions(input: {
       "```mermaid fenced code blocks render as actual diagrams inline. When structure is " +
       "genuinely clearer as a picture — architecture, data flow, state machines, sequences, " +
       "dependency graphs — prefer a small mermaid diagram over ASCII art. Use plain prose " +
-      "for everything that doesn't need one."
+      "for everything that doesn't need one.\n" +
+      // The renderer can place a qualified mention at any length; a bare one
+      // is a guess it declines to make for short numbers, since `#3`, `#333`
+      // and `#29` are far more often a step, a hex colour or a ranking than a
+      // PR (markdown.ts's prMention extension). Writing the repo id is the
+      // cheap half of that contract, so ask for it here.
+      "Write pull request references qualified with the repo id — `opensession#92`, " +
+      "`tella-fusion#5528` — rather than a bare `#92`. A qualified reference always " +
+      "renders as a chip that opens the review here; a bare number only does when it is " +
+      "long enough to be unmistakable, because short `#numbers` in prose are usually a " +
+      "step, a hex colour or a ranking instead."
   );
   // Shared-pool runs only: opencode builds its environment block from the
   // server process cwd, which for a pool member is the neutral SHARED_CWD —

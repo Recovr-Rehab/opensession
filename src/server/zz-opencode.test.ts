@@ -650,6 +650,13 @@ describe("buildRunInstructions", () => {
       expect(s).toContain("```mermaid fenced code blocks render as actual diagrams");
     }
   });
+  test("every run is asked to qualify PR references with the repo id", () => {
+    for (const isAsk of [true, false]) {
+      const s = buildRunInstructions({ isAsk });
+      expect(s).toContain("Write pull request references qualified with the repo id");
+      expect(s).toContain("rather than a bare `#92`");
+    }
+  });
   test("every run forbids unbounded browser services", () => {
     for (const isAsk of [true, false]) {
       const s = buildRunInstructions({ isAsk });
