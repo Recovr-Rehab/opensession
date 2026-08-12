@@ -118,6 +118,7 @@
 	--color-shot-green-deep: var(--shot-green-deep);
 	--color-shot-green-bright: var(--shot-green-bright);
 	--color-shot-green-ink: var(--shot-green-ink);
+	--color-shot-label-ink: var(--shot-label-ink);
 	--color-purple: var(--purple);
 
 	/* Tool-family hues (transcript timeline) */

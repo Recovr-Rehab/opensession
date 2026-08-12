@@ -13,6 +13,17 @@ import { Button } from "../ui/button";
 const mediaUrl = (path: string) => `/media?path=${encodeURIComponent(path)}`;
 
 /**
+ * The Before/After label's shape. It sits in the tile's own corner rather than
+ * floating 8px inside it: a rounded pill dropped on a screenshot reads as part
+ * of the screenshot, which is exactly the wrong thing for the one label whose
+ * job is to say what the screenshot IS. Squared into the corner, under the
+ * tile's own radius, it reads as part of the frame. Colour is per picture —
+ * see labelClass.
+ */
+const SHOT_LABEL =
+	"pointer-events-none absolute left-0 top-0 rounded-br-md px-2 py-1 text-[11px] font-semibold leading-4";
+
+/**
  * Is the top-left corner of this picture, the part a Before/After label covers,
  * a dark one? Sampled from the pixels rather than from the app theme: the label
  * has to contrast with the screenshot under it, and a card routinely shows a
@@ -87,10 +98,10 @@ export function WalkthroughCard({
 		if (side === "before")
 			return dark
 				? "bg-shot-red-bright text-shot-red-ink"
-				: "bg-shot-red-deep text-white";
+				: "bg-shot-red-deep text-shot-label-ink";
 		return dark
 			? "bg-shot-green-bright text-shot-green-ink"
-			: "bg-shot-green-deep text-white";
+			: "bg-shot-green-deep text-shot-label-ink";
 	};
 	const repo = useMarkdownRepo();
 	const summaryHtml = useMemo(
@@ -414,10 +425,10 @@ export function WalkthroughCard({
 															/>
 															{/* Filled, so which of the two it is registers
 															    before the word is read. Which fill, see
-															    labelClass. */}
+															    labelClass; the shape, SHOT_LABEL. */}
 															<span
 																className={cn(
-																	"pointer-events-none absolute left-2 top-2 rounded-full px-2 py-0.5 text-[11px] font-semibold leading-4 shadow-[0_1px_2px_oklch(0_0_0_/_0.12)]",
+																	SHOT_LABEL,
 																	labelClass(`${i}:${side}`, side),
 																)}
 															>
@@ -527,10 +538,10 @@ export function WalkthroughCard({
 															/>
 															{/* Filled, so which of the two it is registers
 															    before the word is read. Which fill, see
-															    labelClass. */}
+															    labelClass; the shape, SHOT_LABEL. */}
 															<span
 																className={cn(
-																	"pointer-events-none absolute left-2 top-2 rounded-full px-2 py-0.5 text-[11px] font-semibold leading-4 shadow-[0_1px_2px_oklch(0_0_0_/_0.12)]",
+																	SHOT_LABEL,
 																	labelClass(`${i}:${side}`, side),
 																)}
 															>
