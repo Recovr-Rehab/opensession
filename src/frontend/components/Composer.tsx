@@ -54,7 +54,7 @@ import {
 } from "../lib/palette-classes";
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
-import { ContextMenu } from "../ui/menu";
+import { ContextMenu, MenuShortcut } from "../ui/menu";
 import { Button } from "../ui/button";
 import { Modal } from "../ui/modal";
 import {
@@ -64,6 +64,7 @@ import {
   sendKeyLabel,
 } from "../lib/send-key";
 import { getSendKeyPref, onSendKeyChanged } from "../lib/send-key-pref";
+import { isApple } from "../lib/platform";
 import { VoiceInput } from "./VoiceInput";
 import {
   getBusySendPrefs,
@@ -1017,7 +1018,9 @@ export function Composer({
                       <span className={composerMenuIcon}>
                         <IconPaperclip size={22} />
                       </span>
-                      {onFilesChange ? "Attach files" : "Attach an image"}
+                      <span className="grow whitespace-nowrap">
+                        {onFilesChange ? "Attach files" : "Attach an image"}
+                      </span>
                     </button>
                   )}
                   {canAttach && mentionFetch && (
@@ -1032,7 +1035,12 @@ export function Composer({
                       <span className={composerMenuIcon}>
                         <IconAtSign size={22} />
                       </span>
-                      Reference a file
+                      <span className="grow whitespace-nowrap">Reference a file</span>
+                      {/* Not a chord: typing @ in the field opens the same
+                          picker, which is the faster way once you know it.
+                          Hidden on phones, where there are no keys to press —
+                          the same call the Enter hint under the field makes. */}
+                      {!isPhone && <MenuShortcut>@</MenuShortcut>}
                     </button>
                   )}
                   {onSetGoal && (
@@ -1047,7 +1055,9 @@ export function Composer({
                       <span className={composerMenuIcon}>
                         <IconCrosshair size={22} />
                       </span>
-                      {goal ? "Edit goal" : "Set a goal"}
+                      <span className="grow whitespace-nowrap">
+                        {goal ? "Edit goal" : "Set a goal"}
+                      </span>
                     </button>
                   )}
                   {onNoteModeChange && (
@@ -1067,7 +1077,12 @@ export function Composer({
                       <span className={composerMenuIcon}>
                         <IconNote size={22} />
                       </span>
-                      {noteMode ? "Back to prompting" : "Write a team note"}
+                      <span className="grow whitespace-nowrap">
+                        {noteMode ? "Back to prompting" : "Write a team note"}
+                      </span>
+                      {!isPhone && (
+                        <MenuShortcut>{isApple ? "⌘N" : "Ctrl N"}</MenuShortcut>
+                      )}
                     </button>
                   )}
                   {menuExtra?.({ close: () => setMenu(null) })}

@@ -107,7 +107,7 @@ export const composerToolbarPill =
  *  written: that already supplies `cursor: pointer`, `background: none`,
  *  `border: none` and zero padding. */
 export const composerMenuItem =
-	"flex w-full items-center gap-[9px] rounded-control px-[9px] py-[7px] text-left text-[12px] text-fg hover:bg-hover";
+	"flex w-full items-center gap-[9px] rounded-control px-[9px] py-[7px] text-left text-control-label text-fg hover:bg-hover";
 /** The row's leading glyph. A fixed 20px column so the labels line up however
  *  wide the icons draw. */
 export const composerMenuIcon =

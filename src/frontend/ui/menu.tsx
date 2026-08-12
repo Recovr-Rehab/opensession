@@ -143,8 +143,11 @@ function CheckboxItem({
 }
 
 /** Right-aligned keyboard-shortcut hint on a menu row ("⌘ W"). Place it after
- * the row's `grow` label so it pins to the trailing edge. */
-function Shortcut({
+ * the row's `grow` label so it pins to the trailing edge. Exported on its own
+ * as well as on the Menu namespaces: the composer's "+" menu is a hand-rolled
+ * popover (its rows carry the iOS touchend handling Base UI can't), and its
+ * hints have to read exactly like the ones in a real menu. */
+export function MenuShortcut({
 	className,
 	children,
 }: {
@@ -183,7 +186,7 @@ export const ContextMenu = {
 	Popup: ContextPopup,
 	Item,
 	Separator,
-	Shortcut,
+	Shortcut: MenuShortcut,
 };
 
 export const Menu = {
@@ -192,7 +195,7 @@ export const Menu = {
 	Popup,
 	Item,
 	Separator,
-	Shortcut,
+	Shortcut: MenuShortcut,
 	Group: BaseMenu.Group,
 	GroupLabel,
 	SubmenuRoot: BaseMenu.SubmenuRoot,
