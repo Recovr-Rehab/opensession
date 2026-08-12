@@ -60,6 +60,11 @@
 	   of the ramp, so they read as lifted off whatever they sit on, with a
 	   whisper of shadow. Codex-style. */
 	--control-surface: #292929;
+	/* The plate under a control you *press*. In dark it is the control surface
+	   above — lighter than the page, so the fill is what lifts it. Light is the
+	   composer's case at chip scale, so it takes the composer's answer; see the
+	   light block. */
+	--button-surface: var(--control-surface);
 	/* Floating popups — hover cards, menus, context menus. Same L3 tier as the
 	   controls above, and in dark that is all it needs: lighter than the page,
 	   so the fill alone reads as lifted and the hairline is just an edge. Light
@@ -310,6 +315,14 @@ html[data-theme="light"] {
 	   #ebebeb lands between --bg-panel (#f0f0f0) and --bg-hover (#e9e9e9), which
 	   is where dark's #292929 sits between #262626 and #2e2e2e. */
 	--control-surface: #ebebeb;
+	/* A button is the composer's exception at chip scale. The ramp above is
+	   right for a *filled* chip — a status pill, an option row, an input well —
+	   which has nothing but its fill to read against the page. A button also
+	   carries a hairline and a cast shadow, and those already say "raised"; add
+	   the grey fill on top and the control reads as tinted rather than lifted,
+	   which is the disabled signal again. So it goes paper and lets the shadow
+	   do the lifting, exactly as the composer and the popups below do. */
+	--button-surface: #ffffff;
 	/* The composer is the exception to the ramp above, and it has to be. The
 	   ramp steps AWAY from the page — darker in light — which is right for a
 	   small chip read against its neighbours, but the composer is a big empty

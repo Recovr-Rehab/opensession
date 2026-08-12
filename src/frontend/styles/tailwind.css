@@ -131,9 +131,13 @@
 	--color-tooltip-fg: var(--tooltip-fg);
 	--color-tooltip-ring: var(--tooltip-ring);
 
-	/* Control chrome (buttons, inputs): the raised white/graphite surface with
-	   its soft key shadow — pairs with border-line. */
+	/* Control chrome (filled chips, inputs, option rows): the raised
+	   white/graphite surface — pairs with border-line. */
 	--color-control: var(--control-surface);
+	/* The plate under a *pressable* control. Same fill as above in dark; paper
+	   in light, because a button carries a cast shadow and a hairline to say it
+	   is raised, so it does not need a grey fill to say it too. */
+	--color-button: var(--button-surface);
 
 	/* Type + shape */
 	--font-sans: var(--sans);

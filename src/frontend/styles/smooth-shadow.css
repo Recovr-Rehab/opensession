@@ -6,8 +6,9 @@
  * newer canonical scale in tellahq/tella-fusion#5517 rather than the much
  * blurrier shadows this branch originally replaced.
  *
- * `sm` is for compact floating controls, `md` for menus and popovers, and `lg`
- * for palettes, dialogs, and large preview cards. The 1px hairline is the final
+ * `xs` is for controls that rest in the page, `sm` for compact floating
+ * controls, `md` for menus and popovers, and `lg` for palettes, dialogs, and
+ * large preview cards. The 1px hairline is the final
  * shadow layer, so do not add a border, ring, or native `shadow-*` utility to
  * the same element. The ring fades with elevation: compact controls retain a
  * little definition, while menus, dialogs, and large cards increasingly let
@@ -54,6 +55,23 @@ html[data-theme="light"] {
 }
 
 /* Cast-only tiers for surfaces that already carry a meaningful border. */
+
+/*
+ * Below `sm`: a control resting *in* the page rather than floating over it —
+ * a button in a toolbar, a filter pill. `sm` is calibrated for something that
+ * has left the page, and at 26-32px tall its lower layer reaches further below
+ * the control than the control is tall, which reads as a grey underline rather
+ * than a lift. This keeps the same two-layer shape, pulled in tight.
+ */
+@utility smooth-shadow-xs {
+	--smooth-shadow-color: var(--tw-shadow-color, black);
+	box-shadow:
+		0 1px 2px -1px
+		color-mix(in srgb, var(--smooth-shadow-color) 5%, transparent),
+		0 2px 5px -3px
+		color-mix(in srgb, var(--smooth-shadow-color) 7%, transparent);
+}
+
 @utility smooth-shadow-sm {
 	--smooth-shadow-color: var(--tw-shadow-color, black);
 	box-shadow:

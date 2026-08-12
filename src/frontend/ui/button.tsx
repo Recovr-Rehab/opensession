@@ -81,12 +81,15 @@ const iconOnlyPad: Record<Size, string> = {
 // fill, so the hover takes `--accent-hover`, which picks its own direction:
 // toward the page while the accent is ink, deeper into the hue once it isn't.
 const INK =
-	"bg-accent border-transparent text-on-accent smooth-shadow-sm hover:bg-accent-hover";
+	"bg-accent border-transparent text-on-accent smooth-shadow-xs hover:bg-accent-hover";
 
 const variants: Record<Variant, string> = {
 	// The raised control look of the newest chrome (viewer Share button).
+	// Paper in light (`bg-button`), graphite in dark: the hairline and the cast
+	// shadow are what say "raised", so the fill does not have to — see the
+	// --button-surface note in base.css.
 	default:
-		"bg-control border-line text-dim smooth-shadow-sm hover:text-fg hover:border-line-strong",
+		"bg-button border-line text-dim smooth-shadow-xs hover:text-fg hover:border-line-strong",
 	// One plate, two names. `primary` is the one to reach for — it carries 46
 	// call sites to `ink`'s 2, and now that the accent *is* ink the older name
 	// no longer describes anything the newer one doesn't. `ink` stays so its
@@ -106,7 +109,7 @@ const variants: Record<Variant, string> = {
 	// second click of a two-click close). `danger` proposes, `destructive`
 	// commits, so a surface can show both without them reading as the same
 	// weight. Shares `primary`'s shape so the two swap cleanly in a footer.
-	destructive: "bg-red border-transparent text-white smooth-shadow-sm hover:brightness-110",
+	destructive: "bg-red border-transparent text-white smooth-shadow-xs hover:brightness-110",
 	warning: "border-yellow text-yellow hover:bg-[color-mix(in_srgb,var(--yellow)_12%,transparent)]",
 };
 
