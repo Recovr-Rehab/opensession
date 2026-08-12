@@ -143,10 +143,10 @@ export async function connect(opts: ConnectOptions): Promise<number> {
  * Long-running: holds the channel open and runs what the server asks.
  *
  * A WebSocket rather than polling, because the server needs to *push* work. The
- * node dials out, so nothing has to be reachable on this machine.
+ * Runner dials out, so nothing has to be reachable on this machine.
  *
  * Everything the server sends runs as this user with this user's privileges.
- * That is the point of attaching a node, and it is why registration is
+ * That is the point of attaching a Runner, and it is why registration is
  * tailnet-gated and the tool exposing it is interactive-only.
  */
 export async function runnerRun(): Promise<number> {

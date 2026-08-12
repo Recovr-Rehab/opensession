@@ -1,8 +1,8 @@
 /**
  * Where `os` keeps its host + token.
  *
- * `~/.opensession/tui.json`, mode 0600, next to the `node.json` that
- * scripts/lib/connect.ts writes for execution nodes. Same directory on purpose:
+ * `~/.opensession/tui.json`, mode 0600, next to the `runner.json` that
+ * scripts/lib/connect.ts writes for attached Runners. Same directory on purpose:
  * one place to look for "credentials this box holds for an Open Session server".
  */
 
