@@ -194,6 +194,7 @@ import {
 	composerQueueList,
 	composerQueuePill,
 	composerQueuePillGithub,
+	composerQueueSendingShimmer,
 	composerQueueSendingStatus,
 	composerQueueTitle,
 } from "../lib/composer-classes";
@@ -3682,8 +3683,11 @@ export function SessionViewer({
 					>
 						<div className={composerQueueActions}>
 							<span className={composerQueueSendingStatus} role="status">
-								{!waitingForWorkspace && <PixelSpinner className="shrink-0" />}
-								{waitingForWorkspace ? "Queued" : "Queueing"}
+								{waitingForWorkspace ? (
+									"Queued"
+								) : (
+									<span className={composerQueueSendingShimmer}>Queueing</span>
+								)}
 							</span>
 						</div>
 						{renderQueueContent(p, classifyQueuedContent(p.content), {
@@ -3703,8 +3707,9 @@ export function SessionViewer({
 						{item.state !== "failed" && (
 							<div className={composerQueueActions}>
 								<span className={composerQueueSendingStatus} role="status">
-									<PixelSpinner className="shrink-0" />
-									{item.state === "sending" ? "Sending" : "Waiting to send"}
+									<span className={composerQueueSendingShimmer}>
+										{item.state === "sending" ? "Sending" : "Waiting to send"}
+									</span>
 								</span>
 							</div>
 						)}

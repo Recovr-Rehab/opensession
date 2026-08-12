@@ -550,6 +550,9 @@ html[data-accent="mono"] {
                         that actually translates.
      animate-[composer-agents-pulse_…]  (ComposerAgents) keeping the existing
                         explicit choice to stop it.
+     animate-[text-shimmer_…]  (composerQueueSendingShimmer) the crest that
+                        crosses "Queueing"/"Sending". The word itself says
+                        what is happening, so a still label loses nothing.
      [animation-name:pixel-snake-trail]  (PixelSpinner) the decorative pixel
                         loader — a wave that travels across the block. However
                         fun, it is the single most motion-heavy thing in the
@@ -1772,6 +1775,20 @@ a.pr-ref[data-pr-tone="yellow"] .pr-ref-icon {
 @keyframes preview-spin {
 	to {
 		transform: rotate(360deg);
+	}
+}
+
+/* A highlight travelling across a word, for a status label that is its own
+   loading indicator ("Queueing", "Sending"). The gradient is twice the box
+   wide, so sliding the position from 100% to 0% walks the crest left to
+   right across the letters. Referenced from `composerQueueSendingShimmer`
+   in lib/composer-classes. */
+@keyframes text-shimmer {
+	from {
+		background-position: 100% center;
+	}
+	to {
+		background-position: 0% center;
 	}
 }
 
