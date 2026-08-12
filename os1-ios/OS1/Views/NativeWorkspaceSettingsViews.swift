@@ -222,7 +222,7 @@ struct ModelProvidersSections: View {
             if let error { settingsErrorRow(error) { Task { await load() } } }
             if let providers {
                 if providers.isEmpty {
-                    Text("No providers yet — add one to run sessions on models beyond the Anthropic and OpenAI subscriptions.")
+                    Text("No providers yet. Add one to use models beyond the Anthropic and OpenAI subscriptions.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

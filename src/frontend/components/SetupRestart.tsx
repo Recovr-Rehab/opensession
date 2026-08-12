@@ -17,12 +17,12 @@ export function SetupRestart({ setup }: { setup: SetupController }) {
 				<div className="sticky bottom-3 z-20 mt-8 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-line bg-panel px-4 py-3 smooth-shadow-soft">
 					<div className="min-w-0 flex-1">
 						<div className="text-control-label font-medium text-fg">
-							Changes saved — restart to apply
+							Changes saved. Restart to apply.
 						</div>
 						<div className="mt-0.5 text-supporting text-dim">
 							{restartState === "failed" ? (
 								<>
-									Still not back — check <Code>opensession logs</Code>.
+									Still not back. Check <Code>opensession logs</Code>.
 								</>
 							) : (
 								"The server reads credentials and enable flags on boot. Restarts take a few seconds; running engine turns keep going."

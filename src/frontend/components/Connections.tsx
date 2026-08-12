@@ -659,7 +659,7 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
               <span className="flex min-w-0 flex-1 items-center gap-2">
                 <PulseDot size={7} />
                 <span className="min-w-0">
-                  Waiting for GitHub — sign in as the account you want to connect.
+                  Waiting for GitHub. Sign in as the account you want to connect.
                 </span>
               </span>
               <Button
@@ -891,7 +891,7 @@ function CodeStorageCard() {
               </SettingsField>
             </SettingsFormRow>
             <SettingsField>
-              Private key (PKCS8 PEM — its public half is registered with the org in the
+              Private key (PKCS8 PEM, its public half registered with the org in the
               Pierre dashboard)
               <textarea
                 className={cn(settingsInputClass, "resize-y font-mono")}
@@ -969,7 +969,7 @@ function CodeStorageCard() {
                   <div className="text-meta leading-snug text-red">
                     {wh.rejectedCount} unauthenticated request
                     {wh.rejectedCount === 1 ? "" : "s"} rejected ({wh.lastRejected.error}
-                    ), last {relativeTime(wh.lastRejected.at)} — if these are your Pierre
+                    ), last {relativeTime(wh.lastRejected.at)}. If these are your Pierre
                     deliveries, check that the secret in the dashboard matches; otherwise
                     it's internet noise and verified deliveries above are unaffected.
                   </div>
@@ -1063,7 +1063,7 @@ function PlainRouter() {
           Every new Plain ticket goes through one cheap Haiku call before triage: spam is skipped
           entirely, a very basic ask (simple refund, how-do-I) runs triage on the model below, and
           everything else runs on the triage automation's own model. Router errors fail open to
-          full triage. Applies to the next ticket — no restart.
+          full triage. Applies to the next ticket, with no restart.
         </div>
         <div className="flex min-w-0 items-center gap-2.5 text-meta text-faint">
           <span className="whitespace-nowrap">Model for basic tickets:</span>
@@ -1218,7 +1218,7 @@ function AddMcpForm({ onClose, onAdded }: { onClose: () => void; onAdded: () => 
             </SettingsField>
           </SettingsFormRow>
           <SettingsField>
-            Env (KEY=VALUE, one per line — stored in mcp-config.json)
+            Env (KEY=VALUE, one per line, stored in mcp-config.json)
             <textarea
               className={cn(settingsInputClass, "resize-y font-mono")}
               value={env}
@@ -1231,7 +1231,7 @@ function AddMcpForm({ onClose, onAdded }: { onClose: () => void; onAdded: () => 
       )}
 
       <SettingsField>
-        Allowed users (optional, comma-separated — leave blank for everyone)
+        Allowed users (optional, comma-separated, blank for everyone)
         <input
           className={settingsInputClass}
           value={allowedUsers}

@@ -10,7 +10,7 @@ export function ModelsPanel() {
 		<SettingsPanel>
 			<SettingsHeader
 				title="Models"
-				description="Which model and execution environment new sessions start with, plus the accounts and providers those models come from."
+				description="Choose the models and execution environments available to new sessions."
 			/>
 			<AccountsPanel />
 			<ModelProvidersPanel />

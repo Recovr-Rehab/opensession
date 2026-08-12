@@ -161,7 +161,7 @@ export function integrationState(i: SetupIntegration): {
 } {
 	if (i.enabled && i.missingRequired.length === 0)
 		return { tone: "on", label: "On" };
-	if (i.enabled) return { tone: "warn", label: "Enabled — missing credentials" };
+	if (i.enabled) return { tone: "warn", label: "Enabled · missing credentials" };
 	return { tone: "off", label: "Off" };
 }
 
@@ -169,7 +169,7 @@ export function githubAuthState(g: SetupGithub): { tone: ChipTone; label: string
 	if (g.userPrAuth && g.clientIdConfigured)
 		return {
 			tone: "on",
-			label: g.redirectFlowAvailable ? "Active" : "Active — device flow only",
+			label: g.redirectFlowAvailable ? "Active" : "Active · device flow only",
 		};
 	if (g.userPrAuth) return { tone: "warn", label: "Missing client id" };
 	return { tone: "off", label: "Off" };
@@ -195,24 +195,24 @@ export function repoLifecycleState(repo: SetupRepo): {
 			label: setup ? "Ready" : "Boots",
 			description: setup
 				? `${where}/ provisions each worktree and boots the dev server.`
-				: `${where}/start.sh boots the dev server — add ${where}/setup to provision worktrees.`,
+				: `${where}/start.sh boots the dev server. Add ${where}/setup to provision worktrees.`,
 		};
 	if (previewCommand)
 		return {
 			tone: "on",
 			label: "Instance command",
-			description: `Boots through this instance's previewCommand — commit ${where}/start.sh to keep the recipe with the code.`,
+			description: `Boots through this instance's previewCommand. Commit ${where}/start.sh to keep the recipe with the code.`,
 		};
 	if (setup)
 		return {
 			tone: "warn",
 			label: "Setup only",
-			description: `${where}/setup provisions worktrees — add start.sh to enable previews.`,
+			description: `${where}/setup provisions worktrees. Add start.sh to enable previews.`,
 		};
 	return {
 		tone: "off",
 		label: "None",
-		description: `No ${where}/ scripts — previews stay disabled.`,
+		description: `No ${where}/ scripts. Previews stay disabled.`,
 	};
 }
 
@@ -249,12 +249,17 @@ export function Code({
 	);
 }
 
-/** Deep links into the third-party tool where a credential is created —
- * rendered as a chip row under an integration card's description. */
-export function LinkChips({ links }: { links: SetupLink[] }) {
+/** Deep links into the third-party tool where a credential is created. */
+export function LinkChips({
+	links,
+	className,
+}: {
+	links: SetupLink[];
+	className?: string;
+}) {
 	if (!links.length) return null;
 	return (
-		<div className="mt-2 flex flex-wrap gap-1.5">
+		<div className={cn("mt-2 flex flex-wrap gap-1.5", className)}>
 			{links.map((link) => (
 				<a
 					key={link.url}

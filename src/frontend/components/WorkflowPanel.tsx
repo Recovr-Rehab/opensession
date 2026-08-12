@@ -359,8 +359,8 @@ function WorkflowsEmptyState() {
 				className="py-6"
 			>
 				Ask this session to <span className="text-fg">use a workflow</span> and
-				it fans out many small agents at once — one per file, topic or candidate
-				— then combines their results. They show up here live.
+				it fans out many small agents at once, one per file, topic or candidate,
+				then combines their results. They show up here live.
 			</EmptyState>
 			<div>
 				<div className="mb-1.5 text-meta font-medium text-faint">Try</div>
@@ -795,7 +795,7 @@ const AgentRow = React.memo(function AgentRow({
 									className="self-start text-[11px] font-medium text-link hover:underline"
 									onClick={() => onLoadDetail(a.seq)}
 								>
-									Couldn't load the full record — retry
+									Couldn't load the full record. Retry
 								</button>
 							)}
 						</div>

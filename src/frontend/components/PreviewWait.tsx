@@ -130,7 +130,7 @@ export function PreviewWait({ sessionId }: { sessionId: string }) {
 					)}
 					<div className="max-w-sm text-[13px] font-medium leading-relaxed text-dim">
 						The first build can take a minute. This tab will open the app
-						automatically when it's ready — keep it in the background.
+						automatically when it's ready, so keep it in the background.
 					</div>
 				</>
 			) : (

@@ -817,7 +817,7 @@ function AgentReviewCard({
 			</div>
 			{done && (
 				<div className="px-1 text-[11px] font-medium text-dim">
-					Started {done.label.toLowerCase()} — {AGENT_NAME} will post results on{" "}
+					Started {done.label.toLowerCase()}. {AGENT_NAME} will post results on{" "}
 					{pr.url ? (
 						<a
 							href={pr.url}

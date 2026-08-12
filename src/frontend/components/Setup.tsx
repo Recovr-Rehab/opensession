@@ -17,7 +17,6 @@ import { ReposSection } from "./SetupRepos";
 import { SetupRestart } from "./SetupRestart";
 import { TeamSection } from "./SetupTeam";
 import {
-	Code,
 	chipDotColor,
 	githubAuthState,
 	integrationState,
@@ -51,36 +50,31 @@ const STEPS: StepDef[] = [
 		id: "engine",
 		label: "Engine",
 		title: "Engine",
-		description:
-			"The model capacity sessions run on. Without this nothing else on this page matters — no session can run a single turn.",
+		description: "Connect the model capacity that sessions use for every turn.",
 	},
 	{
 		id: "identity",
 		label: "Identity",
 		title: "Identity",
-		description:
-			"What this instance and its agent are called, everywhere they introduce themselves. Optional — both have defaults.",
+		description: "Choose the names this instance and its agent use when they introduce themselves.",
 	},
 	{
 		id: "repos",
 		label: "Repositories",
 		title: "Repositories",
-		description:
-			"The repos sessions work in. Registering clones the repo onto the server; sessions then branch into isolated worktrees of it.",
+		description: "Register the repositories sessions can work in.",
 	},
 	{
 		id: "team",
 		label: "Members",
 		title: "Members",
-		description:
-			"Everyone who uses this instance. The identity table drives commit attribution, access scoping and GitHub sign-in, so add the people before the credentials.",
+		description: "Add everyone who uses this instance so sessions, commits, and access grants name the right person.",
 	},
 	{
 		id: "integrations",
 		label: "Integrations",
 		title: "Integrations",
-		description:
-			"The tools the agent can reach — Slack, Linear, Plain, Stripe, Grafana, GitHub. Paste the credentials, flip the switch, save. All optional; connect what you use.",
+		description: "Connect the tools and event sources your agent should use.",
 	},
 	{
 		id: "github",
@@ -93,8 +87,7 @@ const STEPS: StepDef[] = [
 		id: "review",
 		label: "Review",
 		title: "Review",
-		description:
-			"What's wired up, and what's still missing. Every row here stays reachable from its own page under Workspace.",
+		description: "Review what is ready and what still needs attention.",
 	},
 ];
 
@@ -238,6 +231,7 @@ export function SetupPanel({ onDone }: { onDone?: () => void }) {
 						{step.id === "integrations" && (
 							<IntegrationsList
 								integrations={status.integrations}
+								publicBaseUrl={status.publicBaseUrl}
 								onSaved={setup.applyIntegration}
 							/>
 						)}
@@ -248,8 +242,8 @@ export function SetupPanel({ onDone }: { onDone?: () => void }) {
 									onSaved={setup.applyGithub}
 								/>
 								<SettingsHint>
-									Teammates connect their own accounts under Workspace →
-									Connections. Full guide: <Code>docs/setup/github.md</Code>.
+									After setup, teammates connect their own accounts under Workspace →
+									Connections.
 								</SettingsHint>
 							</>
 						)}

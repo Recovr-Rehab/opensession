@@ -1925,7 +1925,7 @@ function AutomationForm({
           </label>
 
           {accountId && (
-            <label className={FIELD_LABEL} title="This account only: when it's out of usage, runs switch to the fallback model rather than the shared pool, so this account's limits are the automation's cost ceiling. Prefer it: exhausted runs rotate into the shared pool instead.">
+            <label className={FIELD_LABEL} title="Out of usage, runs switch to the fallback model rather than the shared pool, so this account's limits cap the cost. Prefer it rotates into the pool instead.">
               When the pinned account is out of usage
               <Select
                 value={accountStrict ? "strict" : "pool"}
@@ -1938,7 +1938,7 @@ function AutomationForm({
             </label>
           )}
 
-          <label className={FIELD_LABEL} title="Usage-credits are pay-as-you-go spend past the subscription's included limits. They only take effect on accounts with extra usage enabled at claude.ai, and their monthly credit cap still bounds the spend.">
+          <label className={FIELD_LABEL} title="Pay-as-you-go spend past the subscription's included limits. Only applies to accounts with extra usage enabled at claude.ai, bounded by their monthly credit cap.">
             Usage credits
             <Select
               value={usageCredits ? "allow" : "never"}

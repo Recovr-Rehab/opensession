@@ -64,7 +64,7 @@ export async function splitAttachments(
   const uploaded = await Promise.all(
     otherFiles.map(async (f): Promise<FileAttachment | null> => {
       if (f.size > MAX_UPLOAD_BYTES) {
-        rejected.push(`${f.name} (too large — max ${Math.floor(MAX_UPLOAD_BYTES / (1024 * 1024))} MB)`);
+        rejected.push(`${f.name} (too large, max ${Math.floor(MAX_UPLOAD_BYTES / (1024 * 1024))} MB)`);
         return null;
       }
       try {

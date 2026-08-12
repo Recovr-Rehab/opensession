@@ -443,7 +443,7 @@ export function Analytics() {
 					<div>
 						<h1 className="m-0 text-section-title font-semibold tracking-[-0.02em] text-fg">Analytics</h1>
 						<p className="m-0 mt-1 text-supporting text-dim">
-							What happened on {PRODUCT_NAME} — sessions, tokens, models, PRs.
+							What happened on {PRODUCT_NAME}: sessions, tokens, models, PRs.
 						</p>
 					</div>
 					<div className="flex flex-wrap items-center gap-2">

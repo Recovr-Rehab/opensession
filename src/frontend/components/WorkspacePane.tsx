@@ -231,7 +231,7 @@ export function WorkspacePane({
 					</div>
 					{workspaceSessions.length === 0 ? (
 						<div className="text-dim text-supporting mt-1.5">
-							None yet — the composer below starts the first one
+							None yet. The composer below starts the first one.
 							{workspace.branch ? " on the PR's branch" : ""}.
 						</div>
 					) : (
@@ -334,7 +334,7 @@ export function WorkspacePane({
 					</div>
 					{workspaceSessions.length === 0 && (
 						<div className="text-dim text-[13px] mt-5">
-							No sessions in this workspace yet — start one below
+							No sessions in this workspace yet. Start one below.
 							{workspace.branch ? " on the PR's branch" : ""}.
 						</div>
 					)}

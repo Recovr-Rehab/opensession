@@ -177,10 +177,9 @@ function DeskVoicePanel() {
 				<DeskVoiceApiKeyRow />
 			</SettingCard>
 			<SettingsHint>
-				Talk to your Desk — the standing session you summon with ⌘J — out loud
-				instead of typing. Voice mode uses OpenAI Realtime and adds a
-				microphone button to the Desk overlay; the API key is shared by
-				everyone on this instance.
+				Talk to your Desk, the standing session you summon with ⌘J, instead of
+				typing. Voice mode adds a microphone button to the Desk overlay. The API
+				key is shared by everyone on this instance.
 			</SettingsHint>
 		</>
 	);
@@ -281,11 +280,9 @@ function PersonalPromptPanel() {
 				</div>
 			</SettingsSection>
 			<SettingsHint>
-				Added to the system prompt of every session you ({user}) start, on top
-				of the built-in ones — tone, preferences, how you like work reported.
-				It follows you across devices and surfaces (same identity as your
-				memory store), and is never given to automations. Leave it empty to
-				turn it off.
+				Added to the system prompt of every session you ({user}) start: tone,
+				preferences, how you like work reported. It follows you across devices and
+				is never given to automations. Leave it empty to turn it off.
 			</SettingsHint>
 		</>
 	);
@@ -367,13 +364,13 @@ export function PreferencesPanel() {
 		<SettingsPanel>
 			<SettingsHeader
 				title="Preferences"
-				description="How you work with a session: the message box, the transcript, voice, and your standing instructions."
+				description="Choose how sessions send messages, show their work, use voice, and follow your standing instructions."
 			/>
 			<SettingsGroupLabel className="mt-0">Messages</SettingsGroupLabel>
 			<SettingCard>
 				<SettingRow
 					title="Default model"
-					desc="What new sessions you start are preselected to run on."
+					desc="Preselect this model when you start a session."
 					control={
 						<Select
 							label="Default model"
@@ -463,20 +460,18 @@ export function PreferencesPanel() {
 				/>
 			</SettingCard>
 			<SettingsHint>
-				All of it is stored per user, so it follows you across every device you
-				sign in from. Queue holds a follow-up until the run and its worker
-				sessions have finished; the modifier choice also applies when
-				⌘/Ctrl-clicking the send button.
+				Stored per user, so it follows you across every device. Queue holds a
+				follow-up until the run and its worker sessions have finished.
 			</SettingsHint>
 
 			<SettingsGroupLabel>Transcript</SettingsGroupLabel>
 			<SettingCard>
 				<SettingRow
-					title="Tool calls & messages"
+					title="Tool calls and messages"
 					desc="How much of each turn's working the transcript shows."
 					control={
 						<Select
-							label="Tool calls & messages"
+						label="Tool calls and messages"
 							value={turnActivity}
 							options={[
 								{ value: "messages", label: "Fold tool calls" },
@@ -490,10 +485,9 @@ export function PreferencesPanel() {
 				/>
 			</SettingCard>
 			<SettingsHint>
-				By default a turn is open while it runs and folds away once it
-				settles. "Fold tool calls" instead keeps every turn's in-between
-				messages reading as normal transcript, so only its tool calls ever
-				fold. Expanding a turn does not open its individual tool inputs.
+				By default a turn is open while it runs and folds away once it settles.
+				"Fold tool calls" instead folds only the tool calls, leaving the rest of the
+				turn reading as normal transcript.
 			</SettingsHint>
 
 			<DeskVoicePanel />

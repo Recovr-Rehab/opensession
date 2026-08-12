@@ -77,7 +77,7 @@ async function login(): Promise<number> {
 	if ("status" in start) {
 		if (start.status === "not-required") {
 			await writeConfig({ host });
-			console.log("This server has no sign-in gate — nothing to do. Host saved.");
+			console.log("This server has no sign-in gate. Host saved.");
 			return 0;
 		}
 		console.error(`✗ ${start.error}`);
@@ -149,7 +149,7 @@ async function listSessions(): Promise<number> {
 		if (!sessions.length) {
 			console.log(
 				all.length && scope !== "all"
-					? `No ${scope} sessions (${all.length} in total — try \`os sessions --all\`).`
+					? `No ${scope} sessions (${all.length} in total). Try \`os sessions --all\`.`
 					: "No sessions.",
 			);
 			return 0;
@@ -197,7 +197,7 @@ async function tui(): Promise<number> {
 		await api.sessions();
 	} catch (e) {
 		if (e instanceof ApiError && e.needsAuth) {
-			console.error(`✗ ${host} requires sign-in — run \`os login\``);
+			console.error(`✗ ${host} requires sign-in. Run \`os login\``);
 			return 1;
 		}
 		throw e;

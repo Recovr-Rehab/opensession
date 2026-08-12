@@ -144,8 +144,8 @@ export function Sidebar({
 				{error
 					? ""
 					: total
-						? `nothing in ${scope} — f widens the scope`
-						: "no sessions yet — ^b c to start one"}
+						? `nothing in ${scope} · f widens the scope`
+						: "no sessions yet · ^b c to start one"}
 			</text>,
 		);
 	} else if (truncated) {

@@ -266,7 +266,7 @@ export function AppearancePanel() {
 		<SettingsPanel>
 			<SettingsHeader
 				title="Appearance"
-				description="How this app looks, and what the sidebar shows. Theme, accent, and tool toggles are per browser; sidebar order and feeds follow your account everywhere."
+				description="Choose how the app looks and what appears in your sidebar."
 			/>
 			<SettingsGroupLabel>Theme</SettingsGroupLabel>
 			<SettingsSection>

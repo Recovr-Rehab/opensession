@@ -531,7 +531,7 @@ function TicketCard({
 					)
 				) : timeline === "error" ? (
 					<div className="text-sm text-red">
-						Couldn't load the conversation — open it in Plain.
+						Couldn't load the conversation. Open it in Plain.
 					</div>
 				) : timeline.entries.length === 0 ? (
 					<div className="text-sm italic text-faint">

@@ -205,9 +205,9 @@ struct PreferencesSettingsView: View {
                 // always one gesture away, and this is the only place
                 // that says so.
                 #if os(macOS)
-                Text("Queued messages wait until the agent has fully finished; steering folds them into the running turn at its next step. Hold the send button to use the other one for a single message.")
+                Text("Queue waits for the agent to finish. Steer adds your message to the running turn. Hold Send to use the other option once.")
                 #else
-                Text("Queued messages wait until the agent has fully finished; steering folds them into the running turn at its next step. Touch and hold the send button to use the other one for a single message.")
+                Text("Queue waits for the agent to finish. Steer adds your message to the running turn. Touch and hold Send to use the other option once.")
                 #endif
             }
 
@@ -889,7 +889,7 @@ struct PersonalPromptSection: View {
         } header: {
             Text("Personal prompt")
         } footer: {
-            Text("Standing instructions added to every session you start, on top of the built-in ones. Saved when you leave this screen; empty turns it off.")
+            Text("Add standing instructions to every session you start. Leave this empty to turn them off.")
         }
         .task { await load() }
         .onChange(of: editing) { _, focused in if !focused { commit() } }
@@ -948,7 +948,7 @@ struct ShortcutsSettingsView: View {
             } footer: {
                 // No section header: the navigation title above already says
                 // "Shortcuts", and repeating it just pushed the first row down.
-                Text("Installed with the app — no setup needed. Ask Siri for it by name, or find it under OS1 in the Shortcuts app.")
+                Text("Installed with the app. Ask Siri for it by name, or find it under OS1 in Shortcuts.")
             }
 
             #if os(iOS)
@@ -1077,7 +1077,7 @@ struct MyAccountsSettingsView: View {
                     accountRow(server)
                 }
             } header: {
-                Text("MCP accounts — tools as yourself")
+                Text("MCP accounts · tools as yourself")
             } footer: {
                 Text("Connect one and your sessions use your own account for that tool. Anything you leave unconnected keeps running on the workspace credential.")
             }
@@ -1085,7 +1085,7 @@ struct MyAccountsSettingsView: View {
             Section {
                 githubRows
             } header: {
-                Text("GitHub — PRs as yourself")
+                Text("GitHub · PRs as yourself")
             } footer: {
                 Text("Interactive sessions of a connected teammate open PRs as their own GitHub account. Everyone else, and every automation, keeps the bot.")
             }
@@ -1174,7 +1174,7 @@ struct MyAccountsSettingsView: View {
                 }
             }
         } else {
-            Text("Per-user GitHub auth is off for this workspace — sessions open PRs as the bot.")
+			Text("Personal GitHub sign-in is off for this workspace. Sessions open PRs as the bot.")
                 .foregroundStyle(.secondary)
         }
     }

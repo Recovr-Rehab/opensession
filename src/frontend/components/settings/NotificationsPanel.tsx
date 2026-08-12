@@ -82,7 +82,7 @@ export function NotificationsPanel() {
 		<SettingsPanel>
 			<SettingsHeader
 				title="Notifications"
-				description="How and when this device tells you a session needs you."
+				description="Choose how this device tells you when a session needs you."
 			/>
 
 			<SettingsGroupLabel>Alerts</SettingsGroupLabel>

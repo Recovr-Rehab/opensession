@@ -100,7 +100,7 @@ struct ChangesView: View {
                     )
                 } footer: {
                     if diff.truncated == true {
-                        Text("This diff is too large to send in full — the "
+                        Text("This diff is too large to send in full. The "
                              + "files above are what fit.")
                     } else if let base = diff.baseRef, !base.isEmpty {
                         Text(verbatim: "Against \(base), including uncommitted work.")

@@ -166,13 +166,13 @@ struct PrPanelView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("The branch keeps its commits — the pull request can be reopened on GitHub.")
+                Text("The branch keeps its commits. You can reopen the pull request on GitHub.")
             }
         } else if viewModel.prLoadFailed {
             ContentUnavailableView {
                 Label("Couldn't load the pull request", systemImage: "exclamationmark.triangle")
             } description: {
-                Text("GitHub may be rate-limited right now — try again in a moment.")
+                Text("GitHub may be rate-limited. Try again in a moment.")
             } actions: {
                 Button("Retry") { viewModel.loadPr() }
             }

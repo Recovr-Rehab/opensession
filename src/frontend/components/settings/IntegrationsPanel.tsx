@@ -8,7 +8,6 @@ import {
 import { LoadingState } from "../../ui/state";
 import { GithubAuthCard, IntegrationsList } from "../SetupIntegrations";
 import { SetupRestart } from "../SetupRestart";
-import { Code } from "../setup-shared";
 
 // Workspace → Integrations: the credentials the agent reaches other tools
 // with, plus GitHub sign-in. Same cards the Setup wizard shows, including its
@@ -22,7 +21,7 @@ export function IntegrationsPanel() {
 		<SettingsPanel className="relative">
 			<SettingsHeader
 				title="Integrations"
-				description="The tools the agent can reach. Paste the credentials, flip the switch on, and save."
+				description="Connect agent tools and event sources. Each setup includes the provider steps, required permissions, and credentials."
 			/>
 			{!status ? (
 				<LoadingState>
@@ -32,14 +31,14 @@ export function IntegrationsPanel() {
 				<>
 					<IntegrationsList
 						integrations={status.integrations}
+						publicBaseUrl={status.publicBaseUrl}
 						onSaved={setup.applyIntegration}
 					/>
 
 					<SettingsGroupLabel>GitHub sign-in</SettingsGroupLabel>
 					<GithubAuthCard github={status.github} onSaved={setup.applyGithub} />
 					<SettingsHint>
-						Teammates connect their own accounts under Workspace → Connections.
-						Full guide: <Code>docs/setup/github.md</Code>.
+						After setup, teammates connect their own accounts under Workspace → Connections.
 					</SettingsHint>
 				</>
 			)}

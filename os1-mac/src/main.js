@@ -121,7 +121,7 @@ function checkForUpdatesFromMenu() {
       type: "info",
       message: "Updates unavailable",
       detail: app.isPackaged
-        ? "The updater failed to initialize — check the logs."
+        ? "The updater failed to initialize. Check the logs."
         : "Auto-update only works in the packaged, signed app.",
     });
     return;
@@ -163,7 +163,7 @@ function initAutoUpdate() {
       dialog.showMessageBox(win, {
         type: "info",
         message: "Update available",
-        detail: "Downloading in the background — you'll be asked to restart once it's ready.",
+        detail: "Downloading in the background. You'll be asked to restart when it's ready.",
       });
     }
   });

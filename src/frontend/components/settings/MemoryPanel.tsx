@@ -8,7 +8,6 @@ import {
 	type MemoryEntryDto,
 	type MemoryScopeDto,
 } from "../../lib/api";
-import { AGENT_NAME } from "../../lib/brand";
 import { Button } from "../../ui/button";
 import {
 	SettingsGroupLabel,
@@ -256,7 +255,7 @@ export function MemoryPanel() {
 	const header = (
 		<SettingsHeader
 			title="Memory"
-			description={`Durable facts injected into every matching session: team memory is workspace-wide (shared with ${AGENT_NAME} in Slack), repo memory follows the session's repo, people memory follows whoever is prompting. Sessions manage these with the opensession-memory tools ("remember that…"); this page is the same store, maintained by hand.`}
+			description="Facts that matching sessions remember. Team memory spans the workspace, repo memory follows the repo, and people memory follows whoever is prompting."
 		/>
 	);
 

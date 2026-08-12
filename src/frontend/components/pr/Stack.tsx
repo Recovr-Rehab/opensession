@@ -68,7 +68,7 @@ function StackBody({
           <span className="rounded-sm border border-line bg-surface px-1.5 py-0.5 text-meta">
             {pr.stackBase}
           </span>{" "}
-          but the PRs aren't a stack on GitHub yet — each is still reviewed against the whole chain.
+          but the PRs aren't a stack on GitHub yet, so each is still reviewed against the whole chain.
         </div>
         <div className="flex items-center gap-3 pt-1">
           <Button

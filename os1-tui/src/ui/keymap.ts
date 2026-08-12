@@ -342,7 +342,7 @@ export const KEY_HELP: { keys: string; label: string }[] = [
 	{ keys: "↑/↓ · j/k", label: "move in the focused pane" },
 	{ keys: "enter", label: "open session · focus composer" },
 	{ keys: "i", label: "jump to the composer" },
-	{ keys: "enter (composer)", label: "send — queues behind a running turn" },
+	{ keys: "enter (composer)", label: "send · queues behind a running turn" },
 	{ keys: "ctrl+enter · alt+enter", label: "send as a steer instead" },
 	{ keys: "1…9", label: "answer a pending question" },
 	{ keys: "f · ^b f", label: "sidebar scope: mine → team → all" },

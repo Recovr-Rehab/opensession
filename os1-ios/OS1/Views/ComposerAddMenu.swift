@@ -408,7 +408,7 @@ struct SchedulePromptSheet: View {
                     Button("Pick a time…") { showingCustom = true }
                         .buttonStyle(.plain)
                 } footer: {
-                    Text("The draft is held on the server and sent then — this app doesn't have to be open.")
+                    Text("The server holds and sends the draft, so this app can be closed.")
                 }
 
                 if showingCustom {

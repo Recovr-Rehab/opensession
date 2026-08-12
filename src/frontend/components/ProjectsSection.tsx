@@ -118,7 +118,7 @@ export function ProjectsSection() {
 	return (
 		<>
 			<SectionHeading>
-				Projects — every source of work, one band each
+				Projects: every source of work, one band each
 			</SectionHeading>
 			{error && (
 				<InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>

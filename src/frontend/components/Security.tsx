@@ -127,7 +127,7 @@ export function Security({ onOpenSession }: Props) {
         <div>
           <PageTitle>Security</PageTitle>
           <PageDescription>
-            deepsec scans across the registered repos — findings land as PRs, one per confirmed issue.
+            deepsec scans across the registered repos. Findings land as PRs, one per confirmed issue.
           </PageDescription>
         </div>
         <Button
@@ -199,7 +199,7 @@ export function Security({ onOpenSession }: Props) {
           </div>
           {profiles.length === 0 ? (
             <EmptyState title="No scan profiles yet">
-              Profiles customize how scans analyze your code — threat model
+              Profiles customize how scans analyze your code: threat model
               focus, known false positives, severity bar.
             </EmptyState>
           ) : (
@@ -482,7 +482,7 @@ function NewScanModal({
           </Select>
           {profiles.length === 0 && (
             <span className="mt-1 text-meta text-faint">
-              No scan profiles yet — profiles customize how scans analyze your
+              No scan profiles yet. Profiles customize how scans analyze your
               code. Create one under Security → Profiles.
             </span>
           )}
@@ -624,7 +624,7 @@ function ProfileModal({
         </label>
 
         <label className={FIELD_LABEL}>
-          Threat model — how should scans analyze the code?
+          Threat model: how should scans analyze the code?
           <Textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}

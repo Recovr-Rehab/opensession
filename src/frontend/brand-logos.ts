@@ -7,6 +7,12 @@
 export interface BrandLogo { viewBox: string; paths: string[] }
 
 export const BRAND_LOGOS: Record<string, BrandLogo> = {
+  "plain": {
+    "viewBox": "0 0 24 24",
+    "paths": [
+      "M5.9 10.5 9.05 6.6h6.1a4.05 4.05 0 0 1 0 8.1h-1.4a4.08 4.08 0 0 0-3.95-3.05H6.45c-.78 0-1-.48-.55-1.15Zm-.95 7.85 3.15-3.9h6.95c1.05 0 1.9-.8 1.9-1.85v-.2c0 3.35-1.85 6.45-5.45 6.45H5.45c-.62 0-.84-.12-.5-.5Z"
+    ]
+  },
   "slack": {
     "viewBox": "0 0 24 24",
     "paths": [

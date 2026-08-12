@@ -14,7 +14,7 @@ export function ReposPanel() {
 		<SettingsPanel>
 			<SettingsHeader
 				title="Repositories"
-				description="The repos sessions work in. Registering clones the repo onto the server; sessions then branch into isolated worktrees of it."
+				description="Register the repositories sessions can work in. Each session uses an isolated worktree."
 			/>
 			{!status ? (
 				<LoadingState>

@@ -160,7 +160,7 @@ export function Transcript({
 
 	const title = session.title?.trim() || session.branch || session.id.slice(0, 12);
 	const bottom = scrollMode
-		? " SCROLL — q exits, b loads earlier "
+		? " SCROLL · q exits, b loads earlier "
 		: connection === "open"
 			? undefined
 			: ` ${connection === "retrying" ? "reconnecting…" : "connecting…"} `;

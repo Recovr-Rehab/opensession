@@ -5,7 +5,7 @@ import { BRAND_LOGOS } from "../brand-logos";
 export const BRANDS: Record<string, { bg: string; fg?: string }> = {
   slack: { bg: "#4a154b" },
   linear: { bg: "#5e6ad2" },
-  plain: { bg: "#0d9488" },
+  plain: { bg: "#29df9a", fg: "#071c18" },
   sentry: { bg: "#362d59" },
   workos: { bg: "#6363f1" },
   tinybird: { bg: "#27f795", fg: "#08080a" },
@@ -14,6 +14,7 @@ export const BRANDS: Record<string, { bg: string; fg?: string }> = {
   grafana: { bg: "#f46800" },
   "grafana-poller": { bg: "#f46800" },
   github: { bg: "#24292e" },
+  codestorage: { bg: "#111111" },
   incident: { bg: "#f25533" },
   ahrefs: { bg: "#ff6b00" },
   circle: { bg: "#6c47ff" },
@@ -48,7 +49,7 @@ export function IconTile({ name, size = 34 }: { name: string; size?: number }) {
   const logoSize = key === "tella" ? size : size * 0.56;
   return (
     <span
-      className="flex flex-shrink-0 items-center justify-center rounded-md font-semibold"
+      className="flex flex-shrink-0 items-center justify-center overflow-hidden rounded-md font-semibold"
       style={{
         width: size,
         height: size,
@@ -70,7 +71,7 @@ export function IconTile({ name, size = 34 }: { name: string; size?: number }) {
           ))}
         </svg>
       ) : (
-        name.charAt(0).toUpperCase()
+        key === "codestorage" ? "cs" : name.charAt(0).toUpperCase()
       )}
     </span>
   );

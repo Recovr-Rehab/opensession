@@ -21,7 +21,7 @@
     "padding:1px 7px;border-radius:4px;border:1px solid #6c8cff;display:none;" +
     "max-width:60vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;";
   const hint = document.createElement("div");
-  hint.textContent = "Click an element to capture it — Esc to cancel";
+  hint.textContent = "Click an element to capture it · Esc to cancel";
   hint.style.cssText = `position:fixed;z-index:${Z};pointer-events:none;` +
     "top:12px;left:50%;transform:translateX(-50%);background:#1b1e2e;" +
     "color:#dfe4ff;font:12.5px system-ui;padding:6px 14px;border-radius:999px;" +

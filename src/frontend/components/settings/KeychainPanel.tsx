@@ -82,7 +82,7 @@ export function KeychainPanel() {
 	const panelHeader = (
 		<SettingsHeader
 			title="Keychain"
-			description="Credentials a session can borrow with the owner's approval, for a stated purpose. Approved calls go through a broker that injects the secret server-side, so the agent never sees it. Grants are scoped to one session, expire, and are revocable. Everyone on this instance sees the list below (who owns what, never the secret); only the owner can approve or remove theirs."
+			description="Credentials a session can borrow with the owner's approval. The secret is injected server-side, so the agent never sees it, and every grant is scoped to one session and expires."
 		/>
 	);
 
@@ -164,7 +164,7 @@ export function KeychainPanel() {
 							aria-label="Allowed path prefixes"
 						/>
 						<SettingsHint>
-							Narrow the methods and paths where you can — a grant can only ever reach what the
+							Narrow the methods and paths where you can. A grant can only reach what the
 							credential allows, so this is the ceiling on anything you approve later.
 						</SettingsHint>
 						<Button
@@ -180,8 +180,8 @@ export function KeychainPanel() {
 
 			{data.credentials.length === 0 ? (
 				<EmptyState placement="card">
-					No credentials yet. Add one to let sessions ask you for scoped access instead of going
-					without — or instead of a token ending up in a prompt.
+					No credentials yet. Add one so sessions can request scoped access without putting a
+					token in a prompt.
 				</EmptyState>
 			) : (
 				<SettingCard>
@@ -231,7 +231,7 @@ export function KeychainPanel() {
 						))}
 					</SettingCard>
 					<SettingsHint>
-						Answer these where they were asked — the Slack DM, or the card in the session.
+						Answer these where they were asked: the Slack DM, or the card in the session.
 					</SettingsHint>
 				</>
 			)}

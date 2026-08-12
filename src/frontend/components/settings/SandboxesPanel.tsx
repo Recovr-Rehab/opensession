@@ -642,7 +642,7 @@ function ProjectEnvironmentDialog({
 					<Select value={profile} onChange={(event) => setProfile(event.target.value)}>
 						{machineProfiles(provider).map((candidate) => (
 							<option key={candidate.id} value={candidate.id}>
-								{candidate.label} — {candidate.detail}
+								{candidate.label} · {candidate.detail}
 							</option>
 						))}
 					</Select>
@@ -759,7 +759,7 @@ export function SandboxesPanel() {
 		<SettingsPanel>
 			<SettingsHeader
 				title="Sandboxes"
-				description="Connect compute you already pay for. Open Session prepares and tests it so starting an isolated session stays a one-choice workflow."
+				description="Connect compute you already pay for. Starting an isolated session stays one choice."
 			/>
 			<WorkspaceSandboxDefaults canManage={canManage} />
 			<SettingsGroupLabel>Connections</SettingsGroupLabel>
@@ -782,7 +782,7 @@ export function SandboxesPanel() {
 				))}
 			</div>
 			<SettingsHint>
-				None remains available and is the default. Personal preferences and per-session choices can override the workspace default without changing these connections.
+				None remains the default. Personal and per-session choices can override the workspace default.
 			</SettingsHint>
 			{reusableEnvironments.length > 0 && (
 				<>

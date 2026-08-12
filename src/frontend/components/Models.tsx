@@ -117,7 +117,7 @@ export function AccountsPanel() {
 			<CodexAccountsSection />
 
 			<SettingsHint>
-				Changes apply to new session runs immediately (config is read per run) — no restart
+				Changes apply to new session runs immediately (config is read per run), with no restart
 				needed. Per-session model overrides still win over the default.
 			</SettingsHint>
 		</>
@@ -394,7 +394,7 @@ function EnginesSection() {
 					<SettingRowText>
 						<SettingRowTitle>OpenCode engine</SettingRowTitle>
 						<SettingRowDescription>
-							The default engine — Anthropic models on the Claude account pool via the
+							The default engine: Anthropic models on the Claude account pool via the
 							Meridian bridge, OpenAI models on the codex pool, plus API-key providers.
 						</SettingRowDescription>
 					</SettingRowText>
@@ -412,7 +412,7 @@ function EnginesSection() {
 					<SettingRowText>
 						<SettingRowTitle>Pi engine</SettingRowTitle>
 						<SettingRowDescription>
-							pi.dev's coding agent as an alternative engine, on the same account pools —
+							pi.dev's coding agent as an alternative engine, on the same account pools.
 							its models join the picker as pi/&lt;provider&gt;/&lt;model&gt; while enabled.
 						</SettingRowDescription>
 					</SettingRowText>
@@ -432,9 +432,9 @@ function EnginesSection() {
 				<DefaultEngineRow piEnabled={pi?.enabled ?? false} />
 			</SettingCard>
 			<SettingsHint>
-				Both engines draw on the same subscription account pools. Which models each engine
-				advertises comes from its config file's <code>pickerModels</code>; any well-formed
-				engine id still resolves when typed. Changes apply to new runs immediately.
+				Both engines draw on the same account pools. Each engine advertises the models in
+				its config file's <code>pickerModels</code>, and any well-formed engine id still
+				resolves when typed. Changes apply to new runs.
 			</SettingsHint>
 		</>
 	);
@@ -844,7 +844,7 @@ function ClaudeAccountsSection() {
 					<LoadingState placement="row">Loading accounts…</LoadingState>
 				) : accounts.length === 0 ? (
 					<EmptyState placement="row">
-						No accounts yet — runs use the VPS's own Claude login. Add Max-account tokens
+						No accounts yet, so runs use the VPS's own Claude login. Add Max-account tokens
 						(<code>claude setup-token</code>) and runs pick the least-used one, rotating when
 						one hits its limit.
 					</EmptyState>
@@ -865,7 +865,7 @@ function ClaudeAccountsSection() {
 								</SettingRowDescription>
 								{a.noUsageScope && !a.usage ? (
 									<div className="mt-1.5 text-meta text-faint">
-										Usage not visible — setup-tokens cannot read the usage endpoint. Use
+										Usage not visible: setup-tokens cannot read the usage endpoint. Use
 										“Sign in with Claude” in this account's menu to connect usage.
 									</div>
 								) : (
@@ -881,7 +881,7 @@ function ClaudeAccountsSection() {
 										{a.usage?.source === "meridian" && (
 											<div className="mt-1.5 text-meta text-faint">
 												Observed via the Meridian bridge (rate-limit events from live
-												runs) — the token can’t read the usage endpoint directly.
+												runs). The token can’t read the usage endpoint directly.
 											</div>
 										)}
 										{a.usage?.error && (
@@ -955,11 +955,9 @@ function ClaudeAccountsSection() {
 				)}
 			</SettingCard>
 			<SettingsHint>
-				The usage pool for Claude session runs — each run picks the least-used usable account.
-				A personal account is used first by its owner's runs and never by anyone else's;
-				automations only use the shared pool. For usage bars, use “Sign in with Claude” in an
-				account's menu: it stores its own auto-refreshing OAuth credentials, so usage tracking
-				doesn't share (and can't lose) the CLI's login.
+				The usage pool for Claude runs. Each run picks the least-used account, and a
+				personal one is used first by its owner and never by anyone else. For usage
+				bars, sign in with Claude from an account's menu.
 			</SettingsHint>
 		</>
 	);
@@ -1132,7 +1130,7 @@ function CodexAccountsSection() {
 					<LoadingState placement="row">Loading accounts…</LoadingState>
 				) : accounts.length === 0 ? (
 					<EmptyState placement="row">
-						No accounts yet — Codex runs use the VPS's own <code>codex login</code> (~/.codex).
+						No accounts yet, so Codex runs use the VPS's own <code>codex login</code> (~/.codex).
 						Add an OpenAI API key, or a CODEX_HOME directory holding a ChatGPT-plan{" "}
 						<code>auth.json</code>, and runs rotate across the pool.
 					</EmptyState>
@@ -1201,10 +1199,9 @@ function CodexAccountsSection() {
 				)}
 			</SettingCard>
 			<SettingsHint>
-				The pool for GPT/Codex session runs — runs rotate to the next account when one hits its
-				usage limit. A personal account is used first by its owner's runs and never by anyone
-				else's; automations only use the shared pool. ChatGPT-plan usage comes from Codex's
-				account rate-limit view; API-key spend remains organization-level.
+				The pool for GPT and Codex runs. Runs rotate to the next account at the usage
+				limit, and a personal one is used first by its owner and never by anyone else.
+				Automations only use the shared pool.
 			</SettingsHint>
 		</>
 	);
@@ -1269,7 +1266,7 @@ function AddClaudeAccountForm({ onClose, onAdded }: { onClose: () => void; onAdd
 						placeholder="sk-ant-oat01-…"
 					/>
 				</SettingsField>
-				<SettingsField className="mb-0 flex-1" title="Personal sub: this person's runs use the account first, with the shared pool as backup, and nobody else's runs touch it. Shared pool = used by everyone and by automations.">
+				<SettingsField className="mb-0 flex-1" title="Personal sub: this person's runs use the account first, with the shared pool as backup. Shared pool: used by everyone and by automations.">
 					Owner
 					<select className={settingsInputClass} value={owner} onChange={(e) => setOwner(e.target.value)}>
 						<option value="">Shared pool</option>
@@ -1584,13 +1581,13 @@ function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdde
 			<SettingRowDescription className="-mt-2">
 				{kind === "device" ? (
 					<>
-						Sign in with ChatGPT from here — no VPS access needed. You'll get a link and a
+						Sign in with ChatGPT from here, with no VPS access needed. You'll get a link and a
 						one-time code to enter on any device. (Device-code login must be enabled in the
 						ChatGPT workspace's security settings.)
 					</>
 				) : kind === "oauth" ? (
 					<>
-						Sign in with ChatGPT on any device — works even where device-code login is
+						Sign in with ChatGPT on any device. Works even where device-code login is
 						disabled. After signing in you'll land on a <code>localhost</code> page that
 						fails to load; copy that page's full address and paste it back here.
 					</>
@@ -1642,7 +1639,7 @@ function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdde
 						/>
 					</SettingsField>
 				)}
-				<SettingsField className="mb-0 flex-1" title="Personal sub: this person's runs use the account first, with the shared pool as backup, and nobody else's runs touch it. Shared pool = used by everyone and by automations.">
+				<SettingsField className="mb-0 flex-1" title="Personal sub: this person's runs use the account first, with the shared pool as backup. Shared pool: used by everyone and by automations.">
 					Owner
 					<select className={settingsInputClass} value={owner} onChange={(e) => setOwner(e.target.value)} disabled={!!login || !!oauth}>
 						<option value="">Shared pool</option>
@@ -1715,7 +1712,7 @@ function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdde
 						and sign in to the account.
 					</div>
 					<div className="mt-1.5">
-						2. The browser lands on a <code>localhost</code> page that can't load — copy its
+						2. The browser lands on a <code>localhost</code> page that can't load. Copy its
 						full address (starts with <code>http://localhost:1455/…</code>) and paste it:
 					</div>
 					<input

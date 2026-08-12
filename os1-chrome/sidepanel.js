@@ -45,7 +45,7 @@ async function api(path, opts = {}) {
   });
   if (res.status === 401) {
     setAuthedUi(false);
-    throw new Error("Not signed in — open settings and sign in.");
+    throw new Error("Not signed in. Open settings and sign in.");
   }
   if (!res.ok) {
     let msg = `${res.status}`;
@@ -481,7 +481,7 @@ async function loadTranscript(initial = false) {
         $("detail-title").textContent = s.title || detail.title || s.id;
         const bits = [
           s.waitingForInput
-            ? "⚠ waiting for input — answer in the web UI"
+            ? "⚠ waiting for input · answer in the web UI"
             : s.isRunning
               ? "● running"
               : "idle",

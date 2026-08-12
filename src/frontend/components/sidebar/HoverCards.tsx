@@ -88,7 +88,7 @@ export function SessionCardBody({ session: s }: { session: UnifiedSession }) {
 
 			{s.waitingForInput && (
 				<div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta text-dim">
-					Blocked on a question — open the session to answer.
+					Blocked on a question. Open the session to answer.
 				</div>
 			)}
 			{!s.waitingForInput && runNeedsAttention(s) && (
@@ -351,7 +351,7 @@ function WsOverviewInfo({
 			{row.status === "needsinput" &&
 				(row.sessions.some((c) => c.waitingForInput) ? (
 					<div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta text-dim">
-						Blocked on a question — open to answer.
+						Blocked on a question. Open to answer.
 					</div>
 				) : (
 					<div className="mt-[7px] rounded-md bg-accent-soft px-2 py-[5px] text-meta text-dim">

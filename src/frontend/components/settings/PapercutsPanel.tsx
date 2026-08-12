@@ -41,7 +41,7 @@ export function PapercutsPanel() {
 	const header = (
 		<SettingsHeader
 			title="Papercuts"
-			description="Small frictions agents log while working: retried tool calls, flaky commands, misleading errors, undocumented gotchas. None block on their own, but together they show where a repo needs sanding down."
+			description="Small frictions agents log while working: retried tool calls, flaky commands, misleading errors. Together they show where a repo needs sanding down."
 		/>
 	);
 
@@ -103,7 +103,7 @@ export function PapercutsPanel() {
 			</SettingsGroupLabel>
 			{entries.length === 0 ? (
 				<EmptyState placement="card">
-					Nothing logged yet — papercuts appear here as agents hit friction.
+					Nothing logged yet. Papercuts appear here as agents hit friction.
 				</EmptyState>
 			) : (
 				<SettingCard>

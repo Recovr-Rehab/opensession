@@ -10,7 +10,7 @@ export function MembersPanel() {
 		<SettingsPanel>
 			<SettingsHeader
 				title="Members"
-				description="Everyone who uses this instance. Commits, sessions and access grants attribute to these people."
+				description="Add everyone who uses this instance so sessions, commits, and access grants name the right person."
 			/>
 			<TeamSection onChanged={() => {}} />
 		</SettingsPanel>

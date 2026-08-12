@@ -9,7 +9,7 @@ export function IdentityPanel() {
 		<SettingsPanel>
 			<SettingsHeader
 				title="Identity"
-				description="What this instance and its agent are called, everywhere they introduce themselves."
+				description="Choose the names this instance and its agent use when they introduce themselves."
 			/>
 			<IdentityCard />
 		</SettingsPanel>

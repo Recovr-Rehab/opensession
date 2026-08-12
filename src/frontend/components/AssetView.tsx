@@ -533,7 +533,7 @@ export function AssetPreview({
 				)
 			) : (
 				<div className="flex h-full items-center justify-center text-label text-faint">
-					No inline preview for this file type — use Download.
+					No inline preview for this file type. Use Download.
 				</div>
 			)}
 		</div>

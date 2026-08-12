@@ -185,7 +185,7 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
         <div>
           <PageTitle className={sel ? "text-item-title" : undefined}>Goals</PageTitle>
           <PageDescription className={sel ? "hidden" : undefined}>
-            Long-running, self-pacing missions — one managed session that remembers its own
+            Long-running, self-pacing missions. One managed session that remembers its own
             progress, paces itself, and stops when done.
           </PageDescription>
         </div>
@@ -220,7 +220,7 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
         <LoadingState>Loading…</LoadingState>
       ) : goals.length === 0 && !showForm ? (
         <EmptyState title="No goals yet.">
-          A goal pursues one mission over days/weeks — it wakes itself, reads its ledger,
+          A goal pursues one mission over days or weeks. It wakes itself, reads its ledger,
           ships work via PRs, measures, and iterates until the objective is met.
         </EmptyState>
       ) : (
@@ -375,7 +375,7 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
                 </div>
                 {sel.status === "paused" && sel.pauseReason && (
                   <div className="text-dim text-supporting leading-snug">
-                    Paused — {sel.pauseReason}
+                    Paused: {sel.pauseReason}
                   </div>
                 )}
                 {(sel.status === "done" || sel.status === "failed") && sel.doneReason && (

@@ -459,7 +459,7 @@ struct SettingsView: View {
                             .fill(OS1VisualStyle.markdownInlineCode)
                     )
             }
-            Text(copiedCode ? "Copied — paste it on GitHub." : "Tap the code to copy it.")
+            Text(copiedCode ? "Copied. Paste it on GitHub." : "Tap the code to copy it.")
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
                 .frame(maxWidth: .infinity)
@@ -479,7 +479,7 @@ struct SettingsView: View {
                 Button("Cancel", role: .cancel) { signIn.cancel() }
             }
             if let at = signIn.lastPollAt {
-                Text("Checked \(at.formatted(date: .omitted, time: .standard)) — \(signIn.lastPollNote ?? "")")
+                Text("Checked \(at.formatted(date: .omitted, time: .standard)) · \(signIn.lastPollNote ?? "")")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }

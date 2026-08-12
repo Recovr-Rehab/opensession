@@ -120,7 +120,7 @@ export function ModelProvidersPanel() {
 					<LoadingState placement="row">Loading providers…</LoadingState>
 				) : providers.length === 0 ? (
 					<EmptyState placement="row">
-						No providers yet — add one to run sessions on models beyond the
+						No providers yet. Add one to run sessions on models beyond the
 						Anthropic/OpenAI subscriptions.
 					</EmptyState>
 				) : (
@@ -149,7 +149,7 @@ export function ModelProvidersPanel() {
 									</div>
 								) : (
 									<div className="mt-1 text-meta text-faint">
-										No picker models — its models are type-in only
+										No picker models, so its models are type-in only
 										(opencode/{p.id}/&lt;model&gt;).
 									</div>
 								)}
@@ -183,7 +183,7 @@ export function ModelProvidersPanel() {
 				Mistral, …) with your API key. Keys are stored on the server (0600) and
 				only ever shown masked. Changes apply to new session runs immediately,
 				and saved models appear in the picker without a restart. To update a
-				provider, add it again with the same id — the key, base URL and model
+				provider, add it again with the same id. The key, base URL and model
 				list are replaced.
 			</SettingsHint>
 		</>

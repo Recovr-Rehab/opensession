@@ -148,10 +148,9 @@ function WarmPreviewsPanel() {
 				})}
 			</SettingCard>
 			<SettingsHint>
-				Keeps a template worktree per repo with node_modules installed,
-				refreshed from its default branch on a schedule. Prebuilt spares of
-				those dep trees are adopted into new session worktrees near-instantly,
-				instead of every session paying a cold install.
+				Keeps a template worktree per repo with node_modules installed, refreshed
+				from its default branch on a schedule. New sessions adopt a prebuilt copy
+				instead of paying a cold install.
 			</SettingsHint>
 		</>
 	);
@@ -337,11 +336,9 @@ function PreviewPoolPanel() {
 				})}
 			</SettingCard>
 			<SettingsHint>
-				Keeps dev-server containers pre-booted from a nightly golden image, so
-				the Preview button claims one in seconds instead of paying a cold boot.
-				Claims follow the session's branch (small edits stream in live; big
-				branch jumps reboot the dev server cleanly) and are released on stop or
-				after sitting unwatched.
+				Keeps dev-server containers pre-booted from a nightly image, so the Preview
+				button claims one in seconds instead of a cold boot. Claims follow the
+				session's branch and are released on stop.
 			</SettingsHint>
 		</>
 	);

@@ -307,7 +307,7 @@ struct MacConnectionSettingsView: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.plain)
-            Text(copiedCode ? "Copied — paste it on GitHub." : "Click the code to copy it.")
+            Text(copiedCode ? "Copied. Paste it on GitHub." : "Click the code to copy it.")
                 .font(.callout)
                 .foregroundStyle(.tertiary)
                 .frame(maxWidth: .infinity, alignment: .center)
@@ -327,7 +327,7 @@ struct MacConnectionSettingsView: View {
                 Button("Cancel", role: .cancel) { signIn.cancel() }
             }
             if let at = signIn.lastPollAt {
-                Text("Checked \(at.formatted(date: .omitted, time: .standard)) — \(signIn.lastPollNote ?? "")")
+                Text("Checked \(at.formatted(date: .omitted, time: .standard)) · \(signIn.lastPollNote ?? "")")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }

@@ -184,7 +184,7 @@ struct SetupSettingsView: View {
             } header: {
                 Text("Integrations")
             } footer: {
-                Text("Credentials are entered on the web — they save into the server's env file and are never shown back, so this screen reports state only.")
+                Text("Enter credentials on the web. This screen only shows their status.")
             }
         }
     }

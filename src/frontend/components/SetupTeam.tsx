@@ -84,7 +84,7 @@ export function TeamSection({
 					)
 				) : members.length === 0 ? (
 					<EmptyState placement="row">
-						No teammates yet — add everyone who uses this instance so commits and
+						No teammates yet. Add everyone who uses this instance so commits and
 						sessions attribute to real people.
 					</EmptyState>
 				) : (
@@ -103,7 +103,7 @@ export function TeamSection({
 			</SettingCard>
 			<SettingsHint>
 				Names, emails, GitHub logins and Slack ids all resolve through the same
-				identity table — a session user given as any of them matches the member.
+				identity table, so a session user given as any of them matches the member.
 			</SettingsHint>
 			<MemberDialog
 				open={dialogOpen}
