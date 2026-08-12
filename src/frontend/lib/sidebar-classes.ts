@@ -378,21 +378,6 @@ export const SIDEBAR_CHROME_BTN =
  */
 export const SIDEBAR_HEADER_BTN = "shrink-0 rounded-control font-medium";
 /**
- * Both are quiet chrome: they fade in with the header under the pointer, and on
- * focus, because hover cannot be the only way to reach a control. The reveal is
- * scoped to fine pointers — a touch screen has no hover, so there they simply
- * stay on. Opacity, not display: the header measures this pair's width to
- * decide whether the repo chip fits inline, so the box has to stay in layout.
- */
-export const SIDEBAR_HEADER_ACTIONS_REVEAL =
-	"[@media_(hover:hover)_and_(pointer:fine)]:pointer-events-none " +
-	"[@media_(hover:hover)_and_(pointer:fine)]:opacity-0 " +
-	"[@media_(hover:hover)_and_(pointer:fine)]:transition-opacity " +
-	"[@media_(hover:hover)_and_(pointer:fine)]:group-hover/wshead:pointer-events-auto " +
-	"[@media_(hover:hover)_and_(pointer:fine)]:group-hover/wshead:opacity-100 " +
-	"[@media_(hover:hover)_and_(pointer:fine)]:focus-within:pointer-events-auto " +
-	"[@media_(hover:hover)_and_(pointer:fine)]:focus-within:opacity-100";
-/**
  * Size and type step together, so each viewport carries its whole pair rather
  * than overriding half of the other's. `leading-none` has to sit AFTER the
  * `text-*` in the same string: cn() is tailwind-merge, which files `leading`
