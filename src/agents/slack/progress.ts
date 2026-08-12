@@ -419,4 +419,47 @@ export class SlackProgress {
     }
     this.ts = null;
   }
+
+  /** A process restart is temporary, not an error or user cancellation. Keep
+   * the card visibly in-progress but remove its now-dead Stop button. */
+  async restarting(): Promise<void> {
+    if (this.finished) return;
+    this.finished = true;
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    if (this.inflight) {
+      try {
+        await this.inflight;
+      } catch {
+        /* already logged */
+      }
+    }
+    if (!this.ts) return;
+    try {
+      const res = await updateSlackBlocks(
+        this.o.channel,
+        this.ts,
+        "Restarting…",
+        [
+          this.header(),
+          this.taskCard("in_progress"),
+          {
+            type: "context",
+            elements: [
+              { type: "mrkdwn", text: "_Open Session is restarting. Continuing shortly._" },
+            ],
+          },
+        ],
+        { unfurlLinks: false, unfurlMedia: false },
+      );
+      if (res && !res.ok) {
+        console.warn("[slack] progress restart render failed:", res.error);
+      }
+    } catch (e) {
+      console.warn("[slack] progress restart render failed:", e);
+    }
+    this.ts = null;
+  }
 }

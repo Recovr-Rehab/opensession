@@ -42,7 +42,7 @@ import {
 import { triggerPrAction } from "../github/trigger";
 import { classifyMention } from "./mention-intent";
 import { renderMemoryForPrompt, type MemoryContext } from "./memory";
-import { enqueueMessage, getOrCreateQueue } from "./queue";
+import { enqueueMessage, getOrCreateQueue, isRestartAbort } from "./queue";
 import type { QueuedMessage, SessionQueue } from "./queue";
 import { sessionQueues } from "./queue";
 import { isStopMessage, cancelSession } from "./cancel";
@@ -1101,6 +1101,12 @@ export async function processMessage(
   }
 
   if (abortController.signal.aborted) {
+    if (isRestartAbort(abortController.signal)) {
+      console.log(`[slack] run interrupted by server restart for ${sessionKey}`);
+      await streamer.clearStatus();
+      await progress.restarting();
+      return;
+    }
     console.log(`[slack] run aborted for ${sessionKey}`);
     await streamer.error("Cancelled by user.");
     await streamer.clearStatus();

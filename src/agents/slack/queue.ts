@@ -47,6 +47,9 @@ export interface SessionQueue {
   queue: QueuedMessage[];
   processing: boolean;
   abortController: AbortController | null;
+  /** The server is restarting, so leave the current message queued for the
+   * next process instead of treating its abort like a person's Stop action. */
+  restartInterrupted?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -54,6 +57,27 @@ export interface SessionQueue {
 // ---------------------------------------------------------------------------
 
 export const sessionQueues = new Map<string, SessionQueue>();
+
+/** Deliberately distinct from an ordinary AbortError: handlers use this to
+ * render a restart state rather than the misleading "Cancelled by user". */
+export const RESTART_ABORT_REASON = "opensession-server-restart";
+
+export function isRestartAbort(signal: AbortSignal): boolean {
+  return signal.aborted && signal.reason === RESTART_ABORT_REASON;
+}
+
+/** Stop driving live Slack turns during process shutdown while retaining the
+ * head message in each queue. Startup reloads and continues those messages. */
+export function interruptQueuesForRestart(): number {
+  let interrupted = 0;
+  for (const sq of sessionQueues.values()) {
+    if (!sq.abortController || sq.abortController.signal.aborted) continue;
+    sq.restartInterrupted = true;
+    sq.abortController.abort(RESTART_ABORT_REASON);
+    interrupted++;
+  }
+  return interrupted;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -160,6 +184,18 @@ export async function processQueue(sessionKey: string): Promise<void> {
       } catch (e2) {
         console.error(`[slack] Failed to report processing error for ${sessionKey}:`, e2);
       }
+    }
+    // A restart aborts the local streamer/runner but deliberately leaves this
+    // message at the queue head. Do not let this process start it again while
+    // shutdown is in progress; the next boot reloads the persisted queue.
+    if (sq.restartInterrupted) {
+      sq.processing = false;
+      sq.abortController = null;
+      await saveQueueToDisk().catch((e) =>
+        console.warn("[slack] Failed to save restart-interrupted queue:", e)
+      );
+      console.log(`[slack] Preserved interrupted message for ${sessionKey} across restart`);
+      return;
     }
     // Remove the message we just processed BY IDENTITY, not a blind shift().
     // A Stop/cancel clears the queue (sq.queue.length = 0); if a new message

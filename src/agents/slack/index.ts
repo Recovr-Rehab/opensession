@@ -36,7 +36,7 @@ import {
   inviteBotToChannel,
   getWorktreeDirForChannel,
 } from "./worktree-channels";
-import { loadQueueFromDisk, sessionQueues } from "./queue";
+import { interruptQueuesForRestart, loadQueueFromDisk, sessionQueues } from "./queue";
 import {
   enqueueMessage,
   getOrCreateQueue,
@@ -1015,14 +1015,11 @@ Please address this feedback:
   }
 
   async shutdown(): Promise<void> {
-    // Abort all running queries
-    for (const [key, sq] of sessionQueues) {
-      if (sq.abortController) {
-        sq.abortController.abort();
-      }
-    }
-
-    console.log("[slack] Agent shut down");
+    // A server restart must not masquerade as a person's Stop action. Keep the
+    // queue head on disk and let startup continue it against the saved engine
+    // session; handlers render the existing card as "Restarting".
+    const interrupted = interruptQueuesForRestart();
+    console.log(`[slack] Agent shut down (${interrupted} run(s) preserved for restart)`);
   }
 
   health(): Record<string, unknown> {
