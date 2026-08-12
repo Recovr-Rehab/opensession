@@ -3,6 +3,7 @@ import { fetchShippedChangeChannels } from "../lib/api/shipped-changes";
 import { Button } from "../ui/button";
 import { Input, Select } from "../ui/input";
 import { BrandMark } from "./BrandMark";
+import { openLightbox } from "./MediaLightbox";
 
 export interface ShippedChangeComposerProps {
 	sessionId: string;
@@ -45,10 +46,10 @@ export function ShippedChangeComposer({
 	}, [sessionId]);
 
 	return (
-		<div className="mx-auto mb-6 -mt-2 w-full max-w-[var(--session-col)] rounded-lg bg-panel p-3">
-			<div className="mb-2 flex items-center gap-2 text-label font-medium text-fg">
-				<BrandMark name="slack" size={16} />
-				Share what shipped
+		<div className="mx-auto mt-2 mb-6 w-full max-w-[var(--session-col)] rounded-xl bg-panel p-4">
+			<div className="mb-3 flex items-center gap-2 text-[14px] leading-5 text-fg">
+				<BrandMark name="slack" size={20} />
+				<span className="font-semibold">Share what shipped</span>
 			</div>
 			<Input
 				aria-label="Slack message"
@@ -64,13 +65,36 @@ export function ShippedChangeComposer({
 				}}
 			/>
 			{screenshot && (
-				<img
-					className="mt-2 max-h-48 w-full rounded-md bg-surface object-contain"
-					src={`/media?path=${encodeURIComponent(screenshot)}`}
-					alt="Screenshot attached to the Slack update"
-				/>
+				<figure className="mt-3 mb-0">
+					<figcaption className="mb-1 inline-flex rounded-full bg-blue-soft px-2 py-0.5 text-[11px] leading-4 font-semibold text-blue">
+						Screenshot
+					</figcaption>
+					<button
+						type="button"
+						className="block aspect-[16/10] w-full cursor-zoom-in overflow-hidden rounded-md border border-line bg-transparent p-0 outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+						onClick={(event) =>
+							openLightbox(
+								[
+									{
+										kind: "image",
+										src: `/media?path=${encodeURIComponent(screenshot)}`,
+										sessionTitle: "Screenshot attached to the Slack update",
+									},
+								],
+								0,
+								event.currentTarget,
+							)
+						}
+					>
+						<img
+							className="h-full w-full object-cover object-top"
+							src={`/media?path=${encodeURIComponent(screenshot)}`}
+							alt="Screenshot attached to the Slack update"
+						/>
+					</button>
+				</figure>
 			)}
-			<div className="mt-2 flex items-center gap-2 phone:flex-col phone:items-stretch">
+			<div className="mt-3 flex items-center gap-2 phone:flex-col phone:items-stretch">
 				<label className="flex min-w-0 flex-1 items-center gap-2 text-meta text-dim">
 					<span className="shrink-0">Send to</span>
 					<Select
