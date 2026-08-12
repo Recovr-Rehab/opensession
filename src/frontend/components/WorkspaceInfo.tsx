@@ -240,15 +240,15 @@ const STATUS_MARK: Record<
 		glyph: "+",
 		className: "bg-green-soft text-green",
 	},
-	// No tint behind the dot: an edit is the default thing a run does, so its
-	// mark should cost the row nothing and leave the tinted plus or minus two
-	// rows down as the thing the eye finds. `yellow-tint` rather than `yellow`
-	// because the dot is a fill, and light mode's text yellow is a dark ochre
-	// that reads as dirt at 4px (see the note in base.css).
+	// `yellow-tint` rather than `yellow`, for both the dot and the tile it sits
+	// on: these are fills, and light mode's text yellow is a dark ochre that
+	// reads as dirt at this size (see the note in base.css). Mixed here rather
+	// than taken from `--yellow-soft`, which is that same ochre at 12%.
 	modified: {
 		label: "Modified",
 		glyph: STATUS_DOT,
-		className: "text-yellow-tint",
+		className:
+			"bg-[color-mix(in_srgb,var(--yellow-tint)_18%,transparent)] text-yellow-tint",
 	},
 	deleted: {
 		label: "Deleted",
