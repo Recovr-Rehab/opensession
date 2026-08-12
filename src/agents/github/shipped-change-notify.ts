@@ -13,19 +13,24 @@ import {
 } from "fs";
 import { dirname, relative, resolve } from "path";
 import { createHash } from "crypto";
-import { personaName } from "../../server/config";
+import { configuredIntegration } from "../../server/config";
 import { audit } from "../../server/audit";
 import { stateDir } from "../../server/paths";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import { UPLOADS_DIR } from "../../server/uploads";
 import type { UnifiedSession } from "../../server/types";
-import { postSlackFile } from "../slack/slack-api";
+import { postSlackFile, sendSlackMessage } from "../slack/slack-api";
 import { shippedChangesChannel } from "./constants";
 
 export interface ShippedVisualChange {
   sessionId: string;
   screenshot: string;
   summary: string;
+}
+
+export interface ShippedChangeChannel {
+  id: string;
+  name: string;
 }
 
 const ANNOUNCEMENT_STATE_ROOT = `${stateDir("github")}/shipped-visual-changes`;
@@ -155,33 +160,59 @@ function slackText(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+export function shippedChangeChannels(): ShippedChangeChannel[] {
+  const names = configuredIntegration("slack").channelNames;
+  if (!names || typeof names !== "object" || Array.isArray(names)) return [];
+  return Object.entries(names)
+    .filter(([id, name]) => /^C[A-Z0-9]+$/.test(id) && typeof name === "string" && name.trim())
+    .map(([id, name]) => ({ id, name: String(name).trim() }));
+}
+
+export function normalizeShippedChangeMessage(value: unknown): string {
+  if (typeof value !== "string") return "";
+  const message = value.replace(/\s+/g, " ").trim();
+  if (message.length > 500) throw new Error("Slack message must be 500 characters or fewer");
+  return message;
+}
+
 export async function shareShippedVisualChange(opts: {
   session: UnifiedSession;
   pr: { number: number; title: string; url: string };
   repoFullName: string;
   requestedBy?: string;
+  channel?: string;
+  message?: string;
 }): Promise<{ status: "shared" | "already_shared" }> {
-  const channel = shippedChangesChannel();
+  const channels = shippedChangeChannels();
+  const channel = opts.channel || shippedChangesChannel();
   if (!channel) throw new Error("Shipped changes channel is not configured");
+  if (!channels.some((candidate) => candidate.id === channel)) {
+    throw new Error("Choose a configured Slack channel");
+  }
   const visual = selectShippedVisualChange(opts.session);
-  if (!visual) throw new Error("Walkthrough has no valid after screenshot");
   const title = opts.pr.title.replace(/\|/g, "¦");
-  const reason = shippedChangeOneLiner(visual.summary);
-  if (!reason) throw new Error("Walkthrough has no prose explanation");
-  const comment = `*${slackText(personaName())} shipped <${opts.pr.url}|${slackText(title)}>*\n${slackText(reason)}`;
+  const message = normalizeShippedChangeMessage(opts.message) ||
+    shippedChangeOneLiner(visual?.summary || "");
+  if (!message) throw new Error("Write a short Slack message first");
+  const comment = slackText(message);
   const announcementKey = `${opts.repoFullName}#${opts.pr.number}`;
   const claimId = claimShippedChangeAnnouncement(announcementKey);
   if (!claimId) return { status: "already_shared" };
   try {
-    await postSlackFile(channel, visual.screenshot, comment, {
-      title: `${title} — shipped`,
-      altText: `Screenshot of the shipped visual change: ${title}`,
-    });
+    if (visual) {
+      await postSlackFile(channel, visual.screenshot, comment, {
+        title: `${title} — shipped`,
+        altText: `Screenshot of the shipped visual change: ${title}`,
+      });
+    } else {
+      const posted = await sendSlackMessage(channel, comment);
+      if (!posted?.ok) throw new Error(`Slack message failed: ${posted?.error || "invalid response"}`);
+    }
     settleShippedChangeAnnouncement(
       announcementKey,
       claimId,
       true,
-      visual.sessionId,
+      opts.session.id,
     );
   } catch (error) {
     settleShippedChangeAnnouncement(announcementKey, claimId, false);
@@ -191,12 +222,12 @@ export async function shareShippedVisualChange(opts: {
     msg: "github_shipped_visual_change_announced",
     repo: opts.repoFullName,
     pr_number: opts.pr.number,
-    session_id: visual.sessionId,
+    session_id: opts.session.id,
     slack_channel: channel,
     requested_by: opts.requestedBy,
   });
   console.log(
-    `[github] Shared merged visual change ${opts.repoFullName}#${opts.pr.number} in Slack from ${visual.sessionId}`,
+    `[github] Shared merged change ${opts.repoFullName}#${opts.pr.number} in Slack from ${opts.session.id}`,
   );
   return { status: "shared" };
 }

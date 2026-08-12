@@ -18,37 +18,21 @@ const walkthrough = {
 	shots: [{ after: "/tmp/after.png" }],
 };
 
-describe("WalkthroughCard Slack action", () => {
-	test("shows the deliberate action in a PR panel", () => {
+describe("WalkthroughCard", () => {
+	test("shows the walkthrough in a PR panel", () => {
 		const html = renderToStaticMarkup(
-			<WalkthroughCard
-				walkthrough={walkthrough}
-				slackShare={{ status: "idle", onShare: () => {} }}
-			/>,
+			<WalkthroughCard walkthrough={walkthrough} />,
 		);
-		expect(html).toContain("Share to Slack");
+		expect(html).toContain("The clearer controls");
 	});
 
-	test("shows completion and disables repeat clicks", () => {
-		const html = renderToStaticMarkup(
-			<WalkthroughCard
-				walkthrough={walkthrough}
-				slackShare={{ status: "shared", onShare: () => {} }}
-			/>,
-		);
-		expect(html).toContain("disabled");
-		expect(html).toContain(">Shared<");
-	});
-
-	test("shows the action beside the inline session disclosure", () => {
+	test("folds the inline session walkthrough", () => {
 		const html = renderToStaticMarkup(
 			<WalkthroughCard
 				walkthrough={walkthrough}
 				variant="session"
-				slackShare={{ status: "idle", onShare: () => {} }}
 			/>,
 		);
-		expect(html).toContain("Share to Slack");
 		expect(html).toContain('aria-expanded="false"');
 	});
 });

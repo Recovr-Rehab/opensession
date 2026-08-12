@@ -82,6 +82,7 @@ import {
 } from "../lib/poll";
 import { sessionPrPresentation } from "../lib/session-prs";
 import { shareShippedChange } from "../lib/api/shipped-changes";
+import { suggestedShippedChangeMessage } from "../lib/shipped-change-copy";
 import { useBackSwipe } from "../hooks/useBackSwipe";
 import { dedupeViewers, otherViewers } from "../lib/presence";
 import { personKey, prReviewCompletion } from "../lib/review-queue";
@@ -785,61 +786,56 @@ export function SessionViewer({
 		() => sessionPrPresentation(session.prs),
 		[session.prs],
 	);
-	const mergedWalkthroughPr =
-		prPresentation.primary?.state === "MERGED" &&
-		session.walkthrough?.shots?.some((shot) => shot.after)
+	const mergedPr =
+		prPresentation.primary?.state === "MERGED"
 			? prPresentation.primary
 			: undefined;
-	const [walkthroughSlackShareStatus, setWalkthroughSlackShareStatus] = useState<
+	const [shippedChangeStatus, setShippedChangeStatus] = useState<
 		"idle" | "sharing" | "shared"
 	>("idle");
 	useEffect(
-		() => setWalkthroughSlackShareStatus("idle"),
-		[session.id, session.walkthrough?.publishedAt, mergedWalkthroughPr?.number],
+		() => setShippedChangeStatus("idle"),
+		[session.id, mergedPr?.number],
 	);
-	const shareWalkthroughToSlack = useCallback(async () => {
-		if (!mergedWalkthroughPr) return;
-		setWalkthroughSlackShareStatus("sharing");
+	const sendShippedChangeToSlack = useCallback(async (message: string, channel: string) => {
+		if (!mergedPr) return;
+		setShippedChangeStatus("sharing");
 		try {
 			const result = await shareShippedChange(session.id, {
-				repo: mergedWalkthroughPr.repo,
-				branch: mergedWalkthroughPr.branch,
+				repo: mergedPr.repo,
+				branch: mergedPr.branch,
+				message,
+				channel,
 			});
-			setWalkthroughSlackShareStatus("shared");
+			setShippedChangeStatus("shared");
 			toast(
 				result.status === "already_shared"
 					? "This change was already shared"
 					: "Shared to Slack",
 			);
 		} catch (error: any) {
-			setWalkthroughSlackShareStatus("idle");
-			toast(error?.message || "Couldn't share the visual change");
+			setShippedChangeStatus("idle");
+			toast(error?.message || "Couldn't share the shipped update");
 		}
-	}, [mergedWalkthroughPr, session.id]);
-	const walkthroughSlackShare = useMemo(
+	}, [mergedPr, session.id]);
+	const shippedChangeShare = useMemo(
 		() =>
-			mergedWalkthroughPr
+			mergedPr
 				? {
-						prNumber: mergedWalkthroughPr.number!,
-						preview: {
-							persona: AGENT_NAME,
-							title:
-								mergedWalkthroughPr.title ||
-								`PR #${mergedWalkthroughPr.number}`,
-							url: mergedWalkthroughPr.url!,
-							summary: session.walkthrough!.summary,
-							screenshot: session.walkthrough!.shots!.find(
-								(shot) => shot.after,
-							)!.after!,
-						},
-						status: walkthroughSlackShareStatus,
-						onShare: shareWalkthroughToSlack,
+						prNumber: mergedPr.number!,
+						sessionId: session.id,
+						defaultMessage: suggestedShippedChangeMessage(
+							mergedPr.title || "an update",
+							mergedPr.repo,
+						),
+						status: shippedChangeStatus,
+						onShare: sendShippedChangeToSlack,
 					}
 				: undefined,
 		[
-			mergedWalkthroughPr,
-			shareWalkthroughToSlack,
-			walkthroughSlackShareStatus,
+			mergedPr,
+			sendShippedChangeToSlack,
+			shippedChangeStatus,
 		],
 	);
 	const promotedPr =
@@ -5488,7 +5484,7 @@ export function SessionViewer({
 															sessionId={session.id}
 															walkthrough={sessionWalkthrough}
 															notes={notes}
-															slackShare={walkthroughSlackShare}
+															slackShare={shippedChangeShare}
 															onFork={canForkSession ? handleFork : undefined}
 															onOpenSubagent={openSubagent}
 															// For automation-owned sessions (e.g. a GitHub PR run), the

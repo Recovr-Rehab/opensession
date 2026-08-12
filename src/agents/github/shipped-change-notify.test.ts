@@ -8,6 +8,7 @@ import {
   selectShippedVisualChange,
   settleShippedChangeAnnouncement,
   shippedChangeOneLiner,
+  normalizeShippedChangeMessage,
   validWalkthroughScreenshot,
 } from "./shipped-change-notify";
 
@@ -70,6 +71,15 @@ describe("shipped visual change selection", () => {
 });
 
 describe("shipped change copy", () => {
+	test("accepts an editable short message", () => {
+		expect(normalizeShippedChangeMessage("  We updated the toggle style in Tella.  ")).toBe(
+			"We updated the toggle style in Tella.",
+		);
+		expect(() => normalizeShippedChangeMessage("x".repeat(501))).toThrow(
+			"500 characters or fewer",
+		);
+	});
+
   test("uses the first prose paragraph and strips markdown", () => {
     expect(
       shippedChangeOneLiner(

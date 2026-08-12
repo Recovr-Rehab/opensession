@@ -1,4 +1,8 @@
-import { shareShippedVisualChange } from "../../agents/github/shipped-change-notify";
+import {
+	shareShippedVisualChange,
+	shippedChangeChannels,
+} from "../../agents/github/shipped-change-notify";
+import { shippedChangesChannel } from "../../agents/github/constants";
 import { findSession } from "../session-cache";
 import { resolvePrTarget } from "../session-repos";
 import { prHostFor } from "../pr-host";
@@ -10,10 +14,16 @@ export async function handleShippedChangeRoutes(
 ): Promise<Response | undefined> {
 	const { req, path } = ctx;
 	const match = path.match(/^\/api\/sessions\/([^/]+)\/share-shipped-change$/);
-	if (!match || req.method !== "POST") return;
+	if (!match || (req.method !== "GET" && req.method !== "POST")) return;
 	const session = findSession(decodeURIComponent(match[1]));
 	if (!session)
 		return Response.json({ error: "Session not found" }, { status: 404 });
+	if (req.method === "GET") {
+		return Response.json({
+			channels: shippedChangeChannels(),
+			defaultChannel: shippedChangesChannel(),
+		});
+	}
 	const body = await req.json().catch(() => ({}));
 	const target = resolvePrTarget(session, body?.repo, body?.branch);
 	if (!target)
@@ -35,11 +45,13 @@ export async function handleShippedChangeRoutes(
 				pr: { number: pr.number, title: pr.title, url: pr.url },
 				repoFullName: target.ghRepo,
 				requestedBy: requestUser(ctx, body?.user),
+				channel: body?.channel,
+				message: body?.message,
 			}),
 		);
 	} catch (error: any) {
 		return Response.json(
-			{ error: error?.message || "Couldn't share the visual change" },
+			{ error: error?.message || "Couldn't share the shipped update" },
 			{ status: 502 },
 		);
 	}

@@ -39,34 +39,27 @@ const entries: TranscriptEntry[] = [
 ];
 
 describe("TranscriptBlocks shipped change action", () => {
-	test("places Share to Slack after the merged response", () => {
+	test("places the Slack composer after the merged response", () => {
 		const html = renderToStaticMarkup(
 			<TranscriptBlocks
 				entries={entries}
 				slackShare={{
 					prNumber: 5606,
-					preview: {
-						persona: "Michael",
-						title: "Adopt the OpenSession toggle style",
-						url: "https://github.com/tellahq/tella-fusion/pull/5606",
-						summary: "The longer toggle is easier to read.",
-						screenshot: "/tmp/toggle-after.png",
-					},
+					sessionId: "session-1",
+					defaultMessage: "We updated the toggle style in Tella.",
 					status: "idle",
 					onShare: () => {},
 				}}
 			/>,
 		);
 		expect(html.indexOf("PR #5606 is merged")).toBeLessThan(
-			html.indexOf("Share to Slack"),
+			html.indexOf("Send to Slack"),
 		);
-		expect(html.indexOf("Share to Slack")).toBeLessThan(
+		expect(html.indexOf("Send to Slack")).toBeLessThan(
 			html.indexOf("Deployment finished"),
 		);
-		expect(html).toContain("Michael shipped");
-		expect(html).toContain("Adopt the OpenSession toggle style");
-		expect(html).toContain("The longer toggle is easier to read.");
-		expect(html).toContain("%2Ftmp%2Ftoggle-after.png");
+		expect(html).toContain("We updated the toggle style in Tella.");
+		expect(html).toContain("Send to");
 		expect(html).toContain('data-brand="slack"');
 	});
 
@@ -76,18 +69,13 @@ describe("TranscriptBlocks shipped change action", () => {
 				entries={entries}
 				slackShare={{
 					prNumber: 5607,
-					preview: {
-						persona: "Michael",
-						title: "Another PR",
-						url: "https://github.com/tellahq/tella-fusion/pull/5607",
-						summary: "Another visual change.",
-						screenshot: "/tmp/another.png",
-					},
+					sessionId: "session-1",
+					defaultMessage: "We shipped another update.",
 					status: "idle",
 					onShare: () => {},
 				}}
 			/>,
 		);
-		expect(html).not.toContain("Share to Slack");
+		expect(html).not.toContain("Send to Slack");
 	});
 });
