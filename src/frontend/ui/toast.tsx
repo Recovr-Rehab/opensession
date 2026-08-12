@@ -139,7 +139,7 @@ function ToastCard({ toast: t }: { toast: Toast }) {
 				// backdrop-filter can't run or transparency is reduced (base.css).
 				"pointer-events-auto flex cursor-default items-center gap-2.5 rounded-lg",
 				"bg-popup-glass px-3.5 py-2.5 text-sm text-fg [backdrop-filter:var(--popup-blur)]",
-				"[--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-md",
+				"[--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm",
 			)}
 		>
 			{t.variant === "success" && (
