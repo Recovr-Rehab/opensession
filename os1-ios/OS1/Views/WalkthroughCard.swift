@@ -20,10 +20,10 @@ import AppKit
 /// that is a long way to drag past to reach what was said after it — in a
 /// session that published several, the conversation is mostly walkthrough.
 ///
-/// Folded is not hidden: the card keeps a sideways strip of its stills, and a
-/// tap on one opens the same full-screen viewer the open card does. Checking
-/// what changed is what most readers came for, and it shouldn't cost them
-/// unfolding a screenful of video to get to it.
+/// Folded is one compact disclosure row. The label says what the walkthrough
+/// contains, and expanding reveals the writeup and media together. This keeps a
+/// walkthrough from becoming the largest object in the transcript before the
+/// reader asks to see it.
 struct WalkthroughCard: View {
     let walkthrough: SessionWalkthrough
     let state: TurnFoldState
@@ -52,8 +52,6 @@ struct WalkthroughCard: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(accessibilityLabel)
-            // Folded, the pictures are already on screen, so what the button
-            // offers is the rest of it.
             .accessibilityHint(state.expanded ? "Hide the walkthrough" : "Show the demo and writeup")
 
             if state.expanded {
@@ -67,8 +65,6 @@ struct WalkthroughCard: View {
                 ForEach(walkthrough.stills) { shot in
                     WalkthroughShotView(shot: shot, gallery: gallery)
                 }
-            } else if !gallery.isEmpty {
-                WalkthroughThumbnailStrip(stills: walkthrough.stills, gallery: gallery)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -78,12 +74,10 @@ struct WalkthroughCard: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(OS1VisualStyle.border, lineWidth: 0.5)
         }
-        // It ends in media where its neighbours end in text, so it needs more
-        // room after it than between ordinary blocks — folded too, now that
-        // folded still ends in a row of pictures. A writeup-only walkthrough
-        // folds down to a line of text like everything else, and there the
-        // extra gap would read as a break in the conversation.
-        .padding(.bottom, state.expanded || !gallery.isEmpty ? 6 : 0)
+        // Open, it ends in media where its neighbours end in text, so it needs
+        // more room after it than between ordinary blocks. Folded is one line
+        // like the work fold beside it and keeps the normal transcript rhythm.
+        .padding(.bottom, state.expanded ? 6 : 0)
     }
 
     /// Every still in the card, in reading order, so opening one pages
@@ -156,70 +150,6 @@ struct WalkthroughCard: View {
         let contents = contentsLabel
         if !contents.isEmpty { parts.append(contents.replacingOccurrences(of: " · ", with: ", ")) }
         return parts.joined(separator: ", ")
-    }
-}
-
-/// The folded card's pictures: every still, small, in reading order, scrolling
-/// sideways. A tap opens the full-screen viewer at that picture and pages
-/// through the rest — so a before/after can be compared without unfolding the
-/// card at all.
-///
-/// Fixed-size tiles, deliberately. A thumbnail with a flexible width has no
-/// intrinsic size to report, and a horizontal scroll view around content like
-/// that measures its content as exactly its own width: the extra tiles are
-/// then clipped rather than reachable and every drag springs back (measured on
-/// device — it is why `ConversationImageStrip` wraps in a grid instead).
-private struct WalkthroughThumbnailStrip: View {
-    let stills: [WalkthroughShot]
-    let gallery: [PreviewImage]
-
-    /// Big enough to read what the screenshot shows. A thumbnail of a UI is a
-    /// picture of small things, and at the postage-stamp size this strip
-    /// started at, a before and an after of the same screen were
-    /// indistinguishable — which makes the folded card decorative rather than
-    /// the answer to "what changed".
-    ///
-    /// The width is not a choice: a pair has to sit side by side within the
-    /// card, which at phone width is 168 each, and the next pair then peeks in
-    /// from the edge. So height is the only room left, and the tile is now
-    /// SQUARE-ish rather than a 1.6 letterbox. That is the orientation-neutral
-    /// shape: these tiles crop to fill, so a tall tile shows more of a phone
-    /// screenshot and less of a wide one. 190 was measured too — it reads
-    /// beautifully for phone shots and cuts a wide crop down to its middle
-    /// 41%, which is the way a before and an after start looking alike again.
-    private static let tile = CGSize(width: 168, height: 160)
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            // Tight within a pair, loose between them: the gaps keep each
-            // overlaid Before/After pair together without adding another row.
-            HStack(alignment: .top, spacing: 14) {
-                ForEach(stills) { shot in
-                    let items: [(label: String, path: String)] = [
-                        ("Before", shot.before), ("After", shot.after),
-                    ].compactMap { item in
-                        item.1.map { (item.0, $0) }
-                    }
-                    HStack(spacing: 4) {
-                        ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                            MediaImage(
-                                path: item.path,
-                                gallery: gallery,
-                                galleryIndex: gallery.firstIndex { $0.id == item.path } ?? 0,
-                                label: item.label,
-                                thumbnail: Self.tile
-                            )
-                        }
-                    }
-                }
-            }
-            .padding(.vertical, 1)
-        }
-        // The strip is the card's own width, but scrolls to the card's edges:
-        // a tile cut off by the padding looks like a rendering bug, where one
-        // that runs under the edge reads as "there is more this way".
-        .padding(.horizontal, -WalkthroughCard.padding)
-        .contentMargins(.horizontal, WalkthroughCard.padding, for: .scrollContent)
     }
 }
 
