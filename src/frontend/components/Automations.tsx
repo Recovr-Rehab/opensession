@@ -337,16 +337,9 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                 >
                   <span className="sr-only">Open {a.name}</span>
                 </button>
-                <Switch
-                  size="sm"
-                  className="relative"
-                  checked={a.enabled}
-                  onCheckedChange={() => handleToggle(a)}
-                  aria-label={`${a.name} · ${a.enabled ? "on" : "off"}`}
-                />
                 <span
                   className={cn(
-                    "pointer-events-none relative flex min-w-0 flex-1 flex-col gap-0.75 max-[560px]:-order-1",
+                    "pointer-events-none relative flex min-w-0 flex-1 flex-col gap-0.75",
                     !a.enabled && "opacity-55",
                   )}
                 >
@@ -391,8 +384,20 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                     sel ? "hidden" : "max-[560px]:hidden",
                   )}
                 >
-                  {!a.enabled ? "off" : a.nextRunAt ? `next ${formatNext(a.nextRunAt)}` : ""}
+                  {/* No "off" here any more: it used to be the only state a
+                      row carried at this end, and now it sits beside a switch
+                      that already says it. */}
+                  {a.enabled && a.nextRunAt ? `next ${formatNext(a.nextRunAt)}` : ""}
                 </span>
+                {/* Last in the row: the switch is the one thing you act on
+                    here, so it sits on the edge, in a column of its own. */}
+                <Switch
+                  size="sm"
+                  className="relative"
+                  checked={a.enabled}
+                  onCheckedChange={() => handleToggle(a)}
+                  aria-label={`${a.name} · ${a.enabled ? "on" : "off"}`}
+                />
               </div>
             );
           })}
