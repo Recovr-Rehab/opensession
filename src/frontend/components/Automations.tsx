@@ -20,7 +20,7 @@ import {
 } from "../lib/api";
 import { getCurrentUser } from "./UserPicker";
 import { CheckStatusIcon } from "./CheckStatusIcon";
-import { IconBolt, IconClock, IconHash, IconPlayOutline, IconPlug } from "./icons";
+import { IconBolt, IconClock, IconHash, IconPlayOutline, IconPlug, IconPlus } from "./icons";
 import { AGENT_NAME, PUBLIC_BASE_URL, docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
@@ -295,10 +295,11 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
         <Button
 					variant="primary"
 					size="lg"
-					className="px-[18px] text-control-label font-medium"
+					icon={<IconPlus size={20} />}
+					className="pl-4 pr-[18px] text-control-label font-medium"
 					onClick={() => setShowModal(true)}
 				>
-					+ New automation
+					New automation
 				</Button>
       </PageHeader>
 

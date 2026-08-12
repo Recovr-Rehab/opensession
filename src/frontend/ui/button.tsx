@@ -80,8 +80,13 @@ const iconOnlyPad: Record<Size, string> = {
 // `primary` used to hover with) is invisible on a near-white or near-black
 // fill, so the hover takes `--accent-hover`, which picks its own direction:
 // toward the page while the accent is ink, deeper into the hue once it isn't.
+//
+// `plate-sheen` (styles/tailwind.css) is the top-down shading that keeps this
+// from reading as a flat printed rectangle. It is a white-then-black overlay,
+// so it costs the variant nothing per palette and survives the ink accent at
+// both ends of the light/dark range.
 const INK =
-	"bg-accent border-transparent text-on-accent smooth-shadow-xs hover:bg-accent-hover";
+	"bg-accent border-transparent text-on-accent plate-sheen smooth-shadow-xs hover:bg-accent-hover";
 
 const variants: Record<Variant, string> = {
 	// The raised control look of the newest chrome (viewer Share button).
@@ -116,7 +121,8 @@ const variants: Record<Variant, string> = {
 	// second click of a two-click close). `danger` proposes, `destructive`
 	// commits, so a surface can show both without them reading as the same
 	// weight. Shares `primary`'s shape so the two swap cleanly in a footer.
-	destructive: "bg-red border-transparent text-white smooth-shadow-xs hover:brightness-110",
+	destructive:
+		"bg-red border-transparent text-white plate-sheen smooth-shadow-xs hover:brightness-110",
 	warning: "border-yellow text-yellow hover:bg-[color-mix(in_srgb,var(--yellow)_12%,transparent)]",
 };
 

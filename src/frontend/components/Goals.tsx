@@ -20,6 +20,7 @@ import { getCurrentUser } from "./UserPicker";
 import { docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
+import { IconPlus } from "./icons";
 import { SOURCE_CHIP } from "../lib/source-chip-classes";
 import { Input, Select, Textarea } from "../ui/input";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
@@ -192,10 +193,11 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
         <Button
 					variant="primary"
 					size="lg"
-					className="px-[18px] text-control-label font-medium"
+					icon={<IconPlus size={20} />}
+					className="pl-4 pr-[18px] text-control-label font-medium"
 					onClick={() => setShowForm(true)}
 				>
-					+ New goal
+					New goal
 				</Button>
       </PageHeader>
 

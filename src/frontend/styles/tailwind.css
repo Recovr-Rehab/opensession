@@ -256,6 +256,28 @@
 	}
 }
 
+/* The light on a solid plate: the accent CTA, the destructive confirm. A flat
+   fill at that size reads as a printed rectangle. A few percent of top-down
+   shading gives it a face, which is the whole difference between a colour and a
+   button.
+
+   It is an overlay rather than a two-stop accent gradient because the accent is
+   a moving target: eleven palettes plus ink, which is near-black in light mode
+   and near-white in dark. Mixing a lighter accent breaks on both ends of that
+   range (white has nowhere to go, and the palettes drift hue as they lighten).
+   White-then-black at low alpha needs to know nothing about the fill: on a dark
+   plate the highlight carries it, on a near-white one the foot does. Held under
+   13% so it registers as light falling on the button rather than as a gradient.
+   Leave it stronger and it dates immediately. */
+@utility plate-sheen {
+	background-image: linear-gradient(
+		to bottom,
+		rgb(255 255 255 / 0.13),
+		rgb(255 255 255 / 0.02) 52%,
+		rgb(0 0 0 / 0.07)
+	);
+}
+
 /* One keyboard-focus treatment for raw controls. It intentionally does not
    animate, so focus is immediate and reduced-motion needs no special case. */
 @utility focus-ring {

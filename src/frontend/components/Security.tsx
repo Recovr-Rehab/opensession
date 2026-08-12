@@ -18,6 +18,7 @@ import { AGENT_NAME, docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { cn } from "../ui/cn";
+import { IconPlus } from "./icons";
 import { SOURCE_CHIP } from "../lib/source-chip-classes";
 import { Input, Select, Textarea } from "../ui/input";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
@@ -134,10 +135,11 @@ export function Security({ onOpenSession }: Props) {
         <Button
 					variant="primary"
 					size="lg"
-					className="px-[18px] text-control-label font-medium"
+					icon={<IconPlus size={20} />}
+					className="pl-4 pr-[18px] text-control-label font-medium"
 					onClick={() => setShowNewScan(true)}
 				>
-					+ New scan
+					New scan
 				</Button>
       </PageHeader>
 

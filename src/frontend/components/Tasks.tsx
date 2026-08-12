@@ -8,7 +8,7 @@ import { cn } from "../ui/cn";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
 import { EmptyState } from "../ui/state";
 import { getCurrentUser } from "./UserPicker";
-import { IconCheck, IconListChecks, IconX } from "./icons";
+import { IconCheck, IconListChecks, IconPlus, IconX } from "./icons";
 import { Input } from "../ui/input";
 
 interface TasksProps {
@@ -234,6 +234,7 @@ export function Tasks({ addHandler, onOpenSession }: TasksProps) {
 						type="submit"
 						size="lg"
 						variant="primary"
+						icon={<IconPlus size={20} />}
 						disabled={!draft.trim() || adding}
 					>
 						{adding ? "Adding…" : "Add task"}

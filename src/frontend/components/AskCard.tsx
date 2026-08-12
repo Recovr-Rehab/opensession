@@ -4,7 +4,7 @@ import { renderMarkdown } from "../lib/markdown";
 import type { AskQuestion } from "../lib/types";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
-import { IconCheck } from "./icons";
+import { IconCheck, IconReturn } from "./icons";
 import { useMarkdownRepo } from "./MarkdownBody";
 
 interface Props {
@@ -203,9 +203,12 @@ export function AskCard({ questions, onAnswer }: Props) {
       ))}
 
       <div className="flex justify-end">
+        {/* The glyph reports the state the label also names: an answer on its
+            way out before you press, a tick once it has gone. */}
         <Button
           variant="primary"
           size="lg"
+          icon={submitted ? <IconCheck size={20} /> : <IconReturn size={20} />}
           onClick={submit}
           disabled={!complete || submitted}
         >
