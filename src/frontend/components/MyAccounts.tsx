@@ -13,7 +13,11 @@ import {
 	SettingsHeader,
 	SettingsHint,
 	SettingsPanel,
+	StatusChip,
+	rowMenuTriggerClasses,
 } from "../ui/settings";
+import { Menu } from "../ui/menu";
+import { IconDotsHorizontal, IconPlug, IconTrash } from "./icons";
 import { IconTile, displayName } from "./BrandTile";
 import { useCurrentUser } from "./UserPicker";
 import { GithubAccounts } from "./Connections";
@@ -159,7 +163,10 @@ export function MyAccountsPanel() {
 											: slack
 												? "Connect to post messages and screenshots as you after a PR merges"
 												: mine
-													? "Connected as you"
+													? // Not "Connected as you": the chip beside it already
+														// says connected, so the description says what that
+														// buys instead of repeating the state.
+														"Sessions use your account"
 											: st?.shared
 												? "Using the workspace account"
 												: st?.capable
@@ -167,18 +174,36 @@ export function MyAccountsPanel() {
 													: "Not connected"}
 									</SettingRowDescription>
 								</SettingRowText>
-								<SettingRowControl>
+								<SettingRowControl className="flex items-center gap-2">
 									{mine ? (
-										<div className="flex items-center gap-1.5">
-											{slack && (
-												<Button size="sm" onClick={() => connect(s.name)}>
-													Reconnect
-												</Button>
-											)}
-											<Button size="sm" onClick={() => disconnect(s.name)}>
-												Disconnect
-											</Button>
-										</div>
+										// A connected row states that it is connected and keeps its
+										// actions in the ⋯ menu. Left as buttons, "Disconnect" sat
+										// exactly where an unconnected row shows "Connect", in the
+										// same neutral style, so the two states read alike.
+										<>
+											<StatusChip label="Connected" dot="var(--green)" />
+											<Menu.Root>
+												<Menu.Trigger
+													className={rowMenuTriggerClasses}
+													aria-label={`Manage ${displayName(s.name)}`}
+												>
+													<IconDotsHorizontal size={18} />
+												</Menu.Trigger>
+												<Menu.Popup align="end" sideOffset={4}>
+													<Menu.Item onClick={() => connect(s.name)}>
+														<IconPlug size={16} className="text-faint" />
+														Reconnect
+													</Menu.Item>
+													<Menu.Item
+														onClick={() => disconnect(s.name)}
+														className="text-red data-[highlighted]:bg-red-soft"
+													>
+														<IconTrash size={16} />
+														Disconnect
+													</Menu.Item>
+												</Menu.Popup>
+											</Menu.Root>
+										</>
 									) : (
 										// Not `primary`: one red button per row would make a list of
 										// unconnected servers shout, and the GitHub rows below use the

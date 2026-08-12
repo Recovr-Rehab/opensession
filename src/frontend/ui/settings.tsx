@@ -156,6 +156,21 @@ export function SettingRowControl({
 	return <div className={cn("ml-auto shrink-0", className)} {...props} />;
 }
 
+/**
+ * A row's state, read before its actions: a dot and a word. Connected rows
+ * carry one and unconnected rows carry a Connect button, which is what keeps
+ * the two apart at a glance. A row whose only difference is the verb on a
+ * neutral button ("Connect" vs "Disconnect") reads as the same row twice.
+ */
+export function StatusChip({ label, dot }: { label: string; dot: string }) {
+	return (
+		<span className="flex flex-shrink-0 items-center gap-1.5 text-label text-dim">
+			<span className="h-1.5 w-1.5 rounded-full" style={{ background: dot }} />
+			{label}
+		</span>
+	);
+}
+
 /** The ⋯ trigger for a row's overflow menu — quiet until hovered or open.
  *  Shared so a row's actions look the same on every settings page. */
 export const rowMenuTriggerClasses =

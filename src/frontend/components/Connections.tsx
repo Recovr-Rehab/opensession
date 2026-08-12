@@ -23,6 +23,7 @@ import {
   SettingsHint,
   SettingsPanel,
   SettingsSection,
+  StatusChip,
   rowMenuTriggerClasses,
   settingsInputClass,
   settingsSelectClass,
@@ -109,15 +110,6 @@ function LockIcon({ size = 12 }: { size?: number }) {
       <rect x="5" y="10.5" width="14" height="9" rx="2" fill="currentColor" opacity="0.9" />
       <path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" stroke="currentColor" strokeWidth="1.8" fill="none" />
     </svg>
-  );
-}
-
-function StatusChip({ label, dot }: { label: string; dot: string }) {
-  return (
-    <span className="flex flex-shrink-0 items-center gap-1.5 text-label text-dim">
-      <span className="h-1.5 w-1.5 rounded-full" style={{ background: dot }} />
-      {label}
-    </span>
   );
 }
 
@@ -725,13 +717,27 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
                     }
                   />
                   {m.connected && m.canManage && (
-                    <Button
-                      size="sm"
-                      className="hover:border-red hover:text-red"
-                      onClick={() => disconnect(m.github)}
-                    >
-                      Disconnect
-                    </Button>
+                    // Behind the ⋯ rather than beside the chip: a connected row
+                    // needs no button of its own, and a neutral "Disconnect"
+                    // sitting where an unconnected row shows "Connect" made the
+                    // two states look identical.
+                    <Menu.Root>
+                      <Menu.Trigger
+                        className={rowMenuTriggerClasses}
+                        aria-label={`Manage @${m.github}`}
+                      >
+                        <IconDotsHorizontal size={18} />
+                      </Menu.Trigger>
+                      <Menu.Popup align="end" sideOffset={4}>
+                        <Menu.Item
+                          onClick={() => disconnect(m.github)}
+                          className="text-red data-[highlighted]:bg-red-soft"
+                        >
+                          <IconTrash size={16} />
+                          Disconnect
+                        </Menu.Item>
+                      </Menu.Popup>
+                    </Menu.Root>
                   )}
                 </SettingRowControl>
               </SettingRow>
