@@ -91,7 +91,8 @@ private enum CatchUpDragAxis {
 struct CatchUpDeckView: View {
     let model: CatchUpViewModel
     let onOpen: (Session) -> Void
-    let onReply: () -> Void
+    let onReply: (String) -> Void
+    let undoTrigger: Int
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -119,7 +120,6 @@ struct CatchUpDeckView: View {
                     .onAppear { deckSize = geo.size }
                     .onChange(of: geo.size) { _, size in deckSize = size }
             }
-            undoBar
             actionBar
         }
         // Arming is a state change you can feel before you commit to it — one
@@ -127,6 +127,7 @@ struct CatchUpDeckView: View {
         .haptic(trigger: armed) { _, now in
             now == nil ? .released : .armed
         }
+        .onChange(of: undoTrigger) { _, _ in performUndo() }
     }
 
     // MARK: - Stack
@@ -172,7 +173,7 @@ struct CatchUpDeckView: View {
     // MARK: - Geometry
 
     private func cardWidth(in size: CGSize) -> CGFloat {
-        max(240, min(size.width - 32, 460))
+        max(240, min(size.width - 24, 520))
     }
 
     /// Capped, not just "the space available": a card that fills the pane is a
@@ -180,7 +181,7 @@ struct CatchUpDeckView: View {
     /// leaves a margin top and bottom on a phone and stops the card growing
     /// into a slab on a tablet or a Mac window.
     private func cardHeight(in size: CGSize) -> CGFloat {
-        max(260, min(size.height - 40, 580))
+        max(300, min(size.height - 12, 760))
     }
 
     private func horizontalThreshold(in size: CGSize) -> CGFloat {
@@ -397,89 +398,43 @@ struct CatchUpDeckView: View {
 
     // MARK: - Controls
 
-    @ViewBuilder
-    private var undoBar: some View {
-        ZStack {
-            if let entry = model.undoable {
-                HStack(spacing: 10) {
-                    Text(entry.action.pastTense)
-                        .font(.footnote.weight(.medium))
-                        .foregroundStyle(OS1VisualStyle.textDim)
-                        .lineLimit(1)
-                    Text(entry.card.title)
-                        .font(.footnote)
-                        .foregroundStyle(OS1VisualStyle.textFaint)
-                        .lineLimit(1)
-                    Spacer(minLength: 4)
-                    Button(action: performUndo) {
-                        Text("Undo")
-                            .font(.footnote.weight(.semibold))
-                            .foregroundStyle(OS1VisualStyle.accentInk)
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(
-                    Capsule().fill(OS1VisualStyle.raised)
-                )
-                .padding(.horizontal, 20)
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-        }
-        // Reserved whether or not the pill is showing. Collapsing the row when
-        // it expires moves the three action buttons 40pt under a thumb that is
-        // already on its way to the next decision — in a surface built for
-        // deciding fast, that is a mis-tap waiting to happen, and the two it
-        // sits between are Archive and Read.
-        .frame(height: 40)
-        .animation(.snappy(duration: 0.32), value: model.undoable)
-    }
-
     private var actionBar: some View {
-        HStack(spacing: 12) {
-            actionButton(.archive, size: 60)
-            actionButton(.keep, size: 50)
-            actionButton(.read, size: 60)
+        HStack(spacing: 10) {
+            decisionButton(.keep, label: "Keep unread", prominent: false)
+            decisionButton(.read, label: "Mark as read", prominent: true)
         }
-        .padding(.top, 8)
-        .padding(.bottom, 6)
+        .padding(.horizontal, 12)
+        .padding(.top, 12)
+        .padding(.bottom, 10)
     }
 
-    /// Ordered the way the swipes are — archive to the left, keep upward in
-    /// the middle, read to the right — so the control is a map of the gesture
-    /// rather than a second thing to learn.
-    private func actionButton(_ intent: CatchUpIntent, size: CGFloat) -> some View {
+    private func decisionButton(
+        _ intent: CatchUpIntent,
+        label: String,
+        prominent: Bool
+    ) -> some View {
         let live = self.intent(for: drag) == intent
         let amount = live ? progress(drag, in: deckSize) : 0
-        return VStack(spacing: 6) {
-            Button {
-                commit(intent, velocity: .zero, in: deckSize)
-            } label: {
-                Image(systemName: intent.symbol)
-                    .font(.system(size: size * 0.36, weight: .semibold))
-                    .foregroundStyle(intent.tint)
-                    .frame(width: size, height: size)
-                    .background {
-                        Circle()
-                            .fill(intent.tint.opacity(0.12 + 0.24 * amount))
-                            .overlay(
-                                Circle().strokeBorder(
-                                    intent.tint.opacity(0.18 + 0.5 * amount),
-                                    lineWidth: 1
-                                )
-                            )
-                    }
-                    // The button the current drag is heading for swells with
-                    // it: the gesture and the control are the same decision.
-                    .scaleEffect(1 + 0.1 * amount)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(accessibilityLabel(intent))
-            Text(intent.label)
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(OS1VisualStyle.textFaint)
+        return Button {
+            commit(intent, velocity: .zero, in: deckSize)
+        } label: {
+            Text(label)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(prominent ? OS1VisualStyle.onAccent : OS1VisualStyle.text)
+                .frame(maxWidth: .infinity, minHeight: 58)
+                .background {
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(prominent ? OS1VisualStyle.accent : OS1VisualStyle.background)
+                        .shadow(
+                            color: .black.opacity(prominent ? 0.12 : 0.08),
+                            radius: prominent ? 12 : 8,
+                            y: prominent ? 7 : 4
+                        )
+                }
+                .scaleEffect(1 + 0.025 * amount)
         }
+        .buttonStyle(CatchUpPressStyle())
+        .accessibilityLabel(accessibilityLabel(intent))
         .animation(.snappy(duration: 0.2), value: amount)
     }
 
@@ -489,6 +444,14 @@ struct CatchUpDeckView: View {
         case .read: "Mark as read"
         case .keep: "Keep unread"
         }
+    }
+}
+
+private struct CatchUpPressStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
 

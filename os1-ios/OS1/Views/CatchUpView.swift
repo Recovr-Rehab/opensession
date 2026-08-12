@@ -21,33 +21,26 @@ struct CatchUpView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var model = CatchUpViewModel()
-    @State private var replying = false
+    @State private var undoTrigger = 0
 
     var body: some View {
         VStack(spacing: 0) {
             header
             content
         }
-        .background(OS1VisualStyle.chatCanvas)
+        .background(OS1VisualStyle.accent.opacity(0.06))
         .task { await model.settle(from: list) }
         // Not `.success` on every finish: the chime belongs to the moment the
         // last card leaves, and only when there was something to clear.
         .haptic(trigger: model.isDone) { was, now in
             now && !was && model.handled > 0 ? .commit : nil
         }
-        .sheet(isPresented: $replying) {
-            if let card = model.current {
-                CatchUpReplySheet(card: card) { text in
-                    model.reply(text)
-                }
-            }
-        }
     }
 
     // MARK: - Chrome
 
     private var header: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 8) {
             ZStack {
                 Text(counterLabel)
                     .font(.headline)
@@ -58,8 +51,8 @@ struct CatchUpView: View {
                     .animation(.snappy(duration: 0.3), value: model.remaining)
                 HStack {
                     Button { dismiss() } label: {
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 17, weight: .semibold))
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 19, weight: .semibold))
                             .foregroundStyle(OS1VisualStyle.textDim)
                             .frame(width: 44, height: 44)
                             .contentShape(Rectangle())
@@ -67,13 +60,20 @@ struct CatchUpView: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("Close catch up")
                     Spacer()
+                    Button("Undo") { undoTrigger += 1 }
+                        .font(.body.weight(.semibold))
+                        .foregroundStyle(OS1VisualStyle.text)
+                        .frame(minWidth: 60, minHeight: 44, alignment: .trailing)
+                        .opacity(model.undoable == nil ? 0 : 1)
+                        .disabled(model.undoable == nil)
+                        .buttonStyle(.plain)
                 }
             }
             progressBar
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 6)
-        .padding(.bottom, 12)
+        .padding(.horizontal, 18)
+        .padding(.top, 4)
+        .padding(.bottom, 10)
     }
 
     /// How far through the deck you are. A finish line is most of what makes a
@@ -125,7 +125,8 @@ struct CatchUpView: View {
             CatchUpDeckView(
                 model: model,
                 onOpen: onOpenSession,
-                onReply: { replying = true }
+                onReply: model.reply,
+                undoTrigger: undoTrigger
             )
         }
     }
@@ -231,60 +232,5 @@ private struct CatchUpFinishedView: View {
         case 1: "You went through one workspace."
         default: "You went through \(handled) workspaces."
         }
-    }
-}
-
-// MARK: - Reply
-
-/// A reply from the deck, as a small sheet rather than a field on the card.
-/// The card is a drag surface; a keyboard and a text field on top of it would
-/// be two gestures fighting over the same pixels, and a detent-sized sheet is
-/// what the system already does well here.
-private struct CatchUpReplySheet: View {
-    let card: CatchUpCard
-    let onSend: (String) -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @State private var text = ""
-    @FocusState private var focused: Bool
-
-    var body: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(card.title)
-                    .font(.footnote.weight(.medium))
-                    .foregroundStyle(OS1VisualStyle.textDim)
-                    .lineLimit(1)
-                TextField("Reply…", text: $text, axis: .vertical)
-                    .font(.body)
-                    .lineLimit(1...6)
-                    .focused($focused)
-                    .padding(12)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(OS1VisualStyle.raised)
-                    )
-                Spacer(minLength: 0)
-            }
-            .padding(16)
-            .inlineTitleBarCompat()
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Send") {
-                        // The sheet is gone before a trigger could fire.
-                        Haptics.play(.send)
-                        onSend(text)
-                        dismiss()
-                    }
-                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
-        }
-        .presentationDetents([.height(240)])
-        .presentationDragIndicator(.visible)
-        .onAppear { focused = true }
     }
 }

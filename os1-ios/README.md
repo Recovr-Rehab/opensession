@@ -41,16 +41,14 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   *workspace* (the same grouping the list shows,
   built by `CatchUpQueue` from the shared `/api/reads` marks with the web
   deck's rules: yours, not archived, not an automation, not the Desk). The card
-  previews the workspace's main chat, with `Open` for that conversation and
-  `Reply` (a detent sheet, delivered through the `Outbox`).
-  The workspace preview scrolls vertically. Decisions stay on the other axis:
-  swipe left to archive or right to mark read, while Keep remains the center
-  button. The whole stack is a function of one horizontal drag value: tilt,
+  renders the workspace's main chat with an expand control and an inline reply
+  field delivered through the `Outbox`. Full-width **Keep unread** and **Mark
+  as read** buttons sit below it; swipe left still archives and swipe right
+  still marks read. The whole stack is a function of one horizontal drag value: tilt,
   stamp, tint, and how far forward the card behind has come, so a half-swipe
   reverses continuously; release uses Apple's
   momentum projection to decide, then hands the finger's velocity to the
-  spring. Every decision is undoable for six seconds (the pill's row is always
-  reserved, so the buttons never move under your thumb). The queue is frozen
+  spring. Every decision is undoable for six seconds from the top bar. The queue is frozen
   once built, and `settle` waits for both the sessions list and the read marks
   before it is willing to say "All caught up".
 - **Session view** — live transcript over the `/ws` WebSocket, grouped into

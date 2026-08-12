@@ -14,9 +14,10 @@ struct CatchUpCardView: View {
     let conversation: CatchUpViewModel.Conversation?
     let isTop: Bool
     let onOpen: () -> Void
-    let onReply: () -> Void
+    let onReply: (String) -> Void
 
     @State private var folds = FoldStateStore()
+    @State private var reply = ""
 
     private let shape = RoundedRectangle(cornerRadius: 26, style: .continuous)
 
@@ -47,21 +48,36 @@ struct CatchUpCardView: View {
     // MARK: - Header
 
     private var headerRow: some View {
-        HStack(alignment: .top, spacing: 11) {
-            RepoTile(name: card.repo, size: 28)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(card.title)
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(OS1VisualStyle.text)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
+        VStack(spacing: 5) {
+            ZStack {
+                HStack {
+                    RepoTile(name: card.repo, size: 28)
+                    Spacer()
+                    Button(action: onOpen) {
+                        Image(systemName: "arrow.up.forward")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(OS1VisualStyle.textDim)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Open main chat")
+                }
+                HStack(spacing: 5) {
+                    Text("#").foregroundStyle(OS1VisualStyle.textDim)
+                    Text(card.title).lineLimit(1)
+                }
+                .font(.headline.weight(.semibold))
+                .foregroundStyle(OS1VisualStyle.text)
+                .padding(.horizontal, 52)
+            }
+            if isTop {
                 metaRow
             }
-            Spacer(minLength: 0)
         }
-        .padding(.horizontal, 18)
-        .padding(.top, 18)
-        .padding(.bottom, 14)
+        .padding(.horizontal, 14)
+        .padding(.top, 10)
+        .padding(.bottom, 11)
     }
 
     private var metaRow: some View {
@@ -84,7 +100,7 @@ struct CatchUpCardView: View {
                 .lineLimit(1)
             if card.sessionCount > 1 {
                 Text("·").foregroundStyle(OS1VisualStyle.textFaint)
-                Text("\(card.sessionCount) sessions")
+                Text("\(card.sessionCount) chats")
                     .font(.caption)
                     .foregroundStyle(OS1VisualStyle.textFaint)
             }
@@ -191,31 +207,52 @@ struct CatchUpCardView: View {
 
     private var footerRow: some View {
         HStack(spacing: 10) {
-            Button(action: onOpen) {
-                Label("Open", systemImage: "arrow.up.forward")
-                    .labelStyle(.titleAndIcon)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(OS1VisualStyle.text)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 9)
-                    .background(Capsule().fill(OS1VisualStyle.hover))
+            Image(systemName: "plus")
+                .font(.system(size: 18, weight: .medium))
+                .foregroundStyle(OS1VisualStyle.textDim)
+                .frame(width: 36, height: 36)
+                .background(Circle().fill(OS1VisualStyle.hover))
+            TextField("Message main chat", text: $reply, axis: .vertical)
+                .lineLimit(1...4)
+                .font(.body)
+                .submitLabel(.send)
+                .onSubmit(sendReply)
+            Button(action: sendReply) {
+                Image(systemName: "arrow.up.circle.fill")
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundStyle(
+                        canReply ? OS1VisualStyle.accent : OS1VisualStyle.textFaint
+                    )
+                    .frame(width: 36, height: 36)
             }
             .buttonStyle(.plain)
-            Spacer(minLength: 0)
-            Button(action: onReply) {
-                Label("Reply", systemImage: "arrowshape.turn.up.left.fill")
-                    .labelStyle(.titleAndIcon)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(OS1VisualStyle.onAccent)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 9)
-                    .background(Capsule().fill(OS1VisualStyle.accent))
-            }
-            .buttonStyle(.plain)
+            .disabled(!canReply)
+            .accessibilityLabel("Send reply")
         }
-        .padding(.horizontal, 18)
-        .padding(.top, 10)
-        .padding(.bottom, 16)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(OS1VisualStyle.raised)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .strokeBorder(OS1VisualStyle.border.opacity(0.4), lineWidth: 0.5)
+                }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+    }
+
+    private var canReply: Bool {
+        !reply.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func sendReply() {
+        let text = reply.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        Haptics.play(.send)
+        onReply(text)
+        reply = ""
     }
 
     // MARK: - Behind the top card
