@@ -269,9 +269,14 @@ export const SIDEBAR_STICKY_BAND =
 export const SIDEBAR_STICKY_BAND_ROW =
 	"desktop:mt-0 desktop:flex desktop:h-[44px] desktop:min-h-[44px] desktop:items-center desktop:py-[7px]";
 
-/** Tier 2 — a lane / repo / status header, pinned one band-row lower. */
+/**
+ * Tier 2: a lane / repo / status header, pinned one band-row lower. Once
+ * pinned, its trailing fade makes the rows passing underneath remain visible
+ * without leaving a hard edge below the caption.
+ */
 export const SIDEBAR_STICKY_LANE =
-	"desktop:sticky desktop:top-[44px] desktop:z-[15] desktop:h-[30px] desktop:min-h-[30px]";
+	"desktop:sticky desktop:top-[44px] desktop:z-[15] desktop:h-[30px] desktop:min-h-[30px] " +
+	"desktop:[&.is-stuck::after]:pointer-events-none desktop:[&.is-stuck::after]:absolute desktop:[&.is-stuck::after]:top-full desktop:[&.is-stuck::after]:left-[-400px] desktop:[&.is-stuck::after]:right-[-400px] desktop:[&.is-stuck::after]:z-[-1] desktop:[&.is-stuck::after]:h-3 desktop:[&.is-stuck::after]:content-[''] desktop:[&.is-stuck::after]:[background:linear-gradient(to_bottom,var(--sidebar-material),transparent),linear-gradient(to_bottom,var(--bg-raised),transparent)]";
 
 /**
  * A status lane nested inside a repo band sits one row lower again — its repo
