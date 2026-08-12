@@ -39,6 +39,10 @@ const SHOT_LABEL_SIDE = {
 		"text-red [background-image:linear-gradient(var(--red-soft),var(--red-soft))]",
 	after:
 		"text-green [background-image:linear-gradient(var(--green-soft),var(--green-soft))]",
+	// The demo wears the same pill in the same corner, so the strip is captioned
+	// one way instead of two: a tile says what it is, rather than a label above
+	// the video and a label inside every screenshot.
+	demo: "text-blue [background-image:linear-gradient(var(--blue-soft),var(--blue-soft))]",
 } as const;
 
 /**
@@ -289,9 +293,6 @@ export function WalkthroughCard({
 											: cn("shrink-0", tile),
 								)}
 							>
-								<figcaption className="mb-1 inline-flex rounded-full bg-blue-soft px-2 py-0.5 text-[11px] font-semibold leading-4 text-blue">
-									Demo
-								</figcaption>
 								<button
 									type="button"
 									className={cn(
@@ -321,6 +322,11 @@ export function WalkthroughCard({
 									/>
 									<span className="absolute inset-0 grid place-items-center bg-black/25 text-white">
 										<IconPlay size={18} className="ml-0.5" />
+									</span>
+									{/* After the scrim, so the pill keeps its own contrast
+									    rather than sitting under a wash of black. */}
+									<span className={cn(SHOT_LABEL, SHOT_LABEL_SIDE.demo)}>
+										Demo
 									</span>
 								</button>
 							</figure>
