@@ -18,7 +18,7 @@ import {
   writePrState,
   readPrState,
 } from "./state";
-import { runGithubAgent, authorForLogin, sessionUrl } from "./run";
+import { announceGithubRun, runGithubAgent, authorForLogin, sessionUrl } from "./run";
 import { buildAutoFixPrompt, mergeabilityState, type MergeabilityState } from "./prompts";
 import { checkRegistrationPending } from "./autofix-gates";
 import { postIssueComment, editIssueComment, removeLabel, resolveAddressedThreads, fetchReviewFindings, AUTOFIX_MARKER } from "./github-rest";
@@ -183,7 +183,18 @@ export async function runAutoFix(
     s.autoFix = { active: true, iterations, startedAt, statusCommentId, requestedBy, worktreeDir: prior?.worktreeDir, lastPushedSha: prior?.lastPushedSha, steer: effectiveSteer };
     writePrState(s);
 
-    // Post the first status BEFORE the (slow) worktree checkout so the PR shows it's working ASAP.
+    const bksId = await announceGithubRun({
+      prNumber: pr.number,
+      ghRepo: pr.ghRepo,
+      kind: "autofix",
+      branch: pr.headRef,
+      title: `Auto-fix · PR #${pr.number} ${pr.title}`.slice(0, 100),
+      mode: "code",
+    });
+    onSessionCreated?.(bksId);
+
+    // Post the first status before the slow worktree checkout. The local
+    // session already exists, so a slow GitHub write cannot delay opening it.
     await updateStatus(resuming ? `resuming (iteration ${iterations + 1}/${MAX_ITERATIONS})…` : `starting (up to ${MAX_ITERATIONS} iterations) — setting up a worktree…`);
     const worktreeDir = await createWorktreeForPrBranch(
       pr.headRef,
@@ -251,7 +262,6 @@ export async function runAutoFix(
         title: `Auto-fix · PR #${pr.number} ${details.title}`.slice(0, 100),
         resume: iterations > 1 || resuming,
         author,
-        onSessionCreated,
       });
 
       const newSha = await headSha(pr.headRef, pr.ghRepo || REPO);

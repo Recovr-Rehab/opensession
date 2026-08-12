@@ -12,7 +12,6 @@ import { runAutoFix } from "./autofix";
 import { runSimplify } from "./simplify";
 import { runAdversarial } from "./adversarial";
 import { resolveReviewConfig } from "./webhook";
-import { bksIdFor } from "./run";
 
 export type PrActionKind = "review" | "autofix" | "simplify" | "adversarial";
 
@@ -69,6 +68,11 @@ export async function triggerPrAction(
     ...(ghRepo ? { ghRepo } : {}),
   };
 
+  let resolveSessionCreated: (id: string) => void = () => {};
+  const sessionCreated = new Promise<string>((resolve) => {
+    resolveSessionCreated = resolve;
+  });
+
   const fail = (e: unknown) => console.error(`[github] ${kind} trigger failed for PR #${prNumber}:`, e);
   let done: Promise<unknown>;
   switch (kind) {
@@ -80,25 +84,41 @@ export async function triggerPrAction(
       // owning session never got its fix round (PR #5055, 2026-07-19). SHA
       // dedup + the round cap inside maybeHandoffFindings keep this safe if a
       // webhook-fired review races the same SHA.
-      done = runReview(ref, resolveReviewConfig().config, undefined, true, steer)
+      done = runReview(ref, resolveReviewConfig().config, resolveSessionCreated, true, steer)
         .then((result) => maybeHandoffFindings(ref, result))
         .catch(fail);
       break;
     case "autofix":
-      done = runAutoFix(ref, requestedBy, undefined, false, steer).catch(fail);
+      done = runAutoFix(ref, requestedBy, resolveSessionCreated, false, steer).catch(fail);
       break;
     case "simplify":
-      done = runSimplify(ref, requestedBy, undefined, steer).catch(fail);
+      done = runSimplify(ref, requestedBy, resolveSessionCreated, steer).catch(fail);
       break;
     case "adversarial":
-      done = runAdversarial(ref, requestedBy, undefined, steer).catch(fail);
+      done = runAdversarial(ref, requestedBy, resolveSessionCreated, steer).catch(fail);
       break;
+  }
+
+  // Each behavior announces only after it owns the relevant lock. If it exits
+  // first, another action won the lock or setup failed, so do not hand the UI
+  // an id for a worker that never started.
+  const bksId = await Promise.race([
+    sessionCreated,
+    done.then(() => ""),
+  ]);
+  if (!bksId) {
+    return {
+      ok: false,
+      url: details.url,
+      done,
+      message: `Couldn't start ${kind} for PR #${prNumber}. Another PR action may already be running.`,
+    };
   }
 
   return {
     ok: true,
     url: details.url,
-    bksId: bksIdFor(prNumber, kind, ghRepo),
+    bksId,
     done,
     message: `${LABELS[kind]} PR #${prNumber} (“${details.title}”). I'll post the results on the PR: ${details.url}`,
   };

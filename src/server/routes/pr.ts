@@ -1093,6 +1093,7 @@ export async function handlePrRoutes(
 			message: result.message,
 			url: result.url,
 			bksId: result.bksId,
+			session: result.bksId ? findSession(result.bksId) ?? null : null,
 			...(result.ok ? {} : { error: result.message }),
 		});
 	}

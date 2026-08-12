@@ -6,7 +6,7 @@
  */
 import { existsSync, readFileSync } from "fs";
 import { OPENSESSION_SESSIONS_DIR } from "../../server/paths";
-import { recordRunOutcome, updateSessionFile } from "../../server/session-cache";
+import { invalidateSessionsCache, recordRunOutcome, updateSessionFile } from "../../server/session-cache";
 import { runAgent } from "../../server/agent-runner";
 import { listAutomations } from "../../server/automations";
 import { providerFor, DEFAULT_FALLBACK_MODEL, modelLabel } from "../../server/models";
@@ -15,9 +15,9 @@ import { STRIPE_CONFIRM_TOOLS } from "../../server/runner-shared";
 import { gitIdentityFor, type GitIdentity } from "../../server/shared/user-mappings";
 import { resolvePrWorkspace } from "../../server/workspace-resolve";
 import { repoForPath } from "../../server/worktree";
-import { PR_EVENT_KEY, prKey } from "./constants";
+import { PR_EVENT_KEY, prKey, repoForFullName } from "./constants";
 import type { NativeSessionFile } from "../../server/types";
-import { configuredServer } from "../../server/config";
+import { configuredServer, defaultRepo } from "../../server/config";
 import { shouldPersistModelSwitch } from "../../server/run-events";
 
 const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
@@ -67,15 +67,15 @@ export function githubFlowMcpServers(): string[] {
  * so the sidebar's PR clicks and these headless runs can never mint diverging
  * workspaces for the same PR. Best-effort: never block a run on this.
  */
-async function workspaceIdForPr(prNumber: number, branch: string, title: string, cwd: string, ghRepo?: string): Promise<string | null> {
+async function workspaceIdForPr(prNumber: number, branch: string, title: string, repoId: string | null): Promise<string | null> {
+  if (!repoId) return null;
   try {
-    const repo = repoForPath(cwd).id;
     // opts.title is per-kind ("Review · PR #123 <PR title>"). The folder groups
     // ALL kinds for the PR, so name it PR-level: strip the kind + "PR #n" prefix
     // down to the bare PR title (fall back to the full title if it doesn't match).
     const prTitle = title.replace(/^.*?PR #\d+[:\s-]*/i, "").trim() || title;
     const resolved = await resolvePrWorkspace({
-      repoId: repo,
+      repoId,
       number: prNumber,
       branch,
       title: prTitle,
@@ -112,6 +112,83 @@ export function uiSessionUrl(sessionId: string): string {
 /** Open Session UI link to a run's session, for "open to monitor" links in PR comments. */
 export function sessionUrl(prNumber: number, kind: GithubRunKind, ghRepo?: string): string {
   return uiSessionUrl(bksIdFor(prNumber, kind, ghRepo));
+}
+
+export interface AnnouncedRun {
+  prNumber: number;
+  ghRepo?: string;
+  kind: GithubRunKind;
+  branch: string;
+  title: string;
+  mode: "ask" | "code";
+}
+
+/**
+ * The session file an announce writes: create-if-absent defaults first (an
+ * existing file wins, so a resumed round keeps its engine ids and model
+ * history), then the fields this round owns. Same field-scoped shape as
+ * runGithubAgent's persist, minus everything only the engine can know.
+ * Exported for its test; call announceGithubRun.
+ */
+export function announcedSessionFile(
+  existing: NativeSessionFile,
+  bksId: string,
+  opts: AnnouncedRun,
+  workspaceId: string | null,
+  repoId: string,
+  now = new Date().toISOString(),
+): NativeSessionFile {
+  return {
+    id: bksId,
+    claudeSessionId: "",
+    // The worktree doesn't exist yet. That checkout is what an announce is
+    // getting ahead of; runGithubAgent fills it in once it has one.
+    worktreeDir: "",
+    createdAt: now,
+    ...(existing as Partial<NativeSessionFile>),
+    branch: opts.branch,
+    createdBy: "GitHub (automation)",
+    lastActivity: now,
+    title: opts.title,
+    mode: opts.mode,
+    repo: repoId,
+    automation: "github-pr-review",
+    ...(workspaceId ? { workspaceId } : {}),
+  };
+}
+
+/**
+ * Make a run's session exist before its engine does.
+ *
+ * `bksIdFor` is deterministic, so every behavior hands out the run's session
+ * link the moment it starts: the PR's "📺 open session" comment, and the info
+ * panel's "open run" after a Review/Simplify/Adversarial click. The file behind
+ * that id was only written on the engine's FIRST event, which comes after a PR
+ * fetch and a worktree checkout that can install dependencies. Anyone who
+ * followed the link inside that window landed on "Session not found".
+ *
+ * Each behavior calls this where it mints the link. One small atomic write, and
+ * runGithubAgent's own persist overlays the engine ids on top of it.
+ */
+export async function announceGithubRun(opts: AnnouncedRun): Promise<string> {
+  const bksId = bksIdFor(opts.prNumber, opts.kind, opts.ghRepo);
+  const repoId =
+    (opts.ghRepo ? repoForFullName(opts.ghRepo)?.id : undefined) ??
+    defaultRepo().id;
+  const workspaceId = await workspaceIdForPr(
+    opts.prNumber,
+    opts.branch,
+    opts.title,
+    repoId,
+  );
+  await updateSessionFile(bksId, (data) =>
+    announcedSessionFile(data, bksId, opts, workspaceId, repoId),
+  );
+  // updateSessionFile drops the session cache but not the list route's
+  // serialized snapshot on top of it. Without this the new session can stay
+  // invisible to the UI for the rest of that snapshot's TTL.
+  invalidateSessionsCache();
+  return bksId;
 }
 
 /** Map a GitHub login to a git identity for commit attribution (fix/simplify). */
@@ -190,7 +267,11 @@ export async function runGithubAgent(opts: GithubRunOpts): Promise<GithubRunResu
   const startedAt = new Date();
 
   // Group this and the PR's other sessions under one Project folder.
-  const workspaceId = await workspaceIdForPr(opts.prNumber, opts.branch, opts.title, opts.cwd, opts.ghRepo);
+  let repoId: string | null = null;
+  try {
+    repoId = repoForPath(opts.cwd).id;
+  } catch {}
+  const workspaceId = await workspaceIdForPr(opts.prNumber, opts.branch, opts.title, repoId);
 
   const existingSessionFile = readSessionFile(bksId);
   // Engine sessions are scoped to their directory; a session started under a
@@ -237,6 +318,7 @@ export async function runGithubAgent(opts: GithubRunOpts): Promise<GithubRunResu
         lastActivity: new Date().toISOString(),
         title: opts.title,
         mode: opts.mode,
+        ...(repoId ? { repo: repoId } : {}),
         automation: "github-pr-review",
         ...(workspaceId ? { workspaceId } : {}),
       };
@@ -247,6 +329,12 @@ export async function runGithubAgent(opts: GithubRunOpts): Promise<GithubRunResu
   let text = "";
   let engineSessionId = resumeFrom;
   let errorMsg = "";
+
+  // Write the file before the engine boots, not on its first event: the run's
+  // session link is already public by now (see announceGithubRun), and booting
+  // an engine takes long enough that following it hit "Session not found".
+  await persist(resumeFrom);
+  invalidateSessionsCache();
 
   try {
     for await (const event of runAgent({

@@ -8,7 +8,7 @@ import { personaName } from "../../server/config";
 import { getPrDetails } from "../../server/pr-info";
 import { createWorktreeForPrBranch } from "../../server/worktree";
 import { claimLock, releaseLock, getOrInitPrState, writePrState } from "./state";
-import { runGithubAgent, authorForLogin, finalSummary, sessionUrl } from "./run";
+import { announceGithubRun, runGithubAgent, authorForLogin, finalSummary, sessionUrl } from "./run";
 import { buildAdversarialPrompt } from "./prompts";
 import { postOrEditComment, removeLabel, ADVERSARIAL_MARKER } from "./github-rest";
 import { LABEL_ADVERSARIAL, labelAliases, repoForFullName } from "./constants";
@@ -35,6 +35,17 @@ export async function runAdversarial(
 
     const startedAt = new Date().toISOString();
     const link = `[📺 open session](${sessionUrl(pr.number, "adversarial", pr.ghRepo)})`;
+    const title = `Adversarial · PR #${pr.number} ${details.title}`.slice(0, 100);
+    const bksId = await announceGithubRun({
+      prNumber: pr.number,
+      ghRepo: pr.ghRepo,
+      kind: "adversarial",
+      branch: details.headRefName,
+      title,
+      mode: "code",
+    });
+    onSessionCreated?.(bksId);
+
     const s = getOrInitPrState(pr.number, details.headRefName, pr.ghRepo);
     const reuseId = s.activeRun?.kind === "adversarial" ? s.activeRun.progressCommentId : undefined;
     const progressId = await postOrEditComment(
@@ -60,9 +71,8 @@ export async function runAdversarial(
       cwd: worktreeDir,
       mode: "code",
       branch: details.headRefName,
-      title: `Adversarial · PR #${pr.number} ${details.title}`.slice(0, 100),
+      title,
       author,
-      onSessionCreated,
     });
 
     const summary = finalSummary(result.text).slice(0, 6000) || "Done.";

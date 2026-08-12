@@ -7,7 +7,7 @@ import { personaName } from "../../server/config";
 import { getPrDetails, getPrDiff } from "../../server/pr-info";
 import { createWorktreeForPrBranch } from "../../server/worktree";
 import { claimLock, releaseLock, getOrInitPrState, writePrState } from "./state";
-import { runGithubAgent, authorForLogin, finalSummary, sessionUrl } from "./run";
+import { announceGithubRun, runGithubAgent, authorForLogin, finalSummary, sessionUrl } from "./run";
 import { buildSimplifyPrompt } from "./prompts";
 import { postOrEditComment, removeLabel, SIMPLIFY_MARKER } from "./github-rest";
 import { LABEL_SIMPLIFY, labelAliases, repoForFullName } from "./constants";
@@ -36,6 +36,17 @@ export async function runSimplify(
 
     const startedAt = new Date().toISOString();
     const link = `[📺 open session](${sessionUrl(pr.number, "simplify", pr.ghRepo)})`;
+    const title = `Simplify · PR #${pr.number} ${details.title}`.slice(0, 100);
+    const bksId = await announceGithubRun({
+      prNumber: pr.number,
+      ghRepo: pr.ghRepo,
+      kind: "simplify",
+      branch: pr.headRef,
+      title,
+      mode: "code",
+    });
+    onSessionCreated?.(bksId);
+
     const s = getOrInitPrState(pr.number, pr.headRef, pr.ghRepo);
     // Reuse this run's comment only when recovering an interrupted run; a fresh
     // trigger (no activeRun) posts a new comment.
@@ -64,9 +75,8 @@ export async function runSimplify(
       cwd: worktreeDir,
       mode: "code",
       branch: pr.headRef,
-      title: `Simplify · PR #${pr.number} ${details.title}`.slice(0, 100),
+      title,
       author,
-      onSessionCreated,
     });
 
     const summary = finalSummary(result.text).slice(0, 2000) || "Done.";

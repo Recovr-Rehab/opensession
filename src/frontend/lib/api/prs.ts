@@ -540,11 +540,11 @@ export async function triggerPrActionApi(
 		url?: string;
 		bksId?: string;
 		error?: string;
-		/** Auto-fix opens a live session in the workspace instead of a headless PR run —
-		    the caller navigates into bksId rather than showing a "posted on the PR" note. */
+		/** Auto-fix opens a live session in the workspace instead of a headless PR run.
+		    The caller navigates into bksId rather than showing a PR status note. */
 		openSession?: boolean;
-		/** The just-created session (auto-fix only), already persisted server-side, so
-		    the caller can open it without waiting for the next sessions poll. */
+		/** The persisted run session, so the caller can open it without waiting for
+		    the next sessions poll. */
 		session?: UnifiedSession | null;
 	}>(`/sessions/${encodeURIComponent(sessionId)}/pr-action`, {
 		method: "POST",

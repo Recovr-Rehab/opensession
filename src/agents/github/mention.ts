@@ -18,7 +18,7 @@ import {
   setPendingMention,
   clearPendingMention,
 } from "./state";
-import { runGithubAgent, authorForLogin, finalSummary, sessionUrl } from "./run";
+import { announceGithubRun, runGithubAgent, authorForLogin, finalSummary, sessionUrl } from "./run";
 import { buildMentionPrompt, buildFollowupMentionPrompt } from "./prompts";
 import { triggerPrAction } from "./trigger";
 import { repoForFullName } from "./constants";
@@ -203,6 +203,15 @@ export async function runConversationalMention(
     headRef = details.headRefName;
     const model = listAutomations().find((a) => a.eventKey === PR_EVENT_KEY)?.model;
     const link = `[📺 open session](${sessionUrl(prNumber, "mention", ghRepo)})`;
+    const title = `Mention · PR #${prNumber} ${details.title}`.slice(0, 100);
+    await announceGithubRun({
+      prNumber,
+      ghRepo,
+      kind: "mention",
+      branch: headRef,
+      title,
+      mode: "code",
+    });
 
     const st = getOrInitPrState(prNumber, headRef, ghRepo);
     // Reuse the progress comment only when recovering an interrupted run.
@@ -249,7 +258,7 @@ export async function runConversationalMention(
       mode: "code",
       model,
       branch: headRef,
-      title: `Mention · PR #${prNumber} ${details.title}`.slice(0, 100),
+      title,
       resume: true, // keep a conversation across mentions on the same PR
       author: authorForLogin(args.author), // attribute any commits to the person who asked
     });
@@ -298,6 +307,15 @@ async function runFollowupMention(
   const suffix = args.replyToId ? String(args.replyToId) : String(prNumber);
   const branch = `followup-pr-${prNumber}-${suffix}`.slice(0, 80);
   const link = `[📺 open session](${sessionUrl(prNumber, "followup", ghRepo)})`;
+  const followupTitle = `Follow-up · PR #${prNumber} ${details.title}`.slice(0, 100);
+  await announceGithubRun({
+    prNumber,
+    ghRepo,
+    kind: "followup",
+    branch,
+    title: followupTitle,
+    mode: "code",
+  });
 
   const progressId = await postOrEditComment(
     prNumber,
@@ -335,7 +353,7 @@ async function runFollowupMention(
     mode: "code",
     model,
     branch,
-    title: `Follow-up · PR #${prNumber} ${details.title}`.slice(0, 100),
+    title: followupTitle,
     resume: false, // fresh branch → fresh session, don't resume the merged PR's thread
     author: authorForLogin(args.author), // attribute commits to the person who asked
   });

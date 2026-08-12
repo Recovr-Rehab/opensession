@@ -8,7 +8,7 @@
 import { personaName } from "../../server/config";
 import { getPrDetails, getPrDiff, type PrDetails } from "../../server/pr-info";
 import { claimLock, releaseLock, getOrInitPrState, writePrState } from "./state";
-import { runGithubAgent, sessionUrl } from "./run";
+import { announceGithubRun, runGithubAgent, sessionUrl } from "./run";
 import { buildReviewPrompt, DEFAULT_REVIEW_PROMPT } from "./prompts";
 import {
   postIssueComment,
@@ -142,6 +142,24 @@ export async function runReview(
     const isUpdate = state.reviewedShas.length > 0;
     state.activeRun = { kind: "review", requestedBy: "", startedAt: new Date().toISOString(), steer };
 
+    // Look up by number before publishing the session link. If details are
+    // unavailable, no worker exists and the next delivery remains retryable.
+    const details = await getPrDetails(pr.number ? String(pr.number) : pr.headRef, pr.ghRepo || undefined);
+    if (!details) {
+      console.warn(`[github] no PR details for #${pr.number} (${pr.headRef}); review not started`);
+      return null;
+    }
+    const title = `Review · PR #${pr.number} ${details.title}`.slice(0, 100);
+    const bksId = await announceGithubRun({
+      prNumber: pr.number,
+      ghRepo: pr.ghRepo,
+      kind: "review",
+      branch: pr.headRef,
+      title,
+      mode: "ask",
+    });
+    onSessionCreated?.(bksId);
+
     // Post a fresh "reviewing…" comment immediately (progress ASAP), then collapse
     // the previous review under an "Outdated review" <details>. Each review is its
     // own comment; postReview edits this placeholder with the result.
@@ -158,26 +176,6 @@ export async function runReview(
       if (prevId && prevId !== placeholderId) await supersedeReviewComment(prevId, pr.ghRepo).catch(() => {});
     }
     // If the placeholder failed, summaryCommentId keeps prevId and postReview edits it.
-
-    // Look up by PR number, not branch: `gh pr view <branch>` resolves through
-    // GitHub's search index, which lags seconds behind PR creation — the
-    // initial review of a fresh PR died on exactly that (PR #4953), leaving
-    // the "Reviewing…" placeholder dangling forever. By-number is an exact
-    // REST get. Branch stays as the fallback for callers without a number.
-    const details = await getPrDetails(pr.number ? String(pr.number) : pr.headRef, pr.ghRepo || undefined);
-    if (!details) {
-      console.warn(`[github] no PR details for #${pr.number} (${pr.headRef}); review not started`);
-      // Don't leave the placeholder pointing at a session that was never
-      // created — say what happened. The SHA was not recorded as reviewed,
-      // so the next push (or a manual "review" trigger) retries.
-      if (placeholderId)
-        await editIssueComment(
-          placeholderId,
-          `${REVIEW_MARKER}\n### 🤖 ${personaName()} review\n\n⚠️ Couldn't fetch the PR details to start the review — it will retry on the next push, or ask ${personaName()} to review manually.`,
-          pr.ghRepo,
-        ).catch(() => {});
-      return null;
-    }
 
     // Pin a read-only worktree to the PR head so the files the agent Reads are
     // the exact tree the local git diff describes. Without that guarantee, fail
@@ -294,7 +292,7 @@ export async function runReview(
       mode: "ask",
       model: reviewModel,
       branch: pr.headRef,
-      title: `Review · PR #${pr.number} ${details.title}`.slice(0, 100),
+      title,
       // Each review is self-contained: it reads the CURRENT full diff from the
       // pinned worktree and posts a fresh full assessment, so
       // we do NOT resume the prior engine session. Resuming accumulated the whole
@@ -305,7 +303,6 @@ export async function runReview(
       // github-review, e.g. PR #4638 (15 errors / 0 turns). `isUpdate` still drives
       // the "re-review the current diff" prompt framing above.
       resume: false,
-      onSessionCreated,
     });
 
     let finalResult = result;
@@ -324,9 +321,8 @@ export async function runReview(
         mode: "ask",
         model: finalResult.model || reviewModel,
         branch: pr.headRef,
-        title: `Review · PR #${pr.number} ${details.title}`.slice(0, 100),
+        title,
         resume: true,
-        onSessionCreated,
       });
       parsed = parseReviewOutput(finalResult.text);
     }

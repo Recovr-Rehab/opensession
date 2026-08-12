@@ -618,7 +618,11 @@ function AgentReviewCard({
 	onOpenSession?: (id: string, created?: UnifiedSession | null) => void;
 }) {
 	const [busy, setBusy] = useState<PrAgentAction | null>(null);
-	const [done, setDone] = useState<{ label: string; bksId?: string } | null>(
+	const [done, setDone] = useState<{
+		label: string;
+		bksId?: string;
+		session?: UnifiedSession | null;
+	} | null>(
 		null,
 	);
 	const [error, setError] = useState<string | null>(null);
@@ -716,7 +720,7 @@ function AgentReviewCard({
 					onOpenSession(res.bksId, res.session ?? null);
 					return;
 				}
-				setDone({ label: action.label, bksId: res.bksId });
+				setDone({ label: action.label, bksId: res.bksId, session: res.session });
 			} else setError(res.error || res.message || "Couldn't start");
 		} catch (e: any) {
 			setError(e?.message || "Couldn't start");
@@ -895,6 +899,14 @@ function AgentReviewCard({
 							{" · "}
 							<a
 								href={`${BASE_PATH}/session/${encodeURIComponent(done.bksId)}`}
+								onClick={(e) => {
+									// Plain click opens the worker in this workspace. Modified
+									// clicks keep native new-tab behavior.
+									if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+									if (!onOpenSession) return;
+									e.preventDefault();
+									onOpenSession(done.bksId!, done.session ?? null);
+								}}
 								className="text-fg underline decoration-line-strong underline-offset-2"
 							>
 								open run
