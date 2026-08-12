@@ -20,7 +20,7 @@ import { applyNoteUpdate, getNoteState, isValidNoteId } from "./notes";
 import { appendOpencodeTranscript, clearTranscriptStoreDegraded, transcriptLineRunnerNotice } from "./opencode-transcript";
 import { deleteQueuedPrompt, persistQueues, promptQueues, queueWithIds, recordSteer, reorderQueuedPrompt, requeueSteerReceipts, steeredReceipts, stoppedSessions, updateQueuedPrompt } from "./queue-state";
 import { transitionRunState } from "./run-state";
-import { abortTurnAndDrain, enqueuePrompt, interruptQueuedPrompt, runSessionPrompt, runSessionPromptAndDrain, steerQueuedPrompt, watchExternalRunAndDrain } from "./run-session";
+import { abortTurnAndDrain, drainQueue, enqueuePrompt, interruptQueuedPrompt, runSessionPrompt, runSessionPromptAndDrain, steerQueuedPrompt, watchExternalRunAndDrain } from "./run-session";
 import { sandboxWsClose, sandboxWsMessage, sandboxWsOpen } from "./run-ws";
 import { handleCreateSessionMessage } from "./session-create";
 import { runnerWsClose, runnerWsMessage, runnerWsOpen } from "./runner-ws";
@@ -956,6 +956,18 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 							(id: unknown): id is string => typeof id === "string",
 						)
 					: undefined;
+				// A Sandbox send is durable before it can wake compute. The drain has
+				// a per-session single-flight lock, so the first queued message owns
+				// the wake and later messages remain FIFO behind it.
+				if (session.sandbox?.sandboxId && session.sandbox.provider !== "local") {
+					enqueuePrompt(sessionId, {
+						content, user, images: imageUrls, files: msg.files, contextSessions,
+					});
+					void drainQueue(sessionId).catch((error) =>
+						console.error(`[queue] Sandbox wake drain failed for ${sessionId}:`, error),
+					);
+					break;
+				}
 				await runSessionPromptAndDrain(
 					sessionId,
 					content,
