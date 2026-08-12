@@ -1161,6 +1161,53 @@ export function resumeInterruptedRuns(
       if (run.osSessionId) transitionRunState(run.osSessionId, "turn_end");
       continue;
     }
+    // Runner hosts are persistent, outbound-dial run hosts just like remote
+    // Sandboxes. Reattach through their Runner control channel only. A failed
+    // reattach must never fall through to an in-process server run, because
+    // that would silently change the selected execution machine.
+    if (run.runnerId) {
+      rememberHandledSession(run);
+      trackRecovery(run);
+      recoveryTasks.push(recoveryTask(run, async () => {
+        let terminalSeen = false;
+        try {
+          if (abandonStoppedRecovery(run)) return;
+          Object.assign(run, journalStartRecovery(run));
+          const events = await (await import("./runner-session")).resumeRunnerRun(run, {
+            onAskUser: run.osSessionId ? askHandlerFor?.(run.osSessionId) : undefined,
+          });
+          if (abandonStoppedRecovery(run)) return;
+          if (!events) {
+            reportRecoveryFailure(
+              run,
+              "Restart recovery could not reconnect to the interrupted Runner. Check its connection, then send the prompt again.",
+            );
+            return;
+          }
+          for await (const event of events) {
+            if (abandonStoppedRecovery(run)) return;
+            if (event.type === "done" || event.type === "error") {
+              terminalSeen = settleRecovery(run, event) || terminalSeen;
+            } else emitRecoveryEvent(run, event);
+          }
+          if (!terminalSeen && !abandonStoppedRecovery(run)) {
+            reportRecoveryFailure(
+              run,
+              "Restart recovery ended before the Runner returned a final result. Send the prompt again to continue.",
+            );
+          }
+        } catch (error) {
+          console.error(`[runner] Runner resume failed for ${run.runKey}:`, error);
+          if (!terminalSeen && !abandonStoppedRecovery(run)) {
+            reportRecoveryFailure(
+              run,
+              "Restart recovery failed while reconnecting to the Runner. Check its connection, then send the prompt again.",
+            );
+          }
+        }
+      }));
+      continue;
+    }
     // Sandboxed runs (docs/self-hosting-sandboxes.md): the sandbox — and
     // often the in-sandbox run host itself — outlives a opensession restart.
     // Reattach/relaunch through the provider instead of running in-process;

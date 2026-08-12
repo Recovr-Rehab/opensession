@@ -83,6 +83,8 @@ export interface ActiveRunRecord {
   serverKey?: string;
   /** Sandbox the run executes in (docs/self-hosting-sandboxes.md); absent = host process */
   sandboxId?: string;
+  /** Persistent Runner that owns this run's remote workspace and run host. */
+  runnerId?: string;
   /** Provider owning sandboxId, so resume-after-restart can reattach via provider.get() */
   sandboxProvider?: string;
   /** Credential/network boundary for a sandbox run, preserved on relaunch. */

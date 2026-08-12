@@ -100,6 +100,38 @@ export function runnerHostAlive(hostId: string): boolean {
 	return !exitedHosts.has(hostId);
 }
 
+/** Ask the Runner whether its detached host is still alive. This remains
+ * accurate after the Runner service reconnects, unlike an in-memory map. */
+export async function runnerHostStatus(
+	runnerId: string,
+	input: { sessionId: string; repo: string; workspacePath: string; hostId: string; user?: string },
+): Promise<boolean> {
+	const connection = connections.get(runnerId);
+	if (!connection || connection.protocolVersion !== PROTOCOL_VERSION) return false;
+	if (!runnerAllowed(connection.runner, { user: input.user, repo: input.repo, permission: "fullSessions" })) return false;
+	if (!connection.runner.workspaceRoots.some((root) => input.workspacePath === `${root.replace(/\/$/, "")}/sessions/${input.sessionId}`)) return false;
+	const id = `rs${++executionCounter}-${Date.now().toString(36)}`;
+	const operationToken = randomBytes(18).toString("base64url");
+	const result = await new Promise<RunnerExecResult>((resolve) => {
+		const timer = setTimeout(() => {
+			const pending = connection.pending.get(id); if (!pending) return;
+			connection.pending.delete(id);
+			resolve({ code: -1, stdout: "", stderr: "Runner host status timed out", timedOut: true });
+		}, 15_000);
+		connection.pending.set(id, { stdout: [], stderr: [], resolve, timer, operationToken });
+		try {
+			connection.ws.send(JSON.stringify({
+				t: "host_status", version: PROTOCOL_VERSION, id, operationToken,
+				sessionId: input.sessionId, repo: input.repo, workspacePath: input.workspacePath, hostId: input.hostId,
+			}));
+		} catch (error) {
+			clearTimeout(timer); connection.pending.delete(id);
+			resolve({ code: -1, stdout: "", stderr: `Could not reach Runner: ${(error as Error).message}` });
+		}
+	});
+	return result.code === 0 && result.stdout === "alive";
+}
+
 export function disconnectRunner(id: string, reason = "revoked"): boolean {
 	const connection = connections.get(id);
 	if (!connection) return false;
@@ -213,6 +245,15 @@ export function runnerWsMessage(ws: any, raw: string | Buffer): boolean {
 		case "host_exited":
 			exitedHosts.add(String(message.hostId));
 			return true;
+		case "host_status": {
+			const id = String(message.id);
+			const pending = connection.pending.get(id);
+			if (!pending || message.operationToken !== pending.operationToken) return true;
+			clearTimeout(pending.timer);
+			connection.pending.delete(id);
+			pending.resolve({ code: message.alive === true ? 0 : 1, stdout: message.alive === true ? "alive" : "dead", stderr: "" });
+			return true;
+		}
 	}
 	return true;
 }

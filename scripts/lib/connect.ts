@@ -250,6 +250,10 @@ export async function runnerRun(): Promise<number> {
 			await startRunHost(socket, persistent, msg);
 			return;
 		}
+		if (msg?.t === "host_status" && msg.version === 1 && msg.operationToken) {
+			await reportRunHostStatus(socket, persistent, msg);
+			return;
+		}
         if (msg?.t !== "exec" || msg.version !== 1 || !msg.operationToken) return;
 
         const id = String(msg.id);
@@ -403,6 +407,7 @@ async function startRunHost(socket: WebSocket, persistent: Map<string, ReturnTyp
 		const bun = Bun.which("bun") || process.execPath;
 		const proc = Bun.spawn(["setsid", bun, "run", RUNNER_HOST_ENTRY, specPath], { cwd: spec.cwd, env, stdin: "ignore", stdout: "ignore", stderr: "ignore" });
 		proc.unref();
+		await Bun.write(join(stateDir, "pid"), `${proc.pid}\n`);
 		persistent.set(spec.hostId, proc);
 		void proc.exited.finally(async () => {
 			persistent.delete(spec.hostId);
@@ -412,6 +417,27 @@ async function startRunHost(socket: WebSocket, persistent: Map<string, ReturnTyp
 	} catch (error) {
 		socket.send(JSON.stringify({ t: "host_error", id, operationToken: token, error: error instanceof Error ? error.message : String(error) }));
 	}
+}
+
+async function reportRunHostStatus(socket: WebSocket, persistent: Map<string, ReturnType<typeof Bun.spawn>>, msg: any): Promise<void> {
+	const id = String(msg.id);
+	const token = String(msg.operationToken);
+	const hostId = typeof msg.hostId === "string" ? msg.hostId : "";
+	const workspacePath = typeof msg.workspacePath === "string" ? msg.workspacePath : "";
+	let alive = false;
+	try {
+		if (!hostId || !workspacePath || workspacePath.includes("\0")) throw new Error("Invalid host status request");
+		const proc = persistent.get(hostId);
+		if (proc) alive = proc.exitCode === null;
+		if (!alive) {
+			const stateDir = join(workspacePath, ".opensession-run-hosts", hostId);
+			const spec = JSON.parse(await Bun.file(join(stateDir, "spec.json")).text()) as { hostId?: string };
+			const pid = Number((await Bun.file(join(stateDir, "pid")).text()).trim());
+			if (spec.hostId !== hostId || !Number.isSafeInteger(pid) || pid <= 0) throw new Error("Invalid host state");
+			try { process.kill(pid, 0); alive = true; } catch { alive = false; }
+		}
+	} catch { alive = false; }
+	socket.send(JSON.stringify({ t: "host_status", id, operationToken: token, hostId, alive }));
 }
 
 async function runnerCommand(cmd: string[], env: Record<string, string>): Promise<{ code: number; stdout: string; stderr: string }> {

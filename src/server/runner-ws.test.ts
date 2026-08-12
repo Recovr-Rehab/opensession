@@ -3,6 +3,7 @@ import {
 	disconnectRunner,
 	launchRunnerHost,
 	prepareRunnerWorkspace,
+	runnerHostStatus,
 	runnerWsMessage,
 	runnerWsOpen,
 } from "./runner-ws";
@@ -65,5 +66,18 @@ describe("Runner full-session control", () => {
 		expect(message.spec.cwd).toBe(request.spec.cwd);
 		runnerWsMessage(ws, JSON.stringify({ t: "host_started", id: message.id, operationToken: message.operationToken, hostId: "rh-test" }));
 		await expect(pending).resolves.toBeUndefined();
+	});
+
+	test("checks a detached host through the authenticated Runner channel", async () => {
+		const ws = socket(runnerId);
+		runnerWsOpen(ws);
+		runnerWsMessage(ws, JSON.stringify({ t: "hello", version: 1 }));
+		const pending = runnerHostStatus(runnerId, {
+			sessionId: "bks-test", repo: "opensession", workspacePath: "/srv/opensession/sessions/bks-test", hostId: "rh-test",
+		});
+		const message = JSON.parse(ws.sent.at(-1)!);
+		expect(message.t).toBe("host_status");
+		runnerWsMessage(ws, JSON.stringify({ t: "host_status", id: message.id, operationToken: message.operationToken, hostId: "rh-test", alive: true }));
+		await expect(pending).resolves.toBe(true);
 	});
 });
