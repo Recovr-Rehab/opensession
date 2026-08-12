@@ -479,7 +479,10 @@ function FileRow({
 				{stats}
 				<span
 					className={cn(
-						"inline-flex size-[15px] shrink-0 items-center justify-center rounded-xs text-[11px] font-bold leading-none",
+						// An even box around an even dot: 15px left half-pixels on
+						// both axes, which at Retina reads as a dot sitting off
+						// its own tile.
+						"inline-flex size-4 shrink-0 items-center justify-center rounded-md text-[11px] font-bold leading-none",
 						mark.className,
 					)}
 					title={mark.label}
