@@ -147,17 +147,19 @@ export function MyAccountsPanel() {
 					{oauthServers.map((s) => {
 						const st = oauthByName[s.name];
 						const mine = st?.users.some(isMe);
+						const slack = s.name.toLowerCase() === "slack";
 						return (
 							<SettingRow key={s.name} className="gap-3">
 								<IconTile name={s.name} size={30} />
 								<SettingRowText>
 									<SettingRowTitle>{displayName(s.name)}</SettingRowTitle>
-									{/* Status only. The sentence explaining what connecting
-									    changes is the same on every unconnected row, so it lives
-									    once under the card instead of down the list. */}
 									<SettingRowDescription>
-										{mine
-											? "Connected as you"
+										{slack && mine
+											? "Post messages and screenshots as you after a PR merges"
+											: slack
+												? "Connect to post messages and screenshots as you after a PR merges"
+												: mine
+													? "Connected as you"
 											: st?.shared
 												? "Using the workspace account"
 												: st?.capable
@@ -167,9 +169,16 @@ export function MyAccountsPanel() {
 								</SettingRowText>
 								<SettingRowControl>
 									{mine ? (
-										<Button size="sm" onClick={() => disconnect(s.name)}>
-											Disconnect
-										</Button>
+										<div className="flex items-center gap-1.5">
+											{slack && (
+												<Button size="sm" onClick={() => connect(s.name)}>
+													Reconnect
+												</Button>
+											)}
+											<Button size="sm" onClick={() => disconnect(s.name)}>
+												Disconnect
+											</Button>
+										</div>
 									) : (
 										// Not `primary`: one red button per row would make a list of
 										// unconnected servers shout, and the GitHub rows below use the
