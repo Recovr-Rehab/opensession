@@ -323,7 +323,6 @@ const PARSED_NOTICES: Record<string, Omit<EntryNotice, "tone">> = {
   compaction: {
     kind: "compaction",
     title: "Context compacted",
-    body: "collapsed",
   },
   recap: { kind: "recap", title: "Recap", body: "inline" },
 };

@@ -214,7 +214,7 @@ describe("classifyEntry", () => {
 		expect(c.content).toBe("couldn't push");
 	});
 
-	it("reads a recap inline and a compaction folded", () => {
+	it("reads a recap inline and a compaction as a title", () => {
 		expect(
 			classifyEntry(entry({ type: "system", content: "Fixed the build.", noticeKind: "recap" }))
 				.notice,
@@ -226,8 +226,12 @@ describe("classifyEntry", () => {
 		).toMatchObject({
 			kind: "compaction",
 			title: "Context compacted",
-			body: "collapsed",
 		});
+		expect(
+			classifyEntry(
+				entry({ type: "system", content: "Earlier…", noticeKind: "compaction" }),
+			).notice?.body,
+		).toBeUndefined();
 	});
 
 	it("turns a worker report into a notice that links back to the worker", () => {
