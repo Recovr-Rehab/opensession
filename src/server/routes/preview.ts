@@ -11,7 +11,7 @@ import { getPreviewStatus, getSandboxPreviewStatus, portalRouteAuthorized, start
 import { findSession } from "../session-cache";
 import { activeSandboxFor } from "../session-sandbox";
 import { existsSync } from "fs";
-import { restartPortalService, stopPortalService } from "../portal-supervisor";
+import { restartPortalService, restartSandboxPortalService, stopPortalService, stopSandboxPortalService } from "../portal-supervisor";
 
 export async function handlePreviewRoutes(
 	ctx: RouteContext,
@@ -201,19 +201,26 @@ export async function handlePreviewRoutes(
 	}
 
 	// A Portal control is scoped to the named service in this session's own
-	// workspace. Remote Sandbox Portal controls join the reverse-relay path in
-	// portal-supervisor; until then we fail clearly instead of accidentally
-	// targeting the host checkout.
+	// workspace. An explicit restart is allowed to wake a Sandbox; stop stays
+	// non-waking so an inspection action never starts compute by accident.
 	{
 		const m = path.match(/^\/api\/sessions\/(.+)\/portals\/([a-z0-9-]+)\/(stop|restart)$/);
 		if (m && req.method === "POST") {
 			const session = findSession(decodeURIComponent(m[1]));
 			if (!session) return Response.json({ error: "Session not found" }, { status: 404 });
-			if (!session.worktreeDir || !existsSync(session.worktreeDir))
-				return Response.json({ error: "Session has no local Portal workspace" }, { status: 400 });
-			if (session.sandbox?.sandboxId)
-				return Response.json({ error: "This Portal is managed by its Sandbox" }, { status: 409 });
 			try {
+				const sandbox = session.worktreeDir
+					? await activeSandboxFor(session, { wake: m[3] === "restart" })
+					: null;
+				if (session.sandbox?.sandboxId && !sandbox)
+					return Response.json({ error: "This session's Sandbox is sleeping or unavailable" }, { status: 409 });
+				if (sandbox) {
+					if (m[3] === "stop") await stopSandboxPortalService({ sessionId: session.id, sandbox, name: m[2] });
+					else await restartSandboxPortalService({ sessionId: session.id, sandbox, name: m[2] });
+					return Response.json(await getSandboxPreviewStatus(sandbox, session.worktreeDir!));
+				}
+				if (!session.worktreeDir || !existsSync(session.worktreeDir))
+					return Response.json({ error: "Session has no Portal workspace" }, { status: 400 });
 				if (m[3] === "stop") await stopPortalService({ sessionId: session.id, worktreeDir: session.worktreeDir, name: m[2] });
 				else await restartPortalService({ sessionId: session.id, worktreeDir: session.worktreeDir, name: m[2] });
 				return Response.json(await getPreviewStatus(session.worktreeDir));

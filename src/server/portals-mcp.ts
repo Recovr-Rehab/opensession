@@ -2,19 +2,27 @@
 
 import { z } from "zod";
 import { createSdkMcpServer, tool } from "./inprocess-mcp";
-import { getPreviewStatus } from "./preview";
-import { listPortalServices, restartPortalService, setPortalPath, startPortalService, stopPortalService } from "./portal-supervisor";
+import { getPreviewStatus, getSandboxPreviewStatus } from "./preview";
+import { listPortalServices, listSandboxPortalServices, restartPortalService, restartSandboxPortalService, setPortalPath, setSandboxPortalPath, startPortalService, startSandboxPortalService, stopPortalService, stopSandboxPortalService } from "./portal-supervisor";
+import type { Sandbox } from "./sandbox/provider";
 
 export interface PortalsMcpContext {
 	sessionId: string;
 	worktreeDir: () => string | undefined;
 	setDefaultPath: (path: string | null) => void;
+	/** An explicit computation action may wake the Sandbox. Passive listing may not. */
+	sandbox: (options?: { wake?: boolean }) => Promise<Sandbox | null>;
+	hasSandbox: () => boolean;
 }
 
 function result(value: string) { return { content: [{ type: "text" as const, text: value }] }; }
 function workspace(ctx: PortalsMcpContext): string | Error {
 	const dir = ctx.worktreeDir();
 	return dir ? dir : new Error("This session has no workspace for a Portal.");
+}
+
+async function portalStatus(ctx: PortalsMcpContext, dir: string, sandbox: Sandbox | null) {
+	return sandbox ? getSandboxPreviewStatus(sandbox, dir) : getPreviewStatus(dir);
 }
 
 export function createPortalsMcpServer(ctx: PortalsMcpContext) {
@@ -25,17 +33,23 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
 			}, async (args: { name: string; command: string; port?: number; description?: string }) => {
 				const dir = workspace(ctx); if (dir instanceof Error) return result(dir.message);
 				try {
-					const portal = await startPortalService({ sessionId: ctx.sessionId, worktreeDir: dir, ...args });
-					const status = await getPreviewStatus(dir);
+					const sandbox = await ctx.sandbox({ wake: true });
+					if (!sandbox && ctx.hasSandbox()) return result("Could not start Portal: this session's Sandbox is unavailable.");
+					const portal = sandbox
+						? await startSandboxPortalService({ sessionId: ctx.sessionId, sandbox, ...args })
+						: await startPortalService({ sessionId: ctx.sessionId, worktreeDir: dir, ...args });
+					const status = await portalStatus(ctx, dir, sandbox);
 					const service = status.services.find((candidate) => candidate.key === portal.key);
-					return result(`${portal.name} is ready at ${service?.previewUrl ?? portal.url}.`);
+					return result(`${portal.name} is ready at ${service?.previewUrl ?? "its authenticated Portal URL"}.`);
 				} catch (error) { return result(`Could not start Portal: ${(error as Error).message}`); }
 			}),
 			tool("list_portals", "List this session's registered Portals and their readiness. Use this after starting a service before telling the user it is ready.", {}, async () => {
 				const dir = workspace(ctx); if (dir instanceof Error) return result(dir.message);
-				const portals = await listPortalServices(dir);
+				const sandbox = await ctx.sandbox();
+				if (!sandbox && ctx.hasSandbox()) return result("This session's Sandbox is sleeping or unavailable. Opening a Portal or sending a message wakes it.");
+				const portals = sandbox ? await listSandboxPortalServices(sandbox) : await listPortalServices(dir);
 				if (!portals.length) return result("No Portals are registered. Use start_portal for a live app or service.");
-				const status = await getPreviewStatus(dir);
+				const status = await portalStatus(ctx, dir, sandbox);
 				return result(portals.map((portal) => {
 					const service = status.services.find((candidate) => candidate.key === portal.key);
 					return `${portal.name}\nstate: ${portal.state}\nport: ${portal.port}\nurl: ${service?.previewUrl ?? "not ready"}${portal.description ? `\ndescription: ${portal.description}` : ""}`;
@@ -43,21 +57,36 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
 			}),
 			tool("stop_portal", "Stop one supervised Portal in this session. It never affects services in another session.", { name: z.string() }, async ({ name }: { name: string }) => {
 				const dir = workspace(ctx); if (dir instanceof Error) return result(dir.message);
-				try { await stopPortalService({ sessionId: ctx.sessionId, worktreeDir: dir, name }); return result(`Stopped ${name}.`); }
+				try {
+					const sandbox = await ctx.sandbox();
+					if (!sandbox && ctx.hasSandbox()) return result("Could not stop Portal: this session's Sandbox is sleeping or unavailable.");
+					if (sandbox) await stopSandboxPortalService({ sessionId: ctx.sessionId, sandbox, name });
+					else await stopPortalService({ sessionId: ctx.sessionId, worktreeDir: dir, name });
+					return result(`Stopped ${name}.`);
+				}
 				catch (error) { return result(`Could not stop Portal: ${(error as Error).message}`); }
 			}),
 			tool("restart_portal", "Restart one supervised Portal using its registered command and port.", { name: z.string() }, async ({ name }: { name: string }) => {
 				const dir = workspace(ctx); if (dir instanceof Error) return result(dir.message);
 				try {
-					const portal = await restartPortalService({ sessionId: ctx.sessionId, worktreeDir: dir, name });
-					const status = await getPreviewStatus(dir);
-					return result(`${portal.name} restarted at ${status.services.find((candidate) => candidate.key === portal.key)?.previewUrl ?? portal.url}.`);
+					const sandbox = await ctx.sandbox({ wake: true });
+					if (!sandbox && ctx.hasSandbox()) return result("Could not restart Portal: this session's Sandbox is unavailable.");
+					const portal = sandbox
+						? await restartSandboxPortalService({ sessionId: ctx.sessionId, sandbox, name })
+						: await restartPortalService({ sessionId: ctx.sessionId, worktreeDir: dir, name });
+					const status = await portalStatus(ctx, dir, sandbox);
+					return result(`${portal.name} restarted at ${status.services.find((candidate) => candidate.key === portal.key)?.previewUrl ?? "its authenticated Portal URL"}.`);
 				} catch (error) { return result(`Could not restart Portal: ${(error as Error).message}`); }
 			}),
 			tool("set_portal_path", "Set the root-relative route a Portal should open by default. Omit name to set the session's default testing route.", { name: z.string().optional(), path: z.string() }, async ({ name, path }: { name?: string; path: string }) => {
 				const dir = workspace(ctx); if (dir instanceof Error) return result(dir.message);
 				try {
-					if (name) setPortalPath(dir, path, name);
+					if (name) {
+						const sandbox = await ctx.sandbox();
+						if (!sandbox && ctx.hasSandbox()) return result("Could not set Portal route: this session's Sandbox is sleeping or unavailable.");
+						if (sandbox) await setSandboxPortalPath(sandbox, path, name);
+						else setPortalPath(dir, path, name);
+					}
 					else ctx.setDefaultPath(path.trim() === "" ? null : path);
 					return result(name ? `Set ${name}'s default route to ${path || "/"}.` : `Set this session's default route to ${path || "/"}.`);
 				} catch (error) { return result(`Could not set Portal path: ${(error as Error).message}`); }

@@ -43,6 +43,7 @@ import {
 import { searchIndex } from "../session-index";
 import { resolvePrTarget } from "../session-repos";
 import { destroySessionSandbox } from "../session-sandbox";
+import { stopAllPortalServices } from "../portal-supervisor";
 import {
 	deleteSession,
 	engineUserTexts,
@@ -1053,6 +1054,10 @@ export async function handleSessionsRoutes(
 			} catch {}
 		};
 		try {
+			// Local Portals are their own detached process groups. Stop them before
+			// deleting session metadata or optionally removing the worktree.
+			if (session.worktreeDir && !session.sandbox?.sandboxId)
+				await stopAllPortalServices({ sessionId: session.id, worktreeDir: session.worktreeDir });
 			deleteSession(session);
 			purgeTranscriptRows(session.id);
 			invalidateSessionsCache();

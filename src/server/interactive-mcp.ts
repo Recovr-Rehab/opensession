@@ -239,6 +239,11 @@ export function interactiveMcpServers(
 					"opensession-portals": createPortalsMcpServer({
 						sessionId,
 						worktreeDir: () => findSession(sessionId)?.worktreeDir || undefined,
+						sandbox: async (options) => {
+							const session = findSession(sessionId);
+							return session ? activeSandboxFor(session, options) : null;
+						},
+						hasSandbox: () => Boolean(findSession(sessionId)?.sandbox?.sandboxId),
 						setDefaultPath: (path) =>
 							touchNativeSession(sessionId, {
 								previewPath: path || undefined,

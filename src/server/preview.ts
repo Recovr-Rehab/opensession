@@ -35,7 +35,7 @@ import {
 import { basename, dirname, join, resolve } from "path";
 import { getAgentAwsEnv } from "./aws-creds";
 import { audit } from "./audit";
-import { listPortalServices } from "./portal-supervisor";
+import { listPortalServices, listSandboxPortalServices } from "./portal-supervisor";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import {
   lookupSandboxHttpsPort,
@@ -1146,6 +1146,8 @@ export async function getSandboxPreviewStatus(
   // way for volume-mode workspaces (no host copy).
   const conf = await sandbox.exec(["cat", ".ports.conf"]);
   const ports = conf.exitCode === 0 ? parsePortsText(conf.stdout) : [];
+	const portalRecords = await listSandboxPortalServices(sandbox);
+	const portalByKey = new Map(portalRecords.map((record) => [record.key, record]));
   const portalsManifest = await sandbox.exec(["cat", `${LIFECYCLE_DIR}/portals.json`]);
   const portalRecipes = parsePreviewPortalRecipes(
     portalsManifest.exitCode === 0 ? portalsManifest.stdout : null,
@@ -1156,6 +1158,7 @@ export async function getSandboxPreviewStatus(
   const portMap = await sandbox.ports(ports.map((service) => service.port));
   const host = await previewHost();
   for (const { key, port } of ports) {
+		const portal = portalByKey.get(key);
     const running = await sandboxPortListening(sandbox, port);
     let previewUrl: string | null = null;
     if (running) {
@@ -1176,12 +1179,15 @@ export async function getSandboxPreviewStatus(
     }
     // PIDs are container-internal — meaningless to the host UI; leave empty.
     services.push({
-      name: friendly(key),
+		name: portal?.name ?? friendly(key),
       key,
       port,
       running,
       pids: [],
       previewUrl,
+		...(portal?.description ? { description: portal.description } : {}),
+		...(portal?.defaultPath ? { defaultPath: portal.defaultPath } : {}),
+		...(portal ? { state: portal.state, managed: true } : {}),
     });
   }
   const webapp = services.find((s) => s.key === "WEBAPP_PORT");
