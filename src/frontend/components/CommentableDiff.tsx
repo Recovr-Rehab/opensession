@@ -28,7 +28,7 @@ const DIFF_DEL = "font-semibold text-red";
    stats that hide beneath them. */
 const FILE_ROW = "mb-2 overflow-clip rounded-lg border border-line bg-panel";
 const FILE_HEADER =
-  "group relative flex w-full min-w-0 cursor-pointer items-center gap-2 border-none bg-transparent px-2.5 py-2 text-left text-fg hover:bg-hover";
+  "group relative flex w-full min-w-0 cursor-pointer items-center gap-2 border-none px-2.5 py-2 text-left text-fg hover:bg-hover";
 const STICKY_FILE_HEADER =
   "sticky top-[var(--review-file-header-top,0px)] z-[6] bg-panel";
 
@@ -615,7 +615,7 @@ export function CommentableDiff({
           // `diff-file-header` is a DOM hook, not styling — no rule reaches it
           // any more: PrPanel's Files card finds this row by that class to
           // scroll to and expand a file (`el.querySelector(".diff-file-header")`).
-          className={`diff-file-header ${FILE_HEADER} ${stickyFileHeaders ? STICKY_FILE_HEADER : ""}`}
+          className={`diff-file-header ${FILE_HEADER} ${stickyFileHeaders ? STICKY_FILE_HEADER : "bg-transparent"}`}
           role="button"
           tabIndex={0}
           aria-expanded={isOpen}
