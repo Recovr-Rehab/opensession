@@ -63,7 +63,10 @@ import {
 	SIDEBAR_WS_TIME_HOVER,
 } from "../lib/sidebar-classes";
 import { mobileFilterBtn } from "../lib/app-header-classes";
-import { isScratchWorkspace } from "../lib/sidebar-workspaces";
+import {
+	isScratchWorkspace,
+	spawnedSessionBelongsInSidebar,
+} from "../lib/sidebar-workspaces";
 import type { ReviewQueueItem } from "../lib/review-queue";
 import {
 	fetchOpenPrs,
@@ -1038,15 +1041,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			// from inside a run — a throwaway fixture, a probe) belongs to that
 			// run, not to you: it gets a workspace like anything else, but not a
 			// row here. It surfaces the moment it needs a human — a blocked
-			// question — and while you have it open, so nothing can get stuck out
-			// of sight; a lane you set on it yourself claims it for good, exactly
-			// like claiming an automation run above. Work the Desk delegates on
-			// your behalf is never marked this way (server: session-control-wiring).
+			// question — or when you explicitly add it through the viewer. Work
+			// the Desk delegates on your behalf is never marked this way (server:
+			// session-control-wiring).
 			if (
-				s.spawnedBy &&
-				s.id !== selectedId &&
-				mineStatus(s) !== "needsinput" &&
-				!pinnedLane(s)
+				!spawnedSessionBelongsInSidebar(
+					s,
+					mineStatus(s) === "needsinput",
+					!!pinnedLane(s),
+				)
 			)
 				continue;
 			if (s.workspaceId) {
@@ -1186,28 +1189,18 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// rule "it came back because it needed me, and stays back until I hide it
 	// again" instead of flickering as questions get asked and answered.
 	//
-	// Otherwise you get a hidden row back by opening one of its sessions — ⌘K
-	// still finds it — which resurfaces the row (below) so its menu can offer
-	// "Restore to my sidebar"; prompting in it clears the hide outright
-	// (SessionViewer → unhideForSession). There is no Hidden band: hiding is
-	// removal from your sidebar, not a folder to browse.
+	// Otherwise the viewer offers "Add to sidebar" when you open a hidden
+	// session through a link or ⌘K. There is no Hidden band: hiding is removal
+	// from your sidebar, not a folder to browse.
 	const { hiddenKeys: hiddenRowKeys, resurfaced: resurfacedRows } = useMemo(
 		() => partitionHidden(allWsRows, hides),
 		[allWsRows, hides],
 	);
-	// The open session's row always shows, hidden or not — the same rule that keeps
-	// it from disappearing inside a collapsed band. It's what makes hiding
-	// reversible without a Hidden band to browse: ⌘K finds a hidden session (the
-	// palette ignores hides), opening it brings its row back, and the row menu
-	// then offers "Restore to my sidebar".
+	// Opening a deep link must not undo a personal hide. The viewer owns the
+	// recovery action while the row stays absent.
 	const wsRows = useMemo(
-		() =>
-			allWsRows.filter(
-				(r) =>
-					!hiddenRowKeys.has(r.key) ||
-					r.sessions.some((c) => c.id === selectedId),
-			),
-		[allWsRows, hiddenRowKeys, selectedId],
+		() => allWsRows.filter((r) => !hiddenRowKeys.has(r.key)),
+		[allWsRows, hiddenRowKeys],
 	);
 	// Consume the hide of any row that just resurfaced (blocked on a question),
 	// marking its sessions unread so the return reads as fresh activity — the same
@@ -2220,11 +2213,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		return list;
 	}
 	const automationsOpen = bandOpen("automations");
-	const visibleAutomationGroups = automationsOpen
-		? groups
-		: groups.filter((group) =>
-				group.items.some((session) => session.id === selectedId),
-			);
+	const visibleAutomationGroups = automationsOpen ? groups : [];
 	function toggleBand(band: GroupBand | "tools" | "workspaces") {
 		const key = `collapsed:band:${band}`;
 		setExpanded((prev) => {
@@ -5050,10 +5039,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 												<IconGear size={17} />
 											</span>
 										</button>
-										{/* When collapsed, still surface the actively selected
-										    session so it never disappears behind a closed header. */}
 										{group.items
-											.filter((s) => open || s.id === selectedId)
+											.filter(() => open)
 											.map((s) => {
 												const pin = sessionPinState(s);
 												return (

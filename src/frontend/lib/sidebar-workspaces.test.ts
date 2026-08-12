@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { isScratchWorkspace } from "./sidebar-workspaces";
+import {
+	isScratchWorkspace,
+	spawnedSessionBelongsInSidebar,
+} from "./sidebar-workspaces";
 
 describe("isScratchWorkspace", () => {
 	test("recognizes a workspace containing scratch sessions", () => {
@@ -13,5 +16,23 @@ describe("isScratchWorkspace", () => {
 			false,
 		);
 		expect(isScratchWorkspace([])).toBe(false);
+	});
+});
+
+describe("spawnedSessionBelongsInSidebar", () => {
+	test("keeps an unclaimed spawned deep link out of the sidebar", () => {
+		expect(
+			spawnedSessionBelongsInSidebar(
+				{ spawnedBy: "parent" },
+				false,
+				false,
+			),
+		).toBe(false);
+	});
+
+	test("includes spawned sessions that need attention or were claimed", () => {
+		const session = { spawnedBy: "parent" };
+		expect(spawnedSessionBelongsInSidebar(session, true, false)).toBe(true);
+		expect(spawnedSessionBelongsInSidebar(session, false, true)).toBe(true);
 	});
 });
