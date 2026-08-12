@@ -73,7 +73,7 @@ export async function runSessionPreviewAction(
 	if (!session || !worktreeDir)
 		throw new Error("this session has no worktree to preview");
 
-	const sandbox = await deps.activeSandboxFor(session);
+	const sandbox = await deps.activeSandboxFor(session, { wake: action === "start" });
 	if (!sandbox && session.sandbox?.sandboxId) {
 		throw new Error(
 			`this session's ${session.sandbox.provider} sandbox is not available`,

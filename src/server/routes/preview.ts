@@ -95,7 +95,7 @@ export async function handlePreviewRoutes(
 					{ status: 404 },
 				);
 			const sbx = session.worktreeDir
-				? await activeSandboxFor(session)
+				? await activeSandboxFor(session, { wake: true })
 				: null;
 			if (!session.worktreeDir || (!existsSync(session.worktreeDir) && !sbx))
 				return Response.json(
@@ -144,7 +144,7 @@ export async function handlePreviewRoutes(
 					{ status: 404 },
 				);
 			const sbx = session.worktreeDir
-				? await activeSandboxFor(session)
+				? await activeSandboxFor(session, { wake: true })
 				: null;
 			if (sbx)
 				return Response.json(

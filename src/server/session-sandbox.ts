@@ -45,12 +45,15 @@ export function destroySessionSandbox(
 }
 
 /**
- * Resolve the live sandbox for an explicit user action. Durable remote
- * providers wake here when stopped, so opening/statusing a Portal is itself a
- * wake signal. Null never means "fall back to host" for a volume workspace;
- * callers keep their existing unavailable response when wake fails.
+ * Resolve a live sandbox. Status inspection is deliberately non-waking: a
+ * sleeping session remains readable and its Portals sidebar must not spend
+ * compute merely to render. Callers performing an explicit compute action pass
+ * `wake: true`.
  */
-export async function activeSandboxFor(session: UnifiedSession): Promise<Sandbox | null> {
+export async function activeSandboxFor(
+	session: UnifiedSession,
+	options: { wake?: boolean } = {},
+): Promise<Sandbox | null> {
 	const sb = session.sandbox;
 	if (!sb?.provider || !sb.sandboxId) return null;
 	if (!sandboxesEnabled()) return null;
@@ -59,7 +62,7 @@ export async function activeSandboxFor(session: UnifiedSession): Promise<Sandbox
 		try {
 			const provider = getSandboxProvider(sb.provider);
 			let sandbox = await provider.get(sb.sandboxId);
-			if (sandbox && (await sandbox.status()) === "stopped" && provider.resume) {
+			if (sandbox && (await sandbox.status()) === "stopped" && options.wake && provider.resume) {
 				sandbox = await provider.resume(sb.sandboxId);
 			}
 			return sandbox && (await sandbox.status()) === "running" ? sandbox : null;

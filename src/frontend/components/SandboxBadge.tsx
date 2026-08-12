@@ -50,6 +50,14 @@ export function SandboxBadge({
 	if (!sandbox?.provider || sandbox.provider === "local") return null;
 	const mode = sandbox.workspace === "volume" ? "volume" : "bind";
 	const state = status?.status || (sandbox.sandboxId ? "running" : "gone");
+	const lifecycleLabel =
+		state === "running"
+			? "Awake"
+			: state === "stopped"
+				? "Sleeping"
+				: state === "gone"
+					? "Needs attention"
+					: "Preparing";
 	const dot =
 		state === "running"
 			? "bg-green"
@@ -81,11 +89,11 @@ export function SandboxBadge({
 			<Popover.Trigger
 				className="flex min-h-10 flex-none items-center gap-1.5 rounded-md border border-line bg-surface px-2 text-meta font-medium text-dim outline-none transition-[color,background-color,border-color,scale] hover:border-line-strong hover:text-fg focus-visible:border-line-strong active:scale-[0.96]"
 				data-testid="sandbox-badge"
+				aria-label={`Sandbox · ${lifecycleLabel}`}
 			>
 				<span className={cn("size-2 rounded-full", dot)} aria-hidden="true" />
 				<IconBox size={20} className="text-faint" />
-				<span>{sandbox.provider}</span>
-				<span className="text-faint">· {mode}</span>
+				<span>Sandbox</span>
 			</Popover.Trigger>
 			<Popover.Popup
 				side="bottom"
@@ -96,8 +104,11 @@ export function SandboxBadge({
 				<div className="px-2 pb-2 pt-1">
 					<div className="flex items-center gap-2 text-xs font-semibold text-fg">
 						<span className={cn("size-2 rounded-full", dot)} />
-						<span className="capitalize">{state}</span>
-						<span className="ml-auto font-medium text-faint">{sandbox.provider}</span>
+						<span>{lifecycleLabel}</span>
+						<span className="ml-auto font-medium text-faint">Runtime</span>
+					</div>
+					<div className="mt-1 text-[11px] text-dim">
+						{sandbox.provider} · {mode} workspace
 					</div>
 					{status?.cwd ? (
 						<div className="mt-1 truncate font-mono text-[10px] text-faint" title={status.cwd}>
@@ -111,7 +122,7 @@ export function SandboxBadge({
 						disabled={Boolean(working || status.busy)}
 						onClick={() => void act("pause")}
 					>
-						{working === "pause" ? "Pausing…" : "Pause compute"}
+						{working === "pause" ? "Sleeping…" : "Sleep sandbox"}
 					</button>
 				) : null}
 				{state === "stopped" && status?.canResume ? (
