@@ -3,6 +3,7 @@ import { DEFAULT_REPO_ID } from "./brand";
 import type { Group } from "./sidebar-types";
 import type { UnifiedSession } from "./types";
 import { sessionRepoOr } from "./session-repo";
+import { onRepoCountChanged, repoCount } from "./repo-count";
 import { RepoTile } from "../components/RepoTile";
 
 // Per-person group dots share the repo-tile swatch palette (RepoTile.tsx) —
@@ -103,12 +104,36 @@ export type PrsFilter = "default" | "all" | "none";
 export const DEFAULT_PROJECT = DEFAULT_REPO_ID;
 export const FILTER_KEY = "opensession-sidebar-filter";
 // Bumped when the default grouping changes. Because setFilter persists the
-// whole state, a stored "status" from before v2 is ambiguous — most people got
-// it by touching Repo or Person, not by choosing it — so a pre-v2 blob keeps
-// its repo/person/sort but takes the new default grouping once. Anything
-// written after that carries v2 and is honoured verbatim.
-export const FILTER_VERSION = 2;
-export const DEFAULT_GROUP_BY: GroupBy = "repo-status";
+// whole state, a stored grouping from before the bump is ambiguous — most
+// people got it by touching Repo or Person, not by choosing it — so a blob
+// carrying the default of its day keeps its repo/person/sort but takes the new
+// default. Anything written at the current version says what it means: v3
+// stores "auto" when nobody picked a grouping.
+export const FILTER_VERSION = 3;
+
+const GROUPINGS: GroupBy[] = [
+	"status",
+	"repo",
+	"repo-status",
+	"repo-inbox",
+	"recently",
+	"inbox",
+];
+
+/**
+ * The grouping to use when nobody picked one. A single project has nothing to
+ * group by, so it reads as a plain inbox; several get the same inbox bands
+ * nested under each project. It re-decides as projects are added, since the
+ * choice is stored as "auto" rather than as its answer.
+ *
+ * The count is only unknown on the very first load, before `/api/repos`
+ * answers (lib/repo-count) — assume several then, so an instance that has them
+ * doesn't paint a flat list and regroup a moment later.
+ */
+export function defaultGroupBy(): GroupBy {
+	const count = repoCount();
+	return count !== null && count <= 1 ? "inbox" : "repo-inbox";
+}
 
 export interface FilterState {
 	groupBy: GroupBy;
@@ -121,6 +146,13 @@ export interface FilterState {
 	prs: PrsFilter;
 }
 
+/** What a grouping can be on disk: a pick, or "auto" for nobody's pick. */
+export type StoredGroupBy = GroupBy | "auto";
+
+export interface StoredFilterState extends Omit<FilterState, "groupBy"> {
+	groupBy: StoredGroupBy;
+}
+
 /**
  * The person lens is shared, not the sidebar's private business: Home's
  * facepile and the sidebar's lanes read and write this one value, so the face
@@ -129,15 +161,30 @@ export interface FilterState {
  * rides along here because the whole state persists as one blob.
  */
 const CHANGE_EVENT = "opensession-sidebar-filter-changed";
+// What is stored (grouping possibly "auto") and what the app reads (that
+// resolved against the project count). Both are cached; a write, another tab,
+// or a change in the number of projects drops the resolved one.
+let stored: StoredFilterState | null = null;
 let current: FilterState | null = null;
 
 export function getFilter(): FilterState {
-	return (current ||= readFilter());
+	if (!current) {
+		stored ||= readStoredFilter();
+		current = {
+			...stored,
+			groupBy: stored.groupBy === "auto" ? defaultGroupBy() : stored.groupBy,
+		};
+	}
+	return current;
 }
 
 export function setFilter(patch: Partial<FilterState>) {
-	const next = { ...getFilter(), ...patch };
-	current = next;
+	getFilter();
+	// Picking a grouping from the menu makes it explicit: it stores the value
+	// rather than "auto", so adding a project won't move it afterwards.
+	const next: StoredFilterState = { ...stored!, ...patch };
+	stored = next;
+	current = null;
 	localStorage.setItem(FILTER_KEY, JSON.stringify({ ...next, v: FILTER_VERSION }));
 	window.dispatchEvent(new Event(CHANGE_EVENT));
 }
@@ -154,6 +201,15 @@ export function onFilterChanged(handler: () => void): () => void {
 if (typeof window !== "undefined") {
 	window.addEventListener("storage", (event) => {
 		if (event.key !== FILTER_KEY) return;
+		stored = null;
+		current = null;
+		window.dispatchEvent(new Event(CHANGE_EVENT));
+	});
+	// The project list landing (or a project being added) can change what
+	// "auto" means, so the sidebar re-reads it.
+	onRepoCountChanged(() => {
+		if (stored?.groupBy !== "auto") return;
+		if (current?.groupBy === defaultGroupBy()) return;
 		current = null;
 		window.dispatchEvent(new Event(CHANGE_EVENT));
 	});
@@ -202,20 +258,29 @@ export function personLensFilter(picked: string, currentUser: string): string {
 		: personFilterFor(picked, currentUser);
 }
 
-export function readFilter(): FilterState {
+/**
+ * Which grouping a stored blob is actually asking for. "auto" means nobody
+ * chose one, so `defaultGroupBy` decides and keeps deciding.
+ *
+ * A blob written before v3 can't say that: setFilter persists the whole
+ * state, so the grouping it carries may only be the default of its day. Those
+ * defaults — "status" before v2, "repo-status" before v3 — therefore read as
+ * unset, and everything else as a real choice.
+ */
+function storedGroupBy(v: any): StoredGroupBy {
+	const g = v?.groupBy;
+	if (!GROUPINGS.includes(g)) return "auto";
+	if (v.v === FILTER_VERSION) return g;
+	if (g === "repo-status") return "auto";
+	if (g === "status" && v.v !== 2) return "auto";
+	return g;
+}
+
+export function readStoredFilter(): StoredFilterState {
 	try {
 		const v = JSON.parse(localStorage.getItem(FILTER_KEY) || "{}");
-		const chosen = v.v === FILTER_VERSION;
 		return {
-			groupBy:
-				v.groupBy === "repo" ||
-				v.groupBy === "repo-status" ||
-				v.groupBy === "repo-inbox" ||
-				v.groupBy === "recently" ||
-				v.groupBy === "inbox" ||
-				(chosen && v.groupBy === "status")
-					? v.groupBy
-					: DEFAULT_GROUP_BY,
+			groupBy: storedGroupBy(v),
 			repo: typeof v.repo === "string" ? v.repo : "all",
 			// Legacy stored "all" behaved as "you" in the lanes — map it to "me"
 			// so nobody's default flips to everyone.
@@ -228,7 +293,7 @@ export function readFilter(): FilterState {
 		};
 	} catch {
 		return {
-			groupBy: DEFAULT_GROUP_BY,
+			groupBy: "auto",
 			repo: "all",
 			person: "me",
 			sort: "updated",

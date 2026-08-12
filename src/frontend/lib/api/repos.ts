@@ -1,5 +1,6 @@
 import { API_BASE, ApiError, request } from "./request";
 import { rememberRepoColors } from "../repo-colors";
+import { rememberRepoCount } from "../repo-count";
 
 export interface RepoInfo {
 	id: string;
@@ -83,6 +84,11 @@ export async function fetchRepos(cloud = false): Promise<RepoInfo[]> {
 			// Recorded here rather than at the call sites: every tile reads the
 			// assignment, and the tile takes a repo id, not a RepoInfo.
 			rememberRepoColors(data?.repos ?? []);
+			// The sidebar's default grouping depends on how many projects there
+			// are, and has to resolve before this request can answer — so the
+			// size of the registered set is cached for the next load. Only the
+			// local set counts; `cloud` lists a different one.
+			if (!cloud) rememberRepoCount((data?.repos ?? []).length);
 			return data?.repos ?? [];
 		} catch (error) {
 			const retryDelay = REPO_FETCH_RETRY_DELAYS_MS[attempt];
