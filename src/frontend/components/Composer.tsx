@@ -722,20 +722,6 @@ export function Composer({
     // falls through here to the busy-stop below), and Enter is never consumed,
     // so the send combos keep working in any mode.
     if (vim.handleKeyDown(e)) return;
-    // ⌘/Ctrl+N toggles note mode while the field is focused (Plain's shortcut).
-    // stopPropagation keeps the global ⌘N (new-session palette) from also firing.
-    if (
-      onNoteModeChange &&
-      (e.metaKey || e.ctrlKey) &&
-      !e.shiftKey &&
-      !e.altKey &&
-      (e.key === "n" || e.key === "N")
-    ) {
-      e.preventDefault();
-      e.stopPropagation();
-      onNoteModeChange(!noteMode);
-      return;
-    }
     // Esc while a run is busy = the stop button: interrupt the current turn.
     if (e.key === "Escape" && busy && onStop && !disabled) {
       e.preventDefault();

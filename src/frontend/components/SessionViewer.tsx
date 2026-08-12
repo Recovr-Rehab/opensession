@@ -1937,11 +1937,28 @@ export function SessionViewer({
 		});
 	}, [isBusy, loading, entries, session.runStartedAt]);
 
-	// Ctrl+R focuses the composer (overrides browser reload while in a session)
+	// Session-wide composer shortcuts. ⌘/Ctrl+N toggles team-note mode even when
+	// the composer is not focused; Ctrl+R focuses it directly.
 	const composerRef = useRef<HTMLTextAreaElement | null>(null);
 	useEffect(() => {
 		function onKeyDown(e: KeyboardEvent) {
 			if (!focused) return;
+			if (
+				!e.defaultPrevented &&
+				!e.repeat &&
+				(e.metaKey || e.ctrlKey) &&
+				!e.altKey &&
+				!e.shiftKey &&
+				(e.key.toLowerCase() === "n" || e.code === "KeyN") &&
+				!document.querySelector(
+					".palette-backdrop, .composer-schedule-modal-backdrop, .session-delete-overlay",
+				)
+			) {
+				e.preventDefault();
+				setNoteMode((on) => !on);
+				queueMicrotask(() => composerRef.current?.focus());
+				return;
+			}
 			if (
 				e.key.toLowerCase() === "r" &&
 				e.ctrlKey &&
