@@ -112,8 +112,12 @@ export const composerMenuItem =
  *  wide the icons draw. */
 export const composerMenuIcon =
 	"inline-flex w-5 items-center justify-center text-label text-dim";
+/** The surface those rows sit on. Edge and cast come from the same ring the
+ *  Base UI menus use (ui/menu.tsx) rather than a `border-line-strong` hairline:
+ *  that line is drawn for a control resting IN the page, and on a floating
+ *  popup it read a step darker than every other menu on screen. */
 export const composerMenuPopup =
-	"absolute bottom-[calc(100%+6px)] z-40 rounded-lg border border-line-strong bg-popup-glass [backdrop-filter:var(--popup-blur)] p-1 smooth-shadow-md";
+	"absolute bottom-[calc(100%+6px)] z-40 rounded-lg bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] p-1 smooth-shadow-ring-md";
 /** The menu's own floor width. Kept out of the surface above because a second
  *  `min-w-*` on the same element would not compose — the send-later menu is
  *  wider (it lists pending messages), and whichever Tailwind emitted last would

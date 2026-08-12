@@ -360,8 +360,8 @@ export const TAB_HISTORY =
  *  rule named after the swatch row it no longer dresses (those chips live in the
  *  tab context menu now). Above every other popup on the pane at z-1000. */
 export const NEW_MENU =
-	"fixed z-[1000] flex min-w-[250px] flex-col gap-px rounded-popup border border-line-strong bg-popup-glass [backdrop-filter:var(--popup-blur)] p-1 " +
-	"smooth-shadow-md";
+	"fixed z-[1000] flex min-w-[250px] flex-col gap-px rounded-popup bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] p-1 " +
+	"smooth-shadow-ring-md";
 export const NEW_MENU_ITEM =
 	"block w-full cursor-pointer whitespace-nowrap rounded-[calc(6px*var(--rf))] border-0 " +
 	"bg-transparent px-2 py-1.5 text-left text-label text-fg hover:bg-hover";

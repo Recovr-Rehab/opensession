@@ -29,8 +29,8 @@ const BACKDROP_NESTED = "fixed inset-0 z-[320]";
  *  fixed-positioned at the anchor. Same entrance and shadow as MINI_MENU below;
  *  one step rounder, and it sits under the menus it opens. */
 const FILTER_POPOVER =
-	"fixed z-[301] flex flex-col gap-2.5 rounded-popup border border-line-strong bg-popup-glass [backdrop-filter:var(--popup-blur)] " +
-	"px-3.5 py-3 smooth-shadow-md animate-[hovercard-in_var(--dur-micro)_var(--ease)]";
+	"fixed z-[301] flex flex-col gap-2.5 rounded-popup bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] " +
+	"px-3.5 py-3 smooth-shadow-ring-md animate-[hovercard-in_var(--dur-micro)_var(--ease)]";
 
 /** One labelled control per row: the label holds its width, the select takes
  *  the rest. */
@@ -154,7 +154,7 @@ export function FilterPopover({
 /** The dropdown menu shared by MiniSelect and the repo chip: portalled, so it
  *  escapes both the filter popover and the narrow sidebar. */
 const MINI_MENU =
-	"fixed z-[321] max-h-[60vh] overflow-y-auto rounded-popup border border-line-strong bg-popup-glass [backdrop-filter:var(--popup-blur)] p-[5px] smooth-shadow-md animate-[hovercard-in_var(--dur-micro)_var(--ease)]";
+	"fixed z-[321] max-h-[60vh] overflow-y-auto rounded-popup bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] p-[5px] smooth-shadow-ring-md animate-[hovercard-in_var(--dur-micro)_var(--ease)]";
 
 /** One row of that menu. The hover is a layer (SIDEBAR_HOVER_LAYER), so it
  *  adds to the selected row's wash instead of replacing it — which is what the
