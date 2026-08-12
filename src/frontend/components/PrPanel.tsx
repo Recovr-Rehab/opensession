@@ -1211,7 +1211,7 @@ export function PrPanel({
             inside the one scroll container so the identity scrolls away with
             the diff. Only the tab row sticks, so the reviewer keeps a way back
             to Conversation/Commits/Checks once they're deep in a file. */}
-        <main className="min-h-0 flex-1 overflow-y-auto bg-surface pb-24">
+        <main className="min-h-0 flex-1 overflow-y-auto bg-surface pb-24 [--review-file-header-top:106px]">
           <header className="flex min-h-[96px] shrink-0 items-center gap-5 px-6 py-4 phone:min-h-[78px] phone:px-3">
             <div className="min-w-0 flex-1">
               <a
@@ -1457,6 +1457,7 @@ export function PrPanel({
                     <CommentableDiff
                       patch={diff.patch}
                       diffStyle={diffStyle}
+                      stickyFileHeaders
                       defaultExpandedFiles={Infinity}
                       viewedFiles={prViewed?.key === viewedKey ? prViewed.viewed : undefined}
                       onToggleViewed={handleToggleViewed}
@@ -1517,6 +1518,7 @@ export function PrPanel({
                           <CommentableDiff
                             patch={section.patch}
                             diffStyle={diffStyle}
+                            stickyFileHeaders
                             defaultExpandedFiles={Infinity}
                             viewedFiles={prViewed?.key === viewedKey ? prViewed.viewed : undefined}
                             onToggleViewed={handleToggleViewed}
@@ -1539,6 +1541,7 @@ export function PrPanel({
                 <CommentableDiff
                   patch={diff.patch}
                   diffStyle={diffStyle}
+                  stickyFileHeaders
                   defaultExpandedFiles={Infinity}
                   viewedFiles={prViewed?.key === viewedKey ? prViewed.viewed : undefined}
                   onToggleViewed={handleToggleViewed}

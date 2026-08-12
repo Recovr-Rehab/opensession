@@ -26,9 +26,11 @@ const DIFF_DEL = "font-semibold text-red";
 /* One collapsible file. The header is the hover group for everything revealed
    inside it — the copy-path button, the edit and discard actions, and the
    stats that hide beneath them. */
-const FILE_ROW = "mb-2 overflow-hidden rounded-lg border border-line bg-panel";
+const FILE_ROW = "mb-2 overflow-clip rounded-lg border border-line bg-panel";
 const FILE_HEADER =
   "group relative flex w-full min-w-0 cursor-pointer items-center gap-2 border-none bg-transparent px-2.5 py-2 text-left text-fg hover:bg-hover";
+const STICKY_FILE_HEADER =
+  "sticky top-[var(--review-file-header-top,0px)] z-[6] bg-panel";
 
 /* Revealed on row hover but always occupying its space (opacity, not display),
    so nothing can shift under the pointer. Focus reveals it too — hover cannot
@@ -103,6 +105,8 @@ interface Props {
   groupsLoading?: boolean;
   /** PR review canvases use GitHub's side-by-side presentation; workspace diffs stay unified. */
   diffStyle?: "unified" | "split";
+  /** Keep each filename visible while its expanded file scrolls through a review canvas. */
+  stickyFileHeaders?: boolean;
   /**
    * Review-batching mode: when provided, already-added comments render inline as
    * pending cards (the parent owns the list and submits them as one review).
@@ -217,6 +221,7 @@ export function CommentableDiff({
   groups,
   groupsLoading,
   diffStyle = "unified",
+  stickyFileHeaders = false,
   viewedFiles,
   onToggleViewed,
   editFile,
@@ -610,7 +615,7 @@ export function CommentableDiff({
           // `diff-file-header` is a DOM hook, not styling — no rule reaches it
           // any more: PrPanel's Files card finds this row by that class to
           // scroll to and expand a file (`el.querySelector(".diff-file-header")`).
-          className={`diff-file-header ${FILE_HEADER}`}
+          className={`diff-file-header ${FILE_HEADER} ${stickyFileHeaders ? STICKY_FILE_HEADER : ""}`}
           role="button"
           tabIndex={0}
           aria-expanded={isOpen}
