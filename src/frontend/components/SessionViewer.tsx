@@ -828,12 +828,14 @@ export function SessionViewer({
 							mergedPr.title || "an update",
 							mergedPr.repo,
 						),
+						screenshot: session.walkthrough?.shots?.find((shot) => shot.after)?.after,
 						status: shippedChangeStatus,
 						onShare: sendShippedChangeToSlack,
 					}
 				: undefined,
 		[
 			mergedPr,
+			session.walkthrough?.shots,
 			sendShippedChangeToSlack,
 			shippedChangeStatus,
 		],

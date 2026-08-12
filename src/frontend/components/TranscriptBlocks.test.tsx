@@ -47,6 +47,7 @@ describe("TranscriptBlocks shipped change action", () => {
 					prNumber: 5606,
 					sessionId: "session-1",
 					defaultMessage: "We updated the toggle style in Tella.",
+					screenshot: "/tmp/toggle-after.png",
 					status: "idle",
 					onShare: () => {},
 				}}
@@ -61,6 +62,9 @@ describe("TranscriptBlocks shipped change action", () => {
 		expect(html).toContain("We updated the toggle style in Tella.");
 		expect(html).toContain("Send to");
 		expect(html).toContain('data-brand="slack"');
+		expect(html).toContain("%2Ftmp%2Ftoggle-after.png");
+		expect(html).not.toContain("border-line bg-panel");
+		expect(html).not.toContain("smooth-shadow-sm");
 	});
 
 	test("does not show the action for a different merged PR", () => {

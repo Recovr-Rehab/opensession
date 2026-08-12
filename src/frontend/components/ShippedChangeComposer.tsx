@@ -7,6 +7,7 @@ import { BrandMark } from "./BrandMark";
 export interface ShippedChangeComposerProps {
 	sessionId: string;
 	defaultMessage: string;
+	screenshot?: string;
 	status: "idle" | "sharing" | "shared";
 	onShare: (message: string, channel: string) => void;
 }
@@ -14,6 +15,7 @@ export interface ShippedChangeComposerProps {
 export function ShippedChangeComposer({
 	sessionId,
 	defaultMessage,
+	screenshot,
 	status,
 	onShare,
 }: ShippedChangeComposerProps) {
@@ -43,7 +45,7 @@ export function ShippedChangeComposer({
 	}, [sessionId]);
 
 	return (
-		<div className="mx-auto mb-6 -mt-2 w-full max-w-[var(--session-col)] rounded-lg border border-line bg-panel p-3 smooth-shadow-sm">
+		<div className="mx-auto mb-6 -mt-2 w-full max-w-[var(--session-col)] rounded-lg bg-panel p-3">
 			<div className="mb-2 flex items-center gap-2 text-label font-medium text-fg">
 				<BrandMark name="slack" size={16} />
 				Share what shipped
@@ -61,6 +63,13 @@ export function ShippedChangeComposer({
 					}
 				}}
 			/>
+			{screenshot && (
+				<img
+					className="mt-2 max-h-48 w-full rounded-md bg-surface object-contain"
+					src={`/media?path=${encodeURIComponent(screenshot)}`}
+					alt="Screenshot attached to the Slack update"
+				/>
+			)}
 			<div className="mt-2 flex items-center gap-2 phone:flex-col phone:items-stretch">
 				<label className="flex min-w-0 flex-1 items-center gap-2 text-meta text-dim">
 					<span className="shrink-0">Send to</span>
