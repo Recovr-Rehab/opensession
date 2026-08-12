@@ -15,7 +15,7 @@ import { BottomSheet, SheetBody, SheetItem, SheetSeparator } from "../../ui/shee
 import { openLightbox } from "../MediaLightbox";
 import { repoLabel } from "../RepoTile";
 import { CardFooter, CardLink, checksLabel, osReviewLabel } from "../SidebarRowCards";
-import { IconGitMerge, IconInbox, IconLink, IconMail, IconMoon, IconPin, IconPullRequest } from "../icons";
+import { IconArrowUpRight, IconGitMerge, IconInbox, IconLink, IconMail, IconMoon, IconPin, IconPullRequest } from "../icons";
 import React, { useEffect, useState } from "react";
 
 // The session row's card body. Content is state-dependent: the prominent status
@@ -121,8 +121,7 @@ export function SessionCardBody({ session: s }: { session: UnifiedSession }) {
 					>
 						<span className="text-[0.95em]">
 							{s.prNumber ? `#${s.prNumber}` : "PR"}
-						</span>{" "}
-						↗
+						</span>
 					</CardLink>
 				)}
 			</CardFooter>
@@ -317,12 +316,16 @@ function WsOverviewInfo({
 	const media = ov?.media || [];
 	return (
 		<>
-			{/* What changed, not where it lives: a generated branch name
-			    ("auto-plain-ticket-triage-202608121249") fills the line, truncates,
-			    and answers nothing the title doesn't. The diff takes its place, and
-			    the repo stands in when there is no PR to size. */}
+			{/* The PR facts, on one strip above the title: what changed, what the
+			    automated review made of it, and where it stands. A generated branch
+			    name ("auto-plain-ticket-triage-202608121249") used to hold this
+			    line, truncating to answer nothing the title doesn't. The verdict
+			    reads better here than under the title, where it sat between the
+			    name and the description and pushed them apart. */}
 			<div className="flex min-w-0 items-center gap-[7px]">
-				<span className="min-w-0 flex-1 truncate text-meta">
+				{/* The diff is two short numbers and never truncates; the verdict is
+				    the variable-length half, so it takes the slack and gives it back. */}
+				<span className="shrink-0 text-meta">
 					{prSession?.prAdditions != null && prSession?.prDeletions != null ? (
 						<>
 							<span className="text-green">
@@ -338,21 +341,21 @@ function WsOverviewInfo({
 						</span>
 					)}
 				</span>
-				<span className="flex shrink-0 items-center" title={meta?.label}>
+				{/* What os-review made of this PR — the question a Ready-to-merge row
+				    raises, answered without opening GitHub. */}
+				{prSession?.prOsReview && (
+					<span className="min-w-0 flex-1 truncate text-right text-meta">
+						<span className="text-faint">OS review </span>
+						{osReviewLabel(prSession.prOsReview)}
+					</span>
+				)}
+				{/* `ml-auto` only bites when there is no verdict to take the slack. */}
+				<span className="ml-auto flex shrink-0 items-center" title={meta?.label}>
 					<WsStatusMark row={row} size={22} />
 				</span>
 			</div>
 
 			<div className="mt-[5px] text-label font-semibold leading-[1.3]">{row.name}</div>
-
-			{/* What os-review made of this PR — the question a Ready-to-merge row
-			    raises, answered without opening GitHub. */}
-			{prSession?.prOsReview && (
-				<div className="mt-[3px] text-meta font-medium">
-					<span className="text-faint">OS review </span>
-					{osReviewLabel(prSession.prOsReview)}
-				</div>
-			)}
 
 			{row.status === "needsinput" &&
 				(row.sessions.some((c) => c.waitingForInput) ? (
@@ -499,7 +502,8 @@ export function WsCardBody({
 								: `${WS_ACTION} border border-line bg-surface text-dim hover:bg-hover hover:text-fg`
 						}
 					>
-						{prReady ? "Merge" : "Review"} ↗
+						{prReady ? "Merge" : "Review"}
+						<IconArrowUpRight size={15} className="opacity-80" />
 					</a>
 				) : null}
 				{prSession?.prUrl && (
@@ -509,8 +513,7 @@ export function WsCardBody({
 					>
 						<span className="text-[0.95em]">
 							{prSession.prNumber ? `#${prSession.prNumber}` : "PR"}
-						</span>{" "}
-						↗
+						</span>
 					</CardLink>
 				)}
 				{prStatusBits.length > 0 && (

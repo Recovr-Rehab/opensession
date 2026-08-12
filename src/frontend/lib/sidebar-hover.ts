@@ -100,8 +100,11 @@ export interface WsCardRow {
 
 // Footer action button base — the color variant carries the status meaning
 // (green = ready to merge, purple = merged/archive, accent = needs an answer).
+// Sized like ui/button's `sm`, and tight-leading for the same reason that
+// primitive is: a text utility's stock line height pads one side of the label
+// more than the other, which on a solid plate reads as the word sitting high.
 export const WS_ACTION =
-	"flex shrink-0 cursor-pointer items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium no-underline";
+	"inline-flex min-h-[26px] shrink-0 cursor-pointer items-center justify-center gap-1 rounded-md px-2.5 text-xs font-medium leading-none no-underline";
 
 // Overview (description + thumbnails) for a workspace row. Same cache (and
 // key) as the right panel's WorkspaceInfo block, so a workspace that's been

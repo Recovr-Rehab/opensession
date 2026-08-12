@@ -5,7 +5,7 @@ import { relativeTime, type OpenPr } from "../lib/api";
 import { providerFromUrl } from "../lib/provider";
 import { TONE_TEXT, prettyReview, type HoverTone } from "../lib/sidebar-hover";
 import { plainThreadUrl } from "./PlainThreadPanel";
-import { IconGitMerge } from "./icons";
+import { IconArrowUpRight, IconGitMerge } from "./icons";
 import { Popover } from "../ui/popover";
 
 /**
@@ -119,7 +119,9 @@ function CardRows({ rows }: { rows: Array<[string, React.ReactNode]> }) {
  * Tailwind Preflight (see styles/tailwind.css), so a bare `<a>` keeps the UA's
  * underline and `legacy.css`'s accent link colour — which is why this has to
  * say `no-underline` out loud, and why every card must go through it rather
- * than hand-rolling an anchor and forgetting to.
+ * than hand-rolling an anchor and forgetting to. The leaving arrow belongs to
+ * the link, not to each caller's label: as a raw "↗" glyph it carried its own
+ * font's side bearings and sat off-centre beside the text.
  */
 export function CardLink({
 	href,
@@ -136,9 +138,10 @@ export function CardLink({
 			target="_blank"
 			rel="noopener noreferrer"
 			title={title}
-			className="shrink-0 text-xs text-dim no-underline hover:text-fg"
+			className="inline-flex shrink-0 items-center gap-0.5 text-xs text-dim no-underline hover:text-fg"
 		>
 			{children}
+			<IconArrowUpRight size={15} className="opacity-70" />
 		</a>
 	);
 }
@@ -328,7 +331,7 @@ export function PrRowCard({ item }: { item: ReviewQueueItem }) {
 					href={pr.url}
 					title={`Open on ${providerFromUrl(pr.url).name}`}
 				>
-					<span className="text-[0.95em]">#{pr.number}</span> ↗
+					<span className="text-[0.95em]">#{pr.number}</span>
 				</CardLink>
 			</CardFooter>
 		</>
@@ -412,7 +415,7 @@ export function SupportRowCard({
 				time={stamp ? `Updated ${relativeTime(stamp)}` : ""}
 				timeTitle={stamp ? new Date(stamp).toLocaleString() : undefined}
 			>
-				<CardLink href={plainThreadUrl(t.id)}>Open in Plain ↗</CardLink>
+				<CardLink href={plainThreadUrl(t.id)}>Open in Plain</CardLink>
 			</CardFooter>
 		</>
 	);
