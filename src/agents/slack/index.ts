@@ -15,7 +15,10 @@ import {
   verifyGitHubSignature,
 } from "../../server/shared/signature";
 import { handleMessageEvent, handleMentionEvent } from "./handlers";
-import { shouldHandleAppMention } from "./event-routing";
+import {
+  shouldHandleAppMention,
+  shouldHandleDirectMessage,
+} from "./event-routing";
 import { handleLinkShared } from "./unfurl";
 import {
   handlePullRequestReview,
@@ -360,7 +363,7 @@ export class SlackAgent implements AgentModule {
         }
 
         // Handle message.im events (DMs)
-        if (event.type === "message" && event.channel_type === "im") {
+        if (shouldHandleDirectMessage(event)) {
           const eventId = `${event.channel}-${event.ts}`;
           if (isEventProcessed(eventId)) {
             console.log(`[slack] Duplicate event: ${eventId}`);
