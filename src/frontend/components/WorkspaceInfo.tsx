@@ -60,6 +60,7 @@ import {
 	GIT_ROW,
 } from "../lib/pr-tone-classes";
 import { openLightbox } from "./MediaLightbox";
+import { PrChecksPopover } from "./PrChecksPopover";
 import { repoLabel } from "./RepoTile";
 import { SandboxBadge } from "./SandboxBadge";
 import {
@@ -129,6 +130,8 @@ interface Props {
 	onReviewChange?: (sessionId: string, req: ReviewRequestInfo | null) => void;
 	/** Jump to a sibling tab when a status chip / reply row is clicked. */
 	onOpenTab?: (tab: PanelTab) => void;
+	/** Open the current PR directly on its Checks tab. */
+	onOpenChecks?: () => void;
 	/** The session's scratch assets — listed in the Info panel; clicking one
 	    opens the full-width Assets view-tab focused on that file. */
 	assets?: SessionAssetFile[];
@@ -514,6 +517,63 @@ function FileRow({
 				</Popover.Popup>
 			)}
 		</Popover.Root>
+	);
+}
+
+function ChecksCard({
+	pr,
+	onOpenChecks,
+}: {
+	pr: PrDetails;
+	onOpenChecks?: () => void;
+}) {
+	const checks = pr.checks || [];
+	if (checks.length === 0) return null;
+	const failed = checks.filter((check) =>
+		["FAILURE", "TIMED_OUT", "ERROR", "ACTION_REQUIRED"].includes(
+			check.conclusion,
+		),
+	).length;
+	const pending = checks.filter(
+		(check) =>
+			(check.status !== "COMPLETED" && check.status !== "") ||
+			check.conclusion === "PENDING" ||
+			check.conclusion === "EXPECTED",
+	).length;
+	const passed = checks.filter((check) => check.conclusion === "SUCCESS").length;
+	const tone = failed > 0
+		? { dot: "bg-red", text: "text-red" }
+		: pending > 0
+			? { dot: "bg-yellow", text: "text-yellow" }
+			: { dot: "bg-green", text: "text-green" };
+	const summary = failed > 0
+		? `${failed} failing`
+		: pending > 0
+			? `${pending} running`
+			: `${passed} passed`;
+
+	return (
+		<div className={INFO_SECTION_CLASS}>
+			<div className={INFO_LABEL_CLASS}>Checks</div>
+			<PrChecksPopover
+				checks={checks}
+				trigger={
+					<button
+						type="button"
+						className="flex min-h-10 w-full items-center gap-2 rounded-lg bg-panel px-3 py-2.5 text-left transition-[background-color,scale] hover:bg-hover active:scale-[0.96] phone:min-h-11"
+						onClick={onOpenChecks}
+					>
+						<span className={`size-2 shrink-0 rounded-full ${tone.dot}`} aria-hidden />
+						<span className="min-w-0 flex-1 text-label font-semibold text-fg">
+							{checks.length} check{checks.length === 1 ? "" : "s"}
+						</span>
+						<span className={`shrink-0 text-label font-semibold ${tone.text}`}>
+							{summary}
+						</span>
+					</button>
+				}
+			/>
+		</div>
 	);
 }
 
@@ -1220,6 +1280,7 @@ export function WorkspaceInfo({
 	reviewAcceptedFromPr,
 	onReviewChange,
 	onOpenTab,
+	onOpenChecks,
 	onAddToInput,
 	onOpenSession,
 	send,
@@ -1444,6 +1505,7 @@ export function WorkspaceInfo({
 					</div>
 				)}
 			</div>
+			{pr && <ChecksCard pr={pr} onOpenChecks={onOpenChecks} />}
 			{pr?.number && (
 				<AgentReviewCard
 					sessionId={sessionId}

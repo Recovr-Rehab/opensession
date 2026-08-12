@@ -5028,6 +5028,10 @@ export function SessionViewer({
 											reviewRequestSessionId={effectiveReview?.ownerId}
 											reviewAcceptedFromPr={effectiveReview?.acceptedFromPr}
 											onReviewChange={onReviewChange}
+											onOpenChecks={() => {
+												setInfoPageOpen(false);
+												focusPrInReview(undefined, "checks");
+											}}
 											send={connected ? send : undefined}
 											assets={assetFiles}
 											onOpenAsset={(path) => {
@@ -6055,6 +6059,7 @@ export function SessionViewer({
 										reviewRequestSessionId={effectiveReview?.ownerId}
 										reviewAcceptedFromPr={effectiveReview?.acceptedFromPr}
 										onReviewChange={onReviewChange}
+										onOpenChecks={() => focusPrInReview(undefined, "checks")}
 										send={connected ? send : undefined}
 										assets={assetFiles}
 										onOpenAsset={(path) => setOverlayAssetPath(path)}
