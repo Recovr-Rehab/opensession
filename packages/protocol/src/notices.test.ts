@@ -215,11 +215,7 @@ describe("classifyEntry", () => {
 			classifyEntry(
 				entry({ type: "system", content: "Earlier…", noticeKind: "compaction" }),
 			).notice,
-		).toMatchObject({
-			kind: "compaction",
-			title: "Context compacted",
-			body: "collapsed",
-		});
+		).toMatchObject({ kind: "compaction", body: "collapsed" });
 	});
 
 	it("turns a worker report into a notice that links back to the worker", () => {

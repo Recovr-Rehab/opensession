@@ -20,6 +20,13 @@ struct ComposerAddMenu: View {
     /// draft rather than opening a picker that can't submit.
     var hasDraft: Bool = false
     var onSchedule: (() -> Void)?
+    /// A note is a human-to-human message, not an attachment carrier. Existing
+    /// staged images stay with the next prompt but don't appear on the note.
+    var attachmentsEnabled = true
+    /// The session's one-message note mode. It sits beside the ordinary
+    /// attachment actions so the same "+" menu owns every composer mode.
+    var noteMode = false
+    var onToggleNoteMode: (() -> Void)?
     /// Set only for an ask-mode session that the server would let promote.
     var onSwitchToCode: (() -> Void)?
     var promoting: Bool = false
@@ -37,27 +44,29 @@ struct ComposerAddMenu: View {
 
     var body: some View {
         Menu {
-            Button {
-                #if os(iOS)
-                showingPhotos = true
-                #else
-                importing = true
-                #endif
-            } label: {
-                Label(attachLabel, systemImage: "photo.on.rectangle")
-            }
-            .disabled(remaining == 0)
-
-            #if os(iOS)
-            if CameraPicker.isAvailable {
+            if attachmentsEnabled {
                 Button {
-                    showingCamera = true
+                    #if os(iOS)
+                    showingPhotos = true
+                    #else
+                    importing = true
+                    #endif
                 } label: {
-                    Label("Take a photo", systemImage: "camera")
+                    Label(attachLabel, systemImage: "photo.on.rectangle")
                 }
                 .disabled(remaining == 0)
+
+                #if os(iOS)
+                if CameraPicker.isAvailable {
+                    Button {
+                        showingCamera = true
+                    } label: {
+                        Label("Take a photo", systemImage: "camera")
+                    }
+                    .disabled(remaining == 0)
+                }
+                #endif
             }
-            #endif
 
             if let onReferenceFile {
                 Button(action: onReferenceFile) {
@@ -86,6 +95,15 @@ struct ComposerAddMenu: View {
                     Label("Send later", systemImage: "clock")
                 }
                 .disabled(!hasDraft)
+            }
+
+            if let onToggleNoteMode {
+                Button(action: onToggleNoteMode) {
+                    Label(
+                        noteMode ? "Back to prompting" : "Write a team note",
+                        systemImage: noteMode ? "arrow.uturn.backward" : "note.text"
+                    )
+                }
             }
         } label: {
             icon

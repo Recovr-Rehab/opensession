@@ -149,6 +149,24 @@ final class ServerEventTests: XCTestCase {
         XCTAssertEqual(questionId, "ask-1")
     }
 
+    func testSessionNotesDecodeAndADeletedNoteCarriesItsId() {
+        let note = #"{"type":"session_note","sessionId":"bks-1","note":{"id":"note-1","user":"Kent","text":"Check this","ts":1760000000000}}"#
+        guard case .sessionNote(let sessionId, let decoded) = parse(note) else {
+            return XCTFail("expected .sessionNote")
+        }
+        XCTAssertEqual(sessionId, "bks-1")
+        XCTAssertEqual(decoded.id, "note-1")
+        XCTAssertEqual(decoded.user, "Kent")
+        XCTAssertEqual(decoded.text, "Check this")
+        XCTAssertEqual(decoded.ts, 1_760_000_000_000)
+
+        guard case .sessionNoteDeleted(let deletedSession, let noteId) =
+            parse(#"{"type":"session_note_deleted","sessionId":"bks-1","noteId":"note-1"}"#)
+        else { return XCTFail("expected .sessionNoteDeleted") }
+        XCTAssertEqual(deletedSession, "bks-1")
+        XCTAssertEqual(noteId, "note-1")
+    }
+
     func testNoticeAndError() {
         guard case .notice(let message) = parse(#"{"type":"notice","message":"heads up"}"#) else {
             return XCTFail("expected .notice")

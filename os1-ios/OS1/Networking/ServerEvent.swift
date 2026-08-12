@@ -10,6 +10,8 @@ enum ServerEvent: Sendable {
     case transcriptInit(sessionId: String, entries: [TranscriptEntry], cursor: HistoryCursor)
     case transcriptHistory(sessionId: String, entries: [TranscriptEntry], cursor: HistoryCursor)
     case transcriptAppend(sessionId: String, entries: [TranscriptEntry])
+    case sessionNote(sessionId: String, note: SessionNote)
+    case sessionNoteDeleted(sessionId: String, noteId: String)
     case streamStart(sessionId: String)
     case streamText(sessionId: String, text: String)
     case streamEntry(sessionId: String, entry: TranscriptEntry)
@@ -51,6 +53,12 @@ enum ServerEvent: Sendable {
         case "transcript_append":
             guard let id = frame.sessionId else { return .ignored }
             return .transcriptAppend(sessionId: id, entries: frame.entries ?? [])
+        case "session_note":
+            guard let id = frame.sessionId, let note = frame.note else { return .ignored }
+            return .sessionNote(sessionId: id, note: note)
+        case "session_note_deleted":
+            guard let id = frame.sessionId, let noteId = frame.noteId else { return .ignored }
+            return .sessionNoteDeleted(sessionId: id, noteId: noteId)
         case "stream_start":
             guard let id = frame.sessionId else { return .ignored }
             return .streamStart(sessionId: id)
@@ -207,6 +215,8 @@ private struct RawFrame: Decodable {
     let bootId: String?
     let entries: [TranscriptEntry]?
     let entry: TranscriptEntry?
+    let note: SessionNote?
+    let noteId: String?
     let text: String?
     struct WireViewing: Decodable {
         let user: String?

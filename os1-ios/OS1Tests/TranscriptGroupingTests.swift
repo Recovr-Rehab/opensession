@@ -348,6 +348,32 @@ final class TranscriptGroupingTests: XCTestCase {
         )
         XCTAssertEqual(blocks.first?.entryIds, [])
     }
+
+    func testTeamNotesInterleaveByTimestampWithoutSplittingAFooter() {
+        let items = TranscriptGrouping.displayItems(from: [
+            TranscriptEntry(
+                id: "a1", type: "assistant", content: "First.",
+                timestamp: "2026-01-01T00:00:00Z"
+            ),
+            TranscriptEntry(
+                id: "a2", type: "assistant", content: "Second.",
+                timestamp: "2026-01-01T00:02:00Z"
+            ),
+        ])
+        let note = SessionNote(
+            id: "note-1", user: "Kent", text: "Look here",
+            ts: 1_767_225_660_000, editedAt: nil
+        )
+        let blocks = TranscriptGrouping.blocks(
+            from: items,
+            live: false,
+            worktreeDir: nil,
+            notes: [note]
+        )
+
+        XCTAssertEqual(blocks.map(\.id), ["a1", "note:note-1", "a2"])
+        XCTAssertTrue(blocks[1].entryIds.isEmpty)
+    }
 }
 
 /// Session ids in agent output become links you can follow. The rewrite runs

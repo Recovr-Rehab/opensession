@@ -274,7 +274,13 @@ struct SessionView: View {
                                     // words, so they get no author fallback —
                                     // the web makes the same exception.
                                     owner: viewModel.session.isAutomation
-                                        ? nil : viewModel.session.startedBy
+                                        ? nil : viewModel.session.startedBy,
+                                    onEditNote: { note, text in
+                                        try await viewModel.editSessionNote(note, text: text)
+                                    },
+                                    onDeleteNote: { note in
+                                        try await viewModel.deleteSessionNote(note)
+                                    }
                                 )
                                 .id(block.id)
                                 .transcriptTail(block.id == tailId)
@@ -2069,6 +2075,10 @@ private struct SessionInputBar: View {
     /// is in flight), so the pending row waits out that window and only shows
     /// up when the send is genuinely slow, offline, or refused.
     @State private var pendingSendVisible = false
+    /// Notes are one-message context: they post straight to the team and never
+    /// enter the engine or busy-message queue.
+    @State private var noteMode = false
+    @State private var addingNote = false
     /// Roughly the height of a one-line `.body` field, scaled with Dynamic
     /// Type. The wrap test compares against 1.6× this, comfortably between
     /// one line and two whatever internal padding the field carries.
@@ -2089,6 +2099,13 @@ private struct SessionInputBar: View {
             // the field you type in, so it now ticks at the end of the
             // transcript under the last message (`RunStatusFooter`) — this
             // chip is left for what's waiting on the composer itself.
+            if noteMode {
+                noteModeChip
+                    .transition(
+                        .opacity.combined(with: .scale(scale: 0.94, anchor: .bottomLeading))
+                    )
+            }
+
             if (viewModel.queuedCount > 0 && viewModel.queuedItems.isEmpty)
                 || visibleNotice != nil {
                 composerChip
@@ -2099,7 +2116,7 @@ private struct SessionInputBar: View {
                     )
             }
 
-            if !viewModel.attachedImages.isEmpty {
+            if !noteMode && !viewModel.attachedImages.isEmpty {
                 AttachedImagesRow(images: viewModel.attachedImages) { image in
                     viewModel.attachedImages.removeAll { $0.id == image.id }
                 }
@@ -2131,6 +2148,7 @@ private struct SessionInputBar: View {
         .padding(.top, Self.barTopPadding)
         .padding(.bottom, 8)
         .animation(.smooth(duration: 0.22), value: visibleNotice)
+        .animation(.smooth(duration: 0.18), value: noteMode)
         // The send you can feel. Keyed on the view model's send counter rather
         // than the button's action, so every way of sending gets it: the disc,
         // the hold menu's steer/queue, Return on the software keyboard and
@@ -2315,6 +2333,33 @@ private struct SessionInputBar: View {
         .accessibilityHint(notice == nil ? "" : "Dismisses the notice")
     }
 
+    private var noteModeChip: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "note.text")
+            Text("Team note")
+            Spacer(minLength: 8)
+            Button {
+                noteMode = false
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.caption.weight(.semibold))
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Leave note mode")
+        }
+        .font(.caption.weight(.medium))
+        .foregroundStyle(OS1VisualStyle.yellow)
+        .padding(.leading, 10)
+        .padding(.trailing, 3)
+        .padding(.vertical, 3)
+        .background(
+            OS1VisualStyle.yellow.opacity(0.12),
+            in: Capsule()
+        )
+    }
+
     private var visibleNotice: String? {
         guard let notice = viewModel.notice else { return nil }
         if case .connected = viewModel.connectionState { return notice }
@@ -2490,7 +2535,7 @@ private struct SessionInputBar: View {
     /// into the narrow middle column. Mac always uses the multi-line form.
     private var isSingleRow: Bool {
         #if os(iOS)
-        !draftWrapped && viewModel.attachedImages.isEmpty
+        !draftWrapped && (noteMode || viewModel.attachedImages.isEmpty)
         #else
         false
         #endif
@@ -2530,12 +2575,16 @@ private struct SessionInputBar: View {
                 }
 
                 TextField(
-                    composerPlaceholder,
                     text: $viewModel.draft,
-                    axis: .vertical
-                )
+                    prompt: Text(composerPlaceholder).foregroundStyle(
+                        noteMode ? OS1VisualStyle.notePlaceholder : OS1VisualStyle.textFaint
+                    )
+                ) {
+                    Text(noteMode ? "Team note" : "Message")
+                }
                 .textFieldStyle(.plain)
                 .lineLimit(1...10)
+                .foregroundStyle(OS1VisualStyle.text)
                 // Measured on the field itself, BEFORE the frame and padding
                 // below — so the reading is the text's own height and doesn't
                 // move when the surrounding layout does.
@@ -2548,7 +2597,7 @@ private struct SessionInputBar: View {
                     viewModel.userDidInteract()
                     // Starting to write is a statement about where you want to
                     // be: at the end of the conversation you're replying to.
-                    if previous.isEmpty, !draft.isEmpty {
+                    if !noteMode, previous.isEmpty, !draft.isEmpty {
                         viewModel.draftStarted()
                         // The first character is the earliest honest signal
                         // that a send is coming — warm the engine there, so
@@ -2576,15 +2625,17 @@ private struct SessionInputBar: View {
                 // iOS the software keyboard's return key just wraps, as before.
                 .onSubmit {
                     #if os(iOS)
-                    viewModel.sendDraft()
+                    send()
                     #else
-                    if sendKey == "enter" { viewModel.sendDraft() }
+                    if sendKey == "enter" { send() }
                     #endif
                 }
                 // A copied screenshot pastes straight into the attachments
                 // (Cmd+V on Mac, long-press Paste on iOS); text pastes flow
                 // through to the field untouched.
-                .pastesImages(into: $viewModel.attachedImages)
+                .pastesImages(
+                    into: noteMode ? .constant([]) : $viewModel.attachedImages
+                )
 
                 if isSingleRow {
                     // Dictation leads the trailing controls: it belongs to
@@ -2600,7 +2651,7 @@ private struct SessionInputBar: View {
                     if viewModel.isRunning {
                         stopButton
                     }
-                    if !viewModel.isRunning || viewModel.canSend {
+                    if noteMode || !viewModel.isRunning || canSubmit {
                         sendButton
                     }
                 }
@@ -2665,7 +2716,9 @@ private struct SessionInputBar: View {
                 // near-opaque, so a tint added there paints where nothing can
                 // see it.
                 .overlay {
-                    if viewModel.session.mode == "ask" {
+                    if noteMode {
+                        composerShape.fill(OS1VisualStyle.yellow.opacity(0.10))
+                    } else if viewModel.session.mode == "ask" {
                         composerShape.fill(OS1VisualStyle.green.opacity(0.09))
                     }
                 }
@@ -2684,8 +2737,9 @@ private struct SessionInputBar: View {
         // Growth and the one-row → multi-line morph both want to track the
         // text rather than ease behind it — a snappy, short spring so a fast
         // typist never sees the box lagging the caret.
-        .animation(.snappy(duration: 0.18), value: viewModel.draft)
-        .animation(.snappy(duration: 0.18), value: isSingleRow)
+            .animation(.snappy(duration: 0.18), value: viewModel.draft)
+            .animation(.snappy(duration: 0.18), value: isSingleRow)
+            .animation(.snappy(duration: 0.18), value: noteMode)
         #endif
     }
 
@@ -2704,7 +2758,13 @@ private struct SessionInputBar: View {
             hasDraft: !viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
             // Scheduling is a server-side hold on a native session's own queue;
             // an agent-owned session has no such queue to put it on.
-            onSchedule: isNativeSession ? { sheet = .schedule } : nil,
+            onSchedule: noteMode ? nil : (isNativeSession ? { sheet = .schedule } : nil),
+            attachmentsEnabled: !noteMode,
+            noteMode: noteMode,
+            onToggleNoteMode: {
+                noteMode.toggle()
+                inputFocused = true
+            },
             // Ask mode reads the code but can't change it. Promoting cuts a
             // worktree, so it's one-way — and the server only allows it here.
             onSwitchToCode: (isNativeSession && viewModel.session.mode == "ask")
@@ -2728,6 +2788,7 @@ private struct SessionInputBar: View {
     }
 
     private var composerPlaceholder: String {
+        if noteMode { return "Only your team will see this" }
         guard viewModel.isRunning else { return "Message" }
         return busySend == "steer"
             ? "Message — steers this run"
@@ -2742,7 +2803,14 @@ private struct SessionInputBar: View {
     /// between, so an idle composer keeps the plain button.
     @ViewBuilder
     private var sendButton: some View {
-        if viewModel.isRunning {
+        if noteMode {
+            Button { send() } label: { sendButtonFace }
+                .buttonStyle(.plain)
+                .disabled(!canSubmit)
+                .frame(width: 44, height: 44)
+                .contentShape(Circle())
+                .accessibilityLabel("Add note")
+        } else if viewModel.isRunning {
             Menu {
                 Button {
                     viewModel.sendDraft(busyModeOverride: "steer")
@@ -2763,11 +2831,11 @@ private struct SessionInputBar: View {
             } label: {
                 sendButtonFace
             } primaryAction: {
-                viewModel.sendDraft()
+                send()
             }
             .menuOrder(.fixed)
             .buttonStyle(.plain)
-            .disabled(!viewModel.canSend)
+            .disabled(!canSubmit)
             .frame(width: 44, height: 44)
             .contentShape(Circle())
             .accessibilityLabel("Send")
@@ -2778,12 +2846,12 @@ private struct SessionInputBar: View {
             )
         } else {
             Button {
-                viewModel.sendDraft()
+                send()
             } label: {
                 sendButtonFace
             }
             .buttonStyle(.plain)
-            .disabled(!viewModel.canSend)
+            .disabled(!canSubmit)
             .frame(width: 44, height: 44)
             .contentShape(Circle())
         }
@@ -2800,16 +2868,37 @@ private struct SessionInputBar: View {
             // button on top of that left the disc invisible against the
             // near-white composer (measured: 242 vs a 252 background).
             .foregroundStyle(
-                viewModel.canSend ? OS1VisualStyle.onAccent : OS1VisualStyle.textDim
+                canSubmit ? OS1VisualStyle.onAccent : OS1VisualStyle.textDim
             )
             .frame(width: 32, height: 32)
             .background(
-                viewModel.canSend
+                canSubmit
                     ? AnyShapeStyle(OS1VisualStyle.accent)
                     : AnyShapeStyle(OS1VisualStyle.hover),
                 in: Circle()
             )
-            .animation(.easeOut(duration: 0.15), value: viewModel.canSend)
+            .animation(.easeOut(duration: 0.15), value: canSubmit)
+    }
+
+    private var canSubmit: Bool {
+        if noteMode {
+            return !addingNote
+                && !viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        return viewModel.canSend
+    }
+
+    private func send() {
+        guard canSubmit else { return }
+        if noteMode {
+            addingNote = true
+            Task {
+                if await viewModel.addSessionNote() { noteMode = false }
+                addingNote = false
+            }
+        } else {
+            viewModel.sendDraft()
+        }
     }
 
     @ViewBuilder
@@ -2876,7 +2965,8 @@ private struct SessionInputBar: View {
                     let mode = UserDefaults.standard.string(
                         forKey: "os1.composer.busySendMod"
                     ) ?? "steer"
-                    viewModel.sendDraft(busyModeOverride: mode)
+                    if noteMode { send() }
+                    else { viewModel.sendDraft(busyModeOverride: mode) }
                     return nil
                 }
                 if mods == .shift || (mods.isEmpty && preferredSendKey == "mod-enter") {

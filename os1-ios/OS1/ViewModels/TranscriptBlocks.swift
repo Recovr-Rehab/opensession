@@ -19,6 +19,8 @@ enum TranscriptBlock: Identifiable, Equatable {
     case footer(TurnFooter)
     /// The agent-published walkthrough, at the point it was published.
     case walkthrough(SessionWalkthrough)
+    /// A team note that the agent never sees.
+    case note(SessionNote)
 
     var id: String {
         switch self {
@@ -27,6 +29,7 @@ enum TranscriptBlock: Identifiable, Equatable {
         case .work(let turn): turn.id
         case .footer(let footer): footer.id
         case .walkthrough(let walkthrough): "walkthrough:\(walkthrough.publishedAt)"
+        case .note(let note): "note:\(note.id)"
         }
     }
 
@@ -49,6 +52,7 @@ enum TranscriptBlock: Identifiable, Equatable {
         // A walkthrough is not a transcript entry, so it can never be a
         // scroll anchor.
         case .walkthrough: []
+        case .note: []
         }
     }
 }
@@ -259,7 +263,8 @@ enum TranscriptGrouping {
         from items: [SessionViewModel.DisplayItem],
         live: Bool,
         worktreeDir: String?,
-        walkthrough: SessionWalkthrough? = nil
+        walkthrough: SessionWalkthrough? = nil,
+        notes: [SessionNote] = []
     ) -> [TranscriptBlock] {
         var blocks: [TranscriptBlock] = []
         var turn: [TurnItem] = []
@@ -353,7 +358,25 @@ enum TranscriptGrouping {
             }
             if isLast { flush(isTrailing: true) }
         }
-        return place(walkthrough, into: blocks)
+        return place(notes, into: place(walkthrough, into: blocks))
+    }
+
+    /// Interleave team notes by timestamp without splitting an answer from its
+    /// footer. Mirrors the web transcript's placement rule.
+    private static func place(
+        _ notes: [SessionNote], into blocks: [TranscriptBlock]
+    ) -> [TranscriptBlock] {
+        guard !notes.isEmpty else { return blocks }
+        var out = blocks
+        var at = 0
+        for note in notes.sorted(by: { $0.ts < $1.ts }) {
+            while at < out.count, (blockTime(out[at]) ?? .distantPast) <= note.date {
+                at += 1
+            }
+            out.insert(.note(note), at: at)
+            at += 1
+        }
+        return out
     }
 
     /// Drop the walkthrough card straight after the turn that published it —
@@ -419,6 +442,7 @@ enum TranscriptGrouping {
         case .work(let turn): turn.items.last.flatMap(endTimestamp)
         case .footer(let footer): footer.timestamp
         case .walkthrough(let walkthrough): walkthrough.publishedDate
+        case .note(let note): note.date
         }
     }
 

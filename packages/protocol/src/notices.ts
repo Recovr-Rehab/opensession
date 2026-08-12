@@ -320,7 +320,7 @@ export function parseSessionNotice(content?: string): { body: string } | null {
 const PARSED_NOTICES: Record<string, Omit<EntryNotice, "tone">> = {
   compaction: {
     kind: "compaction",
-    title: "Context compacted",
+    title: "Context compacted — earlier conversation summarized to keep going",
     body: "collapsed",
   },
   recap: { kind: "recap", title: "Recap", body: "inline" },

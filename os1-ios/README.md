@@ -59,7 +59,10 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   one header (`Worked · 4m 42s · 40 steps`, a fingerprint of the tool families
   used, failure count, edited files and ±lines); the turn's final answer escapes
   the fold and renders as a normal message; a footer closes it with the
-  duration, the model that wrote it, and chips for every file it touched.
+   duration, the model that wrote it, and chips for every file it touched.
+   Team notes sit in that timeline without entering the agent context. The
+   yellow composer mode posts them directly to the team and offers only the
+   author edit and delete actions.
   Tool rows carry per-tool identity — engine dialects fold onto canonical names,
   MCP calls split into a server pill plus tool name, and each tool gets its own
   glyph and bespoke summary (a tidied path, a shell command, `/pattern/ path`,

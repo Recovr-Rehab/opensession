@@ -19,6 +19,8 @@ struct TranscriptRow: View {
     /// Who started this session, for crediting turns that carry no explicit
     /// sender (see `UserBubble`). Nil for automations and sub-agents.
     var owner: String?
+    var onEditNote: ((SessionNote, String) async throws -> Void)?
+    var onDeleteNote: ((SessionNote) async throws -> Void)?
 
     var body: some View {
         switch block {
@@ -81,6 +83,168 @@ struct TranscriptRow: View {
                 walkthrough: walkthrough,
                 state: expansionState(block.id, false)
             )
+        case .note(let note):
+            SessionNoteRow(
+                note: note,
+                onEdit: isMine(note) ? { text in
+                    guard let onEditNote else { return }
+                    try await onEditNote(note, text)
+                } : nil,
+                onDelete: isMine(note) ? {
+                    guard let onDeleteNote else { return }
+                    try await onDeleteNote(note)
+                } : nil
+            )
+        }
+    }
+
+    private func isMine(_ note: SessionNote) -> Bool {
+        note.user.trimmingCharacters(in: .whitespacesAndNewlines)
+            .localizedCaseInsensitiveCompare(
+                ServerConfig.shared.userName.trimmingCharacters(in: .whitespacesAndNewlines)
+            ) == .orderedSame
+    }
+}
+
+private struct SessionNoteRow: View {
+    let note: SessionNote
+    var onEdit: ((String) async throws -> Void)?
+    var onDelete: (() async throws -> Void)?
+
+    @State private var editing = false
+    @State private var draft: String
+    @State private var busy = false
+    @State private var error: String?
+
+    init(
+        note: SessionNote,
+        onEdit: ((String) async throws -> Void)? = nil,
+        onDelete: (() async throws -> Void)? = nil
+    ) {
+        self.note = note
+        self.onEdit = onEdit
+        self.onDelete = onDelete
+        _draft = State(initialValue: note.text)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 7) {
+                UserAvatar(person: note.user, size: 18)
+                Text(note.user)
+                    .font(.caption.weight(.semibold))
+                Text("Note")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(OS1VisualStyle.yellow)
+                Text(note.date, format: .dateTime.month(.abbreviated).day().hour().minute())
+                    .font(.caption2)
+                    .foregroundStyle(OS1VisualStyle.textFaint)
+                if note.editedAt != nil {
+                    Text("· edited")
+                        .font(.caption2)
+                        .foregroundStyle(OS1VisualStyle.textFaint)
+                }
+                Spacer(minLength: 4)
+                if onEdit != nil || onDelete != nil {
+                    Menu {
+                        if onEdit != nil {
+                            Button {
+                                draft = note.text
+                                editing = true
+                            } label: {
+                                Label("Edit", systemImage: "square.and.pencil")
+                            }
+                        }
+                        if let onDelete {
+                            Button(role: .destructive) {
+                                Task {
+                                    do { try await onDelete() }
+                                    catch { self.error = error.localizedDescription }
+                                }
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .frame(width: 32, height: 32)
+                            .contentShape(Rectangle())
+                    }
+                    .menuIndicator(.hidden)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Note actions")
+                }
+            }
+            if editing {
+                TextEditor(text: $draft)
+                    .font(.body)
+                    .scrollContentBackground(.hidden)
+                    .padding(8)
+                    .background(OS1VisualStyle.background, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(OS1VisualStyle.yellow.opacity(0.5), lineWidth: 1)
+                    }
+                    .frame(minHeight: 96)
+                    .disabled(busy)
+                HStack(spacing: 12) {
+                    Button("Save") { save() }
+                        .buttonStyle(.borderedProminent)
+                        .tint(OS1VisualStyle.accent)
+                        .disabled(busy || draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button("Cancel") {
+                        draft = note.text
+                        editing = false
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(busy)
+                    Spacer()
+                }
+                .font(.subheadline.weight(.medium))
+            } else {
+                Text(note.text)
+                    .font(.body)
+                    .foregroundStyle(OS1VisualStyle.text)
+                    .textSelection(.enabled)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            OS1VisualStyle.yellow.opacity(0.10),
+            in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+        )
+        .alert("Couldn't change note", isPresented: Binding(
+            get: { error != nil },
+            set: { if !$0 { error = nil } }
+        )) {
+            Button("OK") { error = nil }
+        } message: {
+            Text(error ?? "Try again.")
+        }
+        .onChange(of: note.text) { _, text in
+            if !editing { draft = text }
+        }
+    }
+
+    private func save() {
+        guard let onEdit, !busy else { return }
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        guard text != note.text else {
+            editing = false
+            return
+        }
+        busy = true
+        Task {
+            do {
+                try await onEdit(text)
+                editing = false
+            } catch {
+                self.error = error.localizedDescription
+            }
+            busy = false
         }
     }
 }
@@ -351,17 +515,24 @@ struct NoticeRow: View {
         notice.showsBodyInline || (notice.isCollapsible && state.expanded)
     }
 
-    /// Matches the web transcript: passive and warning notices are centered
-    /// directly on the transcript. Only an error earns a tinted surface.
-    private var hasBackground: Bool { tone == .error }
+    /// An info notice carrying a body — a recap, an expanded worker report —
+    /// is prose you read, not a status pill, so it drops the card entirely and
+    /// sits on the transcript's own rail: its text lines up with the message
+    /// above it instead of being indented inside a container. The card's fill
+    /// was invisible here anyway (`panel` is pure white on a white page in
+    /// light mode), so the indent was the only thing left of it. Warn and
+    /// error keep their card in every form — there the tint IS the signal.
+    private var isProse: Bool {
+        tone == .info && showsBody && !entry.text.isEmpty
+    }
 
     var body: some View {
         content
-            .padding(.horizontal, hasBackground ? 12 : 0)
+            .padding(.horizontal, isProse ? 0 : 12)
         .padding(.vertical, 7)
         .frame(maxWidth: 520)
         .background(
-            hasBackground ? tone.background : Color.clear,
+            isProse ? Color.clear : tone.background,
             in: RoundedRectangle(cornerRadius: 12, style: .continuous)
         )
         .frame(maxWidth: .infinity)
@@ -396,7 +567,7 @@ struct NoticeRow: View {
                         Image(systemName: symbol)
                             .font(.caption2)
                     }
-                    // The title is one line and stays one line. The body
+                    // The title is one line and stays one line — the body
                     // below is where the detail lives, which is what kept a
                     // folded notice from printing its whole text twice.
                     Text(notice.title)
@@ -408,7 +579,7 @@ struct NoticeRow: View {
                 }
                 .font(.footnote)
                 .foregroundStyle(tone.color)
-                .multilineTextAlignment(.center)
+                .multilineTextAlignment(notice.isCollapsible ? .leading : .center)
 
                 if showsBody, !entry.text.isEmpty {
                     // `notice.link` (e.g. "Open worker") is deliberately not

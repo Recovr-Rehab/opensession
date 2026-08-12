@@ -16,6 +16,10 @@ final class SessionViewModel {
     private(set) var session: Session
 
     private(set) var entries: [TranscriptEntry] = []
+    private(set) var sessionNotes: [SessionNote] = []
+    /// The note list can answer after a live delete. Remember removals so that
+    /// stale response cannot put a deleted note back into the transcript.
+    private var deletedSessionNoteIds: Set<String> = []
     /// Ephemeral entries from the live engine stream (tool calls mid-run).
     /// They render at the end in stream order and graduate into `entries`
     /// when the file watcher lands them via transcript_append — the
@@ -92,6 +96,7 @@ final class SessionViewModel {
     /// of an endless spinner.
     private(set) var prLoadFailed = false
     private var prTask: Task<Void, Never>?
+    private var notesTask: Task<Void, Never>?
 
     // ── Session goal ──
     /// Goal set from this app (`/goal`), used to label the composer menu's
@@ -420,6 +425,7 @@ final class SessionViewModel {
         armConversationLoadDeadline()
         connect()
         loadPr()
+        loadSessionNotes()
     }
 
     func stop() {
@@ -441,6 +447,7 @@ final class SessionViewModel {
         creationRetryTask?.cancel()
         deliveringPruneTask?.cancel()
         prTask?.cancel()
+        notesTask?.cancel()
         socket?.disconnect()
         socket = nil
     }
@@ -466,6 +473,50 @@ final class SessionViewModel {
             guard !Task.isCancelled else { return }
             prLoadFailed = prDetails == nil
         }
+    }
+
+    func loadSessionNotes() {
+        notesTask?.cancel()
+        notesTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let notes = try await OS1API.sessionNotes(sessionId: self.session.id)
+                guard !Task.isCancelled else { return }
+                self.mergeSessionNotes(notes)
+            } catch {
+                // Notes are an enhancement to the transcript. A server that
+                // predates them still opens the conversation normally.
+            }
+        }
+    }
+
+    func addSessionNote() async -> Bool {
+        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return false }
+        do {
+            let note = try await OS1API.addSessionNote(sessionId: session.id, text: text)
+            upsertSessionNote(note)
+            draft = ""
+            sendSeq += 1
+            return true
+        } catch {
+            notice = error.localizedDescription
+            return false
+        }
+    }
+
+    func editSessionNote(_ note: SessionNote, text: String) async throws {
+        let changed = try await OS1API.editSessionNote(
+            sessionId: session.id,
+            noteId: note.id,
+            text: text
+        )
+        upsertSessionNote(changed)
+    }
+
+    func deleteSessionNote(_ note: SessionNote) async throws {
+        try await OS1API.deleteSessionNote(sessionId: session.id, noteId: note.id)
+        removeSessionNote(id: note.id)
     }
 
     // ── Pull request actions ──
@@ -1165,6 +1216,12 @@ final class SessionViewModel {
             }
             rebuildDisplayItems()
 
+        case .sessionNote(let id, let note) where id == session.id:
+            upsertSessionNote(note)
+
+        case .sessionNoteDeleted(let id, let noteId) where id == session.id:
+            removeSessionNote(id: noteId)
+
         case .streamStart(let id) where id == session.id:
             liveFlushTask?.cancel()
             liveFlushTask = nil
@@ -1426,7 +1483,8 @@ final class SessionViewModel {
             from: items,
             live: isRunning || isStreaming,
             worktreeDir: session.worktreeDir,
-            walkthrough: session.walkthrough
+            walkthrough: session.walkthrough,
+            notes: sessionNotes
         )
         // What the transcript may link: the files this session's own tools
         // touched. Registering the set here — rather than fetching the diff —
@@ -1529,6 +1587,39 @@ final class SessionViewModel {
                 entries.append(entry)
             }
         }
+    }
+
+    private func upsertSessionNote(_ note: SessionNote) {
+        deletedSessionNoteIds.remove(note.id)
+        if let index = sessionNotes.firstIndex(where: { $0.id == note.id }) {
+            sessionNotes[index] = note
+        } else {
+            sessionNotes.append(note)
+        }
+        sessionNotes.sort { $0.ts < $1.ts }
+        rebuildDisplayItems()
+    }
+
+    private func removeSessionNote(id: String) {
+        deletedSessionNoteIds.insert(id)
+        sessionNotes.removeAll { $0.id == id }
+        rebuildDisplayItems()
+    }
+
+    private func mergeSessionNotes(_ incoming: [SessionNote]) {
+        var merged = Dictionary(uniqueKeysWithValues: sessionNotes.map { ($0.id, $0) })
+        for note in incoming where !deletedSessionNoteIds.contains(note.id) {
+            if let current = merged[note.id], noteVersion(current) > noteVersion(note) {
+                continue
+            }
+            merged[note.id] = note
+        }
+        sessionNotes = merged.values.sorted { $0.ts < $1.ts }
+        rebuildDisplayItems()
+    }
+
+    private func noteVersion(_ note: SessionNote) -> Double {
+        note.editedAt ?? note.ts
     }
 
     // MARK: - Delivering chips

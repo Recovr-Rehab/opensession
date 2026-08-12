@@ -18,6 +18,22 @@ enum OS1VisualStyle {
     static let text = Color(uiColor: .label)
     static let textDim = Color(uiColor: .secondaryLabel)
     static let textFaint = Color(uiColor: .tertiaryLabel)
+    /// The note composer's hint is the faint label ink warmed 16% toward its
+    /// yellow surface. A neutral hint reads blue-grey on that fill.
+    static let notePlaceholder = Color(uiColor: UIColor { traits in
+        let faint = UIColor.tertiaryLabel.resolvedColor(with: traits)
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+        faint.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        return UIColor(
+            red: red * 0.84 + 0.824 * 0.16,
+            green: green * 0.84 + 0.600 * 0.16,
+            blue: blue * 0.84 + 0.133 * 0.16,
+            alpha: alpha
+        )
+    })
     /// Code surfaces mirror the PWA's GitHub-themed wells rather than using a
     /// permanently dark card in light appearance.
     ///
@@ -157,6 +173,11 @@ enum OS1VisualStyle {
     static let text = Color(nsColor: .labelColor)
     static let textDim = Color(nsColor: .secondaryLabelColor)
     static let textFaint = Color(nsColor: .tertiaryLabelColor)
+    static let notePlaceholder = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(red: 0.525, green: 0.486, blue: 0.412, alpha: 1)
+            : NSColor(red: 0.584, green: 0.553, blue: 0.486, alpha: 1)
+    })
     static let codeWell = Color(nsColor: NSColor(name: nil) { appearance in
         appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
             ? NSColor(red: 0.051, green: 0.059, blue: 0.075, alpha: 1)

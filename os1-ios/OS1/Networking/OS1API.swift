@@ -80,6 +80,70 @@ enum OS1API {
         return try await get("/api/sessions/\(encoded)")
     }
 
+    private struct SessionNotesResponse: Decodable, Sendable {
+        let notes: [SessionNote]
+    }
+
+    private struct SessionNoteResponse: Decodable, Sendable {
+        let note: SessionNote
+    }
+
+    static func sessionNotes(sessionId: String) async throws -> [SessionNote] {
+        let encoded = sessionId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? sessionId
+        let response: SessionNotesResponse = try await get(
+            "/api/sessions/\(encoded)/notes"
+        )
+        return response.notes
+    }
+
+    static func addSessionNote(sessionId: String, text: String) async throws -> SessionNote {
+        let encoded = sessionId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? sessionId
+        let response: SessionNoteResponse = try await post(
+            "/api/sessions/\(encoded)/notes",
+            body: ["text": text, "user": ServerConfig.shared.userName]
+        )
+        return response.note
+    }
+
+    static func editSessionNote(
+        sessionId: String,
+        noteId: String,
+        text: String
+    ) async throws -> SessionNote {
+        let session = sessionId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? sessionId
+        let note = noteId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? noteId
+        let response: SessionNoteResponse = try await patch(
+            "/api/sessions/\(session)/notes/\(note)",
+            body: ["text": text, "user": ServerConfig.shared.userName]
+        )
+        return response.note
+    }
+
+    static func deleteSessionNote(sessionId: String, noteId: String) async throws {
+        let session = sessionId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? sessionId
+        let note = noteId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? noteId
+        let user = ServerConfig.shared.userName.addingPercentEncoding(
+            withAllowedCharacters: .urlQueryAllowed
+        ) ?? ServerConfig.shared.userName
+        let _: SessionNoteResponse = try await mutate(
+            "/api/sessions/\(session)/notes/\(note)?user=\(user)",
+            method: "DELETE",
+            body: [:]
+        )
+    }
+
     struct WorkspaceSummary: Decodable, Sendable {
         let id: String
         let name: String
