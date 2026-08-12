@@ -237,6 +237,13 @@ export const VIEWER_MESSAGES =
 	// Keep the reader's place when content loads or expands above them.
 	"[overflow-anchor:auto] px-5 pt-0 pb-[calc(var(--session-under)_+_16px)] " +
 	"[&>*]:w-full [&>*]:shrink-0 " +
+	// With a tab strip above (a split gives every column one), the first row
+	// otherwise sits right on the strip's hairline. The header alone needs no
+	// such gap: its scroll-edge wash stands in for the divider there, and
+	// reserving blank space under it would only push the first message down.
+	// Same ancestor variant the wash uses, and it outranks `pt-0` on
+	// specificity, so the order the two are written in doesn't decide it.
+	"desktop:[.detail-pane:has(.session-tabs)_&]:pt-3 " +
 	"desktop:supports-[animation-timeline:scroll()]:[scroll-timeline:--viewer-session-scroll_y] " +
 	// Phone: clear the floating pills at rest, then scroll under them.
 	// --strip-clearance is 0 by default and the docked tab bar's height on a
