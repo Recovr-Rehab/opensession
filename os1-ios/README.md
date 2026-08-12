@@ -89,8 +89,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   plain text immediately while highlighting finishes and keep large files plain.
   ```mermaid fences render as diagrams (see "Mermaid diagrams" below).
 - **Workspace details** — tapping the session title opens a native worktree sheet
-  with repository and branch metadata, local git status, changed files, pull
-  request status, workspace context, model/reasoning controls, and live remote
+  with repository and branch metadata, local git status, changed files, a
+  color-coded pull request card for checks, review state and conflicts,
+  workspace context, model/reasoning controls, and live remote
   sandbox status. Sandboxed workspaces expose explicit pause, wake, and
   confirmed recreate controls without embedding the web client.
 - **Session panels** — details of a session (its assets, one of those files,
@@ -160,8 +161,10 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   shortcut, `POST …/pr-review`), **Merge** (squash, merge commit or rebase,
   behind a confirmation that names what it would land on top of — conflicts,
   failing checks, a draft, requested changes — `POST …/pr-merge`), and
-  **Close pull request** (`POST …/pr-close`). Each needs a GitHub credential
-  server-side, which with web sign-in on is the signed-in person's own token,
+  **Close pull request** (`POST …/pr-close`). The session overflow menu also
+  exposes squash, merge-commit and rebase merge actions directly, with the same
+  warnings and confirmation. Each action needs a GitHub credential server-side,
+  which with web sign-in on is the signed-in person's own token,
   so an unconnected account gets the server's "connect your GitHub account"
   sentence in the panel rather than a status code. It is
   pushed as a panel (`PrPanelView(chrome: .pushed)` drops its own navigation

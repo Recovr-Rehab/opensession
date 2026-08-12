@@ -461,36 +461,135 @@ struct WorktreeInfoView: View {
     @ViewBuilder
     private var pullRequestSection: some View {
         if let number = viewModel.prDetails?.number ?? currentSession.prNumber {
-            InfoSection(title: "Pull request") {
+            InfoSection(
+                title: "Pull request",
+                trailing: viewModel.prDetails.map { AnyView(prNumberLabel(number, summary: $0.summary)) }
+            ) {
                 Button {
                     panel = .review(sessionId: currentSession.id)
                 } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: "arrow.triangle.pull")
-                            .foregroundStyle(OS1VisualStyle.blue)
-                            .frame(width: 20)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(viewModel.prDetails?.title ?? "Pull request")
-                                .font(.subheadline.weight(.medium))
-                                .foregroundStyle(OS1VisualStyle.text)
-                                .lineLimit(1)
-                            Text(viewModel.prDetails?.summary.label ?? "View status and checks")
-                                .font(.caption)
-                                .foregroundStyle(OS1VisualStyle.textDim)
-                        }
-                        Spacer(minLength: 8)
-                        PrChipLabel(number: number, summary: viewModel.prDetails?.summary)
-                            .foregroundStyle(OS1VisualStyle.text)
-                        Image(systemName: "chevron.right")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(OS1VisualStyle.textFaint)
+                    if let pr = viewModel.prDetails {
+                        prSummary(pr)
+                    } else {
+                        prLoadingSummary(number)
                     }
-                    .padding(.horizontal, 12)
-                    .frame(minHeight: 52)
-                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
+        }
+    }
+
+    private func prNumberLabel(_ number: Int, summary: PrDetails.Summary) -> some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(summary.color)
+                .frame(width: 7, height: 7)
+            Text(verbatim: "#\(number)")
+                .font(.caption.weight(.semibold))
+                .monospacedDigit()
+        }
+        .foregroundStyle(OS1VisualStyle.textDim)
+    }
+
+    private func prSummary(_ pr: PrDetails) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 11) {
+                Image(systemName: pr.state == "MERGED" ? "arrow.triangle.merge" : "arrow.triangle.pull")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(pr.summary.color)
+                    .frame(width: 34, height: 34)
+                    .background(pr.summary.color.opacity(0.14), in: Circle())
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(pr.title ?? "Pull request")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(OS1VisualStyle.text)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(2)
+                    if let head = pr.headRefName, let base = pr.baseRefName {
+                        Text("\(head) → \(base)")
+                            .font(.caption.monospaced())
+                            .foregroundStyle(OS1VisualStyle.textDim)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(OS1VisualStyle.textFaint)
+                    .padding(.top, 10)
+            }
+
+            FlowLayout(spacing: 7) {
+                StatusPill(text: pr.summary.label, icon: prSummaryIcon(pr.summary), color: pr.summary.color)
+                if let review = prReviewStatus(pr.reviewDecision) {
+                    StatusPill(text: review.text, icon: review.icon, color: review.color)
+                }
+                if pr.mergeable == "CONFLICTING" {
+                    StatusPill(text: "Merge conflict", icon: "exclamationmark.triangle.fill", color: OS1VisualStyle.red)
+                }
+            }
+
+            HStack(spacing: 14) {
+                Label(
+                    "+\(pr.additions ?? 0)",
+                    systemImage: "plus"
+                )
+                .foregroundStyle(OS1VisualStyle.green)
+                Label(
+                    "−\(pr.deletions ?? 0)",
+                    systemImage: "minus"
+                )
+                .foregroundStyle(OS1VisualStyle.red)
+                Label(
+                    "\(pr.changedFiles ?? 0) file\((pr.changedFiles ?? 0) == 1 ? "" : "s")",
+                    systemImage: "doc.on.doc"
+                )
+                .foregroundStyle(OS1VisualStyle.textDim)
+            }
+            .font(.caption.weight(.medium).monospacedDigit())
+        }
+        .padding(12)
+        .contentShape(Rectangle())
+    }
+
+    private func prLoadingSummary(_ number: Int) -> some View {
+        HStack(spacing: 11) {
+            ProgressView().controlSize(.small)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(verbatim: "Pull request #\(number)")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(OS1VisualStyle.text)
+                Text("Loading status and checks…")
+                    .font(.caption)
+                    .foregroundStyle(OS1VisualStyle.textDim)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(OS1VisualStyle.textFaint)
+        }
+        .padding(12)
+        .frame(minHeight: 58)
+        .contentShape(Rectangle())
+    }
+
+    private func prSummaryIcon(_ summary: PrDetails.Summary) -> String {
+        switch summary {
+        case .merged: "arrow.triangle.merge"
+        case .closed, .failing: "xmark.circle.fill"
+        case .draft: "pencil.circle.fill"
+        case .pending: "clock.fill"
+        case .passing: "checkmark.circle.fill"
+        }
+    }
+
+    private func prReviewStatus(_ decision: String?) -> (text: String, icon: String, color: Color)? {
+        switch decision ?? "" {
+        case "APPROVED": ("Approved", "checkmark.seal.fill", OS1VisualStyle.green)
+        case "CHANGES_REQUESTED": ("Changes requested", "exclamationmark.bubble.fill", OS1VisualStyle.red)
+        case "REVIEW_REQUIRED": ("Review required", "eye.fill", OS1VisualStyle.yellow)
+        default: nil
         }
     }
 

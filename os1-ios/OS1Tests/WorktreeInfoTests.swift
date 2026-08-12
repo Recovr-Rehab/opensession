@@ -51,4 +51,28 @@ final class WorktreeInfoTests: XCTestCase {
         XCTAssertNil(status.sandboxId)
         XCTAssertNil(status.canResume)
     }
+
+    func testPullRequestSummaryPrefersFailingChecks() throws {
+        let pullRequest = try JSONDecoder().decode(
+            PrDetails.self,
+            from: Data(
+                #"{"number":42,"state":"OPEN","checks":[{"name":"Tests","status":"COMPLETED","conclusion":"FAILURE"},{"name":"Deploy","status":"IN_PROGRESS"}]}"#.utf8
+            )
+        )
+
+        XCTAssertEqual(pullRequest.summary, .failing)
+        XCTAssertTrue(pullRequest.isOpen)
+    }
+
+    func testPullRequestSummaryPrefersTerminalState() throws {
+        let pullRequest = try JSONDecoder().decode(
+            PrDetails.self,
+            from: Data(
+                #"{"number":42,"state":"MERGED","isDraft":true,"checks":[{"name":"Tests","status":"COMPLETED","conclusion":"FAILURE"}]}"#.utf8
+            )
+        )
+
+        XCTAssertEqual(pullRequest.summary, .merged)
+        XCTAssertFalse(pullRequest.isOpen)
+    }
 }

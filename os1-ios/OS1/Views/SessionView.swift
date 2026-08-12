@@ -1198,6 +1198,10 @@ private struct SessionActionsMenu: View {
     /// the menu there rather than offering something that can't happen.
     let openPanel: OpenPanelAction
 
+    @State private var pendingMerge: String?
+    @State private var merging = false
+    @State private var mergeError: String?
+
     var body: some View {
         Menu {
             if let onNewSession {
@@ -1258,6 +1262,19 @@ private struct SessionActionsMenu: View {
                         Image(systemName: "arrow.triangle.pull")
                     }
                 }
+                if viewModel.prDetails?.isOpen == true {
+                    Menu {
+                        Button("Squash and merge") { pendingMerge = "squash" }
+                        Button("Create a merge commit") { pendingMerge = "merge" }
+                        Button("Rebase and merge") { pendingMerge = "rebase" }
+                    } label: {
+                        Label(
+                            merging ? "Merging pull request…" : "Merge pull request",
+                            systemImage: "arrow.triangle.merge"
+                        )
+                    }
+                    .disabled(merging)
+                }
             }
 
             Section {
@@ -1315,6 +1332,78 @@ private struct SessionActionsMenu: View {
                 .foregroundStyle(OS1VisualStyle.text)
         }
         .accessibilityLabel("Session actions")
+        .confirmationDialog(
+            mergeConfirmationTitle,
+            isPresented: Binding(
+                get: { pendingMerge != nil },
+                set: { if !$0 { pendingMerge = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(mergeButtonLabel(pendingMerge ?? "squash")) {
+                merge(method: pendingMerge ?? "squash")
+            }
+            Button("Cancel", role: .cancel) { pendingMerge = nil }
+        } message: {
+            Text(mergeConfirmationMessage)
+        }
+        .alert(
+            "Couldn’t merge pull request",
+            isPresented: Binding(
+                get: { mergeError != nil },
+                set: { if !$0 { mergeError = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(mergeError ?? "Please try again.")
+        }
+    }
+
+    private var mergeConfirmationTitle: String {
+        guard let number = viewModel.prDetails?.number else { return "Merge pull request?" }
+        return "Merge PR #\(number)?"
+    }
+
+    private var mergeConfirmationMessage: String {
+        guard let pr = viewModel.prDetails else { return "This cannot be undone." }
+        var warnings: [String] = []
+        if pr.mergeable == "CONFLICTING" { warnings.append("it has conflicts") }
+        if (pr.checks ?? []).contains(where: { $0.rank == .failure }) {
+            warnings.append("checks are failing")
+        } else if (pr.checks ?? []).contains(where: { $0.rank == .pending }) {
+            warnings.append("checks are still running")
+        }
+        if pr.isDraft == true { warnings.append("it’s still a draft") }
+        if pr.reviewDecision == "CHANGES_REQUESTED" { warnings.append("changes were requested") }
+        let base = pr.baseRefName ?? "the base branch"
+        guard !warnings.isEmpty else { return "This merges into \(base)." }
+        return "This merges into \(base) even though \(warnings.joined(separator: ", "))."
+    }
+
+    private func mergeButtonLabel(_ method: String) -> String {
+        switch method {
+        case "merge": "Create a merge commit"
+        case "rebase": "Rebase and merge"
+        default: "Squash and merge"
+        }
+    }
+
+    private func merge(method: String) {
+        pendingMerge = nil
+        guard !merging else { return }
+        merging = true
+        mergeError = nil
+        Task {
+            do {
+                try await viewModel.mergePr(method: method)
+                Haptics.play(.commit)
+            } catch {
+                mergeError = (error as? LocalizedError)?.errorDescription
+                    ?? error.localizedDescription
+            }
+            merging = false
+        }
     }
 
     /// The sidebar row these sessions form. `tabs` is exactly one worktree's
