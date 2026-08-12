@@ -42,6 +42,16 @@ const SHOT_LABEL_SIDE = {
 } as const;
 
 /**
+ * One tile of the folded filmstrip, matching the sidebar hover card's strip
+ * (components/sidebar/HoverCards.tsx): a whole frame in a 124px landscape box,
+ * `object-contain` rather than cropped. A square crop of a 1440px screenshot
+ * is a grey band of text, not a picture of anything.
+ */
+const STRIP_TILE =
+	"relative block aspect-video w-[124px] shrink-0 cursor-zoom-in snap-start overflow-hidden rounded-sm border border-line bg-surface p-0 outline-none transition-[filter] hover:brightness-[0.97] focus-visible:shadow-[inset_0_0_0_3px_var(--accent-soft)]";
+const STRIP_MEDIA = "h-full w-full object-contain";
+
+/**
  * The agent-published walkthrough (opensession-walkthrough): demo video +
  * before/after screenshot pairs + writeup. Rendered at the top of the PR info
  * column in the Review tab (`panel`), and inline in the session where the agent
@@ -195,6 +205,51 @@ export function WalkthroughCard({
 				<div className="mb-2 flex items-center gap-1.5">
 					<IconPlayRectangle size={20} className="text-faint" />
 					<span className="text-xs font-semibold text-dim">Walkthrough</span>
+				</div>
+			)}
+
+			{session && !expanded && gallery.items.length > 0 && (
+				// Folded, the card still shows what it holds. The strip scrolls
+				// sideways so nothing is hidden behind a "+3", and it bleeds through
+				// the card's right padding so the next tile is clipped at the card
+				// edge rather than stopping short inside it. A tile opens the
+				// lightbox directly: seeing one picture is usually the whole reason
+				// the row caught someone's eye.
+				<div className="-mr-4 mt-2.5 flex snap-x snap-mandatory gap-1.5 overflow-x-auto pr-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+					{gallery.items.map((item, i) => (
+						<button
+							key={i}
+							type="button"
+							className={STRIP_TILE}
+							title={item.sessionTitle}
+							aria-label={item.sessionTitle || "Open walkthrough media"}
+							onClick={(event) =>
+								openLightbox(gallery.items, i, event.currentTarget)
+							}
+						>
+							{item.kind === "image" ? (
+								<img
+									src={item.src}
+									alt=""
+									loading="lazy"
+									className={STRIP_MEDIA}
+								/>
+							) : (
+								<>
+									<video
+										src={item.src}
+										muted
+										playsInline
+										preload="metadata"
+										className={STRIP_MEDIA}
+									/>
+									<span className="pointer-events-none absolute inset-0 grid place-items-center text-white drop-shadow">
+										<IconPlayRectangle size={18} />
+									</span>
+								</>
+							)}
+						</button>
+					))}
 				</div>
 			)}
 

@@ -46,4 +46,21 @@ describe("WalkthroughCard", () => {
 		expect(html).not.toContain("The clearer controls");
 		expect(html).toContain("max-w-[var(--session-col)]");
 	});
+
+	test("shows the media in the folded session walkthrough", () => {
+		const html = renderToStaticMarkup(
+			<WalkthroughCard
+				walkthrough={{
+					...walkthrough,
+					video: "/tmp/demo.mp4",
+					shots: [{ before: "/tmp/before.png", after: "/tmp/after.png" }],
+				}}
+				variant="session"
+			/>,
+		);
+		expect(html).toContain('aria-expanded="false"');
+		expect(html).toContain("/media?path=%2Ftmp%2Fdemo.mp4");
+		expect(html).toContain("/media?path=%2Ftmp%2Fbefore.png");
+		expect(html).toContain("/media?path=%2Ftmp%2Fafter.png");
+	});
 });
