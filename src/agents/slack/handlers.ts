@@ -730,8 +730,9 @@ export async function processMessage(
     channel,
     sessionKey,
     sessionUrl: opensessionUrl,
-    title: taskCardTitle(prompt),
+    title: taskCardTitle(msg.cardTitle || prompt),
     linkText: session.branch || "this session",
+    continuedBy: createdSession ? undefined : userName,
   });
   await progress.start(threadTs);
 
@@ -1253,6 +1254,7 @@ export async function handleMessageEvent(event: any): Promise<void> {
 
     enqueueMessage(sessionKey, {
       prompt: text,
+      cardTitle: text,
       channel,
       threadTs: threadTs || ts,
       messageTs: ts,
@@ -1292,6 +1294,7 @@ I'm now in a worktree (branch: ${branch}) for this task. Please analyze what nee
 
     enqueueMessage(sessionKey, {
       prompt,
+      cardTitle: text,
       channel,
       threadTs: threadTs || ts,
       messageTs: ts,
@@ -1520,6 +1523,7 @@ Please help with this request. Start by exploring the codebase to understand wha
 
     enqueueMessage(sessionKey, {
       prompt,
+      cardTitle: cleanText,
       channel,
       threadTs,
       messageTs: ts,
@@ -1609,6 +1613,7 @@ Please help with this request. Start by exploring the codebase to understand wha
     const repoNote = askCwd ? ` I'm in the ${repo.id} repo's checkout for this.` : "";
     enqueueMessage(sessionKey, {
       prompt: `${intro}\n\nThis is a question/discussion, not a coding task — don't create a branch or change code. Read the codebase as needed for context and answer concisely.${repoNote}`,
+      cardTitle: cleanText,
       channel,
       threadTs,
       messageTs: ts,
@@ -1638,6 +1643,7 @@ Please help with this request. Start by exploring the codebase to understand wha
       : `${userName} tagged me in a Slack channel with this message: "${cleanText}"`;
     enqueueMessage(sessionKey, {
       prompt: `${intro}\n\nPlease help with this request.`,
+      cardTitle: cleanText,
       channel,
       threadTs,
       messageTs: ts,
@@ -1695,6 +1701,7 @@ ${where} Please help with this request. Start by exploring the codebase to under
 
   enqueueMessage(sessionKey, {
     prompt,
+    cardTitle: cleanText,
     channel,
     threadTs,
     messageTs: ts,

@@ -1,5 +1,11 @@
-import { describe, expect, test } from "bun:test";
-import { slackFileRefs } from "./slack-api";
+import { afterEach, describe, expect, test } from "bun:test";
+import { postSlackBlocks, slackFileRefs, updateSlackBlocks } from "./slack-api";
+
+const originalFetch = globalThis.fetch;
+
+afterEach(() => {
+  globalThis.fetch = originalFetch;
+});
 
 describe("slackFileRefs", () => {
   test("maps Slack file objects to small refs", () => {
@@ -37,5 +43,47 @@ describe("slackFileRefs", () => {
 
   test("handles undefined", () => {
     expect(slackFileRefs(undefined)).toEqual([]);
+  });
+});
+
+describe("Slack block message options", () => {
+  test("disables unfurls when posting a progress card", async () => {
+    let payload: any;
+    globalThis.fetch = (async (_input, init) => {
+      payload = JSON.parse(String(init?.body));
+      return Response.json({ ok: true, ts: "123.456" });
+    }) as typeof fetch;
+
+    await postSlackBlocks("C123", "fallback", [], "111.222", {
+      unfurlLinks: false,
+      unfurlMedia: false,
+    });
+
+    expect(payload).toMatchObject({
+      channel: "C123",
+      thread_ts: "111.222",
+      unfurl_links: false,
+      unfurl_media: false,
+    });
+  });
+
+  test("keeps unfurls disabled when updating a progress card", async () => {
+    let payload: any;
+    globalThis.fetch = (async (_input, init) => {
+      payload = JSON.parse(String(init?.body));
+      return Response.json({ ok: true });
+    }) as typeof fetch;
+
+    await updateSlackBlocks("C123", "123.456", "Working", [], {
+      unfurlLinks: false,
+      unfurlMedia: false,
+    });
+
+    expect(payload).toMatchObject({
+      channel: "C123",
+      ts: "123.456",
+      unfurl_links: false,
+      unfurl_media: false,
+    });
   });
 });

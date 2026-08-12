@@ -4,7 +4,8 @@
  * via chat.update.
  *
  * Message layout while running:
- *   [section]   Created and started working on <session link>
+ *   [section]   Created and started working on <session link>, or notes that a
+ *               follow-up comment was added to an existing session
  *   [task_card] title + spinner; latest assistant narration and a capped
  *               checklist in `details`; current tool action in `output`
  *   [actions]   lone Stop button
@@ -39,6 +40,8 @@ export interface SlackProgressOpts {
   title: string;
   /** Display text of the header link, e.g. the session branch. */
   linkText: string;
+  /** Teammate whose follow-up comment is continuing an existing session. */
+  continuedBy?: string;
 }
 
 /** Slack soft-limits chat.update to ~1/sec/channel. Stay just above that. */
@@ -64,6 +67,18 @@ function escapeMrkdwn(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+export function progressHeaderText(
+  opts: Pick<SlackProgressOpts, "sessionUrl" | "linkText" | "continuedBy">,
+  linked = true,
+): string {
+  const session = linked
+    ? `<${opts.sessionUrl}|${escapeMrkdwn(opts.linkText)}>`
+    : opts.sessionUrl;
+  return opts.continuedBy
+    ? `${escapeMrkdwn(opts.continuedBy)} added a comment to ${session}`
+    : `Created and started working on ${session}`;
+}
+
 export class SlackProgress {
   private o: SlackProgressOpts;
   private ts: string | null = null;
@@ -85,6 +100,10 @@ export class SlackProgress {
     this.o = opts;
   }
 
+  private headerText(linked = true): string {
+    return progressHeaderText(this.o, linked);
+  }
+
   /**
    * Post the initial card. The channel sees a visible reply immediately; this
    * object then edits that same message in place as work proceeds. A failed
@@ -94,9 +113,10 @@ export class SlackProgress {
     try {
       const res = await postSlackBlocks(
         this.o.channel,
-        `Created and started working on ${this.o.sessionUrl}`,
+        this.headerText(false),
         this.runningBlocks(),
-        threadTs
+        threadTs,
+        { unfurlLinks: false, unfurlMedia: false },
       );
       if (res?.ok && res.ts) this.ts = res.ts;
       else console.warn("[slack] progress card post failed:", res?.error);
@@ -159,7 +179,7 @@ export class SlackProgress {
       type: "section",
       text: {
         type: "mrkdwn",
-        text: `Created and started working on <${this.o.sessionUrl}|${escapeMrkdwn(this.o.linkText)}>`,
+        text: this.headerText(),
       },
     };
   }
@@ -345,7 +365,8 @@ export class SlackProgress {
           this.o.channel,
           ts,
           "Working…",
-          this.runningBlocks()
+          this.runningBlocks(),
+          { unfurlLinks: false, unfurlMedia: false },
         );
         if (res && !res.ok) {
           console.warn("[slack] progress flush failed:", res.error);
@@ -387,7 +408,8 @@ export class SlackProgress {
         this.o.channel,
         this.ts,
         label,
-        this.finishBlocks(label)
+        this.finishBlocks(label),
+        { unfurlLinks: false, unfurlMedia: false },
       );
       if (res && !res.ok) {
         console.warn("[slack] progress finish failed:", res.error);

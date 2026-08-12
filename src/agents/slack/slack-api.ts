@@ -240,7 +240,8 @@ export async function postSlackBlocks(
   channel: string,
   fallbackText: string,
   blocks: any[],
-  threadTs?: string
+  threadTs?: string,
+  opts?: { unfurlLinks?: boolean; unfurlMedia?: boolean },
 ): Promise<any> {
   const response = await fetchWithTimeout("https://slack.com/api/chat.postMessage", {
     method: "POST",
@@ -253,6 +254,8 @@ export async function postSlackBlocks(
       text: fallbackText,
       blocks,
       thread_ts: threadTs,
+      ...(opts?.unfurlLinks !== undefined ? { unfurl_links: opts.unfurlLinks } : {}),
+      ...(opts?.unfurlMedia !== undefined ? { unfurl_media: opts.unfurlMedia } : {}),
     }),
   });
   return response.json();
@@ -334,7 +337,8 @@ export async function updateSlackBlocks(
   channel: string,
   ts: string,
   text: string,
-  blocks: any[]
+  blocks: any[],
+  opts?: { unfurlLinks?: boolean; unfurlMedia?: boolean },
 ): Promise<any> {
   const response = await fetchWithTimeout("https://slack.com/api/chat.update", {
     method: "POST",
@@ -342,7 +346,14 @@ export async function updateSlackBlocks(
       "Content-Type": "application/json",
       Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
     },
-    body: JSON.stringify({ channel, ts, text, blocks }),
+    body: JSON.stringify({
+      channel,
+      ts,
+      text,
+      blocks,
+      ...(opts?.unfurlLinks !== undefined ? { unfurl_links: opts.unfurlLinks } : {}),
+      ...(opts?.unfurlMedia !== undefined ? { unfurl_media: opts.unfurlMedia } : {}),
+    }),
   });
   return response.json();
 }

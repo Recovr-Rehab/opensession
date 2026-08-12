@@ -23,6 +23,8 @@ const QUEUE_FILE = `${SESSION_DIR}/message-queue.json`;
 
 export interface QueuedMessage {
   prompt: string;
+  /** User-facing Slack text for the progress card, before prompt enrichment. */
+  cardTitle?: string;
   channel: string;
   threadTs: string;
   messageTs: string;
