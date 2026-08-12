@@ -2925,16 +2925,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					onClick={() => toggleGroup(gkey)}
 				>
 					<span className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_LANE_NAME)}>Snoozed</span>
+					{!open && (
+						<IconChevronDown
+							className={cn(SIDEBAR_GROUP_CHEVRON, SIDEBAR_GROUP_CHEVRON_COLLAPSED)}
+							size={22}
+							style={{ transform: "rotate(-90deg)" }}
+						/>
+					)}
 					<span className={SIDEBAR_LANE_COUNT}>{rows.length}</span>
-					<IconChevronDown
-						className={cn(
-							SIDEBAR_GROUP_CHEVRON,
-							"ml-auto",
-							!open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
-						)}
-						size={22}
-						style={{ transform: open ? "none" : "rotate(-90deg)" }}
-					/>
 				</button>
 				{rows
 					.filter((r) => open || rowOwnsSelection(r))
@@ -3000,17 +2998,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						onClick={() => toggleGroup(gkey)}
 					>
 						<span className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_LANE_NAME)}>{meta.label}</span>
-						{/* Count rides directly behind the lane name, not pinned right. */}
+						{!open && (
+							<IconChevronDown
+								className={cn(SIDEBAR_GROUP_CHEVRON, SIDEBAR_GROUP_CHEVRON_COLLAPSED)}
+								size={22}
+								style={{ transform: "rotate(-90deg)" }}
+							/>
+						)}
 						<span className={SIDEBAR_LANE_COUNT}>{items.length + prs.length}</span>
-						<IconChevronDown
-							className={cn(
-								SIDEBAR_GROUP_CHEVRON,
-								"ml-auto",
-								!open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
-							)}
-							size={22}
-							style={{ transform: open ? "none" : "rotate(-90deg)" }}
-						/>
 					</button>
 					{items
 						.filter((r) => open || rowOwnsSelection(r))
@@ -3121,18 +3116,16 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							<span className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_LANE_NAME)}>
 								{b.label}
 							</span>
+							{!open && (
+								<IconChevronDown
+									className={cn(SIDEBAR_GROUP_CHEVRON, SIDEBAR_GROUP_CHEVRON_COLLAPSED)}
+									size={22}
+									style={{ transform: "rotate(-90deg)" }}
+								/>
+							)}
 							<span className={SIDEBAR_LANE_COUNT}>
 								{b.rows.length + b.prs.length}
 							</span>
-							<IconChevronDown
-								className={cn(
-									SIDEBAR_GROUP_CHEVRON,
-									"ml-auto",
-									!open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
-								)}
-								size={22}
-								style={{ transform: open ? "none" : "rotate(-90deg)" }}
-							/>
 						</button>
 						{b.rows
 							.filter((r) => open || rowOwnsSelection(r))
