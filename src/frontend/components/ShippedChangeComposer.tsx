@@ -153,7 +153,7 @@ export function ShippedChangeComposer({
 					<div className="flex-1" />
 					<label className="flex items-center">
 						<span className="sr-only">Send to</span>
-						<Select size="sm" className="w-24 border-transparent bg-transparent text-dim shadow-none hover:bg-hover phone:w-20" aria-label="Slack channel" value={channel} disabled={status !== "idle" || channels.length === 0} onChange={(event) => setChannel(event.target.value)}>
+						<Select size="sm" className="w-24 phone:w-20" aria-label="Slack channel" value={channel} disabled={status !== "idle" || channels.length === 0} onChange={(event) => setChannel(event.target.value)}>
 							{channels.length === 0 && <option value="">No channels available</option>}
 							{channels.map((candidate) => (
 								<option key={candidate.id} value={candidate.id}>#{candidate.name}</option>
