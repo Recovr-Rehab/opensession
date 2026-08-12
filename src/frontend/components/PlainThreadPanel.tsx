@@ -41,7 +41,7 @@ import {
 	composerTextareaPadding,
 	composerToolbar,
 } from "../lib/composer-classes";
-import { paletteIconBtn } from "../lib/palette-classes";
+import { paletteIconBtn, palettePill } from "../lib/palette-classes";
 import { Tooltip } from "../ui/tooltip";
 import { IconArrowUp, IconPencil, IconPlus } from "./icons";
 import { FileChips } from "./FileChips";
@@ -701,26 +701,31 @@ export function PlainReplyBox({
 						event.target.value = "";
 					}}
 				/>
+				{/* A labelled toggle rather than a bare glyph: which of the two
+				    things this box sends — a customer-facing reply or an internal
+				    note — is the one thing you must never have to guess. Same
+				    "Note" marker the session composer puts beside its own "+". */}
 				<Tooltip
 					label={
-						kind === "note" ? "Switch to customer reply" : "Write an internal note"
+						kind === "note"
+							? "Switch to a customer reply"
+							: "Write a note only the team sees"
 					}
 				>
 					<button
 						type="button"
-						aria-label={
-							kind === "note" ? "Switch to customer reply" : "Write an internal note"
-						}
 						aria-pressed={kind === "note"}
 						className={cn(
-							paletteIconBtn,
+							palettePill,
+							"shrink-0",
 							kind === "note" &&
-								"text-yellow hover:text-yellow before:bg-[color-mix(in_srgb,var(--yellow)_16%,transparent)] hover:before:bg-[color-mix(in_srgb,var(--yellow)_24%,transparent)]",
+								"bg-[color-mix(in_srgb,var(--yellow)_16%,transparent)] text-yellow hover:bg-[color-mix(in_srgb,var(--yellow)_24%,transparent)] hover:text-yellow",
 						)}
 						onClick={() => setKind((current) => (current === "note" ? "reply" : "note"))}
 						disabled={sending}
 					>
-						<IconPencil size={20} />
+						<IconPencil size={14} />
+						Internal note
 					</button>
 				</Tooltip>
 				<span className="min-w-0 truncate text-meta text-faint phone:hidden">
