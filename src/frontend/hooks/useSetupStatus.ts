@@ -115,7 +115,7 @@ export function useSetupStatus(): SetupController {
 						await refetch();
 						setRestartNeeded(false);
 						setRestartState("idle");
-						toast("Server restarted — changes applied");
+						toast("Server restarted. Changes applied.");
 						return;
 					}
 				} catch {}

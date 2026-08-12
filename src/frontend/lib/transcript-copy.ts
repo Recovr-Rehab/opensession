@@ -28,7 +28,7 @@ export function formatTranscript(
 					e.toolInput === undefined
 						? ""
 						: `\n\n\`\`\`json\n${JSON.stringify(e.toolInput, null, 2)}\n\`\`\``;
-				parts.push(`### Tool: ${e.toolName || "unknown"} — ${text}${input}`);
+				parts.push(`### Tool: ${e.toolName || "unknown"} · ${text}${input}`);
 			} else if (e.type === "tool_result") {
 				parts.push(
 					`### Tool result${e.isError ? " (error)" : ""}\n\n\`\`\`\n${text}\n\`\`\``,

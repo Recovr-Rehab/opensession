@@ -88,8 +88,8 @@ export function ReposSection({
 			<SettingCard>
 				{repos.length === 0 ? (
 					<EmptyState placement="row">
-						No repositories registered — sessions need at least one repo to work
-						in. Add one above.
+						No repositories registered. Sessions need at least one repo to work
+						in, so add one above.
 					</EmptyState>
 				) : (
 					repos.map((r) => {
@@ -118,11 +118,11 @@ export function ReposSection({
 			</SettingCard>
 			<SettingsHint>
 				Registering clones the repo onto the server; sessions then branch into
-				isolated worktrees of it. New repos are usable right away — no restart.
+				isolated worktrees of it. New repos are usable right away, with no restart.
 				A repo that commits <code>.agents/setup</code> and{" "}
 				<code>.agents/start.sh</code> provisions its own worktrees and
 				boots its dev server, so previews work and agents can check their UI
-				changes in a real browser — see docs/repo-lifecycle.md.
+				changes in a real browser. See docs/repo-lifecycle.md.
 			</SettingsHint>
 		</>
 	);
@@ -296,7 +296,7 @@ function RepoTileButton({
 					{busy
 						? "Working…"
 						: avatarOk
-							? `Automatic keeps this repo on a color no other repo has. The avatar is ${repo?.ghRepo?.split("/")[0]}’s — the same picture for every repo that owner has.`
+							? `Automatic keeps this repo on a color no other repo has. The avatar is ${repo?.ghRepo?.split("/")[0]}’s. Every repo that owner has shows the same picture.`
 							: "Automatic keeps this repo on a color no other repo has."}
 				</div>
 				{error && <InlineAlert className="mt-2">{error}</InlineAlert>}
@@ -542,8 +542,8 @@ function AddRepoPicker({ onAdded }: { onAdded: () => void | Promise<void> }) {
 						)}
 					</div>
 					<div className="mt-2 text-meta text-faint">
-						Browsing as the {browse.source === "user" ? "connected account" : "bot"} —
-						only repos that credential can reach are listed.
+						Browsing as the {browse.source === "user" ? "connected account" : "bot"}.
+						Only repos that credential can reach are listed.
 					</div>
 				</>
 			) : (
@@ -553,8 +553,8 @@ function AddRepoPicker({ onAdded }: { onAdded: () => void | Promise<void> }) {
 							<>Couldn&rsquo;t load the GitHub repo list right now.</>
 						) : (
 							<>
-								No GitHub credential yet, so the repo list can&rsquo;t be browsed
-								— connect your account under Workspace → Connections, or set{" "}
+								No GitHub credential yet, so the repo list can&rsquo;t be browsed.
+								Connect your account under Workspace → Connections, or set{" "}
 								<code className="rounded-sm bg-surface px-1.5 py-0.5 font-mono text-[0.92em] text-fg">
 									GITHUB_API_TOKEN
 								</code>{" "}

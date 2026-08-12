@@ -76,4 +76,4 @@ export const sessionSourceLabel = (source: string) =>
 export const DEFAULT_DOC_TITLE = PRODUCT_NAME;
 
 /** "<view> — Open Session" document titles. */
-export const docTitle = (view: string) => `${view} — ${PRODUCT_NAME}`;
+export const docTitle = (view: string) => `${view} · ${PRODUCT_NAME}`;

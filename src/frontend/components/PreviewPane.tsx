@@ -97,7 +97,7 @@ export function PreviewPane({
 					key={`${url}#${reloadNonce}`}
 					className="block min-h-0 w-full flex-1 border-0 bg-white"
 					src={url}
-					title={`Preview — ${session.title || session.id}`}
+					title={`Preview · ${session.title || session.id}`}
 					allow="clipboard-read; clipboard-write; fullscreen"
 					sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms allow-modals allow-downloads"
 				/>
@@ -113,7 +113,7 @@ export function PreviewPane({
 					<div className="max-w-sm text-supporting font-medium leading-relaxed text-dim">
 						{status?.starting || !status
 							? "Warm claims serve in seconds; a big branch jump can take a minute to compile."
-							: "It may have been stopped or released — close and reopen this tab to start it again."}
+							: "It may have been stopped or released. Close and reopen this tab to start it again."}
 					</div>
 				</div>
 			)}

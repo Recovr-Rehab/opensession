@@ -335,7 +335,7 @@ export function PrTinder({ onExit }: Props) {
 				// and come back to it.
 				unkeepTinderPr(entry.pr.number, currentUser)
 					.then(() =>
-						finish(`Back on #${entry.pr.number} — comment left in place`),
+						finish(`Back on #${entry.pr.number}, comment left in place`),
 					)
 					.catch(fail);
 			}
@@ -547,7 +547,7 @@ export function PrTinder({ onExit }: Props) {
 						className="flex items-center justify-center rounded-control border border-red/40 bg-red-soft px-4 py-3 text-sm font-semibold text-red hover:border-red/70 disabled:opacity-50"
 						onClick={close}
 						disabled={busy}
-						title="Close PR (← or c) — undo available"
+						title="Close PR (← or c). Undo available."
 					>
 						Close
 					</button>

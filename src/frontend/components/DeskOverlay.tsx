@@ -178,7 +178,7 @@ function DeskBody({
 					size="xs"
 					className="shrink-0 text-faint"
 					onClick={clearSession}
-					title="Clear the session here — the full transcript stays in the expanded session"
+					title="Clear the session here. The full transcript stays in the expanded session."
 				>
 					Clear
 				</Button>

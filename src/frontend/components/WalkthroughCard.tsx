@@ -68,7 +68,7 @@ export function WalkthroughCard({
 					src: mediaUrl(path),
 					sessionTitle: [shot.caption, side === "before" ? "Before" : "After"]
 						.filter(Boolean)
-						.join(" — "),
+						.join(" · "),
 				});
 			}
 		});
@@ -275,7 +275,7 @@ export function WalkthroughCard({
 													<img
 														className="h-full w-full object-cover object-top"
 														src={mediaUrl(shot[side]!)}
-														alt={`${shot.caption || "Change"} — ${side}`}
+														alt={`${shot.caption || "Change"} · ${side}`}
 														loading="lazy"
 													/>
 												</button>
@@ -383,7 +383,7 @@ export function WalkthroughCard({
 																	: "w-full",
 															)}
 															src={mediaUrl(shot[side]!)}
-															alt={`${shot.caption || "change"} — ${side}`}
+															alt={`${shot.caption || "change"} · ${side}`}
 															loading="lazy"
 														/>
 													</button>

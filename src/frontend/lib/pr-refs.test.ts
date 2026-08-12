@@ -103,13 +103,13 @@ describe("refLabel", () => {
 				}),
 			),
 		).toBe(
-			"tella-fusion #72 (1 check pending) — Fix the uploader · 3/4 checks passed",
+			"tella-fusion #72 (1 check pending) · Fix the uploader · 3/4 checks passed",
 		);
 	});
 
 	test("omits checks a PR does not have", () => {
 		expect(refLabel(ref({ title: "Fix the uploader" }))).toBe(
-			"tella-fusion #72 (open) — Fix the uploader",
+			"tella-fusion #72 (open) · Fix the uploader",
 		);
 	});
 });

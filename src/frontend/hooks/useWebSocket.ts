@@ -116,7 +116,7 @@ export function useWebSocket(presenceActive = true) {
       );
       try {
         const msg = JSON.parse(e.data) as WSServerMessage;
-        if (msg.type === "pong") return; // liveness only — not for handlers
+        if (msg.type === "pong") return; // liveness only, not for handlers
         let delivered: WSServerMessage | null = msg;
         if (msg.type === "session_feed") {
           const cursor = feedCursorsRef.current.get(msg.sessionId);

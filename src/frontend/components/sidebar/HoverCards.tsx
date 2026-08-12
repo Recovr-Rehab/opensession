@@ -784,7 +784,7 @@ export function WsMobileSheet({
 					<div className="px-4 py-2">
 						<div className="mb-1.5 text-[11px] font-semibold text-faint">
 							{snoozeUntil
-								? `Snoozed — wakes in ${formatRemaining(snoozeUntil)}`
+								? `Snoozed · wakes in ${formatRemaining(snoozeUntil)}`
 								: "Snooze"}
 						</div>
 						<div className="flex flex-wrap gap-1.5">

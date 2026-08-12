@@ -347,7 +347,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
       ? [
           {
             id: sandboxProvider,
-            note: "Unavailable — choose None or a Ready connection before creating",
+            note: "Unavailable. Choose None or a Ready connection before creating.",
           },
           ...sandboxChoices,
         ]
@@ -397,7 +397,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     if (modelFamily.sandboxable) return null;
     return (
       `${modelFamily.label} models can't run in a sandbox` +
-      (modelFamily.hint ? ` — ${modelFamily.hint}` : "") +
+      (modelFamily.hint ? ` · ${modelFamily.hint}` : "") +
       "."
     );
   })();
@@ -689,7 +689,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     },
     // Ask stays above the branch list — as the last option it drowned below
     // the scroll fold once the worktree list grew, reading as "Ask is gone".
-    { value: "__ask__", label: "Ask — read-only on main", menuLabel: "Ask · read-only on main" },
+    { value: "__ask__", label: "Ask · read-only on main", menuLabel: "Ask · read-only on main" },
     ...worktrees.map((wt) => ({ value: wt.branch, label: wt.branch })),
   ];
 
@@ -1001,7 +1001,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                                 <span>
                                   {sandboxLabel(opt.id)}
                                   {opt.id === "" && (
-                                    <span className="text-faint"> — no sandbox</span>
+                                    <span className="text-faint"> · no sandbox</span>
                                   )}
                                 </span>
                                 {opt.note && (
@@ -1042,8 +1042,8 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                               <span>{engineLabel(e)}</span>
                               <span className="whitespace-normal text-[11px] font-medium leading-snug text-faint">
                                 {e === "pi"
-                                  ? "pi.dev harness, in-process — native mid-turn steering"
-                                  : "Default engine — server pools, sandboxes, detached runs"}
+                                  ? "pi.dev harness, in-process · native mid-turn steering"
+                                  : "Default engine · server pools, sandboxes, detached runs"}
                               </span>
                             </span>
                           </Menu.Item>

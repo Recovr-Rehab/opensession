@@ -473,7 +473,7 @@ function FileRow({
 				type="button"
 				className="flex min-w-0 items-center gap-2 rounded-md px-[7px] py-[5px] text-left transition-colors hover:bg-hover"
 				onClick={() => onOpenTab?.("changes")}
-				aria-label={`${file.path} — ${mark.label.toLowerCase()} — open in Changes`}
+				aria-label={`${file.path} · ${mark.label.toLowerCase()} · open in Changes`}
 			>
 				<span
 					className={cn(
@@ -853,7 +853,7 @@ function AgentReviewCard({
 }
 
 /** The reviewer action: pick a teammate to flag this
-		session as "needs review" — it jumps into a Needs-review band at the top of
+		session as "needs review", so it jumps into a Needs-review band at the top of
 		their sidebar and buzzes their registered devices. Re-pick to hand off,
 		"Clear review request" to withdraw. Optimistic; the polled session list
 		confirms (or reverts) on the next refresh. */

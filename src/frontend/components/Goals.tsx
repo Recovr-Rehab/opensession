@@ -260,7 +260,7 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
                 ) : g.lastRunStatus === "ok" ? (
                   <span
                     className="text-green"
-                    title={`Last wake ok${g.lastRunAt ? ` — ${relativeTime(g.lastRunAt)}` : ""}`}
+                    title={`Last wake ok${g.lastRunAt ? ` · ${relativeTime(g.lastRunAt)}` : ""}`}
                   >
                     ✓
                   </span>
@@ -302,7 +302,7 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
               Goals
             </button>
             <span className="min-w-0 truncate text-label font-semibold">
-              {editMode ? `Edit — ${sel.name}` : sel.name}
+              {editMode ? `Edit ${sel.name}` : sel.name}
             </span>
             {!editMode && (
               <div className="ml-auto flex shrink-0 gap-1.5">
@@ -380,7 +380,7 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
                 )}
                 {(sel.status === "done" || sel.status === "failed") && sel.doneReason && (
                   <div className="text-dim text-supporting leading-snug">
-                    {sel.status === "done" ? "Done" : "Failed"} — {sel.doneReason}
+                    {sel.status === "done" ? "Done" : "Failed"}: {sel.doneReason}
                   </div>
                 )}
 
@@ -397,8 +397,8 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
                     <DetailKey>Mode</DetailKey>
                     <span className="text-dim">
                       {sel.mode === "ask"
-                        ? "Ask — read-only research/measure"
-                        : `Code — persistent worktree${sel.repo ? ` in ${repoLabel(sel.repo)}` : ""}, can open PRs`}
+                        ? "Ask · read-only research and measurement"
+                        : `Code · persistent worktree${sel.repo ? ` in ${repoLabel(sel.repo)}` : ""}, can open PRs`}
                     </span>
 
                     {sel.phase && (
@@ -414,7 +414,7 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
                       {sel.fallbackModel && sel.fallbackModel !== "none" && (
                         <span
                           className="text-faint"
-                          title="Fallback — used only when every account for the primary model has hit its usage limit"
+                          title="Used only when every account for the primary model has hit its usage limit"
                         >
                           {" "}· falls back to {sel.fallbackModel}
                         </span>
@@ -649,8 +649,8 @@ function GoalForm({
         <label className={FIELD_LABEL}>
           Mode
           <Select value={mode} onChange={(e) => setMode(e.target.value as "ask" | "code")}>
-            <option value="ask">Ask — read-only research/measure</option>
-            <option value="code">Code — persistent worktree, can open PRs</option>
+            <option value="ask">Ask · read-only research and measurement</option>
+            <option value="code">Code · persistent worktree, can open PRs</option>
           </Select>
         </label>
 
@@ -668,7 +668,7 @@ function GoalForm({
         <label className={FIELD_LABEL}>
           Model
           <Select value={model} onChange={(e) => setModel(e.target.value)}>
-            <option value="">Default{defaultModel ? ` — ${defaultModel}` : ""}</option>
+            <option value="">Default{defaultModel ? ` · ${defaultModel}` : ""}</option>
             {models.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.label}
@@ -681,7 +681,7 @@ function GoalForm({
         <label className={FIELD_LABEL}>
           Fallback (all accounts hit limits)
           <Select value={fallbackModel} onChange={(e) => setFallbackModel(e.target.value)}>
-            <option value="">None — fail instead</option>
+            <option value="">None · fail instead</option>
             {models.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.label}
@@ -719,7 +719,7 @@ function GoalForm({
             type="number"
             value={maxWakes}
             onChange={(e) => setMaxWakes(e.target.value)}
-            placeholder="—"
+            placeholder="–"
           />
         </label>
       </div>

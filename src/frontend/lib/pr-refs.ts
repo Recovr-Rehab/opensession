@@ -79,7 +79,7 @@ export function refLabel(ref: SessionPrRef): string {
 	const parts = [
 		`${repoLabel(ref.repo)} #${ref.number} (${refState(ref).toLowerCase()})`,
 	];
-	if (ref.title) parts.push(`— ${ref.title}`);
+	if (ref.title) parts.push(`· ${ref.title}`);
 	if (checks && checks.total > 0)
 		parts.push(`· ${checks.passed}/${checks.total} checks passed`);
 	return parts.join(" ");

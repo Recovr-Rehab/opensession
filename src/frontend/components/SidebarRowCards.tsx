@@ -236,7 +236,7 @@ function prState(item: ReviewQueueItem): { label: string; tone: HoverTone } | nu
 		return {
 			label:
 				item.status === "Approved"
-					? "Approved — ready to merge"
+					? "Approved · ready to merge"
 					: "Ready to merge",
 			tone: "green",
 		};

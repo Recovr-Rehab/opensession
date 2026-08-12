@@ -332,7 +332,7 @@ export function PlainThreadActions({
 								className={actionPill}
 								disabled={busy}
 								onClick={() => setStatus("todo")}
-								title="Unsnooze — back to Todo"
+								title="Unsnooze, back to Todo"
 							>
 								Unsnooze
 							</button>
@@ -520,7 +520,7 @@ export function PlainThreadActions({
 					}}
 					title={
 						isSpam
-							? "This customer is marked as spam in Plain — click to undo"
+							? "This customer is marked as spam in Plain. Click to undo."
 							: "Mark this customer as spam in Plain (also closes the thread)"
 					}
 				>
@@ -652,7 +652,7 @@ export function PlainReplyBox({
 				placeholder={
 					kind === "note"
 						? "Internal note for the team (English)…"
-						: `Reply to ${customerName || "the customer"} — sent via Plain…`
+						: `Reply to ${customerName || "the customer"}, sent via Plain…`
 				}
 				value={text}
 				disabled={sending}
@@ -838,7 +838,7 @@ function PlainAttachments({
 						href={href}
 						target="_blank"
 						rel="noreferrer"
-						title={`${a.fileName}${a.sizeBytes ? ` — ${fileSize(a.sizeBytes)}` : ""}`}
+						title={`${a.fileName}${a.sizeBytes ? ` · ${fileSize(a.sizeBytes)}` : ""}`}
 						className={cn(
 							"block rounded-md border border-line overflow-hidden hover:border-line-strong",
 							!isImage && "px-2 py-1 text-label text-dim hover:text-fg",

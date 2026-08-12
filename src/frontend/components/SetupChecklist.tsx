@@ -140,7 +140,7 @@ export function SetupChecklist({
 				description={
 					status.repos.length > 0
 						? status.repos.map((r) => r.label).join(", ")
-						: "Register the repos sessions work in — Workspace → Repositories."
+						: "Register the repos sessions work in, under Workspace → Repositories."
 				}
 				tone={reposTone}
 				label={
@@ -155,8 +155,8 @@ export function SetupChecklist({
 					title="Local dev setup"
 					description={
 						missing.length === 0
-							? "Every repo commits lifecycle scripts — sessions provision themselves, previews boot, and agents can check their own UI changes in a browser."
-							: `No boot script in ${namedMissing}${restMissing > 0 ? ` and ${restMissing} more` : ""} — the Preview button stays disabled there. Add .agents/start.sh to the repo (docs/repo-lifecycle.md).`
+							? "Every repo commits lifecycle scripts, so sessions provision themselves, previews boot, and agents can check their own UI changes in a browser."
+							: `No boot script in ${namedMissing}${restMissing > 0 ? ` and ${restMissing} more` : ""}. The Preview button stays disabled there. Add .agents/start.sh to the repo (docs/repo-lifecycle.md).`
 					}
 					tone={
 						bootable.length === status.repos.length
@@ -188,7 +188,7 @@ export function SetupChecklist({
 				description={
 					status.github.userPrAuth && status.github.clientIdConfigured
 						? "Teammates sign in with GitHub and open PRs as themselves."
-						: "Off — the UI uses the name picker and PRs come from the bot account."
+						: "Off. The UI uses the name picker and PRs come from the bot account."
 				}
 				tone={githubState.tone}
 				label={githubState.label}
@@ -205,7 +205,7 @@ export function SetupChecklist({
 								? "Connected and running."
 								: s.tone === "warn"
 									? `Enabled, but missing ${i.missingRequired.join(", ")}.`
-									: "Not enabled — paste its credentials to connect it."
+									: "Not enabled. Paste its credentials to connect it."
 						}
 						tone={s.tone}
 						label={s.label}

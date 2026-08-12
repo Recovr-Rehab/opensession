@@ -34,7 +34,7 @@ describe("partitionHidden", () => {
 		expect(resurfaced.map((r) => r.key)).toEqual(["workspace:a"]);
 	});
 
-	test("resurfacing is per row — other hidden rows stay hidden", () => {
+	test("resurfacing is per row: other hidden rows stay hidden", () => {
 		const { hiddenKeys, resurfaced } = partitionHidden(
 			[
 				row("workspace:a", "needsinput"),

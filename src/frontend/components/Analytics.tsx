@@ -614,7 +614,7 @@ export function Analytics() {
 									</ChartCard>
 									<ChartCard
 										title="Review quality trend"
-										subtitle={`Earlier vs recent half of the range (split at ${shortDate(derived.splitDate)}) — is the reviewer getting better?`}
+										subtitle={`Earlier vs recent half of the range (split at ${shortDate(derived.splitDate)}). Is the reviewer getting better?`}
 									>
 										<table className="w-full border-collapse text-label">
 											<thead>
@@ -788,7 +788,7 @@ export function Analytics() {
 							<div className="mt-4">
 								<ChartCard
 									title="Repo activity per person"
-									subtitle="Output tokens by repo — hover a segment for sessions and turns"
+									subtitle="Output tokens by repo. Hover a segment for sessions and turns."
 									series={derived.personRepoSeries}
 								>
 									<div className="flex flex-col gap-2">

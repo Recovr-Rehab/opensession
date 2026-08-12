@@ -41,7 +41,7 @@ export function PapercutsPanel() {
 	const header = (
 		<SettingsHeader
 			title="Papercuts"
-			description="Small frictions agents log in the moment while working — retried tool calls, flaky commands, misleading errors, undocumented gotchas. None block on their own; together they show where a repo needs sanding down. The nightly Dreaming digest reads them too."
+			description="Small frictions agents log while working: retried tool calls, flaky commands, misleading errors, undocumented gotchas. None block on their own, but together they show where a repo needs sanding down."
 		/>
 	);
 
@@ -72,7 +72,7 @@ export function PapercutsPanel() {
 						desc={
 							r.enabled
 								? "Sessions and automations in this repo get the log_papercut tool and the nudge to use it."
-								: "Off — runs in this repo don't log papercuts."
+								: "Off. Runs in this repo don't log papercuts."
 						}
 						control={
 							<Switch

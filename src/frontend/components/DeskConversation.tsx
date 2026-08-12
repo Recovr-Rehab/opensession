@@ -243,7 +243,7 @@ export function DeskConversation({
 					id: crypto.randomUUID(),
 					type: "system",
 					content:
-						"Slash commands aren't supported in the Desk — run them from a session.",
+						"Slash commands aren't supported in the Desk. Run them from a session.",
 					timestamp: new Date().toISOString(),
 				},
 			]);

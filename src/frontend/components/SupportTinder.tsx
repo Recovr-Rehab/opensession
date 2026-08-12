@@ -400,7 +400,7 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 						className="flex items-center justify-center rounded-control border border-red/40 bg-red-soft px-4 py-3 text-sm font-semibold text-red hover:border-red/70 disabled:opacity-50"
 						onClick={spam}
 						disabled={busy}
-						title="Mark customer as spam, closes the thread (← or s) — undo available"
+						title="Mark customer as spam, closes the thread (← or s). Undo available."
 					>
 						Spam
 					</button>
@@ -408,7 +408,7 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 						className="flex-1 rounded-control border border-line bg-panel px-3 py-3 text-sm font-semibold text-dim hover:bg-surface hover:text-green disabled:opacity-50"
 						onClick={markDone}
 						disabled={busy}
-						title="Mark this thread Done (d) — undo available"
+						title="Mark this thread Done (d). Undo available."
 					>
 						Done
 					</button>
@@ -416,7 +416,7 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 						className="flex-1 rounded-control border border-line bg-panel px-3 py-3 text-sm font-semibold text-dim hover:bg-surface hover:text-fg disabled:opacity-50"
 						onClick={openSession}
 						disabled={opening}
-						title="Open the ticket's opensession session — starts triage if none exists (e)"
+						title="Open the ticket's opensession session, starting triage if none exists (e)"
 					>
 						{opening ? "Opening…" : "Session"}
 					</button>
@@ -432,7 +432,7 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 					<button
 						className="flex-1 rounded-control bg-green px-4 py-3 text-sm font-semibold text-white hover:opacity-90"
 						onClick={skip}
-						title="Skip — leave the ticket as-is (→ or k)"
+						title="Skip, leaving the ticket as-is (→ or k)"
 					>
 						Skip
 					</button>

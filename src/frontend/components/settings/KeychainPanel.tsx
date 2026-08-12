@@ -82,7 +82,7 @@ export function KeychainPanel() {
 	const panelHeader = (
 		<SettingsHeader
 			title="Keychain"
-			description="Credentials a session can borrow — with the owner's approval, for a stated purpose. Approved calls go through a broker that injects the secret server-side, so the agent never sees it. Grants are scoped to one session, expire, and are revocable. Everyone on this instance sees the list below (who owns what, never the secret); only the owner can approve or remove theirs."
+			description="Credentials a session can borrow with the owner's approval, for a stated purpose. Approved calls go through a broker that injects the secret server-side, so the agent never sees it. Grants are scoped to one session, expire, and are revocable. Everyone on this instance sees the list below (who owns what, never the secret); only the owner can approve or remove theirs."
 		/>
 	);
 
@@ -153,14 +153,14 @@ export function KeychainPanel() {
 							className={settingsInputClass}
 							value={methods}
 							onChange={(e) => setMethods(e.target.value)}
-							placeholder="allowed methods, comma-separated (optional — e.g. GET)"
+							placeholder="allowed methods, comma-separated (optional, e.g. GET)"
 							aria-label="Allowed methods"
 						/>
 						<input
 							className={settingsInputClass}
 							value={prefixes}
 							onChange={(e) => setPrefixes(e.target.value)}
-							placeholder="allowed path prefixes, comma-separated (optional — e.g. /v1/deployments)"
+							placeholder="allowed path prefixes, comma-separated (optional, e.g. /v1/deployments)"
 							aria-label="Allowed path prefixes"
 						/>
 						<SettingsHint>
@@ -224,7 +224,7 @@ export function KeychainPanel() {
 						{pendingAsks.map((a) => (
 							<SettingRow
 								key={a.id}
-								title={`${byId.get(a.credentialId)?.service ?? a.credentialId} — ${a.requestedBy}`}
+								title={`${byId.get(a.credentialId)?.service ?? a.credentialId} · ${a.requestedBy}`}
 								desc={`${a.requestedMode} · ${a.purpose}`}
 								control={null}
 							/>

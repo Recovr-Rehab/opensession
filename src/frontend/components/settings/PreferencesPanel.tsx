@@ -367,7 +367,7 @@ export function PreferencesPanel() {
 		<SettingsPanel>
 			<SettingsHeader
 				title="Preferences"
-				description="How you work with a session — the message box, the transcript, voice, and your standing instructions."
+				description="How you work with a session: the message box, the transcript, voice, and your standing instructions."
 			/>
 			<SettingsGroupLabel className="mt-0">Messages</SettingsGroupLabel>
 			<SettingCard>
@@ -434,7 +434,7 @@ export function PreferencesPanel() {
 				/>
 				<SettingRow
 					title="Vim mode"
-					desc="Modal editing in the composer — Esc for normal mode, i to type. Enter still sends."
+					desc="Modal editing in the composer. Esc for normal mode, i to type. Enter still sends."
 					control={
 						<Switch aria-label="Vim mode" checked={vimMode} onCheckedChange={setVimModePref} />
 					}

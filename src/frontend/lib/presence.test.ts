@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { dedupeViewers, otherViewers } from "./presence";
 
 describe("otherViewers", () => {
-	test("your own devices come out — all of them, not just the first", () => {
+	test("your own devices come out: all of them, not just the first", () => {
 		expect(otherViewers(["Kent", "Kent", "Michiel"], "Kent")).toEqual(["Michiel"]);
 	});
 
@@ -18,7 +18,7 @@ describe("otherViewers", () => {
 		expect(otherViewers(["Michiel", "Johnny"], "Kent")).toEqual(["Michiel", "Johnny"]);
 	});
 
-	test("without a known identity nobody is filtered — better a face too many than a wrong one", () => {
+	test("without a known identity nobody is filtered: better a face too many than a wrong one", () => {
 		expect(otherViewers(["Kent", "Michiel"], "")).toEqual(["Kent", "Michiel"]);
 	});
 });

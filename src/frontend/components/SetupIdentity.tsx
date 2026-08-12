@@ -87,7 +87,7 @@ export function IdentityCard() {
 	const save = async (patch: { personaName?: string; productName?: string }) => {
 		try {
 			setIdentity(await saveInstanceIdentity(patch));
-			toast("Saved — open tabs update after the next rebuild", {
+			toast("Saved. Open tabs update after the next rebuild.", {
 				variant: "success",
 			});
 		} catch (e: any) {

@@ -279,7 +279,7 @@ function NewProjectModal({
 			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
 			const raw = body.result ?? JSON.parse(body.sample || "null");
 			const found = findItemsPath(raw);
-			if (!found) throw new Error("No array of items found in the tool result — try different args or another tool");
+			if (!found) throw new Error("No array of items found in the tool result. Try different args or another tool.");
 			setPath(found.path);
 			setMap(suggestMap(found.sample));
 			setSampleItem(JSON.stringify(found.sample, null, 1).slice(0, 600));
@@ -355,7 +355,7 @@ function NewProjectModal({
 			<Modal.Content widthClassName="max-w-[34rem]">
 				<Modal.Header
 					title="New project"
-					description="A sidebar feed built from one MCP tool call — pick a server and its list-tool, fetch a sample, adjust the mapping."
+					description="A sidebar feed built from one MCP tool call. Pick a server and its list-tool, fetch a sample, then adjust the mapping."
 				/>
 				<div className="max-h-[60vh] overflow-y-auto px-1">
 					<label className={labelCls}>Name</label>
@@ -419,7 +419,7 @@ function NewProjectModal({
 						))}
 					</div>
 
-					<label className={labelCls}>Panel (optional) — tab label + {"{id}"}-templated embed URL</label>
+					<label className={labelCls}>Panel (optional): tab label and {"{id}"}-templated embed URL</label>
 					<div className="grid grid-cols-[1fr_2fr] gap-3">
 						<input className={inputCls} value={panelLabel} onChange={(e) => setPanelLabel(e.target.value)} placeholder="Video" />
 						<input className={inputCls} value={panelEmbed} onChange={(e) => setPanelEmbed(e.target.value)} placeholder="https://…/{id}/embed" />

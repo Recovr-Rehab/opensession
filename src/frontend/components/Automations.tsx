@@ -147,14 +147,14 @@ const PRESETS: Array<{ label: string; cron: string }> = [
   { label: "Weekdays · 9:00 AM PT", cron: "0 16 * * 1-5" },
   { label: "Weekdays · 9:00 AM CET", cron: "0 8 * * 1-5" },
   { label: "Mondays · 9:00 AM CET", cron: "0 8 * * 1" },
-  { label: "No schedule — webhook / manual only", cron: "" },
+  { label: "No schedule · webhook or manual only", cron: "" },
   { label: "Custom cron…", cron: CUSTOM },
 ];
 
 const EVENT_OPTIONS: Array<{ key: string; label: string }> = [
-  { key: "plain:thread_created", label: "Plain — new support ticket created" },
-  { key: "stripe:charge.dispute.created", label: "Stripe — dispute (chargeback) created" },
-  { key: "github:pr_merged", label: "GitHub — PR merged" },
+  { key: "plain:thread_created", label: "Plain · new support ticket created" },
+  { key: "stripe:charge.dispute.created", label: "Stripe · dispute (chargeback) created" },
+  { key: "github:pr_merged", label: "GitHub · PR merged" },
 ];
 
 /** Claude and Codex accounts for provider-aware automation pins. */
@@ -286,7 +286,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
         <div>
           <PageTitle className={sel ? "text-base" : undefined}>Automations</PageTitle>
           <PageDescription className={sel ? "hidden" : undefined}>
-            Scheduled {AGENT_NAME} sessions — cron runs in UTC (server time).
+            Scheduled {AGENT_NAME} sessions. Cron runs in UTC (server time).
           </PageDescription>
         </div>
         <Button
@@ -360,7 +360,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                 ) : a.lastRunStatus === "ok" ? (
                   <span
                     className="text-green"
-                    title={`Last run ok${a.lastRunAt ? ` — ${relativeTime(a.lastRunAt)}` : ""}`}
+                    title={`Last run ok${a.lastRunAt ? ` · ${relativeTime(a.lastRunAt)}` : ""}`}
                   >
                     ✓
                   </span>
@@ -407,7 +407,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
               Automations
             </button>
             <span className="min-w-0 truncate text-label font-semibold">
-              {editMode ? `Edit — ${sel.name}` : sel.name}
+              {editMode ? `Edit ${sel.name}` : sel.name}
             </span>
             {!editMode && (
               <div className="ml-auto flex shrink-0 gap-1.5">
@@ -509,7 +509,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                           <span className={`${CHIP} text-yellow`}>
                             #{sel.slackWatch.channel}
                           </span>{" "}
-                          — one run per top-level message
+                          · one run per top-level message
                         </>
                       ) : (
                         <>
@@ -534,17 +534,17 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                     <span className="text-dim">
                       {sel.mode === "ask"
                         ? sel.sandbox
-                          ? "Ask — isolated MicroVM workspace"
-                          : "Ask — read-only on the main checkout"
+                          ? "Ask · isolated MicroVM workspace"
+                          : "Ask · read-only on the main checkout"
                         : sel.sandbox
-                          ? "Code — isolated MicroVM workspace, can open PRs"
-                          : "Code — isolated worktree, can open PRs"}
+                          ? "Code · isolated MicroVM workspace, can open PRs"
+                          : "Code · isolated worktree, can open PRs"}
                     </span>
 
                     <DetailKey>Environment</DetailKey>
                     <span className="text-dim">
                       {sel.sandbox
-                        ? "MicroVM — pinned credentials and restricted egress"
+                        ? "MicroVM · pinned credentials and restricted egress"
                         : "Host worktree"}
                     </span>
 
@@ -554,7 +554,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                       {sel.fallbackModel && sel.fallbackModel !== "none" && (
                         <span
                           className="text-faint"
-                          title="Fallback — used only when every account for the primary model has hit its usage limit"
+                          title="Used only when every account for the primary model has hit its usage limit"
                         >
                           {" "}· falls back to {sel.fallbackModel}
                         </span>
@@ -569,8 +569,8 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                             "pinned account"}
                           <span className="text-faint">
                             {sel.accountStrict === false
-                              ? " — preferred, falls back to the shared pool"
-                              : " — hard pin (cost cap)"}
+                              ? " · preferred, falls back to the shared pool"
+                              : " · hard pin (cost cap)"}
                             {sel.usageCredits ? " · paid usage-credits allowed" : ""}
                           </span>
                         </span>
@@ -765,7 +765,7 @@ function TriggerGraph({ runs, compact }: { runs: AutomationRun[]; compact?: bool
           if (count === 0) {
             return (
               <rect key={i} x={i * SLOT} y={PLOT_H - 2} width={SLOT - 2} height={2} rx={1} fill="var(--border)">
-                <title>{`${label} — no runs`}</title>
+                <title>{`${label} · no runs`}</title>
               </rect>
             );
           }
@@ -778,7 +778,7 @@ function TriggerGraph({ runs, compact }: { runs: AutomationRun[]; compact?: bool
           ].filter(Boolean);
           return (
             <rect key={i} x={i * SLOT} y={PLOT_H - h} width={SLOT - 2} height={h} rx={1.5} fill={fill}>
-              <title>{`${label} — ${count} run${count === 1 ? "" : "s"} (${parts.join(", ")})`}</title>
+              <title>{`${label} · ${count} run${count === 1 ? "" : "s"} (${parts.join(", ")})`}</title>
             </rect>
           );
         })}
@@ -1742,7 +1742,7 @@ function AutomationForm({
 
       {isWatch ? (
         <label className={FIELD_LABEL}>
-          Slack channel — what channel should {AGENT_NAME} watch?
+          Slack channel: what channel should {AGENT_NAME} watch?
           <Input
             value={watchChannel}
             onChange={(e) => setWatchChannel(e.target.value)}
@@ -1750,7 +1750,7 @@ function AutomationForm({
             className="mono-input"
           />
           <span className="mt-1 text-meta leading-snug text-faint">
-            Invite @{AGENT_NAME} to the channel first — the bot only receives messages
+            Invite @{AGENT_NAME} to the channel first. The bot only receives messages
             for channels it's a member of. One run per top-level message; thread
             replies don't re-trigger. Channel id is in the channel's “About” tab.
           </span>
@@ -1816,7 +1816,7 @@ function AutomationForm({
       )}
 
       <label className={FIELD_LABEL}>
-        Instructions — what {AGENT_NAME} does {isWatch ? "with each message" : "when triggers activate"}
+        Instructions: what {AGENT_NAME} does {isWatch ? "with each message" : "when triggers activate"}
         <Textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
@@ -1855,8 +1855,8 @@ function AutomationForm({
           <label className={FIELD_LABEL}>
             Mode
             <Select value={mode} onChange={(e) => setMode(e.target.value as "ask" | "code")}>
-              <option value="ask">Ask — read-only on main</option>
-              <option value="code">Code — fresh worktree per run</option>
+              <option value="ask">Ask · read-only on main</option>
+              <option value="code">Code · fresh worktree per run</option>
             </Select>
           </label>
 
@@ -1884,7 +1884,7 @@ function AutomationForm({
           <label className={FIELD_LABEL}>
             Model
             <Select value={model} onChange={(e) => setModel(e.target.value)}>
-              <option value="">Default{defaultModel ? ` — ${defaultModel}` : ""}</option>
+              <option value="">Default{defaultModel ? ` · ${defaultModel}` : ""}</option>
               {models.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.label}
@@ -1901,7 +1901,7 @@ function AutomationForm({
               onChange={(e) => setFallbackModel(e.target.value)}
               disabled={sandbox}
             >
-              <option value="">None — fail instead of falling back</option>
+              <option value="">None · fail instead of falling back</option>
               {models.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.label}
@@ -1914,38 +1914,38 @@ function AutomationForm({
           <label className={FIELD_LABEL} title="Pin runs to one account from the selected model's provider pool.">
             Provider account
             <Select value={accountId} onChange={(e) => setAccountId(e.target.value)}>
-              <option value="">Auto — shared pool rotation</option>
+              <option value="">Auto · shared pool rotation</option>
               {eligibleAccounts.map((x) => (
                 <option key={x.id} value={x.id}>
                   {x.name}
-                  {x.owner ? ` — ${x.owner}'s` : ""}
+                  {x.owner ? ` · ${x.owner}'s` : ""}
                 </option>
               ))}
             </Select>
           </label>
 
           {accountId && (
-            <label className={FIELD_LABEL} title="This account only: when it's out of usage, runs switch to the fallback model — never the shared pool — so this account's limits are the automation's cost ceiling. Prefer it: exhausted runs rotate into the shared pool instead.">
+            <label className={FIELD_LABEL} title="This account only: when it's out of usage, runs switch to the fallback model rather than the shared pool, so this account's limits are the automation's cost ceiling. Prefer it: exhausted runs rotate into the shared pool instead.">
               When the pinned account is out of usage
               <Select
                 value={accountStrict ? "strict" : "pool"}
                 onChange={(e) => setAccountStrict(e.target.value === "strict")}
                 disabled={sandbox}
               >
-                <option value="strict">This account only — fall back by model (cost cap)</option>
-                <option value="pool">Prefer it — fall back to the shared pool</option>
+                <option value="strict">This account only · fall back by model (cost cap)</option>
+                <option value="pool">Prefer it · fall back to the shared pool</option>
               </Select>
             </label>
           )}
 
-          <label className={FIELD_LABEL} title="Usage-credits are pay-as-you-go spend past the subscription's included limits. Only takes effect on accounts with extra usage enabled at claude.ai — and their monthly credit cap still bounds the spend.">
+          <label className={FIELD_LABEL} title="Usage-credits are pay-as-you-go spend past the subscription's included limits. They only take effect on accounts with extra usage enabled at claude.ai, and their monthly credit cap still bounds the spend.">
             Usage credits
             <Select
               value={usageCredits ? "allow" : "never"}
               onChange={(e) => setUsageCredits(e.target.value === "allow")}
             >
-              <option value="never">Never — stop / fall back at the limit</option>
-              <option value="allow">Allowed — keep going on paid credits</option>
+              <option value="never">Never · stop or fall back at the limit</option>
+              <option value="allow">Allowed · keep going on paid credits</option>
             </Select>
           </label>
         </div>

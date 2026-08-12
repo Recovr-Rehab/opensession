@@ -171,7 +171,7 @@ function DefaultModelRow() {
 	const claudeModels = legacy.filter((m) => m.provider === "claude");
 	const codexModels = legacy.filter((m) => m.provider === "codex");
 	const legacyGroup = (engine: string) =>
-		opencodeModels.length > 0 ? `Legacy — ${engine} (direct SDK)` : engine;
+		opencodeModels.length > 0 ? `Legacy · ${engine} (direct SDK)` : engine;
 
 	return (
 		<SettingRow>
@@ -493,7 +493,7 @@ function DefaultEngineRow({ piEnabled }: { piEnabled: boolean }) {
 					{tail
 						? `Moves the default model (currently ${current}) onto the chosen engine, keeping the same model.`
 						: current
-							? `The default (${current}) isn't an engine-prefixed model — pick an opencode/… or pi/… default model above to switch engines here.`
+							? `The default (${current}) isn't an engine-prefixed model. Pick an opencode/… or pi/… default model above to switch engines here.`
 							: "Which engine new sessions start on."}
 				</SettingRowDescription>
 			</SettingRowText>
@@ -657,7 +657,7 @@ function UsageBar({ label, window: w }: { label: string; window: UsageWindow | n
 		<Meter
 			label={label}
 			pct={pct}
-			value={pct === null ? "—" : `${Math.round(pct)}%`}
+			value={pct === null ? "–" : `${Math.round(pct)}%`}
 			note={formatReset(w?.resetsAt ?? null)}
 			noteTitle={absoluteReset(w?.resetsAt ?? null)}
 		/>
@@ -682,7 +682,7 @@ function ExtraUsageRow({
 	return (
 		<Meter
 			label="Credits"
-			labelTitle="Usage-credits — pay-as-you-go spend past the subscription limits, against this account's monthly credit cap (set at claude.ai)"
+			labelTitle="Usage-credits: pay-as-you-go spend past the subscription limits, against this account's monthly credit cap (set at claude.ai)"
 			pct={pct}
 			value={usd(extra.usedCredits)}
 			note={`${extra.monthlyLimit > 0 ? `of ${usd(extra.monthlyLimit)}/mo` : "no monthly cap"}${
@@ -898,8 +898,8 @@ function ClaudeAccountsSection() {
 									aria-label={`Owner of ${a.name}`}
 									title={
 										a.owner
-											? `${a.owner}'s personal sub — their runs use it first, everyone else never does.`
-											: "Shared pool account — used by everyone and by automations."
+											? `${a.owner}'s personal sub. Their runs use it first, everyone else never does.`
+											: "Shared pool account, used by everyone and by automations."
 									}
 								>
 									<option value="">Shared pool</option>
@@ -1163,8 +1163,8 @@ function CodexAccountsSection() {
 									aria-label={`Owner of ${a.name}`}
 									title={
 										a.owner
-											? `${a.owner}'s personal subscription — their runs use it first, everyone else never does.`
-											: "Shared pool account — used by everyone and by automations."
+											? `${a.owner}'s personal subscription. Their runs use it first, everyone else never does.`
+											: "Shared pool account, used by everyone and by automations."
 									}
 								>
 									<option value="">Shared pool</option>
@@ -1269,7 +1269,7 @@ function AddClaudeAccountForm({ onClose, onAdded }: { onClose: () => void; onAdd
 						placeholder="sk-ant-oat01-…"
 					/>
 				</SettingsField>
-				<SettingsField className="mb-0 flex-1" title="Personal sub: this person's runs use the account first, with the shared pool as backup — nobody else's runs touch it. Shared pool = used by everyone and by automations.">
+				<SettingsField className="mb-0 flex-1" title="Personal sub: this person's runs use the account first, with the shared pool as backup, and nobody else's runs touch it. Shared pool = used by everyone and by automations.">
 					Owner
 					<select className={settingsInputClass} value={owner} onChange={(e) => setOwner(e.target.value)}>
 						<option value="">Shared pool</option>
@@ -1624,9 +1624,9 @@ function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdde
 						onChange={(e) => setKind(e.target.value as "device" | "oauth" | "api_key" | "home")}
 						disabled={!!login || !!oauth}
 					>
-						<option value="device">ChatGPT sign-in — device code</option>
-						<option value="oauth">ChatGPT sign-in — link + paste</option>
-						<option value="home">ChatGPT login — existing CODEX_HOME directory</option>
+						<option value="device">ChatGPT sign-in · device code</option>
+						<option value="oauth">ChatGPT sign-in · link and paste</option>
+						<option value="home">ChatGPT login · existing CODEX_HOME directory</option>
 						<option value="api_key">OpenAI API key</option>
 					</select>
 				</SettingsField>
@@ -1642,7 +1642,7 @@ function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdde
 						/>
 					</SettingsField>
 				)}
-				<SettingsField className="mb-0 flex-1" title="Personal sub: this person's runs use the account first, with the shared pool as backup — nobody else's runs touch it. Shared pool = used by everyone and by automations.">
+				<SettingsField className="mb-0 flex-1" title="Personal sub: this person's runs use the account first, with the shared pool as backup, and nobody else's runs touch it. Shared pool = used by everyone and by automations.">
 					Owner
 					<select className={settingsInputClass} value={owner} onChange={(e) => setOwner(e.target.value)} disabled={!!login || !!oauth}>
 						<option value="">Shared pool</option>
@@ -1686,7 +1686,7 @@ function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdde
 						</>
 					)}
 					{login.state === "done" && (
-						<div>Signed in — account "{login.name}" added to the pool.</div>
+						<div>Signed in. Account "{login.name}" added to the pool.</div>
 					)}
 					{login.state === "error" && (
 						<InlineAlert

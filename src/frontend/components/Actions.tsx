@@ -266,7 +266,7 @@ export function Actions({ onOpenSession, selectedId, onSelect }: Props) {
                 <DetailKey>Type</DetailKey>
                 <span className="text-dim">
                   {sel.kind === "mcp"
-                    ? "MCP tool — runs on its own server with its own credentials"
+                    ? "MCP tool · runs on its own server with its own credentials"
                     : "Repo script"}
                 </span>
 
@@ -383,7 +383,7 @@ function RunForm({
               value={values[input.name] ?? ""}
               onChange={(e) => setValues((v) => ({ ...v, [input.name]: e.target.value }))}
             >
-              <option value="">—</option>
+              <option value="">–</option>
               {(input.options || []).map((o) => (
                 <option key={o} value={o}>
                   {o}
@@ -533,8 +533,8 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
       <label className={FIELD_LABEL}>
         Type
         <Select value={kind} onChange={(e) => setKind(e.target.value as "repo" | "mcp")}>
-          <option value="repo">Repo script — run a script from a repo</option>
-          <option value="mcp">MCP tool — call a tool on an MCP server</option>
+          <option value="repo">Repo script · run a script from a repo</option>
+          <option value="mcp">MCP tool · call a tool on an MCP server</option>
         </Select>
       </label>
 
@@ -612,7 +612,7 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
       <div className={cn(FORM_TITLE, "mt-2")}>
         Inputs {kind === "mcp" ? "(arg names)" : argMode === "positional" ? "(in order →)" : ""}
       </div>
-      {inputs.length === 0 && <div className="mt-1 text-supporting text-faint">No inputs — the script runs with no args.</div>}
+      {inputs.length === 0 && <div className="mt-1 text-supporting text-faint">No inputs. The script runs with no args.</div>}
       {inputs.map((input, idx) => (
         <div className={cn(FORM_ROW, "items-end")} key={idx}>
           <label className={FIELD_LABEL}>

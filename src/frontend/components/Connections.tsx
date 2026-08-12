@@ -78,7 +78,7 @@ const STATUS_META: Record<McpConnection["status"], { label: string; dot: string;
 };
 
 const MCP_BLURBS: Record<string, string> = {
-  linear: "Issues & projects — read and update Linear",
+  linear: "Issues and projects: read and update Linear",
   plain: "Customer support threads from Plain",
   sentry: "Errors and performance issues",
   workos: "User & organization admin",
@@ -86,7 +86,7 @@ const MCP_BLURBS: Record<string, string> = {
   stripe: "Billing, subscriptions & refunds",
   amplitude: "Product analytics events",
   grafana: "Dashboards, logs & metrics",
-  incident: "incident.io — incidents & on-call",
+  incident: "incident.io: incidents and on-call",
   slack: "Post & read Slack messages",
   ahrefs: "SEO, keywords & backlink data",
   github: "Repos, issues & pull requests",
@@ -264,7 +264,7 @@ export function Connections() {
     <SettingsPanel>
       <SettingsHeader
         title="Connections"
-        description={`What ${AGENT_NAME} is wired into — inbound agents and the MCP tools every session can use.`}
+        description={`What ${AGENT_NAME} is wired into: inbound agents and the MCP tools every session can use.`}
         actions={
           <>
             <Button
@@ -303,7 +303,7 @@ export function Connections() {
         <LoadingState>Checking connections…</LoadingState>
       ) : (
         <>
-          <SectionHeading>Agents — how work reaches {AGENT_NAME}</SectionHeading>
+          <SectionHeading>Agents: how work reaches {AGENT_NAME}</SectionHeading>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-2.5">
             {Object.entries(data.agents).map(([name, health]) => {
               const ok = health?.status === "operational";
@@ -333,7 +333,7 @@ export function Connections() {
             })}
           </div>
 
-          <SectionHeading>MCP servers — tools inside every session</SectionHeading>
+          <SectionHeading>MCP servers: tools inside every session</SectionHeading>
           <SettingCard>
             {data.mcpServers.map((s) => {
               const meta = STATUS_META[s.status];
@@ -791,7 +791,7 @@ function CodeStorageCard() {
       const res = await connectCodeStorage(org.trim(), pem);
       setPem("");
       setNote(
-        `Connected — ${res.repoCount} repo${res.repoCount === 1 ? "" : "s"} visible. Register them under Settings → Setup → Repositories.`,
+        `Connected. ${res.repoCount} repo${res.repoCount === 1 ? "" : "s"} visible. Register them under Settings → Setup → Repositories.`,
       );
     } catch (e: any) {
       setError(e.message);
@@ -832,7 +832,7 @@ function CodeStorageCard() {
 
   return (
     <>
-      <SectionHeading>Code Storage — branch-based repo host</SectionHeading>
+      <SectionHeading>Code Storage: branch-based repo host</SectionHeading>
       {error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
       <SettingCard>
         <div className="flex items-center gap-3 px-4 py-3">
@@ -841,12 +841,12 @@ function CodeStorageCard() {
             <div className="text-body font-medium text-fg">code.storage (Pierre)</div>
             <div className="text-label leading-snug text-dim">
               {!connected
-                ? "Host repos on code.storage — sessions review branch diffs instead of PRs. Paste the org's signing key to connect; nothing else to configure."
+                ? "Host repos on code.storage, where sessions review branch diffs instead of PRs. Paste the org's signing key to connect; nothing else to configure."
                 : status.error
                   ? `Configured for org "${status.org}", but the last check failed.`
                   : `Connected to org "${status.org}"${
                       typeof status.repoCount === "number"
-                        ? ` — ${status.repoCount} repo${status.repoCount === 1 ? "" : "s"} visible`
+                        ? ` · ${status.repoCount} repo${status.repoCount === 1 ? "" : "s"} visible`
                         : ""
                     }. Register repos under Settings → Setup → Repositories.`}
             </div>
@@ -1054,7 +1054,7 @@ function PlainRouter() {
 
   return (
     <>
-      <SectionHeading>Plain triage router — spam gate + model routing</SectionHeading>
+      <SectionHeading>Plain triage router: spam gate and model routing</SectionHeading>
       {error && (
         <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
       )}
@@ -1179,8 +1179,8 @@ function AddMcpForm({ onClose, onAdded }: { onClose: () => void; onAdded: () => 
         <SettingsField>
           Transport
           <select className={settingsSelectClass} value={transport} onChange={(e) => setTransport(e.target.value as any)}>
-            <option value="http">http — remote MCP endpoint</option>
-            <option value="stdio">stdio — local command</option>
+            <option value="http">http · remote MCP endpoint</option>
+            <option value="stdio">stdio · local command</option>
           </select>
         </SettingsField>
       </SettingsFormRow>

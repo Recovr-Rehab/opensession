@@ -1092,9 +1092,9 @@ export function PrPanel({
           onClick={() => setActiveKey(t.key)}
           title={
             t.linked
-              ? `Linked PR — branch ${t.branch}`
+              ? `Linked PR · branch ${t.branch}`
               : t.discovered
-                ? `PR opened by this session — branch ${t.branch}`
+                ? `PR opened by this session · branch ${t.branch}`
                 : t.primary
                   ? "Primary repo"
                   : "Attached repo"
@@ -1463,7 +1463,7 @@ export function PrPanel({
                       disabled={!caps.reviewComments}
                       disabledHint={`Inline review comments aren't supported on ${provider.name}`}
                       submitLabel="Add comment"
-                      placeholder={`Comment on #${diff.number} — added to your pending review…`}
+                      placeholder={`Comment on #${diff.number}, added to your pending review…`}
                       pendingComments={pending}
                       onRemovePending={handleRemovePending}
                       onSubmit={handleAddPending}
@@ -1523,7 +1523,7 @@ export function PrPanel({
                             disabled={!caps.reviewComments}
                             disabledHint={`Inline review comments aren't supported on ${provider.name}`}
                             submitLabel="Add comment"
-                            placeholder={`Comment on #${diff.number} — added to your pending review…`}
+                            placeholder={`Comment on #${diff.number}, added to your pending review…`}
                             pendingComments={pending}
                             onRemovePending={handleRemovePending}
                             onSubmit={handleAddPending}
@@ -1545,7 +1545,7 @@ export function PrPanel({
                   disabled={!caps.reviewComments}
                   disabledHint={`Inline review comments aren't supported on ${provider.name}`}
                   submitLabel="Add comment"
-                  placeholder={`Comment on #${diff.number} — added to your pending review…`}
+                  placeholder={`Comment on #${diff.number}, added to your pending review…`}
                   pendingComments={pending}
                   onRemovePending={handleRemovePending}
                   onSubmit={handleAddPending}
@@ -1614,7 +1614,7 @@ export function PrPanel({
               {closeError ||
                 (caps.reviewComments
                   ? "Comments are sent together when you finish the review"
-                  : `${provider.name} has no reviews — merge or close when you're done`)}
+                  : `${provider.name} has no reviews. Merge or close when you're done.`)}
             </div>
           </div>
           <div className="pointer-events-auto ml-3 flex shrink-0 gap-2">
@@ -1635,7 +1635,7 @@ export function PrPanel({
                 className="text-xs"
                 onClick={handleClose}
                 disabled={closing}
-                title="Close this pull request without merging — the branch and its commits stay available"
+                title="Close this pull request without merging. The branch and its commits stay available."
               >
                 {closing ? "Closing…" : confirmClose ? "Confirm close" : "Close"}
               </Button>
@@ -2022,8 +2022,8 @@ export function PrPanel({
               </div>
               <div className="text-right text-meta text-faint">
                 {caps.reviewComments
-                  ? "Review — comments stay pending until you submit"
-                  : `Read-only — ${provider.name} has no review comments`}
+                  ? "Review. Comments stay pending until you submit."
+                  : `Read-only. ${provider.name} has no review comments.`}
                 {reviewDone &&
                   (reviewDone === "submitted" ? (
                     <span className="ml-2 text-green">review submitted ✓</span>
@@ -2066,7 +2066,7 @@ export function PrPanel({
                         disabled={!caps.reviewComments}
                         disabledHint={`Inline review comments aren't supported on ${provider.name}`}
                         submitLabel="Add comment"
-                        placeholder={`Comment on #${diff.number} — added to your pending review…`}
+                        placeholder={`Comment on #${diff.number}, added to your pending review…`}
                         pendingComments={pending}
                         onRemovePending={handleRemovePending}
                         onSubmit={handleAddPending}
@@ -2087,7 +2087,7 @@ export function PrPanel({
                 disabled={!caps.reviewComments}
                 disabledHint={`Inline review comments aren't supported on ${provider.name}`}
                 submitLabel="Add comment"
-                placeholder={`Comment on #${diff.number} — added to your pending review…`}
+                placeholder={`Comment on #${diff.number}, added to your pending review…`}
                 pendingComments={pending}
                 onRemovePending={handleRemovePending}
                 onSubmit={handleAddPending}

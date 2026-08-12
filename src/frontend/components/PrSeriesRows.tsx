@@ -56,7 +56,7 @@ export function PrSeriesRow({
 				type="button"
 				className={PR_ROW_MAIN}
 				onClick={() => onOpen?.({ repo: prRef.repo, branch: prRef.branch })}
-				title={`${refLabel(prRef)} — open in the PR tab`}
+				title={`${refLabel(prRef)} · open in the PR tab`}
 				aria-label={`Review ${repoLabel(prRef.repo)} pull request #${prRef.number}`}
 			>
 				<span className={prChipClass(tone, "row")}>

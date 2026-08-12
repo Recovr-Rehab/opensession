@@ -140,7 +140,7 @@ export function PreviewButton({
   // Absent on pre-field servers — treat as bootable so the button still works
   // against a not-yet-restarted backend.
   const bootable = status.bootable !== false;
-  const notBootableHint = `No preview boot mechanism for this repo — commit an .agents/start.sh to the repo, or set previewCommand on its repos config entry`;
+  const notBootableHint = `No preview boot mechanism for this repo. Commit an .agents/start.sh to the repo, or set previewCommand on its repos config entry.`;
 
   // Same-origin interstitial that waits for the boot and then redirects itself
   // to the preview (PreviewWait.tsx). The agent-flagged deep link rides along
@@ -424,7 +424,7 @@ export function PreviewButton({
               href={url}
               target="_blank"
               rel="noopener"
-              title={`Open the webapp — ${url}`}
+              title={`Open the webapp · ${url}`}
               onClick={(e) => {
                 if (e.metaKey || e.ctrlKey) {
                   e.preventDefault();
@@ -476,7 +476,7 @@ export function PreviewButton({
   // (seen live, 2026-07-09).
   if (variant === "header") {
     const menuCaret = (running || anyRunning || isStarting) && (
-      <Tooltip label="Dev services — stop the server, snapshot" side="bottom">
+      <Tooltip label="Dev services: stop the server, snapshot" side="bottom">
         <Popover.Trigger
           render={
             <button
@@ -503,7 +503,7 @@ export function PreviewButton({
               label={
                 copied
                   ? "Link copied"
-                  : "Open the running app — ⌘-click to copy the link, right-click for dev services"
+                  : "Open the running app. ⌘-click copies the link, right-click opens dev services."
               }
               side="bottom"
             >
@@ -535,7 +535,7 @@ export function PreviewButton({
             </Tooltip>
           ) : isStarting ? (
             <Tooltip
-              label={stopping ? "Cancelling…" : "Starting the dev server — click to cancel"}
+              label={stopping ? "Cancelling…" : "Starting the dev server. Click to cancel."}
               side="bottom"
             >
               <button
@@ -554,7 +554,7 @@ export function PreviewButton({
               </button>
             </Tooltip>
           ) : !bootable ? (
-            <Tooltip label={`${notBootableHint} — right-click for details`} side="bottom" multiline>
+            <Tooltip label={`${notBootableHint} Right-click for details.`} side="bottom" multiline>
               <button
                 className={cn(
                   headerIconBase,
@@ -568,7 +568,7 @@ export function PreviewButton({
               </button>
             </Tooltip>
           ) : (
-            <Tooltip label="Run — start the dev server (right-click for dev services)" side="bottom">
+            <Tooltip label="Run the dev server (right-click for dev services)" side="bottom">
               <button
                 className={cn(headerIconBase, "text-faint hover:bg-hover hover:text-dim")}
                 onClick={start}
@@ -599,7 +599,7 @@ export function PreviewButton({
             href={url}
             target="_blank"
             rel="noopener"
-            title={`Open the webapp — ${url}`}
+            title={`Open the webapp · ${url}`}
             onClick={(e) => {
               if (onOpenTab && !e.metaKey && !e.ctrlKey) {
                 e.preventDefault();
@@ -620,7 +620,7 @@ export function PreviewButton({
             )}
             onClick={stop}
             disabled={stopping}
-            title="Starting the dev server (first build can take a minute) — click to cancel"
+            title="Starting the dev server (first build can take a minute). Click to cancel."
           >
             <span className={spinnerClass} />
             <span className="inline group-hover:hidden">
@@ -672,7 +672,7 @@ export function PreviewButton({
             if (running) copy(url, { toast: "Preview link copied" });
           }}
           aria-disabled={!running || undefined}
-          title={running ? `Copy the preview link — ${url}` : "Start the preview first"}
+          title={running ? `Copy the preview link · ${url}` : "Start the preview first"}
         >
           <CopyCheck copied={copied} size={18} idle={<IconLink size={18} />} />
         </button>

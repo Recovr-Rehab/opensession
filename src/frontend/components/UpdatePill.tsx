@@ -174,7 +174,7 @@ export function UpdatePill({ addHandler, variant = "toast" }: Props) {
         aria-live="polite"
         title={
           forced
-            ? `Updating in ${secondsLeft}s — tap to refresh now.`
+            ? `Updating in ${secondsLeft}s. Tap to refresh now.`
             : restart
               ? `OS¹ ${shellVersion ?? "update"} is ready. Tap to restart and install it.`
               : `A new update is available${by ? ` (${by})` : ""}. Tap to refresh.`

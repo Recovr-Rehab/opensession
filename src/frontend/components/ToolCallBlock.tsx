@@ -507,7 +507,7 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
             <IconX size={20} />
           </span>
         ) : !result ? (
-          <span className="flex-shrink-0 text-meta text-faint">—</span>
+          <span className="flex-shrink-0 text-meta text-faint">–</span>
         ) : null}
       </button>
 

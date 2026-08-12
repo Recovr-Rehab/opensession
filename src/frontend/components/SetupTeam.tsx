@@ -316,7 +316,7 @@ function MemberDialog({
 			<Modal.Content initialFocus={nameRef}>
 				<Modal.Header
 					title={member ? `Edit ${member.name}` : "Add member"}
-					description="Identity table entry — commits, sessions and access grants resolve through it."
+					description="Identity table entry. Commits, sessions and access grants resolve through it."
 				/>
 				<form className="flex flex-col gap-3" onSubmit={submit}>
 					<Field label="Full name">

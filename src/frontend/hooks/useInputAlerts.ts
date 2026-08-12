@@ -100,7 +100,7 @@ export function useInputAlerts(
 				"Needs input",
 				s.waitingForInput
 					? s.title || "A session is waiting for your answer"
-					: `Run failed — ${s.title || "a session needs attention"}`,
+					: `Run failed: ${s.title || "a session needs attention"}`,
 				() => onOpenRef.current(s.id),
 			);
 		}

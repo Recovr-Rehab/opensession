@@ -55,11 +55,11 @@ function SandboxDefaultRow({ scope, canManage = true }: { scope: Scope; canManag
 	const available = new Set<string>(providers.map((provider) => provider.id));
 	const unavailableSelection =
 		value !== "workspace" && value !== "none" && !available.has(value)
-			? [{ value, label: `${providerLabel(value)} — unavailable`, disabled: true }]
+			? [{ value, label: `${providerLabel(value)} · unavailable`, disabled: true }]
 			: [];
 	const options = [
 		...(scope === "personal"
-			? [{ value: "workspace", label: `Workspace default — ${providerLabel(workspace)}` }]
+			? [{ value: "workspace", label: `Workspace default · ${providerLabel(workspace)}` }]
 			: []),
 		{ value: "none", label: "None" },
 		...unavailableSelection,

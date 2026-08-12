@@ -143,7 +143,7 @@ export function PreviewWait({ sessionId }: { sessionId: string }) {
 					<div className="max-w-sm text-[13px] font-medium leading-relaxed text-dim">
 						{state === "gone"
 							? "This preview link points at a session that no longer exists."
-							: "It's been a few minutes with nothing listening — the boot may have failed. Check the session's Preview services for details, or try starting it again."}
+							: "It's been a few minutes with nothing listening, so the boot may have failed. Check the session's Preview services for details, or try starting it again."}
 					</div>
 					<a
 						href={backHref}

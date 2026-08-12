@@ -3394,14 +3394,14 @@ export function SessionViewer({
 							)}
 						>
 							<div className={composerQueueActions}>
-								<Tooltip label="Already delivered into the running turn — shown here until the turn finishes">
+								<Tooltip label="Already delivered into the running turn, shown here until the turn finishes">
 									<span className={composerQueuePill}>
 										<IconCrosshair size={20} />
 										Steered
 									</span>
 								</Tooltip>
 								{s.id && (
-									<Tooltip label="Dismiss — the run keeps going; this message won't be re-sent">
+									<Tooltip label="Dismiss. The run keeps going and this message won't be re-sent.">
 										<button
 											type="button"
 											className={cn(
@@ -3503,7 +3503,7 @@ export function SessionViewer({
 									<Tooltip
 										label={
 											canSteer
-												? "Steer — fold into the running turn now, without stopping it"
+												? "Steer: fold into the running turn now, without stopping it"
 												: "Messages with files cannot be steered"
 										}
 									>
@@ -4188,7 +4188,7 @@ export function SessionViewer({
 				// serves the previous deploy until the new one lands.)
 				if (staging.status !== "Ready") {
 					toast(
-						`Preview environment is ${staging.status.toLowerCase()} — the link goes live once the first deploy finishes`,
+						`Preview environment is ${staging.status.toLowerCase()}. The link goes live once the first deploy finishes.`,
 					);
 					return;
 				}
@@ -4546,7 +4546,7 @@ export function SessionViewer({
 							<span className="flex min-w-0 items-center gap-1.5">
 								<span
 									className="flex min-w-0 items-center gap-1.5 text-[13px] font-medium text-dim"
-									title="Scratch session — no repo"
+									title="Scratch session · no repo"
 								>
 									<RepoTile
 										name={session.externalRefs?.[0]?.kind || "scratch"}
@@ -4587,7 +4587,7 @@ export function SessionViewer({
 							className={`${VIEWER_BRANCH} ${onRename ? VIEWER_BRANCH_EDITABLE : ""}`}
 							title={
 								workspaceName
-									? `${session.title} — double-click to rename the workspace`
+									? `${session.title} · double-click to rename the workspace`
 									: onRename
 										? "Double-click to rename"
 										: session.title
@@ -4610,7 +4610,7 @@ export function SessionViewer({
 						<a
 							href={`${BASE_PATH}/automations/${encodeURIComponent(session.automationId || session.automation)}`}
 							className={cn(SOURCE_CHIP, SOURCE_CHIP_AUTOMATION)}
-							title={`Automation — open ${session.automation} settings`}
+							title={`Automation · open ${session.automation} settings`}
 						>
 							{automationLabel}
 						</a>
@@ -5150,7 +5150,7 @@ export function SessionViewer({
 					{session.loop && (
 						<span
 							className="inline-flex max-w-full items-center gap-1.5 overflow-hidden text-ellipsis whitespace-nowrap rounded-full border border-line bg-panel px-3 py-[3px] text-label text-dim"
-							title={`"${session.loop.prompt}" — stop with /loop stop`}
+							title={`"${session.loop.prompt}" · stop with /loop stop`}
 						>
 							⟳ every {session.loop.intervalMinutes}m —{" "}
 							{session.loop.prompt.slice(0, 60)}
@@ -5192,7 +5192,7 @@ export function SessionViewer({
 										<span className="truncate">
 											Preview environment
 											{staging.status !== "Ready"
-												? ` — ${staging.status.toLowerCase()}…`
+												? ` · ${staging.status.toLowerCase()}…`
 												: ""}
 										</span>
 										<div className="ml-auto flex items-center gap-3">
@@ -5210,7 +5210,7 @@ export function SessionViewer({
 												href={stagingUrl}
 												target="_blank"
 												rel="noopener"
-												title="Open first-party in a new tab — needed if the frame is blank because you aren't logged in to the preview environment yet"
+												title="Open first-party in a new tab. Needed if the frame is blank because you aren't logged in to the preview environment yet."
 												className="inline-flex items-center gap-1 transition-colors hover:text-fg"
 											>
 												Open
@@ -5456,7 +5456,7 @@ export function SessionViewer({
 														}
 														title={
 															selected
-																? "Attached — its transcript rides along with your first message"
+																? "Attached · its transcript rides along with your first message"
 																: "Attach this session's transcript as context"
 														}
 														className={
@@ -5681,7 +5681,7 @@ export function SessionViewer({
 												: isBusy
 													? "Queue for when it finishes…"
 													: isAsk
-															? `Ask ${AGENT_NAME} — read-only…`
+															? `Ask ${AGENT_NAME}, read-only…`
 															: `Ask ${AGENT_NAME}…`
 									}
 									disabled={!connected && !!forkFrom}
@@ -5714,7 +5714,7 @@ export function SessionViewer({
 														type="button"
 														className={composerMenuItem}
 														disabled={promoting}
-														title="Ask mode — this session can read the code but not change it"
+														title="Ask mode: this session can read the code but not change it"
 														onClick={() => void handlePromote(close)}
 													>
 														<span className={composerMenuIcon}>

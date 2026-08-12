@@ -155,7 +155,7 @@ export function RepoBar({
       // ⋯ overflow menu row (phone): matches the other menu items' shape.
       <Menu.Trigger
         className="flex w-full cursor-pointer items-center gap-[7px] whitespace-nowrap rounded-control border border-line-strong bg-transparent px-3 py-[7px] text-control-label font-medium text-faint hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg"
-        title="Repo — switch or attach another"
+        title="Switch or attach another repo"
       >
         <RepoTile name={primary} size={18} />
         <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-left">
@@ -172,7 +172,7 @@ export function RepoBar({
     ) : (
       <Menu.Trigger
         className="-mx-1.5 -my-1 flex min-w-0 shrink-0 cursor-pointer items-center gap-[7px] rounded-md border-0 bg-transparent px-1.5 py-1 text-body font-medium text-fg hover:bg-hover data-[popup-open]:bg-hover"
-        title="Repo — click to switch or attach another"
+        title="Click to switch or attach another repo"
       >
         <RepoTile name={primary} />
         <span className="max-w-[180px] truncate">{busy ?? repoLabel(primary)}</span>
@@ -219,7 +219,7 @@ export function RepoBar({
                   <Menu.Group>
                     <Menu.GroupLabel>Attached</Menu.GroupLabel>
                     {attached.map((r) => (
-                      <div key={r.repo} className={staticRow} title={`${r.dir} — branch ${r.branch}`}>
+                      <div key={r.repo} className={staticRow} title={`${r.dir} · branch ${r.branch}`}>
                         <RepoTile name={r.repo} />
                         <span className="min-w-0 flex-1 truncate">
                           {repoLabel(r.repo)} <span className="text-faint">· {r.branch}</span>
@@ -260,14 +260,14 @@ export function RepoBar({
               </Menu.Group>
               {!switchable ? (
                 <div className="max-w-[240px] px-2.5 pt-1.5 pb-0.5 text-meta leading-snug text-faint">
-                  Ask sessions read the shared checkout — there's no primary repo
+                  Ask sessions read the shared checkout, so there's no primary repo
                   to switch.
                 </div>
               ) : (
                 hasWork && (
                   <div className="max-w-[240px] px-2.5 pt-1.5 pb-0.5 text-meta leading-snug text-faint">
-                    Switching keeps your current changes in the {repoLabel(primary)} worktree
-                    — they won't move to the new repo.
+                    Switching keeps your current changes in the {repoLabel(primary)} worktree.
+                    They won't move to the new repo.
                   </div>
                 )
               )}

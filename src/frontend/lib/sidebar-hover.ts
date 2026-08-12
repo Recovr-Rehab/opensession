@@ -42,7 +42,7 @@ export function hoverState(s: UnifiedSession): {
 		return { label: "PR closed", tone: "dim", dotClass: "bg-red" };
 	if (s.prState === "OPEN")
 		return {
-			label: s.prIsDraft ? "Draft PR — in review" : "In review",
+			label: s.prIsDraft ? "Draft PR · in review" : "In review",
 			tone: "green",
 			dotClass: "bg-green",
 		};

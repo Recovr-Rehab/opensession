@@ -1171,7 +1171,7 @@ export function Composer({
                 // order, and the "+" is rendered first.
                 className="composer-pop-wrap relative inline-flex shrink-0 phone:order-[-2]"
               >
-                <Tooltip label="Ask mode — this session can read the code but not change it">
+                <Tooltip label="Ask mode: this session can read the code but not change it">
                   <button
                     type="button"
                     // Same "on" language as paletteIconBtnOn: the state
@@ -1273,7 +1273,7 @@ export function Composer({
           </motion.div>
 
           {busy && onStop && (
-            <Tooltip label="Stop — interrupts the current turn; the session stays ready">
+            <Tooltip label="Stop. Interrupts the current turn; the session stays ready.">
               <button
                 type="button"
                 className={cn(

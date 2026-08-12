@@ -137,7 +137,7 @@ function StateIcon({ kind }: { kind: string }) {
 /** Compact CI rollup: a tone dot, count, and a thin proportional bar. */
 function ChecksCell({ s }: { s: UnifiedSession }) {
   const c = s.prChecks;
-  if (!c || c.total === 0) return <span className={DIM}>—</span>;
+  if (!c || c.total === 0) return <span className={DIM}>–</span>;
   const tone: ChecksTone = c.failed > 0 ? "fail" : c.pending > 0 ? "pending" : "pass";
   const label =
     tone === "fail"
@@ -168,7 +168,7 @@ function ChecksCell({ s }: { s: UnifiedSession }) {
 function ReviewCell({ s }: { s: UnifiedSession }) {
   const d = s.prReviewDecision || "";
   const review = "text-meta font-medium whitespace-nowrap";
-  if ((s.prState || "OPEN") !== "OPEN") return <span className={DIM}>—</span>;
+  if ((s.prState || "OPEN") !== "OPEN") return <span className={DIM}>–</span>;
   if (d === "APPROVED") return <span className={`${review} text-green`}>Approved</span>;
   if (d === "CHANGES_REQUESTED")
     return <span className={`${review} text-yellow`}>Changes</span>;
@@ -180,7 +180,7 @@ function ChangesCell({ s }: { s: UnifiedSession }) {
   const add = s.prAdditions ?? 0;
   const del = s.prDeletions ?? 0;
   const files = s.prChangedFiles ?? 0;
-  if (!s.prChangedFiles && !add && !del) return <span className={DIM}>—</span>;
+  if (!s.prChangedFiles && !add && !del) return <span className={DIM}>–</span>;
   const total = add + del || 1;
   const blocks = 5;
   const greens = Math.max(add > 0 ? 1 : 0, Math.round((add / total) * blocks));
@@ -525,7 +525,7 @@ export function Reviews({
                         <span className="truncate text-meta text-dim">{s.prAuthor}</span>
                       </>
                     ) : (
-                      <span className={DIM}>—</span>
+                      <span className={DIM}>–</span>
                     )}
                   </span>
                   <span className={C_UPDATED} role="cell">

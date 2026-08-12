@@ -38,7 +38,7 @@ describe("renderMarkdown session links", () => {
     );
   });
 
-  it("links an `os-` id — the prefix minted since the rename", () => {
+  it("links an `os-` id, the prefix minted since the rename", () => {
     const codespan = renderMarkdown(
       "Delegated to `os-019fd30a-785b-7000-ad89-9c2fb5b74a19` reporting back.",
     );

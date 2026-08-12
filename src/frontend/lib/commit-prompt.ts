@@ -21,7 +21,7 @@ export function commitPrompt(
 	return [
 		`Commit your ${files} with a clear, descriptive message, then push.`,
 		"",
-		"This is a shared checkout — other sessions have their own uncommitted",
+		"This is a shared checkout. Other sessions have their own uncommitted",
 		"work in the same tree. Commit ONLY these paths, and do not run",
 		"`git add -A`, `git reset`, or anything else that touches the rest of the",
 		"tree or another session's staged entries:",

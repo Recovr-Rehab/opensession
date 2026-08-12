@@ -75,7 +75,7 @@ export function AuditPanel() {
 		<SettingsPanel>
 			<SettingsHeader
 				title="Audit log"
-				description="Every agent run's structured events — prompts, tool decisions, account switches, human confirmations. Read-only; files live under ~/.opensession-audit (400-day retention)."
+				description="Every agent run's structured events: prompts, tool decisions, account switches, human confirmations. Read-only. Files live under ~/.opensession-audit with 400-day retention."
 			/>
 
 			<div className="mb-3 flex flex-wrap items-center gap-2 px-4">

@@ -342,9 +342,14 @@ Follow Apple's Human Interface Guidelines. The rules that decide most cases:
 - **Explain a limit plainly, once.** If a switch does less than it looks like
   it does, say so in a clause a person can act on, and do not add a roadmap
   note about what will fix it later.
-- **Never use em dashes in UI copy.** Use a period and a second sentence, a
-  colon when a list follows, or a comma. This is a copy rule, not a code rule:
-  module docs and comments keep the house style.
+- **Never use an em dash.** Not in copy, not in docs, not in a commit message,
+  not in a reply to the human. It is almost always hiding a second sentence, a
+  colon, or a comma, and the rewrite is clearer every time. Use a period and a
+  second sentence, a colon when a list or a definition follows, a comma for an
+  aside, and the middle dot `·` for a label and its qualifier
+  ("Ask · read-only on main"). For an empty value in a table use `–`.
+  Existing em dashes in comments and module docs are being retired as their
+  lines are touched, so do not add new ones there either.
 - **Terminology comes from CONCEPTS.md.** Project, workspace, session, turn,
   worktree, automation, goal, action. Do not invent a synonym in one panel.
 

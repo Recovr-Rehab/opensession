@@ -180,10 +180,10 @@ export function Notes({
 	useEffect(() => {
 		const note = selNoteId ? notes.find((n) => n.id === selNoteId) : null;
 		document.title = note
-			? `${note.title} — Notes — ${PRODUCT_NAME}`
+			? `${note.title} · Notes · ${PRODUCT_NAME}`
 			: selDocPath
-				? `${selDocPath.split("/").pop()} — Docs — ${PRODUCT_NAME}`
-				: `Notes — ${PRODUCT_NAME}`;
+				? `${selDocPath.split("/").pop()} · Docs · ${PRODUCT_NAME}`
+				: `Notes · ${PRODUCT_NAME}`;
 		return () => {
 			document.title = DEFAULT_DOC_TITLE;
 		};
@@ -450,8 +450,7 @@ export function Notes({
 					<div className="mx-auto my-[60px] max-w-[560px] text-center text-dim">
 						<h2 className="mb-3 text-fg">Notes</h2>
 						<p>
-							Shared, real-time collaborative notes — todos and longer ideas,
-							edited live together. Create one with <b>＋</b>, @-tag
+							Shared notes for todos and longer ideas, edited live together. Create one with <b>＋</b>, @-tag
 							sessions/notes/docs, pin a note as a tab, or prompt Haiku to
 							update it.
 						</p>
@@ -540,7 +539,7 @@ function NotePane({
 				type: "create_session",
 				mode: "ask",
 				branch: "",
-				prompt: `We're discussing the shared note "${note.title}" (open it at ${BASE_PATH}/notes/${noteId}). Read it below, then help me think it through / answer questions about it. If we land on changes, propose the new text — I can paste it into the note or run it through the note's prompt bar.\n\n---\n\n${note.text}`,
+				prompt: `We're discussing the shared note "${note.title}" (open it at ${BASE_PATH}/notes/${noteId}). Read it below, then help me think it through / answer questions about it. If we land on changes, propose the new text. I can paste it into the note or run it through the note's prompt bar.\n\n---\n\n${note.text}`,
 				user,
 				createWorkspace: {},
 			} as any);

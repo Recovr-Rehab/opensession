@@ -67,7 +67,7 @@ export function SpinOffMenu({ session, entries, send, connected }: Props) {
           `2. What went wrong or was wasted effort (wrong paths, retries, misunderstandings).\n` +
           `3. A rewritten version of the original prompt that would likely have succeeded in one shot.\n` +
           `4. Whether any repo docs (docs/kb/**, AGENTS.md, CLAUDE.md) could be updated to prevent ` +
-          `the mistakes you found — quote the concrete text you would add.\n\n` +
+          `the mistakes you found. Quote the concrete text you would add.\n\n` +
           `## Conversation\n\n${context}`,
       });
       return;
@@ -86,7 +86,7 @@ export function SpinOffMenu({ session, entries, send, connected }: Props) {
           `Extract durable, non-obvious learnings from the conversation above: gotchas, architecture facts, ` +
           `runbook steps, conventions, anything a teammate or future agent session would benefit from knowing. ` +
           `Check whether each is already documented; skip session-specific noise. Add the genuinely new ones to ` +
-          `the right place — docs/kb/**, AGENTS.md, CLAUDE.md, or a package README — keeping each addition ` +
+          `the right place (docs/kb/**, AGENTS.md, CLAUDE.md, or a package README), keeping each addition ` +
           `short and factual, matching the surrounding style.` +
           (task.trim() ? `\n\nExtra guidance from ${me}: ${task.trim()}` : "") +
           `\n\nWhen done, commit on this branch and open a PR titled "docs: learnings from ${AGENT_NAME} session" ` +
@@ -103,7 +103,7 @@ export function SpinOffMenu({ session, entries, send, connected }: Props) {
       user: me,
       prompt:
         `This coding session was spun off from an Ask session ("${session.title}"). ` +
-        `The conversation below is context — the codebase exploration already happened there, ` +
+        `The conversation below is context. The codebase exploration already happened there, ` +
         `so trust its conclusions but re-verify file paths before editing.\n\n` +
         `## Ask conversation\n\n${context}\n\n## Task\n\n${task.trim() || "Implement what was discussed above."}`,
     });

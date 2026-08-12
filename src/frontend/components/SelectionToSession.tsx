@@ -87,7 +87,7 @@ export function SelectionToSession({ sessionId, label, send, children }: Props) 
     const content =
       `${user} selected this text in ${label} and wants you to act on it:\n\n` +
       `${quoted}\n\n` +
-      (note ? note : "(no extra message — use the selection as the instruction / context)");
+      (note ? note : "(no extra message: use the selection as the instruction or context)");
     send({ type: "prompt", sessionId, user, content });
     setSent(true);
     setTimeout(dismiss, 1400);

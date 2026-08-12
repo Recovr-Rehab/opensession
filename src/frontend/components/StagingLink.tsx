@@ -218,7 +218,7 @@ export function StagingLink({
 		if (building) {
 			e.preventDefault();
 			toast(
-				`Preview environment is ${staging.status.toLowerCase()} — the link goes live once the first deploy finishes`,
+				`Preview environment is ${staging.status.toLowerCase()}. The link goes live once the first deploy finishes.`,
 			);
 		}
 	};
@@ -254,7 +254,7 @@ export function StagingLink({
 			: building
 				? `Preview environment ${staging.status.toLowerCase()}… ${copyHint}`
 				: rebuilding
-					? `Redeploying for the latest push — opens the previous deploy until it lands (${OPEN_CHORD}; ${copyHint})`
+					? `Redeploying for the latest push. Opens the previous deploy until it lands (${OPEN_CHORD}; ${copyHint})`
 					: `Open the preview environment to test this PR on real infra (${OPEN_CHORD}; ${copyHint})`;
 
 	if (variant === "header") {
@@ -287,7 +287,7 @@ export function StagingLink({
 				onClick={onClick}
 				aria-disabled={building || undefined}
 				className={`flex min-w-0 items-center gap-2 rounded-md px-2.5 py-2 text-left text-supporting font-semibold no-underline outline-none transition-colors hover:bg-hover focus-visible:bg-hover ${building ? "cursor-default text-faint" : "text-fg"}`}
-				title={`${tooltip("⌘-click to copy the link")} — ${href}`}
+				title={`${tooltip("⌘-click to copy the link")} · ${href}`}
 			>
 				<span className="inline-flex size-5 shrink-0 items-center justify-center text-faint">
 					{globe(17, RING_LG)}
@@ -305,7 +305,7 @@ export function StagingLink({
 			onClick={onClick}
 			aria-disabled={building || undefined}
 			className={`${LINK_BASE} ${building ? LINK_BUILDING : LINK_READY}`}
-			title={`${tooltip("⌘-click to copy the link")} — ${href}`}
+			title={`${tooltip("⌘-click to copy the link")} · ${href}`}
 		>
 			{globe(15, RING_SM)}
 			Preview environment

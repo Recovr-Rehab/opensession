@@ -30,7 +30,7 @@ test("a session with one PR beyond its own branch renders one row", () => {
 	expect(html).toContain('aria-label="Review tella-fusion pull request #72"');
 });
 
-test("no refs renders nothing at all — no empty list chrome", () => {
+test("no refs renders nothing at all: no empty list chrome", () => {
 	expect(renderToStaticMarkup(<PrSeriesRows refs={[]} />)).toBe("");
 });
 

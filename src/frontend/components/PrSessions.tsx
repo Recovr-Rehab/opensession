@@ -121,7 +121,7 @@ export function PrSessionsList({
 			if (!startingRef.current) return;
 			startingRef.current = false;
 			setStarting(false);
-			setError("No response — check your connection and try again.");
+			setError("No response. Check your connection and try again.");
 		}, 15_000);
 		// Join the PR's existing workspace when a related session carries one so
 		// the new session lands as a sibling tab, not a duplicate workspace.

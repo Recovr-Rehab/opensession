@@ -840,7 +840,7 @@ export function PrStatusBar({
 							stackMerge
 								? `Squash and merge ${stackMerge.layers
 										.map((l) => `#${l.number}`)
-										.join(", ")} into ${pr?.stack?.baseRefName || "the base branch"} — all or nothing`
+										.join(", ")} into ${pr?.stack?.baseRefName || "the base branch"}, all or nothing`
 								: "Squash and merge this PR into its base branch"
 						}
 					>

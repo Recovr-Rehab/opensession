@@ -92,16 +92,16 @@ function WarmPreviewsPanel() {
 				{repos.map((entry) => {
 					const s = entry.state;
 					const status = entry.refreshing
-						? "Refreshing now — updating the template…"
+						? "Refreshing now, updating the template…"
 						: !entry.enabled
-							? "Off — fresh worktrees install cold."
+							? "Off. Fresh worktrees install cold."
 							: s?.ok
 								? `Warm at ${s.sha} · refreshed ${warmAgo(s.refreshedAt)} · ${
 										entry.spares
 									} spare${entry.spares === 1 ? "" : "s"} ready`
 								: s?.lastError
 									? `Last refresh failed: ${s.lastError}`
-									: "Enabled — first refresh runs shortly.";
+									: "Enabled. First refresh runs shortly.";
 					return (
 						<SettingRow
 							key={entry.repoId}
@@ -249,13 +249,13 @@ function PreviewPoolPanel() {
 						.filter(Boolean)
 						.join(" · ");
 					const status = entry.goldenBuilding
-						? "Building the golden image — boots the dev server once, warms routes, commits (~10 min)…"
+						? "Building the golden image: boots the dev server once, warms routes, commits (~10 min)…"
 						: !entry.config.enabled
-							? "Off — previews boot cold on the host."
+							? "Off. Previews boot cold on the host."
 							: (entry.config.backend || "docker") === "daytona"
 								? `Daytona sandboxes${poolBits ? ` · ${poolBits}` : " · pool provisioning (first sandbox takes ~10 min)…"}`
 								: (entry.config.backend || "docker") === "microvm"
-									? `Firecracker snapshots — claims restore in ~2s${poolBits ? ` · ${poolBits}` : " · restore-on-demand (no warm members needed)"}`
+									? `Firecracker snapshots · claims restore in ~2s${poolBits ? ` · ${poolBits}` : " · restore-on-demand (no warm members needed)"}`
 								: entry.golden?.sha
 									? `Image at ${entry.golden.sha.slice(0, 10)} · built ${warmAgo(
 											entry.golden.builtAt,
@@ -264,7 +264,7 @@ function PreviewPoolPanel() {
 												? ` · last build failed: ${entry.golden.lastError.slice(0, 120)}`
 												: ""
 										}`
-									: "Enabled — first golden image builds shortly.";
+									: "Enabled. First golden image builds shortly.";
 					return (
 						<SettingRow
 							key={entry.repoId}

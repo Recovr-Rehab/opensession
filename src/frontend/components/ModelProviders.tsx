@@ -244,7 +244,7 @@ function AddProviderForm({
 			<SettingRowDescription className="-mt-2 mb-3">
 				The provider id must match opencode's slug for it (xai, openrouter,
 				groq, …). Models are registered in the picker as{" "}
-				<code>opencode/&lt;provider&gt;/&lt;model&gt;</code> — list the
+				<code>opencode/&lt;provider&gt;/&lt;model&gt;</code>. List the
 				provider's own model ids, e.g. <code>grok-4</code> for xai.
 			</SettingRowDescription>
 

@@ -272,7 +272,7 @@ export function Security({ onOpenSession }: Props) {
                 <div className={CARD_TOP}>
                   <StatusPill status={s.status} />
                   <span className={CARD_NAME}>
-                    {s.interactive ? "Interactive scan" : "Scan"} —{" "}
+                    {s.interactive ? "Interactive scan" : "Scan"} ·{" "}
                     {s.repos.map(repoLabel).join(", ")}
                   </span>
                   {s.profileName && (
@@ -473,7 +473,7 @@ function NewScanModal({
         <label className={FIELD_LABEL}>
           Scan profile
           <Select value={profileId} onChange={(e) => setProfileId(e.target.value)}>
-            <option value="">None — default threat model</option>
+            <option value="">None · default threat model</option>
             {profiles.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}

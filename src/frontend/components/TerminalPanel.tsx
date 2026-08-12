@@ -63,7 +63,7 @@ function loadTerminalEngine(): Promise<TermEngine> {
         extraOptions: { ghostty },
       };
     } catch (e) {
-      console.warn("[shell] ghostty engine unavailable — using xterm.js", e);
+      console.warn("[shell] ghostty engine unavailable, using xterm.js", e);
       const [x, f] = await Promise.all([
         import("@xterm/xterm"),
         import("@xterm/addon-fit"),
@@ -252,13 +252,13 @@ function ShellView({
         else if (msg.type === "term_ready" && msg.target !== "host")
           // Sandboxed sessions get their shell INSIDE the sandbox.
           term.write(
-            `\x1b[2m[shell inside ${msg.target} sandbox — ${msg.cwd || ""}]\x1b[0m\r\n`,
+            `\x1b[2m[shell inside ${msg.target} sandbox · ${msg.cwd || ""}]\x1b[0m\r\n`,
           );
         else if (msg.type === "term_notice")
           term.write(`\x1b[2m[${msg.message}]\x1b[0m\r\n`);
         else if (msg.type === "term_exit")
           term.write(
-            "\r\n\x1b[2m[shell exited — close this tab or open a new one]\x1b[0m\r\n",
+            "\r\n\x1b[2m[shell exited. Close this tab or open a new one]\x1b[0m\r\n",
           );
       });
 
