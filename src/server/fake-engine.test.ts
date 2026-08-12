@@ -243,6 +243,40 @@ describe("fake engine through runAgent", () => {
 		expect(events.at(-1)).toMatchObject({ type: "done" });
 	});
 
+	test("recovers when the status-poll watchdog loses an engine server", async () => {
+		const fake = makeFakeEngine([
+			{
+				kind: "error",
+				content:
+					"opencode server stopped answering status polls and refused a health probe — ending the turn " +
+					"(engine state preserved; send again to continue)",
+			},
+			{ kind: "clean", text: ["continued automatically"] },
+		]);
+		__setEngineForTest(fake.engine);
+		const events = await collect(
+			runAgent({
+				prompt: "p",
+				cwd: "/tmp",
+				mcpServers: [],
+				model: "claude-sonnet-5",
+				fallbackModel: "claude-opus-5",
+				journal: { osSessionId: "bks-test-status-poll-watchdog", kind: "prompt" },
+			}),
+		);
+		expect(fake.calls).toHaveLength(2);
+		expect(events.find((event) => event.type === "model_switch")).toMatchObject({
+			fromModel: "claude-sonnet-5",
+			toModel: "opencode/openai/gpt-5.6-sol",
+			temporaryFallback: true,
+		});
+		expect(events.find((event) => event.type === "text_chunk")).toMatchObject({
+			type: "text_chunk",
+			text: "continued automatically",
+		});
+		expect(events.at(-1)).toMatchObject({ type: "done" });
+	});
+
 	test("stops on a provider overload without burning a same-provider fallback", async () => {
 		const fake = makeFakeEngine([
 			{ kind: "error", content: "Our servers are currently overloaded. Please try again later." },

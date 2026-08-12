@@ -226,6 +226,13 @@ export function isTransientRunError(message: string | undefined | null): boolean
     s.includes("opencode server exited") ||
     s.includes("server exited") ||
     s.includes("server died") ||
+    // The status-poll watchdog only emits these after six failed polls and a
+    // second, independent health probe. A dead/refusing server and a server
+    // temporarily unable to schedule its health handler are both recoverable
+    // by the normal bounded continuation path; do not make a person send the
+    // prompt again after a restart/re-adoption spike.
+    s.includes("opencode server stopped answering status polls") ||
+    s.includes("opencode server answered health probes but was too starved to serve status") ||
     s.includes("failed to start opencode") ||
     s.includes("econnaborted") ||
     // HTTP 5xx / gateway / provider overload
