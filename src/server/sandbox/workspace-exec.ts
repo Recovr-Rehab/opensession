@@ -50,7 +50,10 @@ export type WorkspaceExec = ((cmd: string[], opts?: ExecOpts) => Promise<ExecRes
 /** The minimal session shape the routing decision needs (UnifiedSession and
  *  NativeSessionFile both satisfy it). */
 export interface WorkspaceExecSession {
-  sandbox?: { provider?: string; sandboxId?: string; workspace?: string };
+	id?: string;
+	createdBy?: string | null;
+	sandbox?: { provider?: string; sandboxId?: string; workspace?: string };
+	runner?: { id: string; workspacePath: string };
   worktreeDir?: string | null;
   repo?: string;
 }
@@ -75,7 +78,7 @@ export function hostWorkspaceExec(dir: string): WorkspaceExec {
 export function hasRemoteWorkspace(
   session: WorkspaceExecSession | null | undefined,
 ): boolean {
-  return session?.sandbox?.workspace === "volume";
+	return session?.sandbox?.workspace === "volume" || !!session?.runner;
 }
 
 /**
@@ -89,9 +92,30 @@ export async function workspaceExecFor(
   session: WorkspaceExecSession | null | undefined,
   dir?: string,
 ): Promise<WorkspaceExec> {
-  const cwd = dir || session?.worktreeDir || "";
-  const host = hostWorkspaceExec(cwd);
-  const sb = session?.sandbox;
+	const cwd = dir || session?.worktreeDir || "";
+	const host = hostWorkspaceExec(cwd);
+	if (session?.runner && session.repo && cwd === session.runner.workspacePath) {
+		try {
+			const { execRunnerWorkspace } = await import("../runner-ws");
+			const quote = (word: string) => `'${word.replaceAll("'", `'\\''`)}'`;
+			return Object.assign(
+				async (cmd: string[], opts?: ExecOpts) => {
+					if (opts?.env && Object.keys(opts.env).length) {
+						return { exitCode: 1, stdout: "", stderr: "Runner workspace commands cannot inject environment variables" };
+					}
+					const result = await execRunnerWorkspace(session.runner!.id, {
+						sessionId: session.id || "", repo: session.repo!, user: session.createdBy || undefined,
+						workspacePath: cwd, command: cmd.map(quote).join(" "),
+					});
+					return { exitCode: result.code, stdout: result.stdout, stderr: result.stderr };
+				},
+				{ sandboxed: false, remote: true } as const,
+			);
+		} catch {
+			return Object.assign(async () => ({ exitCode: 1, stdout: "", stderr: "Runner workspace is unavailable" }), { sandboxed: false, remote: true } as const);
+		}
+	}
+	const sb = session?.sandbox;
   if (!cwd || !sb?.provider || !sb.sandboxId) return host;
   const unavailableRemote = Object.assign(
     async (): Promise<ExecResult> => ({

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
-import { fetchWorktrees, fetchModels, fetchFileMentions, fetchSkillMentions, fetchConnections, fetchSandboxStatus, requestSandboxPrewarm, suggestBranch, fetchProviderAccounts, fetchRepos, type ProviderAccountOption, type ModelOption, type SandboxStatusInfo } from "../lib/api";
+import { fetchWorktrees, fetchModels, fetchFileMentions, fetchSkillMentions, fetchConnections, fetchSandboxStatus, requestSandboxPrewarm, suggestBranch, fetchProviderAccounts, fetchRepos, fetchRunners, type ProviderAccountOption, type ModelOption, type SandboxStatusInfo, type RunnerInfo } from "../lib/api";
 import { getCurrentUser, useAuthStatus } from "./UserPicker";
 import { splitAttachments, imageFilesFromPaste, type FileAttachment } from "../lib/images";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
@@ -345,6 +345,8 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   // configured providers are offered, and the whole control hides when the
   // server has no sandbox config or the kill switch is on.
   const [sandboxProvider, setSandboxProvider] = useState("");
+  const [runnerId, setRunnerId] = useState("");
+  const [runners, setRunners] = useState<RunnerInfo[]>([]);
   const [sandboxStatus, setSandboxStatus] = useState<SandboxStatusInfo | null>(null);
   const sandboxSelectionTouched = useRef(false);
   useEffect(() => {
@@ -355,6 +357,11 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
 		// behind the explicit Sandbox choice, never in an invisible default.
 		if (!sandboxSelectionTouched.current) setSandboxProvider("");
       })
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
+    fetchRunners()
+      .then((value) => setRunners(value.runners.filter((runner) => runner.permissions.fullSessions && runner.workspaceRoots.length > 0 && (runner.state === "online" || runner.state === "busy"))))
       .catch(() => {});
   }, []);
   const sandboxChoices = sandboxStatus?.connections?.length
@@ -415,7 +422,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     if (sandboxProvider && !selectedSandboxAvailable) {
 		return `${sandboxLabel(sandboxProvider)} is unavailable. Choose This machine or a ready Sandbox.`;
     }
-    if (!sandboxProvider || !modelFamily) return null;
+    if (runnerId || !sandboxProvider || !modelFamily) return null;
     if (modelFamily.sandboxable) return null;
     return (
 		`${modelFamily.label} models can't run in a Sandbox` +
@@ -662,7 +669,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
       ...(accountProvider && accountId ? { accountId } : {}),
       // Once defaults have loaded, Host is an explicit override ("local") —
       // omitting the field would make the server re-apply the user's default.
-      ...(sandboxStatus ? { sandbox: sandboxProvider || "local" } : {}),
+      ...(runnerId ? { runner: runnerId, sandbox: "local" } : sandboxStatus ? { sandbox: sandboxProvider || "local" } : {}),
       ...(selectedMcpServers.length ? { mcpServers: selectedMcpServers } : {}),
       ...(images.length ? { images } : {}),
       ...(files.length
@@ -993,7 +1000,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                   type="button"
                   className={cn(
                     FOOTER_ICON_BTN,
-                    (sandboxProvider || currentEngine === "pi" || selectedMcpServers.length > 0) &&
+                    (sandboxProvider || runnerId || currentEngine === "pi" || selectedMcpServers.length > 0) &&
                       paletteIconBtnOn,
                   )}
                   disabled={creating}
@@ -1032,6 +1039,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                               onClick={() => {
                                 sandboxSelectionTouched.current = true;
                                 setSandboxProvider(opt.id);
+                                setRunnerId("");
                               }}
                               className="items-start"
                             >
@@ -1056,6 +1064,32 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                           );
                         },
                       )}
+                    </Menu.Popup>
+                  </Menu.SubmenuRoot>
+                )}
+                {runners.length > 0 && (
+                  <Menu.SubmenuRoot>
+                    <Menu.SubmenuTrigger className="justify-between gap-3">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <IconConnections className="shrink-0 text-dim" size={20} />
+                        <span className="truncate">Other machines</span>
+                      </span>
+                      <span className="flex flex-none items-center gap-1 text-dim">
+                        {runnerId ? runners.find((runner) => runner.id === runnerId)?.label || runners.find((runner) => runner.id === runnerId)?.name : "This machine"}
+                        <IconChevronRight className="shrink-0 text-faint" size={17} />
+                      </span>
+                    </Menu.SubmenuTrigger>
+                    <Menu.Popup className="max-w-[min(340px,calc(100vw-1rem))]">
+                      <Menu.Item onClick={() => setRunnerId("")}>
+                        <IconCheck size={17} className={`shrink-0 text-dim ${runnerId ? "invisible" : ""}`} />
+                        <span>This machine</span>
+                      </Menu.Item>
+                      {runners.map((runner) => (
+                        <Menu.Item key={runner.id} onClick={() => { setRunnerId(runner.id); setSandboxProvider(""); }} className="items-start">
+                          <IconCheck size={17} className={`mt-0.5 shrink-0 text-dim ${runnerId === runner.id ? "" : "invisible"}`} />
+                          <span className="flex min-w-0 flex-col gap-0.5"><span>{runner.label || runner.name}</span><span className="whitespace-normal text-[11px] font-medium leading-snug text-faint">Trusted machine · {runner.platform}{runner.resources?.gpu?.model ? ` · ${runner.resources.gpu.model}` : ""}</span></span>
+                        </Menu.Item>
+                      ))}
                     </Menu.Popup>
                   </Menu.SubmenuRoot>
                 )}

@@ -91,6 +91,7 @@ import { ensureAskCheckout, ensureScratchDir, getRepo, isSharedCheckoutDir, repo
 import { createGoalSelfMcpServer } from "../agents/slack/goal-tools";
 import { sendSlackMessage } from "../agents/slack/slack-api";
 import type { RunHostSpec } from "../runner-host/protocol";
+import { maybeLaunchRunnerRun } from "./runner-session";
 import { shouldPersistModelSwitch, type ImageInput, type TurnUsage } from "./run-events";
 import type {
 	SessionUsage,
@@ -1928,7 +1929,15 @@ async function runSessionPromptInner(
 	// opt-in field) = the unchanged in-process path below. A recorded provider
 	// that is unavailable throws before this point; it never falls back.
 	const turnMetricStartedAt = Date.now();
-	const sandboxRun = await maybeLaunchSandboxedRun(session, {
+	const runnerRun = await maybeLaunchRunnerRun(session, {
+		prompt,
+		engineSessionId: engineSessionId || undefined,
+		images,
+		mcpServers: mcpServers ?? "all",
+		user,
+		reposNote: isAutomationSession ? undefined : await buildSessionNote(session, user),
+	});
+	const sandboxRun = runnerRun ? null : await maybeLaunchSandboxedRun(session, {
 		prompt,
 		promptEntryId,
 		engineSessionId: engineSessionId || undefined,
@@ -1942,7 +1951,7 @@ async function runSessionPromptInner(
 
 	// Defensive guard: a session with an explicit runnable provider must never
 	// reach the host path, even if a future launcher regression returns null.
-	if (!sandboxRun && isRunnableSandboxProvider(session.sandbox?.provider)) {
+	if (!runnerRun && !sandboxRun && isRunnableSandboxProvider(session.sandbox?.provider)) {
 		const msg =
 			"This session's workspace lives in its sandbox volume, but the sandbox is unavailable (disabled by config/kill-switch, or it failed to start) — the prompt was not run. Re-enable sandboxes and try again." +
 			(session.sandbox?.provider === "daytona"
@@ -1979,7 +1988,7 @@ async function runSessionPromptInner(
 	// while human messages are queued behind ongoing work.
 	let toolUseCount = 0;
 
-	for await (const event of sandboxRun ?? runAgent({
+	for await (const event of runnerRun ?? sandboxRun ?? runAgent({
 		prompt,
 		promptEntryId,
 		sessionId: engineSessionId || undefined,

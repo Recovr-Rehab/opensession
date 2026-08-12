@@ -19,13 +19,14 @@
 
 import { chmodSync, existsSync, mkdirSync } from "fs";
 import { arch, hostname, platform } from "os";
-import { join } from "path";
+import { dirname, join, resolve } from "path";
 import { OPENSESSION_HOME } from "./paths";
 import { bold, dim, fail, heading, info, ok, run, warn } from "./ui";
 import { localAutomationToken } from "./local-auth";
 
 const IDENTITY_PATH = join(OPENSESSION_HOME, "runner.json");
 const HEARTBEAT_MS = 60_000;
+const RUNNER_HOST_ENTRY = resolve(import.meta.dir, "../../src/runner-host/host.ts");
 
 type Identity = { server: string; id: string; token: string; name: string };
 
@@ -167,6 +168,7 @@ export async function runnerRun(): Promise<number> {
         headers: { authorization: `Bearer ${identity.token}` },
       } as any);
       const running = new Map<string, ReturnType<typeof Bun.spawn>>();
+		const persistent = new Map<string, ReturnType<typeof Bun.spawn>>();
 
       socket.addEventListener("open", async () => {
         attempt = 0;
@@ -182,10 +184,18 @@ export async function runnerRun(): Promise<number> {
           return;
         }
         if (msg?.t === "cancel") {
-          const proc = running.get(String(msg.id));
+			const proc = running.get(String(msg.id)) || persistent.get(String(msg.id));
           if (proc) proc.kill();
           return;
         }
+		if (msg?.t === "workspace_prepare" && msg.version === 1 && msg.operationToken) {
+			await prepareWorkspace(socket, msg);
+			return;
+		}
+		if (msg?.t === "run_host" && msg.version === 1 && msg.operationToken) {
+			await startRunHost(socket, persistent, msg);
+			return;
+		}
         if (msg?.t !== "exec" || msg.version !== 1 || !msg.operationToken) return;
 
         const id = String(msg.id);
@@ -230,7 +240,7 @@ export async function runnerRun(): Promise<number> {
           fail("the server refused this Runner", "its credential may have been revoked");
           stopping = true;
         }
-        for (const proc of running.values()) proc.kill();
+		for (const proc of running.values()) proc.kill();
         resolve();
       });
 
@@ -251,6 +261,88 @@ export async function runnerRun(): Promise<number> {
     await new Promise((r) => setTimeout(r, delay));
   }
   return 1;
+}
+
+async function prepareWorkspace(socket: WebSocket, msg: any): Promise<void> {
+	const id = String(msg.id);
+	const token = String(msg.operationToken);
+	const workspacePath = typeof msg.workspacePath === "string" ? msg.workspacePath : "";
+	const repositoryUrl = typeof msg.repositoryUrl === "string" ? msg.repositoryUrl : "";
+	const branch = typeof msg.branch === "string" ? msg.branch : "";
+	try {
+		if (!workspacePath || !workspacePath.startsWith("/") || workspacePath.includes("\0")) throw new Error("Invalid managed workspace path");
+		if (!/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\.git$/.test(repositoryUrl)) throw new Error("Runner only accepts an approved GitHub repository URL");
+		if (!/^[A-Za-z0-9._/-]{1,240}$/.test(branch) || branch.includes("..")) throw new Error("Invalid branch");
+		const env = { PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin", HOME: process.env.HOME || "/tmp", GIT_TERMINAL_PROMPT: "0", GIT_CONFIG_NOSYSTEM: "1" };
+		if (existsSync(workspacePath)) {
+			const origin = await runnerCommand(["git", "-C", workspacePath, "remote", "get-url", "origin"], env);
+			if (origin.code !== 0 || origin.stdout.trim() !== repositoryUrl) throw new Error("Managed workspace does not match this session repository");
+			const fetch = await runnerCommand(["git", "-C", workspacePath, "fetch", "--prune", "origin"], env);
+			if (fetch.code !== 0) throw new Error(fetch.stderr.trim() || "Could not refresh managed workspace");
+			const remoteBranch = await runnerCommand(["git", "-C", workspacePath, "show-ref", "--verify", "--quiet", `refs/remotes/origin/${branch}`], env);
+			const checkout = remoteBranch.code === 0
+				? await runnerCommand(["git", "-C", workspacePath, "checkout", "-B", branch, `origin/${branch}`], env)
+				: await runnerCommand(["git", "-C", workspacePath, "checkout", "-B", branch, "origin/HEAD"], env);
+			if (checkout.code !== 0) throw new Error(checkout.stderr.trim() || "Could not check out managed branch");
+		} else {
+			mkdirSync(dirname(workspacePath), { recursive: true });
+			const clone = await runnerCommand(["git", "clone", repositoryUrl, workspacePath], env);
+			if (clone.code !== 0) throw new Error(clone.stderr.trim() || "Could not clone managed workspace");
+			const remoteBranch = await runnerCommand(["git", "-C", workspacePath, "show-ref", "--verify", "--quiet", `refs/remotes/origin/${branch}`], env);
+			const checkout = remoteBranch.code === 0
+				? await runnerCommand(["git", "-C", workspacePath, "checkout", "-B", branch, `origin/${branch}`], env)
+				: await runnerCommand(["git", "-C", workspacePath, "checkout", "-B", branch, "origin/HEAD"], env);
+			if (checkout.code !== 0) throw new Error(checkout.stderr.trim() || "Could not check out managed branch");
+		}
+		socket.send(JSON.stringify({ t: "workspace_ready", id, operationToken: token, cwd: workspacePath }));
+	} catch (error) {
+		socket.send(JSON.stringify({ t: "workspace_error", id, operationToken: token, error: error instanceof Error ? error.message : String(error) }));
+	}
+}
+
+async function startRunHost(socket: WebSocket, persistent: Map<string, ReturnType<typeof Bun.spawn>>, msg: any): Promise<void> {
+	const id = String(msg.id);
+	const token = String(msg.operationToken);
+	try {
+		const spec = msg.spec;
+		if (!spec || typeof spec !== "object" || typeof spec.hostId !== "string" || typeof spec.cwd !== "string" || !spec.wsToken) throw new Error("Invalid run-host request");
+		if (!existsSync(RUNNER_HOST_ENTRY)) throw new Error("This Runner installation does not include the run-host entrypoint");
+		const stateDir = join(spec.cwd, ".opensession-run-hosts", spec.hostId);
+		mkdirSync(stateDir, { recursive: true });
+		const specPath = join(stateDir, "spec.json");
+		await Bun.write(specPath, JSON.stringify(spec));
+		const base = String(msg.server || "").replace(/\/$/, "").replace(/^http/, "ws");
+		if (!/^wss?:\/\//.test(base)) throw new Error("Invalid Open Session endpoint");
+		const env = {
+			PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin", HOME: process.env.HOME || "/tmp",
+			OPENSESSION_RUN_WS_URL: `${base}/run-ws/${encodeURIComponent(spec.hostId)}`,
+			OPENSESSION_RUN_WS_TOKEN: String(spec.wsToken),
+			OPENSESSION_RPC_WS_URL: `${base}/rpc-ws`,
+			OPENSESSION_RPC_WS_HOST: spec.hostId,
+			OPENSESSION_RPC_WS_AUTH: String(spec.wsToken),
+		};
+		const bun = Bun.which("bun") || process.execPath;
+		const proc = Bun.spawn(["setsid", bun, "run", RUNNER_HOST_ENTRY, specPath], { cwd: spec.cwd, env, stdin: "ignore", stdout: "ignore", stderr: "ignore" });
+		proc.unref();
+		persistent.set(spec.hostId, proc);
+		void proc.exited.finally(async () => {
+			persistent.delete(spec.hostId);
+			try { socket.send(JSON.stringify({ t: "host_exited", hostId: spec.hostId })); } catch {}
+		});
+		socket.send(JSON.stringify({ t: "host_started", id, operationToken: token, hostId: spec.hostId }));
+	} catch (error) {
+		socket.send(JSON.stringify({ t: "host_error", id, operationToken: token, error: error instanceof Error ? error.message : String(error) }));
+	}
+}
+
+async function runnerCommand(cmd: string[], env: Record<string, string>): Promise<{ code: number; stdout: string; stderr: string }> {
+	const proc = Bun.spawn(cmd, { env, stdout: "pipe", stderr: "pipe" });
+	const [stdout, stderr, code] = await Promise.all([
+		new Response(proc.stdout).text(),
+		new Response(proc.stderr).text(),
+		proc.exited,
+	]);
+	return { code, stdout: stdout.trim(), stderr: stderr.trim() };
 }
 
 export async function runnerStatus(): Promise<number> {

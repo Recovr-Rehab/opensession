@@ -3,6 +3,7 @@
 import { audit } from "../audit";
 import { hostRunBusy } from "../host-registry";
 import { getSandboxProvider } from "../sandbox";
+import { dropSandboxPreviewRoutes } from "../preview";
 import { findSession, touchNativeSession } from "../session-cache";
 import type { RouteContext } from "./context";
 
@@ -90,6 +91,7 @@ export async function handleSandboxRoutes(
 					{ error: `${recorded.provider} does not expose manual pause` },
 					{ status: 400 },
 				);
+			await dropSandboxPreviewRoutes(recorded.sandboxId);
 			touchNativeSession(session.id, { sandbox: { ...recorded, lifecycle: "sleeping", lastLifecycleError: undefined } });
 			await provider.pause(recorded.sandboxId);
 		} else if (action === "resume") {
@@ -110,6 +112,7 @@ export async function handleSandboxRoutes(
 					{ status: 400 },
 				);
 			touchNativeSession(session.id, { sandbox: { ...recorded, lifecycle: "preparing", lastLifecycleError: undefined } });
+			await dropSandboxPreviewRoutes(recorded.sandboxId);
 			await provider.destroy(recorded.sandboxId);
 			const recreated = await provider.ensure({
 				sessionId: session.id,

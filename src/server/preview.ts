@@ -251,6 +251,84 @@ export async function resolvePreviewBoot(
 const hostExists = (p: string) => existsSync(p);
 const warnedMissingPreviewCommand = new Set<string>();
 
+/** Remote providers sometimes return a signed preview URL. It is never a
+ * browser or Caddy upstream. This loopback-only relay holds that URL and its
+ * provider headers on the server side, so Caddy has one safe invariant: every
+ * Portal route targets localhost. */
+type RemotePortalRelay = {
+	upstream: string;
+	headers?: Record<string, string>;
+	server: ReturnType<typeof Bun.serve>;
+};
+const remotePortalRelays: Map<string, RemotePortalRelay> =
+	((globalThis as any).__opensessionRemotePortalRelays ??= new Map());
+
+function relayKey(sandboxId: string, port: number): string {
+	return `${sandboxId}:${port}`;
+}
+
+function relayTarget(upstream: string, requestUrl: string): string {
+	const base = new URL(upstream);
+	const incoming = new URL(requestUrl);
+	base.pathname = `${base.pathname.replace(/\/$/, "")}/${incoming.pathname.replace(/^\//, "")}`.replace(/\/{2,}/g, "/");
+	base.search = incoming.search;
+	return base.toString();
+}
+
+function localRelayFor(
+	sandboxId: string,
+	port: number,
+	upstream: string,
+	headers?: Record<string, string>,
+): string {
+	const key = relayKey(sandboxId, port);
+	const current = remotePortalRelays.get(key);
+	if (current?.upstream === upstream && JSON.stringify(current.headers || {}) === JSON.stringify(headers || {}))
+		return `127.0.0.1:${current.server.port}`;
+	if (current) {
+		try { current.server.stop(true); } catch {}
+		remotePortalRelays.delete(key);
+	}
+	const connections = new Map<any, WebSocket>();
+	const server = Bun.serve<{ url: string }>({
+		hostname: "127.0.0.1",
+		port: 0,
+		fetch(request, relayServer) {
+			const upgrade = request.headers.get("upgrade")?.toLowerCase() === "websocket";
+			if (upgrade) {
+				return relayServer.upgrade(request, { data: { url: request.url } })
+					? undefined
+					: new Response("WebSocket upgrade failed", { status: 400 });
+			}
+			const forwarded = new Headers(request.headers);
+			forwarded.delete("host");
+			forwarded.delete("connection");
+			forwarded.delete("content-length");
+			for (const [name, value] of Object.entries(headers || {})) forwarded.set(name, value);
+			return fetch(relayTarget(upstream, request.url), {
+				method: request.method,
+				headers: forwarded,
+				body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
+				redirect: "manual",
+			});
+		},
+		websocket: {
+			open(ws) {
+				const remoteUrl = relayTarget(upstream.replace(/^http/, "ws"), ws.data.url);
+				const remote = new (WebSocket as any)(remoteUrl, { headers }) as WebSocket;
+				connections.set(ws, remote);
+				remote.addEventListener("message", (event) => ws.send(event.data));
+				remote.addEventListener("close", () => { try { ws.close(); } catch {} });
+				remote.addEventListener("error", () => { try { ws.close(); } catch {} });
+			},
+			message(ws, message) { connections.get(ws)?.send(message); },
+			close(ws) { try { connections.get(ws)?.close(); } catch {} connections.delete(ws); },
+		},
+	});
+	remotePortalRelays.set(key, { upstream, headers, server });
+	return `127.0.0.1:${server.port}`;
+}
+
 // Worktrees with an in-flight `startPreview` (worktreeDir -> started-at ms).
 // Parked on globalThis so it survives --hot reloads. Entries are cleared when
 // the webapp comes up, when the bring-up process exits, or after a TTL (so a
@@ -408,52 +486,12 @@ export function previewServerConfig(
   httpsPort: number,
   upstream: string,
   host: string,
-  requestHeaders: Record<string, string> = {},
 ) {
+	if (!/^127\.0\.0\.1:\d{1,5}$/.test(upstream)) {
+		throw new Error("Portal Caddy routes must target a loopback relay");
+	}
   const authPort = configuredServer().port;
-  const remote = /^https?:\/\//.test(upstream) ? new URL(upstream) : null;
-  const serviceProxy = remote
-    ? {
-        handler: "reverse_proxy",
-        upstreams: [
-          {
-            dial: `${remote.hostname}:${remote.port || (remote.protocol === "https:" ? "443" : "80")}`,
-          },
-        ],
-        ...(remote.protocol === "https:"
-          ? {
-              // Dialing the upstream by hostname already supplies TLS SNI.
-              // `tls_server_name` is not supported by the Caddy version
-              // shipped on existing OpenSession hosts and made the whole
-              // dynamic portal route fail to load.
-              transport: { protocol: "http", tls: {} },
-            }
-          : {}),
-        ...(remote.search
-          ? {
-              // Provider preview credentials (Box's `_token`) stay in Caddy's
-              // server-side route. Preserve the browser's own query string
-              // while appending the provider query only to the proxied copy.
-              rewrite: {
-                uri: `?{http.request.uri.query}&${remote.searchParams.toString()}`,
-              },
-            }
-          : {}),
-        headers: {
-          request: {
-            set: {
-              ...Object.fromEntries(
-                Object.entries(requestHeaders).map(([key, value]) => [key, [value]]),
-              ),
-              Host: [remote.host],
-            },
-          },
-        },
-      }
-    : {
-        handler: "reverse_proxy",
-        upstreams: [{ dial: upstream }],
-      };
+  const serviceProxy = { handler: "reverse_proxy", upstreams: [{ dial: upstream }] };
   return {
     listen: [`:${httpsPort}`],
     routes: [
@@ -508,7 +546,7 @@ async function ensurePreviewRoute(
 ): Promise<boolean> {
   const signature = JSON.stringify([upstream, requestHeaders]);
   if (previewRoutes.get(httpsPort) === signature) return true;
-  const server = previewServerConfig(httpsPort, upstream, host, requestHeaders);
+  const server = previewServerConfig(httpsPort, upstream, host);
   const path = `${caddyAdmin()}/config/apps/http/servers/preview_${httpsPort}`;
   const put = () =>
     fetch(path, {
@@ -1169,7 +1207,14 @@ export async function getSandboxPreviewStatus(
       const requestHeaders = typeof entry === "object" ? entry?.requestHeaders : undefined;
       if (directUrl || published || privateUpstream) {
         const httpsPort = sandboxHttpsPortFor(sandbox.id, port);
-        const upstream = directUrl || privateUpstream || `127.0.0.1:${published}`;
+        const upstream = directUrl || privateUpstream
+          ? localRelayFor(
+              sandbox.id,
+              port,
+              directUrl || `http://${privateUpstream}`,
+              requestHeaders,
+            )
+          : `127.0.0.1:${published}`;
         if (await ensurePreviewRoute(httpsPort, upstream, host, requestHeaders))
           previewUrl = `https://${host}:${httpsPort}`;
       }
@@ -1391,7 +1436,14 @@ export async function startSandboxPreview(
   const privateUpstream = typeof entry === "object" ? entry.upstream : undefined;
   const published = typeof entry === "number" ? entry : entry?.hostPort;
   const requestHeaders = typeof entry === "object" ? entry.requestHeaders : undefined;
-  const upstream = directUrl || privateUpstream || `127.0.0.1:${published}`;
+  const upstream = directUrl || privateUpstream
+    ? localRelayFor(
+        sandbox.id,
+        port,
+        directUrl || `http://${privateUpstream}`,
+        requestHeaders,
+      )
+    : `127.0.0.1:${published}`;
   const httpsPort = sandboxHttpsPortFor(sandbox.id, port);
   const host = await previewHost();
   const previewUrl = `https://${host}:${httpsPort}`;
@@ -1459,7 +1511,12 @@ export async function stopSandboxPreview(
  * allocations and drop any Caddy routes still pointing at them.
  */
 export async function dropSandboxPreviewRoutes(sandboxId: string): Promise<void> {
-  for (const httpsPort of releaseSandboxPreviewPorts(sandboxId)) {
+	for (const [key, relay] of remotePortalRelays) {
+		if (!key.startsWith(`${sandboxId}:`)) continue;
+		try { relay.server.stop(true); } catch {}
+		remotePortalRelays.delete(key);
+	}
+	for (const httpsPort of releaseSandboxPreviewPorts(sandboxId)) {
     // removePreviewRoute only touches routes this process cached — a destroy
     // right after a restart may miss the cache, so delete unconditionally.
     previewRoutes.delete(httpsPort);

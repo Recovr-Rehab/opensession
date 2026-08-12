@@ -39,6 +39,9 @@ import { attachSessionWatchersToEngineTranscript, drainQueue, foldSessionUsage, 
 import { type McpScope, STRIPE_CONFIRM_TOOLS } from "./runner-shared";
 import { isRemoteSandboxProvider, resolveRequestedSandbox, sandboxConfig, sandboxesEnabled } from "./sandbox/config";
 import { resolveInteractiveSandbox } from "./sandbox/defaults";
+import { getRunner, runnerAvailableForSession } from "./runners";
+import { isRunnerConnected, prepareRunnerWorkspace } from "./runner-ws";
+import { maybeLaunchRunnerRun } from "./runner-session";
 
 /** Sandbox provider id as resolveRequestedSandbox resolves it (null = host). */
 type ResolvedSandboxProvider = Extract<
@@ -78,6 +81,7 @@ export interface CreateSessionMessage {
 	mcpServers?: unknown;
 	repo?: unknown;
 	sandbox?: unknown;
+	runner?: unknown;
 	worktreeMode?: unknown;
 	workspaceId?: unknown;
 	plainThreadId?: unknown;
@@ -217,6 +221,8 @@ export interface ResolvedCreate {
 	 */
 	runMcpServers?: McpScope;
 	sandboxProvider: ResolvedSandboxProvider;
+	/** Explicit persistent-machine target. Mutually exclusive with Sandbox. */
+	runnerTarget?: { id: string; name: string; workspacePath: string; repositoryUrl: string };
 	/** Sandbox volume workspace: no host worktree, provider clones in-container. */
 	volumeWorkspace: boolean;
 	remoteSandbox: boolean;
@@ -307,6 +313,7 @@ export async function openCreatedSession(
 	// Actual worktree HEAD when it drifted from the recorded branch (the
 	// agent switched/renamed branches during the opening turn).
 	const headBranchPatch = () => {
+		if (spec.runnerTarget) return {};
 		const head = spec.persistBranch ? worktreeHeadBranch(spec.wtPath) : null;
 		return head && head !== spec.branch ? { branch: head } : {};
 	};
@@ -370,6 +377,9 @@ export async function openCreatedSession(
 							},
 						}
 					: {}),
+				...(spec.runnerTarget
+					? { runner: { id: spec.runnerTarget.id, name: spec.runnerTarget.name, workspacePath: spec.runnerTarget.workspacePath, lifecycle: "preparing" as const } }
+					: {}),
 				...existing,
 				...(engineSessionId
 					? engineSessionPatch(effectiveProvider, engineSessionId)
@@ -398,7 +408,7 @@ export async function openCreatedSession(
 		// window from double-starting a run (same race as
 		// runSessionPrompt).
 		const startToken = markSessionStarting(bksId);
-		const preparingEnvironment = spec.needsWorktree || Boolean(spec.sandboxProvider);
+		const preparingEnvironment = spec.needsWorktree || Boolean(spec.sandboxProvider) || Boolean(spec.runnerTarget);
 		if (preparingEnvironment) preparingWorkspaces.add(bksId);
 		try {
 			await persist();
@@ -441,6 +451,7 @@ export async function openCreatedSession(
 			// Bind mode has a host checkout, but silently using it would still
 			// change the chosen isolation boundary.
 			let sandboxOpeningRun: AsyncGenerator<StreamEvent> | null = null;
+			let runnerOpeningRun: AsyncGenerator<StreamEvent> | null = null;
 			if (spec.sandboxProvider) {
 				const created = findSession(bksId);
 				sandboxOpeningRun = created
@@ -462,8 +473,37 @@ export async function openCreatedSession(
 				preparingWorkspaces.delete(bksId);
 				io.emit({ type: "workspace_status", ready: true });
 			}
+			if (spec.runnerTarget) {
+				await prepareRunnerWorkspace(spec.runnerTarget.id, {
+					sessionId: bksId,
+					repo: spec.repoId || "",
+					branch: spec.branch,
+					workspacePath: spec.runnerTarget.workspacePath,
+					repositoryUrl: spec.runnerTarget.repositoryUrl,
+					user: spec.user,
+				});
+				touchNativeSession(bksId, {
+					runner: { id: spec.runnerTarget.id, name: spec.runnerTarget.name, workspacePath: spec.runnerTarget.workspacePath, lifecycle: "awake" },
+				});
+				const created = findSession(bksId);
+				runnerOpeningRun = created
+					? await maybeLaunchRunnerRun(created, {
+						prompt: spec.openingPrompt,
+						images: spec.images,
+						mcpServers: spec.runMcpServers ?? [],
+						user: spec.user,
+						reposNote: [
+							buildBranchNote({ mode: spec.mode, branch: spec.branch, worktreeDir: spec.wtPath }),
+							await memoryNoteFor(spec.user, spec.memoryRepoIds),
+						].filter(Boolean).join("\n\n") || undefined,
+					})
+					: null;
+				if (!runnerOpeningRun) throw new Error("Runner unavailable. Check its connection and retry.");
+				preparingWorkspaces.delete(bksId);
+				io.emit({ type: "workspace_status", ready: true });
+			}
 
-			for await (const event of sandboxOpeningRun ?? runAgent({
+			for await (const event of sandboxOpeningRun ?? runnerOpeningRun ?? runAgent({
 				prompt: spec.openingPrompt,
 				cwd: spec.wtPath,
 				mode: spec.mode,
@@ -714,6 +754,17 @@ export async function openCreatedSession(
 		// instead of leaving the viewer spinning. Before the announce there's
 		// no session to scope to, so the raw error goes back to the caller.
 		if (announced) {
+			if (spec.runnerTarget) {
+				touchNativeSession(bksId, {
+					runner: {
+						id: spec.runnerTarget.id,
+						name: spec.runnerTarget.name,
+						workspacePath: spec.runnerTarget.workspacePath,
+						lifecycle: "needs_attention",
+						lastLifecycleError: String(e.message || e).slice(0, 200),
+					},
+				});
+			}
 			io.emit({ type: "error", message: e.message || String(e) });
 			io.emit({ type: "stream_done" });
 			io.emit({
@@ -836,6 +887,26 @@ export async function handleCreateSessionMessage(
 	}
 	// null = host (no sandbox recorded on the session).
 	const createSandboxProvider = sandboxResolved.provider;
+	const requestedRunnerId = typeof msg.runner === "string" && msg.runner.trim() ? msg.runner.trim() : undefined;
+	if (requestedRunnerId && createSandboxProvider) {
+		ws.send(JSON.stringify({ type: "error", message: "Choose either Sandbox or a Runner for this session." }));
+		return;
+	}
+	const selectedRunner = requestedRunnerId ? getRunner(requestedRunnerId) : undefined;
+	if (requestedRunnerId) {
+		if (!selectedRunner || !isRunnerConnected(selectedRunner.id)) {
+			ws.send(JSON.stringify({ type: "error", message: "That Runner is offline." }));
+			return;
+		}
+		if (!runnerAvailableForSession(selectedRunner, { user, repo: repo.id, sessionId: "new" }) || !selectedRunner.workspaceRoots.length) {
+			ws.send(JSON.stringify({ type: "error", message: "That Runner is not available for this repository." }));
+			return;
+		}
+		if (forkSource || fromPr || isScratch || isAsk) {
+			ws.send(JSON.stringify({ type: "error", message: "Runner sessions require a new code workspace." }));
+			return;
+		}
+	}
 	// Remote providers have no host mounts — always volume-style.
 	const remoteSandbox = isRemoteSandboxProvider(createSandboxProvider);
 	// Workspace linkage. The New modal creates a Workspace + first Session
@@ -928,6 +999,7 @@ export async function handleCreateSessionMessage(
 	};
 	let spec: ResolvedCreate;
 	try {
+		const bksId = newSessionId();
 		let wtPath: string;
 		// Deferred worktree setup: the git fetch + worktree add +
 		// bun install can take tens of seconds, so the session is
@@ -939,7 +1011,11 @@ export async function handleCreateSessionMessage(
 		// all - the sandbox provider clones it in-container on the
 		// opening run below.
 		let volumeWorkspace = false;
-		if (forkSource) {
+		if (selectedRunner) {
+			if (!branch)
+				branch = sanitizeBranchSlug(prompt.trim().split("\n")[0]) || `session-${Date.now().toString(36)}`;
+			wtPath = `${selectedRunner.workspaceRoots[0].replace(/\/$/, "")}/sessions/${bksId}`;
+		} else if (forkSource) {
 			// Share the source's cwd so the fork sees the same code state.
 			wtPath = forkSource.worktreeDir || repo.repo;
 		} else if (fromPr) {
@@ -1048,13 +1124,14 @@ export async function handleCreateSessionMessage(
 				? branch
 				: isAsk || isScratch
 					? ""
-					: sharedCheckoutForNewSessions(repo)
+					: selectedRunner
+						? branch
+						: sharedCheckoutForNewSessions(repo)
 						? repo.defaultBranch
 						: workspace?.worktreeDir === wtPath
 							? workspace.branch || branch
 							: branch;
 
-		const bksId = newSessionId();
 		const title = prompt.trim().split("\n")[0].slice(0, 80);
 		// Every session lives in a workspace (session-workspace.ts). A create
 		// that resolved none — no picker choice, no fork parent, no
@@ -1175,7 +1252,7 @@ export async function handleCreateSessionMessage(
 			branch: sessionBranch,
 			// Scratch sessions are repo-less: wtPath is a plain scratch dir
 			// repoForPath would throw on.
-			repoId: isScratch ? undefined : repoForPath(wtPath).id,
+			repoId: isScratch ? undefined : selectedRunner ? repo.id : repoForPath(wtPath).id,
 			memoryRepoIds: [repo.id],
 			stackedOn: stackBase
 				? { repo: repoForPath(wtPath).id, branch: stackBase }
@@ -1209,6 +1286,12 @@ export async function handleCreateSessionMessage(
 				? createMcpServers
 				: feedMcpServers) as McpScope | undefined,
 			sandboxProvider: createSandboxProvider,
+			runnerTarget: selectedRunner ? {
+				id: selectedRunner.id,
+				name: selectedRunner.label || selectedRunner.name,
+				workspacePath: wtPath,
+				repositoryUrl: `https://github.com/${repo.ghRepo}.git`,
+			} : undefined,
 			volumeWorkspace,
 			remoteSandbox,
 			needsWorktree,

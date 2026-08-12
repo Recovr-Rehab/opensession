@@ -268,6 +268,15 @@ export interface UnifiedSession {
 		lifecycle?: "preparing" | "awake" | "sleeping" | "waking" | "needs_attention";
 		lastLifecycleError?: string;
   };
+  /** Persistent, explicitly trusted machine selected for this session. Unlike
+   * a Sandbox, a Runner is not an isolation boundary. */
+  runner?: {
+    id: string;
+    name: string;
+    workspacePath: string;
+    lifecycle?: "preparing" | "awake" | "offline" | "needs_attention";
+    lastLifecycleError?: string;
+  };
 }
 
 // Slack session file format (two variants exist)
@@ -513,6 +522,13 @@ export interface NativeSessionFile {
     workspace?: "bind" | "volume";
 		lifecycle?: "preparing" | "awake" | "sleeping" | "waking" | "needs_attention";
 		lastLifecycleError?: string;
+  };
+  runner?: {
+    id: string;
+    name: string;
+    workspacePath: string;
+    lifecycle?: "preparing" | "awake" | "offline" | "needs_attention";
+    lastLifecycleError?: string;
   };
 }
 

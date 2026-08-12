@@ -358,6 +358,16 @@ export function runnerAllowed(runner: Runner, input: { user?: string; repo?: str
 	return true;
 }
 
+/** Server-side scheduling gate for a full session. A reservation belongs to
+ * its recorded session only. One live workload is intentionally conservative
+ * until multi-host capacity accounting is available on the Runner channel. */
+export function runnerAvailableForSession(runner: Runner, input: { user?: string; repo?: string; sessionId: string }): boolean {
+	if (!runnerAllowed(runner, { ...input, permission: "fullSessions" })) return false;
+	const reservation = runner.reservation;
+	if (reservation && Date.parse(reservation.expiresAt) > Date.now() && reservation.sessionId && reservation.sessionId !== input.sessionId) return false;
+	return !runner.workload?.sessionId || runner.workload.sessionId === input.sessionId;
+}
+
 export function publicRunner(runner: Runner, online: boolean, busy = false): Omit<Runner, "tokenHash"> & { state: RunnerState } {
 	const { tokenHash: _tokenHash, reservation, ...rest } = runner;
 	const activeReservation = reservation && Date.parse(reservation.expiresAt) > Date.now() ? reservation : undefined;

@@ -440,6 +440,7 @@ export interface UnifiedSession {
 	 *  provider materialized it; `workspace: "volume"` means the workspace lives
 	 *  ONLY inside the sandbox (no host worktree). Mirrors the session file. */
 	sandbox?: { provider: string; sandboxId?: string; workspace?: "bind" | "volume" };
+	runner?: { id: string; name: string; workspacePath: string; lifecycle?: "preparing" | "awake" | "offline" | "needs_attention"; lastLifecycleError?: string };
 	linearIssue?: { identifier: string; title: string; url?: string };
 	slackThread?: { channel: string; threadTs: string };
 	/** Blocked on an AskUserQuestion — a human needs to answer. Set by /api/sessions. */

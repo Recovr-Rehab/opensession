@@ -4755,7 +4755,7 @@ export function SessionViewer({
 					{/* Sandbox badge: this session's runs execute inside an isolated
 					    container (docker/daytona/e2b). Renders nothing for host sessions
 					    — purely from session fields, no container polling. */}
-					<SandboxBadge sessionId={session.id} sandbox={session.sandbox} />
+					<SandboxBadge sessionId={session.id} sandbox={session.sandbox} runner={session.runner} />
 					{/* Lone-session "+ New tab": with no tab strip on screen the affordance
 					    to spawn a sibling session lives here beside the title (⌘⌥N does the
 					    same). The moment the strip appears — a second session, an open view
