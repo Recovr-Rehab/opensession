@@ -49,7 +49,7 @@ export function ShippedChangeComposer({
 		<div className="mx-auto mt-2 mb-6 w-full max-w-[var(--session-col)] rounded-xl bg-panel p-4">
 			<div className="mb-3 flex items-center gap-2 text-[14px] leading-5 text-fg">
 				<BrandMark name="slack" size={20} />
-				<span className="font-semibold">Share what shipped</span>
+				<span className="font-semibold">Post what you shipped</span>
 			</div>
 			<Input
 				aria-label="Slack message"

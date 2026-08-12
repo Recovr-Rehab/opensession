@@ -172,13 +172,14 @@ export async function slackApiGet(
 export async function sendSlackMessage(
   channel: string,
   text: string,
-  threadTs?: string
+  threadTs?: string,
+  tokenOverride?: string,
 ): Promise<any> {
   const response = await fetchWithTimeout("https://slack.com/api/chat.postMessage", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
+      Authorization: `Bearer ${tokenOverride || SLACK_BOT_TOKEN}`,
     },
     body: JSON.stringify({
       channel,
@@ -264,6 +265,7 @@ export async function postSlackBlocks(
 async function slackFormCall(
   method: string,
   params: Record<string, string | number>,
+  tokenOverride?: string,
 ): Promise<any> {
   const body = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) body.set(key, String(value));
@@ -271,7 +273,7 @@ async function slackFormCall(
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
-      Authorization: `Bearer ${SLACK_BOT_TOKEN}`,
+      Authorization: `Bearer ${tokenOverride || SLACK_BOT_TOKEN}`,
     },
     body,
   });
@@ -292,6 +294,7 @@ export async function postSlackFile(
   path: string,
   initialComment: string,
   opts?: { title?: string; altText?: string },
+  tokenOverride?: string,
 ): Promise<any> {
   const filename = basename(path);
   const stat = statSync(path);
@@ -304,7 +307,7 @@ export async function postSlackFile(
     filename,
     length,
     ...(opts?.altText ? { alt_txt: opts.altText.slice(0, 1000) } : {}),
-  });
+  }, tokenOverride);
   if (!reserved?.ok || !reserved.upload_url || !reserved.file_id) {
     throw new Error(
       `Slack upload reservation failed: ${reserved?.error || "invalid response"}`,
@@ -324,7 +327,7 @@ export async function postSlackFile(
     files: JSON.stringify([{ id: reserved.file_id, title: opts?.title || filename }]),
     channel_id: channel,
     initial_comment: initialComment,
-  });
+  }, tokenOverride);
   if (!completed?.ok) {
     throw new Error(
       `Slack upload completion failed: ${completed?.error || "invalid response"}`,

@@ -25,6 +25,9 @@ export async function handleShippedChangeRoutes(
 		});
 	}
 	const body = await req.json().catch(() => ({}));
+	const caller = ctx.authUser?.login || ctx.authUser?.name || requestUser(ctx, body?.user);
+	const { mcpUserGrantToken } = await import("../mcp-oauth");
+	const slackToken = caller ? mcpUserGrantToken("slack", caller) : undefined;
 	const target = resolvePrTarget(session, body?.repo, body?.branch);
 	if (!target)
 		return Response.json({ error: "Pull request target not found" }, { status: 404 });
@@ -47,6 +50,7 @@ export async function handleShippedChangeRoutes(
 				requestedBy: requestUser(ctx, body?.user),
 				channel: body?.channel,
 				message: body?.message,
+				slackToken,
 			}),
 		);
 	} catch (error: any) {

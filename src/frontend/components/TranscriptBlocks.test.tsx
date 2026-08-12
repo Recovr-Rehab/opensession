@@ -60,6 +60,7 @@ describe("TranscriptBlocks shipped change action", () => {
 			html.indexOf("Deployment finished"),
 		);
 		expect(html).toContain("We updated the toggle style in Tella.");
+		expect(html).toContain("Post what you shipped");
 		expect(html).toContain("Send to");
 		expect(html).toContain('data-brand="slack"');
 		expect(html).toContain("%2Ftmp%2Ftoggle-after.png");

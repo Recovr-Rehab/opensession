@@ -182,12 +182,16 @@ export async function shareShippedVisualChange(opts: {
   requestedBy?: string;
   channel?: string;
   message?: string;
+  slackToken?: string;
 }): Promise<{ status: "shared" | "already_shared" }> {
   const channels = shippedChangeChannels();
   const channel = opts.channel || shippedChangesChannel();
   if (!channel) throw new Error("Shipped changes channel is not configured");
   if (!channels.some((candidate) => candidate.id === channel)) {
     throw new Error("Choose a configured Slack channel");
+  }
+  if (!opts.slackToken) {
+    throw new Error("Connect your Slack account in Settings → My accounts to post as yourself");
   }
   const visual = selectShippedVisualChange(opts.session);
   const title = opts.pr.title.replace(/\|/g, "¦");
@@ -203,9 +207,9 @@ export async function shareShippedVisualChange(opts: {
       await postSlackFile(channel, visual.screenshot, comment, {
         title: `${title} — shipped`,
         altText: `Screenshot of the shipped visual change: ${title}`,
-      });
+      }, opts.slackToken);
     } else {
-      const posted = await sendSlackMessage(channel, comment);
+      const posted = await sendSlackMessage(channel, comment, undefined, opts.slackToken);
       if (!posted?.ok) throw new Error(`Slack message failed: ${posted?.error || "invalid response"}`);
     }
     settleShippedChangeAnnouncement(
