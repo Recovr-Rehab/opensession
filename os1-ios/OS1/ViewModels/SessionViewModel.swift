@@ -71,6 +71,9 @@ final class SessionViewModel {
     var draft = ""
     /// Images staged in the composer, sent (as data URLs) with the next prompt.
     var attachedImages: [AttachedImage] = []
+    /// Transcript text attached to the next message. The controller also owns
+    /// the retained TextKit highlight after the composer takes focus.
+    let quoteSelection = TranscriptQuoteSelection()
     /// Bumped on every send so the view can scroll to the bottom: the
     /// scroll view's bottom size-change anchor doesn't re-pin once the
     /// reader has scrolled (or the keyboard resized the viewport), leaving
@@ -491,9 +494,10 @@ final class SessionViewModel {
     }
 
     func addSessionNote() async -> Bool {
-        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let typed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let images = attachedImages.map(\.dataURL)
-        guard !text.isEmpty || !images.isEmpty else { return false }
+        guard !typed.isEmpty || !images.isEmpty else { return false }
+        let text = quoteSelection.message(with: typed)
         do {
             let note = try await OS1API.addSessionNote(
                 sessionId: session.id,
@@ -503,6 +507,7 @@ final class SessionViewModel {
             upsertSessionNote(note)
             draft = ""
             attachedImages = []
+            quoteSelection.clear()
             sendSeq += 1
             return true
         } catch {
@@ -664,9 +669,10 @@ final class SessionViewModel {
     /// and it stays there until the server says it has it — so a send made in
     /// a tunnel arrives when the signal does, in the order it was written.
     func sendDraft(busyModeOverride: String? = nil) {
-        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let typed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         let images = attachedImages.map(\.dataURL)
-        guard !text.isEmpty || !images.isEmpty else { return }
+        guard !typed.isEmpty || !images.isEmpty else { return }
+        let text = quoteSelection.message(with: typed)
         let busyMode = busyModeOverride
             ?? UserDefaults.standard.string(forKey: "os1.composer.busySend")
             ?? "queue"
@@ -688,6 +694,7 @@ final class SessionViewModel {
         HideStore.shared.unhide(for: session)
         draft = ""
         attachedImages = []
+        quoteSelection.clear()
         sendSeq += 1
     }
 
@@ -779,10 +786,12 @@ final class SessionViewModel {
     /// Hold the draft until `at` — the server sends it then, whether or not
     /// the app is running. Clears the draft only once the server has it.
     func schedulePrompt(at: Date) async throws {
-        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        let typed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !typed.isEmpty else { return }
+        let text = quoteSelection.message(with: typed)
         try await OS1API.schedulePrompt(sessionId: session.id, prompt: text, at: at)
         draft = ""
+        quoteSelection.clear()
         sendSeq += 1
     }
 

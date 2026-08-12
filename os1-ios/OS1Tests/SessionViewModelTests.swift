@@ -843,6 +843,28 @@ final class SendDraftTests: XCTestCase {
         XCTAssertTrue(unsent.isEmpty, "a delivered message must leave the outbox")
     }
 
+    func testSendPrependsSelectedTranscriptTextAndClearsIt() async {
+        viewModel.quoteSelection.stage("First line\n\nSecond line")
+
+        await send("What does this mean?")
+
+        XCTAssertEqual(
+            deliveries.map(\.item.content),
+            ["> First line\n>\n> Second line\n\nWhat does this mean?"]
+        )
+        XCTAssertNil(viewModel.quoteSelection.text)
+    }
+
+    func testSelectedTextDoesNotEnableAnEmptySend() {
+        viewModel.quoteSelection.stage("Context only")
+
+        XCTAssertFalse(viewModel.canSend)
+        viewModel.sendDraft()
+
+        XCTAssertEqual(viewModel.quoteSelection.text, "Context only")
+        XCTAssertTrue(unsent.isEmpty)
+    }
+
     func testIdleEchoReplacedByServerCopyWithoutDuplication() async {
         await send("hi")
         viewModel.handle(.transcriptAppend(sessionId: "bks-1", entries: [

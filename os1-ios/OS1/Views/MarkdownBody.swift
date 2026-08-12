@@ -21,6 +21,7 @@ struct MarkdownBody: View {
     /// surface with nowhere to push (the Mac app) has no id and gets no file
     /// links — which is right, since the push is the whole point of one.
     @Environment(\.openPanel) private var openPanel
+    @Environment(\.transcriptQuoteSelection) private var quoteSelection
 
     init(_ text: String, dimmed: Bool = false) {
         self.text = text
@@ -79,9 +80,14 @@ struct MarkdownBody: View {
     }
 
     private func markdown(_ value: String) -> some View {
-        SwiftStreamingMarkdown.MarkdownView(
+        let base = dimmed ? MarkdownRenderConfig.os1Dim : .os1Static
+        let config = quoteSelection == nil
+            ? base
+            : base.withTextContextMenu(value: .os1QuoteSelection)
+        return SwiftStreamingMarkdown.MarkdownView(
             text: linkified(value),
-            config: dimmed ? .os1Dim : .os1Static
+            config: config,
+            listener: quoteSelection?.listener
         )
         .frame(maxWidth: .infinity, alignment: .leading)
     }

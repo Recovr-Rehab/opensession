@@ -32,6 +32,7 @@ struct MarkdownTableView: View {
     /// Narration inside a work fold renders dimmer than a final answer, the
     /// same split `MarkdownBody` makes for prose.
     var dimmed = false
+    @Environment(\.transcriptQuoteSelection) private var quoteSelection
 
     @State private var available: CGFloat = 0
 
@@ -52,9 +53,14 @@ struct MarkdownTableView: View {
                 if layout.fits {
                     grid(layout)
                 } else {
+                    let base = dimmed ? MarkdownRenderConfig.os1Dim : .os1Static
+                    let config = quoteSelection == nil
+                        ? base
+                        : base.withTextContextMenu(value: .os1QuoteSelection)
                     SwiftStreamingMarkdown.MarkdownView(
                         text: table.markdownSource(),
-                        config: dimmed ? .os1Dim : .os1Static
+                        config: config,
+                        listener: quoteSelection?.listener
                     )
                 }
             }

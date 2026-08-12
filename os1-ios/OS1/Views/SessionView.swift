@@ -357,6 +357,13 @@ struct SessionView: View {
                     // lazy rows settle. The pin releases when the person scrolls
                     // up to read, so new output does not yank them back.
                     .softScrollEdges()
+                    .environment(\.transcriptQuoteSelection, viewModel.quoteSelection)
+                    .transcriptQuoteInteractions(viewModel.quoteSelection)
+                    .onKeyPress(.escape) {
+                        guard viewModel.quoteSelection.text != nil else { return .ignored }
+                        viewModel.quoteSelection.clear()
+                        return .handled
+                    }
                     #if os(iOS)
                     .transcriptTopWash()
                     #endif
@@ -769,6 +776,7 @@ struct SessionView: View {
                 text: viewModel.draft,
                 images: viewModel.attachedImages
             ))
+            viewModel.quoteSelection.clear()
         }
         .onChange(of: scenePhase) { _, phase in
             // Presence follows the foreground app, not input activity. Resync
@@ -2142,6 +2150,13 @@ private struct SessionInputBar: View {
                     )
             }
 
+            if viewModel.quoteSelection.text != nil {
+                selectedTextChip
+                    .transition(
+                        .opacity.combined(with: .scale(scale: 0.94, anchor: .bottomLeading))
+                    )
+            }
+
             if (viewModel.queuedCount > 0 && viewModel.queuedItems.isEmpty)
                 || visibleNotice != nil {
                 composerChip
@@ -2185,6 +2200,7 @@ private struct SessionInputBar: View {
         .padding(.bottom, 8)
         .animation(.smooth(duration: 0.22), value: visibleNotice)
         .animation(.smooth(duration: 0.18), value: noteMode)
+        .animation(.smooth(duration: 0.18), value: viewModel.quoteSelection.text)
         // The send you can feel. Keyed on the view model's send counter rather
         // than the button's action, so every way of sending gets it: the disc,
         // the hold menu's steer/queue, Return on the software keyboard and
@@ -2293,6 +2309,7 @@ private struct SessionInputBar: View {
         .onAppear { installShiftReturnMonitor() }
         .onDisappear { removeShiftReturnMonitor() }
         #endif
+        .transcriptQuoteComposerRegion(viewModel.quoteSelection)
     }
 
     /// Messages this app is still holding for the server. Read here, in the
@@ -2394,6 +2411,34 @@ private struct SessionInputBar: View {
             OS1VisualStyle.yellow.opacity(0.12),
             in: Capsule()
         )
+    }
+
+    private var selectedTextChip: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "cursorarrow")
+                .foregroundStyle(OS1VisualStyle.textFaint.opacity(0.6))
+            Text("Selected text")
+            Spacer(minLength: 8)
+            Button {
+                viewModel.quoteSelection.clear()
+                inputFocused = true
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.caption.weight(.bold))
+                    .frame(width: 28, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Remove selected text")
+        }
+        .font(.caption.weight(.medium))
+        .foregroundStyle(OS1VisualStyle.text)
+        .padding(.leading, 10)
+        .padding(.trailing, 3)
+        .padding(.vertical, 3)
+        .background(OS1VisualStyle.panel, in: Capsule())
+        .overlay { Capsule().stroke(OS1VisualStyle.border.opacity(0.6), lineWidth: 0.5) }
+        .help(viewModel.quoteSelection.text ?? "")
     }
 
     private var visibleNotice: String? {
@@ -2823,6 +2868,7 @@ private struct SessionInputBar: View {
 
     private var composerPlaceholder: String {
         if noteMode { return "Only your team will see this" }
+        if viewModel.quoteSelection.text != nil { return "Chat with selected text" }
         guard viewModel.isRunning else { return "Message" }
         return busySend == "steer"
             ? "Message — steers this run"
