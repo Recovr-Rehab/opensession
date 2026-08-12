@@ -2929,7 +2929,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					{!open && (
 						<IconChevronDown
 							className={cn(SIDEBAR_GROUP_CHEVRON, SIDEBAR_GROUP_CHEVRON_COLLAPSED)}
-							size={22}
+							size={16}
 							style={{ transform: "rotate(-90deg)" }}
 						/>
 					)}
@@ -3002,7 +3002,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						{!open && (
 							<IconChevronDown
 								className={cn(SIDEBAR_GROUP_CHEVRON, SIDEBAR_GROUP_CHEVRON_COLLAPSED)}
-								size={22}
+								size={16}
 								style={{ transform: "rotate(-90deg)" }}
 							/>
 						)}
@@ -3122,7 +3122,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							{!open && (
 								<IconChevronDown
 									className={cn(SIDEBAR_GROUP_CHEVRON, SIDEBAR_GROUP_CHEVRON_COLLAPSED)}
-									size={22}
+									size={16}
 									style={{ transform: "rotate(-90deg)" }}
 								/>
 							)}
