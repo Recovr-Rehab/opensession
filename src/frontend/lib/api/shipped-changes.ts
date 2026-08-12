@@ -21,16 +21,6 @@ export function fetchShippedChangeChannels(sessionId: string): Promise<{
 	});
 }
 
-export function requestShippedChangeScreenshot(
-	sessionId: string,
-): Promise<{ status: "capturing"; workerSessionId: string }> {
-	return request(`/sessions/${encodeURIComponent(sessionId)}/request-shipped-screenshot`, {
-		method: "POST",
-		body: {},
-		label: "Couldn't request a screenshot",
-	});
-}
-
 export async function reconnectSlack(): Promise<void> {
 	const popup = window.open("about:blank", "_blank");
 	const result = await request<{ url: string }>("/connections/mcp/slack/oauth/start", {

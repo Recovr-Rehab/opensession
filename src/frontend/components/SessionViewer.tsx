@@ -82,7 +82,6 @@ import {
 } from "../lib/poll";
 import { sessionPrPresentation } from "../lib/session-prs";
 import {
-	requestShippedChangeScreenshot,
 	reconnectSlack,
 	shareShippedChange,
 } from "../lib/api/shipped-changes";
@@ -798,27 +797,15 @@ export function SessionViewer({
 	const [shippedChangeStatus, setShippedChangeStatus] = useState<
 		"idle" | "sharing"
 	>("idle");
-	const [requestingShippedScreenshot, setRequestingShippedScreenshot] = useState(false);
 	const [shippedSlackReconnectRequired, setShippedSlackReconnectRequired] = useState(false);
 	const walkthroughScreenshot = session.walkthrough?.shots?.find((shot) => shot.after)?.after;
 	useEffect(
 		() => {
 			setShippedChangeStatus("idle");
-			setRequestingShippedScreenshot(false);
 			setShippedSlackReconnectRequired(false);
 		},
 		[session.id, mergedPr?.number],
 	);
-	const requestShippedScreenshot = useCallback(async () => {
-		if (!mergedPr || requestingShippedScreenshot) return;
-		setRequestingShippedScreenshot(true);
-		try {
-			await requestShippedChangeScreenshot(session.id);
-		} catch (error: any) {
-			setRequestingShippedScreenshot(false);
-			toast(error?.message || "Couldn't request a screenshot");
-		}
-	}, [mergedPr, requestingShippedScreenshot, session.id]);
 	const sendShippedChangeToSlack = useCallback(async (message: string, channel: string, screenshots: string[]) => {
 		if (!mergedPr) return;
 		setShippedChangeStatus("sharing");
@@ -964,9 +951,6 @@ export function SessionViewer({
 		transcriptViewStore.getServerSnapshot,
 	);
 	const shippedScreenshot = walkthroughScreenshot || latestFeaturedScreenshot(entries);
-	useEffect(() => {
-		if (shippedScreenshot) setRequestingShippedScreenshot(false);
-	}, [shippedScreenshot]);
 	const setEntries = useCallback(
 		(
 			update:
@@ -3018,22 +3002,15 @@ export function SessionViewer({
 							session.walkthrough?.summary,
 						),
 						screenshot: shippedScreenshot,
-						requestingScreenshot: requestingShippedScreenshot,
 						reconnectRequired: shippedSlackReconnectRequired,
 						status: shippedChangeStatus,
 						onShare: sendShippedChangeToSlack,
 						onReconnectSlack: reconnectShippedSlack,
-						onRequestScreenshot:
-							connected && !noEngine ? requestShippedScreenshot : undefined,
 					}
 				: undefined,
 		[
 			mergedPr,
-			requestShippedScreenshot,
-			requestingShippedScreenshot,
 			shippedSlackReconnectRequired,
-			connected,
-			noEngine,
 			shippedScreenshot,
 			session.walkthrough?.summary,
 			sendShippedChangeToSlack,

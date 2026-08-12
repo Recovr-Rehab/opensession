@@ -6,7 +6,7 @@ import { Select } from "../ui/input";
 import { toast } from "../ui/toast";
 import { BrandMark } from "./BrandMark";
 import { openLightbox } from "./MediaLightbox";
-import { IconCamera, IconPlus, IconX } from "./icons";
+import { IconPlus, IconX } from "./icons";
 import { PixelSpinner } from "./PixelSpinner";
 
 const MAX_SLACK_IMAGE_BYTES = 20 * 1024 * 1024;
@@ -15,11 +15,9 @@ export interface ShippedChangeComposerProps {
 	sessionId: string;
 	defaultMessage: string;
 	screenshot?: string;
-	requestingScreenshot?: boolean;
 	reconnectRequired?: boolean;
 	status: "idle" | "sharing";
 	onShare: (message: string, channel: string, screenshots: string[]) => void;
-	onRequestScreenshot?: () => void;
 	onReconnectSlack?: () => void;
 }
 
@@ -27,11 +25,9 @@ export function ShippedChangeComposer({
 	sessionId,
 	defaultMessage,
 	screenshot,
-	requestingScreenshot = false,
 	reconnectRequired = false,
 	status,
 	onShare,
-	onRequestScreenshot,
 	onReconnectSlack,
 }: ShippedChangeComposerProps) {
 	const [message, setMessage] = useState(defaultMessage);
@@ -154,11 +150,6 @@ export function ShippedChangeComposer({
 					<button type="button" aria-label="Add images" title="Add images" className="focus-ring inline-flex size-8 shrink-0 items-center justify-center rounded-control text-dim transition-[background-color,color,scale] hover:bg-hover hover:text-fg active:scale-[0.96] disabled:opacity-40 phone:size-10" disabled={status !== "idle" || uploading || screenshots.length >= 10} onClick={() => fileInputRef.current?.click()}>
 						{uploading ? <PixelSpinner /> : <IconPlus size={20} />}
 					</button>
-					{onRequestScreenshot && (
-						<button type="button" aria-label={requestingScreenshot ? "Capturing screenshot" : "Capture screenshot"} title={requestingScreenshot ? "Capturing screenshot" : "Capture screenshot"} className="focus-ring inline-flex size-8 shrink-0 items-center justify-center rounded-control text-dim transition-[background-color,color,scale] hover:bg-hover hover:text-fg active:scale-[0.96] disabled:opacity-40 phone:size-10" disabled={status !== "idle" || requestingScreenshot} onClick={onRequestScreenshot}>
-							{requestingScreenshot ? <PixelSpinner /> : <IconCamera size={18} />}
-						</button>
-					)}
 					<div className="flex-1" />
 					<label className="flex items-center">
 						<span className="sr-only">Send to</span>

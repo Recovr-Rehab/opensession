@@ -54,7 +54,6 @@ describe("TranscriptBlocks shipped change action", () => {
 					screenshot: "/tmp/toggle-after.png",
 					status: "idle",
 					onShare: () => {},
-					onRequestScreenshot: () => {},
 				}}
 			/>,
 		);
@@ -76,7 +75,7 @@ describe("TranscriptBlocks shipped change action", () => {
 		expect(html).not.toContain("rounded-xl bg-panel p-4");
 	});
 
-	test("offers to request visual proof when no screenshot exists", () => {
+	test("keeps image attachment explicit when no screenshot exists", () => {
 		const html = renderToStaticMarkup(
 			<TranscriptBlocks
 				entries={entries}
@@ -86,32 +85,12 @@ describe("TranscriptBlocks shipped change action", () => {
 					defaultMessage: "Background names are now visible in tooltips.",
 					status: "idle",
 					onShare: () => {},
-					onRequestScreenshot: () => {},
 				}}
 			/>,
 		);
 		expect(html).toContain('aria-label="Add images"');
-		expect(html).toContain('aria-label="Capture screenshot"');
-	});
-
-	test("keeps screenshot progress inside the Slack composer", () => {
-		const html = renderToStaticMarkup(
-			<TranscriptBlocks
-				entries={entries}
-				slackShare={{
-					prNumber: 5606,
-					sessionId: "session-1",
-					defaultMessage: "Background names are now visible in tooltips.",
-					requestingScreenshot: true,
-					status: "idle",
-					onShare: () => {},
-					onRequestScreenshot: () => {},
-				}}
-			/>,
-		);
-		expect(html).toContain('aria-label="Capturing screenshot"');
-		expect(html).not.toContain("Requested");
-		expect(html).not.toContain("Capture a clear after screenshot");
+		expect(html).not.toContain("Capture screenshot");
+		expect(html).not.toContain("Capturing screenshot");
 	});
 
 	test("does not show the action for a different merged PR", () => {
