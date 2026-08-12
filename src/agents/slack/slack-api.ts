@@ -322,6 +322,9 @@ export async function postSlackFiles(
       ...(opts?.altText ? { alt_txt: opts.altText.slice(0, 1000) } : {}),
     }, tokenOverride);
     if (!reserved?.ok || !reserved.upload_url || !reserved.file_id) {
+		if (reserved?.error === "missing_scope") {
+			throw new Error("SLACK_RECONNECT_REQUIRED");
+		}
       throw new Error(
         `Slack upload reservation failed: ${reserved?.error || "invalid response"}`,
       );
