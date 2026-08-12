@@ -30,6 +30,45 @@ enum TranscriptScroll {
         geometry.contentHeight + geometry.insetBottom - geometry.visibleMaxY
     }
 
+    /// Where the reader is, measured from the END of the transcript.
+    ///
+    /// This is the coordinate a page of earlier history does not move: its
+    /// rows land above everything on screen, so the distance from the content's
+    /// end is the same before and after, while the offset from the TOP has
+    /// grown by the whole page.
+    static func distanceFromEnd(offset: CGFloat, contentHeight: CGFloat) -> CGFloat {
+        contentHeight - offset
+    }
+
+    /// What to hand `ScrollPosition.scrollTo(y:)` to put the reader back where
+    /// a prepend found them.
+    ///
+    /// The inverse of `distanceFromEnd`, plus the top inset, and both halves
+    /// are load-bearing. It is a function rather than one line at the call
+    /// site because the restore re-runs as the prepended rows settle:
+    /// markdown parses asynchronously and the lazy stack realizes rows as it
+    /// goes, so `contentHeight` keeps climbing for a beat after the page
+    /// arrives and the answer has to be recomputed against the newest one.
+    ///
+    /// The inset is the trap. `scrollTo(y:)` measures from the top of the
+    /// content AREA, while `contentOffset` — what `distanceFromEnd` is built
+    /// from — starts one top inset above it. Without the term every restore
+    /// lands short by the height of the navigation bar; measured on an iPhone
+    /// 17 Pro, exactly 116pt, on every tick.
+    static func restoredScrollY(
+        distanceFromEnd: CGFloat,
+        contentHeight: CGFloat,
+        insetTop: CGFloat,
+        minimumContentHeight: CGFloat = 0
+    ) -> CGFloat? {
+        guard contentHeight >= minimumContentHeight else { return nil }
+        let y = contentHeight - distanceFromEnd + insetTop
+        // A LazyVStack can briefly report less content than it had before the
+        // prepend while it re-realizes rows. There is no valid position above
+        // zero, so wait for the next measurement instead of clamping to top.
+        return y >= 0 ? y : nil
+    }
+
     /// Whether new output should follow the reader down.
     ///
     /// `tolerance` has to clear the transcript's trailing padding: scrolling to
@@ -45,4 +84,26 @@ enum TranscriptScroll {
         if geometry.contentHeight <= geometry.containerHeight { return true }
         return distanceFromBottom(geometry) <= tolerance
     }
+}
+
+/// The two numbers the prepend restore works from, as one `Equatable` value so
+/// `onScrollGeometryChange` reports them together — the restore needs the pair
+/// as it was BEFORE the page landed, and two observers would not agree on that.
+struct TranscriptGeometry: Equatable {
+    var offset: CGFloat
+    var contentHeight: CGFloat
+    /// The top inset the navigation bar takes, for `restoredScrollY`.
+    var insetTop: CGFloat
+}
+
+/// The transcript's live scroll geometry, held by reference on purpose.
+///
+/// It updates on every frame of a scroll, and everything a `SessionView.body`
+/// reads re-evaluates the whole transcript with it — so the offset cannot live
+/// in `@State`. Only code outside `body` (the prepend restore) reads this.
+@MainActor
+final class TranscriptGeometryBox {
+    var offset: CGFloat = 0
+    var contentHeight: CGFloat = 0
+    var insetTop: CGFloat = 0
 }

@@ -38,12 +38,29 @@ struct SessionView: View {
         horizontalSizeClass == .compact ? 16 : 20
     }
 
-    /// Anchor for restoring the scroll position after a requested history
-    /// prepend: the ENTRY that was topmost stays where the reader left it.
-    /// An entry id, not a block id — a prepended page can merge older entries
-    /// into the topmost turn, which changes that block's id and would leave a
-    /// block-keyed anchor pointing at nothing.
-    @State private var prependAnchorEntryId: String?
+    /// Where the reader was when a page of earlier history landed, measured
+    /// from the END of the transcript. Rows land above the reader, so this
+    /// coordinate survives a prepend while a top-relative offset does not.
+    @State private var prependDistanceFromEnd: CGFloat?
+    /// The content height before the page landed. A lazy stack can briefly
+    /// report less than this while re-realizing its rows; that is not a valid
+    /// restoration target yet.
+    @State private var prependBaselineContentHeight: CGFloat?
+    @State private var awaitingPrepend = false
+    @State private var prependRestoreTask: Task<Void, Never>?
+    /// A page requested before the reader began a newer gesture must not claim
+    /// their position when its delayed response finally arrives.
+    @State private var prependRequestInteraction: Int?
+    @State private var scrollInteractionGeneration = 0
+    /// Lets the generic new-output observer distinguish a history page from a
+    /// real tail append, regardless of modifier callback ordering.
+    @State private var lastDisplayHistoryPrependSeq = 0
+
+    /// Live scroll geometry for the restore. A reference box avoids making
+    /// each scroll frame invalidate the whole transcript body.
+    @State private var scrollGeometry = TranscriptGeometryBox()
+    /// Exact offsets are the one thing `ScrollViewProxy` cannot express.
+    @State private var scrollPosition = ScrollPosition()
 
     /// Set when a "jump to the start" walk lands with more history still
     /// behind it, so the loader it puts back on screen doesn't immediately
@@ -367,6 +384,27 @@ struct SessionView: View {
                         pinnedToBottom = isNearBottom
                         if isNearBottom { newBelow = false }
                     }
+                    .scrollPosition($scrollPosition)
+                    .onScrollGeometryChange(for: TranscriptGeometry.self) {
+                        TranscriptGeometry(
+                            offset: $0.contentOffset.y,
+                            contentHeight: $0.contentSize.height,
+                            insetTop: $0.contentInsets.top
+                        )
+                    } action: { old, new in
+                        scrollGeometry.offset = new.offset
+                        scrollGeometry.contentHeight = new.contentHeight
+                        scrollGeometry.insetTop = new.insetTop
+                        guard awaitingPrepend, new.contentHeight != old.contentHeight
+                        else { return }
+                        awaitingPrepend = false
+                        prependDistanceFromEnd = TranscriptScroll.distanceFromEnd(
+                            offset: old.offset,
+                            contentHeight: old.contentHeight
+                        )
+                        prependBaselineContentHeight = old.contentHeight
+                        restoreAfterPrepend()
+                    }
                     // One viewport, for the content stack's floor above.
                     // `containerSize` is the unobstructed visible region (it
                     // excludes the content insets the composer and the header
@@ -408,7 +446,11 @@ struct SessionView: View {
                     // A scroll gesture is the reader taking over: the
                     // opening hold ends the moment they touch the transcript.
                     .onScrollPhaseChange { _, phase in
-                        if phase == .interacting { endHold() }
+                        if phase == .interacting {
+                            scrollInteractionGeneration += 1
+                            endHold()
+                            cancelPrependRestore()
+                        }
                         // Reading counts as being here: a hand on the transcript
                         // is what keeps our face on this session (the view model
                         // throttles it). Output scrolling past on its own does
@@ -451,6 +493,13 @@ struct SessionView: View {
                     // landing inside an existing turn leaves the BLOCK count
                     // unchanged, and following new output would stop.
                     .onChange(of: viewModel.displayItems.count) {
+                        let isHistoryPrepend =
+                            lastDisplayHistoryPrependSeq != viewModel.historyPrependSeq
+                        lastDisplayHistoryPrependSeq = viewModel.historyPrependSeq
+                        if isHistoryPrepend { return }
+                        // Tail output breaks the pure-prepend invariant, so
+                        // stop restoring from the stale end distance.
+                        cancelPrependRestore()
                         if pinnedToBottom || holdingAtLatest {
                             scrollToBottom(proxy, animated: true)
                         } else {
@@ -466,6 +515,7 @@ struct SessionView: View {
                         }
                     }
                     .onChange(of: viewModel.liveText) {
+                        cancelPrependRestore()
                         if pinnedToBottom {
                             scrollToBottom(proxy, animated: false)
                         } else if !viewModel.liveText.isEmpty {
@@ -473,22 +523,21 @@ struct SessionView: View {
                         }
                     }
                     .onChange(of: viewModel.historyPrependSeq) {
-                        // Keep the reader where they were: the entry that was
-                        // at the top of the viewport stays there. Resolved
-                        // through the entry, since the block that now renders
-                        // it may be a different (merged) turn.
-                        if let entryId = prependAnchorEntryId,
-                           let blockId = viewModel.blockId(containing: entryId) {
-                            proxy.scrollTo(blockId, anchor: .top)
+                        guard !viewModel.jumpingToStart,
+                              prependRequestInteraction == scrollInteractionGeneration
+                        else {
+                            cancelPrependRestore()
+                            return
                         }
-                        prependAnchorEntryId = nil
+                        prependRequestInteraction = nil
+                        awaitingPrepend = true
                     }
                     // A landed "jump to the start": the walk's last page is in
                     // the transcript now, so take the reader to the oldest
                     // block it reached — the first message, unless the walk
                     // stopped at its ceiling.
                     .onChange(of: viewModel.jumpLandedSeq) {
-                        prependAnchorEntryId = nil
+                        cancelPrependRestore()
                         suppressAutoEarlier = viewModel.canLoadEarlier
                         if let first = viewModel.displayBlocks.first?.id {
                             proxy.scrollTo(first, anchor: .top)
@@ -803,7 +852,8 @@ struct SessionView: View {
 
     private func requestEarlier() {
         guard viewModel.canLoadEarlier, !viewModel.loadingEarlier else { return }
-        prependAnchorEntryId = viewModel.topmostEntryId
+        cancelPrependRestore()
+        prependRequestInteraction = scrollInteractionGeneration
         viewModel.loadEarlier()
     }
 
@@ -811,7 +861,7 @@ struct SessionView: View {
         guard viewModel.canLoadEarlier, !viewModel.loadingEarlier else { return }
         // The walk ends with an explicit scroll to the first message, so the
         // per-page anchor restore has nothing to keep in place.
-        prependAnchorEntryId = nil
+        cancelPrependRestore()
         viewModel.jumpToStart()
     }
 
@@ -1041,6 +1091,51 @@ struct SessionView: View {
         holdTask?.cancel()
         holdTask = nil
         holdingAtLatest = false
+    }
+
+    private static let prependRestoreTicks = 12
+    private static let prependRestoreInterval = Duration.milliseconds(120)
+
+    /// Restore the reader after prepended rows settle and grow.
+    private func restoreAfterPrepend() {
+        guard let distance = prependDistanceFromEnd,
+              let baseline = prependBaselineContentHeight
+        else { return }
+        prependRestoreTask?.cancel()
+        prependRestoreTask = Task { @MainActor in
+            var lastRestoredHeight: CGFloat?
+            var unchangedHeightRetries = 0
+            for tick in 0..<SessionView.prependRestoreTicks {
+                if tick > 0 {
+                    try? await Task.sleep(for: SessionView.prependRestoreInterval)
+                    if Task.isCancelled { return }
+                }
+                let height = scrollGeometry.contentHeight
+                guard let y = TranscriptScroll.restoredScrollY(
+                    distanceFromEnd: distance,
+                    contentHeight: height,
+                    insetTop: scrollGeometry.insetTop,
+                    minimumContentHeight: baseline
+                ) else { continue }
+                if height == lastRestoredHeight {
+                    unchangedHeightRetries += 1
+                    guard unchangedHeightRetries <= 2 else { continue }
+                } else {
+                    lastRestoredHeight = height
+                    unchangedHeightRetries = 0
+                }
+                scrollPosition.scrollTo(y: y)
+            }
+        }
+    }
+
+    private func cancelPrependRestore() {
+        prependRestoreTask?.cancel()
+        prependRestoreTask = nil
+        awaitingPrepend = false
+        prependDistanceFromEnd = nil
+        prependBaselineContentHeight = nil
+        prependRequestInteraction = nil
     }
 
     /// Take the transcript to its last row — the ask card, the run clock, the
