@@ -40,6 +40,7 @@ import {
   closePrPreviewApi,
 } from "../lib/api";
 import { Button } from "../ui/button";
+import { Checkbox } from "../ui/checkbox";
 import { toast } from "../ui/toast";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import { CommentableDiff, type CommentTarget, type PendingComment } from "./CommentableDiff";
@@ -1700,11 +1701,7 @@ export function PrPanel({
               </div>
               {reviewEvent === "APPROVE" && canMergeAfterReview && (
                 <label className="mb-3 flex cursor-pointer items-center gap-2 px-0.5 text-meta text-dim">
-                  <input
-                    type="checkbox"
-                    checked={mergeAfterReview}
-                    onChange={(event) => setMergeAfterReview(event.target.checked)}
-                  />
+                  <Checkbox checked={mergeAfterReview} onCheckedChange={setMergeAfterReview} />
                   Squash and merge immediately after approval
                 </label>
               )}

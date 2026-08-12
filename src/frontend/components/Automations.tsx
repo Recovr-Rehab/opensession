@@ -19,8 +19,10 @@ import {
   type AutomationDraft,
 } from "../lib/api";
 import { getCurrentUser } from "./UserPicker";
+import { CheckStatusIcon } from "./CheckStatusIcon";
 import { AGENT_NAME, PUBLIC_BASE_URL, docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { Button } from "../ui/button";
+import { Checkbox } from "../ui/checkbox";
 import { cn } from "../ui/cn";
 import { Input, Select, Textarea } from "../ui/input";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
@@ -315,40 +317,36 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
           {automations.map((a) => {
             const running = a.isRunning || a.lastRunStatus === "running";
             return (
-              <button
+              <div
                 key={a.id}
                 className={cn(
-                  "flex w-full min-w-0 items-center gap-3 border-b border-line px-2.5 py-2.75 text-left text-body text-fg",
+                  "relative flex w-full min-w-0 items-center gap-3 border-b border-line px-2.5 py-2.75 text-left text-body text-fg",
                   "max-[560px]:gap-2.5 max-[560px]:px-1 max-[560px]:py-3",
                   sel?.id === a.id ? "bg-active" : "hover:bg-hover",
                 )}
-                onClick={() => onSelect(a.id)}
               >
-                {/* Inner controls are spans — the row itself is a button. */}
-                <span
-                  role="button"
-                  className={cn(
-                    "relative h-[19px] w-[34px] shrink-0 rounded-full border p-0 transition-[background] duration-[var(--dur-micro)] ease-[var(--ease)] phone:h-[26px] phone:w-11",
-                    a.enabled ? "border-green bg-green-soft" : "border-line-strong bg-active",
-                  )}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleToggle(a);
-                  }}
-                  title={a.enabled ? "Disable" : "Enable"}
+                {/* Two controls in one row: opening the automation, and
+                    turning it on. So the row can't be a button around the
+                    switch — the open target is a button stretched under the
+                    content instead, which keeps the whole row clickable and
+                    keyboard-reachable without nesting one inside the other.
+                    Content above it is inert unless it has its own tooltip. */}
+                <button
+                  className="absolute inset-0 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50"
+                  onClick={() => onSelect(a.id)}
                 >
-                  <span
-                    className={cn(
-                      "absolute top-0.5 left-0.5 size-[13px] rounded-full phone:size-5 transition-[translate,background] duration-[var(--dur-micro)] ease-[var(--ease)]",
-                      a.enabled
-                        ? "translate-x-[15px] bg-green phone:translate-x-[18px]"
-                        : "bg-faint",
-                    )}
-                  />
-                </span>
+                  <span className="sr-only">Open {a.name}</span>
+                </button>
+                <Switch
+                  size="sm"
+                  className="relative"
+                  checked={a.enabled}
+                  onCheckedChange={() => handleToggle(a)}
+                  aria-label={`${a.name} · ${a.enabled ? "on" : "off"}`}
+                />
                 <span
                   className={cn(
-                    "flex min-w-0 flex-1 flex-col gap-0.75 max-[560px]:-order-1",
+                    "pointer-events-none relative flex min-w-0 flex-1 flex-col gap-0.75 max-[560px]:-order-1",
                     !a.enabled && "opacity-55",
                   )}
                 >
@@ -356,35 +354,46 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                   <span className="truncate text-meta text-faint">{triggerSummary(a)}</span>
                 </span>
                 {running ? (
-                  <WorkingPill className="max-[560px]:max-w-[92px] max-[560px]:overflow-hidden max-[560px]:text-ellipsis" />
-                ) : a.lastRunStatus === "ok" ? (
+                  <WorkingPill className="pointer-events-none relative max-[560px]:max-w-[92px] max-[560px]:overflow-hidden max-[560px]:text-ellipsis" />
+                ) : a.lastRunStatus === "ok" || a.lastRunStatus === "error" ? (
+                  // Its own click target rather than an inert glyph: keeping
+                  // pointer events is what keeps the tooltip, and the click
+                  // does what the row does.
                   <span
-                    className="text-green"
-                    title={`Last run ok${a.lastRunAt ? ` · ${relativeTime(a.lastRunAt)}` : ""}`}
+                    className={cn(
+                      "relative flex shrink-0 cursor-pointer",
+                      a.lastRunStatus === "ok" ? "text-green" : "text-red",
+                    )}
+                    onClick={() => onSelect(a.id)}
+                    title={
+                      a.lastRunStatus === "ok"
+                        ? `Last run ok${a.lastRunAt ? ` · ${relativeTime(a.lastRunAt)}` : ""}`
+                        : a.lastRunError || "Last run failed"
+                    }
                   >
-                    ✓
-                  </span>
-                ) : a.lastRunStatus === "error" ? (
-                  <span className="text-red" title={a.lastRunError || "Last run failed"}>
-                    ✗
+                    <CheckStatusIcon kind={a.lastRunStatus === "ok" ? "success" : "failure"} />
                   </span>
                 ) : null}
                 {/* The graph and the next-run column are the first things to
                     go when width is scarce: the drawer's rail and phones. */}
                 <span
-                  className={cn("shrink-0", sel ? "hidden" : "flex max-[560px]:hidden")}
+                  className={cn(
+                    "relative shrink-0 cursor-pointer",
+                    sel ? "hidden" : "flex max-[560px]:hidden",
+                  )}
+                  onClick={() => onSelect(a.id)}
                 >
                   {(a.runs?.length ?? 0) > 0 && <TriggerGraph runs={a.runs!} compact />}
                 </span>
                 <span
                   className={cn(
-                    "w-21 shrink-0 text-right text-meta text-faint",
+                    "pointer-events-none relative w-21 shrink-0 text-right text-meta text-faint",
                     sel ? "hidden" : "max-[560px]:hidden",
                   )}
                 >
                   {!a.enabled ? "off" : a.nextRunAt ? `next ${formatNext(a.nextRunAt)}` : ""}
                 </span>
-              </button>
+              </div>
             );
           })}
         </div>
@@ -461,23 +470,11 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
             ) : (
               <>
                 <div className="flex items-center gap-2.5">
-                  <button
-                    className={cn(
-                    "relative h-[19px] w-[34px] shrink-0 rounded-full border p-0 transition-[background] duration-[var(--dur-micro)] ease-[var(--ease)] phone:h-[26px] phone:w-11",
-                    sel.enabled ? "border-green bg-green-soft" : "border-line-strong bg-active",
-                  )}
-                    onClick={() => handleToggle(sel)}
-                    title={sel.enabled ? "Disable" : "Enable"}
-                  >
-                    <span
-                      className={cn(
-                        "absolute top-0.5 left-0.5 size-[13px] rounded-full phone:size-5 transition-[translate,background] duration-[var(--dur-micro)] ease-[var(--ease)]",
-                        sel.enabled
-                          ? "translate-x-[15px] bg-green phone:translate-x-[18px]"
-                          : "bg-faint",
-                      )}
-                    />
-                  </button>
+                  <Switch
+                    checked={sel.enabled}
+                    onCheckedChange={() => handleToggle(sel)}
+                    aria-label={`${sel.name} · ${sel.enabled ? "on" : "off"}`}
+                  />
                   <span className="text-dim text-[13px]">
                     {sel.enabled ? "Enabled" : "Disabled"}
                   </span>
@@ -1142,12 +1139,7 @@ function McpPicker({
         <label
           className="flex items-center gap-2.5 border-b border-line px-3 py-2 text-label cursor-pointer hover:bg-hover"
         >
-          <input
-            type="checkbox"
-            checked={all}
-            onChange={() => onChange(all ? [] : undefined)}
-            style={{ width: "auto" }}
-          />
+          <Checkbox checked={all} onCheckedChange={() => onChange(all ? [] : undefined)} />
           <span className="text-fg">All connectors</span>
           <span className="text-faint text-[11px]">
             every configured server (pre-least-privilege default)
@@ -1159,11 +1151,9 @@ function McpPicker({
               key={s.name}
               className="flex items-center gap-2.5 px-3 py-1.5 text-label cursor-pointer hover:bg-hover"
             >
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={all || selected.includes(s.name)}
-                onChange={() => toggle(s.name)}
-                style={{ width: "auto" }}
+                onCheckedChange={() => toggle(s.name)}
               />
               <span className="text-fg">{s.name}</span>
               {s.status !== "connected" && s.status !== "ready" && (
@@ -1362,30 +1352,26 @@ function DataFlowEditor({
                     </div>
                     <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-label text-dim">
                       <label className="flex min-h-10 items-center gap-2">
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           checked={slack.includeThreads !== false}
-                          onChange={(e) =>
+                          onCheckedChange={(checked) =>
                             updateInput(index, {
                               ...input,
-                              source: { ...slack, includeThreads: e.target.checked },
+                              source: { ...slack, includeThreads: checked },
                             })
                           }
-                          className="size-4"
                         />
                         Include thread replies
                       </label>
                       <label className="flex min-h-10 items-center gap-2">
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           checked={slack.includeBots === true}
-                          onChange={(e) =>
+                          onCheckedChange={(checked) =>
                             updateInput(index, {
                               ...input,
-                              source: { ...slack, includeBots: e.target.checked },
+                              source: { ...slack, includeBots: checked },
                             })
                           }
-                          className="size-4"
                         />
                         Include bot messages
                       </label>
@@ -1511,13 +1497,11 @@ function DataFlowEditor({
                       placeholder="C0123456789"
                     />
                     <label className="flex min-h-10 shrink-0 items-center gap-2 text-label text-dim">
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         checked={output.enabled !== false}
-                        onChange={(e) =>
-                          updateOutput(index, { ...output, enabled: e.target.checked })
+                        onCheckedChange={(checked) =>
+                          updateOutput(index, { ...output, enabled: checked })
                         }
-                        className="size-4"
                       />
                       Send
                     </label>
@@ -1800,12 +1784,7 @@ function AutomationForm({
               Schedules and events can be combined. Manual “Run now” is always available.
             </div>
             <label className="flex min-h-10 items-center gap-2.5 text-label text-dim">
-              <input
-                type="checkbox"
-                checked={webhookEnabled}
-                onChange={(e) => setWebhookEnabled(e.target.checked)}
-                className="size-4"
-              />
+              <Checkbox checked={webhookEnabled} onCheckedChange={setWebhookEnabled} />
               <span>
                 Accept webhook triggers
                 <span className="ml-1.5 text-faint">Creates a secret external POST URL</span>

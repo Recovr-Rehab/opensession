@@ -16,6 +16,7 @@ import {
 import { getCurrentUser } from "./UserPicker";
 import { AGENT_NAME, docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { Button } from "../ui/button";
+import { Checkbox } from "../ui/checkbox";
 import { cn } from "../ui/cn";
 import { SOURCE_CHIP } from "../lib/source-chip-classes";
 import { Input, Select, Textarea } from "../ui/input";
@@ -522,12 +523,11 @@ function NewScanModal({
             canInteractive ? "cursor-pointer" : "opacity-50",
           )}
         >
-          <input
-            type="checkbox"
+          <Checkbox
+            className="mt-[3px]"
             checked={canInteractive && interactive}
             disabled={!canInteractive}
-            onChange={(e) => setInteractive(e.target.checked)}
-            style={{ width: "auto", marginTop: 3 }}
+            onCheckedChange={setInteractive}
           />
           <span>
             Interactive mode

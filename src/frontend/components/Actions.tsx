@@ -15,6 +15,7 @@ import {
 import { getCurrentUser } from "./UserPicker";
 import { docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { Button } from "../ui/button";
+import { Checkbox } from "../ui/checkbox";
 import { cn } from "../ui/cn";
 import { SOURCE_CHIP } from "../lib/source-chip-classes";
 import { Input, Select, Textarea } from "../ui/input";
@@ -647,10 +648,9 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
           </label>
           <label className={cn(FIELD_LABEL, "flex-none")}>
             Required
-            <input
-              type="checkbox"
+            <Checkbox
               checked={!!input.required}
-              onChange={(e) => updateInput(idx, { required: e.target.checked })}
+              onCheckedChange={(checked) => updateInput(idx, { required: checked })}
             />
           </label>
           <Button size="sm" variant="danger" onClick={() => removeInput(idx)}>
@@ -665,11 +665,7 @@ function ActionForm({ onClose, onCreated }: { onClose: () => void; onCreated: ()
       </div>
 
       <label className={cn(FIELD_LABEL, "flex-row items-center gap-2")}>
-        <input
-          type="checkbox"
-          checked={confirmFlag}
-          onChange={(e) => setConfirmFlag(e.target.checked)}
-        />
+        <Checkbox checked={confirmFlag} onCheckedChange={setConfirmFlag} />
         Require a confirm before running (recommended for anything touching prod)
       </label>
 

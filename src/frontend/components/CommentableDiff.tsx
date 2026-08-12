@@ -14,6 +14,7 @@ import { IconCheck, IconChevronRight, IconCopy, IconPencil, IconUndo } from "./i
 import { copyToClipboard } from "../lib/share-link";
 import { Tooltip } from "../ui/tooltip";
 import { Button } from "../ui/button";
+import { Checkbox } from "../ui/checkbox";
 import { useResolvedTheme } from "./CodeHighlight";
 import { PixelSpinner } from "./PixelSpinner";
 import { EmptyState } from "../ui/state";
@@ -768,12 +769,7 @@ export function CommentableDiff({
               }`}
               onClick={(e) => e.stopPropagation()}
             >
-              <input
-                type="checkbox"
-                className="m-0 cursor-pointer accent-accent"
-                checked={isViewed}
-                onChange={() => toggleViewed(file, i)}
-              />
+              <Checkbox checked={isViewed} onCheckedChange={() => toggleViewed(file, i)} />
               Viewed
             </label>
           )}
