@@ -444,6 +444,28 @@ describe("renderMarkdown PR mentions", () => {
     }
   });
 
+  it("keeps a short bare number as prose unless the PR is known", () => {
+    setKnownRepos([{ id: "backstage", ghRepo: "tellahq/backstage" }]);
+    const backstage = { repo: "backstage" };
+    for (const src of [
+      "step #3 is the tricky one",
+      "take #2 of the recording",
+      "the #42 case",
+    ]) {
+      expect(renderMarkdown(src, backstage)).not.toContain("pr-ref");
+    }
+    // A qualified mention says what it means, however short.
+    expect(renderMarkdown("follows backstage#92 closely", fusion)).toContain(
+      'href="/pr/backstage/92"',
+    );
+    // So does a bare one the session list can vouch for — the repos numbered
+    // under a thousand reference their own PRs this way.
+    setKnownPrStates([{ repo: "backstage", number: 92, state: "OPEN" }]);
+    expect(renderMarkdown("follows #92 closely", backstage)).toContain(
+      'href="/pr/backstage/92"',
+    );
+  });
+
   it("reads mentions as they are actually written in prose", () => {
     // Sentence-final, parenthesised, inside emphasis, at the start of a line,
     // and in a list — all the same reference.
@@ -499,12 +521,12 @@ describe("renderMarkdown PR mentions", () => {
   });
 
   it("renders the same source differently per repo (cache is repo-keyed)", () => {
-    const src = "Landed #42.";
+    const src = "Landed #4242.";
     expect(renderMarkdown(src, { repo: "tella-fusion" })).toContain(
-      'href="/pr/tella-fusion/42"',
+      'href="/pr/tella-fusion/4242"',
     );
     expect(renderMarkdown(src, { repo: "opensession" })).toContain(
-      'href="/pr/opensession/42"',
+      'href="/pr/opensession/4242"',
     );
   });
 });

@@ -274,6 +274,13 @@ function sessionLink(id: string, href?: string): string {
 // server-side, and a chip pointing at a repo we can't resolve is worse than
 // plain text.
 const PR_NUMBER_MAX_DIGITS = 5;
+// A bare mention has nothing but its digits to argue it is a PR at all, and
+// prose is full of small ordinals ("step #3", "take #2", "monitor #1"). Below
+// this length a bare number links only when the instance can prove the PR
+// exists — one the session list already knows for that repo, which is the
+// common case for the repos numbered under a thousand. A qualified
+// `backstage#92` states its intent, so it links at any length.
+const BARE_PR_MIN_DIGITS = 4;
 // The qualifier is part of the match so it can be vetted (or rejected) rather
 // than left dangling in front of a chip — that also means a word glued to the
 // `#` can never be mistaken for a bare mention (`abc#1` is a qualified
@@ -429,6 +436,14 @@ function prMentionRepo(qualifier: string | undefined): string | null {
   // ids are instance-local, and the owner is noise we already know.
   const id = qualifier.slice(qualifier.lastIndexOf("/") + 1);
   return knownRepos.has(id) ? id : null;
+}
+
+/** Whether an unqualified `#123` reads as a PR reference rather than prose. */
+function bareMentionLinks(repo: string, number: string): boolean {
+  return (
+    number.length >= BARE_PR_MIN_DIGITS ||
+    knownPrStates.has(prStateKey(repo, number))
+  );
 }
 
 function prMentionLink(repo: string, number: string, label: string): string {
@@ -708,6 +723,9 @@ md.use({
         // rejected qualifier is behind it and `#1234` reads as a BARE mention —
         // linking a third party's PR number into one of our own repos.
         if (!repo) return { type: "text", raw: m[0], text: m[0] };
+        // Same for a short bare number that reads as prose, not a PR.
+        if (!m[1] && !bareMentionLinks(repo, m[2]))
+          return { type: "text", raw: m[0], text: m[0] };
         return { type: "prMention", raw: m[0], repo, number: m[2] };
       },
       renderer(token: any) {
