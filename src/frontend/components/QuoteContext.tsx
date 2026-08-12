@@ -22,13 +22,16 @@ export function QuoteContext({ quote, onRemove, disabled }: Props) {
 				duration: duration.micro,
 				ease,
 			}}
-			className="mb-1.5 flex origin-left"
+			className="mb-1 flex origin-left"
 		>
 			<div
 				title={quote.text}
-				className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border border-line/60 bg-surface px-2.5 text-label font-medium text-fg"
+				className="inline-flex h-7 max-w-full items-center gap-1 rounded-full border border-line/60 bg-surface px-2 text-label font-medium text-fg"
 			>
-				<IconCursor size={15} className="shrink-0 translate-y-px text-faint" />
+				<IconCursor
+					size={15}
+					className="shrink-0 translate-y-px text-faint opacity-60"
+				/>
 				<span className="truncate">Selected text</span>
 				<button
 					type="button"
@@ -37,7 +40,10 @@ export function QuoteContext({ quote, onRemove, disabled }: Props) {
 					aria-label="Remove selected text"
 					className="relative -mr-1 flex size-5 shrink-0 cursor-pointer items-center justify-center text-faint before:absolute before:-inset-2 enabled:hover:text-fg enabled:active:scale-[0.96] enabled:transition-[color,transform] disabled:cursor-default disabled:opacity-50"
 				>
-					<IconX size={20} className="translate-y-px scale-[0.8]" />
+					<IconX
+						size={20}
+						className="translate-y-px scale-[0.8] [&_path]:stroke-2"
+					/>
 				</button>
 			</div>
 		</motion.div>

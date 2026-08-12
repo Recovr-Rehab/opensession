@@ -32,6 +32,7 @@ export function QuoteSelection({
 }: Props) {
 	const rangeRef = useRef<Range | null>(null);
 	const hadQuoteRef = useRef(false);
+	const pressedRetainedRangeRef = useRef(false);
 
 	const clear = useCallback(() => {
 		window.getSelection()?.removeAllRanges();
@@ -117,30 +118,58 @@ export function QuoteSelection({
 	}, [quote]);
 
 	useEffect(() => {
+		const notePress = (event: MouseEvent) => {
+			const retained = rangeRef.current;
+			pressedRetainedRangeRef.current = !!retained && Array.from(retained.getClientRects()).some(
+				(rect) =>
+					event.clientX >= rect.left &&
+					event.clientX <= rect.right &&
+					event.clientY >= rect.top &&
+					event.clientY <= rect.bottom,
+			);
+		};
 		const dismiss = (event: MouseEvent) => {
 			if (!quote || event.button !== 0) return;
+			const retained = rangeRef.current;
+			const restoreSelection = () => {
+				if (
+					!retained ||
+					!retained.startContainer.isConnected ||
+					!retained.endContainer.isConnected
+				)
+					return;
+				const selection = window.getSelection();
+				selection?.removeAllRanges();
+				selection?.addRange(retained.cloneRange());
+			};
 			if (
 				event.target instanceof Element &&
 				event.target.closest(".composer")
-			)
-				return;
-			const retained = rangeRef.current;
-			const selection = window.getSelection();
-			if (retained && selection && !selection.isCollapsed && selection.rangeCount) {
-				const active = selection.getRangeAt(0);
+			) {
 				if (
-					retained.startContainer === active.startContainer &&
-					retained.startOffset === active.startOffset &&
-					retained.endContainer === active.endContainer &&
-					retained.endOffset === active.endOffset
+					!event.target.closest('[aria-label="Remove selected text"]')
 				)
-					return;
+					restoreSelection();
+				return;
+			}
+			const selection = window.getSelection();
+			if (
+				pressedRetainedRangeRef.current &&
+				retained &&
+				selection
+			) {
+				setTimeout(restoreSelection, 0);
+				return;
 			}
 			clear();
 		};
+		document.addEventListener("mousedown", notePress, true);
 		document.addEventListener("click", dismiss);
-		return () => document.removeEventListener("click", dismiss);
-	}, [quote, clear]);
+		return () => {
+			document.removeEventListener("mousedown", notePress, true);
+			document.removeEventListener("click", dismiss);
+		};
+	}, [quote, clear, containerRef]);
 
 	useEffect(
 		() => () => {
