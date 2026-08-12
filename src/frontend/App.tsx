@@ -612,7 +612,9 @@ export function App(
 	// than React nodes, so it can't read this from context — hand it the titles
 	// we already poll. No-ops unless a title actually changed.
 	useEffect(() => {
-		setSessionTitles(sessions.map((s) => [s.id, s.title] as const));
+		setSessionTitles(
+			sessions.map((s) => [s.id, s.title, s.isRunning] as const),
+		);
 		setKnownPrStates(
 			sessions.flatMap((session) => [
 				...(session.repo && session.prNumber

@@ -1,4 +1,5 @@
 import { repoLabel } from "../lib/repo-label";
+import { cleanSessionTitle } from "../lib/session-title";
 import { AGENT_NAME } from "../lib/brand";
 import React, { useEffect, useMemo, useState } from "react";
 import type { UnifiedSession, WSServerMessage } from "../lib/types";
@@ -88,11 +89,7 @@ function prNum(s: UnifiedSession): string | null {
 function cleanTitle(s: UnifiedSession): string {
   const t = s.prTitle?.trim();
   if (t) return t;
-  return (
-    (s.title || "")
-      .replace(/^(Review|Auto-fix|Mention|Simplify|Fix)\s*·\s*PR\s*#\d+\s*/i, "")
-      .trim() || s.title
-  );
+  return cleanSessionTitle(s.title || "") || s.title;
 }
 
 function stateMeta(s: UnifiedSession): { key: string; label: string } {

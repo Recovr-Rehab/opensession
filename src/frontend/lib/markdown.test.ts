@@ -99,7 +99,7 @@ describe("renderMarkdown session links", () => {
     expect(html).toContain(
       'data-session-id="bks-019f9608-ab20-7000-b98e-4de52d5fe436"',
     );
-    expect(html).toContain(">this session</a>");
+    expect(html).toContain('<span class="session-link-label">this session</span>');
     expect(html).not.toContain("target=");
   });
 
@@ -111,7 +111,7 @@ describe("renderMarkdown session links", () => {
       'data-session-id="bks-019f9608-ab20-7000-b98e-4de52d5fe436"',
     );
     // the ~90-char URL is the href, never the chip's (nowrap) label
-    expect(html).toContain(">bks-019f9608…</a>");
+    expect(html).toContain('<span class="session-link-label">bks-019f9608…</span>');
     expect(html).toContain(`href="${url}"`);
     expect(html).not.toContain(`>${url}</a>`);
   });
@@ -120,7 +120,7 @@ describe("renderMarkdown session links", () => {
     const html = renderMarkdown(
       "See [the worker](http://127.0.0.1:3850/session/bks-019f9608-ab20-7000-b98e-4de52d5fe436).",
     );
-    expect(html).toContain(">the worker</a>");
+    expect(html).toContain('<span class="session-link-label">the worker</span>');
   });
 
   it("keeps other internal OS1 links same-tab without a chip", () => {
@@ -143,7 +143,7 @@ describe("session chip labels", () => {
   it("labels a chip with the session's title once registered", () => {
     setSessionTitles([[id, "Fix the sidebar hover states"]]);
     const html = renderMarkdown(`Delegated to \`${id}\`.`);
-    expect(html).toContain(">Fix the sidebar hover states</a>");
+    expect(html).toContain('<span class="session-link-label">Fix the sidebar hover states</span>');
     expect(html).toContain(`data-session-id="${id}"`);
     // the full id stays reachable in the tooltip
     expect(html).toContain(`title="Open Fix the sidebar hover states (${id})"`);
@@ -152,7 +152,7 @@ describe("session chip labels", () => {
 
   it("falls back to a shortened id, marked for monospace", () => {
     const html = renderMarkdown(`Delegated to \`${id}\`.`);
-    expect(html).toContain(">bks-019f24b5…</a>");
+    expect(html).toContain('<span class="session-link-label">bks-019f24b5…</span>');
     expect(html).toContain('data-session-label="id"');
     expect(html).toContain(`title="Open session ${id}"`);
   });
@@ -161,12 +161,12 @@ describe("session chip labels", () => {
     const html = renderMarkdown(
       "Delegated to `os-019fd30a-785b-7000-ad89-9c2fb5b74a19`.",
     );
-    expect(html).toContain(">os-019fd30a…</a>");
+    expect(html).toContain('<span class="session-link-label">os-019fd30a…</span>');
   });
 
   it("keeps short legacy slug ids whole", () => {
     const html = renderMarkdown("Delegated to `bks-worker-two`.");
-    expect(html).toContain(">bks-worker-two</a>");
+    expect(html).toContain('<span class="session-link-label">bks-worker-two</span>');
   });
 
   it("truncates a long title", () => {
@@ -174,14 +174,37 @@ describe("session chip labels", () => {
       [id, "A very long session title that would eat the whole sentence"],
     ]);
     const html = renderMarkdown(`Delegated to \`${id}\`.`);
-    expect(html).toContain(">A very long session title that would…</a>");
+    expect(html).toContain('<span class="session-link-label">A very long session title that would…</span>');
   });
 
   it("re-labels already-rendered markdown when titles arrive", () => {
     const src = `Delegated to \`${id}\`.`;
-    expect(renderMarkdown(src)).toContain(">bks-019f24b5…</a>");
+    expect(renderMarkdown(src)).toContain('<span class="session-link-label">bks-019f24b5…</span>');
     setSessionTitles([[id, "Late title"]]);
-    expect(renderMarkdown(src)).toContain(">Late title</a>");
+    expect(renderMarkdown(src)).toContain('<span class="session-link-label">Late title</span>');
+  });
+
+  it("drops the automation prefix a session was named after", () => {
+    setSessionTitles([[id, "Simplify · PR #5517 Give floating surfaces a rounder corner"]]);
+    const html = renderMarkdown(`Delegated to \`${id}\`.`);
+    expect(html).toContain(
+      '<span class="session-link-label">Give floating surfaces a rounder corn…</span>',
+    );
+  });
+
+  it("carries the glyph, and swaps it for the dot while that session runs", () => {
+    setSessionTitles([[id, "Fix the sidebar hover states"]]);
+    const idle = renderMarkdown(`Delegated to \`${id}\`.`);
+    expect(idle).toContain('class="session-link-icon" aria-hidden="true"');
+    expect(idle).not.toContain("data-session-running");
+
+    setSessionTitles([[id, "Fix the sidebar hover states", true]]);
+    // A different sentence, so this is a fresh render rather than the cached
+    // one above: the running flag deliberately does not clear the cache, and
+    // already-rendered chips are corrected in the DOM instead.
+    const running = renderMarkdown(`Worker \`${id}\` is up.`);
+    expect(running).toContain("data-session-running");
+    expect(running).toContain("· running");
   });
 
   it("ignores blank titles and unrelated sessions", () => {
@@ -190,7 +213,7 @@ describe("session chip labels", () => {
       ["bks-someone-else", "Other"],
     ]);
     expect(renderMarkdown(`Delegated to \`${id}\`.`)).toContain(
-      ">bks-019f24b5…</a>",
+      '<span class="session-link-label">bks-019f24b5…</span>',
     );
   });
 });

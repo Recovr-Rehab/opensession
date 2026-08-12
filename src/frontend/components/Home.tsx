@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import type { Workspace, UnifiedSession } from "../lib/types";
 import { fetchHomeStats, fetchRecentPrs, type HomeStats, type RecentPr } from "../lib/api";
 import { prStatusMark, type PrStatusInput } from "../lib/pr-status";
+import { cleanSessionTitle } from "../lib/session-title";
 import { Button } from "../ui/button";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { useCurrentUser } from "./UserPicker";
@@ -67,14 +68,6 @@ interface WorktreeRow extends PrStatusInput {
   author?: string;
 }
 
-function cleanTitle(title: string): string {
-  return (
-    title
-      .replace(/^(Review|Auto-fix|Mention|Simplify|Fix)\s*·\s*PR\s*#\d+\s*/i, "")
-      .trim() || title
-  );
-}
-
 function worktreesForSession(session: UnifiedSession): WorktreeRow[] {
   if (session.desk) return [];
 
@@ -86,7 +79,7 @@ function worktreesForSession(session: UnifiedSession): WorktreeRow[] {
         return {
           key: pr.url || `${pr.repo}:${pr.branch}`,
           session,
-          title: cleanTitle(pr.title || (primary ? session.prTitle : "") || session.title),
+          title: cleanSessionTitle(pr.title || (primary ? session.prTitle : "") || session.title),
           repo: pr.repo,
           branch: pr.branch,
           url: pr.url,
@@ -113,7 +106,7 @@ function worktreesForSession(session: UnifiedSession): WorktreeRow[] {
     {
       key: session.prUrl,
       session,
-      title: cleanTitle(session.prTitle || session.title),
+      title: cleanSessionTitle(session.prTitle || session.title),
       repo: session.repo || "repository",
       branch: session.branch || "",
       url: session.prUrl,

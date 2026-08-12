@@ -1502,51 +1502,93 @@ a.asset-ref:focus-visible {
 
 /* A session reference rendered by markdown.ts as a clickable link into that
    session (e.g. an orchestrator jumping into the worker it spawned). Labelled
-   with the session's title where we know it, so it reads as prose: a quiet
-   outlined chip in the running text colour, with a dim open-in affordance.
-   Deliberately not accent-coloured — a cross-reference is a destination, not
-   an alert, and the accent chip read as an error inside a sentence. Scoped on
+   with the session's title where we know it, and built from the same parts as
+   the PR chip below: a quiet wash, a glyph naming what opens, and room around
+   the label. Deliberately not accent-coloured: a cross-reference is a
+   destination, not an alert, and the accent chip read as an error inside a
+   sentence. The outlined, near-padless earlier form read as a stray border
+   rather than an object you can click. Scoped on
    the chip's data-session-id attribute: bare .session-link is ALSO the viewer
    header's Linear/Plain pills (which carry their own literal ↗), and an
    unscoped rule here clobbered them into mono accent chips with a second
    arrow. */
 .session-link[data-session-id] {
-	font-size: 0.9em;
-	background: transparent;
-	border: 1px solid var(--border);
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	vertical-align: -0.2em;
+	/* Never wider than the bubble it sits in; the label ellipsizes instead of
+	   pushing the chip past the edge. */
+	max-width: 100%;
+	font-size: 0.95em;
+	background: var(--hover);
+	border: 0;
 	color: var(--text);
 	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
-	padding: 0.5px 6px;
+	padding: 2px 8px 2px 6px;
+	line-height: 1.3;
 	cursor: pointer;
 	text-decoration: none;
 	white-space: nowrap;
 	transition:
 		background var(--dur-micro) var(--ease),
-		border-color var(--dur-micro) var(--ease);
-}
-.session-link[data-session-id]::after {
-	content: " ↗";
-	color: var(--text-faint);
+		scale var(--dur-micro) var(--ease);
 }
 .session-link[data-session-id]:hover {
-	background: var(--hover);
-	border-color: var(--border-strong);
-	/* the chip lights up instead — .markdown a:hover would underline it, which
-	   reads as a text link striking through the chip's own border */
+	background: var(--hover-strong);
+	/* the chip lights up instead: .markdown a:hover would underline it, which
+	   reads as a text link striking through the chip's own fill */
 	text-decoration: none;
 }
-/* A chip can still outgrow a phone-width message bubble (a long title, or a
-   `bks-<uuid>` fallback), where the nowrap above pushed it past the bubble's
-   edge. Let it fold there; box-decoration-break keeps each fragment a proper
-   chip. Wider viewports keep nowrap — with room to spare, a label splitting
-   across lines reads worse than moving the whole chip down a line. */
-@media (max-width: 560px) {
-	.session-link[data-session-id] {
-		white-space: normal;
-		overflow-wrap: anywhere;
-		-webkit-box-decoration-break: clone;
-		box-decoration-break: clone;
-	}
+.session-link[data-session-id]:active {
+	background: var(--hover-strong);
+	scale: 0.96;
+}
+.session-link[data-session-id]:focus-visible {
+	outline: 2px solid var(--accent-ink);
+	outline-offset: 2px;
+}
+.session-link-icon {
+	display: inline-grid;
+	width: 15px;
+	height: 15px;
+	flex: none;
+	place-items: center;
+	color: var(--text-dim);
+	transform: translateY(-0.5px);
+}
+.session-link-icon svg {
+	width: 15px;
+	height: 15px;
+	stroke: currentColor;
+	stroke-width: 1.5;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+.session-link-label {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+/* No title yet (archived, not polled): the label is a raw id, and mono is what
+   makes it read as one rather than as a mangled sentence. */
+.session-link[data-session-label="id"] .session-link-label {
+	font-family: var(--mono);
+	font-size: 0.95em;
+}
+/* That session's agent is mid-run. The glyph becomes the same yellow dot the
+   sidebar uses for a live run, so the chip answers "is it still going?"
+   before you click. Static here: a dot breathing inside a paragraph pulls the
+   eye off the sentence. */
+.session-link[data-session-running] .session-link-icon svg {
+	display: none;
+}
+.session-link[data-session-running] .session-link-icon::before {
+	content: "";
+	width: 7px;
+	height: 7px;
+	border-radius: 999px;
+	background: var(--yellow);
 }
 
 /* A pull-request reference (`#5528` or an explicit GitHub PR link) linked into

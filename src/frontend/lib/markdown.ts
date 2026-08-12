@@ -3,6 +3,7 @@ import { BASE_PATH } from "./base";
 import { PUBLIC_BASE_URL } from "./brand";
 import { prStatusMark, type PrStatusInput } from "./pr-status";
 import { repoLabel } from "./repo-label";
+import { cleanSessionTitle } from "./session-title";
 import { sessionAssetRawUrl } from "./api/sessions";
 
 // Dedicated marked instance for session messages so this config doesn't leak
@@ -200,18 +201,32 @@ const SESSION_ID_BARE = new RegExp(`(?:os|bks)-${UUIDV7}`, "i");
 // The app shell registers the titles it already polls (App.tsx); anything not in
 // that list — archived, deleted, not yet polled — falls back to a shortened id.
 let sessionTitles = new Map<string, string>();
+/** Sessions whose agent is mid-run, for the chip's live dot. */
+let runningSessions = new Set<string>();
 const SESSION_TITLE_MAX = 38;
 const SESSION_ID_SHORT = 12; // `os-019fb3ad2` / `bks-019fb3ad`
 
-/** Register id → title for session chips. Cheap no-op when nothing changed. */
+/**
+ * Register id → title (and whether that session is running) for session
+ * chips. Cheap no-op when no title changed; the running set never clears the
+ * cache, because a run starting somewhere else is not a reason to re-render
+ * every transcript. Rendered chips pick it up through the DOM sync below.
+ */
 export function setSessionTitles(
-  entries: Iterable<readonly [string, string | null | undefined]>,
+  entries: Iterable<readonly [string, string | null | undefined, boolean?]>,
 ): void {
   const next = new Map<string, string>();
-  for (const [id, title] of entries) {
+  const running = new Set<string>();
+  for (const [id, title, isRunning] of entries) {
     const t = String(title ?? "").trim();
-    if (id && t) next.set(id, t);
+    if (id && t) next.set(id, cleanSessionTitle(t));
+    if (id && isRunning) running.add(id);
   }
+  runningSessions = running;
+  // Unconditional: a chip rendered from the markdown cache carries whatever
+  // was true when it was cached, and this is what corrects it. One
+  // querySelectorAll over a handful of anchors, once per session poll.
+  syncRenderedSessionRuns();
   if (next.size === sessionTitles.size) {
     let same = true;
     for (const [id, t] of next) {
@@ -227,6 +242,19 @@ export function setSessionTitles(
   mdCache.clear();
 }
 
+/** Keep already-rendered session chips in step with who is running now. */
+function syncRenderedSessionRuns(): void {
+  if (typeof document === "undefined") return;
+  for (const anchor of document.querySelectorAll<HTMLAnchorElement>(
+    "a.session-link[data-session-id]",
+  )) {
+    const id = anchor.dataset.sessionId;
+    if (!id) continue;
+    if (runningSessions.has(id)) anchor.dataset.sessionRunning = "";
+    else delete anchor.dataset.sessionRunning;
+  }
+}
+
 function shortSessionId(id: string): string {
   // Legacy `bks-<slug>` ids are already short and cutting them mid-word reads
   // worse than showing the whole thing; only uuid-shaped ids get abbreviated.
@@ -235,6 +263,43 @@ function shortSessionId(id: string): string {
   return id.length <= 20
     ? id
     : `${id.slice(0, SESSION_ID_SHORT).replace(/-+$/, "")}…`;
+}
+
+// The chip's leading glyph: a conversation, because that is what opens when
+// you click it. Same 24-grid, 1.5 stroke and 15px box as the PR chip's branch
+// glyph, so the two chips sit on one line without either looking heavier.
+const SESSION_CHIP_ICON =
+  `<span class="session-link-icon" aria-hidden="true">` +
+  `<svg viewBox="0 0 24 24" fill="none"><path d="M6.75 5.25H17.25C18.3546 5.25` +
+  ` 19.25 6.14543 19.25 7.25V14.25C19.25 15.3546 18.3546 16.25 17.25 16.25H11.25` +
+  `L7.25 19.25V16.25H6.75C5.64543 16.25 4.75 15.3546 4.75 14.25V7.25C4.75 6.14543` +
+  ` 5.64543 5.25 6.75 5.25Z"/></svg></span>`;
+
+/**
+ * The chip markup shared by both ways a session reference is written: a bare
+ * id or pasted URL (labelled from the title here) and an explicit
+ * `[label](url)`, which keeps the author's own words. `label` is HTML.
+ */
+function sessionChip(
+  id: string,
+  label: string,
+  opts: { href?: string; tip?: string; idLabel?: boolean },
+): string {
+  // With an href it's a real link (cmd/middle-click open a tab); without one
+  // the delegated click handler is the only way in, so it needs the button role
+  // and a tab stop.
+  const anchor = opts.href
+    ? `href="${attr(opts.href)}" `
+    : `role="button" tabindex="0" `;
+  return (
+    `<a ${anchor}class="session-link" data-session-id="${attr(id)}"` +
+    `${opts.idLabel ? ' data-session-label="id"' : ""}` +
+    // Baked from the current set so a fresh chip is right on first paint;
+    // syncRenderedSessionRuns corrects it from then on.
+    `${runningSessions.has(id) ? " data-session-running" : ""}` +
+    `${opts.tip ? ` title="${attr(opts.tip)}"` : ""}>` +
+    `${SESSION_CHIP_ICON}<span class="session-link-label">${label}</span></a>`
+  );
 }
 
 function sessionLink(id: string, href?: string): string {
@@ -247,18 +312,14 @@ function sessionLink(id: string, href?: string): string {
   // The label is lossy either way (truncated title, abbreviated id), so the
   // full id always stays in the tooltip. data-session-label marks the id
   // fallback for the monospace treatment.
-  const tip = title ? `Open ${title} (${id})` : `Open session ${id}`;
-  // With an href it's a real link (cmd/middle-click open a tab); without one
-  // the delegated click handler is the only way in, so it needs the button role
-  // and a tab stop.
-  const anchor = href
-    ? `href="${attr(href)}" `
-    : `role="button" tabindex="0" `;
-  return (
-    `<a ${anchor}class="session-link" data-session-id="${attr(id)}"` +
-    `${title ? "" : ' data-session-label="id"'} title="${attr(tip)}">` +
-    `${attr(label)}</a>`
-  );
+  return sessionChip(id, attr(label), { href, tip: sessionTip(id), idLabel: !title });
+}
+
+/** What the chip promises: which session opens, and whether it is working. */
+function sessionTip(id: string): string {
+  const title = sessionTitles.get(id);
+  const running = runningSessions.has(id) ? " · running" : "";
+  return title ? `Open ${title} (${id})${running}` : `Open session ${id}${running}`;
 }
 
 // Agents write pull requests the GitHub way — a bare `#5528`, sometimes
@@ -641,10 +702,12 @@ md.use({
         // chip + data-session-id so the delegated handler (SessionViewer)
         // navigates client-side; href stays for middle/cmd-click and for
         // surfaces without the handler (full-page load, same tab).
-        const chip = internal.sessionId
-          ? ` class="session-link" data-session-id="${attr(internal.sessionId)}"`
-          : "";
-        return `<a href="${attr(token.href)}"${title}${chip}>${text}</a>`;
+        if (internal.sessionId)
+          return sessionChip(internal.sessionId, text, {
+            href: token.href,
+            tip: token.title || sessionTip(internal.sessionId),
+          });
+        return `<a href="${attr(token.href)}"${title}>${text}</a>`;
       }
       return `<a href="${attr(token.href)}"${title} target="_blank" rel="noopener noreferrer">${text}</a>`;
     },
