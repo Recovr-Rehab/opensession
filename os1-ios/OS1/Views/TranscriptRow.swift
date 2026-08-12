@@ -351,24 +351,17 @@ struct NoticeRow: View {
         notice.showsBodyInline || (notice.isCollapsible && state.expanded)
     }
 
-    /// An info notice carrying a body — a recap, an expanded worker report —
-    /// is prose you read, not a status pill, so it drops the card entirely and
-    /// sits on the transcript's own rail: its text lines up with the message
-    /// above it instead of being indented inside a container. The card's fill
-    /// was invisible here anyway (`panel` is pure white on a white page in
-    /// light mode), so the indent was the only thing left of it. Warn and
-    /// error keep their card in every form — there the tint IS the signal.
-    private var isProse: Bool {
-        tone == .info && showsBody && !entry.text.isEmpty
-    }
+    /// Matches the web transcript: passive and warning notices are centered
+    /// directly on the transcript. Only an error earns a tinted surface.
+    private var hasBackground: Bool { tone == .error }
 
     var body: some View {
         content
-            .padding(.horizontal, isProse ? 0 : 12)
+            .padding(.horizontal, hasBackground ? 12 : 0)
         .padding(.vertical, 7)
         .frame(maxWidth: 520)
         .background(
-            isProse ? Color.clear : tone.background,
+            hasBackground ? tone.background : Color.clear,
             in: RoundedRectangle(cornerRadius: 12, style: .continuous)
         )
         .frame(maxWidth: .infinity)
@@ -403,7 +396,7 @@ struct NoticeRow: View {
                         Image(systemName: symbol)
                             .font(.caption2)
                     }
-                    // The title is one line and stays one line — the body
+                    // The title is one line and stays one line. The body
                     // below is where the detail lives, which is what kept a
                     // folded notice from printing its whole text twice.
                     Text(notice.title)
@@ -415,7 +408,7 @@ struct NoticeRow: View {
                 }
                 .font(.footnote)
                 .foregroundStyle(tone.color)
-                .multilineTextAlignment(notice.isCollapsible ? .leading : .center)
+                .multilineTextAlignment(.center)
 
                 if showsBody, !entry.text.isEmpty {
                     // `notice.link` (e.g. "Open worker") is deliberately not
