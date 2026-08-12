@@ -2925,6 +2925,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					onClick={() => toggleGroup(gkey)}
 				>
 					<span className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_LANE_NAME)}>Snoozed</span>
+					<span className={SIDEBAR_LANE_COUNT}>{rows.length}</span>
 					{!open && (
 						<IconChevronDown
 							className={cn(SIDEBAR_GROUP_CHEVRON, SIDEBAR_GROUP_CHEVRON_COLLAPSED)}
@@ -2932,7 +2933,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							style={{ transform: "rotate(-90deg)" }}
 						/>
 					)}
-					<span className={SIDEBAR_LANE_COUNT}>{rows.length}</span>
 				</button>
 				{rows
 					.filter((r) => open || rowOwnsSelection(r))
@@ -2998,6 +2998,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						onClick={() => toggleGroup(gkey)}
 					>
 						<span className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_LANE_NAME)}>{meta.label}</span>
+						<span className={SIDEBAR_LANE_COUNT}>{items.length + prs.length}</span>
 						{!open && (
 							<IconChevronDown
 								className={cn(SIDEBAR_GROUP_CHEVRON, SIDEBAR_GROUP_CHEVRON_COLLAPSED)}
@@ -3005,7 +3006,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								style={{ transform: "rotate(-90deg)" }}
 							/>
 						)}
-						<span className={SIDEBAR_LANE_COUNT}>{items.length + prs.length}</span>
 					</button>
 					{items
 						.filter((r) => open || rowOwnsSelection(r))
@@ -3116,6 +3116,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							<span className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_LANE_NAME)}>
 								{b.label}
 							</span>
+							<span className={SIDEBAR_LANE_COUNT}>
+								{b.rows.length + b.prs.length}
+							</span>
 							{!open && (
 								<IconChevronDown
 									className={cn(SIDEBAR_GROUP_CHEVRON, SIDEBAR_GROUP_CHEVRON_COLLAPSED)}
@@ -3123,9 +3126,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									style={{ transform: "rotate(-90deg)" }}
 								/>
 							)}
-							<span className={SIDEBAR_LANE_COUNT}>
-								{b.rows.length + b.prs.length}
-							</span>
 						</button>
 						{b.rows
 							.filter((r) => open || rowOwnsSelection(r))
