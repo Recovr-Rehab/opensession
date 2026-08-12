@@ -475,8 +475,6 @@ function FileRow({
 				onClick={() => onOpenTab?.("changes")}
 				aria-label={`${file.path} — ${mark.label.toLowerCase()} — open in Changes`}
 			>
-				{path}
-				{stats}
 				<span
 					className={cn(
 						// An even box around an even dot: 15px left half-pixels on
@@ -490,6 +488,8 @@ function FileRow({
 				>
 					{mark.glyph}
 				</span>
+				{path}
+				{stats}
 			</Popover.Trigger>
 			{meta && (
 				<Popover.Popup
