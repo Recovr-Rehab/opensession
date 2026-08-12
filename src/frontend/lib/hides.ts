@@ -71,6 +71,21 @@ export function getHides(): Record<string, string> {
 	return cache;
 }
 
+export function isHiddenForSession(
+	session: {
+		id: string;
+		workspaceId?: string | null;
+		worktreeDir?: string | null;
+	},
+	hides = cache,
+): boolean {
+	return [
+		session.id,
+		...(session.workspaceId ? [`workspace:${session.workspaceId}`] : []),
+		...(session.worktreeDir ? [`wt:${session.worktreeDir}`] : []),
+	].some((key) => key in hides);
+}
+
 export function setHide(key: string): void {
 	if (key in cache) return;
 	cache = { ...cache, [key]: new Date().toISOString() };

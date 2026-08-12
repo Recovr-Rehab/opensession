@@ -96,7 +96,11 @@ import { UsageMeter } from "./UsageMeter";
 import { SchedulePromptButton } from "./SchedulePrompt";
 import { readFileAsDataUrl, type FileAttachment } from "../lib/images";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
-import { unhideForSession } from "../lib/hides";
+import {
+	isHiddenForSession,
+	onHidesChanged,
+	unhideForSession,
+} from "../lib/hides";
 import {
 	promptOutbox,
 	type PromptOutboxItem,
@@ -214,6 +218,7 @@ import { copySessionTranscript } from "../lib/transcript-copy";
 import { MoveToCloudDialog } from "./MoveToCloudDialog";
 import { isPinned, togglePin, onPinsChanged } from "../lib/pins";
 import { getLane, onLanesChanged, type Lane } from "../lib/lanes";
+import { ownedBy } from "../lib/sidebar-lanes";
 import { useSessionScroll } from "../hooks/useSessionScroll";
 import { sessionHasWorkspace } from "../lib/session-workspace";
 import { isApple, isChromium } from "../lib/platform";
@@ -1718,6 +1723,7 @@ export function SessionViewer({
 
 	// Keep the pin star in sync with the store (changes can come from the tab bar
 	// or the Home screen) and reset when switching sessions.
+	const currentUser = useCurrentUser();
 	useEffect(() => setPinned(isPinned(session.id)), [session.id]);
 	useEffect(
 		() => onPinsChanged(() => setPinned(isPinned(session.id))),
@@ -1738,6 +1744,25 @@ export function SessionViewer({
 		return onLanesChanged(read);
 	}, [claimIds]);
 	const claimed = claimedLane || claimedGlobally;
+	const hiddenFromSidebar = useSyncExternalStore(
+		onHidesChanged,
+		() => isHiddenForSession(session),
+		() => false,
+	);
+	// A linked session can be open without belonging to your sidebar: teammate
+	// work, automation runs and agent-spawned probes all stay out until claimed.
+	// A normal session you started (or a workspace with one) is already yours.
+	const naturallyInSidebar = claimSessions.some(
+		(c) => !c.spawnedBy && !c.automation && ownedBy(c, currentUser),
+	);
+	const canAddToSidebar =
+		!session.archived &&
+		!!onSetStatus &&
+		(hiddenFromSidebar || (!claimed && !naturallyInSidebar));
+	function addToSidebar() {
+		unhideForSession(session);
+		if (!claimed && !naturallyInSidebar) onSetStatus?.(claimSessions, "mine");
+	}
 	useEffect(() => {
 		function onKeyDown(e: KeyboardEvent) {
 			if (
@@ -3110,7 +3135,6 @@ export function SessionViewer({
 		setShowAllContextSessions(false);
 	}, [session.id]);
 
-	const currentUser = useCurrentUser();
 	// Whose Desk this is. Every Desk is titled "Desk" and carries no repo, so
 	// the owner is the only thing that tells one apart from another — see the
 	// mobile title pill's leading slot.
@@ -4296,6 +4320,24 @@ export function SessionViewer({
 				</div>
 			)}
 			{!hideHeader && (() => {
+				const addToSidebarAction = (inMenu: boolean) =>
+					canAddToSidebar &&
+					(inMenu ? (
+						<Menu.Item onClick={addToSidebar} title="Keep this workspace in your sidebar">
+							<IconInbox size={20} />
+							<span className="grow">Add to sidebar</span>
+						</Menu.Item>
+					) : (
+						<Button
+							size="md"
+							variant="default"
+							icon={<IconInbox size={20} />}
+							onClick={addToSidebar}
+							title="Keep this workspace in your sidebar"
+						>
+							Add to sidebar
+						</Button>
+					));
 				// Share rides inline on a wide header but tucks into the ⋯ overflow
 				// menu when it gets narrow. Both spellings use the link glyph, since
 				// the action copies a link rather than opening a share sheet. Inline
@@ -4392,7 +4434,7 @@ export function SessionViewer({
 						    reading the session (an automation run, a teammate's workspace)
 						    and want it in your own list. Per-user: it moves nothing for
 						    anyone else. */}
-						{onSetStatus && (
+						{onSetStatus && !canAddToSidebar && (
 							<Menu.Item
 								onClick={() => {
 									setOverflowOpen(false);
@@ -4731,6 +4773,7 @@ export function SessionViewer({
 				</div>
 				<div className={VIEWER_HEADER_ACTIONS} ref={headerActionsRef}>
 					{!isPhone && secondaryActions(false)}
+					{!isPhone && addToSidebarAction(false)}
 					{/* Whoever ELSE has the session open, right before Share. Your
 					    own face used to sit here too, which meant every session
 					    you opened showed a face permanently — the one thing a
@@ -4792,6 +4835,7 @@ export function SessionViewer({
 							>
 								{/* Quick session actions use the same focus, spacing, collision,
 								    and dismissal behavior as every other app menu. */}
+								{isPhone && addToSidebarAction(true)}
 								{isPhone && secondaryActions(true)}
 								{(compactHeader || isPhone) && shareAction(true)}
 								{newSessionAction}

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { partitionHidden } from "./hides";
+import { isHiddenForSession, partitionHidden } from "./hides";
 
 const row = (key: string, status: string) => ({ key, status });
 
@@ -58,5 +58,25 @@ describe("partitionHidden", () => {
 		});
 		expect(hiddenKeys.size).toBe(0);
 		expect(resurfaced).toEqual([]);
+	});
+});
+
+describe("isHiddenForSession", () => {
+	test("matches the workspace row that hides a linked session", () => {
+		expect(
+			isHiddenForSession(
+				{ id: "session-a", workspaceId: "linked" },
+				{ "workspace:linked": "2026-08-12T10:00:00.000Z" },
+			),
+		).toBe(true);
+	});
+
+	test("does not match an unrelated row hide", () => {
+		expect(
+			isHiddenForSession(
+				{ id: "session-a", workspaceId: "linked" },
+				{ "workspace:other": "2026-08-12T10:00:00.000Z" },
+			),
+		).toBe(false);
 	});
 });
