@@ -253,7 +253,7 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, sk
   }
 
   const popup = open && pos ? createPortal(
-    <div className="fixed z-[10500] max-h-60 overflow-y-auto rounded-xl border border-line bg-popup-glass [backdrop-filter:var(--popup-blur)] p-1 smooth-shadow-md" role="listbox" style={pos}>
+    <div className="fixed z-[10500] max-h-60 overflow-y-auto rounded-xl bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] p-1 smooth-shadow-ring-md" role="listbox" style={pos}>
       {suggestions.map((item, i) => {
         const isSession = item.kind === "session";
         const isSkill = item.kind === "skill";

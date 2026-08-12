@@ -5,6 +5,7 @@ import { snoozePresets } from "../../lib/snoozes";
 import { IconCheck, IconChevronRight, IconMoon, IconStatusRing } from "../icons";
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { MenuShortcut } from "../../ui/menu";
 
 function CtxItem({
 	icon,
@@ -52,18 +53,7 @@ function CtxItem({
 			<span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis" }}>
 				{label}
 			</span>
-			{shortcut && (
-				<span
-					style={{
-						color: "var(--text-faint)",
-						fontSize: 13,
-						flexShrink: 0,
-						marginLeft: 12,
-					}}
-				>
-					{shortcut}
-				</span>
-			)}
+			{shortcut && <MenuShortcut>{shortcut}</MenuShortcut>}
 			{trailing}
 		</button>
 	);
@@ -119,7 +109,7 @@ export function SidebarCtxMenu({
 	return createPortal(
 		<>
 			<div
-				className="smooth-shadow-md [corner-shape:squircle] [&_button:not(.tab-color-swatch):hover]:bg-hover!"
+				className="smooth-shadow-ring-md [--smooth-ring-color:var(--popup-ring)] [corner-shape:squircle] [&_button:not(.tab-color-swatch):hover]:bg-hover!"
 				style={{ ...CTX_MENU_STYLE, left: x, top: y }}
 				onClick={(e) => e.stopPropagation()}
 			>
@@ -236,7 +226,7 @@ export function SidebarCtxMenu({
 			</div>
 			{sub?.kind === "status" && statusEntry && (
 				<div
-					className="smooth-shadow-md [corner-shape:squircle] [&_button:not(.tab-color-swatch):hover]:bg-hover!"
+					className="smooth-shadow-ring-md [--smooth-ring-color:var(--popup-ring)] [corner-shape:squircle] [&_button:not(.tab-color-swatch):hover]:bg-hover!"
 					style={{
 						...CTX_MENU_STYLE,
 						left: subLeft,
@@ -275,7 +265,7 @@ export function SidebarCtxMenu({
 			)}
 			{sub?.kind === "snooze" && snoozeEntry && (
 				<div
-					className="smooth-shadow-md [corner-shape:squircle] [&_button:not(.tab-color-swatch):hover]:bg-hover!"
+					className="smooth-shadow-ring-md [--smooth-ring-color:var(--popup-ring)] [corner-shape:squircle] [&_button:not(.tab-color-swatch):hover]:bg-hover!"
 					style={{
 						...CTX_MENU_STYLE,
 						left: subLeft,

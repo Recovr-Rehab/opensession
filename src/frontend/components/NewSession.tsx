@@ -143,7 +143,7 @@ const CREATE_CARET =
 	"inline-flex cursor-pointer items-center gap-[7px] rounded-r-control border-none bg-accent p-[7px] text-label font-semibold text-on-accent shadow-[inset_1px_0_0_rgba(0,0,0,0.14)] transition-[background-color,opacity] enabled:hover:bg-accent-hover phone:hidden";
 const CREATE_KBD = "opacity-70";
 const CREATE_MENU =
-	"absolute bottom-[calc(100%+6px)] right-0 z-20 min-w-[208px] rounded-control border border-line bg-popup-glass [backdrop-filter:var(--popup-blur)] p-[5px] smooth-shadow-md";
+	"absolute bottom-[calc(100%+6px)] right-0 z-20 min-w-[208px] rounded-control bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] p-[5px] smooth-shadow-ring-md";
 const CREATE_MENU_ITEM =
 	"flex w-full cursor-pointer items-start gap-[9px] rounded-md border-none bg-transparent px-[9px] py-[7px] text-left text-fg transition-colors hover:bg-hover";
 

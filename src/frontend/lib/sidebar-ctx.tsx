@@ -17,8 +17,10 @@ export const CTX_MENU_STYLE: React.CSSProperties = {
 	padding: 4,
 	background: "var(--popup-glass)",
 	backdropFilter: "var(--popup-blur)",
-	border: "1px solid var(--border-strong)",
-	borderRadius: 14,
+	// No border: the edge is the shared popup ring, carried by the
+	// `smooth-shadow-ring-md` class its hosts put on the same element. A
+	// `--border-strong` hairline is a step darker than every other menu.
+	borderRadius: "var(--radius-popup)",
 	display: "flex",
 	flexDirection: "column",
 	gap: 1,
@@ -40,7 +42,9 @@ export const CTX_ITEM_STYLE: React.CSSProperties = {
 };
 export const CTX_SEP_STYLE: React.CSSProperties = {
 	height: 1,
-	background: "var(--border-strong)",
+	// `--border`, like ui/menu's Separator (bg-line): inside a popup this is a
+	// divider between rows, not the box's own edge.
+	background: "var(--border)",
 	margin: "4px 3px",
 };
 
