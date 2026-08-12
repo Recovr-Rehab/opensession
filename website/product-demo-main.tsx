@@ -459,7 +459,7 @@ localStorage.setItem("opensession-last-session", activeSessionId);
 localStorage.setItem("opensession-panel-open", "false");
 localStorage.setItem("opensession-panel-tab", "workflows");
 localStorage.setItem("opensession-sidebar-collapsed", "0");
-localStorage.setItem("opensession-sidebar-w", "200");
+localStorage.setItem("opensession-sidebar-w", "232");
 localStorage.setItem(
 	"opensession-sidebar-hidden-tools",
 	JSON.stringify([
