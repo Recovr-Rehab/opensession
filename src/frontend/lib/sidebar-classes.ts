@@ -276,7 +276,7 @@ export const SIDEBAR_STICKY_BAND_ROW =
  */
 export const SIDEBAR_STICKY_LANE =
 	"desktop:sticky desktop:top-[44px] desktop:z-[15] desktop:h-[30px] desktop:min-h-[30px] " +
-	"desktop:[&.is-stuck::after]:pointer-events-none desktop:[&.is-stuck::after]:absolute desktop:[&.is-stuck::after]:top-full desktop:[&.is-stuck::after]:left-[-400px] desktop:[&.is-stuck::after]:right-[-400px] desktop:[&.is-stuck::after]:z-[-1] desktop:[&.is-stuck::after]:h-3 desktop:[&.is-stuck::after]:content-[''] desktop:[&.is-stuck::after]:[background:linear-gradient(to_bottom,var(--sidebar-material),transparent),linear-gradient(to_bottom,var(--bg-raised),transparent)]";
+	"desktop:[&.is-stuck::after]:pointer-events-none desktop:[&.is-stuck::after]:absolute desktop:[&.is-stuck::after]:top-[calc(100%-8px)] desktop:[&.is-stuck::after]:left-[-400px] desktop:[&.is-stuck::after]:right-[-400px] desktop:[&.is-stuck::after]:z-[-1] desktop:[&.is-stuck::after]:h-5 desktop:[&.is-stuck::after]:content-[''] desktop:[&.is-stuck::after]:[background:linear-gradient(to_bottom,var(--sidebar-material),transparent),linear-gradient(to_bottom,var(--bg-raised),transparent)]";
 
 /**
  * A status lane nested inside a repo band sits one row lower again — its repo
