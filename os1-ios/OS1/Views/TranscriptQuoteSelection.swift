@@ -39,6 +39,7 @@ final class TranscriptQuoteSelection {
     }
 
     func clear() {
+        collapseNativeSelection()
         removeRetainedHighlight()
         text = nil
     }
@@ -165,6 +166,21 @@ final class TranscriptQuoteSelection {
             )
             restoreBackgroundAttributes(in: storage, range: range)
         }
+        #endif
+    }
+
+    private func collapseNativeSelection() {
+        guard let sourceTextView,
+              sourceRange.location != NSNotFound,
+              sourceRange.length > 0
+        else { return }
+        #if os(iOS)
+        let end = min(NSMaxRange(sourceRange), sourceTextView.attributedText.length)
+        sourceTextView.selectedRange = NSRange(location: end, length: 0)
+        #else
+        guard let storage = sourceTextView.textStorage else { return }
+        let end = min(NSMaxRange(sourceRange), storage.length)
+        sourceTextView.setSelectedRange(NSRange(location: end, length: 0))
         #endif
     }
 
