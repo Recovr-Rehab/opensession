@@ -13,6 +13,36 @@ import { Button } from "../ui/button";
 const mediaUrl = (path: string) => `/media?path=${encodeURIComponent(path)}`;
 
 /**
+ * Is the top-left corner of this picture, the part a Before/After label covers,
+ * a dark one? Sampled from the pixels rather than from the app theme: the label
+ * has to contrast with the screenshot under it, and a card routinely shows a
+ * light shot beside a dark one. The media is same-origin, so the canvas stays
+ * readable; anything unexpected returns null and the label keeps its default.
+ */
+function cornerIsDark(img: HTMLImageElement): boolean | null {
+	const { naturalWidth: w, naturalHeight: h } = img;
+	if (!w || !h) return null;
+	try {
+		const canvas = document.createElement("canvas");
+		canvas.width = 12;
+		canvas.height = 6;
+		const ctx = canvas.getContext("2d");
+		if (!ctx) return null;
+		// A band rather than a point: the label's own corner can land on one
+		// dark control in an otherwise pale header, and the average is what it
+		// sits on. 40% x 12% is roughly the label at every tile size.
+		ctx.drawImage(img, 0, 0, w * 0.4, h * 0.12, 0, 0, 12, 6);
+		const { data } = ctx.getImageData(0, 0, 12, 6);
+		let total = 0;
+		for (let i = 0; i < data.length; i += 4)
+			total += 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+		return total / (data.length / 4) < 140;
+	} catch {
+		return null;
+	}
+}
+
+/**
  * The agent-published walkthrough (opensession-walkthrough): demo video +
  * before/after screenshot pairs + writeup. Rendered at the top of the PR info
  * column in the Review tab (`panel`), and inline in the session where the agent
@@ -41,6 +71,27 @@ export function WalkthroughCard({
 	// too much of (see tileBox). Learned on load; media the tile already suits
 	// never lands here, so it never re-renders.
 	const [ownRatio, setOwnRatio] = useState<Record<string, number>>({});
+	// Which colourway each label takes. Filled red and green are what make a
+	// pair readable at a glance, but only while the fill contrasts with what is
+	// under it: the deep red disappears into a dark screenshot and the bright
+	// one glares on a white one. So the label collides with the PICTURE instead
+	// of following the app theme, decided once per image when it loads.
+	const [darkShot, setDarkShot] = useState<Record<string, boolean>>({});
+	const noteCorner = (key: string, img: HTMLImageElement) => {
+		const dark = cornerIsDark(img);
+		if (dark === null) return;
+		setDarkShot((prev) => (prev[key] === dark ? prev : { ...prev, [key]: dark }));
+	};
+	const labelClass = (key: string, side: "before" | "after") => {
+		const dark = darkShot[key];
+		if (side === "before")
+			return dark
+				? "bg-shot-red-bright text-shot-red-ink"
+				: "bg-shot-red-deep text-white";
+		return dark
+			? "bg-shot-green-bright text-shot-green-ink"
+			: "bg-shot-green-deep text-white";
+	};
 	const repo = useMarkdownRepo();
 	const summaryHtml = useMemo(
 		() => renderMarkdown(walkthrough.summary, { repo }),
@@ -352,27 +403,24 @@ export function WalkthroughCard({
 														src={mediaUrl(shot[side]!)}
 														alt={`${shot.caption || "Change"} · ${side}`}
 														loading="lazy"
-														onLoad={(event) =>
+														onLoad={(event) => {
 															noteRatio(
 																`${i}:${side}`,
 																event.currentTarget.naturalWidth,
 																event.currentTarget.naturalHeight,
-															)
-														}
+															);
+															noteCorner(`${i}:${side}`, event.currentTarget);
+														}}
 															/>
-															{/* The label sits ON the picture, so it carries
-															    its own surface: a tinted wash let a white
-															    screenshot through and left green text on
-															    near-white. Frosted glass reads over any
-															    screenshot, in either theme, and the dot keeps
-															    before and after apart at a glance. */}
-															<span className="pointer-events-none absolute left-2 top-2 inline-flex items-center gap-1.5 rounded-full bg-popup-glass py-0.5 pl-1.5 pr-2 text-[11px] font-semibold leading-4 text-fg [--smooth-ring-color:var(--popup-ring)] [backdrop-filter:var(--popup-blur)] smooth-shadow-ring-sm">
-																<span
-																	className={cn(
-																		"size-1.5 rounded-full",
-																		side === "before" ? "bg-red" : "bg-green",
-																	)}
-																/>
+															{/* Filled, so which of the two it is registers
+															    before the word is read. Which fill, see
+															    labelClass. */}
+															<span
+																className={cn(
+																	"pointer-events-none absolute left-2 top-2 rounded-full px-2 py-0.5 text-[11px] font-semibold leading-4 shadow-[0_1px_2px_oklch(0_0_0_/_0.12)]",
+																	labelClass(`${i}:${side}`, side),
+																)}
+															>
 																{side === "before" ? "Before" : "After"}
 															</span>
 														</button>
@@ -473,20 +521,19 @@ export function WalkthroughCard({
 															src={mediaUrl(shot[side]!)}
 															alt={`${shot.caption || "change"} · ${side}`}
 															loading="lazy"
+															onLoad={(event) =>
+																noteCorner(`${i}:${side}`, event.currentTarget)
+															}
 															/>
-															{/* The label sits ON the picture, so it carries
-															    its own surface: a tinted wash let a white
-															    screenshot through and left green text on
-															    near-white. Frosted glass reads over any
-															    screenshot, in either theme, and the dot keeps
-															    before and after apart at a glance. */}
-															<span className="pointer-events-none absolute left-2 top-2 inline-flex items-center gap-1.5 rounded-full bg-popup-glass py-0.5 pl-1.5 pr-2 text-[11px] font-semibold leading-4 text-fg [--smooth-ring-color:var(--popup-ring)] [backdrop-filter:var(--popup-blur)] smooth-shadow-ring-sm">
-																<span
-																	className={cn(
-																		"size-1.5 rounded-full",
-																		side === "before" ? "bg-red" : "bg-green",
-																	)}
-																/>
+															{/* Filled, so which of the two it is registers
+															    before the word is read. Which fill, see
+															    labelClass. */}
+															<span
+																className={cn(
+																	"pointer-events-none absolute left-2 top-2 rounded-full px-2 py-0.5 text-[11px] font-semibold leading-4 shadow-[0_1px_2px_oklch(0_0_0_/_0.12)]",
+																	labelClass(`${i}:${side}`, side),
+																)}
+															>
 																{side === "before" ? "Before" : "After"}
 															</span>
 														</button>

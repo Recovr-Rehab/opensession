@@ -109,6 +109,15 @@
 	--color-blue-soft: var(--blue-soft);
 	--color-red: var(--red);
 	--color-red-soft: var(--red-soft);
+	/* Red and green for a label painted on a screenshot. They stay put when
+	   the theme flips, because their contrast comes from the picture. See
+	   base.css. */
+	--color-shot-red-deep: var(--shot-red-deep);
+	--color-shot-red-bright: var(--shot-red-bright);
+	--color-shot-red-ink: var(--shot-red-ink);
+	--color-shot-green-deep: var(--shot-green-deep);
+	--color-shot-green-bright: var(--shot-green-bright);
+	--color-shot-green-ink: var(--shot-green-ink);
 	--color-purple: var(--purple);
 
 	/* Tool-family hues (transcript timeline) */

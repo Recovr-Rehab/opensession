@@ -189,6 +189,20 @@
 	--blue-soft: rgba(88, 166, 255, 0.13);
 	--red: #f85149;
 	--red-soft: rgba(248, 81, 73, 0.12);
+	/* Red and green for a label that sits ON a picture, like the
+	   walkthrough's Before/After. These do NOT flip with the theme, so
+	   there is no counterpart in the light block: what the label has to
+	   contrast with is the screenshot under it, not the page around it. The
+	   deep pair is the light theme's ink and reads on a pale screenshot; the
+	   bright pair is the dark theme's and reads on a dark one. The card picks
+	   between them per image (WalkthroughCard). The inks are what goes on the
+	   bright fills, where white would glare. */
+	--shot-red-deep: #cf222e;
+	--shot-red-bright: #f85149;
+	--shot-red-ink: #430b08;
+	--shot-green-deep: #1a7f37;
+	--shot-green-bright: #3fb950;
+	--shot-green-ink: #062d16;
 	--purple: #a371f7;
 	/* Tool-family hues (transcript timeline icons + detail accents) */
 	--tool-run: #3fb950;
