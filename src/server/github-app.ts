@@ -33,7 +33,10 @@ type AppTokenCache = {
   installationId: number;
 };
 
-const g = globalThis as { __ghAppTokenCache?: AppTokenCache | null; __ghAppTokenWarned?: boolean };
+const g = globalThis as {
+  __ghAppTokenCache?: AppTokenCache | null;
+  __ghAppTokenWarned?: boolean;
+};
 
 function appJwt(clientId: string, key: string): string {
   const now = Math.floor(Date.now() / 1000);
@@ -122,6 +125,51 @@ export async function githubAppInstallationToken(): Promise<string | null> {
       g.__ghAppTokenWarned = true;
       console.warn(`[github-app] installation token unavailable: ${String(e).slice(0, 200)}`);
     }
+    return null;
+  }
+}
+
+/**
+ * A one-repository installation token for Runner workspace materialization.
+ * It is intentionally separate from the read-only check token above: the
+ * Runner receives it only in its one workspace_prepare frame and discards its
+ * askpass helper immediately after git finishes. It is never persisted in a
+ * session file, host spec, URL, transcript, or Runner registry.
+ */
+export async function githubAppRepositoryToken(ghRepo: string): Promise<string | null> {
+  const [owner, repo] = ghRepo.split("/");
+  if (!owner || !repo || ghRepo.split("/").length !== 2) return null;
+  // Resolve the installation id through the existing credential path. It keeps
+  // installation selection in one place and may populate the shared cache.
+  await githubAppInstallationToken();
+  const installationId = g.__ghAppTokenCache?.installationId;
+  const { clientId } = githubUserAuthSettings();
+  if (!installationId || !clientId || !existsSync(KEY_PATH)) return null;
+  try {
+    const key = await Bun.file(KEY_PATH).text();
+    const res = await fetch(
+      `https://api.github.com/app/installations/${installationId}/access_tokens`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${appJwt(clientId, key)}`,
+          Accept: "application/vnd.github+json",
+        },
+        body: JSON.stringify({
+          repositories: [repo],
+          permissions: {
+            contents: "write",
+            pull_requests: "write",
+            metadata: "read",
+          },
+        }),
+      },
+    );
+    const token = (await res.json()) as { token?: string; expires_at?: string };
+    if (!res.ok || !token.token) throw new Error(`mint failed (${res.status})`);
+    return token.token;
+  } catch (error) {
+    console.warn(`[github-app] repository token unavailable for ${owner}/${repo}: ${String(error).slice(0, 160)}`);
     return null;
   }
 }

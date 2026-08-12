@@ -54,6 +54,8 @@ export type RunnerWorkspaceRequest = {
 	branch: string;
 	workspacePath: string;
 	repositoryUrl: string;
+	/** Short-lived, repository-scoped clone credential. Never persisted. */
+	cloneToken?: string;
 	user?: string;
 };
 
@@ -245,6 +247,7 @@ export async function prepareRunnerWorkspace(
 				t: "workspace_prepare", version: PROTOCOL_VERSION, id, operationToken,
 				sessionId: request.sessionId, repo: request.repo, branch: request.branch,
 				workspacePath: request.workspacePath, repositoryUrl: request.repositoryUrl,
+				...(request.cloneToken ? { cloneToken: request.cloneToken } : {}),
 			}));
 		} catch (error) {
 			clearTimeout(timer); connection.pending.delete(id);

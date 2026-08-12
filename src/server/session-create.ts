@@ -42,6 +42,7 @@ import { resolveInteractiveSandbox } from "./sandbox/defaults";
 import { getRunner, runnerAvailableForSession } from "./runners";
 import { isRunnerConnected, prepareRunnerWorkspace } from "./runner-ws";
 import { maybeLaunchRunnerRun } from "./runner-session";
+import { githubAppRepositoryToken } from "./github-app";
 
 /** Sandbox provider id as resolveRequestedSandbox resolves it (null = host). */
 type ResolvedSandboxProvider = Extract<
@@ -474,12 +475,16 @@ export async function openCreatedSession(
 				io.emit({ type: "workspace_status", ready: true });
 			}
 			if (spec.runnerTarget) {
+				const cloneToken = spec.repoId
+					? await githubAppRepositoryToken(getRepo(spec.repoId).ghRepo)
+					: null;
 				await prepareRunnerWorkspace(spec.runnerTarget.id, {
 					sessionId: bksId,
 					repo: spec.repoId || "",
 					branch: spec.branch,
 					workspacePath: spec.runnerTarget.workspacePath,
 					repositoryUrl: spec.runnerTarget.repositoryUrl,
+					...(cloneToken ? { cloneToken } : {}),
 					user: spec.user,
 				});
 				touchNativeSession(bksId, {

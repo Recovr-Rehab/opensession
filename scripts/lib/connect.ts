@@ -17,8 +17,8 @@
  * rather than one we claim.
  */
 
-import { chmodSync, existsSync, mkdirSync } from "fs";
-import { arch, hostname, platform } from "os";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync } from "fs";
+import { arch, hostname, platform, tmpdir } from "os";
 import { dirname, join, resolve } from "path";
 import { OPENSESSION_HOME } from "./paths";
 import { bold, dim, fail, heading, info, ok, run, warn } from "./ui";
@@ -323,36 +323,60 @@ async function prepareWorkspace(socket: WebSocket, msg: any): Promise<void> {
 	const token = String(msg.operationToken);
 	const workspacePath = typeof msg.workspacePath === "string" ? msg.workspacePath : "";
 	const repositoryUrl = typeof msg.repositoryUrl === "string" ? msg.repositoryUrl : "";
+	const cloneToken = typeof msg.cloneToken === "string" ? msg.cloneToken : "";
 	const branch = typeof msg.branch === "string" ? msg.branch : "";
 	try {
 		if (!workspacePath || !workspacePath.startsWith("/") || workspacePath.includes("\0")) throw new Error("Invalid managed workspace path");
 		if (!/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\.git$/.test(repositoryUrl)) throw new Error("Runner only accepts an approved GitHub repository URL");
 		if (!/^[A-Za-z0-9._/-]{1,240}$/.test(branch) || branch.includes("..")) throw new Error("Invalid branch");
-		const env = { PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin", HOME: process.env.HOME || "/tmp", GIT_TERMINAL_PROMPT: "0", GIT_CONFIG_NOSYSTEM: "1" };
-		if (existsSync(workspacePath)) {
-			const origin = await runnerCommand(["git", "-C", workspacePath, "remote", "get-url", "origin"], env);
-			if (origin.code !== 0 || origin.stdout.trim() !== repositoryUrl) throw new Error("Managed workspace does not match this session repository");
-			const fetch = await runnerCommand(["git", "-C", workspacePath, "fetch", "--prune", "origin"], env);
-			if (fetch.code !== 0) throw new Error(fetch.stderr.trim() || "Could not refresh managed workspace");
-			const remoteBranch = await runnerCommand(["git", "-C", workspacePath, "show-ref", "--verify", "--quiet", `refs/remotes/origin/${branch}`], env);
-			const checkout = remoteBranch.code === 0
-				? await runnerCommand(["git", "-C", workspacePath, "checkout", "-B", branch, `origin/${branch}`], env)
-				: await runnerCommand(["git", "-C", workspacePath, "checkout", "-B", branch, "origin/HEAD"], env);
-			if (checkout.code !== 0) throw new Error(checkout.stderr.trim() || "Could not check out managed branch");
-		} else {
-			mkdirSync(dirname(workspacePath), { recursive: true });
-			const clone = await runnerCommand(["git", "clone", repositoryUrl, workspacePath], env);
-			if (clone.code !== 0) throw new Error(clone.stderr.trim() || "Could not clone managed workspace");
-			const remoteBranch = await runnerCommand(["git", "-C", workspacePath, "show-ref", "--verify", "--quiet", `refs/remotes/origin/${branch}`], env);
-			const checkout = remoteBranch.code === 0
-				? await runnerCommand(["git", "-C", workspacePath, "checkout", "-B", branch, `origin/${branch}`], env)
-				: await runnerCommand(["git", "-C", workspacePath, "checkout", "-B", branch, "origin/HEAD"], env);
-			if (checkout.code !== 0) throw new Error(checkout.stderr.trim() || "Could not check out managed branch");
+		const scoped = await scopedGitEnvironment(cloneToken);
+		const env = scoped.env;
+		try {
+			if (existsSync(workspacePath)) {
+				const origin = await runnerCommand(["git", "-C", workspacePath, "remote", "get-url", "origin"], env);
+				if (origin.code !== 0 || origin.stdout.trim() !== repositoryUrl) throw new Error("Managed workspace does not match this session repository");
+				const fetch = await runnerCommand(["git", "-C", workspacePath, "fetch", "--prune", "origin"], env);
+				if (fetch.code !== 0) throw new Error(fetch.stderr.trim() || "Could not refresh managed workspace");
+				const remoteBranch = await runnerCommand(["git", "-C", workspacePath, "show-ref", "--verify", "--quiet", `refs/remotes/origin/${branch}`], env);
+				const checkout = remoteBranch.code === 0
+					? await runnerCommand(["git", "-C", workspacePath, "checkout", "-B", branch, `origin/${branch}`], env)
+					: await runnerCommand(["git", "-C", workspacePath, "checkout", "-B", branch, "origin/HEAD"], env);
+				if (checkout.code !== 0) throw new Error(checkout.stderr.trim() || "Could not check out managed branch");
+			} else {
+				mkdirSync(dirname(workspacePath), { recursive: true });
+				const clone = await runnerCommand(["git", "clone", repositoryUrl, workspacePath], env);
+				if (clone.code !== 0) throw new Error(clone.stderr.trim() || "Could not clone managed workspace");
+				const remoteBranch = await runnerCommand(["git", "-C", workspacePath, "show-ref", "--verify", "--quiet", `refs/remotes/origin/${branch}`], env);
+				const checkout = remoteBranch.code === 0
+					? await runnerCommand(["git", "-C", workspacePath, "checkout", "-B", branch, `origin/${branch}`], env)
+					: await runnerCommand(["git", "-C", workspacePath, "checkout", "-B", branch, "origin/HEAD"], env);
+				if (checkout.code !== 0) throw new Error(checkout.stderr.trim() || "Could not check out managed branch");
+			}
+		} finally {
+			scoped.cleanup();
 		}
 		socket.send(JSON.stringify({ t: "workspace_ready", id, operationToken: token, cwd: workspacePath }));
 	} catch (error) {
 		socket.send(JSON.stringify({ t: "workspace_error", id, operationToken: token, error: error instanceof Error ? error.message : String(error) }));
 	}
+}
+
+async function scopedGitEnvironment(cloneToken: string): Promise<{ env: Record<string, string>; cleanup: () => void }> {
+	const env: Record<string, string> = {
+		...runnerEnvironment(),
+		GIT_TERMINAL_PROMPT: "0",
+		GIT_CONFIG_NOSYSTEM: "1",
+		GIT_CONFIG_GLOBAL: "/dev/null",
+	};
+	if (!cloneToken) return { env, cleanup: () => {} };
+	const dir = mkdtempSync(join(tmpdir(), "opensession-runner-git-"));
+	const askpass = join(dir, "askpass");
+	await Bun.write(askpass, "#!/bin/sh\ncase \"$1\" in *Username*) echo x-access-token ;; *) printf '%s\\n' \"$OPENSESSION_RUNNER_GIT_TOKEN\" ;; esac\n");
+	chmodSync(askpass, 0o700);
+	return {
+		env: { ...env, GIT_ASKPASS: askpass, OPENSESSION_RUNNER_GIT_TOKEN: cloneToken },
+		cleanup: () => rmSync(dir, { recursive: true, force: true }),
+	};
 }
 
 async function startRunHost(socket: WebSocket, persistent: Map<string, ReturnType<typeof Bun.spawn>>, msg: any): Promise<void> {
