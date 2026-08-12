@@ -97,7 +97,7 @@ const SCRATCH_REPO_VALUE = "__scratch__";
  *  transparent until the prompt has actually scrolled beneath it. The border
  *  itself is always present: switching the colour keeps the height steady,
  *  where toggling `border-b` would jog the layout by a pixel. */
-const HEADER = "flex items-center justify-between gap-2 border-b border-transparent px-3 py-[11px]";
+const HEADER = "flex items-center justify-between gap-2 border-b border-transparent px-4 py-[11px]";
 /** Merged onto HEADER/FOOTER by `cn()`, which drops the transparent colour. */
 const EDGE_DIVIDER = "border-line";
 /** Header pickers. `relative` is load-bearing — PaletteSelect's phone branch
@@ -127,7 +127,7 @@ const ERROR = "mx-4 mb-2 rounded-md bg-red-soft px-2.5 py-[7px] text-supporting 
    (its label ellipsizes) while the icon buttons and Create keep their size.
    Phones let the row wrap instead of crushing every pill to one letter. */
 const FOOTER =
-	"flex items-center justify-between gap-x-2 gap-y-2 border-t border-transparent px-[11px] py-[9px] phone:flex-wrap max-[560px]:gap-x-1.5 max-[560px]:px-2";
+	"flex items-center justify-between gap-x-2 gap-y-2 border-t border-transparent px-4 py-[9px] phone:flex-wrap max-[560px]:gap-x-1.5 max-[560px]:px-3";
 const FOOTER_LEFT = "flex min-w-0 items-center gap-1.5 max-[560px]:gap-1";
 const FOOTER_RIGHT = "flex min-w-0 items-center gap-1.5 max-[560px]:gap-1 phone:ml-auto";
 const FOOTER_ICON_BTN = cn(paletteIconBtn, "shrink-0 max-[560px]:w-9");
