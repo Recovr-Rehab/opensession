@@ -3,7 +3,14 @@ import { createRoot } from "react-dom/client";
 import type { TranscriptEntry, UnifiedSession } from "../src/frontend/lib/types";
 import openSessionMark from "../os1-mac/build/icon-512.png";
 
-const now = "2026-08-04T12:00:00.000Z";
+/**
+ * Fixture clocks are relative to page load, not fixed dates: a hard-coded
+ * `runStartedAt` made the sidebar's live ticker read "195h 12m" a week after
+ * the fixtures were written.
+ */
+const minutesAgo = (minutes: number) =>
+	new Date(Date.now() - minutes * 60_000).toISOString();
+const now = minutesAgo(0);
 const activeSessionId = "bks-demo-presence";
 
 const sessions: UnifiedSession[] = [
@@ -15,8 +22,8 @@ const sessions: UnifiedSession[] = [
 		worktreeDir: "/workspace/opensession",
 		startedBy: "Alex",
 		title: "Add multiplayer workspace presence",
-		lastActivity: now,
-		createdAt: "2026-08-04T10:18:00.000Z",
+		lastActivity: minutesAgo(4),
+		createdAt: minutesAgo(38),
 		isRunning: false,
 		transcriptPath: "/demo/transcript.jsonl",
 		mode: "code",
@@ -44,10 +51,10 @@ const sessions: UnifiedSession[] = [
 		worktreeDir: "/workspace/checkout",
 		startedBy: "Alex",
 		title: "Review checkout recovery",
-		lastActivity: "2026-08-04T11:44:00.000Z",
-		createdAt: "2026-08-04T09:20:00.000Z",
+		lastActivity: minutesAgo(1),
+		createdAt: minutesAgo(52),
 		isRunning: true,
-		runStartedAt: "2026-08-04T11:54:22.000Z",
+		runStartedAt: minutesAgo(2),
 		transcriptPath: "/demo/checkout.jsonl",
 		mode: "code",
 		repo: "opensession",
@@ -62,8 +69,8 @@ const sessions: UnifiedSession[] = [
 		worktreeDir: "/workspace/mobile",
 		startedBy: "Alex",
 		title: "Improve mobile navigation",
-		lastActivity: "2026-08-04T11:20:00.000Z",
-		createdAt: "2026-08-04T08:45:00.000Z",
+		lastActivity: minutesAgo(9),
+		createdAt: minutesAgo(74),
 		isRunning: false,
 		transcriptPath: "/demo/mobile.jsonl",
 		mode: "code",
@@ -80,8 +87,8 @@ const sessions: UnifiedSession[] = [
 		worktreeDir: "/workspace/shortcuts",
 		startedBy: "Alex",
 		title: "Ship keyboard shortcuts",
-		lastActivity: "2026-08-04T10:55:00.000Z",
-		createdAt: "2026-08-04T07:30:00.000Z",
+		lastActivity: minutesAgo(21),
+		createdAt: minutesAgo(96),
 		isRunning: false,
 		transcriptPath: "/demo/shortcuts.jsonl",
 		mode: "code",
@@ -103,9 +110,10 @@ const sessions: UnifiedSession[] = [
 		worktreeDir: "/workspace/search",
 		startedBy: "Alex",
 		title: "Make session search instant",
-		lastActivity: "2026-08-04T10:31:00.000Z",
-		createdAt: "2026-08-04T06:54:00.000Z",
-		isRunning: false,
+		lastActivity: minutesAgo(1),
+		createdAt: minutesAgo(129),
+		isRunning: true,
+		runStartedAt: minutesAgo(5),
 		transcriptPath: "/demo/search.jsonl",
 		mode: "code",
 		repo: "opensession",
@@ -120,8 +128,8 @@ const sessions: UnifiedSession[] = [
 		worktreeDir: "/workspace/release",
 		startedBy: "Alex",
 		title: "Draft the weekly release notes",
-		lastActivity: "2026-08-04T09:42:00.000Z",
-		createdAt: "2026-08-04T06:10:00.000Z",
+		lastActivity: minutesAgo(47),
+		createdAt: minutesAgo(163),
 		isRunning: false,
 		transcriptPath: "/demo/release.jsonl",
 		mode: "ask",
@@ -144,7 +152,7 @@ const transcripts: Record<string, TranscriptEntry[]> = {
 			type: "user",
 			content:
 				"Add multiplayer presence to project workspaces. Have a focused agent cover the tests, then open a pull request.",
-			timestamp: "2026-08-04T10:18:00.000Z",
+			timestamp: minutesAgo(38),
 			seq: 1,
 			changeSeq: 1,
 		},
@@ -153,7 +161,7 @@ const transcripts: Record<string, TranscriptEntry[]> = {
 			type: "assistant",
 			content:
 				"I found the existing presence channel and workspace header. I’m wiring those together while a focused worker adds coverage.",
-			timestamp: "2026-08-04T10:18:12.000Z",
+			timestamp: minutesAgo(37),
 			model: "openai/gpt-5.6-sol",
 			seq: 2,
 			changeSeq: 2,
@@ -162,7 +170,7 @@ const transcripts: Record<string, TranscriptEntry[]> = {
 			id: "entry-3",
 			type: "tool_use",
 			content: "",
-			timestamp: "2026-08-04T10:18:18.000Z",
+			timestamp: minutesAgo(37),
 			toolName: "functions.task",
 			toolInput: {
 				description: "Add presence coverage",
@@ -177,7 +185,7 @@ const transcripts: Record<string, TranscriptEntry[]> = {
 			id: "entry-4",
 			type: "tool_result",
 			content: "Presence tests added. 16 tests pass.",
-			timestamp: "2026-08-04T10:21:06.000Z",
+			timestamp: minutesAgo(35),
 			toolName: "functions.task",
 			toolUseId: "tool-1",
 			agentId: "agent-demo-tests",
@@ -189,7 +197,7 @@ const transcripts: Record<string, TranscriptEntry[]> = {
 			type: "assistant",
 			content:
 				"Presence now appears in every shared workspace. The focused tests pass and pull request #1842 is ready for review.",
-			timestamp: "2026-08-04T10:23:40.000Z",
+			timestamp: minutesAgo(4),
 			model: "openai/gpt-5.6-sol",
 			seq: 5,
 			changeSeq: 5,
@@ -308,8 +316,8 @@ const responseFor = (url: URL, method: string): Response => {
 							agentType: "worker",
 							label: "Add presence coverage",
 							status: "done",
-							startedAt: Date.parse("2026-08-04T10:18:18.000Z"),
-							endedAt: Date.parse("2026-08-04T10:21:06.000Z"),
+							startedAt: Date.parse(minutesAgo(37)),
+							endedAt: Date.parse(minutesAgo(35)),
 							model: "anthropic/claude-sonnet-5",
 							tokensOut: 1840,
 							source: "opencode",
@@ -319,7 +327,7 @@ const responseFor = (url: URL, method: string): Response => {
 							agentType: "oracle",
 							label: "Review the implementation",
 							status: "running",
-							startedAt: Date.parse("2026-08-04T10:21:12.000Z"),
+							startedAt: Date.parse(minutesAgo(35)),
 							model: "openai/gpt-5.6-terra",
 							source: "opencode",
 						},
@@ -466,6 +474,9 @@ localStorage.setItem("opensession-panel-open", "false");
 localStorage.setItem("opensession-panel-tab", "workflows");
 localStorage.setItem("opensession-sidebar-collapsed", "0");
 localStorage.setItem("opensession-sidebar-w", "264");
+// One repo, so the sidebar resolves its "auto" grouping to the plain inbox
+// straight away instead of painting repo bands until /api/repos answers.
+localStorage.setItem("opensession-repo-count", "1");
 localStorage.setItem(
 	"opensession-sidebar-hidden-tools",
 	JSON.stringify([
