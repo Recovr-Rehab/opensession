@@ -67,7 +67,7 @@ function WarmPreviewsPanel() {
 	}
 
 	const label = (
-		<SettingsGroupLabel className="mt-0">Dependency templates</SettingsGroupLabel>
+		<SettingsGroupLabel className="mt-0">Host dependency cache</SettingsGroupLabel>
 	);
 
 	if (!repos)
@@ -92,11 +92,11 @@ function WarmPreviewsPanel() {
 				{repos.map((entry) => {
 					const s = entry.state;
 					const status = entry.refreshing
-						? "Refreshing now, updating the template…"
+						? "Refreshing now, updating the dependency cache…"
 						: !entry.enabled
 							? "Off. Fresh worktrees install cold."
 							: s?.ok
-								? `Warm at ${s.sha} · refreshed ${warmAgo(s.refreshedAt)} · ${
+								? `Cached at ${s.sha} · refreshed ${warmAgo(s.refreshedAt)} · ${
 										entry.spares
 									} spare${entry.spares === 1 ? "" : "s"} ready`
 								: s?.lastError
@@ -148,8 +148,8 @@ function WarmPreviewsPanel() {
 				})}
 			</SettingCard>
 			<SettingsHint>
-				Keeps a template worktree per repo with node_modules installed, refreshed
-				from its default branch on a schedule. New sessions adopt a prebuilt copy
+				Keeps a host-side worktree per repo with node_modules installed, refreshed
+				from its default branch on a schedule. Host sessions adopt a ready copy
 				instead of paying a cold install.
 			</SettingsHint>
 		</>
@@ -209,7 +209,7 @@ function PreviewPoolPanel() {
 		p.then((r) => setRepos(r.repos)).catch((e) => setError(e.message));
 	}
 
-	const label = <SettingsGroupLabel>Preview containers</SettingsGroupLabel>;
+	const label = <SettingsGroupLabel>Preview pool</SettingsGroupLabel>;
 
 	if (!repos)
 		return (
@@ -336,8 +336,8 @@ function PreviewPoolPanel() {
 				})}
 			</SettingCard>
 			<SettingsHint>
-				Keeps dev-server containers pre-booted from a nightly image, so the Preview
-				button claims one in seconds instead of a cold boot. Claims follow the
+				Keeps preview sandboxes ready from a nightly image, so the Preview button
+				claims one in seconds instead of a cold boot. Claims follow the
 				session's branch and are released on stop.
 			</SettingsHint>
 		</>
@@ -352,8 +352,8 @@ export function PrewarmingPanel() {
 	return (
 		<SettingsPanel>
 			<SettingsHeader
-				title="Prewarming"
-				description="Work done ahead of time, per repo, so a session starts fast instead of paying for it on first use."
+				title="Session acceleration"
+				description="Host-side caches and preview capacity that make local sessions start quickly. Project snapshots for remote sandboxes live in Sandboxes."
 			/>
 			<WarmPreviewsPanel />
 			<PreviewPoolPanel />

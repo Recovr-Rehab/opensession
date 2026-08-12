@@ -468,7 +468,7 @@ const SECTIONS: {
 	},
 	{
 		key: "prewarming",
-		label: "Prewarming",
+		label: "Acceleration",
 		group: "Infrastructure",
 		icon: (
 			<svg

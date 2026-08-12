@@ -71,7 +71,7 @@ export const SETTINGS_KEYWORDS: Record<string, string[]> = {
 	goals: ["standing goals", "objectives"],
 	actions: ["quick actions", "confirm before running"],
 	security: ["scans", "deepsec", "vulnerabilities", "findings"],
-	prewarming: ["dependency templates", "preview containers", "warm", "install"],
+	prewarming: ["acceleration", "faster starts", "dependency cache", "preview pool", "warm", "install"],
 	deploys: ["releases", "restart", "version"],
 	papercuts: ["friction", "annoyances"],
 	audit: ["history", "events", "who did what"],

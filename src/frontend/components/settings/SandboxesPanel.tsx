@@ -580,11 +580,11 @@ function ProjectEnvironmentDialog({
 			const response = await rebuildSandboxEnvironment(selected.repo, provider, settings);
 			onStarted(response.operation, selected, settings);
 			onOpenChange(false);
-			toast(`${providerLabel(provider)} preparation started for ${selected.repo}`, {
+			toast(`${providerLabel(provider)} snapshot build started for ${selected.repo}`, {
 				variant: "success",
 			});
 		} catch (error) {
-			toast(error instanceof Error ? error.message : "Failed to prepare project environment", {
+			toast(error instanceof Error ? error.message : "Failed to build project snapshot", {
 				variant: "error",
 			});
 		} finally {
@@ -596,8 +596,8 @@ function ProjectEnvironmentDialog({
 		<Modal.Root open={open} onOpenChange={onOpenChange}>
 			<Modal.Content widthClassName="max-w-[32rem]">
 				<Modal.Header
-					title={target ? `Configure ${target.repo}` : "Prepare a project"}
-					description="Open Session creates one reusable project template only when you opt in here. Credentials remain in this workspace."
+					title={target ? `Configure ${target.repo} snapshot` : "Create a project snapshot"}
+					description="Open Session builds a reusable, credential-free project snapshot only when you opt in here. Each new session still gets its own isolated sandbox."
 				/>
 				{!target ? (
 					<div className="grid gap-3 sm:grid-cols-2">
@@ -651,7 +651,7 @@ function ProjectEnvironmentDialog({
 					{provider === "daytona" &&
 						"Daytona supports custom resource combinations, but these documented sizes avoid invalid or undersized setups."}
 					{provider === "box" &&
-						"Box exposes three fixed machine types. Stop and resume retain the disk, and prepared projects restore from a named snapshot."}
+						"Box exposes three fixed machine types. Stop and resume retain the disk, and new sandboxes restore from this project's named snapshot."}
 					{provider === "modal" &&
 						"Modal CPU values are physical cores and memory is a guaranteed request; workloads may burst when capacity is available."}
 					{provider === "microvm" &&
@@ -665,7 +665,7 @@ function ProjectEnvironmentDialog({
 						onClick={() => void prepare()}
 						disabled={saving || !selected}
 					>
-						{saving ? "Starting…" : target ? "Save and rebuild" : "Prepare project"}
+						{saving ? "Starting…" : target ? "Save and rebuild snapshot" : "Build snapshot"}
 					</Button>
 				</Modal.Footer>
 			</Modal.Content>
@@ -759,7 +759,7 @@ export function SandboxesPanel() {
 		<SettingsPanel>
 			<SettingsHeader
 				title="Sandboxes"
-				description="Connect compute you already pay for. Starting an isolated session stays one choice."
+				description="Connect compute you already pay for. Each session gets an isolated sandbox; project snapshots make new sandboxes start faster."
 			/>
 			<WorkspaceSandboxDefaults canManage={canManage} />
 			<SettingsGroupLabel>Connections</SettingsGroupLabel>
@@ -798,21 +798,21 @@ export function SandboxesPanel() {
 										setEnvironmentDialogOpen(true);
 									}}
 								>
-									Prepare project
+									Create snapshot
 								</Button>
 							)
 						}
 					>
-						Project environments
+						Project snapshots
 					</SettingsGroupLabel>
 					<div className="grid gap-3 px-4">
 						{configuredEnvironments.length === 0 && (
 							<SettingCard>
 								<div className="px-4 py-5 text-center">
-									<div className="text-item-title font-medium text-fg">No projects prepared</div>
+									<div className="text-item-title font-medium text-fg">No project snapshots</div>
 									<p className="mx-auto mb-0 mt-1 max-w-[30rem] text-supporting leading-relaxed text-dim">
-										Choose only the projects that should get a reusable sandbox template. Nothing
-										is prepared automatically.
+										Choose only the projects that should get a reusable sandbox snapshot. Nothing
+										is built automatically.
 									</p>
 								</div>
 							</SettingCard>
@@ -829,10 +829,10 @@ export function SandboxesPanel() {
 								const status = running
 									? operation.stage
 									: environment.state === "ready"
-										? "Template ready"
+										? "Snapshot ready"
 										: environment.state === "failed"
 											? environment.failureSummary || "Setup failed"
-											: "Template is stale";
+											: "Snapshot is stale";
 								return (
 									<SettingCard key={`${environment.repo}:${environment.provider}`}>
 										<div className="flex flex-wrap items-start gap-3 px-4 py-3.5">
@@ -893,8 +893,8 @@ export function SandboxesPanel() {
 							})}
 					</div>
 					<SettingsHint>
-						Project templates expire after 24 hours and refresh only for projects you have
-						chosen here.
+						Project snapshots expire after 24 hours and refresh only for projects you have
+						chosen here. A snapshot never contains session or model credentials.
 					</SettingsHint>
 				</>
 			)}
