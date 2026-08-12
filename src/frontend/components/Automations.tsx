@@ -20,6 +20,7 @@ import {
 } from "../lib/api";
 import { getCurrentUser } from "./UserPicker";
 import { CheckStatusIcon } from "./CheckStatusIcon";
+import { IconBolt, IconClock, IconHash, IconPlay, IconPlug } from "./icons";
 import { AGENT_NAME, PUBLIC_BASE_URL, docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
@@ -327,7 +328,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
               >
                 {/* Two controls in one row: opening the automation, and
                     turning it on. So the row can't be a button around the
-                    switch — the open target is a button stretched under the
+                    switch. The open target is a button stretched under the
                     content instead, which keeps the whole row clickable and
                     keyboard-reachable without nesting one inside the other.
                     Content above it is inert unless it has its own tooltip. */}
@@ -337,6 +338,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                 >
                   <span className="sr-only">Open {a.name}</span>
                 </button>
+                <TriggerIcon automation={a} />
                 <span
                   className={cn(
                     "pointer-events-none relative flex min-w-0 flex-1 flex-col gap-0.75",
@@ -689,6 +691,33 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
         />
       )}
     </div>
+  );
+}
+
+/**
+ * The row's leading glyph: what makes this automation run. Most of them are
+ * the clock, which is the point. The few that aren't (an event, a webhook, a
+ * watched channel) are what you scan for, and they now show up without
+ * reading the line under the name.
+ */
+function TriggerIcon({ automation }: { automation: Automation }) {
+  const Icon = automation.slackWatch
+    ? IconHash
+    : automation.schedule
+      ? IconClock
+      : automation.eventKey
+        ? IconBolt
+        : automation.webhookEnabled === false
+          ? IconPlay
+          : IconPlug;
+  return (
+    <Icon
+      size={20}
+      className={cn(
+        "pointer-events-none relative shrink-0 text-faint",
+        !automation.enabled && "opacity-55",
+      )}
+    />
   );
 }
 

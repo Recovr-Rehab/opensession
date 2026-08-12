@@ -31,7 +31,7 @@ export function Switch({ className, size = "md", ...props }: SwitchProps) {
 			)}
 			{...props}
 		>
-			{/* The knob is a 32×20 capsule, not a circle — that wider shape is
+			{/* The knob is a 32×20 capsule, not a circle. That wider shape is
 			    most of what reads as the current macOS switch. The small size
 			    keeps the 2px inset and the capsule, at 26×16. */}
 			<BaseSwitch.Thumb
