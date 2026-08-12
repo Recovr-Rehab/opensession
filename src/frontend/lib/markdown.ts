@@ -275,18 +275,29 @@ function sessionLink(id: string, href?: string): string {
 // plain text.
 const PR_NUMBER_MAX_DIGITS = 5;
 // A bare mention has nothing but its digits to argue it is a PR at all, and
-// prose is full of small ordinals ("step #3", "take #2", "monitor #1"). Below
-// this length a bare number links only when the instance can prove the PR
-// exists — one the session list already knows for that repo, which is the
-// common case for the repos numbered under a thousand. A qualified
-// `backstage#92` states its intent, so it links at any length.
+// short `#numbers` in prose are usually something else. Measured over 120k
+// transcript entries: 4+ digits are overwhelmingly PRs, while 1-3 digit runs
+// are mostly stream and step indices (`stream #0`), CSS hex colours
+// (`color: #333`, `#111`), and rankings (`#29`).
+//
+// Repos numbered under a thousand are the reason this can't just be a length
+// floor — backstage is at #92, tella-mac at #14. A short number links when
+// something other than its digits says PR: the word in front of it (`PR #92`,
+// the dominant form in practice), a qualifier (`backstage#92`), or a PR the
+// session list already knows for that repo.
 const BARE_PR_MIN_DIGITS = 4;
 // The qualifier is part of the match so it can be vetted (or rejected) rather
 // than left dangling in front of a chip — that also means a word glued to the
 // `#` can never be mistaken for a bare mention (`abc#1` is a qualified
 // mention by `abc`, not PR #1). 6+ digit runs and `&#8212;`-style entities
 // fall out of the pattern instead of needing their own guard.
+//
+// The `PR` cue is matched here rather than read off the preceding text: a
+// tokenizer only sees the source from its own match position on. It must be
+// followed by a space or the `#` itself, so a repo whose id merely starts
+// with those letters (`prisma#12`) is read as the qualifier it is.
 const PR_MENTION_SRC =
+  `([Pp][Rr]s?(?:\\s+|(?=#)))?` +
   `((?:[A-Za-z0-9][\\w.-]*/)?[A-Za-z0-9][\\w.-]*)?` +
   `#(\\d{1,${PR_NUMBER_MAX_DIGITS}})(?!\\w)`;
 const PR_MENTION_EXACT = new RegExp(`^${PR_MENTION_SRC}`);
@@ -438,7 +449,7 @@ function prMentionRepo(qualifier: string | undefined): string | null {
   return knownRepos.has(id) ? id : null;
 }
 
-/** Whether an unqualified `#123` reads as a PR reference rather than prose. */
+/** Whether an uncued, unqualified `#123` reads as a PR rather than prose. */
 function bareMentionLinks(repo: string, number: string): boolean {
   return (
     number.length >= BARE_PR_MIN_DIGITS ||
@@ -716,20 +727,26 @@ md.use({
       tokenizer(src: string) {
         const m = PR_MENTION_EXACT.exec(src);
         if (!m) return undefined;
-        const repo = prMentionRepo(m[1]);
+        const [raw, cue = "", qualifier, number] = m;
+        const repo = prMentionRepo(qualifier);
         // Nowhere to point: emit the mention as the text it is. Declining the
         // match instead would hand `vercel/next.js#1234` back to the text
         // tokenizer, which walks forward a character at a time until the
         // rejected qualifier is behind it and `#1234` reads as a BARE mention —
         // linking a third party's PR number into one of our own repos.
-        if (!repo) return { type: "text", raw: m[0], text: m[0] };
-        // Same for a short bare number that reads as prose, not a PR.
-        if (!m[1] && !bareMentionLinks(repo, m[2]))
-          return { type: "text", raw: m[0], text: m[0] };
-        return { type: "prMention", raw: m[0], repo, number: m[2] };
+        if (!repo) return { type: "text", raw, text: raw };
+        // Same for a short number with nothing but its digits to go on.
+        if (!cue && !qualifier && !bareMentionLinks(repo, number))
+          return { type: "text", raw, text: raw };
+        return { type: "prMention", raw, cue, repo, number };
       },
       renderer(token: any) {
-        return prMentionLink(token.repo, token.number, token.raw);
+        // The cue stays prose: it reads as `PR` + a chip labelled `#92`, so a
+        // chip already carrying a PR icon doesn't also spell the word out.
+        return (
+          attr(token.cue) +
+          prMentionLink(token.repo, token.number, token.raw.slice(token.cue.length))
+        );
       },
     },
   ],

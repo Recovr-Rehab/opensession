@@ -444,25 +444,55 @@ describe("renderMarkdown PR mentions", () => {
     }
   });
 
-  it("keeps a short bare number as prose unless the PR is known", () => {
+  it("keeps a short number that only has its digits to go on as prose", () => {
     setKnownRepos([{ id: "backstage", ghRepo: "tellahq/backstage" }]);
     const backstage = { repo: "backstage" };
     for (const src of [
       "step #3 is the tricky one",
       "take #2 of the recording",
-      "the #42 case",
+      "stream #0 carries the audio",
+      "the border reads #333 in both themes",
+      "that page ranks #29 for the term",
     ]) {
       expect(renderMarkdown(src, backstage)).not.toContain("pr-ref");
     }
-    // A qualified mention says what it means, however short.
+  });
+
+  it("links a short number the text vouches for, however small", () => {
+    setKnownRepos([{ id: "backstage", ghRepo: "tellahq/backstage" }]);
+    const backstage = { repo: "backstage" };
+    // The word in front of it. The chip stays `#92` — the cue is prose, and
+    // the chip already carries a PR icon.
+    const cued = renderMarkdown("Landed in PR #92 last night.", backstage);
+    expect(cued).toContain('href="/pr/backstage/92"');
+    expect(cued).toContain("PR <a");
+    expect(cued).toContain('<span class="pr-ref-label">#92</span>');
+    for (const src of ["see PRs #92 and #14", "pr #92", "PR#92"]) {
+      expect(renderMarkdown(src, backstage)).toContain('data-pr-number="92"');
+    }
+    // A qualifier says the same thing, and is the only form that crosses repos.
     expect(renderMarkdown("follows backstage#92 closely", fusion)).toContain(
       'href="/pr/backstage/92"',
     );
-    // So does a bare one the session list can vouch for — the repos numbered
-    // under a thousand reference their own PRs this way.
+    // So does a PR the session list already knows for this repo.
     setKnownPrStates([{ repo: "backstage", number: 92, state: "OPEN" }]);
     expect(renderMarkdown("follows #92 closely", backstage)).toContain(
       'href="/pr/backstage/92"',
+    );
+  });
+
+  it("does not read a repo id starting with `pr` as the cue", () => {
+    setKnownRepos([
+      { id: "prisma", ghRepo: "tellahq/prisma" },
+      { id: "tella-fusion", ghRepo: "tellahq/tella-fusion" },
+    ]);
+    // `pr` + `isma` would be a cue plus an unknown qualifier; it is one repo.
+    expect(renderMarkdown("prisma#12 is green", fusion)).toContain(
+      'href="/pr/prisma/12"',
+    );
+    // And an unregistered repo stays text rather than borrowing the cue path.
+    expect(renderMarkdown("press#12 is upstream", fusion)).not.toContain(
+      "pr-ref",
     );
   });
 
