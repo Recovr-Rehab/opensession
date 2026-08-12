@@ -1,5 +1,33 @@
 import { describe, expect, it } from "bun:test";
-import { sanitizeRecap } from "./recap";
+import { sanitizeRecap, walkthroughStandsInForRecap } from "./recap";
+
+describe("walkthroughStandsInForRecap", () => {
+  const turnStart = Date.parse("2026-08-12T10:00:00.000Z");
+
+  it("stands in when the walkthrough was published during the turn", () => {
+    expect(
+      walkthroughStandsInForRecap("2026-08-12T10:42:00.000Z", turnStart),
+    ).toBe(true);
+    // Published at the turn's first instant still belongs to that turn.
+    expect(
+      walkthroughStandsInForRecap("2026-08-12T10:00:00.000Z", turnStart),
+    ).toBe(true);
+  });
+
+  it("does not stand in for a walkthrough from an earlier turn", () => {
+    expect(
+      walkthroughStandsInForRecap("2026-08-12T09:14:00.000Z", turnStart),
+    ).toBe(false);
+  });
+
+  it("falls back to recapping when either side is missing or unparseable", () => {
+    expect(walkthroughStandsInForRecap(undefined, turnStart)).toBe(false);
+    expect(walkthroughStandsInForRecap("2026-08-12T10:42:00.000Z", undefined)).toBe(
+      false,
+    );
+    expect(walkthroughStandsInForRecap("not a date", turnStart)).toBe(false);
+  });
+});
 
 describe("sanitizeRecap", () => {
   it("passes a clean recap through unchanged", () => {

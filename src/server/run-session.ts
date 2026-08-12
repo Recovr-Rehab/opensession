@@ -2335,9 +2335,11 @@ async function runSessionPromptInner(
 		// clean finish — an errored/aborted turn may be mid-work. Fire-and-forget.
 		if (!endedWithError) void autoPushSessionBranches(session);
 		// Clean finish with nobody looking → next returning viewer gets a recap
-		// system chip (recap.ts). Errored turns already land a failure chip.
+		// system chip (recap.ts). Errored turns already land a failure chip, and
+		// a turn that published a walkthrough already summarized itself, which is
+		// what the turn's start time lets recap.ts check.
 		if (!endedWithError && (assistantText.trim() || toolUseCount > 0))
-			markRecapPendingIfUnwatched(sessionId);
+			markRecapPendingIfUnwatched(sessionId, turnMetricStartedAt);
 	}
 }
 

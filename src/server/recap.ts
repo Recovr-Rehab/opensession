@@ -12,7 +12,11 @@
  * Mirrors Claude Code's semantics where they translate: generated for the
  * *returning* viewer (never speculatively — automation sessions that run
  * unwatched forever cost nothing until someone actually looks), and dropped
- * as stale the moment a new turn is active. Pending marks are in-memory
+ * as stale the moment a new turn is active. A turn that ended by publishing a
+ * walkthrough gets no recap at all: that card already says what changed, and
+ * shows it.
+ *
+ * Pending marks are in-memory
  * (restart-fresh, like run-state) — a restart just means no recap for turns
  * that ended before it, never a wrong one.
  *
@@ -52,13 +56,46 @@ function anyPresentWatcher(sessionId: string): boolean {
 }
 
 /**
+ * Does the turn's own walkthrough already say what a recap would?
+ *
+ * A walkthrough published during the turn you missed is the better half of
+ * that pair: the agent wrote it deliberately, and it carries a picture. A
+ * generated recap under it is the same sentence twice, weaker. An OLDER
+ * walkthrough is about an earlier change and stands in for nothing, so the
+ * comparison is against the turn's start, not merely "has a walkthrough".
+ */
+export function walkthroughStandsInForRecap(
+  publishedAt: string | undefined,
+  turnStartedAt: number | undefined
+): boolean {
+  if (!publishedAt || turnStartedAt === undefined) return false;
+  const at = Date.parse(publishedAt);
+  return Number.isFinite(at) && at >= turnStartedAt;
+}
+
+/**
  * Turn-end hook (run-session's idle block): if nobody is looking, mark the
  * session so the next returning viewer gets a recap; if someone watched the
  * finish live, clear any stale mark instead.
+ *
+ * `turnStartedAt` (epoch ms) is the turn being recapped, used only to tell
+ * this turn's walkthrough from an older one.
  */
-export function markRecapPendingIfUnwatched(sessionId: string): void {
+export function markRecapPendingIfUnwatched(
+  sessionId: string,
+  turnStartedAt?: number
+): void {
   if (recapDisabled()) return;
   if (anyPresentWatcher(sessionId)) {
+    recapPending.delete(sessionId);
+    return;
+  }
+  if (
+    walkthroughStandsInForRecap(
+      findSession(sessionId)?.walkthrough?.publishedAt,
+      turnStartedAt
+    )
+  ) {
     recapPending.delete(sessionId);
     return;
   }
