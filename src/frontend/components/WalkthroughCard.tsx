@@ -13,22 +13,26 @@ import { Button } from "../ui/button";
 const mediaUrl = (path: string) => `/media?path=${encodeURIComponent(path)}`;
 
 /**
- * The Before/After label: the app's own status pill, squared into the tile's
- * corner. Panel surface, a --red-soft/--green-soft tint, --red/--green ink and
- * a hairline — the same parts every other pill in the product is made of, so
- * it reads as a caption the app put on the picture rather than as a sticker.
+ * The Before/After label: the app's own status pill, resting in the tile's top
+ * left. Panel surface, a --red-soft/--green-soft tint, --red/--green ink and a
+ * hairline — the same parts every other pill in the product is made of, so it
+ * reads as a caption the app put on the picture rather than as a sticker.
  *
- * Two things follow from it being opaque. It reads on a white screenshot and
- * on a dark one alike, so it can simply follow the app theme instead of
- * sampling the image under it; and sitting in the corner under the tile's own
- * radius, it belongs to the frame rather than to the screenshot.
+ * Because it is opaque it reads on a white screenshot and on a dark one alike,
+ * so it can simply follow the app theme instead of sampling the image under
+ * it. A drop shadow under the hairline is what lifts it off the picture, now
+ * that the tile's corner no longer holds it in place.
+ *
+ * `rounded-[999px]`, not `rounded-full`: base.css grants squircle corners to
+ * every `rounded-*` except that one spelling, and a pill is where the squircle
+ * belongs.
  *
  * The tint is a gradient because it has to sit ON the panel fill: --red-soft
  * is translucent ink, and painted straight onto the picture it is the wash
  * that let a white screenshot through in the first place.
  */
 const SHOT_LABEL =
-	"pointer-events-none absolute left-0 top-0 rounded-br-lg bg-panel px-[9px] py-1 text-[11px] font-semibold leading-[14px] shadow-[inset_0_0_0_1px_var(--border)]";
+	"pointer-events-none absolute left-2 top-2 rounded-[999px] bg-panel px-2 py-0.5 text-[11px] font-semibold leading-4 shadow-[inset_0_0_0_1px_var(--border),0_1px_3px_oklch(0_0_0_/_0.16)]";
 const SHOT_LABEL_SIDE = {
 	before:
 		"text-red [background-image:linear-gradient(var(--red-soft),var(--red-soft))]",
