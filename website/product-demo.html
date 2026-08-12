@@ -17,6 +17,27 @@
 					border-bottom: 1px solid var(--top-divider);
 				}
 			}
+
+			/* The Mac window's traffic lights. `html.wco` already reserves the
+			   room for them at the start of this row. */
+			html.wco .sidebar-brand {
+				position: relative;
+			}
+
+			html.wco .sidebar-brand::before {
+				content: "";
+				position: absolute;
+				z-index: 3;
+				top: 50%;
+				left: 20px;
+				width: 12px;
+				height: 12px;
+				margin-top: -6px;
+				border-radius: 50%;
+				background: #ff5f57;
+				box-shadow: 20px 0 #febc2e, 40px 0 #28c840;
+				pointer-events: none;
+			}
 		</style>
 		<title>Open Session product preview</title>
 	</head>

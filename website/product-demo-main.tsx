@@ -454,12 +454,18 @@ Object.assign(window, {
 		defaultRepoId: "opensession",
 	},
 });
+// Render the Mac desktop shell: `wco` is the window-controls-overlay state the
+// Electron app runs in, so the sidebar's first row becomes the titlebar and
+// clears space for the traffic lights that product-demo.html draws.
+document.documentElement.dataset.platform = "mac";
+document.documentElement.classList.add("wco");
+
 localStorage.setItem("opensession-user", "Alex");
 localStorage.setItem("opensession-last-session", activeSessionId);
 localStorage.setItem("opensession-panel-open", "false");
 localStorage.setItem("opensession-panel-tab", "workflows");
 localStorage.setItem("opensession-sidebar-collapsed", "0");
-localStorage.setItem("opensession-sidebar-w", "232");
+localStorage.setItem("opensession-sidebar-w", "264");
 localStorage.setItem(
 	"opensession-sidebar-hidden-tools",
 	JSON.stringify([
