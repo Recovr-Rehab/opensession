@@ -23,7 +23,7 @@ const entries: TranscriptEntry[] = [
 	{
 		id: "merged-notice",
 		type: "user",
-		content: "PR #5606 was merged into main by Kent.",
+		content: '[GitHub] PR #5606 "Improve the toggle" was merged into main by Kent.',
 		timestamp: "2026-08-11T12:50:45Z",
 		notice: { kind: "system", title: "PR merged", tone: "info" },
 	},

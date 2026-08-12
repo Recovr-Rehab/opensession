@@ -103,7 +103,7 @@ function groupReviewLoops(blocks: RenderBlock[]): RenderBlock[] {
 
 function mergedNoticePrNumber(entry: TranscriptEntry): number | null {
 	if (entry.notice?.kind !== "system") return null;
-	const match = entry.content.match(/^PR #(\d+).*\bwas merged into\b/i);
+	const match = entry.content.match(/\bPR #(\d+).*\bwas merged into\b/i);
 	return match ? Number(match[1]) : null;
 }
 
