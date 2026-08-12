@@ -345,7 +345,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                     !a.enabled && "opacity-55",
                   )}
                 >
-                  <span className="truncate text-body font-semibold">{a.name}</span>
+                  <span className="truncate text-body font-semibold leading-5">{a.name}</span>
                   <span className="truncate text-meta text-faint">{triggerSummary(a)}</span>
                 </span>
                 {running ? (
@@ -356,7 +356,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                   // does what the row does.
                   <span
                     className={cn(
-                      "relative flex size-5 shrink-0 self-start cursor-pointer items-start justify-center [&_svg]:size-3.5",
+                      "relative flex size-5 shrink-0 self-start cursor-pointer items-center justify-center [&_svg]:size-3.5",
                       a.lastRunStatus === "ok" ? "text-green" : "text-red",
                     )}
                     onClick={() => onSelect(a.id)}
@@ -715,11 +715,11 @@ function TriggerIcon({ automation }: { automation: Automation }) {
   return (
     <span
       className={cn(
-        "pointer-events-none relative flex size-5 shrink-0 self-start items-start justify-center text-faint",
+        "pointer-events-none relative flex size-5 shrink-0 self-start items-center justify-center text-faint",
         !automation.enabled && "opacity-55",
       )}
     >
-      <Icon size={20} className={cn("max-w-none origin-top", scale)} />
+      <Icon size={20} className={cn("max-w-none", scale)} />
     </span>
   );
 }
