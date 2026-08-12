@@ -18,7 +18,7 @@
  */
 
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync } from "fs";
-import { arch, hostname, platform, tmpdir } from "os";
+import { arch, cpus, hostname, platform, tmpdir, totalmem } from "os";
 import { dirname, join, resolve } from "path";
 import { OPENSESSION_HOME } from "./paths";
 import { bold, dim, fail, heading, info, ok, run, warn } from "./ui";
@@ -66,6 +66,43 @@ async function detectCapabilities(): Promise<string[]> {
   return found;
 }
 
+async function commandOutput(args: string[]): Promise<string> {
+	try {
+		const proc = Bun.spawn(args, { stdout: "pipe", stderr: "ignore" });
+		const [output, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
+		return code === 0 ? output.trim() : "";
+	} catch {
+		return "";
+	}
+}
+
+async function detectResources(): Promise<Record<string, unknown>> {
+	const resources: Record<string, unknown> = {
+		cpuCores: cpus().length,
+		memoryGb: Math.round((totalmem() / 1024 ** 3) * 10) / 10,
+	};
+	const disk = platform() === "win32"
+		? ""
+		: await commandOutput(["df", "-Pk", "."]);
+	const diskLine = disk.split("\n").at(-1)?.trim().split(/\s+/);
+	if (diskLine && Number.isFinite(Number(diskLine.at(-3)))) {
+		resources.freeDiskGb = Math.round((Number(diskLine.at(-3)) * 1024 / 1024 ** 3) * 10) / 10;
+	}
+	const nvidia = await commandOutput(["nvidia-smi", "--query-gpu=name,memory.total,driver_version", "--format=csv,noheader,nounits"]);
+	if (nvidia) {
+		const [model, vram, driver] = nvidia.split("\n")[0].split(",").map((part) => part.trim());
+		const cudaVersion = (await commandOutput(["nvidia-smi"])).match(/CUDA Version:\s*([\d.]+)/)?.[1];
+		resources.gpu = { kind: "nvidia", model, vramGb: Number.isFinite(Number(vram)) ? Math.round(Number(vram) / 102.4) / 10 : undefined, driver, cuda: cudaVersion };
+	} else if (platform() === "darwin") {
+		const displays = await commandOutput(["system_profiler", "SPDisplaysDataType", "-json"]);
+		try {
+			const display = JSON.parse(displays).SPDisplaysDataType?.[0] as Record<string, unknown> | undefined;
+			if (display) resources.gpu = { kind: "apple", model: String(display.sppci_model ?? display._name ?? "Apple GPU"), metal: Boolean(display.spdisplays_metal) };
+		} catch {}
+	}
+	return resources;
+}
+
 function normalizeServer(url: string): string {
   let value = url.trim().replace(/\/+$/, "");
   if (!value) return "";
@@ -89,7 +126,8 @@ export async function connect(opts: ConnectOptions): Promise<number> {
   }
 
   const name = opts.name?.trim() || hostname().replace(/\.local$/, "");
-  const capabilities = await detectCapabilities();
+	const capabilities = await detectCapabilities();
+	const resources = await detectResources();
 
   info(dim(`server        ${server}`));
   info(dim(`this machine  ${name} (${platform()}/${arch()})`));
@@ -105,7 +143,8 @@ export async function connect(opts: ConnectOptions): Promise<number> {
         name,
         platform: platform(),
         arch: arch(),
-        capabilities,
+		capabilities,
+		resources,
         label: opts.label,
       }),
       signal: AbortSignal.timeout(15_000),
@@ -227,7 +266,14 @@ export async function runnerRun(): Promise<number> {
       socket.addEventListener("open", async () => {
         attempt = 0;
         ok("attached", identity.server);
-        socket.send(JSON.stringify({ t: "hello", version: 1, capabilities: { platform: platform(), toolchains: await detectCapabilities(), tags: [] } }));
+		 const report = async () => {
+			const resources = await detectResources();
+			return { capabilities: { platform: platform(), toolchains: await detectCapabilities(), tags: [], hardware: resources }, resources };
+		 };
+		 const initial = await report();
+		 socket.send(JSON.stringify({ t: "hello", version: 1, ...initial }));
+		 const heartbeat = setInterval(() => { void report().then((next) => socket.send(JSON.stringify({ t: "heartbeat", ...next }))).catch(() => {}); }, HEARTBEAT_MS);
+		 socket.addEventListener("close", () => clearInterval(heartbeat), { once: true });
       });
 
       socket.addEventListener("message", async (event: any) => {
@@ -259,7 +305,10 @@ export async function runnerRun(): Promise<number> {
         const id = String(msg.id);
         info(dim(`exec ${id}: ${String(msg.command).slice(0, 80)}`));
         try {
-          const proc = Bun.spawn(["bash", "-lc", String(msg.command)], {
+		  const command = platform() === "win32"
+			? ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", String(msg.command)]
+			: ["bash", "-lc", String(msg.command)];
+		  const proc = Bun.spawn(command, {
             cwd: typeof msg.cwd === "string" && msg.cwd ? msg.cwd : undefined,
 			env: runnerEnvironment(),
             stdout: "pipe",
@@ -330,7 +379,8 @@ async function prepareWorkspace(socket: WebSocket, msg: any): Promise<void> {
 	const cloneToken = typeof msg.cloneToken === "string" ? msg.cloneToken : "";
 	const branch = typeof msg.branch === "string" ? msg.branch : "";
 	try {
-		if (!workspacePath || !workspacePath.startsWith("/") || workspacePath.includes("\0")) throw new Error("Invalid managed workspace path");
+		const absolute = platform() === "win32" ? /^[A-Za-z]:[\\/]/.test(workspacePath) : workspacePath.startsWith("/");
+		if (!workspacePath || !absolute || workspacePath.includes("\0")) throw new Error("Invalid managed workspace path");
 		if (!/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\.git$/.test(repositoryUrl)) throw new Error("Runner only accepts an approved GitHub repository URL");
 		if (!/^[A-Za-z0-9._/-]{1,240}$/.test(branch) || branch.includes("..")) throw new Error("Invalid branch");
 		const scoped = await scopedGitEnvironment(cloneToken);
@@ -370,13 +420,15 @@ async function scopedGitEnvironment(cloneToken: string): Promise<{ env: Record<s
 		...runnerEnvironment(),
 		GIT_TERMINAL_PROMPT: "0",
 		GIT_CONFIG_NOSYSTEM: "1",
-		GIT_CONFIG_GLOBAL: "/dev/null",
+		GIT_CONFIG_GLOBAL: platform() === "win32" ? "NUL" : "/dev/null",
 	};
 	if (!cloneToken) return { env, cleanup: () => {} };
 	const dir = mkdtempSync(join(tmpdir(), "opensession-runner-git-"));
-	const askpass = join(dir, "askpass");
-	await Bun.write(askpass, "#!/bin/sh\ncase \"$1\" in *Username*) echo x-access-token ;; *) printf '%s\\n' \"$OPENSESSION_RUNNER_GIT_TOKEN\" ;; esac\n");
-	chmodSync(askpass, 0o700);
+	const askpass = join(dir, platform() === "win32" ? "askpass.cmd" : "askpass");
+	await Bun.write(askpass, platform() === "win32"
+		? "@echo off\r\necho %1 | findstr /I Username >nul && (echo x-access-token) || (echo %OPENSESSION_RUNNER_GIT_TOKEN%)\r\n"
+		: "#!/bin/sh\ncase \"$1\" in *Username*) echo x-access-token ;; *) printf '%s\\n' \"$OPENSESSION_RUNNER_GIT_TOKEN\" ;; esac\n");
+	if (platform() !== "win32") chmodSync(askpass, 0o700);
 	return {
 		env: { ...env, GIT_ASKPASS: askpass, OPENSESSION_RUNNER_GIT_TOKEN: cloneToken },
 		cleanup: () => rmSync(dir, { recursive: true, force: true }),
@@ -405,7 +457,8 @@ async function startRunHost(socket: WebSocket, persistent: Map<string, ReturnTyp
 			OPENSESSION_RPC_WS_AUTH: String(spec.wsToken),
 		};
 		const bun = Bun.which("bun") || process.execPath;
-		const proc = Bun.spawn(["setsid", bun, "run", RUNNER_HOST_ENTRY, specPath], { cwd: spec.cwd, env, stdin: "ignore", stdout: "ignore", stderr: "ignore" });
+		const command = platform() === "win32" ? [bun, "run", RUNNER_HOST_ENTRY, specPath] : ["setsid", bun, "run", RUNNER_HOST_ENTRY, specPath];
+		const proc = Bun.spawn(command, { cwd: spec.cwd, env, stdin: "ignore", stdout: "ignore", stderr: "ignore" });
 		proc.unref();
 		await Bun.write(join(stateDir, "pid"), `${proc.pid}\n`);
 		persistent.set(spec.hostId, proc);

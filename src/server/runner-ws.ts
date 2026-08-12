@@ -8,7 +8,7 @@
 
 import { randomBytes } from "crypto";
 import { audit } from "./audit";
-import { authenticateRunner, getRunner, isTailnetAddress, runnerAllowed, touchRunner, type Runner } from "./runners";
+import { authenticateRunner, getRunner, isTailnetAddress, runnerAllowed, runnerOwnsWorkspace, touchRunner, type Runner } from "./runners";
 import type { RunHostSpec } from "../runner-host/protocol";
 
 const g = globalThis as Record<string, unknown>;
@@ -80,7 +80,7 @@ export async function execRunnerWorkspace(
 	if (!connection || connection.protocolVersion !== PROTOCOL_VERSION) throw new Error(`Runner ${runnerId} is not connected`);
 	if (!runnerAllowed(connection.runner, { user: input.user, repo: input.repo, permission: "fullSessions" }))
 		throw new Error(`Runner ${connection.runner.name} is not permitted for this session workspace`);
-	if (!connection.runner.workspaceRoots.some((root) => input.workspacePath === `${root.replace(/\/$/, "")}/sessions/${input.sessionId}`))
+	if (!runnerOwnsWorkspace(connection.runner, input.workspacePath, input.sessionId))
 		throw new Error("Runner workspace path is outside its managed roots");
 	return execRunnerCommand(connection, runnerId, input.command, {
 		cwd: input.workspacePath, timeoutMs: input.timeoutMs, user: input.user, repo: input.repo, sessionId: input.sessionId,
@@ -109,7 +109,7 @@ export async function runnerHostStatus(
 	const connection = connections.get(runnerId);
 	if (!connection || connection.protocolVersion !== PROTOCOL_VERSION) return false;
 	if (!runnerAllowed(connection.runner, { user: input.user, repo: input.repo, permission: "fullSessions" })) return false;
-	if (!connection.runner.workspaceRoots.some((root) => input.workspacePath === `${root.replace(/\/$/, "")}/sessions/${input.sessionId}`)) return false;
+	if (!runnerOwnsWorkspace(connection.runner, input.workspacePath, input.sessionId)) return false;
 	const id = `rs${++executionCounter}-${Date.now().toString(36)}`;
 	const operationToken = randomBytes(18).toString("base64url");
 	const result = await new Promise<RunnerExecResult>((resolve) => {
@@ -270,7 +270,7 @@ export async function prepareRunnerWorkspace(
 		throw new Error(`Runner ${connection.runner.name} is not permitted for full sessions`);
 	if (!connection.runner.workspaceRoots.length)
 		throw new Error(`Runner ${connection.runner.name} has no managed workspace root`);
-	if (!connection.runner.workspaceRoots.some((root) => request.workspacePath === `${root.replace(/\/$/, "")}/sessions/${request.sessionId}`))
+	if (!runnerOwnsWorkspace(connection.runner, request.workspacePath, request.sessionId))
 		throw new Error("Runner workspace path is outside its managed roots");
 	const id = `rw${++executionCounter}-${Date.now().toString(36)}`;
 	const operationToken = randomBytes(18).toString("base64url");
@@ -313,7 +313,7 @@ export async function launchRunnerHost(
 		throw new Error(`Runner ${runnerId} is not connected`);
 	if (!runnerAllowed(connection.runner, { user: request.user, repo: request.repo, permission: "fullSessions" }))
 		throw new Error(`Runner ${connection.runner.name} is not permitted for full sessions`);
-	if (!connection.runner.workspaceRoots.some((root) => request.spec.cwd.startsWith(`${root.replace(/\/$/, "")}/sessions/`)))
+	if (!runnerOwnsWorkspace(connection.runner, request.spec.cwd, request.sessionId))
 		throw new Error("Runner host path is outside its managed workspace roots");
 	const id = `rh${++executionCounter}-${Date.now().toString(36)}`;
 	const operationToken = randomBytes(18).toString("base64url");

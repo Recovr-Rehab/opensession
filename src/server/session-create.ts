@@ -39,7 +39,7 @@ import { attachSessionWatchersToEngineTranscript, drainQueue, foldSessionUsage, 
 import { type McpScope, STRIPE_CONFIRM_TOOLS } from "./runner-shared";
 import { isRemoteSandboxProvider, resolveRequestedSandbox, sandboxConfig, sandboxesEnabled } from "./sandbox/config";
 import { resolveInteractiveSandbox } from "./sandbox/defaults";
-import { getRunner, runnerAvailableForSession } from "./runners";
+import { getRunner, runnerAvailableForSession, runnerWorkspacePath } from "./runners";
 import { isRunnerConnected, prepareRunnerWorkspace } from "./runner-ws";
 import { maybeLaunchRunnerRun } from "./runner-session";
 import { githubAppRepositoryToken } from "./github-app";
@@ -1019,7 +1019,7 @@ export async function handleCreateSessionMessage(
 		if (selectedRunner) {
 			if (!branch)
 				branch = sanitizeBranchSlug(prompt.trim().split("\n")[0]) || `session-${Date.now().toString(36)}`;
-			wtPath = `${selectedRunner.workspaceRoots[0].replace(/\/$/, "")}/sessions/${bksId}`;
+			wtPath = runnerWorkspacePath(selectedRunner, bksId);
 		} else if (forkSource) {
 			// Share the source's cwd so the fork sees the same code state.
 			wtPath = forkSource.worktreeDir || repo.repo;

@@ -13,6 +13,8 @@ import {
 	removeRunner,
 	reserveRunner,
 	runnerAllowed,
+	runnerOwnsWorkspace,
+	runnerWorkspacePath,
 	updateRunner,
 } from "./runners";
 
@@ -60,6 +62,14 @@ describe("Runner registry security", () => {
 });
 
 describe("Runner policy and reservations", () => {
+	test("uses platform-specific paths for session-owned workspaces", () => {
+		const runner = { platform: "win32" as const, workspaceRoots: ["C:\\Open Session\\"] } as ReturnType<typeof listRunners>[number];
+		const workspace = runnerWorkspacePath(runner, "bks-test");
+		expect(workspace).toBe("C:\\Open Session\\sessions\\bks-test");
+		expect(runnerOwnsWorkspace(runner, workspace, "bks-test")).toBe(true);
+		expect(runnerOwnsWorkspace(runner, "C:\\Users\\runner", "bks-test")).toBe(false);
+	});
+
 	test("enforces explicit user, repository, and execution permission policy", () => {
 		const result = register();
 		if (!result.ok) throw new Error(result.error);

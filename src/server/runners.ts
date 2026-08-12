@@ -358,6 +358,19 @@ export function runnerAllowed(runner: Runner, input: { user?: string; repo?: str
 	return true;
 }
 
+/** Server-selected, session-owned workspace path. Keep all path construction
+ * here so Windows Runners never inherit Unix separator assumptions. */
+export function runnerWorkspacePath(runner: Runner, sessionId: string): string {
+	const root = runner.workspaceRoots[0] ?? "";
+	const separator = runner.platform === "win32" ? "\\" : "/";
+	return `${root.replace(/[\\/]+$/, "")}${separator}sessions${separator}${sessionId}`;
+}
+
+export function runnerOwnsWorkspace(runner: Runner, workspacePath: string, sessionId: string): boolean {
+	const separator = runner.platform === "win32" ? "\\" : "/";
+	return runner.workspaceRoots.some((root) => workspacePath === `${root.replace(/[\\/]+$/, "")}${separator}sessions${separator}${sessionId}`);
+}
+
 /** Server-side scheduling gate for a full session. A reservation belongs to
  * its recorded session only. One live workload is intentionally conservative
  * until multi-host capacity accounting is available on the Runner channel. */
