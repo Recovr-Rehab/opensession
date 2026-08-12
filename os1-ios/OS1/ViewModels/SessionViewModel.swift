@@ -1445,14 +1445,14 @@ final class SessionViewModel {
         folds.expansion(id: id, defaultExpanded: defaultExpanded)
     }
 
-    /// Which block currently renders `entryId` — how a scroll anchor captured
-    /// before a history prepend survives the regroup that follows it (the
-    /// entry may have been swallowed into a turn with a different id).
+    /// Which block currently renders `entryId`. A history page can regroup an
+    /// entry into a turn with a different id, so callers that need to find it
+    /// after the regroup resolve through the entry rather than the block.
     func blockId(containing entryId: String) -> String? {
         displayBlocks.first { $0.entryIds.contains(entryId) }?.id
     }
 
-    /// The transcript entry a scroll restore should re-find after a prepend.
+    /// The oldest entry currently held by the transcript.
     var topmostEntryId: String? {
         displayBlocks.first?.entryIds.first
     }

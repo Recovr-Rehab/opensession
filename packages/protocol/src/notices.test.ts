@@ -195,6 +195,14 @@ describe("classifyEntry", () => {
 				.notice,
 		).toMatchObject({ kind: "system", tone: "error" });
 		expect(
+			classifyEntry(
+				entry({
+					type: "system",
+					content: "Switched Opus 5 + Fable oracle → GPT-5.6 sol · out of credits",
+				}),
+			).notice,
+		).toMatchObject({ kind: "system", tone: "warn" });
+		expect(
 			classifyEntry(entry({ type: "system", content: "switched account" }))
 				.notice,
 		).toMatchObject({ kind: "system", tone: "info" });
@@ -215,7 +223,11 @@ describe("classifyEntry", () => {
 			classifyEntry(
 				entry({ type: "system", content: "Earlier…", noticeKind: "compaction" }),
 			).notice,
-		).toMatchObject({ kind: "compaction", body: "collapsed" });
+		).toMatchObject({
+			kind: "compaction",
+			title: "Context compacted",
+			body: "collapsed",
+		});
 	});
 
 	it("turns a worker report into a notice that links back to the worker", () => {

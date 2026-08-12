@@ -66,6 +66,8 @@ const WARN_PATTERNS: RegExp[] = [
   /^this session's worktree\b/,
   // A recoverable background rebuild: clients keep using the prior bundle.
   /^app update paused\b/,
+  // Automatic fallback recovered the run, so this is notable but not fatal.
+  /^switched .+ · (?:out of credits|hit a transient engine error)$/,
 ];
 
 /** Leading glyph some notices already carry; the tone supplies its own. */
@@ -320,7 +322,7 @@ export function parseSessionNotice(content?: string): { body: string } | null {
 const PARSED_NOTICES: Record<string, Omit<EntryNotice, "tone">> = {
   compaction: {
     kind: "compaction",
-    title: "Context compacted — earlier conversation summarized to keep going",
+    title: "Context compacted",
     body: "collapsed",
   },
   recap: { kind: "recap", title: "Recap", body: "inline" },

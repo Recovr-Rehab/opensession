@@ -39,13 +39,17 @@ struct SessionView: View {
     }
 
     /// Where the reader was when a page of earlier history landed, measured
-    /// from the END of the transcript. Rows land above the reader, so this
-    /// coordinate survives a prepend while a top-relative offset does not.
+    /// from the END of the transcript — the one coordinate the page doesn't
+    /// move (see `TranscriptScroll.distanceFromEnd`). Set from the scroll
+    /// geometry's PREVIOUS value the first time the content grows, which is
+    /// the last thing measured before the page was laid out.
     @State private var prependDistanceFromEnd: CGFloat?
     /// The content height before the page landed. A lazy stack can briefly
     /// report less than this while re-realizing its rows; that is not a valid
     /// restoration target yet.
     @State private var prependBaselineContentHeight: CGFloat?
+    /// Armed when a page lands, disarmed by the height change it is waiting
+    /// for.
     @State private var awaitingPrepend = false
     @State private var prependRestoreTask: Task<Void, Never>?
     /// A page requested before the reader began a newer gesture must not claim
@@ -56,10 +60,13 @@ struct SessionView: View {
     /// real tail append, regardless of modifier callback ordering.
     @State private var lastDisplayHistoryPrependSeq = 0
 
-    /// Live scroll geometry for the restore. A reference box avoids making
-    /// each scroll frame invalidate the whole transcript body.
+    /// Live scroll geometry for the restore. In a box because it changes on
+    /// every scroll frame — see `TranscriptGeometryBox`.
     @State private var scrollGeometry = TranscriptGeometryBox()
-    /// Exact offsets are the one thing `ScrollViewProxy` cannot express.
+    /// The transcript's scroll position, for the one thing `ScrollViewProxy`
+    /// cannot express: an exact offset. `scrollTo(_:anchor:)` can only align a
+    /// ROW with an edge, and a session whose turns merge into a handful of
+    /// screens-tall blocks has no row fine-grained enough to land on.
     @State private var scrollPosition = ScrollPosition()
 
     /// Set when a "jump to the start" walk lands with more history still
@@ -391,6 +398,11 @@ struct SessionView: View {
                         if isNearBottom { newBelow = false }
                     }
                     .scrollPosition($scrollPosition)
+                    // The geometry the prepend restore works from. Reading
+                    // `old` is the point: when a page of history lands, the
+                    // first height change carries the transcript as it was
+                    // measured just BEFORE those rows were laid out, which is
+                    // where the reader still thinks they are.
                     .onScrollGeometryChange(for: TranscriptGeometry.self) {
                         TranscriptGeometry(
                             offset: $0.contentOffset.y,
@@ -452,6 +464,8 @@ struct SessionView: View {
                     // A scroll gesture is the reader taking over: the
                     // opening hold ends the moment they touch the transcript.
                     .onScrollPhaseChange { _, phase in
+                        // A hand on the transcript outranks both the opening
+                        // hold and a restore still settling a page of history.
                         if phase == .interacting {
                             scrollInteractionGeneration += 1
                             endHold()
@@ -503,8 +517,9 @@ struct SessionView: View {
                             lastDisplayHistoryPrependSeq != viewModel.historyPrependSeq
                         lastDisplayHistoryPrependSeq = viewModel.historyPrependSeq
                         if isHistoryPrepend { return }
-                        // Tail output breaks the pure-prepend invariant, so
-                        // stop restoring from the stale end distance.
+                        // A tail append during a restore breaks its pure-
+                        // prepend invariant, so the reader's current position
+                        // wins over a stale distance-from-end calculation.
                         cancelPrependRestore()
                         if pinnedToBottom || holdingAtLatest {
                             scrollToBottom(proxy, animated: true)
@@ -529,6 +544,12 @@ struct SessionView: View {
                         }
                     }
                     .onChange(of: viewModel.historyPrependSeq) {
+                        // Keep the reader where they were. The rows land above
+                        // everything on screen, so the geometry observer above
+                        // takes the measurement and `restoreAfterPrepend` puts
+                        // the position back. A "jump to the start" walk pages
+                        // repeatedly on its way and ends with a scroll of its
+                        // own, so it opts out.
                         guard !viewModel.jumpingToStart,
                               prependRequestInteraction == scrollInteractionGeneration
                         else {
@@ -866,7 +887,7 @@ struct SessionView: View {
     private func requestJumpToStart() {
         guard viewModel.canLoadEarlier, !viewModel.loadingEarlier else { return }
         // The walk ends with an explicit scroll to the first message, so the
-        // per-page anchor restore has nothing to keep in place.
+        // per-page restore has nothing to keep in place.
         cancelPrependRestore()
         viewModel.jumpToStart()
     }
@@ -926,7 +947,6 @@ struct SessionView: View {
         .padding(.vertical, 4)
         .frame(maxWidth: 520, alignment: .leading)
         .help(headerSubtitle)
-        .accessibilityElement(children: .combine)
     }
     #endif
 
@@ -1099,10 +1119,25 @@ struct SessionView: View {
         holdingAtLatest = false
     }
 
+    /// How long the prepend restore keeps re-asserting the reader's place.
+    /// The prepended rows are still measuring for about a second after they
+    /// arrive; measured on an iPhone 17 Pro, a page's height landed in four
+    /// steps over ~600ms, and its markdown kept adding to it after that.
     private static let prependRestoreTicks = 12
     private static let prependRestoreInterval = Duration.milliseconds(120)
 
-    /// Restore the reader after prepended rows settle and grow.
+    /// Put the reader back where the page of earlier history found them.
+    ///
+    /// SwiftUI anchors a scroll view across a pure SIZE change, but not across
+    /// the data change a prepend is: measured on an iPhone 17 Pro, one page
+    /// moved the reader 1,254pt the first time and 2,186pt the next — to the
+    /// top of the transcript, several screens from the line they were reading.
+    ///
+    /// It re-asserts rather than setting the offset once, for two reasons the
+    /// measurements made plain: the page's rows keep growing as they realize
+    /// and parse, so the right offset is a moving target; and a write while
+    /// the scroll is still gliding from the flick that triggered the page is
+    /// dropped outright, so the first attempt often does nothing.
     private func restoreAfterPrepend() {
         guard let distance = prependDistanceFromEnd,
               let baseline = prependBaselineContentHeight
@@ -1117,6 +1152,7 @@ struct SessionView: View {
                     if Task.isCancelled { return }
                 }
                 let height = scrollGeometry.contentHeight
+                guard height > 0 else { continue }
                 guard let y = TranscriptScroll.restoredScrollY(
                     distanceFromEnd: distance,
                     contentHeight: height,
