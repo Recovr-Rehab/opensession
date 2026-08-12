@@ -56,6 +56,9 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     /// The requested sandbox provider and materialized sandbox id. This is a
     /// reference only; Workspace details resolves its live state on demand.
     var sandbox: SessionSandbox?
+    /// A persistent machine chosen explicitly for this session. It is separate
+    /// from `sandbox`: runners are trusted hardware, not isolated compute.
+    var runner: SessionRunner?
     /// The agent-published demo of a user-visible change, rendered inline in
     /// the transcript where it was published.
     var walkthrough: SessionWalkthrough?

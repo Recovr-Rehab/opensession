@@ -6,6 +6,8 @@ struct SessionSandbox: Decodable, Equatable, Hashable, Sendable {
     let provider: String?
     let sandboxId: String?
     let workspace: String?
+    let lifecycle: String?
+    let lastLifecycleError: String?
 }
 
 /// Live state from `GET /api/sessions/:id/sandbox`. Keep every field optional:
@@ -22,6 +24,8 @@ struct SessionSandboxStatus: Decodable, Equatable, Sendable {
     let sandboxId: String?
     let workspace: String?
     let status: String?
+    let lifecycle: String?
+    let lastLifecycleError: String?
     let materialized: Bool?
     let busy: Bool?
     let cwd: String?

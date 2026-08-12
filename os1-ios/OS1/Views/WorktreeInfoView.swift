@@ -41,6 +41,7 @@ struct WorktreeInfoView: View {
                     assetsSection
                     worktreeSection
                     sandboxSection
+                    runnerSection
                     runSettingsSection
                 }
                 .padding(.horizontal, 16)
@@ -205,7 +206,7 @@ struct WorktreeInfoView: View {
                 } else {
                     InfoRow(
                         label: "Status",
-                        value: sandboxState.capitalized,
+                        value: sandboxStateLabel,
                         icon: sandboxStateIcon
                     )
                     Divider()
@@ -219,11 +220,11 @@ struct WorktreeInfoView: View {
                         Divider()
                         InfoRow(label: "Path", value: cwd, icon: "folder", monospaced: true)
                     }
-                    if sandboxState == "running", sandboxStatus?.canPause == true {
+                    if sandboxState == "awake", sandboxStatus?.canPause == true {
                         Divider()
                         sandboxActionButton(.pause, title: "Pause compute", icon: "pause.circle")
                     }
-                    if sandboxState == "stopped", sandboxStatus?.canResume == true {
+                    if sandboxState == "sleeping" || sandboxState == "needs_attention", sandboxStatus?.canResume == true {
                         Divider()
                         sandboxActionButton(.resume, title: "Wake sandbox", icon: "play.circle")
                     }
@@ -259,8 +260,58 @@ struct WorktreeInfoView: View {
                             .frame(minHeight: 44)
                             .disabled(sandboxLoading || sandboxAction != nil)
                     }
+                    if let error = sandboxStatus?.lastLifecycleError ?? sandbox.lastLifecycleError,
+                       !error.isEmpty {
+                        Divider()
+                        Text(error)
+                            .font(.footnote)
+                            .foregroundStyle(OS1VisualStyle.red)
+                            .padding(12)
+                    }
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var runnerSection: some View {
+        if let runner = currentSession.runner {
+            InfoSection(title: "Runner") {
+                InfoRow(label: "Machine", value: runner.name, icon: "desktopcomputer")
+                Divider()
+                InfoRow(
+                    label: "Status",
+                    value: runnerLifecycleLabel(runner.lifecycle),
+                    icon: runnerLifecycleIcon(runner.lifecycle)
+                )
+                Divider()
+                InfoRow(label: "Workspace", value: runner.workspacePath, icon: "folder", monospaced: true)
+                if let error = runner.lastLifecycleError, !error.isEmpty {
+                    Divider()
+                    Text(error)
+                        .font(.footnote)
+                        .foregroundStyle(OS1VisualStyle.red)
+                        .padding(12)
+                }
+            }
+        }
+    }
+
+    private func runnerLifecycleLabel(_ lifecycle: String?) -> String {
+        switch lifecycle {
+        case "awake": "Ready"
+        case "offline": "Offline"
+        case "needs_attention": "Needs attention"
+        default: "Preparing"
+        }
+    }
+
+    private func runnerLifecycleIcon(_ lifecycle: String?) -> String {
+        switch lifecycle {
+        case "awake": "checkmark.circle"
+        case "offline": "wifi.slash"
+        case "needs_attention": "exclamationmark.triangle"
+        default: "clock"
         }
     }
 
@@ -708,14 +759,27 @@ struct WorktreeInfoView: View {
     }
 
     private var sandboxState: String {
-        sandboxStatus?.status ?? (remoteSandbox?.sandboxId == nil ? "gone" : "running")
+        sandboxStatus?.lifecycle
+            ?? currentSession.sandbox?.lifecycle
+            ?? (remoteSandbox?.sandboxId == nil ? "preparing" : "awake")
+    }
+
+    private var sandboxStateLabel: String {
+        switch sandboxState {
+        case "awake": "Awake"
+        case "sleeping": "Sleeping"
+        case "waking": "Waking"
+        case "needs_attention": "Needs attention"
+        default: "Preparing"
+        }
     }
 
     private var sandboxStateIcon: String {
         switch sandboxState {
-        case "running": "checkmark.circle"
-        case "stopped": "pause.circle"
-        case "gone": "exclamationmark.triangle"
+        case "awake": "checkmark.circle"
+        case "sleeping": "pause.circle"
+        case "waking": "arrow.clockwise"
+        case "needs_attention": "exclamationmark.triangle"
         default: "questionmark.circle"
         }
     }
