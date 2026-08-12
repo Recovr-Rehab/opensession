@@ -11,6 +11,8 @@ export interface SessionSandboxStatus {
 	sandboxId?: string;
 	workspace?: "bind" | "volume";
 	status: "none" | "running" | "stopped" | "gone";
+	lifecycle?: "preparing" | "awake" | "sleeping" | "waking" | "needs_attention";
+	lastLifecycleError?: string;
 	materialized?: boolean;
 	busy?: boolean;
 	cwd?: string | null;

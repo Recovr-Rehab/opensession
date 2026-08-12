@@ -359,6 +359,7 @@ export async function openCreatedSession(
 					? {
 							sandbox: {
 								provider: spec.sandboxProvider,
+								lifecycle: "preparing",
 								// Volume intent is recorded up front so the prompt
 								// paths know the workspace never exists host-side
 								// (hasRemoteWorkspace) even before the first ensure.

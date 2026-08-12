@@ -263,6 +263,10 @@ export interface UnifiedSession {
     provider: string;
     sandboxId?: string;
     workspace?: "bind" | "volume";
+		/** Provider-neutral compute lifecycle. The transcript and queue stay live
+		 * while this moves between states. */
+		lifecycle?: "preparing" | "awake" | "sleeping" | "waking" | "needs_attention";
+		lastLifecycleError?: string;
   };
 }
 
@@ -507,6 +511,8 @@ export interface NativeSessionFile {
     provider: string;
     sandboxId?: string;
     workspace?: "bind" | "volume";
+		lifecycle?: "preparing" | "awake" | "sleeping" | "waking" | "needs_attention";
+		lastLifecycleError?: string;
   };
 }
 

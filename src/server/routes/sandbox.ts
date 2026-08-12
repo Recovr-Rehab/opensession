@@ -22,6 +22,7 @@ async function sandboxView(session: NonNullable<ReturnType<typeof findSession>>)
 	const provider = getSandboxProvider(recorded.provider);
 	const sandbox = await provider.get(recorded.sandboxId);
 	const status = sandbox ? await sandbox.status() : "gone";
+	const lifecycle = recorded.lifecycle || (status === "running" ? "awake" : status === "stopped" ? "sleeping" : "needs_attention");
 	let logs: { setup?: string; resume?: string } | undefined;
 	if (sandbox && status === "running") {
 		const read = async (suffix: "setup" | "resume") => {
@@ -40,6 +41,8 @@ async function sandboxView(session: NonNullable<ReturnType<typeof findSession>>)
 		sandboxId: recorded.sandboxId,
 		workspace: recorded.workspace,
 		status,
+		lifecycle,
+		lastLifecycleError: recorded.lastLifecycleError,
 		materialized: status !== "gone",
 		busy: hostRunBusy(session.id),
 		cwd: sandbox?.cwd || session.worktreeDir || null,
@@ -87,6 +90,7 @@ export async function handleSandboxRoutes(
 					{ error: `${recorded.provider} does not expose manual pause` },
 					{ status: 400 },
 				);
+			touchNativeSession(session.id, { sandbox: { ...recorded, lifecycle: "sleeping", lastLifecycleError: undefined } });
 			await provider.pause(recorded.sandboxId);
 		} else if (action === "resume") {
 			if (!provider.resume)
@@ -94,6 +98,7 @@ export async function handleSandboxRoutes(
 					{ error: `${recorded.provider} does not expose manual resume` },
 					{ status: 400 },
 				);
+			touchNativeSession(session.id, { sandbox: { ...recorded, lifecycle: "waking", lastLifecycleError: undefined } });
 			await provider.resume(recorded.sandboxId);
 		} else {
 			const body = (await ctx.req.json().catch(() => ({}))) as {
@@ -104,6 +109,7 @@ export async function handleSandboxRoutes(
 					{ error: "Recreate deletes unpushed sandbox workspace data; confirm is required" },
 					{ status: 400 },
 				);
+			touchNativeSession(session.id, { sandbox: { ...recorded, lifecycle: "preparing", lastLifecycleError: undefined } });
 			await provider.destroy(recorded.sandboxId);
 			const recreated = await provider.ensure({
 				sessionId: session.id,
@@ -117,9 +123,13 @@ export async function handleSandboxRoutes(
 					...recorded,
 					sandboxId: recreated.id,
 					workspace: recreated.workspace,
+					lifecycle: "awake",
+					lastLifecycleError: undefined,
 				},
 			});
 		}
+		if (action === "resume")
+			touchNativeSession(session.id, { sandbox: { ...recorded, lifecycle: "awake", lastLifecycleError: undefined } });
 		audit({
 			msg: `sandbox_${action}`,
 			session_id: session.id,
@@ -128,8 +138,10 @@ export async function handleSandboxRoutes(
 		});
 		return Response.json(await sandboxView(findSession(session.id) || session));
 	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		touchNativeSession(session.id, { sandbox: { ...recorded, lifecycle: "needs_attention", lastLifecycleError: message.slice(0, 240) } });
 		return Response.json(
-			{ error: error instanceof Error ? error.message : String(error) },
+			{ error: message },
 			{ status: 500 },
 		);
 	}

@@ -48,20 +48,15 @@ export function SandboxBadge({
 	}, [open, load]);
 
 	if (!sandbox?.provider || sandbox.provider === "local") return null;
-	const mode = sandbox.workspace === "volume" ? "volume" : "bind";
 	const state = status?.status || (sandbox.sandboxId ? "running" : "gone");
-	const lifecycleLabel =
-		state === "running"
-			? "Awake"
-			: state === "stopped"
-				? "Sleeping"
-				: state === "gone"
-					? "Needs attention"
-					: "Preparing";
+	const lifecycle = status?.lifecycle || (state === "running" ? "awake" : state === "stopped" ? "sleeping" : "needs_attention");
+	const lifecycleLabel: Record<typeof lifecycle, string> = {
+		preparing: "Preparing", awake: "Awake", sleeping: "Sleeping", waking: "Waking", needs_attention: "Needs attention",
+	};
 	const dot =
-		state === "running"
+		lifecycle === "awake"
 			? "bg-green"
-			: state === "stopped"
+			: lifecycle === "sleeping" || lifecycle === "waking"
 				? "bg-yellow"
 				: "bg-faint";
 
@@ -104,19 +99,17 @@ export function SandboxBadge({
 				<div className="px-2 pb-2 pt-1">
 					<div className="flex items-center gap-2 text-xs font-semibold text-fg">
 						<span className={cn("size-2 rounded-full", dot)} />
-						<span>{lifecycleLabel}</span>
+						<span>{lifecycleLabel[lifecycle]}</span>
 						<span className="ml-auto font-medium text-faint">Runtime</span>
 					</div>
-					<div className="mt-1 text-[11px] text-dim">
-						{sandbox.provider} · {mode} workspace
-					</div>
+					<div className="mt-1 text-[11px] text-dim">{sandbox.provider} · session workspace</div>
 					{status?.cwd ? (
 						<div className="mt-1 truncate font-mono text-[10px] text-faint" title={status.cwd}>
 							{status.cwd}
 						</div>
 					) : null}
 				</div>
-				{state === "running" && status?.canPause ? (
+				{lifecycle === "awake" && status?.canPause ? (
 					<button
 						className={actionClass}
 						disabled={Boolean(working || status.busy)}
@@ -125,7 +118,7 @@ export function SandboxBadge({
 						{working === "pause" ? "Sleeping…" : "Sleep sandbox"}
 					</button>
 				) : null}
-				{state === "stopped" && status?.canResume ? (
+				{(lifecycle === "sleeping" || lifecycle === "needs_attention") && status?.canResume ? (
 					<button
 						className={actionClass}
 						disabled={Boolean(working)}
@@ -150,7 +143,7 @@ export function SandboxBadge({
 						</pre>
 					</details>
 				) : null}
-				{error ? <div className="px-2 py-1.5 text-[11px] font-medium text-red">{error}</div> : null}
+				{status?.lastLifecycleError || error ? <div className="px-2 py-1.5 text-[11px] font-medium text-red">{status?.lastLifecycleError || error}</div> : null}
 			</Popover.Popup>
 		</Popover.Root>
 	);

@@ -39,6 +39,7 @@ import { PreferencesPanel } from "./settings/PreferencesPanel";
 import { PrewarmingPanel } from "./settings/PrewarmingPanel";
 import { ReposPanel } from "./settings/ReposPanel";
 import { SandboxesPanel } from "./settings/SandboxesPanel";
+import { RunnersPanel } from "./settings/RunnersPanel";
 import { SettingsAccountCard, SettingsAccountFooter } from "./SettingsAccount";
 import { SetupPanel } from "./Setup";
 
@@ -78,6 +79,7 @@ export type SettingsSectionKey =
 	| "members"
 	| "models"
 	| "sandboxes"
+	| "runners"
 	| "library"
 	| "integrations"
 	| "connections"
@@ -306,6 +308,17 @@ const SECTIONS: {
 			<svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4">
 				<path d="M8 1.8l5.2 2.9v6.1L8 13.8l-5.2-3V4.7L8 1.8z" strokeLinejoin="round" />
 				<path d="M2.9 4.9L8 7.7l5.1-2.8M8 7.8v5.8" />
+			</svg>
+		),
+	},
+	{
+		key: "runners",
+		label: "Runners",
+		group: "Workspace",
+		icon: (
+			<svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4">
+				<rect x="2.3" y="3" width="11.4" height="10" rx="1.6" />
+				<path d="M5 6.1h.01M8 6.1h3M5 9.8h6" strokeLinecap="round" />
 			</svg>
 		),
 	},
@@ -686,6 +699,7 @@ function SectionPanel({
 			{section === "audit" && <AuditPanel />}
 			{section === "models" && <ModelsPanel />}
 			{section === "sandboxes" && <SandboxesPanel />}
+			{section === "runners" && <RunnersPanel />}
 			{section === "connections" && <Connections />}
 			{section === "myAccounts" && <MyAccountsPanel />}
 			{section === "memory" && <MemoryPanel />}

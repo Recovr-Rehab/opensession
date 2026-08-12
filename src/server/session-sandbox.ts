@@ -63,10 +63,16 @@ export async function activeSandboxFor(
 			const provider = getSandboxProvider(sb.provider);
 			let sandbox = await provider.get(sb.sandboxId);
 			if (sandbox && (await sandbox.status()) === "stopped" && options.wake && provider.resume) {
+				if (session.source === "opensession")
+					touchNativeSession(session.id, { sandbox: { ...sb, lifecycle: "waking", lastLifecycleError: undefined } });
 				sandbox = await provider.resume(sb.sandboxId);
+				if (sandbox && (await sandbox.status()) === "running" && session.source === "opensession")
+					touchNativeSession(session.id, { sandbox: { ...sb, lifecycle: "awake", lastLifecycleError: undefined } });
 			}
 			return sandbox && (await sandbox.status()) === "running" ? sandbox : null;
-		} catch {
+		} catch (error) {
+			if (options.wake && session.source === "opensession")
+				touchNativeSession(session.id, { sandbox: { ...sb, lifecycle: "needs_attention", lastLifecycleError: error instanceof Error ? error.message.slice(0, 240) : String(error).slice(0, 240) } });
 			return null;
 		}
 	}

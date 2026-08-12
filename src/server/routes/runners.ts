@@ -18,6 +18,7 @@ import {
 	type RunnerPlatform,
 } from "../runners";
 import { requestUser, type RouteContext } from "./context";
+import { requireWorkspaceAdmin, workspaceAdminAuthorized } from "../workspace-auth";
 
 function peerAddress(ctx: RouteContext): string {
 	const server = (globalThis as any).__opensessionServer as { requestIP?(req: Request): { address: string } | null } | undefined;
@@ -29,14 +30,24 @@ function peerAddress(ctx: RouteContext): string {
 	return direct;
 }
 
-function publicView() {
-	return listRunners().map((runner) => publicRunner(runner, isRunnerConnected(runner.id)));
+function publicView(ctx: RouteContext) {
+	const user = requestUser(ctx) || undefined;
+	const admin = workspaceAdminAuthorized(ctx);
+	return listRunners()
+		.filter((runner) => admin || runnerAllowedForView(runner, user))
+		.map((runner) => publicRunner(runner, isRunnerConnected(runner.id)));
+}
+
+function runnerAllowedForView(runner: ReturnType<typeof listRunners>[number], user?: string): boolean {
+	if (runner.allowedUsers.length && (!user || !runner.allowedUsers.includes(user))) return false;
+	return runner.permissions.commands || runner.permissions.fullSessions || runner.permissions.terminals || runner.permissions.portals;
 }
 
 export async function handleRunnersRoutes(ctx: RouteContext): Promise<Response | undefined> {
 	const { path, req } = ctx;
-	if (path === "/api/runners" && req.method === "GET") return Response.json({ runners: publicView() });
+	if (path === "/api/runners" && req.method === "GET") return Response.json({ runners: publicView(ctx), admin: workspaceAdminAuthorized(ctx) });
 	if (path === "/api/runners/pair" && req.method === "POST") {
+		const denied = requireWorkspaceAdmin(ctx); if (denied) return denied;
 		const pairing = createRunnerPairing(requestUser(ctx) || undefined);
 		audit({ msg: "runner_pairing_created", user: requestUser(ctx), pending: listRunnerPairings().length });
 		return Response.json({ ...pairing, pending: listRunnerPairings().length });
@@ -71,6 +82,7 @@ export async function handleRunnersRoutes(ctx: RouteContext): Promise<Response |
 	if (!match) return undefined;
 	const [, id, action] = match;
 	if (!action && req.method === "PATCH") {
+		const denied = requireWorkspaceAdmin(ctx); if (denied) return denied;
 		const body = await req.json().catch(() => null) as Record<string, unknown> | null;
 		if (!body) return Response.json({ error: "Invalid JSON" }, { status: 400 });
 		const runner = updateRunner(id, body as any);
@@ -79,6 +91,7 @@ export async function handleRunnersRoutes(ctx: RouteContext): Promise<Response |
 		return Response.json({ runner: publicRunner(runner, isRunnerConnected(id)) });
 	}
 	if (!action && req.method === "DELETE") {
+		const denied = requireWorkspaceAdmin(ctx); if (denied) return denied;
 		if (!removeRunner(id)) return Response.json({ error: "Runner not found" }, { status: 404 });
 		const disconnected = disconnectRunner(id);
 		audit({ msg: "runner_revoked", runner_id: id, user: requestUser(ctx), disconnected });

@@ -734,7 +734,24 @@ export function attachSessionWatchersToEngineTranscript(
 	}
 }
 
-export async function drainQueue(sessionId: string): Promise<void> {
+const queueDrains: Map<string, Promise<void>> = (g.__queueDrains ??= new Map());
+
+/**
+ * Serialize queue draining per session. A sleeping Sandbox may take seconds
+ * to resume, during which later composer sends must stay behind the first
+ * persisted message instead of each initiating another provider wake.
+ */
+export function drainQueue(sessionId: string): Promise<void> {
+	const existing = queueDrains.get(sessionId);
+	if (existing) return existing;
+	const drain = drainQueueInner(sessionId).finally(() => {
+		if (queueDrains.get(sessionId) === drain) queueDrains.delete(sessionId);
+	});
+	queueDrains.set(sessionId, drain);
+	return drain;
+}
+
+async function drainQueueInner(sessionId: string): Promise<void> {
 	let queue;
 	while ((queue = promptQueues.get(sessionId)) && queue.length > 0) {
 		// The user pressed stop: leave the queue visible-but-parked until their
@@ -1083,6 +1100,15 @@ export async function maybeLaunchSandboxedRun(
 	const sandboxStartedAt = Date.now();
 	try {
 		if (isAgentSessionCancelled(session.id, opts.startToken)) return cancelledRun();
+		if (session.source === "opensession" && session.sandbox) {
+			touchNativeSession(session.id, {
+				sandbox: {
+					...session.sandbox,
+					lifecycle: session.sandbox.sandboxId ? "waking" : "preparing",
+					lastLifecycleError: undefined,
+				},
+			});
+		}
 		const provider = getSandboxProvider(sbProvider);
 		const sandbox = await ensureSandboxWithTransientRetry(provider, {
 			sessionId: session.id,
@@ -1128,6 +1154,8 @@ export async function maybeLaunchSandboxedRun(
 					// Record how the workspace materialized ("volume" = it lives only
 					// inside the sandbox; host existsSync guards must not gate it).
 					workspace: sandbox.workspace,
+					lifecycle: "awake",
+					lastLifecycleError: undefined,
 				},
 				...(remoteSandboxReplaced
 					? {
@@ -1136,6 +1164,20 @@ export async function maybeLaunchSandboxedRun(
 							opencodeSessionId: undefined,
 						}
 					: {}),
+			});
+		}
+		if (session.source === "opensession" && session.sandbox) {
+			// Keep lifecycle state current even when this is a re-use of the same
+			// materialized Sandbox and no engine/session fields changed above.
+			touchNativeSession(session.id, {
+				sandbox: {
+					...session.sandbox,
+					provider: sbProvider,
+					sandboxId: sandbox.id,
+					workspace: sandbox.workspace,
+					lifecycle: "awake",
+					lastLifecycleError: undefined,
+				},
 			});
 		}
 		// opensession-* tools reach the container as stdio proxies over the run-rpc
@@ -1209,6 +1251,11 @@ export async function maybeLaunchSandboxedRun(
 		// The token was registered mid-try; the failed run will never consume it.
 		unregisterRunToken(rpcToken);
 		const reason = String(e?.message || e).slice(0, 200);
+		if (session.source === "opensession" && session.sandbox) {
+			touchNativeSession(session.id, {
+				sandbox: { ...session.sandbox, lifecycle: "needs_attention", lastLifecycleError: reason },
+			});
+		}
 		audit({
 			kind: "sandbox_turn_metric",
 			session_id: session.id,
