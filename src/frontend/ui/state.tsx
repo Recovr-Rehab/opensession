@@ -193,6 +193,60 @@ export function ListSkeleton({
 	);
 }
 
+/**
+ * A conversation that hasn't arrived, in the shape it will take: two turns of
+ * ghost prose with a ghost bubble above each.
+ *
+ * The alternative is a spinner in the middle of the canvas, and in this app a
+ * spinner says the wrong thing — the PixelSpinner is what a session wears while
+ * an agent is WORKING, so wearing it to fetch a transcript reads as "the model
+ * is generating" for a session that finished hours ago. Ghost rows can only
+ * mean "the words are on their way".
+ *
+ * The geometry is the transcript's own: the reading column, `mb-4.5` between
+ * turns, bubbles right-aligned and rounded like `msgBubbleUser`. So the ghosts
+ * sit where the real rows will, and nothing jumps when they land. What it does
+ * NOT reuse is `msgRow` itself — that string carries the `.msg` hook
+ * `useSessionScroll` queries to find turn boundaries, and a placeholder is not
+ * a turn to scroll to.
+ */
+const TRANSCRIPT_GHOST_TURNS: {
+	bubble: string;
+	lines: string[];
+}[] = [
+	{ bubble: "h-[42px] w-[42%]", lines: ["w-[68%]", "w-[84%]", "w-[51%]"] },
+	{ bubble: "h-[32px] w-[28%]", lines: ["w-[76%]", "w-[38%]"] },
+];
+
+export function TranscriptSkeleton({
+	className,
+	label = "Loading conversation",
+	...props
+}: React.ComponentPropsWithoutRef<"div"> & { label?: string }) {
+	return (
+		<div
+			role="status"
+			aria-live="polite"
+			aria-label={label}
+			className={cn("flex animate-pulse flex-col", className)}
+			{...props}
+		>
+			{TRANSCRIPT_GHOST_TURNS.map((turn) => (
+				<React.Fragment key={turn.bubble}>
+					<div className="mx-auto mb-4.5 flex w-full max-w-[var(--session-col)] flex-col">
+						<div className={cn("self-end rounded-lg bg-hover", turn.bubble)} />
+					</div>
+					<div className="mx-auto mb-4.5 flex w-full max-w-[var(--session-col)] flex-col gap-2.5">
+						{turn.lines.map((width) => (
+							<div key={width} className={cn("h-3 rounded-sm bg-hover", width)} />
+						))}
+					</div>
+				</React.Fragment>
+			))}
+		</div>
+	);
+}
+
 type AlertVariant = "error" | "warn" | "info";
 
 // Border at 40% of the hue over its soft fill — the `.form-error` recipe,

@@ -9,8 +9,9 @@ import React, {
 	useSyncExternalStore,
 } from "react";
 import { createPortal } from "react-dom";
-import { Reorder } from "motion/react";
-import { suppressLayoutAnimations } from "../ui/motion";
+import { motion, Reorder } from "motion/react";
+import { duration, ease, suppressLayoutAnimations } from "../ui/motion";
+import { TranscriptSkeleton } from "../ui/state";
 import { renderMarkdown } from "../lib/markdown";
 import { LiveTurnStore } from "../lib/live-turn-store";
 import { isTimelineOnlyRunnerNotice } from "../lib/runner-events";
@@ -6209,15 +6210,25 @@ function WorkspaceWaiting({ detail }: { detail: string }) {
 }
 
 function ConversationLoading() {
+	// Held back for a beat: most transcripts arrive fast enough that a
+	// placeholder would flash and go, which is more distracting than the empty
+	// canvas it replaced. Only a load slow enough to notice gets stood in for.
+	const [visible, setVisible] = useState(false);
+	useEffect(() => {
+		const t = setTimeout(() => setVisible(true), 180);
+		return () => clearTimeout(t);
+	}, []);
+	if (!visible) return <div className="min-h-full" />;
+	// The fade sits on the wrapper, not on the skeleton: Motion writes inline
+	// opacity, which the ghosts' own breathing animation would overwrite.
 	return (
-		<div
-			className="flex min-h-full w-full flex-col items-center justify-center gap-3 px-6 text-center"
-			role="status"
-			aria-live="polite"
+		<motion.div
+			initial={{ opacity: 0 }}
+			animate={{ opacity: 1 }}
+			transition={{ type: "tween", duration: duration.base, ease }}
 		>
-			<PixelSpinner className="text-dim" />
-			<div className="text-[13px] font-medium text-dim">Loading conversation</div>
-		</div>
+			<TranscriptSkeleton />
+		</motion.div>
 	);
 }
 
