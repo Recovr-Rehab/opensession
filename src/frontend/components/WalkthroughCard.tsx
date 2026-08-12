@@ -201,14 +201,7 @@ export function WalkthroughCard({
 					    edge, where it reads as this card's disclosure rather than
 					    as another indent level in the transcript. */}
 					<IconPlayRectangle size={20} className="flex-shrink-0 text-faint" />
-					<span className="flex min-w-0 items-baseline gap-1.5">
-						<span className="flex-shrink-0 font-semibold text-fg">Walkthrough</span>
-						{walkthrough.publishedBy && (
-							<span className="min-w-0 truncate text-label leading-4 text-faint phone:hidden">
-								by {walkthrough.publishedBy}
-							</span>
-						)}
-					</span>
+					<span className="flex-shrink-0 font-semibold text-fg">Walkthrough</span>
 					<span className="ml-auto max-w-40 flex-shrink truncate text-label leading-4 text-faint phone:max-w-24">
 						{expanded
 							? walkthrough.publishedAt
@@ -331,16 +324,6 @@ export function WalkthroughCard({
 												)}
 												key={side}
 											>
-												<figcaption
-													className={cn(
-														"mb-1 inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold leading-4",
-														side === "before"
-															? "bg-red-soft text-red"
-															: "bg-green-soft text-green",
-													)}
-												>
-													{side === "before" ? "Before" : "After"}
-												</figcaption>
 												<button
 													type="button"
 													// A landscape tile is sized by width, and takes
@@ -348,7 +331,7 @@ export function WalkthroughCard({
 													// silently letterbox the wide sizes. A narrow
 													// one is sized by height instead (tileBox).
 													className={cn(
-														"block cursor-zoom-in overflow-hidden rounded-md border border-line bg-transparent p-0 outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+														"relative block cursor-zoom-in overflow-hidden rounded-md border border-line bg-transparent p-0 outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
 														tileBox(`${i}:${side}`).className,
 													)}
 													style={tileBox(`${i}:${side}`).style}
@@ -376,8 +359,18 @@ export function WalkthroughCard({
 																event.currentTarget.naturalHeight,
 															)
 														}
-													/>
-												</button>
+															/>
+															<span
+																className={cn(
+																	"pointer-events-none absolute left-2 top-2 rounded-full px-2 py-0.5 text-[11px] font-semibold leading-4 shadow-[0_1px_2px_oklch(0_0_0_/_0.12)]",
+																	side === "before"
+																		? "bg-red-soft text-red"
+																		: "bg-green-soft text-green",
+																)}
+															>
+																{side === "before" ? "Before" : "After"}
+															</span>
+														</button>
 											</figure>
 										),
 								)}
@@ -450,18 +443,9 @@ export function WalkthroughCard({
 													className="m-0 min-w-0"
 													key={side}
 												>
-													<figcaption className="mb-1.5 flex h-5 items-center gap-2 px-0.5 text-[11px] font-semibold leading-4 text-dim">
-														<span
-															className={cn(
-																"size-1.5 flex-shrink-0 rounded-full",
-																side === "before" ? "bg-red" : "bg-green",
-															)}
-														/>
-														{side === "before" ? "Before" : "After"}
-													</figcaption>
 													<button
 														type="button"
-														className="flex w-full cursor-zoom-in items-start justify-center overflow-hidden rounded-md border-0 bg-surface p-0 text-left outline-none transition-[filter] hover:brightness-[0.98] focus-visible:shadow-[inset_0_0_0_3px_var(--accent-soft)]"
+														className="relative flex w-full cursor-zoom-in items-start justify-center overflow-hidden rounded-md border-0 bg-surface p-0 text-left outline-none transition-[filter] hover:brightness-[0.98] focus-visible:shadow-[inset_0_0_0_3px_var(--accent-soft)]"
 														onClick={(event) =>
 															open(`${i}:${side}`, event.currentTarget)
 														}
@@ -484,8 +468,18 @@ export function WalkthroughCard({
 															src={mediaUrl(shot[side]!)}
 															alt={`${shot.caption || "change"} · ${side}`}
 															loading="lazy"
-														/>
-													</button>
+															/>
+															<span
+																className={cn(
+																	"pointer-events-none absolute left-2 top-2 rounded-full px-2 py-0.5 text-[11px] font-semibold leading-4 shadow-[0_1px_2px_oklch(0_0_0_/_0.12)]",
+																	side === "before"
+																		? "bg-red-soft text-red"
+																		: "bg-green-soft text-green",
+																)}
+															>
+																{side === "before" ? "Before" : "After"}
+															</span>
+														</button>
 												</figure>
 											),
 									)}

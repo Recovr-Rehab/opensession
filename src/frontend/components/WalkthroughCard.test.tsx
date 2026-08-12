@@ -15,6 +15,7 @@ import { WalkthroughCard } from "./WalkthroughCard";
 const walkthrough = {
 	summary: "The clearer controls make the next action easier to find.",
 	publishedAt: "2026-08-11T12:00:00Z",
+	publishedBy: "Kent",
 	shots: [{ after: "/tmp/after.png" }],
 };
 
@@ -34,5 +35,7 @@ describe("WalkthroughCard", () => {
 			/>,
 		);
 		expect(html).toContain('aria-expanded="false"');
+		expect(html).not.toContain("by Kent");
+		expect(html).toContain(">After</span>");
 	});
 });

@@ -116,12 +116,6 @@ struct WalkthroughCard: View {
             Text("Walkthrough")
                 .font(.caption.weight(.semibold))
                 .lineLimit(1)
-            if let by = walkthrough.publishedBy, !by.isEmpty {
-                Text("· \(by)")
-                    .font(.caption)
-                    .foregroundStyle(OS1VisualStyle.textFaint)
-                    .lineLimit(1)
-            }
             Spacer(minLength: 4)
             // Folded, what the card holds — the one thing a reader needs to
             // decide whether to open it. Open, they can see that for
@@ -159,7 +153,6 @@ struct WalkthroughCard: View {
 
     private var accessibilityLabel: String {
         var parts = ["Walkthrough"]
-        if let by = walkthrough.publishedBy, !by.isEmpty { parts.append("by \(by)") }
         let contents = contentsLabel
         if !contents.isEmpty { parts.append(contents.replacingOccurrences(of: " · ", with: ", ")) }
         return parts.joined(separator: ", ")
@@ -198,18 +191,22 @@ private struct WalkthroughThumbnailStrip: View {
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            // Tight within a pair, loose between them: the gaps are what say
-            // which before belongs to which after, now that the labels are
-            // gone.
+            // Tight within a pair, loose between them: the gaps keep each
+            // overlaid Before/After pair together without adding another row.
             HStack(alignment: .top, spacing: 14) {
                 ForEach(stills) { shot in
-                    let paths = [shot.before, shot.after].compactMap { $0 }
+                    let items: [(label: String, path: String)] = [
+                        ("Before", shot.before), ("After", shot.after),
+                    ].compactMap { item in
+                        item.1.map { (item.0, $0) }
+                    }
                     HStack(spacing: 4) {
-                        ForEach(Array(paths.enumerated()), id: \.offset) { _, path in
+                        ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                             MediaImage(
-                                path: path,
+                                path: item.path,
                                 gallery: gallery,
-                                galleryIndex: gallery.firstIndex { $0.id == path } ?? 0,
+                                galleryIndex: gallery.firstIndex { $0.id == item.path } ?? 0,
+                                label: item.label,
                                 thumbnail: Self.tile
                             )
                         }
@@ -305,25 +302,13 @@ private struct WalkthroughShotView: View {
     }
 
     private func labelled(_ label: String, path: String) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(label)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(label == "Before" ? OS1VisualStyle.red : OS1VisualStyle.green)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
-                .background(
-                    (label == "Before" ? OS1VisualStyle.red : OS1VisualStyle.green).opacity(0.14),
-                    in: Capsule()
-                )
-            MediaImage(
-                path: path,
-                gallery: gallery,
-                galleryIndex: gallery.firstIndex { $0.id == path } ?? 0
-            )
-            // The label reads at the card's margin; the picture it labels runs
-            // to the card's edges.
-            .padding(.horizontal, -WalkthroughCard.padding)
-        }
+        MediaImage(
+            path: path,
+            gallery: gallery,
+            galleryIndex: gallery.firstIndex { $0.id == path } ?? 0,
+            label: label
+        )
+        .padding(.horizontal, -WalkthroughCard.padding)
     }
 }
 
@@ -333,6 +318,7 @@ private struct MediaImage: View {
     let path: String
     var gallery: [PreviewImage] = []
     var galleryIndex: Int = 0
+    var label: String? = nil
     /// Set to render at a fixed size, cropped to fill — the folded card's
     /// strip. Unset, the still is shown whole at the card's width.
     var thumbnail: CGSize?
@@ -394,6 +380,22 @@ private struct MediaImage: View {
                 }
                 .buttonStyle(.plain)
                 .disabled(!failed)
+            }
+        }
+        .overlay(alignment: .topLeading) {
+            if let label {
+                Text(label)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(label == "Before" ? OS1VisualStyle.red : OS1VisualStyle.green)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(
+                        (label == "Before" ? OS1VisualStyle.red : OS1VisualStyle.green).opacity(0.14),
+                        in: Capsule()
+                    )
+                    .shadow(color: .black.opacity(0.12), radius: 1, y: 1)
+                    .padding(8)
+                    .allowsHitTesting(false)
             }
         }
         .task(id: "\(path)#\(retryCount)") {
