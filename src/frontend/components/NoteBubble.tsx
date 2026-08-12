@@ -68,7 +68,7 @@ export function NoteBubble({ note }: { note: SessionNote }) {
 				<span
 					className="text-meta font-semibold"
 					style={{ color: "var(--yellow)" }}
-					title="Team note — the agent doesn't see this"
+					title="Only the team sees this note"
 				>
 					Note
 				</span>

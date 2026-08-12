@@ -853,7 +853,7 @@ export function Composer({
               key="note-mode"
               icon={<IconNote size={15} />}
               label="Team note"
-              title="Posts to the transcript for the team; the agent won't see it. ⌘N to go back."
+              title="The agent won't read this. ⌘N to go back."
               tone="note"
               onRemove={() => onNoteModeChange?.(false)}
               removeLabel="Leave note mode"
@@ -923,8 +923,8 @@ export function Composer({
             placeholder={
               noteMode
                 ? minimized
-                  ? "Note…"
-                  : "Leave a note for the team — the agent won't see it"
+                  ? "Team note"
+                  : "Only your team will see this"
                 : minimized
                   ? `Ask ${shortModelLabel(effectiveModel, models)}`
                   : quote
@@ -1087,8 +1087,8 @@ export function Composer({
                       })}
                       title={
                         noteMode
-                          ? "Go back to prompting the agent (⌘N)"
-                          : "Posts to the team; the agent won't see it (⌘N)"
+                          ? "Prompt the agent again (⌘N)"
+                          : "Only your team sees it (⌘N)"
                       }
                     >
                       <span className={composerMenuIcon}>
