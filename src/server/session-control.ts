@@ -170,9 +170,11 @@ export interface SessionControl {
        * native composers' "queue" semantics.
        */
       hold?: boolean;
-      /** Caller-supplied receipt id (agent-to-agent tools); generated otherwise. */
-      deliveryId?: string;
-    },
+		/** Caller-supplied receipt id (agent-to-agent tools); generated otherwise. */
+		deliveryId?: string;
+		/** Automated PR findings wait behind an active user turn and drain alone. */
+		reviewHandoff?: boolean;
+	},
   ): Promise<DeliverResult>;
   /** Cancel a session's in-flight run (only runs this process owns). */
   cancelSession(id: string): boolean;

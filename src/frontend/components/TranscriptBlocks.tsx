@@ -9,6 +9,8 @@ import { WalkthroughCard } from "./WalkthroughCard";
 import { walkthroughInsertIndex } from "./walkthrough-placement";
 import { normalizeLegacyVoiceToolEntries } from "../lib/transcript-state";
 import { collectWrittenAssets } from "../lib/open-asset";
+import { classifyEntry } from "@tellahq/opensession-protocol/notices";
+import { ReviewLoopBlock, ReviewOutcomeBlock, type ReviewLoopOutcome } from "./ReviewLoopBlock";
 import {
 	ShippedChangeComposer,
 	type ShippedChangeComposerProps,
@@ -25,7 +27,8 @@ type RenderBlock =
 			assets: string[];
 	  }
 	| { kind: "walkthrough"; walkthrough: SessionWalkthrough }
-	| { kind: "note"; note: SessionNote };
+	| { kind: "note"; note: SessionNote }
+	| { kind: "review-loop"; blocks: RenderBlock[]; prNumber: number | null; rounds: number };
 
 interface Props {
 	entries: TranscriptEntry[];
@@ -48,6 +51,54 @@ interface Props {
 	slackShare?: ShippedChangeComposerProps & {
 		prNumber: number;
 	};
+	/** A fresh, green PR result. Rendered after the final review loop, never as a
+	 * replacement for the most recent fix turn. */
+	reviewOutcome?: ReviewLoopOutcome;
+}
+
+function reviewHandoff(block: RenderBlock): number | null | undefined {
+	if (block.kind !== "entry") return undefined;
+	const notice = classifyEntry(block.entry).notice;
+	if (notice?.kind !== "review-handoff") return undefined;
+	const match = notice.title.match(/PR #(\d+)/);
+	return match ? Number(match[1]) : null;
+}
+
+/** A review handoff and the agent work it triggers form one quiet phase. A
+ * real user message always ends it, so people never lose their own request in
+ * a collapsed automation trail. */
+function groupReviewLoops(blocks: RenderBlock[]): RenderBlock[] {
+	const grouped: RenderBlock[] = [];
+	for (let i = 0; i < blocks.length; i++) {
+		const first = blocks[i];
+		const firstPr = reviewHandoff(first);
+		if (firstPr === undefined) {
+			grouped.push(first);
+			continue;
+		}
+		const loop: RenderBlock[] = [first];
+		let rounds = 1;
+		let prNumber = firstPr;
+		while (i + 1 < blocks.length) {
+			const next = blocks[i + 1];
+			// Notes and walkthroughs have their own placement and must never vanish
+			// inside an automation disclosure.
+			if (next.kind === "note" || next.kind === "walkthrough") break;
+			// A normal user message is a new conversation phase. A second review
+			// handoff belongs to this loop and starts its next round.
+			if (next.kind === "entry" && next.entry.type === "user" && reviewHandoff(next) === undefined)
+				break;
+			i++;
+			loop.push(next);
+			const nextPr = reviewHandoff(next);
+			if (nextPr !== undefined) {
+				rounds++;
+				prNumber ??= nextPr;
+			}
+		}
+		grouped.push({ kind: "review-loop", blocks: loop, prNumber, rounds });
+	}
+	return grouped;
 }
 
 function mergedNoticePrNumber(entry: TranscriptEntry): number | null {
@@ -80,6 +131,7 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 	walkthrough,
 	notes,
 	slackShare,
+	reviewOutcome,
 }: Props) {
 	const renderedEntries = normalizeLegacyVoiceToolEntries(entries);
 	const shareAfterEntryIds = new Set<string>();
@@ -164,6 +216,10 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 			if (b.kind === "walkthrough")
 				return new Date(b.walkthrough.publishedAt).getTime();
 			if (b.kind === "note") return b.note.ts;
+			if (b.kind === "review-loop") {
+				const last = b.blocks[b.blocks.length - 1];
+				return last ? blockTime(last) : 0;
+			}
 			const entry =
 				b.kind === "turn" ? b.items[b.items.length - 1] : b.entry;
 			return entry ? new Date(entry.timestamp).getTime() : 0;
@@ -176,10 +232,52 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 			at++;
 		}
 	}
+	const groupedBlocks = groupReviewLoops(blocks);
+	const lastReviewLoop = groupedBlocks.findLastIndex(
+		(block) => block.kind === "review-loop",
+	);
+	// A later human turn makes the old verdict stale in spirit even before GitHub
+	// has observed a new push. Operational notices and recaps do not: they are
+	// allowed to follow the outcome without hiding it.
+	const showReviewOutcome =
+		!!reviewOutcome &&
+		lastReviewLoop >= 0 &&
+		!groupedBlocks.slice(lastReviewLoop + 1).some(
+			(block) => block.kind === "entry" && block.entry.type === "user",
+		);
 
 	return (
 		<>
-			{blocks.map((block, i) => {
+			{groupedBlocks.map((block, i) => {
+				if (block.kind === "review-loop") {
+					const isLast = i === groupedBlocks.length - 1;
+					return (
+						<React.Fragment key={`review-loop:${block.blocks[0]?.kind === "entry" ? block.blocks[0].entry.id : i}`}>
+							<ReviewLoopBlock prNumber={block.prNumber} rounds={block.rounds} live={Boolean(live && isLast)}>
+								{block.blocks.map((inner, innerIndex) => {
+									const innerKey = inner.kind === "turn"
+										? inner.items[0].id
+										: inner.kind === "footer"
+											? `${inner.entry.id}:footer`
+											: inner.kind === "entry"
+												? inner.entry.id
+												: `inner:${innerIndex}`;
+									return (
+										<React.Fragment key={innerKey}>
+											{inner.kind === "turn" ? (
+												<TurnBlock items={inner.items} toolResults={toolResults} live={Boolean(live && isLast && innerIndex === block.blocks.length - 1)} onOpenSubagent={onOpenSubagent} sessionId={sessionId} />
+											) : inner.kind === "footer" ? (
+												<TurnFooter entry={inner.entry} durationMs={inner.durationMs} files={inner.files} assets={inner.assets} onFork={onFork} />
+											) : inner.kind === "entry" ? (
+												<MessageBubble entry={inner.entry} owner={owner} sessionId={sessionId} />
+											) : null}
+										</React.Fragment>
+									);
+								})}
+							</ReviewLoopBlock>
+						</React.Fragment>
+					);
+				}
 				const key =
 					block.kind === "turn"
 						? block.items[0].id
@@ -200,8 +298,8 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 				// a turn fold directly before the tail is still the live turn.
 				const isLiveTail =
 					Boolean(live) &&
-					(i === blocks.length - 1 ||
-						(block.kind === "turn" && i === blocks.length - 2));
+					(i === groupedBlocks.length - 1 ||
+						(block.kind === "turn" && i === groupedBlocks.length - 2));
 				const content =
 					block.kind === "turn" ? (
 					<TurnBlock
@@ -249,6 +347,7 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 					</React.Fragment>
 				);
 			})}
+			{showReviewOutcome && reviewOutcome && <ReviewOutcomeBlock outcome={reviewOutcome} />}
 		</>
 	);
 });

@@ -107,10 +107,11 @@ export async function maybeHandoffFindings(pr: PrRef, review: ReviewResult | nul
 
     const round = (state.handoff?.rounds || 0) + 1;
     const findingsBlock = await fetchReviewFindings(pr.number, pr.ghRepo).catch(() => "");
-    const message = buildHandoffMessage({
+		const message = buildHandoffMessage({
       prNumber: pr.number,
       title: pr.title,
-      headRef: pr.headRef,
+			headRef: pr.headRef,
+			reviewedSha: sha,
       repoFull,
       round,
       cap: MAX_ROUNDS,
@@ -119,7 +120,13 @@ export async function maybeHandoffFindings(pr: PrRef, review: ReviewResult | nul
       findingsBlock,
     });
 
-    const res = await control.deliverToSession(target.id, message, "GitHub");
+		// Review findings must not steer into a person's active request. Queue the
+		// handoff behind it and mark it as a phase boundary so the queue drains it
+		// alone, after the user's turn has settled.
+		const res = await control.deliverToSession(target.id, message, "GitHub", {
+			busy: "queue",
+			reviewHandoff: true,
+		});
     if (res.status === "error") {
       console.error(`[github] review handoff → ${target.id} failed for PR #${pr.number}: ${res.message}`);
       return;

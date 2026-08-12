@@ -260,7 +260,10 @@ export const REVIEW_HANDOFF_SENTINEL = "<!--os:review-handoff-->";
 export function buildHandoffMessage(opts: {
   prNumber: number;
   title: string;
-  headRef: string;
+	headRef: string;
+	/** Commit the findings describe. The session may have moved on while this
+	 * handoff waited behind a human request. */
+	reviewedSha?: string;
   /** owner/name, for gh api commands. */
   repoFull: string;
   round: number;
@@ -280,13 +283,14 @@ export function buildHandoffMessage(opts: {
     : `The findings are on the PR — read them with \`gh pr view ${opts.prNumber} --repo ${opts.repoFull} --comments\` and \`gh api repos/${opts.repoFull}/pulls/${opts.prNumber}/comments\`.`;
   const remaining = opts.cap - opts.round;
 
+  const reviewedSha = opts.reviewedSha ? opts.reviewedSha.slice(0, 12) : "";
   return `${REVIEW_HANDOFF_SENTINEL}
 🔍 This session's PR #${opts.prNumber} “${opts.title}” (branch \`${opts.headRef}\`) was just reviewed and is not merge-ready yet${verdict ? ` (${verdict})` : ""}. You wrote this code, so the follow-through is yours — this is fix round ${opts.round}/${opts.cap}.
 
 ${findings}
 
 Do this now, in this session's worktree:
-1. Sync the branch first: \`git pull origin ${opts.headRef}\` — someone else may have pushed since your last commit.
+1. Sync the branch first: \`git pull origin ${opts.headRef}\`.${reviewedSha ? ` These findings describe \`${reviewedSha}\`; if the branch has moved on, do not patch against stale feedback. Explain that it was superseded and let the fresh review run instead.` : ""}
 2. Address every actionable finding. If you disagree with one, leave the code unchanged and reply in that thread explaining why — never silently skip.
 3. Commit (stage specific files) and push: \`git push origin HEAD:${opts.headRef}\`.
 4. Reply in each addressed inline thread with what you did, e.g. \`gh api repos/${opts.repoFull}/pulls/${opts.prNumber}/comments/<id>/replies -f body='Fixed in <sha>'\`.

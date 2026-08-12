@@ -38,6 +38,9 @@ export type QueueItem = {
 	 *  next turn boundary. Orchestration items (worker reports, auto-continues,
 	 *  GitHub FYIs) leave it unset and flow at any boundary. */
 	hold?: boolean;
+	/** Review feedback must start its own turn after any user work already in
+	 * flight. Never batch it into that work or steer it mid-turn. */
+	reviewHandoff?: boolean;
 };
 export const promptQueues: Map<string, QueueItem[]> = (g.__promptQueues ??=
 	new Map());

@@ -32,6 +32,22 @@ describe("selectQueueBatch", () => {
 		expect(plan.rest.map((m) => m.id)).toEqual(["a"]);
 	});
 
+	test("keeps review feedback behind earlier user work and drains it alone", () => {
+		const review: QueueItem = {
+			id: "review",
+			content: "findings",
+			user: "GitHub",
+			reviewHandoff: true,
+		};
+		const first = selectQueueBatch([human("a"), review, human("b")], {});
+		if (first.kind !== "deliver") throw new Error("expected deliver");
+		expect(first.batch.map((m) => m.id)).toEqual(["a"]);
+		const second = selectQueueBatch(first.rest, {});
+		if (second.kind !== "deliver") throw new Error("expected deliver");
+		expect(second.batch.map((m) => m.id)).toEqual(["review"]);
+		expect(second.rest.map((m) => m.id)).toEqual(["b"]);
+	});
+
 	test("still working: all-human queue holds", () => {
 		expect(selectQueueBatch([human("a"), human("b")], { stillWorking: true })).toEqual({ kind: "hold", heldCount: 2 });
 	});

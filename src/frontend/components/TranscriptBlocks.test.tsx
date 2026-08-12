@@ -7,6 +7,10 @@ import type { TranscriptEntry } from "../lib/types";
 	addEventListener: () => {},
 	matchMedia: () => ({ matches: false }),
 };
+(globalThis as { document?: unknown }).document = {
+	documentElement: { dataset: {}, style: {} },
+	querySelector: () => null,
+};
 (globalThis as { localStorage?: unknown }).localStorage = {
 	getItem: () => null,
 	setItem: () => {},
@@ -84,5 +88,39 @@ describe("TranscriptBlocks shipped change action", () => {
 			/>,
 		);
 		expect(html).not.toContain("Send to Slack");
+	});
+});
+
+describe("TranscriptBlocks review loops", () => {
+	test("folds review work but leaves a following user request in the conversation", () => {
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				entries={[
+					{ id: "review", type: "user", content: "[GitHub] <!--os:review-handoff-->\n🔍 This session's PR #42 was just reviewed and is not merge-ready.", timestamp: "2026-08-12T12:00:00Z" },
+					{ id: "fix", type: "assistant", content: "Fixed the review finding.", timestamp: "2026-08-12T12:01:00Z" },
+					{ id: "human", type: "user", content: "Please also update the empty state.", timestamp: "2026-08-12T12:02:00Z" },
+				]}
+				reviewOutcome={{ prNumber: 42, title: "Improve the empty state", confidence: 5, checksPassed: 8 }}
+			/>,
+		);
+		expect(html).toContain("Review loop · PR #42");
+		expect(html).not.toContain("Fixed the review finding.");
+		expect(html).toContain("Please also update the empty state.");
+		expect(html).not.toContain("Session outcome");
+	});
+
+	test("shows the session outcome after the final settled review loop", () => {
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				entries={[
+					{ id: "review", type: "user", content: "[GitHub] <!--os:review-handoff-->\n🔍 This session's PR #42 was just reviewed and is not merge-ready.", timestamp: "2026-08-12T12:00:00Z" },
+					{ id: "fix", type: "assistant", content: "Fixed the review finding.", timestamp: "2026-08-12T12:01:00Z" },
+				]}
+				reviewOutcome={{ prNumber: 42, title: "Improve the empty state", confidence: 5, checksPassed: 8 }}
+			/>,
+		);
+		expect(html).toContain("Session outcome");
+		expect(html).toContain("Completed Improve the empty state.");
+		expect(html).toContain("review 5/5 · 8 checks passed");
 	});
 });

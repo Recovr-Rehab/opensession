@@ -174,6 +174,7 @@ registerSessionControl({
 				contextSessions: opts?.contextSessions,
 				slackReplyTo: opts?.slackReplyTo,
 				...(opts?.hold ? { hold: true } : {}),
+				...(opts?.reviewHandoff ? { reviewHandoff: true } : {}),
 			});
 			watchExternalRunAndDrain(id);
 			return {

@@ -41,6 +41,15 @@ export function selectQueueBatch(
 	if (queue[0]?.user === AUTO_CONTINUE_USER) {
 		return { kind: "deliver", batch: [queue[0]], rest: queue.slice(1) };
 	}
+	// A review handoff is an automation phase boundary. Anything ahead of it is
+	// an earlier human request and gets its own turn first; the handoff then
+	// drains alone, preserving both transcript order and the reviewed SHA's
+	// meaning instead of folding feedback into unrelated work.
+	const handoffAt = queue.findIndex((m) => m.reviewHandoff);
+	if (handoffAt === 0)
+		return { kind: "deliver", batch: [queue[0]], rest: queue.slice(1) };
+	if (handoffAt > 0)
+		return { kind: "deliver", batch: queue.slice(0, handoffAt), rest: queue.slice(handoffAt) };
 	if (opts.stillWorking && !opts.interruptMark) {
 		const batch = queue.filter((m) => !m.hold);
 		if (batch.length === 0) return { kind: "hold", heldCount: queue.length };

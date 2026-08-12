@@ -5173,7 +5173,7 @@ export function SessionViewer({
 							className="inline-flex max-w-full items-center gap-1.5 overflow-hidden text-ellipsis whitespace-nowrap rounded-full border border-line bg-panel px-3 py-[3px] text-label text-dim"
 							title={`"${session.loop.prompt}" · stop with /loop stop`}
 						>
-							⟳ every {session.loop.intervalMinutes}m —{" "}
+							⟳ every {session.loop.intervalMinutes}m ·{" "}
 							{session.loop.prompt.slice(0, 60)}
 							{session.loop.prompt.length > 60 ? "…" : ""}
 						</span>
@@ -5286,7 +5286,7 @@ export function SessionViewer({
 										Copy link
 									</button>
 									<div className="max-w-xs text-xs leading-relaxed text-dim">
-										Opens in a new tab — this deploy isn&apos;t set up to
+										Opens in a new tab. This deploy isn&apos;t set up to
 										embed here yet.
 									</div>
 								</div>
@@ -5515,11 +5515,29 @@ export function SessionViewer({
 											<ToolPathRootsProvider value={toolPathRoots}>
 												<LiveSubagentsProvider value={liveSubagents}>
 													<OpenAssetProvider value={openAssetFromTranscript}>
-														<TranscriptBlocks
-															entries={entries}
-															live={isBusy}
-															sessionId={session.id}
-															walkthrough={sessionWalkthrough}
+																<TranscriptBlocks
+																	entries={entries}
+																	live={isBusy}
+																	sessionId={session.id}
+																	reviewOutcome={
+																		session.prNumber &&
+																		session.prState === "OPEN" &&
+																		session.prOsReview &&
+																		!session.prOsReview.stale &&
+																		session.prOsReview.blocking === 0 &&
+																		(session.prOsReview.confidence ?? 0) >= 4 &&
+																		session.prReviewDecision !== "CHANGES_REQUESTED" &&
+																		(session.prChecks?.failed || 0) === 0 &&
+																		(session.prChecks?.pending || 0) === 0
+																			? {
+																				prNumber: session.prNumber,
+																				title: session.title,
+																				confidence: session.prOsReview.confidence,
+																				checksPassed: session.prChecks?.passed,
+																			}
+																			: undefined
+																	}
+																	walkthrough={sessionWalkthrough}
 															notes={notes}
 															slackShare={shippedChangeShare}
 															onFork={canForkSession ? handleFork : undefined}
@@ -5670,7 +5688,7 @@ export function SessionViewer({
 										{forkFrom && (
 											<div className="mb-2 flex items-center justify-between gap-3 rounded-control border border-[color-mix(in_srgb,var(--accent)_40%,transparent)] bg-[color-mix(in_srgb,var(--accent)_12%,transparent)] px-3 py-[7px] text-supporting text-fg">
 												<span>
-													⑂ Forking a new session from the selected message — type
+													⑂ Forking a new session from the selected message. Type
 													the new direction.
 												</span>
 												<button
