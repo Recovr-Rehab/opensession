@@ -11,13 +11,14 @@ export interface ReviewLoopOutcome {
 }
 
 /**
- * A review handoff and the work it triggered, folded into one line — and, when
- * the loop has settled, the result it reached.
+ * A review handoff and the work it triggered, folded into one line, plus the
+ * result the loop reached once it settles.
  *
  * The outcome lives inside this section rather than after the transcript: it is
- * what this loop concluded, so it hangs off the same rail the loop's work does.
- * That rail is drawn whenever there is anything below the header, which keeps
- * a closed loop and its verdict visibly one object.
+ * what this loop concluded, so it sits directly under the header, whether the
+ * loop is open or closed. No rail or indent ties them together: the turn fold
+ * doesn't draw one around its work either, and a line the rest of the
+ * transcript has dropped reads as a different kind of object.
  */
 export function ReviewLoopBlock({
 	prNumber,
@@ -60,7 +61,7 @@ export function ReviewLoopBlock({
 				{live && <PulseDot className="ml-auto" />}
 			</button>
 			{(open || outcome) && (
-				<div className="mt-1 border-l border-line pl-3">
+				<div className="mt-0.5">
 					{open && children}
 					{outcome && <ReviewOutcome outcome={outcome} open={open} />}
 				</div>
@@ -71,7 +72,7 @@ export function ReviewLoopBlock({
 
 /**
  * What the loop settled on. A quiet panel rather than a sentence: the state is
- * the headline, and the numbers that back it read as meta beside it — the same
+ * the headline and the numbers that back it read as meta beside it, the same
  * shape the turn fold and the PR rows use for a result plus its evidence. The
  * PR number is already on the header above, so it is not repeated here.
  */
