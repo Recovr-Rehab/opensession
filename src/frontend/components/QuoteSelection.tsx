@@ -119,6 +119,11 @@ export function QuoteSelection({
 	useEffect(() => {
 		const dismiss = (event: MouseEvent) => {
 			if (!quote || event.button !== 0) return;
+			if (
+				event.target instanceof Element &&
+				event.target.closest(".composer")
+			)
+				return;
 			const retained = rangeRef.current;
 			const selection = window.getSelection();
 			if (retained && selection && !selection.isCollapsed && selection.rangeCount) {
