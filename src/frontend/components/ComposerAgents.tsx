@@ -273,7 +273,7 @@ export function ComposerAgents({ runs, subagents, plan, onOpenPanel }: Props) {
 				aria-label={open ? "Collapse run status" : "Show run status"}
 				onClick={toggle}
 			>
-				<span className={cn(liveDot, "size-2")} />
+				{!open && <span className={cn(liveDot, "size-2")} />}
 				{/* flex-auto, not flex-1: with a zero basis the label would only ever
 				    take the free space left over, so a long phase name stopped pushing
 				    the caret and started truncating a step early. */}

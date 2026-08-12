@@ -1,6 +1,5 @@
 import type { PlanItem } from "@tellahq/opensession-protocol/todo-plan";
 import { cn } from "../ui/cn";
-import { IconCheck } from "./icons";
 
 /**
  * The model's plan rendered as a checklist — shared by the status flap above
@@ -29,7 +28,7 @@ export function PlanChecklist({ items, max, className }: Props) {
 				<li
 					key={`${i}-${item.content}`}
 					className={cn(
-						"flex min-w-0 items-baseline gap-2",
+						"flex min-w-0 items-start gap-2",
 						item.status === "in_progress" && "font-medium text-fg",
 						item.status === "completed" && "text-dim",
 						item.status === "pending" && "text-faint",
@@ -44,27 +43,17 @@ export function PlanChecklist({ items, max, className }: Props) {
 	);
 }
 
-/** 14px status mark: a green check when done, a filled dot for the current
- *  step, an empty ring for what's still ahead. Self-centred because the row
- *  aligns on the text baseline. */
+/** One quiet marker language: green when done, amber while active, and an
+ *  empty ring for what's still ahead. */
 function PlanMark({ status }: { status: PlanItem["status"] }) {
-	if (status === "completed") {
-		return (
-			<span className="flex size-[14px] flex-none translate-y-[2px] items-center justify-center rounded-full bg-green-soft text-green">
-				<IconCheck size={12} />
-			</span>
-		);
-	}
 	return (
 		<span
 			className={cn(
-				"flex size-[14px] flex-none translate-y-[2px] items-center justify-center rounded-full border",
-				status === "in_progress" ? "border-yellow" : "border-line",
+				"mt-1 size-2 flex-none rounded-full",
+				status === "completed" && "bg-green",
+				status === "in_progress" && "bg-yellow",
+				status === "pending" && "border border-line",
 			)}
-		>
-			{status === "in_progress" && (
-				<span className="size-[6px] rounded-full bg-yellow" />
-			)}
-		</span>
+		/>
 	);
 }
