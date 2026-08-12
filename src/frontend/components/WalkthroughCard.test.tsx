@@ -9,7 +9,13 @@ import { WalkthroughCard } from "./WalkthroughCard";
 	removeItem: () => {},
 };
 (globalThis as { window?: unknown }).window = {
-	matchMedia: () => ({ matches: false }),
+	addEventListener: () => {},
+	removeEventListener: () => {},
+	matchMedia: () => ({
+		matches: false,
+		addEventListener: () => {},
+		removeEventListener: () => {},
+	}),
 };
 
 const walkthrough = {
@@ -25,17 +31,19 @@ describe("WalkthroughCard", () => {
 			<WalkthroughCard walkthrough={walkthrough} />,
 		);
 		expect(html).toContain("The clearer controls");
+		expect(html).toContain(">After</span>");
+		expect(html).not.toContain('class="overflow-hidden"');
 	});
 
 	test("folds the inline session walkthrough", () => {
 		const html = renderToStaticMarkup(
-			<WalkthroughCard
-				walkthrough={walkthrough}
-				variant="session"
-			/>,
+			<WalkthroughCard walkthrough={walkthrough} variant="session" />,
 		);
 		expect(html).toContain('aria-expanded="false"');
 		expect(html).not.toContain("by Kent");
-		expect(html).toContain(">After</span>");
+		expect(html).toContain("1 still");
+		expect(html).not.toContain(">After</span>");
+		expect(html).not.toContain("The clearer controls");
+		expect(html).toContain("max-w-[var(--session-col)]");
 	});
 });
