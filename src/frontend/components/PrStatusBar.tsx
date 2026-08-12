@@ -604,6 +604,12 @@ export function PrStatusBar({
 				? series.label
 				: headline.label;
 
+	// When checks are the reason for the headline, the headline IS the checks
+	// control: hovering it shows them, clicking it opens Review's Checks tab —
+	// so the strip needs no View checks button beside it.
+	const checksPr =
+		pr && (headline.key === "running" || headline.key === "failing") ? pr : null;
+
 	async function run(name: string, fn: () => Promise<unknown>) {
 		if (busy) return;
 		setBusy(name);
@@ -763,16 +769,11 @@ export function PrStatusBar({
 						Resolve
 					</PrBarButton>
 				) : null;
+			// "N checks pending…" / "Checks failed" IS the affordance: hovering the
+			// headline shows the checks, clicking it opens Review's Checks tab. A
+			// View checks button beside it would be the same action twice.
 			case "running":
-				return onOpenChecksTab ? (
-					<PrBarButton
-						className={actionBtn}
-						tone="status-yellow"
-						onClick={onOpenChecksTab}
-					>
-						View checks
-					</PrBarButton>
-				) : null;
+				return null;
 			case "failing":
 				return send ? (
 					<PrBarButton
@@ -786,14 +787,6 @@ export function PrStatusBar({
 						}
 					>
 						Fix checks
-					</PrBarButton>
-				) : onOpenChecksTab ? (
-					<PrBarButton
-						className={actionBtn}
-						tone="status-red"
-						onClick={onOpenChecksTab}
-					>
-						View checks
 					</PrBarButton>
 				) : null;
 			case "changes-requested":
@@ -945,9 +938,9 @@ export function PrStatusBar({
 					onOpenPrTab={() => onOpenPrTab?.()}
 				/>
 			)}
-			{headline.key === "running" && pr ? (
+			{checksPr ? (
 				<PrChecksPopover
-					checks={pr.checks}
+					checks={checksPr.checks}
 					trigger={
 							<button
 								type="button"
