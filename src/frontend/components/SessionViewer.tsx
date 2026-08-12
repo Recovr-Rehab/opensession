@@ -4637,7 +4637,7 @@ export function SessionViewer({
 					    — purely from session fields, no container polling. */}
 					<SandboxBadge sessionId={session.id} sandbox={session.sandbox} />
 					{/* Lone-session "+ New tab": with no tab strip on screen the affordance
-					    to spawn a sibling session lives here beside the title (⌘T does the
+					    to spawn a sibling session lives here beside the title (⌘⌥N does the
 					    same). The moment the strip appears — a second session, an open view
 					    tab like Review, or a split — its own + takes over and this
 					    disappears, so the two never stack. Phone uses the ⋯
@@ -4652,7 +4652,9 @@ export function SessionViewer({
 						workspaceSessions?.length === 1 && (
 							<Tooltip
 								label="New tab in this workspace"
-								shortcut={isApple ? ["⌘", "T"] : ["Ctrl", "T"]}
+								shortcut={
+									isApple ? ["⌘", "⌥", "N"] : ["Ctrl", "Alt", "N"]
+								}
 							>
 								<button
 									type="button"

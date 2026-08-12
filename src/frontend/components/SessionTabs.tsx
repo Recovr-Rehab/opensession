@@ -41,7 +41,7 @@ import { cn } from "../ui/cn";
  * currently-open session (every session sharing its `workspaceId`/workspace). It
  * only renders once a workspace has TWO or more sessions — a lone session needs no
  * strip, so the "+ New tab" affordance moves next to the session title in
- * SessionViewer's header instead (and ⌘T does the same thing). A pre-migration
+ * SessionViewer's header instead (and ⌘⌥N does the same thing). A pre-migration
  * standalone session (empty list) likewise renders nothing.
  *
  * There is no pinning here anymore (pinning moved to the sidebar). Right-click

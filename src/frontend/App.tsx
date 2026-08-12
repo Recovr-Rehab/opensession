@@ -2784,7 +2784,7 @@ export function App(
 	reopenLastArchivedRef.current = reopenLastArchived;
 
 	// Tab shortcuts matching the strip's context-menu hints: ⌘⌥C copies the
-	// concise transcript, ⌘W closes (archives) the tab, ⌘T opens a new tab
+	// concise transcript, ⌘W closes (archives) the tab, ⌘⌥N opens a new tab
 	// (sibling session) in the workspace, and ⌘Z (or the legacy ⌘⇧T) reopens what
 	// you just archived — a session, or a whole workspace row.
 	// Refs keep this mount-once listener reading fresh state. A browser that
@@ -2826,7 +2826,7 @@ export function App(
 			} else if (!e.altKey && e.key.toLowerCase() === "w") {
 				e.preventDefault();
 				void closeSessionRef.current(s);
-			} else if (!e.altKey && e.key.toLowerCase() === "t") {
+			} else if (e.altKey && e.code === "KeyN") {
 				e.preventDefault();
 				void handleNewSessionRef.current("share");
 			}
@@ -2904,7 +2904,7 @@ export function App(
 						description: "Share the current workspace and worktree",
 						category: "Actions" as const,
 						keywords: ["tab", "conversation", "sibling"],
-						shortcut: [mod, "T"],
+						shortcut: [mod, appleShortcuts ? "⌥" : "Alt", "N"],
 						icon: <IconPlus size={18} />,
 						run: () => void handleNewSession("share"),
 					},
