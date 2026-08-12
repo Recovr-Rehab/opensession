@@ -1,11 +1,11 @@
-import { useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { SessionWalkthrough } from "../lib/types";
 import { renderMarkdown } from "../lib/markdown";
 import { relativeTime } from "../lib/api";
 import { cn } from "../ui/cn";
 import { duration, ease } from "../ui/motion";
-import { IconChevronDown, IconPlayRectangle } from "./icons";
+import { IconChevronDown, IconPlay, IconPlayRectangle } from "./icons";
 import { MarkdownBody, useMarkdownRepo } from "./MarkdownBody";
 import { openLightbox, type LightboxItem } from "./MediaLightbox";
 
@@ -42,22 +42,6 @@ const SHOT_LABEL_SIDE = {
 } as const;
 
 /**
- * One tile of the folded filmstrip: a whole frame in a landscape box,
- * `object-contain` rather than cropped, like the sidebar hover card's strip
- * (components/sidebar/HoverCards.tsx). A square crop of a 1440px screenshot is
- * a grey band of text, not a picture of anything.
- *
- * A thumbnail of a UI is a picture of small things, so the tile is sized to be
- * read rather than counted: at the hover card's 124px a screenshot is a grey
- * smudge, and the strip was answering "there are pictures" instead of "here is
- * what changed". The phone keeps the narrower tile, where the card is only
- * wide enough for one and a bit either way.
- */
-const STRIP_TILE =
-	"relative block aspect-video w-40 shrink-0 cursor-zoom-in snap-start overflow-hidden rounded-sm border border-line bg-surface p-0 outline-none transition-[filter] desktop:w-56 hover:brightness-[0.97] focus-visible:shadow-[inset_0_0_0_3px_var(--accent-soft)]";
-const STRIP_MEDIA = "h-full w-full object-contain";
-
-/**
  * The agent-published walkthrough (opensession-walkthrough): demo video +
  * before/after screenshot pairs + writeup. Rendered at the top of the PR info
  * column in the Review tab (`panel`), and inline in the session where the agent
@@ -81,6 +65,10 @@ export function WalkthroughCard({
 }) {
 	const session = variant === "session";
 	const [expanded, setExpanded] = useState(!session);
+	// Natural ratio of any folded tile whose picture the tile shape would crop
+	// too much of (see tileBox). Learned on load; media the tile already suits
+	// never lands here, so it never re-renders.
+	const [ownRatio, setOwnRatio] = useState<Record<string, number>>({});
 	const reduceMotion = useReducedMotion();
 	const repo = useMarkdownRepo();
 	const summaryHtml = useMemo(
@@ -134,6 +122,64 @@ export function WalkthroughCard({
 			.join(" · ") || (walkthrough.summary ? "Writeup" : "");
 	const open = (key: string, target: HTMLElement) =>
 		openLightbox(gallery.items, gallery.at.get(key) ?? 0, target);
+
+	// How big a folded tile gets, set by how many there are. A thumbnail of a UI
+	// is a picture of small things, so a tile only answers "what changed" once
+	// it is big enough to read — and a card with one or two pieces of media has
+	// the whole card to give them. There it stops being a strip at all: the
+	// tiles divide the card's width, which is both the largest they can be and
+	// the only size that never cuts the second one off. Past that the card has
+	// more than it can show at once, so the tiles go back to a scrolling strip
+	// at a fixed size, stepping down as the count goes up. The phone keeps the
+	// small tile throughout — the card is narrow enough there that a wide one
+	// shows a picture and a half.
+	const fill = gallery.items.length <= 2;
+	const tile =
+		gallery.items.length <= 4 ? "w-40 desktop:w-64" : "w-40 desktop:w-56";
+
+	// What a folded tile does with a picture that is not the shape of the tile.
+	// Cropping to 16/10 is honest for a landscape screenshot and useless for a
+	// phone one: cropped that way it is a status bar and a header, and at the
+	// fill size it is that sliver blown up to the width of the card. So a tile
+	// crops only while it still shows three quarters of the picture, which it
+	// does from 1.2 (a portrait shot) to 2.13 (a wide strip of UI); outside
+	// that the media keeps its own ratio and is shown whole.
+	const TILE_RATIO = 16 / 10;
+	const noteRatio = (key: string, w: number, h: number) => {
+		if (!w || !h) return;
+		const ratio = w / h;
+		const shown = ratio < TILE_RATIO ? ratio / TILE_RATIO : TILE_RATIO / ratio;
+		if (shown >= 0.75) return;
+		setOwnRatio((prev) => (prev[key] ? prev : { ...prev, [key]: ratio }));
+	};
+	// A tall tile is sized off a height, which is what keeps it at the scale of
+	// its neighbours instead of running the card; a wide one keeps the width it
+	// was given and is simply shorter. The height goes through a variable so the
+	// width can be derived from it in the same declaration: `aspect-ratio` with
+	// `width: auto` resolves against the caption whenever the caption is the
+	// wider of the two, which lands the picture in a letterboxed tile.
+	const isTall = (key: string) => (ownRatio[key] ?? TILE_RATIO) < TILE_RATIO;
+	const tileBox = (key: string) => {
+		const ratio = ownRatio[key];
+		if (!ratio) return { className: "aspect-[16/10] w-full", style: undefined };
+		if (!isTall(key))
+			return {
+				className: "w-full",
+				style: { aspectRatio: String(ratio) } as React.CSSProperties,
+			};
+		return {
+			className: cn(
+				"max-w-full",
+				fill
+					? "[--tile-h:320px] desktop:[--tile-h:384px]"
+					: "[--tile-h:100px] desktop:[--tile-h:160px]",
+			),
+			style: {
+				height: "var(--tile-h)",
+				width: `calc(var(--tile-h) * ${ratio})`,
+			} as React.CSSProperties,
+		};
+	};
 
 	return (
 		<div
@@ -214,48 +260,150 @@ export function WalkthroughCard({
 				</div>
 			)}
 
-			{session && !expanded && gallery.items.length > 0 && (
-				// Folded, the card still shows what it holds. The strip scrolls
-				// sideways so nothing is hidden behind a "+3", and it bleeds through
-				// the card's right padding so the next tile is clipped at the card
-				// edge rather than stopping short inside it. A tile opens the
-				// lightbox directly: seeing one picture is usually the whole reason
-				// the row caught someone's eye.
-				<div className="-mr-4 mt-2.5 flex snap-x snap-mandatory gap-1.5 overflow-x-auto pr-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-					{gallery.items.map((item, i) => (
-						<button
-							key={i}
-							type="button"
-							className={STRIP_TILE}
-							title={item.sessionTitle}
-							aria-label={item.sessionTitle || "Open walkthrough media"}
-							onClick={(event) =>
-								openLightbox(gallery.items, i, event.currentTarget)
-							}
-						>
-							{item.kind === "image" ? (
-								<img
-									src={item.src}
-									alt=""
-									loading="lazy"
-									className={STRIP_MEDIA}
-								/>
-							) : (
-								<>
+			{!expanded && gallery.items.length > 0 && (
+				// The folded card's media. One or two pieces of it share the card's
+				// width and there is nothing to scroll; more than that keeps the
+				// scrolling strip, where the demo and every still are one size —
+				// flexing each comparison group independently made an unpaired image
+				// twice as wide as either side of a pair. Tight within a pair and
+				// loose between them keeps the relationship without changing scale.
+				// The strip runs to the card's edges rather than stopping at its
+				// padding — a tile cut off by the padding looks like a rendering bug,
+				// one that runs under the edge reads as "there is more this way".
+				<div
+					className={cn(
+						"mt-2",
+						!fill &&
+							"-mx-4 overflow-x-auto px-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+					)}
+				>
+					<div className={cn("flex items-start gap-4", !fill && "w-max")}>
+						{walkthrough.video && (
+							<figure
+								className={cn(
+									"m-0",
+									isTall("video")
+										? "shrink-0"
+										: fill
+											? "min-w-0 flex-1"
+											: cn("shrink-0", tile),
+								)}
+							>
+								<figcaption className="mb-1 inline-flex rounded-full bg-blue-soft px-2 py-0.5 text-[11px] font-semibold leading-4 text-blue">
+									Demo
+								</figcaption>
+								<button
+									type="button"
+									className={cn(
+										"relative block cursor-zoom-in overflow-hidden rounded-md border border-line bg-black p-0 outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+										tileBox("video").className,
+									)}
+									style={tileBox("video").style}
+									aria-label="Open demo in media viewer"
+									onClick={(event) => open("video", event.currentTarget)}
+								>
 									<video
-										src={item.src}
-										muted
-										playsInline
+										className={cn(
+											"h-full w-full",
+											ownRatio.video ? "object-contain" : "object-cover",
+										)}
+										src={`${mediaUrl(walkthrough.video)}#t=0.1`}
 										preload="metadata"
-										className={STRIP_MEDIA}
+										muted
+										tabIndex={-1}
+										onLoadedMetadata={(event) =>
+											noteRatio(
+												"video",
+												event.currentTarget.videoWidth,
+												event.currentTarget.videoHeight,
+											)
+										}
 									/>
-									<span className="pointer-events-none absolute inset-0 grid place-items-center text-white drop-shadow">
-										<IconPlayRectangle size={18} />
+									<span className="absolute inset-0 grid place-items-center bg-black/25 text-white">
+										<IconPlay size={18} className="ml-0.5" />
 									</span>
-								</>
-							)}
-						</button>
-					))}
+								</button>
+							</figure>
+						)}
+						{(walkthrough.shots || []).map((shot, i) => (
+							<div
+								className={cn(
+									"flex gap-1",
+									fill &&
+										!(isTall(`${i}:before`) || isTall(`${i}:after`)) &&
+										"min-w-0 flex-1",
+									(!fill || isTall(`${i}:before`) || isTall(`${i}:after`)) &&
+										"shrink-0",
+								)}
+								key={i}
+							>
+								{(["before", "after"] as const).map(
+									(side) =>
+										shot[side] && (
+											<figure
+												// One tile size for the demo and every still,
+												// wider where there is room for it: a thumbnail
+												// of a UI is a picture of small things, and two
+												// 160px tiles of the same screen are hard to
+												// tell apart — which makes the folded strip
+												// decorative rather than the answer to "what
+												// changed". How wide is `fill`/`tile`, above.
+												className={cn(
+													"m-0",
+													isTall(`${i}:${side}`)
+														? "shrink-0"
+														: fill
+															? "min-w-0 flex-1"
+															: cn("shrink-0", tile),
+												)}
+												key={side}
+											>
+												<button
+													type="button"
+													// A landscape tile is sized by width, and takes
+													// no height cap on top of the ratio: that would
+													// silently letterbox the wide sizes. A narrow
+													// one is sized by height instead (tileBox).
+													className={cn(
+														"relative block cursor-zoom-in overflow-hidden rounded-md border border-line bg-transparent p-0 outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]",
+														tileBox(`${i}:${side}`).className,
+													)}
+													style={tileBox(`${i}:${side}`).style}
+													onClick={(e) => open(`${i}:${side}`, e.currentTarget)}
+												>
+													{/* The alt names the button. An aria-label here
+													    would replace the caption with six identical
+													    "Open before image preview"s. */}
+													<img
+														className={cn(
+															"h-full w-full",
+															ownRatio[`${i}:${side}`]
+																? "object-contain"
+																: "object-cover object-top",
+														)}
+														src={mediaUrl(shot[side]!)}
+														alt={`${shot.caption || "Change"} · ${side}`}
+														loading="lazy"
+														onLoad={(event) =>
+															noteRatio(
+																`${i}:${side}`,
+																event.currentTarget.naturalWidth,
+																event.currentTarget.naturalHeight,
+															)
+														}
+													/>
+													<span
+														className={cn(SHOT_LABEL, SHOT_LABEL_SIDE[side])}
+													>
+														{side === "before" ? "Before" : "After"}
+													</span>
+												</button>
+											</figure>
+										),
+								)}
+							</div>
+						))}
+					</div>
 				</div>
 			)}
 
