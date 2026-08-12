@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { createRunnerPairing, fetchRunners, revokeRunner, updateRunner, type RunnerInfo } from "../../lib/api/runners";
+import { bootstrapRunner, createRunnerPairing, fetchRunnerBootstrapTargets, fetchRunners, revokeRunner, updateRunner, type RunnerBootstrapTarget, type RunnerInfo } from "../../lib/api/runners";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
 import { Switch } from "../../ui/switch";
@@ -31,6 +31,9 @@ export function RunnersPanel() {
 	const [admin, setAdmin] = useState(false);
 	const [loading, setLoading] = useState(true);
 	const [pairing, setPairing] = useState<{ code: string; expiresAt: number } | null>(null);
+	const [connectChoice, setConnectChoice] = useState<"choices" | "ssh" | "kubernetes" | null>(null);
+	const [bootstrapTargets, setBootstrapTargets] = useState<{ ssh: RunnerBootstrapTarget[]; kubernetes: RunnerBootstrapTarget[] }>({ ssh: [], kubernetes: [] });
+	const [bootstrapTargetId, setBootstrapTargetId] = useState("");
 	const [busyId, setBusyId] = useState<string | null>(null);
 
 	const load = async () => {
@@ -46,8 +49,25 @@ export function RunnersPanel() {
 	useEffect(() => { void load(); }, []);
 
 	const pair = async () => {
-		try { setPairing(await createRunnerPairing()); }
+		try { setPairing(await createRunnerPairing()); setConnectChoice(null); }
 		catch (error) { toast(error instanceof Error ? error.message : "Could not create pairing", { variant: "error" }); }
+	};
+	const chooseBootstrap = async (kind: "ssh" | "kubernetes") => {
+		try {
+			const targets = await fetchRunnerBootstrapTargets();
+			setBootstrapTargets(targets);
+			setBootstrapTargetId(targets[kind][0]?.id || "");
+			setConnectChoice(kind);
+		} catch (error) { toast(error instanceof Error ? error.message : "Could not load Runner connection options", { variant: "error" }); }
+	};
+	const startBootstrap = async () => {
+		if (!connectChoice || connectChoice === "choices" || !bootstrapTargetId) return;
+		try {
+			const result = await bootstrapRunner(connectChoice, bootstrapTargetId);
+			setConnectChoice(null);
+			toast(`${result.target} is connecting. It appears here when its Runner channel is online.`, { variant: "success" });
+			void load();
+		} catch (error) { toast(error instanceof Error ? error.message : "Could not start Runner migration", { variant: "error" }); }
 	};
 	const copy = async () => {
 		if (!pairing) return;
@@ -74,8 +94,28 @@ export function RunnersPanel() {
 		<SettingsHeader
 			title="Runners"
 			description="Computers your workspace explicitly trusts for work that needs their hardware or platform. They are not isolated Sandboxes."
-			actions={admin ? <Button variant="primary" size="sm" onClick={() => void pair()}>Add Runner</Button> : undefined}
+			actions={admin ? <Button variant="primary" size="sm" onClick={() => setConnectChoice("choices")}>Add Runner</Button> : undefined}
 		/>
+		{connectChoice === "choices" && <div className="mx-4 mb-4 rounded-lg bg-raised p-4">
+			<div className="text-item-title font-semibold text-fg">Connect a Runner</div>
+			<p className="mb-3 mt-1 text-supporting leading-relaxed text-dim">Choose the machine path first. Runners are trusted computers, not isolated Sandboxes.</p>
+			<div className="grid gap-2 sm:grid-cols-3">
+				<Button size="sm" onClick={() => void pair()}>Connect on this machine</Button>
+				<Button size="sm" variant="soft" onClick={() => void chooseBootstrap("ssh")}>Migrate SSH machine</Button>
+				<Button size="sm" variant="soft" onClick={() => void chooseBootstrap("kubernetes")}>Connect Kubernetes GPU</Button>
+			</div>
+			<Button className="mt-3" size="xs" variant="ghost" onClick={() => setConnectChoice(null)}>Cancel</Button>
+		</div>}
+		{(connectChoice === "ssh" || connectChoice === "kubernetes") && <div className="mx-4 mb-4 rounded-lg bg-raised p-4">
+			<div className="text-item-title font-semibold text-fg">{connectChoice === "ssh" ? "Migrate an SSH machine" : "Connect a Kubernetes GPU Runner"}</div>
+			<p className="mb-3 mt-1 text-supporting leading-relaxed text-dim">Select a preconfigured operator target. The migration installs and starts only the Runner service, then the machine connects outbound.</p>
+			{bootstrapTargets[connectChoice].length ? <>
+				<select className="w-full rounded-md border border-line bg-panel px-2 py-1.5 text-supporting text-fg" value={bootstrapTargetId} onChange={(event) => setBootstrapTargetId(event.target.value)}>
+					{bootstrapTargets[connectChoice].map((target) => <option key={target.id} value={target.id}>{target.label} · {target.host ? `${target.user}@${target.host}:${target.port}` : `${target.context} / ${target.namespace} / ${target.workload}`}</option>)}
+				</select>
+				<div className="mt-3 flex gap-2"><Button size="sm" onClick={() => void startBootstrap()}>Connect</Button><Button size="sm" variant="ghost" onClick={() => setConnectChoice("choices")}>Back</Button></div>
+			</> : <><p className="mb-0 text-supporting text-dim">No configured {connectChoice === "ssh" ? "SSH" : "Kubernetes"} targets are available.</p><Button className="mt-3" size="xs" variant="ghost" onClick={() => setConnectChoice("choices")}>Back</Button></>}
+		</div>}
 
 		{pairing && <div className="mx-4 mb-4 rounded-lg bg-raised p-4">
 			<div className="text-item-title font-semibold text-fg">Connect on this machine</div>

@@ -4,6 +4,7 @@ import { audit } from "../audit";
 import { disconnectRunner, isRunnerConnected } from "../runner-ws";
 import {
 	createRunnerPairing,
+	discardRunnerPairing,
 	isTailnetAddress,
 	listRunnerPairings,
 	listRunners,
@@ -19,6 +20,7 @@ import {
 } from "../runners";
 import { requestUser, type RouteContext } from "./context";
 import { requireWorkspaceAdmin, workspaceAdminAuthorized } from "../workspace-auth";
+import { bootstrapKubernetesRunner, bootstrapSshRunner, configuredRunnerBootstrapTargets } from "../runner-bootstrap";
 
 function peerAddress(ctx: RouteContext): string {
 	const server = (globalThis as any).__opensessionServer as { requestIP?(req: Request): { address: string } | null } | undefined;
@@ -46,6 +48,33 @@ function runnerAllowedForView(runner: ReturnType<typeof listRunners>[number], us
 export async function handleRunnersRoutes(ctx: RouteContext): Promise<Response | undefined> {
 	const { path, req } = ctx;
 	if (path === "/api/runners" && req.method === "GET") return Response.json({ runners: publicView(ctx), admin: workspaceAdminAuthorized(ctx) });
+	if (path === "/api/runners/bootstrap" && req.method === "GET") {
+		const denied = requireWorkspaceAdmin(ctx); if (denied) return denied;
+		const targets = configuredRunnerBootstrapTargets();
+		return Response.json({
+			ssh: targets.ssh.map(({ id, label, host, user, port, fingerprint }) => ({ id, label, host, user, port, fingerprint })),
+			kubernetes: targets.kubernetes.map(({ id, label, context, namespace, workload }) => ({ id, label, context, namespace, workload })),
+		});
+	}
+	const bootstrap = path.match(/^\/api\/runners\/bootstrap\/(ssh|kubernetes)$/);
+	if (bootstrap && req.method === "POST") {
+		const denied = requireWorkspaceAdmin(ctx); if (denied) return denied;
+		const body = await req.json().catch(() => null) as Record<string, unknown> | null;
+		const targetId = typeof body?.targetId === "string" ? body.targetId : "";
+		if (!targetId) return Response.json({ error: "Choose a configured Runner target." }, { status: 400 });
+		const pairing = createRunnerPairing(requestUser(ctx) || undefined);
+		try {
+			const result = bootstrap[1] === "ssh"
+				? await bootstrapSshRunner(targetId, pairing.code)
+				: await bootstrapKubernetesRunner(targetId, pairing.code);
+			audit({ msg: "runner_bootstrap_started", user: requestUser(ctx), target_id: targetId, transport: bootstrap[1], phase: result.phase });
+			return Response.json({ target: result.target.label, phase: result.phase });
+		} catch (error) {
+			discardRunnerPairing(pairing.code);
+			audit({ msg: "runner_bootstrap_failed", user: requestUser(ctx), target_id: targetId, transport: bootstrap[1] });
+			return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 400 });
+		}
+	}
 	if (path === "/api/runners/pair" && req.method === "POST") {
 		const denied = requireWorkspaceAdmin(ctx); if (denied) return denied;
 		const pairing = createRunnerPairing(requestUser(ctx) || undefined);

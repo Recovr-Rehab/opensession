@@ -28,3 +28,18 @@ administrator-approved root, and its run host uses the same durable outbound
 stream as a remote Sandbox. Automation sessions never receive Runner tools.
 Runners run work as their local service user, so only attach machines the
 workspace intends to trust.
+
+## Operator-managed migration
+
+Workspace administrators can also migrate a named SSH machine or a named
+Kubernetes Runner workload from Settings. These choices appear only when the
+operator has configured `integrations.runnersBootstrap` in the protected
+instance configuration. SSH entries require both a pinned `SHA256:` host
+fingerprint and a dedicated known-hosts file. Kubernetes entries name one
+context, namespace, deployment, and optional container.
+
+The migration performs only the reviewed `opensession runner connect` action,
+then the component installs its reconnecting service and dials out normally.
+Agents never receive SSH, kubectl, private-key, kubeconfig, or pairing-token
+access. Kubernetes credentials must be RBAC-scoped to the configured Runner
+namespace and workload.

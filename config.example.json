@@ -134,6 +134,32 @@
       "notifyUser": "alice",
       "slackChannel": "D012345"
     },
+    "runnersBootstrap": {
+      "_comment": "Optional protected operator inventory for Settings → Runners migration. SSH needs a pinned SHA256 host fingerprint and a dedicated known-hosts file. Kubernetes credentials must be restricted to the named Runner namespace/workload. Do not put private keys, kubeconfig content, pairing tokens, or arbitrary commands here.",
+      "ssh": [
+        {
+          "id": "office-mac-mini",
+          "label": "Office Mac mini",
+          "host": "mac-mini.tailnet",
+          "user": "runner",
+          "port": 22,
+          "fingerprint": "SHA256:replace-with-pinned-host-key",
+          "knownHostsPath": "/etc/opensession/runner-known-hosts",
+          "runnerCommand": "/usr/local/bin/opensession"
+        }
+      ],
+      "kubernetes": [
+        {
+          "id": "gpu-devbox",
+          "label": "GPU devbox",
+          "context": "production-gpu",
+          "namespace": "opensession-runners",
+          "workload": "gpu-runner",
+          "container": "runner",
+          "runnerCommand": "/usr/local/bin/opensession"
+        }
+      ]
+    },
     "seeds": {
       "enabled": false,
       "actions": [

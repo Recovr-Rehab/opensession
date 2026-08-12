@@ -210,6 +210,11 @@ export function listRunnerPairings(): Pairing[] {
 	return [...pairings.values()];
 }
 
+/** Bootstrap failures must not leave an unseen pairing credential live. */
+export function discardRunnerPairing(code: string): void {
+	pairings.delete(code);
+}
+
 function redeemPairing(code: string): Pairing | undefined {
 	const pairing = pairings.get(code.trim().toUpperCase());
 	if (!pairing) return undefined;

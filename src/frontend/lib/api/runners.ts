@@ -44,6 +44,26 @@ export async function createRunnerPairing(): Promise<{ code: string; expiresAt: 
 	return request("/runners/pair", { method: "POST", label: "Could not create pairing" });
 }
 
+export type RunnerBootstrapTarget = {
+	id: string;
+	label: string;
+	host?: string;
+	user?: string;
+	port?: number;
+	fingerprint?: string;
+	context?: string;
+	namespace?: string;
+	workload?: string;
+};
+
+export async function fetchRunnerBootstrapTargets(): Promise<{ ssh: RunnerBootstrapTarget[]; kubernetes: RunnerBootstrapTarget[] }> {
+	return request("/runners/bootstrap", { label: "Could not load Runner connection options" });
+}
+
+export async function bootstrapRunner(kind: "ssh" | "kubernetes", targetId: string): Promise<{ target: string; phase: "pairing" }> {
+	return request(`/runners/bootstrap/${kind}`, { method: "POST", body: { targetId }, label: "Could not start Runner migration" });
+}
+
 export type RunnerPatch = Partial<Pick<RunnerInfo, "label" | "description" | "location" | "maintenance" | "allowedUsers" | "allowedRepos" | "workspaceRoots">> & {
 	permissions?: Partial<RunnerPermissions>;
 	capabilities?: Partial<RunnerInfo["capabilities"]>;
