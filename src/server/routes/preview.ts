@@ -11,6 +11,7 @@ import { getPreviewStatus, getSandboxPreviewStatus, portalRouteAuthorized, start
 import { findSession } from "../session-cache";
 import { activeSandboxFor } from "../session-sandbox";
 import { existsSync } from "fs";
+import { restartPortalService, stopPortalService } from "../portal-supervisor";
 
 export async function handlePreviewRoutes(
 	ctx: RouteContext,
@@ -196,6 +197,29 @@ export async function handlePreviewRoutes(
 				});
 			}
 			return Response.json(await stopPreview(session.worktreeDir));
+		}
+	}
+
+	// A Portal control is scoped to the named service in this session's own
+	// workspace. Remote Sandbox Portal controls join the reverse-relay path in
+	// portal-supervisor; until then we fail clearly instead of accidentally
+	// targeting the host checkout.
+	{
+		const m = path.match(/^\/api\/sessions\/(.+)\/portals\/([a-z0-9-]+)\/(stop|restart)$/);
+		if (m && req.method === "POST") {
+			const session = findSession(decodeURIComponent(m[1]));
+			if (!session) return Response.json({ error: "Session not found" }, { status: 404 });
+			if (!session.worktreeDir || !existsSync(session.worktreeDir))
+				return Response.json({ error: "Session has no local Portal workspace" }, { status: 400 });
+			if (session.sandbox?.sandboxId)
+				return Response.json({ error: "This Portal is managed by its Sandbox" }, { status: 409 });
+			try {
+				if (m[3] === "stop") await stopPortalService({ sessionId: session.id, worktreeDir: session.worktreeDir, name: m[2] });
+				else await restartPortalService({ sessionId: session.id, worktreeDir: session.worktreeDir, name: m[2] });
+				return Response.json(await getPreviewStatus(session.worktreeDir));
+			} catch (error) {
+				return Response.json({ error: error instanceof Error ? error.message : String(error) }, { status: 400 });
+			}
 		}
 	}
 

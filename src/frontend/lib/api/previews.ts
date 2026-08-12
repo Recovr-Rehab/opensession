@@ -7,6 +7,10 @@ export interface PreviewService {
 	running: boolean;
 	pids: number[];
 	previewUrl?: string | null;
+	description?: string;
+	defaultPath?: string;
+	state?: "starting" | "awake" | "sleeping" | "waking" | "failed" | "stopped";
+	managed?: boolean;
 }
 
 export interface PreviewPortalRecipe {
@@ -57,6 +61,17 @@ export async function stopPreviewApi(
 	return request<PreviewStatus>(
 		`/sessions/${encodeURIComponent(sessionId)}/preview/stop`,
 		{ method: "POST", label: "Failed to stop preview" },
+	);
+}
+
+export async function portalActionApi(
+	sessionId: string,
+	name: string,
+	action: "stop" | "restart",
+): Promise<PreviewStatus> {
+	return request(
+		`/sessions/${encodeURIComponent(sessionId)}/portals/${encodeURIComponent(name)}/${action}`,
+		{ method: "POST", label: `Failed to ${action} Portal` },
 	);
 }
 

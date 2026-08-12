@@ -72,6 +72,7 @@ import {
 	fetchPr,
 	fetchPreview,
 	type WorkspaceMediaItem,
+	portalActionApi,
 	type ModelOption,
 	type ProviderAccountOption,
 	type SessionSubagentSnapshot,
@@ -6163,6 +6164,9 @@ export function SessionViewer({
 													: "Expose its listening port in .ports.conf with a descriptive *_PORT key, then report when it is ready."),
 										})
 									}
+									onPortalAction={async (name, action) => {
+										setPreviewStatus(await portalActionApi(session.id, name, action));
+									}}
 								/>
 							) : panelTab === "workflows" ? (
 								// Before the Plain fallthrough: a Plain-only session's

@@ -14,11 +14,14 @@ export function portalTargetFor(
 	service: PreviewService,
 ): PortalTarget | null {
 	if (!service.running || !service.previewUrl) return null;
+	const url = service.defaultPath
+		? new URL(service.defaultPath.startsWith("/") ? service.defaultPath : `/${service.defaultPath}`, service.previewUrl).toString()
+		: service.previewUrl;
 	return {
 		sessionId,
 		name: service.name,
 		key: service.key,
 		port: service.port,
-		url: service.previewUrl,
+		url,
 	};
 }

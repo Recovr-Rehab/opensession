@@ -127,12 +127,12 @@ test("MCP tools parse in both the mcp__ and flattened forms", () => {
 });
 
 test("MCP labels read as actions rather than machine identifiers", () => {
-  expect(mcpServerDisplayName("opensession-preview")).toBe("Open Session Preview");
-  expect(mcpToolDisplayName("start_preview")).toBe("Start preview");
-  expect(toolDisplayName("opensession-preview_start_preview")).toBe(
-    "Open Session Preview · Start preview"
-  );
-  expect(toolSummary("opensession-preview_start_preview", {}, "Using opensession-preview_start_preview")).toBe("");
+	expect(mcpServerDisplayName("opensession-portals")).toBe("Open Session Portals");
+	expect(mcpToolDisplayName("start_portal")).toBe("Start portal");
+	expect(toolDisplayName("opensession-portals_start_portal")).toBe(
+		"Open Session Portals · Start portal"
+	);
+	expect(toolSummary("opensession-portals_start_portal", {}, "Using opensession-portals_start_portal")).toBe("");
 });
 
 test("an assets call reads as the file it names, not its contents", () => {

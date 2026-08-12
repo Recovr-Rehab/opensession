@@ -131,7 +131,21 @@ Keep it to the handful of routes people actually open first from a preview.
 Precedence: explicit instance Settings → the repo's committed
 `.agents/preview.json` → built-in defaults.
 
-## portals.json — recommended service starters
+## Portals and `portals.json`
+
+Use session Assets for a static artifact, diagram, report, or standalone HTML
+file that does not need a running process. Use a Portal for an interactive app,
+web server, API-backed UI, multiple routes, authentication, or anything someone
+should open and test live.
+
+Open Session owns `.ports.conf` for the session. It records generated service
+metadata and stable `*_PORT` entries. Agents may inspect it, but start, stop,
+restart, and default paths go through `opensession-portals`. A Portal process is
+session-scoped, receives `PORT` and `PORTAL_URL`, and is exposed only through
+the authenticated Open Session URL. A stopped or sleeping Sandbox never turns
+into a host Portal by fallback.
+
+Repositories can declare reusable recipes in `.agents/portals.json`:
 
 Repositories can add skill-backed starters to the session's Portals tab:
 
@@ -148,12 +162,15 @@ Repositories can add skill-backed starters to the session's Portals tab:
 }
 ```
 
-The UI never runs a repository-provided command: clicking **Ask
-agent to start** sends a fixed prompt naming the validated user-invocable skill.
-`serviceKey` connects the recipe to a `*_PORT` entry in `.ports.conf`; once that
-service is listening, the same card opens its authenticated Portal. Repositories
-can also expose ad-hoc services at runtime by appending a descriptive `*_PORT`
-entry to `.ports.conf` and listening on that port.
+The UI never runs a repository-provided command. Clicking **Ask agent to start**
+sends a fixed prompt naming the validated user-invocable skill. `serviceKey`
+connects the recipe to its generated `*_PORT` entry. Agents can also create an
+ad-hoc Portal without changing repository configuration: create the service,
+call `start_portal`, verify it with `list_portals`, then tell the user which
+Portal is ready.
+
+On wake, `.agents/resume` repairs the workspace first. Open Session then
+rechecks every registered Portal and reports whether it restored or stopped.
 
 ## environment.json — private workspace files
 

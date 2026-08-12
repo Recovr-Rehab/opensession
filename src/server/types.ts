@@ -417,8 +417,8 @@ export interface NativeSessionFile {
   attachedRepos?: AttachedRepo[];
   /** PRs manually linked to this session (beyond branch/attached-repo ones). */
   linkedPrs?: LinkedPr[];
-  /** Root-relative route the Preview/Preview environment buttons deep-link to (set by the
-   *  agent via opensession-preview's set_preview_path). Unset = open the app root. */
+	/** Root-relative route the session opens by default, set through
+	 * opensession-portals. Unset = open the app root. */
   previewPath?: string;
   /** Agent-published demo walkthrough (opensession-walkthrough). */
   walkthrough?: SessionWalkthrough;

@@ -35,6 +35,7 @@ import {
 import { basename, dirname, join, resolve } from "path";
 import { getAgentAwsEnv } from "./aws-creds";
 import { audit } from "./audit";
+import { listPortalServices } from "./portal-supervisor";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import {
   lookupSandboxHttpsPort,
@@ -72,6 +73,11 @@ export interface PreviewService {
   pids: number[];
   /** Authenticated URL for this individual service when it is reachable. */
   previewUrl?: string | null;
+	/** Session supervisor metadata for an agent-created Portal. */
+	description?: string;
+	defaultPath?: string;
+	state?: "starting" | "awake" | "sleeping" | "waking" | "failed" | "stopped";
+	managed?: boolean;
 }
 
 export interface PreviewPortalRecipe {
@@ -566,6 +572,8 @@ export async function getPreviewStatus(worktreeDir: string): Promise<PreviewStat
     };
   }
   const ports = readPorts(worktreeDir);
+	const portalRecords = await listPortalServices(worktreeDir);
+	const portalByKey = new Map(portalRecords.map((record) => [record.key, record]));
   const observedServices: PreviewService[] = await Promise.all(
     ports.map(async ({ key, port }) => {
       const pids = await listenersOnPort(port);
@@ -576,7 +584,13 @@ export async function getPreviewStatus(worktreeDir: string): Promise<PreviewStat
         key === "WEBAPP_PORT" && poolLive != null
           ? poolLive
           : pids.length > 0 || (await portListening(port));
-      return { name: friendly(key), key, port, running, pids };
+		const portal = portalByKey.get(key);
+      return {
+			name: portal?.name ?? friendly(key), key, port, running, pids,
+			...(portal?.description ? { description: portal.description } : {}),
+			...(portal?.defaultPath ? { defaultPath: portal.defaultPath } : {}),
+			...(portal ? { state: portal.state, managed: true } : {}),
+		};
     }),
   );
   const host = await previewHost();

@@ -22,7 +22,7 @@ import { createKeychainMcpServer } from "../agents/slack/keychain-tools";
 import { createPublishMcpServer } from "../agents/slack/publish-tools";
 import { createAskUserMcpServer } from "../agents/slack/ask-tools";
 import { createReposMcpServer } from "../agents/slack/repos-tools";
-import { createPreviewMcpServer } from "../agents/slack/preview-tools";
+import { createPortalsMcpServer } from "./portals-mcp";
 import { createWalkthroughMcpServer } from "../agents/slack/walkthrough-tools";
 import { createMemoryMcpServer } from "../agents/slack/memory-tools";
 import { createGoalsMcpServer, createGoalSelfMcpServer } from "../agents/slack/goal-tools";
@@ -233,34 +233,16 @@ export function interactiveMcpServers(
 							return s ? sessionRepoIds(s) : [];
 						},
 					}),
-					// Preview lifecycle + deep-link: the agent can start/stop/poll its
-					// own dev-server preview (warm pool claim when available) and
-					// record where the change should be tested so the Preview/Preview environment
-					// buttons open that route directly.
-					"opensession-preview": createPreviewMcpServer({
+					// Portals are session-scoped supervised HTTP/WebSocket services.
+					// The old Preview tool was intentionally replaced rather than
+					// aliased: agents should choose Portals for live software.
+					"opensession-portals": createPortalsMcpServer({
 						sessionId,
-						setPreviewPath: (path) =>
+						worktreeDir: () => findSession(sessionId)?.worktreeDir || undefined,
+						setDefaultPath: (path) =>
 							touchNativeSession(sessionId, {
 								previewPath: path || undefined,
 							}),
-						current: () => findSession(sessionId)?.previewPath ?? null,
-						start: async () => {
-							const s = await runSessionPreviewAction(sessionId, "start");
-							return {
-								running: s.running,
-								starting: s.starting,
-								previewUrl: s.previewUrl,
-								bootable: s.bootable,
-							};
-						},
-						status: async () => {
-							const s = await runSessionPreviewAction(sessionId, "status");
-							return { running: s.running, starting: s.starting, previewUrl: s.previewUrl };
-						},
-						stop: async () => {
-							const s = await runSessionPreviewAction(sessionId, "stop");
-							return { running: s.running, starting: s.starting, previewUrl: s.previewUrl };
-						},
 					}),
 					// Publish a demo walkthrough (video + before/after + writeup) onto
 					// the session's Review tab and the PR description.

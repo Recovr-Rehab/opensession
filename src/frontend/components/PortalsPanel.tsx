@@ -10,14 +10,17 @@ export function PortalsPanel({
 	activePortal,
 	onOpenPortal,
 	onStartPortal,
+	onPortalAction,
 }: {
 	sessionId: string;
 	status: PreviewStatus | null;
 	activePortal?: PortalTarget | null;
 	onOpenPortal?: (target: PortalTarget) => void;
 	onStartPortal?: (recipe: PreviewPortalRecipe) => void;
+	onPortalAction?: (name: string, action: "stop" | "restart") => Promise<void>;
 }) {
 	const [requestedSkill, setRequestedSkill] = useState<string | null>(null);
+	const [working, setWorking] = useState<string | null>(null);
 	if (!status) {
 		return (
 			<div className="flex h-full items-center justify-center px-5 text-center">
@@ -127,14 +130,18 @@ export function PortalsPanel({
 											{service.name}
 										</span>
 										<span className="block truncate text-xs text-dim">
-											Port {service.port} ·{" "}
+											{service.description ?? `Port ${service.port}`} ·{" "}
 											{target
 												? active
 													? "Open"
 													: "Running"
 												: service.running
-													? "Unavailable"
-													: "Stopped"}
+													? service.state === "starting"
+														? "Starting"
+														: "Unavailable"
+													: service.state === "failed"
+														? "Failed"
+														: "Stopped"}
 										</span>
 									</span>
 								</button>
@@ -149,6 +156,26 @@ export function PortalsPanel({
 									>
 										<IconArrowUpRight size={16} />
 									</a>
+								) : null}
+								{service.managed && onPortalAction ? (
+									<div className="flex shrink-0 items-center gap-1">
+										<button
+											type="button"
+											disabled={working === service.name}
+											onClick={() => { setWorking(service.name); void onPortalAction(service.name, "restart").catch(() => {}).finally(() => setWorking(null)); }}
+											className="focus-ring min-h-10 rounded-control px-2 text-xs font-semibold text-dim transition-colors hover:bg-hover hover:text-fg active:scale-[0.96] disabled:opacity-45"
+										>
+											Restart
+										</button>
+										<button
+											type="button"
+											disabled={working === service.name || !service.running}
+											onClick={() => { setWorking(service.name); void onPortalAction(service.name, "stop").catch(() => {}).finally(() => setWorking(null)); }}
+											className="focus-ring min-h-10 rounded-control px-2 text-xs font-semibold text-red transition-colors hover:bg-hover active:scale-[0.96] disabled:opacity-45"
+										>
+											Stop
+										</button>
+									</div>
 								) : null}
 							</div>
 						);

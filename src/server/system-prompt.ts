@@ -114,11 +114,7 @@ export function buildSystemPromptParts(opts: {
 			parts.push({
 				title: "Deep-link the change for testing",
 				text:
-					"## Deep-link the change for testing\nWhen your change is viewable at a specific route " +
-					"(a settings page, an editor screen, etc.), call opensession-preview's `set_preview_path` with that " +
-					"root-relative path (e.g. `/settings/tags`). It makes the human's local Preview and Preview environment buttons open " +
-					"directly on the feature under test instead of the app root, so they can verify in one click. Update " +
-					"it if the relevant route changes; pass an empty string to clear it.",
+					"## Live services and testing\nUse session Assets for static artifacts, diagrams, reports, or standalone HTML that does not need a running process. Use Portals for interactive apps, web servers, API-backed UI, multiple routes, authentication, or anything the user should test live. Create the app, call opensession-portals `start_portal`, verify it with `list_portals`, then tell the user which Portal is ready. Use `set_portal_path` to set a root-relative testing route when useful. If this repository has `.agents/portals.json`, it declares reusable Portal recipes. `.ports.conf` is Open Session's generated session service registry.",
 			});
 		}
 	}

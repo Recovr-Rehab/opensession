@@ -393,8 +393,7 @@ export interface UnifiedSession {
 		deletions?: number;
 		checks?: { total: number; passed: number; failed: number; pending: number };
 	}>;
-	/** Route the Preview/Preview environment buttons deep-link to (agent-set via
-	 *  opensession-preview); appended to the base URL. Unset = open the app root. */
+	/** Route the session opens by default, set through opensession-portals. */
 	previewPath?: string;
 	/** Agent-published demo walkthrough (video + before/after + writeup),
 	 *  rendered in the Review tab and mirrored to the PR description. */
