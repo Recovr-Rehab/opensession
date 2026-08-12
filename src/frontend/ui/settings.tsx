@@ -171,10 +171,15 @@ export function StatusChip({ label, dot }: { label: string; dot: string }) {
 	);
 }
 
-/** The ⋯ trigger for a row's overflow menu — quiet until hovered or open.
- *  Shared so a row's actions look the same on every settings page. */
+/** The ⋯ trigger for a row's overflow menu: quiet until hovered or open.
+ *  Shared so a row's actions look the same on every settings page.
+ *
+ *  `before:-inset-2` grows the 28px box to a 44px target without moving
+ *  anything, which a row whose only path to an action is this menu needs on a
+ *  phone. It is the last thing in the row, so the grown area overlaps only the
+ *  status text beside it. */
 export const rowMenuTriggerClasses =
-	"flex size-7 shrink-0 items-center justify-center rounded-md text-faint transition-[color,background] hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg";
+	"relative flex size-7 shrink-0 items-center justify-center rounded-md text-faint transition-[color,background] before:absolute before:-inset-2 before:content-[''] hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg";
 
 export function SettingsHint({
 	className,
