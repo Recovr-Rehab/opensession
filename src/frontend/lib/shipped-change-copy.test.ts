@@ -5,7 +5,7 @@ describe("suggestedShippedChangeMessage", () => {
 	test("turns an imperative PR title into a short team update", () => {
 		expect(
 			suggestedShippedChangeMessage("Adopt the OpenSession toggle style", "tella-fusion"),
-		).toBe("We adopted the OpenSession toggle style in Tella.");
+		).toBe("We updated the toggle style in Tella.");
 	});
 
 	test("does not repeat the product name", () => {

@@ -1,6 +1,6 @@
 const PAST_TENSE: Record<string, string> = {
 	add: "added",
-	adopt: "adopted",
+	adopt: "updated",
 	change: "changed",
 	create: "created",
 	fix: "fixed",
@@ -16,7 +16,11 @@ const PAST_TENSE: Record<string, string> = {
 };
 
 export function suggestedShippedChangeMessage(title: string, repo?: string): string {
-	const clean = title.replace(/^\[[^\]]+\]\s*/, "").replace(/[.!?]+$/, "").trim();
+	const clean = title
+		.replace(/^\[[^\]]+\]\s*/, "")
+		.replace(/[.!?]+$/, "")
+		.replace(repo === "tella-fusion" ? /\bOpenSession\s+/gi : /$^/, "")
+		.trim();
 	if (!clean) return "We shipped an update.";
 	const [verb, ...rest] = clean.split(/\s+/);
 	const action = PAST_TENSE[verb.toLowerCase()];
