@@ -92,6 +92,21 @@ describe("Slack block message options", () => {
 });
 
 describe("Slack file uploads", () => {
+	test("asks for reconnection when the personal token lacks image access", async () => {
+		const root = mkdtempSync(join(tmpdir(), "slack-scope-"));
+		const path = join(root, "one.png");
+		writeFileSync(path, "image");
+		globalThis.fetch = (async () => Response.json({ ok: false, error: "missing_scope" })) as unknown as typeof fetch;
+
+		try {
+			await expect(postSlackFiles("C123", [path], "Shipped it", {}, "xoxp-test")).rejects.toThrow(
+				"SLACK_RECONNECT_REQUIRED",
+			);
+		} finally {
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
+
   test("shares several uploaded files as one message", async () => {
     const root = mkdtempSync(join(tmpdir(), "slack-files-"));
     const paths = [join(root, "one.png"), join(root, "two.png")];

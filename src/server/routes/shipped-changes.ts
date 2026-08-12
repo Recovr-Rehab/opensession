@@ -95,9 +95,26 @@ export async function handleShippedChangeRoutes(
 	if (!session)
 		return Response.json({ error: "Session not found" }, { status: 404 });
 	if (req.method === "GET") {
+		const caller = ctx.authUser?.login || ctx.authUser?.name;
+		const { mcpUserGrantToken } = await import("../mcp-oauth");
+		const slackToken = caller ? mcpUserGrantToken("slack", caller) : undefined;
+		let canUploadImages = false;
+		if (slackToken) {
+			try {
+				const response = await fetch("https://slack.com/api/auth.test", {
+					headers: { Authorization: `Bearer ${slackToken}` },
+					signal: AbortSignal.timeout(5_000),
+				});
+				canUploadImages = (response.headers.get("x-oauth-scopes") || "")
+					.split(",")
+					.map((scope) => scope.trim())
+					.includes("files:write");
+			} catch {}
+		}
 		return Response.json({
 			channels: shippedChangeChannels(),
 			defaultChannel: shippedChangesChannel(),
+			canUploadImages,
 		});
 	}
 	const body = await req.json().catch(() => ({}));
@@ -133,6 +150,12 @@ export async function handleShippedChangeRoutes(
 			}),
 		);
 	} catch (error: any) {
+		if (error?.message === "SLACK_RECONNECT_REQUIRED") {
+			return Response.json(
+				{ error: "Reconnect Slack to add image access, then send again" },
+				{ status: 403 },
+			);
+		}
 		return Response.json(
 			{ error: error?.message || "Couldn't share the shipped update" },
 			{ status: 502 },

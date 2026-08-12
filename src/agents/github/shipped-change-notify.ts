@@ -198,6 +198,17 @@ export function normalizeShippedChangeMessage(value: unknown): string {
   return message;
 }
 
+export function shippedChangeAnnouncementKey(
+  repoFullName: string,
+  prNumber: number,
+  channel: string,
+  comment: string,
+  screenshots: string[],
+): string {
+  const payload = JSON.stringify({ channel, comment, screenshots });
+  return `${repoFullName}#${prNumber}:${createHash("sha256").update(payload).digest("hex")}`;
+}
+
 export async function shareShippedVisualChange(opts: {
   session: UnifiedSession;
   pr: { number: number; title: string; url: string };
@@ -227,7 +238,13 @@ export async function shareShippedVisualChange(opts: {
     shippedChangeOneLiner(visual?.summary || "");
   if (!message) throw new Error("Write a short Slack message first");
   const comment = slackText(message);
-  const announcementKey = `${opts.repoFullName}#${opts.pr.number}`;
+  const announcementKey = shippedChangeAnnouncementKey(
+    opts.repoFullName,
+    opts.pr.number,
+    channel,
+    comment,
+    visual?.screenshots || [],
+  );
   const claimId = claimShippedChangeAnnouncement(announcementKey);
   if (!claimId) return { status: "already_shared" };
   try {
