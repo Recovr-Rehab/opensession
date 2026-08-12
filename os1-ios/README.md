@@ -43,11 +43,11 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   deck's rules: yours, not archived, not an automation, not the Desk). The card
   is a glance — what you asked, where things stand — with `Open` for the real
   conversation and `Reply` (a detent sheet, delivered through the `Outbox`).
-  Three decisions leave the deck: swipe left to archive, right to mark read, up
-  to keep unread, each also a button that plays the *same* fling, so the
-  gesture and the control are never two different animations. The whole stack
-  is a function of one drag value — tilt, stamp, tint, how far forward the card
-  behind has come — so a half-swipe reverses continuously; release uses Apple's
+  The workspace preview scrolls vertically. Decisions stay on the other axis:
+  swipe left to archive or right to mark read, while Keep remains the center
+  button. The whole stack is a function of one horizontal drag value: tilt,
+  stamp, tint, and how far forward the card behind has come, so a half-swipe
+  reverses continuously; release uses Apple's
   momentum projection to decide, then hands the finger's velocity to the
   spring. Every decision is undoable for six seconds (the pill's row is always
   reserved, so the buttons never move under your thumb). The queue is frozen

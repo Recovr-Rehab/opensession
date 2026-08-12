@@ -3,8 +3,8 @@ import SwiftUI
 /// One card in the catch-up deck.
 ///
 /// A glance, not a transcript: what you asked, where things stand, and how to
-/// get to the rest. Two reasons it stops there — a card you can scroll is a
-/// card you can't swipe, and triage is a decision, not a read.
+/// get to the rest. The glance scrolls vertically; the card's decisions swipe
+/// horizontally, so reading never advances the deck by accident.
 ///
 /// Only the top card draws its content. The ones behind are a title and a few
 /// grey lines: nobody can read them, and rendering markdown three times over
@@ -138,35 +138,20 @@ struct CatchUpCardView: View {
 
     // MARK: - Body
 
-    /// The glance, in a scroll view that is not scrollable.
+    /// The glance, contained by a vertical scroll view.
     ///
     /// Not decoration: a fixed `.frame` does NOT constrain a child that wants
     /// more room, it just lets it overflow, and a long answer rendered through
-    /// the markdown view is exactly that child — it drew itself over the whole
-    /// screen, deck chrome included. A `ScrollView` takes the size it is
-    /// offered, clips to it, and never reports its content's height outward,
-    /// which is the containment a card needs. Scrolling stays OFF because the
-    /// card's job is to be swiped; the rest of the conversation is behind
-    /// "Open".
+    /// the markdown view is exactly that child. A `ScrollView` takes the size
+    /// it is offered, clips to it, and never reports its content's height
+    /// outward, which is the containment a card needs. It also lets the reader
+    /// reach the rest of the workspace preview without leaving Catch Up.
     private var bodyColumn: some View {
         ScrollView(.vertical) {
             bodyContent
         }
-        .scrollDisabled(true)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        // What's cut off should look cut off. A hard edge reads as a bug; a
-        // fade reads as "there is more, and it is in the session".
-        .mask(
-            LinearGradient(
-                stops: [
-                    .init(color: .black, location: 0),
-                    .init(color: .black, location: 0.86),
-                    .init(color: .black.opacity(0), location: 1),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
+        .scrollIndicators(.visible)
     }
 
     private var bodyContent: some View {

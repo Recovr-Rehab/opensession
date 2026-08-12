@@ -63,15 +63,6 @@ enum CatchUpMotion {
         (velocity / 1000) * decelerationRate / (1 - decelerationRate)
     }
 
-    /// Progressive resistance past a boundary — dragging a card DOWN does
-    /// nothing, so it has to feel like nothing is there rather than like the
-    /// gesture broke.
-    static func rubberband(
-        _ overshoot: CGFloat, dimension: CGFloat, constant: CGFloat = 0.55
-    ) -> CGFloat {
-        (overshoot * dimension * constant) / (dimension + constant * abs(overshoot))
-    }
-
     /// A spring that continues at the finger's own speed, so there is no seam
     /// between dragging and animating. `initialVelocity` is normalised by the
     /// distance still to travel, which is the unit SwiftUI wants.
@@ -91,6 +82,10 @@ enum CatchUpMotion {
     }
 }
 
+private enum CatchUpDragAxis {
+    case horizontal, vertical
+}
+
 /// The card stack: three slots, one gesture, and the two decisions that change
 /// state — with the undo that makes them safe to make quickly.
 struct CatchUpDeckView: View {
@@ -105,6 +100,9 @@ struct CatchUpDeckView: View {
     /// function of this one value, which is why the stack stays continuous
     /// when a swipe is reversed halfway.
     @State private var drag: CGSize = .zero
+    /// Chosen once per touch so a diagonal reading gesture never changes into
+    /// a card decision halfway through the drag.
+    @State private var dragAxis: CatchUpDragAxis?
     /// Set while a card is on its way out; blocks a second gesture landing on
     /// a card that has already been decided.
     @State private var flinging: CatchUpIntent?
@@ -158,7 +156,9 @@ struct CatchUpDeckView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
-        .gesture(dragGesture(in: size))
+        // Vertical drags belong to the card's preview. Horizontal drags belong
+        // to the deck; Keep remains the labeled center button below it.
+        .simultaneousGesture(dragGesture(in: size))
     }
 
     /// Four slots are rendered, but the fourth is fully transparent: it is
@@ -187,18 +187,10 @@ struct CatchUpDeckView: View {
         max(88, cardWidth(in: size) * 0.28)
     }
 
-    private func verticalThreshold(in size: CGSize) -> CGFloat {
-        max(96, cardHeight(in: size) * 0.16)
-    }
-
     /// How far the current drag has taken the top card toward a decision,
     /// 0…1 — and, with it, how far forward every card behind it has come.
     private func progress(_ translation: CGSize, in size: CGSize) -> Double {
-        let horizontal = Double(abs(translation.width) / horizontalThreshold(in: size))
-        let vertical = translation.height < 0
-            ? Double(abs(translation.height) / verticalThreshold(in: size))
-            : 0
-        return min(1, max(horizontal, vertical))
+        min(1, Double(abs(translation.width) / horizontalThreshold(in: size)))
     }
 
     private func stackProgress(in size: CGSize) -> Double {
@@ -286,20 +278,41 @@ struct CatchUpDeckView: View {
         DragGesture(minimumDistance: 8)
             .onChanged { value in
                 guard flinging == nil else { return }
-                drag = damped(value.translation)
+                if dragAxis == nil {
+                    dragAxis = abs(value.translation.width) > abs(value.translation.height)
+                        ? .horizontal
+                        : .vertical
+                }
+                // A vertical intent is scrolling the preview. Do not move or
+                // arm the card while the nested ScrollView owns that gesture.
+                guard dragAxis == .horizontal
+                else {
+                    if drag != .zero {
+                        drag = .zero
+                        armed = nil
+                    }
+                    return
+                }
+                drag = CGSize(width: value.translation.width, height: 0)
                 let reached = progress(drag, in: size) >= 1
                 let next = reached ? intent(for: drag) : nil
                 if next != armed { armed = next }
             }
             .onEnded { value in
                 guard flinging == nil else { return }
+                defer { dragAxis = nil }
+                guard dragAxis == .horizontal
+                else {
+                    drag = .zero
+                    armed = nil
+                    return
+                }
                 // Decide on where the flick is GOING, not where the finger let
                 // go: a fast, short throw should commit.
                 let projected = CGSize(
                     width: value.translation.width
                         + CatchUpMotion.project(value.velocity.width),
-                    height: value.translation.height
-                        + CatchUpMotion.project(value.velocity.height)
+                    height: 0
                 )
                 if progress(projected, in: size) >= 1,
                    let committed = intent(for: projected) {
@@ -315,22 +328,7 @@ struct CatchUpDeckView: View {
             }
     }
 
-    /// 1:1 sideways and upward; downward resists, because there is no decision
-    /// down there.
-    private func damped(_ translation: CGSize) -> CGSize {
-        CGSize(
-            width: translation.width,
-            height: translation.height < 0
-                ? translation.height
-                : CatchUpMotion.rubberband(translation.height, dimension: 260)
-        )
-    }
-
     private func intent(for translation: CGSize) -> CatchUpIntent? {
-        if translation.height < 0,
-           abs(translation.height) > abs(translation.width) * 1.3 {
-            return .keep
-        }
         if translation.width > 0 { return .read }
         if translation.width < 0 { return .archive }
         return nil
