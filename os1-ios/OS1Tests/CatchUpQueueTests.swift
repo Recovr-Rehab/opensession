@@ -69,9 +69,9 @@ final class CatchUpQueueTests: XCTestCase {
         XCTAssertTrue(build([session("a"), session("b")], unread: []).isEmpty)
     }
 
-    /// One card per workspace, and the card acts on the freshest session in it:
-    /// that is the one carrying the part you haven't seen.
-    func testAWorkspaceCollapsesToOneCardTargetingItsFreshestSession() {
+    /// One card per workspace, showing its main chat even when another chat has
+    /// the newest unread activity.
+    func testAWorkspaceCollapsesToOneCardShowingItsMainChat() {
         let old = session(
             "old", workspace: "ws-1",
             lastActivity: "2026-08-10T09:30:00.000Z",
@@ -92,7 +92,28 @@ final class CatchUpQueueTests: XCTestCase {
         XCTAssertEqual(cards.count, 1)
         XCTAssertEqual(cards[0].title, "Catch up on iOS")
         XCTAssertEqual(cards[0].sessionCount, 2)
-        XCTAssertEqual(cards[0].target.id, "fresh")
+        XCTAssertEqual(cards[0].target.id, "old")
+    }
+
+    /// A secondary unread chat puts the workspace in Catch Up, but it does not
+    /// replace the main chat as the preview, open, or reply destination.
+    func testUnreadSecondaryChatStillShowsReadMainChat() {
+        let main = session(
+            "main", workspace: "ws-1",
+            lastActivity: "2026-08-10T09:30:00.000Z",
+            createdAt: "2026-08-10T09:00:00.000Z"
+        )
+        let secondary = session(
+            "secondary", workspace: "ws-1",
+            lastActivity: "2026-08-10T11:00:00.000Z",
+            createdAt: "2026-08-10T09:15:00.000Z"
+        )
+
+        let cards = build([main, secondary], unread: ["secondary"])
+
+        XCTAssertEqual(cards.count, 1)
+        XCTAssertEqual(cards[0].target.id, "main")
+        XCTAssertEqual(cards[0].sessions.map(\.id), ["secondary"])
     }
 
     /// Newest first. An inbox you work top-down should hand you what moved most

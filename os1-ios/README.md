@@ -41,8 +41,8 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   *workspace* (the same grouping the list shows,
   built by `CatchUpQueue` from the shared `/api/reads` marks with the web
   deck's rules: yours, not archived, not an automation, not the Desk). The card
-  is a glance — what you asked, where things stand — with `Open` for the real
-  conversation and `Reply` (a detent sheet, delivered through the `Outbox`).
+  previews the workspace's main chat, with `Open` for that conversation and
+  `Reply` (a detent sheet, delivered through the `Outbox`).
   The workspace preview scrolls vertically. Decisions stay on the other axis:
   swipe left to archive or right to mark read, while Keep remains the center
   button. The whole stack is a function of one horizontal drag value: tilt,

@@ -11,10 +11,9 @@ struct CatchUpCard: Identifiable, Equatable, Sendable {
     let id: String
     let title: String
     let repo: String
-    /// Every unread session under the row — what a read or archive acts on.
+    /// Every unread session under the row. Read and archive act on these.
     let sessions: [Session]
-    /// Where a reply, an "open" or a read mark lands: the freshest session,
-    /// which is the one carrying the part you haven't seen.
+    /// The workspace's main chat. This is what the card previews and opens.
     let target: Session
     let lane: Session.Lane
     let isRunning: Bool
@@ -42,16 +41,17 @@ enum CatchUpQueue {
         isUnread: (Session) -> Bool
     ) -> [CatchUpCard] {
         let mine = sessions.filter {
-            qualifies(
-                $0, viewerName: viewerName, viewerLogin: viewerLogin, isUnread: isUnread
-            )
+            belongsToViewer($0, viewerName: viewerName, viewerLogin: viewerLogin)
         }
         // Reuse the sidebar's own grouping rather than a second one: a card has
         // to be the row you would have tapped in the list, including its
         // legacy isolated-worktree fallbacks.
         return SessionsListViewModel
             .sidebarWorkspaces(in: mine, workspaceNames: workspaceNames)
-            .map(card(for:))
+            .compactMap { row in
+                let unread = row.sessions.filter(isUnread)
+                return unread.isEmpty ? nil : card(for: row, unread: unread)
+            }
             .sorted { $0.lastActivity > $1.lastActivity }
     }
 
@@ -63,16 +63,8 @@ enum CatchUpQueue {
         viewerLogin: String,
         isUnread: (Session) -> Bool
     ) -> Bool {
-        guard session.archived != true,
-              !session.isAutomation,
-              session.desk != true,
-              let owner = session.startedBy,
-              !owner.isEmpty,
-              MessageAttribution.isViewer(
-                  owner, viewerName: viewerName, viewerLogin: viewerLogin
-              )
-        else { return false }
-        return isUnread(session)
+        belongsToViewer(session, viewerName: viewerName, viewerLogin: viewerLogin)
+            && isUnread(session)
     }
 
     /// How many cards the deck would have, counted off the sessions list's
@@ -99,16 +91,32 @@ enum CatchUpQueue {
         }
     }
 
-    private nonisolated static func card(for row: SidebarWorkspace) -> CatchUpCard {
-        let target = row.sessions.max {
-            ($0.lastActivityDate ?? .distantPast) < ($1.lastActivityDate ?? .distantPast)
-        } ?? row.mainSession
+    private nonisolated static func belongsToViewer(
+        _ session: Session,
+        viewerName: String,
+        viewerLogin: String
+    ) -> Bool {
+        guard session.archived != true,
+              !session.isAutomation,
+              session.desk != true,
+              let owner = session.startedBy,
+              !owner.isEmpty
+        else { return false }
+        return MessageAttribution.isViewer(
+            owner, viewerName: viewerName, viewerLogin: viewerLogin
+        )
+    }
+
+    private nonisolated static func card(
+        for row: SidebarWorkspace,
+        unread: [Session]
+    ) -> CatchUpCard {
         return CatchUpCard(
             id: row.id,
             title: row.title,
             repo: row.effectiveRepo,
-            sessions: row.sessions,
-            target: target,
+            sessions: unread,
+            target: row.mainSession,
             lane: row.lane,
             isRunning: row.isRunning,
             // The earliest start among the running sessions: the row has been
@@ -118,7 +126,7 @@ enum CatchUpQueue {
                 .filter { $0.isRunning == true }
                 .compactMap(\.runStartedDate)
                 .min(),
-            lastActivity: row.lastActivityDate
+            lastActivity: unread.compactMap(\.lastActivityDate).max() ?? .distantPast
         )
     }
 }
