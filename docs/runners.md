@@ -29,6 +29,14 @@ stream as a remote Sandbox. Automation sessions never receive Runner tools.
 Runners run work as their local service user, so only attach machines the
 workspace intends to trust.
 
+Runner sessions can also host supervised Portals. A Portal process listens
+only on the Runner's loopback interface. Open Session relays its HTTP and
+WebSocket traffic over the authenticated Runner control channel to a local
+loopback relay, then Caddy applies the normal session Portal authorization.
+The browser never receives a Runner address, direct port, credential, or a
+general network tunnel. Deleting a session or revoking its Runner stops the
+relay routes immediately.
+
 ## Operator-managed migration
 
 Workspace administrators can also migrate a named SSH machine or a named

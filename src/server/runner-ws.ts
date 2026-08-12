@@ -39,9 +39,11 @@ const connections: Map<string, Connection> = (g.__opensessionRunnerConnections ?
  * host may reconnect, so the server does not kill a live turn during a brief
  * Runner-channel reconnect. */
 const exitedHosts: Set<string> = (g.__opensessionRunnerExitedHosts ??= new Set()) as Set<string>;
+type RunnerPortalFrameHandler = (runnerId: string, message: Record<string, unknown>) => void;
+const portalFrameHandlers: Set<RunnerPortalFrameHandler> = (g.__opensessionRunnerPortalFrameHandlers ??= new Set()) as Set<RunnerPortalFrameHandler>;
 let executionCounter = 0;
 
-export type RunnerExecResult = { code: number; stdout: string; stderr: string; timedOut?: boolean };
+export type RunnerExecResult = { code: number; stdout: string; stderr: string; timedOut?: boolean; data?: unknown };
 export type RunnerExecOptions = { cwd?: string; timeoutMs?: number; user?: string; repo?: string; sessionId?: string };
 
 /**
@@ -88,12 +90,63 @@ export async function execRunnerWorkspace(
 	});
 }
 
+/** A small, typed request/response seam for Runner-owned services. The caller
+ * must still enforce a specific Portal operation and session workspace. */
+export async function requestRunnerPortal(
+	runnerId: string,
+	input: { sessionId: string; repo: string; workspacePath: string; operation: "allocate" | "start" | "list" | "stop" | "restart" | "path" | "http"; payload?: Record<string, unknown>; user?: string },
+): Promise<unknown> {
+	const connection = connections.get(runnerId);
+	if (!connection || connection.protocolVersion !== PROTOCOL_VERSION) throw new Error(`Runner ${runnerId} is not connected`);
+	if (!runnerAllowed(connection.runner, { user: input.user, repo: input.repo, permission: "portals" })) throw new Error(`Runner ${connection.runner.name} is not permitted to expose Portals`);
+	if (!runnerOwnsWorkspace(connection.runner, input.workspacePath, input.sessionId)) throw new Error("Runner Portal workspace is outside its managed roots");
+	const id = `rp${++executionCounter}-${Date.now().toString(36)}`;
+	const operationToken = randomBytes(18).toString("base64url");
+	audit({ msg: "runner_portal_request_start", runner_id: runnerId, session_id: input.sessionId, repo: input.repo, operation: input.operation, operation_id: id });
+	const result = await new Promise<RunnerExecResult>((resolve) => {
+		const timer = setTimeout(() => {
+			const pending = connection.pending.get(id); if (!pending) return;
+			connection.pending.delete(id);
+			resolve({ code: -1, stdout: "", stderr: "Runner Portal request timed out", timedOut: true });
+		}, 30_000);
+		connection.pending.set(id, { stdout: [], stderr: [], resolve, timer, operationToken });
+		try {
+			connection.ws.send(JSON.stringify({
+				t: `portal_${input.operation}`, version: PROTOCOL_VERSION, id, operationToken,
+				sessionId: input.sessionId, repo: input.repo, workspacePath: input.workspacePath, ...(input.payload || {}),
+			}));
+		} catch (error) {
+			clearTimeout(timer); connection.pending.delete(id);
+			resolve({ code: -1, stdout: "", stderr: `Could not reach Runner: ${(error as Error).message}` });
+		}
+	});
+	if (result.code !== 0) {
+		audit({ msg: "runner_portal_request_finish", runner_id: runnerId, session_id: input.sessionId, repo: input.repo, operation: input.operation, operation_id: id, outcome: "failed" });
+		throw new Error(result.stderr || "Runner Portal request failed");
+	}
+	audit({ msg: "runner_portal_request_finish", runner_id: runnerId, session_id: input.sessionId, repo: input.repo, operation: input.operation, operation_id: id, outcome: "ok" });
+	return result.data;
+}
+
 export function connectedRunnerIds(): string[] {
 	return [...connections.keys()];
 }
 
 export function isRunnerConnected(id: string): boolean {
 	return connections.has(id);
+}
+
+/** Portal HTTP uses request/response. WebSocket traffic needs this narrow
+ * frame bridge, still restricted to server-registered Portal connections. */
+export function sendRunnerPortalFrame(runnerId: string, message: Record<string, unknown>): boolean {
+	const connection = connections.get(runnerId);
+	if (!connection || connection.protocolVersion !== PROTOCOL_VERSION) return false;
+	try { connection.ws.send(JSON.stringify({ ...message, version: PROTOCOL_VERSION })); return true; } catch { return false; }
+}
+
+export function registerRunnerPortalFrameHandler(handler: RunnerPortalFrameHandler): () => void {
+	portalFrameHandlers.add(handler);
+	return () => portalFrameHandlers.delete(handler);
 }
 
 export function runnerHostAlive(hostId: string): boolean {
@@ -254,6 +307,22 @@ export function runnerWsMessage(ws: any, raw: string | Buffer): boolean {
 			pending.resolve({ code: message.alive === true ? 0 : 1, stdout: message.alive === true ? "alive" : "dead", stderr: "" });
 			return true;
 		}
+		case "portal_result": {
+			const id = String(message.id);
+			const pending = connection.pending.get(id);
+			if (!pending || message.operationToken !== pending.operationToken) return true;
+			clearTimeout(pending.timer);
+			connection.pending.delete(id);
+			pending.resolve({ code: message.ok === true ? 0 : -1, stdout: "", stderr: String(message.error || ""), data: message.result });
+			return true;
+		}
+		case "portal_ws_opened":
+		case "portal_ws_event":
+		case "portal_ws_closed":
+			for (const handler of portalFrameHandlers) {
+				try { handler(runnerId, message as Record<string, unknown>); } catch (error) { console.warn("[runners] Portal frame handler failed:", error); }
+			}
+			return true;
 	}
 	return true;
 }

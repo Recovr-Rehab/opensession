@@ -244,6 +244,7 @@ export function interactiveMcpServers(
 							return session ? activeSandboxFor(session, options) : null;
 						},
 						hasSandbox: () => Boolean(findSession(sessionId)?.sandbox?.sandboxId),
+						runner: () => findSession(sessionId),
 						setDefaultPath: (path) =>
 							touchNativeSession(sessionId, {
 								previewPath: path || undefined,

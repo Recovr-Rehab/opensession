@@ -4,6 +4,8 @@ import { z } from "zod";
 import { createSdkMcpServer, tool } from "./inprocess-mcp";
 import { getPreviewStatus, getSandboxPreviewStatus } from "./preview";
 import { listPortalServices, listSandboxPortalServices, restartPortalService, restartSandboxPortalService, setPortalPath, setSandboxPortalPath, startPortalService, startSandboxPortalService, stopPortalService, stopSandboxPortalService } from "./portal-supervisor";
+import { listRunnerPortalServices, restartRunnerPortal, runnerPortalUrl, setRunnerPortalPath, startRunnerPortal, stopRunnerPortal } from "./runner-portals";
+import type { UnifiedSession } from "./types";
 import type { Sandbox } from "./sandbox/provider";
 
 export interface PortalsMcpContext {
@@ -13,6 +15,8 @@ export interface PortalsMcpContext {
 	/** An explicit computation action may wake the Sandbox. Passive listing may not. */
 	sandbox: (options?: { wake?: boolean }) => Promise<Sandbox | null>;
 	hasSandbox: () => boolean;
+	/** Runner sessions own their services on the trusted remote machine. */
+	runner: () => UnifiedSession | undefined;
 }
 
 function result(value: string) { return { content: [{ type: "text" as const, text: value }] }; }
@@ -33,6 +37,11 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
 			}, async (args: { name: string; command: string; port?: number; description?: string }) => {
 				const dir = workspace(ctx); if (dir instanceof Error) return result(dir.message);
 				try {
+					const runner = ctx.runner();
+					if (runner?.runner) {
+						const portal = await startRunnerPortal({ session: runner, name: args.name, command: args.command, port: args.port, description: args.description });
+						return result(`${portal.name} is ready at ${await runnerPortalUrl(portal) ?? "its authenticated Portal URL"}.`);
+					}
 					const sandbox = await ctx.sandbox({ wake: true });
 					if (!sandbox && ctx.hasSandbox()) return result("Could not start Portal: this session's Sandbox is unavailable.");
 					const portal = sandbox
@@ -45,6 +54,12 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
 			}),
 			tool("list_portals", "List this session's registered Portals and their readiness. Use this after starting a service before telling the user it is ready.", {}, async () => {
 				const dir = workspace(ctx); if (dir instanceof Error) return result(dir.message);
+				const runner = ctx.runner();
+				if (runner?.runner) {
+					const portals = await listRunnerPortalServices(runner);
+					if (!portals.length) return result("No Portals are registered. Use start_portal for a live app or service.");
+					return result((await Promise.all(portals.map(async (portal) => `${portal.name}\nstate: ${portal.state}\nport: ${portal.port}\nurl: ${await runnerPortalUrl(portal) ?? "not ready"}${portal.description ? `\ndescription: ${portal.description}` : ""}`))).join("\n\n"));
+				}
 				const sandbox = await ctx.sandbox();
 				if (!sandbox && ctx.hasSandbox()) return result("This session's Sandbox is sleeping or unavailable. Opening a Portal or sending a message wakes it.");
 				const portals = sandbox ? await listSandboxPortalServices(sandbox) : await listPortalServices(dir);
@@ -58,6 +73,11 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
 			tool("stop_portal", "Stop one supervised Portal in this session. It never affects services in another session.", { name: z.string() }, async ({ name }: { name: string }) => {
 				const dir = workspace(ctx); if (dir instanceof Error) return result(dir.message);
 				try {
+					const runner = ctx.runner();
+					if (runner?.runner) {
+						await stopRunnerPortal({ session: runner, name });
+						return result(`Stopped ${name}.`);
+					}
 					const sandbox = await ctx.sandbox();
 					if (!sandbox && ctx.hasSandbox()) return result("Could not stop Portal: this session's Sandbox is sleeping or unavailable.");
 					if (sandbox) await stopSandboxPortalService({ sessionId: ctx.sessionId, sandbox, name });
@@ -69,6 +89,11 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
 			tool("restart_portal", "Restart one supervised Portal using its registered command and port.", { name: z.string() }, async ({ name }: { name: string }) => {
 				const dir = workspace(ctx); if (dir instanceof Error) return result(dir.message);
 				try {
+					const runner = ctx.runner();
+					if (runner?.runner) {
+						const portal = await restartRunnerPortal({ session: runner, name });
+						return result(`${portal.name} restarted at ${await runnerPortalUrl(portal) ?? "its authenticated Portal URL"}.`);
+					}
 					const sandbox = await ctx.sandbox({ wake: true });
 					if (!sandbox && ctx.hasSandbox()) return result("Could not restart Portal: this session's Sandbox is unavailable.");
 					const portal = sandbox
@@ -82,6 +107,11 @@ export function createPortalsMcpServer(ctx: PortalsMcpContext) {
 				const dir = workspace(ctx); if (dir instanceof Error) return result(dir.message);
 				try {
 					if (name) {
+						const runner = ctx.runner();
+						if (runner?.runner) {
+							await setRunnerPortalPath({ session: runner, name, path });
+							return result(`Set ${name}'s default route to ${path || "/"}.`);
+						}
 						const sandbox = await ctx.sandbox();
 						if (!sandbox && ctx.hasSandbox()) return result("Could not set Portal route: this session's Sandbox is sleeping or unavailable.");
 						if (sandbox) await setSandboxPortalPath(sandbox, path, name);

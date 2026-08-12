@@ -3,6 +3,8 @@ import {
 	disconnectRunner,
 	launchRunnerHost,
 	prepareRunnerWorkspace,
+	requestRunnerPortal,
+	registerRunnerPortalFrameHandler,
 	runnerHostStatus,
 	runnerWsMessage,
 	runnerWsOpen,
@@ -79,5 +81,34 @@ describe("Runner full-session control", () => {
 		expect(message.t).toBe("host_status");
 		runnerWsMessage(ws, JSON.stringify({ t: "host_status", id: message.id, operationToken: message.operationToken, hostId: "rh-test", alive: true }));
 		await expect(pending).resolves.toBe(true);
+	});
+
+	test("keeps Runner Portal control scoped to the session workspace", async () => {
+		updateRunner(runnerId, { permissions: { portals: true } });
+		const ws = socket(runnerId);
+		runnerWsOpen(ws);
+		runnerWsMessage(ws, JSON.stringify({ t: "hello", version: 1 }));
+		const pending = requestRunnerPortal(runnerId, {
+			sessionId: "bks-test", repo: "opensession", workspacePath: "/srv/opensession/sessions/bks-test", operation: "start",
+			payload: { name: "web", command: "bun run dev" },
+		});
+		const message = JSON.parse(ws.sent.at(-1)!);
+		expect(message.t).toBe("portal_start");
+		runnerWsMessage(ws, JSON.stringify({ t: "portal_result", id: message.id, operationToken: message.operationToken, ok: true, result: { name: "web" } }));
+		await expect(pending).resolves.toEqual({ name: "web" });
+		await expect(requestRunnerPortal(runnerId, {
+			sessionId: "bks-test", repo: "opensession", workspacePath: "/home/runner", operation: "list",
+		})).rejects.toThrow("outside its managed roots");
+	});
+
+	test("forwards Portal WebSocket frames only from the attached Runner", () => {
+		const ws = socket(runnerId);
+		runnerWsOpen(ws);
+		runnerWsMessage(ws, JSON.stringify({ t: "hello", version: 1 }));
+		let received: Record<string, unknown> | undefined;
+		const dispose = registerRunnerPortalFrameHandler((id, message) => { if (id === runnerId) received = message; });
+		runnerWsMessage(ws, JSON.stringify({ t: "portal_ws_event", connectionId: "abcdefgh", binary: false, data: "updated" }));
+		dispose();
+		expect(received?.data).toBe("updated");
 	});
 });

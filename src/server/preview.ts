@@ -579,6 +579,18 @@ async function removePreviewRoute(httpsPort: number): Promise<void> {
   previewRoutes.delete(httpsPort);
 }
 
+/** Expose a pre-built loopback relay through the same permission-coupled
+ * Caddy wrapper used by every Sandbox Portal. The caller never passes a remote
+ * address, so a Runner cannot turn this into a network tunnel. */
+export async function ensureAuthenticatedPortalRoute(httpsPort: number, upstream: string): Promise<string | null> {
+	const host = await previewHost();
+	return (await ensurePreviewRoute(httpsPort, upstream, host)) ? `https://${host}:${httpsPort}` : null;
+}
+
+export async function dropAuthenticatedPortalRoute(httpsPort: number): Promise<void> {
+	await removePreviewRoute(httpsPort);
+}
+
 export async function getPreviewStatus(worktreeDir: string): Promise<PreviewStatus> {
   // Pool-backed previews: claims persist on disk but sync timers don't —
   // re-attach after a process restart (cheap no-op otherwise).

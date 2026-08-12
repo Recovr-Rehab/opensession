@@ -17,7 +17,7 @@
  * rather than one we claim.
  */
 
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync } from "fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { arch, cpus, hostname, platform, tmpdir, totalmem } from "os";
 import { dirname, join, resolve } from "path";
 import { OPENSESSION_HOME } from "./paths";
@@ -262,6 +262,7 @@ export async function runnerRun(): Promise<number> {
       } as any);
       const running = new Map<string, ReturnType<typeof Bun.spawn>>();
 		const persistent = new Map<string, ReturnType<typeof Bun.spawn>>();
+		const portalSockets = new Map<string, WebSocket>();
 
       socket.addEventListener("open", async () => {
         attempt = 0;
@@ -298,6 +299,14 @@ export async function runnerRun(): Promise<number> {
 		}
 		if (msg?.t === "host_status" && msg.version === 1 && msg.operationToken) {
 			await reportRunHostStatus(socket, persistent, msg);
+			return;
+		}
+		if (["portal_allocate", "portal_start", "portal_list", "portal_stop", "portal_restart", "portal_path", "portal_http"].includes(msg?.t) && msg.version === 1 && msg.operationToken) {
+			await handleRunnerPortal(socket, msg);
+			return;
+		}
+		if (["portal_ws_open", "portal_ws_send", "portal_ws_close"].includes(msg?.t) && msg.version === 1) {
+			handleRunnerPortalWebSocket(socket, portalSockets, msg);
 			return;
 		}
         if (msg?.t !== "exec" || msg.version !== 1 || !msg.operationToken) return;
@@ -349,6 +358,7 @@ export async function runnerRun(): Promise<number> {
           stopping = true;
         }
 		for (const proc of running.values()) proc.kill();
+		for (const portal of portalSockets.values()) { try { portal.close(); } catch {} }
         resolve();
       });
 
@@ -433,6 +443,248 @@ async function scopedGitEnvironment(cloneToken: string): Promise<{ env: Record<s
 		env: { ...env, GIT_ASKPASS: askpass, OPENSESSION_RUNNER_GIT_TOKEN: cloneToken },
 		cleanup: () => rmSync(dir, { recursive: true, force: true }),
 	};
+}
+
+type RunnerPortalRecord = {
+	name: string;
+	key: string;
+	command: string;
+	port: number;
+	description?: string;
+	defaultPath?: string;
+	state: "starting" | "awake" | "failed" | "stopped";
+	pid?: number;
+	startedAt?: string;
+	lastError?: string;
+	portalUrl?: string;
+};
+
+const PORTAL_NAME = /^[a-z][a-z0-9-]{0,62}$/;
+const PORTAL_MIN = 1024;
+const PORTAL_MAX = 19_000;
+
+function runnerPortalRegistryPath(workspacePath: string): string {
+	return join(workspacePath, ".opensession-runner-portals.json");
+}
+
+function readRunnerPortalRegistry(workspacePath: string): RunnerPortalRecord[] {
+	try {
+		const parsed = JSON.parse(readFileSync(runnerPortalRegistryPath(workspacePath), "utf8")) as { portals?: RunnerPortalRecord[] };
+		return Array.isArray(parsed.portals) ? parsed.portals.filter((portal) => PORTAL_NAME.test(portal.name) && Number.isInteger(portal.port) && portal.port >= PORTAL_MIN && portal.port <= PORTAL_MAX) : [];
+	} catch { return []; }
+}
+
+function writeRunnerPortalRegistry(workspacePath: string, portals: RunnerPortalRecord[]): void {
+	writeFileSync(runnerPortalRegistryPath(workspacePath), JSON.stringify({ portals }, null, 2) + "\n", { mode: 0o600 });
+}
+
+async function runnerPortListening(port: number): Promise<boolean> {
+	return new Promise((resolve) => {
+		let settled = false;
+		const finish = (value: boolean) => { if (!settled) { settled = true; resolve(value); } };
+		void Bun.connect({ hostname: "127.0.0.1", port, socket: { open(socket) { try { socket.end(); } catch {} finish(true); }, connectError() { finish(false); }, close() { finish(false); } } }).catch(() => finish(false));
+	});
+}
+
+function runnerPortalKey(name: string): string { return `PORTAL_${name.toUpperCase().replace(/-/g, "_")}_PORT`; }
+
+function runnerPortalUpsert(records: RunnerPortalRecord[], next: RunnerPortalRecord): RunnerPortalRecord[] {
+	const index = records.findIndex((record) => record.name === next.name);
+	if (index < 0) return [...records, next];
+	const copy = [...records]; copy[index] = next; return copy;
+}
+
+async function runnerPortalStatus(workspacePath: string): Promise<RunnerPortalRecord[]> {
+	const records = readRunnerPortalRegistry(workspacePath);
+	let changed = false;
+	const next = await Promise.all(records.map(async (record) => {
+		if (record.state === "stopped" || record.state === "failed") return record;
+		const listening = await runnerPortListening(record.port);
+		let alive = false;
+		if (record.pid && record.pid > 1) { try { process.kill(record.pid, 0); alive = true; } catch {} }
+		const state = listening ? "awake" as const : alive ? "starting" as const : "failed" as const;
+		if (state === record.state) return record;
+		changed = true;
+		return { ...record, state, ...(state === "failed" ? { lastError: "The service is no longer listening." } : {}) };
+	}));
+	if (changed) writeRunnerPortalRegistry(workspacePath, next);
+	return next;
+}
+
+async function startRunnerPortal(workspacePath: string, msg: any): Promise<RunnerPortalRecord> {
+	const name = typeof msg.name === "string" ? msg.name.trim().toLowerCase() : "";
+	const command = typeof msg.command === "string" ? msg.command.trim() : "";
+	if (!PORTAL_NAME.test(name) || !command || command.length > 8_000) throw new Error("Invalid Portal service.");
+	let records = await runnerPortalStatus(workspacePath);
+	const current = records.find((record) => record.name === name);
+	if (current && current.state !== "failed" && current.state !== "stopped") throw new Error(`Portal '${name}' already exists.`);
+	let port = typeof msg.port === "number" ? msg.port : 0;
+	if (port) {
+		if (!Number.isInteger(port) || port < PORTAL_MIN || port > PORTAL_MAX) throw new Error("Invalid Portal port.");
+		if (records.some((record) => record.name !== name && record.port === port) || await runnerPortListening(port)) throw new Error(`Port ${port} is already in use.`);
+	} else {
+		for (port = 4_000; port < 9_000; port++) if (!records.some((record) => record.port === port) && !(await runnerPortListening(port))) break;
+		if (port >= 9_000) throw new Error("No Portal ports are available.");
+	}
+	const base: RunnerPortalRecord = {
+		name, key: runnerPortalKey(name), command, port,
+		...(typeof msg.description === "string" && msg.description.trim() ? { description: msg.description.trim().slice(0, 240) } : {}),
+		...(typeof msg.portalUrl === "string" && msg.portalUrl.startsWith("https://") ? { portalUrl: msg.portalUrl } : {}),
+		state: "starting", startedAt: new Date().toISOString(),
+	};
+	writeRunnerPortalRegistry(workspacePath, runnerPortalUpsert(records, base));
+	const env = { ...runnerEnvironment(), PORT: String(port), PORTAL_URL: typeof msg.portalUrl === "string" ? msg.portalUrl : "", OPENSESSION_PORTAL: name };
+	const child = platform() === "win32"
+		? Bun.spawn(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command], { cwd: workspacePath, env, stdin: "ignore", stdout: "ignore", stderr: "ignore" })
+		: Bun.spawn(["setsid", "bash", "-lc", `exec ${command}`], { cwd: workspacePath, env, stdin: "ignore", stdout: "ignore", stderr: "ignore" });
+	child.unref();
+	const running = { ...base, pid: child.pid };
+	writeRunnerPortalRegistry(workspacePath, runnerPortalUpsert(records, running));
+	const deadline = Date.now() + 15_000;
+	while (Date.now() < deadline) {
+		if (await runnerPortListening(port)) {
+			const awake = { ...running, state: "awake" as const };
+			writeRunnerPortalRegistry(workspacePath, runnerPortalUpsert(records, awake));
+			return awake;
+		}
+		await Bun.sleep(200);
+	}
+	const failed = { ...running, state: "failed" as const, lastError: `Nothing listened on port ${port} within 15 seconds.` };
+	writeRunnerPortalRegistry(workspacePath, runnerPortalUpsert(records, failed));
+	throw new Error(failed.lastError);
+}
+
+async function allocateRunnerPortalPort(workspacePath: string, requested: unknown): Promise<{ port: number }> {
+	const records = await runnerPortalStatus(workspacePath);
+	let port = typeof requested === "number" ? requested : 0;
+	if (port) {
+		if (!Number.isInteger(port) || port < PORTAL_MIN || port > PORTAL_MAX || records.some((record) => record.port === port) || await runnerPortListening(port)) throw new Error("Requested Portal port is unavailable.");
+		return { port };
+	}
+	for (port = 4_000; port < 9_000; port++) if (!records.some((record) => record.port === port) && !(await runnerPortListening(port))) return { port };
+	throw new Error("No Portal ports are available.");
+}
+
+async function stopRunnerPortal(workspacePath: string, nameValue: unknown): Promise<RunnerPortalRecord> {
+	const name = typeof nameValue === "string" ? nameValue.trim().toLowerCase() : "";
+	const records = readRunnerPortalRegistry(workspacePath);
+	const current = records.find((record) => record.name === name);
+	if (!current) throw new Error(`Portal '${name}' does not exist.`);
+	if (current.pid && current.pid > 1) {
+		try { process.kill(platform() === "win32" ? current.pid : -current.pid, "SIGTERM"); } catch { try { process.kill(current.pid, "SIGTERM"); } catch {} }
+	}
+	const stopped = { ...current, state: "stopped" as const, pid: undefined };
+	writeRunnerPortalRegistry(workspacePath, runnerPortalUpsert(records, stopped));
+	return stopped;
+}
+
+function setRunnerPortalPath(workspacePath: string, nameValue: unknown, pathValue: unknown): RunnerPortalRecord {
+	const name = typeof nameValue === "string" ? nameValue.trim().toLowerCase() : "";
+	const defaultPath = typeof pathValue === "string" ? pathValue.trim() : "";
+	if (!PORTAL_NAME.test(name) || (defaultPath && (!defaultPath.startsWith("/") || defaultPath.startsWith("//") || defaultPath.includes("\n")))) throw new Error("Invalid Portal route.");
+	const records = readRunnerPortalRegistry(workspacePath);
+	const current = records.find((record) => record.name === name);
+	if (!current) throw new Error(`Portal '${name}' does not exist.`);
+	const updated = { ...current, defaultPath: defaultPath || undefined };
+	writeRunnerPortalRegistry(workspacePath, runnerPortalUpsert(records, updated));
+	return updated;
+}
+
+const RELAY_HEADERS = new Set(["connection", "host", "content-length", "transfer-encoding", "upgrade", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer"]);
+
+async function runnerPortalHttp(workspacePath: string, msg: any): Promise<Record<string, unknown>> {
+	const port = typeof msg.port === "number" ? msg.port : NaN;
+	const path = typeof msg.path === "string" ? msg.path : "";
+	const method = typeof msg.method === "string" ? msg.method.toUpperCase() : "GET";
+	if (!Number.isInteger(port) || !path.startsWith("/") || path.startsWith("//") || path.includes("\0") || !/^[A-Z]{3,10}$/.test(method)) throw new Error("Invalid Portal HTTP request.");
+	const portal = (await runnerPortalStatus(workspacePath)).find((record) => record.port === port && record.state === "awake");
+	if (!portal) throw new Error("The requested Portal is not running.");
+	const headers = new Headers();
+	if (msg.headers && typeof msg.headers === "object" && !Array.isArray(msg.headers)) {
+		for (const [name, value] of Object.entries(msg.headers as Record<string, unknown>)) {
+			if (!RELAY_HEADERS.has(name.toLowerCase()) && typeof value === "string" && value.length <= 8_192) headers.set(name, value);
+		}
+	}
+	let body: Uint8Array | undefined;
+	if (typeof msg.body === "string" && msg.body) {
+		body = Buffer.from(msg.body, "base64");
+		if (body.byteLength > 5 * 1024 * 1024) throw new Error("Portal request body is too large.");
+	}
+	const response = await fetch(`http://127.0.0.1:${port}${path}`, { method, headers, body: body && method !== "GET" && method !== "HEAD" ? Buffer.from(body) as unknown as BodyInit : undefined, redirect: "manual", signal: AbortSignal.timeout(30_000) });
+	const bytes = new Uint8Array(await response.arrayBuffer());
+	if (bytes.byteLength > 10 * 1024 * 1024) throw new Error("Portal response is too large.");
+	const responseHeaders: Record<string, string> = {};
+	for (const [name, value] of response.headers) if (!RELAY_HEADERS.has(name.toLowerCase())) responseHeaders[name] = value;
+	return { status: response.status, headers: responseHeaders, body: Buffer.from(bytes).toString("base64") };
+}
+
+function handleRunnerPortalWebSocket(socket: WebSocket, portalSockets: Map<string, WebSocket>, msg: any): void {
+	const connectionId = typeof msg.connectionId === "string" && /^[A-Za-z0-9_-]{8,128}$/.test(msg.connectionId) ? msg.connectionId : "";
+	if (!connectionId) return;
+	if (msg.t === "portal_ws_close") {
+		try { portalSockets.get(connectionId)?.close(); } catch {}
+		portalSockets.delete(connectionId);
+		return;
+	}
+	if (msg.t === "portal_ws_send") {
+		const portal = portalSockets.get(connectionId);
+		if (!portal || portal.readyState !== WebSocket.OPEN) return;
+		try {
+			if (msg.binary === true && typeof msg.data === "string") portal.send(Buffer.from(msg.data, "base64"));
+			else if (typeof msg.data === "string") portal.send(msg.data);
+		} catch {}
+		return;
+	}
+	const workspacePath = typeof msg.workspacePath === "string" ? msg.workspacePath : "";
+	const port = typeof msg.port === "number" ? msg.port : NaN;
+	const path = typeof msg.path === "string" ? msg.path : "";
+	if (!workspacePath || workspacePath.includes("\0") || !Number.isInteger(port) || !path.startsWith("/") || path.startsWith("//")) return;
+	void (async () => {
+		try {
+			const portal = (await runnerPortalStatus(workspacePath)).find((record) => record.port === port && record.state === "awake");
+			if (!portal) throw new Error("Portal is not running");
+			const headers = msg.headers && typeof msg.headers === "object" && !Array.isArray(msg.headers) ? msg.headers as Record<string, unknown> : {};
+			const forwarded: Record<string, string> = {};
+			for (const [name, value] of Object.entries(headers)) if (!RELAY_HEADERS.has(name.toLowerCase()) && typeof value === "string" && value.length <= 8_192) forwarded[name] = value;
+			const remote = new WebSocket(`ws://127.0.0.1:${port}${path}`, { headers: forwarded } as any);
+			portalSockets.set(connectionId, remote);
+			remote.addEventListener("open", () => { try { socket.send(JSON.stringify({ t: "portal_ws_opened", connectionId })); } catch {} });
+			remote.addEventListener("message", (event: any) => {
+				try {
+					if (typeof event.data === "string") socket.send(JSON.stringify({ t: "portal_ws_event", connectionId, binary: false, data: event.data }));
+					else socket.send(JSON.stringify({ t: "portal_ws_event", connectionId, binary: true, data: Buffer.from(event.data).toString("base64") }));
+				} catch {}
+			});
+			const close = () => { portalSockets.delete(connectionId); try { socket.send(JSON.stringify({ t: "portal_ws_closed", connectionId })); } catch {} };
+			remote.addEventListener("close", close);
+			remote.addEventListener("error", close);
+		} catch {
+			try { socket.send(JSON.stringify({ t: "portal_ws_closed", connectionId })); } catch {}
+		}
+	})();
+}
+
+async function handleRunnerPortal(socket: WebSocket, msg: any): Promise<void> {
+	const id = String(msg.id);
+	const operationToken = String(msg.operationToken);
+	try {
+		const workspacePath = typeof msg.workspacePath === "string" ? msg.workspacePath : "";
+		if (!workspacePath || workspacePath.includes("\0") || !existsSync(workspacePath)) throw new Error("Invalid Runner Portal workspace.");
+		let result: unknown;
+		if (msg.t === "portal_allocate") result = await allocateRunnerPortalPort(workspacePath, msg.port);
+		else if (msg.t === "portal_start") result = await startRunnerPortal(workspacePath, msg);
+		else if (msg.t === "portal_list") result = await runnerPortalStatus(workspacePath);
+		else if (msg.t === "portal_stop") result = await stopRunnerPortal(workspacePath, msg.name);
+		else if (msg.t === "portal_path") result = setRunnerPortalPath(workspacePath, msg.name, msg.path);
+		else if (msg.t === "portal_restart") {
+			const existing = await stopRunnerPortal(workspacePath, msg.name);
+			result = await startRunnerPortal(workspacePath, { ...existing, ...(typeof msg.portalUrl === "string" ? { portalUrl: msg.portalUrl } : {}) });
+		} else if (msg.t === "portal_http") result = await runnerPortalHttp(workspacePath, msg);
+		else throw new Error("Unknown Runner Portal operation.");
+		socket.send(JSON.stringify({ t: "portal_result", id, operationToken, ok: true, result }));
+	} catch (error) {
+		socket.send(JSON.stringify({ t: "portal_result", id, operationToken, ok: false, error: error instanceof Error ? error.message : String(error) }));
+	}
 }
 
 async function startRunHost(socket: WebSocket, persistent: Map<string, ReturnType<typeof Bun.spawn>>, msg: any): Promise<void> {

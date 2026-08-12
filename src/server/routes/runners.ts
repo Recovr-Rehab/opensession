@@ -21,6 +21,7 @@ import {
 import { requestUser, type RouteContext } from "./context";
 import { requireWorkspaceAdmin, workspaceAdminAuthorized } from "../workspace-auth";
 import { bootstrapKubernetesRunner, bootstrapSshRunner, configuredRunnerBootstrapTargets } from "../runner-bootstrap";
+import { dropRunnerPortalsForRunner } from "../runner-portals";
 
 function peerAddress(ctx: RouteContext): string {
 	const server = (globalThis as any).__opensessionServer as { requestIP?(req: Request): { address: string } | null } | undefined;
@@ -122,6 +123,7 @@ export async function handleRunnersRoutes(ctx: RouteContext): Promise<Response |
 	if (!action && req.method === "DELETE") {
 		const denied = requireWorkspaceAdmin(ctx); if (denied) return denied;
 		if (!removeRunner(id)) return Response.json({ error: "Runner not found" }, { status: 404 });
+		await dropRunnerPortalsForRunner(id);
 		const disconnected = disconnectRunner(id);
 		audit({ msg: "runner_revoked", runner_id: id, user: requestUser(ctx), disconnected });
 		return Response.json({ ok: true, disconnected });

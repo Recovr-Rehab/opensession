@@ -12,6 +12,8 @@ import { findSession } from "../session-cache";
 import { activeSandboxFor } from "../session-sandbox";
 import { existsSync } from "fs";
 import { restartPortalService, restartSandboxPortalService, stopPortalService, stopSandboxPortalService } from "../portal-supervisor";
+import { restartRunnerPortal, runnerPortalPreviewStatus, startRunnerPortal, stopRunnerPortal } from "../runner-portals";
+import { getRepo } from "../worktree";
 
 export async function handlePreviewRoutes(
 	ctx: RouteContext,
@@ -57,6 +59,8 @@ export async function handlePreviewRoutes(
 				sessionTitle: session.title || null,
 				sessionBranch: session.branch || null,
 			};
+			if (session.runner)
+				return Response.json({ ...(await runnerPortalPreviewStatus(session, session.startedBy || undefined)), ...who });
 			const sbx = session.worktreeDir
 				? await activeSandboxFor(session)
 				: null;
@@ -95,10 +99,11 @@ export async function handlePreviewRoutes(
 					{ error: "Session not found" },
 					{ status: 404 },
 				);
+			const runnerStatus = session.runner ? await runnerPortalPreviewStatus(session, session.startedBy || undefined) : null;
 			const sbx = session.worktreeDir
 				? await activeSandboxFor(session, { wake: true })
 				: null;
-			if (!session.worktreeDir || (!existsSync(session.worktreeDir) && !sbx))
+			if (!session.worktreeDir || (!existsSync(session.worktreeDir) && !sbx && !runnerStatus))
 				return Response.json(
 					{ error: "Session has no worktree" },
 					{ status: 400 },
@@ -111,7 +116,9 @@ export async function handlePreviewRoutes(
 				// (host status can't see in-container listeners); the URL itself
 				// is an ordinary Caddy-fronted https origin either way.
 				const png = await capturePreviewScreenshot(session.worktreeDir, {
-					...(sbx
+					...(runnerStatus
+						? { status: runnerStatus }
+						: sbx
 						? {
 								status: await getSandboxPreviewStatus(
 									sbx,
@@ -151,6 +158,14 @@ export async function handlePreviewRoutes(
 				return Response.json(
 					await startSandboxPreview(sbx, session.worktreeDir!),
 				);
+			if (session.runner) {
+				const status = await runnerPortalPreviewStatus(session, session.startedBy || undefined);
+				if (status.running || status.starting) return Response.json(status);
+				const repo = session.repo ? getRepo(session.repo) : undefined;
+				const command = repo?.previewCommand ? `${repo.previewCommand} .` : "exec bash .agents/start.sh";
+				await startRunnerPortal({ session, user: session.startedBy || undefined, name: "webapp", command, description: "Repository app" });
+				return Response.json(await runnerPortalPreviewStatus(session, session.startedBy || undefined));
+			}
 			if (!session.worktreeDir || !existsSync(session.worktreeDir)) {
 				return Response.json({
 					hasPortsConf: false,
@@ -209,6 +224,11 @@ export async function handlePreviewRoutes(
 			const session = findSession(decodeURIComponent(m[1]));
 			if (!session) return Response.json({ error: "Session not found" }, { status: 404 });
 			try {
+				if (session.runner) {
+					if (m[3] === "stop") await stopRunnerPortal({ session, user: session.startedBy || undefined, name: m[2] });
+					else await restartRunnerPortal({ session, user: session.startedBy || undefined, name: m[2] });
+					return Response.json(await runnerPortalPreviewStatus(session, session.startedBy || undefined));
+				}
 				const sandbox = session.worktreeDir
 					? await activeSandboxFor(session, { wake: m[3] === "restart" })
 					: null;
