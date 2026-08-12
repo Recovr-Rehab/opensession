@@ -9,7 +9,7 @@ test("PWA manifest includes a new-agent shortcut under the active prefix", () =>
 			url: "/backstage/new",
 			icons: [
 				{
-					src: "/backstage/icon-192.png?v=4",
+					src: "/backstage/icon-192.png?v=5",
 					sizes: "192x192",
 					type: "image/png",
 				},

@@ -31,14 +31,14 @@ export function pwaManifest(publicPrefix: string) {
 		background_color: "#0b0809",
 		theme_color: "#0b0809",
 		icons: [
-			{ src: `${publicPrefix}/icon-192.png?v=4`, sizes: "192x192", type: "image/png", purpose: "any" },
-			{ src: `${publicPrefix}/icon.png?v=4`, sizes: "512x512", type: "image/png", purpose: "any" },
+			{ src: `${publicPrefix}/icon-192.png?v=5`, sizes: "192x192", type: "image/png", purpose: "any" },
+			{ src: `${publicPrefix}/icon.png?v=5`, sizes: "512x512", type: "image/png", purpose: "any" },
 		],
 		shortcuts: [
 			{
 				name: "Start an agent",
 				url: `${publicPrefix}/new`,
-				icons: [{ src: `${publicPrefix}/icon-192.png?v=4`, sizes: "192x192", type: "image/png" }],
+				icons: [{ src: `${publicPrefix}/icon-192.png?v=5`, sizes: "192x192", type: "image/png" }],
 			},
 		],
 	};
@@ -101,7 +101,7 @@ export async function handleStaticAssetsRoutes(
 		});
 	}
 
-	// App icons (red yin-yang, gen by scripts/gen-icons.py) — real PNGs so iOS home-screen and PWA installs
+	// App icons (approved native artwork, gen by scripts/gen-icons.py) — real PNGs so iOS home-screen and PWA installs
 	// pick them up; data-URI apple-touch-icons don't work on iOS. Short cache
 	// + must-revalidate so a refreshed design isn't pinned by a stale copy.
 	const iconFiles: Record<string, string> = {
