@@ -28,7 +28,7 @@ export function QuoteContext({ quote, onRemove, disabled }: Props) {
 				title={quote.text}
 				className="inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 text-label font-medium text-fg"
 			>
-				<IconCursor size={15} className="shrink-0 text-faint" />
+				<IconCursor size={15} className="shrink-0 translate-y-px text-faint" />
 				<span className="truncate">Selected text</span>
 				<button
 					type="button"
@@ -37,7 +37,7 @@ export function QuoteContext({ quote, onRemove, disabled }: Props) {
 					aria-label="Remove selected text"
 					className="relative -mr-1 flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-full text-faint before:absolute before:-inset-2 before:rounded-full enabled:hover:before:bg-hover enabled:hover:text-fg enabled:active:scale-[0.96] enabled:transition-transform disabled:cursor-default disabled:opacity-50"
 				>
-					<IconX size={22} />
+					<IconX size={20} className="translate-y-px" />
 				</button>
 			</div>
 		</motion.div>
