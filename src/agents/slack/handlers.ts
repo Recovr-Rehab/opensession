@@ -29,7 +29,7 @@ import {
 } from "./slack-api";
 import type { SlackFileRef, ThreadContext } from "./slack-api";
 import { SlackStreamer, buildToolStatus, isSilentTool } from "./streamer";
-import { SlackProgress } from "./progress";
+import { SlackProgress, taskCardTitle } from "./progress";
 import { createAdminMcpServer } from "./admin-tools";
 import { createGithubMcpServer } from "./github-tools";
 import { createSessionsMcpServer } from "./sessions-tools";
@@ -717,76 +717,26 @@ export async function processMessage(
   const streamer = new SlackStreamer(channel, threadTs, msg.userId);
   await streamer.setStatus("is thinking...");
 
-  // Post a status message with the live Open Session session link and a Stop
-  // button, so the run can be followed/cancelled even if Slack's assistant DM
-  // disables the input field while we're working.
+  // Live progress card — a native task_card block (the Linear-agent style
+  // card), posted as the thread's visible reply and edited in place as work
+  // proceeds: "Created and started working on <session link>" header, the
+  // model's latest narration + capped plan on the card, the current tool
+  // action, and a lone Stop button so the run can be cancelled even if
+  // Slack's assistant DM disables the input field while we're working. Works
+  // in channels (unlike the DM-only assistant typing status), throttled to
+  // ~1 edit/sec.
   const opensessionUrl = `${configuredServer().publicBaseUrl}/session/slack-${encodeURIComponent(sessionKey)}`;
-  const opensessionButton = {
-    type: "button",
-    text: { type: "plain_text", text: `:desktop_computer: Open in ${productName()}`, emoji: true },
-    url: opensessionUrl,
-    action_id: `opensession:${sessionKey}`,
-  };
-
-  // Action rows for the live progress card: Stop+Open Session while running,
-  // Open Session only once finished.
-  const runningActions = {
-    type: "actions",
-    block_id: `stop-actions-${sessionKey}`,
-    elements: [
-      opensessionButton,
-      {
-        type: "button",
-        text: { type: "plain_text", text: ":octagonal_sign: Stop", emoji: true },
-        style: "danger",
-        action_id: `stop:${sessionKey}`,
-        value: sessionKey,
-      },
-    ],
-  };
-  const finalActions = {
-    type: "actions",
-    block_id: `backstage-link-${sessionKey}`,
-    elements: [opensessionButton],
-  };
-
-  let stopButtonTs: string | null = null;
-  try {
-    // Post the card with an initial progress section already rendered, so the
-    // channel sees a visible reply immediately (the SlackProgress object then
-    // edits this same message in place as work proceeds).
-    const postResult = await postSlackBlocks(
-      channel,
-      `Working — follow along in ${productName()} or tap Stop to cancel.`,
-      [
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: ":hourglass_flowing_sand: *Working…*",
-          },
-        },
-        runningActions,
-      ],
-      threadTs
-    );
-    stopButtonTs = postResult?.ts || null;
-  } catch (e) {
-    console.warn("[slack] Failed to post stop button:", e);
-  }
-
-  // Live, in-place checklist on the card above. Works in channels (unlike the
-  // DM-only assistant typing status), throttled to ~1 edit/sec.
-  const progress = new SlackProgress(
+  const progress = new SlackProgress({
     channel,
-    stopButtonTs,
-    [runningActions],
-    [finalActions]
-  );
+    sessionKey,
+    sessionUrl: opensessionUrl,
+    title: taskCardTitle(prompt),
+    linkText: session.branch || "this session",
+  });
+  await progress.start(threadTs);
 
-  // Backwards-compatible alias: every exit path already calls this to collapse
-  // the Stop button into the Open Session link. Now it also renders the terminal
-  // checklist state.
+  // Backwards-compatible alias: every exit path already calls this to render
+  // the card's terminal state (and drop the Stop button).
   const dismissStopButton = (label: string): Promise<void> =>
     progress.finish(label);
 
@@ -1078,6 +1028,12 @@ export async function processMessage(
         ).catch(() => {});
       }
 
+      // Assistant prose -> the card's narration line (Linear-style). Chunks
+      // accumulate; the card renders the latest paragraph.
+      if (event.type === "text_chunk" && event.text) {
+        progress.appendNarration(event.text);
+      }
+
       // Update the live progress checklist + assistant thread status from tools
       if (event.type === "tool_use" && event.toolName) {
         const name = normalizeToolName(event.toolName);
@@ -1096,9 +1052,13 @@ export async function processMessage(
           progress.setAction(status);
           await streamer.setStatus(status);
         } else if (!isSilentTool(name)) {
-          // Write/action tools -> show what's happening
+          // Write/action tools -> show what's happening; bash commands render
+          // monospaced under the action line, like Linear's card.
           const status = buildToolStatus(name, input);
-          progress.setAction(status);
+          progress.setAction(
+            status,
+            name === "Bash" ? String(input?.command || "") : undefined
+          );
           await streamer.setStatus(status);
         }
       }
@@ -1162,7 +1122,8 @@ export async function processMessage(
 
   await streamer.stop(truncated);
   await streamer.clearStatus();
-  await dismissStopButton("Done");
+  // Errors surface as the card's red terminal state instead of a green check.
+  await dismissStopButton(resultText.startsWith("Error") ? "Failed" : "Done");
 }
 
 // ---------------------------------------------------------------------------
