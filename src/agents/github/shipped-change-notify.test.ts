@@ -39,7 +39,7 @@ describe("shipped visual change selection", () => {
 
     expect(selectShippedVisualChange(visual, () => true)).toEqual({
       sessionId: "preferred",
-      screenshot: "/tmp/preferred.png",
+      screenshots: ["/tmp/preferred.png"],
       summary: "Why preferred matters.",
     });
   });
@@ -62,11 +62,19 @@ describe("shipped visual change selection", () => {
 		const image = join(root, "after.png");
 		writeFileSync(image, "png");
 
-		expect(selectShippedVisualChange(session("featured", "2026-08-12T10:00:00Z", []), () => false, image)).toEqual({
+		expect(selectShippedVisualChange(session("featured", "2026-08-12T10:00:00Z", []), () => false, [image])).toEqual({
 			sessionId: "featured",
-			screenshot: image,
+			screenshots: [image],
 			summary: "Why featured matters.",
 		});
+	});
+
+	test("keeps an explicitly empty attachment list empty", () => {
+		const visual = session("removed", "2026-08-12T10:00:00Z", [
+			{ after: "/tmp/removed.png" },
+		]);
+
+		expect(selectShippedVisualChange(visual, () => true, [])).toBeNull();
 	});
 
   test("accepts only bounded images inside the session walkthrough directory", () => {

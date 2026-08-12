@@ -816,7 +816,7 @@ export function SessionViewer({
 			toast(error?.message || "Couldn't request a screenshot");
 		}
 	}, [mergedPr, requestingShippedScreenshot, session.id]);
-	const sendShippedChangeToSlack = useCallback(async (message: string, channel: string) => {
+	const sendShippedChangeToSlack = useCallback(async (message: string, channel: string, screenshots: string[]) => {
 		if (!mergedPr) return;
 		setShippedChangeStatus("sharing");
 		try {
@@ -825,6 +825,7 @@ export function SessionViewer({
 				branch: mergedPr.branch,
 				message,
 				channel,
+				screenshots,
 			});
 			setShippedChangeStatus("shared");
 			toast(

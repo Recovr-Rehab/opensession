@@ -9,8 +9,6 @@ import { resolvePrTarget } from "../session-repos";
 import { prHostFor } from "../pr-host";
 import { getRepo } from "../worktree";
 import { publishWalkthrough } from "../walkthrough";
-import { transcriptStore } from "../transcript-store";
-import { latestFeaturedScreenshot } from "../../shared/shipped-change-media";
 import { requestUser, type RouteContext } from "./context";
 import type { CreateSessionOpts } from "../session-control";
 
@@ -129,9 +127,9 @@ export async function handleShippedChangeRoutes(
 				channel: body?.channel,
 				message: body?.message,
 				slackToken,
-				featuredScreenshot: latestFeaturedScreenshot(
-					transcriptStore().readTail(session.id, 200).entries,
-				),
+				screenshots: Array.isArray(body?.screenshots)
+					? body.screenshots.filter((path: unknown): path is string => typeof path === "string")
+					: undefined,
 			}),
 		);
 	} catch (error: any) {

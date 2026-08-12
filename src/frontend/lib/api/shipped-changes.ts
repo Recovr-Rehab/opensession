@@ -2,7 +2,7 @@ import { request } from "./request";
 
 export function shareShippedChange(
 	sessionId: string,
-	target: { repo?: string; branch?: string; channel?: string; message?: string },
+	target: { repo?: string; branch?: string; channel?: string; message?: string; screenshots?: string[] },
 ): Promise<{ status: "shared" | "already_shared" }> {
 	return request(`/sessions/${encodeURIComponent(sessionId)}/share-shipped-change`, {
 		method: "POST",

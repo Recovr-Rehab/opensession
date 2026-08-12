@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { fetchShippedChangeChannels } from "../lib/api/shipped-changes";
+import { uploadFile } from "../lib/images";
 import { Button } from "../ui/button";
-import { Input, Select } from "../ui/input";
+import { Select } from "../ui/input";
+import { toast } from "../ui/toast";
 import { BrandMark } from "./BrandMark";
 import { openLightbox } from "./MediaLightbox";
-import { IconCamera } from "./icons";
+import { IconCamera, IconPlus } from "./icons";
 import { PixelSpinner } from "./PixelSpinner";
 
 export interface ShippedChangeComposerProps {
@@ -13,7 +15,7 @@ export interface ShippedChangeComposerProps {
 	screenshot?: string;
 	requestingScreenshot?: boolean;
 	status: "idle" | "sharing" | "shared";
-	onShare: (message: string, channel: string) => void;
+	onShare: (message: string, channel: string, screenshots: string[]) => void;
 	onRequestScreenshot?: () => void;
 }
 
@@ -29,8 +31,23 @@ export function ShippedChangeComposer({
 	const [message, setMessage] = useState(defaultMessage);
 	const [channels, setChannels] = useState<Array<{ id: string; name: string }>>([]);
 	const [channel, setChannel] = useState("");
+	const [screenshots, setScreenshots] = useState<string[]>(() => screenshot ? [screenshot] : []);
+	const [uploading, setUploading] = useState(false);
+	const fileInputRef = useRef<HTMLInputElement>(null);
+	const sessionRef = useRef(sessionId);
 
-	useEffect(() => setMessage(defaultMessage), [defaultMessage, sessionId]);
+	useEffect(() => {
+		setMessage(defaultMessage);
+		if (sessionRef.current !== sessionId) {
+			sessionRef.current = sessionId;
+			setScreenshots(screenshot ? [screenshot] : []);
+		}
+	}, [defaultMessage, screenshot, sessionId]);
+	useEffect(() => {
+		setScreenshots((current) => screenshot && !current.includes(screenshot)
+			? [screenshot, ...current]
+			: current);
+	}, [screenshot]);
 	useEffect(() => {
 		let current = true;
 		fetchShippedChangeChannels(sessionId)
@@ -50,6 +67,27 @@ export function ShippedChangeComposer({
 			current = false;
 		};
 	}, [sessionId]);
+	const addImages = async (files: File[]) => {
+		const images = files.filter((file) => file.type.startsWith("image/")).slice(0, 10 - screenshots.length);
+		if (!images.length) return;
+		setUploading(true);
+		try {
+			const uploaded = await Promise.all(images.map((file) => uploadFile(file)));
+			setScreenshots((current) => [...new Set([
+				...current,
+				...uploaded.map((file) => file.path),
+			])].slice(0, 10));
+		} catch (error) {
+			toast(error instanceof Error ? error.message : "Couldn't add that image", {
+				variant: "error",
+			});
+		} finally {
+			setUploading(false);
+		}
+	};
+	const mediaUrl = (path: string) => path.startsWith("/media?")
+		? path
+		: `/media?path=${encodeURIComponent(path)}`;
 
 	return (
 		<div className="mx-auto mt-2 mb-6 w-full max-w-[var(--session-col)] rounded-xl border border-line/60 bg-transparent p-3">
@@ -57,51 +95,49 @@ export function ShippedChangeComposer({
 				<BrandMark name="slack" size={16} />
 				<span className="font-semibold">Post what you shipped</span>
 			</div>
-			<Input
-				className="border-line/60"
-				aria-label="Slack message"
-				value={message}
-				maxLength={500}
-				disabled={status !== "idle"}
-				onChange={(event) => setMessage(event.target.value)}
-				onKeyDown={(event) => {
-					if (event.key === "Enter" && message.trim() && channel && status === "idle") {
-						event.preventDefault();
-						onShare(message.trim(), channel);
-					}
+			<div
+				className="rounded-control border border-line/60 bg-surface p-2.5 focus-within:border-accent"
+				onDragOver={(event) => event.preventDefault()}
+				onDrop={(event) => {
+					event.preventDefault();
+					if (status === "idle") void addImages(Array.from(event.dataTransfer.files));
 				}}
-			/>
-			{screenshot && (
-				<figure className="mt-2.5 mb-0">
-					<figcaption className="mb-1 inline-flex rounded-full bg-blue-soft px-2 py-0.5 text-[11px] leading-4 font-semibold text-blue">
-						Screenshot
-					</figcaption>
-					<button
-						type="button"
-						className="block aspect-[16/10] w-full cursor-zoom-in overflow-hidden rounded-md border border-line/60 bg-transparent p-0 outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
-						onClick={(event) =>
-							openLightbox(
-								[
-									{
-										kind: "image",
-										src: `/media?path=${encodeURIComponent(screenshot)}`,
-										sessionTitle: "Screenshot attached to the Slack update",
-									},
-								],
-								0,
-								event.currentTarget,
-							)
+			>
+				<textarea
+					className="block min-h-12 max-h-32 w-full resize-none border-0 bg-transparent p-0 text-sm leading-5 text-fg outline-none [field-sizing:content] placeholder:text-faint"
+					aria-label="Slack message"
+					value={message}
+					maxLength={500}
+					disabled={status !== "idle"}
+					onChange={(event) => setMessage(event.target.value)}
+					onPaste={(event) => {
+						const files = Array.from(event.clipboardData.files);
+						if (files.length) {
+							event.preventDefault();
+							void addImages(files);
 						}
-					>
-						<img
-							className="h-full w-full object-cover object-top"
-							src={`/media?path=${encodeURIComponent(screenshot)}`}
-							alt="Screenshot attached to the Slack update"
-						/>
-					</button>
-				</figure>
-			)}
-			{!screenshot && onRequestScreenshot && (
+					}}
+				/>
+				{screenshots.length > 0 && (
+					<div className="mt-2 flex gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+						{screenshots.map((path, index) => (
+							<div key={path} className="relative shrink-0">
+								<button type="button" aria-label="Open screenshot preview" className="focus-ring block overflow-hidden rounded-md" onClick={(event) => openLightbox(screenshots.map((item) => ({ kind: "image", src: mediaUrl(item) })), index, event.currentTarget)}>
+									<img className="h-24 w-36 rounded-md border border-line-strong object-cover object-top" src={mediaUrl(path)} alt="" />
+								</button>
+								<button type="button" aria-label="Remove screenshot" disabled={status !== "idle"} className="absolute top-1 right-1 grid size-5 place-items-center rounded-full bg-fg text-xs leading-none text-panel disabled:opacity-50" onClick={() => setScreenshots((current) => current.filter((_, i) => i !== index))}>×</button>
+							</div>
+						))}
+					</div>
+				)}
+				<div className="mt-2 flex items-center">
+					<input ref={fileInputRef} className="sr-only" type="file" accept="image/*" multiple onChange={(event) => { void addImages(Array.from(event.target.files || [])); event.currentTarget.value = ""; }} />
+					<Button variant="ghost" size="sm" icon={uploading ? <PixelSpinner /> : <IconPlus size={16} />} disabled={status !== "idle" || uploading || screenshots.length >= 10} onClick={() => fileInputRef.current?.click()}>
+						{uploading ? "Adding…" : "Add image"}
+					</Button>
+				</div>
+			</div>
+			{screenshots.length === 0 && onRequestScreenshot && (
 				<div aria-live="polite" className="mt-2.5 flex min-h-24 flex-col items-center justify-center gap-1.5 rounded-control bg-surface px-3 py-2.5 text-center">
 					{requestingScreenshot ? (
 						<>
@@ -140,8 +176,8 @@ export function ShippedChangeComposer({
 				</label>
 				<Button
 					icon={<BrandMark name="slack" size={12} />}
-					disabled={status !== "idle" || !message.trim() || !channel}
-					onClick={() => onShare(message.trim(), channel)}
+					disabled={status !== "idle" || !message.trim() || !channel || uploading}
+					onClick={() => onShare(message.trim(), channel, screenshots)}
 				>
 					{status === "sharing"
 						? "Sending…"

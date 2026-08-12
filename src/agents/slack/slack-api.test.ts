@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { postSlackBlocks, slackFileRefs, updateSlackBlocks } from "./slack-api";
+import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
+import { postSlackBlocks, postSlackFiles, slackFileRefs, updateSlackBlocks } from "./slack-api";
 
 const originalFetch = globalThis.fetch;
 
@@ -85,5 +88,48 @@ describe("Slack block message options", () => {
       unfurl_links: false,
       unfurl_media: false,
     });
+  });
+});
+
+describe("Slack file uploads", () => {
+  test("shares several uploaded files as one message", async () => {
+    const root = mkdtempSync(join(tmpdir(), "slack-files-"));
+    const paths = [join(root, "one.png"), join(root, "two.png")];
+    paths.forEach((path, index) => writeFileSync(path, `image-${index}`));
+    const calls: string[] = [];
+    let reservation = 0;
+    let completion: URLSearchParams | undefined;
+    globalThis.fetch = (async (input, init) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.endsWith("files.getUploadURLExternal")) {
+        reservation++;
+        return Response.json({
+          ok: true,
+          upload_url: `https://upload.example/${reservation}`,
+          file_id: `F${reservation}`,
+        });
+      }
+      if (url.endsWith("files.completeUploadExternal")) {
+        completion = init?.body as URLSearchParams;
+        return Response.json({ ok: true });
+      }
+      return new Response("ok");
+    }) as typeof fetch;
+
+    try {
+      await postSlackFiles("C123", paths, "Shipped it", { title: "Editor" }, "xoxp-test");
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+
+    expect(calls.filter((url) => url.endsWith("files.getUploadURLExternal"))).toHaveLength(2);
+    expect(calls.filter((url) => url.endsWith("files.completeUploadExternal"))).toHaveLength(1);
+    expect(completion?.get("channel_id")).toBe("C123");
+    expect(completion?.get("initial_comment")).toBe("Shipped it");
+    expect(JSON.parse(completion?.get("files") || "[]")).toEqual([
+      { id: "F1", title: "Editor 1" },
+      { id: "F2", title: "Editor 2" },
+    ]);
   });
 });

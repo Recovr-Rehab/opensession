@@ -69,7 +69,9 @@ describe("TranscriptBlocks shipped change action", () => {
 		expect(html).toContain("Send to");
 		expect(html).toContain('data-brand="slack"');
 		expect(html).toContain("%2Ftmp%2Ftoggle-after.png");
-		expect(html).toContain("Screenshot");
+		expect(html).toContain('aria-label="Open screenshot preview"');
+		expect(html).toContain('aria-label="Remove screenshot"');
+		expect(html).toContain("Add image");
 		expect(html).toContain("rounded-xl border border-line/60 bg-transparent p-3");
 		expect(html).not.toContain("rounded-xl bg-panel p-4");
 		expect(html).not.toContain("smooth-shadow-sm");

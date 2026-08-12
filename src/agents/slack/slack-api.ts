@@ -296,35 +296,54 @@ export async function postSlackFile(
   opts?: { title?: string; altText?: string },
   tokenOverride?: string,
 ): Promise<any> {
-  const filename = basename(path);
-  const stat = statSync(path);
-  if (!stat.isFile()) throw new Error(`Slack upload path is not a regular file: ${path}`);
-  const length = stat.size;
-  if (!length || length > MAX_SLACK_UPLOAD_BYTES) {
-    throw new Error(`Slack upload must be between 1 byte and 20 MB: ${path}`);
-  }
-  const reserved = await slackFormCall("files.getUploadURLExternal", {
-    filename,
-    length,
-    ...(opts?.altText ? { alt_txt: opts.altText.slice(0, 1000) } : {}),
-  }, tokenOverride);
-  if (!reserved?.ok || !reserved.upload_url || !reserved.file_id) {
-    throw new Error(
-      `Slack upload reservation failed: ${reserved?.error || "invalid response"}`,
-    );
-  }
+  return postSlackFiles(channel, [path], initialComment, opts, tokenOverride);
+}
 
-  const uploaded = await fetchWithTimeout(reserved.upload_url, {
-    method: "POST",
-    headers: { "Content-Type": "application/octet-stream" },
-    body: readFileSync(path),
-  });
-  if (!uploaded.ok) {
-    throw new Error(`Slack file upload failed: HTTP ${uploaded.status}`);
+/** Upload several local images and share them together as one Slack message. */
+export async function postSlackFiles(
+  channel: string,
+  paths: string[],
+  initialComment: string,
+  opts?: { title?: string; altText?: string },
+  tokenOverride?: string,
+): Promise<any> {
+  const files: Array<{ id: string; title: string }> = [];
+  for (const [index, path] of paths.entries()) {
+    const filename = basename(path);
+    const stat = statSync(path);
+    if (!stat.isFile()) throw new Error(`Slack upload path is not a regular file: ${path}`);
+    const length = stat.size;
+    if (!length || length > MAX_SLACK_UPLOAD_BYTES) {
+      throw new Error(`Slack upload must be between 1 byte and 20 MB: ${path}`);
+    }
+    const reserved = await slackFormCall("files.getUploadURLExternal", {
+      filename,
+      length,
+      ...(opts?.altText ? { alt_txt: opts.altText.slice(0, 1000) } : {}),
+    }, tokenOverride);
+    if (!reserved?.ok || !reserved.upload_url || !reserved.file_id) {
+      throw new Error(
+        `Slack upload reservation failed: ${reserved?.error || "invalid response"}`,
+      );
+    }
+    const uploaded = await fetchWithTimeout(reserved.upload_url, {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream" },
+      body: readFileSync(path),
+    });
+    if (!uploaded.ok) {
+      throw new Error(`Slack file upload failed: HTTP ${uploaded.status}`);
+    }
+    files.push({
+      id: reserved.file_id,
+      title: paths.length === 1
+        ? opts?.title || filename
+        : `${opts?.title || "Screenshot"} ${index + 1}`,
+    });
   }
 
   const completed = await slackFormCall("files.completeUploadExternal", {
-    files: JSON.stringify([{ id: reserved.file_id, title: opts?.title || filename }]),
+    files: JSON.stringify(files),
     channel_id: channel,
     initial_comment: initialComment,
   }, tokenOverride);

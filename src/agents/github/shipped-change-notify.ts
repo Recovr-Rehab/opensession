@@ -20,12 +20,12 @@ import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import { UPLOADS_DIR } from "../../server/uploads";
 import { homeDir } from "../../server/paths";
 import type { UnifiedSession } from "../../server/types";
-import { postSlackFile, sendSlackMessage } from "../slack/slack-api";
+import { postSlackFiles, sendSlackMessage } from "../slack/slack-api";
 import { shippedChangesChannel } from "./constants";
 
 export interface ShippedVisualChange {
   sessionId: string;
-  screenshot: string;
+  screenshots: string[];
   summary: string;
 }
 
@@ -140,18 +140,20 @@ export function validFeaturedScreenshot(path: string): boolean {
 export function selectShippedVisualChange(
   session: UnifiedSession,
   fileExists: (path: string, sessionId: string) => boolean = validWalkthroughScreenshot,
-  featuredScreenshot?: string,
+  requestedScreenshots?: string[],
 ): ShippedVisualChange | null {
   const walkthroughScreenshot = session.walkthrough?.shots?.find((shot) => shot.after)?.after;
-  const screenshot = walkthroughScreenshot && fileExists(walkthroughScreenshot, session.id)
-    ? walkthroughScreenshot
-    : featuredScreenshot && validFeaturedScreenshot(featuredScreenshot)
-      ? featuredScreenshot
-      : undefined;
-  if (!screenshot) return null;
+  const screenshots = [...new Set(
+    requestedScreenshots === undefined
+      ? walkthroughScreenshot && fileExists(walkthroughScreenshot, session.id)
+        ? [walkthroughScreenshot]
+        : []
+      : requestedScreenshots.filter(validFeaturedScreenshot),
+  )].slice(0, 10);
+  if (!screenshots.length) return null;
   return {
     sessionId: session.id,
-    screenshot,
+    screenshots,
     summary: session.walkthrough?.summary || "",
   };
 }
@@ -204,7 +206,7 @@ export async function shareShippedVisualChange(opts: {
   channel?: string;
   message?: string;
   slackToken?: string;
-  featuredScreenshot?: string;
+  screenshots?: string[];
 }): Promise<{ status: "shared" | "already_shared" }> {
   const channels = shippedChangeChannels();
   const channel = opts.channel || shippedChangesChannel();
@@ -218,7 +220,7 @@ export async function shareShippedVisualChange(opts: {
   const visual = selectShippedVisualChange(
     opts.session,
     validWalkthroughScreenshot,
-    opts.featuredScreenshot,
+    opts.screenshots,
   );
   const title = opts.pr.title.replace(/\|/g, "¦");
   const message = normalizeShippedChangeMessage(opts.message) ||
@@ -230,8 +232,8 @@ export async function shareShippedVisualChange(opts: {
   if (!claimId) return { status: "already_shared" };
   try {
     if (visual) {
-      await postSlackFile(channel, visual.screenshot, comment, {
-        title: `${title} — shipped`,
+      await postSlackFiles(channel, visual.screenshots, comment, {
+        title: `${title} · shipped`,
         altText: `Screenshot of the shipped visual change: ${title}`,
       }, opts.slackToken);
     } else {
