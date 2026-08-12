@@ -43,7 +43,7 @@ import { handleActionsRoutes } from "./actions";
 import { handleConnectionsRoutes } from "./connections";
 import { handleAccountsRoutes } from "./accounts";
 import { handleModelsRoutes } from "./models";
-import { handleNodesRoutes } from "./nodes";
+import { handleRunnersRoutes } from "./runners";
 import { handleNotesRoutes } from "./notes";
 import { handlePapercutsRoutes } from "./papercuts";
 import { handleLibraryRoutes } from "./library";
@@ -108,7 +108,7 @@ export const routeHandlers: RouteHandler[] = [
 	handleConnectionsRoutes,
 	handleAccountsRoutes,
 	handleModelsRoutes,
-	handleNodesRoutes,
+	handleRunnersRoutes,
 	handleNotesRoutes,
 	handlePapercutsRoutes,
 	handleLibraryRoutes,

@@ -46,7 +46,7 @@ import { startPrReviewNotificationTicker } from "./src/server/pr-review-notifica
 import { startPublicIngress } from "./src/server/public-ingress";
 import { recordRecoveredRunEvent, restorePromptQueues, resumeDrainedSessions, snapshotActiveSessions } from "./src/server/run-session";
 import { handleSandboxWsUpgrade, timerPoisonRequestCheck } from "./src/server/run-ws";
-import { handleNodeWsUpgrade } from "./src/server/node-ws";
+import { handleRunnerWsUpgrade } from "./src/server/runner-ws";
 import { findSession, invalidateSessionsCache, recordRunOutcome } from "./src/server/session-cache";
 import { getSessionControl } from "./src/server/session-control";
 import { buildReposNote } from "./src/server/session-repos";
@@ -352,14 +352,14 @@ const server: import("bun").Server<WSClientData> = hotServe({
 					(path.startsWith("/api/os1-mac/") ||
 						path.startsWith("/api/os1-chrome/")) &&
 					req.method === "GET";
-				// An execution node dialling in has no browser session: it
-				// registers with a one-time pairing code and then heartbeats with
-				// its own bearer token. Both routes do their own authentication
-				// AND require the caller to be on the tailnet (src/server/nodes.ts),
+				// A Runner dialling in has no browser session: it registers with a
+				// one-time pairing code and then heartbeats with its own bearer
+				// token. Both routes do their own authentication AND require the
+				// caller to be on the tailnet (src/server/runners.ts),
 				// so the sign-in gate would only make them impossible to use.
-				const openNodeAuth =
-					(path === "/api/nodes/register" ||
-						path === "/api/nodes/heartbeat") &&
+				const openRunnerAuth =
+					(path === "/api/runners/register" ||
+						path === "/api/runners/heartbeat") &&
 					req.method === "POST";
 				// The keychain broker's caller is an agent subprocess on
 				// loopback with no browser session. Its own credential is the
@@ -375,7 +375,7 @@ const server: import("bun").Server<WSClientData> = hotServe({
 					!openHealth &&
 					!keypadBearer &&
 					!openOs1Update &&
-					!openNodeAuth &&
+					!openRunnerAuth &&
 					!openKeychainBroker &&
 					((path.startsWith("/api/") &&
 						!path.startsWith("/api/auth/")) ||
@@ -451,12 +451,12 @@ const server: import("bun").Server<WSClientData> = hotServe({
 			// additionally needs ?host=<hostId>. Plain run-rpc tokens are NOT
 			// network credentials: on a sandbox-less deployment the registry is
 			// empty and every upgrade here is a 403. See src/server/run-ws.ts.
-			// Execution nodes dial back here (src/server/node-ws.ts). Its own block:
+			// Runners dial back here (src/server/runner-ws.ts). Its own block:
 			// nesting it inside the sandbox condition meant it never ran and the
 			// path fell through to the SPA fallback, which answered 200.
 			// Tailnet-gated and token-authenticated before the upgrade.
-			if (path === "/node-ws") {
-				const rejected = handleNodeWsUpgrade(req, server, path);
+			if (path === "/runner-ws") {
+				const rejected = handleRunnerWsUpgrade(req, server, path);
 				return rejected ?? (undefined as any);
 			}
 

@@ -23,7 +23,7 @@ import { transitionRunState } from "./run-state";
 import { abortTurnAndDrain, enqueuePrompt, interruptQueuedPrompt, runSessionPrompt, runSessionPromptAndDrain, steerQueuedPrompt, watchExternalRunAndDrain } from "./run-session";
 import { sandboxWsClose, sandboxWsMessage, sandboxWsOpen } from "./run-ws";
 import { handleCreateSessionMessage } from "./session-create";
-import { nodeWsClose, nodeWsMessage, nodeWsOpen } from "./node-ws";
+import { runnerWsClose, runnerWsMessage, runnerWsOpen } from "./runner-ws";
 import { type Sandbox } from "./sandbox";
 import { findSession, invalidateSessionsCache, maybePersistEffort, maybePersistFastMode } from "./session-cache";
 import { engineUserTexts, mergedSessionTranscript, mergedSessionTranscriptAsync, v2MirrorFiles, v2TranscriptHasDrift } from "./sessions";
@@ -410,8 +410,8 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 		// Sandbox transport sockets (run hosts / MCP proxies dialing back)
 		// are not UI clients — run-ws.ts owns them entirely.
 		if (sandboxWsOpen(ws)) return;
-		// Execution-node channels are not UI clients either (node-ws.ts).
-		if (nodeWsOpen(ws)) return;
+		// Runner channels are not UI clients either (runner-ws.ts).
+		if (runnerWsOpen(ws)) return;
 		allClients.add(ws);
 		// Hello frame: hands the client this process's bootId so a reconnect
 		// can tell a real restart (bootId changed → "restarted" toast) from a
@@ -440,7 +440,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 
 	async message(ws, message) {
 		if (sandboxWsMessage(ws, message as any)) return;
-		if (nodeWsMessage(ws, message as any)) return;
+		if (runnerWsMessage(ws, message as any)) return;
 		if (isLocalProfile()) {
 			const identity = await verifiedCloudIdentity();
 			setLocalProfileIdentity(identity);
@@ -1314,7 +1314,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 
 	close(ws) {
 		if (sandboxWsClose(ws)) return;
-		if (nodeWsClose(ws)) return;
+		if (runnerWsClose(ws)) return;
 		closeCloudProxyProtocol(ws, (lane) =>
 			websocketHandlers.close?.(lane, 1000, "cloud proxy disconnected"),
 		);

@@ -1,0 +1,170 @@
+/**
+ * Versioned outbound Runner control channel.
+ *
+ * The server never dials a Runner.  Every command carries a one-use operation
+ * token and is bounded in time/output; the channel is deliberately HTTP/agent
+ * control only and is not a generic network tunnel.
+ */
+
+import { randomBytes } from "crypto";
+import { audit } from "./audit";
+import { authenticateRunner, getRunner, isTailnetAddress, runnerAllowed, touchRunner, type Runner } from "./runners";
+
+const g = globalThis as Record<string, unknown>;
+const PROTOCOL_VERSION = 1;
+const MAX_OUTPUT = 200_000;
+const DEFAULT_TIMEOUT_MS = 10 * 60_000;
+
+type Pending = {
+	stdout: string[];
+	stderr: string[];
+	resolve: (result: RunnerExecResult) => void;
+	timer: ReturnType<typeof setTimeout>;
+	operationToken: string;
+};
+
+type Connection = {
+	ws: any;
+	runner: Runner;
+	connectedAt: number;
+	protocolVersion: number;
+	capabilities: Runner["capabilities"];
+	resources?: Runner["resources"];
+	pending: Map<string, Pending>;
+};
+
+const connections: Map<string, Connection> = (g.__opensessionRunnerConnections ??= new Map()) as Map<string, Connection>;
+let executionCounter = 0;
+
+export type RunnerExecResult = { code: number; stdout: string; stderr: string; timedOut?: boolean };
+export type RunnerExecOptions = { cwd?: string; timeoutMs?: number; user?: string; repo?: string; sessionId?: string };
+
+export function connectedRunnerIds(): string[] {
+	return [...connections.keys()];
+}
+
+export function isRunnerConnected(id: string): boolean {
+	return connections.has(id);
+}
+
+export function disconnectRunner(id: string, reason = "revoked"): boolean {
+	const connection = connections.get(id);
+	if (!connection) return false;
+	try { connection.ws.close(1008, reason); } catch {}
+	return true;
+}
+
+export function handleRunnerWsUpgrade(
+	req: Request,
+	server: { upgrade(req: Request, opts: any): boolean; requestIP?(req: Request): { address: string } | null },
+	path: string,
+): Response | undefined {
+	if (path !== "/runner-ws") return undefined;
+	if (!isTailnetAddress(server.requestIP?.(req)?.address ?? "")) return new Response("forbidden", { status: 403 });
+	const url = new URL(req.url);
+	const id = url.searchParams.get("id") ?? "";
+	const authorization = req.headers.get("authorization") ?? "";
+	const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+	const runner = id && token ? authenticateRunner(id, token) : undefined;
+	if (!runner) return new Response("unauthorized", { status: 401 });
+	return server.upgrade(req, { data: { kind: "runner", runnerId: runner.id } }) ? undefined : new Response("upgrade failed", { status: 400 });
+}
+
+export function runnerWsOpen(ws: any): boolean {
+	const runnerId = ws.data?.kind === "runner" ? ws.data.runnerId : undefined;
+	if (!runnerId) return false;
+	connections.get(runnerId)?.ws?.close?.(1000, "replaced by reconnect");
+	const runner = getRunner(runnerId);
+	if (!runner) { ws.close(1008, "revoked"); return true; }
+	connections.set(runnerId, { ws, runner, connectedAt: Date.now(), protocolVersion: 0, capabilities: runner.capabilities, resources: runner.resources, pending: new Map() });
+	touchRunner(runnerId);
+	console.log(`[runners] ${runner.name} attached (${runnerId})`);
+	return true;
+}
+
+export function runnerWsMessage(ws: any, raw: string | Buffer): boolean {
+	const runnerId = ws.data?.kind === "runner" ? ws.data.runnerId : undefined;
+	if (!runnerId) return false;
+	const connection = connections.get(runnerId);
+	if (!connection) return true;
+	let message: any;
+	try { message = JSON.parse(typeof raw === "string" ? raw : raw.toString()); } catch { return true; }
+
+	switch (message?.t) {
+		case "hello": {
+			const version = Number(message.version ?? 0);
+			if (version !== PROTOCOL_VERSION) { ws.close(1008, "unsupported protocol"); return true; }
+			connection.protocolVersion = version;
+			const capabilities = message.capabilities && typeof message.capabilities === "object" ? message.capabilities : connection.runner.capabilities;
+			const resources = message.resources && typeof message.resources === "object" ? message.resources : connection.runner.resources;
+			connection.capabilities = capabilities;
+			connection.resources = resources;
+			touchRunner(runnerId, { capabilities, resources, softwareVersion: typeof message.softwareVersion === "string" ? message.softwareVersion : undefined });
+			return true;
+		}
+		case "heartbeat":
+			touchRunner(runnerId, { capabilities: message.capabilities, resources: message.resources, softwareVersion: typeof message.softwareVersion === "string" ? message.softwareVersion : undefined });
+			return true;
+		case "out": {
+			const pending = connection.pending.get(String(message.id));
+			if (!pending || message.operationToken !== pending.operationToken) return true;
+			const bucket = message.stream === "stderr" ? pending.stderr : pending.stdout;
+			if (bucket.join("").length < MAX_OUTPUT) bucket.push(String(message.data ?? "").slice(0, MAX_OUTPUT));
+			return true;
+		}
+		case "exit": {
+			const id = String(message.id);
+			const pending = connection.pending.get(id);
+			if (!pending || message.operationToken !== pending.operationToken) return true;
+			clearTimeout(pending.timer);
+			connection.pending.delete(id);
+			pending.resolve({ code: Number(message.code ?? 0), stdout: pending.stdout.join(""), stderr: pending.stderr.join("") });
+			return true;
+		}
+	}
+	return true;
+}
+
+export function runnerWsClose(ws: any): boolean {
+	const runnerId = ws.data?.kind === "runner" ? ws.data.runnerId : undefined;
+	if (!runnerId) return false;
+	const connection = connections.get(runnerId);
+	if (!connection || connection.ws !== ws) return true;
+	for (const pending of connection.pending.values()) {
+		clearTimeout(pending.timer);
+		pending.resolve({ code: -1, stdout: pending.stdout.join(""), stderr: `${pending.stderr.join("")}\n[Runner disconnected]` });
+	}
+	connections.delete(runnerId);
+	console.log(`[runners] ${connection.runner.name} detached (${runnerId})`);
+	return true;
+}
+
+export async function execOnRunner(runnerId: string, command: string, options: RunnerExecOptions = {}): Promise<RunnerExecResult> {
+	const connection = connections.get(runnerId);
+	if (!connection || connection.protocolVersion !== PROTOCOL_VERSION) throw new Error(`Runner ${runnerId} is not connected`);
+	if (!runnerAllowed(connection.runner, { user: options.user, repo: options.repo, permission: "commands" })) throw new Error(`Runner ${connection.runner.name} is not permitted for this command`);
+	const id = `r${++executionCounter}-${Date.now().toString(36)}`;
+	const operationToken = randomBytes(18).toString("base64url");
+	const timeoutMs = Math.min(Math.max(options.timeoutMs ?? DEFAULT_TIMEOUT_MS, 1_000), 60 * 60_000);
+	audit({ msg: "runner_command_start", runner_id: runnerId, session_id: options.sessionId, user: options.user, repo: options.repo, command: command.slice(0, 500), operation_id: id });
+	const result = await new Promise<RunnerExecResult>((resolve) => {
+		const timer = setTimeout(() => {
+			const pending = connection.pending.get(id);
+			if (!pending) return;
+			connection.pending.delete(id);
+			try { connection.ws.send(JSON.stringify({ t: "cancel", id, operationToken })); } catch {}
+			resolve({ code: -1, stdout: pending.stdout.join(""), stderr: pending.stderr.join(""), timedOut: true });
+		}, timeoutMs);
+		connection.pending.set(id, { stdout: [], stderr: [], resolve, timer, operationToken });
+		try { connection.ws.send(JSON.stringify({ t: "exec", version: PROTOCOL_VERSION, id, operationToken, sessionId: options.sessionId, command, cwd: options.cwd, timeoutMs })); }
+		catch (error) { clearTimeout(timer); connection.pending.delete(id); resolve({ code: -1, stdout: "", stderr: `Could not reach Runner: ${(error as Error).message}` }); }
+	});
+	audit({ msg: "runner_command_finish", runner_id: runnerId, session_id: options.sessionId, user: options.user, repo: options.repo, operation_id: id, exit_code: result.code, timed_out: !!result.timedOut });
+	return { ...result, stdout: truncate(result.stdout), stderr: truncate(result.stderr) };
+}
+
+function truncate(value: string): string {
+	if (value.length <= MAX_OUTPUT) return value;
+	const half = Math.floor(MAX_OUTPUT / 2);
+	return `${value.slice(0, half)}\n\n[… ${value.length - MAX_OUTPUT} characters trimmed …]\n\n${value.slice(-half)}`;
+}

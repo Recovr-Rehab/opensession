@@ -1,10 +1,10 @@
 /**
- * `opensession connect` — attach this machine to a server as an execution node.
+ * `opensession connect` — attach this machine to a server as a Runner.
  *
  * The motivating case is platform-locked work: an iOS build needs macOS with
  * Xcode, a Windows build needs MSVC, and neither can happen on the Linux box
  * running the server. Sandboxes do not help — they are ephemeral Linux
- * containers. A node is a persistent machine you own.
+ * containers. A Runner is a persistent machine you own.
  *
  * Deliberately NOT the same thing as a tunnel product. Tools like T3 Connect
  * solve *ingress* (reach my box from my phone, through NAT, without a VPN).
@@ -12,7 +12,7 @@
  * requires the tailnet rather than working around the lack of one — which means
  * no relay to operate and no bandwidth to pay for.
  *
- * The credential lives in ~/.opensession/node.json (0600). Pairing codes are
+ * The credential lives in ~/.opensession/runner.json (0600). Pairing codes are
  * one-time and expire in ten minutes, and the server records the address it saw
  * rather than one we claim.
  */
@@ -24,7 +24,7 @@ import { OPENSESSION_HOME } from "./paths";
 import { bold, dim, fail, heading, info, ok, run, warn } from "./ui";
 import { localAutomationToken } from "./local-auth";
 
-const IDENTITY_PATH = join(OPENSESSION_HOME, "node.json");
+const IDENTITY_PATH = join(OPENSESSION_HOME, "runner.json");
 const HEARTBEAT_MS = 60_000;
 
 type Identity = { server: string; id: string; token: string; name: string };
@@ -82,7 +82,7 @@ export async function connect(opts: ConnectOptions): Promise<number> {
     return 1;
   }
   if (!opts.code) {
-    fail("--code is required", "get one from the server with `opensession nodes pair`");
+    fail("--code is required", "get one from the server with `opensession runners pair`");
     return 1;
   }
 
@@ -95,7 +95,7 @@ export async function connect(opts: ConnectOptions): Promise<number> {
 
   let response: Response;
   try {
-    response = await fetch(`${server}/api/nodes/register`, {
+    response = await fetch(`${server}/api/runners/register`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
@@ -124,18 +124,18 @@ export async function connect(opts: ConnectOptions): Promise<number> {
     return 1;
   }
 
-  const { node, token } = (await response.json()) as { node: { id: string }; token: string };
+  const { runner, token } = (await response.json()) as { runner: { id: string }; token: string };
 
   mkdirSync(OPENSESSION_HOME, { recursive: true });
-  await Bun.write(IDENTITY_PATH, JSON.stringify({ server, id: node.id, token, name }, null, 2) + "\n");
+  await Bun.write(IDENTITY_PATH, JSON.stringify({ server, id: runner.id, token, name }, null, 2) + "\n");
   chmodSync(IDENTITY_PATH, 0o600);
 
-  ok(`registered as ${name}`, node.id);
+  ok(`registered as ${name}`, runner.id);
   info(dim(`  credential written to ${IDENTITY_PATH} (0600)`));
 
   heading("Next");
-  info(`${bold("opensession node run")}    hold the channel open so the server can reach it`);
-  info(dim("  run it under a service manager to keep this node attached across reboots"));
+  info(`${bold("opensession runner run")}    hold the outbound control channel open`);
+  info(dim("  run it under a service manager to keep this Runner attached across reboots"));
   return 0;
 }
 
@@ -149,7 +149,7 @@ export async function connect(opts: ConnectOptions): Promise<number> {
  * That is the point of attaching a node, and it is why registration is
  * tailnet-gated and the tool exposing it is interactive-only.
  */
-export async function nodeRun(): Promise<number> {
+export async function runnerRun(): Promise<number> {
   const identity = await readIdentity();
   if (!identity) {
     fail("this machine is not connected", "run `opensession connect` first");
@@ -157,7 +157,7 @@ export async function nodeRun(): Promise<number> {
   }
 
   const wsUrl =
-    identity.server.replace(/^http/, "ws") + `/node-ws?id=${encodeURIComponent(identity.id)}`;
+    identity.server.replace(/^http/, "ws") + `/runner-ws?id=${encodeURIComponent(identity.id)}`;
   let attempt = 0;
   let stopping = false;
 
@@ -171,7 +171,7 @@ export async function nodeRun(): Promise<number> {
       socket.addEventListener("open", async () => {
         attempt = 0;
         ok("attached", identity.server);
-        socket.send(JSON.stringify({ t: "hello", capabilities: await detectCapabilities() }));
+        socket.send(JSON.stringify({ t: "hello", version: 1, capabilities: { platform: platform(), toolchains: await detectCapabilities(), tags: [] } }));
       });
 
       socket.addEventListener("message", async (event: any) => {
@@ -181,7 +181,12 @@ export async function nodeRun(): Promise<number> {
         } catch {
           return;
         }
-        if (msg?.t !== "exec") return;
+        if (msg?.t === "cancel") {
+          const proc = running.get(String(msg.id));
+          if (proc) proc.kill();
+          return;
+        }
+        if (msg?.t !== "exec" || msg.version !== 1 || !msg.operationToken) return;
 
         const id = String(msg.id);
         info(dim(`exec ${id}: ${String(msg.command).slice(0, 80)}`));
@@ -199,7 +204,7 @@ export async function nodeRun(): Promise<number> {
             const decoder = new TextDecoder();
             for await (const chunk of stream as any) {
               socket.send(
-                JSON.stringify({ t: "out", id, stream: name, data: decoder.decode(chunk) }),
+                JSON.stringify({ t: "out", id, operationToken: msg.operationToken, stream: name, data: decoder.decode(chunk) }),
               );
             }
           };
@@ -209,20 +214,20 @@ export async function nodeRun(): Promise<number> {
           ]);
           const code = await proc.exited;
           running.delete(id);
-          socket.send(JSON.stringify({ t: "exit", id, code }));
+          socket.send(JSON.stringify({ t: "exit", id, operationToken: msg.operationToken, code }));
         } catch (err) {
           running.delete(id);
           socket.send(
-            JSON.stringify({ t: "out", id, stream: "stderr", data: String((err as Error).message) }),
+            JSON.stringify({ t: "out", id, operationToken: msg.operationToken, stream: "stderr", data: String((err as Error).message) }),
           );
-          socket.send(JSON.stringify({ t: "exit", id, code: -1 }));
+          socket.send(JSON.stringify({ t: "exit", id, operationToken: msg.operationToken, code: -1 }));
         }
       });
 
       socket.addEventListener("close", (event: any) => {
         // 1008/4401 mean the server rejected us outright — retrying is pointless.
         if (event?.code === 1008 || event?.code === 4401) {
-          fail("the server refused this node", "its credential may have been revoked");
+          fail("the server refused this Runner", "its credential may have been revoked");
           stopping = true;
         }
         for (const proc of running.values()) proc.kill();
@@ -239,7 +244,7 @@ export async function nodeRun(): Promise<number> {
   while (!stopping) {
     await connectOnce();
     if (stopping) break;
-    // Backoff, capped: a node is often someone's laptop and the server may be
+    // Backoff, capped: a Runner may be someone's laptop and the server may be
     // restarting or the tailnet may be briefly down.
     const delay = Math.min(30_000, 1_000 * 2 ** Math.min(attempt++, 5));
     if (attempt === 1) warn("disconnected — retrying");
@@ -248,7 +253,7 @@ export async function nodeRun(): Promise<number> {
   return 1;
 }
 
-export async function nodeStatus(): Promise<number> {
+export async function runnerStatus(): Promise<number> {
   const identity = await readIdentity();
   heading("This machine");
   if (!identity) {
@@ -261,7 +266,7 @@ export async function nodeStatus(): Promise<number> {
   return 0;
 }
 
-// ── server side: managing attached nodes ─────────────────────────────────────
+// ── server side: managing attached Runners ───────────────────────────────────
 
 /** The local server's own address, from the config this CLI can read. */
 async function localApi(): Promise<string> {
@@ -279,7 +284,7 @@ async function localApi(): Promise<string> {
       // fall through to defaults
     }
   }
-  return `http://${host}:${port}/api/nodes`;
+  return `http://${host}:${port}/api/runners`;
 }
 
 /**
@@ -329,7 +334,7 @@ async function apiCall(path: string, init?: RequestInit): Promise<any | undefine
   }
 }
 
-export async function nodesPair(): Promise<number> {
+export async function runnersPair(): Promise<number> {
   const result = await apiCall("/pair", { method: "POST" });
   if (!result) return 1;
 
@@ -338,34 +343,34 @@ export async function nodesPair(): Promise<number> {
   info(dim(`  valid for 10 minutes, single use`));
   heading("On the machine you want to attach");
   info(dim("  curl -fsSL https://raw.githubusercontent.com/tellahq/opensession/main/install.sh | bash"));
-  info(`  opensession connect --server ${(await localApi()).replace("/api/nodes", "")} --code ${result.code}`);
+  info(`  opensession connect --server ${(await localApi()).replace("/api/runners", "")} --code ${result.code}`);
   return 0;
 }
 
-export async function nodesList(): Promise<number> {
+export async function runnersList(): Promise<number> {
   const result = await apiCall("");
   if (!result) return 1;
 
-  const nodes = result.nodes ?? [];
-  heading("Execution nodes");
-  if (!nodes.length) {
-    info(dim("none attached — `opensession nodes pair` to add one"));
+  const runners = result.runners ?? [];
+  heading("Runners");
+  if (!runners.length) {
+    info(dim("none attached · `opensession runners pair` to add one"));
     return 0;
   }
-  for (const node of nodes) {
-    const seen = node.lastSeenAt
-      ? `last seen ${new Date(node.lastSeenAt).toISOString().replace("T", " ").slice(0, 19)}Z`
+  for (const runner of runners) {
+    const seen = runner.lastSeenAt
+      ? `last seen ${new Date(runner.lastSeenAt).toISOString().replace("T", " ").slice(0, 19)}Z`
       : "never connected";
-    info(`${node.name}  ${dim(`${node.platform}/${node.arch}`)}`);
-    info(dim(`  ${node.id}  ${node.address}  ${seen}`));
-    if (node.capabilities?.length) info(dim(`  can: ${node.capabilities.join(", ")}`));
+    info(`${runner.name}  ${dim(`${runner.platform}/${runner.arch}`)}  ${runner.state}`);
+    info(dim(`  ${runner.id}  ${runner.address}  ${seen}`));
+    if (runner.capabilities?.toolchains?.length) info(dim(`  can: ${runner.capabilities.toolchains.join(", ")}`));
   }
   return 0;
 }
 
-export async function nodesRemove(id: string): Promise<number> {
+export async function runnersRemove(id: string): Promise<number> {
   if (!id) {
-    fail("usage: opensession nodes remove <node-id>");
+    fail("usage: opensession runners remove <runner-id>");
     return 1;
   }
   const result = await apiCall(`/${id}`, { method: "DELETE" });

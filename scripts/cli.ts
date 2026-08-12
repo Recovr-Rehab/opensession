@@ -25,7 +25,7 @@ import { update } from "./lib/update";
 import { bold, dim, fail, green, heading, info, ok, run, runInherit, warn } from "./lib/ui";
 import { INTEGRATIONS, findIntegration } from "../src/server/integrations/registry";
 import { findRecipe, installRecipe, installedKeys, listRecipes, removeRecipe } from "./lib/recipes";
-import { connect, nodeRun, nodeStatus, nodesList, nodesPair, nodesRemove } from "./lib/connect";
+import { connect, runnerRun, runnerStatus, runnersList, runnersPair, runnersRemove } from "./lib/connect";
 import { sandbox } from "./lib/sandbox";
 
 const argv = process.argv.slice(2);
@@ -79,14 +79,14 @@ ${bold("Maintenance")}
   automations remove <id>
   version
 
-${bold("Execution nodes")}   ${dim("run sessions on another machine (macOS/Linux)")}
-  nodes                    list attached nodes
-  nodes pair               mint a one-time pairing code
-  nodes remove <id>        revoke a node
+${bold("Runners")}           ${dim("trusted persistent machines for specialized work")}
+  runners                  list attached Runners
+  runners pair             mint a one-time pairing code
+  runners remove <id>      revoke a Runner
   connect --server <url> --code <code>
                            attach THIS machine to a server
-  node run                 stay attached (heartbeat)
-  node status              is this machine attached?
+  runner run               stay attached (outbound control channel)
+  runner status            is this machine attached?
 
 Docs: docs/setup/README.md
 `);
@@ -322,16 +322,16 @@ async function main(): Promise<number> {
         label: flagValue("--label"),
       });
 
-    case "node":
-      if (positional[0] === "run") return await nodeRun();
-      if (positional[0] === "status" || !positional[0]) return await nodeStatus();
-      fail("usage: opensession node run|status");
+    case "runner":
+      if (positional[0] === "run") return await runnerRun();
+      if (positional[0] === "status" || !positional[0]) return await runnerStatus();
+      fail("usage: opensession runner run|status");
       return 1;
 
-    case "nodes":
-      if (positional[0] === "pair") return await nodesPair();
-      if (positional[0] === "remove") return await nodesRemove(positional[1] ?? "");
-      return await nodesList();
+    case "runners":
+      if (positional[0] === "pair") return await runnersPair();
+      if (positional[0] === "remove") return await runnersRemove(positional[1] ?? "");
+      return await runnersList();
 
     case "tui":
       return await tui();
