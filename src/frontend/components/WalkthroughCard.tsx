@@ -13,45 +13,28 @@ import { Button } from "../ui/button";
 const mediaUrl = (path: string) => `/media?path=${encodeURIComponent(path)}`;
 
 /**
- * The Before/After label's shape. It sits in the tile's own corner rather than
- * floating 8px inside it: a rounded pill dropped on a screenshot reads as part
- * of the screenshot, which is exactly the wrong thing for the one label whose
- * job is to say what the screenshot IS. Squared into the corner, under the
- * tile's own radius, it reads as part of the frame. Colour is per picture —
- * see labelClass.
+ * The Before/After label: the app's own status pill, squared into the tile's
+ * corner. Panel surface, a --red-soft/--green-soft tint, --red/--green ink and
+ * a hairline — the same parts every other pill in the product is made of, so
+ * it reads as a caption the app put on the picture rather than as a sticker.
+ *
+ * Two things follow from it being opaque. It reads on a white screenshot and
+ * on a dark one alike, so it can simply follow the app theme instead of
+ * sampling the image under it; and sitting in the corner under the tile's own
+ * radius, it belongs to the frame rather than to the screenshot.
+ *
+ * The tint is a gradient because it has to sit ON the panel fill: --red-soft
+ * is translucent ink, and painted straight onto the picture it is the wash
+ * that let a white screenshot through in the first place.
  */
 const SHOT_LABEL =
-	"pointer-events-none absolute left-0 top-0 rounded-br-md px-2 py-1 text-[11px] font-semibold leading-4";
-
-/**
- * Is the top-left corner of this picture, the part a Before/After label covers,
- * a dark one? Sampled from the pixels rather than from the app theme: the label
- * has to contrast with the screenshot under it, and a card routinely shows a
- * light shot beside a dark one. The media is same-origin, so the canvas stays
- * readable; anything unexpected returns null and the label keeps its default.
- */
-function cornerIsDark(img: HTMLImageElement): boolean | null {
-	const { naturalWidth: w, naturalHeight: h } = img;
-	if (!w || !h) return null;
-	try {
-		const canvas = document.createElement("canvas");
-		canvas.width = 12;
-		canvas.height = 6;
-		const ctx = canvas.getContext("2d");
-		if (!ctx) return null;
-		// A band rather than a point: the label's own corner can land on one
-		// dark control in an otherwise pale header, and the average is what it
-		// sits on. 40% x 12% is roughly the label at every tile size.
-		ctx.drawImage(img, 0, 0, w * 0.4, h * 0.12, 0, 0, 12, 6);
-		const { data } = ctx.getImageData(0, 0, 12, 6);
-		let total = 0;
-		for (let i = 0; i < data.length; i += 4)
-			total += 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
-		return total / (data.length / 4) < 140;
-	} catch {
-		return null;
-	}
-}
+	"pointer-events-none absolute left-0 top-0 rounded-br-lg bg-panel px-[9px] py-1 text-[11px] font-semibold leading-[14px] shadow-[inset_0_0_0_1px_var(--border)]";
+const SHOT_LABEL_SIDE = {
+	before:
+		"text-red [background-image:linear-gradient(var(--red-soft),var(--red-soft))]",
+	after:
+		"text-green [background-image:linear-gradient(var(--green-soft),var(--green-soft))]",
+} as const;
 
 /**
  * The agent-published walkthrough (opensession-walkthrough): demo video +
@@ -82,27 +65,6 @@ export function WalkthroughCard({
 	// too much of (see tileBox). Learned on load; media the tile already suits
 	// never lands here, so it never re-renders.
 	const [ownRatio, setOwnRatio] = useState<Record<string, number>>({});
-	// Which colourway each label takes. Filled red and green are what make a
-	// pair readable at a glance, but only while the fill contrasts with what is
-	// under it: the deep red disappears into a dark screenshot and the bright
-	// one glares on a white one. So the label collides with the PICTURE instead
-	// of following the app theme, decided once per image when it loads.
-	const [darkShot, setDarkShot] = useState<Record<string, boolean>>({});
-	const noteCorner = (key: string, img: HTMLImageElement) => {
-		const dark = cornerIsDark(img);
-		if (dark === null) return;
-		setDarkShot((prev) => (prev[key] === dark ? prev : { ...prev, [key]: dark }));
-	};
-	const labelClass = (key: string, side: "before" | "after") => {
-		const dark = darkShot[key];
-		if (side === "before")
-			return dark
-				? "bg-shot-red-bright text-shot-red-ink"
-				: "bg-shot-red-deep text-shot-label-ink";
-		return dark
-			? "bg-shot-green-bright text-shot-green-ink"
-			: "bg-shot-green-deep text-shot-label-ink";
-	};
 	const repo = useMarkdownRepo();
 	const summaryHtml = useMemo(
 		() => renderMarkdown(walkthrough.summary, { repo }),
@@ -414,22 +376,18 @@ export function WalkthroughCard({
 														src={mediaUrl(shot[side]!)}
 														alt={`${shot.caption || "Change"} · ${side}`}
 														loading="lazy"
-														onLoad={(event) => {
+														onLoad={(event) =>
 															noteRatio(
 																`${i}:${side}`,
 																event.currentTarget.naturalWidth,
 																event.currentTarget.naturalHeight,
-															);
-															noteCorner(`${i}:${side}`, event.currentTarget);
-														}}
+															)
+														}
 															/>
-															{/* Filled, so which of the two it is registers
-															    before the word is read. Which fill, see
-															    labelClass; the shape, SHOT_LABEL. */}
 															<span
 																className={cn(
 																	SHOT_LABEL,
-																	labelClass(`${i}:${side}`, side),
+																	SHOT_LABEL_SIDE[side],
 																)}
 															>
 																{side === "before" ? "Before" : "After"}
@@ -532,17 +490,11 @@ export function WalkthroughCard({
 															src={mediaUrl(shot[side]!)}
 															alt={`${shot.caption || "change"} · ${side}`}
 															loading="lazy"
-															onLoad={(event) =>
-																noteCorner(`${i}:${side}`, event.currentTarget)
-															}
 															/>
-															{/* Filled, so which of the two it is registers
-															    before the word is read. Which fill, see
-															    labelClass; the shape, SHOT_LABEL. */}
 															<span
 																className={cn(
 																	SHOT_LABEL,
-																	labelClass(`${i}:${side}`, side),
+																	SHOT_LABEL_SIDE[side],
 																)}
 															>
 																{side === "before" ? "Before" : "After"}
