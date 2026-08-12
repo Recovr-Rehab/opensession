@@ -165,7 +165,7 @@ import {
 	IconCopy,
 	IconFile,
 	IconGlobe,
-	IconHistory,
+	IconRobot,
 	IconArrowUpRight,
 } from "./icons";
 import { SessionRelations, type RelatedSession } from "./SessionRelations";
@@ -4562,7 +4562,7 @@ export function SessionViewer({
 								render={<a href={`${BASE_PATH}/automations/${encodeURIComponent(session.automationId || session.automation)}`} />}
 								title={session.automation}
 							>
-								<IconHistory size={20} />
+								<IconRobot size={20} />
 								<span className="grow">Automation</span>
 							</Menu.Item>
 						)}
@@ -4703,7 +4703,7 @@ export function SessionViewer({
 								className="-ml-1 inline-flex size-6 shrink-0 items-center justify-center rounded-control text-faint transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-hover hover:text-fg"
 								aria-label={`Open ${session.automation} automation settings`}
 							>
-								<IconHistory size={18} />
+								<IconRobot size={18} />
 							</a>
 						</Tooltip>
 					)}

@@ -725,6 +725,22 @@ export function IconBox(p: IconProps) {
   );
 }
 
+// Friendly machine face for automation-owned sessions. Kept geometric and
+// neutral so it reads as origin, not as a chat persona or assistant avatar.
+export function IconRobot(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path {...stroke} d="M12 4.75V7.25" />
+      <circle {...stroke} cx="12" cy="4.75" r="1" />
+      <rect {...stroke} x="5.25" y="7.25" width="13.5" height="11.5" rx="3" />
+      <path {...stroke} d="M5.25 11H3.75V15H5.25M18.75 11H20.25V15H18.75" />
+      <circle cx="9" cy="12.25" r="1" fill="currentColor" />
+      <circle cx="15" cy="12.25" r="1" fill="currentColor" />
+      <path {...stroke} d="M9.5 15.75H14.5" />
+    </Svg>
+  );
+}
+
 // Archive box (lidded crate with a pull slot), redrawn to this set's 24×24
 // grammar — the reversible sibling of IconTrash.
 export function IconArchive(p: IconProps) {
