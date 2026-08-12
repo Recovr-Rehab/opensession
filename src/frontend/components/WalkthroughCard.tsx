@@ -153,9 +153,9 @@ export function WalkthroughCard({
 	return (
 		<div
 			className={cn(
-				// A small lift separates the finished proof from the live transcript
-				// without turning it into a heavy panel. The media keeps its own edge.
-				"rounded-xl border border-line/60 bg-raised p-4 smooth-shadow-soft",
+				// White in light mode, with only a close edge shadow. The walkthrough
+				// should read as finished proof, not a panel floating over the transcript.
+				"rounded-xl border border-line/60 bg-surface p-4 smooth-shadow-xs",
 				// In the session the card is a transcript block like any other, so it
 				// takes the same centered reading column the turns and footers use
 				// (mx-auto + --session-col) instead of spanning the whole pane. It
