@@ -51,12 +51,13 @@ export function ShippedChangeComposer({
 	}, [sessionId]);
 
 	return (
-		<div className="mx-auto mt-2 mb-6 w-full max-w-[var(--session-col)] rounded-xl bg-panel p-4">
-			<div className="mb-3 flex items-center gap-2 text-[14px] leading-5 text-fg">
-				<BrandMark name="slack" size={20} />
+		<div className="mx-auto mt-2 mb-6 w-full max-w-[var(--session-col)] rounded-xl border border-line/60 bg-transparent p-3">
+			<div className="mb-2.5 flex items-center gap-1.5 text-[14px] leading-5 text-fg">
+				<BrandMark name="slack" size={16} />
 				<span className="font-semibold">Post what you shipped</span>
 			</div>
 			<Input
+				className="border-line/60"
 				aria-label="Slack message"
 				value={message}
 				maxLength={500}
@@ -70,13 +71,13 @@ export function ShippedChangeComposer({
 				}}
 			/>
 			{screenshot && (
-				<figure className="mt-3 mb-0">
+				<figure className="mt-2.5 mb-0">
 					<figcaption className="mb-1 inline-flex rounded-full bg-blue-soft px-2 py-0.5 text-[11px] leading-4 font-semibold text-blue">
 						Screenshot
 					</figcaption>
 					<button
 						type="button"
-						className="block aspect-[16/10] w-full cursor-zoom-in overflow-hidden rounded-md border border-line bg-transparent p-0 outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+						className="block aspect-[16/10] w-full cursor-zoom-in overflow-hidden rounded-md border border-line/60 bg-transparent p-0 outline-none focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
 						onClick={(event) =>
 							openLightbox(
 								[
@@ -100,7 +101,7 @@ export function ShippedChangeComposer({
 				</figure>
 			)}
 			{!screenshot && onRequestScreenshot && (
-				<div className="mt-3 flex min-h-28 flex-col items-center justify-center gap-2 rounded-md bg-surface px-4 py-3 text-center">
+				<div className="mt-2.5 flex min-h-24 flex-col items-center justify-center gap-1.5 rounded-control bg-surface px-3 py-2.5 text-center">
 					<IconCamera size={20} className="text-faint" />
 					<div className="text-supporting text-dim">Add visual proof to this post.</div>
 					<Button
@@ -112,11 +113,12 @@ export function ShippedChangeComposer({
 					</Button>
 				</div>
 			)}
-			<div className="mt-3 flex items-center gap-2 phone:flex-col phone:items-stretch">
+			<div className="mt-2.5 flex items-center gap-2 phone:flex-col phone:items-stretch phone:gap-1.5">
 				<label className="flex min-w-0 flex-1 items-center gap-2 text-meta text-dim">
 					<span className="shrink-0">Send to</span>
 					<Select
 						size="sm"
+						className="border-line/60"
 						aria-label="Slack channel"
 						value={channel}
 						disabled={status !== "idle" || channels.length === 0}
@@ -132,7 +134,7 @@ export function ShippedChangeComposer({
 				</label>
 				<Button
 					size="sm"
-					icon={<BrandMark name="slack" size={14} />}
+					icon={<BrandMark name="slack" size={12} />}
 					className="[&>span:first-child]:opacity-100"
 					disabled={status !== "idle" || !message.trim() || !channel}
 					onClick={() => onShare(message.trim(), channel)}
