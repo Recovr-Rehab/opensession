@@ -254,22 +254,6 @@ function isToolView(view: string): view is ToolView {
 	return (TOOL_VIEWS as readonly string[]).includes(view);
 }
 
-/** Deep-link requests from the Electron shell. Older shells and ordinary web
- * browsers do not expose this bridge, so the web client stays unchanged. */
-function os1Navigation():
-	| { onRequest: (cb: (path: string) => void) => (() => void) | void }
-	| undefined {
-	return (
-		window as {
-			os1?: {
-				navigation?: {
-					onRequest: (cb: (path: string) => void) => (() => void) | void;
-				};
-			};
-		}
-	).os1?.navigation;
-}
-
 // Non-tool settings sections, addressable as <base>/settings/<section>.
 const SETTINGS_SECTIONS = new Set<SettingsSectionKey>([
 	"myAccounts",
@@ -1214,34 +1198,6 @@ export function App(
 		};
 		window.addEventListener("popstate", onPop);
 		return () => window.removeEventListener("popstate", onPop);
-	}, []);
-
-	// The desktop shell receives os1:// and Universal Link activations even
-	// while this renderer is already alive. Route those through the SPA instead
-	// of making the shell reload the whole document.
-	useEffect(() => {
-		const bridge = os1Navigation();
-		if (!bridge?.onRequest) return;
-		const off = bridge.onRequest((rawPath) => {
-			try {
-				const url = new URL(rawPath, location.origin);
-				if (
-					url.origin !== location.origin ||
-					!url.pathname.startsWith("/") ||
-					url.pathname.startsWith("//")
-				)
-					return;
-				navigate(parseRoute(url.pathname));
-				// navigate() owns the history depth and canonical route. Restore the
-				// deep link's query/fragment on that same entry after it does so.
-				history.replaceState(
-					history.state,
-					"",
-					`${location.pathname}${url.search}${url.hash}`,
-				);
-			} catch {}
-		});
-		return typeof off === "function" ? off : undefined;
 	}, []);
 
 	// Creator Micro macropad → client-side navigation. A local daemon on the

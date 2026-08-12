@@ -344,25 +344,6 @@ function openDeepLink(raw) {
     return;
   }
   showWindow();
-  // Once the SPA is alive, hand the route to its client-side router. loadURL
-  // tears down the renderer, WebSocket, drafts, scroll positions, and every
-  // hydrated session even though only the visible route changed.
-  try {
-    const current = win?.webContents.getURL();
-    const target = new URL(url);
-    if (
-      current &&
-      new URL(current).origin === APP_ORIGIN &&
-      !win.webContents.isLoadingMainFrame()
-    ) {
-      win.webContents.send(
-        "os1:navigate",
-        `${target.pathname}${target.search}${target.hash}`,
-      );
-      return;
-    }
-  } catch {}
-  // Cold starts and local-server recovery pages still need a document load.
   win?.loadURL(url);
 }
 
