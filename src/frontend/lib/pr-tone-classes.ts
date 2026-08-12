@@ -112,10 +112,12 @@ export const PR_BAR_BG: Record<PrTone, string> = {
 	purple: "bg-[color-mix(in_srgb,var(--purple)_10%,transparent)]",
 	red: "bg-red-soft",
 	yellow: "bg-[color-mix(in_srgb,var(--yellow)_9%,transparent)]",
-	// The session's own top bar surface, so header + strip read as one band —
-	// except in the info card, which supplies its own surface.
-	muted:
-		"bg-[var(--topbar-bg)] phone:[.session-info-status_&]:bg-transparent",
+	// The session header's own surface, so header + strip read as one band —
+	// except in the info card, which supplies its own. It used to take the
+	// lifted `--topbar-bg` tint, which the header no longer wears: the two
+	// halves of one row rendered a step apart, which is what made a strip with
+	// nothing to report read as a smudge across the top.
+	muted: "bg-surface phone:[.session-info-status_&]:bg-transparent",
 };
 
 /** A session that shipped one feature as several PRs: the primary strip plus a

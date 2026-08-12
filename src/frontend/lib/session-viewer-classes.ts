@@ -42,20 +42,19 @@
  * growing with its tallest button — including when a tab strip follows, where
  * trimming the row to pull the labels together cost that alignment. The session
  * body's colour rather than the lifted topbar tint keeps the whole top region
- * reading as one surface the transcript dissolves into under the floating pills.
+ * reading as one surface — the PR strip sharing the row takes the same one.
  *
- * There is deliberately no hairline: at the top of a transcript nothing passes
- * under the bar and there is nothing to divide, and once there IS content up
- * there the scroll-edge wash below does the separating. It comes back for
- * engines without scroll-driven animations, which never get the wash — and
- * drops again when the tab strip follows the bar, leaving the strip's own
- * bottom inset as the single divider above the content.
+ * One drawn hairline divides the bar from the content, in the same ink and at
+ * the same height as the PR strip's beside it, so the line runs unbroken across
+ * the whole top row. A scroll-driven wash used to do the separating instead,
+ * which dimmed the rows passing under the bar rather than dividing anything.
+ * The hairline drops when the tab strip follows the bar, leaving the strip's
+ * own bottom inset as the single divider above the content.
  */
 export const VIEWER_HEADER =
 	"viewer-header flex h-[var(--desktop-header-h)] min-w-0 shrink-0 items-center justify-between gap-3 " +
 	"bg-surface px-4 " +
-	"[@supports_not_(animation-timeline:scroll())]:border-b " +
-	"[@supports_not_(animation-timeline:scroll())]:border-b-[var(--top-divider)] " +
+	"border-b border-b-[var(--top-divider)] " +
 	"[.detail-topbar:has(+_.session-tabs)_&]:border-b-0 " +
 	// Collapsed desktop sidebar: the floating re-open + nav cluster overlays the
 	// pane's left edge, so the row's text starts past it.
@@ -170,52 +169,16 @@ export const VIEWER_REVIEW_MAIN =
 /* ── Transcript ─────────────────────────────────────────────────────────── */
 
 /**
- * Holds the scroll area plus the floating "Jump to latest" pill, and — on
- * desktop — the top scroll-edge wash.
+ * Holds the scroll area plus the floating "Jump to latest" pill.
  *
- * Content scrolled past the top dissolves into the header, and the wash appears
- * only when there IS content up there: it is driven entirely by a CSS scroll
- * timeline, so there are no scroll listeners and no re-renders. This is what
- * replaces the header's hairline. Because it tracks scroll position rather than
- * animating over time it stays active under reduced motion — nothing moves that
- * wouldn't move anyway. Phones fade the transcript under their floating pills
- * with a mask instead (see VIEWER_MESSAGES).
- *
- * It is the header's stand-in, so it drops when the header isn't the thing
- * above the transcript: with a tab strip in the pane the strip's own bottom
- * hairline already divides chrome from content, and a wash under a drawn line
- * only dims the first rows for nothing. The pseudo-element isn't generated at
- * all in that case rather than merely hidden, so the scroll timeline has
- * nothing to drive.
+ * Desktop used to paint a scroll-edge wash across the top here, driven by a CSS
+ * scroll timeline, so rows dissolved into the header as they passed under it.
+ * A drawn hairline on the bar divides the two surfaces instead: the wash dimmed
+ * the first legible rows to say what one line says outright. Phones still fade
+ * the transcript under their floating pills with a mask (see VIEWER_MESSAGES),
+ * where the chrome overlays the content rather than sitting above it.
  */
-export const VIEWER_MESSAGES_REGION =
-	"relative flex min-h-0 flex-1 flex-col " +
-	"desktop:supports-[animation-timeline:scroll()]:[timeline-scope:--viewer-session-scroll] " +
-	"desktop:supports-[animation-timeline:scroll()]:before:absolute " +
-	"desktop:supports-[animation-timeline:scroll()]:before:inset-x-0 " +
-	"desktop:supports-[animation-timeline:scroll()]:before:top-0 " +
-	"desktop:supports-[animation-timeline:scroll()]:before:h-[var(--wash-depth)] " +
-	// Above the transcript's flow content, but below the composer (z 1, a later
-	// sibling) and the jump-latest pill (z 5).
-	"desktop:supports-[animation-timeline:scroll()]:before:z-[1] " +
-	"desktop:supports-[animation-timeline:scroll()]:before:pointer-events-none " +
-	"desktop:supports-[animation-timeline:scroll()]:before:opacity-0 " +
-	// `background`, not `bg-[…]`: --wash-up is a gradient, and Tailwind would
-	// read a bare var() as a colour and emit background-color.
-	"desktop:supports-[animation-timeline:scroll()]:before:[background:var(--wash-up)] " +
-	"desktop:supports-[animation-timeline:scroll()]:before:[animation:session-edge-fade-in_1ms_both] " +
-	"desktop:supports-[animation-timeline:scroll()]:before:[animation-timeline:--viewer-session-scroll] " +
-	// Start at the scroll origin: opacity is zero at rest, so the first message is
-	// fully legible without reserving any blank space below the header. The short
-	// 24px ramp still softens content once it begins passing underneath.
-	"desktop:supports-[animation-timeline:scroll()]:before:[animation-range:0_24px] " +
-	"desktop:supports-[animation-timeline:scroll()]:before:content-[''] " +
-	// A tab strip anywhere in the pane (a split gives every column one) puts a
-	// real divider above the transcript, so the wash goes. Written as an
-	// ancestor variant because the strip is neither this element's parent nor
-	// its sibling; it outranks the `content-['']` above on specificity, so the
-	// order the two are written in doesn't decide it.
-	"desktop:supports-[animation-timeline:scroll()]:[.detail-pane:has(.session-tabs)_&]:before:content-none";
+export const VIEWER_MESSAGES_REGION = "relative flex min-h-0 flex-1 flex-col";
 
 /**
  * The scroll container.
@@ -237,14 +200,11 @@ export const VIEWER_MESSAGES =
 	// Keep the reader's place when content loads or expands above them.
 	"[overflow-anchor:auto] px-5 pt-0 pb-[calc(var(--session-under)_+_16px)] " +
 	"[&>*]:w-full [&>*]:shrink-0 " +
-	// With a tab strip above (a split gives every column one), the first row
-	// otherwise sits right on the strip's hairline. The header alone needs no
-	// such gap: its scroll-edge wash stands in for the divider there, and
-	// reserving blank space under it would only push the first message down.
-	// Same ancestor variant the wash uses, and it outranks `pt-0` on
-	// specificity, so the order the two are written in doesn't decide it.
-	"desktop:[.detail-pane:has(.session-tabs)_&]:pt-3 " +
-	"desktop:supports-[animation-timeline:scroll()]:[scroll-timeline:--viewer-session-scroll_y] " +
+	// Whatever sits above — the bar's hairline, or the tab strip's when a split
+	// gives every column one — the first row would otherwise rest directly on
+	// that line. 12px of clear space instead. Only at rest: scrolled content
+	// still runs right up under the chrome.
+	"desktop:pt-3 " +
 	// Phone: clear the floating pills at rest, then scroll under them.
 	// --strip-clearance is 0 by default and the docked tab bar's height on a
 	// multi-session workspace.
