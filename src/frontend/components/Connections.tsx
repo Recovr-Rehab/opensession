@@ -37,6 +37,7 @@ import {
   IconPlus,
 } from "./icons";
 import { IconTile, displayName } from "./BrandTile";
+import { UserAvatar } from "./UserAvatar";
 import { AGENT_NAME, docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { ProjectsSection } from "./ProjectsSection";
 import {
@@ -685,6 +686,9 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
             );
             return (
               <SettingRow key={m.github} className="gap-x-3 py-3">
+                {/* Sized to the card's GitHub tile above so both rows start
+                    their text at the same x. */}
+                <UserAvatar name={m.name} login={m.github} size={30} />
                 <SettingRowText>
                   <SettingRowTitle className="truncate">
                     {m.name}
