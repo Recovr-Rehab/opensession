@@ -1,6 +1,7 @@
 import React from "react";
-import type { SessionWalkthrough, TranscriptEntry } from "../lib/types";
+import type { SessionNote, SessionWalkthrough, TranscriptEntry } from "../lib/types";
 import { MessageBubble } from "./MessageBubble";
+import { NoteBubble } from "./NoteBubble";
 import { TurnBlock } from "./TurnBlock";
 import { collectTouchedFiles, TurnFooter, type TouchedFile } from "./TurnFooter";
 import { VirtualTranscriptBlock } from "./VirtualTranscriptBlock";
@@ -21,7 +22,8 @@ type RenderBlock =
 			files: TouchedFile[];
 			assets: string[];
 	  }
-	| { kind: "walkthrough"; walkthrough: SessionWalkthrough };
+	| { kind: "walkthrough"; walkthrough: SessionWalkthrough }
+	| { kind: "note"; note: SessionNote };
 
 interface Props {
 	entries: TranscriptEntry[];
@@ -38,6 +40,9 @@ interface Props {
 	/** Agent-published walkthrough — rendered inline where it was published.
 	 *  Pass a referentially stable object (see SessionViewer) so the memo holds. */
 	walkthrough?: SessionWalkthrough;
+	/** Team notes (src/server/session-notes.ts) interleaved into the timeline
+	 *  by timestamp. Agent-invisible; rendered as NoteBubbles. */
+	notes?: SessionNote[];
 	slackShare?: {
 		prNumber: number;
 		preview: {
@@ -147,6 +152,7 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 	owner,
 	sessionId,
 	walkthrough,
+	notes,
 	slackShare,
 }: Props) {
 	const renderedEntries = normalizeLegacyVoiceToolEntries(entries);
@@ -223,6 +229,28 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 			walkthrough,
 		});
 
+	// Interleave team notes by timestamp: each note lands after the last block
+	// whose time is at or before it (footers share their answer's time, so a
+	// note never splits an answer from its footer). Notes newer than the whole
+	// window append at the end.
+	if (notes?.length) {
+		const blockTime = (b: RenderBlock): number => {
+			if (b.kind === "walkthrough")
+				return new Date(b.walkthrough.publishedAt).getTime();
+			if (b.kind === "note") return b.note.ts;
+			const entry =
+				b.kind === "turn" ? b.items[b.items.length - 1] : b.entry;
+			return entry ? new Date(entry.timestamp).getTime() : 0;
+		};
+		const sorted = [...notes].sort((a, b) => a.ts - b.ts);
+		let at = 0;
+		for (const note of sorted) {
+			while (at < blocks.length && blockTime(blocks[at]!) <= note.ts) at++;
+			blocks.splice(at, 0, { kind: "note", note });
+			at++;
+		}
+	}
+
 	return (
 		<>
 			{blocks.map((block, i) => {
@@ -231,9 +259,11 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 						? block.items[0].id
 						: block.kind === "walkthrough"
 							? "walkthrough"
-							: block.kind === "footer"
-								? `${block.entry.id}:footer`
-								: block.entry.id;
+							: block.kind === "note"
+								? `note:${block.note.id}`
+								: block.kind === "footer"
+									? `${block.entry.id}:footer`
+									: block.entry.id;
 				const anchorId =
 					block.kind === "turn"
 						? `${block.items[block.items.length - 1].id}#turn`
@@ -261,6 +291,8 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 						variant="session"
 						slackShare={slackShare}
 					/>
+				) : block.kind === "note" ? (
+					<NoteBubble note={block.note} />
 				) : block.kind === "footer" ? (
 					<TurnFooter
 						entry={block.entry}

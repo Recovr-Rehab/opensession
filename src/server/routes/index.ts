@@ -21,6 +21,7 @@ import { handleFeedsRoutes } from "./feeds";
 import { handleSlackChannelRoutes } from "./slack-channels";
 import { handleSystemRoutes } from "./system";
 import { handleSessionAssetsRoutes } from "./session-assets";
+import { handleSessionNotesRoutes } from "./session-notes";
 import { handleSandboxRoutes } from "./sandbox";
 import { handleSandboxesRoutes } from "./sandboxes";
 import { handleSessionsRoutes } from "./sessions";
@@ -80,9 +81,11 @@ export const routeHandlers: RouteHandler[] = [
 	// Local profile only: local ids fall through; every other session id is
 	// forwarded before a local route can turn the ownership miss into a 404.
 	proxyCloudSessionRequest,
-	// Before the generic session routes: /api/sessions/:id/assets* is inside
-	// their path family and must not be swallowed by broader matches.
+	// Before the generic session routes: /api/sessions/:id/assets* and
+	// /api/sessions/:id/notes are inside their path family and must not be
+	// swallowed by broader matches.
 	handleSessionAssetsRoutes,
+	handleSessionNotesRoutes,
 	handleSandboxesRoutes,
 	handleSandboxRoutes,
 	handleShippedChangeRoutes,

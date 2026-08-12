@@ -21,11 +21,13 @@ import {
 } from "../lib/session-performance";
 import { AGENT_NAME, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { withQuotes, type Quote } from "../lib/quotes";
+import { markNotesRead } from "../lib/note-reads";
 import { QuoteSelection } from "./QuoteSelection";
 import { plainThreadUrl } from "./PlainThreadPanel";
 import { isGitHubAttribution } from "@tellahq/opensession-protocol/notices";
 import type {
 	UnifiedSession,
+	SessionNote,
 	TranscriptEntry,
 	WSServerMessage,
 	AskQuestion,
@@ -64,6 +66,8 @@ import {
 	fetchSessionSubagents,
 	fetchRepos,
 	promoteSessionApi,
+	fetchSessionNotesApi,
+	postSessionNoteApi,
 	fetchPr,
 	fetchPreview,
 	type WorkspaceMediaItem,
@@ -1352,6 +1356,40 @@ export function SessionViewer({
 		openAssetsRef.current?.();
 	}, []);
 	const sessionReports = useSessionReports(session.id, addHandler);
+	// Team notes — human-to-human messages on this session, interleaved into
+	// the transcript as NoteBubbles. The agent never sees them; they're posted
+	// from the composer's note mode (⌘N).
+	const [notes, setNotes] = useState<SessionNote[]>([]);
+	const [noteMode, setNoteMode] = useState(false);
+	useEffect(() => {
+		setNotes([]);
+		setNoteMode(false);
+		let cancelled = false;
+		fetchSessionNotesApi(session.id)
+			.then((loaded) => {
+				if (!cancelled && loaded.length) setNotes(loaded);
+			})
+			.catch(() => {});
+		return () => {
+			cancelled = true;
+		};
+	}, [session.id]);
+	useEffect(
+		() =>
+			addHandler((msg) => {
+				if (msg.type !== "session_note" || msg.sessionId !== session.id) return;
+				setNotes((prev) =>
+					prev.some((n) => n.id === msg.note.id) ? prev : [...prev, msg.note],
+				);
+			}),
+		[addHandler, session.id],
+	);
+	// Viewing the session marks its notes read (an unread indicator keys off
+	// this stamp).
+	useEffect(() => {
+		if (!notes.length) return;
+		markNotesRead(session.id, notes[notes.length - 1]!.ts);
+	}, [notes, session.id]);
 	const panelResizeHandle = (
 		<div
 			className={PANEL_RESIZE}
@@ -3063,6 +3101,19 @@ export function SessionViewer({
 		const imgs = images;
 		const fls = files;
 		if (!typed && imgs.length === 0 && fls.length === 0) return false;
+
+		// Note mode: post a team note on this session — never a prompt. The
+		// server broadcast echoes it back into `notes` for every viewer, so
+		// nothing is rendered optimistically here. Notes carry the quoted
+		// selection too (as "> " lines, the same shape a prompt sends).
+		if (noteMode) {
+			if (!typed) return false;
+			postSessionNoteApi(session.id, text, getCurrentUser()).catch(() =>
+				toast("Failed to add note"),
+			);
+			return true;
+		}
+
 		const user = getCurrentUser();
 		// Prefer the staged disk path (HTTP upload); fall back to inline dataUrl.
 		const filePayload = fls.map((f) =>
@@ -5436,6 +5487,7 @@ export function SessionViewer({
 															live={isBusy}
 															sessionId={session.id}
 															walkthrough={sessionWalkthrough}
+															notes={notes}
 															slackShare={walkthroughSlackShare}
 															onFork={canForkSession ? handleFork : undefined}
 															onOpenSubagent={openSubagent}
@@ -5631,6 +5683,10 @@ export function SessionViewer({
 									// the "+", so the writing surface carries the state
 									// instead — tinted and hatched.
 									askMode={isAsk}
+									// Team notes: the send posts to the transcript for the
+									// humans reading it, never to the agent (⌘N, or the "+").
+									noteMode={noteMode}
+									onNoteModeChange={setNoteMode}
 									busy={isBusy && !forkFrom}
 									onStop={handleCancel}
 									// Leaving ask mode is a setting of this session, so it sits in

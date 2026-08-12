@@ -20,6 +20,7 @@ import {
   IconCrosshair,
   IconCheck,
   IconEye,
+  IconNote,
   IconStopSquare,
 } from "./icons";
 import {
@@ -189,9 +190,18 @@ interface Props {
    */
   skillsFetch?: (query: string) => Promise<FileMention[]>;
   /**
+   * Note mode (Plain-style internal notes): the send posts a team note the
+   * agent never sees. When `onNoteModeChange` is wired, a Note row appears in
+   * the "+" menu and ⌘/Ctrl+N toggles it while the field is focused; the
+   * composer tints yellow so the mode is unmistakable.
+   */
+  noteMode?: boolean;
+  onNoteModeChange?: (on: boolean) => void;
+  /**
    * Ask mode: this session can read the checkout but not change it. Tints the
-   * writing surface — the state has no chip of its own, so the surface is what
-   * says it.
+   * writing surface the way note mode does — the state has no chip of its own,
+   * so the surface is what says it. Note mode wins while it's on: ask mode is
+   * ambient for the session's whole life, note mode is one message.
    */
   askMode?: boolean;
 }
@@ -358,6 +368,8 @@ export function Composer({
   onQuoteClear,
   mentionFetch,
   skillsFetch,
+  noteMode,
+  onNoteModeChange,
   askMode,
 }: Props) {
   const internalRef = useRef<HTMLTextAreaElement>(null);
@@ -438,10 +450,15 @@ export function Composer({
   const imgs = images || [];
   const fls = files || [];
   // Any attachment affordance (paste/drop/pick + thumbnails) is enabled when the
-  // parent wired up either channel.
-  const canAttach = !!onImagesChange || !!onFilesChange;
-  // Whether the "+" has anything to show.
-  const hasAddMenu = canAttach || !!onSetGoal || !!menuExtra || !!sendMenu;
+  // parent wired up either channel. Notes are text-only — attachments stay
+  // staged for the next prompt instead of riding a note.
+  const canAttach = !noteMode && (!!onImagesChange || !!onFilesChange);
+  // Whether the "+" has anything to show. Deliberately NOT `canAttach`: note
+  // mode turns attachments off, and keying off it would close the whole menu —
+  // and with it the row that leaves note mode — exactly when it's needed,
+  // stranding anyone who doesn't know ⌘N.
+  const hasAddMenu =
+    canAttach || !!onSetGoal || !!onNoteModeChange || !!menuExtra || !!sendMenu;
 
   // Phones get a ChatGPT-style resting state: while the field is empty and
   // unfocused, the composer collapses to a single-row pill ("+ · placeholder ·
@@ -469,8 +486,10 @@ export function Composer({
   const entSteer = busySendPrefs.enter === "steer";
   const modSteer = busySendPrefs.mod === "steer";
   const modifierPicks = sendKey === "enter";
+  // Notes bypass the busy queue/steer machinery entirely — they post straight
+  // to the team whether or not a turn is running.
   const steerSend =
-    !!busy && (modifierPicks && sendModifierHeld ? modSteer : entSteer);
+    !noteMode && !!busy && (modifierPicks && sendModifierHeld ? modSteer : entSteer);
   // Picking a busy action from the send button's menu hands the OTHER one to
   // ⌘/Ctrl+Enter, so both actions always keep a key and each row shows exactly
   // one — with both prefs on the same action there is no way to reach the other
@@ -701,6 +720,20 @@ export function Composer({
     // falls through here to the busy-stop below), and Enter is never consumed,
     // so the send combos keep working in any mode.
     if (vim.handleKeyDown(e)) return;
+    // ⌘/Ctrl+N toggles note mode while the field is focused (Plain's shortcut).
+    // stopPropagation keeps the global ⌘N (new-session palette) from also firing.
+    if (
+      onNoteModeChange &&
+      (e.metaKey || e.ctrlKey) &&
+      !e.shiftKey &&
+      !e.altKey &&
+      (e.key === "n" || e.key === "N")
+    ) {
+      e.preventDefault();
+      e.stopPropagation();
+      onNoteModeChange(!noteMode);
+      return;
+    }
     // Esc while a run is busy = the stop button: interrupt the current turn.
     if (e.key === "Escape" && busy && onStop && !disabled) {
       e.preventDefault();
@@ -785,7 +818,13 @@ export function Composer({
           minimized ? composerBoxMinimized : composerBoxExpanded,
           disabled && "opacity-60",
         )}
-        style={askMode ? tintedSurface("var(--green)", 7, 4, 30) : undefined}
+        style={
+          noteMode
+            ? tintedSurface("var(--yellow)", 10, 6, 45)
+            : askMode
+              ? tintedSurface("var(--green)", 7, 4, 30)
+              : undefined
+        }
         onDrop={handleDrop}
         onDragOver={(e) => canAttach && e.preventDefault()}
       >
@@ -863,11 +902,15 @@ export function Composer({
             // "Ask <model>" (ChatGPT-style) that fits the single row; the
             // descriptive placeholder returns once it expands.
             placeholder={
-              minimized
-                ? `Ask ${shortModelLabel(effectiveModel, models)}`
-                : quote
-                  ? "Chat with selected text"
-                  : placeholder
+              noteMode
+                ? minimized
+                  ? "Note…"
+                  : "Leave a note for the team — the agent won't see it"
+                : minimized
+                  ? `Ask ${shortModelLabel(effectiveModel, models)}`
+                  : quote
+                    ? "Chat with selected text"
+                    : placeholder
             }
             value={text}
             onChange={(e) => {
@@ -1006,6 +1049,26 @@ export function Composer({
                       {goal ? "Edit goal" : "Set a goal"}
                     </button>
                   )}
+                  {onNoteModeChange && (
+                    <button
+                      type="button"
+                      className={composerMenuItem}
+                      {...tapProps(() => {
+                        setMenu(null);
+                        onNoteModeChange(!noteMode);
+                      })}
+                      title={
+                        noteMode
+                          ? "Go back to prompting the agent (⌘N)"
+                          : "Posts to the team; the agent won't see it (⌘N)"
+                      }
+                    >
+                      <span className={composerMenuIcon}>
+                        <IconNote size={22} />
+                      </span>
+                      {noteMode ? "Back to prompting" : "Write a team note"}
+                    </button>
+                  )}
                   {menuExtra?.({ close: () => setMenu(null) })}
                   {sendMenu?.({
                     text,
@@ -1049,7 +1112,7 @@ export function Composer({
               worktree, so clicking the marker opens the menu and lets you pick
               the labelled row instead. */}
           <AnimatePresence initial={false}>
-            {!minimized && askMode && (
+            {!minimized && (noteMode || askMode) && (
               <motion.div
                 key="mode-marker"
                 layout="position"
@@ -1061,7 +1124,13 @@ export function Composer({
                 // order, and the "+" is rendered first.
                 className="composer-pop-wrap relative inline-flex shrink-0 phone:order-[-2]"
               >
-                <Tooltip label="Ask mode — this session can read the code but not change it">
+                <Tooltip
+                  label={
+                    noteMode
+                      ? "Note mode — posts to the team; the agent won't see it. ⌘N to go back."
+                      : "Ask mode — this session can read the code but not change it"
+                  }
+                >
                   <button
                     type="button"
                     // Same "on" language as paletteIconBtnOn: the state
@@ -1077,13 +1146,20 @@ export function Composer({
                     // toolbar read as assembled rather than designed.
                     className={cn(
                       "inline-flex min-h-8 items-center gap-1.5 rounded-control px-2.5 text-meta font-medium transition-colors",
-                      "bg-[color-mix(in_srgb,var(--green)_18%,transparent)] text-green hover:bg-[color-mix(in_srgb,var(--green)_26%,transparent)]",
+                      noteMode
+                        ? "bg-[color-mix(in_srgb,var(--yellow)_18%,transparent)] text-yellow hover:bg-[color-mix(in_srgb,var(--yellow)_26%,transparent)]"
+                        : "bg-[color-mix(in_srgb,var(--green)_18%,transparent)] text-green hover:bg-[color-mix(in_srgb,var(--green)_26%,transparent)]",
                     )}
-                    {...tapProps(() => setMenu("add"))}
+                    // The marker does the useful thing on click: note mode is a
+                    // reversible toggle, so it turns itself off; ask mode isn't,
+                    // so it opens the menu instead.
+                    {...tapProps(() =>
+                      noteMode ? onNoteModeChange?.(false) : setMenu("add"),
+                    )}
                     disabled={disabled}
                   >
-                    <IconEye size={15} />
-                    Ask
+                    {noteMode ? <IconNote size={15} /> : <IconEye size={15} />}
+                    {noteMode ? "Note" : "Ask"}
                   </button>
                 </Tooltip>
               </motion.div>
@@ -1191,12 +1267,14 @@ export function Composer({
               <ContextMenu.Root>
                 <Tooltip
                   label={
-                    steerSend
-                      ? "Steer message"
-                      : sendTitle ||
-                        (busy
-                          ? "Queue message"
-                          : `Send (${sendKeyLabel(sendKey)})`)
+                    noteMode
+                      ? `Add note (${sendKeyLabel(sendKey)})`
+                      : steerSend
+                        ? "Steer message"
+                        : sendTitle ||
+                          (busy
+                            ? "Queue message"
+                            : `Send (${sendKeyLabel(sendKey)})`)
                   }
                 >
                   <ContextMenu.Trigger
@@ -1204,11 +1282,15 @@ export function Composer({
                       <button
                         className={cn(
                           composerSend,
-                          steerSend
-                            ? composerSendSteer
-                            : busy
-                              ? composerSendQueue
-                              : composerSendDefault,
+                          // A note posts straight away, so it keeps the plain
+                          // send plate even while a turn is running.
+                          noteMode
+                            ? composerSendDefault
+                            : steerSend
+                              ? composerSendSteer
+                              : busy
+                                ? composerSendQueue
+                                : composerSendDefault,
                           minimized && composerSendMinimizedFill,
                         )}
                         {...tapProps(() =>
@@ -1219,18 +1301,20 @@ export function Composer({
                         )}
                         disabled={disabled || isSendDisabled}
                         aria-label={
-                          steerSend
-                            ? "Steer into the running turn"
-                            : busy
-                              ? "Queue until the current turn finishes"
-                              : "Send message"
+                          noteMode
+                            ? "Add note"
+                            : steerSend
+                              ? "Steer into the running turn"
+                              : busy
+                                ? "Queue until the current turn finishes"
+                                : "Send message"
                         }
                       />
                     }
                   >
                     {/* The arrow comes down with the disc in the resting pill — a
                         24px glyph all but touches the smaller plate's edge. */}
-                    {busy && !steerSend ? (
+                    {busy && !steerSend && !noteMode ? (
                       <IconReturn size={minimized ? 20 : 24} />
                     ) : (
                       <IconArrowUp size={minimized ? 20 : 24} />

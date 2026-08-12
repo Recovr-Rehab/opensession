@@ -376,6 +376,18 @@ export function IconFile(p: IconProps) {
   );
 }
 
+/** A page with a folded corner — the composer's team-note mode. */
+export function IconNote(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path
+        {...stroke}
+        d="M13.75 19.25H6.75C5.64543 19.25 4.75 18.3546 4.75 17.25V6.75C4.75 5.64543 5.64543 4.75 6.75 4.75H17.25C18.3546 4.75 19.25 5.64543 19.25 6.75V13.75M13.75 19.25L19.25 13.75M13.75 19.25V14.75C13.75 14.1977 14.1977 13.75 14.75 13.75H19.25"
+      />
+    </Svg>
+  );
+}
+
 export function IconPencil(p: IconProps) {
   return (
     <Svg {...p}>

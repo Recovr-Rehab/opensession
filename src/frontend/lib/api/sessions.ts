@@ -1,5 +1,6 @@
 import { ApiError, BASE, request } from "./request";
 import type {
+	SessionNote,
 	UnifiedSession,
 } from "../types";
 
@@ -460,4 +461,32 @@ export async function acceptReviewApi(
 		body: { accept, by },
 		label: "Failed to update review",
 	});
+}
+
+/**
+ * Team notes on a session (agent-invisible; src/server/session-notes.ts).
+ * Distinct from the shared note documents in lib/api/notes.ts.
+ */
+export async function fetchSessionNotesApi(
+	sessionId: string,
+): Promise<SessionNote[]> {
+	const data = await request<{ notes?: SessionNote[] }>(
+		`/sessions/${encodeURIComponent(sessionId)}/notes`,
+		{ label: "Failed to load notes" },
+	);
+	return data?.notes || [];
+}
+
+/** Post a team note. The server broadcasts it back, so callers don't echo it
+ *  locally — every viewer (including this one) renders the stored record. */
+export async function postSessionNoteApi(
+	sessionId: string,
+	text: string,
+	user: string,
+): Promise<SessionNote> {
+	const data = await request<{ note: SessionNote }>(
+		`/sessions/${encodeURIComponent(sessionId)}/notes`,
+		{ method: "POST", body: { text, user }, label: "Failed to add note" },
+	);
+	return data.note;
 }

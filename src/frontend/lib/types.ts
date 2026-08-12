@@ -281,6 +281,17 @@ export interface SessionWalkthrough {
 	publishedEntryId?: string;
 }
 
+/** A team note on a session: human-to-human, interleaved into the transcript
+ *  by `ts`, and never shown to the agent. See src/server/session-notes.ts —
+ *  unrelated to the shared note DOCUMENTS in lib/api/notes.ts. */
+export interface SessionNote {
+	id: string;
+	user: string;
+	text: string;
+	/** ms epoch */
+	ts: number;
+}
+
 export interface UnifiedSession {
 	id: string;
 	/** Present and true when the local-profile server owns this session. */
@@ -786,6 +797,10 @@ export type WSServerMessage =
 	// change): tabs auto-reload after a short grace instead of waiting for a
 	// click — see UpdatePill.
 	| { type: "frontend_updated"; version: string; by?: string; force?: boolean }
+	// A team note posted on a session (agent-invisible; see SessionNote).
+	// Broadcast to every client, not just the session's watchers, so a client
+	// elsewhere can still tell that a session has new notes.
+	| { type: "session_note"; sessionId: string; note: SessionNote }
 	// Collaborative notes.
 	| { type: "note_state"; noteId: string; update: string }
 	| { type: "note_update"; noteId: string; update: string }
