@@ -66,6 +66,7 @@ import { mobileFilterBtn } from "../lib/app-header-classes";
 import {
 	isScratchWorkspace,
 	spawnedSessionBelongsInSidebar,
+	workspaceRowOwnsSession,
 } from "../lib/sidebar-workspaces";
 import type { ReviewQueueItem } from "../lib/review-queue";
 import {
@@ -1001,7 +1002,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		/** Real workspace record, or null for an implicit single-session row. */
 		workspace: Workspace | null;
 		name: string;
-		sessions: UnifiedSession[]; // createdAt asc — sessions[0] is "the first session"
+		sessions: UnifiedSession[]; // createdAt asc, so sessions[0] is "the first session"
 		status: MineStatus;
 		lastActivity: string;
 		createdAt: string;
@@ -1010,6 +1011,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		/** Lowercased owner (workspace creator, else the first session's starter). */
 		owner: string;
 	}
+	const selectedSession = sessions.find((session) => session.id === selectedId) || null;
 
 	// Most-urgent-first for the row dot: a blocked question beats everything,
 	// a live run beats a ready-to-merge PR, merged/pending are quiet states.
@@ -1175,6 +1177,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		return rows;
 		// `lanes` feeds mineStatus/pinnedLane (read via the lib cache).
 	}, [filtered, sessions, workspaces, selectedId, reads, search, filter, lanes, activeReviewPrKeys]);
+	const rowOwnsSelection = (row: WsRow) =>
+		workspaceRowOwnsSession(row, selectedSession);
+	const selectionBelongsToWorkspaceRow = allWsRows.some(rowOwnsSelection);
+	const automationRowSelected = (session: UnifiedSession) =>
+		session.id === selectedId && !selectionBelongsToWorkspaceRow;
 
 	// ── Hidden rows ─────────────────────────────────────────────────────────
 	// "Hide from my sidebar" is the personal counterpart to Archive: archiving
@@ -1481,7 +1488,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		// Backlog (with auto-pin-new on, hiding pinned rows emptied the lanes).
 		return wsRows.filter(
 			(r) =>
-				(focus === "everyone" ||
+				(rowOwnsSelection(r) ||
+					focus === "everyone" ||
 					(focus === "unassigned"
 						? r.status === "pending"
 						: // A row YOU lane-pinned belongs in your own lens no matter who
@@ -2388,7 +2396,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// `review` marks a row under the "Needs review" band, whose click opens the
 	// Review tab instead of the session.
 	function renderWsRowImpl(row: WsRow, inbox: boolean, review = false) {
-		const active = row.sessions.some((s) => s.id === selectedId);
+		const active = rowOwnsSelection(row);
 		const editing = rowRenameEditing(row);
 		const waiting = row.status === "needsinput";
 		// The "in progress" ticker start: the earliest running session's start, so a
@@ -2924,7 +2932,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					/>
 				</button>
 				{rows
-					.filter((r) => open || r.sessions.some((c) => c.id === selectedId))
+					.filter((r) => open || rowOwnsSelection(r))
 					.map(renderWsRow)}
 			</div>
 		);
@@ -2996,7 +3004,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						/>
 					</button>
 					{items
-						.filter((r) => open || r.sessions.some((c) => c.id === selectedId))
+						.filter((r) => open || rowOwnsSelection(r))
 						.map((r) => renderWsRowImpl(r, false))}
 					{prs
 						.filter((i) => open || prRowSelected(i))
@@ -3114,7 +3122,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							/>
 						</button>
 						{b.rows
-							.filter((r) => open || r.sessions.some((c) => c.id === selectedId))
+							.filter((r) => open || rowOwnsSelection(r))
 							// Nested, the two-line variant's meta line would repeat the
 							// repo tile + name the band header already carries, so the
 							// rows stay compact like every other repo-nested mode's.
@@ -3278,9 +3286,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				// (which made its chevron a frustrating no-op).
 				const selectedRows = open
 					? []
-					: [...rows, ...snoozedRows].filter((r) =>
-							r.sessions.some((c) => c.id === selectedId),
-						);
+					: [...rows, ...snoozedRows].filter(rowOwnsSelection);
 				const selectedPrs = open ? [] : prs.filter(prRowSelected);
 				return (
 					<div
@@ -4445,7 +4451,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								</button>
 								{needsReviewRows
 									.filter(
-										(r) => open || r.sessions.some((c) => c.id === selectedId),
+										(r) => open || rowOwnsSelection(r),
 									)
 									.map(renderReviewWsRow)}
 								{requestedPrItems
@@ -4489,7 +4495,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								</button>
 								{awaitingReviewRows
 									.filter(
-										(r) => open || r.sessions.some((c) => c.id === selectedId),
+										(r) => open || rowOwnsSelection(r),
 									)
 									.map(renderWsRow)}
 							</div>
@@ -4615,7 +4621,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								<SidebarItem
 									session={s}
 									localMode={localMode}
-									selected={s.id === selectedId}
+									selected={automationRowSelected(s)}
 									unread={
 										s.id !== selectedId &&
 										isUnread(s.id, s.lastActivity, reads)
@@ -5048,7 +5054,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 														key={s.id}
 														session={s}
 														localMode={localMode}
-														selected={s.id === selectedId}
+														selected={automationRowSelected(s)}
 														unread={
 															s.id !== selectedId &&
 															isUnread(s.id, s.lastActivity, reads)
