@@ -230,7 +230,7 @@ export function RestartOverlay({ connected, addHandler }: Props) {
       >
         <span
           aria-hidden
-          className="size-3 shrink-0 animate-spin rounded-full border border-current/25 border-t-current text-yellow"
+          className="size-3 shrink-0 animate-spin rounded-full border border-current/25 border-t-current text-accent"
         />
         <span>{restarting ? `${PRODUCT_NAME} is restarting` : "Connection lost"}</span>
         <span className="text-faint">
