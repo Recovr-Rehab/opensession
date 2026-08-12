@@ -3,19 +3,10 @@ import markUrl from "../os1-mac/build/icon-512.png";
 
 const desktopDemoWidth = 840;
 
-export function ProductDemo({ feature }: { feature: number }) {
+export function ProductDemo() {
 	const previewRef = useRef<HTMLElement>(null);
 	const frameRef = useRef<HTMLIFrameElement>(null);
 	const [ready, setReady] = useState(false);
-
-	const showFeature = () => {
-		frameRef.current?.contentWindow?.postMessage(
-			{ type: "opensession-demo-feature", feature },
-			window.location.origin,
-		);
-	};
-
-	useEffect(showFeature, [feature]);
 
 	useLayoutEffect(() => {
 		const preview = previewRef.current;
@@ -37,11 +28,10 @@ export function ProductDemo({ feature }: { feature: number }) {
 			if (event.source !== frameRef.current?.contentWindow) return;
 			if (event.data?.type !== "opensession-demo-ready") return;
 			setReady(true);
-			showFeature();
 		};
 		window.addEventListener("message", handleMessage);
 		return () => window.removeEventListener("message", handleMessage);
-	}, [feature]);
+	}, []);
 
 	return (
 		<figure ref={previewRef} className="preview-wrap" data-ready={ready}>
@@ -72,7 +62,6 @@ export function ProductDemo({ feature }: { feature: number }) {
 				loading="eager"
 				referrerPolicy="no-referrer"
 				sandbox="allow-scripts allow-same-origin"
-				onLoad={showFeature}
 			/>
 		</figure>
 	);

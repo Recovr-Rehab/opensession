@@ -508,21 +508,3 @@ function ProductDemoApp() {
 }
 
 createRoot(document.getElementById("root")!).render(<ProductDemoApp />);
-
-const featureSessions = [activeSessionId, activeSessionId, "bks-demo-shortcuts"];
-
-window.addEventListener("message", (event) => {
-	if (event.origin !== window.location.origin || event.source !== window.parent) return;
-	if (event.data?.type !== "opensession-demo-feature") return;
-	const feature = Number(event.data.feature);
-	if (!Number.isInteger(feature) || feature < 0 || feature >= featureSessions.length)
-		return;
-
-	const sessionId = featureSessions[feature];
-	window.history.replaceState(
-		{ d: 1 },
-		"",
-		`/session/${encodeURIComponent(sessionId)}`,
-	);
-	window.dispatchEvent(new PopStateEvent("popstate", { state: { d: 1 } }));
-});

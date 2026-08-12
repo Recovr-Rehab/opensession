@@ -18,31 +18,13 @@ const Agentation = lazy(() =>
 	import("agentation").then((module) => ({ default: module.Agentation })),
 );
 
-function Mark({ small = false }: { small?: boolean }) {
+function Mark() {
 	return (
-		<span className={small ? "mark mark-small" : "mark"}>
+		<span className="mark">
 			<img src={markUrl} alt="" />
 		</span>
 	);
 }
-
-const features = [
-	{
-		number: "01",
-		title: "Run agents in parallel",
-		body: "Fan work out across models and focused child sessions. Each task keeps its own context and progress, then reports back to the main thread.",
-	},
-	{
-		number: "02",
-		title: "Collaborate in every session",
-		body: "Teammates can watch live, answer questions, steer runs, and review agent output together from the web, desktop, or phone.",
-	},
-	{
-		number: "03",
-		title: "Ship from your own stack",
-		body: "Run in git worktrees or isolated sandboxes on machines you control, using your existing model accounts, tools, and integrations.",
-	},
-];
 
 function WaitlistForm() {
 	const [email, setEmail] = useState("");
@@ -137,7 +119,7 @@ function WaitlistDialog({ open, onClose }: { open: boolean; onClose: () => void 
 			>
 				<span aria-hidden="true">×</span>
 			</button>
-			<p className="section-kicker section-kicker-dark">Early access</p>
+			<p className="section-kicker">Early access</p>
 			<h2>Join the waitlist.</h2>
 			<p className="waitlist-dialog-body">
 				We are opening Open Session to a few teams at a time. Leave your email
@@ -151,130 +133,59 @@ function WaitlistDialog({ open, onClose }: { open: boolean; onClose: () => void 
 	);
 }
 
+/** The whole page: header, the pitch, and the product running beside it. */
 function LandingPage() {
-	const [activeFeature, setActiveFeature] = useState(0);
 	const [waitlistOpen, setWaitlistOpen] = useState(false);
-	const featureRefs = useRef<Array<HTMLElement | null>>([]);
-
-	useEffect(() => {
-		const observer = new IntersectionObserver(
-			(entries) => {
-				for (const entry of entries) {
-					if (!entry.isIntersecting) continue;
-					const index = Number((entry.target as HTMLElement).dataset.feature);
-					if (Number.isInteger(index)) setActiveFeature(index);
-				}
-			},
-			{ rootMargin: "-45% 0px -45%", threshold: 0 },
-		);
-		for (const node of featureRefs.current) if (node) observer.observe(node);
-		return () => observer.disconnect();
-	}, []);
 
 	return (
-		<>
-			<section className="hero">
-				<div className="gradient-fallback" aria-hidden="true" />
-				<TellaBackground />
-				<div className="hero-wash" aria-hidden="true" />
+		<section className="hero">
+			<div className="gradient-fallback" aria-hidden="true" />
+			<TellaBackground />
+			<div className="hero-wash" aria-hidden="true" />
 
-				<header className="site-header page-width">
-					<a className="brand" href="#top" aria-label="Open Session home">
-						<Mark />
-						<span>Open Session</span>
-					</a>
-					<nav aria-label="Main navigation">
-						<a href="#why">How it works</a>
+			<header className="site-header page-width">
+				<a className="brand" href="/" aria-label="Open Session home">
+					<Mark />
+					<span>Open Session</span>
+				</a>
+				<nav aria-label="Main navigation">
+					<button
+						type="button"
+						className="nav-cta"
+						onClick={() => setWaitlistOpen(true)}
+					>
+						Join the waitlist
+					</button>
+				</nav>
+			</header>
+
+			<div className="hero-content page-width">
+				<div className="hero-copy">
+					<h1>Run your coding agents. Together.</h1>
+					<p className="hero-description">
+						Run Claude, Codex, and other coding agents side by side. Work in
+						parallel and bring your team into every session.
+					</p>
+					<div className="hero-actions">
 						<button
 							type="button"
-							className="nav-cta"
+							className="button button-primary"
 							onClick={() => setWaitlistOpen(true)}
 						>
 							Join the waitlist
 						</button>
-					</nav>
-				</header>
-
-			<div className="hero-content page-width" id="top">
-				<div className="hero-story">
-					<div className="hero-copy">
-						<h1>Run your coding agents. Together.</h1>
-						<p className="hero-description">
-							Run Claude, Codex, and other coding agents side by side. Work in
-							parallel and bring your team into every session.
-						</p>
-						<div className="hero-actions">
-							<button
-								type="button"
-								className="button button-primary"
-								onClick={() => setWaitlistOpen(true)}
-							>
-								Join the waitlist
-							</button>
-						</div>
-						<div className="proof-line">
-							<span>Use your existing subscriptions</span>
-							<i />
-							<span>Worktrees and sandboxes</span>
-						</div>
-					</div>
-
-					<div className="hero-scroll-notes" id="why">
-						{features.map((feature, index) => (
-							<article
-								className="hero-scroll-note"
-								data-active={activeFeature === index}
-								data-feature={index}
-								key={feature.number}
-								ref={(node) => {
-									featureRefs.current[index] = node;
-								}}
-							>
-								<span>{feature.number}</span>
-								<h2>{feature.title}</h2>
-								<p>{feature.body}</p>
-							</article>
-						))}
 					</div>
 				</div>
 				<div className="hero-stage">
-					<ProductDemo feature={activeFeature} />
+					<ProductDemo />
 				</div>
 			</div>
-		</section>
-
-		<main>
-			<section className="install-section page-width" id="waitlist">
-					<div className="install-card">
-						<div className="install-copy">
-							<p className="section-kicker section-kicker-dark">Early access</p>
-							<h2>Join the waitlist.</h2>
-							<p>
-								We are opening Open Session to a few teams at a time. Leave your
-								email and we will tell you when it is your turn.
-							</p>
-						</div>
-						<WaitlistForm />
-						<p className="waitlist-note">
-							One email when your invite is ready. Nothing else.
-						</p>
-					</div>
-				</section>
-			</main>
-
-			<footer className="site-footer page-width">
-				<a className="brand brand-footer" href="#top">
-					<Mark small />
-					<span>Open Session</span>
-				</a>
-				<p>The workspace for teams building with agents.</p>
-			</footer>
 
 			<WaitlistDialog
 				open={waitlistOpen}
 				onClose={() => setWaitlistOpen(false)}
 			/>
-		</>
+		</section>
 	);
 }
 

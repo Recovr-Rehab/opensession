@@ -1,4 +1,4 @@
-import { copyFileSync, renameSync, rmSync } from "node:fs";
+import { copyFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { buildWebsiteTailwind } from "./website-tailwind";
 
@@ -8,34 +8,59 @@ const outdir = join(root, ".website-dist");
 rmSync(outdir, { recursive: true, force: true });
 await buildWebsiteTailwind(root);
 
-async function buildHtml(source: string, target: string) {
-	const result = await Bun.build({
-		entrypoints: [join(root, "website", source)],
-		outdir,
-		minify: true,
-		splitting: true,
-		sourcemap: "none",
-		publicPath: "/",
-		naming: {
-			entry: "[name]-[hash].[ext]",
-			chunk: "[name]-[hash].[ext]",
-			asset: "[name]-[hash].[ext]",
-		},
-	});
-	if (!result.success) {
-		for (const log of result.logs) console.error(log);
-		process.exit(1);
-	}
-	const html = result.outputs.find((output) => output.path.endsWith(".html"));
-	if (!html) throw new Error(`${source} build produced no HTML entry`);
-	renameSync(html.path, join(outdir, target));
-	return result.outputs;
+const result = await Bun.build({
+	entrypoints: [
+		join(root, "website", "index.html"),
+		join(root, "website", "product-demo.html"),
+	],
+	outdir,
+	minify: true,
+	splitting: true,
+	sourcemap: "none",
+	publicPath: "/",
+	naming: {
+		entry: "[name]-[hash].[ext]",
+		chunk: "[name]-[hash].[ext]",
+		asset: "[name]-[hash].[ext]",
+	},
+});
+if (!result.success) {
+	for (const log of result.logs) console.error(log);
+	process.exit(1);
 }
 
-const outputs = [
-	...(await buildHtml("index.html", "index.html")),
-	...(await buildHtml("product-demo.html", "product-demo.html")),
-];
+const outputs = result.outputs;
+const named = (page: string, suffix: string, kind?: string) =>
+	outputs.find((output) => {
+		const name = output.path.split("/").pop() || "";
+		return (
+			name.startsWith(`${page}-`) &&
+			name.endsWith(suffix) &&
+			(!kind || output.kind === kind)
+		);
+	});
+
+// Bun points a page's <script> at a shared chunk rather than at the page's own
+// entry, so the served product preview loaded a module that only re-exports and
+// the demo app never booted (the landing page sat on its loading state). Wire
+// each page to its real entry-point output, and prove it carries that page's
+// code before writing the stable filename.
+for (const page of ["index", "product-demo"]) {
+	const html = named(page, ".html");
+	const entry = named(page, ".js", "entry-point");
+	if (!html) throw new Error(`${page}.html build produced no HTML entry`);
+	if (!entry) throw new Error(`${page}.html build produced no script entry`);
+	const script = `/${entry.path.split("/").pop()}`;
+	const proof = page === "index" ? "Run your coding agents" : "bks-demo-presence";
+	if (!(await Bun.file(entry.path).text()).includes(proof))
+		throw new Error(`${script} is not the entry for ${page}.html`);
+	const markup = (await Bun.file(html.path).text()).replace(
+		/(<script[^>]*\ssrc=")[^"]+(")/,
+		`$1${script}$2`,
+	);
+	await Bun.write(join(outdir, `${page}.html`), markup);
+	rmSync(html.path, { force: true });
+}
 
 // Keep one stable, crawler-friendly image path in addition to the hashed icon
 // Bun emits for the page itself. A dedicated landscape social card can replace
