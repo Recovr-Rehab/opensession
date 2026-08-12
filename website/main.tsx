@@ -8,10 +8,11 @@ import { ProductDemo } from "./ProductDemo";
 import { TellaBackground } from "./TellaBackground";
 
 /**
- * Where a waitlist signup goes. Until it points at a real collector the form
- * says so instead of pretending an address was stored.
+ * Where a waitlist signup goes: same origin, so whoever serves the site owns
+ * the list. `bun run website:dev` handles it in scripts/website-dev.ts and
+ * appends each address to a markdown file — no third-party collector yet.
  */
-const waitlistEndpoint = "";
+const waitlistEndpoint = "/api/waitlist";
 
 const Agentation = lazy(() =>
 	import("agentation").then((module) => ({ default: module.Agentation })),
@@ -99,8 +100,60 @@ function WaitlistForm() {
 	);
 }
 
+/**
+ * The waitlist as a modal, so every "Join the waitlist" button fills in the
+ * email where it stands instead of scrolling somewhere. A native <dialog>
+ * carries the backdrop, focus trap and Escape for free.
+ */
+function WaitlistDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+	const ref = useRef<HTMLDialogElement>(null);
+
+	useEffect(() => {
+		const dialog = ref.current;
+		if (!dialog) return;
+		if (open && !dialog.open) {
+			dialog.showModal();
+			// Otherwise the dialog's own autofocus lands on the close button.
+			dialog.querySelector("input")?.focus();
+		}
+		if (!open && dialog.open) dialog.close();
+	}, [open]);
+
+	return (
+		<dialog
+			ref={ref}
+			className="waitlist-dialog"
+			onClose={onClose}
+			// A click on the backdrop lands on the dialog element itself.
+			onClick={(event) => {
+				if (event.target === ref.current) onClose();
+			}}
+		>
+			<button
+				type="button"
+				className="waitlist-dialog-close"
+				onClick={onClose}
+				aria-label="Close"
+			>
+				<span aria-hidden="true">×</span>
+			</button>
+			<p className="section-kicker section-kicker-dark">Early access</p>
+			<h2>Join the waitlist.</h2>
+			<p className="waitlist-dialog-body">
+				We are opening Open Session to a few teams at a time. Leave your email
+				and we will tell you when it is your turn.
+			</p>
+			<WaitlistForm />
+			<p className="waitlist-note">
+				One email when your invite is ready. Nothing else.
+			</p>
+		</dialog>
+	);
+}
+
 function LandingPage() {
 	const [activeFeature, setActiveFeature] = useState(0);
+	const [waitlistOpen, setWaitlistOpen] = useState(false);
 	const featureRefs = useRef<Array<HTMLElement | null>>([]);
 
 	useEffect(() => {
@@ -132,9 +185,13 @@ function LandingPage() {
 					</a>
 					<nav aria-label="Main navigation">
 						<a href="#why">How it works</a>
-						<a className="nav-cta" href="#waitlist">
+						<button
+							type="button"
+							className="nav-cta"
+							onClick={() => setWaitlistOpen(true)}
+						>
 							Join the waitlist
-						</a>
+						</button>
 					</nav>
 				</header>
 
@@ -147,9 +204,13 @@ function LandingPage() {
 							parallel and bring your team into every session.
 						</p>
 						<div className="hero-actions">
-							<a className="button button-primary" href="#waitlist">
+							<button
+								type="button"
+								className="button button-primary"
+								onClick={() => setWaitlistOpen(true)}
+							>
 								Join the waitlist
-							</a>
+							</button>
 						</div>
 						<div className="proof-line">
 							<span>Use your existing subscriptions</span>
@@ -208,6 +269,11 @@ function LandingPage() {
 				</a>
 				<p>The workspace for teams building with agents.</p>
 			</footer>
+
+			<WaitlistDialog
+				open={waitlistOpen}
+				onClose={() => setWaitlistOpen(false)}
+			/>
 		</>
 	);
 }

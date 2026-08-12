@@ -631,6 +631,79 @@ button:focus-visible {
 	font-weight: 600;
 }
 
+/* Same card, floated over the page: every CTA opens this instead of scrolling. */
+.waitlist-dialog {
+	width: min(100% - 32px, 520px);
+	padding: clamp(28px, 5vw, 44px);
+	border: 0;
+	border-radius: 26px;
+	background:
+		radial-gradient(circle at 88% 6%, rgba(117, 102, 198, 0.22), transparent 42%),
+		radial-gradient(circle at 6% 96%, rgba(70, 156, 180, 0.16), transparent 44%),
+		#18191c;
+	box-shadow: 0 30px 80px rgba(16, 18, 22, 0.45);
+	color: #f5f5f4;
+}
+
+.waitlist-dialog::backdrop {
+	background: rgba(16, 18, 22, 0.52);
+	backdrop-filter: blur(6px);
+}
+
+.waitlist-dialog .section-kicker {
+	margin-bottom: 12px;
+}
+
+.waitlist-dialog h2 {
+	margin: 0;
+	font-size: clamp(30px, 4vw, 40px);
+	font-weight: 600;
+	letter-spacing: -0.03em;
+	line-height: 1.05;
+}
+
+.waitlist-dialog-body {
+	margin: 14px 0 0;
+	color: #979aa3;
+	font-size: 15px;
+	line-height: 1.6;
+}
+
+.waitlist-dialog .waitlist-form,
+.waitlist-dialog .waitlist-done {
+	grid-column: auto;
+	max-width: none;
+	margin-top: 26px;
+}
+
+.waitlist-dialog .waitlist-note {
+	grid-column: auto;
+	margin-top: 16px;
+}
+
+.waitlist-dialog-close {
+	display: grid;
+	position: absolute;
+	top: 14px;
+	right: 14px;
+	width: 34px;
+	height: 34px;
+	border: 0;
+	border-radius: 50%;
+	background: none;
+	color: #83858b;
+	cursor: pointer;
+	font-size: 22px;
+	line-height: 1;
+	place-items: center;
+	transition: background-color 160ms ease, color 160ms ease;
+}
+
+.waitlist-dialog-close:hover {
+	background: rgba(255, 255, 255, 0.07);
+	color: #e7e8ea;
+}
+
 .site-footer {
 	display: grid;
 	grid-template-columns: auto 1fr;
@@ -864,6 +937,14 @@ button:focus-visible {
 }
 
 @media (prefers-reduced-motion: no-preference) {
+	.waitlist-dialog[open] {
+		animation: dialog-enter 240ms cubic-bezier(0.23, 1, 0.32, 1);
+	}
+
+	.waitlist-dialog[open]::backdrop {
+		animation: backdrop-enter 240ms ease;
+	}
+
 	.hero-copy > * {
 		animation: enter 700ms cubic-bezier(0.23, 1, 0.32, 1) both;
 	}
@@ -881,6 +962,14 @@ button:focus-visible {
 
 @keyframes preview-enter {
 	from { opacity: 0; transform: translateY(22px) scale(0.985); }
+}
+
+@keyframes dialog-enter {
+	from { opacity: 0; transform: translateY(10px) scale(0.98); }
+}
+
+@keyframes backdrop-enter {
+	from { opacity: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
