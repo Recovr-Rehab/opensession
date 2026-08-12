@@ -70,6 +70,9 @@ export function useRowCtxMenu(onOpen?: () => void) {
 		close: () => setCtxMenu(null),
 		onContextMenu: (e: React.MouseEvent) => {
 			e.preventDefault();
+			// The sidebar's background carries a menu of its own, so a row's menu
+			// has to claim the event rather than let both open.
+			e.stopPropagation();
 			onOpen?.();
 			setCtxMenu({ x: e.clientX, y: e.clientY });
 		},

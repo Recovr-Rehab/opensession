@@ -116,6 +116,17 @@ export function SidebarCtxMenu({
 				{entries.map((entry, i) => {
 					if (entry.kind === "sep")
 						return <div key={i} style={CTX_SEP_STYLE} />;
+					if (entry.kind === "label")
+						return (
+							// Same heading as a Base UI menu group's label, so a
+							// grouped right-click menu reads like every other menu.
+							<div
+								key={i}
+								className="px-2 pt-1 pb-1 text-meta font-semibold tracking-[-0.01em] text-faint"
+							>
+								{entry.label}
+							</div>
+						);
 					if (entry.kind === "status") {
 						return (
 							<button
@@ -218,7 +229,7 @@ export function SidebarCtxMenu({
 							onMouseEnter={scheduleClose}
 							onClick={() => {
 								entry.onClick();
-								onClose();
+								if (!entry.keepOpen) onClose();
 							}}
 						/>
 					);

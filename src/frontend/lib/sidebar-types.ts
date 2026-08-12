@@ -201,9 +201,16 @@ export type CtxEntry =
 			label: string;
 			shortcut?: string;
 			danger?: boolean;
+			/** Leave the menu open after the click. For rows that toggle
+			 * something you often set more than one of (what shows in the
+			 * sidebar), where closing after each one turns four toggles into
+			 * four right-clicks. */
+			keepOpen?: boolean;
 			onClick: () => void;
 	  }
 	| { kind: "sep" }
+	/** Heading over the group of entries that follows it. */
+	| { kind: "label"; label: string }
 	| {
 			kind: "status";
 			current: MineStatus | null;

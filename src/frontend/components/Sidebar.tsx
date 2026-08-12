@@ -632,6 +632,27 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		};
 	}, [workspaceMenu]);
 
+	// Right-click menu on the sidebar itself — a band heading, the gap between
+	// rows, the empty space under the list — listing every tool and source so a
+	// hidden one can come back. Rows own their own menus and stop the event
+	// before it gets here. Without this, hiding the last tool takes the Tools
+	// band and its ••• menu off screen with it, and Settings is the only way
+	// back.
+	const [sidebarMenu, setSidebarMenu] = useState<{
+		x: number;
+		y: number;
+	} | null>(null);
+	useEffect(() => {
+		if (!sidebarMenu) return;
+		const close = () => setSidebarMenu(null);
+		window.addEventListener("click", close);
+		window.addEventListener("scroll", close, true);
+		return () => {
+			window.removeEventListener("click", close);
+			window.removeEventListener("scroll", close, true);
+		};
+	}, [sidebarMenu]);
+
 	// Catch-up badge: how many of *my* unread workspaces the deck would walk
 	// through (distinct workspace groups, same grouping the deck uses) — so the
 	// count matches the "N Left" it opens on.
@@ -2298,6 +2319,41 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 
 	const setToolVisible = setSidebarToolVisible;
 
+	// What the sidebar's own right-click menu offers: every tool and every
+	// source, ticked when it's showing. Hidden entries are the point — this is
+	// the only place a tool or source that took itself off the sidebar can be
+	// put back without going to Settings. The rows stay open on click so
+	// turning three of them on is one gesture, not three.
+	const sidebarMenuEntries: CtxEntry[] = [
+		{ kind: "label", label: "Tools" },
+		...tools.map((tool): CtxEntry => {
+			const shown = !hiddenTools.has(tool.id);
+			return {
+				kind: "item",
+				icon: shown ? <IconCheck size={20} /> : <span />,
+				label: tool.label,
+				keepOpen: true,
+				onClick: () => setToolVisible(tool.id, !shown),
+			};
+		}),
+		...(feeds.length > 0
+			? ([
+					{ kind: "sep" },
+					{ kind: "label", label: "Sources" },
+					...feeds.map((feed): CtxEntry => {
+						const shown = !hiddenFeeds.has(feed.id);
+						return {
+							kind: "item",
+							icon: shown ? <IconCheck size={20} /> : <span />,
+							label: feed.title,
+							keepOpen: true,
+							onClick: () => setSidebarFeedVisible(feed.id, !shown),
+						};
+					}),
+				] as CtxEntry[])
+			: []),
+	];
+
 	// Archived is a destination, not another live workspace group. Keeping it to
 	// one row means the sidebar never needs the archive index or its inline rows.
 	// The shared rail centres its 20px glyph on the same line as the 18px repo tiles.
@@ -2510,6 +2566,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					}}
 					onContextMenu={(e) => {
 					e.preventDefault();
+					// The sidebar's background carries a menu of its own, so this
+					// row's has to claim the event rather than let both open.
+					e.stopPropagation();
 					// On touch this is the long-press callout: our long-press already
 					// opened the menu, so don't stack a second one (or the native
 					// text-selection callout) on top of it.
@@ -3643,6 +3702,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				if (!event.currentTarget.contains(event.relatedTarget as Node | null))
 					stopRepoAutoScroll();
 			}}
+			onContextMenu={(event) => {
+				// Only the background reaches this: every row stops the event on
+				// its way up to open its own menu. Phones are left alone — the
+				// gesture there is a long-press, which the row sheets own.
+				if (isPhone) return;
+				event.preventDefault();
+				setSidebarMenu({ x: event.clientX, y: event.clientY });
+			}}
 		>
 			{/* Someone else's lens is easy to forget you're in — the lanes look
 			    exactly like yours, just with unfamiliar work in them. So when the
@@ -4124,6 +4191,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					currentUser={currentUser}
 					onChange={setFilter}
 					onClose={() => setFilterOpen(false)}
+				/>
+			)}
+
+			{sidebarMenu && (
+				<SidebarCtxMenu
+					x={sidebarMenu.x}
+					y={sidebarMenu.y}
+					entries={sidebarMenuEntries}
+					onClose={() => setSidebarMenu(null)}
 				/>
 			)}
 

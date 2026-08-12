@@ -418,6 +418,9 @@ export function SidebarItem({
 						setDragging(false);
 					}}
 					onContextMenu={(e) => {
+						// The sidebar's background carries a menu of its own, so this
+						// row's has to claim the event rather than let both open.
+						e.stopPropagation();
 						// On touch this is the long-press callout: the action sheet
 						// owns that gesture, so suppress the native text-selection
 						// callout rather than stacking both.
