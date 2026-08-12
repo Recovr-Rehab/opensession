@@ -360,14 +360,19 @@ export function WalkthroughCard({
 															)
 														}
 															/>
-															<span
-																className={cn(
-																	"pointer-events-none absolute left-2 top-2 rounded-full px-2 py-0.5 text-[11px] font-semibold leading-4 shadow-[0_1px_2px_oklch(0_0_0_/_0.12)]",
-																	side === "before"
-																		? "bg-red-soft text-red"
-																		: "bg-green-soft text-green",
-																)}
-															>
+															{/* The label sits ON the picture, so it carries
+															    its own surface: a tinted wash let a white
+															    screenshot through and left green text on
+															    near-white. Frosted glass reads over any
+															    screenshot, in either theme, and the dot keeps
+															    before and after apart at a glance. */}
+															<span className="pointer-events-none absolute left-2 top-2 inline-flex items-center gap-1.5 rounded-full bg-popup-glass py-0.5 pl-1.5 pr-2 text-[11px] font-semibold leading-4 text-fg [--smooth-ring-color:var(--popup-ring)] [backdrop-filter:var(--popup-blur)] smooth-shadow-ring-sm">
+																<span
+																	className={cn(
+																		"size-1.5 rounded-full",
+																		side === "before" ? "bg-red" : "bg-green",
+																	)}
+																/>
 																{side === "before" ? "Before" : "After"}
 															</span>
 														</button>
@@ -469,14 +474,19 @@ export function WalkthroughCard({
 															alt={`${shot.caption || "change"} · ${side}`}
 															loading="lazy"
 															/>
-															<span
-																className={cn(
-																	"pointer-events-none absolute left-2 top-2 rounded-full px-2 py-0.5 text-[11px] font-semibold leading-4 shadow-[0_1px_2px_oklch(0_0_0_/_0.12)]",
-																	side === "before"
-																		? "bg-red-soft text-red"
-																		: "bg-green-soft text-green",
-																)}
-															>
+															{/* The label sits ON the picture, so it carries
+															    its own surface: a tinted wash let a white
+															    screenshot through and left green text on
+															    near-white. Frosted glass reads over any
+															    screenshot, in either theme, and the dot keeps
+															    before and after apart at a glance. */}
+															<span className="pointer-events-none absolute left-2 top-2 inline-flex items-center gap-1.5 rounded-full bg-popup-glass py-0.5 pl-1.5 pr-2 text-[11px] font-semibold leading-4 text-fg [--smooth-ring-color:var(--popup-ring)] [backdrop-filter:var(--popup-blur)] smooth-shadow-ring-sm">
+																<span
+																	className={cn(
+																		"size-1.5 rounded-full",
+																		side === "before" ? "bg-red" : "bg-green",
+																	)}
+																/>
 																{side === "before" ? "Before" : "After"}
 															</span>
 														</button>
