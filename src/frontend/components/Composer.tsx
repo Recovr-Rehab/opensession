@@ -764,6 +764,13 @@ export function Composer({
   }
 
   const effectiveModel = model || defaultModel;
+  const noteSurface = tintedSurface("var(--yellow-tint)", 10, 6, 45);
+  const surfaceStyle = {
+    ...(askMode ? tintedSurface("var(--green)", 7, 4, 30) : {}),
+    "--composer-note-bg": noteSurface.backgroundColor,
+    "--composer-note-image": noteSurface.backgroundImage,
+    "--composer-note-border": noteSurface.borderColor,
+  } as React.CSSProperties;
 
   return (
     <div className="mx-auto w-full max-w-[calc(var(--session-col)+40px)]">
@@ -804,15 +811,11 @@ export function Composer({
           minimized && "composer-min",
           composerBox,
           minimized ? composerBoxMinimized : composerBoxExpanded,
+          "isolate before:pointer-events-none before:absolute before:inset-0 before:z-0 before:rounded-[inherit] before:border before:border-[var(--composer-note-border)] before:bg-[var(--composer-note-bg)] before:[background-image:var(--composer-note-image)] before:opacity-0 before:transition-opacity before:duration-150 before:ease-[cubic-bezier(0.32,0.72,0,1)] [&>*]:relative [&>*]:z-[1]",
+          noteMode && "before:opacity-100",
           disabled && "opacity-60",
         )}
-        style={
-          noteMode
-            ? tintedSurface("var(--yellow-tint)", 10, 6, 45)
-            : askMode
-              ? tintedSurface("var(--green)", 7, 4, 30)
-              : undefined
-        }
+        style={surfaceStyle}
         onDrop={handleDrop}
         onDragOver={(e) => canAttach && e.preventDefault()}
       >
