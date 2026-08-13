@@ -73,7 +73,6 @@ import { Reports } from "./components/Reports";
 import { Analytics } from "./components/Analytics";
 import { Tasks } from "./components/Tasks";
 import { UserGate, getCurrentUser, useAuthStatus, useCurrentUser } from "./components/UserPicker";
-import { fetchTeammateOnboardingStatus, type TeammateOnboardingStatus } from "./lib/api";
 import { PreviewWait, matchPreviewWaitRoute } from "./components/PreviewWait";
 import { SettingsButton } from "./components/SettingsButton";
 import { TitleBar } from "./components/TitleBar";
@@ -586,18 +585,6 @@ export function App(
 	const currentUser = useCurrentUser();
 	const localMode = auth?.local === true;
 	const { connected, send, addHandler } = useWebSocket();
-	const [onboardingStatus, setOnboardingStatus] = useState<TeammateOnboardingStatus | null>(null);
-	const onboardingRequestRef = useRef(0);
-	useEffect(() => {
-		const request = ++onboardingRequestRef.current;
-		void fetchTeammateOnboardingStatus(currentUser, auth?.local === true)
-			.then((status) => {
-				if (request === onboardingRequestRef.current) setOnboardingStatus(status);
-			})
-			.catch(() => {
-				if (request === onboardingRequestRef.current) setOnboardingStatus(null);
-			});
-	}, [auth?.local, currentUser, sessions.length]);
 	const sessionsRef = useRef(sessions);
 	sessionsRef.current = sessions;
 	type PendingCreateDraft = {
@@ -1054,21 +1041,6 @@ export function App(
 	const openPrefilledSession = React.useCallback((prefill: NewSessionPrefill) => {
 		setPalette({ open: true, ...prefill });
 	}, []);
-	const onboardingOpenedForRef = useRef(new Set<string>());
-	useEffect(() => {
-		if (
-			loading ||
-			route.view !== "home" ||
-			palette.open ||
-			onboardingStatus?.hasOwnSessions !== false ||
-			onboardingOpenedForRef.current.has(currentUser)
-		) return;
-		onboardingOpenedForRef.current.add(currentUser);
-		openPrefilledSession({
-			mode: "code",
-			repo: onboardingStatus.preparedRepo?.id,
-		});
-	}, [currentUser, loading, onboardingStatus, openPrefilledSession, palette.open, route.view]);
 
 	// A "new tab" while a session is open is a *new session in that same session*, not
 	// a whole new session — so it must NOT pop the new-session palette. It's a

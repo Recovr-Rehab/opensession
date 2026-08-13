@@ -26,7 +26,6 @@ const CLOUD_TARGET_GET_ROUTES = new Set([
 	"/api/repos",
 	"/api/claude-accounts",
 	"/api/codex-accounts",
-	"/api/onboarding/status",
 ]);
 
 type Client = ServerWebSocket<WSClientData>;
