@@ -9,7 +9,7 @@ import {
 	WALKTHROUGH_LABEL_TONE,
 } from "../lib/walkthrough-label";
 import { cn } from "../ui/cn";
-import { duration, ease } from "../ui/motion";
+import { ease } from "../ui/motion";
 import { IconChevronDown, IconPlay, IconPlayRectangle } from "./icons";
 import { MarkdownBody, useMarkdownRepo } from "./MarkdownBody";
 import { openLightbox, type LightboxItem } from "./MediaLightbox";
@@ -402,26 +402,21 @@ export function WalkthroughCard({
 				{expanded && (
 					<motion.div
 						key="walkthrough-body"
-						initial={
+						initial={{ height: 0, opacity: 0 }}
+						animate={{ height: "auto", opacity: 1 }}
+						exit={{ height: 0, opacity: 0 }}
+						transition={
 							reduceMotion
-								? { opacity: 0 }
-								: { height: 0, opacity: 0, transform: "translateY(-6px)" }
+								? { duration: 0 }
+								: {
+									// Height carries the spatial change. A critically damped
+									// spring makes a quick reversal continue from the live size
+									// instead of restarting a fixed tween. Opacity lands sooner
+									// so the content feels attached to the opening surface.
+									height: { type: "spring", duration: 0.36, bounce: 0 },
+									opacity: { type: "tween", duration: 0.2, ease },
+								}
 						}
-						animate={
-							reduceMotion
-								? { opacity: 1 }
-								: { height: "auto", opacity: 1, transform: "translateY(0px)" }
-						}
-						exit={
-							reduceMotion
-								? { opacity: 0 }
-								: { height: 0, opacity: 0, transform: "translateY(-4px)" }
-						}
-						transition={{
-							type: "tween",
-							duration: reduceMotion ? 0 : duration.large,
-							ease,
-						}}
 						className={session ? "overflow-hidden" : undefined}
 					>
 						<div
