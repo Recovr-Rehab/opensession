@@ -48,6 +48,14 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     var prIsDraft: Bool?
     var prReviewDecision: String?
     var prChecks: PrChecksSummary?
+    /// How big the change is. The sessions list already carries these (the web
+    /// Reviews table reads them off the same rows), so a row can size its own
+    /// diff without fetching the PR.
+    var prAdditions: Int?
+    var prDeletions: Int?
+    var prChangedFiles: Int?
+    /// Person keys ("kent") of teammates with a pending review request.
+    var prReviewRequested: [String]?
     /// The last automated review of this PR, when one has run. Feeds the
     /// transcript's review-loop verdict (`ReviewLoopResult`).
     var prOsReview: OsReviewSummary?

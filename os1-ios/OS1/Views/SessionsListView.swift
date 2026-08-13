@@ -1440,11 +1440,44 @@ struct SessionsListView: View {
         .swipeActions(edge: .leading) {
             pinButton(workspace, filled: true).tint(OS1VisualStyle.yellow)
         }
-        .contextMenu {
+        // A row with a pull request answers "how big, and is it green?" in a
+        // preview above the menu: the phone's shape of the web sidebar's
+        // hover card (see SessionRowPreview). A row without one does not get a
+        // preview at all: everything a card could add that the row does not
+        // already show (model, mode, branch, who started it) is reference
+        // detail rather than a reason to pick a menu item, and Worktree
+        // details in the very menu underneath opens all of it. A thin card is
+        // worse than none: it costs the gesture a beat and answers nothing.
+        .modifier(SessionRowMenu(workspace: workspace) {
             if canArchive { workspaceMenu(workspace) }
-        }
+        })
         #endif
     }
+
+    #if os(iOS)
+    /// Attaches the row's context menu, with the PR preview when there is a PR
+    /// to preview. Two `contextMenu` overloads produce two different view
+    /// types, so the choice lives in a modifier rather than branching the row.
+    private struct SessionRowMenu<Items: View>: ViewModifier {
+        let workspace: SidebarWorkspace
+        @ViewBuilder let items: () -> Items
+
+        func body(content: Content) -> some View {
+            if let session = workspace.pullRequestSession,
+               session.pullRequestContextState != nil {
+                content.contextMenu(menuItems: items) {
+                    SessionRowPreview(
+                        title: workspace.title,
+                        repo: RepoTile.label(for: session.effectiveRepo),
+                        session: session
+                    )
+                }
+            } else {
+                content.contextMenu(menuItems: items)
+            }
+        }
+    }
+    #endif
 
     #if os(iOS)
     /// Leading swipe (and context menu) action. Non-destructive: the row stays

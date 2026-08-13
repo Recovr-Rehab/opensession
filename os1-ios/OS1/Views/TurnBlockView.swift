@@ -699,13 +699,17 @@ struct LineStatsView: View {
     let stats: ToolLineStats
 
     var body: some View {
+        // `verbatim`, because the interpolating initializer takes a
+        // LocalizedStringKey and formats an Int through the current locale:
+        // 2933 changed lines came out as "+2.933" on a Dutch device, which
+        // reads as a decimal rather than a count.
         HStack(spacing: 4) {
             if stats.additions > 0 {
-                Text("+\(stats.additions)")
+                Text(verbatim: "+\(stats.additions)")
                     .foregroundStyle(OS1VisualStyle.green)
             }
             if stats.deletions > 0 {
-                Text("−\(stats.deletions)")
+                Text(verbatim: "−\(stats.deletions)")
                     .foregroundStyle(OS1VisualStyle.red)
             }
         }
