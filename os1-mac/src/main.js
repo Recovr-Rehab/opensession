@@ -52,6 +52,13 @@ let localSupervisor = null;
 let localPageLoaded = false;
 let localRecoveryTimer = null;
 let windowReady = false;
+// Chromium keeps a zoom level per origin for the life of the process only, and
+// the View menu's zoom roles change it without any event we can subscribe to
+// (zoom-changed only covers pinch/wheel). So the level is mirrored here, read
+// back whenever window state is written, and re-applied after every load: on a
+// scaled display the app is unreadable at 100% and the setting has to survive
+// both an in-app navigation and a relaunch.
+let zoomLevel = 0;
 
 function loadShellSettings() {
   try {
@@ -229,10 +236,22 @@ function loadWindowState() {
   }
 }
 
+// A corrupt or hand-edited state file must not be able to leave the app at a
+// zoom nobody can read their way out of.
+function clampZoom(value) {
+  return Number.isFinite(value) ? Math.min(4, Math.max(-3, value)) : 0;
+}
+
 function saveWindowState() {
   if (!win || win.isDestroyed()) return;
   try {
-    fs.writeFileSync(stateFile(), JSON.stringify(win.getNormalBounds()));
+    if (!win.webContents.isDestroyed()) {
+      zoomLevel = win.webContents.getZoomLevel();
+    }
+  } catch {}
+  try {
+    const state = { ...win.getNormalBounds(), zoomLevel: clampZoom(zoomLevel) };
+    fs.writeFileSync(stateFile(), JSON.stringify(state));
   } catch {}
 }
 
@@ -403,7 +422,8 @@ function handleLocalServerState({ state, detail, logFile }) {
 }
 
 function createWindow(initialStatus = null) {
-  const state = loadWindowState();
+  const { zoomLevel: savedZoom, ...state } = loadWindowState();
+  zoomLevel = clampZoom(savedZoom);
   windowReady = false;
   win = new BrowserWindow({
     ...state,
@@ -441,6 +461,21 @@ function createWindow(initialStatus = null) {
     windowReady = true;
     createdWindow.show();
     createdWindow.focus();
+  });
+
+  // Chromium drops the zoom level on a cross-origin load (the status page is
+  // one), so it is restored per load rather than once at startup.
+  win.webContents.on("did-finish-load", () => {
+    if (createdWindow.isDestroyed() || win !== createdWindow) return;
+    createdWindow.webContents.setZoomLevel(clampZoom(zoomLevel));
+  });
+  // Pinch and wheel zoom land in the renderer, so the level has to be read back
+  // a tick later; the View menu's roles are picked up by saveWindowState.
+  win.webContents.on("zoom-changed", () => {
+    setTimeout(() => {
+      if (!win || win.isDestroyed() || win !== createdWindow) return;
+      zoomLevel = clampZoom(win.webContents.getZoomLevel());
+    }, 0);
   });
 
   win.on("close", (e) => {
