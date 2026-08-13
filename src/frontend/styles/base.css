@@ -1627,6 +1627,10 @@ a.pr-ref {
 		background var(--dur-micro) var(--ease),
 		scale var(--dur-micro) var(--ease);
 }
+.pr-ref-label {
+	display: inline-block;
+	transform: translateY(2px);
+}
 a.pr-ref:hover {
 	background: var(--hover-strong);
 	/* the token lights up instead — an underline reads as a strike through
@@ -1643,17 +1647,15 @@ a.pr-ref:focus-visible {
 }
 .pr-ref-icon {
 	display: inline-grid;
-	width: 15px;
-	height: 15px;
+	width: 18px;
+	height: 18px;
 	flex: none;
 	place-items: center;
 	color: var(--text-dim);
-	/* Onto the cap band, same 1px as the session chip above. */
-	transform: translateY(-1px);
 }
 .pr-ref-icon svg {
-	width: 15px;
-	height: 15px;
+	width: 18px;
+	height: 18px;
 	stroke: currentColor;
 	stroke-width: 1.5;
 	stroke-linecap: round;
