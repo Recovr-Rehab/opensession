@@ -86,6 +86,26 @@ describe("TranscriptBlocks shipped change action", () => {
 		expect(html).not.toContain("rounded-xl bg-panel p-4");
 	});
 
+	test("finds the PR in the short merge wording too", () => {
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				entries={entries.map((e) =>
+					e.id === "merged-notice"
+						? { ...e, content: "[GitHub] PR #5606 merged by Kent. Deploying. No action needed." }
+						: e,
+				)}
+				slackShare={{
+					prNumber: 5606,
+					sessionId: "session-1",
+					defaultMessage: "We updated the toggle style in Tella.",
+					status: "idle",
+					onShare: () => {},
+				}}
+			/>,
+		);
+		expect(html).toContain("Send to Slack");
+	});
+
 	test("keeps image attachment explicit when no screenshot exists", () => {
 		const html = renderToStaticMarkup(
 			<TranscriptBlocks

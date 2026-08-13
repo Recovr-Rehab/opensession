@@ -144,11 +144,13 @@ export async function notifyMergedPrSessions(payload: any): Promise<void> {
     base === repo.defaultBranch &&
     !!pr.merge_commit_sha;
 
+  // One line. The session already knows which PR it owns, and its panel shows
+  // the title, so the number and who merged it is the whole news.
   const message =
-    `PR #${prNumber} “${title}” was merged into ${base} by ${mergedBy}.` +
-    (trackDeploy
-      ? " Deployment is in progress; another update will follow."
-      : "") +
+    `PR #${prNumber} merged` +
+    (repo && base === repo.defaultBranch ? "" : ` into ${base}`) +
+    ` by ${mergedBy}.` +
+    (trackDeploy ? " Deploying." : "") +
     " No action needed.";
 
   const sessionIds = guardedSessionNotificationIds(
@@ -191,8 +193,8 @@ export async function handleDeployWorkflowRun(payload: any): Promise<void> {
 
   const success = run.conclusion === "success";
   const message = success
-    ? `Deployment finished for PR #${entry.prNumber} “${entry.title}”. The merge is live. No action needed.`
-    : `Deployment ${run.conclusion || "failed"} for PR #${entry.prNumber} “${entry.title}”: ${run.html_url}`;
+    ? `PR #${entry.prNumber} deployed. No action needed.`
+    : `Deploy ${run.conclusion || "failed"} for PR #${entry.prNumber}: ${run.html_url}`;
 
   const sessionIds = guardedSessionNotificationIds(entry.sessionIds, "deploy_completed", {
     pr_number: entry.prNumber,

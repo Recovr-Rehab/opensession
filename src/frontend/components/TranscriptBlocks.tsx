@@ -112,7 +112,9 @@ function groupReviewLoops(blocks: RenderBlock[]): RenderBlock[] {
 
 function mergedNoticePrNumber(entry: TranscriptEntry): number | null {
 	if (entry.notice?.kind !== "system") return null;
-	const match = entry.content.match(/\bPR #(\d+).*\bwas merged into\b/i);
+	// Both merge wordings session-notify.ts has shipped: today's
+	// "PR #12 merged by …", and the older "PR #12 “title” was merged into main".
+	const match = entry.content.match(/\bPR #(\d+)\b(?:.*\bwas)? merged\b/i);
 	return match ? Number(match[1]) : null;
 }
 

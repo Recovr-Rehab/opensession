@@ -278,18 +278,27 @@ describe("classifyEntry", () => {
 		expect(merged.notice?.title.startsWith("This session's")).toBe(true);
 		expect(merged.content).not.toContain("🔀");
 
-		// Current wording (session-notify.ts, no emoji) classifies the same way.
-		expect(
-			classifyEntry(
-				entry({ content: '[GitHub] PR #4921 "Collapse" was merged into main by Kent.' }),
-			).notice,
-		).toMatchObject({ kind: "system", icon: "merge" });
+		// Every wording session-notify.ts has shipped classifies the same way.
+		for (const content of [
+			'[GitHub] PR #4921 "Collapse" was merged into main by Kent.',
+			"[GitHub] PR #4921 merged by Kent. Deploying. No action needed.",
+			"[GitHub] PR #4921 merged into release by Kent. No action needed.",
+		]) {
+			expect(classifyEntry(entry({ content })).notice).toMatchObject({
+				kind: "system",
+				icon: "merge",
+			});
+		}
 
 		const deployed = classifyEntry(
 			entry({ content: "[GitHub] 🚀 Deploy finished for PR #4921. The merge is live." }),
 		);
 		expect(deployed.notice).toMatchObject({ icon: "deploy" });
 		expect(deployed.notice?.title.startsWith("Deploy finished")).toBe(true);
+		expect(
+			classifyEntry(entry({ content: "[GitHub] PR #4921 deployed. No action needed." }))
+				.notice,
+		).toMatchObject({ icon: "deploy" });
 	});
 
 	it("strips a workflow notice's emoji and keeps the outcome in tone and icon", () => {

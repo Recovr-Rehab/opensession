@@ -104,10 +104,13 @@ export function noticeTone(content: string): NoticeTone {
  */
 export function noticeIcon(content: string): NoticeIcon | undefined {
   const text = stripNoticeGlyph(content || "").toLowerCase();
-  // session-notify.ts, both merge wordings ("was merged into", and the longer
-  // "was just merged into" it used before 2026-08-11).
-  if (/\bmerged into\b/.test(text)) return "merge";
-  if (/^deploy(ment)?\b/.test(text)) return "deploy";
+  // session-notify.ts, every merge wording it has shipped: the current
+  // "PR #12 merged by …", and the "was (just) merged into main" forms that
+  // preceded it, which thousands of transcripts still hold.
+  if (/^pr #\d+ merged\b/.test(text) || /\bmerged into\b/.test(text))
+    return "merge";
+  if (/^pr #\d+ deployed\b/.test(text) || /^deploy(ment)?\b/.test(text))
+    return "deploy";
   if (/^workflow "[^"]*" finished\b/.test(text)) return "done";
   return undefined;
 }
