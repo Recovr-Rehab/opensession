@@ -1448,8 +1448,12 @@ a.asset-ref {
 	max-width: 100%;
 	align-items: center;
 	gap: 4px;
-	vertical-align: -0.25em;
-	padding: 2px 9px 2px 6px;
+	vertical-align: -0.35em;
+	/* Its own line box, like the two chips below. Without this the paragraph's
+	   24px lands inside the pill and pads it out to 28px tall, half of that
+	   under the baseline. */
+	line-height: 1.3;
+	padding: 4px 9px 1px 6px;
 	border: 0;
 	border-radius: calc(9px * var(--rf)); corner-shape: var(--cs);
 	background: var(--accent-soft);
@@ -1472,15 +1476,17 @@ a.asset-ref:focus-visible {
 }
 .asset-ref-icon {
 	display: inline-grid;
-	width: 20px;
-	height: 20px;
+	width: 18px;
+	height: 18px;
 	flex: none;
 	place-items: center;
 	color: var(--accent-ink);
+	/* Onto the cap band, same 1px as the two chips below. */
+	transform: translateY(-1px);
 }
 .asset-ref-icon svg {
-	width: 20px;
-	height: 20px;
+	width: 18px;
+	height: 18px;
 	stroke: currentColor;
 	stroke-width: 1.5;
 	stroke-linecap: round;
@@ -1516,7 +1522,12 @@ a.asset-ref:focus-visible {
 	display: inline-flex;
 	align-items: center;
 	gap: 4px;
-	vertical-align: -0.2em;
+	/* Sits the chip's own words on the sentence's baseline. An inline-flex
+	   takes its baseline from the glyph box, which hangs lower than the label
+	   inside it, so the stock -0.2em left these words riding 1.5px over the
+	   ones around them. Same correction as the PR chip below, in a bigger
+	   number because this chip's em is 0.95 of the body's. */
+	vertical-align: -0.43em;
 	/* Never wider than the bubble it sits in; the label ellipsizes instead of
 	   pushing the chip past the edge. */
 	max-width: 100%;
@@ -1557,8 +1568,8 @@ a.asset-ref:focus-visible {
 }
 .session-link-icon {
 	display: inline-grid;
-	width: 15px;
-	height: 15px;
+	width: 18px;
+	height: 18px;
 	flex: none;
 	place-items: center;
 	color: var(--text-dim);
@@ -1568,8 +1579,8 @@ a.asset-ref:focus-visible {
 	transform: translateY(-1px);
 }
 .session-link-icon svg {
-	width: 15px;
-	height: 15px;
+	width: 18px;
+	height: 18px;
 	stroke: currentColor;
 	stroke-width: 1.5;
 	stroke-linecap: round;

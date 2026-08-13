@@ -266,7 +266,7 @@ function shortSessionId(id: string): string {
 }
 
 // The chip's leading glyph: a conversation, because that is what opens when
-// you click it. Same 24-grid, 1.5 stroke and 15px box as the PR chip's branch
+// you click it. Same 24-grid, 1.5 stroke and 18px box as the PR chip's branch
 // glyph, so the two chips sit on one line without either looking heavier.
 const SESSION_CHIP_ICON =
   `<span class="session-link-icon" aria-hidden="true">` +
