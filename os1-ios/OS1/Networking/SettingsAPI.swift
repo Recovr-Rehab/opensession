@@ -395,6 +395,14 @@ enum SettingsAPI {
         return try await request("/api/connections/plain-router", method: "PUT", body: body)
     }
 
+    // MARK: - Runners
+
+    /// The machines this instance trusts, for the read-only Runners pane. The
+    /// server filters the list to the ones the signed-in person may see.
+    static func runners() async throws -> WorkspaceRunnersResponse {
+        try await request("/api/runners")
+    }
+
     // MARK: - Memory, warmers, papercuts, audit
 
     static func memory() async throws -> MemoryResponse { try await request("/api/memory") }

@@ -52,6 +52,24 @@ export interface DeliverResult {
   deliveryId?: string;
 }
 
+/**
+ * Where a new session runs, as a caller may ask for it. `true` takes the
+ * instance's configured default; `"local"` is the host, named explicitly.
+ * Availability is not decided here — `resolveRequestedSandbox` validates the
+ * request against this instance's providers and fails the create with its own
+ * message, so every create path enforces the same rules.
+ */
+export type SandboxRequest =
+  | boolean
+  | "local"
+  | "docker"
+  | "daytona"
+  | "e2b"
+  | "box"
+  | "modal"
+  | "microvm"
+  | "lambda-microvm";
+
 export interface CreateSessionOpts {
   prompt: string;
   /** Branch for a code-mode worktree session. Ignored for ask mode. */
@@ -95,9 +113,12 @@ export interface CreateSessionOpts {
    * Ask for a sandboxed session (the sandbox rollout plan). `true` = the config
    * default provider; a provider id (including "modal" / "lambda-microvm")
    * picks one explicitly and must be configured (~/.opensession-sandbox.json),
-   * else the create fails with a clear error.
+   * else the create fails with a clear error. `"local"` is the host, asked for
+   * by name: a caller whose UI shows where the session will run has to be able
+   * to say "here" explicitly, or the instance default would decide behind a
+   * control that claims otherwise.
    */
-  sandbox?: boolean | "docker" | "daytona" | "e2b" | "box" | "modal" | "microvm" | "lambda-microvm";
+  sandbox?: SandboxRequest;
   /**
    * Pin a Claude/Codex provider account for the session's runs. Soft pin
    * (falls back to the pool when exhausted), validated like the web palette:

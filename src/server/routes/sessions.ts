@@ -20,7 +20,7 @@ import { editPrReviewers, isNoPrError, prMetaForBranch } from "../pr-info";
 import { promptQueues, requeueSteerReceipts, stoppedSessions } from "../queue-state";
 import { markPrReviewNotified } from "../pr-review-notifications";
 import { getReviewRequest, setReviewAccepted, setReviewRequest } from "../review-requests";
-import { getSessionControl } from "../session-control";
+import { getSessionControl, type SandboxRequest } from "../session-control";
 import { suggestBranchName } from "../suggest-branch";
 import { transitionRunState } from "../run-state";
 import {
@@ -271,6 +271,7 @@ export async function handleSessionsRoutes(
 			branch?: unknown;
 			user?: unknown;
 			workspaceId?: unknown;
+			sandbox?: unknown;
 		} | null;
 		const prompt = typeof body?.prompt === "string" ? body.prompt.trim() : "";
 		if (!prompt) {
@@ -314,6 +315,16 @@ export async function handleSessionsRoutes(
 					? { effort: body.effort }
 					: {}),
 				...(body?.fastMode === true ? { fastMode: true } : {}),
+				// Where the session runs, as the native composer's sandbox chip
+				// names it ("local" is the host, chosen explicitly). Omitted, the
+				// instance's own default still decides — which is what every
+				// caller that doesn't offer the choice wants. Validation stays
+				// where the web create's does (resolveRequestedSandbox), so an
+				// unavailable provider fails the create with its own message
+				// rather than silently running somewhere else.
+				...(typeof body?.sandbox === "string" && body.sandbox
+					? { sandbox: body.sandbox as SandboxRequest }
+					: {}),
 				// Image attachments as data URLs (the native apps' create path;
 				// validated/parsed by the wiring's parseImageDataUrls).
 				...(Array.isArray(body?.images) && body.images.length

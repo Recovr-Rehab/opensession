@@ -185,6 +185,14 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   sentence in the panel rather than a status code. It is
   pushed as a panel (`PrPanelView(chrome: .pushed)` drops its own navigation
   stack and Done button); the sheet form is what the Mac still uses.
+- **New session** (`NewSessionView.swift`) — the desktop palette's shape: repo
+  and what it is created from across the top, the prompt in the middle, and how
+  it runs in the footer. A **sandbox chip** joins that footer only on instances
+  that offer somewhere other than the host to run — the choices are the ready
+  sandbox connections from `GET /api/sandbox/status`, named exactly as the web
+  palette names them, and the host is sent as an explicit `local` so the chip
+  and the session always agree. Choosing a Runner is deliberately not offered:
+  the web palette dropped runner-at-create, and native matches by not having it.
 - **Action Button / Siri / Spotlight — "Start an Agent"** — one App Intent
   (`Intents/StartAgentIntent.swift`), and it deliberately OPENS the app
   (`openAppWhenRun = true`) rather than collecting the idea in the system's
@@ -226,6 +234,12 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
 - **Settings** — native SwiftUI Tools, Personal, and Workspace administration,
   plus server/GitHub/token configuration and a connection test. Cross-device
   composer and session preferences refresh at launch and when the app foregrounds.
+  Infrastructure → **Runners** lists the machines this instance trusts, read
+  only: each one's status, hardware, workspace roots, toolchains and what it is
+  working on. Connecting, revoking and permissions stay in the web settings —
+  a Runner is paired by a command typed on the machine itself. The status word
+  comes from the same `RunnerStatus` vocabulary the Runner card in Workspace
+  details uses, so a machine reads the same way in both places.
 - **Desk** — a standing per-user concierge session (`POST /api/desk/ensure`
   get-or-creates it), summoned as a sheet from a toolbar button next to the
   sessions list (iOS: `lamp.desk` toolbar item; macOS: the same button in the
@@ -350,6 +364,8 @@ OS1/
     AssetLinks.swift         Written scratch files in prose -> AssetOpen
     PrDetails.swift          PR panel payload
     SettingsModels.swift     Settings payloads (tools/personal/workspace)
+    WorkspaceRunner.swift    Instance Runner list + the shared status words
+    SandboxOffering.swift    What run environments a new session may choose
     AccentTheme.swift        The app's primary colour: one table of light/dark
                              fills, a derived glyph colour, and the store the
                              Appearance picker writes
@@ -392,6 +408,7 @@ OS1/
     DeskSheet.swift          Desk sheet: header + voice controls over SessionView
     DeskVoiceCallView.swift  Full-screen voice call: orb, captions, call controls
     SettingsView.swift       Native settings index + connection controls
+    RunnersSettingsView.swift  Read-only list of the instance's Runners
     Native*SettingsViews.swift  Native Tools, Personal, Workspace panels
     MacSettings.swift        macOS settings window
     Glass · ImageAttachments · UserAvatar · WebIcon  smaller shared views

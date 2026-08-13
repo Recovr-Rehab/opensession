@@ -111,6 +111,9 @@ struct SettingsView: View {
             }
 
             Section("Infrastructure") {
+                settingsLink("Runners", icon: "desktopcomputer") {
+                    RunnersSettingsView()
+                }
                 settingsLink("Prewarming", icon: "flame") {
                     PrewarmingSettingsView()
                 }

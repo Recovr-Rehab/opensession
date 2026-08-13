@@ -21,6 +21,7 @@ struct MacSettingsView: View {
         case goals
         case actions
         case security
+        case runners
         case prewarming
         case papercuts
         case auditLog
@@ -41,6 +42,7 @@ struct MacSettingsView: View {
             case .goals: "Goals"
             case .actions: "Actions"
             case .security: "Security"
+            case .runners: "Runners"
             case .prewarming: "Prewarming"
             case .papercuts: "Papercuts"
             case .auditLog: "Audit log"
@@ -61,6 +63,7 @@ struct MacSettingsView: View {
             case .goals: "target"
             case .actions: "bolt"
             case .security: "checkmark.shield"
+            case .runners: "desktopcomputer"
             case .prewarming: "flame"
             case .papercuts: "bandage"
             case .auditLog: "list.bullet.rectangle"
@@ -101,6 +104,7 @@ struct MacSettingsView: View {
                     paneRow(.security)
                 }
                 Section("Infrastructure") {
+                    paneRow(.runners)
                     paneRow(.prewarming)
                 }
                 Section("Activity") {
@@ -153,6 +157,7 @@ struct MacSettingsView: View {
         case .goals: GoalSettingsView()
         case .actions: ActionSettingsView()
         case .security: SecuritySettingsView()
+        case .runners: RunnersSettingsView()
         case .prewarming: PrewarmingSettingsView()
         case .papercuts: PapercutsSettingsView()
         case .auditLog: AuditLogSettingsView()

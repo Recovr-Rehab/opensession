@@ -642,6 +642,13 @@ enum OS1API {
         )
     }
 
+    /// What run environments this instance offers a NEW session. Read once
+    /// when the composer opens; the per-session state above is a different
+    /// question, asked of a session that already exists.
+    static func sandboxStatus() async throws -> InstanceSandboxStatus {
+        try await get("/api/sandbox/status")
+    }
+
     /// Live per-session sandbox state. It is fetched only from Workspace
     /// details because asking every row can execute provider status checks.
     static func sandbox(sessionId: String) async throws -> SessionSandboxStatus {
@@ -1137,10 +1144,16 @@ enum OS1API {
         effort: String? = nil,
         fastMode: Bool = false,
         images: [String] = [],
-        workspaceId: String? = nil
+        workspaceId: String? = nil,
+        sandbox: String? = nil
     ) async throws -> String {
         struct CreateResponse: Decodable { let id: String }
         var body: [String: Any] = ["prompt": prompt, "mode": mode]
+        // Sent only when the composer actually offered the choice. Omitting it
+        // lets the instance's own sandbox default decide, which is the right
+        // behaviour when there was nothing to pick from — and the wrong one
+        // the moment a chip on screen says where this session runs.
+        if let sandbox, !sandbox.isEmpty { body["sandbox"] = sandbox }
         if !repo.isEmpty { body["repo"] = repo }
         // Join an existing workspace as a sibling session (a new tab) rather
         // than starting a standalone session: the server takes the workspace's

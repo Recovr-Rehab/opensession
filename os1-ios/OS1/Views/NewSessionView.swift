@@ -4,8 +4,9 @@ import SwiftUI
 /// session IS — the repo, and what it's created from — reads across the top,
 /// the prompt fills the middle, and how it runs sits in the footer with the
 /// attach button. Only the controls this app actually carries appear; the rest
-/// of the palette's row (connected services, run environment) has no native
-/// equivalent yet, so it stays absent rather than half-present.
+/// of the palette's row (connected services) has no native equivalent yet, so
+/// it stays absent rather than half-present. Where the session runs is one
+/// chip, and only on instances that offer more than the host.
 /// Screenshots paste straight into the attachments (Cmd+V on the Mac,
 /// long-press Paste on iOS).
 ///
@@ -46,6 +47,11 @@ struct NewSessionView: View {
     @State private var effort = ""
     @State private var fastMode = false
     @State private var images: [AttachedImage] = []
+    /// "" is the host. Never seeded from the instance's own default: the chip
+    /// is what tells you where this session will run, so it starts on the one
+    /// answer that is true everywhere.
+    @State private var sandbox = SandboxOffering.host
+    @State private var sandboxStatus: InstanceSandboxStatus?
     @State private var showLibrary = false
     /// Owned here, like the session composer's: the button reads it, this view
     /// keeps it alive across the layout changes a long dictation causes.
@@ -416,6 +422,7 @@ struct NewSessionView: View {
             if !availableEfforts.isEmpty { effortChip }
             if fastSupported { fastChip }
             #endif
+            if !sandboxChoices.isEmpty { sandboxChip }
             modelChip
         }
         .padding(.horizontal, 12)
@@ -430,6 +437,42 @@ struct NewSessionView: View {
         #else
         4
         #endif
+    }
+
+    /// Sandboxes this instance can actually start a session in. Empty on an
+    /// instance that only runs on the host, and then the chip never appears:
+    /// a picker with one entry is a label pretending to be a choice.
+    private var sandboxChoices: [String] {
+        SandboxOffering.choices(sandboxStatus)
+    }
+
+    /// Where the session runs. One chip, mirroring the server's own names for
+    /// the providers. Choosing a Runner is not offered here — the web palette
+    /// dropped that too, because a machine is picked for a piece of work, not
+    /// for a message you have not written yet.
+    private var sandboxChip: some View {
+        Menu {
+            sandboxOption(SandboxOffering.host)
+            ForEach(sandboxChoices, id: \.self) { provider in
+                sandboxOption(provider)
+            }
+        } label: {
+            chipLabel(icon: "cube", text: SandboxOffering.label(sandbox))
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+    }
+
+    private func sandboxOption(_ provider: String) -> some View {
+        Button {
+            sandbox = provider
+        } label: {
+            if sandbox == provider {
+                Label(SandboxOffering.label(provider), systemImage: "checkmark")
+            } else {
+                Text(SandboxOffering.label(provider))
+            }
+        }
     }
 
     private var modelChip: some View {
@@ -611,6 +654,9 @@ struct NewSessionView: View {
         repo = initialRepo ?? lastRepo
         async let reposFetch = OS1API.repos()
         async let modelsFetch = OS1API.models()
+        // A server without sandboxes, or one too old to answer, simply leaves
+        // the chip off. It must never keep the composer from opening.
+        async let sandboxFetch = OS1API.sandboxStatus()
         repos = (try? await reposFetch) ?? []
         if !repos.isEmpty, !repos.contains(where: { $0.id == repo }) {
             repo = repos.first(where: { $0.isDefault == true })?.id ?? repos[0].id
@@ -618,6 +664,7 @@ struct NewSessionView: View {
         // The picker's rows can only show an icon the cache already holds, so
         // fetch them here rather than when the menu opens.
         for repoInfo in repos { RepoTile.prefetchIcon(for: repoInfo.id) }
+        sandboxStatus = try? await sandboxFetch
         if let fetched = try? await modelsFetch {
             catalog = fetched
             let livePreferred = (try? await SettingsAPI.uiPrefs(
@@ -690,7 +737,12 @@ struct NewSessionView: View {
                     effort: effort.isEmpty ? nil : effort,
                     fastMode: fastMode,
                     images: imageURLs,
-                    workspaceId: initialWorkspaceId
+                    workspaceId: initialWorkspaceId,
+                    // Only when the chip was on screen. Where it wasn't, the
+                    // instance keeps deciding, exactly as before.
+                    sandbox: sandboxChoices.isEmpty
+                        ? nil
+                        : SandboxOffering.createValue(sandbox)
                 )
                 onResolved(pending.id, .success(id))
             } catch {

@@ -282,8 +282,8 @@ struct WorktreeInfoView: View {
                 Divider()
                 InfoRow(
                     label: "Status",
-                    value: runnerLifecycleLabel(runner.lifecycle),
-                    icon: runnerLifecycleIcon(runner.lifecycle)
+                    value: RunnerStatus(lifecycle: runner.lifecycle).label,
+                    icon: RunnerStatus(lifecycle: runner.lifecycle).icon
                 )
                 Divider()
                 InfoRow(label: "Workspace", value: runner.workspacePath, icon: "folder", monospaced: true)
@@ -295,24 +295,6 @@ struct WorktreeInfoView: View {
                         .padding(12)
                 }
             }
-        }
-    }
-
-    private func runnerLifecycleLabel(_ lifecycle: String?) -> String {
-        switch lifecycle {
-        case "awake": "Ready"
-        case "offline": "Offline"
-        case "needs_attention": "Needs attention"
-        default: "Preparing"
-        }
-    }
-
-    private func runnerLifecycleIcon(_ lifecycle: String?) -> String {
-        switch lifecycle {
-        case "awake": "checkmark.circle"
-        case "offline": "wifi.slash"
-        case "needs_attention": "exclamationmark.triangle"
-        default: "clock"
         }
     }
 
