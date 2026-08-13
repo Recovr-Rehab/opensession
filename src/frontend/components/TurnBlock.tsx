@@ -332,7 +332,6 @@ function ToolRunBlock({
     if (!userToggledRef.current) setExpanded(defaultExpanded);
   }, [defaultExpanded]);
 
-  const groups = groupedTools(items);
   const label = groupedToolLabel(items);
   let failures = 0;
   let pending = 0;
@@ -393,31 +392,12 @@ function ToolRunBlock({
             )}
           />
         </span>
-        {/* The glyphs say what kind of work the run was without spelling the
-            tool names out, which is what the row is folding away in the first
-            place. A run of one kind needs no count (the step count already
-            says it); a mixed run splits the steps per glyph. The names stay in
-            the aria-label. Inline, not flex items, so the run still truncates
-            to an ellipsis on a narrow row. They are a stand-in for the folded
-            steps, so opening the run drops them: every step below carries its
-            own glyph, and the row would just say the same thing twice. */}
+        {/* Just the count. Which tools ran is what the row is folding away,
+            and one click puts every step back with its own glyph, so naming
+            them here only asks to be read. The names stay in the aria-label,
+            where the count alone would tell a screen reader nothing. */}
         <span className="min-w-0 flex-1 truncate text-[14px] font-medium leading-5 text-dim transition-colors group-hover:text-fg">
           {items.length} step{items.length === 1 ? "" : "s"}
-          {!expanded && groups.map(({ name, count }) => (
-            <span
-              key={name}
-              // No gap: these 24-grid glyphs only ink ~60% of their box, so
-              // the box's own side bearing (~4px at this size) already reads
-              // as the space between the glyph and its count. Adding a gap on
-              // top of it pushed the number twice as far away as it looked.
-              className="ml-2.5 inline-flex items-center align-middle whitespace-nowrap"
-            >
-              <span className="inline-flex size-5 items-center justify-center text-faint">
-                <ToolGlyph toolName={name} size={20} />
-              </span>
-              {groups.length > 1 && count}
-            </span>
-          ))}
         </span>
         {mediaLabel && (
           <span className="flex-shrink-0 text-meta text-faint">{mediaLabel}</span>
