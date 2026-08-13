@@ -542,10 +542,10 @@ function ChecksCard({
 	).length;
 	const passed = checks.filter((check) => check.conclusion === "SUCCESS").length;
 	const tone = failed > 0
-		? { dot: "bg-red", text: "text-red" }
+		? { dot: "bg-red", surface: "bg-red-soft text-red hover:bg-red-soft" }
 		: pending > 0
-			? { dot: "bg-yellow", text: "text-yellow" }
-			: { dot: "bg-green", text: "text-green" };
+			? { dot: "bg-yellow", surface: "bg-yellow-soft text-yellow hover:bg-yellow-soft" }
+			: { dot: "bg-green", surface: "bg-green-soft text-green hover:bg-green-soft" };
 	const summary = failed > 0
 		? `${failed} failing`
 		: pending > 0
@@ -560,14 +560,17 @@ function ChecksCard({
 				trigger={
 					<button
 						type="button"
-						className="flex min-h-10 w-full items-center gap-2 rounded-lg bg-panel px-3 py-2.5 text-left transition-[background-color,scale] hover:bg-hover active:scale-[0.96] phone:min-h-11"
+						className={cn(
+							"flex min-h-10 w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left transition-[background-color,filter,scale] hover:brightness-[0.97] active:scale-[0.96] phone:min-h-11",
+							tone.surface,
+						)}
 						onClick={onOpenChecks}
 					>
 						<span className={`size-2 shrink-0 rounded-full ${tone.dot}`} aria-hidden />
-						<span className="min-w-0 flex-1 text-label font-semibold text-fg">
+						<span className="min-w-0 flex-1 text-label font-semibold">
 							{checks.length} check{checks.length === 1 ? "" : "s"}
 						</span>
-						<span className={`shrink-0 text-label font-semibold ${tone.text}`}>
+						<span className="shrink-0 text-label font-semibold">
 							{summary}
 						</span>
 					</button>
