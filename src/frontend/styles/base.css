@@ -914,6 +914,34 @@ a {
 	}
 }
 
+/* The composer column publishes an anchor, so the Desk trigger floating in the
+   window's bottom-right corner can tell whether that corner is still free (see
+   lib/fab-classes.ts).
+
+   The anchor is the COLUMN rather than the box: the queue flap tucks in above
+   the box as a sibling, and a button clearing the composer has to clear the
+   flap too. The column is not a component of its own, it is exactly "the
+   element a .composer is a direct child of", which is what this matches.
+
+   Scoped to the pane because the pane's composer is the only one that can take
+   that corner: every view that has one — a session, a workspace, the catch-up
+   deck — parks it at the foot of the pane. A split gives the pane two, and the
+   later one in the DOM wins, which is the right-hand column: the one the
+   button actually sits over. */
+.detail-pane div:has(> .composer) {
+	anchor-name: --composer-col;
+}
+
+/* Where the Desk trigger goes once that corner is taken: directly above the
+   composer, right edge flush with the column's. Chrome switches to it the
+   moment the preferred corner position overflows the window, which is what
+   DESK_FAB's `left` arranges. */
+@position-try --desk-fab-above {
+	left: auto;
+	right: anchor(right);
+	bottom: calc(anchor(top) + 10px);
+}
+
 /* A drag in progress owns the cursor for the whole document, not just the
    handle under the pointer — the pointer routinely leaves the 4px handle
    mid-drag, and without this the cursor flickers back to a caret over the
