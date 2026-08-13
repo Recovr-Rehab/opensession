@@ -369,18 +369,23 @@ function ToolRunBlock({
             )}
           />
         </span>
-        {/* Each tool leads with its own glyph, so the run says at a glance
-            what kind of work it was. The glyphs stand in for the interpuncts
-            that used to separate the names, and stay inline (not flex items)
-            so the whole run still truncates to an ellipsis on a narrow row. */}
+        {/* The glyphs say what kind of work the run was without spelling the
+            tool names out, which is what the row is folding away in the first
+            place. A run of one kind needs no count (the step count already
+            says it); a mixed run splits the steps per glyph. The names stay in
+            the aria-label. Inline, not flex items, so the run still truncates
+            to an ellipsis on a narrow row. */}
         <span className="min-w-0 flex-1 truncate text-[14px] font-medium leading-5 text-dim transition-colors group-hover:text-fg">
           {items.length} step{items.length === 1 ? "" : "s"}
           {groups.map(({ name, count }) => (
-            <span key={name} className="ml-2.5 whitespace-nowrap">
-              <span className="mr-1 inline-flex size-5 items-center justify-center align-middle text-faint">
+            <span
+              key={name}
+              className="ml-2.5 inline-flex items-center gap-1 align-middle whitespace-nowrap"
+            >
+              <span className="inline-flex size-5 items-center justify-center text-faint">
                 <ToolGlyph toolName={name} size={20} />
               </span>
-              {groupedToolName(name, count)}
+              {groups.length > 1 && `×${count}`}
             </span>
           ))}
         </span>
