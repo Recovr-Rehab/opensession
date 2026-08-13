@@ -15,6 +15,8 @@ export interface SlackComposeRequest {
 export interface SlackComposeResult {
 	status: "sent" | "cancelled";
 	channel?: SlackChannelOption;
+	/** Link to the posted message, when Slack gave us one. */
+	permalink?: string;
 }
 
 interface PendingSlackComposer {
@@ -137,17 +139,22 @@ export function sendPendingSlackComposer(
 	sessionId: string,
 	requestId: string,
 	channel: SlackChannelOption,
+	permalink?: string,
 ): boolean {
 	const pending = pendingSlackComposers.get(sessionId);
 	if (!pending || pending.request.id !== requestId || pending.status !== "sending") return false;
 	pendingSlackComposers.delete(sessionId);
 	cleanup(pending);
-	pending.resolve({ status: "sent", channel });
+	pending.resolve({ status: "sent", channel, permalink });
+	// Every viewer of this session collapses the composer into the same receipt,
+	// not just the person who pressed Send.
 	broadcastToSession(sessionId, {
 		type: "slack_composer_resolved",
 		sessionId,
 		requestId,
 		status: "sent",
+		channel,
+		permalink,
 	});
 	return true;
 }

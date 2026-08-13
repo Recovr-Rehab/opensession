@@ -3,7 +3,8 @@ import {
 	shippedChangeChannels,
 } from "../../agents/github/shipped-change-notify";
 import { shippedChangesChannel } from "../../agents/github/constants";
-import { findSession } from "../session-cache";
+import { findSession, updateSessionFile } from "../session-cache";
+import type { SessionSlackShare } from "../types";
 import { resolvePrTarget } from "../session-repos";
 import { prHostFor } from "../pr-host";
 import { getRepo } from "../worktree";
@@ -59,20 +60,35 @@ export async function handleShippedChangeRoutes(
 		);
 
 	try {
-		return Response.json(
-			await shareShippedVisualChange({
-				session,
-				pr: { number: pr.number, title: pr.title, url: pr.url },
-				repoFullName: target.ghRepo,
-				requestedBy: requestUser(ctx, body?.user),
-				channel: body?.channel,
-				message: body?.message,
-				slackToken,
-				screenshots: Array.isArray(body?.screenshots)
-					? body.screenshots.filter((path: unknown): path is string => typeof path === "string")
-					: undefined,
-			}),
-		);
+		const result = await shareShippedVisualChange({
+			session,
+			pr: { number: pr.number, title: pr.title, url: pr.url },
+			repoFullName: target.ghRepo,
+			requestedBy: requestUser(ctx, body?.user),
+			channel: body?.channel,
+			message: body?.message,
+			slackToken,
+			screenshots: Array.isArray(body?.screenshots)
+				? body.screenshots.filter((path: unknown): path is string => typeof path === "string")
+				: undefined,
+		});
+		// The receipt is what collapses the share card, on reload and for every
+		// other viewer, so record it before answering.
+		const share: SessionSlackShare | undefined = result.channel && {
+			channelId: result.channel.id,
+			channelName: result.channel.name,
+			permalink: result.permalink,
+			at: new Date().toISOString(),
+			by: caller,
+			prNumber: pr.number,
+		};
+		if (share) {
+			await updateSessionFile(session.id, (data) => ({
+				...data,
+				slackShares: [...(data.slackShares || []), share].slice(-20),
+			}));
+		}
+		return Response.json({ ...result, share });
 	} catch (error: any) {
 		if (error?.message === "SLACK_RECONNECT_REQUIRED") {
 			return Response.json(

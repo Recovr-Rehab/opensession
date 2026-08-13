@@ -143,6 +143,8 @@ export interface UnifiedSession {
   previewPath?: string;
   /** Agent-published demo walkthrough (opensession-walkthrough). */
   walkthrough?: SessionWalkthrough;
+  /** Slack messages a teammate sent from this session. */
+  slackShares?: SessionSlackShare[];
   automation?: string;
   /** Stable automation id for linking back to its settings. Older sessions may
    *  only have `automation`, which the settings route also accepts by name. */
@@ -417,6 +419,21 @@ export interface SessionWalkthrough {
   publishedEntryId?: string;
 }
 
+/**
+ * A Slack message sent from this session, kept so the composer that sent it
+ * collapses into a receipt instead of offering to send the same update again.
+ */
+export interface SessionSlackShare {
+  channelId: string;
+  channelName: string;
+  /** Link to the message. Absent when Slack didn't return one. */
+  permalink?: string;
+  at: string;
+  by?: string;
+  /** The merged PR this share announced, for the in-transcript share card. */
+  prNumber?: number;
+}
+
 export interface NativeSessionFile {
   id: string;
   claudeSessionId: string;
@@ -431,6 +448,8 @@ export interface NativeSessionFile {
   previewPath?: string;
   /** Agent-published demo walkthrough (opensession-walkthrough). */
   walkthrough?: SessionWalkthrough;
+  /** Slack messages a teammate sent from this session. */
+  slackShares?: SessionSlackShare[];
   createdBy: string;
   /** Verified GitHub login of the creator — stamped when GitHub web sign-in
    *  is active (web-auth.ts), and backfilled onto older sessions by the

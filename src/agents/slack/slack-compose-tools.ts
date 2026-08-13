@@ -23,7 +23,12 @@ export function createSlackComposeMcpServer(ctx: { sessionId: string }) {
 					try {
 						const result = await openSlackComposer(ctx.sessionId, args, extra?.signal);
 						if (result.status === "cancelled") return text("The person cancelled the Slack message. Nothing was sent.");
-						return text(`The person sent the Slack message to #${result.channel?.name || result.channel?.id || "channel"}.`);
+						const where = `#${result.channel?.name || result.channel?.id || "channel"}`;
+						return text(
+							result.permalink
+								? `The person sent the Slack message to ${where}: ${result.permalink}`
+								: `The person sent the Slack message to ${where}.`,
+						);
 					} catch (error: any) {
 						return text(`Could not open the Slack composer: ${error?.message || String(error)}`);
 					}

@@ -281,6 +281,16 @@ export interface SessionWalkthrough {
 	publishedEntryId?: string;
 }
 
+/** A Slack message a teammate sent from a session. See the server type. */
+export interface SessionSlackShare {
+	channelId: string;
+	channelName: string;
+	permalink?: string;
+	at: string;
+	by?: string;
+	prNumber?: number;
+}
+
 /** A team note on a session: human-to-human, interleaved into the transcript
  *  by `ts`, and never shown to the agent. See src/server/session-notes.ts —
  *  unrelated to the shared note DOCUMENTS in lib/api/notes.ts. */
@@ -398,6 +408,9 @@ export interface UnifiedSession {
 	/** Agent-published demo walkthrough (video + before/after + writeup),
 	 *  rendered in the Review tab and mirrored to the PR description. */
 	walkthrough?: SessionWalkthrough;
+	/** Slack messages a teammate sent from this session. A share collapses the
+	 *  composer that sent it into a receipt, so nobody re-sends the update. */
+	slackShares?: SessionSlackShare[];
 	automation?: string;
 	/** Stable automation id for linking back to its settings. */
 	automationId?: string;

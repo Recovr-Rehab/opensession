@@ -1,4 +1,9 @@
-import { postSlackFiles, sendSlackMessage } from "../../agents/slack/slack-api";
+import {
+	postSlackFiles,
+	sendSlackMessage,
+	slackPermalink,
+	slackUploadPermalink,
+} from "../../agents/slack/slack-api";
 import { validFeaturedScreenshot } from "../../agents/github/shipped-change-notify";
 import {
 	cancelPendingSlackComposer,
@@ -86,17 +91,22 @@ export async function handleSlackComposeRoutes(ctx: RouteContext): Promise<Respo
 	}
 	try {
 		const snapshottedScreenshots = snapshotPendingSlackImages(sessionId, requestId, screenshots);
+		let permalink: string | undefined;
 		if (snapshottedScreenshots.length > 0) {
-			await postSlackFiles(channel.id, snapshottedScreenshots, message, {
+			const completed = await postSlackFiles(channel.id, snapshottedScreenshots, message, {
 				title: "Open Session update",
 				altText: "Image attached to an Open Session update",
 			}, slackToken);
+			permalink = await slackUploadPermalink(completed, channel.id, slackToken);
 		} else {
 			const posted = await sendSlackMessage(channel.id, message, undefined, slackToken);
 			if (!posted?.ok) throw new Error(posted?.error || "Slack returned an invalid response");
+			permalink = typeof posted.ts === "string"
+				? await slackPermalink(channel.id, posted.ts, slackToken)
+				: undefined;
 		}
-		sendPendingSlackComposer(sessionId, requestId, channel);
-		return Response.json({ status: "sent", channel });
+		sendPendingSlackComposer(sessionId, requestId, channel, permalink);
+		return Response.json({ status: "sent", channel, permalink });
 	} catch (error: any) {
 		restorePendingSlackComposer(sessionId, requestId);
 		if (/SLACK_RECONNECT_REQUIRED|missing_scope|not_allowed_token_type/.test(error?.message || "")) {

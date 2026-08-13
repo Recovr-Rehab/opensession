@@ -20,7 +20,12 @@ import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import { UPLOADS_DIR } from "../../server/uploads";
 import { homeDir } from "../../server/paths";
 import type { UnifiedSession } from "../../server/types";
-import { postSlackFiles, sendSlackMessage } from "../slack/slack-api";
+import {
+  postSlackFiles,
+  sendSlackMessage,
+  slackPermalink,
+  slackUploadPermalink,
+} from "../slack/slack-api";
 import { shippedChangesChannel } from "./constants";
 
 export interface ShippedVisualChange {
@@ -218,7 +223,11 @@ export async function shareShippedVisualChange(opts: {
   message?: string;
   slackToken?: string;
   screenshots?: string[];
-}): Promise<{ status: "shared" | "already_shared" }> {
+}): Promise<{
+  status: "shared" | "already_shared";
+  channel?: ShippedChangeChannel;
+  permalink?: string;
+}> {
   const channels = shippedChangeChannels();
   const channel = opts.channel || shippedChangesChannel();
   if (!channel) throw new Error("Shipped changes channel is not configured");
@@ -247,15 +256,20 @@ export async function shareShippedVisualChange(opts: {
   );
   const claimId = claimShippedChangeAnnouncement(announcementKey);
   if (!claimId) return { status: "already_shared" };
+  let permalink: string | undefined;
   try {
     if (visual) {
-      await postSlackFiles(channel, visual.screenshots, comment, {
+      const completed = await postSlackFiles(channel, visual.screenshots, comment, {
         title: `${title} · shipped`,
         altText: `Screenshot of the shipped visual change: ${title}`,
       }, opts.slackToken);
+      permalink = await slackUploadPermalink(completed, channel, opts.slackToken);
     } else {
       const posted = await sendSlackMessage(channel, comment, undefined, opts.slackToken);
       if (!posted?.ok) throw new Error(`Slack message failed: ${posted?.error || "invalid response"}`);
+      permalink = typeof posted.ts === "string"
+        ? await slackPermalink(channel, posted.ts, opts.slackToken)
+        : undefined;
     }
     settleShippedChangeAnnouncement(
       announcementKey,
@@ -278,5 +292,9 @@ export async function shareShippedVisualChange(opts: {
   console.log(
     `[github] Shared merged change ${opts.repoFullName}#${opts.pr.number} in Slack from ${opts.session.id}`,
   );
-  return { status: "shared" };
+  return {
+    status: "shared",
+    channel: channels.find((candidate) => candidate.id === channel),
+    permalink,
+  };
 }

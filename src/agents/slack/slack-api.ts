@@ -191,6 +191,66 @@ export async function sendSlackMessage(
   return response.json();
 }
 
+/**
+ * Public link to a message we just posted. Best effort on purpose: the message
+ * is already in Slack, so a failed lookup must not fail the send.
+ */
+export async function slackPermalink(
+  channel: string,
+  ts: string,
+  tokenOverride?: string,
+): Promise<string | undefined> {
+  try {
+    const data = await slackApiGet(
+      "chat.getPermalink",
+      { channel, message_ts: ts },
+      tokenOverride,
+    );
+    return data?.ok && typeof data.permalink === "string" ? data.permalink : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The message timestamp a file was shared into `channel` on. A file reports
+ * its shares per channel rather than as a top-level ts.
+ */
+export function slackFileShareTs(
+  file: any,
+  channel: string,
+): string | undefined {
+  const shares = file?.shares;
+  for (const scope of [shares?.public, shares?.private]) {
+    const ts = scope?.[channel]?.[0]?.ts;
+    if (typeof ts === "string") return ts;
+  }
+  return undefined;
+}
+
+/**
+ * Link to the message an upload landed in. files.completeUploadExternal
+ * answers with `{ id, title }` and no shares, so the share normally has to be
+ * read back off the file. Best effort, like slackPermalink.
+ */
+export async function slackUploadPermalink(
+  completed: any,
+  channel: string,
+  tokenOverride?: string,
+): Promise<string | undefined> {
+  const posted = completed?.files?.[0];
+  const ts = slackFileShareTs(posted, channel);
+  if (ts) return slackPermalink(channel, ts, tokenOverride);
+  if (typeof posted?.id !== "string") return undefined;
+  try {
+    const info = await slackApiGet("files.info", { file: posted.id }, tokenOverride);
+    const shared = slackFileShareTs(info?.file, channel);
+    return shared ? slackPermalink(channel, shared, tokenOverride) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function updateSlackMessage(
   channel: string,
   ts: string,

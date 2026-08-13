@@ -2,7 +2,14 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { postSlackBlocks, postSlackFiles, slackFileRefs, updateSlackBlocks } from "./slack-api";
+import {
+  postSlackBlocks,
+  postSlackFiles,
+  slackFileRefs,
+  slackFileShareTs,
+  slackUploadPermalink,
+  updateSlackBlocks,
+} from "./slack-api";
 
 const originalFetch = globalThis.fetch;
 
@@ -88,6 +95,48 @@ describe("Slack block message options", () => {
       unfurl_links: false,
       unfurl_media: false,
     });
+  });
+});
+
+describe("slackUploadPermalink", () => {
+  test("reads the share off the file when the upload response has none", async () => {
+    const calls: string[] = [];
+    globalThis.fetch = (async (input) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.includes("files.info")) {
+        return Response.json({
+          ok: true,
+          file: { shares: { public: { C123: [{ ts: "1786.42" }] } } },
+        });
+      }
+      return Response.json({ ok: true, permalink: "https://tella.slack.com/archives/C123/p178642" });
+    }) as typeof fetch;
+
+    // What files.completeUploadExternal actually answers: id and title only.
+    const link = await slackUploadPermalink(
+      { ok: true, files: [{ id: "F1", title: "Shipped" }] },
+      "C123",
+      "xoxp-test",
+    );
+
+    expect(link).toBe("https://tella.slack.com/archives/C123/p178642");
+    expect(calls.some((url) => url.includes("files.info?file=F1"))).toBe(true);
+    expect(calls.some((url) => url.includes("message_ts=1786.42"))).toBe(true);
+  });
+
+  test("has no link when the file was never shared into the channel", async () => {
+    globalThis.fetch = (async () =>
+      Response.json({ ok: true, file: {} })) as unknown as typeof fetch;
+    expect(await slackUploadPermalink({ files: [{ id: "F1" }] }, "C123")).toBeUndefined();
+  });
+
+  test("finds a private share, and ignores another channel's", () => {
+    const file = {
+      shares: { private: { C123: [{ ts: "1.2" }] }, public: { C999: [{ ts: "9.9" }] } },
+    };
+    expect(slackFileShareTs(file, "C123")).toBe("1.2");
+    expect(slackFileShareTs(file, "C555")).toBeUndefined();
   });
 });
 

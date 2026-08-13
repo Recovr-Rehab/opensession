@@ -718,6 +718,7 @@ function overlaySidecarExtras(session: UnifiedSession): UnifiedSession {
   const data = readJsonSafe<NativeSessionFile>(path);
   if (!data) return session;
   if (data.walkthrough) session.walkthrough = data.walkthrough;
+  if (data.slackShares?.length) session.slackShares = data.slackShares;
   if (data.linkedPrs?.length) session.linkedPrs = data.linkedPrs;
   if (data.attachedRepos?.length) session.attachedRepos = data.attachedRepos;
   if (data.previewPath) session.previewPath = data.previewPath;
@@ -888,6 +889,7 @@ function scanNativeSessions(): UnifiedSession[] {
       linkedPrs: data.linkedPrs,
       previewPath: data.previewPath,
       walkthrough: data.walkthrough,
+      slackShares: data.slackShares,
       automation:
         data.automation ||
         (data.createdBy?.endsWith(" (automation)")

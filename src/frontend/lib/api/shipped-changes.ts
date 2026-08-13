@@ -1,9 +1,10 @@
+import type { SessionSlackShare } from "../types";
 import { request } from "./request";
 
 export function shareShippedChange(
 	sessionId: string,
 	target: { repo?: string; branch?: string; channel?: string; message?: string; screenshots?: string[] },
-): Promise<{ status: "shared" | "already_shared" }> {
+): Promise<{ status: "shared" | "already_shared"; share?: SessionSlackShare }> {
 	return request(`/sessions/${encodeURIComponent(sessionId)}/share-shipped-change`, {
 		method: "POST",
 		body: target,
@@ -56,7 +57,11 @@ export function openSlackComposer(
 export function sendSlackComposer(
 	sessionId: string,
 	target: { requestId: string; channel: string; message: string; screenshots: string[] },
-): Promise<{ status: "sent"; channel: { id: string; name: string } }> {
+): Promise<{
+	status: "sent";
+	channel: { id: string; name: string };
+	permalink?: string;
+}> {
 	return request(`/sessions/${encodeURIComponent(sessionId)}/slack-composer`, {
 		method: "POST",
 		body: target,

@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
+import { motion } from "motion/react";
 import { fetchShippedChangeChannels } from "../lib/api/shipped-changes";
+import { duration, ease } from "../ui/motion";
 import { imageFilesFromPaste, uploadFile } from "../lib/images";
 import { Button } from "../ui/button";
 import { Select } from "../ui/input";
@@ -11,6 +13,45 @@ import { IconChevronDown, IconPlus, IconX } from "./icons";
 import { PixelSpinner } from "./PixelSpinner";
 
 const MAX_SLACK_IMAGE_BYTES = 20 * 1024 * 1024;
+
+export interface SlackSent {
+	channelName: string;
+	permalink?: string;
+}
+
+/**
+ * The composer, once its message is in Slack. It keeps the composer's column
+ * and label type, so sending reads as the card collapsing into its own header
+ * rather than as one surface being swapped for another.
+ */
+export function SlackSentNotice({ channelName, permalink }: SlackSent) {
+	return (
+		<motion.div
+			className="mx-auto mt-2 mb-6 flex w-full max-w-[var(--session-col)] items-center gap-1.5 px-1 text-label leading-5 text-dim"
+			initial={{ opacity: 0 }}
+			animate={{ opacity: 1 }}
+			transition={{ type: "tween", duration: duration.base, ease }}
+		>
+			<BrandMark name="slack" size={12} />
+			<span>
+				Sent to <span className="font-semibold text-fg">#{channelName}</span>
+			</span>
+			{permalink && (
+				<>
+					<span aria-hidden className="text-faint">·</span>
+					<a
+						className="focus-ring rounded-sm text-dim underline decoration-line underline-offset-2 transition-colors hover:text-fg hover:decoration-current"
+						href={permalink}
+						target="_blank"
+						rel="noreferrer"
+					>
+						Open in Slack
+					</a>
+				</>
+			)}
+		</motion.div>
+	);
+}
 
 export interface ShippedChangeComposerProps {
 	sessionId: string;
@@ -28,6 +69,8 @@ export interface ShippedChangeComposerProps {
 		canUploadImages?: boolean;
 	}>;
 	defaultChannel?: string;
+	/** Where this message already went. Set = the card is done, and collapses. */
+	sent?: SlackSent;
 }
 
 export function ShippedChangeComposer({
@@ -42,6 +85,7 @@ export function ShippedChangeComposer({
 	onCancel,
 	loadChannels,
 	defaultChannel,
+	sent,
 }: ShippedChangeComposerProps) {
 	const [message, setMessage] = useState(defaultMessage);
 	const [channels, setChannels] = useState<Array<{ id: string; name: string }>>([]);
@@ -72,6 +116,7 @@ export function ShippedChangeComposer({
 			: current);
 	}, [screenshot]);
 	useEffect(() => {
+		if (sent) return;
 		let current = true;
 		(loadChannels ? loadChannels() : fetchShippedChangeChannels(sessionId))
 			.then((result) => {
@@ -91,7 +136,7 @@ export function ShippedChangeComposer({
 		return () => {
 			current = false;
 		};
-	}, [sessionId, loadChannels, defaultChannel]);
+	}, [sessionId, loadChannels, defaultChannel, sent]);
 	const addImages = async (files: File[]) => {
 		const candidates = files.filter((file) => file.type.startsWith("image/"));
 		const oversized = candidates.find((file) => file.size > MAX_SLACK_IMAGE_BYTES);
@@ -141,6 +186,8 @@ export function ShippedChangeComposer({
 			setAwaitingSlack(false);
 		}
 	};
+
+	if (sent) return <SlackSentNotice {...sent} />;
 
 	return (
 		<div className="mx-auto mt-2 mb-6 w-full max-w-[var(--session-col)]">

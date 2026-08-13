@@ -440,6 +440,9 @@ export type ProtocolServerMessage =
       sessionId: string;
       requestId: string;
       status: "sent" | "cancelled";
+      /** Set when the message was sent, so viewers can show where it landed. */
+      channel?: { id: string; name: string };
+      permalink?: string;
     }
   | { type: "notice"; sessionId?: string; message: string }
   | { type: "pong" }
