@@ -87,7 +87,10 @@ body{
   font-size:24px;font-weight:600;
 }
 .tile svg{width:31px;height:31px}
-.tile-alert{background:var(--wash);color:var(--bad);border-radius:50%}
+/* Stands in for a brand tile when the redirect lost the server name, so it
+   keeps the tile's shape rather than going round: under the squircle
+   @supports below, a 50% radius renders as a rounded square anyway. */
+.tile-alert{background:var(--wash);color:var(--bad)}
 .tile-alert svg{width:26px;height:26px}
 .badge{
   position:absolute;right:-4px;bottom:-4px;width:22px;height:22px;border-radius:50%;
