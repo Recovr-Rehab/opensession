@@ -22,7 +22,6 @@ import {
   IconEye,
   IconReturn,
   IconBox,
-  IconFile,
   IconFolderPlus,
   IconMessage,
   IconPencil,
@@ -92,34 +91,24 @@ const LAST_REPO_KEY = "opensession-new-session-repo";
 const ADD_REPO_VALUE = "__add_repo__";
 
 
-/** What a session may do, in one switch. Mode is the permission (Ask reads,
- *  Code writes); the repo below it is what the session is pointed at. Scratch
- *  is not a third permission — it is Code with no repo — but it earns a place
- *  here because that is how people look for it, and it is what "no repo" means
- *  once you want to write files. */
-const MODE_META = {
-	ask: {
-		label: "Ask",
-		menuLabel: "Ask · reads, changes nothing",
-		icon: IconEye,
-	},
-	code: {
-		label: "Code",
-		menuLabel: "Code · writes on a branch",
-		icon: IconPencil,
-	},
-	scratch: {
-		label: "Scratch",
-		menuLabel: "Scratch · writes, no repo",
-		icon: IconFile,
-	},
-} as const;
-const MODE_OPTIONS = (["ask", "code", "scratch"] as const).map((value) => ({
-	value,
-	label: MODE_META[value].label,
-	menuLabel: MODE_META[value].menuLabel,
-	icon: React.createElement(MODE_META[value].icon, { size: 20 }),
-}));
+/* The Code/Ask switch — the palette's first decision, and a switch rather
+   than a menu because it has exactly two answers and you flip between them
+   while writing the prompt. Both labels stay visible: a dropdown showing only
+   the current mode makes you open it to learn what the other one is.
+
+   Same shape as the range control in Analytics (a `p-0.5` bordered group of
+   `rounded-control` cells) — that is the house pattern for a segmented
+   control, and it still has no primitive of its own. Ask's active cell is
+   green rather than neutral, tying it to the card tint it turns on and to the
+   composer's Ask pill, so one mode reads the same in all three places. */
+const SWITCH_GROUP =
+	"flex shrink-0 items-center gap-0.5 rounded-md border border-line bg-panel/70 p-0.5";
+const SWITCH_ITEM =
+	"inline-flex cursor-pointer items-center gap-1.5 rounded-control border-0 px-2 py-[3px] text-control-label font-medium transition-colors disabled:cursor-default disabled:opacity-55";
+const SWITCH_ITEM_ON = "bg-active text-fg";
+const SWITCH_ITEM_ON_ASK =
+	"bg-[color-mix(in_srgb,var(--green)_18%,transparent)] text-green";
+const SWITCH_ITEM_OFF = "bg-transparent text-dim hover:text-fg";
 
 /* ── Palette chrome ───────────────────────────────────────────────────────
    Every class is written out in full: Tailwind scans source TEXT, so a name
@@ -194,18 +183,6 @@ const FOOTER =
 const FOOTER_LEFT = "flex min-w-0 items-center gap-1.5 max-[560px]:gap-1";
 const FOOTER_RIGHT = "flex min-w-0 items-center gap-1.5 max-[560px]:gap-1 phone:ml-auto";
 const FOOTER_ICON_BTN = cn(paletteIconBtn, "shrink-0 max-[560px]:w-9");
-/** Ask mode's toggle. Off, it is one of the footer's quiet icon tools. On, it
- *  wears the same green marker the session composer's toolbar shows for the
- *  same mode, so one mode reads identically in both places — and it names
- *  itself, because the mode governs the whole session and an unlabelled glyph
- *  would leave read-only running silently.
- *
- *  A complete string rather than a variant stacked on FOOTER_ICON_BTN: the two
- *  states differ in width, height and colour, and `max-[560px]:w-9` from the
- *  icon button would crush the labelled chip on phones. 32px tall, the size
- *  the icon buttons' hover wash paints, so the row keeps one rhythm. */
-const ASK_BTN_ON =
-	"inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-control px-2.5 text-[12px] font-medium transition-colors bg-[color-mix(in_srgb,var(--green)_18%,transparent)] text-green hover:bg-[color-mix(in_srgb,var(--green)_26%,transparent)] disabled:cursor-default disabled:opacity-50";
 /** Ask mode paints the whole card, not just its toggle — the same thing the
  *  session composer does for ask and for note mode, because the mode governs
  *  everything you are about to type rather than one control in the corner.
@@ -304,13 +281,9 @@ function readPrefill() {
   // filter. The configured default is applied once `/repos` resolves.
   const repoParam = params.get("repo") ?? params.get("project");
   const mode = params.get("mode") === "ask" ? ("ask" as const) : ("code" as const);
-  // Only Ask can run without a repo, so `?repo=none` on a code link is
-  // dropped rather than carried into a create the server would refuse.
-  const repo =
-    (repoParam === NO_REPO && mode !== "ask" ? "" : repoParam) ||
-    lastSelectedRepo() ||
-    filteredRepo() ||
-    "";
+  // `?repo=none` is honored in either mode: Ask with no repo reads nothing,
+  // Code with no repo is a scratch session.
+  const repo = repoParam || lastSelectedRepo() || filteredRepo() || "";
   return {
     mode,
     prompt: params.get("prompt") || "",
@@ -337,7 +310,14 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     (window as { os1?: { desktop?: boolean } }).os1?.desktop === true ||
     navigator.userAgent.includes("Electron/");
   const [prefill] = useState(readPrefill);
-  const [mode, setMode] = useState<"ask" | "code" | "scratch">(forceMode || prefill.mode);
+  // What the session may do, and nothing else — the two-state switcher. The
+  // repo below it is a separate axis, so Scratch is not a third value here:
+  // it is what Code with no repo already is (same write access, same
+  // repo-less scratch dir), and `mode` below derives it rather than asking
+  // anyone to pick it.
+  const [permission, setPermission] = useState<"ask" | "code">(
+    (forceMode || prefill.mode) === "ask" ? "ask" : "code",
+  );
   // The desktop app's local bridge merges local and hosted sessions. Hosted is
   // deliberately the default; local execution is still experimental and must
   // be selected explicitly for each palette lifetime.
@@ -349,7 +329,16 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   }, [auth?.local, desktopShell]);
   const cloudTarget = auth?.local === true && createTarget === "cloud";
   // In a workspace, default to its shared repo; else the prefill/filter repo.
-  const [repo, setRepo] = useState(forceRepo || prefill.repo);
+  // `forceMode: "scratch"` (a feed workspace) is a repo-less create, so it
+  // arrives here as the repo rather than as a mode.
+  const [repo, setRepo] = useState(
+    forceMode === "scratch" ? NO_REPO : forceRepo || prefill.repo,
+  );
+  // The three modes the server stores, from the two axes above. Ask reads (a
+  // repo, or nothing); Code writes, on a branch when it has a repo and in a
+  // plain scratch dir when it doesn't.
+  const mode: "ask" | "code" | "scratch" =
+    permission === "ask" ? "ask" : repo === NO_REPO ? "scratch" : "code";
   const [repos, setRepos] = useState<RepoOption[]>([]);
   const [configuredDefaultRepo, setConfiguredDefaultRepo] = useState("");
   const [addRepoOpen, setAddRepoOpen] = useState(false);
@@ -810,25 +799,12 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     });
   }
 
-  /** Switching mode can invalidate the repo below it: only Ask runs without
-   *  one, so leaving "No repo" selected on the way to Code would offer a
-   *  create the server refuses. Falls back to the last real repo. */
-  function changeMode(next: "ask" | "code" | "scratch") {
-    setMode(next);
-    if (next !== "ask" && repo === NO_REPO)
-      setRepo(
-        lastSelectedRepo() ||
-          configuredDefaultRepo ||
-          repos.find((p) => p.default)?.id ||
-          repos[0]?.id ||
-          "",
-      );
-  }
-
   const canCreate =
     !creating &&
     connected &&
-		(!!repo || mode === "scratch") &&
+    // "No repo" is a choice, so it passes; only an unresolved picker (an
+    // instance with no repositories registered yet) blocks.
+    !!repo &&
     // Unsupported model × environment combo: the server would reject the
     // create with the same message (resolveRequestedSandbox) — block here so
     // the wall is discovered before submit, not after.
@@ -836,9 +812,9 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     (prompt.trim() || images.length > 0 || files.length > 0) &&
     (mode === "ask" || mode === "scratch" || selectedWorktree !== "");
 
-  // "Create from…" picks the base a code session branches off. Ask is not an
-  // option here: it is a mode, not a base — it cuts no worktree at all — so it
-  // lives with the footer's other tools and this picker steps aside for it.
+  // "Create from…" picks the base a code session branches off, so it only
+  // appears for a Code session that has a repo. Ask cuts no worktree, and Code
+  // with no repo has no branch to cut one from.
   const createFromLabel = selectedWorktree === "__new__" ? "New branch" : selectedWorktree;
   const createFromOptions = [
     {
@@ -941,39 +917,47 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
         initialFocus={promptRef}
         finalFocus={() => !createdRef.current}
       >
-        {/* Header: mode + repo (left) · create-from (right). The mode is the
-            palette's title because it decides what the session may do; the
-            repo is what it is pointed at, and Ask can be pointed at nothing.
-            Scratch is the repo-off cell of Code rather than a fourth thing, so
-            it hides the repo picker instead of disabling it. On phones the
-            create-from picker stays hidden until the footer's options toggle
-            opens it. */}
+        {/* Header: the Code/Ask switch and the repo (left) · create-from
+            (right). Two axes, in the order they're decided: what the session
+            may do, then what it is pointed at. Either mode can be pointed at
+            nothing — Ask with no repo is a conversation with your tools, Code
+            with no repo is a scratch dir. On phones the create-from picker
+            stays hidden until the footer's options toggle opens it. */}
         <div className={cn(HEADER, edges.top && EDGE_DIVIDER)}>
-          <div className="flex min-w-0 items-center gap-0.5">
-          <PaletteSelect
-            // The one picker that never gives: its three labels are short, and
-            // it is the palette's title — the repo and the branch beside it are
-            // the long, truncatable ones.
-            className={cn(TRIGGER_STRONG, "max-w-none shrink-0")}
+          <div className="flex min-w-0 items-center gap-2">
+          <div
+            className={SWITCH_GROUP}
+            role="group"
+            aria-label="Mode"
             title="What this session may do"
-            value={mode}
-            options={MODE_OPTIONS}
-            onChange={(next) => changeMode(next as typeof mode)}
-            disabled={creating || !!forceMode}
-            ariaLabel="Mode"
-            isPhone={isPhone}
           >
-            {React.createElement(MODE_META[mode].icon, {
-              className: "shrink-0",
-              size: 18,
-            })}
-            <span className="truncate">{MODE_META[mode].label}</span>
-            {!forceMode && <IconChevronDown className={CHEVRON} size={22} />}
-          </PaletteSelect>
+            {(["code", "ask"] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                className={cn(
+                  SWITCH_ITEM,
+                  permission === value
+                    ? value === "ask"
+                      ? SWITCH_ITEM_ON_ASK
+                      : SWITCH_ITEM_ON
+                    : SWITCH_ITEM_OFF,
+                )}
+                aria-pressed={permission === value}
+                disabled={creating || !!forceMode}
+                onClick={() => setPermission(value)}
+              >
+                {value === "ask" ? <IconEye size={15} /> : <IconPencil size={15} />}
+                {value === "ask" ? "Ask" : "Code"}
+              </button>
+            ))}
+          </div>
 
-          {mode !== "scratch" && (
           <PaletteSelect
-            className={cn(TRIGGER, "max-w-none")}
+            // The repo is the picker that gives: the switch beside it never
+            // shrinks (its two labels are short and fixed), so on a narrow
+            // phone the repo name truncates rather than the pair overlapping.
+            className={cn(TRIGGER_STRONG, "max-w-none")}
             title="Repository"
             value={repo}
             options={[
@@ -982,18 +966,14 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 label: p.label,
                 icon: <RepoTile name={p.id} />,
               })),
-              // Only Ask can run without a repo. Code needs somewhere to put
-              // its branch, and offering "No repo" there would advertise a
-              // create the server refuses.
-              ...(mode === "ask"
-                ? [
-                    {
-                      value: NO_REPO,
-                      label: "No repo",
-                      icon: <IconMessage size={20} />,
-                    },
-                  ]
-                : []),
+              // Both modes can run without a repo, and the switch above says
+              // which one you get: Ask reads nothing, Code writes in a plain
+              // scratch dir with no branch or PR flow.
+              {
+                value: NO_REPO,
+                label: "No repo",
+                icon: <IconMessage size={20} />,
+              },
               ...(auth?.local && createTarget === "local"
                 ? [
                     {
@@ -1012,7 +992,9 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
               setRepo(nextRepo);
               if (nextRepo !== NO_REPO) rememberSelectedRepo(nextRepo);
             }}
-            disabled={creating}
+            // A feed workspace is repo-less by construction (its subject is a
+            // Tella video, not a checkout), so its create doesn't offer one.
+            disabled={creating || forceMode === "scratch"}
             ariaLabel="Repository"
             isPhone={isPhone}
           >
@@ -1026,9 +1008,10 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 ? "No repo"
                 : repos.find((p) => p.id === repo)?.label || repo || "No repositories"}
             </span>
-            <IconChevronDown className={CHEVRON} size={22} />
+            {forceMode !== "scratch" && (
+              <IconChevronDown className={CHEVRON} size={22} />
+            )}
           </PaletteSelect>
-          )}
           </div>
 
           {mode === "code" && (
