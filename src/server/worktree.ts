@@ -59,12 +59,43 @@ export function canonicalPath(p: string): string {
 
 /** Infer the repo that owns a checkout/worktree path. */
 export function repoForPath(p: string): Repo {
+  const repo = repoForPathOrNull(p);
+  if (!repo) throw new Error(`No registered repo owns path "${p}"`);
+  return repo;
+}
+
+/** Like `repoForPath`, but undefined instead of throwing when no registered
+ *  repo owns the path — a scratch dir, a sandbox volume, a stale path from a
+ *  repo that has since been unregistered. */
+export function repoForPathOrNull(p: string): Repo | undefined {
   const cp = canonicalPath(p);
   for (const r of Object.values(configuredRepos())) {
     if (cp === canonicalPath(r.repo) || cp.startsWith(`${canonicalPath(worktreesDir())}/${r.wtPrefix}-`))
       return r;
   }
-  throw new Error(`No registered repo owns path "${p}"`);
+  return undefined;
+}
+
+/**
+ * The repo a session's own work lives in, or undefined when it has none.
+ *
+ * Repo-less-ness is a property of the session, not of its mode: `scratch`
+ * sessions (feed-item workspaces) and repo-less `ask` sessions both have no
+ * repo, and a future kind may too. So this asks the path rather than the
+ * mode — call sites used to spell the test `mode !== "scratch"`, which
+ * resolved every OTHER repo-less session to the default repo and quietly
+ * pointed it at a checkout it had nothing to do with.
+ *
+ * Sessions whose stored `repo` predates that field are still derived from
+ * `worktreeDir`. Callers that need a repo no matter what append
+ * `?? defaultRepo().id`; callers that can say "no repo" should.
+ */
+export function sessionRepoId(
+  session: Pick<UnifiedSession, "repo" | "worktreeDir">,
+): string | undefined {
+  if (session.repo) return session.repo;
+  if (!session.worktreeDir) return undefined;
+  return repoForPathOrNull(session.worktreeDir)?.id;
 }
 
 /** Is this dir a shared checkout no single session owns — a repo's live main

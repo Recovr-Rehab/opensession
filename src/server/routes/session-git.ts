@@ -14,7 +14,7 @@ import { imageContentType, imageHeaders } from "../image-mime";
 import { hasRemoteWorkspace, workspaceExecFor } from "../sandbox";
 import { findSession } from "../session-cache";
 import { sessionTouchedPaths } from "../session-touched";
-import { getRepo, isSharedCheckoutDir, repoForPath } from "../worktree";
+import { getRepo, isSharedCheckoutDir, sessionRepoId } from "../worktree";
 import { defaultRepo } from "../config";
 import { $ } from "bun";
 import { existsSync } from "fs";
@@ -57,11 +57,7 @@ export async function handleSessionGitRoutes(
 			primary: boolean;
 		}> = [
 			{
-				repo:
-					session.repo ||
-					(session.worktreeDir && session.mode !== "scratch"
-						? repoForPath(session.worktreeDir).id
-						: defaultRepo().id),
+				repo: sessionRepoId(session) ?? defaultRepo().id,
 				dir: session.worktreeDir,
 				primary: true,
 			},
@@ -149,8 +145,7 @@ export async function handleSessionGitRoutes(
 			patch?: string;
 		};
 		const repoIds = [
-			session.repo ||
-				(session.worktreeDir && session.mode !== "scratch" ? repoForPath(session.worktreeDir).id : defaultRepo().id),
+			sessionRepoId(session) ?? defaultRepo().id,
 			...(session.attachedRepos || []).map((repo) => repo.repo),
 		];
 		if (!body.repo || !repoIds.includes(body.repo))
@@ -186,11 +181,7 @@ export async function handleSessionGitRoutes(
 			return Response.json({ error: "Missing path" }, { status: 400 });
 
 		// Resolve the worktree dir for the targeted repo (primary or attached).
-		const primaryRepo =
-			session.repo ||
-			(session.worktreeDir && session.mode !== "scratch"
-				? repoForPath(session.worktreeDir).id
-				: defaultRepo().id);
+		const primaryRepo = sessionRepoId(session) ?? defaultRepo().id;
 		let dir: string | null = null;
 		let repoId = primaryRepo;
 		if (!body.repo || body.repo === primaryRepo) {
@@ -244,11 +235,7 @@ export async function handleSessionGitRoutes(
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		const repoId = url.searchParams.get("repo");
-		const primaryRepo =
-			session.repo ||
-			(session.worktreeDir && session.mode !== "scratch"
-				? repoForPath(session.worktreeDir).id
-				: defaultRepo().id);
+		const primaryRepo = sessionRepoId(session) ?? defaultRepo().id;
 		const isPrimary = !repoId || repoId === primaryRepo;
 		const dir = isPrimary
 			? session.worktreeDir
@@ -291,11 +278,7 @@ export async function handleSessionGitRoutes(
 		const contentType = imageContentType(filePath);
 		if (!contentType) return new Response("Not an image path", { status: 400 });
 		const repoId = url.searchParams.get("repo");
-		const primaryRepo =
-			session.repo ||
-			(session.worktreeDir && session.mode !== "scratch"
-				? repoForPath(session.worktreeDir).id
-				: defaultRepo().id);
+		const primaryRepo = sessionRepoId(session) ?? defaultRepo().id;
 		const isPrimary = !repoId || repoId === primaryRepo;
 		const dir = isPrimary
 			? session.worktreeDir
@@ -359,11 +342,7 @@ export async function handleSessionGitRoutes(
 		if (!filePath)
 			return Response.json({ error: "Missing path" }, { status: 400 });
 		const repoId = body ? body.repo || null : url.searchParams.get("repo");
-		const primaryRepo =
-			session.repo ||
-			(session.worktreeDir && session.mode !== "scratch"
-				? repoForPath(session.worktreeDir).id
-				: defaultRepo().id);
+		const primaryRepo = sessionRepoId(session) ?? defaultRepo().id;
 		const isPrimary = !repoId || repoId === primaryRepo;
 		const dir = isPrimary
 			? session.worktreeDir
@@ -431,11 +410,7 @@ export async function handleSessionGitRoutes(
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		const body = await req.json().catch(() => ({}));
 		const repoId = typeof body?.repo === "string" ? body.repo : null;
-		const primaryRepo =
-			session.repo ||
-			(session.worktreeDir && session.mode !== "scratch"
-				? repoForPath(session.worktreeDir).id
-				: defaultRepo().id);
+		const primaryRepo = sessionRepoId(session) ?? defaultRepo().id;
 		const isPrimary = !repoId || repoId === primaryRepo;
 		const dir = isPrimary
 			? session.worktreeDir
@@ -469,11 +444,7 @@ export async function handleSessionGitRoutes(
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		const body = await req.json().catch(() => ({}));
 		const repoId = typeof body?.repo === "string" ? body.repo : null;
-		const primaryRepo =
-			session.repo ||
-			(session.worktreeDir && session.mode !== "scratch"
-				? repoForPath(session.worktreeDir).id
-				: defaultRepo().id);
+		const primaryRepo = sessionRepoId(session) ?? defaultRepo().id;
 		const isPrimary = !repoId || repoId === primaryRepo;
 		const dir = isPrimary
 			? session.worktreeDir

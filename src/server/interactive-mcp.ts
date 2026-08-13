@@ -36,7 +36,7 @@ import { createNotesMcpServer } from "../agents/slack/notes-tools";
 import { createSelfDeployMcpServer } from "./self-deploy";
 import { papercutsEnabledForRepo } from "./papercuts";
 import { defaultRepo, productName } from "./config";
-import { repoForPath, REPOS } from "./worktree";
+import { REPOS, sessionRepoId } from "./worktree";
 import { registerInteractiveMcpBuilder, startMcpHttpServer, startRunRpcServer } from "./run-rpc";
 import { automationRunMcpForSession, selfImproveMcpForSession } from "./automations";
 import { findSession, touchNativeSession } from "./session-cache";
@@ -97,10 +97,9 @@ export async function runSessionPreviewAction(
 
 /** The session's primary repo id, for the papercuts toggle (undefined =
  *  session-only session, which logs under no repo and is always enabled). */
-function sessionRepoId(sessionId: string): string | undefined {
+function repoIdForSessionId(sessionId: string): string | undefined {
 	const s = findSession(sessionId);
-	if (!s) return undefined;
-	return s.repo || (s.worktreeDir && s.mode !== "scratch" ? repoForPath(s.worktreeDir).id : undefined);
+	return s ? sessionRepoId(s) : undefined;
 }
 
 /** The papercuts server for a session, or {} when its repo opted out
@@ -112,7 +111,7 @@ function papercutsServerFor(
 	runKind: string,
 	by?: string,
 ): Record<string, unknown> {
-	if (!papercutsEnabledForRepo(sessionRepoId(sessionId))) return {};
+	if (!papercutsEnabledForRepo(repoIdForSessionId(sessionId))) return {};
 	return {
 		"opensession-papercuts": createPapercutsMcpServer({
 			sessionId,
@@ -120,7 +119,7 @@ function papercutsServerFor(
 			by,
 			defaults: () => {
 				const s = findSession(sessionId);
-				return { repo: sessionRepoId(sessionId), model: s?.model };
+				return { repo: repoIdForSessionId(sessionId), model: s?.model };
 			},
 		}),
 	};
@@ -205,11 +204,7 @@ export function interactiveMcpServers(
 							const s = findSession(sessionId);
 							if (!s) return null;
 							return {
-								primaryRepo:
-									s.repo ||
-									(s.worktreeDir && s.mode !== "scratch"
-										? repoForPath(s.worktreeDir).id
-										: defaultRepo().id),
+								primaryRepo: sessionRepoId(s) ?? defaultRepo().id,
 								branch: s.branch,
 								worktreeDir: s.worktreeDir,
 								attached: s.attachedRepos || [],

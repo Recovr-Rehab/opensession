@@ -13,6 +13,7 @@ import {
 	prepareAttachedWorktree,
 	repoForPath,
 	REPOS,
+	sessionRepoId,
 	sharedCheckoutForNewSessions,
 	worktreeHasWork,
 } from "./worktree";
@@ -67,11 +68,7 @@ export function resolveSessionRepoContext(
 	repoId?: string,
 	hint?: string,
 ): SessionRepoContext | null {
-	const primaryRepo =
-		session.repo ||
-		(session.worktreeDir && session.mode !== "scratch"
-			? repoForPath(session.worktreeDir).id
-			: defaultRepo().id);
+	const primaryRepo = sessionRepoId(session) ?? defaultRepo().id;
 	const contexts: SessionRepoContext[] = [
 		...(session.worktreeDir
 			? [{
@@ -192,11 +189,7 @@ export function buildReposNote(session: UnifiedSession): string | undefined {
 		.join("\n\n");
 	const attached = session.attachedRepos || [];
 	if (!attached.length) return branchNote || undefined;
-	const primaryRepo =
-		session.repo ||
-		(session.worktreeDir && session.mode !== "scratch"
-			? repoForPath(session.worktreeDir).id
-			: defaultRepo().id);
+	const primaryRepo = sessionRepoId(session) ?? defaultRepo().id;
 	const lines = [
 		"## Repos in this session",
 		"This session spans multiple repos. Each is an isolated git worktree — `cd` into the right one to read or edit its files, and commit/push/open PRs in each repo independently (don't edit another repo's shared main checkout).",
@@ -215,11 +208,7 @@ export function buildReposNote(session: UnifiedSession): string | undefined {
 
 /** Repo ids a session spans, primary first — memory scopes + repos note agree on this. */
 export function sessionRepoIds(session: UnifiedSession): string[] {
-	const primary =
-		session.repo ||
-		(session.worktreeDir && session.mode !== "scratch"
-			? repoForPath(session.worktreeDir).id
-			: defaultRepo().id);
+	const primary = sessionRepoId(session) ?? defaultRepo().id;
 	return [primary, ...(session.attachedRepos || []).map((r) => r.repo)];
 }
 
@@ -285,11 +274,7 @@ export function resolvePrTarget(
 	branch?: string | null,
 ): { ghRepo: string; branch: string; repoId: string } | null {
 	const primaryBranch = sessionPrBranch(session);
-	const primaryRepo =
-		session.repo ||
-		(session.worktreeDir && session.mode !== "scratch"
-			? repoForPath(session.worktreeDir).id
-			: defaultRepo().id);
+	const primaryRepo = sessionRepoId(session) ?? defaultRepo().id;
 	// Explicit repo+branch — a linked PR, which may live on a different branch
 	// of the primary repo. Only pairs the session actually lists resolve, so
 	// the PR routes can't be pointed at an arbitrary branch.
@@ -567,9 +552,7 @@ export async function linkPr(
 		number = resolved.number;
 	}
 
-	const primaryRepo =
-		session.repo ||
-		(session.worktreeDir && session.mode !== "scratch" ? repoForPath(session.worktreeDir).id : defaultRepo().id);
+	const primaryRepo = sessionRepoId(session) ?? defaultRepo().id;
 	if (repoId === primaryRepo && branch === session.branch)
 		throw new Error("That's this session's own PR — it's already shown");
 	if (
