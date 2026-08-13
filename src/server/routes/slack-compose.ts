@@ -3,6 +3,7 @@ import { validFeaturedScreenshot } from "../../agents/github/shipped-change-noti
 import {
 	cancelPendingSlackComposer,
 	claimPendingSlackComposer,
+	openSlackComposer,
 	pendingSlackComposers,
 	restorePendingSlackComposer,
 	sendPendingSlackComposer,
@@ -19,6 +20,25 @@ function targetChannel(value: unknown) {
 }
 
 export async function handleSlackComposeRoutes(ctx: RouteContext): Promise<Response | undefined> {
+	const openMatch = ctx.path.match(/^\/api\/sessions\/([^/]+)\/slack-composer\/open$/);
+	if (openMatch && ctx.req.method === "POST") {
+		const sessionId = decodeURIComponent(openMatch[1]);
+		if (!ctx.authUser?.login && !ctx.authUser?.name) {
+			return Response.json({ error: "Sign in to review this Slack message" }, { status: 401 });
+		}
+		const body = await ctx.req.json().catch(() => ({}));
+		try {
+			void openSlackComposer(sessionId, {
+				message: typeof body?.message === "string" ? body.message : "",
+			});
+			return Response.json(pendingSlackComposers.get(sessionId)!.request);
+		} catch (error: any) {
+			return Response.json(
+				{ error: error?.message || "Couldn't open the Slack composer" },
+				{ status: 409 },
+			);
+		}
+	}
 	const match = ctx.path.match(/^\/api\/sessions\/([^/]+)\/slack-composer$/);
 	if (!match || !["GET", "POST", "DELETE"].includes(ctx.req.method)) return;
 	const sessionId = decodeURIComponent(match[1]);

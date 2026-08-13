@@ -42,6 +42,17 @@ export function fetchSlackChannels(sessionId: string): Promise<{
 	});
 }
 
+export function openSlackComposer(
+	sessionId: string,
+	message: string,
+): Promise<{ id: string; message: string; channel?: string; images: string[] }> {
+	return request(`/sessions/${encodeURIComponent(sessionId)}/slack-composer/open`, {
+		method: "POST",
+		body: { message },
+		label: "Couldn't open the Slack composer",
+	});
+}
+
 export function sendSlackComposer(
 	sessionId: string,
 	target: { requestId: string; channel: string; message: string; screenshots: string[] },

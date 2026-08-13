@@ -87,6 +87,7 @@ import { reviewLoopResult } from "../lib/review-loop";
 import {
 	cancelSlackComposer,
 	fetchSlackChannels,
+	openSlackComposer,
 	reconnectSlack,
 	sendSlackComposer,
 	shareShippedChange,
@@ -101,6 +102,7 @@ import { ComposerAgents } from "./ComposerAgents";
 import { UsageMeter } from "./UsageMeter";
 import { SchedulePromptButton } from "./SchedulePrompt";
 import { ShippedChangeComposer } from "./ShippedChangeComposer";
+import { BrandMark } from "./BrandMark";
 import { readFileAsDataUrl, type FileAttachment } from "../lib/images";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
 import {
@@ -3891,6 +3893,22 @@ export function SessionViewer({
 		shareLink(link, { toast: "Link copied", title: session.title || undefined });
 	}
 
+	async function handleOpenSlackComposer() {
+		setOverflowOpen(false);
+		const latestAssistantMessage = entries.findLast(
+			(entry) => entry.type === "assistant" && entry.content.trim(),
+		)?.content.trim() || "";
+		try {
+			const request = await openSlackComposer(session.id, latestAssistantMessage);
+			setSlackComposer(request);
+			setSlackComposerStatus("idle");
+			setSlackComposerReconnect(false);
+			requestAnimationFrame(() => scrollToLatest("smooth"));
+		} catch (error: any) {
+			toast(error?.message || "Couldn't open the Slack composer");
+		}
+	}
+
 	function commitRename() {
 		if (renameDraft !== null) {
 			// When the header titles the workspace, renaming edits the workspace —
@@ -4480,6 +4498,16 @@ export function SessionViewer({
 						<span className="grow">New session in workspace</span>
 					</Menu.Item>
 				);
+				const slackAction = (
+					<Menu.Item
+						onClick={() => void handleOpenSlackComposer()}
+						disabled={!!slackComposer}
+						title="Review a message before sending it to Slack"
+					>
+						<BrandMark name="slack" size={20} />
+						<span className="grow">Send to Slack…</span>
+					</Menu.Item>
+				);
 				// Copy transcript. These normally live on a tab's right-click menu,
 				// but a lone-session workspace has no tab strip (and phones hide it at
 				// every count), so the only place to grab this session's full text is the
@@ -4936,6 +4964,7 @@ export function SessionViewer({
 								{isPhone && addToSidebarAction(true)}
 								{isPhone && secondaryActions(true)}
 								{(compactHeader || isPhone) && shareAction(true)}
+								{slackAction}
 								{newSessionAction}
 								{transcriptActions}
 								{overflowActions}

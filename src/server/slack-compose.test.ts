@@ -8,6 +8,17 @@ import {
 	restorePendingSlackComposer,
 	sendPendingSlackComposer,
 } from "./slack-compose";
+import { handleSlackComposeRoutes } from "./routes/slack-compose";
+import type { RouteContext } from "./routes/context";
+
+function routeContext(path: string, authUser: RouteContext["authUser"]): RouteContext {
+	const req = new Request(`http://127.0.0.1:3850${path}`, {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ message: "Latest response" }),
+	});
+	return { req, url: new URL(req.url), path, publicPrefix: "", authUser };
+}
 
 afterEach(() => {
 	for (const [sessionId, pending] of pendingSlackComposers) {
@@ -17,6 +28,24 @@ afterEach(() => {
 });
 
 describe("Slack composer lifecycle", () => {
+	test("opens a human-requested composer from the session route", async () => {
+		const path = "/api/sessions/os-test/slack-composer/open";
+		const response = await handleSlackComposeRoutes(routeContext(path, {
+			login: "michiel",
+			name: "Michiel Westerbeek",
+		}));
+		expect(response?.status).toBe(200);
+		expect(await response?.json()).toMatchObject({ message: "Latest response", images: [] });
+		expect(pendingSlackComposers.get("os-test")?.request.message).toBe("Latest response");
+	});
+
+	test("requires sign-in to open a composer from the session route", async () => {
+		const path = "/api/sessions/os-test/slack-composer/open";
+		const response = await handleSlackComposeRoutes(routeContext(path, null));
+		expect(response?.status).toBe(401);
+		expect(pendingSlackComposers.has("os-test")).toBe(false);
+	});
+
 	test("blocks until the human sends", async () => {
 		const result = openSlackComposer("os-test", { message: "Status update" });
 		const request = pendingSlackComposers.get("os-test")?.request;
