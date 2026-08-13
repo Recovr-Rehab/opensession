@@ -2147,6 +2147,8 @@ private struct SessionInputBar: View {
     @Bindable var viewModel: SessionViewModel
     @AppStorage("os1.composer.sendKey") private var sendKey = "enter"
     @AppStorage("os1.composer.busySend") private var busySend = "queue"
+    /// Read for the Mac send menu's key hints only. See `BusySendHints`.
+    @AppStorage("os1.composer.busySendMod") private var busySendMod = "steer"
     /// Matches the transcript column cap so the bar centers with it.
     let contentMaxWidth: CGFloat
     let horizontalInset: CGFloat
@@ -2987,12 +2989,41 @@ private struct SessionInputBar: View {
             : "Message — queues for after this run"
     }
 
+    /// A send-menu row's title, with the key that does the same thing
+    /// appended on the Mac. A `String` rather than a literal on purpose: that
+    /// picks `Label`'s StringProtocol initializer, so the title never runs
+    /// through `LocalizedStringKey`.
+    private func busyMenuTitle(_ title: String, pref: String) -> String {
+        #if os(macOS)
+        guard let keys = BusySendHints.keys(
+            for: pref,
+            busySend: busySend,
+            busySendMod: busySendMod,
+            sendKey: sendKey
+        ) else { return title }
+        return "\(title) · \(keys)"
+        #else
+        return title
+        #endif
+    }
+
     /// Tapping sends the way the person's setting says (queue or steer);
-    /// holding offers the other one for this message only. Both verbs are
-    /// always one gesture away, the way ⌘/Ctrl+Enter makes them on the web —
-    /// before this, steering a fresh message meant sending it, finding its
-    /// chip, and tapping Steer. Only a running turn has anything to choose
-    /// between, so an idle composer keeps the plain button.
+    /// holding offers the other one FOR THIS MESSAGE ONLY. Both verbs are
+    /// always one gesture away, the way Command/Control+Return makes them on
+    /// the web. Before this, steering a fresh message meant sending it,
+    /// finding its chip, and tapping Steer. Only a running turn has anything
+    /// to choose between, so an idle composer keeps the plain button.
+    ///
+    /// The web's equivalent menu SETS the preference and hands the other
+    /// action to the modifier. That is right there and wrong here, and the
+    /// difference is the modifier: on the web every send already holds a key
+    /// or doesn't, so the menu can spend itself on the default and leave the
+    /// per-message escape hatch to Command+Return. An iPhone has no modifier.
+    /// This menu IS the modifier, and a modifier that silently rewrote your
+    /// default every time you used it would be a strange key. So the override
+    /// stays one-off, and the default stays where a default belongs, in
+    /// Settings. On the Mac, where a modifier does exist, each row also names
+    /// the key that does the same thing.
     @ViewBuilder
     private var sendButton: some View {
         if noteMode {
@@ -3008,7 +3039,7 @@ private struct SessionInputBar: View {
                     viewModel.sendDraft(busyModeOverride: "steer")
                 } label: {
                     Label(
-                        "Steer into this run",
+                        busyMenuTitle("Steer into this run", pref: "steer"),
                         systemImage: busySend == "steer" ? "checkmark" : "arrow.turn.up.right"
                     )
                 }
@@ -3016,7 +3047,7 @@ private struct SessionInputBar: View {
                     viewModel.sendDraft(busyModeOverride: "queue")
                 } label: {
                     Label(
-                        "Queue for after this run",
+                        busyMenuTitle("Queue for after this run", pref: "queue"),
                         systemImage: busySend == "steer" ? "clock" : "checkmark"
                     )
                 }
