@@ -17,6 +17,7 @@ import {
   IconCheck,
   IconConnections,
   IconDotsHorizontal,
+  IconEye,
   IconReturn,
   IconBox,
   IconFile,
@@ -140,6 +141,18 @@ const FOOTER =
 const FOOTER_LEFT = "flex min-w-0 items-center gap-1.5 max-[560px]:gap-1";
 const FOOTER_RIGHT = "flex min-w-0 items-center gap-1.5 max-[560px]:gap-1 phone:ml-auto";
 const FOOTER_ICON_BTN = cn(paletteIconBtn, "shrink-0 max-[560px]:w-9");
+/** Ask mode's toggle. Off, it is one of the footer's quiet icon tools. On, it
+ *  wears the same green marker the session composer's toolbar shows for the
+ *  same mode, so one mode reads identically in both places — and it names
+ *  itself, because the mode governs the whole session and an unlabelled glyph
+ *  would leave read-only running silently.
+ *
+ *  A complete string rather than a variant stacked on FOOTER_ICON_BTN: the two
+ *  states differ in width, height and colour, and `max-[560px]:w-9` from the
+ *  icon button would crush the labelled chip on phones. 32px tall, the size
+ *  the icon buttons' hover wash paints, so the row keeps one rhythm. */
+const ASK_BTN_ON =
+	"inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-control px-2.5 text-[12px] font-medium transition-colors bg-[color-mix(in_srgb,var(--green)_18%,transparent)] text-green hover:bg-[color-mix(in_srgb,var(--green)_26%,transparent)] disabled:cursor-default disabled:opacity-50";
 /** The one flexible footer item. `[&_[data-effort]]` reaches the effort suffix
  *  inside ModelEffortSelect: on ultra-narrow screens it cedes its space to the
  *  model name, which would otherwise truncate to a single letter. */
@@ -686,22 +699,10 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     (prompt.trim() || images.length > 0 || files.length > 0) &&
     (mode === "ask" || mode === "scratch" || selectedWorktree !== "");
 
-  // "Create from…" combines the repo-backed mode + base into one control.
-  const createFromValue = mode === "ask" ? "__ask__" : selectedWorktree;
-  function onCreateFromChange(v: string) {
-    if (v === "__ask__") {
-      setMode("ask");
-    } else {
-      setMode("code");
-      setSelectedWorktree(v);
-    }
-  }
-  const createFromLabel =
-    mode === "ask"
-      ? "Ask · read-only"
-      : selectedWorktree === "__new__"
-        ? "New branch"
-        : selectedWorktree;
+  // "Create from…" picks the base a code session branches off. Ask is not an
+  // option here: it is a mode, not a base — it cuts no worktree at all — so it
+  // lives with the footer's other tools and this picker steps aside for it.
+  const createFromLabel = selectedWorktree === "__new__" ? "New branch" : selectedWorktree;
   const createFromOptions = [
     {
       value: "__new__",
@@ -709,9 +710,6 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
         ? `New stacked branch (off ${forceBranch})`
         : "New branch",
     },
-    // Ask stays above the branch list — as the last option it drowned below
-    // the scroll fold once the worktree list grew, reading as "Ask is gone".
-    { value: "__ask__", label: "Ask · read-only on main", menuLabel: "Ask · read-only on main" },
     ...worktrees.map((wt) => ({ value: wt.branch, label: wt.branch })),
   ];
 
@@ -847,13 +845,13 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
             <IconChevronDown className={CHEVRON} size={22} />
           </PaletteSelect>
 
-          {mode !== "scratch" && (
+          {mode === "code" && (
           <PaletteSelect
             className={TRIGGER}
             title="What to create from"
-            value={createFromValue}
+            value={selectedWorktree}
             options={createFromOptions}
-            onChange={onCreateFromChange}
+            onChange={setSelectedWorktree}
             disabled={creating}
             ariaLabel="Create from"
             isPhone={isPhone}
@@ -972,6 +970,31 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 e.target.value = "";
               }}
             />
+            {/* Ask sits with the tools rather than in the header's base picker:
+                it is a mode the session runs in, like the composer's note mode,
+                not something to branch from. Scratch has no repo to read, so
+                the toggle steps out there entirely. */}
+            {mode !== "scratch" && !forceMode && (
+              <Tooltip
+                label={
+                  mode === "ask"
+                    ? "Ask mode on · reads the repo, changes nothing. Click to write code instead"
+                    : "Ask mode · read-only on main, no branch"
+                }
+              >
+                <button
+                  type="button"
+                  className={mode === "ask" ? ASK_BTN_ON : FOOTER_ICON_BTN}
+                  onClick={() => setMode(mode === "ask" ? "code" : "ask")}
+                  disabled={creating}
+                  aria-pressed={mode === "ask"}
+                  aria-label="Ask mode"
+                >
+                  <IconEye size={mode === "ask" ? 14 : 20} />
+                  {mode === "ask" && "Ask"}
+                </button>
+              </Tooltip>
+            )}
             {/* Rarely changed execution settings stay one level behind a single
                 overflow button. Their current values remain visible in the
                 submenu rows, while attachment stays one tap away. */}
