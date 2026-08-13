@@ -1203,7 +1203,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 							try {
 								appendOpencodeTranscript(session.claudeSessionId, [
 									transcriptLineRunnerNotice(
-										`Turn stopped by ${data.user || "someone"} (stop button / Esc).`,
+										`Stopped by ${data.user || "someone"}.`,
 									),
 								]);
 							} catch {}

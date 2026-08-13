@@ -5044,8 +5044,8 @@ async function* runOpencodeAttempt(
               bridgeRunEnd("error", runFailure);
               rotation.rotate = true;
               rotation.note =
-                `Claude usage limit hit on account "${pickedMeridian.name}" ` +
-                `(${parsed.modelID}); switched to "${next.name}" and retrying.`;
+                `Usage limit on "${pickedMeridian.name}" ` +
+                `(${parsed.modelID}); switched to "${next.name}".`;
               return;
             }
           }
@@ -5080,8 +5080,8 @@ async function* runOpencodeAttempt(
             bridgeRunEnd("error", runFailure);
             rotation.rotate = true;
             rotation.note =
-              `OpenAI usage limit hit on codex account "${pickedOpenai.name}" ` +
-              `(${parsed.modelID}); switched to "${next.name}" and retrying.`;
+              `Usage limit on "${pickedOpenai.name}" ` +
+              `(${parsed.modelID}); switched to "${next.name}".`;
             return;
           }
           runFailure +=
@@ -5180,9 +5180,9 @@ async function* runOpencodeAttempt(
         if (livenessWedged) turn.wedgeRetries++;
         rotation.rotate = true;
         rotation.note = livenessWedged
-          ? `Engine bridge went silent on account "${bridgeAccountLabel}" — respawned the opencode server and retrying once` +
-            (wedgeSwitchTo ? ` on account "${wedgeSwitchTo}".` : ".")
-          : `Transient engine error on account "${bridgeAccountLabel}" — retrying once.`;
+          ? `Engine went silent on "${bridgeAccountLabel}"; restarted and retrying` +
+            (wedgeSwitchTo ? ` on "${wedgeSwitchTo}".` : ".")
+          : `Engine error on "${bridgeAccountLabel}"; retrying.`;
         return;
       }
       turnEvent({ direction: "out", kind: "error", error: runFailure });
@@ -5230,7 +5230,7 @@ async function* runOpencodeAttempt(
         turnEvent({ direction: "out", kind: "server_respawn_retry", error: errMessage });
         bridgeRunEnd("error", errMessage);
         rotation.rotate = true;
-        rotation.note = `Transient engine error mid-turn — retrying (attempt ${attemptIndex + 1}).`;
+        rotation.note = `Engine error mid-turn; retrying (attempt ${attemptIndex + 1}).`;
         return;
       }
       turnEvent({ direction: "out", kind: "error", error: errMessage });
@@ -5332,7 +5332,7 @@ async function* runOpencodeAttempt(
         bridgeRunEnd("error", emptyMessage);
         rotation.rotate = true;
         rotation.note =
-          "The model stopped without a final response — continuing once from its saved work.";
+          "No final answer; continuing from its saved work.";
         return;
       }
       const terminalMessage =

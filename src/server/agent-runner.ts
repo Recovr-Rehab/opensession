@@ -518,10 +518,10 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
         yield {
           type: "error",
           content:
-            `${modelLabel(currentModel)} also failed with a transient engine error — ` +
+            `${modelLabel(currentModel)} also failed with a transient engine error. ` +
             `${consecutiveTransient} models in a row failed the same way, so this looks like ` +
-            `an infrastructure problem (engine bridge, MCP socket, or network), not a model ` +
-            `or usage issue. Stopping the fallback walk; retry in a minute or ping ${personaName()}. ` +
+            `infrastructure (engine bridge, MCP socket, or network). Stopping the fallback ` +
+            `walk; retry in a minute or ping ${personaName()}. ` +
             `Last error: ${failure.content || "unknown"}`,
           provider: providerFor(currentModel),
           model: currentModel,
@@ -1088,7 +1088,7 @@ export function resumeInterruptedRuns(
       );
       reportRecoveryFailure(
         run,
-        "Restart recovery did not begin in time, so it was stopped safely. Send the prompt again to continue.",
+        "Restart recovery didn't start in time. Send the prompt again.",
       );
     }, BOOT_RECOVERY_QUEUE_WAIT_MS);
 
