@@ -577,14 +577,14 @@ final class SessionLinkTests: XCTestCase {
     func testACodespannedIdBecomesALink() {
         SessionLinks.register(titles: [id: "Improve iOS session UI"])
         XCTAssertEqual(
-            SessionLinks.linkify("Delegated to `\(id)` just now."),
+            chipsAsLinks(SessionLinks.linkify("Delegated to `\(id)` just now.")),
             "Delegated to [Improve iOS session UI](os1session:\(id)) just now."
         )
     }
 
     func testAnUnknownIdIsLabelledByItsShortenedSelf() {
         XCTAssertEqual(
-            SessionLinks.linkify("see \(id) for details"),
+            chipsAsLinks(SessionLinks.linkify("see \(id) for details")),
             "see [bks-019fcc8f…](os1session:\(id)) for details"
         )
     }

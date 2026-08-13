@@ -18,7 +18,7 @@ final class TranscriptLinksTests: XCTestCase {
     /// it, and the same markdown has to come out different.
     func testATitleArrivingChangesWhatTheRowRenders() {
         let source = "handed to `\(id)`"
-        let before = SessionLinks.linkify(source)
+        let before = chipsAsLinks(SessionLinks.linkify(source))
         XCTAssertTrue(before.contains("os-019fcead…"), before)
 
         let generation = TranscriptLinks.shared.generation
@@ -26,7 +26,7 @@ final class TranscriptLinksTests: XCTestCase {
 
         XCTAssertGreaterThan(TranscriptLinks.shared.generation, generation)
         XCTAssertEqual(
-            SessionLinks.linkify(source),
+            chipsAsLinks(SessionLinks.linkify(source)),
             "handed to [Fold consecutive edits into one row](os1session:\(id))"
         )
     }
@@ -43,7 +43,7 @@ final class TranscriptLinksTests: XCTestCase {
 
         XCTAssertGreaterThan(TranscriptLinks.shared.generation, generation)
         XCTAssertTrue(
-            PrLinks.linkify("opened opensession#128", sessionId: nil)
+            chipsAsLinks(PrLinks.linkify("opened opensession#128", sessionId: nil))
                 .contains("(os1pr:opensession/128)")
         )
     }

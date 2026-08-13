@@ -17,8 +17,11 @@ final class AssetLinksTests: XCTestCase {
         )
     }
 
+    /// Assets draw as chips, whose label rides in the destination's query.
+    /// `chipsAsLinks` turns one back into the link it stands for, so these
+    /// expectations stay about which names are claimed.
     private func linkify(_ markdown: String) -> String {
-        AssetLinks.linkify(markdown, sessionId: session)
+        chipsAsLinks(AssetLinks.linkify(markdown, sessionId: session))
     }
 
     func testWrittenAssetBecomesALink() {

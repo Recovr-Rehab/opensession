@@ -21,7 +21,8 @@ enum AssetLinks {
 
     private static let links = PathLinks(
         scheme: scheme,
-        acceptsMentionPrefix: false
+        acceptsMentionPrefix: false,
+        chipKind: .asset
     )
 
     static func register(paths next: Set<String>, for sessionId: String) {

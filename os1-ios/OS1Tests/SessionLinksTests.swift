@@ -67,11 +67,11 @@ final class SessionLinksTests: XCTestCase {
     func testModernIdsLinkBothWaysTheyAreWritten() {
         let modern = "os-019fcead-adc4-7000-b0da-8a5af66819c7"
         XCTAssertEqual(
-            SessionLinks.linkify("delegated to `\(modern)`"),
+            chipsAsLinks(SessionLinks.linkify("delegated to `\(modern)`")),
             "delegated to [os-019fcead…](os1session:\(modern))"
         )
         XCTAssertEqual(
-            SessionLinks.linkify("delegated to \(modern) just now"),
+            chipsAsLinks(SessionLinks.linkify("delegated to \(modern) just now")),
             "delegated to [os-019fcead…](os1session:\(modern)) just now"
         )
     }
@@ -80,14 +80,14 @@ final class SessionLinksTests: XCTestCase {
     /// codespans. Only the full uuidv7 counts — the line the web draws too.
     func testOrdinaryOsCodespansAreNotSessionIds() {
         for text in ["run `os-release` first", "see `os-1`", "`os-build-cache`"] {
-            XCTAssertEqual(SessionLinks.linkify(text), text, text)
+            XCTAssertEqual(chipsAsLinks(SessionLinks.linkify(text)), text, text)
         }
     }
 
     /// The pre-rename ids are still all over stored transcripts.
     func testLegacyIdsStillLink() {
         XCTAssertEqual(
-            SessionLinks.linkify("see `bks-ghpr-5099-review`"),
+            chipsAsLinks(SessionLinks.linkify("see `bks-ghpr-5099-review`")),
             "see [bks-ghpr-5099-review](os1session:bks-ghpr-5099-review)"
         )
     }

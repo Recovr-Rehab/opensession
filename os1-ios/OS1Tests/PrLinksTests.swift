@@ -32,8 +32,12 @@ final class PrLinksTests: XCTestCase {
         try JSONDecoder().decode([Session].self, from: Data(json.utf8))
     }
 
+    /// A PR draws as a chip, whose label rides in the destination's query and
+    /// whose live state is a tone rather than words. `chipsAsLinks` turns one
+    /// back into the link it stands for, so these expectations stay about
+    /// which mentions are claimed; the tone has its own test below.
     private func linkify(_ markdown: String) -> String {
-        PrLinks.linkify(markdown, sessionId: session)
+        chipsAsLinks(PrLinks.linkify(markdown, sessionId: session))
     }
 
     // MARK: - The forms a PR is written in
@@ -95,12 +99,13 @@ final class PrLinksTests: XCTestCase {
     }
 
     func testShortNumberLinksWhenTheListKnowsThatPr() {
-        // os-other owns opensession#92, merged — so it chips, with its dot.
+        // os-other owns opensession#92, so the list can place it.
         XCTAssertEqual(
             linkify("shipped in #92"),
-            "shipped in [\u{1F7E3} #92](os1pr:opensession/92)"
+            "shipped in [#92](os1pr:opensession/92)"
         )
     }
+
 
     /// A repo this instance doesn't serve must never be pointed at one of
     /// ours: the mention stays text, and the URL stays a plain link for
@@ -227,14 +232,16 @@ final class PrLinksTests: XCTestCase {
     /// and in the toolbar. A PR no session in the list owns has no state to
     /// show and draws none.
     func testStateRidesOnTheChipOnlyWhenTheListKnowsIt() {
-        XCTAssertEqual(
-            linkify("opensession#92"),
-            "[\u{1F7E3} opensession#92](os1pr:opensession/92)"
-        )
-        XCTAssertEqual(
-            linkify("opensession#5528"),
-            "[opensession#5528](os1pr:opensession/5528)"
-        )
+        // The list owns opensession#92 and knows it merged, so the chip is
+        // toned; the label itself is what the sentence wrote, either way.
+        let known = PrLinks.linkify("opensession#92", sessionId: session)
+        XCTAssertEqual(chipParameter("chipKind", in: known), "pr")
+        XCTAssertEqual(chipParameter("chipTone", in: known), "purple")
+        XCTAssertEqual(chipsAsLinks(known), "[opensession#92](os1pr:opensession/92)")
+
+        let unknown = PrLinks.linkify("opensession#5528", sessionId: session)
+        XCTAssertEqual(chipParameter("chipTone", in: unknown), "neutral")
+        XCTAssertEqual(chipsAsLinks(unknown), "[opensession#5528](os1pr:opensession/5528)")
     }
 
     func testListStateIsRankedLikeTheFetchedPr() throws {
@@ -266,11 +273,14 @@ final class PrLinksTests: XCTestCase {
     /// autolinking claims it, and what it produces has to survive every
     /// rewrite that runs after it.
     func testChipSurvivesTheRestOfThePipeline() {
-        let out = SessionLinks.linkify(
+        let out = chipsAsLinks(SessionLinks.linkify(
             MarkdownAutolink.linkify(
-                linkify("opened https://github.com/tellahq/opensession/pull/5528 · docs at https://tella.tv")
+                PrLinks.linkify(
+                    "opened https://github.com/tellahq/opensession/pull/5528 · docs at https://tella.tv",
+                    sessionId: session
+                )
             )
-        )
+        ))
         XCTAssertEqual(
             out,
             "opened [PR #5528](os1pr:opensession/5528) · docs at [https://tella.tv](https://tella.tv)"

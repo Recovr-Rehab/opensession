@@ -94,12 +94,26 @@ enum SessionLinks {
                 location: cursor,
                 length: match.range.location - cursor
             ))
-            result += "[\(escaped(label(for: id)))](\(scheme):\(id))"
+            result += chip(for: id).markdown
             cursor = match.range.location + match.range.length
         }
         guard cursor > 0 else { return line }
         result += ns.substring(from: cursor)
         return result
+    }
+
+    /// What a reference to another session draws as: a conversation glyph and
+    /// that session's own title. The full id stays in the accessibility label,
+    /// because the label above is lossy either way.
+    static func chip(for id: String) -> TranscriptChip {
+        let label = label(for: id)
+        return TranscriptChip(
+            kind: .session,
+            tone: .neutral,
+            title: label,
+            accessibilityLabel: label == id ? "Open session \(id)" : "Open \(label) (\(id))",
+            destination: "\(scheme):\(id)"
+        )
     }
 
     /// The chip's text: the referenced session's title when we know it,
@@ -151,12 +165,4 @@ enum SessionLinks {
         return stripped.isEmpty ? title : stripped
     }
 
-    /// A title is arbitrary text landing in a markdown link label, so the
-    /// characters that would end that label early have to be escaped.
-    private static func escaped(_ label: String) -> String {
-        label
-            .replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "[", with: "\\[")
-            .replacingOccurrences(of: "]", with: "\\]")
-    }
 }

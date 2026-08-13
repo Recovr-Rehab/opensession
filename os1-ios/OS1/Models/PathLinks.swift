@@ -24,15 +24,22 @@ final class PathLinks {
     /// Repo paths may come from the composer's `@path` mention syntax. Scratch
     /// asset names have no such syntax, so `@report.html` must stay unknown.
     private let acceptsMentionPrefix: Bool
+    /// What a matched path draws as, or nil for an ordinary link. A scratch
+    /// file is an artifact the turn made — one object, worth a chip. A repo
+    /// path is a name in a sentence, and a paragraph listing four files would
+    /// come out as four buttons, so those stay text.
+    private let chipKind: TranscriptChip.Kind?
 
     init(
         scheme: String,
         maxShortAliases: Int = 600,
-        acceptsMentionPrefix: Bool = true
+        acceptsMentionPrefix: Bool = true,
+        chipKind: TranscriptChip.Kind? = nil
     ) {
         self.scheme = scheme
         self.maxShortAliases = maxShortAliases
         self.acceptsMentionPrefix = acceptsMentionPrefix
+        self.chipKind = chipKind
     }
 
     /// session id → the paths that session may link, and the pattern matching
@@ -194,11 +201,26 @@ final class PathLinks {
             // looks exactly like the un-tappable code around it. Dropping the
             // code voice is the smaller loss: the reader learns that a grey
             // chip is code and a coloured path is a file they can open.
-            result += "[\(text)](\(destination))"
+            result += link(text: text, path: path, destination: destination)
             cursor = whole.location + whole.length
         }
         result += ns.substring(from: cursor)
         return result
+    }
+
+    /// The markdown one match becomes: a chip for the schemes that draw one,
+    /// an ordinary link for the rest. `text` is what the prose wrote, which is
+    /// the shorthand the reader chose; `path` is the whole of it, and is what
+    /// the chip says out loud.
+    private func link(text: String, path: String, destination: String) -> String {
+        guard let chipKind else { return "[\(text)](\(destination))" }
+        return TranscriptChip(
+            kind: chipKind,
+            tone: .accent,
+            title: text,
+            accessibilityLabel: "Open \(path)",
+            destination: destination
+        ).markdown
     }
 
     /// Percent-encode everything a markdown destination can't carry — a space

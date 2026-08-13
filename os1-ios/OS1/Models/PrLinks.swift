@@ -319,18 +319,22 @@ enum PrLinks {
     }
 
     private static func link(label: String, to reference: Reference) -> String {
-        "[\(marked(label, for: reference))](\(destination(for: reference)))"
-    }
-
-    /// The chip's dot, in front of the number the way `PrChipLabel` draws it in
-    /// the toolbar. A markdown link renders in ONE colour, so the state can't
-    /// tint the label the way the web's chip does; a colour glyph carries its
-    /// own, and is the only way to say "merged" or "checks failing" inline
-    /// without spelling the word out mid-sentence.
-    private static func marked(_ label: String, for reference: Reference) -> String {
-        guard let summary = index.states[Index.key(reference.repo, reference.number)]
-        else { return label }
-        return "\(summary.marker) \(label)"
+        let summary = index.states[Index.key(reference.repo, reference.number)]
+        return TranscriptChip(
+            kind: .pullRequest,
+            // The web colours the whole chip by the PR's live state
+            // (`a.pr-ref[data-pr-tone]`), and now so does this: a wash and a
+            // label in the state's own ink. It replaces a colour emoji, which
+            // was what a one-colour markdown link could manage — three of them
+            // in a paragraph read like a set of traffic lights, and none of
+            // them could be told apart at a glance from the emoji an agent
+            // writes on purpose.
+            tone: summary?.chipTone ?? .neutral,
+            title: label,
+            accessibilityLabel: summary.map { "Open PR \(reference.number) · \($0.label)" }
+                ?? "Open PR \(reference.number)",
+            destination: destination(for: reference)
+        ).markdown
     }
 
     private static func destination(for reference: Reference) -> String {

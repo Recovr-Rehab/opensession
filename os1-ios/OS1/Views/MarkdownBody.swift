@@ -291,6 +291,12 @@ extension MarkdownRenderConfig {
     /// separate a name from the prose around it, so the underline is
     /// `.clear`.
     static func os1Config(text: Color, quote: Color) -> MarkdownRenderConfig {
+        // Inline chips are attachments, and an attachment is only drawn by the
+        // view provider once that provider owns the file type. Registering
+        // here rather than at launch keeps the two halves of the mechanism in
+        // one place: nothing can render markdown without going through a
+        // config first. See `TranscriptChip`.
+        TranscriptChipViewProvider.registerIfNeeded()
         #if os(iOS)
         let base = MarkdownRenderConfig.default
         return MarkdownRenderConfig(
@@ -336,6 +342,7 @@ extension MarkdownRenderConfig {
                 codeBackgroundColor: OS1VisualStyle.markdownInlineCode,
                 codeUnderlineColor: .clear
             ),
+            citationConfig: .os1Chips,
             codeBlockConfig: .init(
                 theme: .github,
                 backgroundColor: OS1VisualStyle.markdownCodeWell,
@@ -379,6 +386,7 @@ extension MarkdownRenderConfig {
                 codeBackgroundColor: OS1VisualStyle.markdownInlineCode,
                 codeUnderlineColor: .clear
             ),
+            citationConfig: .os1Chips,
             codeBlockConfig: .init(
                 theme: .github,
                 backgroundColor: OS1VisualStyle.markdownCodeWell,
