@@ -4611,7 +4611,7 @@ export function SessionViewer({
 								: `Archive session (${archiveShortcutLabel})`
 						}
 					>
-						<IconArchive size={22} />
+						<IconArchive size={20} />
 						<span className="grow">
 							{archiving
 								? session.archived
@@ -4631,11 +4631,11 @@ export function SessionViewer({
 				const deleteAction = !showDeleteConfirm ? (
 					<Menu.Item
 						closeOnClick={false}
-						className="text-dim data-[highlighted]:bg-red-soft data-[highlighted]:text-red"
+						className="data-[highlighted]:bg-red-soft data-[highlighted]:text-red"
 						onClick={() => setShowDeleteConfirm(true)}
 						title="Delete session"
 					>
-						<IconTrash size={22} />
+						<IconTrash size={20} />
 						<span className="grow">Delete session</span>
 					</Menu.Item>
 				) : (

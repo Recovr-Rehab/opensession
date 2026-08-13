@@ -392,7 +392,7 @@ export function PreviewButton({
         {isStarting ? (
           <span className={spinnerClass} />
         ) : (
-          <IconPlayOutline size={20} className={running ? "text-green" : "text-faint"} />
+          <IconPlayOutline size={20} className={running ? "text-green" : undefined} />
         )}
         <span className="grow">
           {isStarting ? "Cancel preview startup" : running ? "Open preview" : "Preview"}
