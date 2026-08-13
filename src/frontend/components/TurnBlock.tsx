@@ -396,7 +396,11 @@ function ToolRunBlock({
           {groups.map(({ name, count }) => (
             <span
               key={name}
-              className="ml-2.5 inline-flex items-center gap-1 align-middle whitespace-nowrap"
+              // No gap: these 24-grid glyphs only ink ~60% of their box, so
+              // the box's own side bearing (~4px at this size) already reads
+              // as the space between the glyph and its count. Adding a gap on
+              // top of it pushed the number twice as far away as it looked.
+              className="ml-2.5 inline-flex items-center align-middle whitespace-nowrap"
             >
               <span className="inline-flex size-5 items-center justify-center text-faint">
                 <ToolGlyph toolName={name} size={20} />
