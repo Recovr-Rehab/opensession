@@ -184,8 +184,14 @@ export function IconCheck(p: IconProps) {
 export function IconCheckCircle(p: IconProps) {
   return (
     <Svg {...p}>
-      <circle {...stroke} cx="12" cy="12" r="7.25" />
-      <path {...stroke} d="M8.25 12.25L10.75 14.5L15.75 9.5" />
+      <path
+        {...stroke}
+        d="M4.75 12C4.75 7.99594 7.99594 4.75 12 4.75V4.75C16.0041 4.75 19.25 7.99594 19.25 12V12C19.25 16.0041 16.0041 19.25 12 19.25V19.25C7.99594 19.25 4.75 16.0041 4.75 12V12Z"
+      />
+      <path
+        {...stroke}
+        d="M9.75 12.75L10.1837 13.6744C10.5275 14.407 11.5536 14.4492 11.9564 13.7473L14.25 9.75"
+      />
     </Svg>
   );
 }

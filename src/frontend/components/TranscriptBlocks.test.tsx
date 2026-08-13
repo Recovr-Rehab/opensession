@@ -352,7 +352,8 @@ describe("TranscriptBlocks review loops", () => {
 		expect(html).toContain(">1 step<");
 		expect(html).not.toContain("report.txt");
 		expect(html).toContain('aria-label="Review passed"');
-		expect(html).toContain('<circle stroke="currentColor"');
+		expect(html).toContain("M4.75 12C4.75 7.99594");
+		expect(html).toContain("M9.75 12.75L10.1837 13.6744");
 		expect(html).toContain("text-faint");
 		expect(html).toContain("1 round · 5/5 · 8 checks passed");
 		expect(html).toContain("mt-0.5 pl-2");
