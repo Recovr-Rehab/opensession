@@ -131,17 +131,25 @@ describe("scanConflictTransitions", () => {
 });
 
 describe("conflictMessage", () => {
-  test("names the PR and tells the session it can finish what it is doing", () => {
-    const msg = conflictMessage({
-      repoId: "tella-fusion",
-      branch: "fix/test",
-      number: 42,
-      title: "Test PR",
-      url: "https://github.com/tellahq/tella-fusion/pull/42",
-    });
+  const msg = conflictMessage({
+    repoId: "tella-fusion",
+    branch: "fix/test",
+    number: 42,
+    title: "Test PR",
+    url: "https://github.com/tellahq/tella-fusion/pull/42",
+  });
+
+  test("names the PR and links it", () => {
     expect(msg).toContain("PR #42");
-    expect(msg).toContain("finish that first");
-    expect(msg).toContain("gh pr view 42 --json baseRefName");
-    expect(msg).toContain("Never force-push");
+    expect(msg).toContain("Test PR");
+    expect(msg).toContain("https://github.com/tellahq/tella-fusion/pull/42");
+  });
+
+  test("notifies without prescribing what to do about it", () => {
+    // It is an event, not a briefing: no procedure, no priority call, no
+    // repetition of git rules the agent already has.
+    expect(msg.length).toBeLessThan(160);
+    for (const instruction of ["git ", "gh pr", "resolve", "finish", "Never", "push"])
+      expect(msg).not.toContain(instruction);
   });
 });

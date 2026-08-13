@@ -88,22 +88,13 @@ export function scanConflictTransitions(
 }
 
 /**
- * What the session is told. It is an FYI with a suggested procedure, not an
- * instruction to drop everything: the base branch moving is not this session's
- * doing, and interrupting a half-finished task to rebase is usually worse than
- * waiting. The base branch is looked up rather than named here because the bulk
- * cache carries no base ref, and a stacked PR does not target the default one.
+ * What the session is told: the fact, and nothing else. It is a notification,
+ * so it does not prescribe a resolution procedure, rank the work against
+ * whatever the session is already doing, or repeat the git rules the agent
+ * already has. When and how to fix it is the session's call.
  */
 export function conflictMessage(event: PrConflictEvent): string {
-  return (
-    `PR #${event.number} “${event.title}” now has merge conflicts. ` +
-    `Its base branch moved after your last push, so it can no longer be merged as is. ` +
-    `Nothing is broken in your work and nothing is urgent: if you are mid-task, finish that first. ` +
-    `When you do resolve it, merge the base into the PR branch rather than rebasing: ` +
-    `read the base with \`gh pr view ${event.number} --json baseRefName\`, \`git fetch origin\`, ` +
-    `merge that branch in, resolve the conflicts, re-run the tests that cover the touched code, and push. ` +
-    `Never force-push, and never \`gh pr merge\`. ${event.url}`
-  );
+  return `PR #${event.number} “${event.title}” now has merge conflicts with its base branch. ${event.url}`;
 }
 
 /**
