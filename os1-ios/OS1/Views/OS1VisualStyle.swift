@@ -305,6 +305,50 @@ enum OS1VisualStyle {
     static let blue = Color(red: 0.345, green: 0.651, blue: 1.0)
     static let red = Color(red: 0.973, green: 0.318, blue: 0.286)
     static let purple = Color(red: 0.639, green: 0.443, blue: 0.969)
+    // A check row that wants something, on the PR panel's grouped list.
+    //
+    // The web tints one summary chip by the worst status it can see. A phone
+    // shows every check as its own row, and the question those rows hide is
+    // which one broke: finding it means reading twenty 15pt glyphs down a
+    // column of near-identical workflow names. So the rows that are NOT
+    // passing take a wash and a passing row keeps the plain list surface. A
+    // list painted green end to end answers nothing and leaves the single red
+    // row harder to find than before.
+    //
+    // Translucent status ink rather than the web's `--red-soft` / `--yellow-soft`
+    // hexes: those are mixed for `--bg-panel`, and a grouped row here is white
+    // in light appearance and near-black in dark, so one wash has to sit a
+    // fixed step over both surfaces instead of naming a colour. The alpha is
+    // per appearance because the wash that reads on white disappears on black,
+    // and yellow carries more of it than red at the same strength because it
+    // is the lighter hue.
+    #if os(iOS)
+    static let checkRowFailure = Color(uiColor: UIColor { traits in
+        UIColor(
+            red: 0.973, green: 0.318, blue: 0.286,
+            alpha: traits.userInterfaceStyle == .dark ? 0.22 : 0.12
+        )
+    })
+    static let checkRowPending = Color(uiColor: UIColor { traits in
+        UIColor(
+            red: 0.824, green: 0.600, blue: 0.133,
+            alpha: traits.userInterfaceStyle == .dark ? 0.24 : 0.16
+        )
+    })
+    #else
+    static let checkRowFailure = Color(nsColor: NSColor(name: nil) { appearance in
+        NSColor(
+            red: 0.973, green: 0.318, blue: 0.286,
+            alpha: appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? 0.22 : 0.12
+        )
+    })
+    static let checkRowPending = Color(nsColor: NSColor(name: nil) { appearance in
+        NSColor(
+            red: 0.824, green: 0.600, blue: 0.133,
+            alpha: appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? 0.24 : 0.16
+        )
+    })
+    #endif
     /// A teammate's reply routed back into a session — the web's `#1f9e8a`.
     /// Not a status colour: it marks whose words these are, so it is warm
     /// rather than green-for-good.

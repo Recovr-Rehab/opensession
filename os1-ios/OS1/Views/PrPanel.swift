@@ -360,12 +360,15 @@ struct PrPanelView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(Array(checks.enumerated()), id: \.offset) { _, check in
-                    if let url = check.url.flatMap(URL.init) {
-                        Link(destination: url) { checkRow(check) }
-                            .foregroundStyle(.primary)
-                    } else {
-                        checkRow(check)
+                    Group {
+                        if let url = check.url.flatMap(URL.init) {
+                            Link(destination: url) { checkRow(check) }
+                                .foregroundStyle(.primary)
+                        } else {
+                            checkRow(check)
+                        }
                     }
+                    .listRowBackground(checkRowTint(check.rank))
                 }
             }
         }
@@ -400,15 +403,31 @@ struct PrPanelView: View {
         }
     }
 
+    /// Nil for a check that is fine. See `OS1VisualStyle.checkRowFailure` for
+    /// why only the rows that want something are painted.
+    private func checkRowTint(_ rank: PrCheck.Rank) -> Color? {
+        switch rank {
+        case .failure: OS1VisualStyle.checkRowFailure
+        case .pending: OS1VisualStyle.checkRowPending
+        case .success, .neutral: nil
+        }
+    }
+
     @ViewBuilder
     private func checkIcon(_ rank: PrCheck.Rank) -> some View {
+        // The app's own status palette, not SwiftUI's stock green/red/orange:
+        // the same five colours mean the same five things everywhere else in
+        // both apps, and the stock ones render a different hue per platform.
         switch rank {
         case .success:
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(OS1VisualStyle.green)
         case .failure:
-            Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
+            Image(systemName: "xmark.circle.fill")
+                .foregroundStyle(OS1VisualStyle.red)
         case .pending:
-            Image(systemName: "clock.fill").foregroundStyle(.orange)
+            Image(systemName: "clock.fill")
+                .foregroundStyle(OS1VisualStyle.yellow)
         case .neutral:
             Image(systemName: "minus.circle").foregroundStyle(.secondary)
         }
