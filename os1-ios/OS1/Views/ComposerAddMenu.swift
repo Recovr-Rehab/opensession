@@ -436,7 +436,7 @@ struct SchedulePromptSheet: View {
                 }
 
                 if let error {
-                    Section { Text(error).foregroundStyle(OS1VisualStyle.red) }
+                    Section { Text(error).foregroundStyle(OS1VisualStyle.redInk) }
                 }
             }
             .navigationTitle("Send later")

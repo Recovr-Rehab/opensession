@@ -160,7 +160,7 @@ struct DeskVoiceCallView: View {
             Text(engine.state == .error ? (engine.errorMessage ?? engine.state.label) : statusText)
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(
-                    engine.state == .error ? OS1VisualStyle.red : OS1VisualStyle.textDim
+                    engine.state == .error ? OS1VisualStyle.redInk : OS1VisualStyle.textDim
                 )
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
@@ -173,7 +173,7 @@ struct DeskVoiceCallView: View {
             if let hint = engine.hint, engine.state != .error {
                 Text(hint)
                     .font(.footnote)
-                    .foregroundStyle(OS1VisualStyle.yellow)
+                    .foregroundStyle(OS1VisualStyle.yellowInk)
                     .multilineTextAlignment(.center)
                     .transition(.opacity)
             }

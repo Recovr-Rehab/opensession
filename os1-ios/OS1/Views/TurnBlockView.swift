@@ -185,7 +185,7 @@ struct TurnBlockView: View {
             if turn.failureCount > 0 {
                 Text("· \(turn.failureCount) failed")
                     .font(.footnote)
-                    .foregroundStyle(OS1VisualStyle.red)
+                    .foregroundStyle(OS1VisualStyle.redInk)
                     .fixedSize()
             }
 
@@ -258,7 +258,7 @@ struct TurnBlockView: View {
         if turn.failureCount > 0 {
             Text("· \(turn.failureCount) failed")
                 .font(.footnote)
-                .foregroundStyle(OS1VisualStyle.red)
+                .foregroundStyle(OS1VisualStyle.redInk)
                 .fixedSize()
         }
     }
@@ -509,7 +509,7 @@ private struct ToolRunView: View {
                         if failureCount > 0 {
                             Text("\(failureCount) failed")
                                 .font(.caption2)
-                                .foregroundStyle(OS1VisualStyle.red)
+                                .foregroundStyle(OS1VisualStyle.redInk)
                                 .fixedSize()
                         }
                         if isLive, items.contains(where: \.isPending) {
@@ -660,7 +660,7 @@ private struct EditRunView: View {
             if failureCount > 0 {
                 Text("\(failureCount) failed")
                     .font(.caption2)
-                    .foregroundStyle(OS1VisualStyle.red)
+                    .foregroundStyle(OS1VisualStyle.redInk)
                     .fixedSize()
             }
             if isLive, items.contains(where: \.isPending) {
@@ -706,11 +706,11 @@ struct LineStatsView: View {
         HStack(spacing: 4) {
             if stats.additions > 0 {
                 Text(verbatim: "+\(stats.additions)")
-                    .foregroundStyle(OS1VisualStyle.green)
+                    .foregroundStyle(OS1VisualStyle.greenInk)
             }
             if stats.deletions > 0 {
                 Text(verbatim: "−\(stats.deletions)")
-                    .foregroundStyle(OS1VisualStyle.red)
+                    .foregroundStyle(OS1VisualStyle.redInk)
             }
         }
         .font(.caption2.weight(.medium))

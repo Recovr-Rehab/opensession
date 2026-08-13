@@ -159,7 +159,7 @@ private struct SessionNoteRow: View {
                     .font(.caption.weight(.semibold))
                 Text("Note")
                     .font(.caption2.weight(.semibold))
-                    .foregroundStyle(OS1VisualStyle.yellow)
+                    .foregroundStyle(OS1VisualStyle.yellowInk)
                 Text(note.date, format: .dateTime.month(.abbreviated).day().hour().minute())
                     .font(.caption2)
                     .foregroundStyle(OS1VisualStyle.textFaint)
@@ -664,10 +664,10 @@ struct RunStatusFooter: View {
             // Amber is the in-progress colour everywhere else in the app —
             // the sessions list's in-progress lane, the tab strip's running
             // pill — so the transcript says "running" in the same voice.
-            PulsingDot(color: OS1VisualStyle.yellow, size: 6)
+            PulsingDot(color: OS1VisualStyle.yellowInk, size: 6)
             RunElapsedLabel(since: since)
                 .font(.caption2.weight(.medium))
-                .foregroundStyle(OS1VisualStyle.yellow)
+                .foregroundStyle(OS1VisualStyle.yellowInk)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)

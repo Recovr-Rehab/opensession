@@ -2504,7 +2504,7 @@ private struct SessionInputBar: View {
             .accessibilityLabel("Leave note mode")
         }
         .font(.caption.weight(.medium))
-        .foregroundStyle(OS1VisualStyle.yellow)
+        .foregroundStyle(OS1VisualStyle.yellowInk)
         .padding(.leading, 10)
         .padding(.trailing, 3)
         .padding(.vertical, 3)
@@ -3292,8 +3292,8 @@ private struct SessionInputBar: View {
         /// messages doesn't read as a flap full of warnings.
         private var labelColor: Color {
             switch phase {
-            case .unsent: OS1VisualStyle.yellow
-            case .failed: OS1VisualStyle.red
+            case .unsent: OS1VisualStyle.yellowInk
+            case .failed: OS1VisualStyle.redInk
             case .queued, .steering, .delivering: OS1VisualStyle.textFaint
             }
         }
@@ -3307,6 +3307,11 @@ private struct SessionInputBar: View {
 
         /// The state, as a small tinted mark rather than a bold coloured
         /// sentence per row. In-flight pulses like the run chip above.
+        ///
+        /// These two take the ink rather than the fill, which is the one
+        /// place a glyph should: they sit inline with `labelColor` saying the
+        /// same thing, and a bright amber mark beside dark amber words reads
+        /// as two states rather than one.
         @ViewBuilder
         private var mark: some View {
             switch phase {
@@ -3317,11 +3322,11 @@ private struct SessionInputBar: View {
             case .unsent:
                 Image(systemName: "arrow.up.circle")
                     .font(.caption2)
-                    .foregroundStyle(OS1VisualStyle.yellow)
+                    .foregroundStyle(OS1VisualStyle.yellowInk)
             case .failed:
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.caption2)
-                    .foregroundStyle(OS1VisualStyle.red)
+                    .foregroundStyle(OS1VisualStyle.redInk)
             }
         }
 
@@ -3672,7 +3677,7 @@ private struct QueuedMessageEditor: View {
                             .font(.subheadline)
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(OS1VisualStyle.red)
+                    .foregroundStyle(OS1VisualStyle.redInk)
                 }
                 .padding(.horizontal, 16)
                 #if os(iOS)

@@ -243,7 +243,7 @@ struct WorktreeInfoView: View {
                                 Spacer()
                             }
                             .font(.subheadline.weight(.medium))
-                            .foregroundStyle(OS1VisualStyle.red)
+                            .foregroundStyle(OS1VisualStyle.redInk)
                             .padding(.horizontal, 12)
                             .frame(minHeight: 48)
                             .contentShape(Rectangle())
@@ -266,7 +266,7 @@ struct WorktreeInfoView: View {
                         Divider()
                         Text(error)
                             .font(.footnote)
-                            .foregroundStyle(OS1VisualStyle.red)
+                            .foregroundStyle(OS1VisualStyle.redInk)
                             .padding(12)
                     }
                 }
@@ -291,7 +291,7 @@ struct WorktreeInfoView: View {
                     Divider()
                     Text(error)
                         .font(.footnote)
-                        .foregroundStyle(OS1VisualStyle.red)
+                        .foregroundStyle(OS1VisualStyle.redInk)
                         .padding(12)
                 }
             }
@@ -416,11 +416,11 @@ struct WorktreeInfoView: View {
                             Spacer(minLength: 8)
                             if file.additions > 0 {
                                 Text(verbatim: "+\(file.additions)")
-                                    .foregroundStyle(OS1VisualStyle.green)
+                                    .foregroundStyle(OS1VisualStyle.greenInk)
                             }
                             if file.deletions > 0 {
                                 Text(verbatim: "−\(file.deletions)")
-                                    .foregroundStyle(OS1VisualStyle.red)
+                                    .foregroundStyle(OS1VisualStyle.redInk)
                             }
                             Image(systemName: "chevron.right")
                                 .font(.caption2.weight(.semibold))
@@ -587,12 +587,12 @@ struct WorktreeInfoView: View {
                     "+\(pr.additions ?? 0)",
                     systemImage: "plus"
                 )
-                .foregroundStyle(OS1VisualStyle.green)
+                .foregroundStyle(OS1VisualStyle.greenInk)
                 Label(
                     "−\(pr.deletions ?? 0)",
                     systemImage: "minus"
                 )
-                .foregroundStyle(OS1VisualStyle.red)
+                .foregroundStyle(OS1VisualStyle.redInk)
                 Label(
                     "\(pr.changedFiles ?? 0) file\((pr.changedFiles ?? 0) == 1 ? "" : "s")",
                     systemImage: "doc.on.doc"
@@ -1007,10 +1007,10 @@ struct WorktreeInfoView: View {
     private func diffTotals(_ diff: OS1API.SessionDiff) -> some View {
         HStack(spacing: 6) {
             if diff.totalAdditions > 0 {
-                Text(verbatim: "+\(diff.totalAdditions)").foregroundStyle(OS1VisualStyle.green)
+                Text(verbatim: "+\(diff.totalAdditions)").foregroundStyle(OS1VisualStyle.greenInk)
             }
             if diff.totalDeletions > 0 {
-                Text(verbatim: "−\(diff.totalDeletions)").foregroundStyle(OS1VisualStyle.red)
+                Text(verbatim: "−\(diff.totalDeletions)").foregroundStyle(OS1VisualStyle.redInk)
             }
         }
         .font(.caption.weight(.semibold).monospacedDigit())

@@ -2266,7 +2266,7 @@ struct SessionsListView: View {
                     if urgentPlainTicketCount > 0 {
                         Text("\(urgentPlainTicketCount)")
                             .font(.footnote.weight(.semibold))
-                            .foregroundStyle(OS1VisualStyle.red)
+                            .foregroundStyle(OS1VisualStyle.redInk)
                     }
                 }
                 .padding(.vertical, 11)
@@ -3176,7 +3176,7 @@ private struct WorkspaceRunElapsedLabel: View {
         #else
         .font(.caption.monospacedDigit())
         #endif
-        .foregroundStyle(OS1VisualStyle.yellow)
+        .foregroundStyle(OS1VisualStyle.yellowInk)
         .fixedSize(horizontal: true, vertical: false)
     }
 

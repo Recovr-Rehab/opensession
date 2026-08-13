@@ -177,7 +177,7 @@ struct SupportThreadView: View {
                     } else if let error = model.errorText {
                         Text(error)
                             .font(.footnote)
-                            .foregroundStyle(OS1VisualStyle.red)
+                            .foregroundStyle(OS1VisualStyle.redInk)
                     }
                 }
                 .padding(.horizontal, 14)
@@ -215,7 +215,7 @@ struct SupportThreadView: View {
             if thread.awaitingFirstResponse == true {
                 Text("Waiting for a first reply")
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(OS1VisualStyle.yellow)
+                    .foregroundStyle(OS1VisualStyle.yellowInk)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -654,10 +654,10 @@ private struct SupportComposer: View {
 
     private var footnoteColor: Color {
         switch model.sending {
-        case .failed, .failedUpload: return OS1VisualStyle.red
+        case .failed, .failedUpload: return OS1VisualStyle.redInk
         case .idle: return model.overBudget == nil
             ? OS1VisualStyle.textFaint
-            : OS1VisualStyle.red
+            : OS1VisualStyle.redInk
         default: return OS1VisualStyle.textFaint
         }
     }

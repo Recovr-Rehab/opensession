@@ -248,9 +248,9 @@ private struct PrReviewLineView: View {
 
     private var foreground: Color {
         switch line.kind {
-        case .addition: OS1VisualStyle.green
-        case .deletion: OS1VisualStyle.red
-        case .metadata: OS1VisualStyle.blue
+        case .addition: OS1VisualStyle.greenInk
+        case .deletion: OS1VisualStyle.redInk
+        case .metadata: OS1VisualStyle.blueInk
         case .context: OS1VisualStyle.codeWellText
         }
     }

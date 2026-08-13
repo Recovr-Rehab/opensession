@@ -178,10 +178,10 @@ struct PrPreviewFact: Equatable {
 
         var color: Color {
             switch self {
-            case .green: OS1VisualStyle.green
-            case .red: OS1VisualStyle.red
-            case .yellow: OS1VisualStyle.yellow
-            case .purple: OS1VisualStyle.purple
+            case .green: OS1VisualStyle.greenInk
+            case .red: OS1VisualStyle.redInk
+            case .yellow: OS1VisualStyle.yellowInk
+            case .purple: OS1VisualStyle.purpleInk
             case .dim: OS1VisualStyle.textDim
             case .faint: OS1VisualStyle.textFaint
             }

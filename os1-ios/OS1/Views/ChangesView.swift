@@ -165,13 +165,13 @@ struct ChangesView: View {
         var output = AttributedString()
         if file.additions > 0 {
             var additions = AttributedString("+\(file.additions)")
-            additions.foregroundColor = OS1VisualStyle.green
+            additions.foregroundColor = OS1VisualStyle.greenInk
             output.append(additions)
         }
         if file.deletions > 0 {
             if !output.characters.isEmpty { output.append(AttributedString(" ")) }
             var deletions = AttributedString("−\(file.deletions)")
-            deletions.foregroundColor = OS1VisualStyle.red
+            deletions.foregroundColor = OS1VisualStyle.redInk
             output.append(deletions)
         }
         return output

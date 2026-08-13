@@ -87,7 +87,7 @@ struct CatchUpCardView: View {
     private var metaRow: some View {
         HStack(spacing: 6) {
             if card.isRunning {
-                PulsingDot(color: OS1VisualStyle.yellow, size: 7)
+                PulsingDot(color: OS1VisualStyle.yellowInk, size: 7)
                 runningLabel
             } else {
                 Circle()
@@ -117,11 +117,11 @@ struct CatchUpCardView: View {
                 Text("Working \(elapsed(context.date.timeIntervalSince(since)))")
             }
             .font(.caption.weight(.medium).monospacedDigit())
-            .foregroundStyle(OS1VisualStyle.yellow)
+            .foregroundStyle(OS1VisualStyle.yellowInk)
         } else {
             Text("Working")
                 .font(.caption.weight(.medium))
-                .foregroundStyle(OS1VisualStyle.yellow)
+                .foregroundStyle(OS1VisualStyle.yellowInk)
         }
     }
 

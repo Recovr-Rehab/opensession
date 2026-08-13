@@ -272,7 +272,7 @@ struct ToolSummaryText: View {
             } else {
                 Text(summary)
                     .foregroundStyle(
-                        isError ? OS1VisualStyle.red : OS1VisualStyle.textFaint
+                        isError ? OS1VisualStyle.redInk : OS1VisualStyle.textFaint
                     )
             }
         }
@@ -312,7 +312,7 @@ struct ToolCodeBox<Content: View>: View {
             Text(label)
                 .font(.caption2.weight(.semibold))
                 .foregroundStyle(
-                    isError ? OS1VisualStyle.red : OS1VisualStyle.textFaint
+                    isError ? OS1VisualStyle.redInk : OS1VisualStyle.textFaint
                 )
             VStack(alignment: .leading, spacing: 6) {
                 content
@@ -370,7 +370,7 @@ struct PlainCodeText: View {
             .font(.system(.caption, design: .monospaced))
             .foregroundStyle(
                 isError
-                    ? OS1VisualStyle.red.opacity(0.85)
+                    ? OS1VisualStyle.redInk.opacity(0.85)
                     : OS1VisualStyle.codeWellText
             )
             .textSelection(.enabled)

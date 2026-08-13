@@ -300,6 +300,9 @@ enum OS1VisualStyle {
     #endif
     // One status palette on both platforms — the Mac previously used stock
     // Color.green/.yellow/… which rendered different hues than iOS.
+    //
+    // These are FILL colours: a dot, a status glyph, a wash, a stroke. For
+    // the same five meanings said in WORDS, use the matching `*Ink` below.
     static let green = Color(red: 0.247, green: 0.725, blue: 0.314)
     static let yellow = Color(red: 0.824, green: 0.600, blue: 0.133)
     static let blue = Color(red: 0.345, green: 0.651, blue: 1.0)
@@ -347,6 +350,79 @@ enum OS1VisualStyle {
             red: 0.824, green: 0.600, blue: 0.133,
             alpha: appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? 0.24 : 0.16
         )
+    })
+    #endif
+    // The same five meanings as INK: what a status is called, rather than the
+    // mark that stands for it.
+    //
+    // The palette above is one pair of values for both appearances, and those
+    // values are the web's DARK theme (`--green` and friends in base.css). On
+    // a dark page they measure 6:1 to 8:1. On this app's light surfaces they
+    // measure about 2.5:1, under WCAG AA's 4.5:1 for body text and under even
+    // the 3:1 large text gets. That is defensible for a dot, a glyph or a
+    // wash: those are seen rather than read, and each one in this app sits
+    // beside words that say the same thing. It is not defensible for the
+    // words themselves, which is what these are for.
+    //
+    // Dark keeps the palette unchanged, so a status reads as one colour there.
+    // Light starts from base.css's own light theme and takes three of the five
+    // a step further. The web's values are calibrated against a white page,
+    // and the surfaces these words land on here sit below it: the Mac's window
+    // background, the transcript canvas, a note's own 10% wash, a grouped
+    // list. Against the lowest of those, #ECECEC, the web's green, blue and
+    // purple measure about 4.3:1 and its yellow 4.1:1. These hold 4.5:1 from
+    // white down to that surface, which `StatusInkContrastTests` asserts.
+    #if os(iOS)
+    static let greenInk = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.247, green: 0.725, blue: 0.314, alpha: 1)
+            : UIColor(red: 0.098, green: 0.478, blue: 0.208, alpha: 1)
+    })
+    static let yellowInk = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.824, green: 0.600, blue: 0.133, alpha: 1)
+            : UIColor(red: 0.561, green: 0.373, blue: 0.0, alpha: 1)
+    })
+    static let blueInk = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.345, green: 0.651, blue: 1.0, alpha: 1)
+            : UIColor(red: 0.035, green: 0.400, blue: 0.835, alpha: 1)
+    })
+    static let redInk = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.973, green: 0.318, blue: 0.286, alpha: 1)
+            : UIColor(red: 0.812, green: 0.133, blue: 0.180, alpha: 1)
+    })
+    static let purpleInk = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 0.639, green: 0.443, blue: 0.969, alpha: 1)
+            : UIColor(red: 0.490, green: 0.302, blue: 0.839, alpha: 1)
+    })
+    #else
+    static let greenInk = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(red: 0.247, green: 0.725, blue: 0.314, alpha: 1)
+            : NSColor(red: 0.098, green: 0.478, blue: 0.208, alpha: 1)
+    })
+    static let yellowInk = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(red: 0.824, green: 0.600, blue: 0.133, alpha: 1)
+            : NSColor(red: 0.561, green: 0.373, blue: 0.0, alpha: 1)
+    })
+    static let blueInk = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(red: 0.345, green: 0.651, blue: 1.0, alpha: 1)
+            : NSColor(red: 0.035, green: 0.400, blue: 0.835, alpha: 1)
+    })
+    static let redInk = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(red: 0.973, green: 0.318, blue: 0.286, alpha: 1)
+            : NSColor(red: 0.812, green: 0.133, blue: 0.180, alpha: 1)
+    })
+    static let purpleInk = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(red: 0.639, green: 0.443, blue: 0.969, alpha: 1)
+            : NSColor(red: 0.490, green: 0.302, blue: 0.839, alpha: 1)
     })
     #endif
     /// A teammate's reply routed back into a session — the web's `#1f9e8a`.
