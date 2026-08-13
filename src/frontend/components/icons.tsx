@@ -181,6 +181,15 @@ export function IconCheck(p: IconProps) {
   );
 }
 
+export function IconCheckCircle(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <circle {...stroke} cx="12" cy="12" r="7.25" />
+      <path {...stroke} d="M8.25 12.25L10.75 14.5L15.75 9.5" />
+    </Svg>
+  );
+}
+
 // Enter/return key glyph: a corner-down-left arrow. Used as the keyboard hint
 // on the Create button (replaces the bare ↵ character).
 export function IconReturn(p: IconProps) {

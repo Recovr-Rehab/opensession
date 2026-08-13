@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { IconChevronDown, IconCheck, IconX } from "./icons";
+import { IconChevronDown, IconCheckCircle, IconX } from "./icons";
 import { cn } from "../ui/cn";
 import type { ReviewLoopResult } from "../lib/review-loop";
 
@@ -112,10 +112,10 @@ function ReviewLoopResultRow({
 			<span
 				className={cn(
 					"relative z-[1] flex size-[22px] flex-none self-center items-center justify-center",
-					passed ? "text-green" : "text-red",
+					passed ? "text-faint" : "text-red",
 				)}
 			>
-				{passed ? <IconCheck size={20} /> : <IconX size={20} />}
+				{passed ? <IconCheckCircle size={20} /> : <IconX size={20} />}
 			</span>
 			<span className="shrink-0 text-[14px] font-medium leading-5 text-dim">
 				{passed ? "Ready to merge" : "Needs changes"}
