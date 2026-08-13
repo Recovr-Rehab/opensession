@@ -66,6 +66,8 @@ interface Props {
     workspaceId?: string;
     model?: string;
     images?: string[];
+    /** Start the session without following it — leave the current view alone. */
+    background?: boolean;
   }) => void;
 }
 
@@ -160,6 +162,19 @@ const MODEL_PILL = cn(
 	palettePill,
 	"shrink min-w-0 max-[560px]:px-[9px] max-[374px]:[&_[data-effort]]:hidden",
 );
+
+/* What a create does with the view behind the palette: "open" follows the new
+   session, "background" leaves you where you were, and "more" keeps the palette
+   up for the next task. */
+type CreateAction = "open" | "background" | "more";
+
+/** Each label is written out per target rather than suffixed with " locally",
+ *  which would read as "Create in background locally". */
+const CREATE_LABELS: Record<CreateAction, { cloud: string; local: string }> = {
+	open: { cloud: "Create", local: "Create locally" },
+	background: { cloud: "Create in background", local: "Create locally in background" },
+	more: { cloud: "Create more", local: "Create more locally" },
+};
 
 /* Split button: primary Create action + a caret that opens a mode dropdown.
    The two halves' corners are scoped to mutually exclusive media queries, so
@@ -338,9 +353,9 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     const account = accounts.find((item) => item.id === accountId);
     if (accountId && account?.provider !== accountProvider) setAccountId("");
   }, [accountProvider, accountId, accounts]);
-  // Keep the palette open after a create to fire off another task. Chosen from
-  // the Create split-button's dropdown; the primary button reflects the mode.
-  const [createMore, setCreateMore] = useState(false);
+  // What a create does with the view behind the palette. Chosen from the
+  // Create split-button's dropdown; the primary button reflects the choice.
+  const [createAction, setCreateAction] = useState<CreateAction>("open");
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const createSplitRef = useRef<HTMLDivElement>(null);
   const isPhone = useIsPhone();
@@ -595,10 +610,11 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
         creatingRef.current = false;
         // The prompt was consumed — drop the stored draft either way.
         clearDraft("new-session");
-        // With "Create more" on, stay in the palette and reset for the next task
-        // (App still navigates into the created session behind the overlay). Off,
-        // close and let App drop us into the new session.
-        if (createMore) {
+        // "Create more" stays in the palette and resets for the next task (App
+        // still navigates into the created session behind the overlay). The
+        // other two close it: "Create" lets App drop us into the new session,
+        // "Create in background" leaves the view we came from in place.
+        if (createAction === "more") {
           setCreating(false);
           setPrompt("");
           setImages([]);
@@ -608,14 +624,15 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
           setError(null);
           promptRef.current?.focus();
         } else {
-          // Close the palette; App's global session_created handler drops us
-          // into the newly created session behind it.
-          createdRef.current = true;
+          // Only an "open" create replaces the surface behind the palette, so
+          // only it declines to restore focus. In the background it is the
+          // opener you pressed that you are returning to.
+          createdRef.current = createAction === "open";
           onBack();
         }
       }
     });
-  }, [addHandler, createMore]);
+  }, [addHandler, createAction]);
 
   async function addAttachments(picked: FileList | File[]) {
     const { images: imgs, files: fls, rejected } = await splitAttachments(picked);
@@ -658,6 +675,8 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
       ...(workspaceId ? { workspaceId } : {}),
       ...(model ? { model } : {}),
       ...(images.length ? { images } : {}),
+      // App navigates into a created session by default; this asks it not to.
+      ...(createAction === "background" ? { background: true } : {}),
     });
     send({
       type: "create_session",
@@ -1179,13 +1198,11 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
               >
                 {creating
                   ? "Creating…"
-                  : (auth?.local || desktopShell) && createTarget === "local"
-                    ? createMore
-                      ? "Create more locally"
-                      : "Create locally"
-                    : createMore
-                      ? "Create more"
-                      : "Create"}
+                  : CREATE_LABELS[createAction][
+                      (auth?.local || desktopShell) && createTarget === "local"
+                        ? "local"
+                        : "cloud"
+                    ]}
                 {/* The hint has to match the preference — a bare ↩ next to a
                     field that only creates on ⌘↩ is what made Enter look
                     broken in the first place. */}
@@ -1257,24 +1274,29 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                     </>
                   )}
                   {[
-                    { more: false, title: "Create", desc: "Open the new session" },
-                    { more: true, title: "Create more", desc: "Stay here to start another" },
+                    { action: "open" as const, title: "Create", desc: "Open the new session" },
+                    {
+                      action: "background" as const,
+                      title: "Create in background",
+                      desc: "Stay where you are",
+                    },
+                    { action: "more" as const, title: "Create more", desc: "Stay here to start another" },
                   ].map((opt) => (
                     <button
-                      key={opt.title}
+                      key={opt.action}
                       type="button"
                       role="menuitemradio"
-                      aria-checked={createMore === opt.more}
+                      aria-checked={createAction === opt.action}
                       className={CREATE_MENU_ITEM}
                       onClick={() => {
-                        setCreateMore(opt.more);
+                        setCreateAction(opt.action);
                         setCreateMenuOpen(false);
                       }}
                     >
                       <IconCheck
                         className="mt-px shrink-0 text-dim"
                         size={22}
-                        style={{ visibility: createMore === opt.more ? "visible" : "hidden" }}
+                        style={{ visibility: createAction === opt.action ? "visible" : "hidden" }}
                       />
                       <span className="flex min-w-0 flex-col gap-px">
                         <span className="text-label font-semibold">{opt.title}</span>

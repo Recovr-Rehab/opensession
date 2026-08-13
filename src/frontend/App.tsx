@@ -611,6 +611,8 @@ export function App(
 		startedAt: string;
 		user: string;
 		originPath: string;
+		/** "Create in background": start the session, stay in the current view. */
+		background?: boolean;
 	};
 	const pendingCreateDraftRef = useRef<PendingCreateDraft | null>(null);
 	const [pendingInitialPrompts, setPendingInitialPrompts] = useState<
