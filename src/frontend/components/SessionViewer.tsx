@@ -4476,7 +4476,7 @@ export function SessionViewer({
 						}}
 						title="Start a new session in this workspace"
 					>
-						<IconPlus size={22} />
+						<IconPlus size={20} />
 						<span className="grow">New session in workspace</span>
 					</Menu.Item>
 				);
@@ -4818,11 +4818,10 @@ export function SessionViewer({
 					    same). The moment the strip appears — a second session, an open view
 					    tab like Review, or a split — its own + takes over and this
 					    disappears, so the two never stack. Phone uses the ⋯
-					    menu's newSessionAction instead. Square 30px chip: same height and
-					    corner radius as the ⋯ and side-panel buttons at the other end of
-					    the bar. Sized by padding it came out 37×33 — a wide rectangle
-					    around a 13px cross, so the hover chip read larger than every
-					    control beside it. */}
+					    menu's newSessionAction instead. Rendered AS the Button primitive,
+					    like the ⋯ and side-panel controls at the other end of the bar, so
+					    the 32px square, radius, hover wash and press scale match by
+					    construction rather than by hand-matching a chip. */}
 					{!isPhone &&
 						onNewSession &&
 						!tabStripVisible &&
@@ -4833,20 +4832,17 @@ export function SessionViewer({
 									isApple ? ["⌘", "⌥", "N"] : ["Ctrl", "Alt", "N"]
 								}
 							>
-								<button
-									type="button"
-									className="flex-none inline-flex size-[30px] items-center justify-center rounded-control text-dim transition-colors hover:bg-hover hover:text-fg"
+								<Button
+									variant="ghost"
+									size="md"
+									className="flex-none rounded-control text-dim hover:bg-hover hover:text-fg"
 									onClick={() => onNewSession("share")}
 									aria-label="New tab"
-								>
-									{/* 25, not the menu-row 22: the IconPlus path only fills ~52%
-									    of its box (vs ~60% for the play/sidebar glyphs beside it),
-									    so at 22 it read a touch small. 25 nudges it up without the
-									    28 that read too big beside the compact ▶ play / ▐ panel
-									    toggle — the thin full-box cross carries more optical width
-									    than those glyphs at the same size. */}
-									<IconPlus size={25} />
-								</button>
+									// 22, the standard standalone step the ⋯ and side-panel
+									// glyphs use. IconPlus now draws the set's 14.5 span, so it
+									// lands at their size and weight without a bump.
+									icon={<IconPlus size={22} />}
+								/>
 							</Tooltip>
 						)}
 					{onOpenSession && (parentSession || (workerSessions && workerSessions.length > 0)) && (

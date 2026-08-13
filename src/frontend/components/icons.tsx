@@ -280,11 +280,18 @@ export function IconCamera(p: IconProps) {
   );
 }
 
+// Arms run 4.75 → 19.25, the same 14.5 of the 24 grid the sidebar, chart and
+// link glyphs draw. The old 5.75 → 18.25 cross covered only 12.5, so a plus
+// rendered visibly smaller than whatever sat beside it at the same size, and
+// call sites kept compensating with a one-off bump (25 beside 22 buttons, 22
+// on 20px menu rows). Those bumps also scaled the stroke, so the mark came
+// back heavier than its neighbours instead of merely bigger. Drawing the
+// set's span means a plus needs no exception: size it off the normal scale.
 export function IconPlus(p: IconProps) {
   return (
     <Svg {...p}>
-      <path {...stroke} d="M12 5.75V18.25" />
-      <path {...stroke} d="M18.25 12L5.75 12" />
+      <path {...stroke} d="M12 4.75V19.25" />
+      <path {...stroke} d="M19.25 12L4.75 12" />
     </Svg>
   );
 }
