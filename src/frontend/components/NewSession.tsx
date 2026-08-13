@@ -138,17 +138,33 @@ const MODE_OPTIONS = (["ask", "code", "scratch"] as const).map((value) => ({
  *
  *  Padding is asymmetric for the same reason the footer's is: the top is the
  *  card's own edge, the bottom only a hairline. The pickers are 32px boxes
- *  that fill on hover, so 16px above them matches the 16px beside them. */
-const HEADER = "flex items-center justify-between gap-2 border-b border-transparent px-4 pt-4 pb-[11px]";
+ *  that fill on hover, so 16px above them matches the 16px beside them.
+ *
+ *  `flex-wrap` is what keeps the row honest on a phone. The three pickers want
+ *  ~64px more than a 393px screen has, and a single line can only pay for that
+ *  out of the labels — which took "tella-fusion" down to "tel…" and the branch
+ *  to "New br…", two ellipses on the one row that says what the session is
+ *  pointed at. Wrapped, the branch drops to a second line at full width and
+ *  nothing is abbreviated; on any width that fits (every desktop) the row is
+ *  unchanged, since wrapping costs nothing until it happens. */
+const HEADER =
+	"flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-b border-transparent px-4 pt-4 pb-[11px]";
 /** Merged onto HEADER/FOOTER by `cn()`, which drops the transparent colour. */
 const EDGE_DIVIDER = "border-line";
 /** Header pickers. `relative` is load-bearing — PaletteSelect's phone branch
- *  stacks an invisible native <select> over the trigger. */
+ *  stacks an invisible native <select> over the trigger.
+ *
+ *  So is `min-w-0`: a picker's label already truncates, but a flex item whose
+ *  own overflow is visible cannot be sized below its content, so the row had
+ *  no way to give. On a phone the three of them want more than the header has,
+ *  and the repo picker ran out under the branch picker instead of ellipsizing
+ *  — the two labels overlapped, with the branch glyph landing on the repo's
+ *  chevron. */
 const TRIGGER =
-	"relative inline-flex max-w-[46%] cursor-pointer items-center gap-1.5 rounded-control px-2 py-[5px] text-label font-medium text-dim transition-colors hover:bg-hover hover:text-fg disabled:cursor-default disabled:opacity-55";
+	"relative inline-flex min-w-0 max-w-[46%] cursor-pointer items-center gap-1.5 rounded-control px-2 py-[5px] text-label font-medium text-dim transition-colors hover:bg-hover hover:text-fg disabled:cursor-default disabled:opacity-55";
 /** The repo picker doubles as the palette's title: bigger, solid, heavier. */
 const TRIGGER_STRONG =
-	"relative inline-flex max-w-[46%] cursor-pointer items-center gap-1.5 rounded-control px-2 py-[5px] text-item-title font-semibold text-fg transition-colors hover:bg-hover disabled:cursor-default disabled:opacity-55";
+	"relative inline-flex min-w-0 max-w-[46%] cursor-pointer items-center gap-1.5 rounded-control px-2 py-[5px] text-item-title font-semibold text-fg transition-colors hover:bg-hover disabled:cursor-default disabled:opacity-55";
 const CHEVRON = "-ml-0.5 shrink-0 text-faint";
 
 /** One scroll surface for the prompt and its attachments. Keeping the image in
@@ -935,7 +951,10 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
         <div className={cn(HEADER, edges.top && EDGE_DIVIDER)}>
           <div className="flex min-w-0 items-center gap-0.5">
           <PaletteSelect
-            className={cn(TRIGGER_STRONG, "max-w-none")}
+            // The one picker that never gives: its three labels are short, and
+            // it is the palette's title — the repo and the branch beside it are
+            // the long, truncatable ones.
+            className={cn(TRIGGER_STRONG, "max-w-none shrink-0")}
             title="What this session may do"
             value={mode}
             options={MODE_OPTIONS}
@@ -1024,7 +1043,17 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
             isPhone={isPhone}
             align="end"
           >
-            <svg width="19" height="19" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            {/* shrink-0 like every other glyph in the header: a long branch
+                name squeezes the trigger, and the icon was giving up its width
+                before the label gave up characters, leaving a sliver. */}
+            <svg
+              className="shrink-0"
+              width="19"
+              height="19"
+              viewBox="0 0 16 16"
+              fill="none"
+              aria-hidden="true"
+            >
               <circle cx="4" cy="4" r="1.7" stroke="currentColor" strokeWidth="1.3" />
               <circle cx="4" cy="12" r="1.7" stroke="currentColor" strokeWidth="1.3" />
               <circle cx="12" cy="5.5" r="1.7" stroke="currentColor" strokeWidth="1.3" />

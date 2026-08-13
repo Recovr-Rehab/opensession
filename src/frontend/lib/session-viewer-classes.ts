@@ -350,9 +350,18 @@ export const TRANSCRIPT_PILL_TOP =
  * `[.session-info-status_&]`.
  */
 
+/** The page is a scrolling column, so nothing in it may flex.
+ *
+ *  `[&>*]:shrink-0` is load-bearing rather than defensive: a column flex
+ *  container still lays its children out to its own height, and a child whose
+ *  overflow is not `visible` has an automatic minimum size of zero — so on any
+ *  session with enough below it, the PR strip's frame (INFO_STATUS, which
+ *  clips) was the one child free to absorb the whole overflow. It gave up its
+ *  height first and clipped the strip inside it, down to nothing on a short
+ *  viewport, while the sections that cannot shrink kept theirs. */
 export const INFO_PAGE =
 	"fixed inset-0 z-[60] flex flex-col gap-0.5 overflow-y-auto overscroll-contain bg-surface " +
-	"pb-[max(16px,env(safe-area-inset-bottom,0px))] " +
+	"pb-[max(16px,env(safe-area-inset-bottom,0px))] [&>*]:shrink-0 " +
 	"[animation:session-info-in_var(--dur)_var(--ease)]";
 
 const INFO_TOPBAR =
