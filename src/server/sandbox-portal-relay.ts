@@ -50,7 +50,7 @@ function grantForSandboxPortal(token: string, expected: Omit<StoredGrant, "expir
 export function revokeSandboxPortalGrants(sandboxId: string): void {
 	for (const [token, grant] of grants) if (grant.sandboxId === sandboxId) grants.delete(token);
 	for (const [id, connection] of connections) if (connection.sandboxId === sandboxId) { clearTimeout(connection.expiryTimer); try { connection.ws.close(1008, "portal revoked"); } catch {} connections.delete(id); }
-	for (const [id, relay] of relays) if (relay.sandboxId === sandboxId) { try { relay.server.stop(true); } catch {} void import("./preview").then(({ dropAuthenticatedPortalRoute }) => dropAuthenticatedPortalRoute(sandboxHttpsPortFor(`sandbox-${sandboxId}`, relay.port))); relays.delete(id); }
+	for (const [id, relay] of relays) if (relay.sandboxId === sandboxId) { try { relay.server.stop(true); } catch {} void import("./preview").then(({ dropAuthenticatedPortalRoute }) => dropAuthenticatedPortalRoute(sandboxHttpsPortFor(sandboxId, relay.port))); relays.delete(id); }
 }
 
 /** Stop one service's public surface without affecting sibling Portals in the
@@ -58,7 +58,7 @@ export function revokeSandboxPortalGrants(sandboxId: string): void {
 export function revokeSandboxPortalRelay(sandboxId: string, port: number): void {
 	for (const [token, grant] of grants) if (grant.sandboxId === sandboxId && grant.port === port) grants.delete(token);
 	for (const [id, connection] of connections) if (connection.sandboxId === sandboxId && connection.port === port) { clearTimeout(connection.expiryTimer); try { connection.ws.close(1008, "portal stopped"); } catch {} connections.delete(id); }
-	for (const [id, relay] of relays) if (relay.sandboxId === sandboxId && relay.port === port) { try { relay.server.stop(true); } catch {} void import("./preview").then(({ dropAuthenticatedPortalRoute }) => dropAuthenticatedPortalRoute(sandboxHttpsPortFor(`sandbox-${sandboxId}`, port))); relays.delete(id); }
+	for (const [id, relay] of relays) if (relay.sandboxId === sandboxId && relay.port === port) { try { relay.server.stop(true); } catch {} void import("./preview").then(({ dropAuthenticatedPortalRoute }) => dropAuthenticatedPortalRoute(sandboxHttpsPortFor(sandboxId, port))); relays.delete(id); }
 }
 
 /** Upgrade only an outbound Sandbox relay whose expiring grant exactly matches
@@ -164,5 +164,5 @@ export async function ensureSandboxPortalRelay(input: { sessionId: string; sandb
 		relay = { ...input, server }; relays.set(id, relay);
 	}
 	const { ensureAuthenticatedPortalRoute } = await import("./preview");
-	return ensureAuthenticatedPortalRoute(sandboxHttpsPortFor(`sandbox-${input.sandboxId}`, input.port), `127.0.0.1:${relay.server.port}`);
+	return ensureAuthenticatedPortalRoute(sandboxHttpsPortFor(input.sandboxId, input.port), `127.0.0.1:${relay.server.port}`);
 }
