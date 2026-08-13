@@ -25,7 +25,7 @@ struct TurnBlockView: View {
 
     private enum TurnSection: Identifiable {
         case message(TranscriptEntry)
-        case tools([ToolCallItem], compact: Bool)
+        case tools([ToolCallItem], kind: ToolRunKind)
 
         var id: String {
             switch self {
@@ -56,15 +56,16 @@ struct TurnBlockView: View {
             case .message(let entry):
                 sections.append(.message(entry))
             case .tool(let call):
+                let kind = runKind(call)
                 if let last = sections.last,
-                   case .tools(let existing, let compact) = last,
-                   compact,
-                   isCompactTool(call) {
+                   case .tools(let existing, let lastKind) = last,
+                   lastKind == kind,
+                   kind.groups {
                     var tools = existing
                     tools.append(call)
-                    sections[sections.count - 1] = .tools(tools, compact: true)
+                    sections[sections.count - 1] = .tools(tools, kind: kind)
                 } else {
-                    sections.append(.tools([call], compact: isCompactTool(call)))
+                    sections.append(.tools([call], kind: kind))
                 }
             }
         }
@@ -94,17 +95,28 @@ struct TurnBlockView: View {
                             // only tool rows keep the dimmed treatment.
                             MarkdownBody(entry.text)
                                 .padding(.trailing, 16)
-                        case .tools(let calls, let compact):
+                        case .tools(let calls, let kind):
                             if state.expanded {
-                                ToolRunView(
-                                    items: calls,
-                                    sessionId: sessionId,
-                                    worktreeDir: worktreeDir,
-                                    state: expansionState("run-\(calls[0].id)", expandsToolRuns),
-                                    isLive: turn.isLive,
-                                    isCompact: compact,
-                                    expansionState: expansionState
-                                )
+                                if case .edits = kind, calls.count > 1 {
+                                    EditRunView(
+                                        items: calls,
+                                        sessionId: sessionId,
+                                        worktreeDir: worktreeDir,
+                                        state: expansionState("edits-\(calls[0].id)", expandsToolRuns),
+                                        isLive: turn.isLive,
+                                        expansionState: expansionState
+                                    )
+                                } else {
+                                    ToolRunView(
+                                        items: calls,
+                                        sessionId: sessionId,
+                                        worktreeDir: worktreeDir,
+                                        state: expansionState("run-\(calls[0].id)", expandsToolRuns),
+                                        isLive: turn.isLive,
+                                        isCompact: kind == .compact,
+                                        expansionState: expansionState
+                                    )
+                                }
                             }
                         }
                     }
@@ -124,14 +136,27 @@ struct TurnBlockView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func isCompactTool(_ item: ToolCallItem) -> Bool {
+    /// Which run, if any, a call joins. Routine calls share one compact run;
+    /// consecutive passes over one file share an edit run, keyed on the tool
+    /// and the file so a different file — or a read in between — starts a new
+    /// one. Everything else stands alone.
+    private func runKind(_ item: ToolCallItem) -> ToolRunKind {
         guard item.assetPath == nil,
               item.subagentId == nil,
+              // Media the agent asked to show keeps its own row, as everywhere.
               item.result?.featuredMedia?.isEmpty != false
-        else { return false }
+        else { return .single }
         switch item.presentation.family {
-        case .run, .file, .find, .web: return true
-        default: return false
+        case .run, .file, .find, .web:
+            return .compact
+        case .edit:
+            // One file, named by the same derivation the footer's chips use —
+            // a call whose input arrived clamped has none, and keeps its row.
+            guard item.presentation.touchedFiles.count == 1 else { return .single }
+            let file = item.presentation.touchedFiles[0].path
+            return .edits(key: "\(item.presentation.canonical)\u{0}\(file)")
+        default:
+            return .single
         }
     }
 
@@ -360,6 +385,22 @@ struct TurnBlockView: View {
     }
 }
 
+/// What kind of run a consecutive stretch of tool calls forms.
+private enum ToolRunKind: Equatable {
+    /// Routine calls — shell, reads, searches — behind one "N steps" line.
+    case compact
+    /// Repeated passes over a single file, behind one edit row.
+    case edits(key: String)
+    /// Stands on its own: an asset write, a worker, anything with media.
+    case single
+
+    /// Whether a neighbour of the same kind joins, or starts its own run.
+    var groups: Bool {
+        if case .single = self { return false }
+        return true
+    }
+}
+
 private struct ToolRunView: View {
     let items: [ToolCallItem]
     let sessionId: String
@@ -463,6 +504,120 @@ private struct ToolRunView: View {
         if mediaCount > 0 { parts.append(mediaLabel) }
         if isLive, items.contains(where: \.isPending) { parts.append("running") }
         return parts.joined(separator: ", ")
+    }
+}
+
+/// Consecutive edits to one file, folded into a single row: the path once,
+/// the summed ± lines, and a count.
+///
+/// Four passes over the same file are one change to a reader, and four rows
+/// repeating the same path push the rest of the turn off a phone screen. The
+/// row keeps the shape of the single edit it stands in for — same glyph, same
+/// name, same dimmed path — so a folded run reads as one more edit rather
+/// than as a new kind of row. Every individual call, with its own diff, is
+/// one tap inside.
+private struct EditRunView: View {
+    let items: [ToolCallItem]
+    let sessionId: String
+    var worktreeDir: String?
+    let state: TurnFoldState
+    let isLive: Bool
+    let expansionState: (String, Bool) -> TurnFoldState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Button {
+                withAnimation(.snappy(duration: 0.2, extraBounce: 0)) {
+                    state.toggle()
+                }
+            } label: {
+                header
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(accessibilityLabel)
+            .accessibilityHint(state.expanded ? "Hide the edits" : "Show the edits")
+
+            if state.expanded {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(items) { item in
+                        ToolCallRow(
+                            item: item,
+                            sessionId: sessionId,
+                            worktreeDir: worktreeDir,
+                            state: expansionState(item.id, false)
+                        )
+                    }
+                }
+                .padding(.leading, 20)
+                .transition(.opacity)
+            }
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 7) {
+            Image(systemName: state.expanded ? "chevron.down" : presentation.family.symbol)
+                .font(.system(size: 11))
+                .foregroundStyle(
+                    failureCount > 0 ? OS1VisualStyle.red : OS1VisualStyle.textFaint
+                )
+                .frame(width: 15)
+
+            Text(presentation.name)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(OS1VisualStyle.textDim)
+                .fixedSize()
+
+            ToolSummaryText(
+                summary: presentation.summary,
+                isPath: presentation.summaryIsPath
+            )
+
+            // The count belongs to the path it multiplies, so it travels with
+            // it rather than sitting out with the trailing meta.
+            Text("×\(items.count)")
+                .font(.caption2)
+                .foregroundStyle(OS1VisualStyle.textFaint)
+                .fixedSize()
+
+            Spacer(minLength: 4)
+
+            if !stats.isEmpty {
+                LineStatsView(stats: stats)
+            }
+            if failureCount > 0 {
+                Text("\(failureCount) failed")
+                    .font(.caption2)
+                    .foregroundStyle(OS1VisualStyle.red)
+                    .fixedSize()
+            }
+            if isLive, items.contains(where: \.isPending) {
+                ProgressView()
+                    .controlSize(.mini)
+            }
+        }
+        #if os(iOS)
+        .frame(minHeight: 44)
+        #else
+        .padding(.vertical, 2)
+        #endif
+        .contentShape(Rectangle())
+    }
+
+    private var presentation: ToolPresentation { items[0].presentation }
+
+    /// Summed from what the rows themselves show, so opening the run adds up
+    /// to the counts that were on it.
+    private var stats: ToolLineStats {
+        items.reduce(ToolLineStats()) { $0 + ($1.presentation.lineStats ?? ToolLineStats()) }
+    }
+
+    private var failureCount: Int { items.filter(\.isError).count }
+
+    private var accessibilityLabel: String {
+        var parts = ["\(items.count) \(presentation.name) steps", presentation.summary]
+        if failureCount > 0 { parts.append("\(failureCount) failed") }
+        return parts.filter { !$0.isEmpty }.joined(separator: ", ")
     }
 }
 

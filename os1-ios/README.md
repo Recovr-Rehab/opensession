@@ -67,6 +67,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   glyph and bespoke summary (a tidied path, a shell command, `/pattern/ path`,
   the active todo). Expanding one renders the tool's own shape: a unified diff
   for an edit, the command for a shell call, file content for a write.
+  Routine calls fold into one `N steps` run, and consecutive edits to the same
+  file into one row — the path once, the summed ±lines, and a `×3` count —
+  both opening to the individual calls.
   A `Task` row opens the sub-agent's own transcript in a sheet (polled while
   the worker runs, via `GET /api/sessions/:id/subagent/:agentId`), and a
   footer's file chip opens that file's diff for the turn. A published

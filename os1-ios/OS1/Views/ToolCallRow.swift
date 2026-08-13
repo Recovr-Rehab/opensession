@@ -176,27 +176,12 @@ struct ToolCallRow: View {
             + Text(presentation.name).foregroundStyle(OS1VisualStyle.textDim)
     }
 
-    /// A path's directory dims so the filename — the part that identifies the
-    /// call — survives truncation at the head.
-    @ViewBuilder
     private var summaryText: some View {
-        let value = presentation.summary
-        Group {
-            if presentation.summaryIsPath, let slash = value.lastIndex(of: "/") {
-                Text(value[value.startIndex...slash])
-                    .foregroundStyle(OS1VisualStyle.textFaint)
-                    + Text(value[value.index(after: slash)...])
-                    .foregroundStyle(OS1VisualStyle.textDim)
-            } else {
-                Text(value)
-                    .foregroundStyle(
-                        item.isError ? OS1VisualStyle.red : OS1VisualStyle.textFaint
-                    )
-            }
-        }
-        .font(.system(.caption, design: .monospaced))
-        .lineLimit(1)
-        .truncationMode(presentation.summaryIsPath ? .head : .tail)
+        ToolSummaryText(
+            summary: presentation.summary,
+            isPath: presentation.summaryIsPath,
+            isError: item.isError
+        )
     }
 
     @ViewBuilder
@@ -265,6 +250,35 @@ struct ToolCallRow: View {
                 ProgressView().controlSize(.mini)
             }
         }
+    }
+}
+
+/// What a call is doing, on the row's own line. A path's directory dims so
+/// the filename — the part that identifies the call — survives truncation at
+/// the head. Shared with the folded edit run, which stands in for a row and
+/// so has to read as one.
+struct ToolSummaryText: View {
+    let summary: String
+    let isPath: Bool
+    var isError = false
+
+    var body: some View {
+        Group {
+            if isPath, let slash = summary.lastIndex(of: "/") {
+                Text(summary[summary.startIndex...slash])
+                    .foregroundStyle(OS1VisualStyle.textFaint)
+                    + Text(summary[summary.index(after: slash)...])
+                    .foregroundStyle(OS1VisualStyle.textDim)
+            } else {
+                Text(summary)
+                    .foregroundStyle(
+                        isError ? OS1VisualStyle.red : OS1VisualStyle.textFaint
+                    )
+            }
+        }
+        .font(.system(.caption, design: .monospaced))
+        .lineLimit(1)
+        .truncationMode(isPath ? .head : .tail)
     }
 }
 
