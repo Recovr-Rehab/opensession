@@ -196,6 +196,13 @@ export const ContextMenu = {
 	Item,
 	Separator,
 	Shortcut: MenuShortcut,
+	// Grouping and checkable rows are the plain Menu parts for the same reason
+	// the submenu parts below are: Base UI builds both menus on one primitive,
+	// so a context menu can offer a checkable list without a second styling
+	// path. Only the popup differs, because that is the part that anchors.
+	Group: BaseMenu.Group,
+	GroupLabel,
+	CheckboxItem,
 	// Submenus are the plain Menu parts (ContextMenu re-exports them), so a
 	// submenu's own popup is Menu.Popup: it anchors to its trigger row rather
 	// than to the cursor the way ContextPopup does.

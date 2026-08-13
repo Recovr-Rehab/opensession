@@ -134,7 +134,6 @@ import {
 	IconTrash,
 	IconChart,
 	IconFile,
-	IconDotsHorizontal,
 	IconGlobe,
 	IconHome,
 	IconListCircles,
@@ -2205,7 +2204,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// hides every group within that band. Searching forces them open.
 	const bandOpen = (band: GroupBand | "workspaces") =>
 		search.trim().length > 0 ? true : !expanded.has(`collapsed:band:${band}`);
-	const toolsOpen = !expanded.has("collapsed:band:tools");
 	const workspacesOpen = bandOpen("workspaces");
 	// Assignee/label/session filter over the Plain queue; free text rides the
 	// sidebar-wide search box (title/customer/preview).
@@ -3860,83 +3858,21 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				className="block max-w-full min-w-0 flex-none"
 				style={{ order: 0 }}
 			>
-			{/* The "Tools" band header sits above the top-level nav as a collapse
-			    toggle. Its 6px inset plus the toggle's 10px padding matches
-			    the band headings inside the workspace list. */}
-			{!isPhone && visibleTools.length > 0 && (
-				<div
-					className={cn(
-						SIDEBAR_BAND_LABEL,
-						"px-1.5 pt-3 pb-0.5",
-						SIDEBAR_STICKY_BAND,
-						SIDEBAR_STICKY_BAND_ROW,
-						SIDEBAR_STUCK_BACKING,
-					)}
-					data-sticky-head
-				>
-					{/* No hover fill: a band heading is a label, and the ••• that
-					    appears on hover is the only thing here with a surface of its
-					    own. See the height scale in lib/sidebar-classes.ts. */}
-					<div className="group flex min-h-7 w-full items-center rounded-md hover:text-dim">
-						<button
-							className={cn(
-								SIDEBAR_BAND_TOGGLE,
-								"w-auto flex-1 pr-2 pl-[10px]",
-							)}
-							onClick={() => toggleBand("tools")}
-							aria-expanded={toolsOpen}
-							title={toolsOpen ? "Collapse tools" : "Expand tools"}
-						>
-							<span className="min-w-0 truncate">Tools</span>
-							<IconChevronDown
-								className={cn(
-									SIDEBAR_BAND_CHEVRON,
-									"group-hover/band:visible group-hover/band:text-dim",
-									!toolsOpen && SIDEBAR_BAND_CHEVRON_COLLAPSED,
-								)}
-								size={18}
-								style={{
-									transform: toolsOpen ? "none" : "rotate(-90deg)",
-								}}
-							/>
-						</button>
-						<Menu.Root>
-							<Menu.Trigger
-								type="button"
-								className="invisible mr-1 ml-auto inline-flex size-7 shrink-0 items-center justify-center rounded-md text-dim group-hover:visible hover:bg-hover hover:text-fg data-[popup-open]:visible data-[popup-open]:text-dim"
-								aria-label="Choose toolbar tools"
-								title="Choose toolbar tools"
-							>
-								<IconDotsHorizontal size={22} />
-							</Menu.Trigger>
-							<Menu.Popup side="bottom" align="end" sideOffset={4}>
-								<Menu.Group>
-									<Menu.GroupLabel>Show in toolbar</Menu.GroupLabel>
-									{tools.map((tool) => (
-										<Menu.CheckboxItem
-											key={tool.id}
-											checked={!hiddenTools.has(tool.id)}
-											onCheckedChange={(checked) =>
-												setToolVisible(tool.id, checked)
-											}
-										>
-											<span className="flex size-4 shrink-0 items-center justify-center rounded-xs border border-line-strong text-fg">
-												{!hiddenTools.has(tool.id) && <IconCheck size={12} />}
-											</span>
-											<span className="text-fg">{tool.label}</span>
-										</Menu.CheckboxItem>
-									))}
-								</Menu.Group>
-								<Menu.Separator />
-								<Menu.Item onClick={hideAllSidebarTools}>
-									Hide tools from sidebar
-								</Menu.Item>
-							</Menu.Popup>
-						</Menu.Root>
-					</div>
-				</div>
-			)}
-			{visibleTools.length > 0 && (isPhone || toolsOpen) && (
+			{/* The tools carry no heading. "Tools" named a handful of self-evident
+			    destinations (Home, Reviews, Notes) sitting at the very top of the
+			    rail, where nothing else can be confused for them, and it cost a
+			    caption plus the gap around it before the first thing you can
+			    click. Phones already listed them bare; desktop matches now.
+
+			    Its two jobs moved rather than went: the collapse is gone (it hid
+			    at most a few rows and a collapsed band left the top of the
+			    sidebar looking empty), and the ••• menu that chose which tools
+			    show is now in the right-click menu on any tool row, beside the
+			    "Remove from toolbar" that already lived there. Hiding every tool
+			    still leaves Settings as the way back, exactly as before — the
+			    band header rendered only while at least one tool was visible, so
+			    it was never the escape hatch either. */}
+			{visibleTools.length > 0 && (
 				<nav
 					className={cn(
 						"flex [--sidebar-nav-x:6px]",
@@ -3954,12 +3890,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								// vanishes "under" the cards as it passes over them. Momentum
 								// scroll is on by default on modern iOS anyway.
 								"flex-none flex-row flex-nowrap gap-2 overflow-x-auto overflow-y-hidden pt-3 pr-3 pb-2.5 pl-4 [overscroll-behavior-x:contain] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-							: // No negative margin: it used to claw back the slack inside
-								// the band heading's old 44px box, and against the 32px one
-								// it pulled the first tool row up THROUGH the heading. The
-								// 2px top pad is the same gap a row keeps from the heading
-								// above it anywhere else in the rail.
-								"flex-col gap-0.5 px-[var(--sidebar-nav-x)] pt-0.5 pb-1.5",
+							: // The tools are the first thing in the rail now that their
+								// heading is gone, so the top pad is theirs rather than a
+								// correction against a heading's box: it sets the tools off
+								// from the window chrome above them the way the caption used
+								// to. Bottom pad stays the gap to the Workspaces heading.
+								"flex-col gap-0.5 px-[var(--sidebar-nav-x)] pt-2 pb-1.5",
 					)}
 				>
 					{visibleTools.map((tool) => {
@@ -4058,11 +3994,37 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								>
 									{rowBody}
 								</ContextMenu.Trigger>
+								{/* This menu is now the only place that chooses which tools
+								    show, since the band heading that held the ••• is gone. */}
 								<ContextMenu.Popup>
 									<ContextMenu.Item
 										onClick={() => setToolVisible(tool.id, false)}
 									>
 										Remove from toolbar
+									</ContextMenu.Item>
+									<ContextMenu.Separator />
+									<ContextMenu.Group>
+										<ContextMenu.GroupLabel>
+											Show in toolbar
+										</ContextMenu.GroupLabel>
+										{tools.map((t) => (
+											<ContextMenu.CheckboxItem
+												key={t.id}
+												checked={!hiddenTools.has(t.id)}
+												onCheckedChange={(checked) =>
+													setToolVisible(t.id, checked)
+												}
+											>
+												<span className="flex size-4 shrink-0 items-center justify-center rounded-xs border border-line-strong text-fg">
+													{!hiddenTools.has(t.id) && <IconCheck size={12} />}
+												</span>
+												<span className="text-fg">{t.label}</span>
+											</ContextMenu.CheckboxItem>
+										))}
+									</ContextMenu.Group>
+									<ContextMenu.Separator />
+									<ContextMenu.Item onClick={hideAllSidebarTools}>
+										Hide tools from sidebar
 									</ContextMenu.Item>
 								</ContextMenu.Popup>
 							</ContextMenu.Root>
