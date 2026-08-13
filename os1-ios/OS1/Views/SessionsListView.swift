@@ -1461,7 +1461,17 @@ struct SessionsListView: View {
                     Label("Copy GitHub link", systemImage: "doc.on.doc")
                 }
                 Button {
-                    slackShare = PrSlackShareRequest(title: workspace.title, url: prURL)
+                    slackShare = PrSlackShareRequest(
+                        title: workspace.title,
+                        url: prURL,
+                        sessionId: session.id,
+                        repo: session.repo,
+                        branch: session.branch,
+                        merged: session.prState == "MERGED",
+                        walkthroughSummary: session.walkthrough?.summary,
+                        suggestedScreenshot: session.walkthrough?.shots?
+                            .first { $0.after != nil }?.after
+                    )
                 } label: {
                     Label("Share to Slack", systemImage: "paperplane")
                 }

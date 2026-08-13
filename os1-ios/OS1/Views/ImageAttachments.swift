@@ -12,6 +12,7 @@ import UIKit
 struct AttachImagesButton: View {
     @Binding var images: [AttachedImage]
     var maxCount: Int = 6
+    var systemImage = "paperclip"
 
     #if os(iOS)
     @State private var pickerItems: [PhotosPickerItem] = []
@@ -74,7 +75,7 @@ struct AttachImagesButton: View {
     }
 
     private var icon: some View {
-        Image(systemName: "paperclip")
+        Image(systemName: systemImage)
             .font(.system(size: 17, weight: .medium))
             .foregroundStyle(.secondary)
             #if os(iOS)

@@ -168,7 +168,10 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   exposes squash, merge-commit and rebase merge actions directly, with the same
   warnings and confirmation. PR surfaces can copy the GitHub link or open an
   editable Slack post that appends the link, defaults to `#engineering`, and
-  sends through the signed-in person's Slack account. A workspace row's
+  sends through the signed-in person's Slack account. After merge, that sheet
+  becomes the shipped-change composer: it suggests copy from the walkthrough,
+  preloads its after image, accepts up to 10 images, and reconnects Slack when
+  the person's existing grant lacks image access. A workspace row's
   long-press menu also rolls the
   cached PR state into one next action: merge when ready, fix failed checks,
   resolve conflicts, address feedback, view running checks, or archive after it

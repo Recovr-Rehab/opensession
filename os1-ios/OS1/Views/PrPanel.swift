@@ -232,7 +232,15 @@ struct PrPanelView: View {
                 Button {
                     slackShare = PrSlackShareRequest(
                         title: pr.title ?? "PR #\(pr.number)",
-                        url: url
+                        url: url,
+                        sessionId: viewModel.session.id,
+                        repo: viewModel.session.repo,
+                        branch: viewModel.session.branch,
+                        merged: pr.state == "MERGED",
+                        walkthroughSummary: viewModel.session.walkthrough?.summary,
+                        suggestedScreenshot: viewModel.session.walkthrough?.shots?
+                            .first { $0.after != nil }?.after
+                            ?? ShippedChangeMedia.latestScreenshot(in: viewModel.entries)
                     )
                 } label: {
                     Label("Share to Slack", systemImage: "paperplane")

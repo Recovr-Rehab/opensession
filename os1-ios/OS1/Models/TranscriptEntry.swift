@@ -84,6 +84,9 @@ struct TranscriptEntry: Identifiable, Decodable, Equatable, Sendable {
     /// Image attachments on conversation messages: `data:` URLs or bounded
     /// transcript `os-blob:` references resolved through the image endpoint.
     var images: [String]?
+    /// Images an agent marked as the visual result of its work. A merged-change
+    /// share uses the newest local screenshot when no walkthrough still exists.
+    var featuredMedia: [String]?
     /// Set when this entry is an operational notice rather than a message —
     /// a runner line, a recap, a worker's report, a heads-up from another
     /// session. The server classifies it (protocol notices.ts) and strips the
