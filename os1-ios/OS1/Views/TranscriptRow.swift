@@ -227,7 +227,11 @@ private struct SessionNoteRow: View {
                 .font(.subheadline.weight(.medium))
             } else {
                 if !note.text.isEmpty {
-                    Text(note.text)
+                    // An attributed string, so a mention reads as a name and a
+                    // pasted URL is tappable: the same two tokens the web
+                    // bubble marks up. See `NoteText` for why a note does not
+                    // go through the markdown pipeline.
+                    Text(NoteText.attributed(note.text))
                         .font(.body)
                         .foregroundStyle(OS1VisualStyle.text)
                         .textSelection(.enabled)
