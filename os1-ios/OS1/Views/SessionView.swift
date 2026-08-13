@@ -59,7 +59,6 @@ struct SessionView: View {
     /// Lets the generic new-output observer distinguish a history page from a
     /// real tail append, regardless of modifier callback ordering.
     @State private var lastDisplayHistoryPrependSeq = 0
-    @State private var lastSyncedDraft = ""
 
     /// Live scroll geometry for the restore. In a box because it changes on
     /// every scroll frame — see `TranscriptGeometryBox`.
@@ -214,7 +213,6 @@ struct SessionView: View {
             seed: seed,
             composerDraft: composerDraft
         ))
-        _lastSyncedDraft = State(initialValue: composerDraft?.text ?? "")
         self.tabs = tabs ?? [session]
         self.workspaceNames = workspaceNames
         self.onSelectTab = onSelectTab
@@ -234,9 +232,6 @@ struct SessionView: View {
         onArchiveWorkspace: (() -> Void)? = nil
     ) {
         _viewModel = State(initialValue: viewModel)
-        _lastSyncedDraft = State(
-            initialValue: DraftsStore.shared.text(for: viewModel.session.id) ?? ""
-        )
         self.tabs = tabs
         self.workspaceNames = workspaceNames
         self.onSelectTab = nil
@@ -810,12 +805,7 @@ struct SessionView: View {
             viewModel.quoteSelection.clear()
         }
         .onChange(of: DraftsStore.shared.remoteRevision) {
-            let remote = DraftsStore.shared.mountedText(
-                current: viewModel.draft,
-                for: viewModel.session.id,
-                previousSynced: lastSyncedDraft
-            )
-            lastSyncedDraft = remote
+            let remote = DraftsStore.shared.mountedText(for: viewModel.session.id)
             if viewModel.draft != remote { viewModel.draft = remote }
         }
         .onChange(of: scenePhase) { _, phase in

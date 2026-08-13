@@ -87,6 +87,7 @@ final class DraftsStore {
     private struct CacheBucket: Codable {
         var texts: [String: String]
         var synced: [String: String]
+        var editedAt: [String: String]?
     }
 
     private static let cacheKey = "os1.composerDrafts"
@@ -154,8 +155,7 @@ final class DraftsStore {
     /// Text the store decided belongs in a mounted composer after hydration.
     /// Dirty local text is already in `texts`, because each keystroke calls
     /// `setText`; clean text was replaced by reconciliation.
-    func mountedText(current: String, for sessionId: String, previousSynced: String) -> String {
-        guard current == previousSynced else { return current }
+    func mountedText(for sessionId: String) -> String {
         return texts[sessionId] ?? ""
     }
 
@@ -163,13 +163,15 @@ final class DraftsStore {
     /// debounced; sending (which empties the draft) pushes straight away, since
     /// that is what clears the pencil on the other device.
     func setText(_ text: String, for sessionId: String, immediate: Bool = false) {
-        guard (texts[sessionId] ?? "") != text else { return }
-        texts[sessionId] = text
+        let stored = text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "" : text
+        guard (texts[sessionId] ?? "") != stored else { return }
+        texts[sessionId] = stored
         editedAt[sessionId] = ISO8601DateFormatter.draftStamp.string(from: Date())
         updatePresence(sessionId)
         schedulePersist()
         pushTasks[sessionId]?.cancel()
-        if immediate || text.isEmpty {
+        if sessionId.hasPrefix("pending-") { return }
+        if immediate || stored.isEmpty {
             pushTasks[sessionId] = nil
             send(sessionId)
             return
@@ -206,7 +208,6 @@ final class DraftsStore {
         updatePresence(realId)
         schedulePersist()
         send(realId)
-        deleteRemote(tempId)
     }
 
     /// Load this user's drafts. Guarded like `ReadsStore.hydrate`: a response
@@ -222,8 +223,11 @@ final class DraftsStore {
     /// Kept internal so the merge contract can be tested without a server.
     func apply(_ server: [String: RemoteDraft]) {
         hasHydrated = true
+        let pendingIds = server.keys.filter { $0.hasPrefix("pending-") }
+        for id in pendingIds { deleteRemote(id) }
+        let visibleServer = server.filter { !$0.key.hasPrefix("pending-") }
         let state = DraftSync.State(local: texts, synced: syncedText)
-        for action in DraftSync.reconcile(server: server, state: state) {
+        for action in DraftSync.reconcile(server: visibleServer, state: state) {
             switch action {
             case .adopt(let id, let text):
                 let changed = (texts[id] ?? "") != text
@@ -241,7 +245,7 @@ final class DraftsStore {
             }
         }
         // Stop tracking sessions neither side holds anything for.
-        for id in syncedText.keys where server[id] == nil && (texts[id] ?? "").isEmpty {
+        for id in syncedText.keys where visibleServer[id] == nil && (texts[id] ?? "").isEmpty {
             syncedText[id] = nil
             attemptedText[id] = nil
             texts[id] = nil
@@ -249,7 +253,7 @@ final class DraftsStore {
         schedulePersist()
     }
 
-    private func resetForNewContext(_ context: NativePreferences.Context) {
+    func resetForNewContext(_ context: NativePreferences.Context) {
         guard let hydratedContext else {
             self.hydratedContext = context
             return
@@ -257,10 +261,12 @@ final class DraftsStore {
         guard hydratedContext != context else { return }
         // A different person (or server) is signed in now. Their drafts are
         // not this one's to show, and ours are already on the old server.
-        self.hydratedContext = context
         for task in pushTasks.values { task.cancel() }
         for task in writeTasks.values { task.cancel() }
+        // Save the outgoing account under its own identity before changing
+        // which bucket `persistNow` targets.
         persistNow()
+        self.hydratedContext = context
         persistTask?.cancel()
         persistTask = nil
         pushTasks.removeAll()
@@ -280,6 +286,7 @@ final class DraftsStore {
     }
 
     private func send(_ sessionId: String) {
+        guard !sessionId.hasPrefix("pending-") else { return }
         let text = texts[sessionId] ?? ""
         // Nothing new to say. Compare against what is already ON ITS WAY, not
         // only what the server has confirmed: type a line and send it straight
@@ -363,6 +370,7 @@ final class DraftsStore {
         let bucket = cache()[cacheIdentity(context)]
         texts = bucket?.texts ?? [:]
         syncedText = bucket?.synced ?? [:]
+        editedAt = bucket?.editedAt ?? [:]
         sessionsWithDrafts = Set(texts.compactMap { $0.value.isEmpty ? nil : $0.key })
     }
 
@@ -383,7 +391,11 @@ final class DraftsStore {
         if local.isEmpty && syncedText.isEmpty {
             buckets[cacheIdentity(context)] = nil
         } else {
-            buckets[cacheIdentity(context)] = CacheBucket(texts: local, synced: syncedText)
+            buckets[cacheIdentity(context)] = CacheBucket(
+                texts: local,
+                synced: syncedText,
+                editedAt: editedAt
+            )
         }
         if let data = try? JSONEncoder().encode(buckets) {
             UserDefaults.standard.set(data, forKey: Self.cacheKey)

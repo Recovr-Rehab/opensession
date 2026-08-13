@@ -81,8 +81,9 @@ struct SessionsListView: View {
     /// seeds the conversation view so it renders instantly instead of waiting
     /// for the server to persist the session.
     @State private var optimisticSeeds: [String: SessionViewModel.OptimisticSeed] = [:]
-    /// Unsent composer state survives switching sibling tabs (whose
-    /// SessionViewModel/socket is otherwise deliberately recreated).
+    /// Staged images survive switching sibling tabs (whose SessionViewModel
+    /// and socket are otherwise deliberately recreated). Text lives in
+    /// DraftsStore so a remote send cannot be shadowed by stale view state.
     @State private var composerDrafts: [String: SessionViewModel.ComposerDraft] = [:]
     /// Temp IDs remain aliases through the outgoing view's onDisappear so a
     /// draft edited while session creation resolves is saved under the real ID.
@@ -356,12 +357,7 @@ struct SessionsListView: View {
                     workspaceNames: viewModel.workspaceNames,
                     composerDraft: storedDraft(for: archivedSession.id),
                     onSaveComposerDraft: { draft in
-                        composerDrafts[archivedSession.id] = draft.isEmpty ? nil : draft
-                        DraftsStore.shared.setText(
-                            draft.text,
-                            for: archivedSession.id,
-                            immediate: true
-                        )
+                        saveComposerDraft(draft, for: archivedSession.id)
                     }
                 )
                     .id(archivedSession.id)
@@ -375,10 +371,9 @@ struct SessionsListView: View {
                     session: session,
                     seed: optimisticSeeds[session.id],
                     workspaceNames: viewModel.workspaceNames,
-                    composerDraft: composerDrafts[session.id] ?? storedDraft(for: session.id),
+                    composerDraft: storedDraft(for: session.id),
                     onSaveComposerDraft: { draft in
-                        composerDrafts[session.id] = draft.isEmpty ? nil : draft
-                        DraftsStore.shared.setText(draft.text, for: session.id, immediate: true)
+                        saveComposerDraft(draft, for: session.id)
                     }
                 )
                     // Fresh view (and socket) per session, not a reused one.
@@ -872,8 +867,21 @@ struct SessionsListView: View {
     }
 
     private func storedDraft(for id: String) -> SessionViewModel.ComposerDraft? {
-        guard let text = DraftsStore.shared.text(for: id) else { return nil }
-        return SessionViewModel.ComposerDraft(text: text, images: [])
+        let draft = SessionViewModel.ComposerDraft(
+            text: DraftsStore.shared.text(for: id) ?? "",
+            images: composerDrafts[id]?.images ?? []
+        )
+        return draft.isEmpty ? nil : draft
+    }
+
+    private func saveComposerDraft(
+        _ draft: SessionViewModel.ComposerDraft,
+        for id: String
+    ) {
+        composerDrafts[id] = draft.images.isEmpty
+            ? nil
+            : SessionViewModel.ComposerDraft(text: "", images: draft.images)
+        DraftsStore.shared.setText(draft.text, for: id, immediate: true)
     }
 
     /// The moment Start is tapped: an optimistic row (temporary `pending-` id)
@@ -1280,13 +1288,12 @@ struct SessionsListView: View {
                         for: $0,
                         scope: sessionCacheScope,
                         seed: optimisticSeeds[$0.id],
-                        composerDraft: composerDrafts[$0.id] ?? storedDraft(for: $0.id)
+                        composerDraft: storedDraft(for: $0.id)
                     )
                 },
                 onSaveComposerDraft: { savedSession, draft in
                     let id = resolvedSessionIds[savedSession.id] ?? savedSession.id
-                    composerDrafts[id] = draft.isEmpty ? nil : draft
-                    DraftsStore.shared.setText(draft.text, for: id, immediate: true)
+                    saveComposerDraft(draft, for: id)
                 },
                 onNewSession: {
                     // The session's ⋯ → "New session in this workspace": a sibling
