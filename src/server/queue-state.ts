@@ -19,6 +19,8 @@ import { SESSIONS_DIR } from "./session-cache";
 import { setAppendHook } from "./transcript-store";
 import type { TranscriptEntry } from "./types";
 import { broadcastToSession } from "./ws-hub";
+import { AUTO_CONTINUE_USER } from "./auto-continue";
+import { userMatchesAny } from "./shared/user-mappings";
 
 const g = globalThis as any;
 
@@ -47,6 +49,44 @@ export const promptQueues: Map<string, QueueItem[]> = (g.__promptQueues ??=
 
 export function isGitHubQueueItem(item?: QueueItem): boolean {
 	return item?.user === "GitHub" || item?.user === "GitHub (automation)";
+}
+
+/** Only ordinary composer messages can be moved back into a draft. Routed
+ * items carry queue-only metadata that a composer send cannot reconstruct. */
+export function isEditableQueueItem(item?: QueueItem): boolean {
+	return !!item &&
+		!!item.user &&
+		!isGitHubQueueItem(item) &&
+		item.user !== AUTO_CONTINUE_USER &&
+		!item.contextSessions?.length &&
+		!item.slackReplyTo &&
+		!item.reviewHandoff;
+}
+
+function queueActorMatches(item: QueueItem, actor?: string): boolean {
+	return !!actor && !!item.user && userMatchesAny(actor, [item.user]);
+}
+
+/** Atomically remove an ordinary human message so a client can put its full
+ * payload back in the normal composer. Routed/system items stay queue-owned. */
+export function takeQueuedPrompt(
+	sessionId: string,
+	queueId: string,
+	actor?: string,
+	effects = true,
+): QueueItem | undefined {
+	const queue = promptQueues.get(sessionId);
+	if (!queue) return;
+	const index = queue.findIndex((candidate) => candidate.id === queueId);
+	const item = queue[index];
+	if (!isEditableQueueItem(item) || !item || !queueActorMatches(item, actor)) return;
+	queue.splice(index, 1);
+	if (queue.length === 0) promptQueues.delete(sessionId);
+	if (effects) {
+		persistQueues();
+		broadcastQueue(sessionId);
+	}
+	return item;
 }
 
 // Steered messages (folded into a live run, delivered at the run's next turn
@@ -108,7 +148,7 @@ export function persistQueues(): void {
 	}
 }
 
-export function broadcastQueue(sessionId: string) {
+export function queueDisplayState(sessionId: string) {
 	const queued = queueWithIds(promptQueues.get(sessionId));
 	const steered = queueWithIds(steeredReceipts.get(sessionId));
 	if (queued.length > 0) promptQueues.set(sessionId, queued);
@@ -119,15 +159,20 @@ export function broadcastQueue(sessionId: string) {
 	const forDisplay = (items: typeof queued) =>
 		items.map((i) => {
 			const shown = stripContext(i.content);
-			return shown === i.content
-				? i
-				: { ...i, content: shown || "(auto-continue)" };
+			return {
+				...i,
+				content: shown === i.content ? i.content : shown || "(auto-continue)",
+				editable: isEditableQueueItem(i),
+			};
 		});
+	return { queued: forDisplay(queued), steered: forDisplay(steered) };
+}
+
+export function broadcastQueue(sessionId: string) {
 	broadcastToSession(sessionId, {
 		type: "queue_update",
 		sessionId,
-		queued: forDisplay(queued),
-		steered: forDisplay(steered),
+		...queueDisplayState(sessionId),
 	});
 }
 

@@ -626,6 +626,7 @@ const EXPLICIT_SESSION_MESSAGES = new Set([
 	"load_history",
 	"prompt",
 	"interrupt_prompt",
+	"take_queued_prompt",
 	"update_queued_prompt",
 	"delete_queued_prompt",
 	"steer_queued_prompt",

@@ -127,6 +127,10 @@ export interface QueuedPrompt {
   user?: string;
   images?: string[];
   files?: unknown;
+  /** Sibling-session transcripts attached to this prompt. */
+  contextSessions?: string[];
+  /** False for routed/system items that must keep queue-only metadata. */
+  editable?: boolean;
 }
 
 /**
@@ -212,6 +216,7 @@ export type ProtocolClientMessage =
       queueId?: string;
       queueIndex?: number;
     }
+  | { type: "take_queued_prompt"; sessionId: string; queueId: string }
   | {
       type: "update_queued_prompt";
       sessionId: string;
@@ -405,6 +410,13 @@ export type ProtocolServerMessage =
       sessionId: string;
       queued: QueuedPrompt[];
       steered?: QueuedPrompt[];
+    }
+  | {
+      type: "queued_prompt_taken";
+      sessionId: string;
+      queueId: string;
+      item?: QueuedPrompt;
+      message?: string;
     }
   | {
       type: "ask_question";
