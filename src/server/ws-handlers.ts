@@ -18,12 +18,13 @@ import { INIT_WIRE_CLAMP_BYTES, entriesForWire, parseTranscriptAsync, parseTrans
 import { providerFor } from "./models";
 import { applyNoteUpdate, getNoteState, isValidNoteId } from "./notes";
 import { appendOpencodeTranscript, clearTranscriptStoreDegraded, transcriptLineRunnerNotice } from "./opencode-transcript";
-import { deleteQueuedPrompt, persistQueues, promptQueues, queueWithIds, recordSteer, reorderQueuedPrompt, requeueSteerReceipts, steeredReceipts, stoppedSessions, updateQueuedPrompt } from "./queue-state";
+import { deleteQueuedPrompt, persistQueues, promptQueues, queueDisplayState, recordSteer, reorderQueuedPrompt, requeueSteerReceipts, steeredReceipts, stoppedSessions, takeQueuedPrompt, updateQueuedPrompt } from "./queue-state";
 import { transitionRunState } from "./run-state";
 import { abortTurnAndDrain, drainQueue, enqueuePrompt, interruptQueuedPrompt, runSessionPrompt, runSessionPromptAndDrain, steerQueuedPrompt, watchExternalRunAndDrain } from "./run-session";
 import { sandboxWsClose, sandboxWsMessage, sandboxWsOpen } from "./run-ws";
 import { handleCreateSessionMessage } from "./session-create";
 import { runnerWsClose, runnerWsMessage, runnerWsOpen } from "./runner-ws";
+import { sandboxPortalRelayClose, sandboxPortalRelayMessage, sandboxPortalRelayOpen } from "./sandbox-portal-relay";
 import { type Sandbox } from "./sandbox";
 import { findSession, invalidateSessionsCache, maybePersistEffort, maybePersistFastMode } from "./session-cache";
 import { engineUserTexts, mergedSessionTranscript, mergedSessionTranscriptAsync, v2MirrorFiles, v2TranscriptHasDrift } from "./sessions";
@@ -96,10 +97,7 @@ function sendWatchExtras(
 
 	// Older in-memory rows may lack ids; assign and persist them before
 	// sending so edit/delete/steer actions can address the same row.
-	const queuedPrompts = queueWithIds(promptQueues.get(sessionId));
-	const steeredPrompts = queueWithIds(steeredReceipts.get(sessionId));
-	if (queuedPrompts.length > 0) promptQueues.set(sessionId, queuedPrompts);
-	if (steeredPrompts.length > 0) steeredReceipts.set(sessionId, steeredPrompts);
+	const { queued: queuedPrompts, steered: steeredPrompts } = queueDisplayState(sessionId);
 	if (queuedPrompts.length > 0 || steeredPrompts.length > 0) persistQueues();
 	ws.send(
 		JSON.stringify({
@@ -412,6 +410,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 		if (sandboxWsOpen(ws)) return;
 		// Runner channels are not UI clients either (runner-ws.ts).
 		if (runnerWsOpen(ws)) return;
+		if (sandboxPortalRelayOpen(ws)) return;
 		allClients.add(ws);
 		// Hello frame: hands the client this process's bootId so a reconnect
 		// can tell a real restart (bootId changed → "restarted" toast) from a
@@ -441,6 +440,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 	async message(ws, message) {
 		if (sandboxWsMessage(ws, message as any)) return;
 		if (runnerWsMessage(ws, message as any)) return;
+		if (sandboxPortalRelayMessage(ws, message as any)) return;
 		if (isLocalProfile()) {
 			const identity = await verifiedCloudIdentity();
 			setLocalProfileIdentity(identity);
@@ -810,6 +810,14 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 				const content = typeof msg.content === "string" ? msg.content : "";
 				const images = parseImageDataUrls(msg.images);
 				const imageUrls = asDataUrlList(msg.images);
+				const rawContextSessions = Array.isArray(msg.contextSessions)
+					? msg.contextSessions
+					: Array.isArray(msg.contextChats)
+						? msg.contextChats
+						: undefined;
+				const contextSessions = rawContextSessions?.filter(
+					(id: unknown): id is string => typeof id === "string",
+				);
 				if (
 					!content.trim() &&
 					!images?.length &&
@@ -892,6 +900,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 							user,
 							images: imageUrls,
 							files: msg.files,
+							contextSessions,
 							// Queue-by-choice: held until the agent FULLY completes
 							// (including running child workers), not just until the
 							// next turn boundary. Steer is the deliver-sooner path.
@@ -906,9 +915,11 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					// falls through to the queue (its drain delivers images + files
 					// together at the run's next idle point).
 					const hasFiles = Array.isArray(msg.files) && msg.files.length > 0;
+					const hasContext = !!contextSessions?.length;
 					if (
 						msg.busyMode === "steer" &&
 						!hasFiles &&
+						!hasContext &&
 						steerAgentRun(
 							[session.claudeSessionId, session.codexThreadId, session.id],
 							attributed,
@@ -927,6 +938,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 						user,
 						images: imageUrls,
 						files: msg.files,
+						contextSessions,
 					});
 					watchExternalRunAndDrain(sessionId);
 					break;
@@ -950,12 +962,6 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					return;
 				}
 
-				// Sibling-session transcripts attached via the fresh-session chips.
-				const contextSessions = Array.isArray(msg.contextSessions)
-					? msg.contextSessions.filter(
-							(id: unknown): id is string => typeof id === "string",
-						)
-					: undefined;
 				// A Sandbox send is durable before it can wake compute. The drain has
 				// a per-session single-flight lock, so the first queued message owns
 				// the wake and later messages remain FIFO behind it.
@@ -968,6 +974,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					);
 					break;
 				}
+
 				await runSessionPromptAndDrain(
 					sessionId,
 					content,
@@ -1070,18 +1077,37 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 				break;
 			}
 
+			case "take_queued_prompt": {
+				const { sessionId, queueId } = msg;
+				const item = takeQueuedPrompt(
+					sessionId,
+					queueId,
+					ws.data.authUser || ws.data.user || undefined,
+				);
+				ws.send(JSON.stringify({
+					type: "queued_prompt_taken",
+					sessionId,
+					queueId,
+					...(item
+						? { item }
+						: { message: "That queued message could not be edited." }),
+				}));
+				if (item) watchExternalRunAndDrain(sessionId);
+				break;
+			}
+
 			case "update_queued_prompt": {
 				const { sessionId, queueId, queueIndex, content } = msg;
-				const next = String(content || "").trim();
-				// Present-but-empty means "this message now carries no images",
-				// which asDataUrlList can't express (it collapses [] to
-				// undefined, the "unchanged" signal) — so read the key itself.
-				const nextImages = Array.isArray(msg.images)
+				const images = Array.isArray(msg.images)
 					? (asDataUrlList(msg.images) ?? [])
 					: undefined;
-				// updateQueuedPrompt preserves staged files and removes the item only
-				// when text, images, and files are all empty after the edit.
-				updateQueuedPrompt(sessionId, queueId, queueIndex, next, nextImages);
+				updateQueuedPrompt(
+					sessionId,
+					queueId,
+					queueIndex,
+					String(content || "").trim(),
+					images,
+				);
 				break;
 			}
 
@@ -1327,6 +1353,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 	close(ws) {
 		if (sandboxWsClose(ws)) return;
 		if (runnerWsClose(ws)) return;
+		if (sandboxPortalRelayClose(ws)) return;
 		closeCloudProxyProtocol(ws, (lane) =>
 			websocketHandlers.close?.(lane, 1000, "cloud proxy disconnected"),
 		);

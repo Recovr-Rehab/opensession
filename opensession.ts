@@ -47,6 +47,7 @@ import { startPublicIngress } from "./src/server/public-ingress";
 import { recordRecoveredRunEvent, restorePromptQueues, resumeDrainedSessions, snapshotActiveSessions } from "./src/server/run-session";
 import { handleSandboxWsUpgrade, timerPoisonRequestCheck } from "./src/server/run-ws";
 import { handleRunnerWsUpgrade } from "./src/server/runner-ws";
+import { handleSandboxPortalRelayUpgrade } from "./src/server/sandbox-portal-relay";
 import { findSession, invalidateSessionsCache, recordRunOutcome } from "./src/server/session-cache";
 import { getSessionControl } from "./src/server/session-control";
 import { buildReposNote } from "./src/server/session-repos";
@@ -458,6 +459,9 @@ const server: import("bun").Server<WSClientData> = hotServe({
 			if (path === "/runner-ws") {
 				const rejected = handleRunnerWsUpgrade(req, server, path);
 				return rejected ?? (undefined as any);
+			}
+			if (path === "/sandbox-portal-ws") {
+				return handleSandboxPortalRelayUpgrade(req, server, path);
 			}
 
 			if (path.startsWith("/run-ws/") || path === "/rpc-ws") {

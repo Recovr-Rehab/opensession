@@ -66,7 +66,7 @@ export async function handlePreviewRoutes(
 				: null;
 			if (sbx)
 				return Response.json({
-					...(await getSandboxPreviewStatus(sbx, session.worktreeDir!)),
+					...(await getSandboxPreviewStatus(sbx, session.worktreeDir!, session.id)),
 					...who,
 				});
 			if (!session.worktreeDir || !existsSync(session.worktreeDir)) {
@@ -122,7 +122,8 @@ export async function handlePreviewRoutes(
 						? {
 								status: await getSandboxPreviewStatus(
 									sbx,
-									session.worktreeDir,
+										session.worktreeDir,
+										session.id,
 								),
 							}
 						: {}),
@@ -237,7 +238,7 @@ export async function handlePreviewRoutes(
 				if (sandbox) {
 					if (m[3] === "stop") await stopSandboxPortalService({ sessionId: session.id, sandbox, name: m[2] });
 					else await restartSandboxPortalService({ sessionId: session.id, sandbox, name: m[2] });
-					return Response.json(await getSandboxPreviewStatus(sandbox, session.worktreeDir!));
+						return Response.json(await getSandboxPreviewStatus(sandbox, session.worktreeDir!, session.id));
 				}
 				if (!session.worktreeDir || !existsSync(session.worktreeDir))
 					return Response.json({ error: "Session has no Portal workspace" }, { status: 400 });

@@ -26,7 +26,7 @@ function workspace(ctx: PortalsMcpContext): string | Error {
 }
 
 async function portalStatus(ctx: PortalsMcpContext, dir: string, sandbox: Sandbox | null) {
-	return sandbox ? getSandboxPreviewStatus(sandbox, dir) : getPreviewStatus(dir);
+	return sandbox ? getSandboxPreviewStatus(sandbox, dir, ctx.sessionId) : getPreviewStatus(dir);
 }
 
 export function createPortalsMcpServer(ctx: PortalsMcpContext) {

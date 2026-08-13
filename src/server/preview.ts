@@ -1192,6 +1192,7 @@ async function sandboxPortListening(sandbox: Sandbox, port: number): Promise<boo
 export async function getSandboxPreviewStatus(
   sandbox: Sandbox,
   worktreeDir: string,
+	 sessionId?: string,
 ): Promise<PreviewStatus> {
   // .ports.conf via the sandbox exec — works for bind mounts and is the only
   // way for volume-mode workspaces (no host copy).
@@ -1212,7 +1213,10 @@ export async function getSandboxPreviewStatus(
 		const portal = portalByKey.get(key);
     const running = await sandboxPortListening(sandbox, port);
     let previewUrl: string | null = null;
-    if (running) {
+		if (running && portal && sessionId) {
+			const { ensureSandboxPortalRelay } = await import("./sandbox-portal-relay");
+			previewUrl = await ensureSandboxPortalRelay({ sessionId, sandboxId: sandbox.id, port });
+		} else if (running) {
       const entry = portMap[port];
       const published = typeof entry === "number" ? entry : entry?.hostPort;
       const privateUpstream = typeof entry === "object" ? entry?.upstream : undefined;
