@@ -163,6 +163,68 @@ struct SupportEntry: Decodable, Identifiable, Sendable {
     var date: Date? { timestamp.flatMap(Session.parseISO) }
 }
 
+/// One file staged in the composer, before anything has been uploaded.
+///
+/// Held as bytes rather than a URL: a photo picked from the library has no
+/// stable file to point at, and a security-scoped file from the Files app
+/// stops being readable the moment the picker's callback returns. Pictures are
+/// normalized through `AttachedImage` first — the same downscale-and-JPEG the
+/// session composer applies — which is what keeps a modern phone screenshot
+/// inside a reply's 6 MB budget.
+struct SupportAttachmentDraft: Identifiable, Equatable, Sendable {
+    /// Plain caps one file at 25 MB (routes/plain.ts), whatever the message
+    /// mode is.
+    static let maxFileBytes = 25 * 1024 * 1024
+    /// The total a message may carry, which is where the two modes differ:
+    /// Plain gives an internal note far more room than a customer reply.
+    static let maxReplyBytes = 6 * 1024 * 1024
+    static let maxNoteBytes = 50 * 1024 * 1024
+    static let maxCount = 20
+
+    let id: String
+    let fileName: String
+    let mimeType: String
+    let data: Data
+
+    var isImage: Bool { mimeType.hasPrefix("image/") }
+
+    var sizeLabel: String {
+        ByteCountFormatter.string(fromByteCount: Int64(data.count), countStyle: .file)
+    }
+
+    init(id: String = UUID().uuidString, fileName: String, mimeType: String, data: Data) {
+        self.id = id
+        self.fileName = fileName
+        self.mimeType = mimeType
+        self.data = data
+    }
+
+    /// A picked picture, named for when it was taken: the photo library hands
+    /// over bytes and no filename, and "attachment.jpg" in a customer's inbox
+    /// says less than the date does.
+    init(image: AttachedImage, takenAt: Date = Date()) {
+        self.init(
+            id: image.id,
+            fileName: "Image \(Self.stamp(takenAt)).jpg",
+            mimeType: image.mediaType,
+            data: image.jpegData
+        )
+    }
+
+    /// The limit that applies to a whole message in this mode.
+    static func maxTotalBytes(isNote: Bool) -> Int {
+        isNote ? maxNoteBytes : maxReplyBytes
+    }
+
+    /// `2026-08-13 at 14.05.22`, the shape macOS gives a screenshot.
+    private static func stamp(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
+        return formatter.string(from: date)
+    }
+}
+
 /// A note's author and body, with the server's attribution prefix taken off.
 ///
 /// Plain's API can't post as a workspace user, so a teammate's note goes out

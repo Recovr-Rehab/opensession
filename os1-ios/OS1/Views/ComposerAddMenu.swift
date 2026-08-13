@@ -16,6 +16,10 @@ struct ComposerAddMenu: View {
     var onSetGoal: (() -> Void)?
     /// Opens the `@`-mention picker. Nil where mention search isn't available.
     var onReferenceFile: (() -> Void)?
+    /// Opens the Files browser, for a surface that takes any file rather than
+    /// only pictures — a Plain reply carries logs and PDFs too. Nil in a
+    /// session composer, which has nowhere to put one.
+    var onBrowseFiles: (() -> Void)?
     /// Scheduling needs something to schedule, so the row dims on an empty
     /// draft rather than opening a picker that can't submit.
     var hasDraft: Bool = false
@@ -66,6 +70,13 @@ struct ComposerAddMenu: View {
                     .disabled(remaining == 0)
                 }
                 #endif
+
+                if let onBrowseFiles {
+                    Button(action: onBrowseFiles) {
+                        Label("Choose a file", systemImage: "folder")
+                    }
+                    .disabled(remaining == 0)
+                }
             }
 
             if let onReferenceFile {

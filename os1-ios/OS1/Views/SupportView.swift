@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -495,6 +496,11 @@ private struct SupportImage: View {
 private struct SupportComposer: View {
     @Bindable var model: SupportThreadModel
     @FocusState private var focused: Bool
+    /// What the shared "+" menu picks into. Drained into the model on every
+    /// change, so this holds a picture for one run loop and the model stays
+    /// the only list of what is staged.
+    @State private var picked: [AttachedImage] = []
+    @State private var browsingFiles = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -504,7 +510,21 @@ private struct SupportComposer: View {
             }
             .pickerStyle(.segmented)
 
+            if !model.attachments.isEmpty {
+                SupportAttachmentsRow(
+                    attachments: model.attachments,
+                    onRemove: { model.removeAttachment($0) }
+                )
+            }
+
             HStack(alignment: .bottom, spacing: 8) {
+                ComposerAddMenu(
+                    images: $picked,
+                    onBrowseFiles: { browsingFiles = true },
+                    maxCount: model.attachmentSlots
+                )
+                .disabled(model.sending == .sending || model.attachmentSlots == 0)
+
                 TextField(placeholder, text: $model.draft, axis: .vertical)
                     .lineLimit(1...6)
                     .textFieldStyle(.plain)
@@ -553,9 +573,41 @@ private struct SupportComposer: View {
             guard previous != sending else { return nil }
             switch sending {
             case .sent: return .commit
-            case .failed: return .warn
+            case .failed, .failedUpload: return .warn
             case .idle, .sending: return nil
             }
+        }
+        // The "+" appends to its own binding; anything that lands there is a
+        // picked picture on its way into the staged list.
+        .onChange(of: picked) {
+            guard !picked.isEmpty else { return }
+            let images = picked
+            picked = []
+            model.stage(images.map { SupportAttachmentDraft(image: $0) })
+        }
+        .fileImporter(
+            isPresented: $browsingFiles,
+            allowedContentTypes: [.item],
+            allowsMultipleSelection: true
+        ) { result in
+            guard case .success(let urls) = result else { return }
+            var files: [SupportAttachmentDraft] = []
+            for url in urls.prefix(model.attachmentSlots) {
+                // The picked file is only readable inside this scope, so the
+                // bytes have to be taken now rather than kept as a URL.
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                guard let data = try? Data(contentsOf: url) else { continue }
+                files.append(
+                    SupportAttachmentDraft(
+                        fileName: url.lastPathComponent,
+                        mimeType: UTType(filenameExtension: url.pathExtension)?
+                            .preferredMIMEType ?? "application/octet-stream",
+                        data: data
+                    )
+                )
+            }
+            model.stage(files)
         }
     }
 
@@ -572,14 +624,24 @@ private struct SupportComposer: View {
         switch model.sending {
         case .failed(let message):
             return "Not sent: \(message). Check Plain before sending again."
+        // Nothing left the building, so it says what to fix instead of
+        // sending you to Plain to check.
+        case .failedUpload(let message):
+            return message
         case .sent(let asUser, let wasNote):
             if wasNote { return "Note added." }
             return asUser
                 ? "Sent as you."
                 : "Sent — as the workspace bot, not your Plain account."
         case .sending:
+            if !model.attachments.isEmpty {
+                return model.isNoteMode ? "Uploading and adding note…" : "Uploading and sending…"
+            }
             return model.isNoteMode ? "Adding note…" : "Sending…"
         case .idle:
+            // The size split is the one thing about attachments you can't
+            // guess, so an oversized set says so before you tap send.
+            if let overBudget = model.overBudget { return overBudget }
             let me = ServerConfig.shared.userName
             if model.isNoteMode {
                 return "Only the team sees this."
@@ -591,7 +653,76 @@ private struct SupportComposer: View {
     }
 
     private var footnoteColor: Color {
-        if case .failed = model.sending { return OS1VisualStyle.red }
-        return OS1VisualStyle.textFaint
+        switch model.sending {
+        case .failed, .failedUpload: return OS1VisualStyle.red
+        case .idle: return model.overBudget == nil
+            ? OS1VisualStyle.textFaint
+            : OS1VisualStyle.red
+        default: return OS1VisualStyle.textFaint
+        }
+    }
+}
+
+/// The files waiting to go with the next message, as the session composer
+/// shows its staged images: a thumbnail with a ✕ on it. A support attachment
+/// isn't always a picture, so anything else gets a tile with its name and size
+/// — which is what you check before sending a log to a customer.
+private struct SupportAttachmentsRow: View {
+    let attachments: [SupportAttachmentDraft]
+    let onRemove: (SupportAttachmentDraft) -> Void
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(attachments) { attachment in
+                    ZStack(alignment: .topTrailing) {
+                        tile(attachment)
+                        Button {
+                            onRemove(attachment)
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 15))
+                                .symbolRenderingMode(.palette)
+                                .foregroundStyle(.white, .black.opacity(0.6))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(2)
+                        .accessibilityLabel("Remove \(attachment.fileName)")
+                    }
+                }
+            }
+            .padding(.vertical, 2)
+        }
+    }
+
+    @ViewBuilder
+    private func tile(_ attachment: SupportAttachmentDraft) -> some View {
+        if attachment.isImage {
+            DataImage(data: attachment.data)
+                .frame(width: 56, height: 56)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .accessibilityLabel(attachment.fileName)
+        } else {
+            VStack(alignment: .leading, spacing: 2) {
+                Image(systemName: "doc")
+                    .font(.system(size: 15))
+                    .foregroundStyle(OS1VisualStyle.textDim)
+                Text(attachment.fileName)
+                    .font(.caption2)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Text(attachment.sizeLabel)
+                    .font(.caption2)
+                    .foregroundStyle(OS1VisualStyle.textFaint)
+            }
+            .frame(width: 104, height: 56, alignment: .leading)
+            .padding(.horizontal, 8)
+            .background(
+                OS1VisualStyle.panel,
+                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+            )
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("\(attachment.fileName), \(attachment.sizeLabel)")
+        }
     }
 }

@@ -1148,7 +1148,8 @@ enum OS1API {
     static func sendSupportReply(
         threadId: String,
         text: String,
-        isNote: Bool
+        isNote: Bool,
+        attachmentIds: [String] = []
     ) async throws -> String? {
         struct ReplyResponse: Decodable, Sendable { let sentAs: String? }
         let encoded = threadId.addingPercentEncoding(
@@ -1157,6 +1158,7 @@ enum OS1API {
         var body: [String: Any] = [
             "text": text,
             "kind": isNote ? "note" : "reply",
+            "attachmentIds": attachmentIds,
         ]
         // Without a name the reply goes out unsigned and the note lands
         // unattributed. A signed-in server overrides this with the verified
@@ -1168,6 +1170,55 @@ enum OS1API {
             body: body
         )
         return response.sentAs
+    }
+
+    /// Stage one file on the thread for the next reply or note, and hand back
+    /// the id the send has to carry.
+    ///
+    /// The bytes go up raw, not as multipart: the route reads the whole body
+    /// as the file and takes the name and the mode from headers. The name is
+    /// percent-encoded because a header is ASCII and the server decodes it
+    /// with `decodeURIComponent`.
+    ///
+    /// `isNote` is part of the upload, not just the send: the server remembers
+    /// which mode each staged file was uploaded for and refuses a reply that
+    /// carries a note's attachment (Plain uploads to a different message
+    /// type). Switching the composer's mode therefore invalidates anything
+    /// already uploaded — which is why this runs at send time and not when the
+    /// file is picked.
+    ///
+    /// A file is capped at 25 MB here; the TOTAL a message may carry is the
+    /// send's business (6 MB for a reply, 50 MB for a note).
+    static func uploadSupportAttachment(
+        threadId: String,
+        fileName: String,
+        mimeType: String,
+        data: Data,
+        isNote: Bool
+    ) async throws -> String {
+        struct UploadResponse: Decodable, Sendable { let attachmentId: String? }
+        let encoded = threadId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? threadId
+        // `.alphanumerics` rather than a URL set: every reserved character
+        // then arrives as %XX, which is what the server's decode expects and
+        // what keeps the header ASCII whatever the file is called.
+        let encodedName = fileName.addingPercentEncoding(
+            withAllowedCharacters: .alphanumerics
+        ) ?? "attachment"
+        let response: UploadResponse = try await upload(
+            "/api/plain/threads/\(encoded)/attachments",
+            data: data,
+            contentType: mimeType,
+            headers: [
+                "x-file-name": encodedName,
+                "x-plain-kind": isNote ? "note" : "reply",
+            ]
+        )
+        guard let attachmentId = response.attachmentId else {
+            throw APIError.server("Plain didn't return an attachment")
+        }
+        return attachmentId
     }
 
     /// Move a thread through the queue. Writes take the LOWERCASE status;
@@ -1249,6 +1300,37 @@ enum OS1API {
             throw APIError.http(http.statusCode)
         }
         return try await decodeDetached(T.self, from: data)
+    }
+
+    /// `mutate` with a file for a body instead of JSON — the Plain attachment
+    /// route takes the raw bytes and reads the file's name and type from
+    /// headers. Same error contract, so a server message ("Attachment is too
+    /// large (25 MB max)") reaches the caller as written.
+    private static func upload<T: Decodable & Sendable>(
+        _ path: String,
+        data: Data,
+        contentType: String,
+        headers: [String: String]
+    ) async throws -> T {
+        let config = ServerConfig.shared
+        guard let base = config.baseURL else { throw APIError.notConfigured }
+        guard config.isConfigured else { throw APIError.notConfigured }
+        guard let url = URL(string: base.absoluteString + path) else { throw APIError.badURL }
+
+        var request = config.authorizedRequest(url)
+        request.httpMethod = "POST"
+        request.setValue(contentType, forHTTPHeaderField: "Content-Type")
+        for (field, value) in headers { request.setValue(value, forHTTPHeaderField: field) }
+        request.httpBody = data
+        let (body, response) = try await URLSession.shared.data(for: request)
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            if let serverError = try? JSONDecoder().decode(ServerErrorBody.self, from: body),
+               let message = serverError.error {
+                throw APIError.server(message)
+            }
+            throw APIError.http(http.statusCode)
+        }
+        return try await decodeDetached(T.self, from: body)
     }
 
     /// `mutate` without a Decodable — for responses with no fixed schema
