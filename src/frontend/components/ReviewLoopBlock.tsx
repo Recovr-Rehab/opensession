@@ -26,8 +26,11 @@ export function ReviewLoopBlock({
 }) {
 	const [open, setOpen] = useState(defaultOpen);
 	const status = live ? "pending" : result?.status;
-	const detail = reviewLoopDetail(status, rounds);
-	const label = ["Review loop", detail, prNumber ? `PR #${prNumber}` : null]
+	const resultDetail = reviewLoopDetail(status, rounds);
+	const visibleDetail = open && status !== "pending"
+		? `${rounds} ${rounds === 1 ? "round" : "rounds"}`
+		: resultDetail;
+	const label = ["Review loop", resultDetail, prNumber ? `PR #${prNumber}` : null]
 		.filter(Boolean)
 		.join(", ");
 
@@ -49,7 +52,7 @@ export function ReviewLoopBlock({
 					<IconChevronDown size={20} className="block" />
 				</span>
 				<span className="shrink-0 font-medium">Review loop</span>
-				<span className="min-w-0 truncate text-label leading-4 text-faint">{detail}</span>
+				<span className="min-w-0 truncate text-label leading-4 text-faint">{visibleDetail}</span>
 				{prNumber && (
 					<span className="hidden shrink-0 text-label leading-4 text-faint desktop:block">PR #{prNumber}</span>
 				)}
@@ -61,7 +64,7 @@ export function ReviewLoopBlock({
 				)}
 			</button>
 			{open && (
-				<div className="mt-0.5 pl-6 [&>*:last-child]:mb-0">
+				<div className="mt-0.5 pl-2 [&>*:last-child]:mb-0">
 					{children}
 					{result && !live && result.status !== "pending" && (
 						<ReviewLoopResultRow result={result} rounds={rounds} />
@@ -103,12 +106,12 @@ function ReviewLoopResultRow({
 	const passed = result.status === "passed";
 	return (
 		<div
-			className="mt-1 flex min-w-0 items-baseline gap-2 rounded-control px-1 py-[3px] font-sans"
+			className="mt-1 flex w-full min-w-0 items-baseline gap-2 rounded-control bg-transparent px-1 py-[3px] font-sans"
 			aria-label={passed ? "Review passed" : "Review failed"}
 		>
 			<span
 				className={cn(
-					"grid size-[22px] flex-none self-center place-items-center",
+					"relative z-[1] flex size-[22px] flex-none self-center items-center justify-center",
 					passed ? "text-green" : "text-red",
 				)}
 			>
