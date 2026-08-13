@@ -89,6 +89,7 @@ enum SessionLinks {
     /// itself carries the full id.
     static func label(for id: String) -> String {
         if let title = titles[id], !title.isEmpty {
+            let title = cleanTitle(title)
             return title.count > titleMaxLength
                 ? String(title.prefix(titleMaxLength - 1)).trimmingCharacters(in: .whitespaces) + "…"
                 : title
@@ -96,6 +97,29 @@ enum SessionLinks {
         // Legacy `bks-<slug>` ids are already short, and cutting one mid-word
         // reads worse than showing all of it.
         return id.count <= 20 ? id : String(id.prefix(shortIdLength)) + "…"
+    }
+
+    /// A session an automation opened names itself after the job that opened
+    /// it: "Simplify · PR #5517 Give floating surfaces a rounder corner". That
+    /// prefix is bookkeeping rather than subject, and on a chip clipped at 38
+    /// characters it eats the readable half. The web strips it wherever a
+    /// title is shown at a width that has to choose (`cleanSessionTitle` in
+    /// src/frontend/lib/session-title.ts); this is the same rule, so the same
+    /// session reads the same way in both clients. Stripping everything is no
+    /// improvement on the boilerplate, so a title that is only a prefix keeps it.
+    private static let automationPrefix = try! NSRegularExpression(
+        pattern: "^(Review|Auto-fix|Mention|Simplify|Fix)\\s*·\\s*PR\\s*#\\d+\\s*",
+        options: [.caseInsensitive]
+    )
+
+    static func cleanTitle(_ title: String) -> String {
+        let ns = title as NSString
+        let stripped = automationPrefix.stringByReplacingMatches(
+            in: title,
+            range: NSRange(location: 0, length: ns.length),
+            withTemplate: ""
+        ).trimmingCharacters(in: .whitespaces)
+        return stripped.isEmpty ? title : stripped
     }
 
     /// A title is arbitrary text landing in a markdown link label, so the
