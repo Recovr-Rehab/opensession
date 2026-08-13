@@ -1349,6 +1349,16 @@ private struct SessionActionsMenu: View {
                     Label("Assets", systemImage: "folder")
                 }
             }
+            // What this session put on a port: its dev server, a docs site,
+            // whatever it brought up. Read-only here, so it is safe to look
+            // at a sleeping sandbox's list without waking anything.
+            if openPanel.isAvailable {
+                Button {
+                    openPanel(.portals(sessionId: viewModel.session.id))
+                } label: {
+                    Label("Portals", systemImage: "globe")
+                }
+            }
             if let number = viewModel.prDetails?.number ?? viewModel.session.prNumber {
                 Button {
                     // A tab where there's a strip to open one in; the sheet

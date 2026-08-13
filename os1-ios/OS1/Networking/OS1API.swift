@@ -530,6 +530,18 @@ enum OS1API {
         try await get("/api/workspaces/\(workspaceId)/overview")
     }
 
+    /// The services this session exposes, for the Portals list.
+    ///
+    /// Safe to ask for at any time: the server answers a sleeping sandbox
+    /// from its cached, URL-less snapshot rather than waking it, so reading
+    /// the list never starts compute.
+    static func portals(sessionId: String) async throws -> PortalStatus {
+        let encoded = sessionId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? sessionId
+        return try await get("/api/sessions/\(encoded)/preview")
+    }
+
     /// Live per-session sandbox state. It is fetched only from Workspace
     /// details because asking every row can execute provider status checks.
     static func sandbox(sessionId: String) async throws -> SessionSandboxStatus {

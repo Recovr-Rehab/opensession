@@ -23,6 +23,9 @@ enum SessionPanel: Hashable, Identifiable {
     /// straight away — the workspace sheet already lists the files, so a tap
     /// there should land on the diff rather than on the list again.
     case changes(sessionId: String, path: String? = nil)
+    /// The services the session exposes, read-only. Each live one opens in
+    /// the browser sheet; starting and stopping them stays on the desktop.
+    case portals(sessionId: String)
 
     var id: String {
         switch self {
@@ -30,12 +33,13 @@ enum SessionPanel: Hashable, Identifiable {
         case .asset(let sessionId, let path): "asset-\(sessionId)-\(path)"
         case .review(let sessionId): "review-\(sessionId)"
         case .changes(let sessionId, let path): "changes-\(sessionId)-\(path ?? "")"
+        case .portals(let sessionId): "portals-\(sessionId)"
         }
     }
 
     var sessionId: String {
         switch self {
-        case .assets(let sessionId), .review(let sessionId): sessionId
+        case .assets(let sessionId), .review(let sessionId), .portals(let sessionId): sessionId
         case .asset(let sessionId, _): sessionId
         case .changes(let sessionId, _): sessionId
         }
@@ -104,6 +108,8 @@ struct SessionPanelView: View {
             PrPanelView(viewModel: viewModel, chrome: .pushed)
         case .changes(let sessionId, let path):
             ChangesView(sessionId: sessionId, focus: path)
+        case .portals(let sessionId):
+            PortalsListView(sessionId: sessionId)
         }
     }
 }
