@@ -32,6 +32,12 @@ import {
 	parseNewSessionLink,
 	type NewSessionPrefill,
 } from "../lib/new-session-link";
+import {
+	canUseNativeIOSShare,
+	nativeShareWasCancelled,
+	saveFileWithNativeShare,
+	shareURL,
+} from "../lib/native-file-save";
 import { absoluteLink, copyToClipboard } from "../lib/share-link";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { Button } from "../ui/button";
@@ -192,6 +198,24 @@ function AssetMenu({
 }) {
 	const rawUrl = sessionAssetPreviewUrl(sessionId, file);
 	const stableUrl = sessionAssetRawUrl(sessionId, file.path);
+	const nativeShare = canUseNativeIOSShare();
+	const name = file.path.split("/").pop() || "asset";
+
+	async function onDownload() {
+		try {
+			await saveFileWithNativeShare(sessionAssetDownloadUrl(sessionId, file), name);
+		} catch (error) {
+			if (!nativeShareWasCancelled(error)) toast("Could not save that file");
+		}
+	}
+
+	async function onOpen() {
+		try {
+			await shareURL(rawUrl);
+		} catch (error) {
+			if (!nativeShareWasCancelled(error)) toast("Could not share that link");
+		}
+	}
 
 	async function onDelete() {
 		if (!confirm(`Delete ${file.path}?`)) return;
@@ -214,16 +238,20 @@ function AssetMenu({
 			</Menu.Trigger>
 			<Menu.Popup align="end">
 				<Menu.Item
-					render={<a href={sessionAssetDownloadUrl(sessionId, file)} />}
+					{...(nativeShare
+						? { onClick: onDownload }
+						: { render: <a href={sessionAssetDownloadUrl(sessionId, file)} /> })}
 				>
 					<IconArrowDown size={18} className="text-faint" />
 					Download
 				</Menu.Item>
 				<Menu.Item
-					render={<a href={rawUrl} target="_blank" rel="noreferrer" />}
+					{...(nativeShare
+						? { onClick: onOpen }
+						: { render: <a href={rawUrl} target="_blank" rel="noreferrer" /> })}
 				>
 					<IconArrowUpRight size={18} className="text-faint" />
-					Open in a browser tab
+					{nativeShare ? "Open or share" : "Open in a browser tab"}
 				</Menu.Item>
 				<Menu.Item
 					onClick={() =>
