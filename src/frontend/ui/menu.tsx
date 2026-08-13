@@ -142,6 +142,15 @@ function CheckboxItem({
 	);
 }
 
+/**
+ * Resting colour for a row's leading glyph. Menu icons sit one step back from
+ * their label so the words lead and the column of glyphs reads as one set;
+ * the sidebar's right-click menu and the phone sheet already do this. Skip it
+ * for a glyph that carries state in its colour (a running preview's green, a
+ * pinned row's yellow).
+ */
+export const MENU_ICON = "text-dim";
+
 /** Right-aligned keyboard-shortcut hint on a menu row ("⌘ W"). Place it after
  * the row's `grow` label so it pins to the trailing edge. Exported on its own
  * as well as on the Menu namespaces: the composer's "+" menu is a hand-rolled

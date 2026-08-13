@@ -13,7 +13,7 @@ import { Tooltip } from "../ui/tooltip";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { CopyCheck, useCopy } from "../ui/copy";
-import { Menu } from "../ui/menu";
+import { Menu, MENU_ICON } from "../ui/menu";
 import { Popover } from "../ui/popover";
 import {
   IconArrowUpRight,
@@ -392,7 +392,7 @@ export function PreviewButton({
         {isStarting ? (
           <span className={spinnerClass} />
         ) : (
-          <IconPlayOutline size={20} className={running ? "text-green" : undefined} />
+          <IconPlayOutline size={20} className={running ? "text-green" : MENU_ICON} />
         )}
         <span className="grow">
           {isStarting ? "Cancel preview startup" : running ? "Open preview" : "Preview"}

@@ -1,7 +1,7 @@
 import { AGENT_NAME } from "../lib/brand";
 import React, { useRef, useState } from "react";
 import { Button } from "../ui/button";
-import { Menu } from "../ui/menu";
+import { Menu, MENU_ICON } from "../ui/menu";
 import { Modal } from "../ui/modal";
 import { IconBranches, IconChevronRight } from "./icons";
 import type { UnifiedSession, TranscriptEntry } from "../lib/types";
@@ -142,7 +142,7 @@ export function SpinOffMenu({ session, entries, send, connected }: Props) {
     <>
       <Menu.SubmenuRoot open={menuOpen} onOpenChange={setMenuOpen}>
         <Menu.SubmenuTrigger title="Spin off a new session from this one">
-          <IconBranches size={20} />
+          <IconBranches size={20} className={MENU_ICON} />
           <span className="grow">Spin off</span>
           <IconChevronRight size={16} className="text-faint" />
         </Menu.SubmenuTrigger>

@@ -221,7 +221,7 @@ import {
 	msgRow,
 	msgStreamingRow,
 } from "../lib/msg-classes";
-import { Menu } from "../ui/menu";
+import { Menu, MENU_ICON } from "../ui/menu";
 import { Tooltip } from "../ui/tooltip";
 import { CopyCheck, useCopy } from "../ui/copy";
 import { toast } from "../ui/toast";
@@ -4444,7 +4444,7 @@ export function SessionViewer({
 					canAddToSidebar &&
 					(inMenu ? (
 						<Menu.Item onClick={addToSidebar} title="Keep this workspace in your sidebar">
-							<IconInbox size={20} />
+							<IconInbox size={20} className={MENU_ICON} />
 							<span className="grow">Add to sidebar</span>
 						</Menu.Item>
 					) : (
@@ -4467,7 +4467,7 @@ export function SessionViewer({
 				const shareAction = (inMenu: boolean) =>
 					inMenu ? (
 						<Menu.Item onClick={handleShare} title="Copy a link to this session">
-							<CopyCheck copied={copied} idle={<IconLink size={20} />} size={20} />
+							<CopyCheck copied={copied} idle={<IconLink size={20} />} size={20} className={MENU_ICON} />
 							<span className="grow">{copied ? "Copied" : "Share"}</span>
 						</Menu.Item>
 					) : (
@@ -4494,7 +4494,7 @@ export function SessionViewer({
 						}}
 						title="Start a new session in this workspace"
 					>
-						<IconPlus size={20} />
+						<IconPlus size={20} className={MENU_ICON} />
 						<span className="grow">New session in workspace</span>
 					</Menu.Item>
 				);
@@ -4507,7 +4507,7 @@ export function SessionViewer({
 				const transcriptActions = showTranscriptActions && (
 					<Menu.SubmenuRoot>
 						<Menu.SubmenuTrigger title="Copy this session's transcript">
-							<IconCopy size={20} />
+							<IconCopy size={20} className={MENU_ICON} />
 							<span className="grow">Copy transcript</span>
 							<IconChevronRight size={16} className="text-faint" />
 						</Menu.SubmenuTrigger>
@@ -4519,7 +4519,7 @@ export function SessionViewer({
 								}}
 								title="Copy a trimmed transcript of this session"
 							>
-								<IconListCircles size={20} />
+								<IconListCircles size={20} className={MENU_ICON} />
 								<span className="grow">Concise</span>
 								<Menu.Shortcut>{isApple ? "⌘⌥C" : "Ctrl+Alt+C"}</Menu.Shortcut>
 							</Menu.Item>
@@ -4530,7 +4530,7 @@ export function SessionViewer({
 								}}
 								title="Copy the complete transcript of this session"
 							>
-								<IconFile size={20} />
+								<IconFile size={20} className={MENU_ICON} />
 								<span className="grow">Full</span>
 							</Menu.Item>
 						</Menu.Popup>
@@ -4548,7 +4548,7 @@ export function SessionViewer({
 							}}
 							aria-pressed={pinned}
 						>
-							<IconPin size={20} fill={pinned ? "currentColor" : "none"} />
+							<IconPin size={20} fill={pinned ? "currentColor" : "none"} className={pinned ? undefined : MENU_ICON} />
 							<span className="grow">{pinned ? "Unpin tab" : "Pin as tab"}</span>
 							<span className="ml-auto text-[11px] font-semibold tracking-normal text-faint">
 								{isApple ? "⌘P" : "Ctrl+P"}
@@ -4571,7 +4571,7 @@ export function SessionViewer({
 										: "Keep this workspace in your own sidebar lanes"
 								}
 							>
-								<IconInbox size={20} />
+								<IconInbox size={20} className={MENU_ICON} />
 								<span className="grow">
 									{claimed
 										? "Remove from my workspaces"
@@ -4592,7 +4592,7 @@ export function SessionViewer({
 									setMoveToCloudOpen(true);
 								}}
 							>
-								<IconGlobe size={20} />
+								<IconGlobe size={20} className={MENU_ICON} />
 								<span className="grow">Move to cloud</span>
 							</Menu.Item>
 						)}
@@ -4611,7 +4611,7 @@ export function SessionViewer({
 								: `Archive session (${archiveShortcutLabel})`
 						}
 					>
-						<IconArchive size={20} />
+						<IconArchive size={20} className={MENU_ICON} />
 						<span className="grow">
 							{archiving
 								? session.archived
@@ -4631,11 +4631,11 @@ export function SessionViewer({
 				const deleteAction = !showDeleteConfirm ? (
 					<Menu.Item
 						closeOnClick={false}
-						className="data-[highlighted]:bg-red-soft data-[highlighted]:text-red"
+						className="data-[highlighted]:bg-red-soft data-[highlighted]:text-red data-[highlighted]:[&>svg]:text-red"
 						onClick={() => setShowDeleteConfirm(true)}
 						title="Delete session"
 					>
-						<IconTrash size={20} />
+						<IconTrash size={20} className={MENU_ICON} />
 						<span className="grow">Delete session</span>
 					</Menu.Item>
 				) : (
@@ -4687,7 +4687,7 @@ export function SessionViewer({
 								render={<a href={`${BASE_PATH}/automations/${encodeURIComponent(session.automationId || session.automation)}`} />}
 								title={session.automation}
 							>
-								<IconRobot size={20} />
+								<IconRobot size={20} className={MENU_ICON} />
 								<span className="grow">Automation</span>
 							</Menu.Item>
 						)}
