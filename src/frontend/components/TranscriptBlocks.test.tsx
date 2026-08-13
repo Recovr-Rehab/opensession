@@ -164,7 +164,12 @@ describe("TranscriptBlocks compact tool runs", () => {
 		);
 
 		expect(html).toContain('data-tool-run="true"');
-		expect(html).toContain("2 steps · Bash · Read");
+		expect(html).toContain("2 steps");
+		// Each tool in the run leads with its own glyph: the terminal for Bash,
+		// the file for Read.
+		expect(html).toContain("Bash</span>");
+		expect(html).toContain("Read</span>");
+		expect(html).toContain("M5.25 7.25L10.25 12L5.25 16.75");
 		expect(html).toContain("Show 2 grouped steps: Bash · Read");
 		expect(html).toContain('x="8.25" y="4.75" width="11" height="11" rx="2"');
 		expect(html).toContain("group-hover:opacity-0");

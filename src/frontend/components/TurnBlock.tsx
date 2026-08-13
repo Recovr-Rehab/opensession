@@ -4,6 +4,7 @@ import {
   assetToolPath,
   canonicalToolName,
   ToolCallBlock,
+  ToolGlyph,
   toolDisplayName,
   toolFamily,
   toolSummary,
@@ -315,6 +316,7 @@ function ToolRunBlock({
     if (!userToggledRef.current) setExpanded(defaultExpanded);
   }, [defaultExpanded]);
 
+  const groups = groupedTools(items);
   const label = groupedToolLabel(items);
   let failures = 0;
   let pending = 0;
@@ -367,8 +369,20 @@ function ToolRunBlock({
             )}
           />
         </span>
+        {/* Each tool leads with its own glyph, so the run says at a glance
+            what kind of work it was. The glyphs stand in for the interpuncts
+            that used to separate the names, and stay inline (not flex items)
+            so the whole run still truncates to an ellipsis on a narrow row. */}
         <span className="min-w-0 flex-1 truncate text-[14px] font-medium leading-5 text-dim transition-colors group-hover:text-fg">
-          {items.length} step{items.length === 1 ? "" : "s"} · {label}
+          {items.length} step{items.length === 1 ? "" : "s"}
+          {groups.map(({ name, count }) => (
+            <span key={name} className="ml-2.5 whitespace-nowrap">
+              <span className="mr-1 inline-flex size-5 items-center justify-center align-middle text-faint">
+                <ToolGlyph toolName={name} size={20} />
+              </span>
+              {groupedToolName(name, count)}
+            </span>
+          ))}
         </span>
         {mediaLabel && (
           <span className="flex-shrink-0 text-meta text-faint">{mediaLabel}</span>
@@ -416,14 +430,26 @@ function isCompactTool(
   return !result?.featuredMedia?.length;
 }
 
-function groupedToolLabel(items: TranscriptEntry[]): string {
+/** The run's tools in call order, each with how often it ran. */
+function groupedTools(
+  items: TranscriptEntry[]
+): Array<{ name: string; count: number }> {
   const counts = new Map<string, number>();
   for (const entry of items) {
     const name = canonicalToolName(entry.toolName || "Tool");
     counts.set(name, (counts.get(name) ?? 0) + 1);
   }
-  return [...counts]
-    .map(([name, count]) => (count > 1 ? `${name} ×${count}` : name))
+  return [...counts].map(([name, count]) => ({ name, count }));
+}
+
+function groupedToolName(name: string, count: number): string {
+  return count > 1 ? `${name} ×${count}` : name;
+}
+
+/** Same run, spelled out for a screen reader: the glyphs carry no text. */
+function groupedToolLabel(items: TranscriptEntry[]): string {
+  return groupedTools(items)
+    .map(({ name, count }) => groupedToolName(name, count))
     .join(" · ");
 }
 
