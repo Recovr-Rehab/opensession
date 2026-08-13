@@ -60,6 +60,9 @@ async function detectCapabilities(): Promise<string[]> {
     ["cargo", "rust"],
     ["go", "go"],
     ["bun", "bun"],
+    ["ffmpeg", "ffmpeg"],
+    ["ollama", "ollama"],
+    ["vllm", "vllm"],
   ] as const) {
     if (await has(bin)) found.push(cap);
   }
@@ -99,7 +102,25 @@ async function detectResources(): Promise<Record<string, unknown>> {
 			const display = JSON.parse(displays).SPDisplaysDataType?.[0] as Record<string, unknown> | undefined;
 			if (display) resources.gpu = { kind: "apple", model: String(display.sppci_model ?? display._name ?? "Apple GPU"), metal: Boolean(display.spdisplays_metal) };
 		} catch {}
+	} else {
+		const rocm = await commandOutput(["rocm-smi", "--showproductname", "--showmeminfo", "vram"]);
+		if (rocm) {
+			const model = rocm.split("\n").find((line) => /card series|product name/i.test(line))?.split(":").at(-1)?.trim();
+			resources.gpu = { kind: "amd", ...(model ? { model } : {}), rocm: (await commandOutput(["rocm-smi", "--showversion"])).match(/[\d.]+/)?.[0] };
+		} else {
+			const intel = await commandOutput(["lspci"]);
+			const line = intel.split("\n").find((value) => /vga|3d controller/i.test(value) && /intel/i.test(value));
+			if (line) resources.gpu = { kind: "intel", model: line.split(":").slice(2).join(":").trim() || "Intel GPU" };
+		}
 	}
+	const inference: Array<{ runtime: string; models: string[] }> = [];
+	const ollama = await commandOutput(["ollama", "list"]);
+	if (ollama) {
+		const models = ollama.split("\n").slice(1).map((line) => line.trim().split(/\s+/)[0]).filter((model) => model && model.length <= 160).slice(0, 64);
+		inference.push({ runtime: "ollama", models });
+	}
+	if (await commandOutput(["vllm", "--version"])) inference.push({ runtime: "vllm", models: [] });
+	if (inference.length) resources.localInference = inference;
 	return resources;
 }
 

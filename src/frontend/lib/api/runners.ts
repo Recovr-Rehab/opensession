@@ -27,12 +27,15 @@ export type RunnerInfo = {
 		memoryGb?: number;
 		freeDiskGb?: number;
 		gpu?: { kind: string; model?: string; vramGb?: number; cuda?: string; metal?: boolean; rocm?: string };
+		localInference?: Array<{ runtime: string; models: string[] }>;
 	};
 	permissions: RunnerPermissions;
 	allowedUsers: string[];
 	allowedRepos: string[];
 	workspaceRoots: string[];
 	workspaceRetention?: "retain" | "delete";
+	migration?: { kind: "ssh"; label: string; host: string; user: string; port: number } | { kind: "kubernetes"; label: string; context: string; namespace: string; workload: string };
+	localInferencePolicy?: { enabled: boolean; allowedUsers: string[]; allowedModels: string[]; allowedTasks: Array<"chat" | "embedding" | "image" | "video"> };
 	workload?: { sessionId?: string; operation?: string; startedAt?: string };
 	reservation?: { sessionId?: string; reason: string; reservedBy?: string; expiresAt: string };
 };
@@ -65,7 +68,7 @@ export async function bootstrapRunner(kind: "ssh" | "kubernetes", targetId: stri
 	return request(`/runners/bootstrap/${kind}`, { method: "POST", body: { targetId }, label: "Could not start Runner migration" });
 }
 
-export type RunnerPatch = Partial<Pick<RunnerInfo, "label" | "description" | "location" | "maintenance" | "allowedUsers" | "allowedRepos" | "workspaceRoots" | "workspaceRetention">> & {
+export type RunnerPatch = Partial<Pick<RunnerInfo, "label" | "description" | "location" | "maintenance" | "allowedUsers" | "allowedRepos" | "workspaceRoots" | "workspaceRetention" | "localInferencePolicy">> & {
 	permissions?: Partial<RunnerPermissions>;
 	capabilities?: Partial<RunnerInfo["capabilities"]>;
 };

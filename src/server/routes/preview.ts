@@ -157,7 +157,7 @@ export async function handlePreviewRoutes(
 				: null;
 			if (sbx)
 				return Response.json(
-					await startSandboxPreview(sbx, session.worktreeDir!),
+					await startSandboxPreview(sbx, session.worktreeDir!, session.id),
 				);
 			if (session.runner) {
 				const status = await runnerPortalPreviewStatus(session, session.startedBy || undefined);

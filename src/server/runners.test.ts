@@ -5,6 +5,7 @@ import { join } from "path";
 import {
 	authenticateRunner,
 	createRunnerPairing,
+	bindRunnerPairingMigration,
 	isTailnetAddress,
 	listRunners,
 	normalizeAddress,
@@ -13,6 +14,7 @@ import {
 	removeRunner,
 	reserveRunner,
 	runnerAllowed,
+	runnerAllowsLocalInference,
 	runnerOwnsWorkspace,
 	runnerWorkspacePath,
 	runnerAvailableForSession,
@@ -61,6 +63,14 @@ describe("Runner registry security", () => {
 		expect(second.runner.allowedRepos).toEqual(["opensession"]);
 		expect(authenticateRunner(first.runner.id, first.token)).toBeUndefined();
 	});
+
+	test("keeps non-secret Kubernetes migration diagnostics with the paired Runner", () => {
+		const { code } = createRunnerPairing("tester");
+		expect(bindRunnerPairingMigration(code, { kind: "kubernetes", label: "GPU devbox", context: "production", namespace: "runners", workload: "gpu-runner" })).toBe(true);
+		const result = registerRunner({ code, name: "gpu-devbox", platform: "linux", arch: "x64", address: "100.101.102.103" });
+		if (!result.ok) throw new Error(result.error);
+		expect(result.runner.migration).toEqual({ kind: "kubernetes", label: "GPU devbox", context: "production", namespace: "runners", workload: "gpu-runner" });
+	});
 });
 
 describe("Runner policy and reservations", () => {
@@ -101,5 +111,17 @@ describe("Runner policy and reservations", () => {
 		expect(runnerAvailableForSession(listRunners()[0], { sessionId: "bks-three" })).toBe(false);
 		setRunnerWorkload(runner.id, undefined, "bks-one");
 		expect(runnerAvailableForSession(listRunners()[0], { sessionId: "bks-three" })).toBe(true);
+	});
+
+	test("requires an explicit, user- and model-scoped local inference policy", () => {
+		const result = register({ resources: { localInference: [{ runtime: "ollama", models: ["llama3"] }] } });
+		if (!result.ok) throw new Error(result.error);
+		let runner = listRunners()[0];
+		expect(runnerAllowsLocalInference(runner, { user: "alex", model: "llama3", task: "chat" })).toBe(false);
+		updateRunner(runner.id, { localInferencePolicy: { enabled: true, allowedUsers: ["alex"], allowedModels: ["llama3"], allowedTasks: ["chat"] } });
+		runner = listRunners()[0];
+		expect(runnerAllowsLocalInference(runner, { user: "alex", model: "llama3", task: "chat" })).toBe(true);
+		expect(runnerAllowsLocalInference(runner, { user: "sam", model: "llama3", task: "chat" })).toBe(false);
+		expect(runnerAllowsLocalInference(runner, { user: "alex", model: "other", task: "chat" })).toBe(false);
 	});
 });

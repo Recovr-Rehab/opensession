@@ -35,8 +35,8 @@ import {
 import { basename, dirname, join, resolve } from "path";
 import { getAgentAwsEnv } from "./aws-creds";
 import { audit } from "./audit";
-import { listPortalServices, listSandboxPortalServices } from "./portal-supervisor";
-import { revokeSandboxPortalGrants } from "./sandbox-portal-relay";
+import { ensureRemoteSandboxPortalAgent, forgetRemoteSandboxPortalAgents, listPortalServices, listSandboxPortalServices } from "./portal-supervisor";
+import { revokeSandboxPortalGrants, revokeSandboxPortalRelay } from "./sandbox-portal-relay";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import {
   lookupSandboxHttpsPort,
@@ -45,6 +45,7 @@ import {
 } from "./sandbox/preview-ports";
 import type { Sandbox } from "./sandbox/provider";
 import { shellQuoteWord } from "./sandbox/adapters/bootstrap";
+import { DEFAULT_SANDBOX_PREVIEW_PORTS, isRemoteSandboxProvider, sandboxConfig } from "./sandbox/config";
 import { configuredRepos, configuredServer, type Repo } from "./config";
 import { repoForPath } from "./worktree";
 import {
@@ -1192,7 +1193,7 @@ async function sandboxPortListening(sandbox: Sandbox, port: number): Promise<boo
 export async function getSandboxPreviewStatus(
   sandbox: Sandbox,
   worktreeDir: string,
-	 sessionId?: string,
+	sessionId?: string,
 ): Promise<PreviewStatus> {
   // .ports.conf via the sandbox exec — works for bind mounts and is the only
   // way for volume-mode workspaces (no host copy).
@@ -1207,15 +1208,14 @@ export async function getSandboxPreviewStatus(
   const services: PreviewService[] = [];
   // Remote providers can publish a port on demand. Docker/microVM providers
   // may ignore this hint when their mappings are fixed at sandbox creation.
-  const portMap = await sandbox.ports(ports.map((service) => service.port));
+	const portMap = isRemoteSandboxProvider(sandbox.provider) ? {} : await sandbox.ports(ports.map((service) => service.port));
   const host = await previewHost();
   for (const { key, port } of ports) {
 		const portal = portalByKey.get(key);
     const running = await sandboxPortListening(sandbox, port);
     let previewUrl: string | null = null;
-		if (running && portal && sessionId) {
-			const { ensureSandboxPortalRelay } = await import("./sandbox-portal-relay");
-			previewUrl = await ensureSandboxPortalRelay({ sessionId, sandboxId: sandbox.id, port });
+		if (running && isRemoteSandboxProvider(sandbox.provider)) {
+			previewUrl = sessionId ? await ensureRemoteSandboxPortalAgent({ sessionId, sandbox, port }) : null;
 		} else if (running) {
       const entry = portMap[port];
       const published = typeof entry === "number" ? entry : entry?.hostPort;
@@ -1393,13 +1393,18 @@ async function writeSandboxTunnelsEnv(
 export async function startSandboxPreview(
   sandbox: Sandbox,
   worktreeDir: string,
+	sessionId?: string,
 ): Promise<PreviewStatus> {
-  const status = await getSandboxPreviewStatus(sandbox, worktreeDir);
+	if (isRemoteSandboxProvider(sandbox.provider) && !sessionId) throw new Error("A remote Sandbox Portal requires its session identity.");
+	const status = await getSandboxPreviewStatus(sandbox, worktreeDir, sessionId);
   if (status.running || status.starting) return status;
 
   // 1. Allocate a webapp port from the pre-published range.
-  const portMap = await sandbox.ports();
-  const publishedPorts = Object.keys(portMap).map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+	const portMap = isRemoteSandboxProvider(sandbox.provider) ? {} : await sandbox.ports();
+	const publishedPorts = (isRemoteSandboxProvider(sandbox.provider)
+		? sandboxConfig().previewPorts ?? [...DEFAULT_SANDBOX_PREVIEW_PORTS]
+		: Object.keys(portMap).map(Number)
+	).filter(Number.isFinite).sort((a, b) => a - b);
   if (!publishedPorts.length) {
     console.warn(
       `[preview] ${sandbox.id}: no preview ports are published — configure previewPorts and recreate the container`,
@@ -1448,23 +1453,23 @@ export async function startSandboxPreview(
   //    one that outlives the bring-up — either way the file points at the
   //    right group).
   await seedSandboxPortsConf(sandbox, worktreeDir, port);
-  const entry = portMap[port];
+	const entry = portMap[port];
   const directUrl = typeof entry === "object" ? entry.url : undefined;
   const privateUpstream = typeof entry === "object" ? entry.upstream : undefined;
   const published = typeof entry === "number" ? entry : entry?.hostPort;
   const requestHeaders = typeof entry === "object" ? entry.requestHeaders : undefined;
-  const upstream = directUrl || privateUpstream
-    ? localRelayFor(
-        sandbox.id,
-        port,
-        directUrl || `http://${privateUpstream}`,
-        requestHeaders,
-      )
-    : `127.0.0.1:${published}`;
+	const remotePortalUrl = isRemoteSandboxProvider(sandbox.provider) && sessionId
+		? await ensureRemoteSandboxPortalAgent({ sessionId, sandbox, port })
+		: null;
+	const upstream = remotePortalUrl
+		? undefined
+		: directUrl || privateUpstream
+			? localRelayFor(sandbox.id, port, directUrl || `http://${privateUpstream}`, requestHeaders)
+			: `127.0.0.1:${published}`;
   const httpsPort = sandboxHttpsPortFor(sandbox.id, port);
   const host = await previewHost();
   const previewUrl = `https://${host}:${httpsPort}`;
-  if (!(await ensurePreviewRoute(httpsPort, upstream, host, requestHeaders))) {
+	if (!remotePortalUrl && !(await ensurePreviewRoute(httpsPort, upstream!, host, requestHeaders))) {
     console.warn(`[preview] ${sandbox.id}: Caddy did not accept the sandbox preview portal route`);
   }
   await writeSandboxTunnelsEnv(sandbox, worktreeDir, {
@@ -1505,7 +1510,9 @@ export async function stopSandboxPreview(
   sandboxAwsRefresh.delete(sandbox.id);
   const conf = await sandbox.exec(["cat", ".ports.conf"]);
   const ports = conf.exitCode === 0 ? parsePortsText(conf.stdout) : [];
-  for (const service of ports) {
+	for (const service of ports) {
+		revokeSandboxPortalRelay(sandbox.id, service.port);
+		forgetRemoteSandboxPortalAgents(sandbox.id, service.port);
     const allocated = lookupSandboxHttpsPort(sandbox.id, service.port);
     if (allocated != null) await removePreviewRoute(allocated);
   }
@@ -1529,6 +1536,7 @@ export async function stopSandboxPreview(
  */
 export async function dropSandboxPreviewRoutes(sandboxId: string): Promise<void> {
 	revokeSandboxPortalGrants(sandboxId);
+	forgetRemoteSandboxPortalAgents(sandboxId);
 	for (const [key, relay] of remotePortalRelays) {
 		if (!key.startsWith(`${sandboxId}:`)) continue;
 		try { relay.server.stop(true); } catch {}

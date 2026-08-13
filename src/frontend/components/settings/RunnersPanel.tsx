@@ -149,12 +149,16 @@ function RunnerRow({ runner, admin, busy, onChange, onRevoke }: { runner: Runner
 	const [repos, setRepos] = useState(runner.allowedRepos.join(", "));
 	const [roots, setRoots] = useState(runner.workspaceRoots.join(", "));
 	const [workspaceRetention, setWorkspaceRetention] = useState<"retain" | "delete">(runner.workspaceRetention === "delete" ? "delete" : "retain");
+	const [inferenceModels, setInferenceModels] = useState(runner.localInferencePolicy?.allowedModels.join(", ") || "");
+	const [inferenceEnabled, setInferenceEnabled] = useState(Boolean(runner.localInferencePolicy?.enabled));
 	return <>
 		<SettingRow className="items-start">
 			<div className="min-w-0">
 				<div className="flex flex-wrap items-baseline gap-x-2 gap-y-1"><span className="text-item-title font-medium text-fg">{runner.label || runner.name}</span><span className={`text-meta capitalize ${stateStyle[runner.state]}`}>{runner.state}</span></div>
 				<div className="mt-0.5 text-supporting text-dim">{runner.platform} · {runner.arch} · {resourceSummary(runner)}</div>
 				{runner.capabilities.toolchains.length > 0 && <div className="mt-1 text-meta text-faint">{runner.capabilities.toolchains.join(" · ")}</div>}
+				{runner.resources?.localInference?.length ? <div className="mt-1 text-meta text-faint">Local inference reported: {runner.resources.localInference.map((runtime) => `${runtime.runtime}${runtime.models.length ? ` (${runtime.models.join(", ")})` : ""}`).join(" · ")}</div> : null}
+				{runner.migration?.kind === "kubernetes" && <div className="mt-1 text-meta text-faint">Kubernetes · {runner.migration.context} / {runner.migration.namespace} / {runner.migration.workload}</div>}
 				{runner.workload && <div className="mt-1 text-meta text-dim">Working: {runner.workload.operation || runner.workload.sessionId || "session work"}</div>}
 			</div>
 			<div className="flex shrink-0 items-center gap-2">
@@ -169,6 +173,7 @@ function RunnerRow({ runner, admin, busy, onChange, onRevoke }: { runner: Runner
 				<label className="text-label text-dim">Allowed repositories<Input value={repos} onChange={(event) => setRepos(event.target.value)} placeholder="All repositories" /></label>
 				<label className="text-label text-dim sm:col-span-2">Managed workspace roots<Input value={roots} onChange={(event) => setRoots(event.target.value)} placeholder="Configured Runner workspace root" /></label>
 				<label className="text-label text-dim sm:col-span-2">Deleted session workspaces<select className="mt-1 w-full rounded-md border border-line bg-panel px-2 py-1.5 text-supporting text-fg" value={workspaceRetention} onChange={(event) => setWorkspaceRetention(event.target.value === "delete" ? "delete" : "retain")}><option value="retain">Keep on Runner</option><option value="delete">Delete after session removal</option></select></label>
+				{runner.resources?.localInference?.length ? <label className="text-label text-dim sm:col-span-2">Allowed local models<Input value={inferenceModels} onChange={(event) => setInferenceModels(event.target.value)} placeholder="Comma-separated model names" /></label> : null}
 			</div>
 			<div className="mt-3 flex flex-wrap items-center gap-4 text-label text-dim">
 				<label className="flex items-center gap-2">Maintenance <Switch checked={Boolean(runner.maintenance)} onCheckedChange={(maintenance) => onChange(runner, { maintenance })} disabled={busy} /></label>
@@ -176,11 +181,13 @@ function RunnerRow({ runner, admin, busy, onChange, onRevoke }: { runner: Runner
 				<label className="flex items-center gap-2">Full sessions <Switch checked={runner.permissions.fullSessions} onCheckedChange={(fullSessions) => onChange(runner, { permissions: { fullSessions } })} disabled={busy} /></label>
 				<label className="flex items-center gap-2">Terminals <Switch checked={runner.permissions.terminals} onCheckedChange={(terminals) => onChange(runner, { permissions: { terminals } })} disabled={busy} /></label>
 				<label className="flex items-center gap-2">Portals <Switch checked={runner.permissions.portals} onCheckedChange={(portals) => onChange(runner, { permissions: { portals } })} disabled={busy} /></label>
+				{runner.resources?.localInference?.length ? <label className="flex items-center gap-2">Local inference <Switch checked={inferenceEnabled} onCheckedChange={setInferenceEnabled} disabled={busy} /></label> : null}
 			</div>
 			<div className="mt-3 flex flex-wrap gap-2"><Button size="sm" onClick={() => onChange(runner, {
 				label: label.trim() || undefined,
 				capabilities: { tags: list(tags) },
 				allowedUsers: list(users), allowedRepos: list(repos), workspaceRoots: list(roots), workspaceRetention,
+				...(runner.resources?.localInference?.length ? { localInferencePolicy: { enabled: inferenceEnabled, allowedUsers: list(users), allowedModels: list(inferenceModels), allowedTasks: ["chat", "embedding", "image", "video"] } } : {}),
 			})} disabled={busy}>Save</Button><Button size="sm" variant="danger" onClick={() => onRevoke(runner)} disabled={busy}>Revoke</Button></div>
 		</div>}
 	</>;

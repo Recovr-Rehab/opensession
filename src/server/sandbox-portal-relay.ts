@@ -11,7 +11,7 @@ export type SandboxPortalGrant = { sessionId: string; sandboxId: string; port: n
 type StoredGrant = Omit<SandboxPortalGrant, "token">;
 const g = globalThis as Record<string, unknown>;
 const grants: Map<string, StoredGrant> = (g.__opensessionSandboxPortalGrants ??= new Map()) as Map<string, StoredGrant>;
-type Connection = { ws: any; sessionId: string; sandboxId: string; port: number; pending: Map<string, { resolve: (value: RelayResponse) => void; timer: ReturnType<typeof setTimeout> }> };
+type Connection = { ws: any; sessionId: string; sandboxId: string; port: number; expiresAt: number; expiryTimer: ReturnType<typeof setTimeout>; pending: Map<string, { resolve: (value: RelayResponse) => void; timer: ReturnType<typeof setTimeout> }> };
 type RelayResponse = { status: number; headers: Record<string, string>; body?: string };
 const connections: Map<string, Connection> = (g.__opensessionSandboxPortalConnections ??= new Map()) as Map<string, Connection>;
 type Relay = { server: ReturnType<typeof Bun.serve>; sessionId: string; sandboxId: string; port: number };
@@ -36,16 +36,20 @@ export function mintSandboxPortalGrant(input: { sessionId: string; sandboxId: st
 }
 
 export function verifySandboxPortalGrant(token: string, expected: Omit<StoredGrant, "expiresAt">): boolean {
+	return grantForSandboxPortal(token, expected) !== undefined;
+}
+
+function grantForSandboxPortal(token: string, expected: Omit<StoredGrant, "expiresAt">): StoredGrant | undefined {
 	const grant = grants.get(token);
-	if (!grant || grant.expiresAt <= Date.now()) { grants.delete(token); return false; }
+	if (!grant || grant.expiresAt <= Date.now()) { grants.delete(token); return undefined; }
 	const a = Buffer.from(`${grant.sessionId}\0${grant.sandboxId}\0${grant.port}`);
 	const b = Buffer.from(`${expected.sessionId}\0${expected.sandboxId}\0${expected.port}`);
-	return a.length === b.length && timingSafeEqual(a, b);
+	return a.length === b.length && timingSafeEqual(a, b) ? grant : undefined;
 }
 
 export function revokeSandboxPortalGrants(sandboxId: string): void {
 	for (const [token, grant] of grants) if (grant.sandboxId === sandboxId) grants.delete(token);
-	for (const [id, connection] of connections) if (connection.sandboxId === sandboxId) { try { connection.ws.close(1008, "portal revoked"); } catch {} connections.delete(id); }
+	for (const [id, connection] of connections) if (connection.sandboxId === sandboxId) { clearTimeout(connection.expiryTimer); try { connection.ws.close(1008, "portal revoked"); } catch {} connections.delete(id); }
 	for (const [id, relay] of relays) if (relay.sandboxId === sandboxId) { try { relay.server.stop(true); } catch {} void import("./preview").then(({ dropAuthenticatedPortalRoute }) => dropAuthenticatedPortalRoute(sandboxHttpsPortFor(`sandbox-${sandboxId}`, relay.port))); relays.delete(id); }
 }
 
@@ -53,7 +57,7 @@ export function revokeSandboxPortalGrants(sandboxId: string): void {
  * same Sandbox. Used for explicit stop and failed restarts. */
 export function revokeSandboxPortalRelay(sandboxId: string, port: number): void {
 	for (const [token, grant] of grants) if (grant.sandboxId === sandboxId && grant.port === port) grants.delete(token);
-	for (const [id, connection] of connections) if (connection.sandboxId === sandboxId && connection.port === port) { try { connection.ws.close(1008, "portal stopped"); } catch {} connections.delete(id); }
+	for (const [id, connection] of connections) if (connection.sandboxId === sandboxId && connection.port === port) { clearTimeout(connection.expiryTimer); try { connection.ws.close(1008, "portal stopped"); } catch {} connections.delete(id); }
 	for (const [id, relay] of relays) if (relay.sandboxId === sandboxId && relay.port === port) { try { relay.server.stop(true); } catch {} void import("./preview").then(({ dropAuthenticatedPortalRoute }) => dropAuthenticatedPortalRoute(sandboxHttpsPortFor(`sandbox-${sandboxId}`, port))); relays.delete(id); }
 }
 
@@ -67,22 +71,27 @@ export function handleSandboxPortalRelayUpgrade(req: Request, server: { upgrade(
 	const port = Number(url.searchParams.get("port"));
 	const auth = req.headers.get("authorization") || "";
 	const token = auth.match(/^Bearer\s+(.+)$/i)?.[1] || url.searchParams.get("token") || "";
-	if (!verifySandboxPortalGrant(token, { sessionId, sandboxId, port })) return new Response("unauthorized", { status: 403 });
-	return server.upgrade(req, { data: { kind: "sandbox-portal-relay", sessionId, sandboxId, port } }) ? undefined : new Response("WebSocket upgrade failed", { status: 400 });
+	const grant = grantForSandboxPortal(token, { sessionId, sandboxId, port });
+	if (!grant) return new Response("unauthorized", { status: 403 });
+	return server.upgrade(req, { data: { kind: "sandbox-portal-relay", sessionId, sandboxId, port, expiresAt: grant.expiresAt } }) ? undefined : new Response("WebSocket upgrade failed", { status: 400 });
 }
 
 export function sandboxPortalRelayOpen(ws: any): boolean {
 	if (ws.data?.kind !== "sandbox-portal-relay") return false;
 	const { sessionId, sandboxId, port } = ws.data;
 	const id = key(sessionId, sandboxId, port);
-	connections.get(id)?.ws?.close?.(1000, "replaced");
-	connections.set(id, { ws, sessionId, sandboxId, port, pending: new Map() });
+	const previous = connections.get(id);
+	if (previous) { clearTimeout(previous.expiryTimer); previous.ws?.close?.(1000, "replaced"); }
+	const expiresAt = Number(ws.data.expiresAt);
+	const closeAtExpiry = setTimeout(() => { try { ws.close(1008, "portal credential expired"); } catch {} }, Math.max(0, expiresAt - Date.now()));
+	connections.set(id, { ws, sessionId, sandboxId, port, expiresAt, expiryTimer: closeAtExpiry, pending: new Map() });
 	return true;
 }
 export function sandboxPortalRelayMessage(ws: any, raw: string | Buffer): boolean {
 	if (ws.data?.kind !== "sandbox-portal-relay") return false;
 	let message: any; try { message = JSON.parse(typeof raw === "string" ? raw : raw.toString()); } catch { return true; }
 	const connection = connections.get(key(ws.data.sessionId, ws.data.sandboxId, ws.data.port));
+	if (connection && connection.expiresAt <= Date.now()) { try { connection.ws.close(1008, "portal credential expired"); } catch {} return true; }
 	if (message.t === "ws_event" || message.t === "ws_closed") {
 		const id = typeof message.id === "string" ? message.id : "";
 		const browser = browserSockets.get(id);
@@ -104,6 +113,7 @@ export function sandboxPortalRelayClose(ws: any): boolean {
 	if (ws.data?.kind !== "sandbox-portal-relay") return false;
 	const connection = connections.get(key(ws.data.sessionId, ws.data.sandboxId, ws.data.port));
 	if (connection && connection.ws === ws) {
+		clearTimeout(connection.expiryTimer);
 		for (const pending of connection.pending.values()) { clearTimeout(pending.timer); pending.resolve({ status: 502, headers: {} }); }
 		for (const [id, browser] of browserSockets) if (browser.connection === connection) { try { browser.ws.close(); } catch {} browserSockets.delete(id); }
 		connections.delete(key(ws.data.sessionId, ws.data.sandboxId, ws.data.port));
@@ -114,6 +124,7 @@ export function sandboxPortalRelayClose(ws: any): boolean {
 async function relayFetch(input: { sessionId: string; sandboxId: string; port: number }, request: Request): Promise<Response> {
 	const connection = connections.get(key(input.sessionId, input.sandboxId, input.port));
 	if (!connection) return new Response("Sandbox Portal is not connected", { status: 503 });
+	if (connection.expiresAt <= Date.now()) { try { connection.ws.close(1008, "portal credential expired"); } catch {} return new Response("Sandbox Portal credential expired", { status: 503 }); }
 	const bytes = request.method === "GET" || request.method === "HEAD" ? undefined : new Uint8Array(await request.arrayBuffer());
 	if (bytes && bytes.byteLength > 5 * 1024 * 1024) return new Response("Portal request is too large", { status: 413 });
 	const id = crypto.randomUUID();
@@ -140,7 +151,7 @@ export async function ensureSandboxPortalRelay(input: { sessionId: string; sandb
 			fetch: (request, relayServer) => {
 				if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") return relayFetch(input, request);
 				const connection = connections.get(id);
-				if (!connection) return new Response("Sandbox Portal is not connected", { status: 503 });
+				if (!connection || connection.expiresAt <= Date.now()) return new Response("Sandbox Portal is not connected", { status: 503 });
 				const socketId = crypto.randomUUID();
 				return relayServer.upgrade(request, { data: { id: socketId, connection, path: new URL(request.url).pathname + new URL(request.url).search, headers: safeHeaders(request.headers) } }) ? undefined : new Response("WebSocket upgrade failed", { status: 400 });
 			},

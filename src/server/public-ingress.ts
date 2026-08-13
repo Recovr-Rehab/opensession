@@ -51,6 +51,7 @@ import {
   sandboxWsMessage,
   sandboxWsOpen,
 } from "./run-ws";
+import { handleSandboxPortalRelayUpgrade, sandboxPortalRelayClose, sandboxPortalRelayMessage, sandboxPortalRelayOpen } from "./sandbox-portal-relay";
 import { publicIngressConfig } from "./sandbox/config";
 
 const g = globalThis as any;
@@ -142,14 +143,16 @@ function ingressFetch(req: Request, server: IngressServer): Response | undefined
   if (path === "/ingress-health") {
     return new Response("ok");
   }
-  if (path.startsWith("/run-ws/") || path === "/rpc-ws") {
+  if (path.startsWith("/run-ws/") || path === "/rpc-ws" || path === "/sandbox-portal-ws") {
     if (rateLimited(clientIp(req, server))) {
       return new Response(null, {
         status: 429,
         headers: { "retry-after": String(Math.ceil(WINDOW_MS / 1000)) },
       });
     }
-    return handleSandboxWsUpgrade(req, server, path);
+    return path === "/sandbox-portal-ws"
+      ? handleSandboxPortalRelayUpgrade(req, server, path)
+      : handleSandboxWsUpgrade(req, server, path);
   }
   // Everything else: a bodyless 404 — never JSON, never a route list.
   return new Response(null, { status: 404 });
@@ -194,13 +197,13 @@ export function startPublicIngress(overrides?: {
       // the main server's order of magnitude rather than Bun's 16 MB default.
       maxPayloadLength: 64 * 1024 * 1024,
       open(ws) {
-        sandboxWsOpen(ws);
+        if (!sandboxPortalRelayOpen(ws)) sandboxWsOpen(ws);
       },
       message(ws, message) {
-        sandboxWsMessage(ws, message as any);
+        if (!sandboxPortalRelayMessage(ws, message as any)) sandboxWsMessage(ws, message as any);
       },
       close(ws) {
-        sandboxWsClose(ws);
+        if (!sandboxPortalRelayClose(ws)) sandboxWsClose(ws);
       },
     },
   });

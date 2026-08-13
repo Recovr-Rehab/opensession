@@ -36,6 +36,7 @@ export type RunnerResources = {
 		rocm?: string;
 	};
 	concurrentJobs?: number;
+	localInference?: Array<{ runtime: "ollama" | "vllm" | "llama-cpp" | "other"; models: string[] }>;
 };
 
 export type RunnerCapabilities = {
@@ -50,6 +51,22 @@ export type RunnerReservation = {
 	reason: string;
 	reservedBy?: string;
 	expiresAt: string;
+};
+
+/** Operator-supplied migration context. This is diagnostic metadata only: it
+ * carries no SSH key, kubeconfig, pairing token, or runtime authority. */
+export type RunnerMigration =
+	| { kind: "ssh"; label: string; host: string; user: string; port: number }
+	| { kind: "kubernetes"; label: string; context: string; namespace: string; workload: string };
+
+export type RunnerInferenceTask = "chat" | "embedding" | "image" | "video";
+/** Local inference is opt-in. Presence of Ollama/vLLM on a Runner never
+ * authorizes model traffic until an admin enables a narrow policy. */
+export type RunnerLocalInferencePolicy = {
+	enabled: boolean;
+	allowedUsers: string[];
+	allowedModels: string[];
+	allowedTasks: RunnerInferenceTask[];
 };
 
 export type Runner = {
@@ -75,6 +92,8 @@ export type Runner = {
 	/** Session workspaces are retained by default. Deletion is an explicit
 	 * administrator policy because a Runner may hold unpushed work. */
 	workspaceRetention?: "retain" | "delete";
+	migration?: RunnerMigration;
+	localInferencePolicy?: RunnerLocalInferencePolicy;
 	maintenance?: boolean;
 	reservation?: RunnerReservation;
 	workload?: { sessionId?: string; operation?: string; startedAt?: string };
@@ -84,7 +103,7 @@ export type Runner = {
 };
 
 type Store = { runners: Runner[] };
-type Pairing = { code: string; expiresAt: number; createdBy?: string };
+type Pairing = { code: string; expiresAt: number; createdBy?: string; migration?: RunnerMigration };
 
 function storePath(): string {
 	return statePath(".opensession-runners.json");
@@ -113,6 +132,18 @@ function defaultPermissions(): RunnerExecutionPermissions {
 	return { commands: true, fullSessions: false, terminals: false, portals: false };
 }
 
+function normalizeInferencePolicy(value: unknown): RunnerLocalInferencePolicy | undefined {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+	const raw = value as Record<string, unknown>;
+	const allowedTasks = cleanStrings(raw.allowedTasks).filter((task): task is RunnerInferenceTask => ["chat", "embedding", "image", "video"].includes(task));
+	return {
+		enabled: raw.enabled === true,
+		allowedUsers: cleanStrings(raw.allowedUsers),
+		allowedModels: cleanStrings(raw.allowedModels, 160),
+		allowedTasks,
+	};
+}
+
 function normalizeResources(value: unknown): RunnerResources | undefined {
 	if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
 	const raw = value as Record<string, unknown>;
@@ -139,6 +170,16 @@ function normalizeResources(value: unknown): RunnerResources | undefined {
 		...(number("freeDiskGb") !== undefined ? { freeDiskGb: number("freeDiskGb") } : {}),
 		...(number("concurrentJobs") !== undefined ? { concurrentJobs: number("concurrentJobs") } : {}),
 		...(gpu ? { gpu } : {}),
+		...(Array.isArray(raw.localInference) ? {
+			localInference: raw.localInference.flatMap((value): NonNullable<RunnerResources["localInference"]> => {
+				if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+				const item = value as Record<string, unknown>;
+				const runtime = ["ollama", "vllm", "llama-cpp", "other"].includes(String(item.runtime))
+					? String(item.runtime) as NonNullable<RunnerResources["localInference"]>[number]["runtime"]
+					: "other";
+				return [{ runtime, models: cleanStrings(item.models, 160).slice(0, 64) }];
+			}),
+		} : {}),
 	};
 	return Object.keys(result).length ? result : undefined;
 }
@@ -174,6 +215,7 @@ function normalizeRunner(value: Runner): Runner {
 		allowedRepos: cleanStrings(raw.allowedRepos),
 		workspaceRoots: cleanStrings(raw.workspaceRoots, 512),
 		...(workloads.length ? { workloads, workload: workloads[0] } : {}),
+		...(normalizeInferencePolicy(raw.localInferencePolicy) ? { localInferencePolicy: normalizeInferencePolicy(raw.localInferencePolicy) } : {}),
 	};
 }
 
@@ -213,6 +255,15 @@ export function createRunnerPairing(createdBy?: string): { code: string; expires
 	const expiresAt = Date.now() + PAIRING_TTL_MS;
 	pairings.set(code, { code, expiresAt, createdBy });
 	return { code, expiresAt };
+}
+
+/** Attach preconfigured migration diagnostics to an existing one-time code.
+ * It is set only by the admin bootstrap flow before the Runner registers. */
+export function bindRunnerPairingMigration(code: string, migration: RunnerMigration): boolean {
+	const pairing = pairings.get(code);
+	if (!pairing || pairing.expiresAt <= Date.now()) { pairings.delete(code); return false; }
+	pairing.migration = migration;
+	return true;
 }
 
 export function listRunnerPairings(): Pairing[] {
@@ -287,6 +338,8 @@ export function registerRunner(input: RegisterRunnerInput): { ok: true; runner: 
 		allowedUsers: existing?.allowedUsers ?? [],
 		allowedRepos: existing?.allowedRepos ?? [],
 		workspaceRoots: existing?.workspaceRoots ?? [],
+		migration: pairing.migration ?? existing?.migration,
+		localInferencePolicy: existing?.localInferencePolicy,
 		maintenance: existing?.maintenance,
 	});
 	if (existingIndex >= 0) store.runners[existingIndex] = runner;
@@ -303,7 +356,7 @@ export function authenticateRunner(id: string, token: string): Runner | undefine
 	return expected.length === actual.length && timingSafeEqual(expected, actual) ? runner : undefined;
 }
 
-export type RunnerPatch = Partial<Pick<Runner, "label" | "description" | "location" | "maintenance" | "allowedUsers" | "allowedRepos" | "workspaceRoots" | "resources">> & {
+export type RunnerPatch = Partial<Pick<Runner, "label" | "description" | "location" | "maintenance" | "allowedUsers" | "allowedRepos" | "workspaceRoots" | "resources" | "localInferencePolicy">> & {
 	workspaceRetention?: "retain" | "delete";
 	permissions?: Partial<RunnerExecutionPermissions>;
 	capabilities?: Partial<RunnerCapabilities>;
@@ -378,6 +431,17 @@ export function runnerAllowed(runner: Runner, input: { user?: string; repo?: str
 	if (runner.allowedUsers.length && (!input.user || !runner.allowedUsers.includes(input.user))) return false;
 	if (runner.allowedRepos.length && (!input.repo || !runner.allowedRepos.includes(input.repo))) return false;
 	return true;
+}
+
+/** Eligibility gate for a future local-model caller. It deliberately returns
+ * false for a merely detected runtime, for unconstrained tasks, and for a
+ * user outside the policy. No generic Runner network proxy is involved. */
+export function runnerAllowsLocalInference(runner: Runner, input: { user?: string; model: string; task: RunnerInferenceTask }): boolean {
+	const policy = runner.localInferencePolicy;
+	if (!policy?.enabled || !runner.resources?.localInference?.length || runner.maintenance) return false;
+	if (policy.allowedUsers.length && (!input.user || !policy.allowedUsers.includes(input.user))) return false;
+	if (!policy.allowedTasks.includes(input.task)) return false;
+	return policy.allowedModels.includes(input.model);
 }
 
 /** Server-selected, session-owned workspace path. Keep all path construction

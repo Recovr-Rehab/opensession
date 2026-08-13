@@ -11,7 +11,7 @@ import { join } from "path";
 import { audit } from "./audit";
 import { configuredServer } from "./config";
 import { ensureSandboxPortalRelay, mintSandboxPortalGrant, revokeSandboxPortalRelay } from "./sandbox-portal-relay";
-import { remoteSandboxCallbackBaseUrl } from "./sandbox/config";
+import { isRemoteSandboxProvider, remoteSandboxCallbackBaseUrl } from "./sandbox/config";
 import { shellQuoteWord } from "./sandbox/adapters/bootstrap";
 import { sandboxHttpsPortFor } from "./sandbox/preview-ports";
 import type { Sandbox } from "./sandbox/provider";
@@ -34,6 +34,7 @@ const PREFIX = "# opensession-portal ";
 const NAME = /^[a-z][a-z0-9-]{0,62}$/;
 const MIN_PORT = 1024;
 const MAX_PORT = 19_000;
+const remoteRelayAgents: Map<string, { expiresAt: number }> = ((globalThis as Record<string, unknown>).__opensessionSandboxPortalAgents ??= new Map()) as Map<string, { expiresAt: number }>;
 
 function portalKey(name: string): string {
 	return `PORTAL_${name.toUpperCase().replace(/-/g, "_")}_PORT`;
@@ -142,7 +143,11 @@ async function allocatePort(worktreeDir: string): Promise<number> {
 async function allocateSandboxPort(sandbox: Sandbox, records: PortalRecord[]): Promise<number> {
 	const reserved = new Set(records.map((record) => record.port));
 	// Docker and local microVM Sandboxes have a fixed published range. Remote
-	// providers provision a Portal URL on demand and return an empty map here.
+	// providers use their outbound relay and never expose a provider URL here.
+	if (isRemoteSandboxProvider(sandbox.provider)) {
+		for (let port = 4_000; port < 9_000; port++) if (!reserved.has(port)) return port;
+		throw new Error("No Sandbox Portal ports are available.");
+	}
 	const published = Object.keys(await sandbox.ports()).map(Number)
 		.filter((port) => Number.isInteger(port) && port >= MIN_PORT && port <= MAX_PORT)
 		.sort((a, b) => a - b);
@@ -297,6 +302,44 @@ async function writeSandboxPortalRegistry(sandbox: Sandbox, previousText: string
 	if (response.exitCode !== 0) throw new Error(response.stderr.trim() || "Could not update the Sandbox Portal registry.");
 }
 
+/**
+ * Connect a remote Sandbox service to its session-scoped, outbound-only Portal
+ * relay. Local providers stay behind the same authenticated Portal surface,
+ * but can use their private host mapping directly and need no sidecar.
+ *
+ * The sidecar is intentionally launched from the bootstrapped Open Session
+ * checkout, never downloaded from a provider URL. Repeated calls renew a
+ * short-lived grant before it expires; the server replaces the old socket.
+ */
+export async function ensureRemoteSandboxPortalAgent(input: {
+	sessionId: string;
+	sandbox: Sandbox;
+	port: number;
+}): Promise<string | null> {
+	if (!isRemoteSandboxProvider(input.sandbox.provider)) return null;
+	const agentKey = `${input.sessionId}:${input.sandbox.id}:${input.port}`;
+	const current = remoteRelayAgents.get(agentKey);
+	if (current && current.expiresAt > Date.now() + 30_000) {
+		return ensureSandboxPortalRelay({ sessionId: input.sessionId, sandboxId: input.sandbox.id, port: input.port });
+	}
+	const grant = mintSandboxPortalGrant({ sessionId: input.sessionId, sandboxId: input.sandbox.id, port: input.port });
+	const callbackBase = remoteSandboxCallbackBaseUrl().replace(/\/$/, "");
+	const endpoint = `${callbackBase}/sandbox-portal-ws?session=${encodeURIComponent(input.sessionId)}&sandbox=${encodeURIComponent(input.sandbox.id)}&port=${input.port}`;
+	const agent = "/home/ubuntu/projects/opensession/src/runner-host/sandbox-portal-agent.ts";
+	const relayLaunch = `OPENSESSION_SANDBOX_PORTAL_WS_URL=${shellQuoteWord(endpoint)} OPENSESSION_SANDBOX_PORTAL_TOKEN=${shellQuoteWord(grant.token)} OPENSESSION_SANDBOX_PORTAL_PORT=${shellQuoteWord(String(input.port))} setsid /home/ubuntu/.bun/bin/bun run ${shellQuoteWord(agent)} >/dev/null 2>&1 &`;
+	const started = await input.sandbox.exec(["bash", "-lc", relayLaunch]);
+	if (started.exitCode !== 0) throw new Error(started.stderr.trim() || "Could not start the Sandbox Portal relay.");
+	remoteRelayAgents.set(agentKey, { expiresAt: grant.expiresAt });
+	return ensureSandboxPortalRelay({ sessionId: input.sessionId, sandboxId: input.sandbox.id, port: input.port });
+}
+
+export function forgetRemoteSandboxPortalAgents(sandboxId: string, port?: number): void {
+	for (const agentKey of remoteRelayAgents.keys()) {
+		const [, id, agentPort] = agentKey.split(":");
+		if (id === sandboxId && (port == null || Number(agentPort) === port)) remoteRelayAgents.delete(agentKey);
+	}
+}
+
 export async function listSandboxPortalServices(sandbox: Sandbox): Promise<PortalRecord[]> {
 	const { text, records } = await readSandboxPortalRegistry(sandbox);
 	let changed = false;
@@ -328,7 +371,7 @@ export async function startSandboxPortalService(input: {
 	const records = await listSandboxPortalServices(input.sandbox);
 	const current = records.find((record) => record.name === name);
 	if (current && current.state !== "stopped" && current.state !== "failed") throw new Error(`Portal '${name}' already exists. Restart it instead.`);
-	const published = await input.sandbox.ports();
+	const published = isRemoteSandboxProvider(input.sandbox.provider) ? {} : await input.sandbox.ports();
 	const port = input.port == null ? await allocateSandboxPort(input.sandbox, records) : validatePort(input.port);
 	if (records.some((record) => record.name !== name && record.port === port)) throw new Error(`Port ${port} is already registered.`);
 	if (Object.keys(published).length && !(port in published)) throw new Error(`Port ${port} is not published for this Sandbox.`);
@@ -357,20 +400,7 @@ export async function startSandboxPortalService(input: {
 	}
 	const awake = { ...launchedRecord, state: "awake" as const };
 	await writeSandboxPortalRegistry(input.sandbox, snapshot.text, upsert(records, awake));
-	// A remote Sandbox always dials Open Session. It never hands the browser a
-	// provider preview URL or makes the server dial into its private network.
-	const grant = mintSandboxPortalGrant({ sessionId: input.sessionId, sandboxId: input.sandbox.id, port });
-	const callbackBase = remoteSandboxCallbackBaseUrl().replace(/\/$/, "").replace(/^http/, "ws");
-	const endpoint = `${callbackBase}/sandbox-portal-ws?session=${encodeURIComponent(input.sessionId)}&sandbox=${encodeURIComponent(input.sandbox.id)}&port=${port}`;
-	const agent = "/home/ubuntu/projects/opensession/src/runner-host/sandbox-portal-agent.ts";
-	const relayLaunch = `OPENSESSION_SANDBOX_PORTAL_WS_URL=${shellQuoteWord(endpoint)} OPENSESSION_SANDBOX_PORTAL_TOKEN=${shellQuoteWord(grant.token)} OPENSESSION_SANDBOX_PORTAL_PORT=${shellQuoteWord(String(port))} setsid bun run ${shellQuoteWord(agent)} >/dev/null 2>&1 &`;
-	const relayStarted = await input.sandbox.exec(["bash", "-lc", relayLaunch]);
-	if (relayStarted.exitCode !== 0) {
-		const failed = { ...awake, state: "failed" as const, lastError: relayStarted.stderr.trim() || "Could not start the Sandbox Portal relay." };
-		await writeSandboxPortalRegistry(input.sandbox, snapshot.text, upsert(records, failed));
-		throw new Error(failed.lastError);
-	}
-	await ensureSandboxPortalRelay({ sessionId: input.sessionId, sandboxId: input.sandbox.id, port });
+	await ensureRemoteSandboxPortalAgent({ sessionId: input.sessionId, sandbox: input.sandbox, port });
 	audit({ msg: "sandbox_portal_started", session_id: input.sessionId, sandbox_id: input.sandbox.id, portal: name, port });
 	return awake;
 }
@@ -386,6 +416,7 @@ export async function stopSandboxPortalService(input: { sessionId: string; sandb
 	const stopped = { ...current, state: "stopped" as const, pid: undefined };
 	await writeSandboxPortalRegistry(input.sandbox, snapshot.text, upsert(snapshot.records, stopped));
 	revokeSandboxPortalRelay(input.sandbox.id, current.port);
+	forgetRemoteSandboxPortalAgents(input.sandbox.id, current.port);
 	audit({ msg: "sandbox_portal_stopped", session_id: input.sessionId, sandbox_id: input.sandbox.id, portal: name, port: current.port });
 	return stopped;
 }

@@ -83,7 +83,7 @@ export async function runSessionPreviewAction(
 	const preview = await deps.loadPreview();
 	if (sandbox) {
 		if (action === "start")
-			return preview.startSandboxPreview(sandbox, worktreeDir);
+			return preview.startSandboxPreview(sandbox, worktreeDir, sessionId);
 		if (action === "stop")
 			return preview.stopSandboxPreview(sandbox, worktreeDir);
 		return preview.getSandboxPreviewStatus(sandbox, worktreeDir);

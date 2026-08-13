@@ -11,6 +11,7 @@
 
 import { existsSync } from "fs";
 import { configuredIntegration, configuredServer } from "./config";
+import { bindRunnerPairingMigration } from "./runners";
 
 const ID = /^[a-z][a-z0-9-]{0,63}$/;
 const HOST = /^[A-Za-z0-9._:-]{1,253}$/;
@@ -126,6 +127,7 @@ function connectCommand(command: string, server: string, code: string, name: str
 export async function bootstrapSshRunner(targetId: string, code: string): Promise<{ target: SshBootstrapTarget; phase: "pairing" }> {
 	const target = configuredRunnerBootstrapTargets().ssh.find((candidate) => candidate.id === targetId);
 	if (!target) throw new Error("That SSH Runner target is not configured.");
+	if (!bindRunnerPairingMigration(code, { kind: "ssh", label: target.label, host: target.host, user: target.user, port: target.port })) throw new Error("The Runner pairing code is invalid or expired.");
 	await verifySshFingerprint(target);
 	const remote = connectCommand(target.runnerCommand, configuredServer().publicBaseUrl, code, target.label);
 	const result = await output([
@@ -140,6 +142,7 @@ export async function bootstrapSshRunner(targetId: string, code: string): Promis
 export async function bootstrapKubernetesRunner(targetId: string, code: string): Promise<{ target: KubernetesBootstrapTarget; phase: "pairing" }> {
 	const target = configuredRunnerBootstrapTargets().kubernetes.find((candidate) => candidate.id === targetId);
 	if (!target) throw new Error("That Kubernetes Runner target is not configured.");
+	if (!bindRunnerPairingMigration(code, { kind: "kubernetes", label: target.label, context: target.context, namespace: target.namespace, workload: target.workload })) throw new Error("The Runner pairing code is invalid or expired.");
 	if (!existsSync(target.manifestPath)) throw new Error("The configured Runner workload manifest is unavailable.");
 	const common = ["kubectl", "--context", target.context, "--namespace", target.namespace];
 	const applied = await output([...common, "apply", "--server-side", "--field-manager=opensession-runner-bootstrap", "-f", target.manifestPath]);
