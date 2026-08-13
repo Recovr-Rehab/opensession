@@ -373,15 +373,23 @@ function ToolRunBlock({
         }}
         className="group flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-control border-0 bg-transparent px-1 py-[3px] text-left font-sans transition-colors hover:bg-hover/40 phone:min-h-10"
       >
+        {/* Open, the row is a heading for the steps under it, so it keeps the
+            chevron rather than a stack of what is already on screen. Closed,
+            the stack stands in until a hover offers the chevron. */}
         <span className="relative grid size-[22px] flex-shrink-0 place-items-center text-faint">
-          <span className="absolute inset-0 transition-opacity duration-150 group-hover:opacity-0 group-focus-visible:opacity-0">
+          <span
+            className={cn(
+              "absolute inset-0 transition-opacity duration-150 group-hover:opacity-0 group-focus-visible:opacity-0",
+              expanded && "opacity-0"
+            )}
+          >
             <IconStack size={18} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" />
           </span>
           <IconChevronDown
             size={20}
             className={cn(
-              "absolute block opacity-0 transition-[opacity,transform] duration-150 group-hover:opacity-100 group-focus-visible:opacity-100",
-              !expanded && "-rotate-90"
+              "absolute block transition-[opacity,transform] duration-150 group-hover:opacity-100 group-focus-visible:opacity-100",
+              expanded ? "opacity-100" : "-rotate-90 opacity-0"
             )}
           />
         </span>
@@ -390,10 +398,12 @@ function ToolRunBlock({
             place. A run of one kind needs no count (the step count already
             says it); a mixed run splits the steps per glyph. The names stay in
             the aria-label. Inline, not flex items, so the run still truncates
-            to an ellipsis on a narrow row. */}
+            to an ellipsis on a narrow row. They are a stand-in for the folded
+            steps, so opening the run drops them: every step below carries its
+            own glyph, and the row would just say the same thing twice. */}
         <span className="min-w-0 flex-1 truncate text-[14px] font-medium leading-5 text-dim transition-colors group-hover:text-fg">
           {items.length} step{items.length === 1 ? "" : "s"}
-          {groups.map(({ name, count }) => (
+          {!expanded && groups.map(({ name, count }) => (
             <span
               key={name}
               // No gap: these 24-grid glyphs only ink ~60% of their box, so
@@ -422,7 +432,7 @@ function ToolRunBlock({
         )}
       </button>
       {expanded && (
-        <div className="ml-6">
+        <div className="ml-3">
           {items.map((entry) => (
             <ToolCallBlock
               key={entry.id}
@@ -566,7 +576,7 @@ function EditRunBlock({
         )}
       </button>
       {expanded && (
-        <div className="ml-6">
+        <div className="ml-3">
           {items.map((entry) => (
             <ToolCallBlock
               key={entry.id}
