@@ -153,7 +153,7 @@ function ToastCard({ toast: t }: { toast: Toast }) {
 					!
 				</span>
 			)}
-			<span className="leading-tight">{t.message}</span>
+			<span className="translate-y-[0.5px] leading-tight">{t.message}</span>
 		</motion.div>
 	);
 }
