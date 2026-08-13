@@ -107,11 +107,16 @@ final class DraftsStore {
     @ObservationIgnored private var writeTasks: [UUID: Task<Void, Never>] = [:]
     @ObservationIgnored private var hydratedContext: NativePreferences.Context?
     @ObservationIgnored private var hasHydrated = false
+    @ObservationIgnored private var hydrateRetryTask: Task<Void, Never>?
     @ObservationIgnored private var persistTask: Task<Void, Never>?
 
     /// Long enough that a burst of typing is one write, short enough that the
     /// draft is on the server before someone locks the phone mid-sentence.
     @ObservationIgnored var pushDelay: Duration = .milliseconds(800)
+
+    /// How long a failed load waits before trying again. The web client uses
+    /// the same 5s (src/frontend/lib/drafts.ts).
+    @ObservationIgnored var hydrateRetryDelay: Duration = .seconds(5)
 
     /// Seam for tests: the network call the store makes.
     @ObservationIgnored
@@ -215,9 +220,32 @@ final class DraftsStore {
     func hydrate() async {
         let requestContext = NativePreferences.context()
         resetForNewContext(requestContext)
-        guard let server = try? await SettingsAPI.drafts(user: requestContext.user) else { return }
+        guard let server = try? await SettingsAPI.drafts(user: requestContext.user) else {
+            // A dropped load used to wait for the next turn of the app's poll
+            // loop, which is 30s plus five other hydrates away — long enough
+            // to sit reading another device's stale draft. Try again sooner,
+            // like the web client does.
+            scheduleHydrateRetry(requestContext)
+            return
+        }
         guard NativePreferences.context() == requestContext else { return }
+        hydrateRetryTask?.cancel()
+        hydrateRetryTask = nil
         apply(server)
+    }
+
+    private func scheduleHydrateRetry(_ context: NativePreferences.Context) {
+        hydrateRetryTask?.cancel()
+        let delay = hydrateRetryDelay
+        hydrateRetryTask = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled, let self else { return }
+            self.hydrateRetryTask = nil
+            // Nothing to catch up on if someone else got there first, and
+            // nothing to fetch for a person who has since signed out.
+            guard !self.hasHydrated, NativePreferences.context() == context else { return }
+            await self.hydrate()
+        }
     }
 
     /// Kept internal so the merge contract can be tested without a server.
@@ -263,6 +291,8 @@ final class DraftsStore {
         // not this one's to show, and ours are already on the old server.
         for task in pushTasks.values { task.cancel() }
         for task in writeTasks.values { task.cancel() }
+        hydrateRetryTask?.cancel()
+        hydrateRetryTask = nil
         // Save the outgoing account under its own identity before changing
         // which bucket `persistNow` targets.
         persistNow()
