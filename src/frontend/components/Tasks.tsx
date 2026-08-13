@@ -8,7 +8,7 @@ import { cn } from "../ui/cn";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
 import { EmptyState } from "../ui/state";
 import { getCurrentUser } from "./UserPicker";
-import { IconCheck, IconListChecks, IconPlus, IconX } from "./icons";
+import { IconCheck, IconListCircles, IconPlus, IconX } from "./icons";
 import { Input } from "../ui/input";
 
 interface TasksProps {
@@ -268,7 +268,7 @@ export function Tasks({ addHandler, onOpenSession }: TasksProps) {
 						className="overflow-hidden rounded-xl bg-raised px-4"
 					>
 						<EmptyState
-							icon={<IconListChecks size={22} />}
+							icon={<IconListCircles size={22} />}
 							title="Nothing on your list"
 						>
 							Add a task when something needs your attention.

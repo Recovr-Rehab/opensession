@@ -564,15 +564,20 @@ export function IconBranches(p: IconProps) {
   );
 }
 
-export function IconListChecks(p: IconProps) {
+/**
+ * Checklist glyph: an open circle per item, not a tick. Three ticks at 20px
+ * (the tool-row size) collapse into a smudge, and they also read as "all
+ * done", which a plan in progress is not.
+ */
+export function IconListCircles(p: IconProps) {
   return (
     <Svg {...p}>
-      <path {...stroke} d="M11.75 7.25H19.25" />
-      <path {...stroke} d="M11.75 12H19.25" />
-      <path {...stroke} d="M11.75 16.75H19.25" />
-      <path {...stroke} d="M4.75 7.25L5.75 8.25L7.75 6.25" />
-      <path {...stroke} d="M4.75 12L5.75 13L7.75 11" />
-      <path {...stroke} d="M4.75 16.75L5.75 17.75L7.75 15.75" />
+      <circle {...stroke} cx="6.25" cy="6.5" r="1.75" />
+      <circle {...stroke} cx="6.25" cy="12" r="1.75" />
+      <circle {...stroke} cx="6.25" cy="17.5" r="1.75" />
+      <path {...stroke} d="M11.5 6.5H19.25" />
+      <path {...stroke} d="M11.5 12H19.25" />
+      <path {...stroke} d="M11.5 17.5H19.25" />
     </Svg>
   );
 }

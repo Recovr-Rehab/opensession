@@ -98,7 +98,7 @@ import {
 	IconGlobe,
 	IconHome,
 	IconInbox,
-	IconListChecks,
+	IconListCircles,
 	IconMoon,
 	IconPencil,
 	IconPlus,
@@ -3020,7 +3020,7 @@ export function App(
 			description: "Open your task list",
 			category: "Actions",
 			keywords: ["todos", "tasks"],
-			icon: <IconListChecks size={18} />,
+			icon: <IconListCircles size={18} />,
 			run: () => navigate({ view: "tasks" }),
 		},
 		{
@@ -3118,7 +3118,7 @@ export function App(
 			description: "Open the pull request review queue",
 			category: "Navigate",
 			keywords: ["pull requests", "code review"],
-			icon: <IconListChecks size={18} />,
+			icon: <IconListCircles size={18} />,
 			run: () => navigate({ view: "reviews" }),
 		},
 		{
@@ -3135,7 +3135,7 @@ export function App(
 			label: "Goals",
 			description: "Manage long-running missions",
 			category: "Navigate",
-			icon: <IconListChecks size={18} />,
+			icon: <IconListCircles size={18} />,
 			run: () => navigate({ view: "goals" }),
 		},
 		{

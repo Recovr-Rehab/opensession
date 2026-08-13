@@ -46,7 +46,7 @@ import {
   IconConnections,
   IconBook,
   IconBranches,
-  IconListChecks,
+  IconListCircles,
   IconWrench,
   IconChevronDown,
   IconX,
@@ -231,7 +231,7 @@ export function ToolGlyph({ toolName, size = 20 }: { toolName: string; size?: nu
         case "TaskList":
         case "TaskGet":
         case "TodoWrite":
-          return <IconListChecks size={size} />;
+          return <IconListCircles size={size} />;
         default:
           return <IconWrench size={size} />;
       }

@@ -138,7 +138,7 @@ import {
 	IconDotsHorizontal,
 	IconGlobe,
 	IconHome,
-	IconListChecks,
+	IconListCircles,
 } from "./icons";
 import { Tooltip } from "../ui/tooltip";
 import { ContextMenu, Menu } from "../ui/menu";
@@ -2259,7 +2259,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		{
 			id: "tasks",
 			label: SIDEBAR_TOOL_LABELS.tasks,
-			icon: <IconListChecks />,
+			icon: <IconListCircles />,
 			active: tasksActive,
 			onClick: onOpenTasks,
 			title: "Your open tasks",

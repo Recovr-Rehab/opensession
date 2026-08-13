@@ -34,7 +34,7 @@ import {
 	IconClock,
 	IconFile,
 	IconGitMerge,
-	IconListChecks,
+	IconListCircles,
 	IconPullRequest,
 	IconRepo,
 	IconX,
@@ -166,7 +166,7 @@ export function WorkspacePeek({
 					)}
 					aria-label="Workspace summary"
 				>
-					<IconListChecks size={20} />
+					<IconListCircles size={20} />
 				</Popover.Trigger>
 			</Tooltip>
 			<Popover.Popup
