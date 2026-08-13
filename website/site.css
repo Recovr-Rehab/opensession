@@ -117,8 +117,8 @@ button:focus-visible {
 
 .mark {
 	display: inline-grid;
-	width: 38px;
-	height: 38px;
+	width: 32px;
+	height: 32px;
 	place-items: center;
 }
 
@@ -157,7 +157,7 @@ button:focus-visible {
 	z-index: 2;
 	display: grid;
 	flex: 1;
-	grid-template-columns: minmax(0, 390px) minmax(0, 1fr);
+	grid-template-columns: minmax(0, 440px) minmax(0, 1fr);
 	align-items: center;
 	gap: 64px;
 	/* Shared with the demo window below, which measures its overshoot from the
@@ -168,7 +168,7 @@ button:focus-visible {
 
 .hero-copy {
 	display: flex;
-	max-width: 390px;
+	max-width: 440px;
 	margin: 0;
 	flex-direction: column;
 	align-items: flex-start;
@@ -187,9 +187,9 @@ button:focus-visible {
 }
 
 .hero h1 {
-	max-width: 390px;
+	max-width: 440px;
 	margin: 0;
-	font-size: clamp(46px, 4.2vw, 62px);
+	font-size: clamp(38px, 3.4vw, 52px);
 	font-weight: 600;
 	letter-spacing: -0.03em;
 	line-height: 1.02;
@@ -491,7 +491,7 @@ button:focus-visible {
 	}
 
 	.hero h1 {
-		font-size: clamp(44px, 5.4vw, 56px);
+		font-size: clamp(36px, 4.6vw, 46px);
 	}
 
 
