@@ -1162,21 +1162,38 @@ enum OS1API {
         let encoded = threadId.addingPercentEncoding(
             withAllowedCharacters: .urlPathAllowed
         ) ?? threadId
+        // Without a name the reply goes out unsigned and the note lands
+        // unattributed. A signed-in server overrides this with the verified
+        // identity anyway.
+        let response: ReplyResponse = try await post(
+            "/api/plain/threads/\(encoded)/reply",
+            body: supportReplyBody(
+                text: text,
+                isNote: isNote,
+                user: ServerConfig.shared.userName,
+                attachmentIds: attachmentIds
+            )
+        )
+        return response.sentAs
+    }
+
+    /// The reply route's JSON body. Split out of the send so the wire shape is
+    /// pinned by a test: the ids of the already-uploaded files ride WITH the
+    /// message, which is what makes a half-uploaded attachment impossible
+    /// (the web does the same, in PlainThreadPanel.tsx).
+    nonisolated static func supportReplyBody(
+        text: String,
+        isNote: Bool,
+        user: String,
+        attachmentIds: [String]
+    ) -> [String: Any] {
         var body: [String: Any] = [
             "text": text,
             "kind": isNote ? "note" : "reply",
             "attachmentIds": attachmentIds,
         ]
-        // Without a name the reply goes out unsigned and the note lands
-        // unattributed. A signed-in server overrides this with the verified
-        // identity anyway.
-        let user = ServerConfig.shared.userName
         if !user.isEmpty { body["user"] = user }
-        let response: ReplyResponse = try await post(
-            "/api/plain/threads/\(encoded)/reply",
-            body: body
-        )
-        return response.sentAs
+        return body
     }
 
     /// Stage one file on the thread for the next reply or note, and hand back
@@ -1204,6 +1221,31 @@ enum OS1API {
         isNote: Bool
     ) async throws -> String {
         struct UploadResponse: Decodable, Sendable { let attachmentId: String? }
+        let target = supportAttachmentUpload(
+            threadId: threadId,
+            fileName: fileName,
+            isNote: isNote
+        )
+        let response: UploadResponse = try await upload(
+            target.path,
+            data: data,
+            contentType: mimeType,
+            headers: target.headers
+        )
+        guard let attachmentId = response.attachmentId else {
+            throw APIError.server("Plain didn't return an attachment")
+        }
+        return attachmentId
+    }
+
+    /// Where one staged file goes and what rides with it. Pure, so the part of
+    /// this route that no compiler checks (the raw body, the name in a header,
+    /// the mode in a header) is pinned by a test.
+    nonisolated static func supportAttachmentUpload(
+        threadId: String,
+        fileName: String,
+        isNote: Bool
+    ) -> (path: String, headers: [String: String]) {
         let encoded = threadId.addingPercentEncoding(
             withAllowedCharacters: .urlPathAllowed
         ) ?? threadId
@@ -1213,19 +1255,13 @@ enum OS1API {
         let encodedName = fileName.addingPercentEncoding(
             withAllowedCharacters: .alphanumerics
         ) ?? "attachment"
-        let response: UploadResponse = try await upload(
+        return (
             "/api/plain/threads/\(encoded)/attachments",
-            data: data,
-            contentType: mimeType,
-            headers: [
+            [
                 "x-file-name": encodedName,
                 "x-plain-kind": isNote ? "note" : "reply",
             ]
         )
-        guard let attachmentId = response.attachmentId else {
-            throw APIError.server("Plain didn't return an attachment")
-        }
-        return attachmentId
     }
 
     /// Move a thread through the queue. Writes take the LOWERCASE status;
