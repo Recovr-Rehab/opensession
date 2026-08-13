@@ -173,9 +173,31 @@ describe("TranscriptBlocks review loops", () => {
 				reviewResult={{ status: "passed", confidence: 5, checksPassed: 8 }}
 			/>,
 		);
+		expect(html).toContain('aria-label="Review loop, Ready to merge, PR #42"');
+		expect(html).toContain("Review loop");
+		expect(html).toContain("Ready to merge");
+		expect(html).not.toContain("5/5");
+		expect(html).not.toContain("8 checks passed");
+		expect(html).not.toContain("border-l border-line pl-3");
+	});
+
+	test("opens to icon-led review steps and a final checked result", () => {
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				reviewLoopsOpen
+				entries={[
+					{ id: "review", type: "user", content: "[GitHub] <!--os:review-handoff-->\nReview PR #42", timestamp: "2026-08-12T12:00:00Z" },
+					{ id: "read", type: "tool_use", toolUseId: "read-call", toolName: "Read", toolInput: { filePath: "/tmp/report.txt" }, content: "Using Read", timestamp: "2026-08-12T12:00:01Z" },
+					{ id: "read-result", type: "tool_result", toolUseId: "read-call", content: "ok", timestamp: "2026-08-12T12:00:02Z" },
+				]}
+				reviewResult={{ status: "passed", confidence: 5, checksPassed: 8 }}
+			/>,
+		);
+		expect(html).toContain('aria-expanded="true"');
+		expect(html).toContain("report.txt");
 		expect(html).toContain('aria-label="Review passed"');
 		expect(html).toContain("1 round · 5/5 · 8 checks passed");
-		expect(html).not.toContain("border-l border-line pl-3");
+		expect(html).not.toContain(">Worked<");
 	});
 
 	test("shows progress while a loop is still fixing feedback", () => {
@@ -189,9 +211,23 @@ describe("TranscriptBlocks review loops", () => {
 				reviewResult={{ status: "passed", confidence: 5, checksPassed: 8 }}
 			/>,
 		);
-		expect(html).toContain("Reviewing changes");
+		expect(html).toContain("Working");
 		expect(html).toContain('aria-label="Review in progress"');
 		expect(html).not.toContain('aria-label="Review passed"');
+	});
+
+	test("shows pending review facts without a running spinner after the worker settles", () => {
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				entries={[
+					{ id: "review", type: "user", content: "[GitHub] <!--os:review-handoff-->\nReview PR #42", timestamp: "2026-08-12T12:00:00Z" },
+					{ id: "fix", type: "assistant", content: "Waiting for checks.", timestamp: "2026-08-12T12:01:00Z" },
+				]}
+				reviewResult={{ status: "pending", checksPassed: 7 }}
+			/>,
+		);
+		expect(html).toContain("Working");
+		expect(html).not.toContain('aria-label="Review in progress"');
 	});
 
 	test("shows a failed state when review findings remain", () => {
@@ -204,7 +240,9 @@ describe("TranscriptBlocks review loops", () => {
 				reviewResult={{ status: "failed", confidence: 2, blocking: 1, checksFailed: 1 }}
 			/>,
 		);
-		expect(html).toContain('aria-label="Review failed"');
-		expect(html).toContain("1 round · 2/5 · 1 blocking · 1 check failed");
+		expect(html).toContain('aria-label="Review loop, Needs changes, PR #42"');
+		expect(html).toContain("Needs changes");
+		expect(html).not.toContain("1 blocking");
+		expect(html).not.toContain("1 check failed");
 	});
 });

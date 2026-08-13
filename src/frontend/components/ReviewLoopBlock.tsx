@@ -1,15 +1,12 @@
 import React, { useState } from "react";
-import { IconChevronDown, IconCheck, IconPullRequest, IconX } from "./icons";
+import { IconChevronDown, IconCheck, IconX } from "./icons";
 import { cn } from "../ui/cn";
 import type { ReviewLoopResult } from "../lib/review-loop";
 
 /**
- * A review handoff and the work it triggered, folded into one line, plus the
- * result the loop reached once it settles.
- *
- * The same bounded surface holds both states. The header owns the review
- * identity and verdict; the open body contains only the work, so nested
- * transcript chrome cannot compete with the parent hierarchy.
+ * A review handoff and the work it triggered, folded like a normal turn. Once
+ * settled, the closed row says what the loop concluded; opening it reveals the
+ * same icon-led work rows as any other worker, followed by the final verdict.
  */
 export function ReviewLoopBlock({
 	prNumber,
@@ -17,87 +14,58 @@ export function ReviewLoopBlock({
 	live,
 	result,
 	children,
+	defaultOpen = false,
 }: {
 	prNumber: number | null;
 	rounds: number;
 	live: boolean;
 	result?: ReviewLoopResult;
 	children: React.ReactNode;
+	/** Preview/test hook; the transcript never passes it, so sessions stay folded. */
+	defaultOpen?: boolean;
 }) {
-	const [open, setOpen] = useState(false);
+	const [open, setOpen] = useState(defaultOpen);
 	const status = live ? "pending" : result?.status;
-	const detail = reviewLoopDetail(status, rounds, result);
-	const stateLabel = live
-		? "Review in progress"
-		: status === "pending"
-			? "Review pending"
-			: status === "passed"
-				? "Review passed"
-				: status === "failed"
-					? "Review failed"
-					: undefined;
+	const detail = reviewLoopDetail(status, rounds);
+	const label = ["Review loop", detail, prNumber ? `PR #${prNumber}` : null]
+		.filter(Boolean)
+		.join(", ");
 
 	return (
-		<section
-			className="mx-auto mb-3 w-full max-w-[var(--session-col)] overflow-hidden rounded-lg border border-line bg-surface shadow-[0_1px_2px_rgba(0,0,0,0.025)] [corner-shape:var(--cs)]"
-			aria-label="Review loop"
-		>
+		<section className="mx-auto mb-3 w-full max-w-[var(--session-col)]" aria-label="Review loop">
 			<button
 				type="button"
 				aria-expanded={open}
+				aria-label={label}
 				onClick={() => setOpen((value) => !value)}
-				className={cn(
-					"group flex min-h-10 w-full min-w-0 cursor-pointer items-center gap-2 border-0 bg-panel/60 px-3.5 text-left font-sans transition-colors hover:bg-hover/40",
-					open && "border-b border-line",
-				)}
+				className="-mx-2 flex w-[calc(100%+16px)] min-w-0 cursor-pointer items-baseline gap-2 rounded-control border-0 bg-transparent px-3 py-1 text-left font-sans text-[14px] leading-5 text-dim transition-colors hover:bg-hover/40 hover:text-fg phone:min-h-10"
 			>
-				<span className="relative flex size-[22px] flex-none self-center items-center justify-center text-faint">
-					<IconPullRequest
-						size={20}
-						className={cn(
-							"transition-opacity duration-150 group-hover:opacity-0",
-							open && "opacity-0",
-						)}
-					/>
-					<IconChevronDown
-						size={20}
-						className={cn(
-							"absolute text-dim opacity-0 transition-[opacity,transform] duration-150 group-hover:opacity-100",
-							open && "rotate-180 opacity-100",
-						)}
-					/>
+				<span
+					className={cn(
+						"grid size-5 flex-none self-center place-items-center leading-none text-faint transition-transform duration-150",
+						!open && "-rotate-90",
+					)}
+				>
+					<IconChevronDown size={20} className="block" />
 				</span>
-				<span className="shrink-0 text-[14px] font-medium leading-5 text-fg">
-					Review loop
-				</span>
+				<span className="shrink-0 font-medium">Review loop</span>
+				<span className="min-w-0 truncate text-label leading-4 text-faint">{detail}</span>
 				{prNumber && (
-					<span className="shrink-0 text-label leading-4 text-dim">PR #{prNumber}</span>
+					<span className="hidden shrink-0 text-label leading-4 text-faint desktop:block">PR #{prNumber}</span>
 				)}
-				<span className="min-w-0 flex-1 truncate text-label leading-4 text-faint">
-					{detail}
-				</span>
-				{stateLabel && (
+				{live && (
 					<span
-						className={cn(
-							"flex size-5 flex-none self-center items-center justify-center",
-							status === "passed" && "text-green",
-							status === "failed" && "text-red",
-						)}
-						aria-label={stateLabel}
-					>
-						{status === "passed" ? (
-							<IconCheck size={20} />
-						) : status === "failed" ? (
-							<IconX size={20} />
-						) : (
-							<span className="size-[11px] animate-spin rounded-full border border-b-line-strong border-l-line-strong border-r-line-strong border-t-dim" />
-						)}
-					</span>
+						className="ml-auto size-[11px] flex-none self-center animate-spin rounded-full border border-b-line-strong border-l-line-strong border-r-line-strong border-t-dim"
+						aria-label="Review in progress"
+					/>
 				)}
 			</button>
 			{open && (
-				<div className="px-3.5 pb-3 pt-2.5 [&>*:last-child]:mb-0">
+				<div className="mt-0.5 pl-6 [&>*:last-child]:mb-0">
 					{children}
+					{result && !live && result.status !== "pending" && (
+						<ReviewLoopResultRow result={result} rounds={rounds} />
+					)}
 				</div>
 			)}
 		</section>
@@ -107,17 +75,49 @@ export function ReviewLoopBlock({
 function reviewLoopDetail(
 	status: ReviewLoopResult["status"] | undefined,
 	rounds: number,
-	result: ReviewLoopResult | undefined,
 ): string {
-	if (status === "pending") return "Reviewing changes";
+	if (status === "passed") return "Ready to merge";
+	if (status === "failed") return "Needs changes";
+	if (status === "pending") return "Working";
+	return `${rounds} ${rounds === 1 ? "round" : "rounds"}`;
+}
+
+function ReviewLoopResultRow({
+	result,
+	rounds,
+}: {
+	result: ReviewLoopResult;
+	rounds: number;
+}) {
 	const facts = [
 		`${rounds} ${rounds === 1 ? "round" : "rounds"}`,
-		typeof result?.confidence === "number" ? `${result.confidence}/5` : null,
-		result?.blocking ? `${result.blocking} blocking` : null,
-		result?.checksFailed
+		typeof result.confidence === "number" ? `${result.confidence}/5` : null,
+		result.blocking ? `${result.blocking} blocking` : null,
+		result.checksFailed
 			? `${result.checksFailed} ${result.checksFailed === 1 ? "check" : "checks"} failed`
 			: null,
-		result?.checksPassed ? `${result.checksPassed} checks passed` : null,
-	];
-	return facts.filter(Boolean).join(" · ");
+		result.checksPassed ? `${result.checksPassed} checks passed` : null,
+	]
+		.filter(Boolean)
+		.join(" · ");
+	const passed = result.status === "passed";
+	return (
+		<div
+			className="mt-1 flex min-w-0 items-baseline gap-2 rounded-control px-1 py-[3px] font-sans"
+			aria-label={passed ? "Review passed" : "Review failed"}
+		>
+			<span
+				className={cn(
+					"grid size-[22px] flex-none self-center place-items-center",
+					passed ? "text-green" : "text-red",
+				)}
+			>
+				{passed ? <IconCheck size={20} /> : <IconX size={20} />}
+			</span>
+			<span className="shrink-0 text-[14px] font-medium leading-5 text-dim">
+				{passed ? "Ready to merge" : "Needs changes"}
+			</span>
+			<span className="min-w-0 truncate text-label leading-4 text-faint">{facts}</span>
+		</div>
+	);
 }

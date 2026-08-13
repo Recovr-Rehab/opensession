@@ -11,6 +11,7 @@ import { normalizeLegacyVoiceToolEntries } from "../lib/transcript-state";
 import { collectWrittenAssets } from "../lib/open-asset";
 import { classifyEntry } from "@tellahq/opensession-protocol/notices";
 import { ReviewLoopBlock } from "./ReviewLoopBlock";
+import { ToolCallBlock } from "./ToolCallBlock";
 import type { ReviewLoopResult } from "../lib/review-loop";
 import {
 	ShippedChangeComposer,
@@ -56,6 +57,8 @@ interface Props {
 	};
 	/** The current PR verdict, rendered on the final review loop's own row. */
 	reviewResult?: ReviewLoopResult;
+	/** Preview/test hook; the session viewer leaves review loops folded. */
+	reviewLoopsOpen?: boolean;
 }
 
 function reviewHandoff(block: RenderBlock): number | null | undefined {
@@ -135,6 +138,7 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 	notes,
 	slackShare,
 	reviewResult,
+	reviewLoopsOpen,
 }: Props) {
 	const renderedEntries = normalizeLegacyVoiceToolEntries(entries);
 	const shareAfterEntryIds = new Set<string>();
@@ -268,6 +272,7 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 										? reviewResult
 										: undefined
 								}
+								defaultOpen={reviewLoopsOpen}
 							>
 								{block.blocks.map((inner, innerIndex) => {
 									const innerKey = inner.kind === "turn"
@@ -280,7 +285,33 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 									return (
 										<React.Fragment key={innerKey}>
 											{inner.kind === "turn" ? (
-												<TurnBlock items={inner.items} toolResults={toolResults} live={Boolean(live && isLast && innerIndex === block.blocks.length - 1)} onOpenSubagent={onOpenSubagent} sessionId={sessionId} />
+												<div>
+													{inner.items.map((entry) =>
+														entry.type === "tool_use" ? (
+															<ToolCallBlock
+																key={entry.id}
+																entry={entry}
+																sessionId={sessionId}
+																result={entry.toolUseId ? toolResults.get(entry.toolUseId) : undefined}
+																pending={Boolean(
+																	live &&
+																	isLast &&
+																	innerIndex === block.blocks.length - 1 &&
+																	entry.toolUseId &&
+																	!toolResults.has(entry.toolUseId),
+																)}
+																onOpenSubagent={onOpenSubagent}
+															/>
+														) : (
+															<MessageBubble
+																key={entry.id}
+																entry={entry}
+																owner={owner}
+																sessionId={sessionId}
+															/>
+														),
+													)}
+												</div>
 											) : inner.kind === "footer" ? (
 												<TurnFooter entry={inner.entry} durationMs={inner.durationMs} files={inner.files} assets={inner.assets} onFork={onFork} />
 											) : inner.kind === "entry" && reviewHandoff(inner) === undefined ? (
