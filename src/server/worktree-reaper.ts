@@ -30,6 +30,11 @@
  *  - A worktree that is the cwd of ANY live process is spared — unlike
  *    disk-gc's build-only check, because removing the whole tree breaks even
  *    a passive session process sitting in it.
+ *  - A worktree whose session was active in the last ACTIVE_HOURS is spared
+ *    even when its work reads as done (2026-08-13: a session's checkout was
+ *    reaped hourly for "tip in origin/main" because it had not committed yet,
+ *    so it kept losing node_modules between turns). The /proc check does not
+ *    cover this: a session sitting between turns holds no cwd.
  *  - Husks are only swept when no nested repo inside has dirty/unpushed work.
  */
 
@@ -55,7 +60,8 @@ import { canonicalPath, REPOS } from "./worktree";
 const worktreesDir = () => configuredPaths().worktreesDir;
 
 const MINUTE = 60_000;
-const DAY = 24 * 60 * MINUTE;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
 const SWEEP_INTERVAL_MS = 60 * MINUTE;
 const FIRST_SWEEP_DELAY_MS = 10 * MINUTE; // staggered after disk-gc's 5m
 
@@ -70,6 +76,17 @@ const IDLE_DAYS = positiveNumber(
 	7,
 );
 
+/** Spare a checkout whose session was active this recently, even when its work
+ *  already landed. A done-signal says the WORK is finished, not the session:
+ *  a session between turns holds no process cwd, and its branch reads as done
+ *  the moment its PR merges — or immediately, before it has committed at all,
+ *  since a zero-commit tip is trivially an ancestor of the default branch.
+ *  Reaping there costs the session its dependency install for nothing. */
+const ACTIVE_HOURS = positiveNumber(
+	process.env.OPENSESSION_WORKTREE_ACTIVE_HOURS,
+	6,
+);
+
 /** Infrastructure worktrees, never session trees (same set as disk-gc). */
 const PROTECTED_SUFFIXES = ["-warm-template", "-ask-checkout"];
 
@@ -80,6 +97,7 @@ export interface ReapResult {
 	husksSwept: string[];
 	skipped: {
 		inUse: number;
+		sessionActive: number;
 		dirty: number;
 		unpushed: number;
 		huskWithWork: number;
@@ -92,15 +110,15 @@ export type WorktreeActivitySession = Pick<
 >;
 
 /**
- * Session-owned worktrees whose every owner has been idle since `cutoffMs`.
- * Multiple sessions can share a branch/worktree; one running, recent, or
- * malformed session record protects the checkout. Attached repos participate
- * exactly like the primary worktree.
+ * Newest activity per session-owned worktree dir. `protected` marks a checkout
+ * whose liveness we cannot date — a running session, or one whose lastActivity
+ * does not parse — so both selectors below fail closed on it. Multiple sessions
+ * can share a branch/worktree; attached repos participate exactly like the
+ * primary worktree.
  */
-export function idleSessionWorktrees(
+function worktreeActivity(
 	sessions: readonly WorktreeActivitySession[],
-	cutoffMs: number,
-): Set<string> {
+): Map<string, { latestMs: number; protected: boolean }> {
 	const activity = new Map<
 		string,
 		{ latestMs: number; protected: boolean }
@@ -125,12 +143,32 @@ export function idleSessionWorktrees(
 			activity.set(dir, current);
 		}
 	}
+	return activity;
+}
 
+/** Session-owned worktrees whose every owner has been idle since `cutoffMs`. */
+export function idleSessionWorktrees(
+	sessions: readonly WorktreeActivitySession[],
+	cutoffMs: number,
+): Set<string> {
 	const idle = new Set<string>();
-	for (const [dir, state] of activity) {
+	for (const [dir, state] of worktreeActivity(sessions)) {
 		if (!state.protected && state.latestMs < cutoffMs) idle.add(dir);
 	}
 	return idle;
+}
+
+/** Session-owned worktrees any owner has touched since `cutoffMs` — still in
+ *  use by a live session, whatever git says about the branch. */
+export function activeSessionWorktrees(
+	sessions: readonly WorktreeActivitySession[],
+	cutoffMs: number,
+): Set<string> {
+	const active = new Set<string>();
+	for (const [dir, state] of worktreeActivity(sessions)) {
+		if (state.protected || state.latestMs >= cutoffMs) active.add(dir);
+	}
+	return active;
 }
 
 /** Worktree dirs that are the cwd of ANY live process. Null = /proc unreadable
@@ -277,12 +315,16 @@ export async function sweepWorktreeReaper(
 		removed: [],
 		parked: [],
 		husksSwept: [],
-		skipped: { inUse: 0, dirty: 0, unpushed: 0, huskWithWork: 0 },
+		skipped: { inUse: 0, sessionActive: 0, dirty: 0, unpushed: 0, huskWithWork: 0 },
 	};
 	const nowMs = opts.nowMs ?? Date.now();
 	const idleWorktrees = idleSessionWorktrees(
 		opts.sessions ?? [],
 		nowMs - IDLE_DAYS * DAY,
+	);
+	const activeWorktrees = activeSessionWorktrees(
+		opts.sessions ?? [],
+		nowMs - ACTIVE_HOURS * HOUR,
 	);
 
 	const inUse = worktreesWithProcesses(root);
@@ -392,6 +434,15 @@ export async function sweepWorktreeReaper(
 			reason = `session idle>${IDLE_DAYS}d (checkout parked; branch retained)`;
 		if (!reason) continue;
 
+		// The work is done; the session using the checkout may not be.
+		if (activeWorktrees.has(canonicalPath(dir))) {
+			result.skipped.sessionActive++;
+			console.log(
+				`[worktree-reaper] SKIP ${e.name} (${reason}): session active <${ACTIVE_HOURS}h ago`,
+			);
+			continue;
+		}
+
 		const dirty = (await $`git -C ${dir} status --porcelain`.quiet().nothrow())
 			.text()
 			.trim();
@@ -464,7 +515,7 @@ export async function sweepWorktreeReaper(
 			`[worktree-reaper] sweep done: ${result.removed.length} removed ` +
 				`(${result.parked.length} idle parked), ` +
 				`${result.husksSwept.length} husk(s) swept ` +
-				`(skipped: ${result.skipped.inUse} in-use, ${result.skipped.dirty} dirty, ${result.skipped.unpushed} unpushed)`,
+				`(skipped: ${result.skipped.inUse} in-use, ${result.skipped.sessionActive} session-active, ${result.skipped.dirty} dirty, ${result.skipped.unpushed} unpushed)`,
 		);
 	}
 	return result;
@@ -496,6 +547,6 @@ export function startWorktreeReaper(
 	setTimeout(run, FIRST_SWEEP_DELAY_MS);
 	sweepTimer = setInterval(run, SWEEP_INTERVAL_MS);
 	console.log(
-		`[worktree-reaper] started (every ${Math.round(SWEEP_INTERVAL_MS / MINUTE)}m; idle park>${IDLE_DAYS}d)`,
+		`[worktree-reaper] started (every ${Math.round(SWEEP_INTERVAL_MS / MINUTE)}m; idle park>${IDLE_DAYS}d; spare sessions active<${ACTIVE_HOURS}h)`,
 	);
 }

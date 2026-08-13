@@ -1,8 +1,13 @@
 import { describe, expect, it } from "bun:test";
-import { idleSessionWorktrees, type WorktreeActivitySession } from "./worktree-reaper";
+import {
+	activeSessionWorktrees,
+	idleSessionWorktrees,
+	type WorktreeActivitySession,
+} from "./worktree-reaper";
 
 const NOW = Date.parse("2026-08-08T12:00:00Z");
 const CUTOFF = NOW - 7 * 86_400_000;
+const ACTIVE_CUTOFF = NOW - 6 * 3_600_000;
 
 function session(
 	dir: string,
@@ -71,5 +76,57 @@ describe("idleSessionWorktrees", () => {
 			CUTOFF,
 		);
 		expect(idle.has("/worktrees/unknown")).toBe(false);
+	});
+});
+
+describe("activeSessionWorktrees", () => {
+	it("holds a checkout whose session was touched inside the window", () => {
+		const active = activeSessionWorktrees(
+			[session("/worktrees/live", { lastActivity: "2026-08-08T11:00:00Z" })],
+			ACTIVE_CUTOFF,
+		);
+		expect(active.has("/worktrees/live")).toBe(true);
+	});
+
+	it("releases a checkout whose session went quiet before the window", () => {
+		const active = activeSessionWorktrees(
+			[session("/worktrees/quiet", { lastActivity: "2026-08-08T02:00:00Z" })],
+			ACTIVE_CUTOFF,
+		);
+		expect(active.has("/worktrees/quiet")).toBe(false);
+	});
+
+	it("fails closed on running and malformed sessions", () => {
+		const active = activeSessionWorktrees(
+			[
+				session("/worktrees/running", { isRunning: true }),
+				session("/worktrees/unknown", { lastActivity: "not-a-date" }),
+			],
+			ACTIVE_CUTOFF,
+		);
+		expect(active.has("/worktrees/running")).toBe(true);
+		expect(active.has("/worktrees/unknown")).toBe(true);
+	});
+
+	it("lets one recent owner hold a shared checkout, and covers attached repos", () => {
+		const active = activeSessionWorktrees(
+			[
+				session("/worktrees/shared"),
+				session("/worktrees/shared", {
+					lastActivity: "2026-08-08T11:30:00Z",
+					attachedRepos: [
+						{ repo: "secondary", branch: "topic", dir: "/worktrees/attached" },
+					],
+				}),
+			],
+			ACTIVE_CUTOFF,
+		);
+		expect(active.has("/worktrees/shared")).toBe(true);
+		expect(active.has("/worktrees/attached")).toBe(true);
+	});
+
+	it("never claims a worktree no session owns", () => {
+		const active = activeSessionWorktrees([], ACTIVE_CUTOFF);
+		expect(active.has("/worktrees/orphan")).toBe(false);
 	});
 });
