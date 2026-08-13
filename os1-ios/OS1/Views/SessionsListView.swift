@@ -351,7 +351,19 @@ struct SessionsListView: View {
                     openTicket = row
                 }
             } else if let archivedSession = openedArchivedSession {
-                SessionView(session: archivedSession, workspaceNames: viewModel.workspaceNames)
+                SessionView(
+                    session: archivedSession,
+                    workspaceNames: viewModel.workspaceNames,
+                    composerDraft: storedDraft(for: archivedSession.id),
+                    onSaveComposerDraft: { draft in
+                        composerDrafts[archivedSession.id] = draft.isEmpty ? nil : draft
+                        DraftsStore.shared.setText(
+                            draft.text,
+                            for: archivedSession.id,
+                            immediate: true
+                        )
+                    }
+                )
                     .id(archivedSession.id)
                     .onChange(of: archivedSession, initial: true) { _, open in
                         ReadsStore.shared.open(open)
@@ -362,7 +374,12 @@ struct SessionsListView: View {
                 SessionView(
                     session: session,
                     seed: optimisticSeeds[session.id],
-                    workspaceNames: viewModel.workspaceNames
+                    workspaceNames: viewModel.workspaceNames,
+                    composerDraft: composerDrafts[session.id] ?? storedDraft(for: session.id),
+                    onSaveComposerDraft: { draft in
+                        composerDrafts[session.id] = draft.isEmpty ? nil : draft
+                        DraftsStore.shared.setText(draft.text, for: session.id, immediate: true)
+                    }
                 )
                     // Fresh view (and socket) per session, not a reused one.
                     .id(selectedSessionID)
@@ -854,6 +871,11 @@ struct SessionsListView: View {
         #endif
     }
 
+    private func storedDraft(for id: String) -> SessionViewModel.ComposerDraft? {
+        guard let text = DraftsStore.shared.text(for: id) else { return nil }
+        return SessionViewModel.ComposerDraft(text: text, images: [])
+    }
+
     /// The moment Start is tapped: an optimistic row (temporary `pending-` id)
     /// joins the list and the conversation view opens seeded from the prompt —
     /// no waiting on the server. `resolveCreate` swaps in the real id (or
@@ -908,6 +930,7 @@ struct SessionsListView: View {
             if let draft = composerDrafts.removeValue(forKey: tempId) {
                 composerDrafts[id] = draft
             }
+            DraftsStore.shared.remap(tempId: tempId, to: id)
             #if os(macOS)
             if selectedSessionID == tempId { selectedSessionID = id }
             #else
@@ -1257,12 +1280,13 @@ struct SessionsListView: View {
                         for: $0,
                         scope: sessionCacheScope,
                         seed: optimisticSeeds[$0.id],
-                        composerDraft: composerDrafts[$0.id]
+                        composerDraft: composerDrafts[$0.id] ?? storedDraft(for: $0.id)
                     )
                 },
                 onSaveComposerDraft: { savedSession, draft in
                     let id = resolvedSessionIds[savedSession.id] ?? savedSession.id
                     composerDrafts[id] = draft.isEmpty ? nil : draft
+                    DraftsStore.shared.setText(draft.text, for: id, immediate: true)
                 },
                 onNewSession: {
                     // The session's ⋯ → "New session in this workspace": a sibling
@@ -2593,6 +2617,12 @@ struct SessionRow: View {
                 #endif
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            if hasDraft {
+                Image(systemName: "pencil")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(OS1VisualStyle.textDim)
+                    .accessibilityLabel("Unsent draft")
+            }
             // Teammates focused on any session represented by this row.
             if !rowViewers.isEmpty {
                 PresenceFacepile(viewers: rowViewers, size: faceSize, stacked: false)
@@ -2645,6 +2675,10 @@ struct SessionRow: View {
     /// instead of the whole list body.
     private var unread: Bool {
         ReadsStore.shared.isUnread(sessions.isEmpty ? [session] : sessions)
+    }
+
+    private var hasDraft: Bool {
+        DraftsStore.shared.hasDraft(sessions.isEmpty ? [session] : sessions)
     }
 
     /// Read here rather than at the call site because `PresenceStore` is

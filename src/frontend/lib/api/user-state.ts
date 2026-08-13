@@ -43,6 +43,42 @@ export async function saveReadsApi(
 	});
 }
 
+// ── Drafts (per-user unsent composer text, synced across devices) ──
+
+export interface RemoteDraft {
+	text: string;
+	updatedAt: string;
+}
+
+export async function fetchDrafts(
+	user: string,
+): Promise<Record<string, RemoteDraft>> {
+	const body = await request<{ drafts?: Record<string, RemoteDraft> }>(
+		`/drafts?user=${encodeURIComponent(user)}`,
+		{ label: "Failed to fetch drafts" },
+	);
+	return body?.drafts && typeof body.drafts === "object" ? body.drafts : {};
+}
+
+/** Store one session's draft (empty text deletes it). `applied` comes back
+ *  false when the server holds a newer copy, which is then in `draft`. */
+export async function saveDraftApi(
+	user: string,
+	sessionId: string,
+	text: string,
+	updatedAt: string,
+): Promise<{ draft: RemoteDraft | null; applied: boolean }> {
+	const body = await request<{ draft?: RemoteDraft | null; applied?: boolean }>(
+		"/drafts",
+		{
+			method: "PUT",
+			body: { user, sessionId, text, updatedAt },
+			label: "Failed to save draft",
+		},
+	);
+	return { draft: body?.draft ?? null, applied: body?.applied !== false };
+}
+
 // ── UI prefs (per-user cross-device view preferences) ──
 
 export async function fetchUiPrefs(

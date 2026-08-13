@@ -4,6 +4,7 @@ import { statePath } from "./paths";
 import { existsSync } from "fs";
 import { slackIdToFirstName } from "./shared/user-mappings";
 import { isArchivedId, getArchiveReason } from "./archive";
+import { purgeDraftsForSessions } from "./drafts";
 import { getTitleOverride } from "./title-overrides";
 import { getStatusOverride } from "./status-overrides";
 import { getReviewRequest } from "./review-requests";
@@ -1216,4 +1217,6 @@ export function deleteSession(session: UnifiedSession): void {
       break;
     }
   }
+  // Nobody's unsent draft should outlive the session it was typed into.
+  purgeDraftsForSessions([session.id, ...(session.aliasIds || [])]);
 }

@@ -8,7 +8,21 @@
  * state can't carry a draft across. sessionStorage is a best-effort mirror so a
  * tab reload keeps the draft too; writes are debounced because images ride
  * along as multi-MB `data:` URLs and drafts are saved on every keystroke.
+ *
+ * Session drafts (`session:<id>` keys) also sync to the server per user
+ * (src/server/drafts.ts), so text typed on the phone is here when you sit down
+ * at the browser, and the sidebar pencil shows up on both. Only the text
+ * travels: staged images stay on the device that staged them.
+ *
+ * The rule for whose copy wins is a dirty check, not a timestamp race. A key
+ * whose text still equals what we last agreed with the server is clean, and
+ * the server copy replaces it (including a deletion, which is what makes the
+ * pencil clear here after you send the message on your phone). A key you have
+ * typed into since is dirty: it stays, and gets pushed.
  */
+import { fetchDrafts, saveDraftApi } from "./api";
+import { reconcileDrafts } from "./drafts-sync";
+import { getCurrentUser } from "../components/UserPicker";
 import type { FileAttachment } from "./images";
 
 export interface ComposerDraft {
@@ -19,10 +33,13 @@ export interface ComposerDraft {
 
 const EMPTY: ComposerDraft = { text: "", images: [], files: [] };
 const drafts = new Map<string, ComposerDraft>();
+/** Text last confirmed by the server. Persisted beside each local draft so a
+ * reload can distinguish offline typing from text already sent elsewhere. */
+const syncedText = new Map<string, string>();
 
-// Fired only when a draft appears or disappears (never per keystroke — that
-// would re-render every subscriber, e.g. the whole sidebar, while typing).
-// Drives the "unsent draft" pencil indicators.
+// Fired when a draft appears/disappears, or remote text changes. Local
+// keystrokes only emit on the presence edge, so the sidebar never re-renders
+// per character; remote changes need an event so a mounted composer can adopt.
 const CHANGE_EVENT = "backstage-drafts-changed";
 
 function emit() {
@@ -59,7 +76,10 @@ function persistNow(key: string) {
       sessionStorage.removeItem(SS_PREFIX + key);
       return;
     }
-    const json = JSON.stringify(d);
+    const json = JSON.stringify({
+      ...d,
+      ...(syncedText.has(key) ? { syncedText: syncedText.get(key) } : {}),
+    });
     if (json.length > MAX_PERSIST_BYTES) sessionStorage.removeItem(SS_PREFIX + key);
     else sessionStorage.setItem(SS_PREFIX + key, json);
   } catch {
@@ -102,16 +122,23 @@ export function loadDraft(key: string): ComposerDraft {
         files: Array.isArray(parsed?.files) ? parsed.files : [],
       };
       drafts.set(key, d);
+      if (typeof parsed?.syncedText === "string") {
+        syncedText.set(key, parsed.syncedText);
+      }
       return d;
     }
   } catch {}
   return EMPTY;
 }
 
-/** Merge a partial update into the stored draft; an all-empty result deletes it. */
-export function saveDraft(key: string, patch: Partial<ComposerDraft>): void {
+/** Store `next` locally (an empty draft deletes the entry). */
+function writeLocal(
+  key: string,
+  next: ComposerDraft,
+  opts?: { notifyText?: boolean },
+): void {
   const had = !isEmpty(loadDraft(key));
-  const next = { ...loadDraft(key), ...patch };
+  const previousText = loadDraft(key).text;
   const has = !isEmpty(next);
   if (has) {
     drafts.set(key, next);
@@ -128,7 +155,14 @@ export function saveDraft(key: string, patch: Partial<ComposerDraft>): void {
       sessionStorage.removeItem(SS_PREFIX + key);
     } catch {}
   }
-  if (had !== has) emit();
+  if (had !== has || (opts?.notifyText && previousText !== next.text)) emit();
+}
+
+/** Merge a partial update into the stored draft; an all-empty result deletes it. */
+export function saveDraft(key: string, patch: Partial<ComposerDraft>): void {
+  const before = loadDraft(key).text;
+  writeLocal(key, { ...loadDraft(key), ...patch });
+  if (loadDraft(key).text !== before) markEdited(key);
 }
 
 export function clearDraft(key: string): void {
@@ -139,5 +173,194 @@ export function clearDraft(key: string): void {
   try {
     sessionStorage.removeItem(SS_PREFIX + key);
   } catch {}
-  if (had) emit();
+  syncedText.delete(key);
+  if (had) {
+    emit();
+    // Sending or clearing is the one change worth telling the other device
+    // about right away: it's what takes the pencil off the row over there.
+    markEdited(key, { immediate: true });
+  }
+}
+
+// ── Server sync (session composers only) ────────────────────────────────
+
+const SESSION_PREFIX = "session:";
+/** The text we last agreed on with the server, per key. A key whose current
+ *  text differs is dirty: it was typed here and the server copy must not
+ *  replace it. */
+/** When this device last touched the text, so the server can refuse a device
+ *  that wakes up holding an older copy. */
+const editedAt = new Map<string, string>();
+const pushTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const attemptedText = new Map<string, string>();
+const PUSH_DEBOUNCE_MS = 800;
+let hydratedFor: string | null = null;
+let hydrateVersion = 0;
+let hydrateRetry: ReturnType<typeof setTimeout> | undefined;
+
+function sessionIdOf(key: string): string | null {
+  return key.startsWith(SESSION_PREFIX) ? key.slice(SESSION_PREFIX.length) : null;
+}
+
+function pushNow(key: string): void {
+  clearTimeout(pushTimers.get(key));
+  pushTimers.delete(key);
+  const id = sessionIdOf(key);
+  if (!id) return;
+  const text = loadDraft(key).text;
+  const at = editedAt.get(key) || new Date().toISOString();
+  const user = getCurrentUser();
+  attemptedText.set(key, text);
+  saveDraftApi(user, id, text, at)
+    .then((result) => {
+      // Refused as older than the stored copy: leave this key dirty rather
+      // than adopting the server's text under someone's cursor. The next
+      // keystroke carries a newer stamp and wins.
+      if (getCurrentUser() !== user) return;
+      if (attemptedText.get(key) === text) attemptedText.delete(key);
+      if (result.applied && loadDraft(key).text === text) {
+        syncedText.set(key, text);
+        schedulePersist(key);
+      }
+    })
+    .catch(() => {
+      if (getCurrentUser() === user && attemptedText.get(key) === text) {
+        attemptedText.delete(key);
+      }
+    });
+}
+
+/** Text changed locally: stamp it and schedule (or force) the push. */
+function markEdited(key: string, opts?: { immediate?: boolean }): void {
+  if (!sessionIdOf(key)) return;
+  editedAt.set(key, new Date().toISOString());
+  if (opts?.immediate) {
+    pushNow(key);
+    return;
+  }
+  clearTimeout(pushTimers.get(key));
+  pushTimers.set(key, setTimeout(() => pushNow(key), PUSH_DEBOUNCE_MS));
+}
+
+/** Adopt the server's text for a clean key, keeping any staged attachments. */
+function applyRemote(key: string, text: string): void {
+  syncedText.set(key, text);
+  writeLocal(key, { ...loadDraft(key), text }, { notifyText: true });
+  editedAt.delete(key);
+}
+
+async function hydrate(user: string): Promise<void> {
+  const version = ++hydrateVersion;
+  let server: Record<string, { text: string; updatedAt: string }>;
+  try {
+    server = await fetchDrafts(user);
+  } catch {
+    clearTimeout(hydrateRetry);
+    hydrateRetry = setTimeout(() => {
+      if (getCurrentUser() === user && hydratedFor !== user) void hydrate(user);
+    }, 5_000);
+    return;
+  }
+  // A newer hydrate (or a user switch) started while this one was in flight.
+  if (version !== hydrateVersion || getCurrentUser() !== user) return;
+  clearTimeout(hydrateRetry);
+  hydrateRetry = undefined;
+  hydratedFor = user;
+
+  const storedKeys = new Set<string>();
+  try {
+    for (let index = 0; index < sessionStorage.length; index++) {
+      const storageKey = sessionStorage.key(index);
+      if (storageKey?.startsWith(SS_PREFIX + SESSION_PREFIX)) {
+        storedKeys.add(storageKey.slice(SS_PREFIX.length));
+      }
+    }
+  } catch {}
+  const local: Record<string, string> = {};
+  for (const key of [...drafts.keys(), ...syncedText.keys(), ...storedKeys]) {
+    if (sessionIdOf(key)) local[key] = loadDraft(key).text;
+  }
+  for (const action of reconcileDrafts(
+    server,
+    {
+      local,
+      synced: Object.fromEntries([...syncedText, ...attemptedText]),
+    },
+    (id) => SESSION_PREFIX + id,
+  )) {
+    if (action.kind === "adopt") applyRemote(action.key, action.text);
+    else if (action.kind === "agree") {
+      syncedText.set(action.key, action.text);
+      schedulePersist(action.key);
+    }
+    else pushNow(action.key);
+  }
+  // Keys the server dropped and we no longer hold are settled: stop tracking
+  // them so the map doesn't grow for the life of the tab.
+  for (const key of [...syncedText.keys()]) {
+    if (!loadDraft(key).text && !server[key.slice(SESSION_PREFIX.length)]) {
+      syncedText.delete(key);
+    }
+  }
+}
+
+/** Forget every session draft held for the previous user (they are that
+ *  person's unsent writing, not the new user's). */
+function dropSessionDrafts(): void {
+  let changed = false;
+  for (const key of [...drafts.keys()]) {
+    if (!sessionIdOf(key)) continue;
+    if (!isEmpty(loadDraft(key))) changed = true;
+    clearTimeout(pushTimers.get(key));
+    pushTimers.delete(key);
+    drafts.delete(key);
+    clearTimeout(timers.get(key));
+    timers.delete(key);
+    try {
+      sessionStorage.removeItem(SS_PREFIX + key);
+    } catch {}
+  }
+  try {
+    for (let index = sessionStorage.length - 1; index >= 0; index--) {
+      const key = sessionStorage.key(index);
+      if (key?.startsWith(SS_PREFIX + SESSION_PREFIX)) sessionStorage.removeItem(key);
+    }
+  } catch {}
+  syncedText.clear();
+  attemptedText.clear();
+  editedAt.clear();
+  if (changed) emit();
+}
+
+function rehydrateForCurrentUser(): void {
+  clearTimeout(hydrateRetry);
+  hydrateRetry = undefined;
+  hydratedFor = null;
+  dropSessionDrafts();
+  void hydrate(getCurrentUser());
+}
+
+if (
+  typeof window !== "undefined" &&
+  typeof window.addEventListener === "function"
+) {
+  void hydrate(getCurrentUser());
+  window.addEventListener("opensession-user-changed", rehydrateForCurrentUser);
+  window.addEventListener("storage", (event) => {
+    if (event.key === "opensession-user" || event.key === "backstage-user") {
+      rehydrateForCurrentUser();
+    }
+  });
+  // Coming back to a tab that sat in the background: pick up what was typed
+  // (or sent) on the other device while it was away.
+  document.addEventListener?.("visibilitychange", () => {
+    if (document.visibilityState === "visible") void hydrate(getCurrentUser());
+  });
+  window.setInterval(() => {
+    if (document.visibilityState === "visible") void hydrate(getCurrentUser());
+  }, 30_000);
+  // Don't let the debounce eat the last keystrokes when the tab goes away.
+  window.addEventListener("pagehide", () => {
+    for (const key of [...pushTimers.keys()]) pushNow(key);
+  });
 }

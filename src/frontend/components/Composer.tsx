@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { ModelOption, FileMention, ProviderAccountOption } from "../lib/api";
 import { splitAttachments, imageFilesFromPaste, type FileAttachment } from "../lib/images";
-import { loadDraft, saveDraft } from "../lib/drafts";
+import { loadDraft, onDraftsChanged, saveDraft } from "../lib/drafts";
 import {
   composerHighlightHtml,
   needsComposerHighlight,
@@ -460,6 +460,22 @@ export function Composer({
   useEffect(() => {
     if (!isControlled && draftKey) saveDraft(draftKey, { text: innerValue });
   }, [isControlled, draftKey, innerValue]);
+  // Drafts can also arrive from another device. Never replace text under a
+  // live cursor; hold it until blur, then apply it only if it is still the
+  // server-backed copy (a later local keystroke has already won otherwise).
+  const pendingRemoteText = useRef<string | null>(null);
+  useEffect(() => {
+    if (isControlled || !draftKey) return;
+    return onDraftsChanged(() => {
+      const stored = loadDraft(draftKey).text;
+      if (document.activeElement === textareaRef.current) {
+        pendingRemoteText.current = stored;
+        return;
+      }
+      pendingRemoteText.current = null;
+      setInnerValue((current) => (current === stored ? current : stored));
+    });
+  }, [isControlled, draftKey, textareaRef]);
   // One-shot prefill (see the prop doc): each new seq folds the given text
   // into the draft and focuses the field for immediate editing.
   const prefillSeqRef = useRef(0);
@@ -1054,6 +1070,11 @@ export function Composer({
             onFocus={() => setFocused(true)}
             onBlur={() => {
               setFocused(false);
+              const remote = pendingRemoteText.current;
+              pendingRemoteText.current = null;
+              if (remote !== null && (!draftKey || loadDraft(draftKey).text === remote)) {
+                setInnerValue((current) => (current === remote ? current : remote));
+              }
               // Let a click on a suggestion (mousedown) win the race first.
               setTimeout(mentions.close, 120);
             }}

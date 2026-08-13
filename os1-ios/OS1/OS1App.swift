@@ -112,6 +112,7 @@ struct RootView: View {
                     await PinStore.shared.hydrate()
                     await LaneStore.shared.hydrate()
                     await ReadsStore.shared.hydrate()
+                    await DraftsStore.shared.hydrate()
                     try? await Task.sleep(for: .seconds(30))
                 }
             }
@@ -121,6 +122,8 @@ struct RootView: View {
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active {
                     GitHubSignIn.shared.nudge()
+                } else {
+                    DraftsStore.shared.flushAll()
                 }
             }
             #if os(iOS)

@@ -6,10 +6,11 @@
  * next handler (see routes/index.ts for the dispatch order).
  */
 
-import type { RouteContext } from "./context";
+import { requestUser, type RouteContext } from "./context";
 import { frontend } from "../frontend-build";
 import { getPins as getUserPins, setPins as setUserPins } from "../pins";
 import { getReads as getUserReads, setReads as setUserReads } from "../reads";
+import { getDrafts, upsertDraft } from "../drafts";
 import { addSessionMemory, describeScope, forgetSessionMemory, listAllMemory, updateMemoryEntry } from "../session-memory";
 import { getLanes as getUserLanes, setLanes as setUserLanes } from "../lanes";
 import { getSnoozes as getUserSnoozes, setSnoozes as setUserSnoozes } from "../snoozes";
@@ -260,6 +261,41 @@ export async function handlePrefsRoutes(
 			);
 		}
 		return Response.json({ reads: setUserReads(body.user, body.reads) });
+	}
+
+	// ── Per-user unsent composer drafts ──
+	// Text typed into a session's composer but not sent, so it follows you
+	// between the browser and the phone (src/server/drafts.ts). Unlike the
+	// stores above this is private writing, so the user comes from the
+	// verified sign-in identity when there is one and a `user` param claiming
+	// someone else is ignored. Writes are one session at a time: a whole-map
+	// PUT from a client that hadn't loaded yet would wipe the other device's
+	// drafts.
+	if (path === "/api/drafts" && req.method === "GET") {
+		const user = requestUser(ctx, url.searchParams.get("user")) || "Anonymous";
+		return Response.json({ drafts: getDrafts(user) });
+	}
+
+	if (path === "/api/drafts" && req.method === "PUT") {
+		const body = await req.json().catch(() => null);
+		if (
+			!body ||
+			typeof body.sessionId !== "string" ||
+			!body.sessionId ||
+			typeof body.text !== "string"
+		) {
+			return Response.json(
+				{ error: "sessionId (string) and text (string) are required" },
+				{ status: 400 },
+			);
+		}
+		const user = requestUser(ctx, body.user) || "Anonymous";
+		const updatedAt =
+			typeof body.updatedAt === "string" && body.updatedAt
+				? body.updatedAt
+				: new Date().toISOString();
+		const result = upsertDraft(user, body.sessionId, body.text, updatedAt);
+		return Response.json(result);
 	}
 
 	// ── Per-user UI prefs (cross-device view preferences, e.g. the turn-

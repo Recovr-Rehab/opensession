@@ -9,6 +9,17 @@ extension Notification.Name {
 /// the session client and needs every HTTP verb plus query construction.
 @MainActor
 enum SettingsAPI {
+    struct Connection: Equatable, Sendable {
+        let baseURL: URL
+        let token: String
+
+        static func current() -> Connection? {
+            let config = ServerConfig.shared
+            guard let baseURL = config.baseURL, config.isConfigured else { return nil }
+            return Connection(baseURL: baseURL, token: config.token)
+        }
+    }
+
     private struct ServerError: Decodable { var error: String? }
 
     // MARK: - Automations
@@ -179,6 +190,40 @@ enum SettingsAPI {
         let body: [String: Any] = ["user": user, "reads": reads]
         let response: Response = try await request("/api/reads", method: "PUT", body: body)
         return response.reads ?? reads
+    }
+
+    /// Per-user unsent composer drafts, shared with the web composer (session
+    /// id → the text typed but not sent). Written one session at a time, never
+    /// as a whole map: a client that pushed its map before loading would wipe
+    /// what was typed on the other device (src/server/drafts.ts).
+    static func drafts(user: String) async throws -> [String: RemoteDraft] {
+        struct Response: Decodable, Sendable { var drafts: [String: RemoteDraft]? }
+        let response: Response = try await request("/api/drafts", query: ["user": user])
+        return response.drafts ?? [:]
+    }
+
+    /// Store one session's draft; empty text deletes it. `applied` comes back
+    /// false when the server holds a newer copy, which is then in `draft`.
+    @discardableResult
+    static func saveDraft(
+        user: String,
+        sessionId: String,
+        text: String,
+        updatedAt: String,
+        connection: Connection? = nil
+    ) async throws -> DraftUpsert {
+        let body: [String: Any] = [
+            "user": user,
+            "sessionId": sessionId,
+            "text": text,
+            "updatedAt": updatedAt,
+        ]
+        return try await request(
+            "/api/drafts",
+            method: "PUT",
+            body: body,
+            connection: connection
+        )
     }
 
     static func personalPrompt(user: String) async throws -> String {
@@ -416,10 +461,13 @@ enum SettingsAPI {
         _ path: String,
         method: String = "GET",
         query: [String: String] = [:],
-        body: [String: Any]? = nil
+        body: [String: Any]? = nil,
+        connection: Connection? = nil
     ) async throws -> T {
-        let config = ServerConfig.shared
-        guard let base = config.baseURL, config.isConfigured else { throw OS1API.APIError.notConfigured }
+        guard let resolved = connection ?? Connection.current() else {
+            throw OS1API.APIError.notConfigured
+        }
+        let base = resolved.baseURL
         guard var components = URLComponents(string: base.absoluteString + path) else {
             throw OS1API.APIError.badURL
         }
@@ -428,7 +476,8 @@ enum SettingsAPI {
         }
         guard let url = components.url else { throw OS1API.APIError.badURL }
 
-        var request = config.authorizedRequest(url)
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(resolved.token)", forHTTPHeaderField: "Authorization")
         request.httpMethod = method
         if let body {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
