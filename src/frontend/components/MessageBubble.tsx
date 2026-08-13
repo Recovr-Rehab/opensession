@@ -3,6 +3,7 @@ import type { TranscriptEntry } from "../lib/types";
 import { renderMarkdown } from "../lib/markdown";
 import { MarkdownBody, useMarkdownRepo } from "./MarkdownBody";
 import { classifyEntry } from "@tellahq/opensession-protocol/notices";
+import type { NoticeIcon as NoticeIconName } from "@tellahq/opensession-protocol/notices";
 import { useCurrentUser } from "./UserPicker";
 import { Tooltip } from "../ui/tooltip";
 import { Button } from "../ui/button";
@@ -207,7 +208,7 @@ function NoticeRow({
 				data-tone={notice.tone}
 				role={isError ? "alert" : undefined}
 			>
-				{toned && <NoticeGlyph />}
+				{toned ? <NoticeGlyph /> : <NoticeIcon icon={notice.icon} />}
 				{collapsible ? (
 					<button
 						type="button"
@@ -249,6 +250,55 @@ function NoticeRow({
 		</div>
 	);
 }
+
+/**
+ * What a neutral status line wears in place of the emoji it used to open with:
+ * a merged PR, a finished deploy, a completed workflow. The server names the
+ * state (`notice.icon`) and this draws it, so the sentence stays plain text.
+ *
+ * Hand-drawn at the pill's scale rather than taken from `icons.tsx`: that set
+ * floors at 20px on purpose, which is nearly twice this 11px line. Same 12px
+ * box and 2.2 stroke as NoticeGlyph beside it, and inline rather than a flex
+ * child so a one-line notice stays centered.
+ */
+function NoticeIcon({ icon }: { icon?: NoticeIconName }) {
+	const path = NOTICE_ICON_PATHS[icon ?? ""];
+	if (!path) return null;
+	return (
+		<svg
+			className="mr-1.5 inline-block align-[-0.13em] text-dim"
+			width="12"
+			height="12"
+			viewBox="0 0 24 24"
+			fill="none"
+			stroke="currentColor"
+			strokeWidth="2.2"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			aria-hidden="true"
+		>
+			{path}
+		</svg>
+	);
+}
+
+const NOTICE_ICON_PATHS: Record<string, React.ReactNode> = {
+	merge: (
+		<>
+			<circle cx="18" cy="18" r="3" />
+			<circle cx="6" cy="6" r="3" />
+			<path d="M6 21V9a9 9 0 0 0 9 9" />
+		</>
+	),
+	deploy: (
+		<>
+			<circle cx="12" cy="12" r="9.5" />
+			<path d="M12 16.5V8" />
+			<path d="m8.2 11.8 3.8-3.8 3.8 3.8" />
+		</>
+	),
+	done: <path d="M20 6 9 17l-5-5" />,
+};
 
 /** Triangle-alert glyph for a toned notice; inherits the pill's colour. */
 function NoticeGlyph() {

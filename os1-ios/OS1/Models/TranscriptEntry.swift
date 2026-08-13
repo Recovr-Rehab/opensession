@@ -125,6 +125,11 @@ struct EntryNotice: Decodable, Equatable, Sendable {
     /// the title is the whole notice.
     let body: String?
     let link: Link?
+    /// A quiet state mark on an `info` notice: "merge", "deploy", "done".
+    /// These lines used to open with an emoji of their own; the server strips
+    /// it and names the state instead, so each client draws it in its own
+    /// icon set. An unknown name renders as plain text.
+    let icon: String?
 
     struct Link: Decodable, Equatable, Sendable {
         let label: String
@@ -133,4 +138,15 @@ struct EntryNotice: Decodable, Equatable, Sendable {
 
     var showsBodyInline: Bool { body == "inline" }
     var isCollapsible: Bool { body == "collapsed" }
+
+    /// The SF Symbol for `icon`. `tone.symbol` outranks it: a warning says
+    /// more than a merge mark, and only one glyph fits the line.
+    var iconSymbol: String? {
+        switch icon {
+        case "merge": "arrow.triangle.merge"
+        case "deploy": "arrow.up.circle"
+        case "done": "checkmark"
+        default: nil
+        }
+    }
 }

@@ -835,7 +835,8 @@ final class SessionViewModel {
             content: title,
             timestamp: ISO8601DateFormatter().string(from: .now),
             notice: EntryNotice(
-                kind: "system", title: title, tone: tone.rawValue, body: nil, link: nil
+                kind: "system", title: title, tone: tone.rawValue, body: nil, link: nil,
+                icon: nil
             )
         ))
         rebuildDisplayItems()

@@ -389,7 +389,8 @@ final class TranscriptGroupingTests: XCTestCase {
                 title: pr.map { "PR #\($0) review feedback" } ?? "PR review feedback",
                 tone: "info",
                 body: "collapsed",
-                link: nil
+                link: nil,
+                icon: nil
             )
         )
     }

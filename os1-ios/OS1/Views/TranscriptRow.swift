@@ -58,7 +58,8 @@ struct TranscriptRow: View {
                         title: entry.text,
                         tone: NoticeTone.derived(from: entry).rawValue,
                         body: nil,
-                        link: nil
+                        link: nil,
+                        icon: nil
                     ),
                     state: expansionState("notice-\(entry.id)", false)
                 )
@@ -596,7 +597,7 @@ struct NoticeRow: View {
         } else {
             VStack(spacing: 6) {
                 HStack(alignment: .firstTextBaseline, spacing: 5) {
-                    if let symbol = tone.symbol {
+                    if let symbol = tone.symbol ?? notice.iconSymbol {
                         Image(systemName: symbol)
                             .font(.caption2)
                     }

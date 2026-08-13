@@ -261,10 +261,50 @@ describe("classifyEntry", () => {
 		});
 	});
 
-	it("keeps a short GitHub status as a title-only notice", () => {
+	it("keeps a short GitHub status as a title-only notice, without its emoji", () => {
 		const c = classifyEntry(entry({ content: "[GitHub] 🔀 merged" }));
-		expect(c.notice).toMatchObject({ kind: "system", title: "🔀 merged" });
+		expect(c.notice).toMatchObject({ kind: "system", title: "merged" });
 		expect(c.notice?.body).toBeUndefined();
+	});
+
+	it("gives merge and deploy notices an icon instead of a leading emoji", () => {
+		const merged = classifyEntry(
+			entry({
+				content:
+					'[GitHub] 🔀 This session\'s PR #4921 "Collapse player controls" was just merged into main by tella-butler.',
+			}),
+		);
+		expect(merged.notice).toMatchObject({ tone: "info", icon: "merge" });
+		expect(merged.notice?.title.startsWith("This session's")).toBe(true);
+		expect(merged.content).not.toContain("🔀");
+
+		// Current wording (session-notify.ts, no emoji) classifies the same way.
+		expect(
+			classifyEntry(
+				entry({ content: '[GitHub] PR #4921 "Collapse" was merged into main by Kent.' }),
+			).notice,
+		).toMatchObject({ kind: "system", icon: "merge" });
+
+		const deployed = classifyEntry(
+			entry({ content: "[GitHub] 🚀 Deploy finished for PR #4921. The merge is live." }),
+		);
+		expect(deployed.notice).toMatchObject({ icon: "deploy" });
+		expect(deployed.notice?.title.startsWith("Deploy finished")).toBe(true);
+	});
+
+	it("strips a workflow notice's emoji and keeps the outcome in tone and icon", () => {
+		const done = classifyEntry(
+			entry({ content: '<!--os:workflow-notice-->✅ Workflow "nightly" finished (wf-1)' }),
+		);
+		expect(done.notice).toMatchObject({ kind: "workflow", tone: "info", icon: "done" });
+		expect(done.notice?.title).toBe('Workflow "nightly" finished (wf-1)');
+
+		const failed = classifyEntry(
+			entry({ content: '<!--os:workflow-notice-->⚠️ Workflow "nightly" failed (wf-1)' }),
+		);
+		expect(failed.notice).toMatchObject({ kind: "workflow", tone: "warn" });
+		expect(failed.notice?.icon).toBeUndefined();
+		expect(failed.notice?.title).toBe('Workflow "nightly" failed (wf-1)');
 	});
 
 	it("classifies workflow, session-notice and restart deliveries", () => {

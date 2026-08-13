@@ -68,10 +68,21 @@ const WARN_PATTERNS: RegExp[] = [
   /^app update paused\b/,
   // Automatic fallback recovered the run, so this is notable but not fatal.
   /^switched .+ · (?:out of credits|hit a transient engine error)$/,
+  // A workflow run that ended badly (workflow-runner.ts). The wording used to
+  // carry its own ⚠️/⏹️, which the glyph strip below now removes, so the tone
+  // is the only thing left to say it did not finish cleanly.
+  /^workflow "[^"]*" (?:failed|cancelled|canceled|stopped|error)\b/,
 ];
 
-/** Leading glyph some notices already carry; the tone supplies its own. */
-const LEADING_GLYPH_RE = /^[\s⚠️❌🚨]+/u;
+/**
+ * Leading glyph some notices already carry. Producers reach for an emoji as a
+ * status marker (a merged PR, a finished deploy, a workflow that failed), but
+ * a transcript renders `notice.title` verbatim, so those land as emoji in the
+ * middle of the UI's own icon set. Strip them here and let the presentation
+ * say it: `tone` colours the pill and draws the alert glyph, `icon` names a
+ * real interface icon for the neutral ones.
+ */
+const LEADING_GLYPH_RE = /^[\s⚠️❌🚨✅🔀🚀🔁🔍⏹️]+/u;
 
 export function stripNoticeGlyph(content: string): string {
   return content.replace(LEADING_GLYPH_RE, "");
@@ -83,6 +94,22 @@ export function noticeTone(content: string): NoticeTone {
   if (ERROR_PATTERNS.some((re) => re.test(text))) return "error";
   if (WARN_PATTERNS.some((re) => re.test(text))) return "warn";
   return "info";
+}
+
+/**
+ * The icon a neutral status line earns, in place of the emoji it used to open
+ * with. Derived from the phrasing, like the tone above and for the same
+ * reason: the lines are free text on the wire, and the ones already persisted
+ * carry no metadata at all.
+ */
+export function noticeIcon(content: string): NoticeIcon | undefined {
+  const text = stripNoticeGlyph(content || "").toLowerCase();
+  // session-notify.ts, both merge wordings ("was merged into", and the longer
+  // "was just merged into" it used before 2026-08-11).
+  if (/\bmerged into\b/.test(text)) return "merge";
+  if (/^deploy(ment)?\b/.test(text)) return "deploy";
+  if (/^workflow "[^"]*" finished\b/.test(text)) return "done";
+  return undefined;
 }
 
 /** What produced this notice. Carried for the clients that special-case one
@@ -106,11 +133,22 @@ export type NoticeKind =
  */
 export type NoticeBody = "inline" | "collapsed";
 
+/**
+ * An interface icon for a notice that carries a state but no alarm: a merged
+ * PR, a finished deploy, a workflow that completed. An `info` notice has no
+ * tone colour to speak with, and these lines used to open with an emoji
+ * instead. Clients map the name to their own icon set; an unknown name, or
+ * none, renders as plain text.
+ */
+export type NoticeIcon = "merge" | "deploy" | "done";
+
 export interface EntryNotice {
   kind: NoticeKind;
   /** One line, always visible. Never empty. */
   title: string;
   tone: NoticeTone;
+  /** Only on `info` notices. A toned one already draws its alert glyph. */
+  icon?: NoticeIcon;
   body?: NoticeBody;
   /** At most one action, rendered at the end of the body. */
   link?: { label: string; sessionId: string };
@@ -328,6 +366,18 @@ const PARSED_NOTICES: Record<string, Omit<EntryNotice, "tone">> = {
 };
 
 /**
+ * A status line whose whole notice is its own text: the title IS the body, and
+ * the presentation is derived from the phrasing. One helper for the three
+ * branches that build one, so a runner notice, a GitHub event and a workflow
+ * result cannot drift into three different readings of the same sentence.
+ */
+function statusNotice(kind: NoticeKind, body: string): EntryNotice {
+  const tone = noticeTone(body);
+  const icon = tone === "info" ? noticeIcon(body) : undefined;
+  return { kind, title: body, tone, ...(icon ? { icon } : {}) };
+}
+
+/**
  * Tag one entry with how it should read, stripping delivery plumbing out of
  * `content` as it goes. Returns the entry unchanged (same reference) when it
  * is an ordinary message — the common case, and what keeps this cheap enough
@@ -344,15 +394,7 @@ export function classifyEntry(entry: TranscriptEntry): TranscriptEntry {
     const parsed = entry.noticeKind && PARSED_NOTICES[entry.noticeKind];
     if (parsed) return { ...entry, notice: { tone: "info", ...parsed } };
     const content = stripNoticeGlyph(entry.content);
-    return {
-      ...entry,
-      content,
-      notice: {
-        kind: "system",
-        title: content,
-        tone: noticeTone(entry.content),
-      },
-    };
+    return { ...entry, content, notice: statusNotice("system", content) };
   }
 
   if (entry.type !== "user") return entry;
@@ -386,16 +428,10 @@ export function classifyEntry(entry: TranscriptEntry): TranscriptEntry {
     };
 
   const workflow = parseWorkflowNotice(entry.content);
-  if (workflow)
-    return {
-      ...entry,
-      content: workflow.body,
-      notice: {
-        kind: "workflow",
-        title: workflow.body,
-        tone: noticeTone(workflow.body),
-      },
-    };
+  if (workflow) {
+    const body = stripNoticeGlyph(workflow.body);
+    return { ...entry, content: body, notice: statusNotice("workflow", body) };
+  }
 
   const sessionNotice = parseSessionNotice(entry.content);
   if (sessionNotice)
@@ -438,16 +474,9 @@ export function classifyEntry(entry: TranscriptEntry): TranscriptEntry {
           body: "collapsed",
         },
       };
-    // Everything else GitHub says is a short status line ("🔀 merged").
-    return {
-      ...entry,
-      content: attribution.body,
-      notice: {
-        kind: "system",
-        title: attribution.body,
-        tone: noticeTone(attribution.body),
-      },
-    };
+    // Everything else GitHub says is a short status line ("merged into main").
+    const body = stripNoticeGlyph(attribution.body);
+    return { ...entry, content: body, notice: statusNotice("system", body) };
   }
 
   return { ...entry, content: attribution.body, sender: attribution.name };
