@@ -26,7 +26,7 @@ function shortModel(model: string | undefined, models: ModelOption[]): string | 
 }
 
 const chip =
-	"inline-flex max-w-[220px] items-center gap-1 rounded-control px-1.5 py-[2px] text-[11px] font-medium text-dim transition-colors hover:bg-hover hover:text-fg";
+	"inline-flex max-w-[220px] items-center gap-1 rounded-control px-1.5 py-[2px] text-label font-medium text-dim transition-colors hover:bg-hover hover:text-fg";
 
 export function SessionRelations({
 	parent,
@@ -41,6 +41,9 @@ export function SessionRelations({
 }) {
 	const hasWorkers = !!workers && workers.length > 0;
 	if (!parent && !hasWorkers) return null;
+	const workerLabel = hasWorkers
+		? `${workers!.length} delegated worker${workers!.length > 1 ? "s" : ""}`
+		: "";
 
 	return (
 		<div className="flex items-center gap-1.5">
@@ -57,18 +60,24 @@ export function SessionRelations({
 				>
 					{/* rotated to point up-left: "this belongs to a parent above".
 					    Sized in CSS: the `size` prop floors at 20px (icons.tsx), which
-					    outweighs this chip's 11px label. */}
-					<IconArrowDownRight className="size-4 shrink-0 rotate-180" />
+					    outweighs this chip's 13px label. */}
+					<IconArrowDownRight className="size-[18px] shrink-0 rotate-180" />
 					<span className="truncate">worker of {parent.title}</span>
 				</button>
 			)}
 			{hasWorkers && (
 				<Menu.Root>
-					<Menu.Trigger className={cn(chip, "data-[popup-open]:bg-hover data-[popup-open]:text-fg")}>
-						<IconArrowDownRight className="size-4 shrink-0" />
-						<span>
-							{workers!.length} worker{workers!.length > 1 ? "s" : ""}
-						</span>
+					{/* Count only: the arrow already says "delegated to", so the word
+					    "workers" was two thirds of the chip carrying no information.
+					    The glyph and the number take that room instead, and the
+					    accessible name still spells it out. */}
+					<Menu.Trigger
+						className={cn(chip, "data-[popup-open]:bg-hover data-[popup-open]:text-fg")}
+						aria-label={workerLabel}
+						title={workerLabel}
+					>
+						<IconArrowDownRight className="size-5 shrink-0" />
+						<span className="tabular-nums">{workers!.length}</span>
 					</Menu.Trigger>
 					<Menu.Popup align="start" className="max-w-[300px]">
 						{/* GroupLabel MUST live inside a Group — bare it throws Base UI
