@@ -108,11 +108,11 @@ session's preview card. Sandboxed previews additionally write
 `<worktree>/.tunnels.env` with `PREVIEW_URL` / `PREVIEW_URL_<port>` entries
 (see [deploy/sandbox/README.md](../deploy/sandbox/README.md)).
 
-Previews inject the instance's short-lived cloud credentials (the same ones
-interactive agent runs get) into the boot, including inside user-selected
-sandboxes. A `start.sh` that needs, say, S3 access for a prebuilt-artifact
-fetch works without persisting credentials in the workspace or reusable
-snapshot.
+Previews receive a short-lived workload-identity exchange lease, never the
+instance's cloud credentials. A repository asks for an audience approved by
+the instance operator, then the cloud or service it targets exchanges the OIDC
+token under its own policy. The lease is not persisted in the workspace or a
+reusable snapshot.
 
 ## Workload identity from a sandbox
 
@@ -124,10 +124,10 @@ cloud credentials, CLI profiles, or provider-specific secrets in a sandbox:
 opensession sandbox id-token --audience https://artifacts.example.com
 ```
 
-The command is available to Open Session-managed setup, resume, preview, agent
-run, and terminal commands. It prints only the JWT, so use command substitution
-or a credential helper. `--ttl-seconds` defaults to 600 and accepts 60 through
-3600. It does not work in an ordinary host shell, and it never prompts.
+The command is available only when the operator has granted that lifecycle an
+audience. It prints only the JWT, so use command substitution or a credential
+helper. `--ttl-seconds` defaults to 600 and accepts 60 through 3600. It does
+not work in an ordinary host shell, and it never prompts.
 
 The token is signed by this instance and has standard `iss`, `aud`, `sub`,
 `iat`, `exp`, and `jti` claims. Open Session additionally supplies opaque
@@ -142,11 +142,24 @@ the immutable identity claims it trusts. Use a distinct URL or URN audience for
 each relying service. Open Session issues the identity only. AWS, GCP, Vault,
 and internal services exchange or authorize it themselves.
 
-Setup may mint a token to fetch private build artifacts. The exchange lease is
-passed only to the hook process, is not written to the workspace, and is absent
-from reusable prewarm snapshots. A session restored from a snapshot receives a
-fresh lease. Do not enable shell tracing around the command or save a token in
-the repository.
+Set `OPENSESSION_WORKLOAD_IDENTITY_GRANTS` to a JSON array to grant audiences
+by repository, lifecycle, and optionally trust profile. A grant matches only
+the fields it declares:
+
+```json
+[
+  {"repoId":"example","lifecycle":"setup","audiences":["urn:example:artifacts"]},
+  {"repoId":"example","lifecycle":"preview","trustProfile":"interactive","audiences":["urn:example:preview-read"]}
+]
+```
+
+Use separate audiences for setup artifacts, read-only previews, and any
+write-capable workflow. Do not grant the `run` lifecycle a cloud audience
+unless agent code genuinely needs it. The exchange lease is passed only to the
+hook process, is not written to the workspace, and is absent from reusable
+prewarm snapshots. A session restored from a snapshot receives a fresh lease.
+Do not enable shell tracing around the command or save a token in the
+repository.
 
 ## preview.json — warm routes
 

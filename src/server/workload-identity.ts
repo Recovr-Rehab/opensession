@@ -41,6 +41,14 @@ export interface WorkloadIdentityContext {
 
 interface Lease extends WorkloadIdentityContext {
   expiresAt: number;
+  audiences: string[];
+}
+
+interface AudienceGrant {
+  repoId?: string;
+  lifecycle?: WorkloadLifecycle;
+  trustProfile?: "interactive" | "automation";
+  audiences: string[];
 }
 
 interface StoredKey {
@@ -138,6 +146,37 @@ function validAudience(value: unknown): value is string {
   );
 }
 
+function configuredAudiences(context: WorkloadIdentityContext): string[] {
+  const raw = process.env.OPENSESSION_WORKLOAD_IDENTITY_GRANTS;
+  if (!raw) return [];
+  let grants: unknown;
+  try {
+    grants = JSON.parse(raw);
+  } catch {
+    console.warn("[workload-identity] OPENSESSION_WORKLOAD_IDENTITY_GRANTS is not valid JSON");
+    return [];
+  }
+  if (!Array.isArray(grants)) {
+    console.warn("[workload-identity] OPENSESSION_WORKLOAD_IDENTITY_GRANTS must be a JSON array");
+    return [];
+  }
+  const allowed = new Set<string>();
+  for (const candidate of grants) {
+    if (!candidate || typeof candidate !== "object") continue;
+    const grant = candidate as Partial<AudienceGrant>;
+    if (
+      (grant.repoId && grant.repoId !== context.repoId) ||
+      (grant.lifecycle && grant.lifecycle !== context.lifecycle) ||
+      (grant.trustProfile && grant.trustProfile !== context.trustProfile) ||
+      !Array.isArray(grant.audiences)
+    ) {
+      continue;
+    }
+    for (const audience of grant.audiences) if (validAudience(audience)) allowed.add(audience);
+  }
+  return [...allowed];
+}
+
 function validTtl(value: unknown): number | null {
   if (value === undefined) return DEFAULT_TOKEN_TTL_SECONDS;
   if (!Number.isInteger(value)) return null;
@@ -203,6 +242,10 @@ async function signToken(
  * cloud credential and is deliberately not persisted into snapshots.
  */
 export function createWorkloadIdentityEnv(context: WorkloadIdentityContext): Record<string, string> {
+  const audiences = configuredAudiences(context);
+  // Identity is opt-in per workload grant. A sandbox cannot choose an
+  // arbitrary external audience merely because it is running OpenSession.
+  if (audiences.length === 0) return {};
   const token = randomUUID();
   const now = Date.now();
   const table = leases();
@@ -214,7 +257,7 @@ export function createWorkloadIdentityEnv(context: WorkloadIdentityContext): Rec
     if (!oldest) break;
     table.delete(oldest);
   }
-  table.set(token, { ...context, expiresAt: now + LEASE_TTL_MS });
+  table.set(token, { ...context, audiences, expiresAt: now + LEASE_TTL_MS });
   return {
     OPENSESSION_WORKLOAD_IDENTITY_URL: `${workloadIdentityIssuer()}/token`,
     OPENSESSION_WORKLOAD_IDENTITY_TOKEN: token,
@@ -265,6 +308,7 @@ async function token(req: Request): Promise<Response> {
     return new Response("Invalid JSON", { status: 400 });
   }
   if (!validAudience(body.audience)) return new Response("Invalid audience", { status: 400 });
+  if (!lease.audiences.includes(body.audience)) return new Response("Forbidden audience", { status: 403 });
   const ttl = validTtl(body.ttl_seconds);
   if (ttl === null) {
     return new Response(

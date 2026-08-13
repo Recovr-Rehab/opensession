@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -6,6 +6,7 @@ import { join } from "path";
 const root = mkdtempSync(join(tmpdir(), "opensession-workload-identity-"));
 const previousState = process.env.OPENSESSION_STATE_DIR;
 const previousConfig = process.env.OPENSESSION_SANDBOX_CONFIG;
+const previousGrants = process.env.OPENSESSION_WORKLOAD_IDENTITY_GRANTS;
 process.env.OPENSESSION_STATE_DIR = root;
 process.env.OPENSESSION_SANDBOX_CONFIG = join(root, "sandbox.json");
 writeFileSync(
@@ -41,10 +42,19 @@ afterAll(() => {
   else process.env.OPENSESSION_STATE_DIR = previousState;
   if (previousConfig === undefined) delete process.env.OPENSESSION_SANDBOX_CONFIG;
   else process.env.OPENSESSION_SANDBOX_CONFIG = previousConfig;
+  if (previousGrants === undefined) delete process.env.OPENSESSION_WORKLOAD_IDENTITY_GRANTS;
+  else process.env.OPENSESSION_WORKLOAD_IDENTITY_GRANTS = previousGrants;
   rmSync(root, { recursive: true, force: true });
 });
 
 describe("sandbox workload identity", () => {
+  beforeEach(() => {
+    process.env.OPENSESSION_WORKLOAD_IDENTITY_GRANTS = JSON.stringify([
+      { repoId: "fusion", lifecycle: "setup", audiences: ["urn:test:artifacts"] },
+      { repoId: "fusion", lifecycle: "run", audiences: ["urn:test:run"] },
+    ]);
+  });
+
   test("publishes discovery and a matching RS256 JWKS", async () => {
     const response = await identity.handleWorkloadIdentityRequest(
       new Request("https://identity.example.test/workload-identity/.well-known/openid-configuration"),
@@ -109,6 +119,7 @@ describe("sandbox workload identity", () => {
       sandboxId: "sbx-revoke",
       provider: "modal",
       lifecycle: "run",
+      repoId: "fusion",
     });
     const malformed = await identity.handleWorkloadIdentityRequest(
       new Request(env.OPENSESSION_WORKLOAD_IDENTITY_URL, {
@@ -118,6 +129,14 @@ describe("sandbox workload identity", () => {
       }),
     );
     expect(malformed?.status).toBe(400);
+    const forbidden = await identity.handleWorkloadIdentityRequest(
+      new Request(env.OPENSESSION_WORKLOAD_IDENTITY_URL, {
+        method: "POST",
+        headers: { authorization: `Bearer ${env.OPENSESSION_WORKLOAD_IDENTITY_TOKEN}` },
+        body: JSON.stringify({ audience: "urn:test:forbidden" }),
+      }),
+    );
+    expect(forbidden?.status).toBe(403);
     identity.revokeWorkloadIdentityForSandbox("sbx-revoke");
     const revoked = await identity.handleWorkloadIdentityRequest(
       new Request(env.OPENSESSION_WORKLOAD_IDENTITY_URL, {
@@ -127,5 +146,15 @@ describe("sandbox workload identity", () => {
       }),
     );
     expect(revoked?.status).toBe(401);
+  });
+
+  test("does not create a lease without a matching central audience grant", () => {
+    const env = identity.createWorkloadIdentityEnv({
+      sandboxId: "sbx-no-grant",
+      provider: "box",
+      lifecycle: "preview",
+      repoId: "fusion",
+    });
+    expect(env).toEqual({});
   });
 });
