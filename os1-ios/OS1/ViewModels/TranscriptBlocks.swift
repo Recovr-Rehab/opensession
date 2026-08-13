@@ -21,6 +21,8 @@ enum TranscriptBlock: Identifiable, Equatable {
     case walkthrough(SessionWalkthrough)
     /// A team note that the agent never sees.
     case note(SessionNote)
+    /// A PR review handoff and the fix work it triggered, as one fold.
+    case reviewLoop(ReviewLoop)
 
     var id: String {
         switch self {
@@ -30,6 +32,7 @@ enum TranscriptBlock: Identifiable, Equatable {
         case .footer(let footer): footer.id
         case .walkthrough(let walkthrough): "walkthrough:\(walkthrough.publishedAt)"
         case .note(let note): "note:\(note.id)"
+        case .reviewLoop(let loop): loop.id
         }
     }
 
@@ -40,6 +43,14 @@ enum TranscriptBlock: Identifiable, Equatable {
     var anchorId: String {
         if case .work(let turn) = self { return turn.anchorId }
         return id
+    }
+
+    /// This block plus, for a review loop, everything folded inside it — so
+    /// callers that walk the transcript for content (linkable files, written
+    /// assets) still see work that a loop swallowed.
+    var flattened: [TranscriptBlock] {
+        if case .reviewLoop(let loop) = self { return [self] + loop.blocks }
+        return [self]
     }
 
     /// Every transcript entry this block renders, for anchor resolution.
@@ -53,7 +64,106 @@ enum TranscriptBlock: Identifiable, Equatable {
         // scroll anchor.
         case .walkthrough: []
         case .note: []
+        // A loop stands in for every entry it folded, so an anchor inside one
+        // resolves to the loop's row rather than to nothing.
+        case .reviewLoop(let loop): loop.blocks.flatMap(\.entryIds)
         }
+    }
+}
+
+/// A PR review handoff and the work it triggered, folded into one disclosure.
+///
+/// A review round is noisy out of proportion to what it means: the handoff
+/// itself, the fix turns, the push, then the next handoff. Closed, the loop
+/// says what it concluded; open, it reads like a worker — the same icon-led
+/// step rows, with the verdict at the end. Mirrors the web viewer's
+/// `groupReviewLoops` / `ReviewLoopBlock`.
+struct ReviewLoop: Identifiable, Equatable {
+    var id: String
+    /// The PR under review, when the handoff named one.
+    var prNumber: Int?
+    /// How many handoffs this loop swallowed — one per review round.
+    var rounds: Int
+    /// The loop is the live tail of a running session: still working.
+    var isLive: Bool
+    /// The blocks the loop folded, in transcript order — handoff notices
+    /// included, so their entries stay addressable. The view skips drawing
+    /// them: the disclosure header IS the handoff.
+    var blocks: [TranscriptBlock]
+    /// The settled verdict, on the final loop only.
+    var result: ReviewLoopResult?
+
+    /// What the closed row says. A live loop is always working, whatever
+    /// GitHub last reported about the PR.
+    var detail: String {
+        if isLive { return "Working" }
+        switch result?.status {
+        case .passed: return "Ready to merge"
+        case .failed: return "Needs changes"
+        case .pending: return "Working"
+        case nil: return roundsLabel
+        }
+    }
+
+    /// The loop has reached a verdict, so opening it can move that verdict
+    /// down to its own row and give the header the round count instead.
+    var isSettled: Bool { !isLive && result != nil && result?.status != .pending }
+
+    var roundsLabel: String { "\(rounds) round\(rounds == 1 ? "" : "s")" }
+}
+
+/// The latest GitHub facts about the PR a review loop was working on, as the
+/// loop's row shows them. Mirrors the web's `reviewLoopResult`.
+struct ReviewLoopResult: Equatable {
+    enum Status: Equatable { case pending, passed, failed }
+
+    var status: Status
+    /// 1-5: how safe the reviewer thought this was to merge.
+    var confidence: Int?
+    var checksPassed: Int?
+    var checksFailed: Int?
+    /// P0/P1 findings — what would block a merge.
+    var blocking: Int?
+
+    /// Nil unless there is an open PR with a review on it — anything else has
+    /// no verdict to report, and a row that guesses is worse than no row.
+    init?(session: Session) {
+        guard session.prNumber != nil,
+              session.prState == "OPEN",
+              let review = session.prOsReview
+        else { return nil }
+        let checks = session.prChecks
+        confidence = review.confidence
+        checksPassed = checks?.passed
+        checksFailed = checks?.failed
+        blocking = review.blocking
+
+        if review.stale == true || (checks?.pending ?? 0) > 0 {
+            status = .pending
+            return
+        }
+        let failed = (checks?.failed ?? 0) > 0
+            || session.prReviewDecision == "CHANGES_REQUESTED"
+            || review.verdict == "request_changes"
+            || (review.blocking ?? 0) > 0
+            || ((review.findings ?? 0) > 0 && (review.confidence ?? 0) < 4)
+        status = failed ? .failed : .passed
+    }
+
+    /// "2 rounds · 4/5 · 1 blocking · 3 checks passed" — the numbers behind
+    /// the verdict, in the web's order, with empty pieces dropped rather than
+    /// leaving stray separators.
+    func facts(rounds: Int) -> String {
+        var parts = ["\(rounds) round\(rounds == 1 ? "" : "s")"]
+        if let confidence { parts.append("\(confidence)/5") }
+        if let blocking, blocking > 0 { parts.append("\(blocking) blocking") }
+        if let checksFailed, checksFailed > 0 {
+            parts.append("\(checksFailed) check\(checksFailed == 1 ? "" : "s") failed")
+        }
+        if let checksPassed, checksPassed > 0 {
+            parts.append("\(checksPassed) checks passed")
+        }
+        return parts.joined(separator: " · ")
     }
 }
 
@@ -264,7 +374,8 @@ enum TranscriptGrouping {
         live: Bool,
         worktreeDir: String?,
         walkthrough: SessionWalkthrough? = nil,
-        notes: [SessionNote] = []
+        notes: [SessionNote] = [],
+        reviewResult: ReviewLoopResult? = nil
     ) -> [TranscriptBlock] {
         var blocks: [TranscriptBlock] = []
         var turn: [TurnItem] = []
@@ -358,7 +469,95 @@ enum TranscriptGrouping {
             }
             if isLast { flush(isTrailing: true) }
         }
-        return place(notes, into: place(walkthrough, into: blocks))
+        return groupReviewLoops(
+            place(notes, into: place(walkthrough, into: blocks)),
+            live: live,
+            result: reviewResult
+        )
+    }
+
+    /// A review handoff and the work it triggers form one quiet phase. A real
+    /// user message always ends it, so people never lose their own request in
+    /// a collapsed automation trail. Mirrors the web's `groupReviewLoops`.
+    private static func groupReviewLoops(
+        _ blocks: [TranscriptBlock],
+        live: Bool,
+        result: ReviewLoopResult?
+    ) -> [TranscriptBlock] {
+        guard blocks.contains(where: isReviewHandoff) else { return blocks }
+        var grouped: [TranscriptBlock] = []
+        var index = 0
+        while index < blocks.count {
+            let first = blocks[index]
+            guard isReviewHandoff(first) else {
+                grouped.append(first)
+                index += 1
+                continue
+            }
+            var loop: [TranscriptBlock] = [first]
+            var rounds = 1
+            var prNumber = handoffPrNumber(first)
+            while index + 1 < blocks.count {
+                let next = blocks[index + 1]
+                // Notes and walkthroughs have their own placement and must
+                // never vanish inside an automation disclosure.
+                if case .note = next { break }
+                if case .walkthrough = next { break }
+                // A normal user message is a new conversation phase. A second
+                // review handoff belongs to this loop and starts its next round.
+                if case .message(let entry) = next, entry.isUser, !isReviewHandoff(next) {
+                    break
+                }
+                index += 1
+                loop.append(next)
+                if isReviewHandoff(next) {
+                    rounds += 1
+                    prNumber = prNumber ?? handoffPrNumber(next)
+                }
+            }
+            grouped.append(.reviewLoop(ReviewLoop(
+                id: "review-loop:\(first.id)",
+                prNumber: prNumber,
+                rounds: rounds,
+                isLive: false,
+                blocks: loop
+            )))
+            index += 1
+        }
+
+        // A running session's trailing loop is live whatever GitHub last said
+        // about the PR; a later human turn makes an older verdict stale in
+        // spirit, so only the final loop with nothing but automation after it
+        // reports one.
+        let lastLoop = grouped.lastIndex { if case .reviewLoop = $0 { true } else { false } }
+        guard let lastLoop else { return grouped }
+        let interrupted = grouped[(lastLoop + 1)...].contains { block in
+            if case .message(let entry) = block { return entry.isUser }
+            return false
+        }
+        guard case .reviewLoop(var loop) = grouped[lastLoop] else { return grouped }
+        loop.isLive = live && lastLoop == grouped.count - 1
+        if let result, !interrupted, !loop.isLive { loop.result = result }
+        grouped[lastLoop] = .reviewLoop(loop)
+        return grouped
+    }
+
+    /// Whether this block is the GitHub-delivered review handoff that opens a
+    /// loop. The server classifies it (protocol `notices.ts`), so nothing here
+    /// re-derives it from the message text.
+    private static func isReviewHandoff(_ block: TranscriptBlock) -> Bool {
+        guard case .message(let entry) = block else { return false }
+        return entry.notice?.kind == "review-handoff"
+    }
+
+    /// The PR the handoff's title names ("PR #128 review feedback"), when it
+    /// named one — an older handoff carries no number.
+    private static func handoffPrNumber(_ block: TranscriptBlock) -> Int? {
+        guard case .message(let entry) = block,
+              let title = entry.notice?.title,
+              let range = title.range(of: "PR #[0-9]+", options: .regularExpression)
+        else { return nil }
+        return Int(title[range].dropFirst("PR #".count))
     }
 
     /// Interleave team notes by timestamp without splitting an answer from its
@@ -443,6 +642,9 @@ enum TranscriptGrouping {
         case .footer(let footer): footer.timestamp
         case .walkthrough(let walkthrough): walkthrough.publishedDate
         case .note(let note): note.date
+        // Loops are formed after placement, so this is only for completeness:
+        // a loop reads as the time of the last thing inside it.
+        case .reviewLoop(let loop): loop.blocks.last.flatMap(blockTime)
         }
     }
 

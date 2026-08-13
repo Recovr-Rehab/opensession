@@ -92,6 +92,16 @@ struct TranscriptRow: View {
                 walkthrough: walkthrough,
                 state: expansionState(block.id, false)
             )
+        case .reviewLoop(let loop):
+            // Folded by default, like the web: a settled loop's header already
+            // says what it concluded, and the rounds behind it are automation.
+            ReviewLoopView(
+                loop: loop,
+                sessionId: sessionId,
+                worktreeDir: worktreeDir,
+                state: expansionState(block.id, false),
+                expansionState: expansionState
+            )
         case .note(let note):
             SessionNoteRow(
                 note: note,

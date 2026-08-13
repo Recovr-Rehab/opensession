@@ -23,18 +23,6 @@ struct TurnBlockView: View {
     /// the row scrolling out of the lazy stack.
     let expansionState: (String, Bool) -> TurnFoldState
 
-    private enum TurnSection: Identifiable {
-        case message(TranscriptEntry)
-        case tools([ToolCallItem], kind: ToolRunKind)
-
-        var id: String {
-            switch self {
-            case .message(let entry): entry.id
-            case .tools(let items, _): "tools-\(items.first?.id ?? "empty")"
-            }
-        }
-    }
-
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -47,29 +35,6 @@ struct TurnBlockView: View {
     private var showsNotesOnly: Bool {
         guard showsMessagesWhenFolded else { return false }
         return turn.items.contains { if case .message = $0 { true } else { false } }
-    }
-
-    private var sections: [TurnSection] {
-        var sections: [TurnSection] = []
-        for item in turn.items {
-            switch item {
-            case .message(let entry):
-                sections.append(.message(entry))
-            case .tool(let call):
-                let kind = runKind(call)
-                if let last = sections.last,
-                   case .tools(let existing, let lastKind) = last,
-                   lastKind == kind,
-                   kind.groups {
-                    var tools = existing
-                    tools.append(call)
-                    sections[sections.count - 1] = .tools(tools, kind: kind)
-                } else {
-                    sections.append(.tools([call], kind: kind))
-                }
-            }
-        }
-        return sections
     }
 
     var body: some View {
@@ -86,41 +51,15 @@ struct TurnBlockView: View {
             .accessibilityHint(state.expanded ? "Hide the work" : "Show the work")
 
             if state.expanded || showsNotesOnly {
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(sections) { section in
-                        switch section {
-                        case .message(let entry):
-                            // Narration is prose to read, just like the final
-                            // answer. The fold and its indent distinguish it;
-                            // only tool rows keep the dimmed treatment.
-                            MarkdownBody(entry.text)
-                                .padding(.trailing, 16)
-                        case .tools(let calls, let kind):
-                            if state.expanded {
-                                if case .edits = kind, calls.count > 1 {
-                                    EditRunView(
-                                        items: calls,
-                                        sessionId: sessionId,
-                                        worktreeDir: worktreeDir,
-                                        state: expansionState("edits-\(calls[0].id)", expandsToolRuns),
-                                        isLive: turn.isLive,
-                                        expansionState: expansionState
-                                    )
-                                } else {
-                                    ToolRunView(
-                                        items: calls,
-                                        sessionId: sessionId,
-                                        worktreeDir: worktreeDir,
-                                        state: expansionState("run-\(calls[0].id)", expandsToolRuns),
-                                        isLive: turn.isLive,
-                                        isCompact: kind == .compact,
-                                        expansionState: expansionState
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+                TurnStepsView(
+                    items: turn.items,
+                    sessionId: sessionId,
+                    worktreeDir: worktreeDir,
+                    isLive: turn.isLive,
+                    showsTools: state.expanded,
+                    expandsToolRuns: expandsToolRuns,
+                    expansionState: expansionState
+                )
                 // The indent marks what the header can actually close, so it
                 // appears only when the fold is open. Under the "messages"
                 // preference a folded turn still shows its notes, and those
@@ -170,30 +109,6 @@ struct TurnBlockView: View {
             .padding(.leading, 6)
             .padding(.top, 8)
             .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    /// Which run, if any, a call joins. Routine calls share one compact run;
-    /// consecutive passes over one file share an edit run, keyed on the tool
-    /// and the file so a different file — or a read in between — starts a new
-    /// one. Everything else stands alone.
-    private func runKind(_ item: ToolCallItem) -> ToolRunKind {
-        guard item.assetPath == nil,
-              item.subagentId == nil,
-              // Media the agent asked to show keeps its own row, as everywhere.
-              item.result?.featuredMedia?.isEmpty != false
-        else { return .single }
-        switch item.presentation.family {
-        case .run, .file, .find, .web:
-            return .compact
-        case .edit:
-            // One file, named by the same derivation the footer's chips use —
-            // a call whose input arrived clamped has none, and keeps its row.
-            guard item.presentation.touchedFiles.count == 1 else { return .single }
-            let file = item.presentation.touchedFiles[0].path
-            return .edits(key: "\(item.presentation.canonical)\u{0}\(file)")
-        default:
-            return .single
         }
     }
 
@@ -419,6 +334,121 @@ struct TurnBlockView: View {
         }
         if turn.failureCount > 0 { parts.append("\(turn.failureCount) failed") }
         return parts.joined(separator: ", ")
+    }
+}
+
+/// The inside of a turn: its narration and its tool calls, grouped into runs.
+///
+/// Split out of `TurnBlockView` because a review loop shows the same steps
+/// without a second "Worked · N steps" header over them — the loop's own
+/// disclosure already stands for that work, and nesting one worker fold inside
+/// another makes a reader open two things to see one.
+struct TurnStepsView: View {
+    let items: [TurnItem]
+    let sessionId: String
+    var worktreeDir: String?
+    let isLive: Bool
+    /// False under the "Fold tool calls" preference with the fold shut: the
+    /// narration keeps reading as transcript while the tool runs stay away.
+    var showsTools = true
+    var expandsToolRuns = false
+    let expansionState: (String, Bool) -> TurnFoldState
+
+    private enum TurnSection: Identifiable {
+        case message(TranscriptEntry)
+        case tools([ToolCallItem], kind: ToolRunKind)
+
+        var id: String {
+            switch self {
+            case .message(let entry): entry.id
+            case .tools(let items, _): "tools-\(items.first?.id ?? "empty")"
+            }
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(sections) { section in
+                switch section {
+                case .message(let entry):
+                    // Narration is prose to read, just like the final answer.
+                    // The fold and its indent distinguish it; only tool rows
+                    // keep the dimmed treatment.
+                    MarkdownBody(entry.text)
+                        .padding(.trailing, 16)
+                case .tools(let calls, let kind):
+                    if showsTools {
+                        if case .edits = kind, calls.count > 1 {
+                            EditRunView(
+                                items: calls,
+                                sessionId: sessionId,
+                                worktreeDir: worktreeDir,
+                                state: expansionState("edits-\(calls[0].id)", expandsToolRuns),
+                                isLive: isLive,
+                                expansionState: expansionState
+                            )
+                        } else {
+                            ToolRunView(
+                                items: calls,
+                                sessionId: sessionId,
+                                worktreeDir: worktreeDir,
+                                state: expansionState("run-\(calls[0].id)", expandsToolRuns),
+                                isLive: isLive,
+                                isCompact: kind == .compact,
+                                expansionState: expansionState
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var sections: [TurnSection] {
+        var sections: [TurnSection] = []
+        for item in items {
+            switch item {
+            case .message(let entry):
+                sections.append(.message(entry))
+            case .tool(let call):
+                let kind = runKind(call)
+                if let last = sections.last,
+                   case .tools(let existing, let lastKind) = last,
+                   lastKind == kind,
+                   kind.groups {
+                    var tools = existing
+                    tools.append(call)
+                    sections[sections.count - 1] = .tools(tools, kind: kind)
+                } else {
+                    sections.append(.tools([call], kind: kind))
+                }
+            }
+        }
+        return sections
+    }
+
+    /// Which run, if any, a call joins. Routine calls share one compact run;
+    /// consecutive passes over one file share an edit run, keyed on the tool
+    /// and the file so a different file — or a read in between — starts a new
+    /// one. Everything else stands alone.
+    private func runKind(_ item: ToolCallItem) -> ToolRunKind {
+        guard item.assetPath == nil,
+              item.subagentId == nil,
+              // Media the agent asked to show keeps its own row, as everywhere.
+              item.result?.featuredMedia?.isEmpty != false
+        else { return .single }
+        switch item.presentation.family {
+        case .run, .file, .find, .web:
+            return .compact
+        case .edit:
+            // One file, named by the same derivation the footer's chips use —
+            // a call whose input arrived clamped has none, and keeps its row.
+            guard item.presentation.touchedFiles.count == 1 else { return .single }
+            let file = item.presentation.touchedFiles[0].path
+            return .edits(key: "\(item.presentation.canonical)\u{0}\(file)")
+        default:
+            return .single
+        }
     }
 }
 

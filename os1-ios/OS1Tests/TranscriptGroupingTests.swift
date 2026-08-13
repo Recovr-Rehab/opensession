@@ -374,6 +374,192 @@ final class TranscriptGroupingTests: XCTestCase {
         XCTAssertEqual(blocks.map(\.id), ["a1", "note:note-1", "a2"])
         XCTAssertTrue(blocks[1].entryIds.isEmpty)
     }
+
+    // MARK: - Review loops
+
+    /// A GitHub-delivered review handoff, as the server classifies it
+    /// (protocol `notices.ts`).
+    private func handoff(_ id: String, pr: Int?) -> TranscriptEntry {
+        TranscriptEntry(
+            id: id,
+            type: "user",
+            content: "This session's PR review found 2 things.",
+            notice: EntryNotice(
+                kind: "review-handoff",
+                title: pr.map { "PR #\($0) review feedback" } ?? "PR review feedback",
+                tone: "info",
+                body: "collapsed",
+                link: nil
+            )
+        )
+    }
+
+    private func firstLoop(in blocks: [TranscriptBlock]) -> ReviewLoop? {
+        for block in blocks {
+            if case .reviewLoop(let loop) = block { return loop }
+        }
+        return nil
+    }
+
+    func testReviewHandoffSwallowsTheFixWorkItTriggered() {
+        append([
+            TranscriptEntry(id: "u1", type: "user", content: "ship it"),
+            TranscriptEntry(id: "a1", type: "assistant", content: "Opened the PR."),
+            handoff("h1", pr: 128),
+            toolUse("t1", name: "Edit", input: [
+                "file_path": .string("/wt/a.ts"),
+                "old_string": .string("one"),
+                "new_string": .string("two"),
+            ]),
+            toolResult("t1", text: "ok"),
+            TranscriptEntry(
+                id: "a2",
+                type: "assistant",
+                content: "Addressed the findings.",
+                timestamp: "2026-01-01T00:00:10Z"
+            ),
+        ])
+
+        let blocks = viewModel.displayBlocks
+        XCTAssertEqual(blocks.count, 3, "prompt, answer, and one loop for the review")
+        guard let loop = firstLoop(in: blocks) else {
+            return XCTFail("the handoff should open a review loop")
+        }
+        XCTAssertEqual(loop.prNumber, 128)
+        XCTAssertEqual(loop.rounds, 1)
+        XCTAssertEqual(loop.detail, "1 round", "no verdict yet, so the header counts rounds")
+        XCTAssertTrue(
+            loop.blocks.contains { if case .work = $0 { true } else { false } },
+            "the fix work belongs inside the loop"
+        )
+        XCTAssertTrue(
+            loop.blocks.contains { block in
+                if case .message(let entry) = block { return entry.id == "a2" }
+                return false
+            },
+            "so does the answer the fix ended with"
+        )
+    }
+
+    func testASecondHandoffIsAnotherRoundOfTheSameLoop() {
+        append([
+            handoff("h1", pr: 128),
+            TranscriptEntry(id: "a1", type: "assistant", content: "Fixed."),
+            handoff("h2", pr: 128),
+            TranscriptEntry(id: "a2", type: "assistant", content: "Fixed again."),
+        ])
+
+        let blocks = viewModel.displayBlocks
+        XCTAssertEqual(blocks.count, 1, "both rounds read as one phase")
+        XCTAssertEqual(firstLoop(in: blocks)?.rounds, 2)
+        XCTAssertEqual(firstLoop(in: blocks)?.detail, "2 rounds")
+    }
+
+    func testAPromptEndsTheLoopSoNobodyLosesTheirOwnRequest() {
+        append([
+            handoff("h1", pr: 128),
+            TranscriptEntry(id: "a1", type: "assistant", content: "Fixed."),
+            TranscriptEntry(id: "u1", type: "user", content: "now do this instead"),
+            TranscriptEntry(id: "a2", type: "assistant", content: "Sure."),
+        ])
+
+        let blocks = viewModel.displayBlocks
+        XCTAssertEqual(blocks.count, 3, "loop, prompt, answer")
+        guard case .reviewLoop = blocks[0] else { return XCTFail("expected a loop first") }
+        guard case .message(let prompt) = blocks[1], prompt.id == "u1" else {
+            return XCTFail("the human's own request must stay outside the fold")
+        }
+    }
+
+    func testNotesStayOutsideTheLoop() {
+        let entries = [handoff("h1", pr: 7)]
+        let blocks = TranscriptGrouping.blocks(
+            from: TranscriptGrouping.displayItems(from: entries),
+            live: false,
+            worktreeDir: nil,
+            notes: [SessionNote(
+                id: "n1",
+                user: "Kent",
+                text: "looks right",
+                ts: Date.distantFuture.timeIntervalSince1970 * 1000
+            )]
+        )
+        XCTAssertEqual(blocks.count, 2, "a note has its own placement and never folds away")
+        guard case .note = blocks[1] else { return XCTFail("the note should follow the loop") }
+    }
+
+    func testATrailingLoopInARunningSessionIsLive() {
+        viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
+        append([handoff("h1", pr: 128), toolUse("t1", name: "Bash")])
+
+        guard let loop = firstLoop(in: viewModel.displayBlocks) else {
+            return XCTFail("expected a loop")
+        }
+        XCTAssertTrue(loop.isLive)
+        XCTAssertEqual(loop.detail, "Working")
+        XCTAssertFalse(loop.isSettled)
+    }
+
+    func testTheVerdictLandsOnTheLastLoopAndNotAfterANewPrompt() {
+        var session = Session(id: "bks-1")
+        session.prNumber = 128
+        session.prState = "OPEN"
+        session.prChecks = PrChecksSummary(total: 3, passed: 3, failed: 0, pending: 0)
+        session.prOsReview = OsReviewSummary(
+            verdict: "approve",
+            confidence: 5,
+            findings: 0,
+            blocking: 0,
+            stale: false
+        )
+        let entries = [handoff("h1", pr: 128), TranscriptEntry(
+            id: "a1", type: "assistant", content: "Pushed."
+        )]
+        let result = ReviewLoopResult(session: session)
+        XCTAssertEqual(result?.status, .passed)
+
+        let settled = TranscriptGrouping.blocks(
+            from: TranscriptGrouping.displayItems(from: entries),
+            live: false,
+            worktreeDir: nil,
+            reviewResult: result
+        )
+        guard let loop = firstLoop(in: settled) else { return XCTFail("expected a loop") }
+        XCTAssertEqual(loop.result?.status, .passed)
+        XCTAssertEqual(loop.detail, "Ready to merge")
+        XCTAssertTrue(loop.isSettled)
+        XCTAssertEqual(loop.result?.facts(rounds: 1), "1 round · 5/5 · 3 checks passed")
+
+        // A later human turn makes the old verdict stale in spirit, even
+        // before GitHub has observed a new push.
+        let interrupted = TranscriptGrouping.blocks(
+            from: TranscriptGrouping.displayItems(
+                from: entries + [TranscriptEntry(id: "u9", type: "user", content: "one more thing")]
+            ),
+            live: false,
+            worktreeDir: nil,
+            reviewResult: result
+        )
+        XCTAssertNil(firstLoop(in: interrupted)?.result)
+    }
+
+    func testAReviewIsPendingWhileItIsStaleOrChecksAreRunning() {
+        var session = Session(id: "bks-1")
+        session.prNumber = 1
+        session.prState = "OPEN"
+        session.prOsReview = OsReviewSummary(confidence: 4, findings: 0, blocking: 0, stale: true)
+        XCTAssertEqual(ReviewLoopResult(session: session)?.status, .pending)
+
+        session.prOsReview = OsReviewSummary(confidence: 4, findings: 0, blocking: 0, stale: false)
+        session.prChecks = PrChecksSummary(total: 2, passed: 1, failed: 0, pending: 1)
+        XCTAssertEqual(ReviewLoopResult(session: session)?.status, .pending)
+
+        session.prChecks = PrChecksSummary(total: 2, passed: 1, failed: 1, pending: 0)
+        XCTAssertEqual(ReviewLoopResult(session: session)?.status, .failed)
+
+        session.prState = "MERGED"
+        XCTAssertNil(ReviewLoopResult(session: session), "a closed PR has no loop verdict")
+    }
 }
 
 /// Session ids in agent output become links you can follow. The rewrite runs

@@ -387,10 +387,15 @@ final class SessionViewModel {
     func updateSessionSnapshot(_ session: Session) {
         guard session.id == self.session.id else { return }
         let hadWalkthrough = self.session.walkthrough
+        let hadReview = ReviewLoopResult(session: self.session)
         self.session = session
-        // The walkthrough rides on the session row, not the transcript, so a
-        // newly published one only reaches the blocks through a rebuild.
-        if session.walkthrough != hadWalkthrough { rebuildDisplayItems() }
+        // The walkthrough and the PR's review verdict ride on the session row,
+        // not the transcript, so a newly published walkthrough or a fresh
+        // review only reach the blocks through a rebuild.
+        if session.walkthrough != hadWalkthrough
+            || ReviewLoopResult(session: session) != hadReview {
+            rebuildDisplayItems()
+        }
         // The list row's usage is a snapshot from the last 5s poll, so it can
         // arrive behind the live `usage_update` the socket already delivered.
         // Take it only when it counts at least as many turns.
@@ -1534,7 +1539,8 @@ final class SessionViewModel {
             live: isRunning || isStreaming,
             worktreeDir: session.worktreeDir,
             walkthrough: session.walkthrough,
-            notes: sessionNotes
+            notes: sessionNotes,
+            reviewResult: ReviewLoopResult(session: session)
         )
         // What the transcript may link: the files this session's own tools
         // touched. Registering the set here — rather than fetching the diff —
@@ -1551,7 +1557,9 @@ final class SessionViewModel {
     /// and the Changes panel has no diff for it, so it is not linkable.
     private func linkableFilePaths() -> Set<String> {
         var paths: Set<String> = []
-        for block in displayBlocks {
+        // Flattened: work a review loop folded away is still work this session
+        // did, and prose that names one of its files must still link.
+        for block in displayBlocks.flatMap(\.flattened) {
             let touched: [TouchedFile] = switch block {
             case .work(let turn): turn.touchedFiles
             case .footer(let footer): footer.files
@@ -1572,7 +1580,7 @@ final class SessionViewModel {
     /// footer exists should still link.
     private func linkableAssetPaths() -> Set<String> {
         var paths: Set<String> = []
-        for block in displayBlocks {
+        for block in displayBlocks.flatMap(\.flattened) {
             switch block {
             case .footer(let footer):
                 paths.formUnion(footer.assets)

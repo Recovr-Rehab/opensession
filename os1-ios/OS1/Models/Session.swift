@@ -48,6 +48,9 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     var prIsDraft: Bool?
     var prReviewDecision: String?
     var prChecks: PrChecksSummary?
+    /// The last automated review of this PR, when one has run. Feeds the
+    /// transcript's review-loop verdict (`ReviewLoopResult`).
+    var prOsReview: OsReviewSummary?
     var startedBy: String?
     var createdBy: String?
     var createdByLogin: String?
@@ -176,6 +179,22 @@ struct PrChecksSummary: Decodable, Equatable, Hashable {
     var passed: Int?
     var failed: Int?
     var pending: Int?
+}
+
+/// The automated review the PR last got (`OsReviewSummary` on the server).
+/// Every field is optional here: an older server sends none of it, and a
+/// missing verdict has to read as "no verdict" rather than as a passing one.
+struct OsReviewSummary: Decodable, Equatable, Hashable {
+    /// approve | comment | request_changes.
+    var verdict: String?
+    /// 1-5: how safe the reviewer thought this was to merge.
+    var confidence: Int?
+    var findings: Int?
+    /// P0/P1 findings — what would block a merge.
+    var blocking: Int?
+    /// The branch has moved on since this verdict — it describes older code.
+    var stale: Bool?
+    var at: String?
 }
 
 extension Session {
