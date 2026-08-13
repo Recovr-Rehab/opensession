@@ -182,7 +182,7 @@ export const SIDEBAR_GROUP_HEADER_INSET =
  * step up from the desktop caption so it survives arm's-length reading.
  */
 export const SIDEBAR_LANE_HEADER =
-	"gap-[5px] pt-[9px] pb-[5px] text-[13px] font-semibold desktop:gap-[9px] desktop:pt-1 desktop:pb-1 desktop:text-[12px]";
+	"gap-[5px] pt-[9px] pb-[5px] text-[13px] font-semibold desktop:pt-1 desktop:pb-1 desktop:text-[12px]";
 
 /**
  * The heading's own name. `truncate` before any width utility: it is the pair
