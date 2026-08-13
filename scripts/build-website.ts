@@ -51,7 +51,8 @@ for (const page of ["index", "product-demo"]) {
 	if (!html) throw new Error(`${page}.html build produced no HTML entry`);
 	if (!entry) throw new Error(`${page}.html build produced no script entry`);
 	const script = `/${entry.path.split("/").pop()}`;
-	const proof = page === "index" ? "Run your coding agents" : "bks-demo-presence";
+	// Structural, not copy: a headline edit must not fail the build (it did).
+	const proof = page === "index" ? "waitlist-dialog" : "bks-demo-presence";
 	if (!(await Bun.file(entry.path).text()).includes(proof))
 		throw new Error(`${script} is not the entry for ${page}.html`);
 	const markup = (await Bun.file(html.path).text()).replace(

@@ -23,7 +23,6 @@
    and a button in the app are cut the same way. Browsers without it fall back
    to the plain radius. */
 @supports (corner-shape: squircle) {
-	.button,
 	.waitlist-dialog,
 	.waitlist-form,
 	.waitlist-form button,
@@ -220,7 +219,7 @@ button:focus-visible {
 	gap: 8px;
 	padding: 0 26px;
 	border: 1px solid transparent;
-	border-radius: 16px;
+	border-radius: 999px;
 	cursor: pointer;
 	font-size: 15px;
 	font-weight: 700;

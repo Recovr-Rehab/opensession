@@ -151,10 +151,10 @@ function LandingPage() {
 
 			<div className="hero-content page-width">
 				<div className="hero-copy">
-					<h1>Run your coding agents. Together.</h1>
+					<h1>Where your team runs its coding agents.</h1>
 					<p className="hero-description">
-						Run Claude Code, Codex and OpenCode from one place, with your team
-						in the session. Open source, on your own machines.
+						Claude Code, Codex and OpenCode, in sessions your whole team can
+						join. Open source, on your own machines.
 					</p>
 					<div className="hero-actions">
 						<button
