@@ -6,6 +6,7 @@ import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
 import { getDefaultModelPref } from "../lib/default-model-pref";
 import { getSendKeyPref, onSendKeyChanged } from "../lib/send-key-pref";
 import { insideOpenFence, isSendCombo, MOD_ENTER_GLYPH } from "../lib/send-key";
+import { isApple } from "../lib/platform";
 import { ImageThumbs } from "./ImageThumbs";
 import { FileChips } from "./FileChips";
 import { useFileMentions } from "./useFileMentions";
@@ -165,8 +166,13 @@ const MODEL_PILL = cn(
 
 /* What a create does with the view behind the palette: "open" follows the new
    session, "background" leaves you where you were, and "more" keeps the palette
-   up for the next task. */
-type CreateAction = "open" | "background" | "more";
+   up for the next task. The order is the dropdown's, so the cycle shortcut and
+   the menu step the same way. */
+const CREATE_ACTIONS = ["open", "background", "more"] as const;
+type CreateAction = (typeof CREATE_ACTIONS)[number];
+/** ⌘⌥↓ / ⌘⌥↑ (Ctrl+Alt elsewhere). Vertical rather than horizontal because
+ *  Chrome and Safari own ⌘⌥← / ⌘⌥→ for tab switching. */
+const CYCLE_SHORTCUT = isApple ? ["⌘", "⌥", "↓"] : ["Ctrl", "Alt", "↓"];
 
 /** Each label is written out per target rather than suffixed with " locally",
  *  which would read as "Create in background locally". */
@@ -535,6 +541,24 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     return () => document.removeEventListener("mousedown", onDown);
   }, [createMenuOpen]);
 
+  // Step through the Create options without leaving the prompt: the primary
+  // button's label is the feedback, and an open dropdown moves its check. Only
+  // the action group cycles — hosted vs local is a separate axis of the same
+  // menu. This rides on the dialog rather than on window because Base UI's
+  // popup stops keydown propagation before it leaves the card, which is also
+  // why it can use a chord the rest of the app is free to bind elsewhere.
+  function cycleCreateAction(e: React.KeyboardEvent) {
+    if (creating) return;
+    if (!(e.metaKey || e.ctrlKey) || !e.altKey || e.shiftKey) return;
+    const step = e.code === "ArrowDown" ? 1 : e.code === "ArrowUp" ? -1 : 0;
+    if (!step) return;
+    e.preventDefault();
+    const at = CREATE_ACTIONS.indexOf(createAction);
+    setCreateAction(
+      CREATE_ACTIONS[(at + step + CREATE_ACTIONS.length) % CREATE_ACTIONS.length],
+    );
+  }
+
   useEffect(() => {
     fetchModels(cloudTarget)
       .then((m) => {
@@ -800,6 +824,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
         variant="palette"
         className="max-h-[calc(89dvh-1rem)] max-[560px]:max-h-[calc(93dvh-1rem)]"
         aria-label="New session"
+        onKeyDown={cycleCreateAction}
         // The prompt, not the repo picker Base UI would otherwise land on as the
         // first tabbable.
         initialFocus={promptRef}
@@ -1220,6 +1245,9 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                   />
                 )}
               </button>
+              {/* The tooltip is where the cycle shortcut is taught: the caret
+                  is the only thing on screen that says these options exist. */}
+              <Tooltip label="Create options" shortcut={CYCLE_SHORTCUT}>
               <button
                 type="button"
                 className={`${CREATE_CARET} ${
@@ -1240,6 +1268,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                   size={22}
                 />
               </button>
+              </Tooltip>
               {createMenuOpen && (
                 <div className={CREATE_MENU} role="menu">
                   {auth?.local && (
