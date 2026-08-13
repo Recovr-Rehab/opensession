@@ -52,6 +52,7 @@ import {
   paletteIconBtnRound,
   palettePill,
 } from "../lib/palette-classes";
+import { tintedSurface } from "../lib/tinted-surface";
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
 import { ContextMenu, MenuShortcut } from "../ui/menu";
@@ -236,24 +237,6 @@ function composerRadius(): number {
   probe.remove();
   composerRadiusPx = Number.isFinite(px) && px > 0 ? px : 24;
   return composerRadiusPx;
-}
-
-/** The writing surface for a composer that isn't in its ordinary state: a flat
- *  tint plus a 45° hatch that fades out downwards, so the box settles into its
- *  toolbar instead of hatching all the way to the edge. One shape for every
- *  such state; the modes differ only in ink and strength.
- *  Ask mode is ambient (on for the session's whole life), so it's painted
- *  lighter than the transient modes. */
-function tintedSurface(ink: string, tint: number, hatch: number, edge: number): React.CSSProperties {
-  const flat = `color-mix(in srgb, ${ink} ${tint}%, var(--control-surface))`;
-  const stripe = `color-mix(in srgb, ${ink} ${hatch}%, transparent)`;
-  return {
-    borderColor: `color-mix(in srgb, ${ink} ${edge}%, transparent)`,
-    backgroundColor: flat,
-    backgroundImage:
-      `linear-gradient(to bottom, transparent 15%, ${flat} 72%), ` +
-      `repeating-linear-gradient(45deg, ${stripe} 0, ${stripe} 12px, transparent 12px, transparent 24px)`,
-  };
 }
 
 /** Set / update / clear the session goal — a centered dialog on the shared

@@ -36,6 +36,7 @@ import { IconTile, displayName } from "./BrandTile";
 import { AddRepoDialog } from "./AddRepoDialog";
 import { Tooltip } from "../ui/tooltip";
 import { Modal, useEnterOnMount } from "../ui/modal";
+import { tintedSurfaceParts } from "../lib/tinted-surface";
 import { cn } from "../ui/cn";
 import {
 	paletteIconBtn,
@@ -156,6 +157,24 @@ const FOOTER_ICON_BTN = cn(paletteIconBtn, "shrink-0 max-[560px]:w-9");
  *  the icon buttons' hover wash paints, so the row keeps one rhythm. */
 const ASK_BTN_ON =
 	"inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-control px-2.5 text-[12px] font-medium transition-colors bg-[color-mix(in_srgb,var(--green)_18%,transparent)] text-green hover:bg-[color-mix(in_srgb,var(--green)_26%,transparent)] disabled:cursor-default disabled:opacity-50";
+/** Ask mode paints the whole card, not just its toggle — the same thing the
+ *  session composer does for ask and for note mode, because the mode governs
+ *  everything you are about to type rather than one control in the corner.
+ *
+ *  Two pseudo-elements rather than one background on the card: the palette is
+ *  glass over a dimmed page, so the tint has to sit ON the blur and fade in and
+ *  out with it intact. `::before` is the flat tint and the edge; `::after` is
+ *  the hatch, masked so it dissolves before it reaches the toolbar. The
+ *  composer gets that dissolve for free by painting its flat tint over the
+ *  stripes, which a translucent tint cannot do. At this card's size the hatch
+ *  would otherwise run edge to edge and read as a barber pole rather than as
+ *  texture. Children are lifted above both layers, and the shell's own
+ *  `overflow-hidden` clips them to the rounded corner. */
+const ASK_SURFACE =
+	"isolate " +
+	"before:pointer-events-none before:absolute before:inset-0 before:z-0 before:rounded-[inherit] before:[corner-shape:inherit] before:border before:border-[var(--palette-ask-border)] before:bg-[var(--palette-ask-bg)] before:opacity-0 before:transition-opacity before:duration-150 before:ease-[cubic-bezier(0.32,0.72,0,1)] " +
+	"after:pointer-events-none after:absolute after:inset-0 after:z-0 after:rounded-[inherit] after:[corner-shape:inherit] after:[background-image:var(--palette-ask-hatch)] after:[mask-image:linear-gradient(to_bottom,#000_0,transparent_62%)] after:[-webkit-mask-image:linear-gradient(to_bottom,#000_0,transparent_62%)] after:opacity-0 after:transition-opacity after:duration-150 after:ease-[cubic-bezier(0.32,0.72,0,1)] " +
+	"[&>*]:relative [&>*]:z-[1]";
 /** The one flexible footer item. `[&_[data-effort]]` reaches the effort suffix
  *  inside ModelEffortSelect: on ultra-narrow screens it cedes its space to the
  *  model name, which would otherwise truncate to a single letter. */
@@ -802,6 +821,18 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   // One frame closed so the palette animates in; App mounts us already-open.
   const open = useEnterOnMount();
 
+  // Ask mode's surface: the session composer's own ask numbers, so one mode is
+  // one strength wherever you meet it. Only the base differs — mixed into
+  // `transparent` rather than an opaque colour, because the palette is glass
+  // and an opaque tint would paint the blur out. The parts are handed to the
+  // two pseudo-element layers as custom properties.
+  const askSurface = tintedSurfaceParts("var(--green)", 7, 6, 30, "transparent");
+  const askSurfaceStyle = {
+    "--palette-ask-bg": askSurface.flat,
+    "--palette-ask-hatch": askSurface.hatch,
+    "--palette-ask-border": askSurface.border,
+  } as React.CSSProperties;
+
   return (
     <Modal.Root
       open={open}
@@ -822,7 +853,12 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     >
       <Modal.Content
         variant="palette"
-        className="max-h-[calc(89dvh-1rem)] max-[560px]:max-h-[calc(93dvh-1rem)]"
+        className={cn(
+          "max-h-[calc(89dvh-1rem)] max-[560px]:max-h-[calc(93dvh-1rem)]",
+          ASK_SURFACE,
+          mode === "ask" && "before:opacity-100 after:opacity-100",
+        )}
+        style={askSurfaceStyle}
         aria-label="New session"
         onKeyDown={cycleCreateAction}
         // The prompt, not the repo picker Base UI would otherwise land on as the
@@ -976,7 +1012,12 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
             onClick={mentions.sync}
             onBlur={() => setTimeout(mentions.close, 120)}
             onPaste={handlePaste}
-            placeholder="What do you want to work on?"
+            // Ask sessions read and explain; they never touch the code. Asking
+            // "what to work on" in that mode invites a prompt the session
+            // cannot carry out.
+            placeholder={
+              mode === "ask" ? "What do you want to find out?" : "What do you want to work on?"
+            }
             disabled={creating}
           />
           <ImageThumbs images={images} onRemove={(i) => setImages((p) => p.filter((_, idx) => idx !== i))} disabled={creating} />
