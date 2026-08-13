@@ -14,10 +14,10 @@
  * that's the "you copied the link" confirmation.
  */
 
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence } from "motion/react";
 import { useSyncExternalStore } from "react";
-import { cn } from "./cn";
 import { AnimatedCheck } from "./copy";
+import { FloatingStatus } from "./floating-status";
 
 export type ToastVariant = "default" | "success" | "error";
 
@@ -120,7 +120,7 @@ export function ToastHost() {
 
 function ToastCard({ toast: t }: { toast: Toast }) {
 	return (
-		<motion.div
+		<FloatingStatus
 			layout
 			role="status"
 			aria-live="polite"
@@ -129,18 +129,7 @@ function ToastCard({ toast: t }: { toast: Toast }) {
 			exit={{ opacity: 0, y: 8, scale: 0.96 }}
 			transition={{ type: "spring", duration: 0.34, bounce: 0.22 }}
 			onClick={() => dismissToast(t.id)}
-			className={cn(
-				// The floating-surface vocabulary the menus, popovers and the
-				// scroll-to-bottom pill share: a thinned fill over a heavy blur,
-				// with the hairline coming from the shadow's own ring rather
-				// than a border. An opaque panel behind a solid `border-line-strong`
-				// read as a foreign card dropped over the page; this reads as
-				// held above it. Falls back to the opaque popup surface where
-				// backdrop-filter can't run or transparency is reduced (base.css).
-				"pointer-events-auto flex cursor-default items-center gap-2.5 rounded-lg",
-				"bg-popup-glass px-3.5 py-2.5 text-sm text-fg [backdrop-filter:var(--popup-blur)]",
-				"[--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm",
-			)}
+			className="pointer-events-auto cursor-default"
 		>
 			{t.variant === "success" && (
 				<AnimatedCheck size={17} className="shrink-0 text-green" />
@@ -153,7 +142,7 @@ function ToastCard({ toast: t }: { toast: Toast }) {
 					!
 				</span>
 			)}
-			<span className="translate-y-[0.5px] leading-tight">{t.message}</span>
-		</motion.div>
+			<span>{t.message}</span>
+		</FloatingStatus>
 	);
 }

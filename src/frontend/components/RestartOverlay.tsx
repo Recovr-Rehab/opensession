@@ -1,7 +1,8 @@
 import { BASE_PATH } from "../lib/base";
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { WSServerMessage } from "../lib/types";
 import { PRODUCT_NAME } from "../lib/brand";
+import { FloatingStatus } from "../ui/floating-status";
 import { toast } from "../ui/toast";
 
 const HEALTH_URL = `${BASE_PATH}/api/health`;
@@ -219,15 +220,14 @@ export function RestartOverlay({ connected, addHandler }: Props) {
   if (phase === "reconnecting" || phase === "restarting") {
     const restarting = phase === "restarting" || explicit.current;
     return (
-      <div
+      <FloatingStatus
         // Same floating-surface vocabulary as the scroll-to-bottom pill and the
         // toast this hands off to: glass fill, no border, hairline from the
         // shadow ring — so the restart sequence doesn't change materials
         // halfway through. The `sm` tier is the compact-control one the scroll
-        // pill uses: `md` is calibrated for a menu, and its 28px lower layer
-        // casts further below a 34px capsule than the capsule is tall, which
-        // reads as a grey halo rather than a lift.
-        className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom,0px)+14px)] left-1/2 z-[200] flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-[999px] bg-popup-glass px-3.5 py-2 text-label font-medium text-fg [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm"
+        // pill uses; `md` is calibrated for a menu and reads as a grey halo on
+        // a surface this small.
+        className="pointer-events-none fixed bottom-[calc(env(safe-area-inset-bottom,0px)+14px)] left-1/2 z-[200] -translate-x-1/2"
         role="status"
         aria-live="polite"
       >
@@ -239,7 +239,7 @@ export function RestartOverlay({ connected, addHandler }: Props) {
         <span className="text-faint">
           {restarting && restartBy ? restartBy : "Retrying"}
         </span>
-      </div>
+      </FloatingStatus>
     );
   }
 
