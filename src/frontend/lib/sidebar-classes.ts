@@ -525,9 +525,10 @@ export const SIDEBAR_WS_ACTION =
 export const SIDEBAR_WS_TIME =
 	"ml-auto min-w-[28px] flex-[0_0_auto] justify-end pr-1.5 text-right text-meta text-faint desktop:min-w-[34px] desktop:pr-1";
 
-/** Revealed on row hover. The room for the action cluster is the row's own —
- *  see {@link SIDEBAR_WS_ROW} — so this no longer carries a margin of its own. */
-export const SIDEBAR_WS_TIME_HOVER = "group-hover:inline-flex";
+/** Hidden at rest and revealed on row hover. The room for the action cluster is
+ *  the row's own (see {@link SIDEBAR_WS_ROW}), so this no longer carries a
+ *  margin of its own. Call sites that need an always-visible time omit this. */
+export const SIDEBAR_WS_TIME_HOVER = "hidden group-hover:inline-flex";
 
 /**
  * Live "in progress" elapsed ticker — it sits where the time badge would, in

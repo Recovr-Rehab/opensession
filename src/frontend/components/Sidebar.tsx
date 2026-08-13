@@ -2719,13 +2719,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						<span
 							className={cn(
 								SIDEBAR_WS_TIME,
-								SIDEBAR_WS_TIME_HOVER,
+								wsTimePref === "hover" && SIDEBAR_WS_TIME_HOVER,
 								// The "hover" mode (the default) shows the badge only under
 								// the pointer, and a running row hides the idle badge either
 								// way — its live ticker owns the resting slot. On touch there
 								// is no hover, so the hover-mode badge shows inline like
 								// "always"; a running row still keeps just its ticker.
-								(wsTimePref === "hover" || runStartMs !== null) && "hidden",
+								runStartMs !== null && "hidden",
 								wsTimePref === "hover" &&
 									runStartMs === null &&
 									"[@media(hover:none)]:inline-flex",
