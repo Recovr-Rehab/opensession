@@ -21,7 +21,7 @@ claude setup-token     # on your Max login; copy the sk-ant-… it prints
 opensession start
 ```
 
-Now **open <http://127.0.0.1:3850>**. Add your account under Settings → Accounts
+Now **open <http://127.0.0.1:3850>**. Add your account under Workspace → Models
 (paste the `sk-ant-…`, or use the ChatGPT device-code sign-in for the OpenAI
 path), then pick your repo on the home screen, write a prompt, and create the
 session. A turn that actually runs is the only proof the install works — a
@@ -280,7 +280,7 @@ on:
 claude setup-token   # on a Claude Max login; prints sk-ant-…
 ```
 
-Accounts are added in the web UI under **Settings → Accounts** — which means
+Accounts are added in the web UI under **Workspace → Models** — which means
 this step happens *after* [section 8](#8-first-run): the server has to be
 running before you can paste anything into it. Mint the token whenever you
 like, start the server, then paste it. (The same page signs in ChatGPT-plan

@@ -225,7 +225,7 @@ function GithubAuthSetupDialog({
 							Paste the client id below. Add the client secret to enable browser redirect sign-in; device-code sign-in works without it.
 						</RecipeStep>
 						<RecipeStep n={7}>
-							Enable GitHub sign-in, save, restart Open Session, then have each teammate connect under Workspace → Connections.
+							Enable GitHub sign-in, save, restart Open Session, then have each teammate connect under Personal → My accounts.
 						</RecipeStep>
 					</ol>
 				</section>

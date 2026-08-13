@@ -6,6 +6,7 @@ import { usePeople } from "../lib/people";
 import { Button } from "../ui/button";
 import { DeviceCode } from "../ui/device-code";
 import { PulseDot } from "../ui/status";
+import { LoadingState } from "../ui/state";
 
 /**
  * Mutable compatibility view for older consumers. `usePeople()` owns the
@@ -54,6 +55,7 @@ export function useCurrentUser(): string {
 export interface AuthStatus {
   required: boolean;
   authenticated: boolean;
+  admin?: boolean;
   local?: boolean;
   /** Server supports the redirect (authorization-code) sign-in. */
   redirect?: boolean;
@@ -105,25 +107,42 @@ export function UserGate({ children }: { children: React.ReactNode }) {
   const roster = usePeople();
   TEAM.splice(0, TEAM.length, ...roster.map(({ name }) => name));
   const [auth, setAuth] = useState<AuthStatus | null>(null);
+	const [authFailed, setAuthFailed] = useState(false);
+	const loadAuth = () => {
+		setAuthFailed(false);
+		fetch(`${BASE_PATH}/api/auth/status`)
+			.then((r) => {
+				if (!r.ok) throw new Error(`Authentication status failed: ${r.status}`);
+				return r.json();
+			})
+			.then((body: AuthStatus | null) => {
+				if (!body) throw new Error("Authentication status was empty");
+				setAuth(body);
+				setAuthStatusCache(body);
+				if ((body.local || body.required) && body.authenticated && body.name) {
+					const user = body.name.split(" ")[0];
+					setStoredUser(user);
+				}
+			})
+			.catch(() => setAuthFailed(true));
+	};
 
   useEffect(() => {
-    fetch(`${BASE_PATH}/api/auth/status`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((body: AuthStatus | null) => {
-        if (!body) return; // old server / fetch failed → keep the picker flow
-        setAuth(body);
-        setAuthStatusCache(body);
-        if ((body.local || body.required) && body.authenticated && body.name) {
-          const user = body.name.split(" ")[0];
-          // Always emit the user-change event after authenticated startup. The
-          // per-user sidebar caches hydrate at module load and may have raced
-          // auth/network readiness; selecting the same profile manually fixed
-          // them only because it emitted this event again.
-          setStoredUser(user);
-        }
-      })
-      .catch(() => {});
+		loadAuth();
   }, []);
+
+	if (!auth) {
+		return (
+			<div className="flex h-screen items-center justify-center bg-surface">
+				{authFailed ? (
+					<div className="text-center">
+						<p className="m-0 mb-3 text-body text-dim">Couldn't check sign-in.</p>
+						<Button size="sm" onClick={loadAuth}>Try again</Button>
+					</div>
+				) : <LoadingState>Checking sign-in…</LoadingState>}
+			</div>
+		);
+	}
 
   if (auth?.required) {
     if (auth.authenticated) return <>{children}</>;
@@ -236,7 +255,7 @@ function GithubSignIn({
         if (cancelled) return;
         if (body.status === "ok") {
           if (body.name) setStoredUser(body.name.split(" ")[0]);
-          onSignedIn({ required: true, authenticated: true, login: body.login, name: body.name });
+          onSignedIn({ required: true, authenticated: true, admin: body.admin, login: body.login, name: body.name });
           return;
         }
         if (body.status === "slow_down") intervalMs = Math.max(body.interval, 5) * 1000;

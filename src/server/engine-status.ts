@@ -113,7 +113,7 @@ export function engineStatus(): EngineStatus {
     if (!claudeAccounts) {
       return blocked(
         "No Claude accounts in the pool — the default model has nothing to run on.",
-        "On a machine logged into a Claude Max account run `claude setup-token`, then add the token under Settings → Accounts.",
+		"On a machine logged into a Claude Max account run `claude setup-token`, then add the token under Workspace → Models.",
       );
     }
     if (!claudeBin) {
@@ -127,7 +127,7 @@ export function engineStatus(): EngineStatus {
   if (provider === "codex" && !codexAccounts) {
     return blocked(
       "No ChatGPT accounts in the pool — the default model has nothing to run on.",
-      "Add one under Settings → Accounts with the ChatGPT device-code sign-in.",
+		"Add one under Workspace → Models with the ChatGPT device-code sign-in.",
     );
   }
 
@@ -149,7 +149,7 @@ export function engineStatus(): EngineStatus {
   if (!provider && !claudeAccounts && !codexAccounts && !providerKeys.length) {
     return blocked(
       `No model capacity configured for "${defaultModel}".`,
-      "Add a Claude or ChatGPT account under Settings → Accounts, or a provider API key under Settings → Model providers.",
+		"Add a Claude or ChatGPT account, or a provider API key, under Workspace → Models.",
     );
   }
 

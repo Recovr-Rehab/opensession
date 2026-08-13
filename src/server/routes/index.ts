@@ -58,6 +58,7 @@ import { handleSetupRoutes } from "./setup";
 import { handleOs1UpdateRoutes } from "./os1-update";
 import { handleInstanceSettingsRoutes } from "./instance-settings";
 import { handleLiveActivityRoutes } from "./live-activities";
+import { handleOnboardingRoutes } from "./onboarding";
 
 export type { RouteContext, RouteHandler } from "./context";
 
@@ -103,6 +104,7 @@ export const routeHandlers: RouteHandler[] = [
 	handleKeychainRoutes,
 	handleDeployRoutes,
 	handlePeopleRoutes,
+	handleOnboardingRoutes,
 	handlePrefsRoutes,
 	handleSecurityRoutes,
 	handleGoalsRoutes,
