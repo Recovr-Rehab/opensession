@@ -229,6 +229,16 @@ struct TerminalView: View {
                 } label: {
                     Label("Clear", systemImage: "eraser")
                 }
+                // Only once there is nothing to type at: a shell that ended
+                // or a connection that dropped otherwise leaves the field
+                // disabled with no way back short of leaving the panel.
+                if !isLive {
+                    Button {
+                        model.restart()
+                    } label: {
+                        Label("Start a new shell", systemImage: "arrow.clockwise")
+                    }
+                }
             } label: {
                 Image(systemName: "ellipsis.circle")
             }
@@ -236,10 +246,7 @@ struct TerminalView: View {
         }
     }
 
-    private var isLive: Bool {
-        if case .running = model.state { return true }
-        return false
-    }
+    private var isLive: Bool { model.isLive }
 
     private var canSend: Bool {
         isLive && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

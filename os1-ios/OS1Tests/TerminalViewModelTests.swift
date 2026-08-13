@@ -234,4 +234,32 @@ final class TerminalViewModelTests: XCTestCase {
         model.stop()
         XCTAssertTrue(socket.disconnected, "leaving the panel must take the shell with it")
     }
+
+    // MARK: - Recovering a dead shell
+
+    func testRestartOpensANewShellAndKeepsTheOutput() async {
+        let (model, socket) = makeModel()
+        model.start(columns: 80)
+        socket.ready()
+        socket.emit("the last thing it said\n")
+        await waitForFlush()
+        socket.onClose?("Connection lost")
+
+        XCTAssertFalse(model.isLive)
+        model.restart()
+
+        XCTAssertEqual(socket.startCount, 2, "a dropped shell is replaced, not resumed")
+        XCTAssertTrue(
+            model.plainText.contains("the last thing it said"),
+            "why the shell died is usually the reason someone is looking"
+        )
+    }
+
+    func testRestartDoesNothingWhileTheShellIsAlive() {
+        let (model, socket) = makeModel()
+        model.start(columns: 80)
+        socket.ready()
+        model.restart()
+        XCTAssertEqual(socket.startCount, 1, "a live shell must not be thrown away")
+    }
 }

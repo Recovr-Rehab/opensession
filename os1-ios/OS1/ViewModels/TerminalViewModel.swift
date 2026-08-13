@@ -76,6 +76,33 @@ final class TerminalViewModel {
         socket.disconnect()
     }
 
+    /// Whether there is a shell to type at.
+    var isLive: Bool {
+        if case .running = state { return true }
+        return false
+    }
+
+    /// Open a fresh shell after the last one exited or the connection went.
+    ///
+    /// A NEW pty, never the old one: the server ties a shell's life to the
+    /// socket that asked for it, so whatever ended it is already gone. The
+    /// scrollback stays, because what a shell printed on its way out is
+    /// usually the reason anyone is looking. Without this the panel is a dead
+    /// end on a dropped connection, with a disabled field and no way back
+    /// except leaving and coming in again.
+    func restart() {
+        guard !isLive else { return }
+        hasStarted = false
+        undecodedTail = Data()
+        state = .connecting
+        scrollback.appendNotice(
+            "Starting a new shell",
+            style: TerminalStyle(ink: .indexed(4), dim: true)
+        )
+        lines = scrollback.lines
+        start()
+    }
+
     /// The shell wraps its output at whatever width it believes it has, so a
     /// rotation has to be told. Nothing else about geometry is negotiated.
     /// A width measured before the shell opened is simply remembered, and
