@@ -1059,7 +1059,7 @@ export async function handleSessionsRoutes(
 			// Local Portals are their own detached process groups. Stop them before
 			// deleting session metadata or optionally removing the worktree.
 			if (session.runner)
-				await dropRunnerPortalRoutes(session.id, session.runner.id);
+				await dropRunnerPortalRoutes(session.id, session.runner.id, session.startedBy || undefined);
 			else if (session.worktreeDir && !session.sandbox?.sandboxId)
 				await stopAllPortalServices({ sessionId: session.id, worktreeDir: session.worktreeDir });
 			deleteSession(session);

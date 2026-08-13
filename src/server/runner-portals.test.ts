@@ -11,6 +11,7 @@ const portal = (sessionId: string): RunnerPortalRecord => ({
 	sessionId,
 	repo: "app",
 	workspacePath: `/worktrees/${sessionId}`,
+	user: "portal-owner",
 });
 
 describe("Runner Portal ownership", () => {

@@ -296,7 +296,7 @@ export async function reapOrphanedPortalServices(
 	sessions: readonly PortalOwnerSession[],
 ): Promise<PortalReapResult> {
 	const owners = new Map<string, Set<string>>();
-	const addOwner = (dir: string | undefined, sessionId: string) => {
+	const addOwner = (dir: string | null | undefined, sessionId: string) => {
 		if (!dir) return;
 		const key = canonicalDir(dir);
 		const set = owners.get(key) ?? new Set<string>();

@@ -22,6 +22,8 @@ export type RunnerPortalRecord = PortalRecord & {
 	sessionId: string;
 	repo: string;
 	workspacePath: string;
+	/** Portal authorization is user-scoped on restricted Runners. */
+	user?: string;
 };
 
 type Store = { portals: RunnerPortalRecord[] };
@@ -204,7 +206,7 @@ export async function runnerPortalPreviewStatus(session: UnifiedSession, user?: 
 
 /** Tear down every relay and Caddy allocation when a Runner session is
  * removed. Called by session lifecycle code, never by a browser request. */
-async function dropRecords(records: RunnerPortalRecord[]): Promise<void> {
+async function dropRecords(records: readonly RunnerPortalRecord[]): Promise<void> {
 	for (const record of records) {
 		const relay = relays.get(relayKey(record));
 		if (relay) { try { relay.server.stop(true); } catch {} relays.delete(relayKey(record)); }
@@ -215,14 +217,14 @@ async function dropRecords(records: RunnerPortalRecord[]): Promise<void> {
 	}
 }
 
-export async function dropRunnerPortalRoutes(sessionId: string, runnerId?: string): Promise<void> {
+export async function dropRunnerPortalRoutes(sessionId: string, runnerId?: string, user?: string): Promise<void> {
 	const records = load().portals.filter((record) => record.sessionId === sessionId && (!runnerId || record.runnerId === runnerId));
 	const stopped: RunnerPortalRecord[] = [];
 	for (const record of records) {
 		try {
 			if (record.state !== "stopped") await requestRunnerPortal(record.runnerId, {
 				sessionId: record.sessionId, repo: record.repo, workspacePath: record.workspacePath,
-				operation: "stop", payload: { name: record.name },
+				operation: "stop", user: user ?? record.user, payload: { name: record.name },
 			});
 			stopped.push(record);
 		} catch (error) {
@@ -246,7 +248,7 @@ async function dropRunnerPortalRoutesForRecords(records: readonly RunnerPortalRe
 		try {
 			if (record.state !== "stopped") await requestRunnerPortal(record.runnerId, {
 				sessionId: record.sessionId, repo: record.repo, workspacePath: record.workspacePath,
-				operation: "stop", payload: { name: record.name },
+				operation: "stop", user: record.user, payload: { name: record.name },
 			});
 		} catch (error) {
 			console.warn(`[runner-portals] could not stop ${record.name} for ${record.sessionId}:`, error);
@@ -272,7 +274,7 @@ export async function reapOrphanedRunnerPortals(): Promise<number> {
 		try {
 			if (record.state !== "stopped") await requestRunnerPortal(record.runnerId, {
 				sessionId: record.sessionId, repo: record.repo, workspacePath: record.workspacePath,
-				operation: "stop", payload: { name: record.name },
+				operation: "stop", user: record.user, payload: { name: record.name },
 			});
 			stopped.push(record);
 		} catch (error) {
@@ -329,6 +331,7 @@ function parseRecord(value: unknown, session: UnifiedSession, user?: string): Ru
 		sessionId: session.id,
 		repo: context.repo,
 		workspacePath: context.workspacePath,
+		...(user ? { user } : {}),
 	};
 }
 
@@ -353,6 +356,7 @@ export async function startRunnerPortal(input: { session: UnifiedSession; user?:
 		sessionId: input.session.id,
 		repo: context.repo,
 		workspacePath: context.workspacePath,
+		...(input.user ? { user: input.user } : {}),
 	};
 	const portalUrl = await ensureRelay(provisional);
 	if (!portalUrl) { await dropRelay(provisional); throw new Error("Could not register the authenticated Portal route."); }
