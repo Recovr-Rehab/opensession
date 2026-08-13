@@ -146,6 +146,9 @@ export function ShippedChangeComposer({
 			<div className="mb-2 flex items-center gap-1.5 px-1 text-label leading-5 text-dim">
 				<BrandMark name="slack" size={12} />
 				<span className="font-semibold">Send to Slack</span>
+				{onCancel && (
+					<Button variant="ghost" size="sm" className="ml-auto phone:min-h-10" disabled={status !== "idle"} onClick={onCancel}>Cancel</Button>
+				)}
 			</div>
 			<div
 				className="rounded-[var(--composer-radius)] border border-[color:var(--composer-border)] bg-[var(--composer-surface)] px-3.5 pt-3.5 pb-2.5 shadow-[var(--composer-shadow)] transition-[border-color,box-shadow] focus-within:border-accent desktop:border-transparent desktop:[--smooth-ring-color:var(--composer-border)] desktop:smooth-shadow-ring-soft phone:px-3 phone:pt-3 phone:pb-2"
@@ -203,9 +206,6 @@ export function ShippedChangeComposer({
 					<Button size="md" icon={<BrandMark name="slack" size={12} />} disabled={status !== "idle" || awaitingSlack || (!(reconnectRequired || (!canUploadImages && screenshots.length > 0)) && ((!message.trim() && screenshots.length === 0) || !channel || uploading))} onClick={() => reconnectRequired || (!canUploadImages && screenshots.length > 0) ? void reconnect() : onShare(message.trim(), channel, screenshots)}>
 						{awaitingSlack ? "Waiting…" : reconnectRequired || (!canUploadImages && screenshots.length > 0) ? "Reconnect" : status === "sharing" ? "Sending…" : "Send"}
 					</Button>
-					{onCancel && (
-						<Button size="md" disabled={status !== "idle"} onClick={onCancel}>Cancel</Button>
-					)}
 				</div>
 			</div>
 		</div>
