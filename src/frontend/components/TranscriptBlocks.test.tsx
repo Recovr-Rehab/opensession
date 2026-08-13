@@ -356,6 +356,7 @@ describe("TranscriptBlocks review loops", () => {
 		expect(html).toContain("1 round · 5/5 · 8 checks passed");
 		expect(html).toContain("mt-0.5 pl-2");
 		expect(html).toContain("flex size-[22px] flex-none self-center items-center justify-center");
+		expect(html).toContain("-translate-y-px");
 		expect(html).not.toContain(">Worked<");
 	});
 

@@ -46,7 +46,7 @@ export function ReviewLoopBlock({
 				<span
 					className={cn(
 						"grid size-5 flex-none self-center place-items-center leading-none text-faint transition-transform duration-150",
-						!open && "-rotate-90",
+						open ? "-translate-y-px" : "-rotate-90",
 					)}
 				>
 					<IconChevronDown size={20} className="block" />
