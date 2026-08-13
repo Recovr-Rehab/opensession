@@ -2610,6 +2610,14 @@ struct SessionRow: View {
             if let repo {
                 RepoTile(name: repo, size: tileSize)
             }
+            // Origin reads on the left, beside the status mark and the repo
+            // tile: this row is a machine's run, not yours. Faint and a step
+            // under the tile so a band of automation rows stays a list rather
+            // than a wall of glyphs.
+            if session.isAutomation {
+                WebIcon(kind: .robot, size: tileSize, color: OS1VisualStyle.textFaint)
+                    .accessibilityHidden(true)
+            }
             Text(rowTitle)
                 #if os(iOS)
                 // The web sidebar's phone type, exactly: 16px titles (callout)
@@ -2792,6 +2800,8 @@ struct SessionRow: View {
 
     private var accessibilityStatus: String {
         var parts = [session.lane.label, RepoTile.label(for: session.effectiveRepo)]
+        // The robot is the only sighted cue that a machine owns this row.
+        if session.isAutomation { parts.append("automation") }
         // The bold title is the only sighted cue for unread; say it out loud.
         if unread { parts.insert("unread", at: 0) }
         // Same for the plate: colour alone never carries meaning.

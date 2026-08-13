@@ -340,6 +340,21 @@ final class SessionTests: XCTestCase {
         )
     }
 
+    /// `automation` arrives as `true` or as the automation's NAME, and older
+    /// rows carry it only in `startedBy`. All three mark the row as a machine's
+    /// run, which is what the list's robot and its lane routing key on.
+    func testAutomationFlagAcceptsBothWireShapes() throws {
+        XCTAssertTrue(try session(#"{"id":"one","automation":true}"#).isAutomation)
+        XCTAssertTrue(try session(#"{"id":"two","automation":"triage"}"#).isAutomation)
+        XCTAssertTrue(
+            try session(#"{"id":"three","startedBy":"Plain triage (automation)"}"#).isAutomation
+        )
+        XCTAssertFalse(try session(#"{"id":"four","automation":false}"#).isAutomation)
+        XCTAssertFalse(try session(#"{"id":"five","automation":""}"#).isAutomation)
+        XCTAssertFalse(try session(#"{"id":"six","startedBy":"Kent"}"#).isAutomation)
+        XCTAssertFalse(try session(#"{"id":"seven"}"#).isAutomation)
+    }
+
     func testEmptyEngineIdStillCountsAsNeverRun() throws {
         let session = try JSONDecoder().decode(
             Session.self,

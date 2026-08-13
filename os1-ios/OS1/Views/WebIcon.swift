@@ -10,6 +10,11 @@ enum WebIconKind {
     case gitMerge
     case archive
     case unarchive
+    /// Machine-owned session (an automation run). Ported from the web's
+    /// `IconRobot`, because SF Symbols has no robot: the only match is
+    /// `robotic.vacuum`, and the row's other identity glyphs are this set
+    /// already.
+    case robot
 }
 
 struct WebIcon: View {
@@ -48,6 +53,33 @@ struct WebIcon: View {
                 bars.addRoundedRect(in: rect(6, 11.25, 12, 1.5), cornerSize: CGSize(width: 0.75, height: 0.75))
                 bars.addRoundedRect(in: rect(8, 16.5, 8, 1.5), cornerSize: CGSize(width: 0.75, height: 0.75))
                 context.fill(bars, with: .color(color))
+            case .robot:
+                // Head, antenna, side ears, mouth — stroked; eyes filled. Same
+                // 24-point geometry as the web's IconRobot, so a run marked as
+                // automation wears the same face in both clients.
+                var outline = Path()
+                outline.move(to: point(12, 4.75))
+                outline.addLine(to: point(12, 7.25))
+                addCircle(to: &outline, center: point(12, 4.75), radius: scale)
+                outline.addRoundedRect(
+                    in: rect(5.25, 7.25, 13.5, 11.5),
+                    cornerSize: CGSize(width: 3 * scale, height: 3 * scale)
+                )
+                outline.move(to: point(5.25, 11))
+                outline.addLine(to: point(3.75, 11))
+                outline.addLine(to: point(3.75, 15))
+                outline.addLine(to: point(5.25, 15))
+                outline.move(to: point(18.75, 11))
+                outline.addLine(to: point(20.25, 11))
+                outline.addLine(to: point(20.25, 15))
+                outline.addLine(to: point(18.75, 15))
+                outline.move(to: point(9.5, 15.75))
+                outline.addLine(to: point(14.5, 15.75))
+                context.stroke(outline, with: .color(color), style: stroke)
+                var eyes = Path()
+                addCircle(to: &eyes, center: point(9, 12.25), radius: scale)
+                addCircle(to: &eyes, center: point(15, 12.25), radius: scale)
+                context.fill(eyes, with: .color(color))
             default:
                 var path = Path()
                 switch kind {
@@ -126,7 +158,7 @@ struct WebIcon: View {
                     path.move(to: point(9.75, 14))
                     path.addLine(to: point(12, 11.75))
                     path.addLine(to: point(14.25, 14))
-                case .filter:
+                case .filter, .robot:
                     break
                 }
                 context.stroke(path, with: .color(color), style: stroke)

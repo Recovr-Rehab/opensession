@@ -999,13 +999,22 @@ struct SessionView: View {
                 // No run dot up here: the bar is identity and navigation,
                 // and the running state now reads where the work is — the
                 // clock at the end of the transcript.
-                Text(identityTitle)
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(OS1VisualStyle.text)
-                    .fixedSize(horizontal: true, vertical: false)
-                    .frame(width: 176, alignment: .leading)
-                    .clipped()
-                    .mask(titleTrailingFade)
+                HStack(spacing: 4) {
+                    // A machine owns this conversation. Same glyph and same
+                    // slot as the web header's automation link, and the same
+                    // reason: origin reads beside the name it produced.
+                    if viewModel.session.isAutomation {
+                        WebIcon(kind: .robot, size: 15, color: OS1VisualStyle.textDim)
+                            .accessibilityHidden(true)
+                    }
+                    Text(identityTitle)
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(OS1VisualStyle.text)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+                .frame(width: 176, alignment: .leading)
+                .clipped()
+                .mask(titleTrailingFade)
                 if !dynamicTypeSize.isAccessibilitySize {
                     Text(headerSubtitle)
                         .font(.footnote)
