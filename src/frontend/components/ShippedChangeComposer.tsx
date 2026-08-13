@@ -4,6 +4,7 @@ import { imageFilesFromPaste, uploadFile } from "../lib/images";
 import { Button } from "../ui/button";
 import { Select } from "../ui/input";
 import { toast } from "../ui/toast";
+import { Tooltip } from "../ui/tooltip";
 import { BrandMark } from "./BrandMark";
 import { openLightbox } from "./MediaLightbox";
 import { IconChevronDown, IconPlus, IconX } from "./icons";
@@ -147,7 +148,17 @@ export function ShippedChangeComposer({
 				<BrandMark name="slack" size={12} />
 				<span className="font-semibold">Send to Slack</span>
 				{onCancel && (
-					<Button variant="ghost" size="sm" className="ml-auto phone:min-h-10" disabled={status !== "idle"} onClick={onCancel}>Cancel</Button>
+					<Tooltip label="Close" side="bottom">
+						<Button
+							variant="ghost"
+							size="md"
+							className="ml-auto phone:size-10"
+							icon={<IconX size={18} />}
+							aria-label="Close"
+							disabled={status !== "idle"}
+							onClick={onCancel}
+						/>
+					</Tooltip>
 				)}
 			</div>
 			<div
