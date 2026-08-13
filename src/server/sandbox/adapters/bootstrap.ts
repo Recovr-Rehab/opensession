@@ -151,6 +151,8 @@ export interface RemoteExecOpts {
   cwd?: string;
   env?: Record<string, string>;
   timeoutMs?: number;
+  /** Execute through the provider's native detached-process lane. */
+  detached?: boolean;
 }
 
 export interface RemoteDriver {
@@ -1789,7 +1791,11 @@ export function makeRemoteSandbox(parts: RemoteSandboxParts): Sandbox {
     async exec(cmd: string[], opts?: ExecOpts): Promise<ExecResult> {
       await parts.driver.ensureStarted();
       touch();
-      const result = await parts.driver.exec(shellQuote(cmd), { cwd: parts.cwd, env: opts?.env });
+      const result = await parts.driver.exec(shellQuote(cmd), {
+        cwd: parts.cwd,
+        env: opts?.env,
+        detached: opts?.background,
+      });
       touch();
       return result;
     },

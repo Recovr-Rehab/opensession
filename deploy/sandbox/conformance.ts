@@ -884,7 +884,7 @@ async function runEntry(entry: Entry): Promise<void> {
       let longExec: Promise<unknown> | null = null;
       if (entry.remote) {
         longExec = sandbox
-          .exec(["sh", "-c", "sleep 90; echo long-exec-done"])
+          .exec(["sh", "-c", "sleep 90; echo long-exec-done"], { background: true })
           .catch(() => {});
       }
       const t2 = Date.now();

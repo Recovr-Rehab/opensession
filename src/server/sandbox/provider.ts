@@ -71,6 +71,12 @@ export interface SandboxSessionSpec {
 export interface ExecOpts {
   /** Extra env for the command (merged over the provider's baseline). */
   env?: Record<string, string>;
+  /**
+   * Run through a provider-native detached process when available. Use this
+   * for long workspace work that must not block an agent launch on the same
+   * sandbox.
+   */
+  background?: boolean;
 }
 
 export interface ExecResult {

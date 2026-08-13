@@ -392,7 +392,13 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
           commandPlaneReady = true;
           return;
         }
-        throw new Error("Box command readiness probe did not succeed");
+        // `true` is a read-only readiness probe. Box can briefly accept the
+        // request after a wake but return an unsuccessful result while the VM
+        // command service is still settling. Keep polling within the bounded
+        // readiness window instead of treating that transient as a launch
+        // failure.
+        last = new Error("Box command readiness probe did not succeed");
+        await sleep(POLL_INTERVAL_MS);
       } catch (error) {
         last = error;
         if (!boxCommandPlaneUnavailable(error)) throw error;
@@ -490,7 +496,13 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
     async exec(cmd: string, opts?: RemoteExecOpts) {
       const shell = composeShell(cmd, opts);
       const timeoutMs = opts?.timeoutMs ?? 120_000;
-      if (timeoutMs > SYNC_EXEC_MAX_MS) return execDetached(shell, timeoutMs);
+      // Box serializes its synchronous command surface per VM. Workspace
+      // commands therefore opt into the native detached lane (see
+      // makeRemoteSandbox), leaving the command plane immediately available
+      // for a run host to dial back while a build or test continues.
+      if (opts?.detached || timeoutMs > SYNC_EXEC_MAX_MS) {
+        return execDetached(shell, timeoutMs);
+      }
       try {
         return result(await afterCommandPlaneReady(() => execOnce(shell, timeoutMs)));
       } catch (error) {
