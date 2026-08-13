@@ -6,11 +6,10 @@
 	-moz-osx-font-smoothing: grayscale;
 	--ink: #14161a;
 	--page: #f8f8f6;
-	/* Tella's teal, deepened until white type clears 4.5:1 on BOTH gradient
-	   stops (4.51 and 6.26) — a fill that shades can otherwise go quietly
-	   unreadable at its light end. */
-	--teal: #0e866f;
-	--teal-deep: #0a6d5c;
+	/* The product's blue (base.css --blue in light), with one step down for the
+	   gradient's foot. White type clears 4.5:1 on both stops (5.19 and 5.90). */
+	--blue: #0969da;
+	--blue-deep: #0b62c4;
 }
 
 * {
@@ -112,47 +111,27 @@ button:focus-visible {
 	height: 100%;
 }
 
-.site-header nav {
-	display: flex;
-	align-items: center;
-	gap: 28px;
-	font-size: 14px;
-	font-weight: 600;
-}
-
-/* Both CTAs are one control at two sizes: the product's soft rectangle rather
-   than a pill, a teal that lifts slightly at the top, and elevation in the
-   fill's own hue so the shadow reads as light rather than grey. The inset
-   hairline is the top edge catching the light — the same trick the app's
-   filled controls use. */
-.nav-cta,
-.button-primary {
+/* The filled control, shared by the hero CTA and the modal's submit: the
+   product's soft rectangle rather than a pill, the product's blue, and a
+   1px seat rather than a glow. The app's filled buttons sit ON the surface —
+   a cast shadow is what made this read as a marketing badge instead. */
+.button-primary,
+.waitlist-form button {
 	border: 0;
-	background-image: linear-gradient(180deg, var(--teal) 0%, var(--teal-deep) 100%);
+	background-image: linear-gradient(180deg, var(--blue) 0%, var(--blue-deep) 100%);
+	box-shadow:
+		inset 0 1px 0 rgba(255, 255, 255, 0.16),
+		0 1px 2px rgba(16, 24, 40, 0.14);
 	color: #fff;
 }
 
-.nav-cta {
-	display: inline-flex;
-	min-height: 40px;
-	align-items: center;
-	padding: 0 18px;
-	border-radius: 12px;
-	box-shadow:
-		inset 0 1px 0 rgba(255, 255, 255, 0.22),
-		0 1px 2px rgba(10, 62, 52, 0.22),
-		0 8px 20px -6px rgba(10, 109, 92, 0.45);
-	cursor: pointer;
-	transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1), filter 160ms ease, box-shadow 160ms ease;
+.button-primary:hover,
+.waitlist-form button:hover {
+	filter: brightness(1.06);
 }
 
-.nav-cta:hover,
-.button-primary:hover {
-	filter: brightness(1.08);
-}
-
-.nav-cta:active,
-.button:active {
+.button:active,
+.waitlist-form button:active {
 	transform: scale(0.96);
 }
 
@@ -224,19 +203,14 @@ button:focus-visible {
 	gap: 8px;
 	padding: 0 26px;
 	border: 1px solid transparent;
-	border-radius: 14px;
+	border-radius: 12px;
 	cursor: pointer;
 	font-size: 15px;
 	font-weight: 700;
 	transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1), filter 160ms ease, box-shadow 160ms ease;
 }
 
-.button-primary {
-	box-shadow:
-		inset 0 1px 0 rgba(255, 255, 255, 0.24),
-		0 1px 2px rgba(10, 62, 52, 0.24),
-		0 14px 32px -10px rgba(10, 109, 92, 0.55);
-}
+
 
 .preview-wrap {
 	--demo-scale: 1;
@@ -354,65 +328,51 @@ button:focus-visible {
 
 /* ── Waitlist ─────────────────────────────────────────────────────────── */
 
-.section-kicker {
-	margin: 0 0 24px;
-	color: #8f94a0;
-	font-size: 13px;
-	font-weight: 700;
-	letter-spacing: 0.015em;
-}
-
 .waitlist-form {
 	display: flex;
 	position: relative;
-	min-height: 72px;
+	min-height: 60px;
 	align-items: center;
-	gap: 10px;
-	margin-top: 26px;
-	padding: 12px 12px 12px 14px;
-	border: 1px solid #393b41;
+	gap: 8px;
+	margin-top: 20px;
+	padding: 7px 7px 7px 12px;
+	border: 1px solid rgba(20, 22, 26, 0.14);
 	border-radius: 14px;
-	background: #222328;
-	box-shadow: inset 0 1px rgba(255, 255, 255, 0.025), 0 10px 25px rgba(0, 0, 0, 0.14);
+	background: #fbfbfa;
+}
+
+.waitlist-form:focus-within {
+	border-color: rgba(9, 105, 218, 0.55);
+	box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.14);
 }
 
 .waitlist-form input {
 	min-width: 0;
 	flex: 1;
-	padding: 0 10px;
+	padding: 0 4px;
 	border: 0;
 	background: none;
-	color: #f0f1f3;
+	color: var(--ink);
 	font-size: 15px;
 	outline: none;
 }
 
 .waitlist-form input::placeholder {
-	color: #75787f;
+	color: rgba(20, 22, 26, 0.4);
 }
 
 .waitlist-form button {
 	display: inline-flex;
-	height: 46px;
+	height: 44px;
 	align-items: center;
 	justify-content: center;
-	padding: 0 20px;
-	border: 0;
-	border-radius: 12px;
-	background-image: linear-gradient(180deg, var(--teal) 0%, var(--teal-deep) 100%);
-	box-shadow:
-		inset 0 1px 0 rgba(255, 255, 255, 0.22),
-		0 8px 20px -8px rgba(10, 109, 92, 0.6);
-	color: #fff;
+	padding: 0 18px;
+	border-radius: 10px;
 	cursor: pointer;
 	font-size: 14px;
 	font-weight: 700;
 	white-space: nowrap;
 	transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1), filter 160ms ease;
-}
-
-.waitlist-form button:hover {
-	filter: brightness(1.08);
 }
 
 .waitlist-form button:active {
@@ -431,7 +391,7 @@ button:focus-visible {
 	top: calc(100% + 10px);
 	left: 2px;
 	margin: 0;
-	color: #e79a92;
+	color: #b42318;
 	font-size: 13px;
 }
 
@@ -440,8 +400,8 @@ button:focus-visible {
 	min-height: 72px;
 	align-items: center;
 	gap: 8px;
-	margin: 26px 0 0;
-	color: #9fd8b6;
+	margin: 20px 0 0;
+	color: #0b7a4b;
 	font-size: 16px;
 	font-weight: 600;
 }
@@ -454,40 +414,33 @@ button:focus-visible {
 }
 
 .waitlist-dialog {
-	width: min(100% - 32px, 520px);
-	padding: clamp(28px, 5vw, 44px);
+	width: min(100% - 32px, 440px);
+	padding: clamp(26px, 4vw, 34px);
 	border: 0;
-	border-radius: 26px;
-	background:
-		radial-gradient(circle at 88% 6%, rgba(117, 102, 198, 0.22), transparent 42%),
-		radial-gradient(circle at 6% 96%, rgba(70, 156, 180, 0.16), transparent 44%),
-		#18191c;
-	box-shadow: 0 30px 80px rgba(16, 18, 22, 0.45);
-	color: #f5f5f4;
+	border-radius: 20px;
+	background: #fff;
+	box-shadow: 0 24px 60px rgba(16, 18, 22, 0.22);
+	color: var(--ink);
 }
 
 .waitlist-dialog::backdrop {
-	background: rgba(16, 18, 22, 0.52);
-	backdrop-filter: blur(6px);
-}
-
-.waitlist-dialog .section-kicker {
-	margin-bottom: 12px;
+	background: rgba(16, 18, 22, 0.32);
+	backdrop-filter: blur(4px);
 }
 
 .waitlist-dialog h2 {
 	margin: 0;
-	font-size: clamp(30px, 4vw, 40px);
+	font-size: 26px;
 	font-weight: 600;
-	letter-spacing: -0.03em;
-	line-height: 1.05;
+	letter-spacing: -0.025em;
+	line-height: 1.1;
 }
 
 .waitlist-dialog-body {
-	margin: 14px 0 0;
-	color: #979aa3;
+	margin: 8px 0 0;
+	color: rgba(20, 22, 26, 0.6);
 	font-size: 15px;
-	line-height: 1.6;
+	line-height: 1.5;
 }
 
 .waitlist-dialog-close {
@@ -500,7 +453,7 @@ button:focus-visible {
 	border: 0;
 	border-radius: 50%;
 	background: none;
-	color: #83858b;
+	color: rgba(20, 22, 26, 0.45);
 	cursor: pointer;
 	font-size: 22px;
 	line-height: 1;
@@ -509,8 +462,8 @@ button:focus-visible {
 }
 
 .waitlist-dialog-close:hover {
-	background: rgba(255, 255, 255, 0.07);
-	color: #e7e8ea;
+	background: rgba(20, 22, 26, 0.06);
+	color: var(--ink);
 }
 
 @media (max-width: 980px) {
@@ -604,11 +557,6 @@ button:focus-visible {
 	.mark {
 		width: 34px;
 		height: 34px;
-	}
-
-	.nav-cta {
-		min-height: 38px;
-		padding: 0 15px;
 	}
 
 	.hero h1 {

@@ -53,7 +53,7 @@ function WaitlistForm() {
 	if (state === "done") {
 		return (
 			<p className="waitlist-done" role="status">
-				<IconCheck size={20} /> You are on the list. We will be in touch.
+				<IconCheck size={20} /> You are on the list.
 			</p>
 		);
 	}
@@ -71,7 +71,7 @@ function WaitlistForm() {
 				onChange={(event) => setEmail(event.target.value)}
 			/>
 			<button type="submit" disabled={state === "sending"}>
-				{state === "sending" ? "Joining…" : "Join the waitlist"}
+				{state === "sending" ? "Joining…" : "Join"}
 			</button>
 			{state === "error" && (
 				<p className="waitlist-error" role="alert">
@@ -119,16 +119,12 @@ function WaitlistDialog({ open, onClose }: { open: boolean; onClose: () => void 
 			>
 				<span aria-hidden="true">×</span>
 			</button>
-			<p className="section-kicker">Early access</p>
-			<h2>Join the waitlist.</h2>
+			<h2>Join the waitlist</h2>
 			<p className="waitlist-dialog-body">
-				We are opening Open Session to a few teams at a time. Leave your email
-				and we will tell you when it is your turn.
+				We are opening Open Session to a few teams at a time.
 			</p>
 			<WaitlistForm />
-			<p className="waitlist-note">
-				One email when your invite is ready. Nothing else.
-			</p>
+			<p className="waitlist-note">One email when your invite is ready.</p>
 		</dialog>
 	);
 }
@@ -148,15 +144,6 @@ function LandingPage() {
 					<Mark />
 					<span>Open Session</span>
 				</a>
-				<nav aria-label="Main navigation">
-					<button
-						type="button"
-						className="nav-cta"
-						onClick={() => setWaitlistOpen(true)}
-					>
-						Join the waitlist
-					</button>
-				</nav>
 			</header>
 
 			<div className="hero-content page-width">
