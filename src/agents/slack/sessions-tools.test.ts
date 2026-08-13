@@ -439,7 +439,7 @@ describe("session creator metadata", () => {
 		}
 	});
 
-	it("credits the spawning session even when the create is standalone", async () => {
+	it("keeps create_session results in the user's workspaces", async () => {
 		const h = makeHarness();
 		registerSessionControl(h.deps.control);
 		const server = createSessionsMcpServer(ctx("bks-parent"));
@@ -452,18 +452,17 @@ describe("session creator metadata", () => {
 				name: "create_session",
 				arguments: { prompt: "Write a throwaway fixture.", standalone: true },
 			});
-			// standalone drops the parent link on purpose — but the session is
-			// still the agent's own doing, which is what keeps it out of the
-			// human's sidebar rows.
+			// Standalone controls workspace linkage, not sidebar ownership: a
+			// visible create_session result is still work created for the user.
 			expect(h.created[0].parentSessionId).toBeUndefined();
-			expect(h.created[0].spawnedBy).toBe("bks-parent");
+			expect(h.created[0].spawnedBy).toBeUndefined();
 
 			await client.callTool({
 				name: "create_session",
 				arguments: { prompt: "Delegate the migration." },
 			});
 			expect(h.created[1].parentSessionId).toBe("bks-parent");
-			expect(h.created[1].spawnedBy).toBe("bks-parent");
+			expect(h.created[1].spawnedBy).toBeUndefined();
 		} finally {
 			await client.close();
 			await server.instance.close();

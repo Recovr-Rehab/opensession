@@ -82,10 +82,9 @@ export interface CreateSessionOpts {
   /** Parent/orchestrator session id when this is a worker sub-session. */
   parentSessionId?: string;
   /**
-   * The session whose agent issued this create — pass it even for a standalone
-   * create, which deliberately carries no parentSessionId. It only attributes
-   * the session (the sidebar keeps an agent's own helper sessions out of the
-   * human's rows); it never links the two or asks for a report back.
+   * The session whose agent issued an internal helper create. Visible
+   * create_session results should omit this so they remain in the user's
+   * workspaces; use parentSessionId to link visible child sessions.
    */
   spawnedBy?: string;
   /** Whether the opening prompt was augmented with parent report-back instructions. */

@@ -1054,7 +1054,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				!spawnedSessionBelongsInSidebar(
 					s,
 					mineStatus(s) === "needsinput",
-					!!pinnedLane(s),
+					isClaimed(s),
 				)
 			)
 				continue;
