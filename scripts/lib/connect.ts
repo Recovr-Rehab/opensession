@@ -294,6 +294,10 @@ export async function runnerRun(): Promise<number> {
 			await prepareWorkspace(socket, msg);
 			return;
 		}
+		if (msg?.t === "workspace_cleanup" && msg.version === 1 && msg.operationToken) {
+			await cleanupWorkspace(socket, msg);
+			return;
+		}
 		if (msg?.t === "run_host" && msg.version === 1 && msg.operationToken) {
 			await startRunHost(socket, persistent, msg);
 			return;
@@ -428,6 +432,22 @@ async function prepareWorkspace(socket: WebSocket, msg: any): Promise<void> {
 		socket.send(JSON.stringify({ t: "workspace_ready", id, operationToken: token, cwd: workspacePath }));
 	} catch (error) {
 		socket.send(JSON.stringify({ t: "workspace_error", id, operationToken: token, error: error instanceof Error ? error.message : String(error) }));
+	}
+}
+
+async function cleanupWorkspace(socket: WebSocket, msg: any): Promise<void> {
+	const id = String(msg.id);
+	const operationToken = String(msg.operationToken);
+	try {
+		const workspacePath = typeof msg.workspacePath === "string" ? msg.workspacePath : "";
+		const sessionId = typeof msg.sessionId === "string" ? msg.sessionId : "";
+		const absolute = platform() === "win32" ? /^[A-Za-z]:[\\/]/.test(workspacePath) : workspacePath.startsWith("/");
+		const normalized = workspacePath.replace(/[\\/]+$/, "");
+		if (!absolute || !sessionId || !/^[A-Za-z0-9_-]{3,128}$/.test(sessionId) || normalized.split(/[\\/]/).at(-1) !== sessionId || normalized.split(/[\\/]/).at(-2) !== "sessions") throw new Error("Invalid managed workspace cleanup path");
+		if (existsSync(workspacePath)) rmSync(workspacePath, { recursive: true, force: true });
+		socket.send(JSON.stringify({ t: "workspace_cleaned", id, operationToken, ok: true }));
+	} catch (error) {
+		socket.send(JSON.stringify({ t: "workspace_cleaned", id, operationToken, ok: false, error: error instanceof Error ? error.message : String(error) }));
 	}
 }
 

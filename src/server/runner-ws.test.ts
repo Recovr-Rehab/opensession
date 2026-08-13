@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
 	disconnectRunner,
+	cleanupRunnerWorkspace,
 	launchRunnerHost,
 	prepareRunnerWorkspace,
 	openRunnerTerminal,
@@ -131,5 +132,18 @@ describe("Runner full-session control", () => {
 		dispose();
 		expect(data?.data).toBe("aGk=");
 		await expect(openRunnerTerminal({ runnerId, sessionId: "bks-test", repo: "opensession", workspacePath: "/home/runner" })).rejects.toThrow("outside its managed roots");
+	});
+
+	test("cleans only an opted-in managed session workspace", async () => {
+		updateRunner(runnerId, { workspaceRetention: "delete" });
+		const ws = socket(runnerId);
+		runnerWsOpen(ws);
+		runnerWsMessage(ws, JSON.stringify({ t: "hello", version: 1 }));
+		const pending = cleanupRunnerWorkspace({ runnerId, sessionId: "bks-test", repo: "opensession", workspacePath: "/srv/opensession/sessions/bks-test" });
+		const message = JSON.parse(ws.sent.at(-1)!);
+		expect(message.t).toBe("workspace_cleanup");
+		runnerWsMessage(ws, JSON.stringify({ t: "workspace_cleaned", id: message.id, operationToken: message.operationToken, ok: true }));
+		await expect(pending).resolves.toBeUndefined();
+		await expect(cleanupRunnerWorkspace({ runnerId, sessionId: "bks-test", repo: "opensession", workspacePath: "/srv/opensession/other" })).rejects.toThrow("outside its managed roots");
 	});
 });

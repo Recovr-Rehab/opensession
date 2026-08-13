@@ -72,6 +72,9 @@ export type Runner = {
 	allowedUsers: string[];
 	allowedRepos: string[];
 	workspaceRoots: string[];
+	/** Session workspaces are retained by default. Deletion is an explicit
+	 * administrator policy because a Runner may hold unpushed work. */
+	workspaceRetention?: "retain" | "delete";
 	maintenance?: boolean;
 	reservation?: RunnerReservation;
 	workload?: { sessionId?: string; operation?: string; startedAt?: string };
@@ -294,6 +297,7 @@ export function authenticateRunner(id: string, token: string): Runner | undefine
 }
 
 export type RunnerPatch = Partial<Pick<Runner, "label" | "description" | "location" | "maintenance" | "allowedUsers" | "allowedRepos" | "workspaceRoots" | "resources">> & {
+	workspaceRetention?: "retain" | "delete";
 	permissions?: Partial<RunnerExecutionPermissions>;
 	capabilities?: Partial<RunnerCapabilities>;
 };
@@ -303,7 +307,7 @@ export function updateRunner(id: string, patch: RunnerPatch): Runner | undefined
 	const index = store.runners.findIndex((runner) => runner.id === id);
 	if (index < 0) return undefined;
 	const current = store.runners[index];
-	store.runners[index] = normalizeRunner({ ...current, ...patch, permissions: { ...current.permissions, ...patch.permissions }, capabilities: { ...current.capabilities, ...patch.capabilities } });
+	store.runners[index] = normalizeRunner({ ...current, ...patch, workspaceRetention: patch.workspaceRetention === "delete" ? "delete" : patch.workspaceRetention === "retain" ? "retain" : current.workspaceRetention ?? "retain", permissions: { ...current.permissions, ...patch.permissions }, capabilities: { ...current.capabilities, ...patch.capabilities } });
 	save(store);
 	return store.runners[index];
 }

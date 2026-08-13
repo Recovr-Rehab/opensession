@@ -29,6 +29,11 @@ stream as a remote Sandbox. Automation sessions never receive Runner tools.
 Runners run work as their local service user, so only attach machines the
 workspace intends to trust.
 
+Each Runner has an explicit deleted-session workspace policy. The default is
+to keep the session workspace so unpushed work remains recoverable. An
+administrator may choose deletion, which removes only the exact managed
+`sessions/<session-id>` workspace through the authenticated Runner channel.
+
 The Shell tab uses that same outbound control channel when a session runs on a
 Runner. It opens a PTY only in the server-selected session workspace, honors
 the Runner's terminal permission, and closes when the browser tab or Runner

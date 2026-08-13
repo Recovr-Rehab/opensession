@@ -45,6 +45,7 @@ import { resolvePrTarget } from "../session-repos";
 import { destroySessionSandbox } from "../session-sandbox";
 import { stopAllPortalServices } from "../portal-supervisor";
 import { dropRunnerPortalRoutes } from "../runner-portals";
+import { cleanupRunnerWorkspace } from "../runner-ws";
 import {
 	deleteSession,
 	engineUserTexts,
@@ -1062,6 +1063,13 @@ export async function handleSessionsRoutes(
 			else if (session.worktreeDir && !session.sandbox?.sandboxId)
 				await stopAllPortalServices({ sessionId: session.id, worktreeDir: session.worktreeDir });
 			deleteSession(session);
+			// Runner workspace deletion is opt-in on the Runner. It remains
+			// best-effort so an offline machine never blocks deleting a session.
+			if (session.runner && session.repo && session.worktreeDir) {
+				void cleanupRunnerWorkspace({ runnerId: session.runner.id, sessionId: session.id, repo: session.repo, workspacePath: session.worktreeDir, user: session.createdBy || undefined }).catch((error) =>
+					console.warn(`[runners] Workspace retained after deleting ${session.id}:`, error),
+				);
+			}
 			purgeTranscriptRows(session.id);
 			invalidateSessionsCache();
 			// Tear down the session's sandbox (container + engine-state volumes —

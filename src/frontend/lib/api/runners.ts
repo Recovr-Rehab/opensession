@@ -32,6 +32,7 @@ export type RunnerInfo = {
 	allowedUsers: string[];
 	allowedRepos: string[];
 	workspaceRoots: string[];
+	workspaceRetention?: "retain" | "delete";
 	workload?: { sessionId?: string; operation?: string; startedAt?: string };
 	reservation?: { sessionId?: string; reason: string; reservedBy?: string; expiresAt: string };
 };
@@ -64,7 +65,7 @@ export async function bootstrapRunner(kind: "ssh" | "kubernetes", targetId: stri
 	return request(`/runners/bootstrap/${kind}`, { method: "POST", body: { targetId }, label: "Could not start Runner migration" });
 }
 
-export type RunnerPatch = Partial<Pick<RunnerInfo, "label" | "description" | "location" | "maintenance" | "allowedUsers" | "allowedRepos" | "workspaceRoots">> & {
+export type RunnerPatch = Partial<Pick<RunnerInfo, "label" | "description" | "location" | "maintenance" | "allowedUsers" | "allowedRepos" | "workspaceRoots" | "workspaceRetention">> & {
 	permissions?: Partial<RunnerPermissions>;
 	capabilities?: Partial<RunnerInfo["capabilities"]>;
 };

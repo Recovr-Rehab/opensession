@@ -141,6 +141,28 @@ export async function execRunnerWorkspace(
 	});
 }
 
+/** Remove a session-owned workspace only when the Runner's administrator has
+ * explicitly selected deletion retention. The Runner verifies the exact
+ * `root/sessions/<sessionId>` shape before touching the filesystem. */
+export async function cleanupRunnerWorkspace(input: { runnerId: string; sessionId: string; repo: string; workspacePath: string; user?: string }): Promise<void> {
+	const connection = connections.get(input.runnerId);
+	if (!connection || connection.protocolVersion !== PROTOCOL_VERSION) throw new Error(`Runner ${input.runnerId} is not connected`);
+	if (connection.runner.workspaceRetention !== "delete") return;
+	if (!runnerAllowed(connection.runner, { user: input.user, repo: input.repo, permission: "fullSessions" })) throw new Error(`Runner ${connection.runner.name} is not permitted for workspace cleanup`);
+	if (!runnerOwnsWorkspace(connection.runner, input.workspacePath, input.sessionId)) throw new Error("Runner cleanup workspace is outside its managed roots");
+	const id = `rc${++executionCounter}-${Date.now().toString(36)}`;
+	const operationToken = randomBytes(18).toString("base64url");
+	audit({ msg: "runner_workspace_cleanup_start", runner_id: input.runnerId, session_id: input.sessionId, repo: input.repo, operation_id: id });
+	const result = await new Promise<RunnerExecResult>((resolve) => {
+		const timer = setTimeout(() => { connection.pending.delete(id); resolve({ code: -1, stdout: "", stderr: "Runner workspace cleanup timed out", timedOut: true }); }, 60_000);
+		connection.pending.set(id, { stdout: [], stderr: [], resolve, timer, operationToken });
+		try { connection.ws.send(JSON.stringify({ t: "workspace_cleanup", version: PROTOCOL_VERSION, id, operationToken, sessionId: input.sessionId, repo: input.repo, workspacePath: input.workspacePath })); }
+		catch (error) { clearTimeout(timer); connection.pending.delete(id); resolve({ code: -1, stdout: "", stderr: `Could not reach Runner: ${(error as Error).message}` }); }
+	});
+	audit({ msg: "runner_workspace_cleanup_finish", runner_id: input.runnerId, session_id: input.sessionId, repo: input.repo, operation_id: id, outcome: result.code === 0 ? "ok" : "failed" });
+	if (result.code !== 0) throw new Error(result.stderr || "Runner workspace cleanup failed");
+}
+
 /** A small, typed request/response seam for Runner-owned services. The caller
  * must still enforce a specific Portal operation and session workspace. */
 export async function requestRunnerPortal(
@@ -326,6 +348,14 @@ export function runnerWsMessage(ws: any, raw: string | Buffer): boolean {
 			clearTimeout(pending.timer);
 			connection.pending.delete(id);
 			pending.resolve({ code: -1, stdout: "", stderr: String(message.error || "Workspace preparation failed") });
+			return true;
+		}
+		case "workspace_cleaned": {
+			const id = String(message.id);
+			const pending = connection.pending.get(id);
+			if (!pending || message.operationToken !== pending.operationToken) return true;
+			clearTimeout(pending.timer); connection.pending.delete(id);
+			pending.resolve({ code: message.ok === true ? 0 : -1, stdout: "", stderr: String(message.error || "") });
 			return true;
 		}
 		case "host_started": {
