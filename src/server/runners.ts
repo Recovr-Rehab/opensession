@@ -78,6 +78,9 @@ export type Runner = {
 	maintenance?: boolean;
 	reservation?: RunnerReservation;
 	workload?: { sessionId?: string; operation?: string; startedAt?: string };
+	/** Durable active claims. `workload` is retained as the primary display
+	 * summary while older runner records migrate in place. */
+	workloads?: Array<{ sessionId?: string; operation?: string; startedAt?: string }>;
 };
 
 type Store = { runners: Runner[] };
@@ -148,6 +151,9 @@ function normalizeRunner(value: Runner): Runner {
 		? raw.capabilities as Record<string, unknown>
 		: {};
 	const permissions = raw.permissions && typeof raw.permissions === "object" ? raw.permissions as Record<string, unknown> : {};
+	const workloads = Array.isArray(raw.workloads)
+		? raw.workloads.filter((item): item is NonNullable<Runner["workload"]> => !!item && typeof item === "object").slice(0, 64)
+		: value.workload ? [value.workload] : [];
 	return {
 		...value,
 		platform,
@@ -167,6 +173,7 @@ function normalizeRunner(value: Runner): Runner {
 		allowedUsers: cleanStrings(raw.allowedUsers),
 		allowedRepos: cleanStrings(raw.allowedRepos),
 		workspaceRoots: cleanStrings(raw.workspaceRoots, 512),
+		...(workloads.length ? { workloads, workload: workloads[0] } : {}),
 	};
 }
 
@@ -323,11 +330,17 @@ export function touchRunner(id: string, patch: Partial<Pick<Runner, "softwareVer
 	save(store);
 }
 
-export function setRunnerWorkload(id: string, workload?: Runner["workload"]): void {
+export function setRunnerWorkload(id: string, workload?: Runner["workload"], clearSessionId?: string): void {
 	const store = load();
 	const runner = store.runners.find((candidate) => candidate.id === id);
 	if (!runner) return;
-	runner.workload = workload;
+	const previous = runner.workloads ?? (runner.workload ? [runner.workload] : []);
+	const next = workload?.sessionId
+		? [...previous.filter((item) => item.sessionId !== workload.sessionId), workload]
+		: clearSessionId ? previous.filter((item) => item.sessionId !== clearSessionId) : [];
+	runner.workloads = next;
+	runner.workload = next[0];
+	if (!next.length) { delete runner.workload; delete runner.workloads; }
 	save(store);
 }
 
@@ -387,7 +400,10 @@ export function runnerAvailableForSession(runner: Runner, input: { user?: string
 	if (!runnerAllowed(runner, { ...input, permission: "fullSessions" })) return false;
 	const reservation = runner.reservation;
 	if (reservation && Date.parse(reservation.expiresAt) > Date.now() && reservation.sessionId && reservation.sessionId !== input.sessionId) return false;
-	return !runner.workload?.sessionId || runner.workload.sessionId === input.sessionId;
+	const workloads = runner.workloads ?? (runner.workload ? [runner.workload] : []);
+	if (workloads.some((workload) => workload.sessionId === input.sessionId)) return true;
+	const capacity = Math.max(1, Math.floor(runner.resources?.concurrentJobs ?? 1));
+	return workloads.length < capacity;
 }
 
 export function publicRunner(runner: Runner, online: boolean, busy = false): Omit<Runner, "tokenHash"> & { state: RunnerState } {

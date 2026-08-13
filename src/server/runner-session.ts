@@ -141,7 +141,7 @@ export async function maybeLaunchRunnerRun(
 				yield* handle!.events();
 			} finally {
 				journalClear(session.id);
-				setRunnerWorkload(runner.id, undefined);
+				setRunnerWorkload(runner.id, undefined, session.id);
 			}
 		})() as RunnerEvents;
 		events.runnerId = runner.id;
@@ -150,7 +150,7 @@ export async function maybeLaunchRunnerRun(
 		handle?.abandon();
 		unregisterRunToken(rpcToken);
 		journalClear(session.id);
-		setRunnerWorkload(runner.id, undefined);
+		setRunnerWorkload(runner.id, undefined, session.id);
 		throw error;
 	}
 }
@@ -234,11 +234,11 @@ export async function resumeRunnerRun(
 		await handle.connectWithWait(20_000);
 		return (async function* (): AsyncGenerator<StreamEvent> {
 			try { yield* handle.events(); }
-			finally { setRunnerWorkload(run.runnerId!, undefined); }
+			finally { setRunnerWorkload(run.runnerId!, undefined, session.id); }
 		})();
 	} catch (error) {
 		handle.abandon();
-		setRunnerWorkload(run.runnerId, undefined);
+		setRunnerWorkload(run.runnerId, undefined, session.id);
 		throw error;
 	}
 }

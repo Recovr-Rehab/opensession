@@ -15,6 +15,8 @@ import {
 	runnerAllowed,
 	runnerOwnsWorkspace,
 	runnerWorkspacePath,
+	runnerAvailableForSession,
+	setRunnerWorkload,
 	updateRunner,
 } from "./runners";
 
@@ -87,5 +89,17 @@ describe("Runner policy and reservations", () => {
 		expect(reserveRunner(result.runner.id, { reason: "other", reservedBy: "sam" })).toBeUndefined();
 		expect(releaseRunnerReservation(result.runner.id, "sam")).toBeUndefined();
 		expect(releaseRunnerReservation(result.runner.id, "alex")?.reservation).toBeUndefined();
+	});
+
+	test("uses reported concurrent-job capacity while preserving each session claim", () => {
+		const result = register({ resources: { concurrentJobs: 2 } });
+		if (!result.ok) throw new Error(result.error);
+		const runner = updateRunner(result.runner.id, { permissions: { fullSessions: true } })!;
+		setRunnerWorkload(runner.id, { sessionId: "bks-one", operation: "full session" });
+		expect(runnerAvailableForSession(listRunners()[0], { sessionId: "bks-two" })).toBe(true);
+		setRunnerWorkload(runner.id, { sessionId: "bks-two", operation: "full session" });
+		expect(runnerAvailableForSession(listRunners()[0], { sessionId: "bks-three" })).toBe(false);
+		setRunnerWorkload(runner.id, undefined, "bks-one");
+		expect(runnerAvailableForSession(listRunners()[0], { sessionId: "bks-three" })).toBe(true);
 	});
 });
