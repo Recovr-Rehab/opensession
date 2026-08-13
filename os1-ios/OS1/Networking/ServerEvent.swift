@@ -34,6 +34,13 @@ enum ServerEvent: Sendable {
     case slackComposerResolved(sessionId: String, requestId: String)
     case notice(String)
     case serverError(String)
+    // Shell output, for the session's terminal panel. Each frame carries the
+    // `termId` its sender chose, so one socket could run several shells; the
+    // native app opens exactly one and ignores anything else's frames.
+    case terminalReady(termId: String, target: String, cwd: String)
+    case terminalData(termId: String, data: Data)
+    case terminalNotice(termId: String, message: String)
+    case terminalExit(termId: String, code: Int)
     case ignored
 
     static func parse(_ data: Data) -> ServerEvent {
@@ -124,6 +131,22 @@ enum ServerEvent: Sendable {
             return .notice(frame.message ?? "")
         case "error":
             return .serverError(frame.message ?? "Unknown server error")
+        case "term_ready":
+            return .terminalReady(
+                termId: frame.termId ?? "0",
+                target: frame.target ?? "host",
+                cwd: frame.cwd ?? ""
+            )
+        case "term_data":
+            // Base64 on the wire: pty output is bytes, not text, and a chunk
+            // can split a multi-byte character. Decoding to a String is the
+            // reader's job, which is where the partial tail is held.
+            guard let data = Data(base64Encoded: frame.data ?? "") else { return .ignored }
+            return .terminalData(termId: frame.termId ?? "0", data: data)
+        case "term_notice":
+            return .terminalNotice(termId: frame.termId ?? "0", message: frame.message ?? "")
+        case "term_exit":
+            return .terminalExit(termId: frame.termId ?? "0", code: frame.code ?? 0)
         default:
             return .ignored
         }
@@ -262,6 +285,12 @@ private struct RawFrame: Decodable {
     let startOffset: Int?
     let rev: String?
     let firstSeq: Int?
+    // term_* frames.
+    let termId: String?
+    let target: String?
+    let cwd: String?
+    let data: String?
+    let code: Int?
 
     var cursor: HistoryCursor {
         HistoryCursor(

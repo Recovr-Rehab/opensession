@@ -1363,6 +1363,16 @@ private struct SessionActionsMenu: View {
                     Label("Portals", systemImage: "globe")
                 }
             }
+            // A shell in the worktree, for the one short command that is
+            // quicker to run than to ask for, and for following a log the
+            // session is already writing.
+            if openPanel.isAvailable {
+                Button {
+                    openPanel(.terminal(sessionId: viewModel.session.id))
+                } label: {
+                    Label("Terminal", systemImage: "apple.terminal")
+                }
+            }
             if let number = viewModel.prDetails?.number ?? viewModel.session.prNumber {
                 Button {
                     // A tab where there's a strip to open one in; the sheet
@@ -1555,7 +1565,7 @@ private struct SessionActionsMenu: View {
 /// the glyph kept its light-mode colour. It travels over arbitrary content,
 /// so it keeps one appearance and earns its lift from a hairline and a soft
 /// shadow instead — the same opaque treatment the web control wears.
-private struct ScrollToLatestButton: View {
+struct ScrollToLatestButton: View {
     let hasNewOutput: Bool
     let action: () -> Void
 

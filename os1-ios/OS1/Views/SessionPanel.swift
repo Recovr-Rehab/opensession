@@ -26,6 +26,10 @@ enum SessionPanel: Hashable, Identifiable {
     /// The services the session exposes. Each live one opens in the browser
     /// sheet; a supervised one swipes for stop and restart.
     case portals(sessionId: String)
+    /// A shell in the session's worktree: run a command, read the output.
+    /// A push like the rest, and for the same reason: it is a detail of this
+    /// session, and leaving it should be the gesture you already know.
+    case terminal(sessionId: String)
 
     var id: String {
         switch self {
@@ -34,12 +38,14 @@ enum SessionPanel: Hashable, Identifiable {
         case .review(let sessionId): "review-\(sessionId)"
         case .changes(let sessionId, let path): "changes-\(sessionId)-\(path ?? "")"
         case .portals(let sessionId): "portals-\(sessionId)"
+        case .terminal(let sessionId): "terminal-\(sessionId)"
         }
     }
 
     var sessionId: String {
         switch self {
-        case .assets(let sessionId), .review(let sessionId), .portals(let sessionId): sessionId
+        case .assets(let sessionId), .review(let sessionId), .portals(let sessionId),
+             .terminal(let sessionId): sessionId
         case .asset(let sessionId, _): sessionId
         case .changes(let sessionId, _): sessionId
         }
@@ -110,6 +116,8 @@ struct SessionPanelView: View {
             ChangesView(sessionId: sessionId, focus: path)
         case .portals(let sessionId):
             PortalsListView(sessionId: sessionId)
+        case .terminal(let sessionId):
+            TerminalView(sessionId: sessionId)
         }
     }
 }
