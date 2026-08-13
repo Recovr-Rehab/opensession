@@ -365,4 +365,69 @@ final class SessionTests: XCTestCase {
 
         XCTAssertTrue(session.neverRan)
     }
+
+    /// Usage rides on the session row. Older servers send none of it, and a
+    /// server that adds a counter must not break the ones already shipped, so
+    /// every field decodes independently and defaults to zero.
+    func testUsageDecodesFromTheSessionRow() throws {
+        let full = try session(
+            #"{"id":"one","usage":{"costUsd":1.234,"inputTokens":900,"outputTokens":2500,"cacheReadTokens":45300,"cacheCreationTokens":1200,"contextTokens":128400,"contextWindow":200000,"turns":7,"updatedAt":"2026-08-13T10:00:00Z"}}"#
+        )
+        XCTAssertEqual(full.usage?.costUsd ?? 0, 1.234, accuracy: 0.0001)
+        XCTAssertEqual(full.usage?.turns, 7)
+        XCTAssertEqual(full.usage?.contextWindow, 200_000)
+
+        XCTAssertNil(try session(#"{"id":"two"}"#).usage)
+        let partial = try session(#"{"id":"three","usage":{"turns":2}}"#)
+        XCTAssertEqual(partial.usage?.turns, 2)
+        XCTAssertEqual(partial.usage?.costUsd, 0)
+        XCTAssertEqual(partial.usage?.contextWindow, 0)
+    }
+
+    /// The numbers are formatted to match the web's UsageMeter exactly: the
+    /// same conversation read on a phone and in a browser has to agree. Pinned
+    /// to en_US because grouping and decimal marks follow the reader's locale
+    /// (as the web's `Intl.NumberFormat` does) and this build box is not
+    /// guaranteed to be American.
+    func testUsageLabelsMatchTheWebFormatting() {
+        let en = Locale(identifier: "en_US")
+        XCTAssertEqual(SessionUsage.costLabel(0, locale: en), "$0.00")
+        XCTAssertEqual(SessionUsage.costLabel(-1, locale: en), "$0.00")
+        XCTAssertEqual(SessionUsage.costLabel(0.004, locale: en), "<$0.01")
+        XCTAssertEqual(SessionUsage.costLabel(1.239, locale: en), "$1.24")
+        XCTAssertEqual(SessionUsage.costLabel(99.999, locale: en), "$100.00")
+        XCTAssertEqual(SessionUsage.costLabel(1234.6, locale: en), "$1,235")
+
+        XCTAssertEqual(SessionUsage.tokenLabel(0, locale: en), "0")
+        XCTAssertEqual(SessionUsage.tokenLabel(999, locale: en), "999")
+        XCTAssertEqual(SessionUsage.tokenLabel(45_300, locale: en), "45.3K")
+        XCTAssertEqual(SessionUsage.tokenLabel(200_000, locale: en), "200K")
+    }
+
+    func testUsageContextAndCacheReadouts() {
+        let en = Locale(identifier: "en_US")
+        let usage = SessionUsage(
+            costUsd: 1.5,
+            inputTokens: 900,
+            cacheReadTokens: 45_300,
+            cacheCreationTokens: 1_200,
+            contextTokens: 128_400,
+            contextWindow: 200_000,
+            turns: 1
+        )
+        XCTAssertEqual(usage.contextLabel(locale: en), "128.4K / 200K (64%)")
+        XCTAssertFalse(usage.contextIsTight)
+        XCTAssertEqual(usage.cacheHitPercent, 96)
+        XCTAssertEqual(usage.cacheReadLabel(locale: en), "45.3K (96%)")
+        XCTAssertEqual(usage.turnsLabel, "1 turn")
+
+        // No window reported: a percentage of an unknown ceiling means
+        // nothing, so the readout is withheld rather than guessed.
+        XCTAssertNil(SessionUsage(contextTokens: 1_000).contextLabel(locale: en))
+        XCTAssertEqual(SessionUsage().cacheHitPercent, 0)
+        XCTAssertEqual(SessionUsage().turnsLabel, "0 turns")
+        XCTAssertTrue(
+            SessionUsage(contextTokens: 190_000, contextWindow: 200_000).contextIsTight
+        )
+    }
 }

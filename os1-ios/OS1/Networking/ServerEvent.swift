@@ -25,6 +25,9 @@ enum ServerEvent: Sendable {
     /// to every client on change, and once at the handshake.
     case globalPresence(viewing: [PresenceEntry])
     case queueUpdate(sessionId: String, queued: [QueueItem], steered: [QueueItem])
+    /// Cost and context for the whole conversation, refolded by the server
+    /// after each turn (and mid-run, as snapshots arrive).
+    case usageUpdate(sessionId: String?, usage: SessionUsage)
     case askQuestion(sessionId: String, question: AskQuestion)
     case askResolved(sessionId: String, questionId: String)
     case slackComposer(sessionId: String, request: SlackComposeRequest?)
@@ -91,6 +94,12 @@ enum ServerEvent: Sendable {
                 queued: (frame.queued ?? []).map(QueueItem.init),
                 steered: (frame.steered ?? []).map(QueueItem.init)
             )
+        case "usage_update":
+            // `sessionId` is absent on the frame the create flow emits — that
+            // socket is already scoped to the session being created — so the
+            // usage is what has to be there, not the id.
+            guard let usage = frame.usage else { return .ignored }
+            return .usageUpdate(sessionId: frame.sessionId, usage: usage)
         case "ask_question":
             guard let id = frame.sessionId,
                   let questionId = frame.questionId,
@@ -243,6 +252,7 @@ private struct RawFrame: Decodable {
     let viewing: [WireViewing]?
     let queued: [WireQueueItem]?
     let steered: [WireQueueItem]?
+    let usage: SessionUsage?
     let questionId: String?
     let questions: [AskQuestion.Question]?
     let request: SlackComposeRequest?

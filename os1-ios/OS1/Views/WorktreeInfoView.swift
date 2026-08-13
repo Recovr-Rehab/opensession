@@ -687,6 +687,9 @@ struct WorktreeInfoView: View {
     private var runSettingsSection: some View {
         InfoSection(title: "Run settings") {
             Menu {
+                // Same slot as the session's own model menu: the running cost
+                // sits with the choice that drives it.
+                UsageMenuSection(usage: viewModel.usage)
                 if let catalog {
                     ForEach(catalog.presets + catalog.regular) { option in
                         Button {

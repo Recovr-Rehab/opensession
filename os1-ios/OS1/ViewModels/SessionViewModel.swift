@@ -42,6 +42,10 @@ final class SessionViewModel {
     /// starts while watching anchors to the status flip.
     private(set) var runStartedAt: Date?
     private(set) var queuedCount = 0
+    /// What this conversation has cost and how full its context window is.
+    /// Seeded from the session row and then kept live by `usage_update`,
+    /// which the server broadcasts mid-run as well as at the end of a turn.
+    private(set) var usage: SessionUsage?
     /// Messages held for after the current run (editable, steerable).
     private(set) var queuedItems: [QueueItem] = []
     /// Steer receipts: delivering into the run at its next turn boundary.
@@ -343,6 +347,7 @@ final class SessionViewModel {
         self.conversationLoadTimeout = conversationLoadTimeout
         self.isRunning = session.isRunning ?? false
         self.queuedCount = session.queuedCount ?? 0
+        self.usage = session.usage
         self.model = session.model ?? ""
         self.effort = session.effort ?? ""
         self.fastMode = session.fastMode ?? false
@@ -386,6 +391,12 @@ final class SessionViewModel {
         // The walkthrough rides on the session row, not the transcript, so a
         // newly published one only reaches the blocks through a rebuild.
         if session.walkthrough != hadWalkthrough { rebuildDisplayItems() }
+        // The list row's usage is a snapshot from the last 5s poll, so it can
+        // arrive behind the live `usage_update` the socket already delivered.
+        // Take it only when it counts at least as many turns.
+        if let rowUsage = session.usage, rowUsage.turns >= (usage?.turns ?? 0) {
+            usage = rowUsage
+        }
         guard stopped else { return }
 
         if let running = session.isRunning {
@@ -1286,6 +1297,11 @@ final class SessionViewModel {
 
         case .presence(let id, let viewers) where id == session.id:
             otherViewers = Self.otherViewers(viewers, me: ServerConfig.shared.userName)
+
+        // The create flow's frame carries no session id — that socket is
+        // already scoped to this conversation — so an unaddressed one is ours.
+        case .usageUpdate(let id, let latest) where id == nil || id == session.id:
+            usage = latest
 
         case .sessionStatus(let id, let running) where id == session.id:
             let completed = isRunning && !running

@@ -178,6 +178,35 @@ final class ServerEventTests: XCTestCase {
         XCTAssertEqual(error, "Unknown server error")
     }
 
+    /// `usage_update` arrives two ways: run-session.ts addresses it to a
+    /// session, session-create.ts emits it on a socket already scoped to the
+    /// session being created and sends no id. Both are ours.
+    func testUsageUpdate() {
+        let addressed = #"""
+        {"type":"usage_update","sessionId":"os-1","usage":{"costUsd":0.42,"inputTokens":900,"outputTokens":2500,"cacheReadTokens":45300,"cacheCreationTokens":1200,"contextTokens":128400,"contextWindow":200000,"turns":3,"updatedAt":"2026-08-13T10:00:00Z"}}
+        """#
+        guard case .usageUpdate(let id, let usage) = parse(addressed) else {
+            return XCTFail("expected .usageUpdate")
+        }
+        XCTAssertEqual(id, "os-1")
+        XCTAssertEqual(usage.turns, 3)
+        XCTAssertEqual(usage.contextTokens, 128_400)
+        XCTAssertEqual(usage.costUsd, 0.42, accuracy: 0.0001)
+
+        guard case .usageUpdate(let noId, let creating) =
+            parse(#"{"type":"usage_update","usage":{"turns":1}}"#)
+        else { return XCTFail("expected .usageUpdate without a session id") }
+        XCTAssertNil(noId)
+        XCTAssertEqual(creating.turns, 1)
+        XCTAssertEqual(creating.costUsd, 0)
+
+        // No usage at all is nothing to render — and would otherwise blank a
+        // total the session already knows.
+        guard case .ignored = parse(#"{"type":"usage_update","sessionId":"os-1"}"#) else {
+            return XCTFail("a usage_update with no usage must be ignored")
+        }
+    }
+
     func testUnknownAndMalformedFramesAreIgnored() {
         guard case .ignored = parse(#"{"type":"future_frame","payload":123}"#) else {
             return XCTFail("unknown frame types must decode to .ignored")

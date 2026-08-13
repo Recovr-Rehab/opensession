@@ -62,6 +62,10 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     /// The agent-published demo of a user-visible change, rendered inline in
     /// the transcript where it was published.
     var walkthrough: SessionWalkthrough?
+    /// What this conversation has cost so far, and how full the model's
+    /// context window is. Absent until the first run reports usage; the live
+    /// value during a run arrives on the socket as `usage_update`.
+    var usage: SessionUsage?
     /// Local-only marker for a just-created row that the sessions endpoint has
     /// not returned yet. Its id may already be real after create resolves.
     var isOptimisticPlaceholder: Bool?

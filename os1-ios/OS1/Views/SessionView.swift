@@ -1095,6 +1095,9 @@ struct SessionView: View {
 
     @ViewBuilder
     private var modelMenuContents: some View {
+        // What the conversation has cost, at the top of the menu that decides
+        // what the next turn will cost — the web composer's arrangement.
+        UsageMenuSection(usage: viewModel.usage)
         if let option = catalog?.option(for: currentModel),
            let efforts = option.efforts, !efforts.isEmpty {
             Section("Reasoning") {
