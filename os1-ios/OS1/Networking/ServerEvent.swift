@@ -27,6 +27,8 @@ enum ServerEvent: Sendable {
     case queueUpdate(sessionId: String, queued: [QueueItem], steered: [QueueItem])
     case askQuestion(sessionId: String, question: AskQuestion)
     case askResolved(sessionId: String, questionId: String)
+    case slackComposer(sessionId: String, request: SlackComposeRequest?)
+    case slackComposerResolved(sessionId: String, requestId: String)
     case notice(String)
     case serverError(String)
     case ignored
@@ -103,6 +105,12 @@ enum ServerEvent: Sendable {
                 return .ignored
             }
             return .askResolved(sessionId: id, questionId: questionId)
+        case "slack_composer":
+            guard let id = frame.sessionId else { return .ignored }
+            return .slackComposer(sessionId: id, request: frame.request)
+        case "slack_composer_resolved":
+            guard let id = frame.sessionId, let requestId = frame.requestId else { return .ignored }
+            return .slackComposerResolved(sessionId: id, requestId: requestId)
         case "notice":
             return .notice(frame.message ?? "")
         case "error":
@@ -111,6 +119,13 @@ enum ServerEvent: Sendable {
             return .ignored
         }
     }
+}
+
+struct SlackComposeRequest: Decodable, Equatable, Sendable, Identifiable {
+    let id: String
+    let message: String
+    let channel: String?
+    let images: [String]
 }
 
 /// One person and the session they are looking at, from `global_presence`.
@@ -230,6 +245,8 @@ private struct RawFrame: Decodable {
     let steered: [WireQueueItem]?
     let questionId: String?
     let questions: [AskQuestion.Question]?
+    let request: SlackComposeRequest?
+    let requestId: String?
     let message: String?
     let truncated: Bool?
     let startOffset: Int?

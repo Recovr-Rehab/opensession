@@ -425,6 +425,22 @@ export type ProtocolServerMessage =
       questions: AskQuestion[];
     }
   | { type: "ask_resolved"; sessionId: string; questionId: string }
+  | {
+      type: "slack_composer";
+      sessionId: string;
+      request: {
+        id: string;
+        message: string;
+        channel?: string;
+        images: string[];
+      } | null;
+    }
+  | {
+      type: "slack_composer_resolved";
+      sessionId: string;
+      requestId: string;
+      status: "sent" | "cancelled";
+    }
   | { type: "notice"; sessionId?: string; message: string }
   | { type: "pong" }
   | { type: "error"; sessionId?: string; message: string };

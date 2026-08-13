@@ -24,6 +24,7 @@ import { createAskUserMcpServer } from "../agents/slack/ask-tools";
 import { createReposMcpServer } from "../agents/slack/repos-tools";
 import { createPortalsMcpServer } from "./portals-mcp";
 import { createWalkthroughMcpServer } from "../agents/slack/walkthrough-tools";
+import { createSlackComposeMcpServer } from "../agents/slack/slack-compose-tools";
 import { createMemoryMcpServer } from "../agents/slack/memory-tools";
 import { createGoalsMcpServer, createGoalSelfMcpServer } from "../agents/slack/goal-tools";
 import { createPapercutsMcpServer } from "../agents/slack/papercuts-tools";
@@ -256,6 +257,9 @@ export function interactiveMcpServers(
 						sessionId,
 						by: createdBy,
 					}),
+					// Human-gated Slack composition: the tool only opens an editable
+					// composer. Posting still requires the signed-in person to press Send.
+					"opensession-slack": createSlackComposeMcpServer({ sessionId }),
 					// AskUserQuestion for engines without a canUseTool hook (Codex):
 					// blocks on the same UI question card + Slack escalation as the
 					// native Claude tool. claude-runner strips this server so Claude

@@ -19,6 +19,7 @@ import { handleStaticAssetsRoutes } from "./static-assets";
 import { handlePlainRoutes } from "./plain";
 import { handleFeedsRoutes } from "./feeds";
 import { handleSlackChannelRoutes } from "./slack-channels";
+import { handleSlackComposeRoutes } from "./slack-compose";
 import { handleSystemRoutes } from "./system";
 import { handleSessionAssetsRoutes } from "./session-assets";
 import { handleSessionNotesRoutes } from "./session-notes";
@@ -69,9 +70,13 @@ export const routeHandlers: RouteHandler[] = [
 	// loopback origin. API and WebSocket paths are excluded by the handler.
 	proxyCloudFrontendRequest,
 	handleStaticAssetsRoutes,
+	// Resolve session ownership before local session-domain handlers consume
+	// request bodies or answer from process-local state.
+	proxyCloudSessionRequest,
 	handlePlainRoutes,
 	handleFeedsRoutes,
 	handleSlackChannelRoutes,
+	handleSlackComposeRoutes,
 	handleSystemRoutes,
 	handleOs1UpdateRoutes,
 	handleLiveActivityRoutes,
@@ -79,9 +84,6 @@ export const routeHandlers: RouteHandler[] = [
 	// Local profile only: the cloud-target New Session palette reads the hosted
 	// model catalog and account pools instead of the reduced local equivalents.
 	proxyCloudTargetRequest,
-	// Local profile only: local ids fall through; every other session id is
-	// forwarded before a local route can turn the ownership miss into a 404.
-	proxyCloudSessionRequest,
 	// Before the generic session routes: /api/sessions/:id/assets* and
 	// /api/sessions/:id/notes are inside their path family and must not be
 	// swallowed by broader matches.

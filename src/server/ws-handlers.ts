@@ -11,6 +11,7 @@ import { cancelAgentRun, interruptAndSteerAgentRun, isAgentSessionBusy, steerAge
 import { isLocalSessionUpgradeInProgress } from "./session-transfer-state";
 import { audit } from "./audit";
 import { pendingAsks } from "./asks";
+import { resendPendingSlackComposer } from "./slack-compose";
 import { mentionedUsers } from "./people";
 import { sendPushToUser } from "./push";
 import { startWatching, stopAllWatchesForClient, transcriptRev } from "./file-watcher";
@@ -94,6 +95,7 @@ function sendWatchExtras(
 			}),
 		);
 	}
+	resendPendingSlackComposer(sessionId, (message) => ws.send(JSON.stringify(message)));
 
 	// Older in-memory rows may lack ids; assign and persist them before
 	// sending so edit/delete/steer actions can address the same row.

@@ -33,17 +33,34 @@ export function defaultSlackChannel(
 		|| channels[0]?.id;
 }
 
+export async function slackChannelsPayload(ctx: Pick<RouteContext, "authUser">) {
+	const channels = configuredSlackChannels();
+	const caller = ctx.authUser?.login || ctx.authUser?.name || undefined;
+	const { mcpUserGrantToken } = await import("../mcp-oauth");
+	const grantToken = caller ? mcpUserGrantToken("slack", caller) : undefined;
+	let canUploadImages = false;
+	if (grantToken) {
+		try {
+			const response = await fetch("https://slack.com/api/auth.test", {
+				headers: { Authorization: `Bearer ${grantToken}` },
+				signal: AbortSignal.timeout(5_000),
+			});
+			canUploadImages = (response.headers.get("x-oauth-scopes") || "")
+				.split(",")
+				.map((scope) => scope.trim())
+				.includes("files:write");
+		} catch {}
+	}
+	return { channels, defaultChannel: defaultSlackChannel(channels), canUploadImages };
+}
+
 export async function handleSlackChannelRoutes(
 	ctx: RouteContext,
 ): Promise<Response | undefined> {
 	const { req, url, path } = ctx;
 
 	if (path === "/api/slack/channels" && req.method === "GET") {
-		const channels = configuredSlackChannels();
-		return Response.json({
-			channels,
-			defaultChannel: defaultSlackChannel(channels),
-		});
+		return Response.json(await slackChannelsPayload(ctx));
 	}
 
 	// Viewing the pane marks the channel read (as Slack itself does) — moves

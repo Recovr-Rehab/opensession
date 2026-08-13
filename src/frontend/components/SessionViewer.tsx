@@ -85,7 +85,10 @@ import {
 import { sessionPrPresentation } from "../lib/session-prs";
 import { reviewLoopResult } from "../lib/review-loop";
 import {
+	cancelSlackComposer,
+	fetchSlackChannels,
 	reconnectSlack,
+	sendSlackComposer,
 	shareShippedChange,
 } from "../lib/api/shipped-changes";
 import { suggestedShippedChangeMessage } from "../lib/shipped-change-copy";
@@ -97,6 +100,7 @@ import { Composer } from "./Composer";
 import { ComposerAgents } from "./ComposerAgents";
 import { UsageMeter } from "./UsageMeter";
 import { SchedulePromptButton } from "./SchedulePrompt";
+import { ShippedChangeComposer } from "./ShippedChangeComposer";
 import { readFileAsDataUrl, type FileAttachment } from "../lib/images";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
 import {
@@ -1189,6 +1193,14 @@ export function SessionViewer({
 		questionId: string;
 		questions: AskQuestion[];
 	} | null>(null);
+	const [slackComposer, setSlackComposer] = useState<{
+		id: string;
+		message: string;
+		channel?: string;
+		images: string[];
+	} | null>(null);
+	const [slackComposerStatus, setSlackComposerStatus] = useState<"idle" | "sharing">("idle");
+	const [slackComposerReconnect, setSlackComposerReconnect] = useState(false);
 	const { copied, share: shareLink } = useCopy();
 	// Inline rename of the header title (double-click), mirroring the tab strip.
 	// `null` = not editing; a string = the working draft.
@@ -2367,6 +2379,18 @@ export function SessionViewer({
 						);
 					}
 					break;
+				case "slack_composer":
+					if (msg.sessionId === session.id) {
+						setSlackComposer(msg.request);
+						setSlackComposerStatus("idle");
+						setSlackComposerReconnect(false);
+					}
+					break;
+				case "slack_composer_resolved":
+					if (msg.sessionId === session.id) {
+						setSlackComposer((current) => current?.id === msg.requestId ? null : current);
+					}
+					break;
 				case "session_status":
 					setIsRunningLive(msg.isRunning);
 					onRunningChange?.(session.id, msg.isRunning);
@@ -3049,6 +3073,38 @@ export function SessionViewer({
 	);
 	// Exact engine-state forks use Claude's SDK forkSession. Other backends can
 	// still fork as a new sibling with a transcript handoff.
+	const sendComposedSlackMessage = useCallback(async (message: string, channel: string, screenshots: string[]) => {
+		if (!slackComposer) return;
+		setSlackComposerStatus("sharing");
+		try {
+			await sendSlackComposer(session.id, {
+				requestId: slackComposer.id,
+				message,
+				channel,
+				screenshots,
+			});
+			setSlackComposer(null);
+			setSlackComposerStatus("idle");
+			toast("Sent to Slack");
+		} catch (error: any) {
+			setSlackComposerStatus("idle");
+			if (error?.status === 403 && /Reconnect Slack/.test(error?.message || "")) {
+				setSlackComposerReconnect(true);
+				toast("Reconnect Slack to add image access");
+			} else {
+				toast(error?.message || "Couldn't send to Slack");
+			}
+		}
+	}, [session.id, slackComposer]);
+	const cancelComposedSlackMessage = useCallback(async () => {
+		if (!slackComposer) return;
+		try {
+			await cancelSlackComposer(session.id, slackComposer.id);
+			setSlackComposer(null);
+		} catch (error: any) {
+			toast(error?.message || "Couldn't close the Slack composer");
+		}
+	}, [session.id, slackComposer]);
 	const canForkSession =
 		session.source === "opensession" &&
 		!!(session.claudeSessionId || session.codexThreadId || session.transcriptPath);
@@ -5690,6 +5746,26 @@ export function SessionViewer({
 											answers,
 										})
 									}
+								/>
+							)}
+
+							{slackComposer && (
+								<ShippedChangeComposer
+									key={slackComposer.id}
+									sessionId={session.id}
+									defaultMessage={slackComposer.message}
+									initialScreenshots={slackComposer.images}
+									defaultChannel={slackComposer.channel}
+									status={slackComposerStatus}
+									reconnectRequired={slackComposerReconnect}
+									loadChannels={() => fetchSlackChannels(session.id)}
+									onShare={sendComposedSlackMessage}
+									onReconnectSlack={async () => {
+										await reconnectSlack();
+										setSlackComposerReconnect(false);
+										toast("Approve image access in Slack, then send again");
+									}}
+									onCancel={cancelComposedSlackMessage}
 								/>
 							)}
 

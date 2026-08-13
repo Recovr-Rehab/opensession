@@ -15,26 +15,42 @@ export interface ShippedChangeComposerProps {
 	sessionId: string;
 	defaultMessage: string;
 	screenshot?: string;
+	initialScreenshots?: string[];
 	reconnectRequired?: boolean;
 	status: "idle" | "sharing";
 	onShare: (message: string, channel: string, screenshots: string[]) => void;
 	onReconnectSlack?: () => void;
+	onCancel?: () => void;
+	loadChannels?: () => Promise<{
+		channels: Array<{ id: string; name: string }>;
+		defaultChannel?: string;
+		canUploadImages?: boolean;
+	}>;
+	defaultChannel?: string;
 }
 
 export function ShippedChangeComposer({
 	sessionId,
 	defaultMessage,
 	screenshot,
+	initialScreenshots,
 	reconnectRequired = false,
 	status,
 	onShare,
 	onReconnectSlack,
+	onCancel,
+	loadChannels,
+	defaultChannel,
 }: ShippedChangeComposerProps) {
 	const [message, setMessage] = useState(defaultMessage);
 	const [channels, setChannels] = useState<Array<{ id: string; name: string }>>([]);
 	const [channel, setChannel] = useState("");
-	const [screenshots, setScreenshots] = useState<string[]>(() => screenshot ? [screenshot] : []);
+	const [screenshots, setScreenshots] = useState<string[]>(() => [
+		...(screenshot ? [screenshot] : []),
+		...(initialScreenshots || []),
+	].filter((path, index, all) => all.indexOf(path) === index).slice(0, 10));
 	const [uploading, setUploading] = useState(false);
+	const [awaitingSlack, setAwaitingSlack] = useState(false);
 	const [canUploadImages, setCanUploadImages] = useState(true);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const sessionRef = useRef(sessionId);
@@ -43,9 +59,12 @@ export function ShippedChangeComposer({
 		setMessage(defaultMessage);
 		if (sessionRef.current !== sessionId) {
 			sessionRef.current = sessionId;
-			setScreenshots(screenshot ? [screenshot] : []);
+			setScreenshots([
+				...(screenshot ? [screenshot] : []),
+				...(initialScreenshots || []),
+			].filter((path, index, all) => all.indexOf(path) === index).slice(0, 10));
 		}
-	}, [defaultMessage, screenshot, sessionId]);
+	}, [defaultMessage, screenshot, initialScreenshots, sessionId]);
 	useEffect(() => {
 		setScreenshots((current) => screenshot && !current.includes(screenshot)
 			? [screenshot, ...current]
@@ -53,14 +72,15 @@ export function ShippedChangeComposer({
 	}, [screenshot]);
 	useEffect(() => {
 		let current = true;
-		fetchShippedChangeChannels(sessionId)
+		(loadChannels ? loadChannels() : fetchShippedChangeChannels(sessionId))
 			.then((result) => {
 				if (!current) return;
 				setChannels(result.channels);
 				setCanUploadImages(result.canUploadImages !== false);
+				const preferred = defaultChannel || result.defaultChannel;
 				setChannel(
-					result.channels.some((candidate) => candidate.id === result.defaultChannel)
-						? result.defaultChannel!
+					result.channels.some((candidate) => candidate.id === preferred || candidate.name === preferred?.replace(/^#/, ""))
+						? result.channels.find((candidate) => candidate.id === preferred || candidate.name === preferred?.replace(/^#/, ""))!.id
 						: result.channels[0]?.id || "",
 				);
 			})
@@ -70,7 +90,7 @@ export function ShippedChangeComposer({
 		return () => {
 			current = false;
 		};
-	}, [sessionId]);
+	}, [sessionId, loadChannels, defaultChannel]);
 	const addImages = async (files: File[]) => {
 		const candidates = files.filter((file) => file.type.startsWith("image/"));
 		const oversized = candidates.find((file) => file.size > MAX_SLACK_IMAGE_BYTES);
@@ -101,6 +121,25 @@ export function ShippedChangeComposer({
 	const mediaUrl = (path: string) => path.startsWith("/media?")
 		? path
 		: `/media?path=${encodeURIComponent(path)}`;
+	const reconnect = async () => {
+		if (!onReconnectSlack) return;
+		setAwaitingSlack(true);
+		try {
+			await onReconnectSlack();
+			for (let attempt = 0; attempt < 24; attempt += 1) {
+				await new Promise((resolve) => setTimeout(resolve, 5_000));
+				const result = await (loadChannels ? loadChannels() : fetchShippedChangeChannels(sessionId));
+				setChannels(result.channels);
+				setCanUploadImages(result.canUploadImages !== false);
+				if (result.canUploadImages !== false) return;
+			}
+			toast("Slack access is still waiting for approval", { variant: "error" });
+		} catch (error) {
+			toast(error instanceof Error ? error.message : "Couldn't reconnect Slack", { variant: "error" });
+		} finally {
+			setAwaitingSlack(false);
+		}
+	};
 
 	return (
 		<div className="mx-auto mt-2 mb-6 w-full max-w-[var(--session-col)]">
@@ -161,9 +200,12 @@ export function ShippedChangeComposer({
 						</Select>
 						<IconChevronDown className="pointer-events-none absolute right-2 text-dim" size={16} />
 					</label>
-					<Button size="md" icon={<BrandMark name="slack" size={12} />} disabled={status !== "idle" || (!(reconnectRequired || (!canUploadImages && screenshots.length > 0)) && (!message.trim() || !channel || uploading))} onClick={() => reconnectRequired || (!canUploadImages && screenshots.length > 0) ? onReconnectSlack?.() : onShare(message.trim(), channel, screenshots)}>
-						{reconnectRequired || (!canUploadImages && screenshots.length > 0) ? "Reconnect" : status === "sharing" ? "Sending…" : "Send"}
+					<Button size="md" icon={<BrandMark name="slack" size={12} />} disabled={status !== "idle" || awaitingSlack || (!(reconnectRequired || (!canUploadImages && screenshots.length > 0)) && ((!message.trim() && screenshots.length === 0) || !channel || uploading))} onClick={() => reconnectRequired || (!canUploadImages && screenshots.length > 0) ? void reconnect() : onShare(message.trim(), channel, screenshots)}>
+						{awaitingSlack ? "Waiting…" : reconnectRequired || (!canUploadImages && screenshots.length > 0) ? "Reconnect" : status === "sharing" ? "Sending…" : "Send"}
 					</Button>
+					{onCancel && (
+						<Button size="md" disabled={status !== "idle"} onClick={onCancel}>Cancel</Button>
+					)}
 				</div>
 			</div>
 		</div>

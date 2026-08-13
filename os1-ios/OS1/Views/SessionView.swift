@@ -123,6 +123,7 @@ struct SessionView: View {
 
     /// Native counterpart of mobile web's title-opened workspace info page.
     @State private var showWorktreeInfo = false
+    @State private var slackShare: PrSlackShareRequest?
 
     #if os(iOS)
     /// Rename prompt, raised from the overflow menu.
@@ -725,6 +726,28 @@ struct SessionView: View {
         }
         .sheet(isPresented: $showPrPanel) {
             PrPanelView(viewModel: viewModel)
+        }
+        .sheet(item: $slackShare) { request in
+            PrSlackShareSheet(request: request)
+        }
+        .onChange(of: viewModel.pendingSlackComposer, initial: true) {
+            guard let request = viewModel.pendingSlackComposer else {
+                if slackShare?.composerRequestId != nil { slackShare = nil }
+                return
+            }
+            slackShare = PrSlackShareRequest(
+                title: request.message,
+                url: URL(string: "https://slack.com")!,
+                sessionId: viewModel.session.id,
+                repo: viewModel.session.repo,
+                branch: viewModel.session.branch,
+                merged: false,
+                walkthroughSummary: nil,
+                suggestedScreenshot: nil,
+                composerRequestId: request.id,
+                initialImages: request.images,
+                preferredChannel: request.channel
+            )
         }
         #if os(iOS)
         .alert("Rename workspace", isPresented: $renamingWorkspace) {

@@ -10,6 +10,9 @@ struct PrSlackShareRequest: Identifiable {
     let merged: Bool
     let walkthroughSummary: String?
     let suggestedScreenshot: String?
+    var composerRequestId: String?
+    var initialImages: [String] = []
+    var preferredChannel: String? = nil
 }
 
 enum ShippedChangeCopy {
@@ -171,11 +174,12 @@ struct PrSlackShareSheet: View {
     }
 
     private var canSend: Bool {
-        !sending && !loading && !selectedChannel.isEmpty && !trimmedDescription.isEmpty
+        !sending && !loading && !selectedChannel.isEmpty
+            && (!trimmedDescription.isEmpty || !images.isEmpty)
     }
 
     private var requiresReconnect: Bool {
-        request.merged && !images.isEmpty && !canUploadImages
+        !images.isEmpty && !canUploadImages
     }
 
     var body: some View {
@@ -193,12 +197,12 @@ struct PrSlackShareSheet: View {
                 } header: {
                     Text("Description")
                 } footer: {
-                    Text(request.merged
+                    Text(request.merged || request.composerRequestId != nil
                         ? "Keep it to 500 characters."
                         : "The GitHub link is added automatically.")
                 }
 
-                if request.merged {
+                if request.merged || request.composerRequestId != nil {
                     Section("Images") {
                         if !images.isEmpty {
                             AttachedImagesRow(images: images) { image in
@@ -229,10 +233,12 @@ struct PrSlackShareSheet: View {
                     }
                 }
 
-                Section("Pull request") {
-                    Link(destination: request.url) {
-                        Text(request.url.absoluteString)
-                            .lineLimit(2)
+                if request.composerRequestId == nil {
+                    Section("Pull request") {
+                        Link(destination: request.url) {
+                            Text(request.url.absoluteString)
+                                .lineLimit(2)
+                        }
                     }
                 }
 
@@ -246,7 +252,7 @@ struct PrSlackShareSheet: View {
             .inlineTitleBarCompat()
             .toolbar {
                 ToolbarItem(placement: .topLeadingCompat) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") { cancel() }
                 }
                 ToolbarItem(placement: .topTrailingCompat) {
                     if sending || awaitingSlack {
@@ -264,6 +270,7 @@ struct PrSlackShareSheet: View {
                 async let channelLoad: Void = loadChannels()
                 async let imageLoad: Void = loadSuggestedImage()
                 _ = await (channelLoad, imageLoad)
+                loading = false
             }
             .task(id: awaitingSlack) {
                 guard awaitingSlack else { return }
@@ -283,7 +290,7 @@ struct PrSlackShareSheet: View {
                 errorText = "Slack access is still waiting for approval."
             }
         }
-        .interactiveDismissDisabled(sending)
+        .interactiveDismissDisabled(sending || request.composerRequestId != nil)
         #if os(iOS)
         .sheet(item: $consent) { link in SafariSheet(url: link.url) }
         #endif
@@ -298,30 +305,36 @@ struct PrSlackShareSheet: View {
             if request.merged {
                 response = try await SlackAPI.shippedChangeChannels(sessionId: request.sessionId)
             } else {
-                response = try await SlackAPI.channels()
+                response = try await SlackAPI.channels(sessionId: request.sessionId)
             }
             channels = response.channels
             canUploadImages = response.canUploadImages ?? true
             if !response.channels.contains(where: { $0.id == selectedChannel }) {
-                selectedChannel = response.channels.contains { $0.id == response.defaultChannel }
+                let preferred = request.preferredChannel?.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .replacingOccurrences(of: "#", with: "")
+                selectedChannel = response.channels.first {
+                    $0.id == preferred || $0.name.caseInsensitiveCompare(preferred ?? "") == .orderedSame
+                }?.id ?? (response.channels.contains { $0.id == response.defaultChannel }
                     ? response.defaultChannel ?? ""
-                    : response.channels.first?.id ?? ""
+                    : response.channels.first?.id ?? "")
             }
             if focusDescription { descriptionFocused = true }
         } catch {
             errorText = (error as? LocalizedError)?.errorDescription
                 ?? error.localizedDescription
         }
-        loading = false
     }
 
     private func loadSuggestedImage() async {
-        guard request.merged,
-              let path = request.suggestedScreenshot,
-              let data = try? await OS1API.media(path: path),
-              let image = AttachedImage(rawData: data)
-        else { return }
-        images = [image]
+        guard request.merged || request.composerRequestId != nil else { return }
+        let paths = [request.suggestedScreenshot].compactMap { $0 } + request.initialImages
+        var loaded: [AttachedImage] = []
+        for path in paths.prefix(10) {
+            guard let data = try? await OS1API.media(path: path),
+                  let image = AttachedImage(rawData: data) else { continue }
+            loaded.append(image)
+        }
+        images = loaded
     }
 
     private func send() {
@@ -332,7 +345,19 @@ struct PrSlackShareSheet: View {
         descriptionFocused = false
         Task {
             do {
-                if request.merged {
+                if let composerRequestId = request.composerRequestId {
+                    var screenshots: [String] = []
+                    for (index, image) in images.enumerated() {
+                        screenshots.append(try await SlackAPI.uploadImage(image, index: index + 1))
+                    }
+                    _ = try await SlackAPI.sendComposer(
+                        sessionId: request.sessionId,
+                        requestId: composerRequestId,
+                        channelId: selectedChannel,
+                        message: trimmedDescription,
+                        screenshots: screenshots
+                    )
+                } else if request.merged {
                     var screenshots: [String] = []
                     for (index, image) in images.enumerated() {
                         screenshots.append(try await SlackAPI.uploadImage(image, index: index + 1))
@@ -381,6 +406,27 @@ struct PrSlackShareSheet: View {
                 openURL(url)
                 #endif
             } catch {
+                errorText = (error as? LocalizedError)?.errorDescription
+                    ?? error.localizedDescription
+            }
+        }
+    }
+
+    private func cancel() {
+        guard let composerRequestId = request.composerRequestId else {
+            dismiss()
+            return
+        }
+        sending = true
+        Task {
+            do {
+                try await SlackAPI.cancelComposer(
+                    sessionId: request.sessionId,
+                    requestId: composerRequestId
+                )
+                dismiss()
+            } catch {
+                sending = false
                 errorText = (error as? LocalizedError)?.errorDescription
                     ?? error.localizedDescription
             }

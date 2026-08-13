@@ -2,12 +2,6 @@ import React, { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type WorkspaceMediaItem } from "../lib/api";
-import {
-	canUseNativeIOSShare,
-	nativeShareWasCancelled,
-	saveFileWithNativeShare,
-	shareURL,
-} from "../lib/native-file-save";
 import { copyToClipboard } from "../lib/share-link";
 import { fullTime } from "../lib/time";
 import {
@@ -17,7 +11,6 @@ import {
 	type WalkthroughMediaLabel,
 } from "../lib/walkthrough-label";
 import { cn } from "../ui/cn";
-import { toast } from "../ui/toast";
 import {
 	IconArrowDown,
 	IconArrowUpRight,
@@ -811,9 +804,6 @@ function MediaLightbox({
 	// "Copy link" for the item now on screen rather than a stale "Copied".
 	const [copiedSrc, setCopiedSrc] = useState<string | null>(null);
 	const copied = !!item && copiedSrc === item.src;
-	const [savingSrc, setSavingSrc] = useState<string | null>(null);
-	const nativeShare = canUseNativeIOSShare();
-	const saving = savingSrc === item.src;
 	// Which way the last page turn went, so the arriving item slides in from
 	// the side it came from — set by the arrows and the keyboard too, not just
 	// by the drag, so every route through the gallery reads the same.
@@ -838,24 +828,6 @@ function MediaLightbox({
 		onIndex(i);
 	};
 	const requestClose = () => onClose(!imageZoomed);
-	const saveItem = async () => {
-		if (saving) return;
-		setSavingSrc(item.src);
-		try {
-			await saveFileWithNativeShare(downloadHref(item), suggestedName(item));
-		} catch (error) {
-			if (!nativeShareWasCancelled(error)) toast("Could not save that file");
-		} finally {
-			setSavingSrc(null);
-		}
-	};
-	const openItem = async () => {
-		try {
-			await shareURL(item.src);
-		} catch (error) {
-			if (!nativeShareWasCancelled(error)) toast("Could not share that link");
-		}
-	};
 
 	useEffect(() => {
 		if (!copiedSrc) return;
@@ -952,25 +924,18 @@ function MediaLightbox({
 			}}
 		>
 			<div className="absolute right-[calc(12px+env(safe-area-inset-right))] top-[calc(12px+env(safe-area-inset-top))] z-10 flex items-center gap-1">
-				{nativeShare ? (
-					<button type="button" className={lightboxAction} onClick={saveItem} disabled={saving}>
-						<IconArrowDown size={14} />
-						{saving ? "Preparing…" : "Download"}
-					</button>
-				) : (
-					<a
-						href={downloadHref(item)}
-						download={
-							item.src.startsWith("data:") || item.src.startsWith("blob:")
-								? suggestedName(item)
-								: undefined
-						}
-						className={lightboxAction}
-					>
-						<IconArrowDown size={14} />
-						Download
-					</a>
-				)}
+				<a
+					href={downloadHref(item)}
+					download={
+						item.src.startsWith("data:") || item.src.startsWith("blob:")
+							? suggestedName(item)
+							: undefined
+					}
+					className={lightboxAction}
+				>
+					<IconArrowDown size={14} />
+					Download
+				</a>
 				{!item.src.startsWith("data:") && (
 					<>
 						{/* The file's own URL — what you paste into a Tella upload, a
@@ -987,22 +952,15 @@ function MediaLightbox({
 							{copied ? <IconCheck size={14} /> : <IconLink size={14} />}
 							{copied ? "Copied" : "Copy link"}
 						</button>
-						{nativeShare ? (
-							<button type="button" onClick={openItem} className={lightboxAction}>
-								<IconArrowUpRight size={14} />
-								Open or share
-							</button>
-						) : (
-							<a
-								href={item.src}
-								target="_blank"
-								rel="noopener noreferrer"
-								className={lightboxAction}
-							>
-								<IconArrowUpRight size={14} />
-								Open
-							</a>
-						)}
+						<a
+							href={item.src}
+							target="_blank"
+							rel="noopener noreferrer"
+							className={lightboxAction}
+						>
+							<IconArrowUpRight size={14} />
+							Open
+						</a>
 					</>
 				)}
 				<button

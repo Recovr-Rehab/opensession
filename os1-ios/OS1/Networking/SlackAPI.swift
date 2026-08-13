@@ -17,6 +17,10 @@ enum SlackAPI {
         let status: String
     }
 
+    struct ComposerResponse: Decodable, Sendable {
+        let status: String
+    }
+
     private struct UploadResponse: Decodable, Sendable {
         let ok: Bool
         let path: String?
@@ -28,8 +32,9 @@ enum SlackAPI {
     }
 
     /// Configured Slack destinations for deliberate, human-authored posts.
-    static func channels() async throws -> ChannelsResponse {
-        let data = try await request("/api/slack/channels")
+    static func channels(sessionId: String) async throws -> ChannelsResponse {
+        let session = encodePath(sessionId)
+        let data = try await request("/api/sessions/\(session)/slack-composer")
         return try JSONDecoder().decode(ChannelsResponse.self, from: data)
     }
 
@@ -100,6 +105,36 @@ enum SlackAPI {
             body: body
         )
         return try JSONDecoder().decode(ShippedChangeResponse.self, from: data)
+    }
+
+    static func sendComposer(
+        sessionId: String,
+        requestId: String,
+        channelId: String,
+        message: String,
+        screenshots: [String]
+    ) async throws -> ComposerResponse {
+        let session = encodePath(sessionId)
+        let data = try await request(
+            "/api/sessions/\(session)/slack-composer",
+            method: "POST",
+            body: [
+                "requestId": requestId,
+                "channel": channelId,
+                "message": message,
+                "screenshots": screenshots,
+            ]
+        )
+        return try JSONDecoder().decode(ComposerResponse.self, from: data)
+    }
+
+    static func cancelComposer(sessionId: String, requestId: String) async throws {
+        let session = encodePath(sessionId)
+        _ = try await request(
+            "/api/sessions/\(session)/slack-composer",
+            method: "DELETE",
+            body: ["requestId": requestId]
+        )
     }
 
     private static func encodePath(_ value: String) -> String {

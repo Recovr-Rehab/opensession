@@ -31,3 +31,32 @@ export async function reconnectSlack(): Promise<void> {
 	if (popup) popup.location.href = result.url;
 	else window.location.href = result.url;
 }
+
+export function fetchSlackChannels(sessionId: string): Promise<{
+	channels: Array<{ id: string; name: string }>;
+	defaultChannel?: string;
+	canUploadImages?: boolean;
+}> {
+	return request(`/sessions/${encodeURIComponent(sessionId)}/slack-composer`, {
+		label: "Couldn't load Slack channels",
+	});
+}
+
+export function sendSlackComposer(
+	sessionId: string,
+	target: { requestId: string; channel: string; message: string; screenshots: string[] },
+): Promise<{ status: "sent"; channel: { id: string; name: string } }> {
+	return request(`/sessions/${encodeURIComponent(sessionId)}/slack-composer`, {
+		method: "POST",
+		body: target,
+		label: "Couldn't send to Slack",
+	});
+}
+
+export function cancelSlackComposer(sessionId: string, requestId: string): Promise<void> {
+	return request(`/sessions/${encodeURIComponent(sessionId)}/slack-composer`, {
+		method: "DELETE",
+		body: { requestId },
+		label: "Couldn't close the Slack composer",
+	});
+}

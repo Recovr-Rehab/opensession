@@ -62,6 +62,7 @@ final class SessionViewModel {
     /// once, since presence carries one name per socket.
     private(set) var otherViewers: [String] = []
     private(set) var pendingQuestion: AskQuestion?
+    private(set) var pendingSlackComposer: SlackComposeRequest?
     private(set) var connectionState: ConnectionState = .connecting
     private(set) var isLoadingConversation = true
     /// A watch that never receives transcript_init is not a loading state
@@ -1377,6 +1378,12 @@ final class SessionViewModel {
 
         case .askResolved(let id, let questionId) where id == session.id:
             if pendingQuestion?.id == questionId { pendingQuestion = nil }
+
+        case .slackComposer(let id, let request) where id == session.id:
+            pendingSlackComposer = request
+
+        case .slackComposerResolved(let id, let requestId) where id == session.id:
+            if pendingSlackComposer?.id == requestId { pendingSlackComposer = nil }
 
         case .serverError(let message)
         where awaitingCreation && message == "Session not found":
