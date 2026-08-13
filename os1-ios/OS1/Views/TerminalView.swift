@@ -96,20 +96,30 @@ struct TerminalView: View {
                 proxy.scrollTo(TerminalView.tailAnchor, anchor: .bottom)
             }
             .overlay(alignment: .bottomTrailing) {
-                if !model.isPinnedToBottom {
-                    ScrollToLatestButton(hasNewOutput: model.hasUnseenOutput) {
-                        withAnimation(.easeOut(duration: 0.2)) {
-                            proxy.scrollTo(TerminalView.tailAnchor, anchor: .bottom)
-                        }
-                        model.isPinnedToBottom = true
-                        model.hasUnseenOutput = false
+                // The control is always present and fades itself, rather than
+                // being inserted and removed under an `.animation` on the
+                // scroll view. The container spelling reads more naturally and
+                // it is what crashed: an implicit animation there wraps every
+                // row, and with output arriving several times a second the
+                // retain count overflowed inside SwiftUI's animation combining
+                // (SIGABRT in swift_abortRetainOverflow, by way of
+                // combineAnimation and AnimatableFrameAttribute, about 80
+                // seconds into a live `tail -f`). Keep any animation on this
+                // surface scoped to the smallest view that needs it.
+                ScrollToLatestButton(hasNewOutput: model.hasUnseenOutput) {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        proxy.scrollTo(TerminalView.tailAnchor, anchor: .bottom)
                     }
-                    .padding(.trailing, 14)
-                    .padding(.bottom, 12)
-                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                    model.isPinnedToBottom = true
+                    model.hasUnseenOutput = false
                 }
+                .padding(.trailing, 14)
+                .padding(.bottom, 12)
+                .opacity(model.isPinnedToBottom ? 0 : 1)
+                .scaleEffect(model.isPinnedToBottom ? 0.9 : 1)
+                .animation(.easeOut(duration: 0.18), value: model.isPinnedToBottom)
+                .allowsHitTesting(!model.isPinnedToBottom)
             }
-            .animation(.easeOut(duration: 0.18), value: model.isPinnedToBottom)
             .overlay(alignment: .top) { banner }
             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width in
                 // The shell wraps at the width it believes it has. Telling it
