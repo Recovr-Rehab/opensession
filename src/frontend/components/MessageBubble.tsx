@@ -258,15 +258,16 @@ function NoticeRow({
  *
  * Hand-drawn at the pill's scale rather than taken from `icons.tsx`: that set
  * floors at 20px on purpose, which is nearly twice this 11px line. Same 12px
- * box and 2.2 stroke as NoticeGlyph beside it, and inline rather than a flex
- * child so a one-line notice stays centered.
+ * box, 2.2 stroke and inherited colour as NoticeGlyph beside it, so the mark
+ * reads as part of the sentence rather than louder than it. Inline rather
+ * than a flex child, so a one-line notice stays centered.
  */
 function NoticeIcon({ icon }: { icon?: NoticeIconName }) {
 	const path = NOTICE_ICON_PATHS[icon ?? ""];
 	if (!path) return null;
 	return (
 		<svg
-			className="mr-1.5 inline-block align-[-0.13em] text-dim"
+			className="mr-1.5 inline-block align-[-0.13em]"
 			width="12"
 			height="12"
 			viewBox="0 0 24 24"
