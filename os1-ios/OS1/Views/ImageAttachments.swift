@@ -135,18 +135,21 @@ struct PreviewImage: Identifiable, Equatable {
     }
 }
 
-/// Horizontal strip of attached-image thumbnails, each removable — and, on
-/// iOS, tappable to check what was actually attached before sending it. At
-/// 56pt a screenshot is unreadable, so the thumbnail alone can't answer "is
-/// this the right one?"; the ✕ stays on top of the tap target, so removing
-/// still takes one tap rather than a trip through the viewer.
+/// Horizontal strip of attached-image thumbnails, each removable and openable
+/// to check what was actually attached before sending it. At 56pt a screenshot
+/// is unreadable, so the thumbnail alone can't answer "is this the right
+/// one?"; the ✕ stays on top of the tap target, so removing still takes one
+/// tap rather than a trip through the viewer.
+///
+/// Each platform opens it in its own grammar — full screen on the phone, a
+/// sheet on the Mac — but neither is left without the answer.
 struct AttachedImagesRow: View {
     let images: [AttachedImage]
     let onRemove: (AttachedImage) -> Void
 
-    #if os(iOS)
     @State private var previewing: AttachedImage?
 
+    #if os(iOS)
     private var gallery: [PreviewImage] {
         images.map { PreviewImage(id: $0.id, source: .data($0.jpegData)) }
     }
@@ -173,12 +176,19 @@ struct AttachedImagesRow: View {
             }
             .padding(.vertical, 2)
         }
+        // `item:` rather than a bool, on both: the presentation renders the
+        // image it was opened with even if the strip changes underneath it.
         #if os(iOS)
-        // `item:` rather than a bool: the sheet renders the image it was
-        // opened with even if the strip changes underneath it.
         .fullScreenCover(item: $previewing) { image in
             FullScreenImagePreview(
                 items: gallery,
+                index: images.firstIndex(of: image) ?? 0
+            )
+        }
+        #else
+        .sheet(item: $previewing) { image in
+            MacImagePreview(
+                images: images.map(\.jpegData),
                 index: images.firstIndex(of: image) ?? 0
             )
         }
@@ -186,7 +196,6 @@ struct AttachedImagesRow: View {
     }
 
     private func thumbnail(_ image: AttachedImage) -> some View {
-        #if os(iOS)
         Button {
             previewing = image
         } label: {
@@ -194,9 +203,11 @@ struct AttachedImagesRow: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Open attached image")
+        #if os(iOS)
         .accessibilityHint("Shows the image full screen")
         #else
-        thumbnailImage(image)
+        .accessibilityHint("Shows the image larger")
+        .help("Open attached image")
         #endif
     }
 
@@ -451,6 +462,110 @@ struct ConversationImageStrip: View {
         }
     }
 }
+
+#if os(macOS)
+/// A staged picture, large enough to check before it goes out.
+///
+/// A sheet rather than a window of its own. Quick Look's floating panel is the
+/// Mac's shape for a file you are browsing, and it detaches on purpose: it
+/// outlives whatever opened it, and you close it yourself. This picture is
+/// part of a message being written in this window, and the question it answers
+/// — "is that the right screenshot?" — lasts seconds, so the preview belongs
+/// to the window holding the composer and leaves with Escape. The phone's
+/// `fullScreenCover` has no macOS counterpart anyway, and taking the whole
+/// display for a glance would be phone grammar on a desk.
+///
+/// Bytes rather than `PreviewImage`, which is what the iOS viewer takes: every
+/// source it would have to resolve (a transcript blob, an asset path, a
+/// support attachment) is fetched by an iOS-only loader, and a viewer that
+/// silently skipped the sources it cannot draw would page past pictures
+/// without saying so. A composer's attachments are always bytes in hand.
+struct MacImagePreview: View {
+    let images: [Data]
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var index: Int
+    private let idealHeight: CGFloat
+
+    init(images: [Data], index: Int) {
+        self.images = images
+        _index = State(initialValue: min(max(index, 0), max(images.count - 1, 0)))
+        idealHeight = Self.idealHeight(for: images.first)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            picture
+            Divider()
+            controls
+        }
+        .frame(minWidth: 480, idealWidth: Self.idealWidth, minHeight: 380, idealHeight: idealHeight)
+    }
+
+    private static let idealWidth: CGFloat = 760
+
+    /// The sheet takes the shape of the picture it opens on, so a wide
+    /// screenshot doesn't sit in a tall pane of empty grey. It keeps that shape
+    /// while you page: a sheet that resized itself under the arrow keys would
+    /// move the button you were about to click again.
+    private static func idealHeight(for data: Data?) -> CGFloat {
+        guard let data, let image = NSImage(data: data), image.size.width > 0 else { return 620 }
+        let padding: CGFloat = 32
+        let controls: CGFloat = 53
+        let drawn = (idealWidth - padding) * (image.size.height / image.size.width)
+        return min(max(drawn + padding + controls, 380), 900)
+    }
+
+    /// The well is the panel surface rather than white: most of what lands
+    /// here is a screenshot of a light UI, and on white you cannot see where
+    /// the picture ends.
+    private var picture: some View {
+        ZStack {
+            OS1VisualStyle.panel
+            if images.indices.contains(index), let image = NSImage(data: images[index]) {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .padding(16)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    /// Paging is buttons carrying the arrow keys rather than `onKeyPress`,
+    /// which only fires for a focused view: in a sheet that focus belongs to
+    /// the default button, so the keys would work or not depending on where
+    /// you last clicked.
+    @ViewBuilder private var controls: some View {
+        HStack(spacing: 12) {
+            if images.count > 1 {
+                Button { step(-1) } label: { Image(systemName: "chevron.left") }
+                    .keyboardShortcut(.leftArrow, modifiers: [])
+                    .disabled(index == 0)
+                    .accessibilityLabel("Previous image")
+                Text("\(index + 1) of \(images.count)")
+                    .font(.callout)
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+                Button { step(1) } label: { Image(systemName: "chevron.right") }
+                    .keyboardShortcut(.rightArrow, modifiers: [])
+                    .disabled(index == images.count - 1)
+                    .accessibilityLabel("Next image")
+            }
+            Spacer()
+            Button("Done") { dismiss() }
+                .keyboardShortcut(.cancelAction)
+        }
+        .padding(12)
+    }
+
+    private func step(_ delta: Int) {
+        let next = index + delta
+        guard images.indices.contains(next) else { return }
+        index = next
+    }
+}
+#endif
 
 #if os(iOS)
 /// The full-screen viewer: one picture at a time, swiping sideways to the rest
