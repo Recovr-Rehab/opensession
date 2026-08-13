@@ -74,9 +74,6 @@ struct NewSessionView: View {
             .background(OS1VisualStyle.background)
             .navigationTitle("New session")
             .inlineTitleBarCompat()
-            #if os(macOS)
-            .frame(minWidth: 560, minHeight: 440)
-            #endif
             .toolbar {
                 #if os(iOS)
                 // Both ends draw their own circle, so both hide the toolbar's
@@ -111,6 +108,14 @@ struct NewSessionView: View {
             // mic must not outlive either.
             .onDisappear { dictation.stop() }
         }
+        // The floor belongs to the stack, not to its first screen. A macOS
+        // sheet sizes to its content, so applied inside, a push replaced it
+        // with a view that asks for nothing and the sheet collapsed to its
+        // title bar. That is how the whole library came up empty behind
+        // "Start from a recipe".
+        #if os(macOS)
+        .frame(minWidth: 560, minHeight: 440)
+        #endif
     }
 
     // ── Prompt editor ─────────────────────────────────────────────────────
