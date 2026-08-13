@@ -1,9 +1,9 @@
 /** Interactive-only Runner MCP. Runners are trusted machines, never Sandboxes. */
 
 import { z } from "zod";
-import { createSdkMcpServer, tool } from "../../server/inprocess-mcp";
-import { execOnRunner, isRunnerConnected } from "../../server/runner-ws";
-import { getRunner, listRunners, publicRunner, releaseRunnerReservation, reserveRunner, runnerAllowed } from "../../server/runners";
+import { createSdkMcpServer, tool } from "./inprocess-mcp";
+import { execOnRunner, isRunnerConnected } from "./runner-ws";
+import { getRunner, listRunners, publicRunner, releaseRunnerReservation, reserveRunner, runnerAllowed } from "./runners";
 
 function resolveRunner(query: string) {
 	const wanted = query.trim().toLowerCase();

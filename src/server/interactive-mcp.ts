@@ -15,7 +15,7 @@
 
 import { createSessionsMcpServer } from "../agents/slack/sessions-tools";
 import { isDevInstance } from "./dev-mode";
-import { createRunnersMcpServer } from "../agents/slack/runners-tools";
+import { createRunnersMcpServer } from "./runners-mcp";
 import { createAdminMcpServer } from "../agents/slack/admin-tools";
 import { createHumansMcpServer } from "../agents/slack/humans-tools";
 import { createKeychainMcpServer } from "../agents/slack/keychain-tools";
