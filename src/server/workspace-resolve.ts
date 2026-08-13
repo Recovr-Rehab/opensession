@@ -130,6 +130,11 @@ export async function resolvePrWorkspace(input: {
       ...(key ? { key } : {}),
       ...(number !== undefined ? { prNumber: number } : {}),
       ...(branch ? { branch } : {}),
+      // The PR's repo travels with its branch. A workspace minted by a session
+      // in another repo (cross-repo work through an attached repo) keeps that
+      // session's repo otherwise, and the pair then describes a branch that
+      // does not exist where it says it does.
+      repo: repoId,
     };
     const matches = (s: UnifiedSession) =>
       !!branch && sessionMatchesPr(s, repoId, branch, number);

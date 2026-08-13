@@ -244,6 +244,7 @@ export function stampWorkspaceIdentity(
     key?: string;
     prNumber?: number;
     branch?: string;
+    repo?: string;
     plainThreadId?: string;
     externalRef?: ExternalRef;
   },
@@ -251,6 +252,17 @@ export function stampWorkspaceIdentity(
   const cur = getWorkspace(id);
   if (!cur) return null;
   if (cur.key && patch.key && cur.key !== patch.key) return cur;
+  // The adopted workspace may have been minted by a session in ANOTHER repo:
+  // a session working in repo A can open a PR in repo B through an attached
+  // repo, and that is how a workspace ended up filed under `opensession` while
+  // its branch and PR belonged to `tella-fusion`. A repo that disagrees with
+  // the branch beside it is worse than none: sessionPrBranch refuses to
+  // inherit a branch across repos, the sidebar cannot match the PR row to the
+  // workspace, and a new session here resolves the branch in the wrong repo.
+  // Only when the workspace has not materialized a worktree of its own, which
+  // is the point where its repo stops being a guess.
+  const adoptRepo =
+    patch.repo && !cur.branch && !cur.worktreeDir && cur.repo !== patch.repo;
   // externalRefs accrue (a workspace can carry several linked objects, like
   // PRs) — only the dedupe key is refused once present.
   const addRef =
@@ -267,6 +279,7 @@ export function stampWorkspaceIdentity(
       ? { prNumber: patch.prNumber }
       : {}),
     ...(patch.branch && !cur.branch ? { branch: patch.branch } : {}),
+    ...(adoptRepo ? { repo: patch.repo } : {}),
     ...(patch.plainThreadId && !cur.plainThreadId
       ? { plainThreadId: patch.plainThreadId }
       : {}),

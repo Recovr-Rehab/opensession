@@ -372,6 +372,10 @@ interface Props {
 	 * on the tabs) and double-click renames the workspace, not the session.
 	 */
 	workspaceName?: string;
+	/** Who created the workspace, for the Info panel's attribution. Its own
+	    record, not the oldest visible session: archiving the session a workspace
+	    was started from must not re-attribute it to whoever came next. */
+	workspaceCreatedBy?: string;
 	onRenameWorkspace?: (name: string) => void;
 	/** Sibling sessions in this session's workspace (the tab strip's list, oldest
 	    first) — feeds the floating overview panel's cross-session media. */
@@ -743,6 +747,7 @@ export function SessionViewer({
 	onComposerPrefillConsumed,
 	onRename,
 	workspaceName,
+	workspaceCreatedBy,
 	onRenameWorkspace,
 	workspaceSessions,
 	onSetStatus,
@@ -5207,6 +5212,7 @@ export function SessionViewer({
 											sessionId={session.id}
 											workspaceId={session.workspaceId || null}
 											workspaceName={workspaceName}
+											workspaceCreatedBy={workspaceCreatedBy}
 											sessions={(workspaceSessions?.length ? workspaceSessions : [session]).map(
 												(s) => ({
 													id: s.id,
@@ -6253,6 +6259,7 @@ export function SessionViewer({
 										sessionId={session.id}
 										workspaceId={session.workspaceId || null}
 										workspaceName={workspaceName}
+										workspaceCreatedBy={workspaceCreatedBy}
 										sessions={(workspaceSessions?.length ? workspaceSessions : [session]).map(
 											(s) => ({
 												id: s.id,

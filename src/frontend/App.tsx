@@ -3319,6 +3319,12 @@ export function App(
 						? workspaces.find((project) => project.id === activeWorkspaceId)?.name
 						: undefined
 				}
+				workspaceCreatedBy={
+					activeWorkspaceId
+						? workspaces.find((project) => project.id === activeWorkspaceId)
+								?.createdBy
+						: undefined
+				}
 				onRenameWorkspace={
 					activeWorkspaceId
 						? async (name) => {

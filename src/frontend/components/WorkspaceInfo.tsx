@@ -101,6 +101,8 @@ interface Props {
 	/** The session's workspace (workspaceId); null = workspace-less (fallback only). */
 	workspaceId: string | null;
 	workspaceName?: string;
+	/** Who created the workspace (its own record). */
+	workspaceCreatedBy?: string;
 	/** Sibling sessions, oldest first (the tab strip's list). */
 	sessions: Array<OverviewSessionRef & { startedBy?: string | null }>;
 	/** Primary repo the workspace's sessions work in. */
@@ -1236,6 +1238,7 @@ export function WorkspaceInfo({
 	sessionId,
 	workspaceId,
 	workspaceName,
+	workspaceCreatedBy,
 	sessions,
 	repo,
 	prState,
@@ -1389,7 +1392,13 @@ export function WorkspaceInfo({
 	const meta = [
 		repo ? repoLabel(repo) : null,
 		`${sessions.length} session${sessions.length === 1 ? "" : "s"}`,
-		oldest?.startedBy ? `by ${oldest.startedBy}` : null,
+		// The workspace's own creator, not the oldest session still on screen:
+		// archiving the session a workspace was started from used to hand the
+		// credit to whoever came next, which for a PR workspace is the review
+		// automation.
+		workspaceCreatedBy || oldest?.startedBy
+			? `by ${workspaceCreatedBy || oldest?.startedBy}`
+			: null,
 		started,
 	]
 		.filter(Boolean)
