@@ -112,20 +112,22 @@ function WaitlistDialog({ open, onClose }: { open: boolean; onClose: () => void 
 				if (event.target === ref.current) onClose();
 			}}
 		>
-			<button
-				type="button"
-				className="waitlist-dialog-close"
-				onClick={onClose}
-				aria-label="Close"
-			>
-				<span aria-hidden="true">×</span>
-			</button>
-			<h2>Request a demo</h2>
+			<div className="waitlist-dialog-head">
+				<h2>Request a demo</h2>
+				<button
+					type="button"
+					className="waitlist-dialog-close"
+					onClick={onClose}
+					aria-label="Close"
+				>
+					<span aria-hidden="true">×</span>
+				</button>
+			</div>
 			<p className="waitlist-dialog-body">
-				We are opening Open Session to a few teams at a time.
+				We will walk you through Open Session running on your own machines, with
+				your team in the same session. Leave your email and we will find a time.
 			</p>
 			<WaitlistForm />
-			<p className="waitlist-note">One email when your invite is ready.</p>
 		</dialog>
 	);
 }

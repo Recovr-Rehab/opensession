@@ -220,7 +220,7 @@ button:focus-visible {
 	gap: 8px;
 	padding: 0 26px;
 	border: 1px solid transparent;
-	border-radius: 12px;
+	border-radius: 16px;
 	cursor: pointer;
 	font-size: 15px;
 	font-weight: 700;
@@ -352,9 +352,9 @@ button:focus-visible {
 	align-items: center;
 	gap: 8px;
 	margin-top: 20px;
-	padding: 7px 7px 7px 12px;
+	padding: 7px 7px 7px 14px;
 	border: 1px solid rgba(20, 22, 26, 0.14);
-	border-radius: 14px;
+	border-radius: 18px;
 	background: #fbfbfa;
 }
 
@@ -384,7 +384,7 @@ button:focus-visible {
 	align-items: center;
 	justify-content: center;
 	padding: 0 18px;
-	border-radius: 10px;
+	border-radius: 14px;
 	cursor: pointer;
 	font-size: 14px;
 	font-weight: 700;
@@ -423,18 +423,11 @@ button:focus-visible {
 	font-weight: 600;
 }
 
-.waitlist-note {
-	margin: 16px 0 0;
-	color: #838791;
-	font-size: 12px;
-	font-weight: 600;
-}
-
 .waitlist-dialog {
 	width: min(100% - 32px, 440px);
 	padding: clamp(26px, 4vw, 34px);
 	border: 0;
-	border-radius: 20px;
+	border-radius: 26px;
 	background: #fff;
 	box-shadow: 0 24px 60px rgba(16, 18, 22, 0.22);
 	color: var(--ink);
@@ -447,10 +440,10 @@ button:focus-visible {
 
 .waitlist-dialog h2 {
 	margin: 0;
-	font-size: 26px;
+	font-size: 21px;
 	font-weight: 600;
-	letter-spacing: -0.025em;
-	line-height: 1.1;
+	letter-spacing: -0.02em;
+	line-height: 1.2;
 }
 
 .waitlist-dialog-body {
@@ -460,13 +453,21 @@ button:focus-visible {
 	line-height: 1.5;
 }
 
+/* The heading and its dismiss share a row, so the × sits on the title's line
+   rather than floating in the corner above it. */
+.waitlist-dialog-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
 .waitlist-dialog-close {
 	display: grid;
-	position: absolute;
-	top: 14px;
-	right: 14px;
-	width: 34px;
-	height: 34px;
+	width: 30px;
+	height: 30px;
+	flex: none;
+	margin-right: -6px;
 	border: 0;
 	border-radius: 50%;
 	background: none;
