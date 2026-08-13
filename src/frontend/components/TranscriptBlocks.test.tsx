@@ -348,7 +348,9 @@ describe("TranscriptBlocks review loops", () => {
 			/>,
 		);
 		expect(html).toContain('aria-expanded="true"');
-		expect(html).toContain("report.txt");
+		expect(html).toContain('data-tool-run="true"');
+		expect(html).toContain(">1 step<");
+		expect(html).not.toContain("report.txt");
 		expect(html).toContain('aria-label="Review passed"');
 		expect(html).toContain("1 round · 5/5 · 8 checks passed");
 		expect(html).toContain("mt-0.5 pl-2");

@@ -2,7 +2,7 @@ import React from "react";
 import type { SessionNote, SessionWalkthrough, TranscriptEntry } from "../lib/types";
 import { MessageBubble } from "./MessageBubble";
 import { NoteBubble } from "./NoteBubble";
-import { TurnBlock } from "./TurnBlock";
+import { ToolSection, TurnBlock } from "./TurnBlock";
 import { collectTouchedFiles, TurnFooter, type TouchedFile } from "./TurnFooter";
 import { VirtualTranscriptBlock } from "./VirtualTranscriptBlock";
 import { WalkthroughCard } from "./WalkthroughCard";
@@ -11,7 +11,6 @@ import { normalizeLegacyVoiceToolEntries } from "../lib/transcript-state";
 import { collectWrittenAssets } from "../lib/open-asset";
 import { classifyEntry } from "@tellahq/opensession-protocol/notices";
 import { ReviewLoopBlock } from "./ReviewLoopBlock";
-import { ToolCallBlock } from "./ToolCallBlock";
 import type { ReviewLoopResult } from "../lib/review-loop";
 import {
 	ShippedChangeComposer,
@@ -285,33 +284,14 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 									return (
 										<React.Fragment key={innerKey}>
 											{inner.kind === "turn" ? (
-												<div>
-													{inner.items.map((entry) =>
-														entry.type === "tool_use" ? (
-															<ToolCallBlock
-																key={entry.id}
-																entry={entry}
-																sessionId={sessionId}
-																result={entry.toolUseId ? toolResults.get(entry.toolUseId) : undefined}
-																pending={Boolean(
-																	live &&
-																	isLast &&
-																	innerIndex === block.blocks.length - 1 &&
-																	entry.toolUseId &&
-																	!toolResults.has(entry.toolUseId),
-																)}
-																onOpenSubagent={onOpenSubagent}
-															/>
-														) : (
-															<MessageBubble
-																key={entry.id}
-																entry={entry}
-																owner={owner}
-																sessionId={sessionId}
-															/>
-														),
-													)}
-												</div>
+												<ReviewTurnSteps
+													items={inner.items}
+													toolResults={toolResults}
+													live={Boolean(live && isLast && innerIndex === block.blocks.length - 1)}
+													owner={owner}
+													sessionId={sessionId}
+													onOpenSubagent={onOpenSubagent}
+												/>
 											) : inner.kind === "footer" ? (
 												<TurnFooter entry={inner.entry} durationMs={inner.durationMs} files={inner.files} assets={inner.assets} onFork={onFork} />
 											) : inner.kind === "entry" && reviewHandoff(inner) === undefined ? (
@@ -402,3 +382,56 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 		</>
 	);
 });
+
+/** Review work uses the same grouped step rows as a normal turn, without
+ * introducing another outer worker disclosure inside the review loop. */
+function ReviewTurnSteps({
+	items,
+	toolResults,
+	live,
+	owner,
+	sessionId,
+	onOpenSubagent,
+}: {
+	items: TranscriptEntry[];
+	toolResults: Map<string, TranscriptEntry>;
+	live: boolean;
+	owner?: string;
+	sessionId?: string;
+	onOpenSubagent?: (agentId: string, label: string) => void;
+}) {
+	const sections: Array<
+		| { kind: "tools"; items: TranscriptEntry[] }
+		| { kind: "message"; entry: TranscriptEntry }
+	> = [];
+	for (const entry of items) {
+		if (entry.type === "tool_use") {
+			const last = sections[sections.length - 1];
+			if (last?.kind === "tools") last.items.push(entry);
+			else sections.push({ kind: "tools", items: [entry] });
+		} else {
+			sections.push({ kind: "message", entry });
+		}
+	}
+
+	return sections.map((section) =>
+		section.kind === "tools" ? (
+			<ToolSection
+				key={section.items[0].id}
+				items={section.items}
+				toolResults={toolResults}
+				live={live}
+				defaultExpanded={false}
+				sessionId={sessionId}
+				onOpenSubagent={onOpenSubagent}
+			/>
+		) : (
+			<MessageBubble
+				key={section.entry.id}
+				entry={section.entry}
+				owner={owner}
+				sessionId={sessionId}
+			/>
+		),
+	);
+}

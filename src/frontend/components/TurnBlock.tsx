@@ -256,7 +256,7 @@ const COMPACT_TOOL_FAMILIES = new Set([
   "web",
 ]);
 
-interface ToolSectionProps {
+export interface ToolSectionProps {
   items: TranscriptEntry[];
   toolResults: Map<string, TranscriptEntry>;
   live: boolean;
@@ -270,7 +270,7 @@ interface ToolSectionProps {
  * Keep uninterrupted runs to one line, while calls with their own important
  * affordance (a worker, an asset, or explicitly featured media) stay direct.
  */
-function ToolSection(props: ToolSectionProps) {
+export function ToolSection(props: ToolSectionProps) {
   const runs: Array<{
     compact: boolean;
     editKey: string;
