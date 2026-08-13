@@ -261,7 +261,7 @@ export function ShippedChangeComposer({
 						</Select>
 						<IconChevronDown className="pointer-events-none absolute right-2 text-dim" size={16} />
 					</label>
-					<Button size="md" icon={<BrandMark name="slack" size={12} />} disabled={status !== "idle" || awaitingSlack || (!(reconnectRequired || (!canUploadImages && screenshots.length > 0)) && ((!message.trim() && screenshots.length === 0) || !channel || uploading))} onClick={() => reconnectRequired || (!canUploadImages && screenshots.length > 0) ? void reconnect() : onShare(message.trim(), channel, screenshots)}>
+					<Button variant="primary" size="md" icon={<BrandMark name="slack" size={12} />} disabled={status !== "idle" || awaitingSlack || (!(reconnectRequired || (!canUploadImages && screenshots.length > 0)) && ((!message.trim() && screenshots.length === 0) || !channel || uploading))} onClick={() => reconnectRequired || (!canUploadImages && screenshots.length > 0) ? void reconnect() : onShare(message.trim(), channel, screenshots)}>
 						{awaitingSlack ? "Waiting…" : reconnectRequired || (!canUploadImages && screenshots.length > 0) ? "Reconnect" : status === "sharing" ? "Sending…" : "Send"}
 					</Button>
 				</div>
