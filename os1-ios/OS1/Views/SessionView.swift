@@ -2186,6 +2186,8 @@ private struct SessionInputBar: View {
     /// enter the engine or busy-message queue.
     @State private var noteMode = false
     @State private var addingNote = false
+    /// Stop was asked for and is waiting on an answer.
+    @State private var stopConfirm = false
     /// Roughly the height of a one-line `.body` field, scaled with Dynamic
     /// Type. The wrap test compares against 1.6× this, comfortably between
     /// one line and two whatever internal padding the field carries.
@@ -2264,6 +2266,26 @@ private struct SessionInputBar: View {
         .animation(.smooth(duration: 0.22), value: visibleNotice)
         .animation(.smooth(duration: 0.18), value: noteMode)
         .animation(.smooth(duration: 0.18), value: viewModel.quoteSelection.text)
+        // Stopping a turn is the one thing in the composer you can't take
+        // back, and the stop disc sits a thumb's width from send — so it asks
+        // first, in the web composer's words. Deliberately an alert rather
+        // than a sheet: the web gives this question a centered dialog of its
+        // own, and an action sheet sliding out of the same edge the composer
+        // lives on reads as part of the composer.
+        .alert("Stop this response?", isPresented: $stopConfirm) {
+            Button("Keep going", role: .cancel) {}
+            // Return confirms, the way initial focus on Stop does on the web.
+            Button("Stop", role: .destructive) { confirmStop() }
+                .keyboardShortcut(.defaultAction)
+        } message: {
+            Text("You can ask again or send a follow-up anytime.")
+        }
+        // A turn that finishes on its own while the question is up leaves
+        // nothing to stop, so the question goes with it rather than stopping
+        // whatever runs next.
+        .onChange(of: viewModel.isRunning) { _, running in
+            if !running { stopConfirm = false }
+        }
         // The send you can feel. Keyed on the view model's send counter rather
         // than the button's action, so every way of sending gets it: the disc,
         // the hold menu's steer/queue, Return on the software keyboard and
@@ -3058,11 +3080,26 @@ private struct SessionInputBar: View {
         }
     }
 
+    /// Every way of stopping goes through the question; nothing here calls
+    /// `cancelRun` directly.
+    private func requestStop() {
+        guard viewModel.isRunning else { return }
+        stopConfirm = true
+    }
+
+    private func confirmStop() {
+        stopConfirm = false
+        // Firmer than a send on purpose, and now on the deliberate half of
+        // the gesture rather than on the tap that only asked.
+        Haptics.play(.stop)
+        viewModel.cancelRun()
+    }
+
     @ViewBuilder
     private var stopButton: some View {
         #if os(macOS)
         Button {
-            viewModel.cancelRun()
+            requestStop()
         } label: {
             Label("Stop", systemImage: "stop.fill")
                 .font(.caption.weight(.medium))
@@ -3074,10 +3111,7 @@ private struct SessionInputBar: View {
         .help("Stop current turn")
         #else
         Button {
-            // Firmer than a send on purpose: stopping a run is the one thing
-            // in the composer you can't take back.
-            Haptics.play(.stop)
-            viewModel.cancelRun()
+            requestStop()
         } label: {
             Image(systemName: "stop.fill")
                 .font(.system(size: 11, weight: .semibold))
@@ -3112,6 +3146,16 @@ private struct SessionInputBar: View {
                 let mods = event.modifierFlags
                     .intersection(.deviceIndependentFlagsMask)
                     .subtracting(.capsLock)
+                // Escape asks to stop the run, like the web composer.
+                // A pending quote keeps its own Escape (the transcript clears
+                // it), so that one passes through untouched.
+                if event.keyCode == 53 {
+                    guard inputFocused, mods.isEmpty, viewModel.isRunning,
+                        viewModel.quoteSelection.text == nil
+                    else { return event }
+                    stopConfirm = true
+                    return nil
+                }
                 guard inputFocused, event.keyCode == 36 || event.keyCode == 76 else {
                     return event
                 }
