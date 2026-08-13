@@ -235,6 +235,7 @@ import {
 } from "./sidebar/HoverCards";
 import { SidebarCtxMenu } from "./sidebar/SidebarCtxMenu";
 import { InlineAlert, ListSkeleton } from "../ui/state";
+import { TeammateOnboarding } from "./TeammateOnboarding";
 import {
 	SIDEBAR_ROW,
 	SIDEBAR_ROW_TITLE,
@@ -281,6 +282,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	onOpenTicket,
 	onOpenFeedItem,
 	onNewSession,
+	onboarding,
 	onNewSessionInRepo,
 	onOpenWorkspace,
 	onRenameWorkspace,
@@ -4413,6 +4415,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				})()}
 			{workspacesOpen && (
 				<div className={SIDEBAR_LIST} data-sidebar-list>
+				{isPhone && onboarding && !onboarding.status?.hasOwnSessions && (
+					<TeammateOnboarding model={onboarding} placement="sidebar" />
+				)}
 				{sessionsLoading && sessions.length === 0 && (
 					<ListSkeleton
 						variant="bare"
@@ -4427,7 +4432,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						Couldn't load sessions.
 					</InlineAlert>
 				)}
-				{workspaceListEmpty && !sessionsLoading && !sessionsError && (
+				{workspaceListEmpty && !sessionsLoading && !sessionsError &&
+					!(onboarding && !onboarding.status?.hasOwnSessions) && (
 					<div className="mx-4 my-7 text-center text-[13px] leading-[1.4] text-faint">
 						{hasWorkspaceFilter
 							? "No matching workspaces"

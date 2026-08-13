@@ -367,6 +367,17 @@ describe("local cloud request routing", () => {
 		expect(sessionRequestTarget("/api/models", false, true)).toBe("none");
 	});
 
+	test("routes cloud-target onboarding readiness to the hosted instance", () => {
+		process.env.OPENSESSION_PROFILE = "local";
+		expect(
+			shouldProxyCloudTargetRequest({
+				path: "/api/onboarding/status",
+				req: new Request("http://localhost/api/onboarding/status?cloud=1"),
+				url: new URL("http://localhost/api/onboarding/status?cloud=1"),
+			}),
+		).toBe(true);
+	});
+
 	test("only proxies allowlisted cloud-target metadata reads", () => {
 		enableCloud();
 		const request = new Request("http://127.0.0.1:3850/api/models?cloud=1");

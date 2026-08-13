@@ -1,4 +1,5 @@
 import React from "react";
+import type { TeammateOnboardingModel } from "../components/TeammateOnboarding";
 import { AGENT_NAME } from "./brand";
 import type { ReviewQueueItem } from "./review-queue";
 import type { FeedDescriptor, FeedItem, SupportThread, UnifiedSession, Workspace } from "./types";
@@ -80,6 +81,8 @@ export interface Props {
 	/** Open a feed item's workspace (resolve-or-create — the feeds design). */
 	onOpenFeedItem: (feed: FeedDescriptor, item: FeedItem) => void;
 	onNewSession: () => void;
+	/** First-session guidance on the phone root. */
+	onboarding?: TeammateOnboardingModel;
 	/** Start a new session with a repo pre-selected (the repo-band "+" action). */
 	onNewSessionInRepo: (repo: string) => void;
 	/** Open a project — its sessions surface in the top tab strip. */

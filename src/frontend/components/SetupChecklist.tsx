@@ -115,7 +115,7 @@ export function SetupChecklist({
 	onJump?: (step: SetupStepId) => void;
 }) {
 	const fix = (step: SetupStepId, tone: ChipTone) =>
-		onJump && tone !== "on" ? (
+		onJump && tone === "warn" ? (
 			<Button size="sm" variant="ghost" onClick={() => onJump(step)}>
 				Set up
 			</Button>
@@ -202,10 +202,10 @@ export function SetupChecklist({
 						title={i.label}
 						description={
 							s.tone === "on"
-								? "Connected and running."
+								? "Configured."
 								: s.tone === "warn"
 									? `Enabled, but missing ${i.missingRequired.join(", ")}.`
-									: "Not enabled. Paste its credentials to connect it."
+									: "Not enabled. Set it up when your team needs it."
 						}
 						tone={s.tone}
 						label={s.label}

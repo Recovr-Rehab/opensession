@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { cn } from "../ui/cn";
+import { useAuthStatus } from "./UserPicker";
 import {
 	SETTINGS_BACK,
 	SETTINGS_CONTENT,
@@ -102,6 +103,7 @@ const SECTIONS: {
 	label: string;
 	group: string;
 	icon: React.ReactNode;
+	adminOnly?: boolean;
 }[] = [
 	{
 		key: "myAccounts",
@@ -201,6 +203,7 @@ const SECTIONS: {
 		key: "setup",
 		label: "Setup",
 		group: "Workspace",
+		adminOnly: true,
 		icon: (
 			<svg
 				width="20"
@@ -243,6 +246,7 @@ const SECTIONS: {
 		key: "repos",
 		label: "Repositories",
 		group: "Workspace",
+		adminOnly: true,
 		icon: (
 			<svg
 				width="20"
@@ -264,6 +268,7 @@ const SECTIONS: {
 		key: "members",
 		label: "Members",
 		group: "Workspace",
+		adminOnly: true,
 		icon: (
 			<svg
 				width="20"
@@ -344,6 +349,7 @@ const SECTIONS: {
 		key: "integrations",
 		label: "Integrations",
 		group: "Workspace",
+		adminOnly: true,
 		icon: (
 			<svg
 				width="20"
@@ -731,6 +737,10 @@ export function Settings({
 	children?: React.ReactNode;
 }) {
 	const isPhone = useIsPhone();
+	const auth = useAuthStatus();
+	const visibleSection = auth?.admin === false && SECTIONS.some(
+		(item) => item.key === section && item.adminOnly,
+	) ? undefined : section;
 
 	// No page-level Esc handler: Esc belongs to whatever is focused (cancelling
 	// an inline edit, closing a menu), not to the settings page itself — losing
@@ -741,6 +751,7 @@ export function Settings({
 	// Group the nav entries under their group label (order preserved).
 	const groups: SectionGroup[] = [];
 	for (const s of SECTIONS) {
+		if (s.adminOnly && auth?.admin === false) continue;
 		let g = groups.find((x) => x.group === s.group);
 		if (!g) groups.push((g = { group: s.group, items: [] }));
 		g.items.push(s);
@@ -750,7 +761,7 @@ export function Settings({
 		return (
 			<MobileSettings
 				groups={groups}
-				section={section}
+				section={visibleSection}
 				onSelect={onSelect}
 				onShowRoot={onShowRoot}
 				onBack={onBack}
@@ -762,7 +773,7 @@ export function Settings({
 	// Default landing = the first non-tool row in the nav. Tool sections can't be
 	// the default: their panel arrives as `children`, which App only passes on a
 	// tool route, so a bare /settings would render an empty pane.
-	const active = section ?? "myAccounts";
+	const active = visibleSection ?? "myAccounts";
 	const shown = filterGroups(groups, query);
 	const firstHit = shown[0]?.hits[0]?.item;
 
