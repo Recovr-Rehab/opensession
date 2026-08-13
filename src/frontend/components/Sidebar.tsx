@@ -3895,8 +3895,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							!isPhone && "items-center",
 							!isPhone &&
 								// Compact rows use control-label type, with glyphs matching
-								// the sidebar's standard 22px leading rail. `py-[5px]` is the
-								// sidebar's 32px item height (see the height scale in
+								// the sidebar's standard 22px leading rail. `py-[7px]` is the
+								// sidebar's 36px item height (see the height scale in
 								// lib/sidebar-classes.ts): a tool row and a session row are
 								// the same kind of thing — one line you click to go
 								// somewhere — so they take the same box. It was `py-[3px]`,
@@ -3906,7 +3906,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								// credited a "wayyy too big" complaint, but no such
 								// request exists in the session record — don't treat the
 								// former numbers as a stated preference.
-								"w-full gap-[9px] rounded-row bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[5px] text-control-label font-medium text-dim hover:text-fg",
+								"w-full gap-[9px] rounded-row bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[7px] text-control-label font-medium text-dim hover:text-fg",
 							!isPhone && SIDEBAR_HOVER_LAYER,
 							!isPhone && tool.active && "bg-pressed text-fg",
 						);

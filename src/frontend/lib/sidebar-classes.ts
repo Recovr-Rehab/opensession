@@ -12,7 +12,7 @@
  * The rail has exactly TWO box heights, and which one an element takes says
  * what KIND of thing it is rather than how important it is:
  *
- *   32px  an ITEM — something you click to go somewhere, and the only family
+ *   36px  an ITEM — something you click to go somewhere, and the only family
  *         that paints a hover pill. Session/PR/support/archived rows, tool
  *         rows, and the headings that are themselves destinations-with-a-mark
  *         (a repo or feed band, Needs review, Awaiting review, Pinned,
@@ -30,12 +30,14 @@
  * directly under them. Hierarchy now comes from type, mark and the hover pill,
  * which are the things that actually differ; height is free to be regular.
  *
- * Phone layouts are deliberately NOT on this scale — a 32px row is not a touch
+ * Phone layouts are deliberately NOT on this scale — a 36px row is not a touch
  * target, so `phone:` keeps its own taller padding throughout.
  *
- * Two numbers downstream depend on those: the sticky offsets below are sums of
- * them (a lane pins under one band = 32; a nested lane under band + repo band
- * = 64), so change a height here and fix the offsets in the same edit.
+ * The tier-1 sticky SLOT is a third number, 32, and it is not a third row
+ * height: it is the 28px band caption plus its air, which is what everything
+ * below pins under. Two offsets are sums of these, so change a height here and
+ * fix them in the same edit: a lane pins under one band at 32, and a lane
+ * nested under a band plus a repo band at 32 + 36 = 68.
  */
 
 /**
@@ -207,7 +209,7 @@ export const SIDEBAR_GROUP_HEADER =
  * An ITEM heading — a repo or feed band, Needs review, Awaiting review,
  * Pinned, Archived, an automation group. Each one leads with a mark in the
  * rail and goes somewhere or opens something, so it wears the row's box and
- * the row's hover pill: on the 32px item height it sits in one regular column
+ * the row's hover pill: on the 36px item height it sits in one regular column
  * with the rows underneath it rather than as a third size between them and the
  * captions.
  *
@@ -215,7 +217,7 @@ export const SIDEBAR_GROUP_HEADER =
  * gives it.
  */
 export const SIDEBAR_HEADER_ROW =
-	`desktop:h-8 desktop:min-h-8 ${SIDEBAR_HOVER_LAYER}`;
+	`desktop:h-9 desktop:min-h-9 ${SIDEBAR_HOVER_LAYER}`;
 
 /** Left pad aligns the icon with a base row (list 6 + header 10 = 16). */
 export const SIDEBAR_GROUP_HEADER_INSET =
@@ -333,11 +335,12 @@ export const SIDEBAR_STICKY_BAND =
  * heading wears in the phone layout, so it is written at the same `min-[721px]`
  * breakpoint the pinning is.
  *
- * 32px, the item height, rather than a 44px box of its own: a band caption
- * carries the least on the rail (a 12px faint word) and had the tallest box on
- * it, which read as a gap in the list rather than as a heading of it. The
- * caption's LABEL height would be 28, but this is also the slot every tier-2
- * header pins under, and the label's own 28 sits inside these 32 unchanged.
+ * 32px rather than a 44px box of its own: a band caption carries the least on
+ * the rail (a 12px faint word) and had the tallest box on it, which read as a
+ * gap in the list rather than as a heading of it. This is a SLOT, not a third
+ * row height — the caption inside it keeps the 28px label height, and the 4px
+ * left over is the air a heading wants above the rows it names. It is also
+ * what every tier-2 header pins under, so the offsets below start from it.
  */
 export const SIDEBAR_STICKY_BAND_ROW =
 	"desktop:mt-0 desktop:flex desktop:h-8 desktop:min-h-8 desktop:items-center desktop:py-0";
@@ -364,12 +367,12 @@ export const SIDEBAR_STICKY_LANE =
  * header, hence the lower z-index. Pass it after {@link SIDEBAR_STICKY_LANE}
  * through `cn()`, which resolves the pair to this one.
  *
- * 64 = the band above it (32) + the repo header above it (32, an item). Both
+ * 68 = the band slot above it (32) + the repo header above it (36, an item). Both
  * of those heights are fixed by their own class rather than by padding, which
  * is what lets this be a sum instead of a measurement.
  */
 export const SIDEBAR_STICKY_LANE_NESTED =
-	"desktop:top-16 desktop:z-[14]";
+	"desktop:top-[68px] desktop:z-[14]";
 
 /**
  * ── Band headings ───────────────────────────────────────────────────────────
