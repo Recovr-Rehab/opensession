@@ -765,7 +765,11 @@ function ZoomableImage({
 				src={src}
 				alt=""
 				draggable={false}
-				className="min-h-0 min-w-0 max-h-full max-w-full rounded-md object-contain [transform-origin:0_0]"
+				// The scrim is near-black in both themes, so a dark screenshot
+				// opened full size has no edge of its own and bleeds into it.
+				// A white hairline rather than border-line-strong: this surface
+				// is always dark, like the rest of the lightbox chrome.
+				className="min-h-0 min-w-0 max-h-full max-w-full rounded-md border border-white/20 object-contain [transform-origin:0_0]"
 				style={{ viewTransitionName }}
 			/>
 		</div>
@@ -1072,7 +1076,9 @@ function MediaLightbox({
 								autoPlay
 								muted
 								playsInline
-								className="min-h-0 min-w-0 max-h-full max-w-full rounded-md"
+								// Same hairline as the photo: a dark first frame needs
+								// an edge against the scrim just as much.
+								className="min-h-0 min-w-0 max-h-full max-w-full rounded-md border border-white/20"
 							/>
 						</div>
 					)}
