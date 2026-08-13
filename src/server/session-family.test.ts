@@ -1,13 +1,18 @@
 import { describe, expect, it } from "bun:test";
 import {
 	familyRoot,
+	foldContext,
 	foldFamilies,
 	parentLinks,
 	type Foldable,
 } from "./session-family";
 
-const hit = (id: string): Foldable & { score: number } => ({
+const DAY = 86_400_000;
+const T0 = 1_770_000_000_000;
+
+const hit = (id: string, ts = T0): Foldable & { score: number } => ({
 	id: `session:${id}`,
+	ts,
 	score: 1,
 });
 
@@ -53,36 +58,85 @@ describe("familyRoot", () => {
 });
 
 describe("foldFamilies", () => {
-	const parents = parentLinks([
-		{ id: "review", parentSessionId: "work" },
-		{ id: "worker", parentSessionId: "work" },
+	// The real shape: a code session, the review spawned from it, and a
+	// follow-up the human started later: all one workspace, one piece of work.
+	const ctx = foldContext([
+		{ id: "work", workspaceId: "ws-1" },
+		{ id: "review", parentSessionId: "work", workspaceId: "ws-1" },
+		{ id: "followup", workspaceId: "ws-1" },
+		{ id: "other", workspaceId: "ws-2" },
 	]);
 
-	it("keeps a parent and its review as one hit", () => {
-		const out = foldFamilies([hit("work"), hit("review")], parents, 8);
+	it("keeps a session and its review as one hit", () => {
+		const out = foldFamilies([hit("work"), hit("review")], ctx, 8);
 		expect(out.map((h) => h.id)).toEqual(["session:work"]);
-		expect(out[0]!.rootId).toBeUndefined();
-		expect(out[0]!.foldedIds).toEqual(["review"]);
+		expect(out[0]!.workspaceId).toBe("ws-1");
+		expect(out[0]!.folded?.map((h) => h.id)).toEqual(["session:review"]);
 	});
 
-	it("points a child-only match at the parent, keeping the child's record", () => {
-		const out = foldFamilies([hit("review")], parents, 8);
+	it("folds a human's sibling sessions in the same workspace", () => {
+		const out = foldFamilies([hit("work"), hit("followup")], ctx, 8);
+		expect(out.map((h) => h.id)).toEqual(["session:work"]);
+		expect(out[0]!.folded?.map((h) => h.id)).toEqual(["session:followup"]);
+	});
+
+	it("lets the best-scoring member lead, and names its parent", () => {
+		const out = foldFamilies([hit("review"), hit("work")], ctx, 8);
 		expect(out).toHaveLength(1);
 		expect(out[0]!.id).toBe("session:review");
-		expect(out[0]!.rootId).toBe("work");
+		expect(out[0]!.parentId).toBe("work");
 	});
 
-	it("lets the best-scoring member lead its family", () => {
-		const out = foldFamilies([hit("review"), hit("worker"), hit("work")], parents, 8);
-		expect(out).toHaveLength(1);
-		expect(out[0]!.id).toBe("session:review");
-		expect(out[0]!.foldedIds).toEqual(["worker", "work"]);
+	it("keeps a spawn separate once its workspace holds work of its own", () => {
+		const aside = foldContext([
+			{ id: "work", workspaceId: "ws-1" },
+			{ id: "aside", parentSessionId: "work", workspaceId: "ws-9" },
+			{ id: "aside-followup", workspaceId: "ws-9" },
+		]);
+		const out = foldFamilies([hit("work"), hit("aside")], aside, 8);
+		expect(out.map((h) => h.id)).toEqual(["session:work", "session:aside"]);
 	});
 
-	it("leaves unrelated sessions alone and applies the limit after folding", () => {
+	it("folds a spawn that sits alone in a workspace of its own", () => {
+		// A fifth of spawned sessions mint a workspace instead of joining the
+		// parent's. Alone in it, that workspace is spawn bookkeeping, not work.
+		const minted = foldContext([
+			{ id: "work", workspaceId: "ws-1" },
+			{ id: "review", parentSessionId: "work", workspaceId: "ws-9" },
+		]);
+		const out = foldFamilies([hit("work"), hit("review")], minted, 8);
+		expect(out.map((h) => h.id)).toEqual(["session:work"]);
+		expect(out[0]!.folded?.map((h) => h.id)).toEqual(["session:review"]);
+	});
+
+	it("falls back to the parent chain when neither session has a workspace", () => {
+		const legacy = foldContext([
+			{ id: "work" },
+			{ id: "review", parentSessionId: "work" },
+		]);
+		const out = foldFamilies([hit("work"), hit("review")], legacy, 8);
+		expect(out.map((h) => h.id)).toEqual(["session:work"]);
+	});
+
+	it("adopts the parent's workspace for a child that has none", () => {
+		const mixed = foldContext([
+			{ id: "work", workspaceId: "ws-1" },
+			{ id: "review", parentSessionId: "work" },
+		]);
+		const out = foldFamilies([hit("work"), hit("review")], mixed, 8);
+		expect(out.map((h) => h.id)).toEqual(["session:work"]);
+		expect(out[0]!.workspaceId).toBe("ws-1");
+	});
+
+	it("does not fold sessions a year apart in a long-lived feed workspace", () => {
+		const out = foldFamilies([hit("work"), hit("followup", T0 + 365 * DAY)], ctx, 8);
+		expect(out).toHaveLength(2);
+	});
+
+	it("leaves unrelated workspaces alone and applies the limit after folding", () => {
 		const out = foldFamilies(
-			[hit("work"), hit("review"), hit("other"), hit("third")],
-			parents,
+			[hit("work"), hit("review"), hit("other"), hit("loose")],
+			ctx,
 			2,
 		);
 		expect(out.map((h) => h.id)).toEqual(["session:work", "session:other"]);

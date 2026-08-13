@@ -34,7 +34,7 @@ import {
 	type SearchHit,
 	type SearchRecord,
 } from "./session-search-store";
-import { foldFamilies, parentLinks, type Folded } from "./session-family";
+import { foldContext, foldFamilies, type Folded } from "./session-family";
 import type { TranscriptEntry, UnifiedSession } from "./types";
 
 const g = globalThis as any;
@@ -61,15 +61,23 @@ export function searchIndex(): SessionSearchStore {
 	return (g.__sessionSearchStore ??= new SessionSearchStore(DB_PATH));
 }
 
-/** Max rows pulled from the store before folding (the store's own ceiling). */
-const FOLD_POOL = 25;
+/** Rows pulled from the store before folding. Well above any caller's limit:
+ *  one busy workspace can own most of the top rows, and after folding those
+ *  are a single result. */
+const FOLD_POOL = 60;
+/** Max results returned to a caller, after folding. */
+const MAX_RESULTS = 25;
 
 /**
- * Search, then collapse each session family to one hit. A review or worker
- * session spawned from another session is the same piece of work as its
- * parent, and it distills into a record that reads like a second, unrelated
- * result; folding here (rather than in the index) keeps the store
- * source-generic and always reflects the CURRENT parent links.
+ * Search, then collapse each piece of work to one hit. A workspace is the unit
+ * of one piece of work (the code session, the follow-up, the review spawned
+ * to read the diff), but the distiller writes a record per session, so a
+ * workspace surfaces as several results that read like unrelated sessions.
+ * session-family.ts owns the grouping rules.
+ *
+ * Folding here rather than in the index keeps the store source-generic (a
+ * Slack thread has no workspace) and always reflects the CURRENT links: a
+ * session moved between workspaces regroups without a reindex.
  */
 export function searchSessionHistory(
 	query: string,
@@ -78,13 +86,13 @@ export function searchSessionHistory(
 	const sinceTs = opts.days
 		? Date.now() - opts.days * 86_400_000
 		: undefined;
-	const limit = Math.min(Math.max(opts.limit ?? 8, 1), FOLD_POOL);
+	const limit = Math.min(Math.max(opts.limit ?? 8, 1), MAX_RESULTS);
 	const hits = searchIndex().search(query, {
 		repo: opts.repo,
 		limit: FOLD_POOL,
 		sinceTs,
 	});
-	return foldFamilies(hits, parentLinks(getCachedSessions()), limit);
+	return foldFamilies(hits, foldContext(getCachedSessions()), limit);
 }
 
 // ── Extraction ──────────────────────────────────────────────────────────────

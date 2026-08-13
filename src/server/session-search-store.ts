@@ -118,7 +118,10 @@ export class SessionSearchStore {
 		query: string,
 		opts: { repo?: string; limit?: number; sinceTs?: number; now?: number } = {},
 	): SearchHit[] {
-		const limit = Math.min(Math.max(opts.limit ?? 8, 1), 25);
+		// Ceiling is generous because the caller folds these rows into pieces of
+		// work (session-family.ts) before showing them: a query where one
+		// workspace holds every top row must still leave other work to rank.
+		const limit = Math.min(Math.max(opts.limit ?? 8, 1), 100);
 		const now = opts.now ?? Date.now();
 		let rows = this.rawMatch(ftsQuery(query, false), opts.repo);
 		// All-terms AND can be too strict for long natural-language queries —

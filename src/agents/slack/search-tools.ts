@@ -29,7 +29,7 @@ export function createSearchMcpServer() {
 	const tools = [
 		tool(
 			"search_history",
-			"Search past Open Session sessions (distilled question/resolution records, lexical match + recency-weighted). Use BEFORE re-deriving something that has likely been solved here before: a bug that looks familiar, an error string, 'how did we fix/decide X', which session touched a file or subsystem. Exact tokens work best — error fragments, file names, function names, flag names. Results are distilled records, not the transcript: take the session id of anything you'd act on and expand it with read_history. Sessions spawned from another session (a review, a worker) fold into their parent, so one piece of work is one result; when a hit says it matched in a sub-session, read THAT id.",
+			"Search past Open Session sessions (distilled question/resolution records, lexical match + recency-weighted). Use BEFORE re-deriving something that has likely been solved here before: a bug that looks familiar, an error string, 'how did we fix/decide X', which session touched a file or subsystem. Exact tokens work best: error fragments, file names, function names, flag names. Results are distilled records, not the transcript: take the session id of anything you'd act on and expand it with read_history. One piece of work is one result: the sessions of a workspace (the change, its follow-ups, the review spawned to read the diff) fold into a single hit, whose other sessions are listed under it. The listed id is often where the answer actually is, so read it rather than assuming the top record covers the family.",
 			{
 				query: z
 					.string()
@@ -64,18 +64,23 @@ export function createSearchMcpServer() {
 						const parts = [
 							`${i + 1}. [${date}]${h.repo ? ` (${h.repo})` : ""}${h.user ? ` ${h.user}:` : ""} ${h.question}`,
 						];
-						if (h.resolution) parts.push(`   → ${h.resolution}`);
-						if (h.files) parts.push(`   files: ${h.files.split(/\s+/).slice(0, 8).join(" ")}`);
-						// A spawned review/worker session folds into its parent: the
-						// parent is the session to open, the match may live in the child.
-						const extra = [
-							h.rootId ? `matched in sub-session ${id}` : "",
-							h.foldedIds?.length ? `+${h.foldedIds.length} more in this family` : "",
-							h.pr ? `PR: ${h.pr}` : "",
-						].filter(Boolean);
-						parts.push(
-							`   session: ${h.rootId || id}${extra.length ? `  (${extra.join(", ")})` : ""}`,
-						);
+							if (h.resolution) parts.push(`   → ${h.resolution}`);
+							if (h.files) parts.push(`   files: ${h.files.split(/\s+/).slice(0, 8).join(" ")}`);
+							parts.push(`   session: ${id}${h.pr ? ` PR: ${h.pr}` : ""}`);
+							// One workspace is one piece of work, so its other sessions fold
+							// behind this one. Name them: the leader is only the best-scoring
+							// record, and the answer may sit in a sibling.
+							if (h.folded?.length) {
+								parts.push(
+									`   same work (workspace ${h.workspaceId || "?"}), also matched:`,
+								);
+								for (const f of h.folded.slice(0, 4)) {
+									parts.push(`     · ${f.id.replace(/^session:/, "")} ${f.question}`);
+								}
+								if (h.folded.length > 4) {
+									parts.push(`     · +${h.folded.length - 4} more`);
+								}
+							}
 						return parts.join("\n");
 					});
 					lines.push(
