@@ -96,7 +96,14 @@ struct TurnBlockView: View {
             }
         }
         .foregroundStyle(OS1VisualStyle.textDim)
+        #if os(iOS)
+        // The label is visually one line, but its touch target still needs the
+        // platform minimum. The previous 24pt frame made otherwise-working
+        // folds easy to miss with a thumb.
+        .frame(minHeight: 44)
+        #else
         .padding(.vertical, 3)
+        #endif
         .contentShape(Rectangle())
     }
 

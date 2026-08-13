@@ -136,13 +136,12 @@ extension View {
     ///     tab strip: a row has to be gone by the time it reaches the pills,
     ///     since the gaps between them show whatever is behind. Longer ramps
     ///     look softer but leave rows half-legible against the glass.
-    ///   - veil: the wash's opacity over the bars. Near-total: this is the only
-    ///     thing hiding a dark code fence from the status bar now. Short of 1
-    ///     so the transcript is still faintly there behind the glass — at 0.97
-    ///     black text sits ~8/255 off the canvas, present but unreadable.
+    ///   - veil: the wash's opacity over the bars. Opaque by default because
+    ///     system chrome owns that touch region; showing a control there makes
+    ///     it look actionable even though UIKit cannot deliver the touch.
     func transcriptTopWash(
         ramp: CGFloat = 56,
-        veil: Double = 0.97
+        veil: Double = 1
     ) -> some View {
         // Enough to cover the tallest top chrome (status bar + nav bar + tab
         // strip) on any device, plus slack; the excess lands off-screen.
