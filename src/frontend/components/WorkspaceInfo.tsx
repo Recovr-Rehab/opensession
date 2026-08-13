@@ -1606,7 +1606,16 @@ export function WorkspaceInfo({
 											// get away with rounded-control because they only
 											// sit 4px in — so it's spelled out, and it follows
 											// --rf like every other radius.
-											"relative aspect-video shrink-0 snap-start overflow-hidden rounded-[calc(14px*var(--rf)-8px)] border border-line bg-surface transition-colors hover:border-line-strong hover:bg-hover",
+											// border-line-strong, not border-line: a frame's own
+											// edge is whatever the capture happens to end on, so
+											// a dark screenshot on the dark panel has no edge at
+											// all and the tile dissolves into the card behind it.
+											// The frame supplies the edge instead, at the same
+											// step every other image in the app is outlined with
+											// (NoteBubble, the Slack composer's thumbnails).
+											// Hover is the fill alone: there is no line above
+											// strong to escalate to.
+											"relative aspect-video shrink-0 snap-start overflow-hidden rounded-[calc(14px*var(--rf)-8px)] border border-line-strong bg-surface transition-colors hover:bg-hover",
 											media.length === 1
 												? "w-full"
 												: media.length === 2
