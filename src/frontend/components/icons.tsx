@@ -540,22 +540,6 @@ export function IconConnections(p: IconProps) {
   );
 }
 
-// The same glyph pulled in around its centre, stroke unchanged. Three spread
-// nodes fill more of the 24-grid than the sparse tool glyphs, so in a row of
-// them (the transcript's tool steps) the plain one reads a step larger.
-// Scaling the whole SVG would thin the stroke with it; this keeps the weight.
-export function IconConnectionsTight(p: IconProps) {
-  return (
-    <Svg {...p}>
-      <circle {...stroke} cx="7.65" cy="12" r="1.96" fill="none" />
-      <circle {...stroke} cx="15.92" cy="7.43" r="1.96" fill="none" />
-      <circle {...stroke} cx="15.92" cy="16.57" r="1.96" fill="none" />
-      <path {...stroke} d="M9.67 10.88L13.9 8.55" />
-      <path {...stroke} d="M9.67 13.12L13.9 15.45" />
-    </Svg>
-  );
-}
-
 export function IconBook(p: IconProps) {
   return (
     <Svg {...p}>

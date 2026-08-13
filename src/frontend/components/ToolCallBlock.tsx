@@ -43,7 +43,7 @@ import {
   IconSearch,
   IconGlobe,
   IconSparkle,
-  IconConnectionsTight,
+  IconConnections,
   IconBook,
   IconBranches,
   IconListChecks,
@@ -213,12 +213,12 @@ export function ToolGlyph({ toolName, size = 20 }: { toolName: string; size?: nu
       return <IconGlobe size={size} />;
     case "agent":
       return <IconSparkle size={size} />;
-    // The three nodes fill more of the 24-grid than the sparse tool glyphs, so
-    // MCP rows need the pulled-in drawing to sit level with shell rows. Asking
-    // for a smaller `size` here does nothing: icons clamp at 20px (MIN_SIZE in
-    // icons.tsx), and scaling the box would thin the stroke with it.
+    // Full size, like every other family. The three nodes do fill more of the
+    // 24-grid than the sparse glyphs, but both ways of pulling it in read
+    // worse: a smaller `size` does nothing (icons clamp at 20px, MIN_SIZE in
+    // icons.tsx), and a tighter drawing loses the row's rhythm.
     case "mcp":
-      return <IconConnectionsTight size={size} />;
+      return <IconConnections size={size} />;
     case "skill":
       return <IconBook size={size} />;
     default:
