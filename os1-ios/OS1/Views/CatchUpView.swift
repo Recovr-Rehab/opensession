@@ -40,7 +40,7 @@ struct CatchUpView: View {
     // MARK: - Chrome
 
     private var header: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 5) {
             ZStack {
                 Text(counterLabel)
                     .font(.headline)
@@ -71,9 +71,9 @@ struct CatchUpView: View {
             }
             progressBar
         }
-        .padding(.horizontal, 18)
-        .padding(.top, 4)
-        .padding(.bottom, 10)
+        .padding(.horizontal, 14)
+        .padding(.top, 1)
+        .padding(.bottom, 7)
     }
 
     /// How far through the deck you are. A finish line is most of what makes a
@@ -88,7 +88,7 @@ struct CatchUpView: View {
             }
         }
         .frame(height: 3)
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 4)
         .animation(.snappy(duration: 0.38), value: fractionDone)
         .opacity(model.isEmpty ? 0 : 1)
         .accessibilityHidden(true)

@@ -42,9 +42,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   built by `CatchUpQueue` from the shared `/api/reads` marks with the web
   deck's rules: yours, not archived, not an automation, not the Desk). The card
   renders the workspace's main chat with an expand control and an inline reply
-  field delivered through the `Outbox`. Full-width **Keep unread** and **Mark
-  as read** buttons sit below it; swipe left still archives and swipe right
-  still marks read. The whole stack is a function of one horizontal drag value: tilt,
+  field delivered through the `Outbox`. Full-width **Archive**, **Keep unread**,
+  and **Mark as read** buttons sit below it; swipe left still archives and swipe
+  right still marks read. The whole stack is a function of one horizontal drag value: tilt,
   stamp, tint, and how far forward the card behind has come, so a half-swipe
   reverses continuously; release uses Apple's
   momentum projection to decide, then hands the finger's velocity to the

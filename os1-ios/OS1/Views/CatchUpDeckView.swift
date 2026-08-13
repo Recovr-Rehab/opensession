@@ -399,19 +399,39 @@ struct CatchUpDeckView: View {
     // MARK: - Controls
 
     private var actionBar: some View {
-        HStack(spacing: 10) {
-            decisionButton(.keep, label: "Keep unread", prominent: false)
-            decisionButton(.read, label: "Mark as read", prominent: true)
+        HStack(spacing: 8) {
+            decisionButton(.archive, label: "Archive", style: .archive)
+            decisionButton(.keep, label: "Keep unread", style: .secondary)
+            decisionButton(.read, label: "Mark as read", style: .primary)
         }
         .padding(.horizontal, 12)
-        .padding(.top, 12)
+        .padding(.top, 10)
         .padding(.bottom, 10)
+    }
+
+    private enum DecisionStyle: Equatable {
+        case archive, secondary, primary
+
+        var foreground: Color {
+            switch self {
+            case .archive: OS1VisualStyle.red
+            case .secondary: OS1VisualStyle.text
+            case .primary: OS1VisualStyle.onAccent
+            }
+        }
+
+        var fill: Color {
+            switch self {
+            case .archive, .secondary: OS1VisualStyle.background
+            case .primary: OS1VisualStyle.accent
+            }
+        }
     }
 
     private func decisionButton(
         _ intent: CatchUpIntent,
         label: String,
-        prominent: Bool
+        style: DecisionStyle
     ) -> some View {
         let live = self.intent(for: drag) == intent
         let amount = live ? progress(drag, in: deckSize) : 0
@@ -419,16 +439,18 @@ struct CatchUpDeckView: View {
             commit(intent, velocity: .zero, in: deckSize)
         } label: {
             Text(label)
-                .font(.body.weight(.semibold))
-                .foregroundStyle(prominent ? OS1VisualStyle.onAccent : OS1VisualStyle.text)
-                .frame(maxWidth: .infinity, minHeight: 58)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+                .foregroundStyle(style.foreground)
+                .frame(maxWidth: .infinity, minHeight: 54)
                 .background {
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .fill(prominent ? OS1VisualStyle.accent : OS1VisualStyle.background)
+                    RoundedRectangle(cornerRadius: 17, style: .continuous)
+                        .fill(style.fill)
                         .shadow(
-                            color: .black.opacity(prominent ? 0.12 : 0.08),
-                            radius: prominent ? 12 : 8,
-                            y: prominent ? 7 : 4
+                            color: .black.opacity(style == .primary ? 0.12 : 0.08),
+                            radius: style == .primary ? 12 : 8,
+                            y: style == .primary ? 7 : 4
                         )
                 }
                 .scaleEffect(1 + 0.025 * amount)

@@ -18,6 +18,7 @@ struct CatchUpCardView: View {
 
     @State private var folds = FoldStateStore()
     @State private var reply = ""
+    @Environment(\.colorScheme) private var colorScheme
 
     private let shape = RoundedRectangle(cornerRadius: 26, style: .continuous)
 
@@ -33,7 +34,7 @@ struct CatchUpCardView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .background(OS1VisualStyle.background)
+        .background(cardSurface)
         .clipShape(shape)
         .overlay(shape.strokeBorder(OS1VisualStyle.border.opacity(0.5), lineWidth: 0.5))
         // A card in hand casts more shadow than the ones under it, which is
@@ -43,6 +44,14 @@ struct CatchUpCardView: View {
             radius: isTop ? 26 : 12,
             y: isTop ? 14 : 6
         )
+    }
+
+    private var cardSurface: Color {
+        colorScheme == .dark ? OS1VisualStyle.raised : OS1VisualStyle.background
+    }
+
+    private var composerSurface: Color {
+        colorScheme == .dark ? OS1VisualStyle.panel : OS1VisualStyle.raised
     }
 
     // MARK: - Header
@@ -233,7 +242,7 @@ struct CatchUpCardView: View {
         .padding(.vertical, 8)
         .background {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(OS1VisualStyle.raised)
+                .fill(composerSurface)
                 .overlay {
                     RoundedRectangle(cornerRadius: 22, style: .continuous)
                         .strokeBorder(OS1VisualStyle.border.opacity(0.4), lineWidth: 0.5)
