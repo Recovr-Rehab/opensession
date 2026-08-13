@@ -3,7 +3,12 @@ import type { SessionNote, SessionWalkthrough, TranscriptEntry } from "../lib/ty
 import { MessageBubble } from "./MessageBubble";
 import { NoteBubble } from "./NoteBubble";
 import { ToolSection, TurnBlock } from "./TurnBlock";
-import { collectTouchedFiles, TurnFooter, type TouchedFile } from "./TurnFooter";
+import {
+	collectTouchedFiles,
+	TurnFooter,
+	TURN_FOOTER_LIFT,
+	type TouchedFile,
+} from "./TurnFooter";
 import { VirtualTranscriptBlock } from "./VirtualTranscriptBlock";
 import { WalkthroughCard } from "./WalkthroughCard";
 import { walkthroughInsertIndex } from "./walkthrough-placement";
@@ -293,7 +298,9 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 													onOpenSubagent={onOpenSubagent}
 												/>
 											) : inner.kind === "footer" ? (
-												<TurnFooter entry={inner.entry} durationMs={inner.durationMs} files={inner.files} assets={inner.assets} onFork={onFork} />
+												// Inside the fold the row is one child among many, so it
+												// carries its own lift onto the answer above it.
+												<TurnFooter className={TURN_FOOTER_LIFT} entry={inner.entry} durationMs={inner.durationMs} files={inner.files} assets={inner.assets} onFork={onFork} />
 											) : inner.kind === "entry" && reviewHandoff(inner) === undefined ? (
 												<MessageBubble
 													entry={inner.entry}
@@ -370,6 +377,9 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 						<VirtualTranscriptBlock
 							anchorId={anchorId}
 							enabled={!isLiveTail && i < blocks.length - 24}
+							// A footer overlaps the answer block above it, and only the
+							// wrapper can: the windowed branch contains its contents.
+							className={block.kind === "footer" ? TURN_FOOTER_LIFT : undefined}
 						>
 							{content}
 						</VirtualTranscriptBlock>

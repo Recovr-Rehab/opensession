@@ -26,10 +26,28 @@ export interface TouchedFile {
   deletions: number;
 }
 
+/**
+ * The row sits 10px into the answer above it, closing the turn's own 18px
+ * bottom margin to 8px: these actions belong to that answer, and a full row
+ * gap read as the next block starting.
+ *
+ * It is a class the CALLER places rather than one the row wears, because the
+ * lift only works on a box nothing clips. TranscriptBlocks wraps each block in
+ * VirtualTranscriptBlock, whose `content-visibility: auto` applies layout and
+ * paint containment: layout containment stops this margin collapsing out
+ * through the wrapper, so the row hangs 10px above the wrapper's box, and
+ * paint containment then clips exactly those 10px off the top, taking half the
+ * duration and the top of every chip with them. On that wrapper the same class
+ * is a plain margin, outside the box it contains.
+ */
+export const TURN_FOOTER_LIFT = "-mt-2.5";
+
 interface Props {
   /** The turn's final answer entry — copy copies its markdown, fork forks from it. */
   entry: TranscriptEntry;
   durationMs: number;
+  /** Where the caller puts the row. TURN_FOOTER_LIFT when nothing contains it. */
+  className?: string;
   /** Files the turn's tool calls wrote, merged per path in first-touch order. */
   files: TouchedFile[];
   /** Scratch files the turn wrote (`opensession-assets`), in first-write order. */
@@ -54,6 +72,7 @@ export const TurnFooter = React.memo(function TurnFooter({
   files,
   assets,
   onFork,
+  className,
 }: Props) {
   const pathRoots = useToolPathRoots();
   const isPhone = useIsPhone();
@@ -68,7 +87,12 @@ export const TurnFooter = React.memo(function TurnFooter({
   const duration = formatDuration(durationMs);
 
   return (
-    <div className="mx-auto -mt-2.5 mb-[18px] flex w-full max-w-[var(--session-col)] flex-wrap items-center gap-x-0.5 gap-y-1.5">
+    <div
+      className={cn(
+        "mx-auto mb-[18px] flex w-full max-w-[var(--session-col)] flex-wrap items-center gap-x-0.5 gap-y-1.5",
+        className
+      )}
+    >
       {duration && (
         <span className="mr-1.5 pl-1 text-meta font-medium leading-4 text-faint">
           {duration}
@@ -201,6 +225,7 @@ function turnFooterPropsEqual(prev: Props, next: Props): boolean {
     prev.entry !== next.entry ||
     prev.durationMs !== next.durationMs ||
     prev.onFork !== next.onFork ||
+    prev.className !== next.className ||
     prev.assets.length !== next.assets.length ||
     prev.files.length !== next.files.length
   )
