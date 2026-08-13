@@ -356,14 +356,11 @@ function StopConfirmModal({
           </Modal.Description>
         </div>
         <Modal.Footer className="mt-3 gap-3">
-          <Modal.Close
-            render={<Button size="lg" className="min-h-11 px-5 text-base">Keep going</Button>}
-          />
+          <Modal.Close render={<Button size="lg">Keep going</Button>} />
           <Button
             ref={stopRef}
             variant="primary"
             size="lg"
-            className="min-h-11 px-5 text-base"
             onClick={onConfirm}
           >
             Stop
