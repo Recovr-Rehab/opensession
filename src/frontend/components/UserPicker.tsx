@@ -6,7 +6,6 @@ import { usePeople } from "../lib/people";
 import { Button } from "../ui/button";
 import { DeviceCode } from "../ui/device-code";
 import { PulseDot } from "../ui/status";
-import { LoadingState } from "../ui/state";
 
 /**
  * Mutable compatibility view for older consumers. `usePeople()` owns the
@@ -108,8 +107,10 @@ export function UserGate({ children }: { children: React.ReactNode }) {
   TEAM.splice(0, TEAM.length, ...roster.map(({ name }) => name));
   const [auth, setAuth] = useState<AuthStatus | null>(null);
 	const [authFailed, setAuthFailed] = useState(false);
+	const [showAuthWait, setShowAuthWait] = useState(false);
 	const loadAuth = () => {
 		setAuthFailed(false);
+		setShowAuthWait(false);
 		fetch(`${BASE_PATH}/api/auth/status`)
 			.then((r) => {
 				if (!r.ok) throw new Error(`Authentication status failed: ${r.status}`);
@@ -131,6 +132,17 @@ export function UserGate({ children }: { children: React.ReactNode }) {
 		loadAuth();
   }, []);
 
+	useEffect(() => {
+		if (auth || authFailed) return;
+		const timer = window.setTimeout(() => setShowAuthWait(true), 300);
+		return () => window.clearTimeout(timer);
+	}, [auth, authFailed]);
+
+	// Returning visitors already have a local identity. Let the app paint while
+	// the server verifies its HttpOnly session, as it did before this check grew
+	// a blocking loading screen. The server still enforces auth on every route.
+	if (!auth && !authFailed && user !== "Anonymous") return <>{children}</>;
+
 	if (!auth) {
 		return (
 			<div className="flex h-screen items-center justify-center bg-surface">
@@ -139,7 +151,11 @@ export function UserGate({ children }: { children: React.ReactNode }) {
 						<p className="m-0 mb-3 text-body text-dim">Couldn't check sign-in.</p>
 						<Button size="sm" onClick={loadAuth}>Try again</Button>
 					</div>
-				) : <LoadingState>Checking sign-in…</LoadingState>}
+				) : showAuthWait ? (
+					<div role="status" aria-live="polite" className="text-supporting text-faint">
+						Checking sign-in
+					</div>
+				) : null}
 			</div>
 		);
 	}
