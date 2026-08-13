@@ -268,6 +268,13 @@ struct DataImage: View {
 /// viewer; a pinch zooms it where it sits, without going anywhere (see
 /// `pinchToPeek`). Composer thumbnails (`AttachedImagesRow`) open the same
 /// viewer on tap, but keep the ✕ as their primary interaction.
+///
+/// A click opens it on the Mac too, in that platform's sheet. What the Mac
+/// does NOT get is the group: paging needs every picture of the message, and
+/// the rest of them are still URLs that only the iOS viewer knows how to
+/// fetch. One picture you can read beats a transcript of pictures you cannot
+/// open, so the sheet shows the one you clicked and says nothing about a
+/// group it cannot page through.
 struct ExpandableDataImage: View {
     let data: Data
     /// The group this picture belongs to, and where it sits in it. Empty means
@@ -275,9 +282,9 @@ struct ExpandableDataImage: View {
     var gallery: [PreviewImage] = []
     var galleryIndex: Int = 0
 
-    #if os(iOS)
     @State private var previewPresented = false
 
+    #if os(iOS)
     private var items: [PreviewImage] {
         gallery.isEmpty
             ? [PreviewImage(id: "single", source: .data(data))]
@@ -316,7 +323,18 @@ struct ExpandableDataImage: View {
             FullScreenImagePreview(items: items, index: gallery.isEmpty ? 0 : galleryIndex)
         }
         #else
-        DataImage(data: data)
+        Button {
+            previewPresented = true
+        } label: {
+            DataImage(data: data)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Open image")
+        .accessibilityHint("Shows the image larger")
+        .help("Open image")
+        .sheet(isPresented: $previewPresented) {
+            MacImagePreview(images: [data], index: 0)
+        }
         #endif
     }
 }
