@@ -86,14 +86,16 @@ struct WalkthroughCard: View {
     /// see the other.
     private var gallery: [PreviewImage] {
         walkthrough.stills.flatMap { shot in
-            [("Before", shot.before), ("After", shot.after)].compactMap { side, path in
+            [
+                (PreviewImage.WalkthroughLabel.before, shot.before),
+                (.after, shot.after),
+            ].compactMap { side, path in
                 guard let path else { return nil }
                 return PreviewImage(
                     id: path,
                     source: .media(path: path),
-                    label: [shot.caption, side]
-                        .compactMap { $0?.isEmpty == false ? $0 : nil }
-                        .joined(separator: " — ")
+                    label: shot.caption?.isEmpty == false ? shot.caption : nil,
+                    walkthroughLabel: side
                 )
             }
         }

@@ -3,6 +3,11 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { SessionWalkthrough } from "../lib/types";
 import { renderMarkdown } from "../lib/markdown";
 import { relativeTime } from "../lib/api";
+import {
+	WALKTHROUGH_LABEL_CLASS,
+	WALKTHROUGH_LABEL_TEXT,
+	WALKTHROUGH_LABEL_TONE,
+} from "../lib/walkthrough-label";
 import { cn } from "../ui/cn";
 import { duration, ease } from "../ui/motion";
 import { IconChevronDown, IconPlay, IconPlayRectangle } from "./icons";
@@ -32,18 +37,10 @@ const mediaUrl = (path: string) => `/media?path=${encodeURIComponent(path)}`;
  * is translucent ink, and painted straight onto the picture it is the wash
  * that let a white screenshot through in the first place.
  */
-const SHOT_LABEL =
-	"pointer-events-none absolute left-2 top-2 rounded-[999px] bg-panel px-2 py-0.5 text-[11px] font-semibold leading-4 shadow-[inset_0_0_0_1px_var(--border),0_1px_3px_oklch(0_0_0_/_0.16)]";
-const SHOT_LABEL_SIDE = {
-	before:
-		"text-red [background-image:linear-gradient(var(--red-soft),var(--red-soft))]",
-	after:
-		"text-green [background-image:linear-gradient(var(--green-soft),var(--green-soft))]",
-	// The demo wears the same pill in the same corner, so the strip is captioned
-	// one way instead of two: a tile says what it is, rather than a label above
-	// the video and a label inside every screenshot.
-	demo: "text-blue [background-image:linear-gradient(var(--blue-soft),var(--blue-soft))]",
-} as const;
+const SHOT_LABEL = cn(
+	WALKTHROUGH_LABEL_CLASS,
+	"pointer-events-none absolute left-2 top-2",
+);
 
 /**
  * The agent-published walkthrough (opensession-walkthrough): demo video +
@@ -87,7 +84,7 @@ export function WalkthroughCard({
 			items.push({
 				kind: "video",
 				src: mediaUrl(walkthrough.video),
-				label: "Demo",
+				walkthroughLabel: "demo",
 				sessionTitle: walkthrough.videoTitle,
 			});
 		}
@@ -101,7 +98,7 @@ export function WalkthroughCard({
 				items.push({
 					kind: "image",
 					src: mediaUrl(path),
-					label: side === "before" ? "Before" : "After",
+					walkthroughLabel: side,
 					sessionTitle: shot.caption,
 				});
 			}
@@ -310,8 +307,8 @@ export function WalkthroughCard({
 									</span>
 									{/* After the scrim, so the pill keeps its own contrast
 									    rather than sitting under a wash of black. */}
-									<span className={cn(SHOT_LABEL, SHOT_LABEL_SIDE.demo)}>
-										Demo
+									<span className={cn(SHOT_LABEL, WALKTHROUGH_LABEL_TONE.demo)}>
+										{WALKTHROUGH_LABEL_TEXT.demo}
 									</span>
 								</button>
 							</figure>
@@ -383,10 +380,13 @@ export function WalkthroughCard({
 															)
 														}
 													/>
-													<span
-														className={cn(SHOT_LABEL, SHOT_LABEL_SIDE[side])}
-													>
-														{side === "before" ? "Before" : "After"}
+											<span
+												className={cn(
+													SHOT_LABEL,
+													WALKTHROUGH_LABEL_TONE[side],
+												)}
+											>
+												{WALKTHROUGH_LABEL_TEXT[side]}
 													</span>
 												</button>
 											</figure>
@@ -512,10 +512,10 @@ export function WalkthroughCard({
 																<span
 																	className={cn(
 																		SHOT_LABEL,
-																		SHOT_LABEL_SIDE[side],
+														WALKTHROUGH_LABEL_TONE[side],
 																	)}
 																>
-																	{side === "before" ? "Before" : "After"}
+													{WALKTHROUGH_LABEL_TEXT[side]}
 																</span>
 															</button>
 														</figure>

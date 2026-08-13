@@ -4,6 +4,12 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type WorkspaceMediaItem } from "../lib/api";
 import { copyToClipboard } from "../lib/share-link";
 import { fullTime } from "../lib/time";
+import {
+	WALKTHROUGH_LABEL_CLASS,
+	WALKTHROUGH_LABEL_TEXT,
+	WALKTHROUGH_LABEL_TONE,
+	type WalkthroughMediaLabel,
+} from "../lib/walkthrough-label";
 import { cn } from "../ui/cn";
 import {
 	IconArrowDown,
@@ -38,6 +44,7 @@ import {
 export interface LightboxItem {
 	kind: "image" | "video";
 	src: string;
+	walkthroughLabel?: WalkthroughMediaLabel;
 	sessionTitle?: string;
 	description?: string;
 	at?: string;
@@ -1039,20 +1046,32 @@ function MediaLightbox({
 			    "Before"/"After" label cannot read as another link. */}
 			<div
 				className={cn(
-					"z-10 flex flex-col items-center gap-1 px-4 pb-4 pt-4",
-					!caption && !description && !many && "hidden",
+					"z-10 flex flex-col items-center gap-1.5 px-4 pb-4 pt-4",
+					!item.walkthroughLabel && !caption && !description && !many && "hidden",
 				)}
 				onMouseDown={(e) => {
 					if (e.target === e.currentTarget) requestClose();
 				}}
 			>
-				{(caption || description) && (
+				{(item.walkthroughLabel || caption || description) && (
 					<div className="flex max-w-full flex-col items-center gap-0.5 text-center">
-						{caption && (
-							<div className="max-w-full truncate text-sm font-medium text-white">
-								{caption}
-							</div>
-						)}
+						<div className="flex max-w-full items-center justify-center gap-2">
+							{item.walkthroughLabel && (
+								<span
+									className={cn(
+										WALKTHROUGH_LABEL_CLASS,
+										WALKTHROUGH_LABEL_TONE[item.walkthroughLabel],
+									)}
+								>
+									{WALKTHROUGH_LABEL_TEXT[item.walkthroughLabel]}
+								</span>
+							)}
+							{caption && (
+								<div className="min-w-0 max-w-full truncate text-sm font-medium text-white">
+									{caption}
+								</div>
+							)}
+						</div>
 						{description && (
 							<div className="max-w-[min(720px,90vw)] line-clamp-2 text-sm leading-snug text-white/75">
 								{description}

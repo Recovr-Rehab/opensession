@@ -93,6 +93,11 @@ struct AttachImagesButton: View {
 /// viewer that can only ever show the picture you tapped makes you close and
 /// re-open it to compare a before with its after.
 struct PreviewImage: Identifiable, Equatable {
+    enum WalkthroughLabel: String, Equatable {
+        case before = "Before"
+        case after = "After"
+    }
+
     enum Source: Equatable {
         case data(Data)
         case conversation(source: String, sessionId: String)
@@ -111,13 +116,22 @@ struct PreviewImage: Identifiable, Equatable {
     let id: String
     let source: Source
     /// What this picture is, shown at the bottom of the viewer: a walkthrough's
-    /// "Before"/"After", a markdown image's alt text.
+    /// caption, or a markdown image's alt text.
     var label: String?
+    /// Walkthrough media keeps its role separate so the viewer can render a
+    /// recognizable status pill without styling an arbitrary image caption.
+    var walkthroughLabel: WalkthroughLabel?
 
-    init(id: String, source: Source, label: String? = nil) {
+    init(
+        id: String,
+        source: Source,
+        label: String? = nil,
+        walkthroughLabel: WalkthroughLabel? = nil
+    ) {
         self.id = id
         self.source = source
         self.label = label
+        self.walkthroughLabel = walkthroughLabel
     }
 }
 
@@ -469,6 +483,11 @@ struct FullScreenImagePreview: View {
         return (label?.isEmpty ?? true) ? nil : label
     }
 
+    private var walkthroughLabel: PreviewImage.WalkthroughLabel? {
+        guard items.indices.contains(index) else { return nil }
+        return items[index].walkthroughLabel
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
             Color.black
@@ -525,14 +544,27 @@ struct FullScreenImagePreview: View {
     /// is as likely to be white there as black. It fades out with the
     /// dismissal drag so the photo leaves alone.
     @ViewBuilder private var caption: some View {
-        if label != nil || items.count > 1 {
+        if walkthroughLabel != nil || label != nil || items.count > 1 {
             VStack(spacing: 3) {
-                if let label {
-                    Text(label)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.white)
-                        .multilineTextAlignment(.center)
-                        .lineLimit(2)
+                if walkthroughLabel != nil || label != nil {
+                    HStack(spacing: 8) {
+                        if let walkthroughLabel {
+                            Text(walkthroughLabel.rawValue)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(walkthroughLabel.color)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 3)
+                                .background(walkthroughLabel.color.opacity(0.18), in: Capsule())
+                                .overlay { Capsule().stroke(.white.opacity(0.18), lineWidth: 0.5) }
+                        }
+                        if let label {
+                            Text(label)
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.white)
+                                .multilineTextAlignment(.center)
+                                .lineLimit(2)
+                        }
+                    }
                 }
                 if items.count > 1 {
                     Text("\(index + 1) of \(items.count)")
@@ -564,6 +596,15 @@ struct FullScreenImagePreview: View {
             .opacity(1 - dismissalProgress)
             .allowsHitTesting(false)
             .accessibilityElement(children: .combine)
+        }
+    }
+}
+
+private extension PreviewImage.WalkthroughLabel {
+    var color: Color {
+        switch self {
+        case .before: OS1VisualStyle.red
+        case .after: OS1VisualStyle.green
         }
     }
 }
