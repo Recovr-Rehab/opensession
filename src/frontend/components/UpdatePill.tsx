@@ -205,7 +205,10 @@ export function UpdatePill({ addHandler, variant = "toast" }: Props) {
         // light where a darker box would read as a well, --control-surface in
         // dark where lighter already means lifted.
         "rounded-row border border-[color:var(--composer-border)] bg-[var(--composer-surface)] " +
-        "smooth-shadow-soft py-2.5 pr-2.5 pl-4 phone:shadow-[var(--composer-shadow)] " +
+        // A menu-tier cast, not the `soft` one: this card is small and docked
+        // against the sidebar edge, so the wide 56px layer read as a grey halo
+        // pooling around it rather than as a lift.
+        "smooth-shadow-md py-2.5 pr-2.5 pl-4 phone:shadow-[var(--composer-shadow)] " +
         "animate-[update-toast-in_var(--dur-lg)_var(--ease)] motion-reduce:animate-none " +
         "phone:bottom-[max(8px,env(safe-area-inset-bottom))]"
       }
