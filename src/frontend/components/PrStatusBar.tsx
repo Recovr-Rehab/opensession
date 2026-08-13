@@ -323,7 +323,7 @@ function PrNumberChip({
 						/>
 					}
 				>
-					#{pr.number}
+					<span className="translate-y-px">#{pr.number}</span>
 				</ContextMenu.Trigger>
 				<ContextMenu.Popup>
 					<ContextMenu.Item
