@@ -16,6 +16,7 @@ import { startAnalyticsPrewarm } from "./src/server/analytics";
 import { startDiskGc } from "./src/server/disk-gc";
 import { startWorktreeReaper } from "./src/server/worktree-reaper";
 import { startPortalReaper } from "./src/server/portal-supervisor";
+import { startRunnerPortalReaper } from "./src/server/runner-portals";
 import { startTodoReminderTicker } from "./src/server/todos";
 import { startGeneratedTitleSweep } from "./src/server/generated-titles";
 import { startLiveActivitySync } from "./src/server/live-activities";
@@ -650,6 +651,7 @@ if (!g.__opensessionBooted) {
 	// Portal processes survive a coordinator restart by design. Reconcile their
 	// durable owner records immediately and keep reaping deleted-session husks.
 	startPortalReaper(getAllSessions);
+	startRunnerPortalReaper();
 
 	// Desk todo reminders: push + Slack DM when a remindAt passes (todos.ts)
 	startTodoReminderTicker();

@@ -15,6 +15,7 @@ import type { PortalRecord } from "./portal-supervisor";
 import { ensureAuthenticatedPortalRoute, dropAuthenticatedPortalRoute } from "./preview";
 import { releaseSandboxPreviewPorts, sandboxHttpsPortFor } from "./sandbox/preview-ports";
 import { findSession } from "./session-cache";
+import { getAllSessions } from "./sessions";
 
 export type RunnerPortalRecord = PortalRecord & {
 	runnerId: string;
@@ -26,6 +27,7 @@ export type RunnerPortalRecord = PortalRecord & {
 type Store = { portals: RunnerPortalRecord[] };
 const NAME = /^[a-z][a-z0-9-]{0,62}$/;
 const MAX_RELAY_BODY = 5 * 1024 * 1024;
+const RUNNER_PORTAL_REAP_INTERVAL_MS = 5 * 60_000;
 const HOP_HEADERS = new Set(["connection", "host", "content-length", "transfer-encoding", "upgrade", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer"]);
 
 type RunnerPortalRelay = { server: ReturnType<typeof Bun.serve>; record: RunnerPortalRecord };
@@ -43,6 +45,12 @@ function load(): Store {
 	} catch { return { portals: [] }; }
 }
 function save(store: Store): void { writeJsonAtomic(storePath(), store); }
+function remove(records: readonly RunnerPortalRecord[]): void {
+	if (!records.length) return;
+	const keys = new Set(records.map((record) => `${record.runnerId}:${record.sessionId}:${record.name}`));
+	const store = load();
+	save({ portals: store.portals.filter((record) => !keys.has(`${record.runnerId}:${record.sessionId}:${record.name}`)) });
+}
 function upsert(record: RunnerPortalRecord): void {
 	const store = load();
 	const index = store.portals.findIndex((item) => item.runnerId === record.runnerId && item.sessionId === record.sessionId && item.name === record.name);
@@ -208,11 +216,86 @@ async function dropRecords(records: RunnerPortalRecord[]): Promise<void> {
 }
 
 export async function dropRunnerPortalRoutes(sessionId: string, runnerId?: string): Promise<void> {
-	await dropRecords(load().portals.filter((record) => record.sessionId === sessionId && (!runnerId || record.runnerId === runnerId)));
+	const records = load().portals.filter((record) => record.sessionId === sessionId && (!runnerId || record.runnerId === runnerId));
+	const stopped: RunnerPortalRecord[] = [];
+	for (const record of records) {
+		try {
+			if (record.state !== "stopped") await requestRunnerPortal(record.runnerId, {
+				sessionId: record.sessionId, repo: record.repo, workspacePath: record.workspacePath,
+				operation: "stop", payload: { name: record.name },
+			});
+			stopped.push(record);
+		} catch (error) {
+			// Keep the record for the boot/ticker reaper. An offline Runner must
+			// not turn a transient network error into an unrecoverable orphan.
+			console.warn(`[runner-portals] could not stop ${record.name} for ${record.sessionId}:`, error);
+		}
+	}
+	await dropRecords(records);
+	remove(stopped);
 }
 
 export async function dropRunnerPortalsForRunner(runnerId: string): Promise<void> {
-	await dropRecords(load().portals.filter((record) => record.runnerId === runnerId));
+	const records = load().portals.filter((record) => record.runnerId === runnerId);
+	await dropRunnerPortalRoutesForRecords(records);
+	remove(records);
+}
+
+async function dropRunnerPortalRoutesForRecords(records: readonly RunnerPortalRecord[]): Promise<void> {
+	for (const record of records) {
+		try {
+			if (record.state !== "stopped") await requestRunnerPortal(record.runnerId, {
+				sessionId: record.sessionId, repo: record.repo, workspacePath: record.workspacePath,
+				operation: "stop", payload: { name: record.name },
+			});
+		} catch (error) {
+			console.warn(`[runner-portals] could not stop ${record.name} for ${record.sessionId}:`, error);
+		}
+	}
+	await dropRecords(records);
+}
+
+/** Records whose session vanished while its Runner process could outlive us. */
+export function orphanedRunnerPortalRecords(
+	records: readonly RunnerPortalRecord[],
+	liveSessionIds: ReadonlySet<string>,
+): RunnerPortalRecord[] {
+	return records.filter((record) => !liveSessionIds.has(record.sessionId));
+}
+
+/** Retry teardown for remote Portals that outlived a crashed session delete. */
+export async function reapOrphanedRunnerPortals(): Promise<number> {
+	const records = orphanedRunnerPortalRecords(load().portals, new Set(getAllSessions().map((session) => session.id)));
+	if (!records.length) return 0;
+	const stopped: RunnerPortalRecord[] = [];
+	for (const record of records) {
+		try {
+			if (record.state !== "stopped") await requestRunnerPortal(record.runnerId, {
+				sessionId: record.sessionId, repo: record.repo, workspacePath: record.workspacePath,
+				operation: "stop", payload: { name: record.name },
+			});
+			stopped.push(record);
+		} catch (error) {
+			console.warn(`[runner-portals] orphan ${record.name} for ${record.sessionId} is not reachable yet:`, error);
+		}
+	}
+	await dropRecords(records);
+	remove(stopped);
+	return stopped.length;
+}
+
+let runnerPortalReapTimer: ReturnType<typeof setInterval> | null = null;
+
+/** Reap durable Runner Portal records after boot and while the server runs. */
+export function startRunnerPortalReaper(): void {
+	if (runnerPortalReapTimer) return;
+	const run = () => void reapOrphanedRunnerPortals().then((reaped) => {
+		if (reaped) console.log(`[runner-portals] reaped ${reaped} orphaned Portal service(s)`);
+	}).catch((error) => console.error("[runner-portals] orphan reap failed:", error));
+	run();
+	runnerPortalReapTimer = setInterval(run, RUNNER_PORTAL_REAP_INTERVAL_MS);
+	runnerPortalReapTimer.unref?.();
+	console.log(`[runner-portals] orphan reaper started (every ${RUNNER_PORTAL_REAP_INTERVAL_MS / 60_000}m)`);
 }
 
 function runnerSession(session: UnifiedSession, user?: string) {
