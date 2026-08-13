@@ -213,10 +213,12 @@ export function ToolGlyph({ toolName, size = 20 }: { toolName: string; size?: nu
       return <IconGlobe size={size} />;
     case "agent":
       return <IconSparkle size={size} />;
-    // The three nodes fill more of the 24-grid than the sparse tool glyphs.
-    // Pull it in optically so MCP rows carry the same weight as shell rows.
+    // The three nodes fill more of the 24-grid than the sparse tool glyphs, so
+    // pull the drawing in optically. It has to be a transform: icons clamp at
+    // 20px (MIN_SIZE in icons.tsx), so asking for a smaller `size` here was
+    // silently ignored and MCP rows read a step larger than shell rows.
     case "mcp":
-      return <IconConnections size={size * 0.8} />;
+      return <IconConnections size={size} className="scale-[0.85]" />;
     case "skill":
       return <IconBook size={size} />;
     default:
