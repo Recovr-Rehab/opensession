@@ -798,6 +798,13 @@ enum OS1API {
         // tile in the app wants the assignment, and a tile is handed a repo
         // id, not a RepoInfo.
         await RepoTilePalette.shared.remember(response.repos)
+        // Same deal for the transcript's PR chips: the ids decide which
+        // qualified mentions (`opensession#128`) link at all, and the GitHub
+        // names are where a chip goes when the app can't show the PR itself.
+        PrLinks.register(repos: Dictionary(
+            response.repos.map { ($0.id, $0.ghRepo) },
+            uniquingKeysWith: { first, _ in first }
+        ))
         return response.repos
     }
 

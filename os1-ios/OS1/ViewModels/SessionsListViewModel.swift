@@ -162,7 +162,7 @@ final class SessionsListViewModel {
     /// actor would put another thousands-of-rows loop in the 5s poll.
     private static func groupedOffMain(
         _ sessions: [Session], workspaceNames names: [String: String]
-    ) async -> (rows: [SidebarWorkspace], titles: [String: String]) {
+    ) async -> (rows: [SidebarWorkspace], titles: [String: String], prs: PrLinks.Index) {
         await Task.detached(priority: .userInitiated) {
             var titles: [String: String] = [:]
             titles.reserveCapacity(sessions.count)
@@ -170,7 +170,15 @@ final class SessionsListViewModel {
                 let title = session.displayTitle
                 if !title.isEmpty { titles[session.id] = title }
             }
-            return (sidebarRows(in: sessions, workspaceNames: names), titles)
+            return (
+                sidebarRows(in: sessions, workspaceNames: names),
+                titles,
+                // What tints a `#5528` chip in a transcript, and what tells a
+                // bare one which repo it belongs to — the same fields the web
+                // hands `setKnownPrStates`, off the main actor for the same
+                // reason the titles are.
+                PrLinks.Index.build(sessions)
+            )
         }.value
     }
 
@@ -720,6 +728,7 @@ final class SessionsListViewModel {
                 guard requestConnection == OS1API.LiveActivityConnection.current() else { return }
                 #endif
                 SessionLinks.register(titles: grouped.titles)
+                PrLinks.register(index: grouped.prs)
                 if let renamed { workspaceNames = renamed }
                 #if os(iOS)
                 liveActivityConnection = requestConnection

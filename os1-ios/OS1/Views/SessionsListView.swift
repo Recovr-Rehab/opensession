@@ -211,6 +211,17 @@ struct SessionsListView: View {
             // the navigation container — is what lets a transcript push the
             // worker it spawned instead of leaving the id as dead text.
             .environment(\.openURL, OpenURLAction { url in
+                // A PR chip that reached this far is one no transcript claimed
+                // — the Mac app, or a card outside a session. There is no
+                // review panel to push without a session, so it opens on
+                // GitHub, which is the same fallback the chip had as a plain
+                // link before it was one.
+                if let reference = PrLinks.reference(from: url) {
+                    guard let github = PrLinks.githubURL(for: reference) else {
+                        return .handled
+                    }
+                    return .systemAction(github)
+                }
                 guard let id = SessionLinks.sessionId(from: url) else {
                     return .systemAction
                 }

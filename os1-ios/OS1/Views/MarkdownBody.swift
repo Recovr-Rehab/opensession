@@ -103,17 +103,25 @@ struct MarkdownBody: View {
         return out
     }
 
-    /// Session ids, file paths, scratch files and bare URLs become links here
-    /// rather than in the display pass: the entry's own text stays the raw
-    /// markdown, so copying a message still yields what the agent actually
-    /// wrote. Autolinking runs first so a session URL is already a link target
-    /// by the time `SessionLinks` looks for loose ids, and each rewrite after
-    /// it leaves the links already there alone. `AssetLinks` runs last, so a
-    /// name that is both a repo path and a scratch file keeps its diff.
+    /// PR references, session ids, file paths, scratch files and bare URLs
+    /// become links here rather than in the display pass: the entry's own text
+    /// stays the raw markdown, so copying a message still yields what the
+    /// agent actually wrote. `PrLinks` runs FIRST, because a pasted PR URL is
+    /// its to claim: left to `MarkdownAutolink` it would already be an
+    /// external link by the time the PR rewrite looked at it, and tapping it
+    /// would leave the app for the browser. Autolinking runs next, so a
+    /// session URL is already a link target by the time `SessionLinks` looks
+    /// for loose ids, and each rewrite after it leaves the links already there
+    /// alone. `AssetLinks` runs last, so a name that is both a repo path and a
+    /// scratch file keeps its diff.
     private func linkified(_ value: String) -> String {
         AssetLinks.linkify(
             FileLinks.linkify(
-                SessionLinks.linkify(MarkdownAutolink.linkify(value)),
+                SessionLinks.linkify(
+                    MarkdownAutolink.linkify(
+                        PrLinks.linkify(value, sessionId: openPanel.sessionId)
+                    )
+                ),
                 sessionId: openPanel.sessionId
             ),
             sessionId: openPanel.sessionId

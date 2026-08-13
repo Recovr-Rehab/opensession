@@ -95,3 +95,22 @@ extension PrDetails {
         return .passing
     }
 }
+
+extension PrDetails.Summary {
+    /// The chip's dot as a character, for the one surface that can't draw a
+    /// view: a PR chip inside the transcript is a markdown link, and a link
+    /// renders in a single colour, so the state has to ride in the text.
+    /// Colour glyphs, matched to `PrChipLabel`'s dot (PrPanel.swift) — purple
+    /// merged, red closed or failing, grey draft, orange running, green
+    /// passing — because one PR must not read one way in the toolbar and
+    /// another in the prose above it.
+    var marker: String {
+        switch self {
+        case .merged: "\u{1F7E3}"
+        case .closed, .failing: "\u{1F534}"
+        case .draft: "\u{26AA}"
+        case .pending: "\u{1F7E0}"
+        case .passing: "\u{1F7E2}"
+        }
+    }
+}

@@ -589,6 +589,20 @@ struct SessionView: View {
             // still belongs to the system browser.
             #if os(iOS)
             .environment(\.openURL, OpenURLAction { url in
+                // A PR chip (PrLinks) is caught here rather than one level up,
+                // because both of its landings live here: this session's own
+                // PR is the review panel one push away, and any other PR is
+                // the GitHub page, which belongs in the same in-app browser a
+                // transcript link opens in.
+                if let reference = PrLinks.reference(from: url) {
+                    if PrLinks.isOwnPr(reference, of: viewModel.session),
+                       openPanel.isAvailable {
+                        openPanel(.review(sessionId: viewModel.session.id))
+                    } else if let github = PrLinks.githubURL(for: reference) {
+                        safariLink = SafariLink(url: github)
+                    }
+                    return .handled
+                }
                 guard SafariLink.isWeb(url) else {
                     // Session links and custom schemes stay with the action
                     // the sessions list installed above us.
