@@ -34,6 +34,7 @@ import {
 	type SearchHit,
 	type SearchRecord,
 } from "./session-search-store";
+import { foldFamilies, parentLinks, type Folded } from "./session-family";
 import type { TranscriptEntry, UnifiedSession } from "./types";
 
 const g = globalThis as any;
@@ -60,18 +61,30 @@ export function searchIndex(): SessionSearchStore {
 	return (g.__sessionSearchStore ??= new SessionSearchStore(DB_PATH));
 }
 
+/** Max rows pulled from the store before folding (the store's own ceiling). */
+const FOLD_POOL = 25;
+
+/**
+ * Search, then collapse each session family to one hit. A review or worker
+ * session spawned from another session is the same piece of work as its
+ * parent, and it distills into a record that reads like a second, unrelated
+ * result; folding here (rather than in the index) keeps the store
+ * source-generic and always reflects the CURRENT parent links.
+ */
 export function searchSessionHistory(
 	query: string,
 	opts: { repo?: string; limit?: number; days?: number } = {},
-): SearchHit[] {
+): Folded<SearchHit>[] {
 	const sinceTs = opts.days
 		? Date.now() - opts.days * 86_400_000
 		: undefined;
-	return searchIndex().search(query, {
+	const limit = Math.min(Math.max(opts.limit ?? 8, 1), FOLD_POOL);
+	const hits = searchIndex().search(query, {
 		repo: opts.repo,
-		limit: opts.limit,
+		limit: FOLD_POOL,
 		sinceTs,
 	});
+	return foldFamilies(hits, parentLinks(getCachedSessions()), limit);
 }
 
 // ── Extraction ──────────────────────────────────────────────────────────────

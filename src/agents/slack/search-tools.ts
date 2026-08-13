@@ -29,7 +29,7 @@ export function createSearchMcpServer() {
 	const tools = [
 		tool(
 			"search_history",
-			"Search past Open Session sessions (distilled question/resolution records, lexical match + recency-weighted). Use BEFORE re-deriving something that has likely been solved here before: a bug that looks familiar, an error string, 'how did we fix/decide X', which session touched a file or subsystem. Exact tokens work best — error fragments, file names, function names, flag names. Results are distilled records, not the transcript: take the session id of anything you'd act on and expand it with read_history.",
+			"Search past Open Session sessions (distilled question/resolution records, lexical match + recency-weighted). Use BEFORE re-deriving something that has likely been solved here before: a bug that looks familiar, an error string, 'how did we fix/decide X', which session touched a file or subsystem. Exact tokens work best — error fragments, file names, function names, flag names. Results are distilled records, not the transcript: take the session id of anything you'd act on and expand it with read_history. Sessions spawned from another session (a review, a worker) fold into their parent, so one piece of work is one result; when a hit says it matched in a sub-session, read THAT id.",
 			{
 				query: z
 					.string()
@@ -66,7 +66,16 @@ export function createSearchMcpServer() {
 						];
 						if (h.resolution) parts.push(`   → ${h.resolution}`);
 						if (h.files) parts.push(`   files: ${h.files.split(/\s+/).slice(0, 8).join(" ")}`);
-						parts.push(`   session: ${id}${h.pr ? `  PR: ${h.pr}` : ""}`);
+						// A spawned review/worker session folds into its parent: the
+						// parent is the session to open, the match may live in the child.
+						const extra = [
+							h.rootId ? `matched in sub-session ${id}` : "",
+							h.foldedIds?.length ? `+${h.foldedIds.length} more in this family` : "",
+							h.pr ? `PR: ${h.pr}` : "",
+						].filter(Boolean);
+						parts.push(
+							`   session: ${h.rootId || id}${extra.length ? `  (${extra.join(", ")})` : ""}`,
+						);
 						return parts.join("\n");
 					});
 					lines.push(
