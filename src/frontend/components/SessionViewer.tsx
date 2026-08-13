@@ -4498,18 +4498,6 @@ export function SessionViewer({
 						<span className="grow">New session in workspace</span>
 					</Menu.Item>
 				);
-				const slackAction = (
-					<Menu.Item
-						onClick={() => void handleOpenSlackComposer()}
-						disabled={!!slackComposer}
-						title="Review a message before sending it to Slack"
-					>
-						<span className="flex size-5 shrink-0 items-center justify-center">
-							<BrandMark name="slack" size={16} />
-						</span>
-						<span className="grow">Send to Slack…</span>
-					</Menu.Item>
-				);
 				// Copy transcript. These normally live on a tab's right-click menu,
 				// but a lone-session workspace has no tab strip (and phones hide it at
 				// every count), so the only place to grab this session's full text is the
@@ -4966,7 +4954,6 @@ export function SessionViewer({
 								{isPhone && addToSidebarAction(true)}
 								{isPhone && secondaryActions(true)}
 								{(compactHeader || isPhone) && shareAction(true)}
-								{slackAction}
 								{newSessionAction}
 								{transcriptActions}
 								{overflowActions}
@@ -5956,26 +5943,39 @@ export function SessionViewer({
 									// until the server answers — cutting a worktree isn't always
 									// instant. Only opensession sessions can promote (the server owns
 									// that rule); elsewhere the row would be a dead end.
-									menuExtra={
-										isAsk && session.source === "opensession"
-											? ({ close }) => (
-													<button
-														type="button"
-														className={composerMenuItem}
-														disabled={promoting}
-														title="Ask mode: this session can read the code but not change it"
-														onClick={() => void handlePromote(close)}
-													>
-														<span className={composerMenuIcon}>
-															<IconEye size={22} />
-														</span>
-														{promoting
-															? "Switching to code…"
-															: "Switch to code"}
-													</button>
-												)
-											: undefined
-									}
+									menuExtra={({ close }) => (
+										<>
+											<button
+												type="button"
+												className={composerMenuItem}
+												disabled={!!slackComposer}
+												title="Review a message before sending it to Slack"
+												onClick={() => {
+													close();
+													void handleOpenSlackComposer();
+												}}
+											>
+												<span className={composerMenuIcon}>
+													<BrandMark name="slack" size={16} />
+												</span>
+												<span className="grow whitespace-nowrap">Send to Slack…</span>
+											</button>
+											{isAsk && session.source === "opensession" && (
+												<button
+													type="button"
+													className={composerMenuItem}
+													disabled={promoting}
+													title="Ask mode: this session can read the code but not change it"
+													onClick={() => void handlePromote(close)}
+												>
+													<span className={composerMenuIcon}>
+														<IconEye size={22} />
+													</span>
+													{promoting ? "Switching to code…" : "Switch to code"}
+												</button>
+											)}
+										</>
+									)}
 									attached={attachedComposer}
 									prefill={composerPrefill}
 									models={models}
