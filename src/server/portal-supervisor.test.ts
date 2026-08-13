@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { listPortalServices, listSandboxPortalServices, readPortalRegistry, setPortalPath, startPortalService, startSandboxPortalService, stopPortalService, stopSandboxPortalService } from "./portal-supervisor";
+import { listPortalServices, listSandboxPortalServices, readPortalRegistry, reapOrphanedPortalServices, setPortalPath, startPortalService, startSandboxPortalService, stopPortalService, stopSandboxPortalService } from "./portal-supervisor";
 import type { Sandbox } from "./sandbox/provider";
 
 let worktree = "";
@@ -34,6 +34,27 @@ describe("session Portal supervisor", () => {
 		expect((await listPortalServices(worktree))[0]?.state).toBe("awake");
 		await stopPortalService({ sessionId: "os-portal-test", worktreeDir: worktree, name: "test-app" });
 		delete process.env.PORTAL_SUPERVISOR_TEST_SECRET;
+		expect((await listPortalServices(worktree))[0]?.state).toBe("stopped");
+	});
+
+	test("reaps a Portal whose durable owner no longer owns the worktree", async () => {
+		const port = 18_703;
+		await startPortalService({
+			sessionId: "deleted-session", worktreeDir: worktree, name: "orphan", port,
+			command: "bun -e 'Bun.serve({port:Number(process.env.PORT),fetch(){return new Response(\"orphan\")}})'",
+		});
+		expect(readPortalRegistry(worktree)[0]).toMatchObject({ sessionId: "deleted-session", state: "awake" });
+		expect((await reapOrphanedPortalServices([
+			{ id: "deleted-session", worktreeDir: worktree, attachedRepos: [] },
+		])).stopped).toEqual([]);
+		expect((await listPortalServices(worktree))[0]?.state).toBe("awake");
+
+		const result = await reapOrphanedPortalServices([
+			{ id: "replacement-session", worktreeDir: worktree, attachedRepos: [] },
+		]);
+		expect(result.stopped).toEqual([
+			expect.objectContaining({ sessionId: "deleted-session", worktreeDir: worktree, name: "orphan" }),
+		]);
 		expect((await listPortalServices(worktree))[0]?.state).toBe("stopped");
 	});
 

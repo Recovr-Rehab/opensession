@@ -15,6 +15,7 @@ import { startAccountHealthMonitor } from "./src/server/account-health";
 import { startAnalyticsPrewarm } from "./src/server/analytics";
 import { startDiskGc } from "./src/server/disk-gc";
 import { startWorktreeReaper } from "./src/server/worktree-reaper";
+import { startPortalReaper } from "./src/server/portal-supervisor";
 import { startTodoReminderTicker } from "./src/server/todos";
 import { startGeneratedTitleSweep } from "./src/server/generated-titles";
 import { startLiveActivitySync } from "./src/server/live-activities";
@@ -645,6 +646,10 @@ if (!g.__opensessionBooted) {
 	// Remove worktrees whose work is merged / PR closed, sweep removal husks
 	// (worktree-reaper.ts — in-process port of the cleanup-closed-worktrees cron)
 	startWorktreeReaper(getAllSessions);
+
+	// Portal processes survive a coordinator restart by design. Reconcile their
+	// durable owner records immediately and keep reaping deleted-session husks.
+	startPortalReaper(getAllSessions);
 
 	// Desk todo reminders: push + Slack DM when a remindAt passes (todos.ts)
 	startTodoReminderTicker();

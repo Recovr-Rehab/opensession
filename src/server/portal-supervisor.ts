@@ -6,15 +6,16 @@
  * agent can inspect services without becoming their process manager.
  */
 
-import { existsSync, readFileSync, writeFileSync } from "fs";
-import { join } from "path";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "fs";
+import { join, resolve } from "path";
 import { audit } from "./audit";
-import { configuredServer } from "./config";
+import { configuredPaths, configuredServer } from "./config";
 import { ensureSandboxPortalRelay, mintSandboxPortalGrant, revokeSandboxPortalRelay } from "./sandbox-portal-relay";
 import { remoteSandboxCallbackBaseUrl, usesOutboundSandboxPortalRelay } from "./sandbox/config";
 import { shellQuoteWord } from "./sandbox/adapters/bootstrap";
 import { sandboxHttpsPortFor } from "./sandbox/preview-ports";
 import type { Sandbox } from "./sandbox/provider";
+import type { UnifiedSession } from "./types";
 
 export type PortalState = "starting" | "awake" | "sleeping" | "waking" | "failed" | "stopped";
 export type PortalRecord = {
@@ -22,6 +23,8 @@ export type PortalRecord = {
 	key: string;
 	command: string;
 	port: number;
+	/** The session that owns this process. Persisted so a restarted server can reap it. */
+	sessionId?: string;
 	description?: string;
 	defaultPath?: string;
 	state: PortalState;
@@ -35,6 +38,7 @@ const NAME = /^[a-z][a-z0-9-]{0,62}$/;
 const MIN_PORT = 1024;
 const MAX_PORT = 19_000;
 const remoteRelayAgents: Map<string, { expiresAt: number }> = ((globalThis as Record<string, unknown>).__opensessionSandboxPortalAgents ??= new Map()) as Map<string, { expiresAt: number }>;
+const PORTAL_REAP_INTERVAL_MS = 5 * 60_000;
 
 function portalKey(name: string): string {
 	return `PORTAL_${name.toUpperCase().replace(/-/g, "_")}_PORT`;
@@ -207,7 +211,7 @@ export async function startPortalService(input: {
 	if (records.some((record) => record.name !== name && record.port === port) || await portListening(port)) throw new Error(`Port ${port} is already in use.`);
 	const url = `https://${configuredServer().previewHost}:${port + 6_000}`;
 	const base: PortalRecord = {
-		name, key: portalKey(name), command, port,
+		name, key: portalKey(name), command, port, sessionId: input.sessionId,
 		...(input.description?.trim() ? { description: input.description.trim().slice(0, 240) } : {}),
 		state: "starting", startedAt: new Date().toISOString(),
 	};
@@ -222,6 +226,9 @@ export async function startPortalService(input: {
 			PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin",
 			HOME: process.env.HOME || "/tmp",
 			PORT: String(port), PORTAL_URL: url, OPENSESSION_PORTAL: name,
+			// Next's detached telemetry flusher escapes the Portal process group
+			// during shutdown. Portals do not need telemetry, so never create it.
+			NEXT_TELEMETRY_DISABLED: "1",
 		},
 			stdin: "ignore", stdout: "ignore", stderr: "ignore",
 		});
@@ -249,8 +256,13 @@ export async function stopPortalService(input: { sessionId: string; worktreeDir:
 	const records = readPortalRegistry(input.worktreeDir);
 	const current = records.find((record) => record.name === name);
 	if (!current) throw new Error(`Portal '${name}' does not exist.`);
-	if (current.pid && await pidAlive(current.pid)) {
+	if (current.pid && current.pid > 1) {
+		// Signal the whole setsid group even if its original leader has already
+		// exited. That is the common failure mode for a supervisor which leaves
+		// its worker behind after a server restart.
 		try { process.kill(-current.pid, "SIGTERM"); } catch { try { process.kill(current.pid, "SIGTERM"); } catch {} }
+		await Bun.sleep(1_500);
+		try { process.kill(-current.pid, 0); process.kill(-current.pid, "SIGKILL"); } catch {}
 	}
 	const stopped = { ...current, state: "stopped" as const, pid: undefined };
 	writePortalRegistry(input.worktreeDir, upsert(records, stopped));
@@ -266,6 +278,87 @@ export async function stopAllPortalServices(input: { sessionId: string; worktree
 		try { await stopPortalService({ ...input, name: record.name }); }
 		catch (error) { console.warn(`[portals] could not stop ${record.name} for ${input.sessionId}:`, error); }
 	}
+}
+
+export type PortalOwnerSession = Pick<UnifiedSession, "id" | "worktreeDir" | "attachedRepos">;
+export type PortalReapResult = { stopped: Array<{ sessionId: string; worktreeDir: string; name: string }> };
+
+function canonicalDir(dir: string): string { return resolve(dir); }
+
+/**
+ * Stop host Portal process groups that no live session owns. Portal records
+ * are intentionally stored with the worktree, which survives a coordinator
+ * restart, so this closes the gap between a crashed delete and the next human
+ * action. Legacy records without sessionId are only reaped when no session
+ * owns their worktree at all.
+ */
+export async function reapOrphanedPortalServices(
+	sessions: readonly PortalOwnerSession[],
+): Promise<PortalReapResult> {
+	const owners = new Map<string, Set<string>>();
+	const addOwner = (dir: string | undefined, sessionId: string) => {
+		if (!dir) return;
+		const key = canonicalDir(dir);
+		const set = owners.get(key) ?? new Set<string>();
+		set.add(sessionId);
+		owners.set(key, set);
+	};
+	for (const session of sessions) {
+		addOwner(session.worktreeDir, session.id);
+		for (const repo of session.attachedRepos ?? []) addOwner(repo.dir, session.id);
+	}
+
+	// Include session worktrees outside the normal worktree root, then discover
+	// deleted-session worktrees below the managed root. We only act on explicit
+	// OpenSession Portal records, never arbitrary processes in those directories.
+	const dirs = new Set(owners.keys());
+	try {
+		for (const entry of readdirSync(configuredPaths().worktreesDir, { withFileTypes: true })) {
+			if (entry.isDirectory()) dirs.add(canonicalDir(join(configuredPaths().worktreesDir, entry.name)));
+		}
+	} catch {}
+
+	const stopped: PortalReapResult["stopped"] = [];
+	for (const worktreeDir of dirs) {
+		const liveOwners = owners.get(worktreeDir) ?? new Set<string>();
+		for (const portal of readPortalRegistry(worktreeDir)) {
+			if (portal.state === "stopped" || portal.state === "failed") continue;
+			const orphaned = portal.sessionId
+				? !liveOwners.has(portal.sessionId)
+				: liveOwners.size === 0;
+			if (!orphaned) continue;
+			const sessionId = portal.sessionId || "orphaned-portal";
+			try {
+				await stopPortalService({ sessionId, worktreeDir, name: portal.name });
+				stopped.push({ sessionId, worktreeDir, name: portal.name });
+				audit({ msg: "portal_orphan_reaped", session_id: sessionId, portal: portal.name });
+			} catch (error) {
+				console.warn(`[portals] could not reap ${portal.name} in ${worktreeDir}:`, error);
+			}
+		}
+	}
+	return { stopped };
+}
+
+let portalReapTimer: ReturnType<typeof setInterval> | null = null;
+
+/** Reconcile Portal process groups after boot and every five minutes. */
+export function startPortalReaper(
+	getSessions: () => readonly PortalOwnerSession[] = () => [],
+): void {
+	if (portalReapTimer) return;
+	const run = () => {
+		let sessions: readonly PortalOwnerSession[];
+		try { sessions = getSessions(); }
+		catch (error) { console.error("[portals] session snapshot failed; skipping orphan reap:", error); return; }
+		void reapOrphanedPortalServices(sessions).then(({ stopped }) => {
+			if (stopped.length) console.log(`[portals] reaped ${stopped.length} orphaned Portal service(s)`);
+		}).catch((error) => console.error("[portals] orphan reap failed:", error));
+	};
+	run();
+	portalReapTimer = setInterval(run, PORTAL_REAP_INTERVAL_MS);
+	portalReapTimer.unref?.();
+	console.log(`[portals] orphan reaper started (every ${PORTAL_REAP_INTERVAL_MS / 60_000}m)`);
 }
 
 export async function restartPortalService(input: { sessionId: string; worktreeDir: string; name: string }): Promise<PortalRecord & { url: string }> {
