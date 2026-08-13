@@ -20,10 +20,9 @@ import AppKit
 /// that is a long way to drag past to reach what was said after it — in a
 /// session that published several, the conversation is mostly walkthrough.
 ///
-/// Folded is one compact disclosure row. The label says what the walkthrough
-/// contains, and expanding reveals the writeup and media together. This keeps a
-/// walkthrough from becoming the largest object in the transcript before the
-/// reader asks to see it.
+/// Folded is not hidden: the card keeps a sideways strip of its stills, and a
+/// tap on one opens the same full-screen viewer the open card does. Checking
+/// what changed should not require unfolding the whole walkthrough.
 struct WalkthroughCard: View {
     let walkthrough: SessionWalkthrough
     let state: TurnFoldState
@@ -65,6 +64,8 @@ struct WalkthroughCard: View {
                 ForEach(walkthrough.stills) { shot in
                     WalkthroughShotView(shot: shot, gallery: gallery)
                 }
+            } else if !gallery.isEmpty {
+                WalkthroughThumbnailStrip(stills: walkthrough.stills, gallery: gallery)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -74,10 +75,9 @@ struct WalkthroughCard: View {
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(OS1VisualStyle.border, lineWidth: 0.5)
         }
-        // Open, it ends in media where its neighbours end in text, so it needs
-        // more room after it than between ordinary blocks. Folded is one line
-        // like the work fold beside it and keeps the normal transcript rhythm.
-        .padding(.bottom, state.expanded ? 6 : 0)
+        // Media needs more room after it than ordinary transcript text. A
+        // writeup-only walkthrough still folds to the normal one-line rhythm.
+        .padding(.bottom, state.expanded || !gallery.isEmpty ? 6 : 0)
     }
 
     /// Every still in the card, in reading order, so opening one pages
@@ -150,6 +150,48 @@ struct WalkthroughCard: View {
         let contents = contentsLabel
         if !contents.isEmpty { parts.append(contents.replacingOccurrences(of: " · ", with: ", ")) }
         return parts.joined(separator: ", ")
+    }
+}
+
+/// The folded card's stills in reading order. A tap opens the full-screen
+/// gallery at that image, so Before and After can be compared without opening
+/// the walkthrough first.
+private struct WalkthroughThumbnailStrip: View {
+    let stills: [WalkthroughShot]
+    let gallery: [PreviewImage]
+
+    /// A pair fits side by side at phone width while remaining large enough to
+    /// distinguish two screenshots of the same interface.
+    private static let tile = CGSize(width: 168, height: 160)
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            // Keep each pair tight and leave a larger gap between changes.
+            HStack(alignment: .top, spacing: 14) {
+                ForEach(stills) { shot in
+                    let items: [(label: String, path: String)] = [
+                        ("Before", shot.before), ("After", shot.after),
+                    ].compactMap { item in
+                        item.1.map { (item.0, $0) }
+                    }
+                    HStack(spacing: 4) {
+                        ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                            MediaImage(
+                                path: item.path,
+                                gallery: gallery,
+                                galleryIndex: gallery.firstIndex { $0.id == item.path } ?? 0,
+                                label: item.label,
+                                thumbnail: Self.tile
+                            )
+                        }
+                    }
+                }
+            }
+            .padding(.vertical, 1)
+        }
+        // A clipped next tile communicates that the strip continues.
+        .padding(.horizontal, -WalkthroughCard.padding)
+        .contentMargins(.horizontal, WalkthroughCard.padding, for: .scrollContent)
     }
 }
 
