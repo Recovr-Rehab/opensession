@@ -43,7 +43,7 @@ import {
   IconSearch,
   IconGlobe,
   IconSparkle,
-  IconConnections,
+  IconConnectionsTight,
   IconBook,
   IconBranches,
   IconListChecks,
@@ -214,11 +214,11 @@ export function ToolGlyph({ toolName, size = 20 }: { toolName: string; size?: nu
     case "agent":
       return <IconSparkle size={size} />;
     // The three nodes fill more of the 24-grid than the sparse tool glyphs, so
-    // pull the drawing in optically. It has to be a transform: icons clamp at
-    // 20px (MIN_SIZE in icons.tsx), so asking for a smaller `size` here was
-    // silently ignored and MCP rows read a step larger than shell rows.
+    // MCP rows need the pulled-in drawing to sit level with shell rows. Asking
+    // for a smaller `size` here does nothing: icons clamp at 20px (MIN_SIZE in
+    // icons.tsx), and scaling the box would thin the stroke with it.
     case "mcp":
-      return <IconConnections size={size} className="scale-[0.85]" />;
+      return <IconConnectionsTight size={size} />;
     case "skill":
       return <IconBook size={size} />;
     default:
