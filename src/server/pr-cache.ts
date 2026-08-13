@@ -822,6 +822,18 @@ async function refreshPrCacheInner(): Promise<Set<string>> {
     }
     prCache = { data: next, ts: Date.now() };
     if (freshRepos.size) persistPrCache(next);
+    // A PR that just went MERGEABLE → CONFLICTING wakes the one session that
+    // owns it. GitHub fires no webhook for a mergeability change, so this sweep
+    // is where the event comes from (agents/github/pr-conflict.ts). Imported
+    // lazily to keep the session-control/worktree graph out of this module.
+    if (freshRepos.size && process.env.OPENSESSION_PR_CONFLICTS !== "0") {
+      void import("../agents/github/pr-conflict")
+        .then(({ scanConflictTransitions, notifyConflictedPrSession }) => {
+          for (const event of scanConflictTransitions(next, freshRepos))
+            void notifyConflictedPrSession(event);
+        })
+        .catch((e) => console.error("[github] PR conflict scan failed:", e));
+    }
   } catch (e) {
     console.error("Failed to fetch PRs:", e);
     prCache.ts = Date.now(); // back off on failure too
