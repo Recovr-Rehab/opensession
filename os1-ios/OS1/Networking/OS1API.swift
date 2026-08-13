@@ -183,6 +183,82 @@ enum OS1API {
         return try await get("/api/sessions/\(session)/subagent/\(agent)")
     }
 
+    // ── Agents: the workflow runs a session fanned out ──────────────────────
+
+    /// Every workflow run this session started, newest first. There is no
+    /// cross-session route on purpose: a run belongs to the session that
+    /// started it, and the server only ever indexes them that way.
+    static func workflowRuns(sessionId: String) async throws -> [WorkflowRun] {
+        let session = sessionId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? sessionId
+        let response: WorkflowRunsResponse = try await get(
+            "/api/sessions/\(session)/workflows"
+        )
+        return response.runs
+    }
+
+    /// One workflow agent's own conversation, in the transcript shape the
+    /// session view already renders. Readable while the agent is still
+    /// working, because the server hands out the engine session as soon as it
+    /// exists rather than when the agent finishes.
+    static func workflowAgentTranscript(
+        runId: String,
+        seq: Int
+    ) async throws -> WorkflowAgentTranscript {
+        let run = runId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? runId
+        return try await get("/api/workflows/\(run)/agents/\(seq)/transcript")
+    }
+
+    /// Stop a live run. The server answers `{ ok: false }` when there was
+    /// nothing live to stop, which the caller reports rather than swallows.
+    @discardableResult
+    static func cancelWorkflow(runId: String) async throws -> Bool {
+        struct CancelResponse: Decodable, Sendable { let ok: Bool? }
+        let run = runId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? runId
+        let response: CancelResponse = try await post(
+            "/api/workflows/\(run)/cancel",
+            body: [:]
+        )
+        return response.ok ?? false
+    }
+
+    // ── Reports: what the automations published ─────────────────────────────
+
+    /// One row per automation that has ever published, newest report in hand.
+    static func reportGroups() async throws -> [ReportGroup] {
+        let response: ReportGroupsResponse = try await get("/api/reports")
+        return response.groups
+    }
+
+    /// One automation's history, newest first.
+    static func reports(automationId: String) async throws -> [ReportMeta] {
+        let encoded = automationId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? automationId
+        let response: ReportHistoryResponse = try await get("/api/reports/\(encoded)")
+        return response.reports
+    }
+
+    /// Where a report's rendered HTML is served. Framed rather than fetched:
+    /// the document references its own durable evidence as `assets/<path>`
+    /// relative to this URL, and only loading it from the route itself
+    /// resolves them.
+    static func reportURL(automationId: String, reportId: String) -> URL? {
+        guard let base = ServerConfig.shared.baseURL else { return nil }
+        let group = automationId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? automationId
+        let report = reportId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? reportId
+        return URL(string: "\(base.absoluteString)/api/reports/\(group)/\(report)/raw")
+    }
+
     /// `@`-mention targets matching a query, for the composer's "Reference a
     /// file" picker. Scoped to the session, so an attached repo's files come
     /// back too (labelled with their repo).

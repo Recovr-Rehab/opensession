@@ -58,6 +58,15 @@ struct SessionsListView: View {
     /// bottom of the sessions sidebar; Mac keeps it in the sidebar header.
     @State private var showSupport = false
     @State private var supportQueue = SupportQueueModel()
+    #if os(iOS)
+    /// The published reports, pushed onto this stack like a ticket is: a
+    /// place you go from the list, not a window over it.
+    @State private var showReports = false
+    /// How many automations have ever published a report. Fetched once, and
+    /// only so the Reports row can say what is behind it — and so an instance
+    /// whose automations publish nothing draws no row at all.
+    @State private var reportGroupCount = 0
+    #endif
     /// The ticket opened from the support queue. It has its own destination
     /// because this screen's navigation path is typed `[Session]`.
     @State private var openTicket: SupportThreadSummary?
@@ -286,6 +295,14 @@ struct SessionsListView: View {
                 while !Task.isCancelled {
                     await supportQueue.load()
                     try? await Task.sleep(for: .seconds(60))
+                }
+            }
+            // Once, not on a clock. Reports are published every few hours at
+            // most, and this only decides whether a row is drawn and what
+            // number it carries — the screen behind it loads its own.
+            .task {
+                if let groups = try? await OS1API.reportGroups() {
+                    reportGroupCount = groups.count
                 }
             }
             #endif
@@ -890,6 +907,9 @@ struct SessionsListView: View {
                         openTicket = row
                     }
                 }
+                .navigationDestination(isPresented: $showReports) {
+                    ReportsListView()
+                }
                 // Pushed onto this stack, not thrown over it: a ticket is
                 // somewhere you go from the list, the same as a session, and
                 // a sheet would have covered the list you came from. It can't
@@ -919,6 +939,11 @@ struct SessionsListView: View {
                     }
                     if env["OS1_OPEN_SUPPORT"] != nil {
                         showSupport = true
+                    }
+                    // Same reason again: Reports is a row a scripted run
+                    // would have to find and scroll to before it could tap it.
+                    if env["OS1_OPEN_REPORTS"] != nil {
+                        showReports = true
                     }
                     if env["OS1_OPEN_SETTINGS"] != nil {
                         showSettings = true
@@ -2154,6 +2179,7 @@ struct SessionsListView: View {
 
             #if os(iOS)
             if !isPlainHidden { mobilePlainRow }
+            if reportGroupCount > 0 { mobileReportsRow }
             #endif
 
             // The archived entry is a destination, not a proof that its index
@@ -2292,6 +2318,45 @@ struct SessionsListView: View {
                     Label("Hide from sidebar", systemImage: "eye.slash")
                 }
             }
+        }
+        .listRowInsets(EdgeInsets(
+            top: 2, leading: sidebarMargin, bottom: 2, trailing: sidebarMargin
+        ))
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
+    }
+
+    /// Reports is a sidebar tool on the web, so on a phone it is a row in the
+    /// same ordinary shape as Plain, next to it, rather than another glyph in
+    /// a toolbar that already holds three.
+    private var mobileReportsRow: some View {
+        Section {
+            Button {
+                showReports = true
+            } label: {
+                HStack(spacing: 9) {
+                    Image(systemName: "doc.text")
+                        .symbolRenderingMode(.hierarchical)
+                        .font(.callout)
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                        .frame(width: 22, height: 22)
+                    Text("Reports")
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                    Text(verbatim: "\(reportGroupCount)")
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(OS1VisualStyle.textFaint)
+                    Spacer()
+                }
+                .padding(.vertical, 11)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(
+                reportGroupCount == 1
+                    ? "Open Reports, 1 automation"
+                    : "Open Reports, \(reportGroupCount) automations"
+            )
         }
         .listRowInsets(EdgeInsets(
             top: 2, leading: sidebarMargin, bottom: 2, trailing: sidebarMargin

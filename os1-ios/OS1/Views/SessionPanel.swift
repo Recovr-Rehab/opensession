@@ -30,6 +30,11 @@ enum SessionPanel: Hashable, Identifiable {
     /// A push like the rest, and for the same reason: it is a detail of this
     /// session, and leaving it should be the gesture you already know.
     case terminal(sessionId: String)
+    /// The batches of agents this session sent out, and what each came back
+    /// with. A run belongs to the session that started it — the server has no
+    /// way to ask for anyone else's — so this is a detail of the conversation
+    /// in exactly the way the others are.
+    case agents(sessionId: String)
 
     var id: String {
         switch self {
@@ -39,13 +44,14 @@ enum SessionPanel: Hashable, Identifiable {
         case .changes(let sessionId, let path): "changes-\(sessionId)-\(path ?? "")"
         case .portals(let sessionId): "portals-\(sessionId)"
         case .terminal(let sessionId): "terminal-\(sessionId)"
+        case .agents(let sessionId): "agents-\(sessionId)"
         }
     }
 
     var sessionId: String {
         switch self {
         case .assets(let sessionId), .review(let sessionId), .portals(let sessionId),
-             .terminal(let sessionId): sessionId
+             .terminal(let sessionId), .agents(let sessionId): sessionId
         case .asset(let sessionId, _): sessionId
         case .changes(let sessionId, _): sessionId
         }
@@ -118,6 +124,8 @@ struct SessionPanelView: View {
             PortalsListView(sessionId: sessionId)
         case .terminal(let sessionId):
             TerminalView(sessionId: sessionId)
+        case .agents(let sessionId):
+            WorkflowRunsView(sessionId: sessionId)
         }
     }
 }

@@ -1373,6 +1373,16 @@ private struct SessionActionsMenu: View {
                     Label("Terminal", systemImage: "apple.terminal")
                 }
             }
+            // The batches of agents this session fanned work out to. The
+            // conversation shows that a run happened; what each agent came
+            // back with is only here.
+            if openPanel.isAvailable {
+                Button {
+                    openPanel(.agents(sessionId: viewModel.session.id))
+                } label: {
+                    Label("Agents", systemImage: "square.stack.3d.up")
+                }
+            }
             if let number = viewModel.prDetails?.number ?? viewModel.session.prNumber {
                 Button {
                     // A tab where there's a strip to open one in; the sheet
