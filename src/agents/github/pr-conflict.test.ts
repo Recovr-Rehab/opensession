@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
+import { classifyEntry } from "@tellahq/opensession-protocol/notices";
+import type { TranscriptEntry } from "@tellahq/opensession-protocol/session";
 import type { PrInfo } from "../../server/pr-cache";
 import {
   conflictMessage,
@@ -151,5 +153,21 @@ describe("conflictMessage", () => {
     expect(msg.length).toBeLessThan(160);
     for (const instruction of ["git ", "gh pr", "resolve", "finish", "Never", "push"])
       expect(msg).not.toContain(instruction);
+  });
+
+  test("reads as a system notice, never as something the human sent", () => {
+    // deliverToSession(id, msg, "GitHub") delivers it attributed
+    // (session-control-wiring.ts), and classifyEntry turns a GitHub-attributed
+    // user turn into a system notice: no sender, so no client can render it as
+    // the session owner's own message or as a teammate's steer.
+    const delivered = { type: "user", content: `[GitHub] ${msg}` } as TranscriptEntry;
+    const classified = classifyEntry(delivered);
+    expect(classified.sender).toBeUndefined();
+    expect(classified.senderVia).toBeUndefined();
+    expect(classified.notice?.kind).toBe("system");
+    expect(classified.notice?.tone).toBe("info");
+    // The whole line is the notice title, which is why it has to stay short.
+    expect(classified.notice?.title).toBe(msg);
+    expect(classified.content).toBe(msg);
   });
 });
