@@ -200,6 +200,36 @@ describe("TranscriptBlocks compact tool runs", () => {
 		setTurnActivity(null);
 	});
 
+	test("folds consecutive edits to one file into a single row", () => {
+		setTurnActivity(null);
+		const edit = (n: number, path: string): TranscriptEntry[] => [
+			{ id: `edit-${n}`, type: "tool_use", toolUseId: `edit-call-${n}`, toolName: "edit", toolInput: { filePath: path, oldString: "old", newString: "new" }, content: "Using edit", timestamp: `2026-08-13T06:00:0${n}.000Z` },
+			{ id: `edit-result-${n}`, type: "tool_result", toolUseId: `edit-call-${n}`, content: "updated", timestamp: `2026-08-13T06:00:0${n}.500Z` },
+		];
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				live
+				entries={[
+					{ id: "prompt", type: "user", content: "Rework the button", timestamp: "2026-08-13T06:00:00Z" },
+					...edit(1, "/tmp/button.tsx"),
+					...edit(2, "/tmp/button.tsx"),
+					...edit(3, "/tmp/button.tsx"),
+					...edit(4, "/tmp/other.tsx"),
+				]}
+			/>,
+		);
+
+		// One folded row for the three passes over button.tsx, carrying their
+		// summed counts; the fourth file keeps its own row.
+		expect(html.match(/data-tool-run="edits"/g)).toHaveLength(1);
+		expect(html).toContain("×3");
+		expect(html).toContain("+3");
+		expect(html).toContain("-3");
+		expect(html).toContain("Show 3 edit steps on /tmp/button.tsx");
+		expect(html).toContain('data-eid="edit-4"');
+		expect(html).not.toContain('data-eid="edit-2"');
+	});
+
 	test("keeps compact calls open under the always-expanded preference", () => {
 		setTurnActivity("expanded");
 		const html = renderToStaticMarkup(

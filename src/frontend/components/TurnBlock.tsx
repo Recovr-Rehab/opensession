@@ -3,10 +3,12 @@ import type { TranscriptEntry } from "../lib/types";
 import {
   assetToolPath,
   canonicalToolName,
+  PathSummary,
   ToolCallBlock,
   ToolGlyph,
   toolDisplayName,
   toolFamily,
+  toolLineStats,
   toolSummary,
   useToolPathRoots,
 } from "./ToolCallBlock";
@@ -20,7 +22,12 @@ import {
   getTurnActivityPref,
   onTurnActivityChanged,
 } from "../lib/turn-activity";
-import { collectTouchedFiles, LineStats, TouchedFileChips } from "./TurnFooter";
+import {
+  collectTouchedFiles,
+  LineStats,
+  TouchedFileChips,
+  touchedFilesFromTool,
+} from "./TurnFooter";
 
 interface Props {
   /** The folded part of one assistant turn: tool_use + intermediate assistant
@@ -264,20 +271,28 @@ interface ToolSectionProps {
  * affordance (a worker, an asset, or explicitly featured media) stay direct.
  */
 function ToolSection(props: ToolSectionProps) {
-  const runs: Array<{ compact: boolean; items: TranscriptEntry[] }> = [];
+  const runs: Array<{
+    compact: boolean;
+    editKey: string;
+    items: TranscriptEntry[];
+  }> = [];
   for (const entry of props.items) {
     const result = entry.toolUseId
       ? props.toolResults.get(entry.toolUseId)
       : undefined;
     const compact = isCompactTool(entry, result);
+    const editKey = compact ? "" : editRunKey(entry, result);
     const last = runs[runs.length - 1];
-    if (compact && last?.compact) last.items.push(entry);
-    else runs.push({ compact, items: [entry] });
+    if (last && (compact ? last.compact : !!editKey && last.editKey === editKey))
+      last.items.push(entry);
+    else runs.push({ compact, editKey, items: [entry] });
   }
 
   return runs.map((run) =>
     run.compact ? (
       <ToolRunBlock key={run.items[0].id} {...props} items={run.items} />
+    ) : run.editKey && run.items.length > 1 ? (
+      <EditRunBlock key={run.items[0].id} {...props} items={run.items} />
     ) : (
       <React.Fragment key={run.items[0].id}>
         {run.items.map((entry) => (
@@ -416,6 +431,148 @@ function ToolRunBlock({
                 live &&
                 !!entry.toolUseId &&
                 !toolResults.has(entry.toolUseId)
+              }
+              onOpenSubagent={onOpenSubagent}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Consecutive edits to one file, folded into a single row: the path once, the
+ * summed ±lines, and a count. Four passes over the same file are one change to
+ * a reader, and four rows of the same path push the rest of the turn off the
+ * screen. Every individual call is one click away, with its own diff.
+ *
+ * The path comes from the same derivation the turn's changed-file summary uses,
+ * so a call whose input arrived clamped (no readable path) simply keeps its own
+ * row rather than joining a group it can't be checked against.
+ */
+function editRunKey(
+  entry: TranscriptEntry,
+  result: TranscriptEntry | undefined
+): string {
+  const name = entry.toolName || "Tool";
+  if (toolFamily(name) !== "edit") return "";
+  // Media the agent asked to show keeps its own row, as it does everywhere else.
+  if (result?.featuredMedia?.length) return "";
+  const files = touchedFilesFromTool(entry);
+  if (files.length !== 1) return "";
+  return `${canonicalToolName(name)}\u0000${files[0].path}`;
+}
+
+function EditRunBlock({
+  items,
+  toolResults,
+  live,
+  defaultExpanded,
+  onOpenSubagent,
+  sessionId,
+}: ToolSectionProps) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const userToggledRef = useRef(false);
+  useEffect(() => {
+    if (!userToggledRef.current) setExpanded(defaultExpanded);
+  }, [defaultExpanded]);
+
+  const pathRoots = useToolPathRoots();
+  const first = items[0];
+  const toolName = first.toolName || "Tool";
+  const path = toolSummary(toolName, first.toolInput, first.content, pathRoots);
+
+  let additions = 0;
+  let deletions = 0;
+  let failures = 0;
+  let pending = 0;
+  for (const entry of items) {
+    // Summed from what the rows themselves show, so opening the fold adds up
+    // to the number that was on it.
+    const stats = toolLineStats(entry.toolName || "Tool", entry.toolInput);
+    additions += stats?.additions ?? 0;
+    deletions += stats?.deletions ?? 0;
+    const result = entry.toolUseId ? toolResults.get(entry.toolUseId) : undefined;
+    if (result?.isError) failures++;
+    if (live && entry.toolUseId && !result) pending++;
+  }
+
+  return (
+    <div data-tool-run="edits" data-eid={`${items[items.length - 1].id}#edits`}>
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-label={`${expanded ? "Hide" : "Show"} ${items.length} ${toolName} steps on ${path}${failures > 0 ? `. ${failures} failed` : ""}`}
+        // The single-call row's own line box: a folded group has to sit in the
+        // same column as the edits around it, or the transcript reads as two
+        // kinds of row.
+        className="group flex w-full min-w-0 cursor-pointer items-baseline gap-2 rounded-control border-0 bg-transparent px-1 py-[3px] text-left font-sans transition-colors hover:bg-hover/40"
+        onClick={() => {
+          userToggledRef.current = true;
+          setExpanded(!expanded);
+        }}
+      >
+        <span
+          className={cn(
+            "relative z-[1] flex size-[22px] flex-shrink-0 self-center items-center justify-center",
+            failures > 0 ? "text-red/70" : "text-faint"
+          )}
+        >
+          <span className="transition-opacity duration-150 group-hover:opacity-0 group-focus-visible:opacity-0">
+            <ToolGlyph toolName={toolName} size={20} />
+          </span>
+          <IconChevronDown
+            size={20}
+            className={cn(
+              "absolute block text-dim opacity-0 transition-[opacity,transform] duration-150 group-hover:opacity-100 group-focus-visible:opacity-100",
+              expanded && "rotate-180"
+            )}
+          />
+        </span>
+        <span className="flex-shrink-0 text-[14px] leading-5 font-medium text-dim transition-colors group-hover:text-fg">
+          {toolName}
+        </span>
+        <span className="flex min-w-0 flex-1 items-baseline gap-2">
+          <span
+            className={cn(
+              "min-w-0 truncate text-label leading-4",
+              failures > 0 ? "text-red/80" : "text-dim"
+            )}
+          >
+            <PathSummary path={path} />
+          </span>
+          <span className="flex-shrink-0 text-label leading-4 text-faint">
+            ×{items.length}
+          </span>
+          {additions + deletions > 0 && (
+            <span className="flex flex-shrink-0 gap-1.5 text-label leading-4">
+              {additions > 0 && <span className="text-green">+{additions}</span>}
+              {deletions > 0 && <span className="text-red">-{deletions}</span>}
+            </span>
+          )}
+        </span>
+        {failures > 0 && (
+          <span className="flex-shrink-0 text-meta text-red/80">
+            {failures} failed
+          </span>
+        )}
+        {pending > 0 && (
+          <span className="size-[11px] flex-shrink-0 self-center animate-spin rounded-full border border-b-line-strong border-l-line-strong border-r-line-strong border-t-dim" />
+        )}
+      </button>
+      {expanded && (
+        <div className="ml-6">
+          {items.map((entry) => (
+            <ToolCallBlock
+              key={entry.id}
+              entry={entry}
+              sessionId={sessionId}
+              result={
+                entry.toolUseId ? toolResults.get(entry.toolUseId) : undefined
+              }
+              pending={
+                live && !!entry.toolUseId && !toolResults.has(entry.toolUseId)
               }
               onOpenSubagent={onOpenSubagent}
             />

@@ -239,7 +239,7 @@ export function ToolGlyph({ toolName, size = 20 }: { toolName: string; size?: nu
 }
 
 /** Path summary with the directory dimmed and the basename readable. */
-function PathSummary({ path }: { path: string }) {
+export function PathSummary({ path }: { path: string }) {
   const idx = path.lastIndexOf("/");
   if (idx < 0) return <>{path}</>;
   return (
