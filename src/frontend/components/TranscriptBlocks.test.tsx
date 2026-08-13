@@ -193,30 +193,7 @@ describe("TranscriptBlocks compact tool runs", () => {
 		expect(html).toContain("git status");
 	});
 
-	test("keeps edits as direct rows between compact runs", () => {
-		setTurnActivity("expanded");
-		const html = renderToStaticMarkup(
-			<TranscriptBlocks
-				live
-				entries={[
-					...toolEntries,
-					{ id: "edit", type: "tool_use", toolUseId: "edit-call", toolName: "edit", toolInput: { filePath: "/tmp/package.json", oldString: "old", newString: "new" }, content: "Using edit", timestamp: "2026-08-13T06:00:05.500Z" },
-					{ id: "edit-result", type: "tool_result", toolUseId: "edit-call", content: "updated", timestamp: "2026-08-13T06:00:05.750Z" },
-					...bashCall(1, "bun test"),
-					...bashCall(2, "git diff"),
-				]}
-			/>,
-		);
-
-		expect(html.match(/data-tool-run="true"/g)).toHaveLength(2);
-		expect(html).toContain('data-eid="edit"');
-		expect(html).toContain(">edit</span>");
-		expect(html).toContain("+1");
-		expect(html).toContain("-1");
-		setTurnActivity(null);
-	});
-
-	test("folds consecutive edits to one file into a single row", () => {
+	test("folds edits into the run and counts their lines on the row", () => {
 		setTurnActivity(null);
 		const edit = (n: number, path: string): TranscriptEntry[] => [
 			{ id: `edit-${n}`, type: "tool_use", toolUseId: `edit-call-${n}`, toolName: "edit", toolInput: { filePath: path, oldString: "old", newString: "new" }, content: "Using edit", timestamp: `2026-08-13T06:00:0${n}.000Z` },
@@ -229,30 +206,32 @@ describe("TranscriptBlocks compact tool runs", () => {
 					{ id: "prompt", type: "user", content: "Rework the button", timestamp: "2026-08-13T06:00:00Z" },
 					...edit(1, "/tmp/button.tsx"),
 					...edit(2, "/tmp/button.tsx"),
-					...edit(3, "/tmp/button.tsx"),
-					...edit(4, "/tmp/other.tsx"),
+					...edit(3, "/tmp/other.tsx"),
+					...bashCall(1, "bun test"),
 				]}
 			/>,
 		);
 
-		// One folded row for the three passes over button.tsx, carrying their
-		// summed counts; the fourth file keeps its own row.
-		expect(html.match(/data-tool-run="edits"/g)).toHaveLength(1);
-		expect(html).toContain("×3");
+		// One row for the whole run, edits included, carrying the lines those
+		// edits moved. The individual edit rows are behind it; the turn's own
+		// file chips still name what changed.
+		expect(html.match(/data-tool-run="true"/g)).toHaveLength(1);
+		expect(html).toContain("4 steps");
 		expect(html).toContain("+3");
 		expect(html).toContain("-3");
-		expect(html).toContain("Show 3 edit steps on /tmp/button.tsx");
-		expect(html).toContain('data-eid="edit-4"');
-		expect(html).not.toContain('data-eid="edit-2"');
+		expect(html).toContain("Show 4 grouped steps: Edit ×3 · Bash");
+		expect(html).not.toContain('data-eid="edit-1"');
 	});
 
-	test("keeps compact calls open under the always-expanded preference", () => {
+	test("shows every call in place under the always-expanded preference", () => {
 		setTurnActivity("expanded");
 		const html = renderToStaticMarkup(
 			<TranscriptBlocks live entries={toolEntries} />,
 		);
 
-		expect(html).toContain("Hide 2 grouped steps: Bash · Read");
+		// Nothing to disclose, so no grouped row and no indent under one.
+		expect(html).not.toContain('data-tool-run="true"');
+		expect(html).not.toContain('class="ml-3"');
 		expect(html).toContain("git status");
 		expect(html).toContain("package.json");
 		setTurnActivity(null);

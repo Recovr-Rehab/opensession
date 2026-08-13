@@ -431,7 +431,7 @@ function ReviewTurnSteps({
 				items={section.items}
 				toolResults={toolResults}
 				live={live}
-				defaultExpanded={false}
+				expandAll={false}
 				sessionId={sessionId}
 				onOpenSubagent={onOpenSubagent}
 			/>
