@@ -593,9 +593,10 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
         {/* The shared row primitives, not a local flex row: their `flex-wrap`
             plus the text column's min width is what drops the chip and button
             to their own line on a phone instead of squeezing the description
-            into a one-word column. `items-start` because this row's text runs
-            several lines — a centred icon would float away from its title. */}
-        <SettingRow className="items-start gap-x-3">
+            into a one-word column. The admin row is top-aligned because its
+            description runs several lines; the compact personal row stays
+            centered with its button. */}
+        <SettingRow className={cn("gap-x-3", !personal && "items-start")}>
           <IconTile name="github" size={30} />
           <SettingRowText>
             <SettingRowTitle>{personal ? "GitHub sign-in" : "Per-user GitHub auth"}</SettingRowTitle>
@@ -686,9 +687,11 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
             );
             return (
               <SettingRow key={m.github} className="gap-x-3 py-3">
-                {/* Sized to the card's GitHub tile above so both rows start
-                    their text at the same x. */}
-                <UserAvatar name={m.name} login={m.github} size={30} />
+                {/* Keep the smaller settings-avatar step inside the same slot
+                    as the GitHub tile so every row's text stays aligned. */}
+                <span className="flex size-[30px] shrink-0 items-center justify-center">
+                  <UserAvatar name={m.name} login={m.github} size={28} />
+                </span>
                 <SettingRowText>
                   <SettingRowTitle className="truncate">
                     {m.name}
