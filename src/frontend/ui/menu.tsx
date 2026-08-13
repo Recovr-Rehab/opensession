@@ -187,6 +187,11 @@ export const ContextMenu = {
 	Item,
 	Separator,
 	Shortcut: MenuShortcut,
+	// Submenus are the plain Menu parts (ContextMenu re-exports them), so a
+	// submenu's own popup is Menu.Popup: it anchors to its trigger row rather
+	// than to the cursor the way ContextPopup does.
+	SubmenuRoot: BaseContextMenu.SubmenuRoot,
+	SubmenuTrigger,
 };
 
 export const Menu = {

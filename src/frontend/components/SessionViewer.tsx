@@ -173,7 +173,7 @@ import {
 	IconSparkle,
 	IconTerminal,
 	IconCopy,
-	IconFile,
+	IconChevronRight,
 	IconGlobe,
 	IconRobot,
 	IconArrowUpRight,
@@ -4503,31 +4503,34 @@ export function SessionViewer({
 				const showTranscriptActions =
 					isPhone || (workspaceSessions?.length ?? 1) <= 1;
 				const transcriptActions = showTranscriptActions && (
-					<>
-						<Menu.Item
-							onClick={() => {
-								setOverflowOpen(false);
-								void copySessionTranscript(session, "concise", toast);
-							}}
-							title="Copy a trimmed transcript of this session"
-						>
+					<Menu.SubmenuRoot>
+						<Menu.SubmenuTrigger title="Copy this session's transcript">
 							<IconCopy size={20} />
-							<span className="grow">Copy concise transcript</span>
-							<span className="ml-auto text-[11px] font-semibold tracking-normal text-faint">
-								{isApple ? "⌘⌥C" : "Ctrl+Alt+C"}
-							</span>
-						</Menu.Item>
-						<Menu.Item
-							onClick={() => {
-								setOverflowOpen(false);
-								void copySessionTranscript(session, "full", toast);
-							}}
-							title="Copy the complete transcript of this session"
-						>
-							<IconFile size={20} />
-							<span className="grow">Copy full transcript</span>
-						</Menu.Item>
-					</>
+							<span className="grow">Copy transcript</span>
+							<IconChevronRight size={16} className="text-faint" />
+						</Menu.SubmenuTrigger>
+						<Menu.Popup>
+							<Menu.Item
+								onClick={() => {
+									setOverflowOpen(false);
+									void copySessionTranscript(session, "concise", toast);
+								}}
+								title="Copy a trimmed transcript of this session"
+							>
+								<span className="grow">Concise</span>
+								<Menu.Shortcut>{isApple ? "⌘⌥C" : "Ctrl+Alt+C"}</Menu.Shortcut>
+							</Menu.Item>
+							<Menu.Item
+								onClick={() => {
+									setOverflowOpen(false);
+									void copySessionTranscript(session, "full", toast);
+								}}
+								title="Copy the complete transcript of this session"
+							>
+								<span className="grow">Full</span>
+							</Menu.Item>
+						</Menu.Popup>
+					</Menu.SubmenuRoot>
 				);
 				// Pin and Spin off live here at every width alongside the other
 				// session-level actions, keeping the visible header focused on status.

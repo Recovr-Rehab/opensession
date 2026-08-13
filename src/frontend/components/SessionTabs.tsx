@@ -7,7 +7,7 @@ import { relativeTime } from "../lib/api";
 import { Menu, ContextMenu } from "../ui/menu";
 import { sessionPath, absoluteLink, copyToClipboard } from "../lib/share-link";
 import { copySessionTranscript } from "../lib/transcript-copy";
-import { IconHistory, IconPencil, IconPlus, IconRestore } from "./icons";
+import { IconChevronRight, IconHistory, IconPencil, IconPlus, IconRestore } from "./icons";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { isApple } from "../lib/platform";
 import {
@@ -650,15 +650,23 @@ export function SessionTabs({
 											</ContextMenu.Item>
 										)}
 										<ContextMenu.Separator />
-										<ContextMenu.Item onClick={() => void copySessionTranscript(session, "concise", onToast)}>
-											<span className="grow">Copy concise transcript</span>
-											{key === activeId && (
-												<ContextMenu.Shortcut>{isApple ? "⌘ ⌥ C" : "Ctrl+Alt+C"}</ContextMenu.Shortcut>
-											)}
-										</ContextMenu.Item>
-										<ContextMenu.Item onClick={() => void copySessionTranscript(session, "full", onToast)}>
-											<span className="grow">Copy full transcript</span>
-										</ContextMenu.Item>
+										<ContextMenu.SubmenuRoot>
+											<ContextMenu.SubmenuTrigger>
+												<span className="grow">Copy transcript</span>
+												<IconChevronRight size={16} className="text-faint" />
+											</ContextMenu.SubmenuTrigger>
+											<Menu.Popup>
+												<Menu.Item onClick={() => void copySessionTranscript(session, "concise", onToast)}>
+													<span className="grow">Concise</span>
+													{key === activeId && (
+														<Menu.Shortcut>{isApple ? "⌘ ⌥ C" : "Ctrl+Alt+C"}</Menu.Shortcut>
+													)}
+												</Menu.Item>
+												<Menu.Item onClick={() => void copySessionTranscript(session, "full", onToast)}>
+													<span className="grow">Full</span>
+												</Menu.Item>
+											</Menu.Popup>
+										</ContextMenu.SubmenuRoot>
 										<ContextMenu.Item
 											onClick={() => copyToClipboard(absoluteLink(sessionPath(session)), () => onToast("Link copied"))}
 										>
