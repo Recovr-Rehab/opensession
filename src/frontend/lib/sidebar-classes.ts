@@ -8,28 +8,36 @@
  * its Tailwind equivalent alike — compiles to nothing at all. A lookup of
  * complete literals is the only shape that survives.
  *
- * ── The height scale (desktop) ───────────────────────────────────────────────
- * The rail has exactly TWO box heights, and which one an element takes says
- * what KIND of thing it is rather than how important it is:
+ * ── The two signals (desktop) ───────────────────────────────────────────────
+ * Two properties carry the whole rail, and they are INDEPENDENT. Read them as
+ * separate questions, and do not bundle them into one "kind" again.
  *
- *   36px  an ITEM — something you click to GO somewhere, and the only family
- *         that paints a hover pill. Session/PR/support/archived rows, tool
- *         rows, and the headings that are destinations in their own right and
- *         lead with a mark: a repo or feed band, Archived, an automation
- *         group. See {@link SIDEBAR_HEADER_ROW}.
- *   28px  a LABEL — a caption naming the group under it, leading with no mark
- *         at all. Band headings (Tools / Workspaces / Automations / People),
- *         the status lanes (Needs action / Recent / Yesterday / Urgent), and
- *         the top-level groupings that read as lanes over the whole list:
- *         Needs review, Awaiting review, Pinned. No hover fill: they still
- *         toggle, and the ink brightening on hover says so, but a full-width
- *         pill made every caption look like one more row to click. See
- *         {@link SIDEBAR_LANE_HEADER} and {@link SIDEBAR_BAND_TOGGLE}.
+ * HEIGHT says how prominent a line is. There are exactly two:
  *
- * The line between the two is what the heading IS, not where it sits. Needs
- * review and Pinned are top-level and used to lead with a coloured 22px glyph,
- * which made them the loudest thing in the rail while naming a group exactly
- * the way Yesterday does. They open nothing, so they are labels.
+ *   36px  a FULL LINE. Session/PR/support/archived rows, tool rows, and the
+ *         headings that title a set of rows and lead with a mark: a repo or
+ *         feed band, an automation group, Archived. See
+ *         {@link SIDEBAR_HEADER_ROW}.
+ *   28px  a CAPTION, leading with no mark at all. Band headings (Tools /
+ *         Workspaces / Automations / People), the status lanes (Needs action /
+ *         Recent / Yesterday / Urgent), and the top-level groupings that read
+ *         as lanes over the whole list: Needs review, Awaiting review, Pinned.
+ *         See {@link SIDEBAR_LANE_HEADER} and {@link SIDEBAR_BAND_TOGGLE}.
+ *
+ * The HOVER FILL says whether clicking takes you somewhere. Only a line that
+ * NAVIGATES paints one ({@link SIDEBAR_HOVER_LAYER}): the rows, the tool rows,
+ * and Archived. Everything that merely collapses a group takes none, whatever
+ * its height — a repo band, a feed band, an automation group, every caption.
+ * They still show the ink brightening on hover, which is what says a heading
+ * is a control at all; a full-width pill says something stronger and untrue,
+ * and a rail where most lines offer one teaches that the pill means nothing.
+ *
+ * Neither question is answered by where a heading sits. Needs review and
+ * Pinned are top-level and used to lead with a coloured 22px glyph on the full
+ * line height, which made the headings that go nowhere the loudest things in
+ * the rail; they name a group exactly the way Yesterday does, so they are
+ * captions. A repo band does title real rows, so it keeps the full line, but
+ * it is still only a toggle, so it lost its pill.
  *
  * Before this the same rail ran 44 / 40 / 32 / 30 / 28 down one column — five
  * heights for four kinds of thing, with the tallest box (a band caption at 44)
@@ -213,18 +221,22 @@ export const SIDEBAR_GROUP_HEADER =
 	"group/gh flex w-full items-center gap-[9px] rounded-[calc(10px*var(--rf))] border-none bg-transparent text-[16px] font-medium tracking-[0px] text-dim desktop:text-[14px] hover:text-fg";
 
 /**
- * An ITEM heading — a repo or feed band, Needs review, Awaiting review,
- * Pinned, Archived, an automation group. Each one leads with a mark in the
- * rail and goes somewhere or opens something, so it wears the row's box and
- * the row's hover pill: on the 36px item height it sits in one regular column
- * with the rows underneath it rather than as a third size between them and the
- * captions.
+ * A FULL-LINE heading — a repo or feed band, an automation group, Archived.
+ * Each leads with a mark in the rail and titles the rows under it, so it wears
+ * the row's 36px box and sits in one regular column with them rather than as a
+ * third size between them and the captions.
+ *
+ * The height only. The hover fill is NOT here, because it answers a different
+ * question — see the height scale at the top of this file: a repo band is a
+ * full line but it is a collapse toggle, so it takes no fill, while Archived
+ * looks identical and navigates, so it adds {@link SIDEBAR_HOVER_LAYER} at its
+ * call site. Bundling the two here is what put a pill on three headings that
+ * go nowhere.
  *
  * Desktop only. On phones the heading keeps the taller tap box its own inset
  * gives it.
  */
-export const SIDEBAR_HEADER_ROW =
-	`desktop:h-9 desktop:min-h-9 ${SIDEBAR_HOVER_LAYER}`;
+export const SIDEBAR_HEADER_ROW = "desktop:h-9 desktop:min-h-9";
 
 /** Left pad aligns the icon with a base row (list 6 + header 10 = 16). */
 export const SIDEBAR_GROUP_HEADER_INSET =

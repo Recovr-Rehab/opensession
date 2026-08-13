@@ -2362,6 +2362,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				SIDEBAR_GROUP_HEADER,
 				SIDEBAR_GROUP_HEADER_INSET,
 				SIDEBAR_HEADER_ROW,
+				// The one heading that navigates, so the one heading that paints a
+				// fill. Its neighbours in the rail collapse a group instead and
+				// deliberately take none. See the two signals in sidebar-classes.ts.
+				SIDEBAR_HOVER_LAYER,
 				"transition-colors",
 				archivedActive && "bg-pressed text-fg",
 			)}
