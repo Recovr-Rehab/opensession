@@ -405,7 +405,7 @@ function ToolRunBlock({
               <span className="inline-flex size-5 items-center justify-center text-faint">
                 <ToolGlyph toolName={name} size={20} />
               </span>
-              {groups.length > 1 && `×${count}`}
+              {groups.length > 1 && count}
             </span>
           ))}
         </span>

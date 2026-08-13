@@ -169,7 +169,9 @@ describe("TranscriptBlocks compact tool runs", () => {
 		// Read, with the names left to the aria-label below.
 		expect(html).toContain("M5.25 7.25L10.25 12L5.25 16.75");
 		expect(html).toContain("M7.75 19.25H16.25C17.3546");
-		expect(html).toContain("×1");
+		// A mixed run splits its steps per glyph, as a bare count.
+		expect(html).toContain("</span>1</span>");
+		expect(html).not.toContain("×1");
 		expect(html).toContain("Show 2 grouped steps: Bash · Read");
 		expect(html).toContain('x="8.25" y="4.75" width="11" height="11" rx="2"');
 		expect(html).toContain("group-hover:opacity-0");
