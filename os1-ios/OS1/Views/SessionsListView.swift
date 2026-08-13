@@ -2626,7 +2626,7 @@ struct SessionRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             if hasDraft {
                 Image(systemName: "pencil")
-                    .font(.caption.weight(.semibold))
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(OS1VisualStyle.textDim)
                     .accessibilityLabel("Unsent draft")
             }
