@@ -182,7 +182,7 @@ export const SIDEBAR_GROUP_HEADER_INSET =
  * step up from the desktop caption so it survives arm's-length reading.
  */
 export const SIDEBAR_LANE_HEADER =
-	"gap-[5px] pt-[9px] pb-[5px] text-[13px] font-semibold desktop:pt-1 desktop:pb-1 desktop:text-[12px]";
+	"gap-[5px] pt-[9px] pb-[5px] text-[13px] font-semibold desktop:h-[26px] desktop:min-h-[26px] desktop:pt-1 desktop:pb-1 desktop:text-[12px]";
 
 /**
  * The heading's own name. `truncate` before any width utility: it is the pair
@@ -283,13 +283,12 @@ export const SIDEBAR_STICKY_BAND_ROW =
 	"desktop:mt-0 desktop:flex desktop:h-[44px] desktop:min-h-[44px] desktop:items-center desktop:py-[7px]";
 
 /**
- * Tier 2: a lane / repo / status header, pinned one band-row lower. Its 26px
- * desktop row keeps the caption close to the first item instead of letting the
- * hover surface add visual padding. Once pinned, its trailing fade makes the
- * rows passing underneath remain visible without leaving a hard edge below it.
+ * Tier 2: a lane / repo / status header, pinned one band-row lower. Once
+ * pinned, its trailing fade makes the rows passing underneath remain visible
+ * without leaving a hard edge below the caption.
  */
 export const SIDEBAR_STICKY_LANE =
-	"desktop:sticky desktop:top-[44px] desktop:z-[15] desktop:h-[26px] desktop:min-h-[26px] " +
+	"desktop:sticky desktop:top-[44px] desktop:z-[15] desktop:h-[30px] desktop:min-h-[30px] " +
 	"desktop:[&.is-stuck::after]:pointer-events-none desktop:[&.is-stuck::after]:absolute desktop:[&.is-stuck::after]:top-[calc(100%-8px)] desktop:[&.is-stuck::after]:left-[-400px] desktop:[&.is-stuck::after]:right-[-400px] desktop:[&.is-stuck::after]:z-[-1] desktop:[&.is-stuck::after]:h-5 desktop:[&.is-stuck::after]:content-[''] desktop:[&.is-stuck::after]:[background:linear-gradient(to_bottom,var(--sidebar-material),transparent),linear-gradient(to_bottom,var(--bg-raised),transparent)]";
 
 /**
@@ -299,7 +298,7 @@ export const SIDEBAR_STICKY_LANE =
  * through `cn()`, which resolves the pair to this one.
  */
 export const SIDEBAR_STICKY_LANE_NESTED =
-	"desktop:top-[70px] desktop:z-[14]";
+	"desktop:top-[74px] desktop:z-[14]";
 
 /**
  * ── Band headings ───────────────────────────────────────────────────────────
