@@ -332,9 +332,9 @@ export async function onboard(opts: OnboardOptions = {}): Promise<number> {
   // The engine is the only step that can't be skipped: without model capacity
   // every session fails its first turn. Name the subscription path first —
   // it's what the default model uses — with the API-key route as the alternative.
-  info(`3. ${bold("add model capacity")}     Workspace → Models: paste a`);
+  info(`3. ${bold("add model capacity")}     Settings → Accounts: paste a`);
   info(`   ${dim("`claude setup-token` token, or sign in to ChatGPT by device code.")}`);
-  info(`   ${dim("Using API keys instead? `opencode auth login`, or Workspace → Models.")}`);
+  info(`   ${dim("Using API keys instead? `opencode auth login`, or Settings → Model providers.")}`);
   info(`4. ${bold("create a session")}       a completed turn is the real proof`);
   info(`5. ${bold("opensession team add")}   put yourself on the roster (attribution, sign-in)`);
   if (answers.enabled.length) {

@@ -162,7 +162,7 @@ Everything the OpenCode engine supports beyond the two subscription bridges —
 xAI, OpenRouter, Groq, Mistral, DeepSeek, Google, Cerebras, … — runs on a plain
 API key. There is no pool and no rotation: one key per provider.
 
-Configure them from **Workspace → Models** in the UI. Add the provider
+Configure them from **Settings → Model providers** in the UI. Add the provider
 by its OpenCode slug (`xai`, `openrouter`, …), paste the key, optionally set a
 `baseURL`, and list the model ids you want in the picker. Keys are stored
 server-side in `~/.opensession-opencode.json` (0600), returned only masked, and
@@ -197,7 +197,7 @@ model id remains routable by typing it in).
 
 Pools only work if you can see them. Two mechanisms:
 
-**Workspace → Models** shows every account in both pools
+**The Accounts page** (Settings → Accounts) shows every account in both pools
 with its live usage: the 5-hour and 7-day windows, plan, and extra-usage
 credit spend where enabled. For Claude accounts this polling needs a full
 login-scoped credential — a bare `claude setup-token` lacks the

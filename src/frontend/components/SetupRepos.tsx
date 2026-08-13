@@ -88,7 +88,7 @@ export function ReposSection({
 			<SettingCard>
 				{repos.length === 0 ? (
 					<EmptyState placement="row">
-						No repositories registered. Ask and Code sessions need a repo to work
+						No repositories registered. Sessions need at least one repo to work
 						in, so add one above.
 					</EmptyState>
 				) : (

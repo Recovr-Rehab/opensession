@@ -31,7 +31,6 @@ import {
 import { configuredServer } from "../config";
 import { randomBytes } from "crypto";
 import { isLocalProfile, localProfileLogin, localProfileUser } from "../profile";
-import { workspaceAdminAuthorized } from "../workspace-auth";
 
 const STATE_COOKIE = "opensession_oauth_state";
 
@@ -66,7 +65,6 @@ export async function handleAuthRoutes(
 				required: true,
 				authenticated: !!login && !!name,
 				local: true,
-				admin: true,
 				...(login && name ? { login, name } : {}),
 			});
 		}
@@ -74,7 +72,6 @@ export async function handleAuthRoutes(
 		return Response.json({
 			required: webAuthRequired(),
 			authenticated: !!identity,
-			admin: workspaceAdminAuthorized({ authUser: identity }),
 			/** Redirect (authorization-code) flow available — the UI's primary
 			 *  sign-in when true; device flow is always there as fallback. */
 			redirect: githubRedirectFlowAvailable(),
@@ -212,9 +209,6 @@ export async function handleAuthRoutes(
 				status: "ok",
 				login: result.login,
 				name: session.name,
-				admin: workspaceAdminAuthorized({
-					authUser: { login: result.login, name: session.name },
-				}),
 				...(native ? { token: session.token } : {}),
 			},
 			{ headers: { "Set-Cookie": webAuthSetCookie(session.token) } },

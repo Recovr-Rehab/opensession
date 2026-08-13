@@ -72,9 +72,7 @@ import { WorkspacePane } from "./components/WorkspacePane";
 import { Reports } from "./components/Reports";
 import { Analytics } from "./components/Analytics";
 import { Tasks } from "./components/Tasks";
-import { UserGate, getCurrentUser, useAuthStatus, useCurrentUser } from "./components/UserPicker";
-import type { TeammateOnboardingModel } from "./components/TeammateOnboarding";
-import { fetchTeammateOnboardingStatus, type TeammateOnboardingStatus } from "./lib/api";
+import { UserGate, getCurrentUser, useAuthStatus } from "./components/UserPicker";
 import { PreviewWait, matchPreviewWaitRoute } from "./components/PreviewWait";
 import { SettingsButton } from "./components/SettingsButton";
 import { TitleBar } from "./components/TitleBar";
@@ -555,11 +553,7 @@ export function App(
 			// Landing on the root: stamp it as the base of the page stack so panels
 			// pushed over it can count their way back down.
 			history.replaceState(navState(0), "", location.pathname);
-			const rememberedUser = localStorage.getItem("opensession-last-session-user");
-			const currentUser = getCurrentUser();
-			const lastId = rememberedUser === currentUser
-				? localStorage.getItem("opensession-last-session")
-				: null;
+			const lastId = localStorage.getItem("opensession-last-session");
 			if (lastId) {
 				const restored: Route = { view: "session", id: lastId };
 				// Push rather than replace: the home entry we actually landed on stays
@@ -584,28 +578,8 @@ export function App(
 		remove,
 	} = useSessions({ loadArchived: route.view === "archived" });
 	const auth = useAuthStatus();
-	const currentUser = useCurrentUser();
 	const localMode = auth?.local === true;
 	const { connected, send, addHandler } = useWebSocket();
-	const [onboardingStatus, setOnboardingStatus] = useState<TeammateOnboardingStatus | null>(null);
-	const [onboardingError, setOnboardingError] = useState<string | null>(null);
-	const onboardingRequestRef = useRef(0);
-	const loadOnboarding = useCallback(() => {
-		const request = ++onboardingRequestRef.current;
-		setOnboardingError(null);
-		void fetchTeammateOnboardingStatus(currentUser, auth?.local === true)
-			.then((status) => {
-				if (request === onboardingRequestRef.current) setOnboardingStatus(status);
-			})
-			.catch((error) => {
-				if (request === onboardingRequestRef.current) {
-					setOnboardingError(error instanceof Error ? error.message : "Couldn't check readiness");
-				}
-			});
-	}, [auth?.local, currentUser]);
-	useEffect(() => {
-		loadOnboarding();
-	}, [loadOnboarding, sessions.length]);
 	const sessionsRef = useRef(sessions);
 	sessionsRef.current = sessions;
 	type PendingCreateDraft = {
@@ -1060,14 +1034,6 @@ export function App(
 	const openPrefilledSession = React.useCallback((prefill: NewSessionPrefill) => {
 		setPalette({ open: true, ...prefill });
 	}, []);
-	const teammateOnboarding: TeammateOnboardingModel = {
-		status: onboardingStatus,
-		error: onboardingError,
-		connected,
-		onRetry: loadOnboarding,
-		onStart: openPrefilledSession,
-		onOpenSetup: () => navigate({ view: "settings", section: "setup" }),
-	};
 
 	// A "new tab" while a session is open is a *new session in that same session*, not
 	// a whole new session — so it must NOT pop the new-session palette. It's a
@@ -1313,11 +1279,9 @@ export function App(
 	useEffect(() => {
 		if (route.view === "session") {
 			localStorage.setItem("opensession-last-session", route.id);
-			localStorage.setItem("opensession-last-session-user", getCurrentUser());
 			pushRecent(route.id);
 		} else if (route.view === "home") {
 			localStorage.removeItem("opensession-last-session");
-			localStorage.removeItem("opensession-last-session-user");
 		}
 	}, [route]);
 
@@ -3665,7 +3629,6 @@ export function App(
 							workspaces={workspaces}
 							notes={notes.map((n) => ({ id: n.id, title: n.title }))}
 							teamViewing={teamViewing}
-							onboarding={teammateOnboarding}
 							selectedId={currentSession?.id || null}
 							activeNoteId={currentNoteId}
 							notesActive={route.view === "notes"}
@@ -4167,8 +4130,6 @@ export function App(
 								teamViewing={teamViewing}
 								onSelect={(s) => navigate({ view: "session", id: s.id })}
 								onNewSession={() => openPalette()}
-								onStartSession={openPrefilledSession}
-								onboarding={teammateOnboarding}
 								onShowArchived={refreshArchived}
 								onOpenAnalytics={() => navigate({ view: "analytics" })}
 							/>
@@ -4186,7 +4147,7 @@ export function App(
 				{/* Mobile-only floating + on the root list page — thumb-reach shortcut
 				    to the new-session palette (desktop hides it via CSS; the sidebar's
 				    own + covers that layout). */}
-				{!mobileDetail && onboardingStatus?.hasOwnSessions !== false && (
+				{!mobileDetail && (
 					<button
 						className={MOBILE_FAB}
 						onClick={() => openPalette()}

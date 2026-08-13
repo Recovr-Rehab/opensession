@@ -87,7 +87,7 @@ const STEPS: StepDef[] = [
 		id: "review",
 		label: "Review",
 		title: "Review",
-		description: "Check what is required for a first session and which team workflows are optional.",
+		description: "Review what is ready and what still needs attention.",
 	},
 ];
 
@@ -190,8 +190,8 @@ export function SetupPanel({ onDone }: { onDone?: () => void }) {
 	return (
 		<SettingsPanel className="relative">
 			<SettingsHeader
-				title="Workspace setup"
-				description="Administrator settings for model capacity, repositories, members, and integrations."
+				title="Setup"
+				description="What a new instance needs, one step at a time. Every step is also a page of its own under Workspace."
 			/>
 			{!status ? (
 				<LoadingState>
@@ -242,8 +242,8 @@ export function SetupPanel({ onDone }: { onDone?: () => void }) {
 									onSaved={setup.applyGithub}
 								/>
 								<SettingsHint>
-									After setup, teammates connect their own accounts under Personal →
-									My accounts.
+									After setup, teammates connect their own accounts under Workspace →
+									Connections.
 								</SettingsHint>
 							</>
 						)}
@@ -269,7 +269,7 @@ export function SetupPanel({ onDone }: { onDone?: () => void }) {
 						</span>
 						{last ? (
 							<Button variant="primary" onClick={onDone} disabled={!onDone}>
-								Back to app
+								Done
 							</Button>
 						) : (
 							<Button variant="primary" onClick={() => goTo(index + 1)}>

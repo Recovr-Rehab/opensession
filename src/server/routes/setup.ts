@@ -23,7 +23,6 @@
 
 import { audit } from "../audit";
 import type { IntegrationSpec } from "../integrations/registry";
-import { requireWorkspaceAdmin } from "../workspace-auth";
 import type { RouteContext } from "./context";
 import { handleSetupCodestorageRoutes } from "./setup-codestorage";
 import { handleSetupRepoRoutes } from "./setup-repos";
@@ -155,9 +154,6 @@ export async function handleSetupRoutes(
 ): Promise<Response | undefined> {
   const { req, path } = ctx;
   if (!path.startsWith("/api/setup/")) return undefined;
-
-  const forbidden = requireWorkspaceAdmin(ctx);
-  if (forbidden) return forbidden;
 
   if (path === "/api/setup/status" && req.method === "GET") {
     const { configuredServer, configuredRepos, configuredIdentity } =
