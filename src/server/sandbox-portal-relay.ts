@@ -16,6 +16,8 @@ type RelayResponse = { status: number; headers: Record<string, string>; body?: s
 const connections: Map<string, Connection> = (g.__opensessionSandboxPortalConnections ??= new Map()) as Map<string, Connection>;
 type Relay = { server: ReturnType<typeof Bun.serve>; sessionId: string; sandboxId: string; port: number };
 const relays: Map<string, Relay> = (g.__opensessionSandboxPortalRelays ??= new Map()) as Map<string, Relay>;
+type BrowserSocket = { ws: any; connection: Connection };
+const browserSockets: Map<string, BrowserSocket> = (g.__opensessionSandboxPortalBrowserSockets ??= new Map()) as Map<string, BrowserSocket>;
 const HOP_HEADERS = new Set(["connection", "host", "content-length", "transfer-encoding", "upgrade", "keep-alive", "proxy-authenticate", "proxy-authorization", "te", "trailer"]);
 
 function key(sessionId: string, sandboxId: string, port: number): string { return `${sessionId}:${sandboxId}:${port}`; }
@@ -72,8 +74,17 @@ export function sandboxPortalRelayOpen(ws: any): boolean {
 export function sandboxPortalRelayMessage(ws: any, raw: string | Buffer): boolean {
 	if (ws.data?.kind !== "sandbox-portal-relay") return false;
 	let message: any; try { message = JSON.parse(typeof raw === "string" ? raw : raw.toString()); } catch { return true; }
-	if (message.t !== "http_result" || typeof message.id !== "string") return true;
 	const connection = connections.get(key(ws.data.sessionId, ws.data.sandboxId, ws.data.port));
+	if (message.t === "ws_event" || message.t === "ws_closed") {
+		const id = typeof message.id === "string" ? message.id : "";
+		const browser = browserSockets.get(id);
+		if (!browser || browser.connection !== connection) return true;
+		if (message.t === "ws_event") {
+			try { message.binary === true && typeof message.data === "string" ? browser.ws.send(Buffer.from(message.data, "base64")) : typeof message.data === "string" && browser.ws.send(message.data); } catch {}
+		} else { browserSockets.delete(id); try { browser.ws.close(); } catch {} }
+		return true;
+	}
+	if (message.t !== "http_result" || typeof message.id !== "string") return true;
 	if (!connection) return true;
 	const pending = connection.pending.get(message.id);
 	if (!pending) return true;
@@ -84,7 +95,11 @@ export function sandboxPortalRelayMessage(ws: any, raw: string | Buffer): boolea
 export function sandboxPortalRelayClose(ws: any): boolean {
 	if (ws.data?.kind !== "sandbox-portal-relay") return false;
 	const connection = connections.get(key(ws.data.sessionId, ws.data.sandboxId, ws.data.port));
-	if (connection && connection.ws === ws) { for (const pending of connection.pending.values()) { clearTimeout(pending.timer); pending.resolve({ status: 502, headers: {} }); } connections.delete(key(ws.data.sessionId, ws.data.sandboxId, ws.data.port)); }
+	if (connection && connection.ws === ws) {
+		for (const pending of connection.pending.values()) { clearTimeout(pending.timer); pending.resolve({ status: 502, headers: {} }); }
+		for (const [id, browser] of browserSockets) if (browser.connection === connection) { try { browser.ws.close(); } catch {} browserSockets.delete(id); }
+		connections.delete(key(ws.data.sessionId, ws.data.sandboxId, ws.data.port));
+	}
 	return true;
 }
 
@@ -112,7 +127,21 @@ export async function ensureSandboxPortalRelay(input: { sessionId: string; sandb
 	const id = key(input.sessionId, input.sandboxId, input.port);
 	let relay = relays.get(id);
 	if (!relay) {
-		const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: (request) => relayFetch(input, request) });
+		const server = Bun.serve<{ id: string; connection: Connection; path: string; headers: Record<string, string> }>({
+			hostname: "127.0.0.1", port: 0,
+			fetch: (request, relayServer) => {
+				if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") return relayFetch(input, request);
+				const connection = connections.get(id);
+				if (!connection) return new Response("Sandbox Portal is not connected", { status: 503 });
+				const socketId = crypto.randomUUID();
+				return relayServer.upgrade(request, { data: { id: socketId, connection, path: new URL(request.url).pathname + new URL(request.url).search, headers: safeHeaders(request.headers) } }) ? undefined : new Response("WebSocket upgrade failed", { status: 400 });
+			},
+			websocket: {
+				open(ws) { const data = ws.data; browserSockets.set(data.id, { ws, connection: data.connection }); try { data.connection.ws.send(JSON.stringify({ t: "ws_open", id: data.id, path: data.path, headers: data.headers })); } catch { try { ws.close(); } catch {} } },
+				message(ws, message) { const data = ws.data; try { data.connection.ws.send(JSON.stringify({ t: "ws_send", id: data.id, binary: typeof message !== "string", data: typeof message === "string" ? message : Buffer.from(message as any).toString("base64") })); } catch { try { ws.close(); } catch {} } },
+				close(ws) { const data = ws.data; browserSockets.delete(data.id); try { data.connection.ws.send(JSON.stringify({ t: "ws_close", id: data.id })); } catch {} },
+			},
+		});
 		relay = { ...input, server }; relays.set(id, relay);
 	}
 	const { ensureAuthenticatedPortalRoute } = await import("./preview");

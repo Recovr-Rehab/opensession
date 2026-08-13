@@ -11,6 +11,7 @@ import { join } from "path";
 import { audit } from "./audit";
 import { configuredServer } from "./config";
 import { ensureSandboxPortalRelay, mintSandboxPortalGrant } from "./sandbox-portal-relay";
+import { remoteSandboxCallbackBaseUrl } from "./sandbox/config";
 import { shellQuoteWord } from "./sandbox/adapters/bootstrap";
 import { sandboxHttpsPortFor } from "./sandbox/preview-ports";
 import type { Sandbox } from "./sandbox/provider";
@@ -359,7 +360,7 @@ export async function startSandboxPortalService(input: {
 	// A remote Sandbox always dials Open Session. It never hands the browser a
 	// provider preview URL or makes the server dial into its private network.
 	const grant = mintSandboxPortalGrant({ sessionId: input.sessionId, sandboxId: input.sandbox.id, port });
-	const callbackBase = configuredServer().publicBaseUrl.replace(/\/$/, "").replace(/^http/, "ws");
+	const callbackBase = remoteSandboxCallbackBaseUrl().replace(/\/$/, "").replace(/^http/, "ws");
 	const endpoint = `${callbackBase}/sandbox-portal-ws?session=${encodeURIComponent(input.sessionId)}&sandbox=${encodeURIComponent(input.sandbox.id)}&port=${port}`;
 	const agent = "/home/ubuntu/projects/opensession/src/runner-host/sandbox-portal-agent.ts";
 	const relayLaunch = `OPENSESSION_SANDBOX_PORTAL_WS_URL=${shellQuoteWord(endpoint)} OPENSESSION_SANDBOX_PORTAL_TOKEN=${shellQuoteWord(grant.token)} OPENSESSION_SANDBOX_PORTAL_PORT=${shellQuoteWord(String(port))} setsid bun run ${shellQuoteWord(agent)} >/dev/null 2>&1 &`;
