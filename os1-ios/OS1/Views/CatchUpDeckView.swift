@@ -95,6 +95,7 @@ struct CatchUpDeckView: View {
     let undoTrigger: Int
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
 
     /// Live drag translation of the top card. Everything else in the deck —
     /// the tilt, the stamps, how far forward the card behind has come — is a
@@ -420,9 +421,10 @@ struct CatchUpDeckView: View {
             }
         }
 
-        var fill: Color {
+        func fill(for colorScheme: ColorScheme) -> Color {
             switch self {
-            case .archive, .secondary: OS1VisualStyle.background
+            case .archive, .secondary:
+                colorScheme == .dark ? OS1VisualStyle.raised : OS1VisualStyle.background
             case .primary: OS1VisualStyle.accent
             }
         }
@@ -446,7 +448,16 @@ struct CatchUpDeckView: View {
                 .frame(maxWidth: .infinity, minHeight: 54)
                 .background {
                     RoundedRectangle(cornerRadius: 17, style: .continuous)
-                        .fill(style.fill)
+                        .fill(style.fill(for: colorScheme))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 17, style: .continuous)
+                                .strokeBorder(
+                                    OS1VisualStyle.border.opacity(
+                                        colorScheme == .dark && style != .primary ? 0.7 : 0.2
+                                    ),
+                                    lineWidth: 0.5
+                                )
+                        }
                         .shadow(
                             color: .black.opacity(style == .primary ? 0.12 : 0.08),
                             radius: style == .primary ? 12 : 8,

@@ -41,8 +41,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   *workspace* (the same grouping the list shows,
   built by `CatchUpQueue` from the shared `/api/reads` marks with the web
   deck's rules: yours, not archived, not an automation, not the Desk). The card
-  renders the workspace's main chat with an expand control and an inline reply
-  field delivered through the `Outbox`. Full-width **Archive**, **Keep unread**,
+  renders the workspace's main chat with a compact title, state and repo header,
+  an expand control, and an inline reply field delivered through the `Outbox`.
+  Full-width **Archive**, **Keep unread**,
   and **Mark as read** buttons sit below it; swipe left still archives and swipe
   right still marks read. The whole stack is a function of one horizontal drag value: tilt,
   stamp, tint, and how far forward the card behind has come, so a half-swipe

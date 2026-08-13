@@ -57,36 +57,31 @@ struct CatchUpCardView: View {
     // MARK: - Header
 
     private var headerRow: some View {
-        VStack(spacing: 5) {
-            ZStack {
-                HStack {
-                    RepoTile(name: card.repo, size: 28)
-                    Spacer()
-                    Button(action: onOpen) {
-                        Image(systemName: "arrow.up.forward")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(OS1VisualStyle.textDim)
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Open main chat")
+        HStack(spacing: 10) {
+            RepoTile(name: card.repo, size: 26)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(card.title)
+                    .font(.headline.weight(.semibold))
+                    .foregroundStyle(OS1VisualStyle.text)
+                    .lineLimit(1)
+                if isTop {
+                    metaRow
                 }
-                HStack(spacing: 5) {
-                    Text("#").foregroundStyle(OS1VisualStyle.textDim)
-                    Text(card.title).lineLimit(1)
-                }
-                .font(.headline.weight(.semibold))
-                .foregroundStyle(OS1VisualStyle.text)
-                .padding(.horizontal, 52)
             }
-            if isTop {
-                metaRow
+            Spacer(minLength: 4)
+            Button(action: onOpen) {
+                Image(systemName: "arrow.up.forward")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(OS1VisualStyle.textDim)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open main chat")
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 10)
-        .padding(.bottom, 11)
+        .padding(.leading, 12)
+        .padding(.trailing, 6)
+        .padding(.vertical, 5)
     }
 
     private var metaRow: some View {
@@ -107,21 +102,6 @@ struct CatchUpCardView: View {
                 .font(.caption)
                 .foregroundStyle(OS1VisualStyle.textFaint)
                 .lineLimit(1)
-            if card.sessionCount > 1 {
-                Text("·").foregroundStyle(OS1VisualStyle.textFaint)
-                Text("\(card.sessionCount) chats")
-                    .font(.caption)
-                    .foregroundStyle(OS1VisualStyle.textFaint)
-            }
-            // "How long ago" only when nothing is happening. Beside a run
-            // clock it is a second duration meaning something else entirely,
-            // and the pair reads as one broken number.
-            if !card.isRunning {
-                Text("·").foregroundStyle(OS1VisualStyle.textFaint)
-                Text(SessionRow.compactAgo(Date().timeIntervalSince(card.lastActivity)))
-                    .font(.caption)
-                    .foregroundStyle(OS1VisualStyle.textFaint)
-            }
         }
         .font(.caption)
     }

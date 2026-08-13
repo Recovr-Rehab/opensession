@@ -40,40 +40,37 @@ struct CatchUpView: View {
     // MARK: - Chrome
 
     private var header: some View {
-        VStack(spacing: 5) {
-            ZStack {
-                Text(counterLabel)
-                    .font(.headline)
-                    .foregroundStyle(OS1VisualStyle.text)
-                    // The count is the one number on screen that changes as you
-                    // work, so it rolls rather than cutting.
-                    .contentTransition(.numericText(countsDown: true))
-                    .animation(.snappy(duration: 0.3), value: model.remaining)
-                HStack {
-                    Button { dismiss() } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 19, weight: .semibold))
-                            .foregroundStyle(OS1VisualStyle.textDim)
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Close catch up")
-                    Spacer()
-                    Button("Undo") { undoTrigger += 1 }
-                        .font(.body.weight(.semibold))
-                        .foregroundStyle(OS1VisualStyle.text)
-                        .frame(minWidth: 60, minHeight: 44, alignment: .trailing)
-                        .opacity(model.undoable == nil ? 0 : 1)
-                        .disabled(model.undoable == nil)
-                        .buttonStyle(.plain)
+        ZStack(alignment: .bottom) {
+            Text(counterLabel)
+                .font(.headline)
+                .foregroundStyle(OS1VisualStyle.text)
+                // The count is the one number on screen that changes as you
+                // work, so it rolls rather than cutting.
+                .contentTransition(.numericText(countsDown: true))
+                .animation(.snappy(duration: 0.3), value: model.remaining)
+            HStack {
+                Button { dismiss() } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 19, weight: .semibold))
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Close catch up")
+                Spacer()
+                Button("Undo") { undoTrigger += 1 }
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(OS1VisualStyle.text)
+                    .frame(minWidth: 52, minHeight: 44, alignment: .trailing)
+                    .opacity(model.undoable == nil ? 0 : 1)
+                    .disabled(model.undoable == nil)
+                    .buttonStyle(.plain)
             }
             progressBar
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 1)
-        .padding(.bottom, 7)
+        .frame(height: 45)
+        .padding(.horizontal, 8)
     }
 
     /// How far through the deck you are. A finish line is most of what makes a
@@ -87,8 +84,8 @@ struct CatchUpView: View {
                     .frame(width: max(0, geo.size.width * fractionDone))
             }
         }
-        .frame(height: 3)
-        .padding(.horizontal, 4)
+        .frame(height: 2)
+        .padding(.horizontal, 2)
         .animation(.snappy(duration: 0.38), value: fractionDone)
         .opacity(model.isEmpty ? 0 : 1)
         .accessibilityHidden(true)
