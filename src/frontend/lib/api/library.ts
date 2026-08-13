@@ -16,6 +16,11 @@ export interface LibraryEntry {
 	install: LibraryInstallKind;
 	/** null when the server has no truth to report — see the module doc. */
 	installed: boolean | null;
+	/** Automations only: the prompt they run, and how. The native app prefills
+	 *  its new-session composer from these; this panel does not use them. */
+	prompt?: string;
+	mode?: "ask" | "code";
+	model?: string;
 	href: string;
 	source: "builtin" | "repo";
 }

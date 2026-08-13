@@ -87,6 +87,16 @@ export interface LibraryEntry {
 	install: LibraryInstallKind;
 	/** null when the server has no truth to report (core tools). */
 	installed: boolean | null;
+	/**
+	 * The prompt an automation entry runs, and how it runs it. Carried on the
+	 * entry rather than behind a second request because an automation IS a
+	 * prompt and a trigger, and a catalog row that cannot show what it would
+	 * send is asking to be trusted blind. The native app prefills its new-session
+	 * composer from these; the web panel ignores them.
+	 */
+	prompt?: string;
+	mode?: "ask" | "code";
+	model?: string;
 	/** The surface that owns installing/configuring it. */
 	href: string;
 	source: "builtin" | "repo";
@@ -198,6 +208,11 @@ function automationEntries(installedNames: Set<string>): LibraryEntry[] {
 		...(recipe.requires?.length ? { requires: recipe.requires } : {}),
 		install: "one-click" as const,
 		installed: installedNames.has(recipe.automation.name),
+		prompt: recipe.automation.prompt,
+		...(recipe.automation.mode ? { mode: recipe.automation.mode } : {}),
+		...(typeof recipe.automation.model === "string"
+			? { model: recipe.automation.model }
+			: {}),
 		href: "/settings/automations",
 		source: "repo" as const,
 	}));
@@ -214,6 +229,8 @@ function automationEntries(installedNames: Set<string>): LibraryEntry[] {
 		category: "Automation",
 		install: "draft" as const,
 		installed: installedNames.has(template.name),
+		prompt: template.prompt,
+		mode: template.mode,
 		href: "/settings/automations",
 		source: "builtin" as const,
 	}));

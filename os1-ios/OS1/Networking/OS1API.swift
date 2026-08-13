@@ -823,6 +823,16 @@ enum OS1API {
         return response.repos
     }
 
+    /// The instance library: everything this instance can be extended with.
+    /// Read-only, and small enough to fetch whole (the automation rows carry
+    /// their prompts, which is most of the payload and the reason the phone
+    /// asks for it at all).
+    static func library() async throws -> [LibraryEntry] {
+        struct LibraryResponse: Decodable { let entries: [LibraryEntry]? }
+        let response: LibraryResponse = try await get("/api/library")
+        return response.entries ?? []
+    }
+
     /// One teammate from the server's identity roster (src/server/people.ts).
     /// `name` is the first name every people surface keys on — presence
     /// viewers, `startedBy`, @-mentions — and `github` is where the face

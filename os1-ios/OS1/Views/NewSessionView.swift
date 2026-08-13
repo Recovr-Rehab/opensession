@@ -46,6 +46,7 @@ struct NewSessionView: View {
     @State private var effort = ""
     @State private var fastMode = false
     @State private var images: [AttachedImage] = []
+    @State private var showLibrary = false
     /// Owned here, like the session composer's: the button reads it, this view
     /// keeps it alive across the layout changes a long dictation causes.
     @State private var dictation = Dictation()
@@ -94,6 +95,18 @@ struct NewSessionView: View {
                 #endif
             }
             .task { await load() }
+            // The library is a detail of composing this session, so it pushes
+            // onto the sheet's own stack: back is where you were, with the
+            // prompt filled in.
+            .navigationDestination(isPresented: $showLibrary) {
+                LibraryView(onPick: apply)
+            }
+            // Coming back from the library, the editor would otherwise take
+            // focus again and put the keyboard over the prompt you just chose.
+            // Landing on the whole text is the point; a tap starts editing.
+            .onChange(of: showLibrary) { _, shown in
+                if !shown { promptFocused = false }
+            }
             // Swiping the sheet away is as much a "never mind" as Cancel; the
             // mic must not outlive either.
             .onDisappear { dictation.stop() }
@@ -181,12 +194,15 @@ struct NewSessionView: View {
                 // flow through to the editor untouched.
                 .pastesImages(into: $images)
             if prompt.isEmpty {
-                Text("What should this session do?")
-                    .font(.body)
-                    .foregroundStyle(.tertiary)
-                    .padding(.horizontal, 16)
-                    .padding(.top, placeholderTopPadding)
-                    .allowsHitTesting(false)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("What should this session do?")
+                        .font(.body)
+                        .foregroundStyle(.tertiary)
+                        .allowsHitTesting(false)
+                    recipeButton
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, placeholderTopPadding)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -194,6 +210,42 @@ struct NewSessionView: View {
         .contentShape(Rectangle())
         .onTapGesture { promptFocused = true }
         #endif
+    }
+
+    /// Offered only while the prompt is empty, under the placeholder it
+    /// answers: a recipe is a way to START writing, and once there is
+    /// something to send the button would be both in the way and destructive.
+    private var recipeButton: some View {
+        Button {
+            promptFocused = false
+            showLibrary = true
+        } label: {
+            Label("Start from a recipe", systemImage: "books.vertical")
+                .font(.subheadline)
+                .foregroundStyle(.tint)
+                #if os(iOS)
+                .frame(minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
+                #endif
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Fill the composer from a library entry, leaving every field editable
+    /// and the keyboard down: the point of prefilling rather than starting is
+    /// that you read what will be sent, and a recipe prompt is longer than the
+    /// two lines a raised keyboard leaves.
+    private func apply(_ entry: LibraryEntry) {
+        prompt = entry.prompt ?? ""
+        if let entryMode = entry.mode, entryMode == "ask" || entryMode == "code" {
+            mode = entryMode
+        }
+        // Only a model this instance actually offers; a recipe naming one that
+        // has since been retired keeps the composer's default instead.
+        if let entryModel = entry.model, catalog?.option(for: entryModel) != nil {
+            model = entryModel
+            defaultEffortForCurrentModel()
+        }
     }
 
     /// Lines the placeholder up with the editor's real text origin: the outer
