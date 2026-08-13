@@ -1,5 +1,6 @@
 import type { TranscriptEntry } from "./types";
 import { classifyEntry } from "@tellahq/opensession-protocol/notices";
+import { personKey } from "./review-queue";
 
 function time(entry: TranscriptEntry): number {
 	const parsed = Date.parse(entry.timestamp);
@@ -128,4 +129,24 @@ export function classifyQueuedContent(
 		content: attributed,
 		timestamp: "",
 	});
+}
+
+/**
+ * Who to credit on a queue chip: a teammate who sent into this session, or a
+ * notice's label when that label isn't the whole body.
+ *
+ * Never the viewer's own name. Every queue item carries a `user` (delivery
+ * attribution and edit permission), so without this the person who typed the
+ * message reads their own name back on it. The transcript bubble suppresses
+ * it the same way.
+ */
+export function queueAttribution(
+	classified: TranscriptEntry,
+	currentUser: string,
+): string | null {
+	const label =
+		classified.sender ??
+		(classified.notice?.body ? classified.notice.title : null);
+	if (!label) return null;
+	return personKey(label) === personKey(currentUser) ? null : label;
 }

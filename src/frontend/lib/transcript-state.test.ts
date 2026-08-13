@@ -4,6 +4,7 @@ import {
 	mergeTranscriptEntries,
 	normalizeLegacyVoiceToolEntries,
 	orderTranscriptEntries,
+	queueAttribution,
 } from "./transcript-state";
 import type { TranscriptEntry } from "./types";
 
@@ -123,5 +124,13 @@ describe("transcript client state", () => {
 			title: "PR #42 review feedback",
 		});
 		expect(classified.content).not.toContain("os:review-handoff");
+	});
+
+	test("credits a teammate on a queue chip but never the viewer", () => {
+		const mine = classifyQueuedContent("ship it", "Kent");
+		const theirs = classifyQueuedContent("ship it", "Michiel");
+
+		expect(queueAttribution(mine, "Kent de Bruin")).toBeNull();
+		expect(queueAttribution(theirs, "Kent de Bruin")).toBe("Michiel");
 	});
 });

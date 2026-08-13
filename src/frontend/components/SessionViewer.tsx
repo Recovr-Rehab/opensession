@@ -37,6 +37,7 @@ import {
 	classifyQueuedContent,
 	mergeTranscriptEntries,
 	orderTranscriptEntries,
+	queueAttribution,
 } from "../lib/transcript-state";
 import { TranscriptBlocks } from "./TranscriptBlocks";
 import {
@@ -3432,10 +3433,7 @@ export function SessionViewer({
 		// name, or a notice's title — but only when that title is a LABEL. A
 		// title-only notice (a workflow nudge, a runner line) is its own body, and
 		// printing it twice is just noise.
-		const from = isReview
-			? null
-			: classified.sender ??
-				(classified.notice?.body ? classified.notice.title : null);
+		const from = isReview ? null : queueAttribution(classified, currentUser);
 		const body = isReview
 			? `${classified.notice!.title} · Runs after this turn`
 			: classified.content;
