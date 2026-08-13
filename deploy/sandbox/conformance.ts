@@ -365,6 +365,10 @@ interface Entry {
   expectPort: "hostPort" | "url" | "none";
   /** Remote = workspace exists only in-sandbox. */
   remote: boolean;
+  /** Box serializes detached-process admission per VM; it still has a bounded
+   * live launch lane, but cannot meet the parallel-control-plane SLO used by
+   * providers with independent process lanes. */
+  concurrentAttachMaxMs?: number;
 }
 
 const PREVIEW_PORT = 18755;
@@ -449,6 +453,7 @@ const entries: Entry[] = [
     branch: PUB_BRANCH,
     expectPort: "url",
     remote: true,
+    concurrentAttachMaxMs: 45_000,
   },
   {
     name: "modal",
@@ -899,9 +904,10 @@ async function runEntry(entry: Entry): Promise<void> {
       }
       if (entry.remote) {
         const attachMs = Date.now() - t2;
+        const attachBoundMs = entry.concurrentAttachMaxMs || 10_000;
         ok(
-          "launch attaches during a concurrent long exec (<10s)",
-          !!sandbox.launchRunEager && attachMs < 10_000,
+          `launch attaches during a concurrent long exec (<${attachBoundMs / 1000}s)`,
+          !!sandbox.launchRunEager && attachMs < attachBoundMs,
           `${attachMs}ms`,
         );
         void longExec;

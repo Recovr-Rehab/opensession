@@ -84,7 +84,6 @@ import {
 
 const DEFAULT_API_URL = "https://ascii.dev/api/box/v1";
 const DEFAULT_IDLE_STOP_MINUTES = 30;
-const SYNC_EXEC_MAX_MS = 600_000;
 const POLL_INTERVAL_MS = 2_500;
 const COMMAND_TAIL_BYTES = 524_288;
 const TEMPLATE_WAIT_MS = 15 * 60_000;
@@ -496,13 +495,11 @@ export function boxDriver(cfg: BoxClientConfig, boxId: string): RemoteDriver {
     async exec(cmd: string, opts?: RemoteExecOpts) {
       const shell = composeShell(cmd, opts);
       const timeoutMs = opts?.timeoutMs ?? 120_000;
-      // Box serializes its synchronous command surface per VM. Workspace
-      // commands therefore opt into the native detached lane (see
-      // makeRemoteSandbox), leaving the command plane immediately available
-      // for a run host to dial back while a build or test continues.
-      if (opts?.detached || timeoutMs > SYNC_EXEC_MAX_MS) {
-        return execDetached(shell, timeoutMs);
-      }
+      // Keep short probes on Box's reliable synchronous endpoint. Long setup
+      // work and explicitly backgrounded workspace work use its independent
+      // detached-process lane, so a clone or fetch cannot monopolize the
+      // command plane while a run host is trying to launch.
+      if (opts?.detached || timeoutMs >= 180_000) return execDetached(shell, timeoutMs);
       try {
         return result(await afterCommandPlaneReady(() => execOnce(shell, timeoutMs)));
       } catch (error) {

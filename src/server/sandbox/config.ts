@@ -575,7 +575,11 @@ export const SANDBOX_PROVIDER_CERTIFICATIONS: Record<
     note: "live provider snapshot restore and full remote-run matrix passed",
   }),
   e2b: certification({ note: "live matrix has not run on a funded E2B account" }),
-  box: certification({ note: "live matrix has not run on a Box account" }),
+  box: certification({
+    behavioralPassedAt: "2026-08-13",
+    warmRestorePassedAt: "2026-08-13",
+    note: "live remote-run, lifecycle, and named-snapshot restore matrix passed; Box serializes concurrent command admission per VM",
+  }),
   modal: certification({
     behavioralPassedAt: "2026-08-11",
     warmRestorePassedAt: "2026-08-11",

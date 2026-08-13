@@ -116,6 +116,7 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
     expect(s.providers.filter((p) => p.certified).map((p) => p.id)).toEqual([
       "docker",
       "daytona",
+      "box",
       "modal",
       "microvm",
     ]);
@@ -332,7 +333,7 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
     });
     ready("box");
     expect(sandboxCapabilityStatus().defaultProvider).toBe("local");
-    for (const provider of ["e2b", "box", "lambda-microvm"] as const) {
+    for (const provider of ["e2b", "lambda-microvm"] as const) {
       const status = sandboxCapabilityStatus().providers.find((p) => p.id === provider)!;
       expect(status.configured).toBe(true);
       expect(status.certified).toBe(false);

@@ -600,7 +600,7 @@ fix what fails, and record the certification in this doc + the plan.
 Until then, the adapter is available only to the conformance harness; it is
 hidden from the picker and rejected by session creation/prewarm.
 
-### Box / ascii.dev (first-class, awaiting live certification)
+### Box / ascii.dev (live-certified 2026-08-13)
 
 Persistent Ubuntu VMs from box.ascii.dev, integrated through its public HTTP
 API without an SDK dependency. Connect an API key in **Workspace →
@@ -632,9 +632,12 @@ Sandboxes**. It is stored as an opaque workspace secret; new Boxes use
 - Workspace qualification checks credentials and quota, outbound dial-back,
   command semantics, `/home/ubuntu` file writes, private previews,
   archive/resume persistence, and a distinct named-snapshot restore. The full
-  release gate is `bun run deploy/sandbox/conformance.ts box`; until that runs
-  against a funded account and the certification evidence is recorded, Box is
-  visible for setup but unavailable for new sessions.
+  release gate is `bun run deploy/sandbox/conformance.ts box`. The live matrix
+  passed on 2026-08-13, including a real agent run, reconnect, steer/cancel,
+  archive/resume, and an independent named-snapshot restore. Box serializes
+  concurrent command admission per VM, so a launch behind a long command is
+  bounded at 45 seconds rather than the 10-second parallel-lane target used by
+  Daytona and Modal.
 
 ### Modal (implemented, live-certified 2026-08-11)
 
