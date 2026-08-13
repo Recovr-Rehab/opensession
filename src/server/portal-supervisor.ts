@@ -10,7 +10,7 @@ import { existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { audit } from "./audit";
 import { configuredServer } from "./config";
-import { ensureSandboxPortalRelay, mintSandboxPortalGrant } from "./sandbox-portal-relay";
+import { ensureSandboxPortalRelay, mintSandboxPortalGrant, revokeSandboxPortalRelay } from "./sandbox-portal-relay";
 import { remoteSandboxCallbackBaseUrl } from "./sandbox/config";
 import { shellQuoteWord } from "./sandbox/adapters/bootstrap";
 import { sandboxHttpsPortFor } from "./sandbox/preview-ports";
@@ -385,6 +385,7 @@ export async function stopSandboxPortalService(input: { sessionId: string; sandb
 	}
 	const stopped = { ...current, state: "stopped" as const, pid: undefined };
 	await writeSandboxPortalRegistry(input.sandbox, snapshot.text, upsert(snapshot.records, stopped));
+	revokeSandboxPortalRelay(input.sandbox.id, current.port);
 	audit({ msg: "sandbox_portal_stopped", session_id: input.sessionId, sandbox_id: input.sandbox.id, portal: name, port: current.port });
 	return stopped;
 }

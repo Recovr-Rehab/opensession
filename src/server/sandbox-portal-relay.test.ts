@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { handleSandboxPortalRelayUpgrade, mintSandboxPortalGrant, revokeSandboxPortalGrants, verifySandboxPortalGrant } from "./sandbox-portal-relay";
+import { handleSandboxPortalRelayUpgrade, mintSandboxPortalGrant, revokeSandboxPortalGrants, revokeSandboxPortalRelay, verifySandboxPortalGrant } from "./sandbox-portal-relay";
 
 test("Sandbox Portal grants bind one session, Sandbox, and port", () => {
 	const grant = mintSandboxPortalGrant({ sessionId: "bks-test", sandboxId: "sandbox-test", port: 4300 });
@@ -8,6 +8,14 @@ test("Sandbox Portal grants bind one session, Sandbox, and port", () => {
 	expect(verifySandboxPortalGrant(grant.token, { sessionId: "bks-test", sandboxId: "sandbox-test", port: 4301 })).toBe(false);
 	revokeSandboxPortalGrants("sandbox-test");
 	expect(verifySandboxPortalGrant(grant.token, { sessionId: "bks-test", sandboxId: "sandbox-test", port: 4300 })).toBe(false);
+});
+
+test("stopping one Portal revokes only its bound credential", () => {
+	const api = mintSandboxPortalGrant({ sessionId: "bks-stop", sandboxId: "sandbox-stop", port: 4500 });
+	const web = mintSandboxPortalGrant({ sessionId: "bks-stop", sandboxId: "sandbox-stop", port: 4501 });
+	revokeSandboxPortalRelay("sandbox-stop", 4500);
+	expect(verifySandboxPortalGrant(api.token, { sessionId: "bks-stop", sandboxId: "sandbox-stop", port: 4500 })).toBe(false);
+	expect(verifySandboxPortalGrant(web.token, { sessionId: "bks-stop", sandboxId: "sandbox-stop", port: 4501 })).toBe(true);
 });
 
 test("relay upgrade rejects an unbound credential before WebSocket upgrade", () => {

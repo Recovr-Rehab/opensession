@@ -49,6 +49,14 @@ export function revokeSandboxPortalGrants(sandboxId: string): void {
 	for (const [id, relay] of relays) if (relay.sandboxId === sandboxId) { try { relay.server.stop(true); } catch {} void import("./preview").then(({ dropAuthenticatedPortalRoute }) => dropAuthenticatedPortalRoute(sandboxHttpsPortFor(`sandbox-${sandboxId}`, relay.port))); relays.delete(id); }
 }
 
+/** Stop one service's public surface without affecting sibling Portals in the
+ * same Sandbox. Used for explicit stop and failed restarts. */
+export function revokeSandboxPortalRelay(sandboxId: string, port: number): void {
+	for (const [token, grant] of grants) if (grant.sandboxId === sandboxId && grant.port === port) grants.delete(token);
+	for (const [id, connection] of connections) if (connection.sandboxId === sandboxId && connection.port === port) { try { connection.ws.close(1008, "portal stopped"); } catch {} connections.delete(id); }
+	for (const [id, relay] of relays) if (relay.sandboxId === sandboxId && relay.port === port) { try { relay.server.stop(true); } catch {} void import("./preview").then(({ dropAuthenticatedPortalRoute }) => dropAuthenticatedPortalRoute(sandboxHttpsPortFor(`sandbox-${sandboxId}`, port))); relays.delete(id); }
+}
+
 /** Upgrade only an outbound Sandbox relay whose expiring grant exactly matches
  * the declared session, sandbox, and loopback service port. */
 export function handleSandboxPortalRelayUpgrade(req: Request, server: { upgrade(req: Request, opts?: { data?: unknown }): boolean }, path: string): Response | undefined {
