@@ -808,7 +808,9 @@ enum OS1API {
         let response: ReposResponse = try await get("/api/repos")
         // Recorded on the way through rather than at the call sites: every
         // tile in the app wants the assignment, and a tile is handed a repo
-        // id, not a RepoInfo.
+        // id, not a RepoInfo. The size of the set is remembered for the same
+        // reason — the sessions list picks its default grouping from it, at a
+        // point far too early to ask (see `RepoCount`).
         await RepoTilePalette.shared.remember(response.repos)
         // Same deal for the transcript's PR chips: the ids decide which
         // qualified mentions (`opensession#128`) link at all, and the GitHub
@@ -817,6 +819,7 @@ enum OS1API {
             response.repos.map { ($0.id, $0.ghRepo) },
             uniquingKeysWith: { first, _ in first }
         ))
+        RepoCount.remember(response.repos.count)
         return response.repos
     }
 

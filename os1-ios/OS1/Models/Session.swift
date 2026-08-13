@@ -54,6 +54,11 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     var startedBy: String?
     var createdBy: String?
     var createdByLogin: String?
+    /// The session id of the run that started this one from inside itself
+    /// (`create_session` in an agent's own turn). Set only for those: work the
+    /// Desk delegates on a person's behalf is deliberately unmarked
+    /// (server: session-control-wiring). See `belongsInList`.
+    var spawnedBy: String?
     var automation: AutomationFlag?
     var attachedRepos: [AttachedRepo]?
     /// The requested sandbox provider and materialized sandbox id. This is a
@@ -77,6 +82,22 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     /// the bulk of server noise a person's list should hide by default.
     var isAutomation: Bool {
         automation?.isAutomation ?? (startedBy?.hasSuffix("(automation)") ?? false)
+    }
+
+    /// Whether this session earns a row of its own in the list.
+    ///
+    /// A session an agent started for its own purposes — a throwaway fixture,
+    /// a probe — belongs to the run that spawned it, not to you: it gets a
+    /// workspace like anything else, but no row here. It surfaces the moment
+    /// it needs a human (a blocked question), or once you claim it. Same rule
+    /// as the web sidebar's `spawnedSessionBelongsInSidebar`
+    /// (lib/sidebar-workspaces), so a worker hidden in the browser is hidden
+    /// on the phone too.
+    ///
+    /// `claimed` is `LaneStore`'s claim set — see `PeopleLens`.
+    func belongsInList(claimed: Set<String>) -> Bool {
+        guard let spawnedBy, !spawnedBy.isEmpty else { return true }
+        return lane == .needsInput || claimed.contains(id)
     }
 
     /// A just-created row the server hasn't published yet. Archiving one would

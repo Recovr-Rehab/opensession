@@ -129,7 +129,12 @@ struct SessionsListView: View {
         var workspaceId: String?
     }
 
-    @AppStorage("os1.list.groupBy") private var groupByRaw = GroupBy.repoStatus.rawValue
+    // Empty until the person picks a grouping, so the default can stay a
+    // decision rather than a stored answer — see `defaultGroupBy`.
+    @AppStorage("os1.list.groupBy") private var groupByRaw = ""
+    /// Projects registered on this instance, as of the last load. Read here so
+    /// the list re-groups when the first `/api/repos` of a launch lands.
+    @AppStorage(RepoCount.storageKey) private var knownRepoCount = RepoCount.unknown
     @AppStorage("os1.list.repo") private var repoFilter = "all"
     @AppStorage("os1.list.sort") private var sortByRaw = SortBy.updated.rawValue
     // Default to the signed-in person's own sessions, like the web sidebar —
@@ -144,7 +149,33 @@ struct SessionsListView: View {
     /// sidebar's own band menu. See `SidebarFeeds`.
     @AppStorage(SidebarFeeds.storageKey) private var hiddenFeedsRaw = "[]"
 
-    private var groupBy: GroupBy { GroupBy(rawValue: groupByRaw) ?? .repoStatus }
+    private var groupBy: GroupBy {
+        GroupBy(rawValue: groupByRaw) ?? Self.defaultGroupBy(repoCount: knownRepoCount)
+    }
+
+    /// The grouping to use when nobody has picked one. A single project has
+    /// nothing to group by, so it reads as a plain inbox; several keep the
+    /// repo bands. It re-decides as projects are added, since the choice is
+    /// stored as "unpicked" rather than as its answer.
+    ///
+    /// The count is only unknown on the very first load, before `/api/repos`
+    /// answers — assume several then, so an instance that has them doesn't
+    /// paint a flat list and re-band a moment later.
+    ///
+    /// The web makes the same call with a different multi-project answer
+    /// (repo-and-INBOX, lib/sidebar-filter): this list has banded its repos by
+    /// status since before it had inbox bands, and moving every existing phone
+    /// off that is a separate decision from giving one-project instances a
+    /// grouping that means something.
+    static func defaultGroupBy(repoCount: Int) -> GroupBy {
+        repoCount == RepoCount.unknown || repoCount > 1 ? .repoStatus : .inbox
+    }
+
+    /// The picker reads through `groupBy`, so an unpicked grouping still shows
+    /// its default as the selected row instead of nothing.
+    private var groupBySelection: Binding<String> {
+        Binding(get: { groupBy.rawValue }, set: { groupByRaw = $0 })
+    }
     private var sortBy: SortBy { SortBy(rawValue: sortByRaw) ?? .updated }
 
     private var collapsedGroups: Set<String> {
@@ -1221,7 +1252,7 @@ struct SessionsListView: View {
                 Text("My sessions").tag("mine")
                 Text("Everyone").tag("all")
             }
-            Picker("Group by", selection: $groupByRaw) {
+            Picker("Group by", selection: groupBySelection) {
                 ForEach(GroupBy.allCases, id: \.rawValue) { option in
                     Text(option.label).tag(option.rawValue)
                 }
@@ -2313,9 +2344,25 @@ private struct ArchivedSessionsView: View {
     let onRetry: () -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var searchText = ""
-    @State private var owner = "mine"
+    /// "mine", "everyone", or one teammate's canonical key — see
+    /// `ArchivedOwners`.
+    @State private var owner = ArchivedOwners.mine
     @State private var repo = "all"
     @State private var reason = "all"
+    /// The team roster, read in `body` so the owner options appear when it
+    /// lands — it can arrive after this screen is already open.
+    private var roster: [String: String] { TeamDirectory.shared.displayNames }
+
+    /// The signed-in person's own key, so their archive stays "My archived"
+    /// rather than appearing a second time as a teammate.
+    private var meKey: String {
+        let user = ServerConfig.shared.userName
+        return (ArchivedOwners.canonical(user, in: roster) ?? user).lowercased()
+    }
+
+    private var owners: [ArchivedOwners.Owner] {
+        ArchivedOwners.options(in: sessions, roster: roster, excluding: meKey)
+    }
 
     private var repositories: [String] {
         Array(Set(sessions.map(\.effectiveRepo))).sorted()
@@ -2326,14 +2373,22 @@ private struct ArchivedSessionsView: View {
     }
 
     private var activeFilterCount: Int {
-        (owner == "mine" ? 1 : 0) + (repo == "all" ? 0 : 1) + (reason == "all" ? 0 : 1)
+        (owner == ArchivedOwners.everyone ? 0 : 1)
+            + (repo == "all" ? 0 : 1) + (reason == "all" ? 0 : 1)
     }
 
     private var filteredSessions: [Session] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let lens = PeopleLens.current()
         return sessions.filter { session in
-            if owner == "mine", !lens.isMine(session) { return false }
+            switch owner {
+            case ArchivedOwners.everyone: break
+            case ArchivedOwners.mine: if !lens.isMine(session) { return false }
+            default:
+                if !ArchivedOwners.session(session, hasOwner: owner, roster: roster) {
+                    return false
+                }
+            }
             if repo != "all", session.effectiveRepo != repo { return false }
             if reason == "auto", !isAutoArchived(session) { return false }
             if reason == "manual", isAutoArchived(session) { return false }
@@ -2353,7 +2408,11 @@ private struct ArchivedSessionsView: View {
 
     private func metadata(for session: Session) -> String {
         var parts = [RepoTile.label(for: session.effectiveRepo)]
-        if owner == "everyone", let startedBy = session.startedBy { parts.append(startedBy) }
+        // Only under "Everyone": with one person picked, their name on every
+        // row is the one thing the list already told you.
+        if owner == ArchivedOwners.everyone, let startedBy = session.startedBy {
+            parts.append(startedBy)
+        }
         if reason == "all", isAutoArchived(session) { parts.append("Auto-archived") }
         if let date = session.lastActivityDate {
             parts.append(date.formatted(.relative(presentation: .named)))
@@ -2426,6 +2485,7 @@ private struct ArchivedSessionsView: View {
             .background(OS1VisualStyle.background)
             #endif
             .searchable(text: $searchText, prompt: "Search archived")
+            .task { await TeamDirectory.shared.ensureLoaded() }
             .navigationTitle("Archived")
             .inlineTitleBarCompat()
             .toolbar {
@@ -2433,8 +2493,13 @@ private struct ArchivedSessionsView: View {
                     Menu {
                         Section("Owner") {
                             Picker("Owner", selection: $owner) {
-                                Text("My archived").tag("mine")
-                                Text("Everyone").tag("everyone")
+                                Text("My archived").tag(ArchivedOwners.mine)
+                                Text("Everyone").tag(ArchivedOwners.everyone)
+                                // Teammates who have archived something here,
+                                // busiest first. Absent on an instance of one.
+                                ForEach(owners) { person in
+                                    Text(person.label).tag(person.key)
+                                }
                             }
                         }
                         if repositories.count > 1 {
@@ -2458,7 +2523,7 @@ private struct ArchivedSessionsView: View {
                         }
                         if activeFilterCount > 0 {
                             Button("Clear filters") {
-                                owner = "everyone"
+                                owner = ArchivedOwners.everyone
                                 repo = "all"
                                 reason = "all"
                             }
@@ -2651,7 +2716,9 @@ struct SessionRow: View {
             }
             // Teammates focused on any session represented by this row.
             if !rowViewers.isEmpty {
-                PresenceFacepile(viewers: rowViewers, size: faceSize, stacked: false)
+                PresenceFacepile(
+                    viewers: rowViewers, size: faceSize, separation: .seam
+                )
             }
             if showsClock {
                 WorkspaceRunElapsedLabel(since: session.runStartedDate)

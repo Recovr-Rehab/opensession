@@ -47,6 +47,12 @@ final class SessionsListViewModel {
     /// invalidate the view that is being evaluated.
     @ObservationIgnored private var sidebarRowsCache: [SidebarWorkspace]?
 
+    /// Sessions this user has claimed, as of the last refresh — one of the two
+    /// things that earns a spawned worker a row (`Session.belongsInList`).
+    /// Snapshotted rather than read live so the grouping can run off the main
+    /// actor with the same answer the publish decided on.
+    @ObservationIgnored private var claimedSessionIds: Set<String> = []
+
     /// Bumped by every mutation of the grouping's inputs, so a detached prime
     /// can tell whether the list moved under it without an O(n) comparison.
     @ObservationIgnored private var sessionsRevision = 0
@@ -65,8 +71,11 @@ final class SessionsListViewModel {
         // would silently stop re-rendering when the list changes.
         let sessions = self.sessions
         let names = workspaceNames
+        let claimed = claimedSessionIds
         if let cached = sidebarRowsCache { return cached }
-        let rows = Self.sidebarRows(in: sessions, workspaceNames: names)
+        let rows = Self.sidebarRows(
+            in: Self.listedSessions(in: sessions, claimed: claimed), workspaceNames: names
+        )
         sidebarRowsCache = rows
         return rows
     }
@@ -161,7 +170,9 @@ final class SessionsListViewModel {
     /// detached pass — it walks every row already, and doing it on the main
     /// actor would put another thousands-of-rows loop in the 5s poll.
     private static func groupedOffMain(
-        _ sessions: [Session], workspaceNames names: [String: String]
+        _ sessions: [Session],
+        workspaceNames names: [String: String],
+        claimed: Set<String>
     ) async -> (rows: [SidebarWorkspace], titles: [String: String], prs: PrLinks.Index) {
         await Task.detached(priority: .userInitiated) {
             var titles: [String: String] = [:]
@@ -171,12 +182,17 @@ final class SessionsListViewModel {
                 if !title.isEmpty { titles[session.id] = title }
             }
             return (
-                sidebarRows(in: sessions, workspaceNames: names),
+                sidebarRows(
+                    in: listedSessions(in: sessions, claimed: claimed),
+                    workspaceNames: names
+                ),
                 titles,
                 // What tints a `#5528` chip in a transcript, and what tells a
                 // bare one which repo it belongs to — the same fields the web
                 // hands `setKnownPrStates`, off the main actor for the same
-                // reason the titles are.
+                // reason the titles are. Built from every session, including
+                // the spawned workers the rows leave out: a chip in a
+                // transcript still has to resolve.
                 PrLinks.Index.build(sessions)
             )
         }.value
@@ -275,6 +291,16 @@ final class SessionsListViewModel {
         #else
         return sidebarWorkspaces(in: sessions, workspaceNames: workspaceNames)
         #endif
+    }
+
+    /// The sessions that earn a row, dropping an agent's own spawned workers
+    /// until they need a human or someone claims them. Applied where the web
+    /// applies it — while BUILDING the rows, not to the list itself, so a
+    /// `@session:` link in a transcript still opens the worker it spawned.
+    nonisolated static func listedSessions(
+        in sessions: [Session], claimed: Set<String>
+    ) -> [Session] {
+        sessions.filter { $0.belongsInList(claimed: claimed) }
     }
 
     /// One sidebar row per workspace, with isolated worktrees as the fallback
@@ -687,6 +713,12 @@ final class SessionsListViewModel {
             let hiddenIds = Set(Array(locallyArchived.keys).filter { isLocallyArchived($0) })
             let restoredIds = Set(Array(locallyUnarchived.keys).filter { isLocallyUnarchived($0) })
             let hideKeys = Set(HideStore.shared.hides.keys)
+            // Claims decide which spawned workers earn a row, and they land on
+            // their own clock (`LaneStore.hydrate`) — so a set that moved has
+            // to republish the grouping even when the list itself didn't.
+            let claimed = LaneStore.shared.claims
+            let claimsChanged = claimed != claimedSessionIds
+            claimedSessionIds = claimed
             let prepared = await Task.detached(priority: .userInitiated) {
                 Self.prepared(
                     all,
@@ -714,16 +746,19 @@ final class SessionsListViewModel {
             // list doesn't re-diff (grouping, sorting, row rebuilds) for a
             // byte-identical result.
             #if os(iOS)
-            let shouldPublish = next != sessions || renamed != nil || connectionChanged
+            let shouldPublish =
+                next != sessions || renamed != nil || connectionChanged || claimsChanged
             #else
-            let shouldPublish = next != sessions || renamed != nil
+            let shouldPublish = next != sessions || renamed != nil || claimsChanged
             #endif
             if shouldPublish {
                 // Group before publishing, not after: the assignment wakes
                 // every observing view, so a grouping that starts afterwards
                 // always loses the race to the body that needs it.
                 let names = renamed ?? workspaceNames
-                let grouped = await Self.groupedOffMain(next, workspaceNames: names)
+                let grouped = await Self.groupedOffMain(
+                    next, workspaceNames: names, claimed: claimed
+                )
                 #if os(iOS)
                 guard requestConnection == OS1API.LiveActivityConnection.current() else { return }
                 #endif

@@ -15,6 +15,12 @@ final class TeamDirectory {
     static let shared = TeamDirectory()
 
     private(set) var githubLogins: [String: String] = [:]
+    /// First name → the roster's own spelling of it. This is what merges one
+    /// person's spellings for a filter: chat integrations write a full name
+    /// where the web writes a first name, so "Kent" and "Kent de Bruin" must
+    /// answer to one option (`ArchivedOwners`). The key already IS the first
+    /// name, so no second map is needed the way the web needs one.
+    private(set) var displayNames: [String: String] = [:]
     private var fullNames: [String: String] = [:]
     private var loading = false
     private var lastFailureAt: Date?
@@ -48,6 +54,7 @@ final class TeamDirectory {
         }
         for person in people {
             guard let key = Self.key(person.name) else { continue }
+            displayNames[key] = person.name
             if let github = person.github, !github.isEmpty { githubLogins[key] = github }
             if let fullName = person.fullName, !fullName.isEmpty { fullNames[key] = fullName }
         }
