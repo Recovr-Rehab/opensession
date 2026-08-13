@@ -40,9 +40,16 @@ import React, { useEffect, useRef, useState } from "react";
  *  Rows wrapped in a swipe shell add `mt-0` — the wrapper carries the 2px gap
  *  for them — plus the swipe transform; bare rows keep the margin. On phones,
  *  row content sits one 4px step inside the repo and lane headings, matching
- *  the native list hierarchy instead of flattening every label onto one rail. */
+ *  the native list hierarchy instead of flattening every label onto one rail.
+ *
+ *  5px of padding around the 22px rail is the sidebar's 32px ITEM height (see
+ *  the height scale in lib/sidebar-classes.ts) — the same box the tool rows
+ *  and the item headings take, so a repo band and its sessions run as one
+ *  regular column. It was 9px, which made a session row the tallest thing in
+ *  the rail and 12px taller than a tool row saying the same kind of thing.
+ *  Phones keep `py-[13px]`: 32px is a reading height, not a tap target. */
 export const SIDEBAR_ROW =
-	"group relative mt-0.5 w-full rounded-row border-0 bg-transparent py-[9px] pr-2 pl-2.5 text-left text-fg phone:px-2 phone:py-[13px]";
+	"group relative mt-0.5 w-full rounded-row border-0 bg-transparent py-[5px] pr-2 pl-2.5 text-left text-fg phone:px-2 phone:py-[13px]";
 
 /** A row's title: one line that fades smoothly at the available edge instead
  *  of ending in an ellipsis. Read conversations stay quiet; unread ones

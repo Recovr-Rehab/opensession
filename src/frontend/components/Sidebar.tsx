@@ -30,6 +30,7 @@ import {
 	SIDEBAR_HEADER_BTN,
 	SIDEBAR_HEADER_BTN_DESKTOP,
 	SIDEBAR_HEADER_BTN_PHONE,
+	SIDEBAR_HEADER_ROW,
 	SIDEBAR_HOVER_LAYER,
 	SIDEBAR_INDEPENDENT_SCROLL,
 	SIDEBAR_INDEPENDENT_SECTION,
@@ -2362,6 +2363,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			className={cn(
 				SIDEBAR_GROUP_HEADER,
 				SIDEBAR_GROUP_HEADER_INSET,
+				SIDEBAR_HEADER_ROW,
 				"transition-colors",
 				archivedActive && "bg-pressed text-fg",
 			)}
@@ -3322,6 +3324,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							className={cn(
 								SIDEBAR_GROUP_HEADER,
 								SIDEBAR_GROUP_HEADER_INSET,
+								SIDEBAR_HEADER_ROW,
 								"group transition-colors",
 								SIDEBAR_STICKY_LANE,
 								SIDEBAR_STUCK_BACKING,
@@ -3640,8 +3643,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							<button
 								className={cn(
 									SIDEBAR_GROUP_HEADER,
-								SIDEBAR_GROUP_HEADER_INSET,
-								"group transition-colors",
+									SIDEBAR_GROUP_HEADER_INSET,
+									SIDEBAR_HEADER_ROW,
+									"group transition-colors",
 									SIDEBAR_STICKY_LANE,
 									SIDEBAR_STUCK_BACKING,
 								)}
@@ -3783,14 +3787,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					)}
 					data-sticky-head
 				>
-					<div className="group flex min-h-[30px] w-full items-center rounded-md hover:bg-hover hover:text-dim">
+					{/* No hover fill: a band heading is a label, and the ••• that
+					    appears on hover is the only thing here with a surface of its
+					    own. See the height scale in lib/sidebar-classes.ts. */}
+					<div className="group flex min-h-7 w-full items-center rounded-md hover:text-dim">
 						<button
 							className={cn(
 								SIDEBAR_BAND_TOGGLE,
 								"w-auto flex-1 pr-2 pl-[10px]",
-								// The wrapper paints this row's wash, so the toggle
-								// inside it must not paint a second one.
-								"hover:bg-transparent",
 							)}
 							onClick={() => toggleBand("tools")}
 							aria-expanded={toolsOpen}
@@ -3863,7 +3867,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								// vanishes "under" the cards as it passes over them. Momentum
 								// scroll is on by default on modern iOS anyway.
 								"flex-none flex-row flex-nowrap gap-2 overflow-x-auto overflow-y-hidden pt-3 pr-3 pb-2.5 pl-4 [overscroll-behavior-x:contain] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-							: "-mt-2 flex-col gap-0.5 px-[var(--sidebar-nav-x)] pt-1 pb-1.5",
+							: // No negative margin: it used to claw back the slack inside
+								// the band heading's old 44px box, and against the 32px one
+								// it pulled the first tool row up THROUGH the heading. The
+								// 2px top pad is the same gap a row keeps from the heading
+								// above it anywhere else in the rail.
+								"flex-col gap-0.5 px-[var(--sidebar-nav-x)] pt-0.5 pb-1.5",
 					)}
 				>
 					{visibleTools.map((tool) => {
@@ -3885,14 +3894,19 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								"border-line-strong bg-[image:linear-gradient(var(--hover-strong),var(--hover-strong))]",
 							!isPhone && "items-center",
 							!isPhone &&
-								// Compact rows use control-label type and tight padding, with glyphs
-								// matching the sidebar's standard 22px leading rail.
-								// the utility strip reads lighter than the work lists.
+								// Compact rows use control-label type, with glyphs matching
+								// the sidebar's standard 22px leading rail. `py-[5px]` is the
+								// sidebar's 32px item height (see the height scale in
+								// lib/sidebar-classes.ts): a tool row and a session row are
+								// the same kind of thing — one line you click to go
+								// somewhere — so they take the same box. It was `py-[3px]`,
+								// 28px, which put a fifth height on the rail purely to make
+								// the utility strip read lighter than the work lists.
 								// Landed in ffd11ffc (2026-07-24). That commit's comment
 								// credited a "wayyy too big" complaint, but no such
 								// request exists in the session record — don't treat the
-								// current numbers as a stated preference.
-								"w-full gap-[9px] rounded-row bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[3px] text-control-label font-medium text-dim hover:text-fg",
+								// former numbers as a stated preference.
+								"w-full gap-[9px] rounded-row bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[5px] text-control-label font-medium text-dim hover:text-fg",
 							!isPhone && SIDEBAR_HOVER_LAYER,
 							!isPhone && tool.active && "bg-pressed text-fg",
 						);
@@ -4450,6 +4464,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									className={cn(
 										SIDEBAR_GROUP_HEADER,
 										SIDEBAR_GROUP_HEADER_INSET,
+										SIDEBAR_HEADER_ROW,
 										SIDEBAR_STICKY_LANE,
 										SIDEBAR_STUCK_BACKING,
 									)}
@@ -4498,6 +4513,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									className={cn(
 										SIDEBAR_GROUP_HEADER,
 										SIDEBAR_GROUP_HEADER_INSET,
+										SIDEBAR_HEADER_ROW,
 										SIDEBAR_STICKY_LANE,
 										SIDEBAR_STUCK_BACKING,
 									)}
@@ -4815,6 +4831,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								className={cn(
 									SIDEBAR_GROUP_HEADER,
 									SIDEBAR_GROUP_HEADER_INSET,
+									SIDEBAR_HEADER_ROW,
 									SIDEBAR_STICKY_LANE,
 									SIDEBAR_STUCK_BACKING,
 								)}
@@ -5025,7 +5042,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									return (
 									<React.Fragment key={group.key}>
 										<button
-											className={cn(SIDEBAR_GROUP_HEADER, SIDEBAR_GROUP_HEADER_INSET)}
+											className={cn(
+												SIDEBAR_GROUP_HEADER,
+												SIDEBAR_GROUP_HEADER_INSET,
+												SIDEBAR_HEADER_ROW,
+											)}
 											onClick={() => toggleGroup(group.key)}
 										>
 											{/* The dot is 7px but the header's leading column is a

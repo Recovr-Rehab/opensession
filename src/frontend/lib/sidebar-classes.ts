@@ -7,6 +7,35 @@
  * TEXT, so a class assembled at runtime — `` `sidebar-status-${tone}` `` and
  * its Tailwind equivalent alike — compiles to nothing at all. A lookup of
  * complete literals is the only shape that survives.
+ *
+ * ── The height scale (desktop) ───────────────────────────────────────────────
+ * The rail has exactly TWO box heights, and which one an element takes says
+ * what KIND of thing it is rather than how important it is:
+ *
+ *   32px  an ITEM — something you click to go somewhere, and the only family
+ *         that paints a hover pill. Session/PR/support/archived rows, tool
+ *         rows, and the headings that are themselves destinations-with-a-mark
+ *         (a repo or feed band, Needs review, Awaiting review, Pinned,
+ *         Archived, an automation group). See {@link SIDEBAR_HEADER_ROW}.
+ *   28px  a LABEL — a caption naming the group under it. Band headings
+ *         (Tools / Workspaces / Automations / People) and the status lanes
+ *         (Needs action / Recent / Yesterday / Urgent). No hover fill at all:
+ *         they still toggle, and the ink brightening on hover says so, but a
+ *         full-width pill made every caption look like one more row to click.
+ *         See {@link SIDEBAR_LANE_HEADER} and {@link SIDEBAR_BAND_TOGGLE}.
+ *
+ * Before this the same rail ran 44 / 40 / 32 / 30 / 28 down one column — five
+ * heights for four kinds of thing, with the tallest box (a band caption at 44)
+ * on the QUIETEST content and tool rows 12px shorter than the session rows
+ * directly under them. Hierarchy now comes from type, mark and the hover pill,
+ * which are the things that actually differ; height is free to be regular.
+ *
+ * Phone layouts are deliberately NOT on this scale — a 32px row is not a touch
+ * target, so `phone:` keeps its own taller padding throughout.
+ *
+ * Two numbers downstream depend on those: the sticky offsets below are sums of
+ * them (a lane pins under one band = 32; a nested lane under band + repo band
+ * = 64), so change a height here and fix the offsets in the same edit.
  */
 
 /**
@@ -164,9 +193,29 @@ export const SIDEBAR_REPO_TILE = "size-[18px] shrink-0 text-[11px]";
  * Padding is deliberately not here — the Archived heading wears its own,
  * and two utilities from the same group in one string would leave the winner
  * to Tailwind's internal ordering rather than to the call site.
+ *
+ * Neither is the hover FILL, nor a height: those are what separate the two
+ * families that share this base. An item heading adds
+ * {@link SIDEBAR_HEADER_ROW}; a caption adds {@link SIDEBAR_LANE_HEADER} and
+ * takes neither. The ink brightening on hover stays on both — it is what says
+ * a caption is still a toggle once the pill is gone.
  */
 export const SIDEBAR_GROUP_HEADER =
-	`group/gh flex w-full items-center gap-[9px] rounded-[calc(10px*var(--rf))] border-none bg-transparent text-[16px] font-medium tracking-[0px] text-dim desktop:text-[14px] hover:text-fg ${SIDEBAR_HOVER_LAYER}`;
+	"group/gh flex w-full items-center gap-[9px] rounded-[calc(10px*var(--rf))] border-none bg-transparent text-[16px] font-medium tracking-[0px] text-dim desktop:text-[14px] hover:text-fg";
+
+/**
+ * An ITEM heading — a repo or feed band, Needs review, Awaiting review,
+ * Pinned, Archived, an automation group. Each one leads with a mark in the
+ * rail and goes somewhere or opens something, so it wears the row's box and
+ * the row's hover pill: on the 32px item height it sits in one regular column
+ * with the rows underneath it rather than as a third size between them and the
+ * captions.
+ *
+ * Desktop only. On phones the heading keeps the taller tap box its own inset
+ * gives it.
+ */
+export const SIDEBAR_HEADER_ROW =
+	`desktop:h-8 desktop:min-h-8 ${SIDEBAR_HOVER_LAYER}`;
 
 /** Left pad aligns the icon with a base row (list 6 + header 10 = 16). */
 export const SIDEBAR_GROUP_HEADER_INSET =
@@ -180,9 +229,14 @@ export const SIDEBAR_GROUP_HEADER_INSET =
  * marks, and the lane's own name says what it is). Size and weight are what
  * separate a caption from a title, not a third left edge. The phone size is one
  * step up from the desktop caption so it survives arm's-length reading.
+ *
+ * It takes the 28px LABEL height and — pointedly — no hover fill, which is the
+ * pairing that makes it read as a caption at all. Given the pill it looked
+ * like an item, and a list of five lanes then presented five clickable-looking
+ * rows that lead nowhere between the rows that do.
  */
 export const SIDEBAR_LANE_HEADER =
-	"gap-[5px] pt-[9px] pb-[5px] text-[13px] font-semibold desktop:h-[26px] desktop:min-h-[26px] desktop:pt-1 desktop:pb-1 desktop:text-[12px]";
+	"gap-[5px] pt-[9px] pb-[5px] text-[13px] font-semibold desktop:h-7 desktop:min-h-7 desktop:pt-1 desktop:pb-1 desktop:text-[12px]";
 
 /**
  * The heading's own name. `truncate` before any width utility: it is the pair
@@ -278,17 +332,30 @@ export const SIDEBAR_STICKY_BAND =
  * pushes the next away. It overrides whatever vertical padding/margin the
  * heading wears in the phone layout, so it is written at the same `min-[721px]`
  * breakpoint the pinning is.
+ *
+ * 32px, the item height, rather than a 44px box of its own: a band caption
+ * carries the least on the rail (a 12px faint word) and had the tallest box on
+ * it, which read as a gap in the list rather than as a heading of it. The
+ * caption's LABEL height would be 28, but this is also the slot every tier-2
+ * header pins under, and the label's own 28 sits inside these 32 unchanged.
  */
 export const SIDEBAR_STICKY_BAND_ROW =
-	"desktop:mt-0 desktop:flex desktop:h-[44px] desktop:min-h-[44px] desktop:items-center desktop:py-[7px]";
+	"desktop:mt-0 desktop:flex desktop:h-8 desktop:min-h-8 desktop:items-center desktop:py-0";
 
 /**
  * Tier 2: a lane / repo / status header, pinned one band-row lower. Once
  * pinned, its trailing fade makes the rows passing underneath remain visible
  * without leaving a hard edge below the caption.
+ *
+ * Position only — this used to pin a 30px height on everything it touched,
+ * which is where the rail's third and fourth heights came from: a repo band
+ * (an item) and a status lane (a caption) are structurally the same tier and
+ * so were forced to the same box despite being different kinds of thing. Each
+ * now brings its own height from its family class, and the two agree with the
+ * rows around them instead of with each other.
  */
 export const SIDEBAR_STICKY_LANE =
-	"desktop:sticky desktop:top-[44px] desktop:z-[15] desktop:h-[30px] desktop:min-h-[30px] " +
+	"desktop:sticky desktop:top-8 desktop:z-[15] " +
 	"desktop:[&.is-stuck::after]:pointer-events-none desktop:[&.is-stuck::after]:absolute desktop:[&.is-stuck::after]:top-[calc(100%-8px)] desktop:[&.is-stuck::after]:left-[-400px] desktop:[&.is-stuck::after]:right-[-400px] desktop:[&.is-stuck::after]:z-[-1] desktop:[&.is-stuck::after]:h-5 desktop:[&.is-stuck::after]:content-[''] desktop:[&.is-stuck::after]:[background:linear-gradient(to_bottom,var(--sidebar-material),transparent),linear-gradient(to_bottom,var(--bg-raised),transparent)]";
 
 /**
@@ -296,9 +363,13 @@ export const SIDEBAR_STICKY_LANE =
  * header already occupies the first sub-header slot — and must pass UNDER that
  * header, hence the lower z-index. Pass it after {@link SIDEBAR_STICKY_LANE}
  * through `cn()`, which resolves the pair to this one.
+ *
+ * 64 = the band above it (32) + the repo header above it (32, an item). Both
+ * of those heights are fixed by their own class rather than by padding, which
+ * is what lets this be a sum instead of a measurement.
  */
 export const SIDEBAR_STICKY_LANE_NESTED =
-	"desktop:top-[74px] desktop:z-[14]";
+	"desktop:top-16 desktop:z-[14]";
 
 /**
  * ── Band headings ───────────────────────────────────────────────────────────
@@ -325,7 +396,12 @@ export const SIDEBAR_BAND_TOGGLE =
 	// `border-none`, not `border-0`: the latter zeroes the width but leaves the
 	// style at Tailwind's `solid` default, which is not what the `border: none`
 	// this replaced computed to. Width resolves to 0 under either.
-	"group/band m-0 flex min-h-[30px] w-full cursor-pointer items-center gap-[5px] rounded-[calc(8px*var(--rf))] border-none bg-transparent py-1.5 text-left text-inherit [font:inherit] hover:bg-hover hover:text-dim";
+	//
+	// A band heading is a LABEL, so it paints no hover fill — only the ink
+	// brightens. `min-h-7` is the 28px label height; it sits inside the 32px
+	// slot SIDEBAR_STICKY_BAND_ROW reserves, so the caption keeps a little air
+	// around it without the pinned slot growing.
+	"group/band m-0 flex min-h-7 w-full cursor-pointer items-center gap-[5px] rounded-[calc(8px*var(--rf))] border-none bg-transparent py-1 text-left text-inherit [font:inherit] hover:text-dim";
 
 /**
  * The inset the Automations and People headings take. The desktop value lands
