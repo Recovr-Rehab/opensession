@@ -769,7 +769,10 @@ function ZoomableImage({
 				// opened full size has no edge of its own and bleeds into it.
 				// A white hairline rather than border-line-strong: this surface
 				// is always dark, like the rest of the lightbox chrome.
-				className="min-h-0 min-w-0 max-h-full max-w-full rounded-md border border-white/20 object-contain [transform-origin:0_0]"
+				// rounded-xl, a step above the popup radius: this is the largest
+				// floating surface in the app, and a card-sized corner on a
+				// screen-sized photo reads as a crop rather than a shape.
+				className="min-h-0 min-w-0 max-h-full max-w-full rounded-xl border border-white/20 object-contain [transform-origin:0_0]"
 				style={{ viewTransitionName }}
 			/>
 		</div>
@@ -1078,7 +1081,7 @@ function MediaLightbox({
 								playsInline
 								// Same hairline as the photo: a dark first frame needs
 								// an edge against the scrim just as much.
-								className="min-h-0 min-w-0 max-h-full max-w-full rounded-md border border-white/20"
+								className="min-h-0 min-w-0 max-h-full max-w-full rounded-xl border border-white/20"
 							/>
 						</div>
 					)}
