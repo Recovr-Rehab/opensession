@@ -2,7 +2,7 @@ import Foundation
 
 /// Session ids inside agent output, turned into links you can follow.
 ///
-/// An orchestrator says "delegated to `bks-019f…`" constantly, and on the web
+/// An orchestrator says "delegated to `os-019f…`" constantly, and on the web
 /// that renders as the worker's own title and navigates in-app. Natively it was
 /// dead text — forty characters of noise you could not act on. The transcript's
 /// markdown is rewritten just before rendering so those ids become ordinary
@@ -24,7 +24,11 @@ enum SessionLinks {
     private static var titles: [String: String] = [:]
 
     static func register(titles next: [String: String]) {
-        if next != titles { titles = next }
+        guard next != titles else { return }
+        titles = next
+        // A transcript already on screen was drawn against the old table —
+        // most importantly against an EMPTY one, on a cold deep link.
+        TranscriptLinks.shared.invalidate()
     }
 
     static func title(for id: String) -> String? { titles[id] }
@@ -32,20 +36,30 @@ enum SessionLinks {
     /// The session id a transcript link points at, or nil for a normal URL.
     static func sessionId(from url: URL) -> String? {
         guard url.scheme == scheme else { return nil }
-        // os1session:bks-… — the id lands in `path` or `host` depending on
+        // os1session:os-… — the id lands in `path` or `host` depending on
         // how the URL was spelled, so accept either.
         let candidate = url.host ?? url.path
         let id = candidate.hasPrefix("/") ? String(candidate.dropFirst()) : candidate
-        return id.hasPrefix("bks-") ? id : nil
+        return id.hasPrefix("os-") || id.hasPrefix("bks-") ? id : nil
     }
 
-    // A codespan'd id (`bks-…`), which is how agents usually write one, or a
+    /// Every minted id is `<prefix>-<uuidv7>`. Only the pre-rename `bks-`
+    /// prefix also covers hand-made slug ids (`bks-ghpr-5099-review`), so it
+    /// alone keeps the looser shape — `os-` is short enough that a loose form
+    /// would turn an ordinary codespan like `os-release` into a session link.
+    /// The web draws the line in the same place (`SESSION_ID_EXACT` in
+    /// src/frontend/lib/markdown.ts), because an id has to mean the same thing
+    /// in both clients.
+    private static let uuidV7 =
+        "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
+
+    // A codespan'd id (`os-…`), which is how agents usually write one, or a
     // bare uuidv7-shaped one in prose. The bare form is strict on purpose so
     // it can't misfire on ordinary words.
     private static let pattern = try! NSRegularExpression(
         pattern:
-            "`(bks-[a-z0-9][a-z0-9-]{5,})`"
-            + "|(?<![\\w/-])(bks-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})",
+            "`((?:os-\(uuidV7)|bks-[a-z0-9][a-z0-9-]{5,}))`"
+            + "|(?<![\\w/-])((?:os|bks)-\(uuidV7))",
         options: [.caseInsensitive]
     )
 
@@ -55,11 +69,15 @@ enum SessionLinks {
     /// Markdown with every session id rewritten as a link. Returns the input
     /// unchanged when there is nothing to do, which is the common case.
     static func linkify(_ markdown: String) -> String {
-        guard markdown.contains("bks-") else { return markdown }
+        guard mayContainId(markdown) else { return markdown }
         return MarkdownProse.rewrite(markdown) { line in
             // A line with no id is most lines.
-            line.contains("bks-") ? linkifyLine(line) : line
+            mayContainId(line) ? linkifyLine(line) : line
         }
+    }
+
+    private static func mayContainId(_ text: String) -> Bool {
+        text.contains("os-") || text.contains("bks-")
     }
 
     private static func linkifyLine(_ line: String) -> String {
@@ -96,7 +114,18 @@ enum SessionLinks {
         }
         // Legacy `bks-<slug>` ids are already short, and cutting one mid-word
         // reads worse than showing all of it.
-        return id.count <= 20 ? id : String(id.prefix(shortIdLength)) + "…"
+        guard id.count > 20 else { return id }
+        // Where the cut lands depends on the prefix: `bks-` spends four
+        // characters, `os-` three, so the same twelve reach one character
+        // further into the uuid and can end on its first hyphen. A label
+        // ending in a dangling separator reads as a truncation bug rather
+        // than a shortened id.
+        let short = String(id.prefix(shortIdLength))
+        return short.replacingOccurrences(
+            of: "-+$",
+            with: "",
+            options: .regularExpression
+        ) + "…"
     }
 
     /// A session an automation opened names itself after the job that opened

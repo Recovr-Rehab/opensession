@@ -102,11 +102,18 @@ enum PrLinks {
     private static var index = Index()
 
     static func register(index next: Index) {
-        if next != index { index = next }
+        guard next != index else { return }
+        index = next
+        TranscriptLinks.shared.invalidate()
     }
 
+    /// Until this lands a mention has no repo it is allowed to point at, so a
+    /// transcript drawn before it — a cold deep link — carries no PR chips at
+    /// all rather than merely unstyled ones.
     static func register(repos next: [String: String?]) {
-        if next != repos { repos = next }
+        guard next != repos else { return }
+        repos = next
+        TranscriptLinks.shared.invalidate()
     }
 
     /// The PR a transcript chip points at, or nil for a normal URL.

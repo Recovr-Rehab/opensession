@@ -115,7 +115,13 @@ struct MarkdownBody: View {
     /// alone. `AssetLinks` runs last, so a name that is both a repo path and a
     /// scratch file keeps its diff.
     private func linkified(_ value: String) -> String {
-        AssetLinks.linkify(
+        // Subscribes this row to the registries the rewrites below read.
+        // They are static tables rather than observable state, so without
+        // this a row drawn before the first poll — every row of a cold deep
+        // link — keeps the chips it could make of empty ones, forever. See
+        // `TranscriptLinks` for why one global counter is cheap enough.
+        _ = TranscriptLinks.shared.generation
+        return AssetLinks.linkify(
             FileLinks.linkify(
                 SessionLinks.linkify(
                     MarkdownAutolink.linkify(

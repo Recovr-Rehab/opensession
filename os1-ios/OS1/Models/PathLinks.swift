@@ -67,6 +67,7 @@ final class PathLinks {
             targets: targets,
             pattern: buildPattern(Set(targets.keys))
         )
+        TranscriptLinks.shared.invalidate()
     }
 
     /// The path a transcript link points at, or nil for a normal URL.
