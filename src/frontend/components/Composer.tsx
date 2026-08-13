@@ -327,6 +327,41 @@ function GoalModal({
   );
 }
 
+/** Confirms stopping from Escape. The stop button stays immediate because its
+ *  press is already deliberate. Escape dismisses this dialog, while initial
+ *  focus on Stop lets Enter confirm. */
+function StopConfirmModal({
+  open,
+  onOpenChange,
+  onConfirm,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => void;
+}) {
+  const stopRef = useRef<HTMLButtonElement>(null);
+  return (
+    <Modal.Root open={open} onOpenChange={onOpenChange}>
+      <Modal.Content initialFocus={stopRef}>
+        <div className="flex flex-col">
+          <Modal.Title className="m-0 text-balance text-section-title font-semibold leading-tight tracking-[-0.01em] text-fg">
+            Stop this response?
+          </Modal.Title>
+          <Modal.Description className="m-0 mt-1.5 text-pretty text-supporting font-normal leading-relaxed text-dim">
+            You can ask again or send a follow-up anytime.
+          </Modal.Description>
+        </div>
+        <Modal.Footer>
+          <Modal.Close render={<Button>Keep thinking</Button>} />
+          <Button ref={stopRef} variant="primary" onClick={onConfirm}>
+            Stop
+          </Button>
+        </Modal.Footer>
+      </Modal.Content>
+    </Modal.Root>
+  );
+}
+
 /**
  * Shared session composer (Claude/Codex-style): rounded container with an
  * auto-growing textarea and a bottom toolbar carrying compact model/effort pills,
@@ -527,6 +562,16 @@ export function Composer({
     ]
       .filter(Boolean)
       .join("  ");
+
+  // Escape asked to stop the run and is waiting on an answer. A turn that
+  // finishes on its own while the question is up leaves nothing to stop, so
+  // the dialog goes away with it rather than stopping the NEXT turn.
+  const [stopConfirm, setStopConfirm] = useState(false);
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
+  useEffect(() => {
+    if (!busy) setStopConfirm(false);
+  }, [busy]);
 
   // Which toolbar popover is open ("add" menu or "goal" editor). Closed on an
   // outside click or after an action.
@@ -751,10 +796,16 @@ export function Composer({
     // falls through here to the busy-stop below), and Enter is never consumed,
     // so the send combos keep working in any mode.
     if (vim.handleKeyDown(e)) return;
-    // Esc while a run is busy = the stop button: interrupt the current turn.
+    // Esc while a run is busy asks before interrupting the turn (the stop
+    // button itself still stops on the press).
     if (e.key === "Escape" && busy && onStop && !disabled) {
       e.preventDefault();
-      onStop();
+      e.stopPropagation();
+      // Mount after this Escape dispatch completes. Mounting Base UI's dialog
+      // during the same event lets its dismissal listener consume the opener.
+      queueMicrotask(() => {
+        if (busyRef.current) setStopConfirm(true);
+      });
       return;
     }
     // Inside an unclosed ``` fence, plain Enter inserts a newline instead of
@@ -1500,6 +1551,17 @@ export function Composer({
           {hint}
         </div>
       )}
+      {/* Outside the toolbar: the stop button lives in a row that the phone
+          composer unmounts when it minimizes, and the question has to survive
+          the composer losing focus to the dialog. */}
+      <StopConfirmModal
+        open={stopConfirm}
+        onOpenChange={setStopConfirm}
+        onConfirm={() => {
+          setStopConfirm(false);
+          onStop?.();
+        }}
+      />
     </div>
   );
 }
