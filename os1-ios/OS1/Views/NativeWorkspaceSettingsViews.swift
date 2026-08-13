@@ -336,41 +336,59 @@ struct ConnectionsSettingsView: View {
                 }
                 Section("GitHub") {
                     Text(github?.enabled == true ? "GitHub connection enabled" : "GitHub connection not enabled").foregroundStyle(.secondary)
-                    ForEach((github?.accounts ?? []).filter { $0.login?.isEmpty == false }, id: \.id) { account in
-                        ConnectionRow(name: "github", title: "@\(account.login ?? "")", status: nil, subtitle: nil) {
-                            Menu {
-                                Button(role: .destructive) { disconnecting = account } label: { Label("Disconnect account", systemImage: "person.badge.minus") }
-                            } label: {
-                                Image(systemName: "ellipsis")
-                                    .font(.system(size: 15, weight: .semibold))
-                                    .foregroundStyle(.secondary)
-                                    .frame(width: 30, height: 30)
-                                    .contentShape(Rectangle())
-                            }
-                            .menuStyle(.button)
-                            .buttonStyle(.borderless)
-                            .accessibilityLabel("@\(account.login ?? "") options")
-                            .confirmationDialog(
-                                "Disconnect @\(account.login ?? "")?",
-                                isPresented: Binding(
-                                    get: { disconnecting?.id == account.id },
-                                    set: { if !$0, disconnecting?.id == account.id { disconnecting = nil } }
-                                ),
-                                titleVisibility: .visible
-                            ) {
-                                Button("Disconnect account", role: .destructive) { Task { await disconnect(account) } }
-                                Button("Cancel", role: .cancel) { disconnecting = nil }
-                            } message: {
-                                Text("Sessions fall back to the shared GitHub credential. You can reconnect any time.")
+                    // The whole roster, not only this account: `accounts` holds
+                    // just the person signed in here, so on its own the screen
+                    // couldn't say whether anyone else had connected — or, for
+                    // the one row it did show, that the grant behind it had
+                    // been revoked.
+                    ForEach(teamRoster, id: \.id) { member in
+                        let manageable = manageableAccount(member)
+                        ConnectionRow(
+                            name: "github",
+                            title: member.name?.isEmpty == false ? member.name! : "@\(member.github ?? "")",
+                            status: githubStatus(member),
+                            subtitle: member.name?.isEmpty == false ? "@\(member.github ?? "")" : nil,
+                            detail: connectedSince(connectedAccount(member.github))
+                        ) {
+                            // Only your own grant is yours to revoke, so every
+                            // other row carries no control at all.
+                            if let manageable {
+                                Menu {
+                                    Button(role: .destructive) { disconnecting = manageable } label: { Label("Disconnect account", systemImage: "person.badge.minus") }
+                                } label: {
+                                    Image(systemName: "ellipsis")
+                                        .font(.system(size: 15, weight: .semibold))
+                                        .foregroundStyle(.secondary)
+                                        .frame(width: 30, height: 30)
+                                        .contentShape(Rectangle())
+                                }
+                                .menuStyle(.button)
+                                .buttonStyle(.borderless)
+                                .accessibilityLabel("@\(manageable.login ?? "") options")
+                                .confirmationDialog(
+                                    "Disconnect @\(manageable.login ?? "")?",
+                                    isPresented: Binding(
+                                        get: { disconnecting?.id == manageable.id },
+                                        set: { if !$0, disconnecting?.id == manageable.id { disconnecting = nil } }
+                                    ),
+                                    titleVisibility: .visible
+                                ) {
+                                    Button("Disconnect account", role: .destructive) { Task { await disconnect(manageable) } }
+                                    Button("Cancel", role: .cancel) { disconnecting = nil }
+                                } message: {
+                                    Text("Sessions fall back to the shared GitHub credential. You can reconnect any time.")
+                                }
                             }
                         }
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button(role: .destructive) { disconnecting = account } label: { Label("Disconnect", systemImage: "person.badge.minus") }
+                            if let manageable {
+                                Button(role: .destructive) { disconnecting = manageable } label: { Label("Disconnect", systemImage: "person.badge.minus") }
+                            }
                         }
                     }
-                    if github?.enabled == true {
+                    if github?.enabled == true, let connectAction = githubConnectAction {
                         Button { Task { await connectGitHub() } } label: {
-                            Label("Connect GitHub account", systemImage: "person.badge.key")
+                            Label(connectAction, systemImage: "person.badge.key")
                         }
                     }
                 }
@@ -395,6 +413,87 @@ struct ConnectionsSettingsView: View {
             }
         }
     }
+    // MARK: - GitHub roster
+
+    /// Every configured teammate, plus any connected account the workspace's
+    /// identity list doesn't name — without that fallback an instance with no
+    /// configured team would list nobody, including whoever is signed in here.
+    private var teamRoster: [GitHubTeamConnection] {
+        let team = (github?.team ?? []).filter { $0.github?.isEmpty == false }
+        let named = Set(team.compactMap { $0.github?.lowercased() })
+        let extras: [GitHubTeamConnection] = (github?.accounts ?? []).compactMap { account in
+            guard let login = account.login, !login.isEmpty,
+                !named.contains(login.lowercased())
+            else { return nil }
+            return GitHubTeamConnection(
+                name: account.name,
+                github: login,
+                connected: true,
+                needsReconnect: account.needsReconnect,
+                canManage: true
+            )
+        }
+        return team + extras
+    }
+
+    private func connectedAccount(_ login: String?) -> GitHubConnectedAccount? {
+        guard let login, !login.isEmpty else { return nil }
+        return (github?.accounts ?? []).first { ($0.login ?? "").lowercased() == login.lowercased() }
+    }
+
+    /// The account a Disconnect on this row would act on, or nil when the row
+    /// holds nothing or belongs to someone else.
+    private func manageableAccount(_ member: GitHubTeamConnection) -> GitHubConnectedAccount? {
+        guard member.connected == true, member.canManage == true else { return nil }
+        return connectedAccount(member.github)
+            ?? GitHubConnectedAccount(
+                login: member.github,
+                name: member.name,
+                connectedAt: nil,
+                scopes: nil,
+                needsReconnect: member.needsReconnect
+            )
+    }
+
+    /// Three states, not two. A revoked grant is neither connected nor
+    /// unconnected, and reads as healthy unless the row says otherwise.
+    private func githubStatus(_ member: GitHubTeamConnection) -> String {
+        if member.needsReconnect == true { return "reconnect needed" }
+        return member.connected == true ? "connected" : "not connected"
+    }
+
+    private func connectedSince(_ account: GitHubConnectedAccount?) -> String? {
+        guard let date = Session.parseISO(account?.connectedAt) else { return nil }
+        return "since \(date.formatted(date: .abbreviated, time: .omitted))"
+    }
+
+    /// Which row is you. `canManage` is the server's own answer, computed from
+    /// your GitHub login; the name compare is the fallback for an account whose
+    /// login the server doesn't know yet, matched loosely in both directions
+    /// because one person arrives as "Michiel", "Michiel Westerbeek" and
+    /// "happylinks". My accounts had to learn the same thing, having read every
+    /// one of this account's own grants as somebody else's.
+    private var myTeamRow: GitHubTeamConnection? {
+        if let mine = teamRoster.first(where: { $0.canManage == true }) { return mine }
+        let name = ServerConfig.shared.userName
+        let login = ServerConfig.shared.githubLogin
+        return teamRoster.first { member in
+            [member.github, member.name]
+                .compactMap { $0 }
+                .filter { !$0.isEmpty }
+                .contains { MessageAttribution.isViewer($0, viewerName: name, viewerLogin: login) }
+        }
+    }
+
+    /// The button under the roster, when there is anything left to do: your
+    /// row already saying "Connected" makes a Connect button below it read as
+    /// though it hadn't worked.
+    private var githubConnectAction: String? {
+        guard let mine = myTeamRow else { return "Connect GitHub account" }
+        if mine.needsReconnect == true { return "Reconnect GitHub account" }
+        return mine.connected == true ? nil : "Connect GitHub account"
+    }
+
     private func load(refresh: Bool = false) async {
         loading = true; error = nil
         do {
@@ -526,7 +625,11 @@ private struct ConnectionRow<Trailing: View>: View {
     private static func statusColor(_ status: String) -> Color {
         switch status.lowercased() {
         case "operational", "connected", "ready", "ok", "healthy", "running": .green
-        case "error", "failed", "disconnected", "unauthorized", "stopped", "down": .red
+        case "error", "failed", "disconnected", "unauthorized", "stopped", "down",
+            "reconnect needed": .red
+        // Nothing is wrong with an account nobody has connected, so it gets
+        // the quiet dot rather than the amber one that means "look at me".
+        case "not connected": .secondary
         default: .orange
         }
     }

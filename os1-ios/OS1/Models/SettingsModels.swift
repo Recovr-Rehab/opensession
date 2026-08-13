@@ -263,13 +263,23 @@ struct GitHubConnectedAccount: Codable, Sendable, Identifiable {
     var name: String?
     var connectedAt: String?
     var scopes: String?
+    /// GitHub has revoked the renewal since this account connected. It is not
+    /// a working connection any more, and only reconnecting fixes it.
+    var needsReconnect: Bool?
 }
 
+/// One configured teammate and whether their own GitHub grant is live. The
+/// server answers with the whole roster, not just connected people, so an
+/// unconnected teammate is visible rather than absent.
 struct GitHubTeamConnection: Codable, Sendable, Identifiable {
     var id: String? { github }
     var name: String?
     var github: String?
     var connected: Bool?
+    /// Connected once, but GitHub has since revoked the renewal. The row says
+    /// so instead of reading "Connected", which is the whole point of the
+    /// field: a dead grant otherwise looks healthy until a PR fails.
+    var needsReconnect: Bool?
     var canManage: Bool?
 }
 

@@ -1160,7 +1160,14 @@ struct MyAccountsSettingsView: View {
                     BrandTile(name: "github", size: 30)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("@\(account.login ?? "")")
-                        Text("Connected as you").font(.footnote).foregroundStyle(.secondary)
+                        // A grant GitHub has since revoked is not a working
+                        // connection, and saying "Connected as you" for one
+                        // hides the only thing that fixes it.
+                        if account.needsReconnect == true {
+                            Text("Reconnect needed").font(.footnote).foregroundStyle(.red)
+                        } else {
+                            Text("Connected as you").font(.footnote).foregroundStyle(.secondary)
+                        }
                     }
                     Spacer(minLength: 8)
                     Button("Disconnect") { Task { await disconnectGitHub(account) } }
