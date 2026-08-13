@@ -33,6 +33,8 @@ struct SessionRowPreview: View {
     let repo: String
     let session: Session
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     /// Roughly the web card's 300px. Wide enough for a two-number diff and a
     /// fact per line, narrow enough that the menu underneath still reads as
     /// the thing being chosen from.
@@ -113,7 +115,13 @@ struct SessionRowPreview: View {
                 Text(fact.text)
                     .font(.caption.weight(.medium))
                     .foregroundStyle(fact.tone.color)
-                    .lineLimit(1)
+                    // One line is right while a fact is a few words wide. At
+                    // an accessibility size a single fact can be wider than
+                    // the whole card, and one line then means the end of the
+                    // phrase is cut: "changes requested · 2 bl…". Wrapping
+                    // costs a line and keeps the count, which is the half of
+                    // that fact that changes what to do next.
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
             }
         }
         .padding(.top, facts.isEmpty ? 0 : 6)

@@ -343,6 +343,8 @@ private struct PortalRow: View {
     /// the row's own state is the honest one only once the server answers.
     let working: PortalAction?
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         HStack(spacing: 11) {
             Group {
@@ -364,7 +366,12 @@ private struct PortalRow: View {
                 Text(subtitle)
                     .font(.caption)
                     .foregroundStyle(OS1VisualStyle.textDim)
-                    .lineLimit(1)
+                    // The state leads so that nothing can truncate it, which
+                    // holds while the line is "Live · Port 3000". At an
+                    // accessibility size even that is more than one line, and
+                    // the state would be all the row could say. Two lines let
+                    // the description back in.
+                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? 2 : 1)
             }
             Spacer(minLength: 8)
             if opens {

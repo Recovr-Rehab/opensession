@@ -16,6 +16,7 @@ import SwiftUI
 /// change what will be sent before you send it.
 struct LibraryView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// Called with the picked entry; the caller prefills and pops.
     let onPick: (LibraryEntry) -> Void
@@ -90,28 +91,45 @@ struct LibraryView: View {
         }
     }
 
+    @ViewBuilder
     private func row(_ entry: LibraryEntry) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(entry.name)
-                    .foregroundStyle(OS1VisualStyle.text)
-                if !entry.summary.isEmpty {
-                    Text(entry.summary)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+        let text = VStack(alignment: .leading, spacing: 3) {
+            Text(entry.name)
+                .foregroundStyle(OS1VisualStyle.text)
+            if !entry.summary.isEmpty {
+                Text(entry.summary)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            if !entry.requires.isEmpty {
+                Text("Needs \(entry.requires.map(Self.serviceName).joined(separator: " and ")).")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        // Which mode it will start in decides whether it can change code, so
+        // it belongs before the tap rather than only in the composer.
+        let mode = Text(entry.mode == "code" ? "Code" : "Ask")
+            .font(.caption)
+            .foregroundStyle(.tertiary)
+
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                // Beside the text, the mode is a word in a column of its own.
+                // At an accessibility size that column is wide enough to leave
+                // the recipe's name two or three characters a line. Below the
+                // text it costs one line and takes width from nothing.
+                VStack(alignment: .leading, spacing: 3) {
+                    text
+                    mode
                 }
-                if !entry.requires.isEmpty {
-                    Text("Needs \(entry.requires.map(Self.serviceName).joined(separator: " and ")).")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    text
+                    Spacer(minLength: 8)
+                    mode
                 }
             }
-            Spacer(minLength: 8)
-            // Which mode it will start in decides whether it can change code,
-            // so it belongs before the tap rather than only in the composer.
-            Text(entry.mode == "code" ? "Code" : "Ask")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())

@@ -17,6 +17,8 @@ struct ReviewLoopView: View {
     /// scrolling out of the lazy stack.
     let expansionState: (String, Bool) -> TurnFoldState
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Button {
@@ -97,40 +99,13 @@ struct ReviewLoopView: View {
         }
     }
 
+    @ViewBuilder
     private var header: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "chevron.down")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(OS1VisualStyle.textFaint)
-                .rotationEffect(.degrees(state.expanded ? 0 : -90))
-
-            Text("Review loop")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(OS1VisualStyle.textDim)
-                .fixedSize()
-
-            // Opened, a settled loop trades its verdict for the round count:
-            // the verdict then has its own row at the end of the work.
-            Text(visibleDetail)
-                .font(.footnote)
-                .foregroundStyle(OS1VisualStyle.textFaint)
-                .lineLimit(1)
-
-            Spacer(minLength: 6)
-
-            if let prNumber = loop.prNumber {
-                // Verbatim: interpolated into a LocalizedStringKey the number
-                // runs through the device's locale and #5496 reads "PR #5.496"
-                // (same trap as PrPanel's title).
-                Text(verbatim: "PR #\(prNumber)")
-                    .font(.caption2)
-                    .foregroundStyle(OS1VisualStyle.textFaint)
-                    .fixedSize()
-            }
-
-            if loop.isLive {
-                ProgressView()
-                    .controlSize(.mini)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                wrappedHeader
+            } else {
+                singleLineHeader
             }
         }
         #if os(iOS)
@@ -139,6 +114,91 @@ struct ReviewLoopView: View {
         .padding(.vertical, 3)
         #endif
         .contentShape(Rectangle())
+    }
+
+    private var singleLineHeader: some View {
+        HStack(spacing: 6) {
+            chevron
+
+            title
+                .fixedSize()
+
+            // Opened, a settled loop trades its verdict for the round count:
+            // the verdict then has its own row at the end of the work.
+            detail
+                .lineLimit(1)
+
+            Spacer(minLength: 6)
+
+            prNumberLabel
+                .fixedSize()
+
+            if loop.isLive {
+                ProgressView()
+                    .controlSize(.mini)
+            }
+        }
+    }
+
+    /// At an accessibility type size the title and the PR number are each
+    /// close to a full line on their own, and an `HStack` of intrinsically
+    /// sized text does not give way: it reports a width wider than the
+    /// transcript, and a vertical `ScrollView` centres content it cannot fit,
+    /// so this one row would drag every paragraph around it off both edges.
+    /// The same answer as the turn fold above it: let the row wrap.
+    private var wrappedHeader: some View {
+        FlowLayout(spacing: 6) {
+            // One subview, so the chevron is never stranded on a line of its
+            // own above the words it points at.
+            HStack(spacing: 6) {
+                chevron
+                title
+            }
+            .fixedSize()
+
+            detail
+                .fixedSize(horizontal: false, vertical: true)
+
+            prNumberLabel
+                .fixedSize()
+
+            if loop.isLive {
+                ProgressView()
+                    .controlSize(.mini)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var chevron: some View {
+        Image(systemName: "chevron.down")
+            .font(.system(size: 10, weight: .semibold))
+            .foregroundStyle(OS1VisualStyle.textFaint)
+            .rotationEffect(.degrees(state.expanded ? 0 : -90))
+    }
+
+    private var title: some View {
+        Text("Review loop")
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(OS1VisualStyle.textDim)
+    }
+
+    private var detail: some View {
+        Text(visibleDetail)
+            .font(.footnote)
+            .foregroundStyle(OS1VisualStyle.textFaint)
+    }
+
+    @ViewBuilder
+    private var prNumberLabel: some View {
+        if let prNumber = loop.prNumber {
+            // Verbatim: interpolated into a LocalizedStringKey the number
+            // runs through the device's locale and #5496 reads "PR #5.496"
+            // (same trap as PrPanel's title).
+            Text(verbatim: "PR #\(prNumber)")
+                .font(.caption2)
+                .foregroundStyle(OS1VisualStyle.textFaint)
+        }
     }
 
     private var visibleDetail: String {
@@ -163,28 +223,58 @@ private struct ReviewLoopResultRow: View {
     let result: ReviewLoopResult
     let rounds: Int
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     private var passed: Bool { result.status == .passed }
 
     var body: some View {
-        HStack(spacing: 7) {
-            Image(systemName: passed ? "checkmark.circle" : "xmark.circle")
-                .font(.system(size: 12))
-                .foregroundStyle(passed ? OS1VisualStyle.textFaint : OS1VisualStyle.red)
-                .frame(width: 15)
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                // Same reason as the loop's own header: a verdict and its
+                // numbers, both intrinsically sized, are wider than the
+                // transcript once the type is this large.
+                FlowLayout(spacing: 7) {
+                    HStack(spacing: 7) {
+                        verdictMark
+                        verdictLabel
+                    }
+                    .fixedSize()
 
-            Text(passed ? "Ready to merge" : "Needs changes")
-                .font(.subheadline.weight(.medium))
-                .foregroundStyle(OS1VisualStyle.textDim)
-                .fixedSize()
-
-            Text(result.facts(rounds: rounds))
-                .font(.caption2)
-                .foregroundStyle(OS1VisualStyle.textFaint)
-                .lineLimit(1)
-
-            Spacer(minLength: 4)
+                    facts
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                HStack(spacing: 7) {
+                    verdictMark
+                    verdictLabel
+                        .fixedSize()
+                    facts
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                }
+            }
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(passed ? "Review passed" : "Review failed")
+    }
+
+    private var verdictMark: some View {
+        Image(systemName: passed ? "checkmark.circle" : "xmark.circle")
+            .font(.system(size: 12))
+            .foregroundStyle(passed ? OS1VisualStyle.textFaint : OS1VisualStyle.red)
+            .frame(width: 15)
+    }
+
+    private var verdictLabel: some View {
+        Text(passed ? "Ready to merge" : "Needs changes")
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(OS1VisualStyle.textDim)
+    }
+
+    private var facts: some View {
+        Text(result.facts(rounds: rounds))
+            .font(.caption2)
+            .foregroundStyle(OS1VisualStyle.textFaint)
     }
 }

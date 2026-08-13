@@ -23,7 +23,7 @@ struct FlowLayout: Layout {
         var rowHeight: CGFloat = 0
         var height: CGFloat = 0
         for view in subviews {
-            let size = view.sizeThatFits(.unspecified)
+            let size = measure(view, limit: width)
             if rowWidth > 0, rowWidth + spacing + size.width > width {
                 height += rowHeight + spacing
                 rowWidth = 0
@@ -44,7 +44,7 @@ struct FlowLayout: Layout {
         var point = bounds.origin
         var rowHeight: CGFloat = 0
         for view in subviews {
-            let size = view.sizeThatFits(.unspecified)
+            let size = measure(view, limit: bounds.width)
             if point.x > bounds.minX, point.x + size.width > bounds.maxX {
                 point.x = bounds.minX
                 point.y += rowHeight + spacing
@@ -54,5 +54,19 @@ struct FlowLayout: Layout {
             point.x += size.width + spacing
             rowHeight = max(rowHeight, size.height)
         }
+    }
+
+    /// One subview's size, never wider than the room there is.
+    ///
+    /// Measuring with `.unspecified` is what a chip wants: it asks for the
+    /// width its text needs and the row wraps around it. At an accessibility
+    /// type size that ideal can exceed the container itself, and a subview
+    /// placed at a width nothing can honour is simply drawn through the
+    /// trailing edge. Re-measuring at the width that does exist lets the
+    /// subview wrap or truncate inside the layout instead of outside it.
+    private func measure(_ view: LayoutSubviews.Element, limit: CGFloat) -> CGSize {
+        let ideal = view.sizeThatFits(.unspecified)
+        guard limit > 0, ideal.width > limit else { return ideal }
+        return view.sizeThatFits(ProposedViewSize(width: limit, height: nil))
     }
 }

@@ -18,6 +18,7 @@ struct TerminalView: View {
     @State private var model: TerminalViewModel
     @State private var draft = ""
     @FocusState private var inputFocused: Bool
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     init(sessionId: String) {
         _model = State(initialValue: TerminalViewModel(sessionId: sessionId))
@@ -156,7 +157,12 @@ struct TerminalView: View {
         Text(text)
             .font(.footnote)
             .foregroundStyle(tone)
-            .lineLimit(2)
+            // Two lines hold every banner at the default size. At an
+            // accessibility size the longest of them ("The shell closed…")
+            // needs four, and the sentence it cuts is the one telling you how
+            // to get another shell. A banner is transient, so the height it
+            // takes to say that is cheaper than the truncation.
+            .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
             .padding(.horizontal, 12)
             .padding(.vertical, 7)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -206,6 +212,13 @@ struct TerminalView: View {
                     Text("Stop")
                         .font(.subheadline.weight(.medium))
                         .foregroundStyle(OS1VisualStyle.textDim)
+                        // The only label on this row that scales: the field is
+                        // a fixed 15pt monospace because what you type has to
+                        // match the output above it, and the two glyphs are
+                        // drawn at a fixed size. Left to grow, "Stop" reaches
+                        // the width of the field itself at AX5 and there is
+                        // nowhere left to type. Capped, it stays a word.
+                        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
                 }
                 .accessibilityLabel("Send interrupt")
             }
