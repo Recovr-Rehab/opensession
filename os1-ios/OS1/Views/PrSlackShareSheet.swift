@@ -182,6 +182,12 @@ struct PrSlackShareSheet: View {
         !images.isEmpty && !canUploadImages
     }
 
+    /// A shipped change and a composer request post a message with pictures;
+    /// a plain PR share posts a link, and has no Images section to paste into.
+    private var acceptsImages: Bool {
+        request.merged || request.composerRequestId != nil
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -197,12 +203,12 @@ struct PrSlackShareSheet: View {
                 } header: {
                     Text("Description")
                 } footer: {
-                    Text(request.merged || request.composerRequestId != nil
+                    Text(acceptsImages
                         ? "Keep it to 500 characters."
                         : "The GitHub link is added automatically.")
                 }
 
-                if request.merged || request.composerRequestId != nil {
+                if acceptsImages {
                     Section("Images") {
                         if !images.isEmpty {
                             AttachedImagesRow(images: images) { image in
@@ -248,6 +254,11 @@ struct PrSlackShareSheet: View {
                     }
                 }
             }
+            // A screenshot is usually already on the clipboard when you come
+            // to write this message, so Cmd+V attaches it rather than pasting
+            // nothing into the description. On iOS the same modifier puts
+            // Paste in the text field's own edit menu.
+            .pastesImages(into: $images, maxCount: 10, when: acceptsImages)
             .navigationTitle("Share to Slack")
             .inlineTitleBarCompat()
             .toolbar {
@@ -326,7 +337,7 @@ struct PrSlackShareSheet: View {
     }
 
     private func loadSuggestedImage() async {
-        guard request.merged || request.composerRequestId != nil else { return }
+        guard acceptsImages else { return }
         let paths = [request.suggestedScreenshot].compactMap { $0 } + request.initialImages
         var loaded: [AttachedImage] = []
         for path in paths.prefix(10) {

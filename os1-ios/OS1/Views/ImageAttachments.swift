@@ -1206,3 +1206,21 @@ private enum ImagePasteMenu {
     }
 }
 #endif
+
+extension View {
+    /// `pastesImages`, but only while the surface is actually accepting them.
+    /// A sheet that is offering no attachments has to leave Cmd+V to the text
+    /// field: the Mac monitor claims the key whenever the pasteboard holds an
+    /// image, so installing it unconditionally would swallow pastes that had
+    /// nowhere to go.
+    @ViewBuilder
+    func pastesImages(
+        into images: Binding<[AttachedImage]>, maxCount: Int = 6, when enabled: Bool
+    ) -> some View {
+        if enabled {
+            pastesImages(into: images, maxCount: maxCount)
+        } else {
+            self
+        }
+    }
+}
