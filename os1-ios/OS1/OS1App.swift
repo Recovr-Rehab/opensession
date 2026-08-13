@@ -5,6 +5,11 @@ extension Notification.Name {
     /// Posted by the File > New Session menu command (Cmd+N); the sessions
     /// list opens its new-session sheet in response.
     static let os1NewSession = Notification.Name("os1.newSession")
+    /// File > New Session in This Workspace (Cmd+Option+N): a sibling of the
+    /// open session, sharing its workspace, worktree and branch.
+    static let os1NewSessionInWorkspace = Notification.Name("os1.newSessionInWorkspace")
+    /// View > Command Palette (Cmd+K). Toggles, like the web's own Cmd+K.
+    static let os1CommandPalette = Notification.Name("os1.commandPalette")
 }
 #endif
 
@@ -34,6 +39,25 @@ struct OS1App: App {
                     NotificationCenter.default.post(name: .os1NewSession, object: nil)
                 }
                 .keyboardShortcut("n", modifiers: .command)
+                // The sibling variant, matching the web's own Cmd+Option+N: a
+                // second conversation on the workspace you are already in,
+                // sharing its worktree and branch. Never a dead key — with
+                // nothing selected, or on a session too old to have a
+                // workspace, the sessions list falls back to the composer.
+                Button("New Session in This Workspace") {
+                    NotificationCenter.default.post(
+                        name: .os1NewSessionInWorkspace, object: nil
+                    )
+                }
+                .keyboardShortcut("n", modifiers: [.command, .option])
+            }
+            CommandGroup(after: .sidebar) {
+                Button("Command Palette…") {
+                    NotificationCenter.default.post(
+                        name: .os1CommandPalette, object: nil
+                    )
+                }
+                .keyboardShortcut("k", modifiers: .command)
             }
         }
         #endif

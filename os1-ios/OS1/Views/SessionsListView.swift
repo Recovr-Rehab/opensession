@@ -233,6 +233,17 @@ struct SessionsListView: View {
     /// Archived rows stay out of the live sidebar, but their hydrated copy can
     /// still own the detail column.
     @State private var openedArchivedSession: Session?
+    /// The Command-K palette. Mac only: the iPhone reaches the same places by
+    /// pushing, and has no keyboard to summon anything with.
+    @State private var showPalette = false
+    /// Read so the palette's appearance row can name the one it would switch
+    /// to. `RootView` owns the same key; both write it and both see the write.
+    @AppStorage("os1.appearance") private var appearance = "system"
+    /// What the app is actually drawn in right now — "system" resolves here,
+    /// so the row can say "dark" when the Mac is in dark mode.
+    @Environment(\.colorScheme) private var colorScheme
+    /// The real Settings scene (Cmd+,), which the palette can open too.
+    @Environment(\.openSettings) private var openSettings
     #endif
 
     var body: some View {
@@ -288,6 +299,19 @@ struct SessionsListView: View {
             // File > New Session (Cmd+N) from the app's menu commands.
             .onReceive(NotificationCenter.default.publisher(for: .os1NewSession)) { _ in
                 newSessionRequest = NewSessionRequest()
+            }
+            // File > New Session in This Workspace (Cmd+Option+N).
+            .onReceive(
+                NotificationCenter.default.publisher(for: .os1NewSessionInWorkspace)
+            ) { _ in
+                newSessionInCurrentWorkspace()
+            }
+            // View > Command Palette (Cmd+K), which toggles: the same press
+            // that opened it puts it away.
+            .onReceive(
+                NotificationCenter.default.publisher(for: .os1CommandPalette)
+            ) { _ in
+                withAnimation(.snappy(duration: 0.16)) { showPalette.toggle() }
             }
             #endif
             .onChange(of: viewModel.hasLoaded) {
@@ -480,6 +504,205 @@ struct SessionsListView: View {
         }
         .safeAreaInset(edge: .bottom) {
             errorBanner
+        }
+        // Over the whole window rather than in a sheet: several palette rows
+        // present a sheet themselves, and a sheet cannot open one until it has
+        // finished dismissing.
+        .overlay {
+            if showPalette {
+                ZStack(alignment: .top) {
+                    Color.black.opacity(0.12)
+                        .ignoresSafeArea()
+                        .onTapGesture { closePalette() }
+                    CommandPaletteView(
+                        items: paletteItems,
+                        onRun: { item in
+                            closePalette()
+                            item.run()
+                        },
+                        onClose: { closePalette() }
+                    )
+                    .padding(.top, 90)
+                }
+                .transition(.opacity)
+            }
+        }
+    }
+
+    private func closePalette() {
+        withAnimation(.snappy(duration: 0.16)) { showPalette = false }
+    }
+
+    /// The session the detail column is showing, as the poll last saw it.
+    private var selectedSession: Session? {
+        guard let selectedSessionID else { return nil }
+        return viewModel.sessions.first { $0.id == selectedSessionID }
+    }
+
+    /// Every row the palette offers: the commands this window can actually
+    /// run, then every live session.
+    ///
+    /// Scoped to what the Mac app reaches. It has no Notes, Tasks, Reports,
+    /// Analytics or Catch up to navigate to, and no session panels to push, so
+    /// none of those appear — the web palette's list is a reference, not a
+    /// specification. Sessions come from the whole polled list rather than the
+    /// filtered sidebar, which is half the point: the palette finds the
+    /// session a repo filter or the "My sessions" lens is hiding.
+    private var paletteItems: [CommandPaletteItem] {
+        var items: [CommandPaletteItem] = [
+            CommandPaletteItem(
+                entry: CommandPaletteEntry(
+                    id: "command:new-session",
+                    title: "New session",
+                    subtitle: "Start a session in any repo",
+                    keywords: ["create", "start", "compose"],
+                    shortcut: ["⌘", "N"],
+                    symbol: "plus"
+                ),
+                run: { newSessionRequest = NewSessionRequest() }
+            )
+        ]
+
+        if selectedSession != nil {
+            items.append(
+                CommandPaletteItem(
+                    entry: CommandPaletteEntry(
+                        id: "command:new-session-in-workspace",
+                        title: "New session in this workspace",
+                        subtitle: "Share the open session's worktree and branch",
+                        keywords: ["sibling", "tab", "workspace"],
+                        shortcut: ["⌘", "⌥", "N"],
+                        symbol: "plus.rectangle.on.rectangle"
+                    ),
+                    run: { newSessionInCurrentWorkspace() }
+                )
+            )
+        }
+
+        items.append(contentsOf: [
+            CommandPaletteItem(
+                entry: CommandPaletteEntry(
+                    id: "command:desk",
+                    title: "Open the Desk",
+                    subtitle: "The standing concierge session",
+                    keywords: ["concierge", "assistant", "voice"],
+                    symbol: "lamp.desk"
+                ),
+                run: { showDesk = true }
+            ),
+            CommandPaletteItem(
+                entry: CommandPaletteEntry(
+                    id: "command:support",
+                    title: "Support queue",
+                    subtitle: "Customer tickets waiting for a reply",
+                    keywords: ["plain", "tickets", "inbox"],
+                    symbol: "lifepreserver"
+                ),
+                run: { showSupport = true }
+            ),
+            CommandPaletteItem(
+                entry: CommandPaletteEntry(
+                    id: "command:archived",
+                    title: "Archived sessions",
+                    subtitle: "Browse and restore closed conversations",
+                    keywords: ["closed", "history", "restore"],
+                    symbol: "archivebox"
+                ),
+                run: { showArchived = true }
+            ),
+            CommandPaletteItem(
+                entry: CommandPaletteEntry(
+                    id: "command:settings",
+                    title: "Settings",
+                    subtitle: "Connections, appearance, and preferences",
+                    keywords: ["preferences", "account", "server"],
+                    shortcut: ["⌘", ","],
+                    symbol: "gearshape"
+                ),
+                run: { openSettings() }
+            ),
+            CommandPaletteItem(
+                entry: CommandPaletteEntry(
+                    id: "command:appearance",
+                    title: colorScheme == .dark
+                        ? "Switch to light appearance"
+                        : "Switch to dark appearance",
+                    subtitle: appearance == "system"
+                        ? "Currently following the system"
+                        : "Currently always \(appearance)",
+                    keywords: ["theme", "dark", "light", "appearance"],
+                    symbol: colorScheme == .dark ? "sun.max" : "moon"
+                ),
+                run: { appearance = colorScheme == .dark ? "light" : "dark" }
+            )
+        ])
+
+        for session in viewModel.sessions where session.archived != true {
+            items.append(paletteItem(for: session))
+        }
+        return items
+    }
+
+    private func paletteItem(for session: Session) -> CommandPaletteItem {
+        let repo = RepoTile.label(for: session.effectiveRepo)
+        var details = [repo, session.lane.label]
+        if let workspaceId = session.workspaceId,
+           let name = viewModel.workspaceNames[workspaceId], !name.isEmpty {
+            details.insert(name, at: 1)
+        }
+        return CommandPaletteItem(
+            entry: CommandPaletteEntry(
+                id: "session:\(session.id)",
+                title: session.displayTitle,
+                subtitle: details.joined(separator: " · "),
+                // A session is remembered by its branch or by who started it
+                // as often as by its title, and by the workspace it sits in —
+                // which is how the palette answers "open a workspace" on a Mac
+                // whose sidebar has no workspace row to open.
+                keywords: [
+                    session.effectiveRepo,
+                    session.branch ?? "",
+                    session.startedBy ?? "",
+                    session.isAutomation ? "automation" : ""
+                ].filter { !$0.isEmpty },
+                symbol: paletteSymbol(for: session.lane),
+                kind: .session,
+                recency: session.lastActivityDate
+            ),
+            run: { selectedSessionID = session.id }
+        )
+    }
+
+    private func paletteSymbol(for lane: Session.Lane) -> String {
+        switch lane {
+        case .needsInput: "questionmark.circle"
+        case .inProgress: "circle.dotted"
+        case .inReview: "arrow.triangle.pull"
+        case .done: "checkmark.circle"
+        case .backlog: "bubble.left.and.bubble.right"
+        }
+    }
+
+    /// Cmd+Option+N, and the palette row that shares it.
+    ///
+    /// The same ladder the iPhone's "New session in this workspace" walks: a
+    /// session in a workspace gets an empty sibling straight away, a legacy
+    /// session without one has no strip to join so the composer asks for its
+    /// repo and mode, and with nothing selected there is no workspace to mean,
+    /// so it is a plain new session.
+    private func newSessionInCurrentWorkspace() {
+        guard let current = selectedSession else {
+            newSessionRequest = NewSessionRequest()
+            return
+        }
+        guard current.workspaceId?.isEmpty == false else {
+            newSessionRequest = NewSessionRequest(repo: current.effectiveRepo)
+            return
+        }
+        Task {
+            if let created = await openSiblingTab(of: current) {
+                selectedSessionID = created.id
+            }
         }
     }
 
