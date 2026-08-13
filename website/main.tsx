@@ -153,8 +153,8 @@ function LandingPage() {
 				<div className="hero-copy">
 					<h1>Your team’s control room for coding agents.</h1>
 					<p className="hero-description">
-						Claude Code, Codex and OpenCode, in sessions anyone can join. Open
-						source, on your own machines.
+						Use any model, in sessions anyone on the team can join. Open source,
+						on your own machines.
 					</p>
 					<div className="hero-actions">
 						<button
