@@ -19,6 +19,11 @@ import type { TranscriptEntry } from "../lib/types";
 
 const { TranscriptBlocks } = await import("./TranscriptBlocks");
 
+function setTurnActivity(value: string | null) {
+	(globalThis.localStorage as { getItem: (key: string) => string | null }).getItem =
+		(key) => key === "opensession-turn-activity" ? value : null;
+}
+
 const entries: TranscriptEntry[] = [
 	{
 		id: "merged-notice",
@@ -140,6 +145,100 @@ describe("TranscriptBlocks sent message actions", () => {
 			/>,
 		);
 		expect(html.match(/aria-label="Edit and send again"/g)).toHaveLength(1);
+	});
+});
+
+describe("TranscriptBlocks compact tool runs", () => {
+	const toolEntries: TranscriptEntry[] = [
+		{ id: "prompt", type: "user", content: "Check the repository", timestamp: "2026-08-13T06:00:00Z" },
+		{ id: "bash", type: "tool_use", toolUseId: "bash-call", toolName: "bash", toolInput: { command: "git status" }, content: "Using bash", timestamp: "2026-08-13T06:00:01Z" },
+		{ id: "bash-result", type: "tool_result", toolUseId: "bash-call", content: "clean", timestamp: "2026-08-13T06:00:02Z" },
+		{ id: "read", type: "tool_use", toolUseId: "read-call", toolName: "read", toolInput: { filePath: "/tmp/package.json" }, content: "Using read", timestamp: "2026-08-13T06:00:03Z" },
+		{ id: "read-result", type: "tool_result", toolUseId: "read-call", content: "{}", timestamp: "2026-08-13T06:00:04Z" },
+	];
+
+	test("folds routine calls to one icon-led row by default", () => {
+		setTurnActivity(null);
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks live entries={toolEntries} />,
+		);
+
+		expect(html).toContain('data-tool-run="true"');
+		expect(html).toContain("2 steps · Bash · Read");
+		expect(html).toContain("Show 2 grouped steps: Bash · Read");
+		expect(html).toContain("group-hover:opacity-0");
+		expect(html).toContain("group-hover:opacity-100");
+		expect(html).not.toContain("git status");
+		expect(html).not.toContain("package.json");
+	});
+
+	test("keeps compact calls open under the always-expanded preference", () => {
+		setTurnActivity("expanded");
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks live entries={toolEntries} />,
+		);
+
+		expect(html).toContain("Hide 2 grouped steps: Bash · Read");
+		expect(html).toContain("git status");
+		expect(html).toContain("package.json");
+		setTurnActivity(null);
+	});
+
+	test("keeps intermediate messages between compact runs", () => {
+		setTurnActivity(null);
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				live
+				entries={[
+					...toolEntries.slice(0, 3),
+					{ id: "note", type: "assistant", content: "The repository is clean.", timestamp: "2026-08-13T06:00:02.500Z" },
+					...toolEntries.slice(3),
+				]}
+			/>,
+		);
+
+		expect(html).toContain("The repository is clean.");
+		expect(html.match(/data-tool-run="true"/g)).toHaveLength(2);
+	});
+
+	test("surfaces failure and incidental media status on the compact row", () => {
+		setTurnActivity(null);
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				live
+				entries={[
+					{ id: "prompt", type: "user", content: "Verify it", timestamp: "2026-08-13T06:00:00Z" },
+					{ id: "bash", type: "tool_use", toolUseId: "bash-call", toolName: "bash", toolInput: { command: "bun test" }, content: "Using bash", timestamp: "2026-08-13T06:00:01Z" },
+					{ id: "bash-result", type: "tool_result", toolUseId: "bash-call", content: "failed", isError: true, timestamp: "2026-08-13T06:00:02Z" },
+					{ id: "read", type: "tool_use", toolUseId: "read-call", toolName: "read", toolInput: { filePath: "/tmp/after.png" }, content: "Using read", timestamp: "2026-08-13T06:00:03Z" },
+					{ id: "read-result", type: "tool_result", toolUseId: "read-call", content: "Image read successfully", images: ["/media?path=after.png"], timestamp: "2026-08-13T06:00:04Z" },
+				]}
+			/>,
+		);
+
+		expect(html).toContain("1 failed");
+		expect(html).toContain("1 image");
+		expect(html).toContain("1 failed, 1 media");
+	});
+
+	test("keeps featured media and subagents as direct rows", () => {
+		setTurnActivity("expanded");
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				live
+				entries={[
+					{ id: "prompt", type: "user", content: "Show it", timestamp: "2026-08-13T06:00:00Z" },
+					{ id: "shot", type: "tool_use", toolUseId: "shot-call", toolName: "read", toolInput: { filePath: "/tmp/after.png" }, content: "Using read", timestamp: "2026-08-13T06:00:01Z" },
+					{ id: "shot-result", type: "tool_result", toolUseId: "shot-call", content: "Image read successfully", images: ["/media?path=after.png"], featuredMedia: ["/media?path=after.png"], timestamp: "2026-08-13T06:00:02Z" },
+					{ id: "worker", type: "tool_use", toolUseId: "worker-call", toolName: "task", toolInput: { description: "Review it" }, content: "Using task", timestamp: "2026-08-13T06:00:03Z" },
+				]}
+			/>,
+		);
+
+		expect(html).not.toContain('data-tool-run="true"');
+		expect(html).toContain("after.png");
+		expect(html).toContain("task");
+		setTurnActivity(null);
 	});
 });
 

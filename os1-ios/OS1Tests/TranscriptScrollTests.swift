@@ -244,6 +244,20 @@ final class FoldStateTests: XCTestCase {
         XCTAssertFalse(live.expanded, "once you decide, the default stops winning")
     }
 
+    func testNestedExpansionFollowsItsDefaultUntilYouTouchIt() {
+        let store = FoldStateStore()
+        let state = store.expansion(id: "run-t1", defaultExpanded: false)
+        XCTAssertFalse(state.expanded)
+
+        _ = store.expansion(id: "run-t1", defaultExpanded: true)
+        XCTAssertTrue(state.expanded, "Always expanded should apply without remounting")
+
+        state.toggle()
+        XCTAssertFalse(state.expanded)
+        _ = store.expansion(id: "run-t1", defaultExpanded: true)
+        XCTAssertFalse(state.expanded, "a manual nested toggle still wins")
+    }
+
     func testFailuresAndMediaOnlyPullShortTurnsOpen() {
         var short = turn("t1", tools: 4)
         short.failureCount = 1

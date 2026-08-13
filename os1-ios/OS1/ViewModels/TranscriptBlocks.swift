@@ -592,7 +592,10 @@ final class FoldStateStore {
     /// Expansion for anything else that folds inside a row — a tool call's
     /// detail, a clamped message's body, a long system notice.
     func expansion(id: String, defaultExpanded: Bool = false) -> TurnFoldState {
-        if let existing = states[id] { return existing }
+        if let existing = states[id] {
+            existing.syncDefault(defaultExpanded)
+            return existing
+        }
         let state = TurnFoldState(expanded: defaultExpanded)
         states[id] = state
         return state

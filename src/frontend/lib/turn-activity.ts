@@ -5,8 +5,8 @@
 // "messages" cannot do — there the in-between notes always read as normal
 // transcript and only the tool calls fold away, so the header has nothing to
 // close. "collapsed" folds everything, live included; "expanded" keeps every
-// fold open. Individual tool rows are separate disclosures and remain closed
-// either way.
+// fold open. Individual tool details remain closed either way; compact tool
+// runs follow "expanded" so that preference still means the full timeline.
 // A makeUserPref instance — see lib/user-pref for the server-side ui-prefs
 // hydrate pattern (MacBook, iPhone Safari and the installed PWA all have
 // separate localStorage, which is why "I set it but it's still collapsed

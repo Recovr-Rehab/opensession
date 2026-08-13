@@ -18,9 +18,22 @@ struct TurnBlockView: View {
     /// because the narration is the part worth reading and a shell invocation
     /// rarely is. Expanding puts the tools back between those same notes.
     var showsMessagesWhenFolded = false
+    var expandsToolRuns = false
     /// Resolves each nested tool row's own detail state, which must survive
     /// the row scrolling out of the lazy stack.
-    let detailState: (ToolCallItem) -> TurnFoldState
+    let expansionState: (String, Bool) -> TurnFoldState
+
+    private enum TurnSection: Identifiable {
+        case message(TranscriptEntry)
+        case tools([ToolCallItem], compact: Bool)
+
+        var id: String {
+            switch self {
+            case .message(let entry): entry.id
+            case .tools(let items, _): "tools-\(items.first?.id ?? "empty")"
+            }
+        }
+    }
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -34,6 +47,28 @@ struct TurnBlockView: View {
     private var showsNotesOnly: Bool {
         guard showsMessagesWhenFolded else { return false }
         return turn.items.contains { if case .message = $0 { true } else { false } }
+    }
+
+    private var sections: [TurnSection] {
+        var sections: [TurnSection] = []
+        for item in turn.items {
+            switch item {
+            case .message(let entry):
+                sections.append(.message(entry))
+            case .tool(let call):
+                if let last = sections.last,
+                   case .tools(let existing, let compact) = last,
+                   compact,
+                   isCompactTool(call) {
+                    var tools = existing
+                    tools.append(call)
+                    sections[sections.count - 1] = .tools(tools, compact: true)
+                } else {
+                    sections.append(.tools([call], compact: isCompactTool(call)))
+                }
+            }
+        }
+        return sections
     }
 
     var body: some View {
@@ -51,21 +86,24 @@ struct TurnBlockView: View {
 
             if state.expanded || showsNotesOnly {
                 VStack(alignment: .leading, spacing: 8) {
-                    ForEach(turn.items) { item in
-                        switch item {
+                    ForEach(sections) { section in
+                        switch section {
                         case .message(let entry):
                             // Narration is prose to read, just like the final
                             // answer. The fold and its indent distinguish it;
                             // only tool rows keep the dimmed treatment.
                             MarkdownBody(entry.text)
                                 .padding(.trailing, 16)
-                        case .tool(let call):
+                        case .tools(let calls, let compact):
                             if state.expanded {
-                                ToolCallRow(
-                                    item: call,
+                                ToolRunView(
+                                    items: calls,
                                     sessionId: sessionId,
                                     worktreeDir: worktreeDir,
-                                    state: detailState(call)
+                                    state: expansionState("run-\(calls[0].id)", expandsToolRuns),
+                                    isLive: turn.isLive,
+                                    isCompact: compact,
+                                    expansionState: expansionState
                                 )
                             }
                         }
@@ -79,11 +117,22 @@ struct TurnBlockView: View {
                 // flush and read as ordinary transcript, which is the whole
                 // point of that preference.
                 .padding(.leading, state.expanded ? 6 : 0)
-                .padding(.top, 2)
+                .padding(.top, state.expanded ? 8 : 2)
                 .transition(.opacity)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func isCompactTool(_ item: ToolCallItem) -> Bool {
+        guard item.assetPath == nil,
+              item.subagentId == nil,
+              item.result?.featuredMedia?.isEmpty != false
+        else { return false }
+        switch item.presentation.family {
+        case .run, .file, .edit, .find, .web: return true
+        default: return false
+        }
     }
 
     @ViewBuilder
@@ -307,6 +356,124 @@ struct TurnBlockView: View {
             parts.append(label)
         }
         if turn.failureCount > 0 { parts.append("\(turn.failureCount) failed") }
+        return parts.joined(separator: ", ")
+    }
+}
+
+private struct ToolRunView: View {
+    let items: [ToolCallItem]
+    let sessionId: String
+    var worktreeDir: String?
+    let state: TurnFoldState
+    let isLive: Bool
+    let isCompact: Bool
+    let expansionState: (String, Bool) -> TurnFoldState
+
+    var body: some View {
+        if isCompact {
+            VStack(alignment: .leading, spacing: 4) {
+                Button {
+                    withAnimation(.snappy(duration: 0.2, extraBounce: 0)) {
+                        state.toggle()
+                    }
+                } label: {
+                    HStack(spacing: 7) {
+                        HStack(spacing: -6) {
+                            ForEach(families, id: \.self) { family in
+                                Image(systemName: family.symbol)
+                            }
+                        }
+                            .font(.system(size: 10))
+                            .foregroundStyle(OS1VisualStyle.textFaint)
+                            .frame(width: 18)
+                        Text("\(items.count) step\(items.count == 1 ? "" : "s") · \(label)")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(OS1VisualStyle.textDim)
+                            .lineLimit(1)
+                        Spacer(minLength: 4)
+                        if mediaCount > 0 {
+                            Text(mediaLabel)
+                                .font(.caption2)
+                                .foregroundStyle(OS1VisualStyle.textFaint)
+                                .fixedSize()
+                        }
+                        if failureCount > 0 {
+                            Text("\(failureCount) failed")
+                                .font(.caption2)
+                                .foregroundStyle(OS1VisualStyle.red)
+                                .fixedSize()
+                        }
+                        if isLive, items.contains(where: \.isPending) {
+                            ProgressView()
+                                .controlSize(.mini)
+                        }
+                    }
+                    #if os(iOS)
+                    .frame(minHeight: 44)
+                    #else
+                    .padding(.vertical, 2)
+                    #endif
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(accessibilityLabel)
+                .accessibilityHint(state.expanded ? "Hide the steps" : "Show the steps")
+
+                if state.expanded {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(items) { item in
+                            ToolCallRow(
+                                item: item,
+                                sessionId: sessionId,
+                                worktreeDir: worktreeDir,
+                                state: expansionState(item.id, false)
+                            )
+                        }
+                    }
+                    .padding(.leading, 20)
+                    .transition(.opacity)
+                }
+            }
+        } else if let item = items.first {
+            ToolCallRow(
+                item: item,
+                sessionId: sessionId,
+                worktreeDir: worktreeDir,
+                state: expansionState(item.id, false)
+            )
+        }
+    }
+
+    private var label: String {
+        var order: [String] = []
+        var counts: [String: Int] = [:]
+        for item in items {
+            let name = item.presentation.name
+            if counts[name] == nil { order.append(name) }
+            counts[name, default: 0] += 1
+        }
+        return order.map { name in
+            let count = counts[name, default: 0]
+            return count > 1 ? "\(name) ×\(count)" : name
+        }.joined(separator: " · ")
+    }
+
+    private var failureCount: Int { items.filter(\.isError).count }
+    private var mediaCount: Int { items.reduce(0) { $0 + $1.mediaSources.count } }
+    private var mediaLabel: String { "\(mediaCount) image\(mediaCount == 1 ? "" : "s")" }
+    private var families: [ToolFamily] {
+        var values: [ToolFamily] = []
+        for item in items where !values.contains(item.presentation.family) {
+            values.append(item.presentation.family)
+            if values.count == 3 { break }
+        }
+        return values
+    }
+    private var accessibilityLabel: String {
+        var parts = ["\(items.count) grouped steps", label]
+        if failureCount > 0 { parts.append("\(failureCount) failed") }
+        if mediaCount > 0 { parts.append(mediaLabel) }
+        if isLive, items.contains(where: \.isPending) { parts.append("running") }
         return parts.joined(separator: ", ")
     }
 }

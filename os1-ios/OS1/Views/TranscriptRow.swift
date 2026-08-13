@@ -23,6 +23,8 @@ struct TranscriptRow: View {
     var onEditNote: ((SessionNote, String) async throws -> Void)?
     var onDeleteNote: ((SessionNote) async throws -> Void)?
 
+    @AppStorage("os1.appearance.turnActivity") private var turnActivity = "auto"
+
     var body: some View {
         switch block {
         case .message(let entry):
@@ -75,7 +77,8 @@ struct TranscriptRow: View {
                 worktreeDir: worktreeDir,
                 state: foldState(turn),
                 showsMessagesWhenFolded: showsMessagesWhenFolded,
-                detailState: { expansionState($0.id, false) }
+                expandsToolRuns: turnActivity == "expanded",
+                expansionState: expansionState
             )
         case .footer(let footer):
             TurnFooterView(footer: footer, sessionId: sessionId)

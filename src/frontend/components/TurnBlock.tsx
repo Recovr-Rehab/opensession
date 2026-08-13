@@ -1,8 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
 import type { TranscriptEntry } from "../lib/types";
 import {
+  assetToolPath,
+  canonicalToolName,
   ToolCallBlock,
+  ToolGlyph,
   toolDisplayName,
+  toolFamily,
   toolSummary,
   useToolPathRoots,
 } from "./ToolCallBlock";
@@ -202,22 +206,14 @@ export const TurnBlock = React.memo(function TurnBlock({
                 className="-ml-px desktop:ml-0"
                 data-eid={`${sec.items[sec.items.length - 1].id}#sec`}
               >
-                {sec.items.map((entry) => (
-                  <ToolCallBlock
-                    key={entry.id}
-                    entry={entry}
-                    sessionId={sessionId}
-                    result={
-                      entry.toolUseId ? toolResults.get(entry.toolUseId) : undefined
-                    }
-                    pending={
-                      live &&
-                      !!entry.toolUseId &&
-                      !toolResults.has(entry.toolUseId)
-                    }
-                    onOpenSubagent={onOpenSubagent}
-                  />
-                ))}
+                <ToolSection
+                  items={sec.items}
+                  toolResults={toolResults}
+                  live={live}
+                  defaultExpanded={pref === "expanded"}
+                  sessionId={sessionId}
+                  onOpenSubagent={onOpenSubagent}
+                />
               </div>
             )
           )}
@@ -244,6 +240,219 @@ export const TurnBlock = React.memo(function TurnBlock({
     </div>
   );
 }, turnBlockPropsEqual);
+
+const COMPACT_TOOL_FAMILIES = new Set([
+  "run",
+  "file",
+  "edit",
+  "find",
+  "web",
+]);
+
+interface ToolSectionProps {
+  items: TranscriptEntry[];
+  toolResults: Map<string, TranscriptEntry>;
+  live: boolean;
+  defaultExpanded: boolean;
+  onOpenSubagent?: (agentId: string, label: string) => void;
+  sessionId?: string;
+}
+
+/**
+ * Routine tool calls are evidence of the work, not the conversation itself.
+ * Keep uninterrupted runs to one line, while calls with their own important
+ * affordance (a worker, an asset, or explicitly featured media) stay direct.
+ */
+function ToolSection(props: ToolSectionProps) {
+  const runs: Array<{ compact: boolean; items: TranscriptEntry[] }> = [];
+  for (const entry of props.items) {
+    const result = entry.toolUseId
+      ? props.toolResults.get(entry.toolUseId)
+      : undefined;
+    const compact = isCompactTool(entry, result);
+    const last = runs[runs.length - 1];
+    if (compact && last?.compact) last.items.push(entry);
+    else runs.push({ compact, items: [entry] });
+  }
+
+  return runs.map((run) =>
+    run.compact ? (
+      <ToolRunBlock key={run.items[0].id} {...props} items={run.items} />
+    ) : (
+      <React.Fragment key={run.items[0].id}>
+        {run.items.map((entry) => (
+          <ToolCallBlock
+            key={entry.id}
+            entry={entry}
+            sessionId={props.sessionId}
+            result={
+              entry.toolUseId
+                ? props.toolResults.get(entry.toolUseId)
+                : undefined
+            }
+            pending={
+              props.live &&
+              !!entry.toolUseId &&
+              !props.toolResults.has(entry.toolUseId)
+            }
+            onOpenSubagent={props.onOpenSubagent}
+          />
+        ))}
+      </React.Fragment>
+    )
+  );
+}
+
+function ToolRunBlock({
+  items,
+  toolResults,
+  live,
+  defaultExpanded,
+  onOpenSubagent,
+  sessionId,
+}: ToolSectionProps) {
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  const userToggledRef = useRef(false);
+  useEffect(() => {
+    if (!userToggledRef.current) setExpanded(defaultExpanded);
+  }, [defaultExpanded]);
+
+  const label = groupedToolLabel(items);
+  let failures = 0;
+  let pending = 0;
+  let images = 0;
+  let videos = 0;
+  for (const entry of items) {
+    const result = entry.toolUseId ? toolResults.get(entry.toolUseId) : undefined;
+    if (result?.isError) failures++;
+    if (live && entry.toolUseId && !result) pending++;
+    images += result?.images?.length ?? 0;
+    videos += result?.videos?.length ?? 0;
+  }
+  const mediaCount = images + videos;
+  const familyTools = groupedToolFamilies(items);
+  const statusLabel = [
+    failures > 0 ? `${failures} failed` : "",
+    mediaCount > 0 ? `${mediaCount} media` : "",
+    pending > 0 ? "running" : "",
+  ].filter(Boolean).join(", ");
+  const mediaLabel =
+    mediaCount === 0
+      ? ""
+      : videos === 0
+        ? `${images} image${images === 1 ? "" : "s"}`
+        : images === 0
+          ? `${videos} video${videos === 1 ? "" : "s"}`
+          : `${mediaCount} media`;
+
+  return (
+    <div data-tool-run="true" data-eid={`${items[items.length - 1].id}#run`}>
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-label={`${expanded ? "Hide" : "Show"} ${items.length} grouped steps: ${label}${statusLabel ? `. ${statusLabel}` : ""}`}
+        title={`${items.length} grouped steps`}
+        onClick={() => {
+          userToggledRef.current = true;
+          setExpanded(!expanded);
+        }}
+        className="group flex w-full min-w-0 cursor-pointer items-center gap-2 rounded-control border-0 bg-transparent px-1 py-[3px] text-left font-sans transition-colors hover:bg-hover/40 phone:min-h-10"
+      >
+        <span className="relative grid size-[22px] flex-shrink-0 place-items-center text-faint">
+          <span className="absolute inset-0 transition-opacity duration-150 group-hover:opacity-0 group-focus-visible:opacity-0">
+            {familyTools.map((toolName, index) => (
+              <span
+                key={toolName}
+                className="absolute left-1/2 top-1/2 grid -translate-y-1/2 place-items-center"
+                style={{
+                  transform: `translate(calc(-50% + ${(index - (familyTools.length - 1) / 2) * 5}px), -50%)`,
+                }}
+              >
+                <ToolGlyph toolName={toolName} size={16} />
+              </span>
+            ))}
+          </span>
+          <IconChevronDown
+            size={20}
+            className={cn(
+              "absolute block opacity-0 transition-[opacity,transform] duration-150 group-hover:opacity-100 group-focus-visible:opacity-100",
+              !expanded && "-rotate-90"
+            )}
+          />
+        </span>
+        <span className="min-w-0 flex-1 truncate text-[14px] font-medium leading-5 text-dim transition-colors group-hover:text-fg">
+          {items.length} step{items.length === 1 ? "" : "s"} · {label}
+        </span>
+        {mediaLabel && (
+          <span className="flex-shrink-0 text-meta text-faint">{mediaLabel}</span>
+        )}
+        {failures > 0 && (
+          <span className="flex-shrink-0 text-meta text-red/80">
+            {failures} failed
+          </span>
+        )}
+        {pending > 0 && (
+          <span className="size-[11px] flex-shrink-0 animate-spin rounded-full border border-b-line-strong border-l-line-strong border-r-line-strong border-t-dim" />
+        )}
+      </button>
+      {expanded && (
+        <div className="ml-6">
+          {items.map((entry) => (
+            <ToolCallBlock
+              key={entry.id}
+              entry={entry}
+              sessionId={sessionId}
+              result={
+                entry.toolUseId ? toolResults.get(entry.toolUseId) : undefined
+              }
+              pending={
+                live &&
+                !!entry.toolUseId &&
+                !toolResults.has(entry.toolUseId)
+              }
+              onOpenSubagent={onOpenSubagent}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function isCompactTool(
+  entry: TranscriptEntry,
+  result: TranscriptEntry | undefined
+): boolean {
+  const name = entry.toolName || "Tool";
+  if (!COMPACT_TOOL_FAMILIES.has(toolFamily(name))) return false;
+  if (assetToolPath(name, entry.toolInput)) return false;
+  return !result?.featuredMedia?.length;
+}
+
+function groupedToolLabel(items: TranscriptEntry[]): string {
+  const counts = new Map<string, number>();
+  for (const entry of items) {
+    const name = canonicalToolName(entry.toolName || "Tool");
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+  return [...counts]
+    .map(([name, count]) => (count > 1 ? `${name} ×${count}` : name))
+    .join(" · ");
+}
+
+function groupedToolFamilies(items: TranscriptEntry[]): string[] {
+  const names: string[] = [];
+  const families = new Set<string>();
+  for (const entry of items) {
+    const name = entry.toolName || "Tool";
+    const family = toolFamily(name);
+    if (families.has(family)) continue;
+    families.add(family);
+    names.push(name);
+    if (names.length === 3) break;
+  }
+  return names;
+}
 
 /** Intermediate reasoning stays readable while the turn itself provides the fold. */
 function TurnMessage({
