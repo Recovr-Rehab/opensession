@@ -289,7 +289,9 @@ export function ToolSection(props: ToolSectionProps) {
   }
 
   return runs.map((run) =>
-    run.compact ? (
+    // A run of one has nothing to fold: "1 step" hides a single call behind a
+    // click and says less than the call's own row does. Grouping starts at two.
+    run.compact && run.items.length > 1 ? (
       <ToolRunBlock key={run.items[0].id} {...props} items={run.items} />
     ) : run.editKey && run.items.length > 1 ? (
       <EditRunBlock key={run.items[0].id} {...props} items={run.items} />

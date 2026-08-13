@@ -157,6 +157,13 @@ describe("TranscriptBlocks compact tool runs", () => {
 		{ id: "read-result", type: "tool_result", toolUseId: "read-call", content: "{}", timestamp: "2026-08-13T06:00:04Z" },
 	];
 
+	/** A second routine call and its result. Grouping starts at two, so a run
+	 *  that has to stay folded needs one of these beside the pair above. */
+	const bashCall = (n: number, command: string): TranscriptEntry[] => [
+		{ id: `bash-${n}`, type: "tool_use", toolUseId: `bash-call-${n}`, toolName: "bash", toolInput: { command }, content: "Using bash", timestamp: `2026-08-13T06:01:0${n}.000Z` },
+		{ id: `bash-result-${n}`, type: "tool_result", toolUseId: `bash-call-${n}`, content: "ok", timestamp: `2026-08-13T06:01:0${n}.500Z` },
+	];
+
 	test("folds routine calls to one icon-led row by default", () => {
 		setTurnActivity(null);
 		const html = renderToStaticMarkup(
@@ -175,16 +182,28 @@ describe("TranscriptBlocks compact tool runs", () => {
 		expect(html).not.toContain("package.json");
 	});
 
+	test("leaves a lone routine call as its own row", () => {
+		setTurnActivity(null);
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks live entries={toolEntries.slice(0, 3)} />,
+		);
+
+		// No fold: a lone call's own row already says more than "1 step".
+		expect(html).not.toContain('data-tool-run="true"');
+		expect(html).toContain("git status");
+	});
+
 	test("keeps edits as direct rows between compact runs", () => {
 		setTurnActivity("expanded");
 		const html = renderToStaticMarkup(
 			<TranscriptBlocks
 				live
 				entries={[
-					...toolEntries.slice(0, 3),
-					{ id: "edit", type: "tool_use", toolUseId: "edit-call", toolName: "edit", toolInput: { filePath: "/tmp/package.json", oldString: "old", newString: "new" }, content: "Using edit", timestamp: "2026-08-13T06:00:02.500Z" },
-					{ id: "edit-result", type: "tool_result", toolUseId: "edit-call", content: "updated", timestamp: "2026-08-13T06:00:02.750Z" },
-					...toolEntries.slice(3),
+					...toolEntries,
+					{ id: "edit", type: "tool_use", toolUseId: "edit-call", toolName: "edit", toolInput: { filePath: "/tmp/package.json", oldString: "old", newString: "new" }, content: "Using edit", timestamp: "2026-08-13T06:00:05.500Z" },
+					{ id: "edit-result", type: "tool_result", toolUseId: "edit-call", content: "updated", timestamp: "2026-08-13T06:00:05.750Z" },
+					...bashCall(1, "bun test"),
+					...bashCall(2, "git diff"),
 				]}
 			/>,
 		);
@@ -245,9 +264,10 @@ describe("TranscriptBlocks compact tool runs", () => {
 			<TranscriptBlocks
 				live
 				entries={[
-					...toolEntries.slice(0, 3),
-					{ id: "note", type: "assistant", content: "The repository is clean.", timestamp: "2026-08-13T06:00:02.500Z" },
-					...toolEntries.slice(3),
+					...toolEntries,
+					{ id: "note", type: "assistant", content: "The repository is clean.", timestamp: "2026-08-13T06:00:05Z" },
+					...bashCall(1, "bun test"),
+					...bashCall(2, "git diff"),
 				]}
 			/>,
 		);
@@ -343,13 +363,15 @@ describe("TranscriptBlocks review loops", () => {
 					{ id: "review", type: "user", content: "[GitHub] <!--os:review-handoff-->\nReview PR #42", timestamp: "2026-08-12T12:00:00Z" },
 					{ id: "read", type: "tool_use", toolUseId: "read-call", toolName: "Read", toolInput: { filePath: "/tmp/report.txt" }, content: "Using Read", timestamp: "2026-08-12T12:00:01Z" },
 					{ id: "read-result", type: "tool_result", toolUseId: "read-call", content: "ok", timestamp: "2026-08-12T12:00:02Z" },
+					{ id: "read2", type: "tool_use", toolUseId: "read-call-2", toolName: "Read", toolInput: { filePath: "/tmp/notes.txt" }, content: "Using Read", timestamp: "2026-08-12T12:00:03Z" },
+					{ id: "read2-result", type: "tool_result", toolUseId: "read-call-2", content: "ok", timestamp: "2026-08-12T12:00:04Z" },
 				]}
 				reviewResult={{ status: "passed", confidence: 5, checksPassed: 8 }}
 			/>,
 		);
 		expect(html).toContain('aria-expanded="true"');
 		expect(html).toContain('data-tool-run="true"');
-		expect(html).toContain(">1 step<");
+		expect(html).toContain(">2 steps<");
 		expect(html).not.toContain("report.txt");
 		expect(html).toContain('aria-label="Review passed"');
 		expect(html).toContain("M4.75 12C4.75 7.99594");
