@@ -6,6 +6,7 @@ import {
 	authenticateRunner,
 	createRunnerPairing,
 	bindRunnerPairingMigration,
+	claimRunnerWorkload,
 	isTailnetAddress,
 	listRunners,
 	normalizeAddress,
@@ -111,6 +112,14 @@ describe("Runner policy and reservations", () => {
 		expect(runnerAvailableForSession(listRunners()[0], { sessionId: "bks-three" })).toBe(false);
 		setRunnerWorkload(runner.id, undefined, "bks-one");
 		expect(runnerAvailableForSession(listRunners()[0], { sessionId: "bks-three" })).toBe(true);
+	});
+
+	test("claims capacity in the same registry update that checks eligibility", () => {
+		const result = register({ resources: { concurrentJobs: 1 } });
+		if (!result.ok) throw new Error(result.error);
+		updateRunner(result.runner.id, { permissions: { fullSessions: true } });
+		expect(claimRunnerWorkload(result.runner.id, { sessionId: "bks-one", operation: "full session" })?.workload?.sessionId).toBe("bks-one");
+		expect(claimRunnerWorkload(result.runner.id, { sessionId: "bks-two", operation: "full session" })).toBeUndefined();
 	});
 
 	test("requires an explicit, user- and model-scoped local inference policy", () => {

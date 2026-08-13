@@ -397,6 +397,23 @@ export function setRunnerWorkload(id: string, workload?: Runner["workload"], cle
 	save(store);
 }
 
+/** Atomically check and claim one capacity slot. The registry is single-writer
+ * in this server process, so this synchronous load/mutate/save sequence cannot
+ * interleave with another turn between eligibility and reservation. */
+export function claimRunnerWorkload(id: string, input: { user?: string; repo?: string; sessionId: string; operation: string }): Runner | undefined {
+	const store = load();
+	const runner = store.runners.find((candidate) => candidate.id === id);
+	if (!runner || !runnerAvailableForSession(runner, input)) return undefined;
+	const previous = runner.workloads ?? (runner.workload ? [runner.workload] : []);
+	if (!previous.some((workload) => workload.sessionId === input.sessionId)) {
+		const next = [...previous, { sessionId: input.sessionId, operation: input.operation, startedAt: new Date().toISOString() }];
+		runner.workloads = next;
+		runner.workload = next[0];
+		save(store);
+	}
+	return runner;
+}
+
 export function reserveRunner(id: string, input: Omit<RunnerReservation, "expiresAt"> & { durationMinutes?: number }): Runner | undefined {
 	const store = load();
 	const runner = store.runners.find((candidate) => candidate.id === id);

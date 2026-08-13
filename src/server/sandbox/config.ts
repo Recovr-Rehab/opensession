@@ -679,6 +679,14 @@ export function isRemoteSandboxProvider(
   );
 }
 
+/** Providers whose service ports cannot be reached from the Open Session host
+ * and therefore need the authenticated outbound HTTP/WebSocket Portal relay.
+ * The self-hosted MicroVM adapter has a private host path and deliberately
+ * stays on the direct branch, just like Docker. */
+export function usesOutboundSandboxPortalRelay(v: unknown): boolean {
+	return v === "daytona" || v === "e2b" || v === "box" || v === "modal" || v === "lambda-microvm";
+}
+
 /** True when a sandbox config file exists and parses — the operator has set
  *  sandboxing up at all. Without it every provider is unconfigured. */
 function sandboxConfigPresent(): boolean {

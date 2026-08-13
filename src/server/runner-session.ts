@@ -14,7 +14,7 @@ import { HOST_SPEC_NAME, runHostsDir, type RunHostSpec } from "../runner-host/pr
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { registerRunToken, unregisterRunToken } from "./run-rpc";
 import { launchRunnerHost, runnerHostAlive, runnerHostStatus } from "./runner-ws";
-import { getRunner, runnerAvailableForSession, setRunnerWorkload } from "./runners";
+import { claimRunnerWorkload, getRunner, setRunnerWorkload } from "./runners";
 import { registerRunWsHost, runWsConnector } from "./run-ws";
 import type { UnifiedSession } from "./types";
 import { interactiveMcpServers } from "./interactive-mcp";
@@ -51,9 +51,11 @@ export async function maybeLaunchRunnerRun(
 	const target = session.runner;
 	if (!target) return null;
 	if (!session.repo || !session.worktreeDir) throw new Error("Runner session is missing its repository workspace");
-	const runner = getRunner(target.id);
-	if (!runner || !runnerAvailableForSession(runner, { user: opts.user, repo: session.repo, sessionId: session.id }))
+	const registeredRunner = getRunner(target.id);
+	if (!registeredRunner)
 		throw new Error("This Runner is no longer available for this session");
+	const runner = claimRunnerWorkload(registeredRunner.id, { user: opts.user, repo: session.repo, sessionId: session.id, operation: "full session" });
+	if (!runner) throw new Error("This Runner is no longer available for this session");
 
 	const hostId = `rh-${Bun.randomUUIDv7()}`;
 	const rpcToken = crypto.randomUUID();
@@ -104,7 +106,6 @@ export async function maybeLaunchRunnerRun(
 	});
 	registerRunToken(rpcToken, { sessionId: session.id, user: opts.user });
 	registerRunWsHost(hostId, wsToken);
-	setRunnerWorkload(runner.id, { sessionId: session.id, operation: "full session", startedAt: new Date().toISOString() });
 	const hostSpecs = new Map<string, RunHostSpec>([[hostId, spec]]);
 
 	const launcher: HostLauncher = {

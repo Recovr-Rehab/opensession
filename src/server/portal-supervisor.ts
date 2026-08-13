@@ -11,7 +11,7 @@ import { join } from "path";
 import { audit } from "./audit";
 import { configuredServer } from "./config";
 import { ensureSandboxPortalRelay, mintSandboxPortalGrant, revokeSandboxPortalRelay } from "./sandbox-portal-relay";
-import { isRemoteSandboxProvider, remoteSandboxCallbackBaseUrl } from "./sandbox/config";
+import { remoteSandboxCallbackBaseUrl, usesOutboundSandboxPortalRelay } from "./sandbox/config";
 import { shellQuoteWord } from "./sandbox/adapters/bootstrap";
 import { sandboxHttpsPortFor } from "./sandbox/preview-ports";
 import type { Sandbox } from "./sandbox/provider";
@@ -144,7 +144,7 @@ async function allocateSandboxPort(sandbox: Sandbox, records: PortalRecord[]): P
 	const reserved = new Set(records.map((record) => record.port));
 	// Docker and local microVM Sandboxes have a fixed published range. Remote
 	// providers use their outbound relay and never expose a provider URL here.
-	if (isRemoteSandboxProvider(sandbox.provider)) {
+	if (usesOutboundSandboxPortalRelay(sandbox.provider)) {
 		for (let port = 4_000; port < 9_000; port++) if (!reserved.has(port)) return port;
 		throw new Error("No Sandbox Portal ports are available.");
 	}
@@ -316,7 +316,7 @@ export async function ensureRemoteSandboxPortalAgent(input: {
 	sandbox: Sandbox;
 	port: number;
 }): Promise<string | null> {
-	if (!isRemoteSandboxProvider(input.sandbox.provider)) return null;
+	if (!usesOutboundSandboxPortalRelay(input.sandbox.provider)) return null;
 	const agentKey = `${input.sessionId}:${input.sandbox.id}:${input.port}`;
 	const current = remoteRelayAgents.get(agentKey);
 	if (current && current.expiresAt > Date.now() + 30_000) {
@@ -371,7 +371,7 @@ export async function startSandboxPortalService(input: {
 	const records = await listSandboxPortalServices(input.sandbox);
 	const current = records.find((record) => record.name === name);
 	if (current && current.state !== "stopped" && current.state !== "failed") throw new Error(`Portal '${name}' already exists. Restart it instead.`);
-	const published = isRemoteSandboxProvider(input.sandbox.provider) ? {} : await input.sandbox.ports();
+	const published = usesOutboundSandboxPortalRelay(input.sandbox.provider) ? {} : await input.sandbox.ports();
 	const port = input.port == null ? await allocateSandboxPort(input.sandbox, records) : validatePort(input.port);
 	if (records.some((record) => record.name !== name && record.port === port)) throw new Error(`Port ${port} is already registered.`);
 	if (Object.keys(published).length && !(port in published)) throw new Error(`Port ${port} is not published for this Sandbox.`);

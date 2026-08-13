@@ -45,7 +45,7 @@ import {
 } from "./sandbox/preview-ports";
 import type { Sandbox } from "./sandbox/provider";
 import { shellQuoteWord } from "./sandbox/adapters/bootstrap";
-import { DEFAULT_SANDBOX_PREVIEW_PORTS, isRemoteSandboxProvider, sandboxConfig } from "./sandbox/config";
+import { DEFAULT_SANDBOX_PREVIEW_PORTS, sandboxConfig, usesOutboundSandboxPortalRelay } from "./sandbox/config";
 import { configuredRepos, configuredServer, type Repo } from "./config";
 import { repoForPath } from "./worktree";
 import {
@@ -1208,13 +1208,13 @@ export async function getSandboxPreviewStatus(
   const services: PreviewService[] = [];
   // Remote providers can publish a port on demand. Docker/microVM providers
   // may ignore this hint when their mappings are fixed at sandbox creation.
-	const portMap = isRemoteSandboxProvider(sandbox.provider) ? {} : await sandbox.ports(ports.map((service) => service.port));
+	const portMap = usesOutboundSandboxPortalRelay(sandbox.provider) ? {} : await sandbox.ports(ports.map((service) => service.port));
   const host = await previewHost();
   for (const { key, port } of ports) {
 		const portal = portalByKey.get(key);
     const running = await sandboxPortListening(sandbox, port);
     let previewUrl: string | null = null;
-		if (running && isRemoteSandboxProvider(sandbox.provider)) {
+		if (running && usesOutboundSandboxPortalRelay(sandbox.provider)) {
 			previewUrl = sessionId ? await ensureRemoteSandboxPortalAgent({ sessionId, sandbox, port }) : null;
 		} else if (running) {
       const entry = portMap[port];
@@ -1395,13 +1395,13 @@ export async function startSandboxPreview(
   worktreeDir: string,
 	sessionId?: string,
 ): Promise<PreviewStatus> {
-	if (isRemoteSandboxProvider(sandbox.provider) && !sessionId) throw new Error("A remote Sandbox Portal requires its session identity.");
+	if (usesOutboundSandboxPortalRelay(sandbox.provider) && !sessionId) throw new Error("A remote Sandbox Portal requires its session identity.");
 	const status = await getSandboxPreviewStatus(sandbox, worktreeDir, sessionId);
   if (status.running || status.starting) return status;
 
   // 1. Allocate a webapp port from the pre-published range.
-	const portMap = isRemoteSandboxProvider(sandbox.provider) ? {} : await sandbox.ports();
-	const publishedPorts = (isRemoteSandboxProvider(sandbox.provider)
+	const portMap = usesOutboundSandboxPortalRelay(sandbox.provider) ? {} : await sandbox.ports();
+	const publishedPorts = (usesOutboundSandboxPortalRelay(sandbox.provider)
 		? sandboxConfig().previewPorts ?? [...DEFAULT_SANDBOX_PREVIEW_PORTS]
 		: Object.keys(portMap).map(Number)
 	).filter(Number.isFinite).sort((a, b) => a - b);
@@ -1458,7 +1458,7 @@ export async function startSandboxPreview(
   const privateUpstream = typeof entry === "object" ? entry.upstream : undefined;
   const published = typeof entry === "number" ? entry : entry?.hostPort;
   const requestHeaders = typeof entry === "object" ? entry.requestHeaders : undefined;
-	const remotePortalUrl = isRemoteSandboxProvider(sandbox.provider) && sessionId
+	const remotePortalUrl = usesOutboundSandboxPortalRelay(sandbox.provider) && sessionId
 		? await ensureRemoteSandboxPortalAgent({ sessionId, sandbox, port })
 		: null;
 	const upstream = remotePortalUrl
