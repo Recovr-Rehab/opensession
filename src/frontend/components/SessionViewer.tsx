@@ -4504,7 +4504,9 @@ export function SessionViewer({
 						disabled={!!slackComposer}
 						title="Review a message before sending it to Slack"
 					>
-						<BrandMark name="slack" size={20} />
+						<span className="flex size-5 shrink-0 items-center justify-center">
+							<BrandMark name="slack" size={16} />
+						</span>
 						<span className="grow">Send to Slack…</span>
 					</Menu.Item>
 				);
