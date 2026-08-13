@@ -245,6 +245,10 @@ struct SessionsListView: View {
     /// The Command-K palette. Mac only: the iPhone reaches the same places by
     /// pushing, and has no keyboard to summon anything with.
     @State private var showPalette = false
+    /// What the picked row does, held until the palette has finished
+    /// dismissing — half of these open a sheet, and a sheet cannot present
+    /// over one that is still on its way out.
+    @State private var pendingPaletteAction: (() -> Void)?
     /// Read so the palette's appearance row can name the one it would switch
     /// to. `RootView` owns the same key; both write it and both see the write.
     @AppStorage("os1.appearance") private var appearance = "system"
@@ -328,7 +332,7 @@ struct SessionsListView: View {
             .onReceive(
                 NotificationCenter.default.publisher(for: .os1CommandPalette)
             ) { _ in
-                withAnimation(.snappy(duration: 0.16)) { showPalette.toggle() }
+                showPalette.toggle()
             }
             #endif
             .onChange(of: viewModel.hasLoaded) {
@@ -522,32 +526,31 @@ struct SessionsListView: View {
         .safeAreaInset(edge: .bottom) {
             errorBanner
         }
-        // Over the whole window rather than in a sheet: several palette rows
-        // present a sheet themselves, and a sheet cannot open one until it has
-        // finished dismissing.
-        .overlay {
-            if showPalette {
-                ZStack(alignment: .top) {
-                    Color.black.opacity(0.12)
-                        .ignoresSafeArea()
-                        .onTapGesture { closePalette() }
-                    CommandPaletteView(
-                        items: paletteItems,
-                        onRun: { item in
-                            closePalette()
-                            item.run()
-                        },
-                        onClose: { closePalette() }
-                    )
-                    .padding(.top, 90)
-                }
-                .transition(.opacity)
-            }
+        // A sheet, not an overlay over the split view. An overlay was the
+        // first shape this took, and on macOS it does not repaint: the state
+        // flips, the palette is laid out, and nothing is drawn until some
+        // other change dirties the window — measured, with the palette
+        // appearing only once an unrelated sheet forced a redraw.
+        //
+        // Rows that present a sheet of their own cannot do it while this one
+        // is still dismissing, so what a row runs is parked and run from
+        // `onDismiss` instead.
+        .sheet(isPresented: $showPalette, onDismiss: runPendingPaletteAction) {
+            CommandPaletteView(
+                items: paletteItems,
+                onRun: { item in
+                    pendingPaletteAction = item.run
+                    showPalette = false
+                },
+                onClose: { showPalette = false }
+            )
         }
     }
 
-    private func closePalette() {
-        withAnimation(.snappy(duration: 0.16)) { showPalette = false }
+    private func runPendingPaletteAction() {
+        guard let action = pendingPaletteAction else { return }
+        pendingPaletteAction = nil
+        action()
     }
 
     /// The session the detail column is showing, as the poll last saw it.
@@ -663,8 +666,13 @@ struct SessionsListView: View {
     private func paletteItem(for session: Session) -> CommandPaletteItem {
         let repo = RepoTile.label(for: session.effectiveRepo)
         var details = [repo, session.lane.label]
+        // The workspace name only earns its place when it says something the
+        // title does not. A session that is alone in its workspace carries the
+        // same name twice, and the row read "Fix the hover wash · opensession
+        // · Fix the hover wash · In progress".
         if let workspaceId = session.workspaceId,
-           let name = viewModel.workspaceNames[workspaceId], !name.isEmpty {
+           let name = viewModel.workspaceNames[workspaceId], !name.isEmpty,
+           name.caseInsensitiveCompare(session.displayTitle) != .orderedSame {
             details.insert(name, at: 1)
         }
         return CommandPaletteItem(

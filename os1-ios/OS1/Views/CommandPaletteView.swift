@@ -11,6 +11,49 @@ struct CommandPaletteItem: Identifiable {
     var id: String { entry.id }
 }
 
+/// What the person has typed and what is highlighted.
+///
+/// A class rather than `@State` on the view, because the arrow keys are read
+/// by an `NSEvent` monitor: a monitor closure captures the view struct once,
+/// and a write it makes to a captured `@State` lands in the box without
+/// invalidating anything — measured, with the selection jumping two rows the
+/// next time an unrelated update repainted the palette. An observable object
+/// publishes from wherever it is mutated.
+@Observable
+final class CommandPaletteModel {
+    var query = ""
+    /// Whatever the arrows last landed on. `nil` means "the first result",
+    /// which is also where a new query leaves it.
+    var selectedID: String?
+    /// The rows as of the host's last update, so a row created since the
+    /// palette opened is still the row Return runs.
+    var items: [CommandPaletteItem] = []
+
+    var results: [CommandPaletteEntry] {
+        CommandPaletteRanking.results(items.map(\.entry), query: query)
+    }
+
+    /// The highlighted row: a query that drops the selected row must not leave
+    /// Return pointing at nothing.
+    var selection: String? {
+        if let selectedID, results.contains(where: { $0.id == selectedID }) {
+            return selectedID
+        }
+        return results.first?.id
+    }
+
+    func move(_ offset: Int) {
+        let rows = results
+        guard !rows.isEmpty else { return }
+        let current = rows.firstIndex { $0.id == selection } ?? 0
+        selectedID = rows[min(max(current + offset, 0), rows.count - 1)].id
+    }
+
+    func item(_ id: String) -> CommandPaletteItem? {
+        items.first { $0.id == id }
+    }
+}
+
 /// Command-K on the Mac: type a few letters, land on a session or run a
 /// command.
 ///
@@ -25,28 +68,26 @@ struct CommandPaletteItem: Identifiable {
 /// the session panels the iPhone pushes) gets no row: an entry that opens
 /// nothing is worse than an entry that isn't there.
 ///
-/// A floating panel rather than a sheet, for a reason beyond looks: several
-/// rows open a sheet of their own, and a sheet that has to finish dismissing
-/// before the next one can present turns "New session" into a dropped click.
+/// Presented as a sheet. It was an overlay over the split view first, which is
+/// the shape a palette wants — but a SwiftUI overlay on the Mac's
+/// `NavigationSplitView` does not repaint: the rows were laid out and nothing
+/// was drawn until an unrelated change dirtied the window. The host parks what
+/// a row does and runs it once this has dismissed, so the rows that open a
+/// sheet of their own still work.
 struct CommandPaletteView: View {
     let items: [CommandPaletteItem]
     let onRun: (CommandPaletteItem) -> Void
     let onClose: () -> Void
 
-    @State private var query = ""
-    @State private var selectedID: String?
+    @State private var model = CommandPaletteModel()
     @State private var keyMonitor: Any?
     @FocusState private var fieldFocused: Bool
-
-    private var results: [CommandPaletteEntry] {
-        CommandPaletteRanking.results(items.map(\.entry), query: query)
-    }
 
     var body: some View {
         VStack(spacing: 0) {
             field
             Divider()
-            if results.isEmpty {
+            if model.results.isEmpty {
                 empty
             } else {
                 list
@@ -55,18 +96,13 @@ struct CommandPaletteView: View {
             footer
         }
         .frame(width: 620, height: 460)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(OS1VisualStyle.border, lineWidth: 0.5)
-        )
-        .shadow(color: .black.opacity(0.28), radius: 30, y: 12)
+        .background(OS1VisualStyle.background)
+        .onChange(of: items.map(\.id), initial: true) { model.items = items }
         .onAppear { installKeyMonitor() }
         .onDisappear { removeKeyMonitor() }
         .task {
-            // The field is inside a view that appears in the same frame the
-            // overlay does; focus set in `onAppear` lands before the field
-            // exists and is silently dropped.
+            // The field is created in the same frame the sheet is, and focus
+            // asked for in `onAppear` lands before it exists.
             try? await Task.sleep(for: .milliseconds(40))
             fieldFocused = true
         }
@@ -77,12 +113,11 @@ struct CommandPaletteView: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 15))
                 .foregroundStyle(OS1VisualStyle.textFaint)
-            TextField("Search sessions and commands", text: $query)
+            TextField("Search sessions and commands", text: $model.query)
                 .textFieldStyle(.plain)
                 .font(.system(size: 17))
                 .focused($fieldFocused)
-                // Return is handled by the key monitor, which runs the
-                // selected row rather than whatever submit would mean here.
+                // Return is the key monitor's, which runs the selected row.
                 .onSubmit {}
         }
         .padding(.horizontal, 16)
@@ -93,23 +128,23 @@ struct CommandPaletteView: View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 2) {
-                    ForEach(results) { entry in
+                    ForEach(model.results) { entry in
                         CommandPaletteRow(
                             entry: entry,
-                            selected: entry.id == selectionID
+                            selected: entry.id == model.selection
                         )
                         .id(entry.id)
                         .contentShape(Rectangle())
                         .onTapGesture { activate(entry.id) }
                         .onHover { inside in
-                            if inside { selectedID = entry.id }
+                            if inside { model.selectedID = entry.id }
                         }
                     }
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 8)
             }
-            .onChange(of: selectionID) { _, id in
+            .onChange(of: model.selection) { _, id in
                 guard let id else { return }
                 proxy.scrollTo(id, anchor: .center)
             }
@@ -127,7 +162,7 @@ struct CommandPaletteView: View {
         .frame(maxWidth: .infinity)
     }
 
-    /// The keys this window is listening for, said once at the bottom instead
+    /// The keys this palette is listening for, said once at the bottom instead
     /// of on every row.
     private var footer: some View {
         HStack(spacing: 12) {
@@ -149,27 +184,9 @@ struct CommandPaletteView: View {
         }
     }
 
-    /// The highlighted row: whatever the arrows last landed on, or the first
-    /// result — a query that drops the selected row must not leave Return
-    /// pointing at nothing.
-    private var selectionID: String? {
-        if let selectedID, results.contains(where: { $0.id == selectedID }) {
-            return selectedID
-        }
-        return results.first?.id
-    }
-
     private func activate(_ id: String) {
-        guard let item = items.first(where: { $0.id == id }) else { return }
+        guard let item = model.item(id) else { return }
         onRun(item)
-    }
-
-    private func move(_ offset: Int) {
-        let rows = results
-        guard !rows.isEmpty else { return }
-        let current = rows.firstIndex { $0.id == selectionID } ?? 0
-        let next = min(max(current + offset, 0), rows.count - 1)
-        selectedID = rows[next].id
     }
 
     /// Arrow keys and Return belong to the list, but focus is in the text
@@ -180,15 +197,19 @@ struct CommandPaletteView: View {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
             MainActor.assumeIsolated {
+                // An arrow key is not a bare keypress: macOS puts `.function`
+                // and `.numericPad` in its modifier flags, so a plain
+                // `isEmpty` check passes every arrow through to the field,
+                // which moves its caret and leaves the selection where it was.
                 let mods = event.modifierFlags
                     .intersection(.deviceIndependentFlagsMask)
-                    .subtracting(.capsLock)
+                    .subtracting([.capsLock, .function, .numericPad])
                 guard mods.isEmpty else { return event }
                 switch event.keyCode {
-                case 125: move(1); return nil
-                case 126: move(-1); return nil
+                case 125: model.move(1); return nil
+                case 126: model.move(-1); return nil
                 case 36, 76:
-                    if let selectionID { activate(selectionID) }
+                    if let id = model.selection { activate(id) }
                     return nil
                 case 53: onClose(); return nil
                 default: return event
