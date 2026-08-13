@@ -20,6 +20,20 @@ export const SIDEBAR_TOOL_LABELS: Record<SidebarToolId, string> = {
 	analytics: "Analytics",
 };
 
+// Catch up is a swipe deck: one workspace at a time, moved on with a thumb.
+// That is the wrong shape for a desktop window, which already shows every
+// unread workspace in the sidebar at once, so it is offered at phone widths
+// only. Nothing else in the app hides by viewport, so the rule lives here
+// rather than in each surface that lists tools.
+const PHONE_ONLY_TOOLS: SidebarToolId[] = ["catchup"];
+
+/** Is this tool offered at the current width? Home is the phone's root list
+ *  rather than a tool row, so it drops out there; phone-only tools drop out
+ *  everywhere else. */
+export function toolFitsViewport(id: SidebarToolId, isPhone: boolean): boolean {
+	return isPhone ? id !== "home" : !PHONE_ONLY_TOOLS.includes(id);
+}
+
 const HIDDEN_TOOLS_KEY = "opensession-sidebar-hidden-tools";
 const TOOLS_CHANGED_EVENT = "opensession-sidebar-tools-changed";
 // A new account starts with Home only. Every other tool is either empty until

@@ -2975,15 +2975,21 @@ export function App(
 			icon: <IconHome size={18} />,
 			run: () => navigate({ view: "home" }),
 		},
-		{
-			id: "catch-up",
-			label: "Catch up",
-			description: "Swipe through unread workspaces",
-			category: "Navigate",
-			keywords: ["unread", "inbox"],
-			icon: <IconStack size={18} />,
-			run: () => navigate({ view: "catchup" }),
-		},
+		// Catch up is offered at phone widths only (lib/sidebar-tools.ts), so
+		// the palette doesn't offer it where the sidebar doesn't.
+		...(isPhone
+			? ([
+					{
+						id: "catch-up",
+						label: "Catch up",
+						description: "Swipe through unread workspaces",
+						category: "Navigate",
+						keywords: ["unread", "inbox"],
+						icon: <IconStack size={18} />,
+						run: () => navigate({ view: "catchup" }),
+					},
+				] as CommandPaletteAction[])
+			: []),
 		{
 			id: "pr-tinder",
 			label: "PR Tinder",

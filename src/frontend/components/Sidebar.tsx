@@ -161,6 +161,7 @@ import {
 	setSidebarToolVisible,
 	hideAllSidebarTools,
 	onSidebarToolsChanged,
+	toolFitsViewport,
 	SIDEBAR_TOOL_LABELS,
 	type SidebarToolId,
 } from "../lib/sidebar-tools";
@@ -2335,9 +2336,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			title: "Sessions, tokens, models & PRs over time",
 		},
 	];
-	const visibleTools = tools.filter(
-		(tool) => !hiddenTools.has(tool.id) && (!isPhone || tool.id !== "home"),
-	);
+	// Tools this width offers at all — the switches below only choose among
+	// these, so a tool that doesn't fit the viewport is never listed as off.
+	const fittingTools = tools.filter((tool) => toolFitsViewport(tool.id, isPhone));
+	const visibleTools = fittingTools.filter((tool) => !hiddenTools.has(tool.id));
 
 	const setToolVisible = setSidebarToolVisible;
 
@@ -2348,7 +2350,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// turning three of them on is one gesture, not three.
 	const sidebarMenuEntries: CtxEntry[] = [
 		{ kind: "label", label: "Tools" },
-		...tools.map((tool): CtxEntry => {
+		...fittingTools.map((tool): CtxEntry => {
 			const shown = !hiddenTools.has(tool.id);
 			return {
 				kind: "item",

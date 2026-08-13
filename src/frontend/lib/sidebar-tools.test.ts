@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, test } from "bun:test";
-import { readHiddenSidebarTools, SIDEBAR_TOOL_IDS } from "./sidebar-tools";
+import {
+	readHiddenSidebarTools,
+	toolFitsViewport,
+	SIDEBAR_TOOL_IDS,
+} from "./sidebar-tools";
 
 const store = new Map<string, string>();
 // Enough of the Storage surface for the read path.
@@ -38,5 +42,25 @@ describe("readHiddenSidebarTools", () => {
 	test("unreadable storage falls back to the new-account default", () => {
 		store.set("opensession-sidebar-hidden-tools", "{not json");
 		expect(readHiddenSidebarTools().has("analytics")).toBe(true);
+	});
+});
+
+describe("toolFitsViewport", () => {
+	test("Catch up is offered on phones only", () => {
+		expect(toolFitsViewport("catchup", true)).toBe(true);
+		expect(toolFitsViewport("catchup", false)).toBe(false);
+	});
+
+	test("Home is the phone's root list, not one of its tools", () => {
+		expect(toolFitsViewport("home", false)).toBe(true);
+		expect(toolFitsViewport("home", true)).toBe(false);
+	});
+
+	test("every other tool is offered at both widths", () => {
+		for (const id of SIDEBAR_TOOL_IDS) {
+			if (id === "home" || id === "catchup") continue;
+			expect(toolFitsViewport(id, true)).toBe(true);
+			expect(toolFitsViewport(id, false)).toBe(true);
+		}
 	});
 });

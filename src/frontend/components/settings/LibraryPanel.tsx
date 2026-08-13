@@ -7,10 +7,12 @@ import {
 import { BASE_PATH } from "../../lib/base";
 import { displayName } from "../../brand-logos";
 import { IconTile } from "../BrandTile";
+import { useIsPhone } from "../../hooks/useIsPhone";
 import {
 	onSidebarToolsChanged,
 	readHiddenSidebarTools,
 	setSidebarToolVisible,
+	toolFitsViewport,
 	type SidebarToolId,
 } from "../../lib/sidebar-tools";
 import {
@@ -110,6 +112,7 @@ function EntryControl({
 }
 
 export function LibraryPanel() {
+	const isPhone = useIsPhone();
 	const [entries, setEntries] = useState<LibraryEntry[] | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [query, setQuery] = useState("");
@@ -135,6 +138,12 @@ export function LibraryPanel() {
 	const groups = useMemo(() => {
 		const needle = query.trim().toLowerCase();
 		const matched = (entries || []).filter((entry) => {
+			// A tool this width never shows can't be switched on here either.
+			if (
+				entry.type === "tool" &&
+				!toolFitsViewport(entry.slug as SidebarToolId, isPhone)
+			)
+				return false;
 			if (filter !== "all" && entry.type !== filter) return false;
 			if (!needle) return true;
 			return (
@@ -147,7 +156,7 @@ export function LibraryPanel() {
 			type,
 			entries: matched.filter((entry) => entry.type === type),
 		})).filter((group) => group.entries.length > 0);
-	}, [entries, query, filter]);
+	}, [entries, query, filter, isPhone]);
 
 	const header = (
 		<SettingsHeader

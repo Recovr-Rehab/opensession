@@ -27,9 +27,11 @@ import {
 	onSidebarToolsChanged,
 	readHiddenSidebarTools,
 	setSidebarToolVisible,
+	toolFitsViewport,
 	SIDEBAR_TOOL_IDS,
 	SIDEBAR_TOOL_LABELS,
 } from "../../lib/sidebar-tools";
+import { useIsPhone } from "../../hooks/useIsPhone";
 import {
 	getThemePref,
 	effectiveTheme,
@@ -201,6 +203,7 @@ function AccentSwatch({
  * the re-branded bundle is live.
  */
 export function AppearancePanel() {
+	const isPhone = useIsPhone();
 	const [pref, setPref] = useState<ThemePref>(getThemePref);
 	const [tone, setTone] = useState(effectiveTheme);
 	useEffect(
@@ -364,7 +367,9 @@ export function AppearancePanel() {
 						/>
 					}
 				/>
-				{SIDEBAR_TOOL_IDS.map((toolId) => (
+				{SIDEBAR_TOOL_IDS.filter((toolId) =>
+					toolFitsViewport(toolId, isPhone),
+				).map((toolId) => (
 					<SettingRow
 						key={toolId}
 						title={SIDEBAR_TOOL_LABELS[toolId]}
