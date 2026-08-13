@@ -25,6 +25,7 @@ const semanticFontSizes = [
 	"label",
 	"body",
 	"item-title",
+	"dialog-title",
 	"section-title",
 	"page-title",
 ] as const;

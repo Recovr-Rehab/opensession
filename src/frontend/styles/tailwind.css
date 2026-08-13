@@ -212,6 +212,7 @@
 	   11px -> text-meta (timestamps, status, secondary metadata)
 	   13px -> text-label / text-supporting / text-control-label (interface copy)
 	   14px -> text-body / text-item-title (content and item titles)
+	   17px -> text-dialog-title (modal headings)
 	   19px -> text-section-title / text-page-title (all headings) */
 	--text-meta: 11px;
 	--text-label: 13px;
@@ -219,6 +220,7 @@
 	--text-control-label: 13px;
 	--text-body: 14px;
 	--text-item-title: 14px;
+	--text-dialog-title: 17px;
 	--text-section-title: 19px;
 	--text-page-title: 19px;
 

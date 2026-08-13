@@ -217,7 +217,7 @@ function Header({
 				{/* Base UI renders Title as <h2> and Description as <p>; preflight
 				    isn't imported (base.css owns resets), so zero their UA margins
 				    or the <h2> top margin reads as phantom padding above the head. */}
-				<BaseDialog.Title className="m-0 min-w-0 flex-1 text-balance text-section-title font-semibold leading-tight tracking-[-0.01em] text-fg">
+				<BaseDialog.Title className="m-0 min-w-0 flex-1 text-balance text-dialog-title font-semibold leading-tight tracking-[-0.01em] text-fg">
 					{title}
 				</BaseDialog.Title>
 				<BaseDialog.Close

@@ -284,7 +284,7 @@ export function RepoBar({
           current changes behind), so an explicit, non-dismissible dialog rather
           than a native confirm(). */}
       <Modal.Root open={confirmOpen} onOpenChange={setConfirmOpen} disablePointerDismissal>
-        <Modal.Content widthClassName="max-w-[22rem]" className="gap-3 p-5">
+        <Modal.Content>
           <Modal.Header
             title="Switch repository?"
             description={
