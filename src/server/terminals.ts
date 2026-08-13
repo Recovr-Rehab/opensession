@@ -97,8 +97,12 @@ function deletePending(ws: unknown, termId: string): void {
 
 /** The slice of UnifiedSession / the session file the terminal target needs. */
 export interface TerminalSessionInfo {
-  worktreeDir?: string | null;
-  sandbox?: { provider?: string; sandboxId?: string; workspace?: string };
+	id?: string;
+	repo?: string;
+	createdBy?: string;
+	worktreeDir?: string | null;
+	sandbox?: { provider?: string; sandboxId?: string; workspace?: string };
+	runner?: { id: string; workspacePath: string };
 }
 
 export interface TerminalOpts {
@@ -107,7 +111,7 @@ export interface TerminalOpts {
   send: (msg: object) => void;
 }
 
-type TermTargetKind = "host" | "docker" | "daytona" | "box" | "microvm";
+type TermTargetKind = "host" | "docker" | "daytona" | "box" | "microvm" | "runner";
 
 /** A shell realized as a host process wrapped in a Bun PTY (host, docker, or
  * an SSH transport such as Box). */
@@ -190,6 +194,28 @@ function hostShellTarget(session: TerminalSessionInfo | null | undefined, notice
 async function resolveTarget(
   session: TerminalSessionInfo | null | undefined,
 ): Promise<TermTarget> {
+	if (session?.runner && session.id && session.repo) {
+		const runner = session.runner;
+		const { openRunnerTerminal, registerRunnerTerminalHandler, resizeRunnerTerminal, stopRunnerTerminal, writeRunnerTerminal } = await import("./runner-ws");
+		return {
+			kind: "remote",
+			target: "runner",
+			displayCwd: runner.workspacePath,
+			connect: async (io) => {
+				const opened = await openRunnerTerminal({ runnerId: runner.id, sessionId: session.id!, repo: session.repo!, workspacePath: runner.workspacePath, user: session.createdBy, cols: io.cols, rows: io.rows });
+				const detach = registerRunnerTerminalHandler((runnerId, message) => {
+					if (runnerId !== runner.id || message.id !== opened.terminalId) return;
+					if (message.t === "terminal_data" && typeof message.data === "string") io.onData(Buffer.from(message.data, "base64"));
+					else if (message.t === "terminal_exit") io.onExit(typeof message.code === "number" ? message.code : 0);
+				});
+				return {
+					write: (data) => writeRunnerTerminal(runner.id, opened.terminalId, Buffer.from(data).toString("base64")),
+					resize: (cols, rows) => resizeRunnerTerminal(runner.id, opened.terminalId, cols, rows),
+					close: async () => { detach(); stopRunnerTerminal(runner.id, opened.terminalId); },
+				};
+			},
+		};
+	}
   const sb = session?.sandbox;
   if (!sb?.sandboxId || !sb.provider || sb.provider === "local") {
     return hostShellTarget(session);
@@ -336,6 +362,12 @@ export async function startSessionTerminal(
         await connectRemote(ws, termId, token, target, opts);
         return;
       } catch (e: any) {
+        if (target.target === "runner") {
+          deletePending(ws, termId);
+          opts.send({ type: "term_notice", message: `Runner terminal unavailable (${String(e?.message || e).slice(0, 160)})` });
+          opts.send({ type: "term_exit", code: 1 });
+          return;
+        }
         // Same fail-open shape as resolveTarget: any connect failure
         // degrades to a host shell with a notice.
         target = hostShellTarget(

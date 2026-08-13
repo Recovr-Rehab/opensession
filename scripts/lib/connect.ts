@@ -260,9 +260,10 @@ export async function runnerRun(): Promise<number> {
       const socket = new WebSocket(wsUrl, {
         headers: { authorization: `Bearer ${identity.token}` },
       } as any);
-      const running = new Map<string, ReturnType<typeof Bun.spawn>>();
+		const running = new Map<string, ReturnType<typeof Bun.spawn>>();
 		const persistent = new Map<string, ReturnType<typeof Bun.spawn>>();
 		const portalSockets = new Map<string, WebSocket>();
+		const terminals = new Map<string, RunnerTerminalProcess>();
 
       socket.addEventListener("open", async () => {
         attempt = 0;
@@ -307,6 +308,10 @@ export async function runnerRun(): Promise<number> {
 		}
 		if (["portal_ws_open", "portal_ws_send", "portal_ws_close"].includes(msg?.t) && msg.version === 1) {
 			handleRunnerPortalWebSocket(socket, portalSockets, msg);
+			return;
+		}
+		if (["terminal_start", "terminal_input", "terminal_resize", "terminal_stop"].includes(msg?.t) && msg.version === 1) {
+			await handleRunnerTerminal(socket, terminals, msg);
 			return;
 		}
         if (msg?.t !== "exec" || msg.version !== 1 || !msg.operationToken) return;
@@ -359,7 +364,8 @@ export async function runnerRun(): Promise<number> {
         }
 		for (const proc of running.values()) proc.kill();
 		for (const portal of portalSockets.values()) { try { portal.close(); } catch {} }
-        resolve();
+		for (const proc of terminals.values()) { try { proc.kill(); } catch {} }
+		resolve();
       });
 
       socket.addEventListener("error", () => {
@@ -716,6 +722,59 @@ async function handleRunnerPortal(socket: WebSocket, msg: any): Promise<void> {
 		socket.send(JSON.stringify({ t: "portal_result", id, operationToken, ok: true, result }));
 	} catch (error) {
 		socket.send(JSON.stringify({ t: "portal_result", id, operationToken, ok: false, error: error instanceof Error ? error.message : String(error) }));
+	}
+}
+
+type RunnerTerminalProcess = ReturnType<typeof Bun.spawn>;
+
+function terminalSize(value: unknown, fallback: number, min: number, max: number): number {
+	return typeof value === "number" && Number.isFinite(value) ? Math.max(min, Math.min(max, Math.round(value))) : fallback;
+}
+
+/** A typed, Runner-owned PTY. The server has already pinned its workspace and
+ * verified the terminal permission before this message reaches the machine. */
+async function handleRunnerTerminal(socket: WebSocket, terminals: Map<string, RunnerTerminalProcess>, msg: any): Promise<void> {
+	const id = typeof msg.id === "string" && /^rt\d+-[A-Za-z0-9_-]{16}$/.test(msg.id) ? msg.id : "";
+	if (!id) return;
+	if (msg.t === "terminal_input") {
+		if (typeof msg.data === "string" && msg.data.length <= 128_000) {
+			try { (terminals.get(id) as any)?.terminal?.write(Buffer.from(msg.data, "base64")); } catch {}
+		}
+		return;
+	}
+	if (msg.t === "terminal_resize") {
+		try { (terminals.get(id) as any)?.terminal?.resize(terminalSize(msg.cols, 100, 20, 500), terminalSize(msg.rows, 30, 5, 200)); } catch {}
+		return;
+	}
+	if (msg.t === "terminal_stop") {
+		try { terminals.get(id)?.kill(); } catch {}
+		return;
+	}
+	const operationToken = String(msg.operationToken || "");
+	try {
+		const workspacePath = typeof msg.workspacePath === "string" ? msg.workspacePath : "";
+		if (!workspacePath || workspacePath.includes("\0") || !existsSync(workspacePath)) throw new Error("Invalid Runner terminal workspace.");
+		if (terminals.has(id)) throw new Error("Runner terminal already exists.");
+		const shell = platform() === "win32" ? "powershell.exe" : (process.env.SHELL || "/bin/bash");
+		const argv = platform() === "win32" ? [shell, "-NoLogo"] : [shell, "-il"];
+		const proc = Bun.spawn(argv, {
+			cwd: workspacePath,
+			env: { ...runnerEnvironment(), TERM: "xterm-256color" },
+			terminal: {
+				cols: terminalSize(msg.cols, 100, 20, 500), rows: terminalSize(msg.rows, 30, 5, 200),
+				data: (_terminal: unknown, chunk: Uint8Array) => {
+					try { socket.send(JSON.stringify({ t: "terminal_data", id, data: Buffer.from(chunk).toString("base64") })); } catch {}
+				},
+			},
+		} as any);
+		terminals.set(id, proc);
+		void proc.exited.then((code) => {
+			terminals.delete(id);
+			try { socket.send(JSON.stringify({ t: "terminal_exit", id, code })); } catch {}
+		});
+		socket.send(JSON.stringify({ t: "terminal_ready", id, operationToken, cwd: workspacePath }));
+	} catch (error) {
+		try { socket.send(JSON.stringify({ t: "terminal_error", id, operationToken, error: error instanceof Error ? error.message : String(error) })); } catch {}
 	}
 }
 

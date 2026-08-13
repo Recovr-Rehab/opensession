@@ -755,7 +755,7 @@ export type WSServerMessage =
 	| { type: "term_exit"; termId?: string; code?: number }
 	// Where the Shell tab's PTY landed (sandboxed sessions run their shell
 	// inside the sandbox) + optional fallback explanation.
-	| { type: "term_ready"; termId?: string; target: "host" | "docker" | "daytona"; cwd?: string }
+	| { type: "term_ready"; termId?: string; target: "host" | "docker" | "daytona" | "runner"; cwd?: string }
 	| { type: "term_notice"; termId?: string; message: string }
 	| { type: "cache_warning"; sessionId: string }
 	// A silent server-side auto-push published the session's local commits (repo

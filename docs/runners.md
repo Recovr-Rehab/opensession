@@ -29,6 +29,11 @@ stream as a remote Sandbox. Automation sessions never receive Runner tools.
 Runners run work as their local service user, so only attach machines the
 workspace intends to trust.
 
+The Shell tab uses that same outbound control channel when a session runs on a
+Runner. It opens a PTY only in the server-selected session workspace, honors
+the Runner's terminal permission, and closes when the browser tab or Runner
+connection closes. It never falls back to SSH or kubectl.
+
 Runner sessions can also host supervised Portals. A Portal process listens
 only on the Runner's loopback interface. Open Session relays its HTTP and
 WebSocket traffic over the authenticated Runner control channel to a local

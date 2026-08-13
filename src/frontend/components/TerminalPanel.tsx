@@ -250,9 +250,9 @@ function ShellView({
         if (tagged.termId != null && tagged.termId !== termId) return;
         if (msg.type === "term_data") term.write(b64decode(msg.data));
         else if (msg.type === "term_ready" && msg.target !== "host")
-          // Sandboxed sessions get their shell INSIDE the sandbox.
+          // Remote sessions run their shell in the selected workspace.
           term.write(
-            `\x1b[2m[shell inside ${msg.target} sandbox · ${msg.cwd || ""}]\x1b[0m\r\n`,
+            `\x1b[2m[shell inside ${msg.target === "runner" ? "Runner" : `${msg.target} sandbox`} · ${msg.cwd || ""}]\x1b[0m\r\n`,
           );
         else if (msg.type === "term_notice")
           term.write(`\x1b[2m[${msg.message}]\x1b[0m\r\n`);

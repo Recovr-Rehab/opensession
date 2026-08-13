@@ -3,6 +3,8 @@ import {
 	disconnectRunner,
 	launchRunnerHost,
 	prepareRunnerWorkspace,
+	openRunnerTerminal,
+	registerRunnerTerminalHandler,
 	requestRunnerPortal,
 	registerRunnerPortalFrameHandler,
 	runnerHostStatus,
@@ -110,5 +112,24 @@ describe("Runner full-session control", () => {
 		runnerWsMessage(ws, JSON.stringify({ t: "portal_ws_event", connectionId: "abcdefgh", binary: false, data: "updated" }));
 		dispose();
 		expect(received?.data).toBe("updated");
+	});
+
+	test("opens terminals only in the session-owned Runner workspace", async () => {
+		updateRunner(runnerId, { permissions: { terminals: true } });
+		const ws = socket(runnerId);
+		runnerWsOpen(ws);
+		runnerWsMessage(ws, JSON.stringify({ t: "hello", version: 1 }));
+		const pending = openRunnerTerminal({ runnerId, sessionId: "bks-test", repo: "opensession", workspacePath: "/srv/opensession/sessions/bks-test", cols: 120, rows: 40 });
+		const message = JSON.parse(ws.sent.at(-1)!);
+		expect(message.t).toBe("terminal_start");
+		expect(message.workspacePath).toBe("/srv/opensession/sessions/bks-test");
+		runnerWsMessage(ws, JSON.stringify({ t: "terminal_ready", id: message.id, operationToken: message.operationToken, cwd: message.workspacePath }));
+		await expect(pending).resolves.toEqual({ terminalId: message.id, cwd: message.workspacePath });
+		let data: Record<string, unknown> | undefined;
+		const dispose = registerRunnerTerminalHandler((id, event) => { if (id === runnerId) data = event; });
+		runnerWsMessage(ws, JSON.stringify({ t: "terminal_data", id: message.id, data: "aGk=" }));
+		dispose();
+		expect(data?.data).toBe("aGk=");
+		await expect(openRunnerTerminal({ runnerId, sessionId: "bks-test", repo: "opensession", workspacePath: "/home/runner" })).rejects.toThrow("outside its managed roots");
 	});
 });

@@ -41,10 +41,61 @@ const connections: Map<string, Connection> = (g.__opensessionRunnerConnections ?
 const exitedHosts: Set<string> = (g.__opensessionRunnerExitedHosts ??= new Set()) as Set<string>;
 type RunnerPortalFrameHandler = (runnerId: string, message: Record<string, unknown>) => void;
 const portalFrameHandlers: Set<RunnerPortalFrameHandler> = (g.__opensessionRunnerPortalFrameHandlers ??= new Set()) as Set<RunnerPortalFrameHandler>;
+type RunnerTerminalFrameHandler = (runnerId: string, message: Record<string, unknown>) => void;
+const terminalFrameHandlers: Set<RunnerTerminalFrameHandler> = (g.__opensessionRunnerTerminalFrameHandlers ??= new Set()) as Set<RunnerTerminalFrameHandler>;
 let executionCounter = 0;
 
 export type RunnerExecResult = { code: number; stdout: string; stderr: string; timedOut?: boolean; data?: unknown };
 export type RunnerExecOptions = { cwd?: string; timeoutMs?: number; user?: string; repo?: string; sessionId?: string };
+
+/** Register a narrow terminal frame consumer. Terminal ids are random and
+ * scoped to a browser connection, so a Runner cannot attach to another tab. */
+export function registerRunnerTerminalHandler(handler: RunnerTerminalFrameHandler): () => void {
+	terminalFrameHandlers.add(handler);
+	return () => terminalFrameHandlers.delete(handler);
+}
+
+function publishRunnerTerminalFrame(runnerId: string, message: Record<string, unknown>): void {
+	for (const handler of terminalFrameHandlers) {
+		try { handler(runnerId, message); } catch (error) { console.warn("[runners] Terminal frame handler failed:", error); }
+	}
+}
+
+function sendRunnerTerminalFrame(runnerId: string, message: Record<string, unknown>): void {
+	const connection = connections.get(runnerId);
+	if (!connection || connection.protocolVersion !== PROTOCOL_VERSION) return;
+	try { connection.ws.send(JSON.stringify(message)); } catch {}
+}
+
+/** Open an interactive PTY in the exact session workspace. This is a typed
+ * control-channel operation, not an SSH fallback or generic remote shell. */
+export async function openRunnerTerminal(input: { runnerId: string; sessionId: string; repo: string; workspacePath: string; user?: string; cols?: number; rows?: number }): Promise<{ terminalId: string; cwd: string }> {
+	const connection = connections.get(input.runnerId);
+	if (!connection || connection.protocolVersion !== PROTOCOL_VERSION) throw new Error(`Runner ${input.runnerId} is not connected`);
+	if (!runnerAllowed(connection.runner, { user: input.user, repo: input.repo, permission: "terminals" })) throw new Error(`Runner ${connection.runner.name} is not permitted for terminals`);
+	if (!runnerOwnsWorkspace(connection.runner, input.workspacePath, input.sessionId)) throw new Error("Runner terminal workspace is outside its managed roots");
+	const id = `rt${++executionCounter}-${randomBytes(12).toString("base64url")}`;
+	const operationToken = randomBytes(18).toString("base64url");
+	audit({ msg: "runner_terminal_start", runner_id: input.runnerId, session_id: input.sessionId, repo: input.repo, operation_id: id });
+	const result = await new Promise<RunnerExecResult>((resolve) => {
+		const timer = setTimeout(() => { connection.pending.delete(id); resolve({ code: -1, stdout: "", stderr: "Runner terminal start timed out", timedOut: true }); }, 30_000);
+		connection.pending.set(id, { stdout: [], stderr: [], resolve, timer, operationToken });
+		try { connection.ws.send(JSON.stringify({ t: "terminal_start", version: PROTOCOL_VERSION, id, operationToken, sessionId: input.sessionId, repo: input.repo, workspacePath: input.workspacePath, cols: input.cols, rows: input.rows })); }
+		catch (error) { clearTimeout(timer); connection.pending.delete(id); resolve({ code: -1, stdout: "", stderr: `Could not reach Runner: ${(error as Error).message}` }); }
+	});
+	if (result.code !== 0) throw new Error(result.stderr || "Runner terminal could not start");
+	return { terminalId: id, cwd: result.stdout || input.workspacePath };
+}
+
+export function writeRunnerTerminal(runnerId: string, terminalId: string, data: string): void {
+	if (/^rt\d+-[A-Za-z0-9_-]{16}$/.test(terminalId) && data.length <= 128_000) sendRunnerTerminalFrame(runnerId, { t: "terminal_input", id: terminalId, data });
+}
+export function resizeRunnerTerminal(runnerId: string, terminalId: string, cols: number, rows: number): void {
+	if (/^rt\d+-[A-Za-z0-9_-]{16}$/.test(terminalId)) sendRunnerTerminalFrame(runnerId, { t: "terminal_resize", id: terminalId, cols, rows });
+}
+export function stopRunnerTerminal(runnerId: string, terminalId: string): void {
+	if (/^rt\d+-[A-Za-z0-9_-]{16}$/.test(terminalId)) sendRunnerTerminalFrame(runnerId, { t: "terminal_stop", id: terminalId });
+}
 
 /**
  * The server chooses this whole path. A Runner never receives a caller's home
@@ -322,6 +373,24 @@ export function runnerWsMessage(ws: any, raw: string | Buffer): boolean {
 			for (const handler of portalFrameHandlers) {
 				try { handler(runnerId, message as Record<string, unknown>); } catch (error) { console.warn("[runners] Portal frame handler failed:", error); }
 			}
+			return true;
+		case "terminal_ready": {
+			const pending = connection.pending.get(String(message.id));
+			if (!pending || message.operationToken !== pending.operationToken) return true;
+			clearTimeout(pending.timer); connection.pending.delete(String(message.id));
+			pending.resolve({ code: 0, stdout: String(message.cwd || ""), stderr: "" });
+			return true;
+		}
+		case "terminal_error": {
+			const pending = connection.pending.get(String(message.id));
+			if (!pending || message.operationToken !== pending.operationToken) return true;
+			clearTimeout(pending.timer); connection.pending.delete(String(message.id));
+			pending.resolve({ code: -1, stdout: "", stderr: String(message.error || "Runner terminal failed") });
+			return true;
+		}
+		case "terminal_data":
+		case "terminal_exit":
+			publishRunnerTerminalFrame(runnerId, message as Record<string, unknown>);
 			return true;
 	}
 	return true;
