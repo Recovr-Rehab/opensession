@@ -6,6 +6,38 @@ export function isScratchWorkspace(
 	return sessions.length > 0 && sessions.every((session) => session.mode === "scratch");
 }
 
+/**
+ * The band repo-less Ask workspaces group into, pinned above the projects.
+ *
+ * A pseudo-band, not a repo: it is never written to the user's `repo-order`
+ * pref, never drags, and is never a value of the repo filter. Keeping it out
+ * of those keeps a namespace of real repo ids free of a sentinel that a repo
+ * could one day be named.
+ */
+export const ASK_BAND = "__ask__";
+
+/**
+ * A workspace of nothing but repo-less Ask sessions — the "Ask" band that
+ * sits above the project bands.
+ *
+ * Both halves are required. `mode` alone would sweep in every repo-scoped ask
+ * session, which belongs in its repo's band; `repoLess` alone would sweep in
+ * scratch. A workspace that mixes the two is not an Ask workspace and files
+ * under its repo as usual.
+ *
+ * `repoLess`, never `!repo`: thousands of older ask sessions record no repo
+ * and still sit in a real checkout, so `!repo` would empty every project band
+ * into this one.
+ */
+export function isAskWorkspace(
+	sessions: readonly Pick<UnifiedSession, "mode" | "repoLess">[],
+): boolean {
+	return (
+		sessions.length > 0 &&
+		sessions.every((session) => session.mode === "ask" && !!session.repoLess)
+	);
+}
+
 export function spawnedSessionBelongsInSidebar(
 	session: Pick<UnifiedSession, "spawnedBy">,
 	needsAttention: boolean,

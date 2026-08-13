@@ -1478,22 +1478,25 @@ export async function* runPi(
       }
     }
 
+    // The repo owning this run's cwd, or undefined for a repo-less one (a
+    // scratch dir, a repo-less ask session). Dynamic import to avoid a static
+    // module-init cycle through "./worktree".
+    const cwdRepo = await (async () => {
+      try {
+        return (await import("./worktree")).repoForPathOrNull(cwd);
+      } catch {
+        return undefined;
+      }
+    })();
     const instructions = buildRunInstructions({
       isAsk,
       isScratch,
+      isRepoLess: !cwdRepo,
       reposNote: opts.reposNote,
       prReviewer: opts.prReviewer,
       // Same host-awareness as the opencode runner: code.storage repos get
-      // push-the-branch instructions instead of `gh pr create`. Dynamic import
-      // to avoid a static module-init cycle through "./worktree".
-      repoHost: await (async () => {
-        if (isScratch) return undefined;
-        try {
-          return (await import("./worktree")).repoForPath(cwd).host;
-        } catch {
-          return undefined;
-        }
-      })(),
+      // push-the-branch instructions instead of `gh pr create`.
+      repoHost: isScratch ? undefined : cwdRepo?.host,
       localInstructions: readLocalInstructions(cwd),
       inProcessMcp: opts.inProcessMcp,
       osSessionId: journal?.osSessionId,

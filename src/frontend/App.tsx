@@ -8,6 +8,8 @@ import {
 } from "./lib/markdown";
 import { reviewRequestTargetsPerson } from "./lib/review-queue";
 import { repoLabel } from "./lib/repo-label";
+import { NO_REPO } from "./lib/session-repo";
+import { ASK_BAND } from "./lib/sidebar-workspaces";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { MotionConfig } from "motion/react";
@@ -3672,7 +3674,13 @@ export function App(
 						onOpenFeedItem={openFeedItemWorkspace}
 							onNewSession={() => openPalette()}
 							onNewSessionInRepo={(repo) =>
-								setPalette({ open: true, repo })
+								// The Ask band's "+" is not a repo: it opens the palette
+								// already in Ask with the repo turned off.
+								setPalette(
+									repo === ASK_BAND
+										? { open: true, repo: NO_REPO, mode: "ask" as const }
+										: { open: true, repo },
+								)
 							}
 							onOpenWorkspace={(id) => {
 								// Sidebar selection navigates directly to a session rather than via

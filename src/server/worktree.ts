@@ -77,6 +77,16 @@ export function repoForPathOrNull(p: string): Repo | undefined {
 }
 
 /**
+ * Reserved repo id a CREATE passes to mean "this session has no repo".
+ *
+ * Distinct from omitting the repo, which still means "inherit, else the
+ * default" — that is what every agent-created subagent relies on, so silence
+ * must never start meaning repo-less. `getRepo("none")` throws, so a sentinel
+ * that leaks past a create fails loudly instead of resolving to a checkout.
+ */
+export const NO_REPO = "none";
+
+/**
  * The repo a session's own work lives in, or undefined when it has none.
  *
  * Repo-less-ness is a property of the session, not of its mode: `scratch`
@@ -90,9 +100,10 @@ export function repoForPathOrNull(p: string): Repo | undefined {
  * `worktreeDir`. Callers that need a repo no matter what append
  * `?? defaultRepo().id`; callers that can say "no repo" should.
  */
-export function sessionRepoId(
-  session: Pick<UnifiedSession, "repo" | "worktreeDir">,
-): string | undefined {
+export function sessionRepoId(session: {
+  repo?: string;
+  worktreeDir?: string | null;
+}): string | undefined {
   if (session.repo) return session.repo;
   if (!session.worktreeDir) return undefined;
   return repoForPathOrNull(session.worktreeDir)?.id;

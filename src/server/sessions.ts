@@ -879,6 +879,10 @@ function scanNativeSessions(): UnifiedSession[] {
       mode: data.mode,
       // Back-compat: older session files stored the repo under `project`.
       repo: data.repo ?? (data as { project?: string }).project,
+      // Scratch has always been repo-less; newer repo-less Ask sessions say
+      // so outright. Both are surfaced as one flag so clients never have to
+      // read a missing `repo` as a decision (it usually isn't).
+      repoLess: data.repoLess || data.mode === "scratch" || undefined,
       workspaceId: data.workspaceId ?? null,
       parentSessionId: data.parentSessionId,
       spawnedBy: data.spawnedBy,

@@ -3832,24 +3832,28 @@ async function* runOpencodeAttempt(
     // shared servers can't (config is multi-session), so it rides the
     // per-prompt `system` param instead — verified live to APPEND to
     // opencode's own system prompt, not replace it.
+    // The repo this run's cwd belongs to, or undefined when none owns it (a
+    // scratch dir, a repo-less ask session, an unregistered path). Dynamic
+    // import: a static "./worktree" edge here creates a module-init cycle
+    // (worktree → preview → … → this file) that TDZ-crashes on load.
+    const cwdRepo = await (async () => {
+      try {
+        return (await import("./worktree")).repoForPathOrNull(cwd);
+      } catch {
+        return undefined;
+      }
+    })();
     const instructions = buildRunInstructions({
       isAsk,
       isScratch,
+      // No repo to read or write: the run is a conversation with its tools.
+      isRepoLess: !cwdRepo,
       reposNote: opts.reposNote,
       prReviewer: opts.prReviewer,
       // Host-aware PR-flow instructions: code.storage repos have no PRs, so
       // the agent is told to push its branch instead of `gh pr create`.
-      // Unregistered cwds (repoForPath throws) keep the GitHub default.
-      // Dynamic import: a static "./worktree" edge here creates a module-init
-      // cycle (worktree → preview → … → this file) that TDZ-crashes on load.
-      repoHost: await (async () => {
-        if (isScratch) return undefined;
-        try {
-          return (await import("./worktree")).repoForPath(cwd).host;
-        } catch {
-          return undefined;
-        }
-      })(),
+      // Repo-less cwds keep the GitHub default.
+      repoHost: isScratch ? undefined : cwdRepo?.host,
       // Per-session servers boot in `cwd`, so their environment block is
       // already right; only the pool needs the correction.
       cwd: shared ? cwd : undefined,

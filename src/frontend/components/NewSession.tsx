@@ -11,6 +11,7 @@ import { ImageThumbs } from "./ImageThumbs";
 import { FileChips } from "./FileChips";
 import { useFileMentions } from "./useFileMentions";
 import { peopleMentionMatches } from "../lib/people";
+import { NO_REPO } from "../lib/session-repo";
 import {
   IconPaperclip,
   IconChevronDown,
@@ -23,6 +24,8 @@ import {
   IconBox,
   IconFile,
   IconFolderPlus,
+  IconMessage,
+  IconPencil,
   IconStack,
 } from "./icons";
 import type { WSServerMessage } from "../lib/types";
@@ -87,7 +90,36 @@ interface RepoOption {
 
 const LAST_REPO_KEY = "opensession-new-session-repo";
 const ADD_REPO_VALUE = "__add_repo__";
-const SCRATCH_REPO_VALUE = "__scratch__";
+
+
+/** What a session may do, in one switch. Mode is the permission (Ask reads,
+ *  Code writes); the repo below it is what the session is pointed at. Scratch
+ *  is not a third permission — it is Code with no repo — but it earns a place
+ *  here because that is how people look for it, and it is what "no repo" means
+ *  once you want to write files. */
+const MODE_META = {
+	ask: {
+		label: "Ask",
+		menuLabel: "Ask · reads, changes nothing",
+		icon: IconEye,
+	},
+	code: {
+		label: "Code",
+		menuLabel: "Code · writes on a branch",
+		icon: IconPencil,
+	},
+	scratch: {
+		label: "Scratch",
+		menuLabel: "Scratch · writes, no repo",
+		icon: IconFile,
+	},
+} as const;
+const MODE_OPTIONS = (["ask", "code", "scratch"] as const).map((value) => ({
+	value,
+	label: MODE_META[value].label,
+	menuLabel: MODE_META[value].menuLabel,
+	icon: React.createElement(MODE_META[value].icon, { size: 20 }),
+}));
 
 /* ── Palette chrome ───────────────────────────────────────────────────────
    Every class is written out in full: Tailwind scans source TEXT, so a name
@@ -255,9 +287,16 @@ function readPrefill() {
   // the user's last picker choice across closes/reloads, then use the sidebar
   // filter. The configured default is applied once `/repos` resolves.
   const repoParam = params.get("repo") ?? params.get("project");
-  const repo = repoParam || lastSelectedRepo() || filteredRepo() || "";
+  const mode = params.get("mode") === "ask" ? ("ask" as const) : ("code" as const);
+  // Only Ask can run without a repo, so `?repo=none` on a code link is
+  // dropped rather than carried into a create the server would refuse.
+  const repo =
+    (repoParam === NO_REPO && mode !== "ask" ? "" : repoParam) ||
+    lastSelectedRepo() ||
+    filteredRepo() ||
+    "";
   return {
-    mode: params.get("mode") === "ask" ? ("ask" as const) : ("code" as const),
+    mode,
     prompt: params.get("prompt") || "",
     branch: params.get("branch") || "",
     repo,
@@ -329,7 +368,11 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     };
   }, [cloudTarget]);
   useEffect(() => {
-    setRepo((current) => {
+	setRepo((current) => {
+      // "No repo" is a real choice, not an unresolved id — without this it
+      // fails the `repos.some(...)` membership test below and gets replaced by
+      // the configured default the moment /repos lands.
+      if (forceRepo === NO_REPO || current === NO_REPO) return current;
       if (forceRepo && repos.some((item) => item.id === forceRepo)) return forceRepo;
       if (repos.some((item) => item.id === current)) return current;
       return configuredDefaultRepo;
@@ -751,6 +794,21 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     });
   }
 
+  /** Switching mode can invalidate the repo below it: only Ask runs without
+   *  one, so leaving "No repo" selected on the way to Code would offer a
+   *  create the server refuses. Falls back to the last real repo. */
+  function changeMode(next: "ask" | "code" | "scratch") {
+    setMode(next);
+    if (next !== "ask" && repo === NO_REPO)
+      setRepo(
+        lastSelectedRepo() ||
+          configuredDefaultRepo ||
+          repos.find((p) => p.default)?.id ||
+          repos[0]?.id ||
+          "",
+      );
+  }
+
   const canCreate =
     !creating &&
     connected &&
@@ -867,25 +925,56 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
         initialFocus={promptRef}
         finalFocus={() => !createdRef.current}
       >
-        {/* Header: repo (left) · create-from (right). The repo picker is
-            always visible — on phones the create-from picker hides until the
-            options toggle in the footer opens it. */}
+        {/* Header: mode + repo (left) · create-from (right). The mode is the
+            palette's title because it decides what the session may do; the
+            repo is what it is pointed at, and Ask can be pointed at nothing.
+            Scratch is the repo-off cell of Code rather than a fourth thing, so
+            it hides the repo picker instead of disabling it. On phones the
+            create-from picker stays hidden until the footer's options toggle
+            opens it. */}
         <div className={cn(HEADER, edges.top && EDGE_DIVIDER)}>
+          <div className="flex min-w-0 items-center gap-0.5">
           <PaletteSelect
-            className={TRIGGER_STRONG}
+            className={cn(TRIGGER_STRONG, "max-w-none")}
+            title="What this session may do"
+            value={mode}
+            options={MODE_OPTIONS}
+            onChange={(next) => changeMode(next as typeof mode)}
+            disabled={creating || !!forceMode}
+            ariaLabel="Mode"
+            isPhone={isPhone}
+          >
+            {React.createElement(MODE_META[mode].icon, {
+              className: "shrink-0",
+              size: 18,
+            })}
+            <span className="truncate">{MODE_META[mode].label}</span>
+            {!forceMode && <IconChevronDown className={CHEVRON} size={22} />}
+          </PaletteSelect>
+
+          {mode !== "scratch" && (
+          <PaletteSelect
+            className={cn(TRIGGER, "max-w-none")}
             title="Repository"
-            value={mode === "scratch" ? SCRATCH_REPO_VALUE : repo}
+            value={repo}
             options={[
               ...repos.map((p) => ({
                 value: p.id,
                 label: p.label,
                 icon: <RepoTile name={p.id} />,
               })),
-              {
-                value: SCRATCH_REPO_VALUE,
-                label: "Scratch · no repo",
-                icon: <IconFile size={20} />,
-              },
+              // Only Ask can run without a repo. Code needs somewhere to put
+              // its branch, and offering "No repo" there would advertise a
+              // create the server refuses.
+              ...(mode === "ask"
+                ? [
+                    {
+                      value: NO_REPO,
+                      label: "No repo",
+                      icon: <IconMessage size={20} />,
+                    },
+                  ]
+                : []),
               ...(auth?.local && createTarget === "local"
                 ? [
                     {
@@ -897,34 +986,31 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 : []),
             ]}
             onChange={(nextRepo) => {
-              if (nextRepo === SCRATCH_REPO_VALUE) {
-                setMode("scratch");
-                return;
-              }
               if (nextRepo === ADD_REPO_VALUE) {
                 setAddRepoOpen(true);
                 return;
               }
-              if (mode === "scratch") setMode("code");
               setRepo(nextRepo);
-              rememberSelectedRepo(nextRepo);
+              if (nextRepo !== NO_REPO) rememberSelectedRepo(nextRepo);
             }}
             disabled={creating}
             ariaLabel="Repository"
             isPhone={isPhone}
           >
-            {mode === "scratch" ? (
-              <IconFile className="shrink-0" size={20} />
+            {repo === NO_REPO ? (
+              <IconMessage className="shrink-0" size={18} />
             ) : (
               <RepoTile name={repo} />
             )}
             <span className="truncate">
-              {mode === "scratch"
-                ? "Scratch · no repo"
+              {repo === NO_REPO
+                ? "No repo"
                 : repos.find((p) => p.id === repo)?.label || repo || "No repositories"}
             </span>
             <IconChevronDown className={CHEVRON} size={22} />
           </PaletteSelect>
+          )}
+          </div>
 
           {mode === "code" && (
           <PaletteSelect
@@ -1056,31 +1142,11 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 e.target.value = "";
               }}
             />
-            {/* Ask sits with the tools rather than in the header's base picker:
-                it is a mode the session runs in, like the composer's note mode,
-                not something to branch from. Scratch has no repo to read, so
-                the toggle steps out there entirely. */}
-            {mode !== "scratch" && !forceMode && (
-              <Tooltip
-                label={
-                  mode === "ask"
-                    ? "Ask mode on · reads the repo, changes nothing. Click to write code instead"
-                    : "Ask mode · read-only on main, no branch"
-                }
-              >
-                <button
-                  type="button"
-                  className={mode === "ask" ? ASK_BTN_ON : FOOTER_ICON_BTN}
-                  onClick={() => setMode(mode === "ask" ? "code" : "ask")}
-                  disabled={creating}
-                  aria-pressed={mode === "ask"}
-                  aria-label="Ask mode"
-                >
-                  <IconEye size={mode === "ask" ? 14 : 20} />
-                  {mode === "ask" && "Ask"}
-                </button>
-              </Tooltip>
-            )}
+            {/* The mode used to live here as an Ask toggle, with Scratch
+                disguised as a repo. Both are now the header's first picker:
+                the mode governs the whole session, so it reads as the
+                palette's title rather than as one tool among the paperclip
+                and the overflow menu. */}
             {/* Rarely changed execution settings stay one level behind a single
                 overflow button. Their current values remain visible in the
                 submenu rows, while attachment stays one tap away. */}

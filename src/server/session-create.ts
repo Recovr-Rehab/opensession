@@ -59,7 +59,7 @@ import { type NativeSessionFile, type SessionUsage, type UnifiedSession } from "
 import { parseImageDataUrls, stageFileAttachments, withUploadsNote } from "./uploads";
 import { resolvePlainWorkspace } from "./workspace-resolve";
 import { type Workspace, createWorkspace, getWorkspace, updateWorkspace } from "./workspaces";
-import { createWorktree, createWorktreeForExistingBranch, ensureAskCheckout, ensureScratchDir, getRepo, listWorktrees, repoForPath, resolveUniqueBranch, sharedCheckoutForNewSessions, worktreeHeadBranch, worktreePathFor } from "./worktree";
+import { createWorktree, createWorktreeForExistingBranch, ensureAskCheckout, ensureScratchDir, getRepo, listWorktrees, NO_REPO, repoForPath, repoForPathOrNull, resolveUniqueBranch, sharedCheckoutForNewSessions, worktreeHeadBranch, worktreePathFor } from "./worktree";
 import { type WSClientData, broadcastToSession, preparingWorkspaces } from "./ws-hub";
 
 /**
@@ -332,8 +332,9 @@ export async function openCreatedSession(
 				claudeSessionId: "",
 				branch: spec.persistBranch,
 				worktreeDir: spec.wtPath,
-				// Scratch sessions are repo-less (no repoId resolved for them).
-				...(spec.repoId ? { repo: spec.repoId } : {}),
+				// Repo-less sessions resolve no repoId, and record the absence as
+				// a decision so clients don't have to guess (types.ts, repoLess).
+				...(spec.repoId ? { repo: spec.repoId } : { repoLess: true }),
 				...(spec.workspaceId ? { workspaceId: spec.workspaceId } : {}),
 				...(spec.parentSessionId
 					? { parentSessionId: spec.parentSessionId }
@@ -843,6 +844,14 @@ export async function handleCreateSessionMessage(
 	const isAsk = forkSource
 		? !isScratch && forkSource.mode !== "code"
 		: mode === "ask";
+	// Repo-less: no repo to read, no branch, no PR flow. Scratch always is.
+	// Ask is when the palette's repo picker is set to "No repo" — a session
+	// that is a conversation with the model and its MCP tools. A fork stays
+	// whatever its source was; an OMITTED repo still means "inherit, else the
+	// default", which is what agent-created subagents depend on.
+	const isRepoLess = forkSource
+		? isScratch || (forkSource.mode === "ask" && !forkSource.repo)
+		: isScratch || (isAsk && msg.repo === NO_REPO);
 	// Optional model pick from the UI; invalid input falls back to default.
 	// A fork inherits the source's model. No pick = stamp the interactive
 	// default NOW: leaving it empty would let the init event persist the
@@ -867,9 +876,11 @@ export async function handleCreateSessionMessage(
 	const createMcpServers = Array.isArray(msg.mcpServers)
 		? msg.mcpServers.map(String)
 		: undefined;
-	// Which repo this session works in (tella-fusion by default).
+	// Which repo this session works in (tella-fusion by default). A repo-less
+	// session still resolves one here — sandbox selection and memory scopes
+	// are repo-keyed — but never records it (see `repoId` on the spec below).
 	const repo = getRepo(
-		typeof msg.repo === "string" ? msg.repo : undefined,
+		typeof msg.repo === "string" && msg.repo !== NO_REPO ? msg.repo : undefined,
 	);
 	// Sandbox opt-in (the sandbox rollout plan): boolean true = the
 	// config's default provider (legacy toggle behavior); a string
@@ -976,7 +987,7 @@ export async function handleCreateSessionMessage(
 						msg.createWorkspace.name) ||
 					prompt.trim().split("\n")[0].slice(0, 80) ||
 					"Workspace",
-				...(isScratch ? {} : { repo: repo.id }),
+				...(isRepoLess ? {} : { repo: repo.id }),
 				createdBy: user || "Anonymous",
 			});
 		}
@@ -1039,10 +1050,12 @@ export async function handleCreateSessionMessage(
 				wtPath = worktreePathFor(branch, repo.id, { isolated: true });
 				needsWorktree = true;
 			}
-		} else if (isScratch) {
-			// Scratch sessions run in a plain per-workspace scratch dir
-			// (shared by the workspace's sessions so downloads persist across
-			// them) — never a repo checkout (the feeds design).
+		} else if (isRepoLess) {
+			// Repo-less sessions run in a plain per-workspace scratch dir —
+			// never a repo checkout. Scratch writes there (shared by the
+			// workspace's sessions so downloads persist across them); a
+			// repo-less ask session only needs somewhere for bash to stand,
+			// and carries no tool that can write to it.
 			wtPath = ensureScratchDir(workspace?.id || randomUUIDv7());
 		} else if (isAsk) {
 			// Ask sessions read the repo's pinned ask checkout (default
@@ -1156,7 +1169,7 @@ export async function handleCreateSessionMessage(
 		) {
 			workspace = createWorkspace({
 				name: title || "Workspace",
-				...(isScratch ? {} : { repo: repo.id }),
+				...(isRepoLess ? {} : { repo: repo.id }),
 				createdBy: user || "Anonymous",
 				...(sessionBranch ? { branch: sessionBranch } : {}),
 				// Only an isolated worktree is owned — a shared main/ask
@@ -1259,9 +1272,13 @@ export async function handleCreateSessionMessage(
 			wtPath,
 			persistBranch: sessionBranch,
 			branch: sessionBranch,
-			// Scratch sessions are repo-less: wtPath is a plain scratch dir
-			// repoForPath would throw on.
-			repoId: isScratch ? undefined : selectedRunner ? repo.id : repoForPath(wtPath).id,
+			// Repo-less sessions record no repo: wtPath is a plain scratch dir
+			// no registered repo owns.
+			repoId: isRepoLess
+				? undefined
+				: selectedRunner
+					? repo.id
+					: repoForPathOrNull(wtPath)?.id,
 			memoryRepoIds: [repo.id],
 			stackedOn: stackBase
 				? { repo: repoForPath(wtPath).id, branch: stackBase }

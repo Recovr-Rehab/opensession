@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+	isAskWorkspace,
 	isScratchWorkspace,
 	spawnedSessionBelongsInSidebar,
 	workspaceRowOwnsSession,
@@ -17,6 +18,39 @@ describe("isScratchWorkspace", () => {
 			false,
 		);
 		expect(isScratchWorkspace([])).toBe(false);
+	});
+});
+
+describe("isAskWorkspace", () => {
+	test("recognizes a workspace of repo-less ask sessions", () => {
+		expect(
+			isAskWorkspace([
+				{ mode: "ask", repoLess: true },
+				{ mode: "ask", repoLess: true },
+			]),
+		).toBe(true);
+	});
+
+	test("a repo-scoped ask session stays in its repo's band", () => {
+		// The regression this guards: thousands of older ask sessions record no
+		// repo yet sit in a real checkout, so a `!repo` test would empty every
+		// project band into the Ask band. Only the stored decision counts.
+		expect(isAskWorkspace([{ mode: "ask" }])).toBe(false);
+		expect(isAskWorkspace([{ mode: "ask", repoLess: false }])).toBe(false);
+	});
+
+	test("scratch is repo-less but is not Ask", () => {
+		expect(isAskWorkspace([{ mode: "scratch", repoLess: true }])).toBe(false);
+	});
+
+	test("a mixed or empty workspace is not an Ask workspace", () => {
+		expect(
+			isAskWorkspace([
+				{ mode: "ask", repoLess: true },
+				{ mode: "code" },
+			]),
+		).toBe(false);
+		expect(isAskWorkspace([])).toBe(false);
 	});
 });
 

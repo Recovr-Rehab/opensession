@@ -87,7 +87,7 @@ import { ensureGeneratedTitle } from "./generated-titles";
 import { gitIdentityFor } from "./shared/user-mappings";
 import { writeFileAtomic, writeJsonAtomic } from "./shared/atomic-write";
 import { startWatching } from "./file-watcher";
-import { ensureAskCheckout, ensureScratchDir, getRepo, isSharedCheckoutDir, repoForPath, reviveWorktree, worktreeHeadBranch } from "./worktree";
+import { ensureAskCheckout, ensureScratchDir, getRepo, isSharedCheckoutDir, repoForPath, repoForPathOrNull, reviveWorktree, sessionRepoId, worktreeHeadBranch } from "./worktree";
 import { createGoalSelfMcpServer } from "../agents/slack/goal-tools";
 import { sendSlackMessage } from "../agents/slack/slack-api";
 import type { RunHostSpec } from "../runner-host/protocol";
@@ -985,14 +985,12 @@ export function foldSessionUsage(
  * refetch the instant the push lands.
  */
 export async function autoPushSessionBranches(session: UnifiedSession): Promise<void> {
-	// Scratch sessions are repo-less (worktreeDir is a plain scratch dir that
-	// repoForPath would throw on) and never have branches to push.
-	if (session.mode === "scratch") return;
+	// Repo-less sessions (scratch, repo-less ask) have no primary branch to
+	// push, and their worktreeDir is a plain dir repoForPath would throw on.
+	// Attached repos still push: those carry their own repo and branch.
+	const primaryRepoId = sessionRepoId(session);
 	const targets: Array<{ dir: string; branch: string; repoId: string }> = [];
-	const primaryRepoId =
-		session.repo ||
-		(session.worktreeDir ? repoForPath(session.worktreeDir).id : defaultRepo().id);
-	if (session.worktreeDir && session.branch)
+	if (session.worktreeDir && session.branch && primaryRepoId)
 		targets.push({
 			dir: session.worktreeDir,
 			branch: session.branch,
@@ -1721,10 +1719,14 @@ async function runSessionPromptInner(
 			: session.mode === "ask"
 				? await ensureAskCheckout(session.repo)
 				: defaultRepo().repo);
-	if (session.mode === "scratch") {
-		// Scratch dirs are plain directories (no repo to revive) — just make
-		// sure the dir exists after cleanups/moves.
-		if (!existsSync(cwd)) mkdirSync(cwd, { recursive: true });
+	if (!repoForPathOrNull(cwd)) {
+		// A dir no registered repo owns: a scratch dir, or a repo-less ask
+		// session's inert cwd. Nothing to revive — just make sure it exists
+		// after cleanups/moves. (Asking the path rather than the mode is what
+		// keeps a repo-less ask session out of the revive branch below, whose
+		// repoForPath would throw on it.)
+		if (!existsSync(cwd) && !hasRemoteWorkspace(session))
+			mkdirSync(cwd, { recursive: true });
 	} else if (
 		session.worktreeDir &&
 		!existsSync(session.worktreeDir) &&

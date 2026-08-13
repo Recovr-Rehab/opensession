@@ -68,6 +68,8 @@ import {
 } from "../lib/sidebar-classes";
 import { mobileFilterBtn } from "../lib/app-header-classes";
 import {
+	ASK_BAND,
+	isAskWorkspace,
 	isScratchWorkspace,
 	spawnedSessionBelongsInSidebar,
 	workspaceRowOwnsSession,
@@ -859,7 +861,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	const discoveredRepos = useMemo(() => {
 		const counts = new Map<string, number>();
 		for (const s of sessions) {
-			if (s.archived || s.mode === "scratch") continue;
+			// Repo-less sessions (scratch, repo-less Ask) would otherwise each
+			// add a vote for whatever repo sessionRepo falls back to.
+			if (s.archived || s.repoLess) continue;
 			const p = sessionRepo(s);
 			counts.set(p, (counts.get(p) || 0) + 1);
 		}
@@ -944,7 +948,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			const wsRepo = new Map(workspaces.map((p) => [p.id, p.repo]));
 			visible = visible.filter(
 				(s) =>
-					s.mode !== "scratch" &&
+					// Narrowing to a repo must not surface sessions that have none:
+					// sessionRepo's fallback would hand them the default repo.
+					!s.repoLess &&
 					(sessionRepo(s) === filter.repo ||
 						(!!s.workspaceId && wsRepo.get(s.workspaceId) === filter.repo)),
 			);
@@ -2937,6 +2943,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	);
 	}
 	const rowIsScratch = (row: WsRow) => isScratchWorkspace(row.sessions);
+	// Repo-less Ask workspaces get their own band above the projects. Checked
+	// BEFORE wsRowRepo's fallbacks, which would otherwise file them under the
+	// default project (lib/session-repo).
+	const rowIsAsk = (row: WsRow) => isAskWorkspace(row.sessions);
 
 	// The Snoozed group — the quiet zone, shared by the status lanes (slotted
 	// just above Backlog) and the inbox bands (appended last, after Earlier).
@@ -3255,9 +3265,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		};
 		// Feed workspaces are represented by their feed band's item rows —
 		// don't also mint a pseudo-repo band for them (rowIsFeedOnly above).
+		// Repo-less Ask rows bucket under ASK_BAND: wsRowRepo would otherwise
+		// file them under the default project, which is the one place they
+		// certainly don't belong.
+		const bandOf = (r: WsRow) => (rowIsAsk(r) ? ASK_BAND : wsRowRepo(r));
 		for (const r of focusWsRows)
 			if (!rowIsFeedOnly(r) && !rowIsScratch(r))
-				bucket(byRepo, wsRowRepo(r)).push(r);
+				bucket(byRepo, bandOf(r)).push(r);
 		// The grouped modes keep each repo's snoozed rows in that repo's own
 		// band, as a Snoozed group beside the other lanes/bands — a global
 		// Snoozed group would strand them away from their repo. Flat "Repo" mode
@@ -3266,7 +3280,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		if (mode !== "flat")
 			for (const r of snoozedWsRows)
 				if (!rowIsFeedOnly(r) && !rowIsScratch(r))
-					bucket(snoozedByRepo, wsRowRepo(r)).push(r);
+					bucket(snoozedByRepo, bandOf(r)).push(r);
 		// Session-less PR rows file into their repo's band alongside the
 		// workspace rows (the dissolved Pull-requests band). Review requests
 		// pointed at you are excluded — they ride the notification band under
@@ -3283,7 +3297,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		const approvedByRepo = new Map<string, WsRow[]>();
 		for (const r of approvedReviewRows)
 			if (!rowIsFeedOnly(r) && !rowIsScratch(r))
-				bucket(approvedByRepo, wsRowRepo(r)).push(r);
+				bucket(approvedByRepo, bandOf(r)).push(r);
 		const present = new Set([
 			...byRepo.keys(),
 			...snoozedByRepo.keys(),
@@ -3292,23 +3306,37 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		]);
 		const order = [
 			...repos.filter((r) => present.has(r)),
-			...Array.from(present).filter((r) => !repos.includes(r)),
+			...Array.from(present).filter((r) => !repos.includes(r) && r !== ASK_BAND),
 		];
+		// Ask is pinned above every project and takes no part in the reorder:
+		// it is a band, not a repo. Everything below reads `order` for layout
+		// and `fullOrder` for the saved pref, so keeping the sentinel out of
+		// the second is what keeps it out of the user's stored repo order.
 		const fullOrder = normalizeRepoOrder([
 			...normalizeRepoOrder(savedRepoOrder),
 			...repos.filter((repo) => !savedRepoOrder.includes(repo)),
 			...order.filter((repo) => !repos.includes(repo)),
 		]);
-		const canReorder = !isPhone && filter.repo === "all" && order.length > 1;
+		if (present.has(ASK_BAND)) order.unshift(ASK_BAND);
+		const canReorder =
+			!isPhone &&
+			filter.repo === "all" &&
+			order.filter((r) => r !== ASK_BAND).length > 1;
 		const moveDraggedRepo = (
 			targetRepo: string,
 			event: React.DragEvent<HTMLDivElement>,
 		) => {
 			const draggedRepo = repoDragging.current;
 			if (!draggedRepo) return;
+			// Ask is pinned: it is neither a drag source nor a drop target, and
+			// letting it into `visibleOrder` would write the sentinel into the
+			// saved repo order via replaceVisibleRepoOrder's append.
+			if (targetRepo === ASK_BAND) return;
 			event.preventDefault();
 			if (draggedRepo === targetRepo) return;
-			const visibleOrder = [...(repoVisualOrder.current ?? order)];
+			const visibleOrder = [
+				...(repoVisualOrder.current ?? order.filter((r) => r !== ASK_BAND)),
+			];
 			const from = visibleOrder.indexOf(draggedRepo);
 			if (from < 0) return;
 			visibleOrder.splice(from, 1);
@@ -3414,14 +3442,18 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								SIDEBAR_STUCK_BACKING,
 							)}
 							data-sticky-head
-							draggable={canReorder}
-							title={canReorder ? "Drag to reorder repositories" : undefined}
+							draggable={canReorder && repo !== ASK_BAND}
+							title={
+								canReorder && repo !== ASK_BAND
+									? "Drag to reorder repositories"
+									: undefined
+							}
 							onDragStart={(event) => {
 								repoDragging.current = repo;
 								setRepoDragKey(repo);
 								repoOrderAtDragStart.current = [...fullOrder];
 								repoOrderPending.current = null;
-								repoVisualOrder.current = [...order];
+								repoVisualOrder.current = order.filter((r) => r !== ASK_BAND);
 								event.dataTransfer.effectAllowed = "move";
 								event.dataTransfer.setData("text/plain", repo);
 							}}
@@ -3431,12 +3463,22 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							{/* The rail holds the tile on the same column (and text rail)
 							    as every other header's mark; the tile rides centred in it. */}
 							<span className={SIDEBAR_RAIL}>
-								<RepoTile name={repo} className={SIDEBAR_REPO_TILE} />
+								{/* Ask has no repo and so no tile. The eye is the same mark
+								    the palette's mode picker and the composer use for the
+								    mode, so the band reads as "these are Ask sessions"
+								    rather than as a project called Ask. */}
+								{repo === ASK_BAND ? (
+									<IconEye size={16} className="text-faint" />
+								) : (
+									<RepoTile name={repo} className={SIDEBAR_REPO_TILE} />
+								)}
 							</span>
 							{/* The differently sized name and count share a baseline, while the
 							    pair stays vertically centred against the tile. */}
 							<span className="flex min-w-0 flex-[0_1_auto] items-baseline gap-1.5 desktop:gap-[9px]">
-								<span className={cn(SIDEBAR_GROUP_NAME, "flex-[0_1_auto] font-semibold")}>{repoLabel(repo)}</span>
+								<span className={cn(SIDEBAR_GROUP_NAME, "flex-[0_1_auto] font-semibold")}>
+									{repo === ASK_BAND ? "Ask" : repoLabel(repo)}
+								</span>
 								<span className={cn(SIDEBAR_GROUP_COUNT, "shrink-0")}>
 									{rows.length +
 										snoozedRows.length +
@@ -3475,7 +3517,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								role="button"
 								tabIndex={0}
 								className="relative ml-auto inline-flex size-7 shrink-0 items-center justify-center rounded-md text-faint opacity-100 transition-[opacity,color] duration-150 hover:text-fg focus-visible:opacity-100 md:opacity-0 md:group-hover:opacity-100 before:absolute before:inset-0.5 before:z-0 before:rounded-sm before:[corner-shape:var(--cs)] before:transition-[background] before:content-[''] hover:before:bg-hover [&>*]:relative [&>*]:z-[1]"
-								title={`New session in ${repoLabel(repo)}`}
+								title={
+									repo === ASK_BAND
+										? "New Ask session, no repo"
+										: `New session in ${repoLabel(repo)}`
+								}
 								onClick={(e) => {
 									e.stopPropagation();
 									onNewSessionInRepo(repo);

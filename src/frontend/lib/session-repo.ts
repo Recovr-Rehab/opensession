@@ -23,6 +23,17 @@ import type { UnifiedSession } from "./types";
 /** Generic "no repo" bucket used by review-queue, Archived and SessionSearch. */
 export const FALLBACK_REPO = "repository";
 
+/**
+ * Reserved repo id a CREATE sends to mean "this session has no repo" (the
+ * server's `NO_REPO`, worktree.ts). Only Ask can use it.
+ *
+ * Deliberately not the empty string: the create has to tell "the user turned
+ * the repo off" from "the field was never set", because an unset repo still
+ * means inherit-or-default — which is what every agent-created subagent
+ * relies on.
+ */
+export const NO_REPO = "none";
+
 export function sessionRepoOr(
 	s: Pick<UnifiedSession, "repo">,
 	fallback: string,

@@ -358,6 +358,16 @@ export interface UnifiedSession {
 	mode?: "ask" | "code" | "scratch";
 	/** Primary repo this session works in (registered repo id). */
 	repo?: string;
+	/**
+	 * The session has no repo, on purpose: a scratch session, or an Ask
+	 * session created with the repo turned off.
+	 *
+	 * Always test this rather than `!repo`. A missing repo is ambiguous in the
+	 * stored data — thousands of older ask sessions record none yet sit in a
+	 * real checkout — so `!repo` reads far more sessions as repo-less than
+	 * actually are.
+	 */
+	repoLess?: boolean;
 	/** Workspace this session belongs to; null/undefined = standalone. NOT a
 	 *  project — a project is the level above (a repo band or a feed band).
 	 *  See CONCEPTS.md. */

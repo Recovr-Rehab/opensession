@@ -1826,6 +1826,13 @@ export function SessionViewer({
 
 	const isAsk = session.mode === "ask";
 	const hasWorkspace = sessionHasWorkspace(session);
+	// Everything that only makes sense against a repo: the diff, the Changes
+	// tab, the PR strip, the repo switch/attach bar. A repo-less session still
+	// has a workspace (terminal, agents, assets run in its scratch dir), so
+	// these ride their own flag rather than `hasWorkspace`. Without it the
+	// panel reports the git state of whatever encloses that dir, which is not
+	// this session's work and may not be anyone's.
+	const hasRepoWork = hasWorkspace && !session.repoLess;
 	// The Agents tab stays available on any session with a workspace (it shows
 	// an empty state that teaches the feature), so only fall back to Info when
 	// the tab itself is gone — a session that can't run workflows AND has no
@@ -1942,7 +1949,7 @@ export function SessionViewer({
 	// DiffPanel (passed in as `diff=` below so they poll once, not twice). Parked
 	// unless either workspace surface is open on a code session.
 	const diffState = useSessionDiff(session.id, {
-		enabled: hasWorkspace && panelOpen,
+		enabled: hasRepoWork && panelOpen,
 		isRunning: isBusy,
 	});
 	const changesFileCount = React.useMemo(
@@ -4802,19 +4809,30 @@ export function SessionViewer({
 					)}
 					{session.worktreeDir &&
 						hasWorkspace &&
-						// Scratch sessions are repo-less: a static feed-kind tile
-						// instead of the repo switch/attach menu.
-						(session.mode === "scratch" ? (
+						// Repo-less sessions get a static tile instead of the repo
+						// switch/attach menu: scratch names the feed it came from,
+						// an Ask session with the repo turned off says so.
+						(session.repoLess ? (
 							<span className="flex min-w-0 items-center gap-1.5">
 								<span
 									className="flex min-w-0 items-center gap-1.5 text-[13px] font-medium text-dim"
-									title="Scratch session · no repo"
+									title={
+										session.mode === "scratch"
+											? "Scratch session · no repo"
+											: "Ask session · no repo"
+									}
 								>
-									<RepoTile
-										name={session.externalRefs?.[0]?.kind || "scratch"}
-									/>
+									{session.mode === "scratch" ? (
+										<RepoTile
+											name={session.externalRefs?.[0]?.kind || "scratch"}
+										/>
+									) : (
+										<IconEye size={16} className="shrink-0 text-faint" />
+									)}
 									<span className="truncate">
-										{session.externalRefs?.[0]?.kind || "scratch"}
+										{session.mode === "scratch"
+											? session.externalRefs?.[0]?.kind || "scratch"
+											: "No repo"}
 									</span>
 								</span>
 								<IconChevronDown
@@ -5037,7 +5055,7 @@ export function SessionViewer({
 					    Push/Resolve) inline, grouped with the globe directly left of
 					    the side-panel toggle, so the header still tells you where the
 					    PR stands without opening the Workspace panel. */}
-					{!isPhone && hasWorkspace && !panelOpen && (
+					{!isPhone && hasRepoWork && !panelOpen && (
 						<PrStatusBar
 							sessionId={session.id}
 							repo={session.repo || undefined}
@@ -5055,7 +5073,7 @@ export function SessionViewer({
 					{/* …and the rest of what a one-line strip can't say: changes,
 					    branch, conflicts, sources. One floating card, so the panel can
 					    stay shut without going blind (see WorkspacePeek's module doc). */}
-					{!isPhone && hasWorkspace && !panelOpen && (
+					{!isPhone && hasRepoWork && !panelOpen && (
 						<WorkspacePeek
 							session={session}
 							anchor={headerActionsRef}
@@ -5157,7 +5175,7 @@ export function SessionViewer({
 										.join("  ·  ")}
 									</div>
 								</div>
-								{hasWorkspace && (
+								{hasRepoWork && (
 									<div className={INFO_STATUS}>
 										<PrStatusBar
 											sessionId={session.id}
@@ -5188,7 +5206,7 @@ export function SessionViewer({
 								)}
 								<div className={INFO_CONTENT}>
 									<div className={INFO_LIST}>
-										{hasWorkspace && (
+										{hasRepoWork && (
 											<RepoBar
 												sessionId={session.id}
 												primaryRepo={session.repo || "repository"}
@@ -5221,8 +5239,8 @@ export function SessionViewer({
 													startedBy: s.startedBy,
 												}),
 											)}
-											repo={hasWorkspace ? session.repo || "repository" : undefined}
-											prState={hasWorkspace ? session.prState : undefined}
+											repo={hasRepoWork ? session.repo || "repository" : undefined}
+											prState={hasRepoWork ? session.prState : undefined}
 											refreshTick={gitRefreshTick}
 											sandbox={session.sandbox}
 											reviewRequest={effectiveReview?.req ?? null}
@@ -6146,7 +6164,7 @@ export function SessionViewer({
 								</div>
 							</div>
 							)}
-						{hasWorkspace && (
+						{hasRepoWork && (
 							<PrStatusBar
 								sessionId={session.id}
 								repo={session.repo || undefined}
@@ -6178,6 +6196,10 @@ export function SessionViewer({
 							</button>
 							{hasWorkspace && (
 								<>
+									{/* Changes only: Terminal and Portals below still earn
+									    their place on a repo-less session, whose scratch dir
+									    is a real working directory. A diff of it is not. */}
+									{hasRepoWork && (
 									<button
 										className={panelTabClass(panelTab === "changes")}
 										onClick={() => selectPanelTab("changes")}
@@ -6189,6 +6211,7 @@ export function SessionViewer({
 											</span>
 										) : null}
 									</button>
+									)}
 									<button
 										className={panelTabClass(panelTab === "shell")}
 										onClick={() => selectPanelTab("shell")}
@@ -6269,9 +6292,9 @@ export function SessionViewer({
 											}),
 										)}
 										repo={
-											hasWorkspace ? session.repo || "repository" : undefined
+											hasRepoWork ? session.repo || "repository" : undefined
 										}
-										prState={hasWorkspace ? session.prState : undefined}
+										prState={hasRepoWork ? session.prState : undefined}
 										refreshTick={gitRefreshTick}
 										sandbox={session.sandbox}
 										reviewRequest={effectiveReview?.req ?? null}

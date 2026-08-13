@@ -41,7 +41,7 @@ import { type NativeSessionFile, type StackedOn } from "../types";
 import { type Workspace, createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, updateWorkspace } from "../workspaces";
 import { resolveExternalWorkspace, resolvePlainWorkspace, resolvePrWorkspace } from "../workspace-resolve";
 import { resolveModel } from "../models";
-import { REPOS, createWorktree, createWorktreeForExistingBranch, getRepo, isSharedCheckoutDir, listWorktrees, repoForPath, worktreeHasWork, worktreeHeadBranch } from "../worktree";
+import { REPOS, createWorktree, createWorktreeForExistingBranch, ensureScratchDir, getRepo, isSharedCheckoutDir, listWorktrees, repoForPath, sessionRepoId, worktreeHasWork, worktreeHeadBranch } from "../worktree";
 import { randomUUIDv7 } from "bun";
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from "fs";
 import { isNativeSessionId } from "../paths";
@@ -544,8 +544,15 @@ export async function handleWorkspaceRoutes(
 			repoId = undefined;
 		} else if (worktreeMode === "ask") {
 			branch = "";
-			worktreeDir = "";
 			mode = "ask";
+			// An ask sibling of a repo-less source stays repo-less. Left bare it
+			// would resolve its cwd at prompt time through
+			// ensureAskCheckout(undefined), i.e. the DEFAULT repo's ask
+			// checkout — a session reading a repo nobody asked about. Derived
+			// from the path, so a legacy session that records no repo but does
+			// sit in a real checkout still gets a repo-scoped ask sibling.
+			repoId = sessionRepoId(src);
+			worktreeDir = repoId ? "" : ensureScratchDir(src.workspaceId || bksId);
 		} else if (worktreeMode === "stack" && src.branch && src.repo) {
 			const repo = getRepo(src.repo);
 			if (!repo.sharedCheckout) {

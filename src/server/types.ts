@@ -108,6 +108,18 @@ export interface UnifiedSession {
   mode?: "ask" | "code" | "scratch";
   /** Primary repo this session works in (registered repo id). */
   repo?: string;
+  /**
+   * The session has no repo, on purpose: a scratch session, or an Ask session
+   * created with the repo turned off.
+   *
+   * A positive marker rather than `!repo`, because a missing repo is
+   * ambiguous in the stored data: 2543 of the ask sessions on this instance
+   * record no repo yet sit in a real checkout (the field postdates them), and
+   * treating those as repo-less would drag every one of them into the Ask
+   * band. Server code should still ask `sessionRepoId()`, which reads the
+   * path; this field is how CLIENTS get the same answer without one.
+   */
+  repoLess?: boolean;
   /** Workspace this session belongs to; null/undefined = standalone. NOT a
    *  project — a project is the level above (a repo band or a feed band).
    *  See CONCEPTS.md. */
@@ -461,6 +473,10 @@ export interface NativeSessionFile {
   title?: string;
   mode?: "ask" | "code" | "scratch";
   repo?: string; // which registered repo this session works in
+  /** Deliberately repo-less (scratch, or Ask with the repo turned off). See
+   *  the note on UnifiedSession.repoLess for why this is stored rather than
+   *  derived from a missing `repo`. */
+  repoLess?: boolean;
   workspaceId?: string | null; // Workspace this session belongs to
   /** The branch this session's worktree was cut from, when it was stacked on
    *  another session's branch rather than on the trunk. Drives the stacked-PR

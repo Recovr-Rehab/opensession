@@ -29,7 +29,7 @@ import { handleSlashCommand } from "./slash-commands";
 import { type UnifiedSession } from "./types";
 import { type Workspace, createWorkspace, getWorkspace, updateWorkspace } from "./workspaces";
 import { ownedWorktree } from "./session-workspace";
-import { createWorktree, ensureAskCheckout, ensureScratchDir, getRepo, listWorktrees, repoForPath, resolveUniqueBranch } from "./worktree";
+import { createWorktree, ensureAskCheckout, ensureScratchDir, getRepo, listWorktrees, repoForPath, repoForPathOrNull, resolveUniqueBranch } from "./worktree";
 import { broadcastToSession } from "./ws-hub";
 import { randomUUIDv7 } from "bun";
 import { existsSync, watch } from "fs";
@@ -578,9 +578,14 @@ registerSessionControl({
 			// branch still drives the branch note + HEAD-drift compare below).
 			persistBranch: isAsk || isScratch ? "" : sessionBranch,
 			branch: sessionBranch,
-			// Scratch sessions are repo-less (wtPath is a plain dir). A fork's
-			// worktree names its repo (the source may live elsewhere).
-			repoId: isScratch ? undefined : fork ? repoForPath(wtPath).id : repo.id,
+			// Repo-less sessions record none (wtPath is a plain dir no repo
+			// owns — scratch, or a repo-less ask session being forked). A
+			// fork's worktree names its repo: the source may live elsewhere.
+			repoId: isScratch
+				? undefined
+				: fork
+					? repoForPathOrNull(wtPath)?.id
+					: repo.id,
 			memoryRepoIds: [repo.id],
 			workspaceId: resolvedWorkspaceId || undefined,
 			announceWorkspaceId: resolvedWorkspaceId || undefined,

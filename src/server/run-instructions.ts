@@ -27,6 +27,9 @@ export function buildRunInstructions(input: {
   isAsk: boolean;
   /** Repo-less scratch session (feed-item workspaces — the feeds design). */
   isScratch?: boolean;
+  /** No repo behind this run's cwd: a scratch dir, or a repo-less ask
+   *  session. Decides which Ask-mode briefing the run gets. */
+  isRepoLess?: boolean;
   reposNote?: string;
   /** Reviewer to request on PRs this run opens (GitHub login, `org/team`
    *  slug, or comma-separated list) — see RunAgentOpts.prReviewer. */
@@ -253,7 +256,19 @@ export function buildRunInstructions(input: {
         "video: fetch its details/transcript via the API or MCP rather than guessing)."
     );
   }
-  if (input.isAsk) {
+  if (input.isAsk && input.isRepoLess) {
+    parts.push(
+      `You are ${personaName()} in Ask mode with no repository: there is no checkout to ` +
+        "read, and your working directory is an empty scratch dir, NOT a code repo. Do not " +
+        "go looking for one, and never assume a repo the user has not named. This is " +
+        "READ-ONLY: never write files, commit, or run state-changing shell commands (the " +
+        "permission config enforces this). Answer from what the user tells you and from " +
+        "your MCP tools, which are the point of this mode — use them according to their " +
+        "descriptions. Session assets are the one place you can leave something behind: " +
+        "write a report, diagram, or visualization there when it beats prose. If the task " +
+        "turns out to need a repo, say so and suggest opening a session on it."
+    );
+  } else if (input.isAsk) {
     parts.push(
       `You are ${personaName()} in Ask mode: answer questions about the current checkout. ` +
         "This is READ-ONLY with respect to the checkout and shell: never modify, create, or " +
