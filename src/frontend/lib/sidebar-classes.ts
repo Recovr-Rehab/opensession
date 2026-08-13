@@ -21,7 +21,8 @@
  *   28px  a CAPTION, leading with no mark at all. Band headings (Tools /
  *         Workspaces / Automations / People), the status lanes (Needs action /
  *         Recent / Yesterday / Urgent), and the top-level groupings that read
- *         as lanes over the whole list: Needs review, Awaiting review, Pinned.
+ *         as lanes over the whole list: Needs review, Approved, Awaiting
+ *         review, Pinned.
  *         See {@link SIDEBAR_LANE_HEADER} and {@link SIDEBAR_BAND_TOGGLE}.
  *
  * The HOVER FILL says whether clicking takes you somewhere. Only a line that
@@ -320,10 +321,11 @@ export const SIDEBAR_LANE_COUNT = "text-[12px] font-medium text-faint";
 export const SIDEBAR_GROUP_DOT = "size-[7px] shrink-0 rounded-full opacity-85";
 
 /* The 22px glyph a top-level heading used to lead with is gone: Needs review,
-   Awaiting review and Pinned are groupings rather than destinations, so they
-   are labels now (see the height scale above) and carry no mark, exactly like
-   the Yesterday / Earlier lanes they sit among. The marks that remain in the
-   rail — a repo tile, a lane dot — belong to things you can open. */
+   Approved, Awaiting review and Pinned are groupings rather than
+   destinations, so they are labels now (see the height scale above) and carry
+   no mark, exactly like the Yesterday / Earlier lanes they sit among. The
+   marks that remain in the rail — a repo tile, a lane dot — belong to things
+   you can open. */
 
 /**
  * Automation headings swap their run count for a cog that jumps to that

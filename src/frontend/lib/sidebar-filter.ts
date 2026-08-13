@@ -59,6 +59,7 @@ export const DEFAULT_EXPANDED = [
 	"recently",
 	"pinned",
 	"needsreview",
+	"approvedreview",
 	"awaitingreview",
 	"status:needsinput",
 	"status:merged",

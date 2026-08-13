@@ -1403,6 +1403,20 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				),
 		);
 	}, [reviewScopeRows, currentUser, needsReviewRows]);
+	// The end of that flow: you asked, a teammate approved, and the PR is still
+	// open — so the row is now yours to merge. It needs a band of its own because
+	// an approval otherwise takes the row OUT of the sidebar (it lands in
+	// completedReviewRows below, which the status lanes exclude too), so the one
+	// moment the work comes back to you is the moment it disappears.
+	const approvedReviewRows = useMemo(() => {
+		const me = currentUser.toLowerCase();
+		return reviewScopeRows.filter(
+			// wsPrApproved already means "approved and not merged".
+			(r) =>
+				wsPrApproved(r) &&
+				r.sessions.some((c) => c.reviewRequest?.by?.toLowerCase() === me),
+		);
+	}, [reviewScopeRows, currentUser]);
 	// Completed reviews are hidden from the sidebar, but their keys still need to
 	// be excluded from the normal status lanes. A fresh or reopened request clears
 	// the completion state and makes the row actionable again. Completion can come
@@ -1442,9 +1456,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			new Set([
 				...needsReviewRows.map((r) => r.key),
 				...awaitingReviewRows.map((r) => r.key),
+				...approvedReviewRows.map((r) => r.key),
 				...completedReviewRows.map((r) => r.key),
 			]),
-		[needsReviewRows, awaitingReviewRows, completedReviewRows],
+		[
+			needsReviewRows,
+			awaitingReviewRows,
+			approvedReviewRows,
+			completedReviewRows,
+		],
 	);
 	const pinnedWsRows = useMemo(() => {
 		const pinSet = new Set(pins);
@@ -1552,6 +1572,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			...snoozedWsRows,
 			...needsReviewRows,
 			...awaitingReviewRows,
+			...approvedReviewRows,
 		];
 		for (const r of rowsInView)
 			for (const c of r.sessions) for (const k of sessionPrKeys(c)) covered.add(k);
@@ -1583,6 +1604,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		snoozedWsRows,
 		needsReviewRows,
 		awaitingReviewRows,
+		approvedReviewRows,
 		filter.repo,
 		filter.person,
 		filter.prs,
@@ -1667,6 +1689,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			const seen = new Set<string>();
 			return [
 				...needsReviewRows,
+				...approvedReviewRows,
 				...awaitingReviewRows,
 				...pinnedWsRows,
 				...MINE_STATUS_META.flatMap((meta) =>
@@ -1677,6 +1700,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		},
 		[
 			needsReviewRows,
+			approvedReviewRows,
 			awaitingReviewRows,
 			pinnedWsRows,
 			focusWsRows,
@@ -1688,6 +1712,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	const workspaceListEmpty =
 		needsReviewRows.length === 0 &&
 		awaitingReviewRows.length === 0 &&
+		approvedReviewRows.length === 0 &&
 		pinnedWsRows.length === 0 &&
 		focusWsRows.length === 0 &&
 		snoozedWsRows.length === 0 &&
@@ -4496,6 +4521,48 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								{requestedPrItems
 									.filter((item) => open || prRowSelected(item))
 									.map(renderPrRow)}
+							</div>
+						);
+					})()}
+
+				{/* ── Approved: reviews you asked for that came back with a yes and
+				    are still open. The row moves here out of Awaiting review, so the
+				    approval lands somewhere you can act on instead of removing the
+				    row from the sidebar. ── */}
+				{approvedReviewRows.length > 0 &&
+					(() => {
+						const open = isOpen("approvedreview");
+						return (
+							<div className={SIDEBAR_GROUP}>
+								<button
+									className={cn(
+										SIDEBAR_GROUP_HEADER,
+										SIDEBAR_GROUP_HEADER_INSET,
+										SIDEBAR_LANE_HEADER,
+										SIDEBAR_STICKY_LANE,
+										SIDEBAR_STUCK_BACKING,
+									)}
+									data-sticky-head
+									onClick={() => toggleGroup("approvedreview")}
+								>
+									<span className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_LANE_NAME)}>
+										Approved
+									</span>
+									<span className={SIDEBAR_LANE_COUNT}>
+										{approvedReviewRows.length}
+									</span>
+									<IconChevronDown
+										className={cn(
+											SIDEBAR_GROUP_CHEVRON,
+											!open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
+										)}
+										size={12}
+										style={{ transform: open ? "none" : "rotate(-90deg)" }}
+									/>
+								</button>
+								{approvedReviewRows
+									.filter((r) => open || rowOwnsSelection(r))
+									.map(renderReviewWsRow)}
 							</div>
 						);
 					})()}
