@@ -316,6 +316,23 @@ export const TRANSCRIPT_PILL_LOADING = `${PILL_BASE} gap-2`;
 export const TRANSCRIPT_PILL_SPINNER =
 	"size-3 shrink-0 animate-spin rounded-full border border-current/25 border-t-current text-dim";
 
+/**
+ * Where the top pill ("Load all", and the loading state it swaps to) floats.
+ *
+ * It is a sibling of the scroll area rather than a row inside it, so it does
+ * not inherit the transcript's own top padding. On a phone that padding is the
+ * only thing holding content clear of the chrome: the bar there is a fixed
+ * `z-40` overlay across the top of the pane, with the docked tab strip under
+ * it on a multi-session workspace. 12px therefore put the pill behind both,
+ * rendered and covered and untappable at every scroll position. It clears the
+ * same chrome the transcript clears. No collapsed-chrome variant is needed:
+ * SessionViewer forces the bar back whenever the transcript is within 48px of
+ * the top, which is the only place this pill is reached from.
+ */
+export const TRANSCRIPT_PILL_TOP =
+	"pointer-events-none absolute top-3 left-1/2 z-[5] -translate-x-1/2 " +
+	"phone:top-[calc(var(--pane-header-h)+var(--strip-clearance,0px)+8px)]";
+
 /* ── Session info page (phone) ──────────────────────────────────────────────
  *
  * Tapping the top-bar title opens this as a deeper page, WhatsApp-style: a

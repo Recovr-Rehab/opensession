@@ -256,6 +256,7 @@ import {
 	TRANSCRIPT_PILL_BUTTON,
 	TRANSCRIPT_PILL_LOADING,
 	TRANSCRIPT_PILL_SPINNER,
+	TRANSCRIPT_PILL_TOP,
 	VIEWER_BRANCH,
 	VIEWER_BRANCH_EDITABLE,
 	VIEWER_BRANCH_RENAME,
@@ -5801,7 +5802,7 @@ export function SessionViewer({
 						</div>
 
 							{historyTruncated && (
-								<div className="pointer-events-none absolute top-3 left-1/2 z-[5] -translate-x-1/2">
+								<div className={TRANSCRIPT_PILL_TOP}>
 									{loadingHistory ? (
 										<div className={TRANSCRIPT_PILL_LOADING}>
 											<span
