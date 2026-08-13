@@ -296,7 +296,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
 					variant="primary"
 					size="lg"
 					icon={<IconPlus size={20} />}
-					className="pl-4 pr-[18px] text-control-label font-medium"
+					className="text-control-label font-medium"
 					onClick={() => setShowModal(true)}
 				>
 					New automation

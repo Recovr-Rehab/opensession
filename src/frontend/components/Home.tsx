@@ -561,14 +561,12 @@ export function Home({
             {/* The page's one CTA carries its verb as a glyph as well as a
                 word: at this size a label alone is a coloured rectangle you
                 read, and the plus is what makes it scan as the button that
-                makes something. `pl-4` rather than the header's `px-[18px]`
-                on the icon side, matching the primitive's rule that a leading
-                glyph pulls its own padding in. */}
+                makes something. */}
             <Button
               variant="primary"
               size="lg"
               icon={<IconPlus size={20} />}
-              className="pl-4 pr-[18px] text-control-label font-medium"
+              className="text-control-label font-medium"
               onClick={onNewSession}
             >
               Create workspace

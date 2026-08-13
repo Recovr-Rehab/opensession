@@ -144,7 +144,7 @@ export function Actions({ onOpenSession, selectedId, onSelect }: Props) {
           variant="primary"
           size="lg"
           icon={<IconPlus size={20} />}
-          className="mt-[18px] pl-4 pr-[18px] text-control-label font-medium"
+          className="mt-[18px] text-control-label font-medium"
           onClick={() => setShowForm(true)}
         >
           New action

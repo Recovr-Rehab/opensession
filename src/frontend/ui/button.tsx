@@ -14,9 +14,9 @@ import { cn } from "./cn";
  *  - icon ↔ label gap is 4px, with 20px iconic glyphs (their `w-5 h-5`
  *    convention; matches our icons.tsx size-20 "inline/meta" step);
  *  - when an icon LEADS a label, pull the icon-side padding in 2px
- *    (Tella: px-3 → pl-2.5) so the pair reads optically balanced against a
- *    text-only button — the glyph's built-in whitespace otherwise makes the
- *    icon side look padded out;
+ *    (Tella: px-3 → pl-2.5), and 4px on the large tier, so the pair reads
+ *    optically balanced against a text-only button — the glyph's built-in
+ *    whitespace otherwise makes the icon side look padded out;
  *  - dim the leading icon relative to the label (Tella: opacity-50 on
  *    neutral weights, a lighter tint on the primary) — the label stays the
  *    dominant read, the icon is support;
@@ -58,15 +58,16 @@ const sizes: Record<Size, string> = {
 	xs: "min-h-6 px-2.5 text-xs rounded-control",
 	sm: "min-h-[26px] px-2.5 text-xs rounded-control",
 	md: "min-h-8 px-3 text-sm rounded-control",
-	lg: "min-h-9 px-4 text-base rounded-control",
+	lg: "min-h-9 px-3.5 text-base rounded-control",
 };
 
-// Leading icon + label: shave 2px off the icon side (see doc block).
+// Leading icon + label: shave 2px off the icon side, or 4px at lg where the
+// 20px glyph's whitespace is most apparent (see doc block).
 const iconLeadPad: Record<Size, string> = {
 	xs: "pl-2",
 	sm: "pl-2",
 	md: "pl-2.5",
-	lg: "pl-3.5",
+	lg: "pl-2.5",
 };
 
 // Trailing caret + label: the same 2px shave, on the caret's side.
@@ -74,7 +75,7 @@ const caretTrailPad: Record<Size, string> = {
 	xs: "pr-2",
 	sm: "pr-2",
 	md: "pr-2.5",
-	lg: "pr-3.5",
+	lg: "pr-3",
 };
 
 // The caret keys off the label, not the 20px icon step: an iconic-pro glyph at
