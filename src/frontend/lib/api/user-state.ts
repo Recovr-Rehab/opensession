@@ -67,12 +67,14 @@ export async function saveDraftApi(
 	sessionId: string,
 	text: string,
 	updatedAt: string,
+	keepalive = false,
 ): Promise<{ draft: RemoteDraft | null; applied: boolean }> {
 	const body = await request<{ draft?: RemoteDraft | null; applied?: boolean }>(
 		"/drafts",
 		{
 			method: "PUT",
 			body: { user, sessionId, text, updatedAt },
+			keepalive,
 			label: "Failed to save draft",
 		},
 	);

@@ -197,6 +197,8 @@ const PUSH_DEBOUNCE_MS = 800;
 let hydratedFor: string | null = null;
 let hydrateVersion = 0;
 let hydrateRetry: ReturnType<typeof setTimeout> | undefined;
+let textMutation = 0;
+let unloading = false;
 
 function sessionIdOf(key: string): string | null {
   return key.startsWith(SESSION_PREFIX) ? key.slice(SESSION_PREFIX.length) : null;
@@ -211,7 +213,7 @@ function pushNow(key: string): void {
   const at = editedAt.get(key) || new Date().toISOString();
   const user = getCurrentUser();
   attemptedText.set(key, text);
-  saveDraftApi(user, id, text, at)
+  saveDraftApi(user, id, text, at, unloading)
     .then((result) => {
       // Refused as older than the stored copy: leave this key dirty rather
       // than adopting the server's text under someone's cursor. The next
@@ -219,8 +221,10 @@ function pushNow(key: string): void {
       if (getCurrentUser() !== user) return;
       if (attemptedText.get(key) === text) attemptedText.delete(key);
       if (result.applied && loadDraft(key).text === text) {
-        syncedText.set(key, text);
+        syncedText.set(key, result.draft?.text ?? "");
         schedulePersist(key);
+      } else if (!result.applied && loadDraft(key).text === text) {
+        applyRemote(key, result.draft?.text ?? "");
       }
     })
     .catch(() => {
@@ -234,6 +238,7 @@ function pushNow(key: string): void {
 function markEdited(key: string, opts?: { immediate?: boolean }): void {
   if (!sessionIdOf(key)) return;
   editedAt.set(key, new Date().toISOString());
+  textMutation++;
   if (opts?.immediate) {
     pushNow(key);
     return;
@@ -251,6 +256,7 @@ function applyRemote(key: string, text: string): void {
 
 async function hydrate(user: string): Promise<void> {
   const version = ++hydrateVersion;
+  const mutation = textMutation;
   let server: Record<string, { text: string; updatedAt: string }>;
   try {
     server = await fetchDrafts(user);
@@ -262,7 +268,11 @@ async function hydrate(user: string): Promise<void> {
     return;
   }
   // A newer hydrate (or a user switch) started while this one was in flight.
-  if (version !== hydrateVersion || getCurrentUser() !== user) return;
+  if (
+    version !== hydrateVersion ||
+    mutation !== textMutation ||
+    getCurrentUser() !== user
+  ) return;
   clearTimeout(hydrateRetry);
   hydrateRetry = undefined;
   hydratedFor = user;
@@ -361,6 +371,7 @@ if (
   }, 30_000);
   // Don't let the debounce eat the last keystrokes when the tab goes away.
   window.addEventListener("pagehide", () => {
+    unloading = true;
     for (const key of [...pushTimers.keys()]) pushNow(key);
   });
 }

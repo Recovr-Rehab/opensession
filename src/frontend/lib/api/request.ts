@@ -29,6 +29,7 @@ export async function request<T>(
 		/** JSON-encoded and sent with a Content-Type header when present. */
 		body?: unknown;
 		signal?: AbortSignal;
+		keepalive?: boolean;
 		/** Error-message prefix when the server didn't provide an `error` field. */
 		label?: string;
 	} = {},
@@ -36,6 +37,7 @@ export async function request<T>(
 	const res = await fetch(`${BASE}${path}`, {
 		method: opts.method || "GET",
 		signal: opts.signal,
+		keepalive: opts.keepalive,
 		...(opts.body !== undefined
 			? {
 					headers: { "Content-Type": "application/json" },

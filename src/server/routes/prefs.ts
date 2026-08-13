@@ -10,7 +10,7 @@ import { requestUser, type RouteContext } from "./context";
 import { frontend } from "../frontend-build";
 import { getPins as getUserPins, setPins as setUserPins } from "../pins";
 import { getReads as getUserReads, setReads as setUserReads } from "../reads";
-import { getDrafts, upsertDraft } from "../drafts";
+import { getDrafts, MAX_DRAFT_LENGTH, upsertDraft } from "../drafts";
 import { addSessionMemory, describeScope, forgetSessionMemory, listAllMemory, updateMemoryEntry } from "../session-memory";
 import { getLanes as getUserLanes, setLanes as setUserLanes } from "../lanes";
 import { getSnoozes as getUserSnoozes, setSnoozes as setUserSnoozes } from "../snoozes";
@@ -289,11 +289,24 @@ export async function handlePrefsRoutes(
 				{ status: 400 },
 			);
 		}
+		if (body.text.length > MAX_DRAFT_LENGTH) {
+			return Response.json({ error: "Draft is too long" }, { status: 413 });
+		}
 		const user = requestUser(ctx, body.user) || "Anonymous";
-		const updatedAt =
+		const candidateAt =
 			typeof body.updatedAt === "string" && body.updatedAt
 				? body.updatedAt
 				: new Date().toISOString();
+		const parsedAt = Date.parse(candidateAt);
+		if (!Number.isFinite(parsedAt)) {
+			return Response.json(
+				{ error: "updatedAt must be an ISO timestamp" },
+				{ status: 400 },
+			);
+		}
+		const updatedAt = new Date(
+			Math.min(parsedAt, Date.now() + 5 * 60_000),
+		).toISOString();
 		const result = upsertDraft(user, body.sessionId, body.text, updatedAt);
 		return Response.json(result);
 	}

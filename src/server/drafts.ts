@@ -36,8 +36,9 @@ function draftsDir(): string {
 	return stateDir("drafts");
 }
 
-/** Bound the file: oldest drafts are evicted first. */
-const CAP = 200;
+/** Bound live writing and deletion tombstones independently. */
+const LIVE_CAP = 200;
+const TOMBSTONE_CAP = 2_000;
 /** A composer, not a document store. Longer drafts stay device-local. */
 export const MAX_DRAFT_LENGTH = 32_000;
 
@@ -100,13 +101,15 @@ function visibleDrafts(drafts: DraftMap): DraftMap {
 
 /** Drop the oldest entries once over cap. Mutates and returns `map`. */
 function enforceCap(map: DraftMap): DraftMap {
-	const ids = Object.keys(map);
-	if (ids.length <= CAP) return map;
-	const doomed = ids
+	const trim = (ids: string[], cap: number) => ids
 		.map((id) => ({ id, at: Date.parse(map[id]!.updatedAt) || 0 }))
 		.sort((a, b) => a.at - b.at)
-		.slice(0, ids.length - CAP);
-	for (const { id } of doomed) delete map[id];
+		.slice(0, Math.max(0, ids.length - cap));
+	const live = Object.keys(map).filter((id) => map[id]!.text.trim());
+	const tombstones = Object.keys(map).filter((id) => !map[id]!.text.trim());
+	for (const { id } of [...trim(live, LIVE_CAP), ...trim(tombstones, TOMBSTONE_CAP)]) {
+		delete map[id];
+	}
 	return map;
 }
 
@@ -162,25 +165,24 @@ export function upsertDraft(
 	if (!Object.keys(drafts).length) drafts = read(legacyFileFor(user));
 	const current = drafts[sessionId] ?? null;
 
+	const incoming = Date.parse(updatedAt);
+	const stored = current ? Date.parse(current.updatedAt) : 0;
 	if (!text.trim()) {
+		if (
+			current?.text &&
+			Number.isFinite(incoming) &&
+			Number.isFinite(stored) &&
+			incoming < stored
+		) {
+			return { draft: current, applied: false };
+		}
 		// Keep an empty-text tombstone so an earlier non-empty request that
 		// arrives after this delete cannot resurrect the sent draft.
-		const currentStamp = current ? Date.parse(current.updatedAt) : Number.NaN;
-		const deleteStamp = Date.parse(updatedAt);
-		drafts[sessionId] = {
-			text: "",
-			updatedAt:
-				Number.isFinite(currentStamp) &&
-				(!Number.isFinite(deleteStamp) || currentStamp > deleteStamp)
-					? current!.updatedAt
-					: updatedAt,
-		};
+		drafts[sessionId] = { text: "", updatedAt };
 		write(user, enforceCap(drafts));
 		return { draft: null, applied: true };
 	}
 
-	const incoming = Date.parse(updatedAt);
-	const stored = current ? Date.parse(current.updatedAt) : 0;
 	// Only refuse when both stamps parsed and the incoming one is strictly
 	// older. An unparseable stamp shouldn't freeze a session's draft forever.
 	if (
@@ -192,7 +194,7 @@ export function upsertDraft(
 		return { draft: current.text ? current : null, applied: false };
 	}
 
-	const next: StoredDraft = { text: text.slice(0, MAX_DRAFT_LENGTH), updatedAt };
+	const next: StoredDraft = { text, updatedAt };
 	drafts[sessionId] = next;
 	write(user, enforceCap(drafts));
 	return { draft: next, applied: true };

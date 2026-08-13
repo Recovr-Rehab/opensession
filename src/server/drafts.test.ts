@@ -79,11 +79,12 @@ describe("composer drafts store", () => {
 		expect(getDrafts("Kent")["os-1"]?.text).toBe("newer");
 	});
 
-	// Sending is the common case and must never be undone by clock skew.
-	test("a delete applies even when it looks older", () => {
+	test("an older delete cannot erase newer writing", () => {
 		upsertDraft("Kent", "os-1", "typed", LATE);
-		expect(upsertDraft("Kent", "os-1", "", EARLY).applied).toBe(true);
-		expect(getDrafts("Kent")).toEqual({});
+		const result = upsertDraft("Kent", "os-1", "", EARLY);
+		expect(result.applied).toBe(false);
+		expect(result.draft?.text).toBe("typed");
+		expect(getDrafts("Kent")["os-1"]?.text).toBe("typed");
 	});
 
 	test("a late text write cannot resurrect a sent draft", () => {
@@ -92,11 +93,6 @@ describe("composer drafts store", () => {
 		const lateArrival = upsertDraft("Kent", "os-1", "typed", EARLY);
 		expect(lateArrival).toEqual({ draft: null, applied: false });
 		expect(getDrafts("Kent")).toEqual({});
-	});
-
-	test("long drafts are clamped rather than refused", () => {
-		upsertDraft("Kent", "os-1", "x".repeat(40_000), EARLY);
-		expect(getDrafts("Kent")["os-1"]?.text.length).toBe(32_000);
 	});
 
 	test("the map is capped, dropping the oldest drafts first", () => {
