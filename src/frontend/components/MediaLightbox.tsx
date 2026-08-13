@@ -1056,6 +1056,11 @@ function MediaLightbox({
 				{(item.walkthroughLabel || caption || description) && (
 					<div className="flex max-w-full flex-col items-center gap-0.5 text-center">
 						<div className="flex max-w-full items-center justify-center gap-2">
+							{caption && (
+								<div className="min-w-0 max-w-full truncate text-sm font-medium text-white">
+									{caption}
+								</div>
+							)}
 							{item.walkthroughLabel && (
 								<span
 									className={cn(
@@ -1065,11 +1070,6 @@ function MediaLightbox({
 								>
 									{WALKTHROUGH_LABEL_TEXT[item.walkthroughLabel]}
 								</span>
-							)}
-							{caption && (
-								<div className="min-w-0 max-w-full truncate text-sm font-medium text-white">
-									{caption}
-								</div>
 							)}
 						</div>
 						{description && (

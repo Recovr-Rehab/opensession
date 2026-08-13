@@ -539,7 +539,7 @@ struct FullScreenImagePreview: View {
         .statusBarHidden()
     }
 
-    /// What you are looking at, at the bottom of the picture: the label first,
+    /// What you are looking at, at the bottom of the picture: the caption first,
     /// the position in the group under it. Over a scrim, because a screenshot
     /// is as likely to be white there as black. It fades out with the
     /// dismissal drag so the photo leaves alone.
@@ -548,6 +548,13 @@ struct FullScreenImagePreview: View {
             VStack(spacing: 3) {
                 if walkthroughLabel != nil || label != nil {
                     HStack(spacing: 8) {
+                        if let label {
+                            Text(label)
+                                .font(.subheadline.weight(.medium))
+                                .foregroundStyle(.white)
+                                .multilineTextAlignment(.center)
+                                .lineLimit(2)
+                        }
                         if let walkthroughLabel {
                             Text(walkthroughLabel.rawValue)
                                 .font(.caption.weight(.semibold))
@@ -556,13 +563,6 @@ struct FullScreenImagePreview: View {
                                 .padding(.vertical, 3)
                                 .background(walkthroughLabel.color.opacity(0.18), in: Capsule())
                                 .overlay { Capsule().stroke(.white.opacity(0.18), lineWidth: 0.5) }
-                        }
-                        if let label {
-                            Text(label)
-                                .font(.subheadline.weight(.medium))
-                                .foregroundStyle(.white)
-                                .multilineTextAlignment(.center)
-                                .lineLimit(2)
                         }
                     }
                 }
