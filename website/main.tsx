@@ -53,7 +53,8 @@ function WaitlistForm() {
 	if (state === "done") {
 		return (
 			<p className="waitlist-done" role="status">
-				<IconCheck size={20} /> You are on the list.
+				<IconCheck size={20} /> You are added to the waitlist. We will get in
+				touch when the product is ready.
 			</p>
 		);
 	}
@@ -71,7 +72,7 @@ function WaitlistForm() {
 				onChange={(event) => setEmail(event.target.value)}
 			/>
 			<button type="submit" disabled={state === "sending"}>
-				{state === "sending" ? "Joining…" : "Join"}
+				{state === "sending" ? "Sending…" : "Request"}
 			</button>
 			{state === "error" && (
 				<p className="waitlist-error" role="alert">
@@ -83,8 +84,8 @@ function WaitlistForm() {
 }
 
 /**
- * The waitlist as a modal, so every "Join the waitlist" button fills in the
- * email where it stands instead of scrolling somewhere. A native <dialog>
+ * The waitlist as a modal, so the CTA fills in the email where it stands
+ * instead of scrolling somewhere. A native <dialog>
  * carries the backdrop, focus trap and Escape for free.
  */
 function WaitlistDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
@@ -119,7 +120,7 @@ function WaitlistDialog({ open, onClose }: { open: boolean; onClose: () => void 
 			>
 				<span aria-hidden="true">×</span>
 			</button>
-			<h2>Join the waitlist</h2>
+			<h2>Request a demo</h2>
 			<p className="waitlist-dialog-body">
 				We are opening Open Session to a few teams at a time.
 			</p>
@@ -150,8 +151,8 @@ function LandingPage() {
 				<div className="hero-copy">
 					<h1>Run your coding agents. Together.</h1>
 					<p className="hero-description">
-						Run Claude, Codex, and other coding agents side by side. Work in
-						parallel and bring your team into every session.
+						Run Claude Code, Codex and OpenCode from one place, with your team
+						in the session. Open source, on your own machines.
 					</p>
 					<div className="hero-actions">
 						<button
@@ -159,7 +160,7 @@ function LandingPage() {
 							className="button button-primary"
 							onClick={() => setWaitlistOpen(true)}
 						>
-							Join the waitlist
+							Request a demo
 						</button>
 					</div>
 				</div>

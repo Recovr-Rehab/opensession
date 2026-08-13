@@ -29,8 +29,8 @@ const sessions: UnifiedSession[] = [
 		mode: "code",
 		repo: "opensession",
 		workspaceId: "project-presence",
-		model: "openai/gpt-5.6-sol",
-		effort: "high",
+		model: "anthropic/claude-fable-5",
+		effort: "medium",
 		usage: {
 			costUsd: 0.6,
 			inputTokens: 18420,
@@ -94,7 +94,7 @@ const sessions: UnifiedSession[] = [
 		mode: "code",
 		repo: "opensession",
 		workspaceId: "project-shortcuts",
-		model: "openai/gpt-5.6-terra",
+		model: "anthropic/claude-fable-5",
 		prUrl: "https://github.com/tellahq/opensession/pull/1842",
 		prState: "OPEN",
 		prNumber: 1842,
@@ -135,7 +135,7 @@ const sessions: UnifiedSession[] = [
 		mode: "ask",
 		repo: "opensession",
 		workspaceId: "project-release",
-		model: "openai/gpt-5.6-sol",
+		model: "anthropic/claude-fable-5",
 	},
 	...([
 		["import-csv", "Import contacts from a CSV", 63, 214, "anthropic/claude-opus-5"],
@@ -206,7 +206,7 @@ const transcripts: Record<string, TranscriptEntry[]> = {
 			content:
 				"I found the existing presence channel and workspace header. I’m wiring those together while a focused worker adds coverage.",
 			timestamp: minutesAgo(37),
-			model: "openai/gpt-5.6-sol",
+			model: "anthropic/claude-fable-5",
 			seq: 2,
 			changeSeq: 2,
 		},
@@ -264,7 +264,7 @@ const transcripts: Record<string, TranscriptEntry[]> = {
 			content:
 				"A workspace is just the sessions inside it, so presence can fold up rather than get its own channel. I'll roll each session's viewers into the workspace row and de-duplicate whoever is in two at once.",
 			timestamp: minutesAgo(33),
-			model: "openai/gpt-5.6-sol",
+			model: "anthropic/claude-fable-5",
 			seq: 7,
 			changeSeq: 7,
 		},
@@ -307,7 +307,7 @@ const transcripts: Record<string, TranscriptEntry[]> = {
 			content:
 				"Done. The face on top carries a 2px ring in the row's own colour, so the pile reads as a stack on every row state instead of a row of separate avatars.",
 			timestamp: minutesAgo(26),
-			model: "openai/gpt-5.6-sol",
+			model: "anthropic/claude-fable-5",
 			seq: 11,
 			changeSeq: 11,
 		},
@@ -338,7 +338,7 @@ const transcripts: Record<string, TranscriptEntry[]> = {
 			content:
 				"Presence now appears in every shared workspace, and the pull request is up.\n\n- **Sidebar** rolls each session's viewers into the workspace row, deduplicated\n- **Faces overlap** with a ring in the row's colour, so a stack stays legible on hover and selection\n- **Tests** cover the roll-up and the self-suppression rule\n\nPull request #1842 is ready for review.",
 			timestamp: minutesAgo(4),
-			model: "openai/gpt-5.6-sol",
+			model: "anthropic/claude-fable-5",
 			seq: 14,
 			changeSeq: 14,
 		},
@@ -415,12 +415,12 @@ const responseFor = (url: URL, method: string): Response => {
 		});
 	if (path === "/api/models")
 		return json({
-			default: "openai/gpt-5.6-sol",
+			default: "anthropic/claude-fable-5",
 			models: [
 				{
-					id: "openai/gpt-5.6-sol",
+					id: "anthropic/claude-fable-5",
 					provider: "opencode",
-					label: "GPT-5.6 Sol",
+					label: "Claude Fable 5",
 					aliases: [],
 					efforts: ["medium", "high"],
 				},
@@ -468,7 +468,7 @@ const responseFor = (url: URL, method: string): Response => {
 							label: "Review the implementation",
 							status: "running",
 							startedAt: Date.parse(minutesAgo(35)),
-							model: "openai/gpt-5.6-terra",
+							model: "anthropic/claude-fable-5",
 							source: "opencode",
 						},
 					]
@@ -552,7 +552,7 @@ class DemoWebSocket extends EventTarget {
 				content:
 					"This is a deterministic product preview, so the real coding agent is not contacted. In Open Session, this prompt would start a live run here.",
 				timestamp,
-				model: "openai/gpt-5.6-sol",
+				model: "anthropic/claude-fable-5",
 			};
 			this.emit({ type: "transcript_append", sessionId: message.sessionId, entries: [userEntry] });
 			this.emit({ type: "session_status", sessionId: message.sessionId, isRunning: true }, 60);
@@ -598,7 +598,10 @@ Object.assign(window, {
 	__OPENSESSION_INSTANCE__: {
 		productName: "Open Session",
 		productMark: "OS",
-		personaName: "Ada",
+		// The composer's placeholder reads "Ask <persona>", so the demo's agent is
+		// named for what a visitor should type rather than for a character nobody
+		// on the page has been introduced to.
+		personaName: "your agent",
 		defaultRepoId: "opensession",
 	},
 });

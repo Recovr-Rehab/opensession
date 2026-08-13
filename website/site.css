@@ -6,14 +6,31 @@
 	-moz-osx-font-smoothing: grayscale;
 	--ink: #14161a;
 	--page: #f8f8f6;
-	/* The product's blue (base.css --blue in light), with one step down for the
-	   gradient's foot. White type clears 4.5:1 on both stops (5.19 and 5.90). */
-	--blue: #0969da;
-	--blue-deep: #0b62c4;
+	/* The product's own accent, not a marketing blue: base.css's "sky" pair,
+	   which is what the app's filled controls and its send disc are painted in
+	   (#1f82bb in light). The foot is one step down so the fill has somewhere
+	   to shade to. */
+	--accent-blue: #1f82bb;
+	--accent-blue-deep: #186a90;
 }
 
 * {
 	box-sizing: border-box;
+}
+
+/* The product's corner. base.css grants `corner-shape: squircle` to everything
+   it rounds; the site's own surfaces get the same treatment so a button here
+   and a button in the app are cut the same way. Browsers without it fall back
+   to the plain radius. */
+@supports (corner-shape: squircle) {
+	.button,
+	.waitlist-dialog,
+	.waitlist-form,
+	.waitlist-form button,
+	.waitlist-dialog-close,
+	.preview-wrap {
+		corner-shape: squircle;
+	}
 }
 
 body {
@@ -118,7 +135,7 @@ button:focus-visible {
 .button-primary,
 .waitlist-form button {
 	border: 0;
-	background-image: linear-gradient(180deg, var(--blue) 0%, var(--blue-deep) 100%);
+	background-image: linear-gradient(180deg, var(--accent-blue) 0%, var(--accent-blue-deep) 100%);
 	box-shadow:
 		inset 0 1px 0 rgba(255, 255, 255, 0.16),
 		0 1px 2px rgba(16, 24, 40, 0.14);
@@ -342,8 +359,8 @@ button:focus-visible {
 }
 
 .waitlist-form:focus-within {
-	border-color: rgba(9, 105, 218, 0.55);
-	box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.14);
+	border-color: rgba(31, 130, 187, 0.55);
+	box-shadow: 0 0 0 3px rgba(31, 130, 187, 0.14);
 }
 
 .waitlist-form input {
