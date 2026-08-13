@@ -42,9 +42,11 @@ describe("WalkthroughCard", () => {
 		expect(html).toContain('aria-expanded="false"');
 		expect(html).not.toContain("by Kent");
 		expect(html).toContain("1 still");
-		// Folded is not hidden: the strip keeps the media and its labels.
+		// Folded is not hidden: the card keeps the writeup's first line and the
+		// media it explains, so the fold is what hides the rest, not the point.
 		expect(html).toContain(">After</span>");
-		expect(html).not.toContain("The clearer controls");
+		expect(html).toContain("The clearer controls");
+		expect(html).toContain("line-clamp-3");
 		expect(html).toContain("max-w-[var(--session-col)]");
 		expect(html).not.toContain("transition-[max-width]");
 		expect(html).not.toContain("max-w-[min(1120px,100%)]");

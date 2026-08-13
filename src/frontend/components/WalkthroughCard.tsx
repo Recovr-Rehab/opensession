@@ -8,6 +8,7 @@ import {
 	WALKTHROUGH_LABEL_TEXT,
 	WALKTHROUGH_LABEL_TONE,
 } from "../lib/walkthrough-label";
+import { walkthroughLede } from "../lib/walkthrough-lede";
 import { cn } from "../ui/cn";
 import { ease } from "../ui/motion";
 import { IconChevronDown, IconPlay, IconPlayRectangle } from "./icons";
@@ -118,6 +119,9 @@ export function WalkthroughCard({
 		]
 			.filter(Boolean)
 			.join(" · ") || (walkthrough.summary ? "Writeup" : "");
+	// What the folded card says above its pictures, so a reader learns what
+	// changed without opening it (see walkthroughLede).
+	const lede = walkthroughLede(walkthrough.summary);
 	const open = (key: string, target: HTMLElement) =>
 		openLightbox(gallery.items, gallery.at.get(key) ?? 0, target);
 
@@ -244,6 +248,18 @@ export function WalkthroughCard({
 					<IconPlayRectangle size={20} className="text-faint" />
 					<span className="text-xs font-semibold text-dim">Walkthrough</span>
 				</div>
+			)}
+
+			{!expanded && lede && (
+				// The writeup's first line, above the strip. Folded, the card used
+				// to be a row of thumbnails with nothing saying what they were of,
+				// so seeing what changed meant opening every walkthrough in the
+				// transcript. Three lines is what the paragraph usually is; the
+				// rest of the writeup stays behind the fold, which is what the
+				// fold is for.
+				<p className="m-0 mt-2 line-clamp-3 text-[13px] leading-5 text-dim [overflow-wrap:anywhere] [text-wrap:pretty]">
+					{lede}
+				</p>
 			)}
 
 			{!expanded && gallery.items.length > 0 && (

@@ -73,15 +73,29 @@ struct WalkthroughCard: View {
                 ForEach(walkthrough.stills) { shot in
                     WalkthroughShotView(shot: shot, gallery: gallery)
                 }
-            } else if hasFoldedMedia {
-                WalkthroughThumbnailStrip(
-                    video: walkthrough.video,
-                    stills: walkthrough.stills,
-                    gallery: gallery,
-                    contentWidth: max(120, cardWidth - Self.padding * 2),
-                    compact: isCompact,
-                    onPlayDemo: { playingDemo = true }
-                )
+            } else {
+                // The writeup's first line, above the strip. Folded, the card
+                // was a row of thumbnails with nothing saying what they were
+                // of, so seeing what changed meant opening every walkthrough in
+                // the transcript. Three lines is what the paragraph usually is;
+                // the rest stays behind the fold, which is what the fold is for.
+                if !lede.isEmpty {
+                    Text(lede)
+                        .font(.footnote)
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if hasFoldedMedia {
+                    WalkthroughThumbnailStrip(
+                        video: walkthrough.video,
+                        stills: walkthrough.stills,
+                        gallery: gallery,
+                        contentWidth: max(120, cardWidth - Self.padding * 2),
+                        compact: isCompact,
+                        onPlayDemo: { playingDemo = true }
+                    )
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -124,6 +138,10 @@ struct WalkthroughCard: View {
     private static func transcriptMargin(compact: Bool) -> CGFloat {
         compact ? 16 : 20
     }
+
+    /// What the folded card says above its pictures: the writeup's first
+    /// paragraph (see `SessionWalkthrough.lede`).
+    private var lede: String { walkthrough.lede }
 
     /// Folded, the card keeps a strip of what it holds: the demo and the
     /// stills, which is the part a reader usually wants.
