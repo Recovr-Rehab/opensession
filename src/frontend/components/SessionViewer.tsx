@@ -174,6 +174,8 @@ import {
 	IconTerminal,
 	IconCopy,
 	IconChevronRight,
+	IconFile,
+	IconListCircles,
 	IconGlobe,
 	IconRobot,
 	IconArrowUpRight,
@@ -4517,6 +4519,7 @@ export function SessionViewer({
 								}}
 								title="Copy a trimmed transcript of this session"
 							>
+								<IconListCircles size={20} />
 								<span className="grow">Concise</span>
 								<Menu.Shortcut>{isApple ? "⌘⌥C" : "Ctrl+Alt+C"}</Menu.Shortcut>
 							</Menu.Item>
@@ -4527,6 +4530,7 @@ export function SessionViewer({
 								}}
 								title="Copy the complete transcript of this session"
 							>
+								<IconFile size={20} />
 								<span className="grow">Full</span>
 							</Menu.Item>
 						</Menu.Popup>
