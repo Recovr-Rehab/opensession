@@ -54,12 +54,10 @@ struct TurnBlockView: View {
                     ForEach(turn.items) { item in
                         switch item {
                         case .message(let entry):
-                            // Narration between tool calls reads a step below
-                            // a final answer — context, not conclusion — but
-                            // it is still prose to read, so the step is small
-                            // (see `textNarration`) and the fold's indent
-                            // carries the rest of the distinction.
-                            MarkdownBody(entry.text, dimmed: true)
+                            // Narration is prose to read, just like the final
+                            // answer. The fold and its indent distinguish it;
+                            // only tool rows keep the dimmed treatment.
+                            MarkdownBody(entry.text)
                                 .padding(.trailing, 16)
                         case .tool(let call):
                             if state.expanded {
