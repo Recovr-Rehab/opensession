@@ -416,9 +416,7 @@ struct AppearanceSettingsView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var repos: [OS1API.RepoInfo] = SettingsCache.value("repos") ?? []
-    #if os(iOS)
     @State private var feeds: [SidebarFeeds.Feed] = SettingsCache.value("feeds") ?? []
-    #endif
 
     private static let themes: [(value: String, label: String)] = [
         ("system", "System"),
@@ -519,15 +517,17 @@ struct AppearanceSettingsView: View {
                 )
             }
 
-            #if os(iOS)
-            // The way back from a long press on the row. iOS only: the Mac
-            // sidebar reaches Plain from its header, so there is no row there
-            // to hide and nothing this switch would do.
+            // The way back from a long press on the row, and on the Mac the
+            // only way back at all.
             //
             // One switch per source the SERVER describes, not per source this
             // build draws: the hidden list is the account's and the browser
             // writes it too, so a feed hidden there needs a way back that does
-            // not depend on the phone having a row for it.
+            // not depend on this client having a row for it. That is the whole
+            // reason it is not gated to the platform whose sidebar draws these
+            // rows today — a Mac that hid a feed in a browser would otherwise
+            // have to go back to that browser to undo it, which is the
+            // one-way hiding this section exists to prevent.
             if !sources.isEmpty {
                 Section {
                     ForEach(sources) { source in
@@ -546,16 +546,12 @@ struct AppearanceSettingsView: View {
                     )
                 }
             }
-            #endif
         }
         .navigationTitle("Appearance")
         .task { await loadRepos() }
-        #if os(iOS)
         .task { await loadFeeds() }
-        #endif
     }
 
-    #if os(iOS)
     private var sources: [SidebarFeeds.Source] {
         SidebarFeeds.sources(known: feeds, hidden: hiddenFeeds)
     }
@@ -568,7 +564,6 @@ struct AppearanceSettingsView: View {
         feeds = fetched
         SettingsCache.save("feeds", fetched)
     }
-    #endif
 
     private var themeFooter: String {
         switch appearance {
@@ -591,7 +586,6 @@ struct AppearanceSettingsView: View {
     }
 }
 
-#if os(iOS)
 /// One source's name, and a word about it when the only thing that knows the
 /// id is the hidden list itself. Saying so is what keeps the row honest: the
 /// switch still works, and the person can see why it has no better name.
@@ -611,7 +605,6 @@ private struct SourceToggleLabel: View {
         }
     }
 }
-#endif
 
 /// The first few repo tiles, in order, on the row that opens the editor — the
 /// setting's value said in the same language the list itself speaks.
