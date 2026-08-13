@@ -11,13 +11,13 @@
 import { mkdirSync, renameSync, writeFileSync } from "fs";
 import { dirname } from "path";
 
-export function writeFileAtomic(path: string, data: string): void {
+export function writeFileAtomic(path: string, data: string, mode?: number): void {
   const tmp = `${path}.tmp.${process.pid}`;
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(tmp, data);
+  writeFileSync(tmp, data, mode === undefined ? undefined : { mode });
   renameSync(tmp, path);
 }
 
-export function writeJsonAtomic(path: string, value: unknown, pretty = true): void {
-  writeFileAtomic(path, JSON.stringify(value, null, pretty ? 2 : undefined));
+export function writeJsonAtomic(path: string, value: unknown, pretty = true, mode?: number): void {
+  writeFileAtomic(path, JSON.stringify(value, null, pretty ? 2 : undefined), mode);
 }

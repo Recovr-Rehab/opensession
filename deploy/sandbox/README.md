@@ -263,8 +263,8 @@ needed after changing it.
   rpc socket. `callbackBaseUrl` must be reachable FROM the sandbox (Tailscale
   URL for self-hosters; 127.0.0.1 never works). For remote providers that
   means the PUBLIC internet: enable the isolated `publicIngress` listener
-  (src/server/public-ingress.ts — serves ONLY run-ws/rpc-ws + a health
-  check, rate-limited; see docs/self-hosting-sandboxes.md "Public dial-back
+  (src/server/public-ingress.ts — serves run-ws/rpc-ws, health, and the
+  narrowly scoped workload-identity OIDC endpoints; see docs/self-hosting-sandboxes.md "Public dial-back
   ingress") instead of exposing the main server. Transport code is runner
   internals — restart + image rebuild to take effect.
 - **Remote adapters** (`provider: "daytona"` / `"e2b"` / `"box"` / `"modal"`,

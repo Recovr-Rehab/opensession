@@ -131,6 +131,18 @@ async function tui(): Promise<number> {
   return await runInherit(["bun", entry, ...argv.slice(1)], REPO_ROOT);
 }
 
+/**
+ * The sandbox-local OIDC client intentionally has no server imports. Keeping
+ * this small path in the normal CLI gives repository hooks the stable command
+ * `opensession sandbox id-token …` without giving a sandbox admin commands.
+ */
+async function sandboxIdToken(): Promise<number> {
+  return await runInherit(
+    ["bun", `${REPO_ROOT}/scripts/workload-identity-client.ts`, ...argv],
+    process.cwd(),
+  );
+}
+
 async function status(): Promise<number> {
   heading("Status");
   const kind = service.supervisor();
@@ -271,6 +283,7 @@ async function main(): Promise<number> {
       return await doctor();
 
     case "sandbox":
+      if (argv[1] === "id-token") return await sandboxIdToken();
       return await sandbox(positional);
 
     case "start":

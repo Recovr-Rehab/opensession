@@ -94,6 +94,7 @@ import { hostSteer, hostInterruptSteer, hostCancel } from "../../host-registry";
 import { registerRunToken, unregisterRunToken } from "../../run-rpc";
 import { registerRunWsHost, unregisterRunWsHost, runWsConnector } from "../../run-ws";
 import { writeJsonAtomic } from "../../shared/atomic-write";
+import { createWorkloadIdentityEnv, type WorkloadIdentityContext } from "../../workload-identity";
 import { HostHandle, type HandleCallbacks, type HostLauncher } from "../../host-client";
 import {
   HOST_SPEC_NAME,
@@ -130,7 +131,7 @@ const REMOTE_OPENCODE_VERSION = "1.17.15";
 const REMOTE_NODE_VERSION = "24.18.1";
 const REMOTE_NODE_MAJOR = Number(REMOTE_NODE_VERSION.split(".")[0]);
 const REMOTE_JUST_VERSION = "1.43.1";
-const REMOTE_RUNTIME_REVISION = "workspace-runtime-v6";
+const REMOTE_RUNTIME_REVISION = "workspace-runtime-v7";
 const REMOTE_REPO = REPO_ROOT; // /home/ubuntu/projects/opensession
 const BOOTSTRAP_MARKER = `${REMOTE_HOME}/.bks-bootstrapped`;
 /** Where per-launch openai seed material lands in-sandbox — threaded to the
@@ -810,6 +811,13 @@ export async function bootstrapRemoteSandbox(
     }),
     "bun install of the runner bundle",
   );
+  need(
+    await driver.exec(
+      `ln -sf ${REMOTE_REPO}/deploy/sandbox/opensession ${REMOTE_HOME}/.local/bin/opensession && ` +
+        `chmod 755 ${REMOTE_REPO}/deploy/sandbox/opensession ${REMOTE_HOME}/.local/bin/opensession`,
+    ),
+    "workload identity client install",
+  );
 
   log("ensuring claude CLI…");
   need(
@@ -1024,7 +1032,7 @@ export async function warmRemoteWorkspace(
   driver: RemoteDriver,
   repo: { id: string; repo: string; ghRepo?: string; defaultBranch: string; depsInstall?: string },
   label: string,
-  opts?: { installDeps?: boolean; runSetup?: boolean },
+  opts?: { installDeps?: boolean; runSetup?: boolean; identity?: Omit<WorkloadIdentityContext, "lifecycle"> },
 ): Promise<boolean> {
   const dir = remoteWarmWorkspaceDir(repo.id);
   const log = (msg: string) => console.log(`[sandbox:${label}] warm workspace: ${msg}`);
@@ -1042,7 +1050,7 @@ export async function warmRemoteWorkspace(
     }
   }
   if (opts?.runSetup) {
-    await runRemoteLifecycleHook(driver, dir, "setup", "fresh", repo.id);
+    await runRemoteLifecycleHook(driver, dir, "setup", "fresh", repo.id, opts.identity);
   }
   if (opts?.installDeps === false) {
     await scrubRemoteWarmWorkspaceAuthority(driver, repo, dir);
@@ -1096,6 +1104,7 @@ export async function setupRemoteWorkspace(
   branch: string,
   defaultBranch: string,
   repoId?: string,
+  identity?: Omit<WorkloadIdentityContext, "lifecycle">,
 ): Promise<void> {
   let cloned = await driver.exec(`test -d ${shellQuoteWord(cwd)}/.git`);
   if (cloned.exitCode !== 0 && repoId) {
@@ -1169,7 +1178,7 @@ export async function setupRemoteWorkspace(
   // private files are injected after restore and can never land in a shared
   // provider snapshot.
   await materializeRemoteWorkspaceSeedFiles(driver, cwd, repoId);
-  await runRemoteLifecycleHook(driver, cwd, "setup", "fresh", repoId);
+  await runRemoteLifecycleHook(driver, cwd, "setup", "fresh", repoId, identity);
 }
 
 const REMOTE_LIFECYCLE_DIR = `${REMOTE_HOME}/.opensession/lifecycle`;
@@ -1189,6 +1198,7 @@ export async function runRemoteLifecycleHook(
   /** Stable repo identity lets a prewarmed workspace keep its one-shot setup
    * stamp after it is moved into the adopting session's final cwd. */
   scopeKey?: string,
+  identity?: Omit<WorkloadIdentityContext, "lifecycle">,
 ): Promise<{ ran: boolean; log: string }> {
   const script = `${cwd}/.agents/${hook}`;
   const key = remoteLifecycleKey(scopeKey || cwd) || "workspace";
@@ -1221,10 +1231,16 @@ export async function runRemoteLifecycleHook(
   const executable = await readProbe(`test -x ${shellQuoteWord(script)}`);
   if (executable.exitCode !== 0)
     throw new Error(`.agents/${hook} exists but is not executable`);
+  const identityEnv = identity
+    ? createWorkloadIdentityEnv({ ...identity, lifecycle: hook })
+    : {};
+  const identityArgs = Object.entries(identityEnv)
+    .map(([key, value]) => `${key}=${shellQuoteWord(value)}`)
+    .join(" ");
   const command =
     `mkdir -p ${shellQuoteWord(REMOTE_LIFECYCLE_DIR)} && ` +
     `: > ${shellQuoteWord(log)} && ` +
-    `env HOME=${REMOTE_HOME} PATH=${shellQuoteWord(REMOTE_PATH)} ` +
+    `env HOME=${REMOTE_HOME} PATH=${shellQuoteWord(REMOTE_PATH)} ${identityArgs} ` +
     `OPENSESSION_BOOT_MODE=${shellQuoteWord(bootMode)} ${shellQuoteWord(script)} ` +
     `>> ${shellQuoteWord(log)} 2>&1` +
     (hook === "setup" ? ` && touch ${shellQuoteWord(stamp)}` : "");
@@ -1263,6 +1279,8 @@ function readJsonSafe<T>(path: string): T | null {
 function makeRemoteLauncher(
   driver: RemoteDriver,
   sessionId: string,
+  sandboxId: string,
+  provider: SandboxProviderId,
   callbackBaseUrl = remoteSandboxCallbackBaseUrl(),
 ): HostLauncher {
   return {
@@ -1538,6 +1556,13 @@ function makeRemoteLauncher(
           OPENSESSION_RUN_WS_URL: `${base}/run-ws/${hostId}`,
           OPENSESSION_RUN_WS_TOKEN: spec.wsToken,
           OPENSESSION_RPC_WS_URL: `${base}/rpc-ws`,
+          ...createWorkloadIdentityEnv({
+            sandboxId,
+            provider,
+            lifecycle: "run",
+            sessionId: spec.osSessionId,
+            trustProfile: spec.trustProfile,
+          }),
           ...(process.env.OPENSESSION_MODEL
             ? {
                 OPENSESSION_MODEL: process.env.OPENSESSION_MODEL!,
@@ -1775,6 +1800,8 @@ export function makeRemoteSandbox(parts: RemoteSandboxParts): Sandbox {
   const launcher = makeRemoteLauncher(
     parts.driver,
     parts.sessionId,
+    parts.sandboxId,
+    parts.providerId,
     parts.callbackBaseUrl,
   );
   const touch = () => {
@@ -1793,7 +1820,15 @@ export function makeRemoteSandbox(parts: RemoteSandboxParts): Sandbox {
       touch();
       const result = await parts.driver.exec(shellQuote(cmd), {
         cwd: parts.cwd,
-        env: opts?.env,
+        env: {
+          ...createWorkloadIdentityEnv({
+            sandboxId: parts.sandboxId,
+            provider: parts.providerId,
+            lifecycle: "run",
+            sessionId: parts.sessionId,
+          }),
+          ...opts?.env,
+        },
         detached: opts?.background,
       });
       touch();

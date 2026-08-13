@@ -6,14 +6,16 @@
  * and MCP proxies must dial back to the server's /run-ws and /rpc-ws
  * WebSocket routes from the public internet. The main
  * Bun.serve binds the tailnet and carries the whole app, so instead of
- * exposing IT, this module runs a SECOND Bun.serve that serves ONLY:
+ * exposing IT, this module runs a SECOND Bun.serve that serves only the
+ * narrow sandbox transport and workload-identity surface:
  *
  *   - /run-ws/<hostId>  (WS upgrade — run host event stream)
  *   - /rpc-ws           (WS upgrade — opensession-* MCP proxy channel; same
  *                        historical prefixes accepted)
  *   - /ingress-health              (bare 200 "ok" for monitors/probes)
+ *   - /workload-identity/*         (OIDC discovery, JWKS, token exchange)
  *
- * Everything else is a bodyless 404 — no routes, no app surface, no
+ * Everything else is a bodyless 404 — no app routes or frontend surface, no
  * disclosure. Auth is exactly run-ws.ts's: per-launch wsTokens keyed by
  * hostId, constant-time compared BEFORE the upgrade (shared handlers, not
  * copies — the token registry is process-global, so a token registered by a
@@ -21,7 +23,8 @@
  * runs the registry is empty and every upgrade is a 403.
  *
  * Because this is internet-facing it adds one thing the tailnet path doesn't
- * need: per-IP rate limiting on upgrade attempts (in-memory fixed window,
+ * need: per-IP rate limiting on upgrades and workload-token exchange attempts
+ * (in-memory fixed window,
  * UPGRADES_PER_MIN/min → 429). The client IP is the socket peer, or — when
  * the peer is loopback/private, i.e. a local reverse proxy such as the Caddy
  * front that terminates TLS for it — the last X-Forwarded-For hop (the one
@@ -53,6 +56,7 @@ import {
 } from "./run-ws";
 import { handleSandboxPortalRelayUpgrade, sandboxPortalRelayClose, sandboxPortalRelayMessage, sandboxPortalRelayOpen } from "./sandbox-portal-relay";
 import { publicIngressConfig } from "./sandbox/config";
+import { handleWorkloadIdentityRequest } from "./workload-identity";
 
 const g = globalThis as any;
 
@@ -133,7 +137,7 @@ interface IngressServer {
   requestIP?(req: Request): { address: string } | null;
 }
 
-function ingressFetch(req: Request, server: IngressServer): Response | undefined {
+async function ingressFetch(req: Request, server: IngressServer): Promise<Response | undefined> {
   let path: string;
   try {
     path = new URL(req.url).pathname;
@@ -143,6 +147,14 @@ function ingressFetch(req: Request, server: IngressServer): Response | undefined
   if (path === "/ingress-health") {
     return new Response("ok");
   }
+  if (path === "/workload-identity/token" && rateLimited(clientIp(req, server))) {
+    return new Response(null, {
+      status: 429,
+      headers: { "retry-after": String(Math.ceil(WINDOW_MS / 1000)) },
+    });
+  }
+  const workloadIdentity = await handleWorkloadIdentityRequest(req);
+  if (workloadIdentity) return workloadIdentity;
   if (path.startsWith("/run-ws/") || path === "/rpc-ws" || path === "/sandbox-portal-ws") {
     if (rateLimited(clientIp(req, server))) {
       return new Response(null, {

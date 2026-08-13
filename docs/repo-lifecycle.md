@@ -114,6 +114,40 @@ sandboxes. A `start.sh` that needs, say, S3 access for a prebuilt-artifact
 fetch works without persisting credentials in the workspace or reusable
 snapshot.
 
+## Workload identity from a sandbox
+
+Open Session sandboxes can mint a short-lived OpenID Connect ID token for a
+service that trusts this instance. This is the portable alternative to putting
+cloud credentials, CLI profiles, or provider-specific secrets in a sandbox:
+
+```sh
+opensession sandbox id-token --audience https://artifacts.example.com
+```
+
+The command is available to Open Session-managed setup, resume, preview, agent
+run, and terminal commands. It prints only the JWT, so use command substitution
+or a credential helper. `--ttl-seconds` defaults to 600 and accepts 60 through
+3600. It does not work in an ordinary host shell, and it never prompts.
+
+The token is signed by this instance and has standard `iss`, `aud`, `sub`,
+`iat`, `exp`, and `jti` claims. Open Session additionally supplies opaque
+`sandbox_id`, `sandbox_provider`, `lifecycle`, and, when available,
+`session_id`, `repo_id`, `user_id`, and `trust_profile` claims. `token_use` is
+always `exchanged`. The issuer discovery document is
+`<callback-origin>/workload-identity/.well-known/openid-configuration`.
+
+The audience names a verifier. It is not permission by itself: a relying
+service must verify the signature, issuer, audience, and expiry, then restrict
+the immutable identity claims it trusts. Use a distinct URL or URN audience for
+each relying service. Open Session issues the identity only. AWS, GCP, Vault,
+and internal services exchange or authorize it themselves.
+
+Setup may mint a token to fetch private build artifacts. The exchange lease is
+passed only to the hook process, is not written to the workspace, and is absent
+from reusable prewarm snapshots. A session restored from a snapshot receives a
+fresh lease. Do not enable shell tracing around the command or save a token in
+the repository.
+
 ## preview.json — warm routes
 
 Frameworks with on-demand compilers (Next dev, Vite with heavy transforms)

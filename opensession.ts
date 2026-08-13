@@ -50,6 +50,7 @@ import { recordRecoveredRunEvent, restorePromptQueues, resumeDrainedSessions, sn
 import { handleSandboxWsUpgrade, timerPoisonRequestCheck } from "./src/server/run-ws";
 import { handleRunnerWsUpgrade } from "./src/server/runner-ws";
 import { handleSandboxPortalRelayUpgrade } from "./src/server/sandbox-portal-relay";
+import { handleWorkloadIdentityRequest } from "./src/server/workload-identity";
 import { findSession, invalidateSessionsCache, recordRunOutcome } from "./src/server/session-cache";
 import { getSessionControl } from "./src/server/session-control";
 import { buildReposNote } from "./src/server/session-repos";
@@ -255,6 +256,8 @@ const server: import("bun").Server<WSClientData> = hotServe({
 					{ status: 403 },
 				);
 			}
+			const workloadIdentity = await handleWorkloadIdentityRequest(req);
+			if (workloadIdentity) return workloadIdentity;
 			// The bare domain root is the ONLY public URL form (os.tella.dev,
 			// 2026-07-10 — prefixes dropped) and handlers below match bare
 			// paths. Historical prefixes (/opensession, then the pre-rename

@@ -183,6 +183,7 @@ export class E2bProvider implements SandboxProvider {
       branch,
       repo.defaultBranch,
       repo.id,
+      { sandboxId: sbx.sandboxId, provider: this.id, sessionId: spec.sessionId, repoId: repo.id, trustProfile: spec.trustProfile },
     );
     writeRemoteState({
       sandboxId: sbx.sandboxId,

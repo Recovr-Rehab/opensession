@@ -636,9 +636,10 @@ export class MicrovmProvider implements SandboxProvider {
         branch,
         repo.defaultBranch,
         repo.id,
+        { sandboxId: sandboxId(idx), provider: this.id, sessionId: spec.sessionId, repoId: repo.id, trustProfile },
       );
       if (resumed) {
-        await runRemoteLifecycleHook(driver, cwd, "resume", "resume");
+        await runRemoteLifecycleHook(driver, cwd, "resume", "resume", undefined, { sandboxId: sandboxId(idx), provider: this.id, sessionId: spec.sessionId, repoId: repo.id, trustProfile });
         audit({
           kind: "sandbox_resume_metric",
           session_id: spec.sessionId,
@@ -948,6 +949,7 @@ export const microvmPrewarmAdapter: PrewarmAdapter = {
     if (!(await warmRemoteWorkspace(driver, repo, label, {
       installDeps: false,
       runSetup: true,
+      identity: { sandboxId: `prewarm:${repo.id}`, provider: "microvm", repoId: repo.id },
     }))) {
       throw new Error(`MicroVM prewarm could not clone ${repo.id}`);
     }

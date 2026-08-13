@@ -246,7 +246,8 @@ exists.
 
 ### Remote-sandbox ingress
 
-Daytona and Modal also need three public, token-gated routes on the webhook
+Daytona and Modal also need the isolated sandbox callback and workload-identity
+routes on the webhook
 hostname. They terminate on the isolated listener at `127.0.0.1:3860`; they
 must never expose the main UI on 3850:
 
@@ -259,6 +260,9 @@ ingress.example.com {
         reverse_proxy 127.0.0.1:3860
     }
     handle /ingress-health {
+        reverse_proxy 127.0.0.1:3860
+    }
+    handle /workload-identity/* {
         reverse_proxy 127.0.0.1:3860
     }
     handle {

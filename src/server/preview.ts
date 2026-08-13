@@ -34,6 +34,7 @@ import {
 } from "fs";
 import { basename, dirname, join, resolve } from "path";
 import { getAgentAwsEnv } from "./aws-creds";
+import { createWorkloadIdentityEnv } from "./workload-identity";
 import { audit } from "./audit";
 import { ensureRemoteSandboxPortalAgent, forgetRemoteSandboxPortalAgents, listPortalServices, listSandboxPortalServices } from "./portal-supervisor";
 import { revokeSandboxPortalGrants, revokeSandboxPortalRelay } from "./sandbox-portal-relay";
@@ -1487,13 +1488,19 @@ export async function startSandboxPreview(
   // scripts can fetch private build artifacts. It is never written to the
   // workspace or reusable provider snapshot.
   const awsEnv = await sandboxPreviewAwsEnv(sandbox, worktreeDir, true);
+  const workloadIdentityEnv = createWorkloadIdentityEnv({
+    sandboxId: sandbox.id,
+    provider: sandbox.provider,
+    lifecycle: "preview",
+    repoId: repoForPath(worktreeDir).id,
+  });
   const r = await sandbox.exec([
     "sh", "-c",
     `mkdir -p .ports && nohup setsid env HOME=/home/ubuntu PATH=${shellQuoteWord(SANDBOX_PREVIEW_PATH)} ` +
       `WEBAPP_PORT=${port} PREVIEW_URL=${shellQuoteWord(previewUrl)} ` +
       `OPENSESSION_BOOT_MODE=${shellQuoteWord(bootMode)} ` +
       `bash -c 'echo $$ > .ports/dev-pgid; exec ${cmd}' >> /tmp/backstage-preview.log 2>&1 &`,
-  ], { env: awsEnv });
+  ], { env: { ...awsEnv, ...workloadIdentityEnv } });
   if (r.exitCode !== 0) starting.delete(worktreeDir);
   return { ...status, starting: r.exitCode === 0 };
 }

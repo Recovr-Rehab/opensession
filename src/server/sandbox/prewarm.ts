@@ -455,6 +455,11 @@ async function runPrewarmBootstrap(entry: PrewarmEntry, adapter: PrewarmAdapter)
           const prepared = await warmRemoteWorkspace(driver, repo, `${entry.provider}-prewarm`, {
             installDeps: warm,
             runSetup: true,
+            identity: {
+              sandboxId: entry.sandboxId || `prewarm:${entry.key}`,
+              provider: entry.provider,
+              repoId: repo.id,
+            },
           });
           if (!prepared && adapter.publishTemplate) {
             throw new Error(`could not prepare ${repo.id} for a repo template`);

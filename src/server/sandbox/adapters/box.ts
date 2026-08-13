@@ -745,6 +745,7 @@ export class BoxProvider implements SandboxProvider {
       branch,
       repo.defaultBranch,
       repo.id,
+      { sandboxId: box.id, provider: this.id, sessionId: spec.sessionId, repoId: repo.id, trustProfile: spec.trustProfile },
     );
     writeRemoteState({
       sandboxId: box.id,

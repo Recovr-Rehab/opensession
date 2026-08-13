@@ -136,6 +136,7 @@ RUN bun install --frozen-lockfile
 COPY --chown=ubuntu:ubuntu tsconfig.json backstage.ts opensession.ts ./
 COPY --chown=ubuntu:ubuntu src ./src
 COPY --chown=ubuntu:ubuntu packages/protocol ./packages/protocol
+COPY --chown=ubuntu:ubuntu scripts/workload-identity-client.ts ./scripts/workload-identity-client.ts
 
 WORKDIR /home/ubuntu
 
@@ -148,6 +149,12 @@ WORKDIR /home/ubuntu
 RUN mkdir -p /home/ubuntu/.config \
              /home/ubuntu/.local/share \
              /home/ubuntu/.opensession-sessions
+
+# The workload-identity command is a sandbox client, not an administrative
+# server CLI. It receives its exchange lease only through OpenSession-managed
+# command environments.
+COPY --chown=ubuntu:ubuntu deploy/sandbox/opensession /home/ubuntu/.local/bin/opensession
+RUN chmod +x /home/ubuntu/.local/bin/opensession
 
 # Containers are started long-lived and `docker exec`'d into (one per session).
 CMD ["sleep", "infinity"]

@@ -423,26 +423,31 @@ tailnet and carries the whole app — never expose it. Instead,
 `src/server/public-ingress.ts` runs a **second, isolated Bun.serve** when
 `publicIngress.enabled` is set:
 
-**What it serves — and everything it will ever serve:**
+**What it serves:**
 
 | Path | What |
 | --- | --- |
 | `/run-ws/<hostId>` | WS upgrade — the run host's event stream |
 | `/rpc-ws?host=…` | WS upgrade — the opensession-* MCP proxy channel |
 | `/ingress-health` | bare `200 ok` (monitors/probes) |
+| `/workload-identity/.well-known/openid-configuration` | public OIDC discovery |
+| `/workload-identity/jwks.json` | public signing keys |
+| `/workload-identity/token` | bearer-gated sandbox token exchange |
 
-Every other path is a **bodyless 404** — no app routes, no API, no frontend,
-no route disclosure. Auth is run-ws.ts's own (shared functions, not copies):
+Every other path is a **bodyless 404**. The listener never exposes app routes,
+the general API, or the frontend. Auth is run-ws.ts's own (shared functions, not copies):
 per-launch `wsToken`s keyed by hostId, registered only by ws-transport
 launches, constant-time compared **before** the upgrade. With no sandboxed
 runs in flight the token registry is empty and every upgrade is a 403.
-Being internet-facing it additionally rate-limits upgrade attempts
-**per client IP: 30/min → 429** (X-Forwarded-For-aware behind a local
-reverse proxy; health is exempt). The main :3850 server keeps serving the
+Being internet-facing it additionally rate-limits upgrades and workload-token
+exchange attempts **per client IP: 30/min → 429** (X-Forwarded-For-aware behind a local
+reverse proxy; discovery, JWKS, and health are exempt). The main :3850 server keeps serving the
 same routes for the tailnet path (docker-ws) — the ingress is additive.
 
 The listener binds `127.0.0.1:3860` by default: something must terminate
-TLS in front of it and forward ONLY those paths. Two permanent options:
+TLS in front of it and forward only those paths. The workload-identity issuer
+is this same public HTTPS origin plus `/workload-identity`; an external relying
+party must be able to fetch its discovery document and JWKS. Two permanent options:
 
 1. **Public IP + DNS + Caddy path routes** (needs :443 open in the security
    group and an A record):
@@ -456,6 +461,9 @@ TLS in front of it and forward ONLY those paths. Two permanent options:
            reverse_proxy localhost:3860
        }
        handle /ingress-health {
+           reverse_proxy localhost:3860
+       }
+       handle /workload-identity/* {
            reverse_proxy localhost:3860
        }
        # …whatever else the domain serves stays in its own handle blocks;

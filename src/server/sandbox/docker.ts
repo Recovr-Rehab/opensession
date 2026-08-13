@@ -131,6 +131,7 @@ import { codeStorageConfig } from "../config";
 import { authedRemoteUrl } from "../codestorage/auth";
 import { parseCsRemote } from "../codestorage/remote";
 import { redactUrl } from "../shared/redact";
+import { createWorkloadIdentityEnv } from "../workload-identity";
 import { REPOS, getRepo, repoForPath, worktreePathFor, type Repo } from "../worktree";
 import { LocalProvider } from "./local";
 import {
@@ -870,6 +871,8 @@ async function runWorkspaceSetup(
   sessionId: string,
   cwd: string,
   bootMode: "fresh" | "snapshot-restore",
+  repo: Pick<Repo, "id">,
+  trustProfile?: "interactive" | "automation",
 ): Promise<boolean> {
   const script = `${cwd}/.agents/setup`;
   const probe = await docker(["exec", name, "test", "-f", script]);
@@ -879,11 +882,21 @@ async function runWorkspaceSetup(
     return true;
   }
   const log = assertSafePath(`${sessionRunsDir(sessionId)}/workspace-setup.log`);
+  const identityEnv = createWorkloadIdentityEnv({
+    sandboxId: name,
+    provider: "docker",
+    lifecycle: "setup",
+    sessionId,
+    repoId: repo.id,
+    trustProfile,
+  });
+  const identityArgs = Object.entries(identityEnv).flatMap(([key, value]) => ["-e", `${key}=${value}`]);
   console.log(`[sandbox] ${name}: running workspace setup hook ${script} (log: ${log})`);
   const r = await docker(
     [
       "exec", "-w", assertSafePath(cwd),
       "-e", `OPENSESSION_BOOT_MODE=${bootMode}`,
+      ...identityArgs,
       name,
       "sh", "-c", `bash ${assertSafePath(script)} >> ${log} 2>&1`,
     ],
@@ -927,6 +940,13 @@ function makeDockerLauncher(container: string, sessionId: string): HostLauncher 
       // written to `dir` — respawns included) and point the host at the run-ws
       // + rpc-ws routes instead of socket paths.
       const spec = readJsonSafe<RunHostSpec>(`${dir}/${HOST_SPEC_NAME}`);
+      const workloadIdentityEnv = createWorkloadIdentityEnv({
+        sandboxId: container,
+        provider: "docker",
+        lifecycle: "run",
+        sessionId,
+        trustProfile: spec?.trustProfile,
+      });
       const wsEnv: string[] = [];
       if (spec?.wsToken) {
         const base = sandboxCallbackBaseUrl();
@@ -945,6 +965,7 @@ function makeDockerLauncher(container: string, sessionId: string): HostLauncher 
         // un-migrated in-container build keeps working.
         ...env(`OPENSESSION_RUN_JOURNAL=${dir}/journal.json`),
         ...env(`OPENSESSION_RUN_JOURNAL=${dir}/journal.json`),
+        ...Object.entries(workloadIdentityEnv).flatMap(([key, value]) => env(`${key}=${value}`)),
         ...env("NODE_ENV=production"),
         ...(process.env.OPENSESSION_MODEL
           ? [
@@ -1086,7 +1107,15 @@ function makeDockerSandbox(
 
     async exec(cmd: string[], opts?: ExecOpts): Promise<ExecResult> {
       await ensureStarted(sandboxId);
-      const envArgs = Object.entries(opts?.env || {}).flatMap(([k, v]) => ["-e", `${k}=${v}`]);
+      const envArgs = Object.entries({
+        ...createWorkloadIdentityEnv({
+          sandboxId,
+          provider: "docker",
+          lifecycle: "run",
+          sessionId,
+        }),
+        ...opts?.env,
+      }).flatMap(([k, v]) => ["-e", `${k}=${v}`]);
       return docker(["exec", "-w", cwd, ...envArgs, sandboxId, ...cmd]);
     },
 
@@ -1447,7 +1476,7 @@ export class DockerProvider implements SandboxProvider {
     // restore; never retried once settled — see runWorkspaceSetup).
     let setupRan = existing?.setupRan === true;
     if (!setupRan) {
-      setupRan = await runWorkspaceSetup(name, spec.sessionId, cwd, bootMode);
+      setupRan = await runWorkspaceSetup(name, spec.sessionId, cwd, bootMode, repo, spec.trustProfile);
     }
     writeState({
       sandboxId: name,

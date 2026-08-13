@@ -352,6 +352,7 @@ export class LambdaMicrovmProvider implements SandboxProvider {
         branch,
         repo.defaultBranch,
         repo.id,
+        { sandboxId: id, provider: this.id, sessionId: spec.sessionId, repoId: repo.id, trustProfile: spec.trustProfile },
       );
     } catch (e) {
       if (created) await this.terminate(client, id).catch(() => {});

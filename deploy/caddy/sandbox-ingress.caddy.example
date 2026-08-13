@@ -13,6 +13,9 @@ ingress.example.com {
     handle /ingress-health {
         reverse_proxy 127.0.0.1:3860
     }
+    handle /workload-identity/* {
+        reverse_proxy 127.0.0.1:3860
+    }
     # END OPENSESSION SANDBOX INGRESS
     handle {
         reverse_proxy 127.0.0.1:3848

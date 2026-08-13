@@ -9,6 +9,7 @@ import { isRemoteSandboxProvider, sandboxesEnabled, sandboxProviderConfigured } 
 import { dockerContainerStatus } from "./sandbox/docker";
 import { touchNativeSession } from "./session-cache";
 import { dropSandboxPreviewRoutes } from "./preview";
+import { revokeWorkloadIdentityForSandbox } from "./workload-identity";
 import type { UnifiedSession } from "./types";
 
 /**
@@ -28,6 +29,7 @@ export function destroySessionSandbox(
 	if (!sb?.sandboxId) return;
 	void (async () => {
 		try {
+			revokeWorkloadIdentityForSandbox(sb.sandboxId!);
 			await dropSandboxPreviewRoutes(sb.sandboxId!);
 			await getSandboxProvider(sb.provider).destroy(sb.sandboxId!);
 			console.log(

@@ -306,6 +306,7 @@ export class ModalProvider implements SandboxProvider {
         branch,
         repo.defaultBranch,
         repo.id,
+        { sandboxId: sandbox.sandboxId, provider: this.id, sessionId: spec.sessionId, repoId: repo.id, trustProfile: spec.trustProfile },
       );
     } catch (e) {
       // A failed first bootstrap is not useful and otherwise remains paid

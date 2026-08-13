@@ -66,6 +66,9 @@ ${indent}}
 ${indent}handle /ingress-health {
 ${indent}    reverse_proxy 127.0.0.1:3860
 ${indent}}
+${indent}handle /workload-identity/* {
+${indent}    reverse_proxy 127.0.0.1:3860
+${indent}}
 ${indent}${MANAGED_END}`;
 }
 
@@ -116,6 +119,7 @@ function stripKnownSandboxRoutes(site: string): string {
     "/run-ws/\\*",
     "/rpc-ws",
     "/ingress-health",
+    "/workload-identity/\\*",
     "/opensession/run-ws/\\*",
     "/opensession/rpc-ws",
     "/backstage/run-ws/\\*",
