@@ -13,7 +13,9 @@ import {
 // notifies listeners through window.dispatchEvent — against the stub it
 // throws, the success looks transient, and the call is retried. Fill the one
 // method in rather than deleting the stub, which os1-tui's own renderer owns.
-const leakedWindow = (globalThis as { window?: Record<string, unknown> }).window;
+const leakedWindow = (globalThis as unknown as {
+	window?: Record<string, unknown>;
+}).window;
 if (leakedWindow && typeof leakedWindow.dispatchEvent !== "function")
 	leakedWindow.dispatchEvent = () => true;
 
