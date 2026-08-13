@@ -437,6 +437,23 @@ const responseFor = (url: URL, method: string): Response => {
 	if (path === "/api/feeds") return json({ feeds: [] });
 	if (path === "/api/todos") return json({ todos: [] });
 	if (path === "/api/pins") return json({ pins: [] });
+	// The demo account is an established teammate, not a first-run one: without
+	// this the readiness check fails and Home replaces itself with the
+	// onboarding card.
+	if (path === "/api/onboarding/status")
+		return json({
+			hasOwnSessions: true,
+			admin: false,
+			preparedRepo: {
+				id: "opensession",
+				label: "Open Session",
+				defaultBranch: "main",
+			},
+			capabilities: {
+				task: { ready: true, blocker: null },
+				changes: { ready: true, blocker: null },
+			},
+		});
 	if (path === "/api/ui-prefs") return json({ prefs: {} });
 	if (path === "/api/lanes") return json({ lanes: {} });
 	if (path === "/api/reads") return json({ reads: {} });
@@ -613,6 +630,9 @@ document.documentElement.classList.add("wco");
 
 localStorage.setItem("opensession-user", "Alex");
 localStorage.setItem("opensession-last-session", activeSessionId);
+// The restore is per-user: without the matching owner the demo opens Home
+// instead of the session it was written to show.
+localStorage.setItem("opensession-last-session-user", "Alex");
 localStorage.setItem("opensession-panel-open", "false");
 localStorage.setItem("opensession-panel-tab", "workflows");
 localStorage.setItem("opensession-sidebar-collapsed", "0");
