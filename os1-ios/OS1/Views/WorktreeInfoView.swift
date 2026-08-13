@@ -260,7 +260,8 @@ struct WorktreeInfoView: View {
                             .frame(minHeight: 44)
                             .disabled(sandboxLoading || sandboxAction != nil)
                     }
-                    if let error = sandboxStatus?.lastLifecycleError ?? sandbox.lastLifecycleError,
+                    if let error = sandboxStatus?.lastLifecycleError
+                        ?? currentSession.sandbox?.lastLifecycleError,
                        !error.isEmpty {
                         Divider()
                         Text(error)
