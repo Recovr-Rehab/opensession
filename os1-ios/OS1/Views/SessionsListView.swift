@@ -2558,21 +2558,15 @@ struct SessionsListView: View {
         isCollapsed(key) ? "\(title), collapsed" : "\(title), expanded"
     }
 
+    /// An empty list is a fresh install far more often than it is a quiet
+    /// day, so it says where you have landed as well as what to do next —
+    /// see `FirstRunPlaceholder`, which is the same placeholder plus the
+    /// three facts the phone's modal sign-in never gets to state.
     private var emptyState: some View {
-        ListPlaceholder(
-            symbol: "bubble.left.and.bubble.right",
-            title: "No sessions",
-            message: "Start one and it shows up here."
-        ) {
-            // The only thing worth offering here. Settings used to sit under
-            // it, but the app tile in the corner is already that door — a
-            // placeholder shouldn't spend its one moment of attention
-            // pointing at chrome that never left the screen.
-            Button("New session") { newSessionRequest = NewSessionRequest() }
-                .buttonStyle(PlaceholderActionStyle())
-            Button("Archived") { showArchived = true }
-                .buttonStyle(PlaceholderActionStyle(prominent: false))
-        }
+        FirstRunPlaceholder(
+            onNewSession: { newSessionRequest = NewSessionRequest() },
+            onShowArchived: { showArchived = true }
+        )
     }
 
     /// The list is empty because nothing came back, which is a different

@@ -1024,6 +1024,104 @@ enum OS1API {
         try await get("/api/setup/status")
     }
 
+    /// One repository the instance's GitHub credential can see, as the
+    /// registration picker lists it (src/server/routes/setup-repos.ts).
+    struct BrowsableRepo: Codable, Sendable, Hashable, Identifiable {
+        let fullName: String
+        let isPrivate: Bool?
+        let description: String?
+        let defaultBranch: String?
+        /// Already registered here, so it is shown but can't be picked.
+        let registered: Bool?
+
+        var id: String { fullName }
+
+        private enum CodingKeys: String, CodingKey {
+            case fullName, description, defaultBranch, registered
+            case isPrivate = "private"
+        }
+    }
+
+    /// What `GET /api/setup/github/repos` answers.
+    ///
+    /// `source` names the credential the list was read with — `user` for the
+    /// signed-in teammate's own connected account, `bot` for the instance's
+    /// shared one. It is nil when this instance holds neither, which is the
+    /// one case with nothing to pick from.
+    struct RepoBrowse: Codable, Sendable {
+        let source: String?
+        let repos: [BrowsableRepo]?
+    }
+
+    static func browsableRepos() async throws -> RepoBrowse {
+        try await getReportingServerError("/api/setup/github/repos")
+    }
+
+    /// Register a GitHub `owner/name` on this instance.
+    ///
+    /// The server CLONES the repo before it answers, so this call is slow in a
+    /// way no other one here is — a minute or more on a large repo. It gets
+    /// its own long timeout rather than the shared session's 60s, which would
+    /// fail the request while the clone kept running and leave the phone
+    /// reporting an error for a repo that did register.
+    ///
+    /// Returns nothing on purpose. The registered repo comes back in the
+    /// reply, but the caller wants the whole list rather than one row, and
+    /// decoding a body nobody reads would turn a successful clone into a
+    /// visible error the moment that shape changed.
+    static func registerRepo(fullName: String) async throws {
+        let config = ServerConfig.shared
+        guard let base = config.baseURL, config.isConfigured else {
+            throw APIError.notConfigured
+        }
+        guard let url = URL(string: base.absoluteString + "/api/setup/repos") else {
+            throw APIError.badURL
+        }
+        var request = config.authorizedRequest(url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 600
+        request.httpBody = try JSONSerialization.data(
+            withJSONObject: ["fullName": fullName]
+        )
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try throwServerError(data: data, response: response)
+    }
+
+    /// `get`, but surfacing the server's own error text.
+    ///
+    /// The shared `get` reports the status code alone, which turns setup's two
+    /// most likely answers — "Workspace administrator access is required" and
+    /// a GitHub outage — into "Server returned HTTP 403". Both are things the
+    /// person holding the phone can act on, so both have to arrive as written.
+    private static func getReportingServerError<T: Decodable & Sendable>(
+        _ path: String
+    ) async throws -> T {
+        let config = ServerConfig.shared
+        guard let base = config.baseURL, config.isConfigured else {
+            throw APIError.notConfigured
+        }
+        guard let url = URL(string: base.absoluteString + path) else {
+            throw APIError.badURL
+        }
+        let (data, response) = try await URLSession.shared.data(
+            for: config.authorizedRequest(url)
+        )
+        try throwServerError(data: data, response: response)
+        return try await decodeDetached(T.self, from: data)
+    }
+
+    private static func throwServerError(data: Data, response: URLResponse) throws {
+        guard let http = response as? HTTPURLResponse,
+              !(200..<300).contains(http.statusCode)
+        else { return }
+        if let body = try? JSONDecoder().decode(ServerErrorBody.self, from: data),
+           let message = body.error {
+            throw APIError.server(message)
+        }
+        throw APIError.http(http.statusCode)
+    }
+
     /// Models (and presets) a session can run on, plus the interactive default.
     static func models() async throws -> ModelCatalog {
         try await get("/api/models")

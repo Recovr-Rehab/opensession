@@ -10,10 +10,18 @@ import SwiftUI
 /// rather than sent by the server, which returns facts (`enabled`,
 /// `missingRequired`) and leaves the wording to each client.
 ///
-/// Read-only on purpose. The write half of that page enters credentials and
-/// restarts the server; a phone is the wrong place to type an API key you
-/// can't see afterwards, and the one piece of it worth having on a phone —
-/// a repo's tile — already has its own screen (RepositoriesSettingsView).
+/// A checklist row is actionable exactly when the phone can finish the job
+/// without typing a secret. Two kinds qualify, and both hand off to the
+/// screen that already owns them rather than growing a second copy here:
+/// picking from a list the server already holds (Repositories, which is also
+/// where a repo is added), and anything completed by signing in (My accounts,
+/// where the GitHub device flow and the MCP OAuth grants live).
+///
+/// Everything else stays read-only, and the rows say where to finish it. A
+/// phone is still the wrong place to type an API key you can't see
+/// afterwards: the value is pasted from a dashboard on another screen, it is
+/// write-only once stored, and the mistake is invisible until an integration
+/// quietly fails. So the integration rows report state and name the web.
 struct SetupSettingsView: View {
     @State private var status: OS1API.SetupStatus? = SettingsCache.value("setup-status")
     @State private var loading = false
@@ -26,6 +34,7 @@ struct SetupSettingsView: View {
             }
             if let status {
                 gettingStarted(status)
+                yourAccounts()
                 repositories(status)
                 team(status)
                 integrations(status)
@@ -51,14 +60,21 @@ struct SetupSettingsView: View {
         Section {
             engineRow(s.engine)
 
-            StatusRow(
-                title: "Repositories",
-                detail: repos.isEmpty
-                    ? "Register the repos sessions work in."
-                    : repos.map { $0.label ?? $0.id }.joined(separator: ", "),
-                tone: repos.isEmpty ? .warn : .on,
-                label: repos.isEmpty ? "None" : "\(repos.count) registered"
-            )
+            // The one checklist item a phone can complete on its own: the
+            // server already knows every repo its GitHub credential can see,
+            // so registering one is picking a row rather than typing a path.
+            NavigationLink {
+                RepositoriesSettingsView()
+            } label: {
+                StatusRow(
+                    title: "Repositories",
+                    detail: repos.isEmpty
+                        ? "Add the repos sessions work in."
+                        : repos.map { $0.label ?? $0.id }.joined(separator: ", "),
+                    tone: repos.isEmpty ? .warn : .on,
+                    label: repos.isEmpty ? "None" : "\(repos.count) registered"
+                )
+            }
 
             if !repos.isEmpty {
                 let bootable = repos.filter { lifecycleState($0.lifecycle).tone == .on }
@@ -66,7 +82,12 @@ struct SetupSettingsView: View {
                     title: "Local dev setup",
                     detail: bootable.count == repos.count
                         ? "Every repo boots its own dev server, so previews work and agents can check their UI changes in a browser."
-                        : "Repos without a boot script keep the Preview button disabled — add .opensession/start.sh (docs/repo-lifecycle.md).",
+                        // .agents is the only directory the server looks in
+                        // (LIFECYCLE_DIR in src/server/preview.ts). This row
+                        // named .opensession, which no instance has read since
+                        // the rename, so it sent anyone who followed it to a
+                        // path that stays dark.
+                        : "Repos without a boot script keep the Preview button disabled. Add .agents/start.sh (docs/repo-lifecycle.md).",
                     tone: bootable.count == repos.count
                         ? .on : (bootable.isEmpty ? .off : .warn),
                     label: "\(bootable.count)/\(repos.count) bootable"
@@ -90,13 +111,39 @@ struct SetupSettingsView: View {
                     title: "GitHub sign-in",
                     detail: (github.userPrAuth ?? false) && (github.clientIdConfigured ?? false)
                         ? "Teammates sign in with GitHub and open PRs as themselves."
-                        : "Off — the UI uses the name picker and PRs come from the bot account.",
+                        : "Off, so the UI uses the name picker and PRs come from the bot account. It needs an OAuth app, set up on the web.",
                     tone: state.tone,
                     label: state.label
                 )
             }
         } header: {
             Text("Getting started")
+        }
+    }
+
+    /// The other half a phone can finish: a grant is a sign-in, not a
+    /// credential to type. Both flows already have a screen, so this is a way
+    /// in rather than a second copy of them.
+    @ViewBuilder
+    private func yourAccounts() -> some View {
+        Section {
+            NavigationLink {
+                MyAccountsSettingsView()
+            } label: {
+                Label {
+                    Text("My accounts").foregroundStyle(OS1VisualStyle.text)
+                } icon: {
+                    Image(systemName: "person.crop.circle")
+                        .symbolRenderingMode(.monochrome)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(OS1VisualStyle.iconTint)
+                        .frame(width: 28, height: 28)
+                }
+            }
+        } header: {
+            Text("Your accounts")
+        } footer: {
+            Text("Connect your GitHub account and any tool that signs you in. Sessions you start then act as you rather than as the workspace account.")
         }
     }
 
@@ -151,7 +198,7 @@ struct SetupSettingsView: View {
             } header: {
                 Text("Repositories")
             } footer: {
-                Text("A repo that commits .opensession/setup.sh and start.sh provisions its own worktrees and boots its dev server.")
+                Text("A repo that commits .agents/setup and .agents/start.sh provisions its own worktrees and boots its dev server.")
             }
         }
     }
@@ -184,9 +231,23 @@ struct SetupSettingsView: View {
             } header: {
                 Text("Integrations")
             } footer: {
-                Text("Enter credentials on the web. This screen only shows their status.")
+                // The one line the brief for this screen has to carry: an API
+                // key is pasted from somewhere else and is unreadable once
+                // stored, so say where it gets finished instead of offering a
+                // field that can only be got wrong here.
+                Text("API keys are entered on the web at \(webHost(s)), under Settings → Setup.")
             }
         }
+    }
+
+    /// Where the web UI lives, for the rows this screen deliberately can't
+    /// finish. The server's own `publicBaseUrl` rather than the address this
+    /// device dials, which on a tunnelled or tailnet setup is not the one a
+    /// teammate would type into a browser.
+    private func webHost(_ s: OS1API.SetupStatus) -> String {
+        let raw = s.publicBaseUrl ?? ServerConfig.shared.baseURLString
+        if let host = URL(string: raw)?.host, !host.isEmpty { return host }
+        return raw.isEmpty ? "the web UI" : raw
     }
 
     private func load() async {

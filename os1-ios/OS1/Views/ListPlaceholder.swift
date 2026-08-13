@@ -9,10 +9,15 @@ import SwiftUI
 /// "nothing here" arrived shouting in an app whose every other surface sits
 /// at 13-17pt. This keeps the same anatomy — mark, headline, one line,
 /// actions — at the app's own scale.
-struct ListPlaceholder<Actions: View>: View {
+struct ListPlaceholder<Accessory: View, Actions: View>: View {
     let symbol: String
     let title: String
     var message: String?
+    /// Between the message and the actions, for a placeholder that has
+    /// something to SHOW as well as something to say — the first-run screen
+    /// puts the instance's repos here. Most have nothing, and get the
+    /// four-argument initializer below.
+    @ViewBuilder var accessory: Accessory
     @ViewBuilder var actions: Actions
 
     var body: some View {
@@ -33,6 +38,10 @@ struct ListPlaceholder<Actions: View>: View {
                     .foregroundStyle(OS1VisualStyle.textDim)
                     .padding(.top, 4)
             }
+            // Bare, with no spacing of its own: an EmptyView here has to
+            // leave the fifteen placeholders that pass none pixel-identical,
+            // so the accessory that IS present brings its own padding.
+            accessory
             VStack(spacing: 2) {
                 actions
             }
@@ -44,6 +53,22 @@ struct ListPlaceholder<Actions: View>: View {
         .frame(maxWidth: 300)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.horizontal, 28)
+    }
+}
+
+extension ListPlaceholder where Accessory == EmptyView {
+    /// A placeholder with nothing to show: mark, headline, one line, actions.
+    init(
+        symbol: String,
+        title: String,
+        message: String? = nil,
+        @ViewBuilder actions: () -> Actions
+    ) {
+        self.symbol = symbol
+        self.title = title
+        self.message = message
+        self.accessory = EmptyView()
+        self.actions = actions()
     }
 }
 
