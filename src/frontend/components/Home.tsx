@@ -21,9 +21,6 @@ import { Tooltip } from "../ui/tooltip";
 import { Input } from "../ui/input";
 import { PageHeader, PageTitle } from "../ui/page-header";
 import { EmptyState } from "../ui/state";
-import type { TeammateOnboardingModel } from "./TeammateOnboarding";
-import { TeammateOnboarding } from "./TeammateOnboarding";
-import type { NewSessionPrefill } from "../lib/new-session-link";
 import {
   HOME_GROUP_LABEL,
   HOME_LIST,
@@ -46,8 +43,6 @@ interface Props {
   workspaces: Workspace[];
   onSelect: (session: UnifiedSession) => void;
   onNewSession: () => void;
-  onStartSession: (prefill: NewSessionPrefill) => void;
-  onboarding: TeammateOnboardingModel;
   onShowArchived: () => void;
   onOpenAnalytics?: () => void;
   /** Who's viewing what right now (global presence), for the team face pile. */
@@ -408,8 +403,6 @@ export function Home({
   workspaces,
   onSelect,
   onNewSession,
-  onStartSession,
-  onboarding,
   onShowArchived,
   onOpenAnalytics,
   teamViewing,
@@ -442,7 +435,6 @@ export function Home({
   const [recentPrs, setRecentPrs] = useState<RecentPr[]>([]);
   const [personPrs, setPersonPrs] = useState<RecentPr[]>([]);
   const [stats, setStats] = useState<HomeStats | null>(readCachedHomeStats);
-  const onboardingActive = !onboarding.status?.hasOwnSessions;
 
   useEffect(() => {
     let active = true;
@@ -555,7 +547,7 @@ export function Home({
                 neutral in the header, and the whole pile is one trigger: whose
                 work this page and the sidebar behind it show is a name you pick
                 from the menu, not a face you brush past. */}
-            {!onboardingActive && team.length > 0 && (
+            {team.length > 0 && (
               <TeamLensMenu
                 members={team}
                 size={isPhone ? 24 : 27}
@@ -570,7 +562,7 @@ export function Home({
                 word: at this size a label alone is a coloured rectangle you
                 read, and the plus is what makes it scan as the button that
                 makes something. */}
-            {!onboardingActive && <Button
+            <Button
               variant="primary"
               size="lg"
               icon={<IconPlus size={20} />}
@@ -578,15 +570,9 @@ export function Home({
               onClick={onNewSession}
             >
               New session
-            </Button>}
+            </Button>
           </div>
         </PageHeader>
-        {onboardingActive ? (
-          <TeammateOnboarding
-            model={{ ...onboarding, onStart: onStartSession }}
-          />
-        ) : (
-          <>
         <OverviewStrip running={running} stats={stats} onOpenAnalytics={onOpenAnalytics} />
 
         {/* Search and the two scopes, in the app's field-and-button vocabulary:
@@ -795,8 +781,6 @@ export function Home({
               </section>
             ))}
           </div>
-        )}
-          </>
         )}
       </div>
     </div>

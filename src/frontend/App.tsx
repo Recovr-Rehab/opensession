@@ -73,7 +73,6 @@ import { Reports } from "./components/Reports";
 import { Analytics } from "./components/Analytics";
 import { Tasks } from "./components/Tasks";
 import { UserGate, getCurrentUser, useAuthStatus, useCurrentUser } from "./components/UserPicker";
-import type { TeammateOnboardingModel } from "./components/TeammateOnboarding";
 import { fetchTeammateOnboardingStatus, type TeammateOnboardingStatus } from "./lib/api";
 import { PreviewWait, matchPreviewWaitRoute } from "./components/PreviewWait";
 import { SettingsButton } from "./components/SettingsButton";
@@ -588,24 +587,17 @@ export function App(
 	const localMode = auth?.local === true;
 	const { connected, send, addHandler } = useWebSocket();
 	const [onboardingStatus, setOnboardingStatus] = useState<TeammateOnboardingStatus | null>(null);
-	const [onboardingError, setOnboardingError] = useState<string | null>(null);
 	const onboardingRequestRef = useRef(0);
-	const loadOnboarding = useCallback(() => {
+	useEffect(() => {
 		const request = ++onboardingRequestRef.current;
-		setOnboardingError(null);
 		void fetchTeammateOnboardingStatus(currentUser, auth?.local === true)
 			.then((status) => {
 				if (request === onboardingRequestRef.current) setOnboardingStatus(status);
 			})
-			.catch((error) => {
-				if (request === onboardingRequestRef.current) {
-					setOnboardingError(error instanceof Error ? error.message : "Couldn't check readiness");
-				}
+			.catch(() => {
+				if (request === onboardingRequestRef.current) setOnboardingStatus(null);
 			});
-	}, [auth?.local, currentUser]);
-	useEffect(() => {
-		loadOnboarding();
-	}, [loadOnboarding, sessions.length]);
+	}, [auth?.local, currentUser, sessions.length]);
 	const sessionsRef = useRef(sessions);
 	sessionsRef.current = sessions;
 	type PendingCreateDraft = {
@@ -1060,14 +1052,21 @@ export function App(
 	const openPrefilledSession = React.useCallback((prefill: NewSessionPrefill) => {
 		setPalette({ open: true, ...prefill });
 	}, []);
-	const teammateOnboarding: TeammateOnboardingModel = {
-		status: onboardingStatus,
-		error: onboardingError,
-		connected,
-		onRetry: loadOnboarding,
-		onStart: openPrefilledSession,
-		onOpenSetup: () => navigate({ view: "settings", section: "setup" }),
-	};
+	const onboardingOpenedForRef = useRef(new Set<string>());
+	useEffect(() => {
+		if (
+			loading ||
+			route.view !== "home" ||
+			palette.open ||
+			onboardingStatus?.hasOwnSessions !== false ||
+			onboardingOpenedForRef.current.has(currentUser)
+		) return;
+		onboardingOpenedForRef.current.add(currentUser);
+		openPrefilledSession({
+			mode: "code",
+			repo: onboardingStatus.preparedRepo?.id,
+		});
+	}, [currentUser, loading, onboardingStatus, openPrefilledSession, palette.open, route.view]);
 
 	// A "new tab" while a session is open is a *new session in that same session*, not
 	// a whole new session — so it must NOT pop the new-session palette. It's a
@@ -3665,7 +3664,6 @@ export function App(
 							workspaces={workspaces}
 							notes={notes.map((n) => ({ id: n.id, title: n.title }))}
 							teamViewing={teamViewing}
-							onboarding={teammateOnboarding}
 							selectedId={currentSession?.id || null}
 							activeNoteId={currentNoteId}
 							notesActive={route.view === "notes"}
@@ -4167,8 +4165,6 @@ export function App(
 								teamViewing={teamViewing}
 								onSelect={(s) => navigate({ view: "session", id: s.id })}
 								onNewSession={() => openPalette()}
-								onStartSession={openPrefilledSession}
-								onboarding={teammateOnboarding}
 								onShowArchived={refreshArchived}
 								onOpenAnalytics={() => navigate({ view: "analytics" })}
 							/>
@@ -4186,7 +4182,7 @@ export function App(
 				{/* Mobile-only floating + on the root list page — thumb-reach shortcut
 				    to the new-session palette (desktop hides it via CSS; the sidebar's
 				    own + covers that layout). */}
-				{!mobileDetail && onboardingStatus?.hasOwnSessions !== false && (
+				{!mobileDetail && (
 					<button
 						className={MOBILE_FAB}
 						onClick={() => openPalette()}

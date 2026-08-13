@@ -8,10 +8,6 @@ export interface TeammateOnboardingStatus {
 		label: string;
 		defaultBranch: string;
 	} | null;
-	capabilities: {
-		task: { ready: boolean; blocker: string | null };
-		changes: { ready: boolean; blocker: string | null };
-	};
 }
 
 export function fetchTeammateOnboardingStatus(

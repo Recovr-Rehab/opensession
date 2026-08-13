@@ -1,8 +1,6 @@
 import { defaultRepo } from "../config";
-import { engineStatus } from "../engine-status";
 import { getCachedSessions } from "../session-cache";
 import type { UnifiedSession } from "../types";
-import { workspaceAdminAuthorized } from "../workspace-auth";
 import { requestUser, type RouteContext } from "./context";
 
 export interface OnboardingIdentity {
@@ -52,25 +50,13 @@ export async function handleOnboardingRoutes(
 		};
 	} catch {
 		// A repo-less instance can still run Scratch sessions, but it cannot offer
-		// the repository-guided teammate introduction this endpoint describes.
+		// a prepared repository when the first-session composer opens.
 	}
-
-	const engine = engineStatus();
-	const engineBlocker = engine.ready
-		? null
-		: "No model is available for new sessions.";
-	const repoBlocker = preparedRepo ? null : "No repository is ready for sessions.";
-	const blocker = engineBlocker || repoBlocker;
 
 	return Response.json({
 		hasOwnSessions: getCachedSessions().some((session) =>
 			sessionBelongsToOnboardingUser(session, identity),
 		),
-		admin: workspaceAdminAuthorized(ctx),
 		preparedRepo,
-		capabilities: {
-			task: { ready: !blocker, blocker },
-			changes: { ready: !blocker, blocker },
-		},
 	});
 }
