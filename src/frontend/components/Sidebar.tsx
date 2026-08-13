@@ -2931,7 +2931,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							SIDEBAR_GROUP_CHEVRON,
 							!open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
 						)}
-						size={16}
+						size={12}
 						style={{ transform: open ? "none" : "rotate(-90deg)" }}
 					/>
 				</button>
@@ -3005,7 +3005,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								SIDEBAR_GROUP_CHEVRON,
 								!open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
 							)}
-							size={16}
+							size={12}
 							style={{ transform: open ? "none" : "rotate(-90deg)" }}
 						/>
 					</button>
@@ -3126,7 +3126,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									SIDEBAR_GROUP_CHEVRON,
 									!open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
 								)}
-								size={16}
+								size={12}
 								style={{ transform: open ? "none" : "rotate(-90deg)" }}
 							/>
 						</button>
