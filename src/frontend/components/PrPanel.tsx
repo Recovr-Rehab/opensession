@@ -54,10 +54,14 @@ import { pollWhileVisible, PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import { Textarea } from "../ui/input";
 import {
   IconCheck,
+  IconDotsHorizontal,
   IconMessage,
+  IconReturn,
   IconX,
   IconFile,
 } from "./icons";
+import { Menu, MENU_ICON } from "../ui/menu";
+import { Tooltip } from "../ui/tooltip";
 
 import { checkClass, deriveStatus, isDeployment, summarize } from "../lib/pr-status-derive";
 import {
@@ -421,6 +425,18 @@ export function PrPanel({
     setDiffStyle(style);
     try {
       localStorage.setItem("opensession-pr-diff-style", style);
+    } catch {}
+  };
+  // Long lines scroll sideways by default (GitHub's behaviour). Wrapping keeps
+  // them all on screen, which matters most in split view where each side is
+  // half as wide.
+  const [wrapLines, setWrapLines] = useState(
+    () => localStorage.getItem("opensession-pr-diff-wrap") === "1",
+  );
+  const changeWrapLines = (wrap: boolean) => {
+    setWrapLines(wrap);
+    try {
+      localStorage.setItem("opensession-pr-diff-wrap", wrap ? "1" : "0");
     } catch {}
   };
   const [guide, setGuide] = useState<ReviewGuideData | null>(null);
@@ -1395,6 +1411,33 @@ export function PrPanel({
                     Split
                   </Button>
                 </div>}
+                {diffView !== "flow" && (
+                  <Menu.Root>
+                    <Tooltip label="Diff options">
+                      <Menu.Trigger
+                        render={
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            aria-label="Diff options"
+                            icon={<IconDotsHorizontal size={18} />}
+                          />
+                        }
+                      />
+                    </Tooltip>
+                    <Menu.Popup align="end">
+                      <Menu.CheckboxItem
+                        checked={wrapLines}
+                        onCheckedChange={changeWrapLines}
+                        closeOnClick
+                      >
+                        <IconReturn size={18} className={MENU_ICON} />
+                        <span className="min-w-0 flex-1 truncate">Wrap long lines</span>
+                        {wrapLines && <IconCheck className="shrink-0 text-accent" size={17} />}
+                      </Menu.CheckboxItem>
+                    </Menu.Popup>
+                  </Menu.Root>
+                )}
               </div>
             </div>
           )}
@@ -1458,6 +1501,7 @@ export function PrPanel({
                     <CommentableDiff
                       patch={diff.patch}
                       diffStyle={diffStyle}
+                      wrapLines={wrapLines}
                       stickyFileHeaders
                       defaultExpandedFiles={Infinity}
                       viewedFiles={prViewed?.key === viewedKey ? prViewed.viewed : undefined}
@@ -1519,6 +1563,7 @@ export function PrPanel({
                           <CommentableDiff
                             patch={section.patch}
                             diffStyle={diffStyle}
+                            wrapLines={wrapLines}
                             stickyFileHeaders
                             defaultExpandedFiles={Infinity}
                             viewedFiles={prViewed?.key === viewedKey ? prViewed.viewed : undefined}
@@ -1542,6 +1587,7 @@ export function PrPanel({
                 <CommentableDiff
                   patch={diff.patch}
                   diffStyle={diffStyle}
+                  wrapLines={wrapLines}
                   stickyFileHeaders
                   defaultExpandedFiles={Infinity}
                   viewedFiles={prViewed?.key === viewedKey ? prViewed.viewed : undefined}

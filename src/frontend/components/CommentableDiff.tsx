@@ -106,6 +106,8 @@ interface Props {
   groupsLoading?: boolean;
   /** PR review canvases use GitHub's side-by-side presentation; workspace diffs stay unified. */
   diffStyle?: "unified" | "split";
+  /** Soft-wrap long lines instead of scrolling each file horizontally. */
+  wrapLines?: boolean;
   /** Keep each filename visible while its expanded file scrolls through a review canvas. */
   stickyFileHeaders?: boolean;
   /**
@@ -158,7 +160,7 @@ const BASE_OPTIONS = {
   // Our own collapsible row owns the file header (name + stats + caret), so
   // suppress @pierre/diffs' built-in one to avoid a double header.
   disableFileHeader: true,
-  overflow: "scroll" as const,
+  // `overflow` is set per row from the caller's wrap preference.
   enableLineSelection: true,
 };
 
@@ -222,6 +224,7 @@ export function CommentableDiff({
   groups,
   groupsLoading,
   diffStyle = "unified",
+  wrapLines = false,
   stickyFileHeaders = false,
   viewedFiles,
   onToggleViewed,
@@ -784,6 +787,7 @@ export function CommentableDiff({
               fileIndex={i}
               theme={theme}
               diffStyle={diffStyle}
+              wrapLines={wrapLines}
               annotations={annotations}
               selectedLines={isDraftFile ? draft!.range : null}
               onSelect={handleSelect}
@@ -1055,6 +1059,7 @@ const FileDiffRow = React.memo(function FileDiffRow({
   fileIndex,
   theme,
   diffStyle,
+  wrapLines,
   annotations,
   selectedLines,
   onSelect,
@@ -1067,6 +1072,7 @@ const FileDiffRow = React.memo(function FileDiffRow({
   fileIndex: number;
   theme: "light" | "dark";
   diffStyle: "unified" | "split";
+  wrapLines: boolean;
   annotations: DiffLineAnnotation<Meta>[];
   selectedLines: SelectedLineRange | null;
   onSelect: (fileIndex: number, path: string, range: SelectedLineRange | null) => void;
@@ -1079,6 +1085,7 @@ const FileDiffRow = React.memo(function FileDiffRow({
     () => ({
       ...BASE_OPTIONS,
       diffStyle,
+      overflow: wrapLines ? ("wrap" as const) : ("scroll" as const),
       theme: theme === "light" ? "pierre-light" : "pierre-dark",
       themeType: theme,
       // Line selection drives commenting; while editing, clicks place the
@@ -1087,7 +1094,7 @@ const FileDiffRow = React.memo(function FileDiffRow({
       ...(loadDiffFiles ? { loadDiffFiles } : {}),
       onLineSelected: (range: SelectedLineRange | null) => onSelect(fileIndex, file.name, range),
     }),
-    [diffStyle, fileIndex, file.name, onSelect, theme, editing, loadDiffFiles],
+    [diffStyle, wrapLines, fileIndex, file.name, onSelect, theme, editing, loadDiffFiles],
   );
 
   const fileDiff = (
