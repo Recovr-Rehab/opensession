@@ -12,17 +12,24 @@
  * The rail has exactly TWO box heights, and which one an element takes says
  * what KIND of thing it is rather than how important it is:
  *
- *   36px  an ITEM — something you click to go somewhere, and the only family
+ *   36px  an ITEM — something you click to GO somewhere, and the only family
  *         that paints a hover pill. Session/PR/support/archived rows, tool
- *         rows, and the headings that are themselves destinations-with-a-mark
- *         (a repo or feed band, Needs review, Awaiting review, Pinned,
- *         Archived, an automation group). See {@link SIDEBAR_HEADER_ROW}.
- *   28px  a LABEL — a caption naming the group under it. Band headings
- *         (Tools / Workspaces / Automations / People) and the status lanes
- *         (Needs action / Recent / Yesterday / Urgent). No hover fill at all:
- *         they still toggle, and the ink brightening on hover says so, but a
- *         full-width pill made every caption look like one more row to click.
- *         See {@link SIDEBAR_LANE_HEADER} and {@link SIDEBAR_BAND_TOGGLE}.
+ *         rows, and the headings that are destinations in their own right and
+ *         lead with a mark: a repo or feed band, Archived, an automation
+ *         group. See {@link SIDEBAR_HEADER_ROW}.
+ *   28px  a LABEL — a caption naming the group under it, leading with no mark
+ *         at all. Band headings (Tools / Workspaces / Automations / People),
+ *         the status lanes (Needs action / Recent / Yesterday / Urgent), and
+ *         the top-level groupings that read as lanes over the whole list:
+ *         Needs review, Awaiting review, Pinned. No hover fill: they still
+ *         toggle, and the ink brightening on hover says so, but a full-width
+ *         pill made every caption look like one more row to click. See
+ *         {@link SIDEBAR_LANE_HEADER} and {@link SIDEBAR_BAND_TOGGLE}.
+ *
+ * The line between the two is what the heading IS, not where it sits. Needs
+ * review and Pinned are top-level and used to lead with a coloured 22px glyph,
+ * which made them the loudest thing in the rail while naming a group exactly
+ * the way Yesterday does. They open nothing, so they are labels.
  *
  * Before this the same rail ran 44 / 40 / 32 / 30 / 28 down one column — five
  * heights for four kinds of thing, with the tallest box (a band caption at 44)
@@ -300,8 +307,11 @@ export const SIDEBAR_LANE_COUNT = "text-[12px] font-medium text-faint";
 /** The 7px liveness dot a lane or automation heading leads with. */
 export const SIDEBAR_GROUP_DOT = "size-[7px] shrink-0 rounded-full opacity-85";
 
-/** The 22px glyph a top-level heading (Needs review, Pinned) leads with. */
-export const SIDEBAR_GROUP_ICON = "size-[22px] shrink-0 opacity-90";
+/* The 22px glyph a top-level heading used to lead with is gone: Needs review,
+   Awaiting review and Pinned are groupings rather than destinations, so they
+   are labels now (see the height scale above) and carry no mark, exactly like
+   the Yesterday / Earlier lanes they sit among. The marks that remain in the
+   rail — a repo tile, a lane dot — belong to things you can open. */
 
 /**
  * Automation headings swap their run count for a cog that jumps to that

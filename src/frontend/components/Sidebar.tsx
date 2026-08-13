@@ -22,7 +22,6 @@ import {
 	SIDEBAR_GROUP_DOT,
 	SIDEBAR_GROUP_HEADER,
 	SIDEBAR_GROUP_HEADER_INSET,
-	SIDEBAR_GROUP_ICON,
 	SIDEBAR_GROUP_NAME,
 	SIDEBAR_LANE_COUNT,
 	SIDEBAR_LANE_HEADER,
@@ -118,7 +117,6 @@ import { shortTime } from "../lib/time";
 import {
 	IconChevronDown,
 	IconArchive,
-	IconBell,
 	IconFilter,
 	IconX,
 	IconGear,
@@ -4464,28 +4462,25 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									className={cn(
 										SIDEBAR_GROUP_HEADER,
 										SIDEBAR_GROUP_HEADER_INSET,
-										SIDEBAR_HEADER_ROW,
+										SIDEBAR_LANE_HEADER,
 										SIDEBAR_STICKY_LANE,
 										SIDEBAR_STUCK_BACKING,
 									)}
 									data-sticky-head
 									onClick={() => toggleGroup("needsreview")}
 								>
-									<IconBell
-										className={SIDEBAR_GROUP_ICON}
-										style={{ color: "var(--accent-ink)" }}
-									/>
-									<span className={SIDEBAR_GROUP_NAME}>Needs review</span>
-									<span className={SIDEBAR_GROUP_COUNT}>
+									<span className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_LANE_NAME)}>
+										Needs review
+									</span>
+									<span className={SIDEBAR_LANE_COUNT}>
 										{needsReviewRows.length + requestedPrItems.length}
 									</span>
 									<IconChevronDown
 										className={cn(
 											SIDEBAR_GROUP_CHEVRON,
-											"ml-auto",
 											!open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
 										)}
-										size={22}
+										size={12}
 										style={{ transform: open ? "none" : "rotate(-90deg)" }}
 									/>
 								</button>
@@ -4513,24 +4508,25 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									className={cn(
 										SIDEBAR_GROUP_HEADER,
 										SIDEBAR_GROUP_HEADER_INSET,
-										SIDEBAR_HEADER_ROW,
+										SIDEBAR_LANE_HEADER,
 										SIDEBAR_STICKY_LANE,
 										SIDEBAR_STUCK_BACKING,
 									)}
 									data-sticky-head
 									onClick={() => toggleGroup("awaitingreview")}
 								>
-									<IconEye
-										className={SIDEBAR_GROUP_ICON}
-										style={{ color: "var(--yellow)" }}
-									/>
-									<span className={SIDEBAR_GROUP_NAME}>Awaiting review</span>
-									<span className={SIDEBAR_GROUP_COUNT}>
+									<span className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_LANE_NAME)}>
+										Awaiting review
+									</span>
+									<span className={SIDEBAR_LANE_COUNT}>
 										{awaitingReviewRows.length}
 									</span>
 									<IconChevronDown
-										className={cn(SIDEBAR_GROUP_CHEVRON, "ml-auto")}
-										size={22}
+										className={cn(
+											SIDEBAR_GROUP_CHEVRON,
+											!open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
+										)}
+										size={12}
 										style={{ transform: open ? "none" : "rotate(-90deg)" }}
 									/>
 								</button>
@@ -4831,22 +4827,23 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								className={cn(
 									SIDEBAR_GROUP_HEADER,
 									SIDEBAR_GROUP_HEADER_INSET,
-									SIDEBAR_HEADER_ROW,
+									SIDEBAR_LANE_HEADER,
 									SIDEBAR_STICKY_LANE,
 									SIDEBAR_STUCK_BACKING,
 								)}
 								data-sticky-head
 								onClick={() => toggleGroup("pinned")}
 							>
-								<IconPin
-									className={SIDEBAR_GROUP_ICON}
-									style={{ color: "var(--text-faint)" }}
-								/>
-								<span className={SIDEBAR_GROUP_NAME}>Pinned</span>
-								<span className={SIDEBAR_GROUP_COUNT}>{pinnedCount}</span>
+								<span className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_LANE_NAME)}>
+									Pinned
+								</span>
+								<span className={SIDEBAR_LANE_COUNT}>{pinnedCount}</span>
 								<IconChevronDown
-									className={cn(SIDEBAR_GROUP_CHEVRON, "ml-auto")}
-									size={22}
+									className={cn(
+										SIDEBAR_GROUP_CHEVRON,
+										!pinnedOpen && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
+									)}
+									size={12}
 									style={{ transform: pinnedOpen ? "none" : "rotate(-90deg)" }}
 								/>
 							</button>
