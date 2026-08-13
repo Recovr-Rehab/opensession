@@ -65,7 +65,6 @@ import { Automations } from "./components/Automations";
 import { Security } from "./components/Security";
 import { Goals } from "./components/Goals";
 import { Actions } from "./components/Actions";
-import { Notes, type NotesSelection } from "./components/Notes";
 import { Archived } from "./components/Archived";
 import { Reviews } from "./components/Reviews";
 import { PrQueuePreview } from "./components/PrQueuePreview";
@@ -100,7 +99,6 @@ import {
 	IconInbox,
 	IconListCircles,
 	IconMoon,
-	IconPencil,
 	IconPlus,
 	IconSearch,
 	IconSidebarLeft,
@@ -121,14 +119,12 @@ import {
 	deleteSessionApi,
 	renameSessionApi,
 	setSessionStatusApi,
-	fetchNotes,
 	fetchWorkspaces,
 	updateWorkspaceApi,
 	deleteWorkspaceApi,
 	newSessionApi,
 	fetchRepos,
 	resolveWorkspaceApi,
-	type NoteMeta,
 	type OpenPr,
 } from "./lib/api";
 import {
@@ -228,13 +224,12 @@ type Route =
 	| { view: "prtinder" }
 	// Support Tinder — the same swipe triage over the Plain Todo queue.
 	| { view: "supporttinder" }
-	// Tool surfaces (Automations/Security/Goals/Actions/Notes) render inside the
+	// Tool surfaces (Automations/Security/Goals/Actions) render inside the
 	// Settings chrome but keep their own routes, so old links stay deep-linkable.
 	| { view: "automations"; id?: string }
 	| { view: "security" }
 	| { view: "goals"; id?: string }
 	| { view: "actions"; id?: string }
-	| { view: "notes"; sel: NotesSelection }
 	| { view: "settings"; section?: SettingsSectionKey }
 	| { view: "archived" }
 	| { view: "catchup" };
@@ -244,13 +239,7 @@ type Route =
 const NO_SUBAGENTS: SubagentRef[] = [];
 
 // Route views that render as a tool section inside the Settings surface.
-const TOOL_VIEWS = [
-	"automations",
-	"security",
-	"goals",
-	"actions",
-	"notes",
-] as const;
+const TOOL_VIEWS = ["automations", "security", "goals", "actions"] as const;
 type ToolView = (typeof TOOL_VIEWS)[number];
 function isToolView(view: string): view is ToolView {
 	return (TOOL_VIEWS as readonly string[]).includes(view);
@@ -377,8 +366,7 @@ function parseRoute(pathname: string): Route {
 	const settingsMatch = pathname.match(/^\/settings(?:\/(.+))?$/);
 	if (settingsMatch) {
 		const key = settingsMatch[1];
-		if (key && isToolView(key))
-			return key === "notes" ? { view: "notes", sel: null } : { view: key };
+		if (key && isToolView(key)) return { view: key };
 		if (key && SETTINGS_SECTIONS.has(key as SettingsSectionKey))
 			return { view: "settings", section: key as SettingsSectionKey };
 		if (key && LEGACY_SETTINGS_SECTIONS[key])
@@ -394,29 +382,6 @@ function parseRoute(pathname: string): Route {
 		return {
 			view: "reviews",
 			id: reviewsMatch[1] ? decodeURIComponent(reviewsMatch[1]) : undefined,
-		};
-	const noteMatch = pathname.match(/^\/notes(?:\/(.+))?$/);
-	if (noteMatch)
-		return {
-			view: "notes",
-			sel: noteMatch[1]
-				? { kind: "note", id: decodeURIComponent(noteMatch[1]) }
-				: null,
-		};
-	const docMatch = pathname.match(/^\/docs\/(.+)$/);
-	if (docMatch)
-		return {
-			view: "notes",
-			sel: { kind: "doc", path: decodeURIComponent(docMatch[1]) },
-		};
-	// Back-compat: the old read-only Wiki lived at <base>/wiki/<path>.
-	const wikiMatch = pathname.match(/^\/wiki(?:\/(.+))?$/);
-	if (wikiMatch)
-		return {
-			view: "notes",
-			sel: wikiMatch[1]
-				? { kind: "doc", path: decodeURIComponent(wikiMatch[1]) }
-				: null,
 		};
 	return { view: "home" };
 }
@@ -477,12 +442,6 @@ function routePath(route: Route): string {
 			return route.id
 				? `${BASE_PATH}/reviews/${encodeURIComponent(route.id)}`
 				: `${BASE_PATH}/reviews`;
-		case "notes":
-			if (route.sel?.kind === "note")
-				return `${BASE_PATH}/notes/${encodeURIComponent(route.sel.id)}`;
-			if (route.sel?.kind === "doc")
-				return `${BASE_PATH}/docs/${route.sel.path.split("/").map(encodeURIComponent).join("/")}`;
-			return `${BASE_PATH}/notes`;
 		default:
 			return `${BASE_PATH}/`;
 	}
@@ -757,20 +716,6 @@ export function App(
 	const [pins, setPins] = useState<string[]>(getPins);
 	const [tabColors, setTabColors] =
 		useState<Record<string, string>>(getTabColors);
-	// Shared notes list — resolves note-tab titles and the Notes view sidebar.
-	const [notes, setNotes] = useState<NoteMeta[]>([]);
-	const refreshNotes = React.useCallback(() => {
-		fetchNotes()
-			.then(setNotes)
-			.catch(() => {});
-	}, []);
-	useEffect(() => {
-		refreshNotes();
-		const onFocus = () => refreshNotes();
-		window.addEventListener("focus", onFocus);
-		return () => window.removeEventListener("focus", onFocus);
-	}, [refreshNotes]);
-
 	// Workspaces (containers that group sessions) — powers the sidebar rows
 	// and the workspace-scoped tab strip. Refetched on focus and when sessions
 	// change (a new PR session can auto-create a workspace server-side).
@@ -864,9 +809,7 @@ export function App(
 
 	// Settings (and the tool surfaces it hosts) render as a full page on
 	// desktop, but as a bottom sheet over the root list on phones.
-	const settingsActive =
-		route.view === "settings" ||
-		(isToolView(route.view) && route.view !== "notes");
+	const settingsActive = route.view === "settings" || isToolView(route.view);
 	const isPhone = useIsPhone();
 
 	// A pushed detail page is showing (anything but the sidebar-root home view).
@@ -2156,9 +2099,6 @@ export function App(
 			markRead(currentSession.id, currentSession.lastActivity);
 	}, [currentSession?.id, currentSession?.lastActivity]);
 
-	const currentNoteId =
-		route.view === "notes" && route.sel?.kind === "note" ? route.sel.id : null;
-
 	// The tab strip is scoped to the open session's workspace: its sibling sessions
 	// (same workspaceId), oldest first. Sessions with no workspace (slack/linear
 	// sources — their files are read-only, so the migration couldn't wrap them)
@@ -3079,15 +3019,6 @@ export function App(
 			run: () => navigate({ view: "analytics" }),
 		},
 		{
-			id: "notes",
-			label: "Notes",
-			description: "Open shared notes and documentation",
-			category: "Navigate",
-			keywords: ["docs", "documentation"],
-			icon: <IconPencil size={18} />,
-			run: () => navigate({ view: "notes", sel: null }),
-		},
-		{
 			id: "reviews",
 			label: "Reviews",
 			description: "Open the pull request review queue",
@@ -3644,12 +3575,8 @@ export function App(
 							onRetrySessions={() => void refresh()}
 							workspaceDataReady={!loading && workspacesLoaded}
 							workspaces={workspaces}
-							notes={notes.map((n) => ({ id: n.id, title: n.title }))}
 							teamViewing={teamViewing}
 							selectedId={currentSession?.id || null}
-							activeNoteId={currentNoteId}
-							notesActive={route.view === "notes"}
-							onOpenNotes={() => navigate({ view: "notes", sel: null })}
 							homeActive={route.view === "home"}
 							onOpenHome={() => navigate({ view: "home" })}
 							tasksActive={route.view === "tasks"}
@@ -3730,9 +3657,6 @@ export function App(
 								}
 							}}
 							onToast={showToast}
-							onOpenNote={(id) =>
-								navigate({ view: "notes", sel: { kind: "note", id } })
-							}
 							// Only hand the sidebar the top-bar actions slot on the root
 							// page — on a pushed page (session, etc.) the sidebar is still
 							// mounted underneath and would portal its filter button into
@@ -3964,35 +3888,6 @@ export function App(
 							<Tasks
 								addHandler={addHandler}
 								onOpenSession={(id) => navigate({ view: "session", id })}
-							/>
-						) : route.view === "notes" ? (
-							<Notes
-								sel={route.sel}
-								notes={notes}
-								refreshNotes={refreshNotes}
-								pinnedNoteIds={
-									new Set(
-										pins
-											.filter((p) => p.startsWith("note:"))
-											.map((p) => p.slice(5)),
-									)
-								}
-								onTogglePinNote={(id) => setPins(togglePin(`note:${id}`))}
-								onSelectNote={(id) =>
-									navigate({ view: "notes", sel: { kind: "note", id } })
-								}
-								onSelectDoc={(path) =>
-									navigate({
-										view: "notes",
-										sel: path ? { kind: "doc", path } : null,
-									})
-								}
-								sessions={sessions.map((s) => ({ id: s.id, title: s.title }))}
-								onOpenSession={(id) => navigate({ view: "session", id })}
-								user={getCurrentUser()}
-								connected={connected}
-								send={send}
-								addHandler={addHandler}
 							/>
 						) : route.view === "support" ? (
 							<SupportPreview

@@ -1,5 +1,13 @@
 # Plugins — design proposal
 
+**Update (2026-08-13): Notes was removed from core** — the collaborative-notes
+store, its routes, WebSocket relay, MCP server and UI are gone, and so is its
+library card. The stored documents under `~/.opensession-notes/` were left
+untouched. Notes is the intended first real plugin, so the passages below that
+use it as the worked example describe a feature that no longer ships; read them
+as a design for what a plugin has to be able to do, not as a description of
+current behavior.
+
 **Status: the first slice of the library is built; the plugin runtime is a
 proposal.** Settings → Library (`src/server/library.ts`, `LibraryPanel.tsx`)
 browses the catalog described below — 31 entries derived from the recipes

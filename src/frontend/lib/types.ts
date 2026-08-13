@@ -292,8 +292,7 @@ export interface SessionSlackShare {
 }
 
 /** A team note on a session: human-to-human, interleaved into the transcript
- *  by `ts`, and never shown to the agent. See src/server/session-notes.ts —
- *  unrelated to the shared note DOCUMENTS in lib/api/notes.ts. */
+ *  by `ts`, and never shown to the agent. See src/server/session-notes.ts. */
 export interface SessionNote {
 	id: string;
 	user: string;
@@ -754,12 +753,7 @@ export type WSClientMessage =
 	// Presence only: this tab went hidden or idle (or came back). The watch is
 	// untouched — the transcript keeps streaming — but an away socket stops
 	// showing this person's face to teammates.
-	| { type: "away"; away: boolean }
-	// Collaborative notes (Yjs updates relayed as base64 over this socket).
-	| { type: "watch_note"; noteId: string; user?: string }
-	| { type: "leave_note" }
-	| { type: "note_update"; noteId: string; update: string }
-	| { type: "note_awareness"; noteId: string; update: string };
+	| { type: "away"; away: boolean };
 
 export type WSServerMessage =
 	// The protocol core: hello/pong/error/notice, the transcript frames (init/
@@ -827,12 +821,7 @@ export type WSServerMessage =
 	// Broadcast to every client, not just the session's watchers, so a client
 	// elsewhere can still tell that a session has new notes.
 	| { type: "session_note"; sessionId: string; note: SessionNote }
-	| { type: "session_note_deleted"; sessionId: string; noteId: string }
-	// Collaborative notes.
-	| { type: "note_state"; noteId: string; update: string }
-	| { type: "note_update"; noteId: string; update: string }
-	| { type: "note_awareness"; noteId: string; update: string }
-	| { type: "note_presence"; noteId: string; viewers: string[] };
+	| { type: "session_note_deleted"; sessionId: string; noteId: string };
 
 
 // ── Analytics (sidebar → Analytics; GET /api/analytics) ──

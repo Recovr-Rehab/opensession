@@ -1,5 +1,5 @@
 /**
- * WebSocket fan-out hub: which sockets are watching which session/note, and
+ * WebSocket fan-out hub: which sockets are watching which session, and
  * every broadcast primitive built on that. Pure client/presence state — no
  * run or queue logic lives here (see queue-state.ts / run-session.ts).
  *
@@ -58,7 +58,6 @@ export interface WSClientData {
 	/** Hosted-side authorization for the virtual-client multiplex protocol. */
 	cloudProxy?: boolean;
 	cloudProxyLanes?: Map<string, any>;
-	watchingNoteId: string | null;
 	user: string | null;
 	/** Verified sign-in identity stamped at upgrade (web-auth.ts). When set,
 	 *  it overrides any client-claimed `user` in messages (ws-handlers.ts). */
@@ -302,56 +301,3 @@ function broadcastGlobalPresence() {
 		} catch {}
 	}
 }
-
-// ── Collaborative notes fan-out ───────────────────────────────────────────
-// Parallel to sessionWatchers: noteId → sockets editing that note. Notes are
-// Yjs CRDT docs (src/server/notes.ts); clients relay binary Yjs updates +
-// awareness (cursors) as base64 over this same multiplexed JSON socket.
-export const noteWatchers: Map<string, Set<any>> = (g.__noteWatchers ??=
-	new Map());
-
-export function joinNote(ws: any, noteId: string) {
-	let set = noteWatchers.get(noteId);
-	if (!set) {
-		set = new Set();
-		noteWatchers.set(noteId, set);
-	}
-	set.add(ws);
-	broadcastNotePresence(noteId);
-}
-
-export function leaveNote(ws: any) {
-	const noteId = ws.data?.watchingNoteId;
-	if (!noteId) return;
-	const set = noteWatchers.get(noteId);
-	if (set) {
-		set.delete(ws);
-		if (set.size === 0) noteWatchers.delete(noteId);
-		else broadcastNotePresence(noteId);
-	}
-	ws.data.watchingNoteId = null;
-}
-
-export function broadcastToNote(noteId: string, msg: object, except?: any) {
-	const set = noteWatchers.get(noteId);
-	if (!set) return;
-	const payload = JSON.stringify(msg);
-	for (const ws of set) {
-		if (ws === except) continue;
-		try {
-			ws.send(payload);
-		} catch {}
-	}
-}
-
-function broadcastNotePresence(noteId: string) {
-	const set = noteWatchers.get(noteId);
-	const viewers = set
-		? Array.from(set, (ws: any) => ws.data?.user || "Anonymous")
-		: [];
-	broadcastToNote(noteId, { type: "note_presence", noteId, viewers });
-}
-
-export const b64encode = (u: Uint8Array) => Buffer.from(u).toString("base64");
-export const b64decode = (s: string) =>
-	new Uint8Array(Buffer.from(s, "base64"));

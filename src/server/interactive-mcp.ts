@@ -32,7 +32,6 @@ import { createTodosMcpServer } from "../agents/slack/todos-tools";
 import { createSearchMcpServer } from "../agents/slack/search-tools";
 import { createAssetsMcpServer } from "../agents/slack/assets-tools";
 import { createWorkflowsMcpServer } from "../agents/slack/workflow-tools";
-import { createNotesMcpServer } from "../agents/slack/notes-tools";
 import { createSelfDeployMcpServer } from "./self-deploy";
 import { papercutsEnabledForRepo } from "./papercuts";
 import { defaultRepo, productName } from "./config";
@@ -153,9 +152,6 @@ export function interactiveMcpServers(
 		// but transcripts can hold sensitive material — interactive-only like the
 		// siblings (the automation gate in the run-rpc builder below fails closed).
 		"opensession-search": createSearchMcpServer(),
-		// Workspace-wide collaborative notes. Read/write/delete is interactive-only
-		// because notes can contain sensitive material and persistent instructions.
-		"opensession-notes": createNotesMcpServer(),
 		// Self-deploy: ff-only deploy of THIS instance to a sha + restart, with a
 		// last-known-good pin, health gate, and watchdog-covered rollback
 		// (deploy/self-deploy.sh). Interactive-only like every sibling — a deploy

@@ -274,7 +274,7 @@ export function buildRunInstructions(input: {
         "This is READ-ONLY with respect to the checkout and shell: never modify, create, or " +
         "delete repository files, never commit, and never run state-changing shell commands " +
         "(the permission config enforces this). This does not prohibit intentional changes " +
-        "through available product-scoped MCP tools such as todos, shared notes, session " +
+        "through available product-scoped MCP tools such as todos, session " +
         "assets, or messages; use those tools according to their descriptions when the user " +
         "asks. Explore the checkout with read-only shell and git commands, then answer clearly " +
         "and concisely."

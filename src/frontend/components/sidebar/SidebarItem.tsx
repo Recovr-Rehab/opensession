@@ -31,7 +31,7 @@ import { SidebarCtxMenu } from "../sidebar/SidebarCtxMenu";
 import React, { useEffect, useRef, useState } from "react";
 
 /** The sidebar's selectable row — the shape every list family wears: session,
- *  workspace, PR, support, feed, archived and note rows. Migrated off the
+ *  workspace, PR, support, feed and archived rows. Migrated off the
  *  legacy row family, so the state that used to live in `-selected` /
  *  `-waiting` / `-unread` modifier classes now rides `data-*` attributes on
  *  the row itself and descendants read it through `group-data-[…]` variants.

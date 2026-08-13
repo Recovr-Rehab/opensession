@@ -126,13 +126,6 @@ const CORE_TOOLS: {
 		category: "Work",
 	},
 	{
-		slug: "notes",
-		name: "Notes",
-		description:
-			"Shared documents you and your agents edit together.",
-		category: "Work",
-	},
-	{
 		slug: "catchup",
 		name: "Catch up",
 		description:

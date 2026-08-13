@@ -34,7 +34,6 @@ import {
   demoAuditLines,
   demoAutomations,
   demoGoal,
-  demoNotes,
   demoPrDetails,
   demoPrInfo,
   demoSessions,
@@ -42,7 +41,7 @@ import {
 
 export interface DemoGenerateOpts {
   /**
-   * Also seed the HOME-rooted stores (automations/audit/notes/goals via
+   * Also seed the HOME-rooted stores (automations/audit/goals via
    * stateDir(), plus the two PR snapshot caches). Default true — demo
    * instances run with their state root (HOME) redirected. The standalone
    * CLI passes false when only the sessions dir was redirected, so nothing ever
@@ -263,12 +262,6 @@ export function generateDemoData(
         .map((l) => JSON.stringify(l))
         .join("\n")}\n`,
     );
-
-    // Notes (plain .md is enough — notes.ts seeds the Y.Doc from it).
-    const notesDir = stateDir("notes");
-    for (const [id, md] of Object.entries(demoNotes())) {
-      writeText(join(notesDir, `${id}.md`), md);
-    }
 
     // Goal + ledger (paused + far-future wake: never ticker-runnable).
     const goalsDir = stateDir("goals");

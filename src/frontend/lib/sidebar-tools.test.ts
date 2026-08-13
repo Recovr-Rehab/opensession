@@ -30,13 +30,13 @@ describe("readHiddenSidebarTools", () => {
 	test("stored ids that are no longer tools are dropped", () => {
 		store.set(
 			"opensession-sidebar-hidden-tools",
-			JSON.stringify(["notes", "retired-tool"]),
+			JSON.stringify(["analytics", "retired-tool"]),
 		);
-		expect([...readHiddenSidebarTools()]).toEqual(["notes"]);
+		expect([...readHiddenSidebarTools()]).toEqual(["analytics"]);
 	});
 
 	test("unreadable storage falls back to the new-account default", () => {
 		store.set("opensession-sidebar-hidden-tools", "{not json");
-		expect(readHiddenSidebarTools().has("notes")).toBe(true);
+		expect(readHiddenSidebarTools().has("analytics")).toBe(true);
 	});
 });

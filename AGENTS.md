@@ -98,10 +98,10 @@ entry file (that's what keeps parallel sessions from colliding):
   plain, workspace, models, …). Handlers get a `RouteContext` and return a
   `Response` or `undefined` to fall through; `routes/index.ts` is the ordered
   chain. Order only matters *within* a path family — keep a family (e.g.
-  `/notes/search` before `/notes/:id`) in one module. New endpoint → add it to
+  `/todos/search` before `/todos/:id`) in one module. New endpoint → add it to
   the matching domain file (or a new file + one line in index.ts).
 - `src/server/ws-handlers.ts` — the UI WebSocket (watch/prompt/queue control/
-  answers/terminals/notes + create_session).
+  answers/terminals + create_session).
 - `src/server/run-session.ts` — driving a session turn: runSessionPrompt(Inner),
   queue delivery (enqueue/steer/interrupt/drain), sandbox launch, restart
   resume, /loop ticker. This is runner-adjacent: changes need a real restart.
@@ -330,10 +330,10 @@ Follow Apple's Human Interface Guidelines. The rules that decide most cases:
   is doing real work, keep it; if it is restating the first with more nuance,
   cut it. Prefer "Review open pull requests one at a time." to a sentence that
   also explains why lists are bad.
-- **Lead with what it does for the reader**, not how it is built. "Shared
-  documents you and your agents edit together" beats "Collaborative documents
-  with live multi-cursor editing, backlinks, and agent read/write through the
-  opensession-notes tools." Implementation detail belongs in the module doc.
+- **Lead with what it does for the reader**, not how it is built. "A shared
+  task list agents can add to" beats "A per-user todo store with reminder
+  scheduling, Slack delivery, and agent read/write through the
+  opensession-todos tools." Implementation detail belongs in the module doc.
 - **Buttons are verbs, one or two words.** Add, Use, Set up, Connect, Retry.
   Not "Start from this template".
 - **Sentence case** for everything except product names. Not Title Case.

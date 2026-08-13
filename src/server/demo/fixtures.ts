@@ -1,6 +1,6 @@
 /**
  * Synthetic demo dataset fixtures — every session, transcript, automation,
- * note, goal and audit line the generator writes. All content is fictional
+ * goal and audit line the generator writes. All content is fictional
  * and PII-free (fake teammates "Alex"/"Sam", fake repo "acme-todo"); nothing
  * here may embed an absolute path from THIS machine — paths are threaded in
  * from the generator, which resolves them through the server's own resolvers
@@ -851,31 +851,6 @@ export function demoAutomations(now: number) {
       ],
     },
   ];
-}
-
-export function demoNotes(): Record<string, string> {
-  return {
-    "demo-release-checklist": [
-      "# Release checklist (demo)",
-      "",
-      "- [x] Changelog drafted",
-      "- [x] Smoke tests green on staging",
-      "- [ ] Feature flags default-off in prod",
-      "- [ ] Rollback plan linked from the deploy PR",
-      "",
-      "Owner rotates weekly — currently Alex.",
-      "",
-    ].join("\n"),
-    "demo-incident-log": [
-      "# Incident log (demo)",
-      "",
-      "## 2026-07-30 — upload retries exhausted",
-      "",
-      "Flaky retry loop skipped the final attempt (off-by-one).",
-      "Fixed in `demo/fix-flaky-upload`; watch error rate for a week.",
-      "",
-    ].join("\n"),
-  };
 }
 
 export function demoGoal(now: number, goalsDir: string) {

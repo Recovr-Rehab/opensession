@@ -26,15 +26,7 @@ export interface Props {
 	workspaceDataReady: boolean;
 	/** Workspace folders that group sessions. */
 	workspaces: Workspace[];
-	/** Notes (id + title), to render pinned-note rows. */
-	notes: Array<{ id: string; title: string }>;
 	selectedId: string | null;
-	/** The note currently open (highlights its pinned row), or null. */
-	activeNoteId: string | null;
-	/** True while the Notes tool is open. */
-	notesActive: boolean;
-	/** Open the shared Notes tool. */
-	onOpenNotes: () => void;
 	/** True while the Home view is open — highlights the Home entry. */
 	homeActive: boolean;
 	/** Open the home worktree index. */
@@ -88,8 +80,6 @@ export interface Props {
 	onRenameWorkspace: (id: string, name: string) => void;
 	/** Delete a project folder (its sessions become standalone). */
 	onDeleteWorkspace: (id: string) => void;
-	/** Open a note (pinned-note row click). */
-	onOpenNote: (id: string) => void;
 	onOpenArchived: () => void;
 	/** True while the archived view is open — highlights the Archived row. */
 	archivedActive: boolean;

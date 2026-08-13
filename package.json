@@ -29,12 +29,6 @@
     "@anthropic-ai/claude-agent-sdk": "^0.2.104",
     "@aws-sdk/client-lambda-microvms": "3.1090.0",
     "@base-ui/react": "^1.6.0",
-    "@codemirror/autocomplete": "^6.20.3",
-    "@codemirror/commands": "^6.10.4",
-    "@codemirror/lang-markdown": "^6.5.0",
-    "@codemirror/language": "^6.12.4",
-    "@codemirror/state": "^6.7.0",
-    "@codemirror/view": "^6.43.4",
     "@daytonaio/sdk": "0.194.0",
     "@earendil-works/pi-coding-agent": "^0.83.0",
     "@lezer/common": "^1.5.2",
@@ -67,9 +61,6 @@
     "tailwind-merge": "^3.6.0",
     "typescript": "^5.7.0",
     "web-push": "^3.6.7",
-    "y-codemirror.next": "^0.3.5",
-    "y-protocols": "^1.0.7",
-    "yjs": "^13.6.31",
     "zod": "^4.3.6"
   },
   "devDependencies": {

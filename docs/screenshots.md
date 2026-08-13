@@ -58,12 +58,6 @@ Scheduled and webhook-triggered agent runs, each with its own history.
 
 ![](screenshots/automations.png)
 
-## Notes and docs
-
-Collaborative notes alongside a read-only view of the repo's docs.
-
-![](screenshots/notes.png)
-
 ## On a phone
 
 The same UI, installed as a PWA — read a running session and steer it from

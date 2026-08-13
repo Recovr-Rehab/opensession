@@ -57,7 +57,6 @@ export async function handleCloudProxyProtocolMessage(
 		lane = {
 			data: {
 				watchingSessionId: null,
-				watchingNoteId: null,
 				user: ws.data.user || null,
 				authUser: ws.data.authUser || null,
 				authLogin: ws.data.authLogin || null,

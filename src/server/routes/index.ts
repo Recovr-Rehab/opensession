@@ -1,8 +1,8 @@
 /**
  * Ordered HTTP route handler chain. Handlers are grouped by domain; a handler
  * returns undefined to fall through. Order across modules is free because the
- * path families are disjoint — order WITHIN a family (e.g. /notes/search
- * before /notes/:id) is preserved inside its module. The WebSocket upgrade,
+ * path families are disjoint — order WITHIN a family (e.g. /todos/search
+ * before /todos/:id) is preserved inside its module. The WebSocket upgrade,
  * run-ws upgrades, SPA fallback and 404 stay in opensession.ts's fetch tail.
  */
 
@@ -45,7 +45,6 @@ import { handleConnectionsRoutes } from "./connections";
 import { handleAccountsRoutes } from "./accounts";
 import { handleModelsRoutes } from "./models";
 import { handleRunnersRoutes } from "./runners";
-import { handleNotesRoutes } from "./notes";
 import { handlePapercutsRoutes } from "./papercuts";
 import { handleLibraryRoutes } from "./library";
 import { handleTodosRoutes } from "./todos";
@@ -111,7 +110,6 @@ export const routeHandlers: RouteHandler[] = [
 	handleAccountsRoutes,
 	handleModelsRoutes,
 	handleRunnersRoutes,
-	handleNotesRoutes,
 	handlePapercutsRoutes,
 	handleLibraryRoutes,
 	handleTodosRoutes,

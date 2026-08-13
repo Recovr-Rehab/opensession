@@ -224,12 +224,6 @@ const server: import("bun").Server<WSClientData> = hotServe({
 				"/reports/*",
 				"/pr-tinder",
 				"/support-tinder",
-				"/wiki",
-				"/wiki/*",
-				"/notes",
-				"/notes/*",
-				"/docs",
-				"/docs/*",
 				"/connections",
 				"/settings",
 				"/settings/*",
@@ -420,7 +414,6 @@ const server: import("bun").Server<WSClientData> = hotServe({
 				const upgraded = server.upgrade(req, {
 					data: {
 						watchingSessionId: null,
-						watchingNoteId: null,
 						user: authFirst,
 						authUser: authFirst,
 						authLogin: authUser?.login || null,

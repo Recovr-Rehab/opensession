@@ -117,7 +117,6 @@ export const SHARED_INPROCESS_SERVERS = [
   "opensession-assets",
   "opensession-search",
   "opensession-todos",
-  "opensession-notes",
 	"opensession-runners",
 ];
 

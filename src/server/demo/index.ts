@@ -5,7 +5,7 @@
  *
  * Three stages:
  *  1. Generator (disk, idempotent via the sessions-dir marker) — sessions,
- *     transcripts, git repo/worktree, PR caches, automations, audit, notes,
+ *     transcripts, git repo/worktree, PR caches, automations, audit,
  *     goal. See generate.ts.
  *  2. The in-memory bits disk can't fake (asks.ts pendingAsks is a
  *     restart-fresh globalThis map): a waiting-on-question card on the demo
@@ -82,7 +82,7 @@ function offerDemoAsk(state: DemoState): void {
  */
 export async function startDemo(): Promise<void> {
   // Isolation precondition — refuse, don't trust the caller. Demo writes fan
-  // out beyond the sessions dir (PR caches, automations, audit, notes, goals via
+  // out beyond the sessions dir (PR caches, automations, audit, goals via
   // stateDir(); opencode maps/transcripts via their own resolvers), so the
   // strict OPENSESSION_STATE_DIR master knob is required — a sessions-dir-only
   // redirect would leak the stateDir() stores into the operator's live state.

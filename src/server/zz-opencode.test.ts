@@ -541,7 +541,7 @@ describe("reconnectSharedInProcessMcp", () => {
         status: async () => ({
           data: {
             "opensession-sessions": { status: "connected" },
-            "opensession-notes": { status: "failed", error: "Failed to get tools" },
+            "opensession-todos": { status: "failed", error: "Failed to get tools" },
           },
         }),
         connect: async ({ path }: { path: { name: string } }) => {
@@ -553,25 +553,25 @@ describe("reconnectSharedInProcessMcp", () => {
 
     const failed = await reconnectSharedInProcessMcp(
       client as any,
-      ["opensession-sessions", "opensession-notes", "opensession-assets"],
+      ["opensession-sessions", "opensession-todos", "opensession-assets"],
       { query: { directory: "/tmp/worktree" } }
     );
 
-    expect(connected).toEqual(["opensession-notes", "opensession-assets"]);
+    expect(connected).toEqual(["opensession-todos", "opensession-assets"]);
     expect(failed).toEqual([]);
   });
 
   test("reports proxies OpenCode could not reconnect", async () => {
     const client = {
       mcp: {
-        status: async () => ({ data: { "opensession-notes": { status: "failed" } } }),
+        status: async () => ({ data: { "opensession-todos": { status: "failed" } } }),
         connect: async () => ({ error: { message: "no tools" } }),
       },
     };
 
     expect(
-      await reconnectSharedInProcessMcp(client as any, ["opensession-notes"])
-    ).toEqual(["opensession-notes"]);
+      await reconnectSharedInProcessMcp(client as any, ["opensession-todos"])
+    ).toEqual(["opensession-todos"]);
   });
 
   test("fails soft when MCP status never settles", async () => {
@@ -589,11 +589,11 @@ describe("reconnectSharedInProcessMcp", () => {
     expect(
       await reconnectSharedInProcessMcp(
         client as any,
-        ["opensession-notes", "opensession-assets"],
+        ["opensession-todos", "opensession-assets"],
         {},
         { timeoutMs: 5 }
       )
-    ).toEqual(["opensession-notes", "opensession-assets"]);
+    ).toEqual(["opensession-todos", "opensession-assets"]);
     expect(signal?.aborted).toBe(true);
   });
 
@@ -601,7 +601,7 @@ describe("reconnectSharedInProcessMcp", () => {
     let signal: AbortSignal | undefined;
     const client = {
       mcp: {
-        status: async () => ({ data: { "opensession-notes": { status: "failed" } } }),
+        status: async () => ({ data: { "opensession-todos": { status: "failed" } } }),
         connect: (options: { signal: AbortSignal }) => {
           signal = options.signal;
           return new Promise(() => {});
@@ -612,11 +612,11 @@ describe("reconnectSharedInProcessMcp", () => {
     expect(
       await reconnectSharedInProcessMcp(
         client as any,
-        ["opensession-notes"],
+        ["opensession-todos"],
         {},
         { timeoutMs: 5 }
       )
-    ).toEqual(["opensession-notes"]);
+    ).toEqual(["opensession-todos"]);
     expect(signal?.aborted).toBe(true);
   });
 });
@@ -766,7 +766,7 @@ describe("buildRunInstructions", () => {
     const s = buildRunInstructions({ isAsk: true });
     expect(s).toContain("READ-ONLY with respect to the checkout and shell");
     expect(s).toContain("does not prohibit intentional changes");
-    expect(s).toContain("shared notes");
+    expect(s).toContain("todos");
   });
   test("Ask and Desk prompts permit product-scoped writes", () => {
     const preview = buildSystemPromptParts({ isAsk: true, interactiveTools: true })

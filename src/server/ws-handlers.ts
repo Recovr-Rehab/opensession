@@ -1,8 +1,8 @@
 /**
  * The UI WebSocket: watch/unwatch sessions, live prompts and queue control,
- * question answers, terminals, collaborative notes — plus the
- * create_session flow. Extracted verbatim from opensession.ts; sandbox
- * transport sockets are delegated to run-ws.ts before any of this runs.
+ * question answers, terminals — plus the create_session flow. Extracted
+ * verbatim from opensession.ts; sandbox transport sockets are delegated to
+ * run-ws.ts before any of this runs.
  */
 
 import type { WebSocketHandler } from "bun";
@@ -17,7 +17,6 @@ import { sendPushToUser } from "./push";
 import { startWatching, stopAllWatchesForClient, transcriptRev } from "./file-watcher";
 import { INIT_WIRE_CLAMP_BYTES, entriesForWire, parseTranscriptAsync, parseTranscriptTail, parseTranscriptWindow } from "./jsonl-parser";
 import { providerFor } from "./models";
-import { applyNoteUpdate, getNoteState, isValidNoteId } from "./notes";
 import { appendOpencodeTranscript, clearTranscriptStoreDegraded, transcriptLineRunnerNotice } from "./opencode-transcript";
 import { deleteQueuedPrompt, persistQueues, promptQueues, queueDisplayState, recordSteer, reorderQueuedPrompt, requeueSteerReceipts, steeredReceipts, stoppedSessions, takeQueuedPrompt, updateQueuedPrompt } from "./queue-state";
 import { transitionRunState } from "./run-state";
@@ -39,7 +38,7 @@ import { resumeSessionFeed } from "./session-feed";
 import { type SeqEntry, transcriptStore } from "./transcript-store";
 import { startTranscriptWatch } from "./transcript-watch";
 import { MAX_UPLOAD_BYTES, WS_MAX_PAYLOAD_BYTES, asDataUrlList, parseImageDataUrls } from "./uploads";
-import { BOOT_ID, allClients, b64decode, b64encode, broadcastToNote, broadcastToSession, globalPresenceFrame, joinNote, joinSession, leaveNote, leaveSession, markClientSeen, revalidateLocalClients, setClientAway } from "./ws-hub";
+import { BOOT_ID, allClients, broadcastToSession, globalPresenceFrame, joinSession, leaveSession, markClientSeen, revalidateLocalClients, setClientAway } from "./ws-hub";
 import { existsSync, readFileSync, statSync, watch } from "fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -485,14 +484,8 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 		if (routeCloudWebSocketMessage(ws, msg)) return;
 		// Anything that isn't a heartbeat is a person doing something, so it
 		// refreshes this socket's attention (ws-hub's idle window — a face means
-		// "here now"). `away` carries its own stamp; Yjs awareness is excluded
-		// because it ticks on its own timer whether or not anyone is typing.
-		markClientSeen(
-			ws,
-			msg.type !== "ping" &&
-				msg.type !== "away" &&
-				msg.type !== "note_awareness",
-		);
+		// "here now"). `away` carries its own stamp.
+		markClientSeen(ws, msg.type !== "ping" && msg.type !== "away");
 
 		switch (msg.type) {
 			case "ping": {
@@ -1280,64 +1273,6 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 				await handleCreateSessionMessage(ws, msg);
 				break;
 			}
-			// ── Collaborative notes (Yjs over the shared socket) ──
-			case "watch_note": {
-				const noteId = msg.noteId;
-				if (!isValidNoteId(noteId)) {
-					ws.send(
-						JSON.stringify({ type: "error", message: "Invalid note id" }),
-					);
-					return;
-				}
-				// Leave any previously-watched note first (one note per client).
-				leaveNote(ws);
-				if (msg.user) ws.data.user = msg.user;
-				ws.data.watchingNoteId = noteId;
-				joinNote(ws, noteId);
-				// Send the full current doc state so the client syncs immediately.
-				ws.send(
-					JSON.stringify({
-						type: "note_state",
-						noteId,
-						update: b64encode(getNoteState(noteId)),
-					}),
-				);
-				break;
-			}
-
-			case "leave_note": {
-				leaveNote(ws);
-				break;
-			}
-
-			case "note_update": {
-				const noteId = msg.noteId;
-				if (!isValidNoteId(noteId) || typeof msg.update !== "string")
-					return;
-				try {
-					applyNoteUpdate(noteId, b64decode(msg.update));
-				} catch {}
-				// Relay to the other editors of this note.
-				broadcastToNote(
-					noteId,
-					{ type: "note_update", noteId, update: msg.update },
-					ws,
-				);
-				break;
-			}
-
-			case "note_awareness": {
-				const noteId = msg.noteId;
-				if (!isValidNoteId(noteId) || typeof msg.update !== "string")
-					return;
-				// Cursors/presence are ephemeral — relay only, never persist.
-				broadcastToNote(
-					noteId,
-					{ type: "note_awareness", noteId, update: msg.update },
-					ws,
-				);
-				break;
-			}
 		}
 		} catch (e) {
 			console.error(`[ws] ${msg?.type || "unknown"} handler failed:`, e);
@@ -1364,7 +1299,6 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 		stopAllWatchesForClient(ws);
 		releaseTranscriptV2(ws);
 		leaveSession(ws);
-		leaveNote(ws);
 		stopAllTerminals(ws); // the Shell tabs' PTYs die with their socket
 		console.log("WebSocket client disconnected");
 	},

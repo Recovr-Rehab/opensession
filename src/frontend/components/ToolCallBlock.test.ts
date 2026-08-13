@@ -149,7 +149,7 @@ test("an assets call reads as the file it names, not its contents", () => {
   // Only this server's path-taking calls; a listing names nothing, and
   // another server's `path` is not an asset.
   expect(assetToolPath("opensession-assets_list_assets", {})).toBe("");
-  expect(assetToolPath("opensession-notes_read_note", { path: "a.md" })).toBe("");
+  expect(assetToolPath("opensession-todos_add_todo", { path: "a.md" })).toBe("");
 });
 
 test("the run-rpc session key stays out of MCP summaries", () => {

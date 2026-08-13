@@ -216,7 +216,7 @@ export function LibraryPanel() {
 							return (
 								<SettingRow key={entry.id}>
 									{/* Only integrations have a brand to show; a letter tile next to
-									    "Notes" would be noise rather than recognition. */}
+									    "Tasks" would be noise rather than recognition. */}
 									{entry.type === "integration" && (
 										<IconTile name={entry.slug} size={30} />
 									)}

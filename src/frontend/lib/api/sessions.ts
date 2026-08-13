@@ -463,10 +463,7 @@ export async function acceptReviewApi(
 	});
 }
 
-/**
- * Team notes on a session (agent-invisible; src/server/session-notes.ts).
- * Distinct from the shared note documents in lib/api/notes.ts.
- */
+/** Team notes on a session (agent-invisible; src/server/session-notes.ts). */
 export async function fetchSessionNotesApi(
 	sessionId: string,
 ): Promise<SessionNote[]> {

@@ -258,8 +258,8 @@
 /* Above the phone breakpoint the top bar isn't rendered at all, so nothing is
    offset by it and the token collapses to zero. It stays a token rather than a
    rule on an element because everything that clears the bar reads it from
-   somewhere else in the tree: the workspace panel and the notes rail anchor
-   their ≤920px overlays to it, the sidebar masks its scroll by it, and the
+   somewhere else in the tree: the workspace panel anchors its ≤920px
+   overlay to it, the sidebar masks its scroll by it, and the
    detail pane spends it as --pane-header-h. */
 @media (min-width: 721px) {
 	:root {
@@ -599,13 +599,9 @@ html[data-accent="mono"] {
 	}
 
 	/* A spinner that turns at a rate other than the 0.8s above keeps its own
-	   exception, and sits after that rule so its duration wins the tie. The
+	   exception, placed after that rule so its duration wins the tie. The
 	   0.8s spinners need no entry at all — the rule above already names them
 	   by their animation utility. */
-	.note-spinner {
-		animation-duration: 0.6s !important;
-		animation-iteration-count: infinite !important;
-	}
 
 	/* Status pulses — opacity breathing that encodes live session state
 	   (running vs waiting vs idle). The rule for this preference is "gentler,

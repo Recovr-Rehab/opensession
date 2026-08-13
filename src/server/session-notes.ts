@@ -13,9 +13,6 @@
  * flat-file pattern of pins.ts/push.ts). Realtime delivery rides the app
  * WebSocket from the route; an `@Name` mention web-pushes that teammate's
  * devices via src/server/push.ts.
- *
- * Not to be confused with src/server/notes.ts, the shared Yjs note DOCUMENTS
- * behind /api/notes. Different feature, unrelated store.
  */
 
 import { existsSync, mkdirSync, readFileSync, readdirSync } from "fs";

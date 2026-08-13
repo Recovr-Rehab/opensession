@@ -40,7 +40,6 @@ const ROUTES: [string, string][] = [
 	["settings", "/settings"],
 	["appearance", "/settings/appearance"],
 	["reviews", "/reviews"],
-	["notes", "/notes"],
 	["automations", "/automations"],
 ];
 const VIEWPORTS: [string, number, number][] = [

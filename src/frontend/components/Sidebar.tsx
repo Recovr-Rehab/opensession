@@ -257,11 +257,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	onRetrySessions,
 	workspaceDataReady,
 	workspaces,
-	notes,
 	selectedId,
-	activeNoteId,
-	notesActive,
-	onOpenNotes,
 	homeActive,
 	onOpenHome,
 	tasksActive,
@@ -287,7 +283,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	onOpenWorkspace,
 	onRenameWorkspace,
 	onDeleteWorkspace,
-	onOpenNote,
 	onOpenArchived,
 	archivedActive,
 	onOpenCatchUp,
@@ -1261,7 +1256,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// session is archived away.
 	const flatOrder = useMemo(() => {
 		const pinned = pins
-			.filter((e) => !e.startsWith("note:"))
 			.map((id) =>
 				sessions.find((s) => s.id === id || s.aliasIds?.includes(id)),
 			)
@@ -2339,14 +2333,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			active: analyticsActive,
 			onClick: onOpenAnalytics,
 			title: "Sessions, tokens, models & PRs over time",
-		},
-		{
-			id: "notes",
-			label: SIDEBAR_TOOL_LABELS.notes,
-			icon: <IconPencil />,
-			active: notesActive,
-			onClick: onOpenNotes,
-			title: "Shared notes and documentation",
 		},
 	];
 	const visibleTools = tools.filter(
@@ -3908,7 +3894,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				style={{ order: 0 }}
 			>
 			{/* The tools carry no heading. "Tools" named a handful of self-evident
-			    destinations (Home, Reviews, Notes) sitting at the very top of the
+			    destinations (Home, Reviews, Tasks) sitting at the very top of the
 			    rail, where nothing else can be confused for them, and it cost a
 			    caption plus the gap around it before the first thing you can
 			    click. Phones already listed them bare; desktop matches now.
@@ -4686,7 +4672,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						);
 					})()}
 
-				{/* ── Pinned (workspaces + notes, mixed) ── */}
+				{/* ── Pinned (workspaces, sessions, tickets, PRs, feed items) ── */}
 				{(() => {
 					const pinnedRows = pinnedWsRows;
 					// Pinned sessions that don't map to a workspace row (automation runs).
@@ -4694,7 +4680,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						wsRows.flatMap((r) => r.sessions.map((c) => c.id)),
 					);
 					const pinnedLoose = pins
-						.filter((e) => !e.startsWith("note:") && !e.startsWith("workspace:"))
+						.filter((e) => !e.startsWith("workspace:"))
 						.filter((id) => !rowSessionIds.has(id))
 						.map((id) =>
 							sessions.find(
@@ -4712,10 +4698,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						.filter(
 							(s) => filter.repo === "all" || sessionRepo(s) === filter.repo,
 						);
-					const pinnedNotes = pins
-						.filter((e) => e.startsWith("note:"))
-						.map((e) => notes.find((n) => n.id === e.slice(5)))
-						.filter((n): n is { id: string; title: string } => !!n);
 					// Pinned Plain tickets and PRs — resolved against the live
 					// queues, so a done ticket / closed PR just stops rendering
 					// (its stale pin key is harmless, like an archived session's).
@@ -4750,7 +4732,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					if (
 						!pinnedRows.length &&
 						!pinnedLoose.length &&
-						!pinnedNotes.length &&
 						!pinnedTickets.length &&
 						!pinnedFeedItems.length &&
 						!pinnedPrs.length
@@ -4759,7 +4740,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					const pinnedOpen = isOpen("pinned");
 
 					// One flat drag-to-reorder list: every pinned thing (workspace row,
-					// loose session, note) becomes an entry slotted by its first key's
+					// loose session, ticket) becomes an entry slotted by its first key's
 					// position in the pins array, so reordering is just rewriting that
 					// array (reorderPins). `pinKeys` is everything in `pins` that maps
 					// to the entry — a workspace can be pinned via its own key AND
@@ -4768,8 +4749,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						key: string;
 						pinKeys: string[];
 						/** Lane-drop payload: the sessions a lane drop re-lanes (empty
-						    = not droppable, e.g. notes) + the entry's repo for the
-						    same-repo rule under per-repo lanes. */
+						    = not droppable, e.g. a pinned ticket) + the entry's repo
+						    for the same-repo rule under per-repo lanes. */
 						repo: string | null;
 						sessions: UnifiedSession[];
 						node: React.ReactNode;
@@ -4822,35 +4803,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									onRename={(title) => onRename(s, title)}
 									onSetStatus={(st) => onSetStatus([s], st)}
 								/>
-							),
-						});
-					}
-					for (const n of pinnedNotes) {
-						entries.push({
-							key: `note:${n.id}`,
-							pinKeys: [`note:${n.id}`],
-							repo: null,
-							sessions: [],
-							node: (
-								<button
-									className={cn(
-										SIDEBAR_ROW,
-										"block",
-										SIDEBAR_HOVER_LAYER,
-										n.id === activeNoteId && "bg-pressed",
-									)}
-									data-sidebar-row=""
-									data-selected={n.id === activeNoteId || undefined}
-									onClick={() => onOpenNote(n.id)}
-									title={n.title}
-								>
-									<span className="flex min-w-0 items-center gap-[9px]">
-										<span className={SIDEBAR_RAIL} style={{ opacity: 0.9 }}>
-											📝
-										</span>
-										<span className={SIDEBAR_ROW_TITLE}>{n.title}</span>
-									</span>
-								</button>
 							),
 						});
 					}
