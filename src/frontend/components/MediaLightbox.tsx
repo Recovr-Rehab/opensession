@@ -416,7 +416,9 @@ function suggestedName(item: LightboxItem): string {
  * and on any failure fell back to window.open(), which a popup blocker eats
  * silently — leaving a Download button that does nothing. `?download=1` asks
  * our own routes for an attachment disposition, so the file saves instead of
- * opening in a tab even where the `download` attribute is ignored.
+ * opening in a tab. Do not also put the `download` attribute on server-backed
+ * links: installed iOS PWAs route those through their preview controller
+ * instead of the browser's attachment handling.
  */
 function downloadHref(item: LightboxItem): string {
 	if (item.src.startsWith("data:") || item.src.startsWith("blob:"))
@@ -924,7 +926,11 @@ function MediaLightbox({
 			<div className="absolute right-[calc(12px+env(safe-area-inset-right))] top-[calc(12px+env(safe-area-inset-top))] z-10 flex items-center gap-1">
 				<a
 					href={downloadHref(item)}
-					download={suggestedName(item)}
+					download={
+						item.src.startsWith("data:") || item.src.startsWith("blob:")
+							? suggestedName(item)
+							: undefined
+					}
 					className={lightboxAction}
 				>
 					<IconArrowDown size={14} />

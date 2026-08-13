@@ -214,7 +214,7 @@ function AssetMenu({
 			</Menu.Trigger>
 			<Menu.Popup align="end">
 				<Menu.Item
-					render={<a href={sessionAssetDownloadUrl(sessionId, file)} download />}
+					render={<a href={sessionAssetDownloadUrl(sessionId, file)} />}
 				>
 					<IconArrowDown size={18} className="text-faint" />
 					Download
