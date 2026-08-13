@@ -36,6 +36,7 @@ import { basename, dirname, join, resolve } from "path";
 import { getAgentAwsEnv } from "./aws-creds";
 import { audit } from "./audit";
 import { listPortalServices, listSandboxPortalServices } from "./portal-supervisor";
+import { revokeSandboxPortalGrants } from "./sandbox-portal-relay";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import {
   lookupSandboxHttpsPort,
@@ -1523,6 +1524,7 @@ export async function stopSandboxPreview(
  * allocations and drop any Caddy routes still pointing at them.
  */
 export async function dropSandboxPreviewRoutes(sandboxId: string): Promise<void> {
+	revokeSandboxPortalGrants(sandboxId);
 	for (const [key, relay] of remotePortalRelays) {
 		if (!key.startsWith(`${sandboxId}:`)) continue;
 		try { relay.server.stop(true); } catch {}
