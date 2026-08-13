@@ -46,6 +46,8 @@ describe("WalkthroughCard", () => {
 		expect(html).toContain(">After</span>");
 		expect(html).not.toContain("The clearer controls");
 		expect(html).toContain("max-w-[var(--session-col)]");
+		expect(html).not.toContain("transition-[max-width]");
+		expect(html).not.toContain("max-w-[min(1120px,100%)]");
 	});
 
 	test("shows the media in the folded session walkthrough", () => {

@@ -53,12 +53,9 @@ const SHOT_LABEL_SIDE = {
  * behind a tab. Both are the inline counterpart of the link-only section
  * mirrored into the GitHub PR description.
  *
- * In the session it arrives as one folded row. Opening it also widens the card:
- * the compact state belongs to the transcript's reading column, while paired
- * screenshots need more room to be useful. Width and body move together, so
- * the disclosure explains where that extra space came from instead of snapping
- * between two unrelated layouts. In the Review tab the card IS the content of
- * the column, so it stays open.
+ * In the session it stays in the transcript's reading column and expands only
+ * downward. In the Review tab the card IS the content of the column, so it
+ * stays open.
  */
 export function WalkthroughCard({
 	walkthrough,
@@ -90,7 +87,8 @@ export function WalkthroughCard({
 			items.push({
 				kind: "video",
 				src: mediaUrl(walkthrough.video),
-				sessionTitle: walkthrough.videoTitle || "Demo",
+				label: "Demo",
+				sessionTitle: walkthrough.videoTitle,
 			});
 		}
 		let stillCount = 0;
@@ -103,9 +101,8 @@ export function WalkthroughCard({
 				items.push({
 					kind: "image",
 					src: mediaUrl(path),
-					sessionTitle: [shot.caption, side === "before" ? "Before" : "After"]
-						.filter(Boolean)
-						.join(" · "),
+					label: side === "before" ? "Before" : "After",
+					sessionTitle: shot.caption,
 				});
 			}
 		});
@@ -197,19 +194,7 @@ export function WalkthroughCard({
 				// trails more space than it leads: unlike the neighbouring blocks
 				// it ends in media, which otherwise butts straight into the next
 				// message.
-				session &&
-					"mx-auto mb-6 mt-2 w-full transition-[max-width] duration-[var(--dur-lg)] ease-[var(--ease)]",
-				session && !expanded && "max-w-[var(--session-col)]",
-				// Opened, it stops being a line in the conversation and becomes the
-				// thing you are looking at, so it takes the room the pane has —
-				// where the reading column is a limit the media never asked for. A
-				// before and an after sit side by side, so each of them is half of
-				// whatever the card gets: at the 780px column, two desktop
-				// screenshots come out ~370px wide, which is too small to see what
-				// changed in the picture you opened the card to check. The prose
-				// keeps its own measure (the summary caps at 68ch), and the ceiling
-				// keeps the card from running the width of a large display.
-				session && expanded && "max-w-[min(1120px,100%)]",
+				session && "mx-auto mb-6 mt-2 w-full max-w-[var(--session-col)]",
 				!session && "mb-4",
 			)}
 		>
