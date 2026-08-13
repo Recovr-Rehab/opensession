@@ -542,6 +542,30 @@ enum OS1API {
         return try await get("/api/sessions/\(encoded)/preview")
     }
 
+    /// Stop or restart one supervised portal, answering the session's whole
+    /// portal status afterwards.
+    ///
+    /// Only `managed` services accept this. A restart is allowed to wake a
+    /// sleeping Sandbox because a person asked for it by name; a stop never
+    /// wakes one, and the server answers 409 rather than starting compute to
+    /// end a process.
+    static func portalAction(
+        sessionId: String,
+        name: String,
+        action: PortalAction
+    ) async throws -> PortalStatus {
+        let session = sessionId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? sessionId
+        let portal = name.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? name
+        return try await post(
+            "/api/sessions/\(session)/portals/\(portal)/\(action.rawValue)",
+            body: [:]
+        )
+    }
+
     /// Live per-session sandbox state. It is fetched only from Workspace
     /// details because asking every row can execute provider status checks.
     static func sandbox(sessionId: String) async throws -> SessionSandboxStatus {

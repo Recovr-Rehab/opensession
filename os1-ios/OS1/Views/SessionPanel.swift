@@ -23,8 +23,8 @@ enum SessionPanel: Hashable, Identifiable {
     /// straight away — the workspace sheet already lists the files, so a tap
     /// there should land on the diff rather than on the list again.
     case changes(sessionId: String, path: String? = nil)
-    /// The services the session exposes, read-only. Each live one opens in
-    /// the browser sheet; starting and stopping them stays on the desktop.
+    /// The services the session exposes. Each live one opens in the browser
+    /// sheet; a supervised one swipes for stop and restart.
     case portals(sessionId: String)
 
     var id: String {

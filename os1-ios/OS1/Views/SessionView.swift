@@ -1354,8 +1354,8 @@ private struct SessionActionsMenu: View {
                 }
             }
             // What this session put on a port: its dev server, a docs site,
-            // whatever it brought up. Read-only here, so it is safe to look
-            // at a sleeping sandbox's list without waking anything.
+            // whatever it brought up. Opening the list never wakes a sleeping
+            // sandbox; only a restart someone asked for does.
             if openPanel.isAvailable {
                 Button {
                     openPanel(.portals(sessionId: viewModel.session.id))
