@@ -138,19 +138,27 @@ btn.addEventListener('click',()=>{
 });
 btn.focus({preventScroll:true,focusVisible:false});`;
 
-function page(opts: {
+/**
+ * The page itself. Exported for the other flow that lands a browser here: the
+ * Linear agent's own OAuth callback (src/agents/linear/oauth.ts), which runs on
+ * the webhook server and writes its own copy.
+ */
+export function connectResultPage(opts: {
 	ok: boolean;
+	/** Server/brand name for the mark. Omit when the redirect lost it. */
 	server?: string;
 	title: string;
 	message: string;
-	/** The useful next step: close this tab, or go back to the app. */
+	/** The useful next step: close this tab, or go somewhere. */
 	action: { close: true } | { href: string; label: string };
+	status?: number;
 }): Response {
-	const close = "close" in opts.action;
+	const action = opts.action;
+	const close = "close" in action;
 	const button = close
 		? `<button class="btn" id="close" type="button">Close tab</button>
 <p class="foot" id="foot">You can close this tab.</p>`
-		: `<a class="btn" href="${opts.action.href}">${esc(opts.action.label)}</a>
+		: `<a class="btn" href="${esc(action.href)}">${esc(action.label)}</a>
 <p class="foot always">Or close this tab.</p>`;
 	return new Response(
 		`<!doctype html>
@@ -171,14 +179,17 @@ ${button}
 ${close ? `<script>${CLOSE_SCRIPT}</script>` : ""}
 </body>
 </html>`,
-		{ headers: { "Content-Type": "text/html; charset=utf-8" } },
+		{
+			status: opts.status,
+			headers: { "Content-Type": "text/html; charset=utf-8" },
+		},
 	);
 }
 
 /** The grant landed. `teamName` present = it is that teammate's own account. */
 export function connectedPage(server: string, teamName?: string): Response {
 	const name = displayName(server);
-	return page({
+	return connectResultPage({
 		ok: true,
 		server,
 		title: `${name} connected`,
@@ -191,7 +202,7 @@ export function connectedPage(server: string, teamName?: string): Response {
 
 /** The flow came back broken: a lost state, a refused consent, a token exchange that failed. */
 export function connectFailedPage(server: string | undefined, error: string): Response {
-	return page({
+	return connectResultPage({
 		ok: false,
 		server,
 		title: server ? `${displayName(server)} not connected` : "Connect failed",

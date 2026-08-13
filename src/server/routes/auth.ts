@@ -123,7 +123,7 @@ export async function handleAuthRoutes(
 		const expected = cookieValue(req, STATE_COOKIE);
 		if (!code) return fail(ctx.url.searchParams.get("error_description") || "GitHub returned no code");
 		if (!state || !expected || state !== expected)
-			return fail("State mismatch — start the sign-in again");
+			return fail("State mismatch. Start the sign-in again.");
 		const result = await exchangeGithubOauthCode(code, callbackUri());
 		if (result.status !== "ok")
 			return fail(result.status === "error" ? result.error : "Sign-in did not complete");

@@ -1,6 +1,7 @@
 /**
  * Linear OAuth flow and token management.
  */
+import { connectResultPage } from "../../server/connect-result-page";
 import { fetchWithTimeout } from "../../server/shared/fetch-with-timeout";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import {
@@ -109,10 +110,24 @@ export function handleAuthorize(): Response {
   return Response.redirect(`https://linear.app/oauth/authorize?${params}`, 302);
 }
 
+// Every exit here lands in a person's browser, so they all render the shared
+// connect-result card rather than raw text (and never Linear's own JSON, which
+// is a token response).
+function failed(message: string): Response {
+  return connectResultPage({
+    ok: false,
+    server: "linear",
+    title: "Linear not authorized",
+    message,
+    action: { href: "/oauth/authorize", label: "Try again" },
+    status: 400,
+  });
+}
+
 export async function handleCallback(url: URL, tokens: LinearTokens): Promise<Response> {
   const code = url.searchParams.get("code");
   if (!code) {
-    return new Response("Missing code", { status: 400 });
+    return failed("The redirect came back without a code, so nothing was authorized.");
   }
 
   const response = await fetchWithTimeout("https://api.linear.app/oauth/token", {
@@ -148,12 +163,20 @@ export async function handleCallback(url: URL, tokens: LinearTokens): Promise<Re
         expiresAt: Date.now() + (data.expires_in || 3600) * 1000,
       };
       await saveTokens(tokens);
-      return new Response(
-        `<html><body><h1>${personaName()} authorized for ${orgName}!</h1><p>I'm ready to receive assignments.</p></body></html>`,
-        { headers: { "Content-Type": "text/html" } }
-      );
+      return connectResultPage({
+        ok: true,
+        server: "linear",
+        title: "Linear authorized",
+        message: `${personaName()} can pick up tickets in ${orgName} now.`,
+        action: { close: true },
+      });
     }
+    return failed("Linear authorized, but did not say which workspace. Try again.");
   }
 
-  return new Response(`Authorization failed: ${JSON.stringify(data)}`, { status: 400 });
+  return failed(
+    data?.error_description ||
+      data?.error ||
+      "Linear did not return an access token.",
+  );
 }
