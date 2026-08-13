@@ -129,6 +129,12 @@ audience. It prints only the JWT, so use command substitution or a credential
 helper. `--ttl-seconds` defaults to 600 and accepts 60 through 3600. It does
 not work in an ordinary host shell, and it never prompts.
 
+For a long-running process, pass `--refresh-file /path/to/token`. The command
+atomically replaces that mode-0600 file before its token expires, so a standard
+web-identity SDK can read a fresh token when it refreshes its own credentials.
+Run the refresher in the preview process group. It stops with the preview and
+the exchange lease still expires when the sandbox does.
+
 The token is signed by this instance and has standard `iss`, `aud`, `sub`,
 `iat`, `exp`, and `jti` claims. Open Session additionally supplies opaque
 `sandbox_id`, `sandbox_provider`, `lifecycle`, and, when available,

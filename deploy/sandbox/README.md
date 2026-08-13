@@ -78,8 +78,9 @@ Mounts (rationale in the docker.ts header):
 Known Phase 1 caveats: external MCP servers now spawn inside the container
 (host-only deps won't start); native Codex account homes are never mounted —
 the capability matrix keeps GPT (Codex) runs host-only, and GPT-in-a-sandbox
-goes through `opencode/openai/*` models; `aws: true` can't mint creds inside
-(IMDS blocked).
+goes through `opencode/openai/*` models. Sandboxes never inherit host cloud
+credentials or use IMDS. An operator may grant a lifecycle an OIDC audience;
+the repository then exchanges its per-launch lease with its cloud provider.
 
 ## Phase 2 — exec-routed surfaces, volume workspaces, preview ports
 
@@ -165,11 +166,11 @@ differ):
    image doesn't carry) is skipped instead of failing.
 
 No rung resolves → the status reports `bootable: false` and the UI renders a
-disabled Start explaining what to add. Host previews additionally inject the
-short-lived instance-role AWS creds from aws-creds.ts into the bring-up: the
-service cgroup denies IMDS (IPAddressDeny) for every child, which otherwise
-breaks bring-ups that need AWS access (e.g. an `aws` preflight or an
-S3-backed prebuilt-artifact install).
+disabled Start explaining what to add. A matching operator workload-identity
+grant injects only an exchange lease into the lifecycle command. The repository
+can mint an OIDC token with `opensession sandbox id-token` and let a standard
+cloud SDK exchange it. No AWS CLI, profile, host credential, or IMDS access is
+required for that flow.
 
 `<worktree>/.agents/setup` is the sibling one-shot hook: it runs once
 per workspace materialization (first ensure of the sandbox, cwd = workspace,
@@ -205,11 +206,10 @@ such scripts tend to need — bash/coreutils/curl/python3/git, plus `just`,
 `direnv` (`direnv exec . just dev` chains) and `lsof` (port probes).
 Deliberately NOT installed: the **aws CLI** and heavyweight backing services
 (Postgres/Redis-class daemons are out of image scope — the dev server points
-at whatever its bind-mounted env files point at, seeded host-side). Caveat:
-anything in the bring-up that needs cloud credentials fails inside the
-container (minimal env, IMDS blocked). Example from Tella's setup: their
-webapp's prebuilt-WASM S3 install has to run host-side once per worktree
-(any host preview does it) before an in-sandbox bring-up can rely on it.
+at whatever its bind-mounted env files point at, seeded host-side). A
+repository needing cloud access should use its SDK's standard web-identity
+provider, after an operator has granted the lifecycle a narrow audience. This
+keeps provider tooling out of the image and keeps a snapshot credential-free.
 
 **Post-prompt snapshots.** When `snapshots.enabled`, a successfully completed
 sandboxed run schedules a `docker commit` snapshot (same helper as the

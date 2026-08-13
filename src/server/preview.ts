@@ -1483,17 +1483,18 @@ export async function startSandboxPreview(
 
   starting.set(worktreeDir, Date.now());
   const bootMode = sandbox.bootMode || "fresh";
-  // Sandbox previews are an interactive execution path, like agent runs.
-  // Pass the host's short-lived AWS scope as process env so repo setup/start
-  // scripts can fetch private build artifacts. It is never written to the
-  // workspace or reusable provider snapshot.
-  const awsEnv = await sandboxPreviewAwsEnv(sandbox, worktreeDir, true);
+  // A matching workload-identity grant is the sandbox credential boundary.
+  // Retain the legacy instance credential path only for repositories that do
+  // not have a grant yet, so migrations do not turn existing previews off.
   const workloadIdentityEnv = createWorkloadIdentityEnv({
     sandboxId: sandbox.id,
     provider: sandbox.provider,
     lifecycle: "preview",
     repoId: repoForPath(worktreeDir).id,
   });
+  const awsEnv = Object.keys(workloadIdentityEnv).length
+    ? {}
+    : await sandboxPreviewAwsEnv(sandbox, worktreeDir, true);
   const r = await sandbox.exec([
     "sh", "-c",
     `mkdir -p .ports && nohup setsid env HOME=/home/ubuntu PATH=${shellQuoteWord(SANDBOX_PREVIEW_PATH)} ` +
