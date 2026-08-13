@@ -6,7 +6,6 @@ import {
 	authenticateRunner,
 	createRunnerPairing,
 	bindRunnerPairingMigration,
-	claimRunnerWorkload,
 	isTailnetAddress,
 	listRunners,
 	normalizeAddress,
@@ -16,10 +15,6 @@ import {
 	reserveRunner,
 	runnerAllowed,
 	runnerAllowsLocalInference,
-	runnerOwnsWorkspace,
-	runnerWorkspacePath,
-	runnerAvailableForSession,
-	setRunnerWorkload,
 	updateRunner,
 } from "./runners";
 
@@ -56,11 +51,11 @@ describe("Runner registry security", () => {
 	test("re-pairing retains policy but rotates the credential", () => {
 		const first = register();
 		if (!first.ok) throw new Error(first.error);
-		updateRunner(first.runner.id, { permissions: { fullSessions: true, portals: true }, allowedRepos: ["opensession"] });
+		updateRunner(first.runner.id, { allowedRepos: ["opensession"] });
 		const second = register();
 		if (!second.ok) throw new Error(second.error);
 		expect(second.runner.id).toBe(first.runner.id);
-		expect(second.runner.permissions.fullSessions).toBe(true);
+		expect(second.runner.permissions.fullSessions).toBe(false);
 		expect(second.runner.allowedRepos).toEqual(["opensession"]);
 		expect(authenticateRunner(first.runner.id, first.token)).toBeUndefined();
 	});
@@ -75,21 +70,14 @@ describe("Runner registry security", () => {
 });
 
 describe("Runner policy and reservations", () => {
-	test("uses platform-specific paths for session-owned workspaces", () => {
-		const runner = { platform: "win32" as const, workspaceRoots: ["C:\\Open Session\\"] } as ReturnType<typeof listRunners>[number];
-		const workspace = runnerWorkspacePath(runner, "bks-test");
-		expect(workspace).toBe("C:\\Open Session\\sessions\\bks-test");
-		expect(runnerOwnsWorkspace(runner, workspace, "bks-test")).toBe(true);
-		expect(runnerOwnsWorkspace(runner, "C:\\Users\\runner", "bks-test")).toBe(false);
-	});
-
 	test("enforces explicit user, repository, and execution permission policy", () => {
 		const result = register();
 		if (!result.ok) throw new Error(result.error);
-		const runner = updateRunner(result.runner.id, { allowedUsers: ["alex"], allowedRepos: ["ios-app"], permissions: { commands: true, fullSessions: true, terminals: false, portals: false } })!;
+		const runner = updateRunner(result.runner.id, { allowedUsers: ["alex"], allowedRepos: ["ios-app"], permissions: { commands: true, fullSessions: true, terminals: true, portals: true } })!;
 		expect(runnerAllowed(runner, { user: "alex", repo: "ios-app", permission: "commands" })).toBe(true);
 		expect(runnerAllowed(runner, { user: "sam", repo: "ios-app", permission: "commands" })).toBe(false);
 		expect(runnerAllowed(runner, { user: "alex", repo: "web", permission: "commands" })).toBe(false);
+		expect(runner.permissions.fullSessions).toBe(false);
 		expect(runnerAllowed(runner, { user: "alex", repo: "ios-app", permission: "portals" })).toBe(false);
 	});
 
@@ -100,26 +88,6 @@ describe("Runner policy and reservations", () => {
 		expect(reserveRunner(result.runner.id, { reason: "other", reservedBy: "sam" })).toBeUndefined();
 		expect(releaseRunnerReservation(result.runner.id, "sam")).toBeUndefined();
 		expect(releaseRunnerReservation(result.runner.id, "alex")?.reservation).toBeUndefined();
-	});
-
-	test("uses reported concurrent-job capacity while preserving each session claim", () => {
-		const result = register({ resources: { concurrentJobs: 2 } });
-		if (!result.ok) throw new Error(result.error);
-		const runner = updateRunner(result.runner.id, { permissions: { fullSessions: true } })!;
-		setRunnerWorkload(runner.id, { sessionId: "bks-one", operation: "full session" });
-		expect(runnerAvailableForSession(listRunners()[0], { sessionId: "bks-two" })).toBe(true);
-		setRunnerWorkload(runner.id, { sessionId: "bks-two", operation: "full session" });
-		expect(runnerAvailableForSession(listRunners()[0], { sessionId: "bks-three" })).toBe(false);
-		setRunnerWorkload(runner.id, undefined, "bks-one");
-		expect(runnerAvailableForSession(listRunners()[0], { sessionId: "bks-three" })).toBe(true);
-	});
-
-	test("claims capacity in the same registry update that checks eligibility", () => {
-		const result = register({ resources: { concurrentJobs: 1 } });
-		if (!result.ok) throw new Error(result.error);
-		updateRunner(result.runner.id, { permissions: { fullSessions: true } });
-		expect(claimRunnerWorkload(result.runner.id, { sessionId: "bks-one", operation: "full session" })?.workload?.sessionId).toBe("bks-one");
-		expect(claimRunnerWorkload(result.runner.id, { sessionId: "bks-two", operation: "full session" })).toBeUndefined();
 	});
 
 	test("requires an explicit, user- and model-scoped local inference policy", () => {

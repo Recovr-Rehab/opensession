@@ -22,30 +22,9 @@ managed workspace roots, maintenance state, and revocation. Revoking a Runner
 invalidates its credential and closes its control connection immediately.
 
 Interactive sessions can use the `opensession-runners` MCP tools for scoped,
-audited command delegation. A session may explicitly select an eligible Runner
-under Other machines. Its repository workspace is created below an
-administrator-approved root, and its run host uses the same durable outbound
-stream as a remote Sandbox. Automation sessions never receive Runner tools.
+audited command delegation. Automation sessions never receive Runner tools.
 Runners run work as their local service user, so only attach machines the
 workspace intends to trust.
-
-Each Runner has an explicit deleted-session workspace policy. The default is
-to keep the session workspace so unpushed work remains recoverable. An
-administrator may choose deletion, which removes only the exact managed
-`sessions/<session-id>` workspace through the authenticated Runner channel.
-
-The Shell tab uses that same outbound control channel when a session runs on a
-Runner. It opens a PTY only in the server-selected session workspace, honors
-the Runner's terminal permission, and closes when the browser tab or Runner
-connection closes. It never falls back to SSH or kubectl.
-
-Runner sessions can also host supervised Portals. A Portal process listens
-only on the Runner's loopback interface. Open Session relays its HTTP and
-WebSocket traffic over the authenticated Runner control channel to a local
-loopback relay, then Caddy applies the normal session Portal authorization.
-The browser never receives a Runner address, direct port, credential, or a
-general network tunnel. Deleting a session or revoking its Runner stops the
-relay routes immediately.
 
 ## Operator-managed migration
 

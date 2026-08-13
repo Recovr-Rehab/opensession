@@ -893,6 +893,10 @@ export async function handleCreateSessionMessage(
 	// null = host (no sandbox recorded on the session).
 	const createSandboxProvider = sandboxResolved.provider;
 	const requestedRunnerId = typeof msg.runner === "string" && msg.runner.trim() ? msg.runner.trim() : undefined;
+	if (requestedRunnerId) {
+		ws.send(JSON.stringify({ type: "error", message: "Runner full sessions are not available. Use Runner command delegation from a standard session." }));
+		return;
+	}
 	if (requestedRunnerId && createSandboxProvider) {
 		ws.send(JSON.stringify({ type: "error", message: "Choose either Sandbox or a Runner for this session." }));
 		return;

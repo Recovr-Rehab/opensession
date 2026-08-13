@@ -43,7 +43,7 @@ function publicView(ctx: RouteContext) {
 
 function runnerAllowedForView(runner: ReturnType<typeof listRunners>[number], user?: string): boolean {
 	if (runner.allowedUsers.length && (!user || !runner.allowedUsers.includes(user))) return false;
-	return runner.permissions.commands || runner.permissions.fullSessions || runner.permissions.terminals || runner.permissions.portals;
+	return runner.permissions.commands;
 }
 
 export async function handleRunnersRoutes(ctx: RouteContext): Promise<Response | undefined> {

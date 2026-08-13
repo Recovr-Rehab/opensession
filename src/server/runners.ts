@@ -205,11 +205,13 @@ function normalizeRunner(value: Runner): Runner {
 			...(normalizeResources(capabilities.hardware) ? { hardware: normalizeResources(capabilities.hardware) } : {}),
 		},
 		...(normalizeResources(raw.resources) ? { resources: normalizeResources(raw.resources) } : {}),
-		permissions: {
+	permissions: {
 			commands: permissions.commands !== false,
-			fullSessions: permissions.fullSessions === true,
-			terminals: permissions.terminals === true,
-			portals: permissions.portals === true,
+			// Runner full sessions are not shipped. Keep legacy fields false so
+			// an old record or client cannot reactivate the removed path.
+			fullSessions: false,
+			terminals: false,
+			portals: false,
 		},
 		allowedUsers: cleanStrings(raw.allowedUsers),
 		allowedRepos: cleanStrings(raw.allowedRepos),
