@@ -36,7 +36,8 @@ import {
   IconHistory,
   IconPlus,
 } from "./icons";
-import { IconTile, displayName } from "./BrandTile";
+import { displayName } from "../brand-logos";
+import { IconTile } from "./BrandTile";
 import { UserAvatar } from "./UserAvatar";
 import { AGENT_NAME, docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { ProjectsSection } from "./ProjectsSection";

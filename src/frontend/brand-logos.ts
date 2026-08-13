@@ -1,10 +1,58 @@
 /**
- * Brand marks for the Connections tiles. Single-color logo paths (Simple Icons
- * 24×24 marks + svgl square marks), recolored to white via the tile's currentColor.
+ * Brand marks, colors and display names for the connectable services, keyed by
+ * lowercased server/agent name. Single-color logo paths (Simple Icons 24×24
+ * marks + svgl square marks), recolored to white via the tile's currentColor.
  * Rendered on the brand-colored IconTile; servers absent here fall back to a
  * lettered tile. Paths lifted verbatim from simple-icons / svgl (MIT / CC0).
+ *
+ * Plain data, no React: the server renders the same mark on the OAuth
+ * connect-result page (src/server/connect-result-page.ts), so one brand ends
+ * up looking the same in the app and in the tab the consent screen lands on.
  */
 export interface BrandLogo { viewBox: string; paths: string[] }
+
+/** Brand tile colors, keyed by lowercased server/agent name. */
+export const BRANDS: Record<string, { bg: string; fg?: string }> = {
+  slack: { bg: "#4a154b" },
+  linear: { bg: "#5e6ad2" },
+  plain: { bg: "#29df9a", fg: "#071c18" },
+  sentry: { bg: "#362d59" },
+  workos: { bg: "#6363f1" },
+  tinybird: { bg: "#27f795", fg: "#08080a" },
+  stripe: { bg: "#635bff" },
+  amplitude: { bg: "#2d6ff7" },
+  grafana: { bg: "#f46800" },
+  "grafana-poller": { bg: "#f46800" },
+  github: { bg: "#24292e" },
+  codestorage: { bg: "#111111" },
+  incident: { bg: "#f25533" },
+  ahrefs: { bg: "#ff6b00" },
+  circle: { bg: "#6c47ff" },
+  brex: { bg: "#212121" },
+  posthog: { bg: "#f54e00" },
+  tella: { bg: "#5e51f8" },
+  dub: { bg: "#000000" },
+};
+
+/** Pretty display names for the handful that don't title-case cleanly. */
+const DISPLAY_NAMES: Record<string, string> = {
+  workos: "WorkOS",
+  posthog: "PostHog",
+  github: "GitHub",
+  "grafana-poller": "Grafana Poller",
+  incident: "incident.io",
+  codestorage: "Code Storage",
+};
+
+export function displayName(name: string): string {
+  return DISPLAY_NAMES[name.toLowerCase()] || name.charAt(0).toUpperCase() + name.slice(1);
+}
+
+/** The logo for a server name. Agents like "grafana-poller" reuse the base brand's mark. */
+export function brandLogo(name: string): BrandLogo | undefined {
+  const key = name.toLowerCase();
+  return BRAND_LOGOS[key] || BRAND_LOGOS[key.split("-")[0]];
+}
 
 export const BRAND_LOGOS: Record<string, BrandLogo> = {
   "plain": {

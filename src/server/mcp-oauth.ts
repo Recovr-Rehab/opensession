@@ -236,6 +236,11 @@ const pending: Map<string, PendingFlow> = ((globalThis as any).__osMcpOauth ??=
   new Map<string, PendingFlow>());
 const PENDING_TTL_MS = 10 * 60_000;
 
+/** Which server a callback's state belongs to, for the result page's brand mark. */
+export function pendingFlowServer(state: string): string | undefined {
+  return pending.get(state)?.name;
+}
+
 function b64url(buf: Buffer): string {
   return buf
     .toString("base64")
@@ -314,7 +319,7 @@ export async function completeMcpOauthFlow(
 ): Promise<{ name: string; teamName?: string }> {
   const flow = pending.get(state);
   if (!flow || Date.now() - flow.createdAt > PENDING_TTL_MS)
-    throw new Error("This connect link expired — start again from Connections");
+    throw new Error("This connect link expired. Start again from Connections.");
   pending.delete(state);
   const preset = oauthPresetFor(flow.name);
   if (preset) {

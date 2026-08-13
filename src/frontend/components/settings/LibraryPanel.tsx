@@ -5,7 +5,8 @@ import {
 	type LibraryEntryType,
 } from "../../lib/api/library";
 import { BASE_PATH } from "../../lib/base";
-import { displayName, IconTile } from "../BrandTile";
+import { displayName } from "../../brand-logos";
+import { IconTile } from "../BrandTile";
 import {
 	onSidebarToolsChanged,
 	readHiddenSidebarTools,

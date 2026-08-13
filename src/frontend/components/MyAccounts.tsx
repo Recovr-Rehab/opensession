@@ -18,7 +18,8 @@ import {
 } from "../ui/settings";
 import { Menu } from "../ui/menu";
 import { IconDotsHorizontal, IconPlug, IconTrash } from "./icons";
-import { IconTile, displayName } from "./BrandTile";
+import { displayName } from "../brand-logos";
+import { IconTile } from "./BrandTile";
 import { useCurrentUser } from "./UserPicker";
 import { GithubAccounts } from "./Connections";
 

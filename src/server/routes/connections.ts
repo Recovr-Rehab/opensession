@@ -45,29 +45,29 @@ export async function handleConnectionsRoutes(
 	) {
 		const code = url.searchParams.get("code") || "";
 		const state = url.searchParams.get("state") || "";
-		const page = (title: string, body: string, ok: boolean) =>
-			new Response(
-				`<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><body style="font-family:system-ui;display:grid;place-items:center;height:90vh;margin:0"><div style="text-align:center;max-width:26rem"><div style="font-size:40px">${ok ? "✅" : "⚠️"}</div><h2 style="margin:8px 0 4px">${title}</h2><p style="color:#666">${body}</p></div></body>`,
-				{ headers: { "Content-Type": "text/html; charset=utf-8" } },
-			);
+		const { connectedPage, connectFailedPage } = await import(
+			"../connect-result-page"
+		);
 		if (!code || !state)
-			return page("Connect failed", "Missing code/state in the redirect.", false);
+			return connectFailedPage(
+				undefined,
+				"The redirect came back without a code, so nothing was connected.",
+			);
+		const { completeMcpOauthFlow, pendingFlowServer } = await import(
+			"../mcp-oauth"
+		);
+		// Read the server name before completing: the flow is consumed either
+		// way, and the failure page wants the same brand mark as the success one.
+		const server = pendingFlowServer(state);
 		try {
-			const { completeMcpOauthFlow } = await import("../mcp-oauth");
 			const done = await completeMcpOauthFlow(
 				state,
 				code,
 				ctx.authUser?.login || ctx.authUser?.name || undefined,
 			);
-			return page(
-				`${done.name} connected`,
-				done.teamName
-					? `Connected as ${done.teamName}'s account. You can close this tab.`
-					: "Connected for the whole workspace. You can close this tab.",
-				true,
-			);
+			return connectedPage(done.name, done.teamName);
 		} catch (e: any) {
-			return page("Connect failed", e?.message || String(e), false);
+			return connectFailedPage(server, e?.message || String(e));
 		}
 	}
 
