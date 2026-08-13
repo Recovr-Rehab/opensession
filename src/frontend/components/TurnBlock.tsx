@@ -20,7 +20,7 @@ import {
   getTurnActivityPref,
   onTurnActivityChanged,
 } from "../lib/turn-activity";
-import { collectTouchedFiles, LineStats } from "./TurnFooter";
+import { collectTouchedFiles, LineStats, TouchedFileChips } from "./TurnFooter";
 
 interface Props {
   /** The folded part of one assistant turn: tool_use + intermediate assistant
@@ -218,21 +218,17 @@ export const TurnBlock = React.memo(function TurnBlock({
             )
           )}
           {expanded && (failures > 0 || editedFiles.length > 0) && (
-            <div className="ml-7 mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 px-1 text-label leading-4 text-faint">
+            <div className="ml-7 mt-1 flex flex-wrap items-center gap-x-0.5 gap-y-1 px-1 text-label leading-4 text-faint">
               {failures > 0 && (
-                <span className="text-red/80">
+                <span className="mr-1.5 text-red/80">
                   {failures} failed {failures === 1 ? "step" : "steps"}
                 </span>
               )}
-              {editedFiles.length > 0 && (
-                // Line counts live on the fold header, where they read folded
-                // and open alike; repeating them here would say the same
-                // number twice within one block.
-                <span>
-                  {editedFiles.length}{" "}
-                  {editedFiles.length === 1 ? "file" : "files"} changed
-                </span>
-              )}
+              {/* The same chips the answer's footer ends with: a bare count
+                  said how many files without saying which, and the name is
+                  the part worth reading. The fold header keeps the turn's
+                  totals; these carry each file's own. */}
+              <TouchedFileChips files={editedFiles} max={FOLD_FILE_CHIPS} />
             </div>
           )}
         </div>
@@ -240,6 +236,11 @@ export const TurnBlock = React.memo(function TurnBlock({
     </div>
   );
 }, turnBlockPropsEqual);
+
+/** Files named in the expanded summary before the rest become one count. This
+ * row wraps onto as many lines as it needs, unlike the answer footer's single
+ * row, so it can afford to name more of them. */
+const FOLD_FILE_CHIPS = 6;
 
 const COMPACT_TOOL_FAMILIES = new Set([
   "run",

@@ -66,14 +66,6 @@ export const TurnFooter = React.memo(function TurnFooter({
   };
 
   const duration = formatDuration(durationMs);
-  // Named files, then a count for the rest. Chips keep their natural width and
-  // wrap with the row rather than sharing a shrinking box: a chip spends ~60px
-  // on its ± counts before it spends any on the name, so a row that seats them
-  // by shrinking crushes exactly the part worth reading — at 390px both names
-  // went to nothing and left two bare "TS +160" chips. A phone seats one; the
-  // ⋯ menu is the complete list either way.
-  const shownFiles = files.slice(0, isPhone ? 1 : MAX_CHIPS);
-  const restFiles = files.slice(shownFiles.length);
 
   return (
     <div className="mx-auto -mt-2.5 mb-[18px] flex w-full max-w-[var(--session-col)] flex-wrap items-center gap-x-0.5 gap-y-1.5">
@@ -168,13 +160,41 @@ export const TurnFooter = React.memo(function TurnFooter({
           </Menu.Popup>
         </Menu.Root>
       </div>
-      {shownFiles.map((f) => (
-        <FileChip key={f.path} file={f} roots={pathRoots} />
-      ))}
-      {restFiles.length > 0 && <MoreChip files={restFiles} />}
+      <TouchedFileChips files={files} max={isPhone ? 1 : MAX_CHIPS} />
     </div>
   );
 }, turnFooterPropsEqual);
+
+/**
+ * The files a turn wrote, named with the ±lines each moved, and one count for
+ * whatever is past `max`. Shared by this footer and the work fold's summary, so
+ * a turn reports its files in the same shape wherever you read it.
+ *
+ * Chips keep their natural width and wrap with the row rather than sharing a
+ * shrinking box: a chip spends ~60px on its ± counts before it spends any on
+ * the name, so a row that seats them by shrinking crushes exactly the part
+ * worth reading — at 390px both names went to nothing and left two bare
+ * "TS +160" chips.
+ */
+export function TouchedFileChips({
+  files,
+  max,
+}: {
+  files: TouchedFile[];
+  max: number;
+}) {
+  const pathRoots = useToolPathRoots();
+  const shown = files.slice(0, max);
+  const rest = files.slice(shown.length);
+  return (
+    <>
+      {shown.map((f) => (
+        <FileChip key={f.path} file={f} roots={pathRoots} />
+      ))}
+      {rest.length > 0 && <MoreChip files={rest} />}
+    </>
+  );
+}
 
 function turnFooterPropsEqual(prev: Props, next: Props): boolean {
   if (
@@ -209,7 +229,8 @@ const BTN =
  * it from the answer — hover and focus still bring both up. */
 const ACTIONS = "flex items-center gap-0.5";
 
-/** Named files in the row; the rest collapse into MoreChip. */
+/** Named files in the row; the rest collapse into MoreChip. A phone seats one;
+ * the ⋯ menu is the complete list either way. */
 const MAX_CHIPS = 2;
 
 /** The menu has room to name more of them, being a list rather than a row. */
