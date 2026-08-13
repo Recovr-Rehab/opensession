@@ -37,6 +37,7 @@ import { getAgentAwsEnv } from "./aws-creds";
 import { audit } from "./audit";
 import { ensureRemoteSandboxPortalAgent, forgetRemoteSandboxPortalAgents, listPortalServices, listSandboxPortalServices } from "./portal-supervisor";
 import { revokeSandboxPortalGrants, revokeSandboxPortalRelay } from "./sandbox-portal-relay";
+import { cacheSandboxPortals, dropCachedSandboxPortals } from "./sandbox-portals";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import {
   lookupSandboxHttpsPort,
@@ -1286,7 +1287,7 @@ export async function getSandboxPreviewStatus(
     );
   }
 
-  return {
+  const status: PreviewStatus = {
     hasPortsConf: ports.length > 0,
     webappPort: webapp?.port ?? null,
     running: !!webapp?.running,
@@ -1299,6 +1300,8 @@ export async function getSandboxPreviewStatus(
     services,
     portalRecipes,
   };
+	if (sessionId) cacheSandboxPortals(sessionId, sandbox.id, services);
+	return status;
 }
 
 /** `exists` predicate for resolvePreviewBoot inside a sandbox. */
@@ -1534,9 +1537,10 @@ export async function stopSandboxPreview(
  * Teardown hook for DockerProvider.destroy(): release the sandbox's https
  * allocations and drop any Caddy routes still pointing at them.
  */
-export async function dropSandboxPreviewRoutes(sandboxId: string): Promise<void> {
+export async function dropSandboxPreviewRoutes(sandboxId: string, options: { preservePortalCache?: boolean } = {}): Promise<void> {
 	revokeSandboxPortalGrants(sandboxId);
 	forgetRemoteSandboxPortalAgents(sandboxId);
+	if (!options.preservePortalCache) dropCachedSandboxPortals(sandboxId);
 	for (const [key, relay] of remotePortalRelays) {
 		if (!key.startsWith(`${sandboxId}:`)) continue;
 		try { relay.server.stop(true); } catch {}

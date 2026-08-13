@@ -14,6 +14,7 @@ import { existsSync } from "fs";
 import { restartPortalService, restartSandboxPortalService, stopPortalService, stopSandboxPortalService } from "../portal-supervisor";
 import { restartRunnerPortal, runnerPortalPreviewStatus, startRunnerPortal, stopRunnerPortal } from "../runner-portals";
 import { getRepo } from "../worktree";
+import { sleepingSandboxPortalStatus } from "../sandbox-portals";
 
 export async function handlePreviewRoutes(
 	ctx: RouteContext,
@@ -69,6 +70,10 @@ export async function handlePreviewRoutes(
 					...(await getSandboxPreviewStatus(sbx, session.worktreeDir!, session.id)),
 					...who,
 				});
+			if (session.sandbox?.sandboxId) {
+				const sleeping = sleepingSandboxPortalStatus(session.id, session.sandbox.sandboxId);
+				if (sleeping) return Response.json({ ...sleeping, ...who });
+			}
 			if (!session.worktreeDir || !existsSync(session.worktreeDir)) {
 				return Response.json({
 					hasPortsConf: false,

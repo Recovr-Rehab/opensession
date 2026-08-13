@@ -138,6 +138,8 @@ export function PortalsPanel({
 												: service.running
 													? service.state === "starting"
 														? "Starting"
+														: service.state === "sleeping" || service.state === "waking"
+															? service.state === "sleeping" ? "Sleeping" : "Waking"
 														: "Unavailable"
 													: service.state === "failed"
 														? "Failed"

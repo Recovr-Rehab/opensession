@@ -91,7 +91,7 @@ export async function handleSandboxRoutes(
 					{ error: `${recorded.provider} does not expose manual pause` },
 					{ status: 400 },
 				);
-			await dropSandboxPreviewRoutes(recorded.sandboxId);
+			await dropSandboxPreviewRoutes(recorded.sandboxId, { preservePortalCache: true });
 			touchNativeSession(session.id, { sandbox: { ...recorded, lifecycle: "sleeping", lastLifecycleError: undefined } });
 			await provider.pause(recorded.sandboxId);
 		} else if (action === "resume") {
