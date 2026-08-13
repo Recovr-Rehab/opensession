@@ -1616,8 +1616,8 @@ a.pr-ref {
 	color: var(--text);
 	border: 0;
 	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
-	/* Unequal to read as equal, same sum as the session chip above. */
-	padding: 4px 8px 1px 5px;
+	/* Keep the optical top bias without crowding the descenders below. */
+	padding: 4px 8px 2px 5px;
 	line-height: 1.3;
 	font-weight: 600;
 	font-variant-numeric: tabular-nums;
