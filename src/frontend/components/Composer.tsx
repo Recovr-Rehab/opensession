@@ -348,7 +348,7 @@ function StopConfirmModal({
         className="gap-5 p-7 phone:w-[calc(100vw-1.5rem)] phone:p-6"
       >
         <div className="flex flex-col">
-          <Modal.Title className="m-0 text-balance text-[22px] font-semibold leading-tight tracking-[-0.02em] text-fg phone:text-[21px]">
+          <Modal.Title className="m-0 text-balance text-section-title font-semibold leading-tight tracking-[-0.01em] text-fg">
             Stop this response?
           </Modal.Title>
           <Modal.Description className="m-0 mt-2 text-pretty text-base font-normal leading-relaxed text-dim">
