@@ -1611,13 +1611,22 @@ a.pr-ref {
 	display: inline-flex;
 	align-items: center;
 	gap: 3px;
-	vertical-align: -0.2em;
+	/* Sits the chip's own words on the sentence's baseline. The extra 0.15em
+	   past the session chip's -0.2em is what an inline-flex costs: its
+	   baseline comes from the glyph box, which hangs lower than the label it
+	   contains, so the stock value leaves the chip's text riding 2.3px over
+	   the words around it. In em so it holds at any body size. */
+	vertical-align: -0.35em;
 	background: var(--hover);
 	color: var(--text);
 	border: 0;
 	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
-	/* Keep the same total height while giving the lower edge equal room. */
-	padding: 3px 8px 3px 5px;
+	/* Unequal to read as equal, the same 4/1 split as the session chip above
+	   and for the same reason: the line box hangs ~5px below the baseline and
+	   only ~3px over the caps, so it is the TOP that needs the padding. A
+	   symmetric 3/3 put 8.3px over the caps against 5.7px under the baseline,
+	   which is the pill sitting low on its own label. */
+	padding: 4px 8px 1px 5px;
 	line-height: 1.3;
 	font-weight: 600;
 	font-variant-numeric: tabular-nums;
@@ -1626,10 +1635,6 @@ a.pr-ref {
 	transition:
 		background var(--dur-micro) var(--ease),
 		scale var(--dur-micro) var(--ease);
-}
-.pr-ref-label {
-	display: inline-block;
-	transform: translateY(2.5px);
 }
 a.pr-ref:hover {
 	background: var(--hover-strong);
@@ -1652,7 +1657,10 @@ a.pr-ref:focus-visible {
 	flex: none;
 	place-items: center;
 	color: var(--text-dim);
-	transform: translateY(0.5px);
+	/* Flex centres the glyph on the line box, which hangs lower than the cap
+	   band the eye reads the label by. Onto that band, same 1px as the
+	   session chip above. */
+	transform: translateY(-1px);
 }
 .pr-ref-icon svg {
 	width: 18px;
