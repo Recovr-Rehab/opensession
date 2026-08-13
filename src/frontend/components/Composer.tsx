@@ -342,18 +342,30 @@ function StopConfirmModal({
   const stopRef = useRef<HTMLButtonElement>(null);
   return (
     <Modal.Root open={open} onOpenChange={onOpenChange}>
-      <Modal.Content initialFocus={stopRef}>
+      <Modal.Content
+        initialFocus={stopRef}
+        widthClassName="max-w-[32rem]"
+        className="gap-5 p-7 phone:w-[calc(100vw-1.5rem)] phone:p-6"
+      >
         <div className="flex flex-col">
-          <Modal.Title className="m-0 text-balance text-section-title font-semibold leading-tight tracking-[-0.01em] text-fg">
+          <Modal.Title className="m-0 text-balance text-[22px] font-semibold leading-tight tracking-[-0.02em] text-fg phone:text-[21px]">
             Stop this response?
           </Modal.Title>
-          <Modal.Description className="m-0 mt-1.5 text-pretty text-supporting font-normal leading-relaxed text-dim">
+          <Modal.Description className="m-0 mt-2 text-pretty text-base font-normal leading-relaxed text-dim">
             You can ask again or send a follow-up anytime.
           </Modal.Description>
         </div>
-        <Modal.Footer>
-          <Modal.Close render={<Button>Keep thinking</Button>} />
-          <Button ref={stopRef} variant="primary" onClick={onConfirm}>
+        <Modal.Footer className="mt-3 gap-3">
+          <Modal.Close
+            render={<Button size="lg" className="min-h-11 px-5 text-base">Keep going</Button>}
+          />
+          <Button
+            ref={stopRef}
+            variant="primary"
+            size="lg"
+            className="min-h-11 px-5 text-base"
+            onClick={onConfirm}
+          >
             Stop
           </Button>
         </Modal.Footer>
