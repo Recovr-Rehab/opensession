@@ -55,4 +55,53 @@ final class SidebarFeedsTests: XCTestCase {
             ["plain", "loom"]
         )
     }
+
+    func testSourcesFollowTheServersFeeds() {
+        let rows = SidebarFeeds.sources(
+            known: [
+                SidebarFeeds.Feed(id: "plain", title: "Plain"),
+                SidebarFeeds.Feed(id: "linear", title: "Linear"),
+            ],
+            hidden: #"["linear"]"#
+        )
+
+        XCTAssertEqual(rows.map(\.id), ["plain", "linear"])
+        XCTAssertEqual(rows.map(\.title), ["Plain", "Linear"])
+        XCTAssertEqual(rows.map(\.unknown), [false, false])
+    }
+
+    /// The gap this list closes: a source hidden in the browser that this
+    /// server no longer describes still needs a switch, or it can never come
+    /// back from the phone.
+    func testHiddenSourceTheServerDoesNotDescribeStillGetsARow() {
+        let rows = SidebarFeeds.sources(
+            known: [SidebarFeeds.Feed(id: "plain", title: "Plain")],
+            hidden: #"["loom","plain"]"#
+        )
+
+        XCTAssertEqual(rows.map(\.id), ["plain", "loom"])
+        // Nothing names it, so the id is the name rather than nothing at all.
+        XCTAssertEqual(rows.last?.title, "loom")
+        XCTAssertEqual(rows.last?.unknown, true)
+    }
+
+    func testSourcesFallBackToTheIdWhenTheServerNamesNothing() {
+        let rows = SidebarFeeds.sources(
+            known: [
+                SidebarFeeds.Feed(id: "loom", title: nil),
+                SidebarFeeds.Feed(id: " ", title: "Blank"),
+                SidebarFeeds.Feed(id: "plain", title: "  "),
+                SidebarFeeds.Feed(id: "loom", title: "Loom"),
+            ],
+            hidden: "[]"
+        )
+
+        XCTAssertEqual(rows.map(\.id), ["loom", "plain"])
+        XCTAssertEqual(rows.map(\.title), ["loom", "plain"])
+    }
+
+    func testSourcesAreEmptyWhenThereIsNothingToShow() {
+        XCTAssertTrue(SidebarFeeds.sources(known: [], hidden: "[]").isEmpty)
+        XCTAssertTrue(SidebarFeeds.sources(known: [], hidden: "junk").isEmpty)
+    }
 }

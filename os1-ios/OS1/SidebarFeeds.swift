@@ -17,10 +17,55 @@ import Foundation
 /// offered on the phone at all: the web only puts a tool's removal behind a
 /// right-click because a phone can't reach the menu that restores it.
 enum SidebarFeeds {
-    /// The Plain support queue. Named here rather than fetched from
-    /// `/api/feeds` because it is the one source row this app draws; the web,
-    /// which renders every configured feed, resolves ids from the server.
+    /// The Plain support queue: the one source row this app DRAWS, named here
+    /// because the row is built in Swift rather than from the descriptor. Which
+    /// sources the account can show is a different question, and the server
+    /// answers it (`/api/feeds`, see `sources(known:hidden:)`).
     static let plain = "plain"
+
+    /// A source this instance offers, as `/api/feeds` describes it. A tolerant
+    /// subset of the server's `FeedDescriptor`: the rest of that shape names
+    /// web surfaces this client has no equivalent of.
+    struct Feed: Codable, Identifiable, Hashable, Sendable {
+        let id: String
+        let title: String?
+    }
+
+    /// One switch in Settings → Appearance.
+    struct Source: Identifiable, Hashable, Sendable {
+        let id: String
+        /// The server's band title, or the id when nothing names it.
+        let title: String
+        /// True when only the hidden list knows this id.
+        let unknown: Bool
+    }
+
+    /// The switches the Sources list should draw: every feed the server
+    /// describes, then every hidden id it did not mention.
+    ///
+    /// That second half is the point. The hidden list belongs to the ACCOUNT
+    /// and the browser writes it too, so an instance's feed hidden there would
+    /// otherwise be stranded: no row on the phone to hide, and no row in
+    /// Settings to bring back. An id nothing can name still gets a switch,
+    /// because a source you cannot name beats a source you cannot restore.
+    static func sources(known: [Feed], hidden json: String) -> [Source] {
+        var rows: [Source] = []
+        var seen = Set<String>()
+        for feed in known {
+            let id = feed.id.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !id.isEmpty, seen.insert(id).inserted else { continue }
+            let title = feed.title?.trimmingCharacters(in: .whitespacesAndNewlines)
+            rows.append(Source(
+                id: id,
+                title: (title?.isEmpty == false ? title : nil) ?? id,
+                unknown: false
+            ))
+        }
+        for id in decode(json) where seen.insert(id).inserted {
+            rows.append(Source(id: id, title: id, unknown: true))
+        }
+        return rows
+    }
 
     /// Mirrors the server pref into `@AppStorage`, like every other
     /// cross-device preference (`NativePreferences`).

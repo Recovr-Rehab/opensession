@@ -802,6 +802,15 @@ enum OS1API {
         return try await decodeDetached(RepoAppearance.self, from: data)
     }
 
+    /// Source bands this instance offers. Only the ids and titles are read:
+    /// the app draws Plain's row itself, and the list exists so Settings can
+    /// offer a switch per source instead of the one id this build knows.
+    static func feeds() async throws -> [SidebarFeeds.Feed] {
+        struct FeedsResponse: Decodable, Sendable { let feeds: [SidebarFeeds.Feed]? }
+        let response: FeedsResponse = try await get("/api/feeds")
+        return response.feeds ?? []
+    }
+
     /// Repos a new session can target.
     static func repos() async throws -> [RepoInfo] {
         struct ReposResponse: Decodable { let repos: [RepoInfo] }

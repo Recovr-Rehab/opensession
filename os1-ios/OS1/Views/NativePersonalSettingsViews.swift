@@ -416,6 +416,9 @@ struct AppearanceSettingsView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var repos: [OS1API.RepoInfo] = SettingsCache.value("repos") ?? []
+    #if os(iOS)
+    @State private var feeds: [SidebarFeeds.Feed] = SettingsCache.value("feeds") ?? []
+    #endif
 
     private static let themes: [(value: String, label: String)] = [
         ("system", "System"),
@@ -520,23 +523,52 @@ struct AppearanceSettingsView: View {
             // The way back from a long press on the row. iOS only: the Mac
             // sidebar reaches Plain from its header, so there is no row there
             // to hide and nothing this switch would do.
-            Section {
-                Toggle("Plain", isOn: Binding(
-                    get: { !SidebarFeeds.isHidden(SidebarFeeds.plain, in: hiddenFeeds) },
-                    set: { SidebarFeeds.setVisible(SidebarFeeds.plain, $0) }
-                ))
-            } header: {
-                Text("Sources")
-            } footer: {
-                Text(
-                    "Show the Plain support queue in the session list. Hidden sources stop refreshing until you show them again, and the setting is your account's — the web sidebar follows it too."
-                )
+            //
+            // One switch per source the SERVER describes, not per source this
+            // build draws: the hidden list is the account's and the browser
+            // writes it too, so a feed hidden there needs a way back that does
+            // not depend on the phone having a row for it.
+            if !sources.isEmpty {
+                Section {
+                    ForEach(sources) { source in
+                        Toggle(isOn: Binding(
+                            get: { !SidebarFeeds.isHidden(source.id, in: hiddenFeeds) },
+                            set: { SidebarFeeds.setVisible(source.id, $0) }
+                        )) {
+                            SourceToggleLabel(source: source)
+                        }
+                    }
+                } header: {
+                    Text("Sources")
+                } footer: {
+                    Text(
+                        "Hidden sources stop refreshing until you show them again. The setting is your account's, so the web sidebar follows it too."
+                    )
+                }
             }
             #endif
         }
         .navigationTitle("Appearance")
         .task { await loadRepos() }
+        #if os(iOS)
+        .task { await loadFeeds() }
+        #endif
     }
+
+    #if os(iOS)
+    private var sources: [SidebarFeeds.Source] {
+        SidebarFeeds.sources(known: feeds, hidden: hiddenFeeds)
+    }
+
+    /// Cached like the repo list: the switches have to be right on the screen
+    /// that restores a source, and a cold fetch is a beat too late. A failed
+    /// fetch leaves the cached set, and the hidden ids alone still draw rows.
+    private func loadFeeds() async {
+        guard let fetched = try? await OS1API.feeds() else { return }
+        feeds = fetched
+        SettingsCache.save("feeds", fetched)
+    }
+    #endif
 
     private var themeFooter: String {
         switch appearance {
@@ -558,6 +590,28 @@ struct AppearanceSettingsView: View {
         SettingsCache.save("repos", fetched)
     }
 }
+
+#if os(iOS)
+/// One source's name, and a word about it when the only thing that knows the
+/// id is the hidden list itself. Saying so is what keeps the row honest: the
+/// switch still works, and the person can see why it has no better name.
+private struct SourceToggleLabel: View {
+    let source: SidebarFeeds.Source
+
+    var body: some View {
+        if source.unknown {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(source.title)
+                Text("This server no longer offers this source.")
+                    .font(.footnote)
+                    .foregroundStyle(OS1VisualStyle.textDim)
+            }
+        } else {
+            Text(source.title)
+        }
+    }
+}
+#endif
 
 /// The first few repo tiles, in order, on the row that opens the editor — the
 /// setting's value said in the same language the list itself speaks.
