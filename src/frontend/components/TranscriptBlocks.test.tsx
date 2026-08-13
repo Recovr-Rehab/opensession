@@ -166,10 +166,33 @@ describe("TranscriptBlocks compact tool runs", () => {
 		expect(html).toContain('data-tool-run="true"');
 		expect(html).toContain("2 steps · Bash · Read");
 		expect(html).toContain("Show 2 grouped steps: Bash · Read");
+		expect(html).toContain('x="8.25" y="4.75" width="11" height="11" rx="2"');
 		expect(html).toContain("group-hover:opacity-0");
 		expect(html).toContain("group-hover:opacity-100");
 		expect(html).not.toContain("git status");
 		expect(html).not.toContain("package.json");
+	});
+
+	test("keeps edits as direct rows between compact runs", () => {
+		setTurnActivity("expanded");
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				live
+				entries={[
+					...toolEntries.slice(0, 3),
+					{ id: "edit", type: "tool_use", toolUseId: "edit-call", toolName: "edit", toolInput: { filePath: "/tmp/package.json", oldString: "old", newString: "new" }, content: "Using edit", timestamp: "2026-08-13T06:00:02.500Z" },
+					{ id: "edit-result", type: "tool_result", toolUseId: "edit-call", content: "updated", timestamp: "2026-08-13T06:00:02.750Z" },
+					...toolEntries.slice(3),
+				]}
+			/>,
+		);
+
+		expect(html.match(/data-tool-run="true"/g)).toHaveLength(2);
+		expect(html).toContain('data-eid="edit"');
+		expect(html).toContain(">edit</span>");
+		expect(html).toContain("+1");
+		expect(html).toContain("-1");
+		setTurnActivity(null);
 	});
 
 	test("keeps compact calls open under the always-expanded preference", () => {

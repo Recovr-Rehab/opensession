@@ -130,7 +130,7 @@ struct TurnBlockView: View {
               item.result?.featuredMedia?.isEmpty != false
         else { return false }
         switch item.presentation.family {
-        case .run, .file, .edit, .find, .web: return true
+        case .run, .file, .find, .web: return true
         default: return false
         }
     }
@@ -378,11 +378,7 @@ private struct ToolRunView: View {
                     }
                 } label: {
                     HStack(spacing: 7) {
-                        HStack(spacing: -6) {
-                            ForEach(families, id: \.self) { family in
-                                Image(systemName: family.symbol)
-                            }
-                        }
+                        Image(systemName: "square.stack")
                             .font(.system(size: 10))
                             .foregroundStyle(OS1VisualStyle.textFaint)
                             .frame(width: 18)
@@ -461,14 +457,6 @@ private struct ToolRunView: View {
     private var failureCount: Int { items.filter(\.isError).count }
     private var mediaCount: Int { items.reduce(0) { $0 + $1.mediaSources.count } }
     private var mediaLabel: String { "\(mediaCount) image\(mediaCount == 1 ? "" : "s")" }
-    private var families: [ToolFamily] {
-        var values: [ToolFamily] = []
-        for item in items where !values.contains(item.presentation.family) {
-            values.append(item.presentation.family)
-            if values.count == 3 { break }
-        }
-        return values
-    }
     private var accessibilityLabel: String {
         var parts = ["\(items.count) grouped steps", label]
         if failureCount > 0 { parts.append("\(failureCount) failed") }

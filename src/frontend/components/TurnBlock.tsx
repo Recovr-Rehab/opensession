@@ -4,7 +4,6 @@ import {
   assetToolPath,
   canonicalToolName,
   ToolCallBlock,
-  ToolGlyph,
   toolDisplayName,
   toolFamily,
   toolSummary,
@@ -12,7 +11,7 @@ import {
 } from "./ToolCallBlock";
 import { ClampedBody } from "./MessageBubble";
 import { resolveEntryImageSrc } from "../lib/osBlob";
-import { IconChevronDown } from "./icons";
+import { IconChevronDown, IconStack } from "./icons";
 import { cn } from "../ui/cn";
 import { msgBody, msgMedia } from "../lib/msg-classes";
 import { formatDuration } from "../lib/time";
@@ -244,7 +243,6 @@ export const TurnBlock = React.memo(function TurnBlock({
 const COMPACT_TOOL_FAMILIES = new Set([
   "run",
   "file",
-  "edit",
   "find",
   "web",
 ]);
@@ -330,7 +328,6 @@ function ToolRunBlock({
     videos += result?.videos?.length ?? 0;
   }
   const mediaCount = images + videos;
-  const familyTools = groupedToolFamilies(items);
   const statusLabel = [
     failures > 0 ? `${failures} failed` : "",
     mediaCount > 0 ? `${mediaCount} media` : "",
@@ -360,17 +357,7 @@ function ToolRunBlock({
       >
         <span className="relative grid size-[22px] flex-shrink-0 place-items-center text-faint">
           <span className="absolute inset-0 transition-opacity duration-150 group-hover:opacity-0 group-focus-visible:opacity-0">
-            {familyTools.map((toolName, index) => (
-              <span
-                key={toolName}
-                className="absolute left-1/2 top-1/2 grid -translate-y-1/2 place-items-center"
-                style={{
-                  transform: `translate(calc(-50% + ${(index - (familyTools.length - 1) / 2) * 5}px), -50%)`,
-                }}
-              >
-                <ToolGlyph toolName={toolName} size={16} />
-              </span>
-            ))}
+            <IconStack size={18} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" />
           </span>
           <IconChevronDown
             size={20}
@@ -438,20 +425,6 @@ function groupedToolLabel(items: TranscriptEntry[]): string {
   return [...counts]
     .map(([name, count]) => (count > 1 ? `${name} ×${count}` : name))
     .join(" · ");
-}
-
-function groupedToolFamilies(items: TranscriptEntry[]): string[] {
-  const names: string[] = [];
-  const families = new Set<string>();
-  for (const entry of items) {
-    const name = entry.toolName || "Tool";
-    const family = toolFamily(name);
-    if (families.has(family)) continue;
-    families.add(family);
-    names.push(name);
-    if (names.length === 3) break;
-  }
-  return names;
 }
 
 /** Intermediate reasoning stays readable while the turn itself provides the fold. */
