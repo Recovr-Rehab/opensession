@@ -865,15 +865,16 @@ struct SessionView: View {
         .environment(\.colorScheme, appColorScheme)
     }
 
+    /// Ghost rows in the transcript's own geometry, rather than a spinner in
+    /// the middle of an empty screen: the wait then looks like the thing
+    /// being waited for, and the real rows land into a shape that is already
+    /// there. It draws itself only if the load outlasts a short delay.
     private var conversationLoader: some View {
-        VStack(spacing: 10) {
-            ProgressView()
-                .controlSize(.small)
-            Text("Loading conversation…")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        TranscriptSkeleton()
+            .padding(.horizontal, contentInset)
+            .padding(.vertical, 8)
+            .frame(maxWidth: contentMaxWidth)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private func conversationLoadFailure(_ error: String) -> some View {

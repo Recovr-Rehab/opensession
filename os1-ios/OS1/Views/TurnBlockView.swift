@@ -131,9 +131,46 @@ struct TurnBlockView: View {
                 .padding(.leading, state.expanded ? 6 : 0)
                 .padding(.top, state.expanded ? 8 : 2)
                 .transition(.opacity)
+
+                if state.expanded {
+                    touchedFileSummary
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Files named in the open fold before the rest become one chip. A
+    /// refactor can touch thirty, and thirty wrapped chips would bury the
+    /// steps they belong to.
+    private static let foldFileChips = 6
+
+    /// What the turn changed, by name, closing the open fold.
+    ///
+    /// Shut, the header's trailing detail names the files; open, it steps
+    /// aside and the fold used to say nothing about them at all — so opening
+    /// a turn to see its work took away the one line saying what the work
+    /// came to. These are the same chips the answer's footer ends with, and
+    /// they open the same diff: the header keeps the turn's totals, these
+    /// carry each file's own.
+    @ViewBuilder
+    private var touchedFileSummary: some View {
+        if !turn.touchedFiles.isEmpty {
+            FlowLayout(spacing: 6) {
+                ForEach(turn.touchedFiles.prefix(Self.foldFileChips)) { file in
+                    FileChipView(file: file)
+                }
+                if turn.touchedFiles.count > Self.foldFileChips {
+                    MoreFilesChipView(
+                        sessionId: sessionId,
+                        count: turn.touchedFiles.count - Self.foldFileChips
+                    )
+                }
+            }
+            .padding(.leading, 6)
+            .padding(.top, 8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     /// Which run, if any, a call joins. Routine calls share one compact run;
@@ -423,7 +460,12 @@ private struct ToolRunView: View {
                             .font(.system(size: 10))
                             .foregroundStyle(OS1VisualStyle.textFaint)
                             .frame(width: 18)
-                        Text("\(items.count) step\(items.count == 1 ? "" : "s") · \(label)")
+                        // Just the count. Which tools ran is what the row is
+                        // folding away, and one tap puts every step back with
+                        // its own glyph, so naming them here only asks to be
+                        // read twice. The names stay in the accessibility
+                        // label, where the count alone would say nothing.
+                        Text("\(items.count) step\(items.count == 1 ? "" : "s")")
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(OS1VisualStyle.textDim)
                             .lineLimit(1)
