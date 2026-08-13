@@ -679,6 +679,21 @@ export function IconMessage(p: IconProps) {
   );
 }
 
+export function IconMessages(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path
+        {...stroke}
+        d="M5.75 5.25H14.25C15.3546 5.25 16.25 6.14543 16.25 7.25V12.25C16.25 13.3546 15.3546 14.25 14.25 14.25H10.25L6.75 17V14.25H5.75C4.64543 14.25 3.75 13.3546 3.75 12.25V7.25C3.75 6.14543 4.64543 5.25 5.75 5.25Z"
+      />
+      <path
+        {...stroke}
+        d="M17.25 8.75H18.25C19.3546 8.75 20.25 9.64543 20.25 10.75V15.25C20.25 16.3546 19.3546 17.25 18.25 17.25H17.25V19.5L14.25 17.25H12.75"
+      />
+    </Svg>
+  );
+}
+
 export function IconMessageQuestion(p: IconProps) {
   return (
     <Svg {...p}>

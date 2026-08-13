@@ -137,7 +137,9 @@ import {
 	IconGlobe,
 	IconHome,
 	IconListCircles,
+	IconMessages,
 } from "./icons";
+import { Button } from "../ui/button";
 import { Tooltip } from "../ui/tooltip";
 import { ContextMenu, Menu } from "../ui/menu";
 import { Popover } from "../ui/popover";
@@ -1721,6 +1723,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		focusWsRows.length === 0 &&
 		snoozedWsRows.length === 0 &&
 		prRowItems.length === 0;
+	const productEmpty = sessions.length === 0 && workspaces.length === 0;
 
 	function archiveWorkspaceWithNext(row: WsRow) {
 		// Sessionless rows can't be opened, so they're not "next" candidates.
@@ -4490,11 +4493,46 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						Couldn't load sessions.
 					</InlineAlert>
 				)}
-				{workspaceListEmpty && !sessionsLoading && !sessionsError && (
+				{workspaceListEmpty && !sessionsLoading && !sessionsError && hasWorkspaceFilter && (
 					<div className="mx-4 my-7 text-center text-[13px] leading-[1.4] text-faint">
-						{hasWorkspaceFilter
-							? "No matching workspaces"
-							: "No workspaces yet"}
+						No matching workspaces
+					</div>
+				)}
+				{workspaceListEmpty &&
+					!sessionsLoading &&
+					!sessionsError &&
+					!hasWorkspaceFilter &&
+					(!isPhone || !productEmpty) && (
+					<div className="mx-4 my-7 text-center text-[13px] leading-[1.4] text-faint">
+						No workspaces yet
+					</div>
+				)}
+				{productEmpty &&
+					!sessionsLoading &&
+					!sessionsError &&
+					!hasWorkspaceFilter &&
+					isPhone && (
+					<div className="flex min-h-[360px] flex-col items-center justify-center px-7 py-12 text-center">
+						<IconMessages size={30} className="mb-3 text-dim" />
+						<div className="text-[19px] leading-[1.15] font-semibold tracking-[-0.02em] text-fg">
+							No sessions
+						</div>
+						<p className="m-0 mt-1 max-w-[26ch] text-[14px] leading-[1.45] text-dim text-pretty">
+							Start one and it shows up here.
+						</p>
+						<div className="mt-4 flex flex-col items-center gap-1">
+							<Button
+								variant="soft"
+								size="md"
+								className="rounded-full px-4"
+								onClick={onNewSession}
+							>
+								New session
+							</Button>
+							<Button variant="ghost" size="sm" onClick={onOpenArchived}>
+								Archived
+							</Button>
+						</div>
 					</div>
 				)}
 
@@ -5042,7 +5080,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							]}
 				</div>
 
-				<div className={SIDEBAR_GROUP}>{archivedLink}</div>
+				{(!isPhone || !productEmpty || hasWorkspaceFilter) && (
+					<div className={SIDEBAR_GROUP}>{archivedLink}</div>
+				)}
 				</div>
 			)}
 			</div>
