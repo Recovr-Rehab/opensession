@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   cachedPrDetailsForSession,
+  ghApiErrorMessage,
   isNoPrError,
   latestWorkflowChecks,
   prApiErrorMessage,
@@ -133,5 +134,47 @@ describe("cached session PR details", () => {
         "feature",
       ),
     ).toBeNull();
+  });
+});
+
+describe("ghApiErrorMessage", () => {
+  // Verbatim bodies from POST /pulls/{n}/reviews, whose stderr line is only
+  // ever "gh: Unprocessable Entity (HTTP 422)".
+  const bareStderr = "gh: Unprocessable Entity (HTTP 422)\n";
+
+  test("recovers the reason gh drops, and says what to do about it", () => {
+    expect(
+      ghApiErrorMessage(
+        '{"message":"Unprocessable Entity","errors":["Line could not be resolved"],"status":"422"}',
+        bareStderr,
+        "gh api failed",
+      ),
+    ).toBe(
+      "Line could not be resolved. The comment no longer matches the PR's current diff. Reload the diff and add it again.",
+    );
+    expect(
+      ghApiErrorMessage(
+        '{"message":"Unprocessable Entity","errors":["Path could not be resolved"],"status":"422"}',
+        bareStderr,
+        "gh api failed",
+      ),
+    ).toContain("Path could not be resolved.");
+  });
+
+  test("keeps a message that carries information, and object-shaped errors", () => {
+    expect(
+      ghApiErrorMessage(
+        '{"message":"Validation Failed","errors":[{"resource":"PullRequestReview","code":"custom","message":"Can not approve your own pull request"}]}',
+        "gh: Validation Failed (HTTP 422)",
+        "gh api failed",
+      ),
+    ).toBe("Validation Failed: Can not approve your own pull request");
+  });
+
+  test("falls back to stderr, then to the caller's fallback", () => {
+    expect(ghApiErrorMessage("not json", "gh: Not Found (HTTP 404)", "gh api failed")).toBe(
+      "gh: Not Found (HTTP 404)",
+    );
+    expect(ghApiErrorMessage("", "", "gh api failed")).toBe("gh api failed");
   });
 });

@@ -669,7 +669,8 @@ export async function postPrComment(
         new Response(proc.stderr).text(),
         proc.exited,
       ]);
-      if (code !== 0) return { error: (err || "gh api failed").slice(0, 300) };
+      if (code !== 0)
+        return { error: ghApiErrorMessage(out, err, "gh api failed") };
       const url = (() => {
         try {
           return JSON.parse(out).html_url as string;
@@ -779,7 +780,8 @@ export async function submitPrReview(
         new Response(proc.stderr).text(),
         proc.exited,
       ]);
-      if (code !== 0) return { error: (err || "gh api failed").slice(0, 300) } as const;
+      if (code !== 0)
+        return { error: ghApiErrorMessage(out, err, "gh api failed") } as const;
       const url = (() => {
         try {
           return JSON.parse(out).html_url as string;
@@ -1067,6 +1069,56 @@ export function prApiErrorMessage(msg: string): string {
   if (/resource not accessible/i.test(msg))
     return "The GitHub token is missing a permission for this API. Check the PAT's fine-grained permissions.";
   return "GitHub's pull request API is unavailable right now.";
+}
+
+/**
+ * Turn a failed `gh api` call into something the person reading it can act on.
+ *
+ * GitHub puts the real reason for a 422 in `errors[]` ("Line could not be
+ * resolved"), but gh's error line stops at the top-level `message` — so its
+ * stderr is the useless "gh: Unprocessable Entity (HTTP 422)" while the
+ * response body, which gh prints on stdout even when it exits non-zero, holds
+ * the detail. Read the body first and keep stderr as the fallback.
+ */
+export function ghApiErrorMessage(
+  out: string,
+  err: string,
+  fallback: string,
+): string {
+  const body = (() => {
+    try {
+      return JSON.parse(out.trim());
+    } catch {
+      return null;
+    }
+  })();
+  const detail = Array.isArray(body?.errors)
+    ? body.errors
+        .map((e: any) =>
+          typeof e === "string"
+            ? e
+            : // A per-error `message` is the human sentence; without one, the
+              // shape has to be assembled from the resource/field/code triple.
+              e?.message ||
+              [e?.resource, e?.field, e?.code].filter(Boolean).join(" "),
+        )
+        .filter(Boolean)
+        .join("; ")
+    : "";
+  // "Unprocessable Entity" is the bare status name, so it adds nothing once
+  // errors[] is in hand; a real message ("Validation Failed") still leads.
+  const message =
+    typeof body?.message === "string" &&
+    !/^unprocessable entity$/i.test(body.message)
+      ? body.message
+      : "";
+  const base = [message, detail].filter(Boolean).join(": ");
+  const msg = (base || err.trim() || fallback).slice(0, 300);
+  // The anchor failures are the ones people hit, and the reason is never the
+  // comment itself: the diff moved under it.
+  return /could not be resolved/i.test(detail)
+    ? `${msg}. The comment no longer matches the PR's current diff. Reload the diff and add it again.`
+    : msg;
 }
 
 function isPermanentPrApiError(msg: string): boolean {
