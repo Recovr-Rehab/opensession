@@ -105,7 +105,11 @@ import { Composer } from "./Composer";
 import { ComposerAgents } from "./ComposerAgents";
 import { UsageMeter } from "./UsageMeter";
 import { SchedulePromptButton } from "./SchedulePrompt";
-import { ShippedChangeComposer } from "./ShippedChangeComposer";
+import {
+	ShippedChangeComposer,
+	SlackSentNotice,
+	type SlackSent,
+} from "./ShippedChangeComposer";
 import { BrandMark } from "./BrandMark";
 import { readFileAsDataUrl, type FileAttachment } from "../lib/images";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
@@ -1220,6 +1224,7 @@ export function SessionViewer({
 	} | null>(null);
 	const [slackComposerStatus, setSlackComposerStatus] = useState<"idle" | "sharing">("idle");
 	const [slackComposerReconnect, setSlackComposerReconnect] = useState(false);
+	const [slackComposerSent, setSlackComposerSent] = useState<SlackSent | null>(null);
 	const { copied, share: shareLink } = useCopy();
 	// Inline rename of the header title (double-click), mirroring the tab strip.
 	// `null` = not editing; a string = the working draft.
@@ -2418,11 +2423,19 @@ export function SessionViewer({
 						setSlackComposer(msg.request);
 						setSlackComposerStatus("idle");
 						setSlackComposerReconnect(false);
+						if (msg.request) setSlackComposerSent(null);
 					}
 					break;
 				case "slack_composer_resolved":
 					if (msg.sessionId === session.id) {
 						setSlackComposer((current) => current?.id === msg.requestId ? null : current);
+						if (msg.status === "sent" && msg.channel) {
+							setSlackComposerSent({
+								channelName: msg.channel.name,
+								permalink: msg.permalink,
+								receiptKey: msg.requestId,
+							});
+						}
 					}
 					break;
 				case "session_status":
@@ -3077,12 +3090,13 @@ export function SessionViewer({
 		!session.claudeSessionId &&
 		!session.codexThreadId &&
 		session.source !== "opensession";
-	// A merged PR that was already shared no longer needs a transcript action.
-	// Keep the receipt in session data so the same post is not offered twice.
+	const latestAssistantMessage = entries.findLast(
+		(entry) => entry.type === "assistant" && entry.content.trim(),
+	)?.content.trim() || "";
 	const shippedSent =
 		shippedShare ||
 		(mergedPr
-			? session.slackShares?.find((share) => share.prNumber === mergedPr.number)
+			? session.slackShares?.findLast((share) => share.prNumber === mergedPr.number)
 			: undefined);
 	const shippedChangeShare = useMemo(
 		() =>
@@ -3100,7 +3114,16 @@ export function SessionViewer({
 						status: shippedChangeStatus,
 						onShare: sendShippedChangeToSlack,
 						onReconnectSlack: reconnectShippedSlack,
-						sent: !!shippedSent,
+						nextMessage: latestAssistantMessage,
+						...(shippedSent
+							? {
+									sent: {
+										channelName: shippedSent.channelName,
+										permalink: shippedSent.permalink,
+										receiptKey: shippedSent.at,
+									},
+								}
+							: {}),
 					}
 				: undefined,
 		[
@@ -3112,6 +3135,7 @@ export function SessionViewer({
 			reconnectShippedSlack,
 			shippedChangeStatus,
 			shippedSent,
+			latestAssistantMessage,
 		],
 	);
 	// Exact engine-state forks use Claude's SDK forkSession. Other backends can
@@ -3120,7 +3144,7 @@ export function SessionViewer({
 		if (!slackComposer) return;
 		setSlackComposerStatus("sharing");
 		try {
-			await sendSlackComposer(session.id, {
+			const result = await sendSlackComposer(session.id, {
 				requestId: slackComposer.id,
 				message,
 				channel,
@@ -3128,6 +3152,11 @@ export function SessionViewer({
 			});
 			setSlackComposer(null);
 			setSlackComposerStatus("idle");
+			setSlackComposerSent({
+				channelName: result.channel.name,
+				permalink: result.permalink,
+				receiptKey: slackComposer.id,
+			});
 		} catch (error: any) {
 			setSlackComposerStatus("idle");
 			if (error?.status === 403 && /Reconnect Slack/.test(error?.message || "")) {
@@ -3954,14 +3983,12 @@ export function SessionViewer({
 
 	async function handleOpenSlackComposer() {
 		setOverflowOpen(false);
-		const latestAssistantMessage = entries.findLast(
-			(entry) => entry.type === "assistant" && entry.content.trim(),
-		)?.content.trim() || "";
 		try {
 			const request = await openSlackComposer(session.id, latestAssistantMessage);
 			setSlackComposer(request);
 			setSlackComposerStatus("idle");
 			setSlackComposerReconnect(false);
+			setSlackComposerSent(null);
 			requestAnimationFrame(() => scrollToLatest("smooth"));
 		} catch (error: any) {
 			toast(error?.message || "Couldn't open the Slack composer");
@@ -5865,6 +5892,13 @@ export function SessionViewer({
 										toast("Approve image access in Slack, then send again");
 									}}
 									onCancel={cancelComposedSlackMessage}
+								/>
+							)}
+
+							{!slackComposer && slackComposerSent && (
+								<SlackSentNotice
+									{...slackComposerSent}
+									onSendAnother={handleOpenSlackComposer}
 								/>
 							)}
 

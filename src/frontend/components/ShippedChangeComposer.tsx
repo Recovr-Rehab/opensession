@@ -12,6 +12,43 @@ import { Spinner } from "../ui/spinner";
 
 const MAX_SLACK_IMAGE_BYTES = 20 * 1024 * 1024;
 
+export interface SlackSent {
+	channelName: string;
+	permalink?: string;
+	receiptKey?: string;
+}
+
+export function SlackSentNotice({
+	channelName,
+	permalink,
+	onSendAnother,
+}: SlackSent & { onSendAnother: () => void }) {
+	return (
+		<div className="mx-auto mt-2 mb-6 flex w-full max-w-[var(--session-col)] items-center gap-1.5 px-1 text-label leading-5 text-dim">
+			<BrandMark name="slack" size={12} />
+			<span>
+				Sent to <span className="font-semibold text-fg">#{channelName}</span>
+			</span>
+			{permalink && (
+				<>
+					<span aria-hidden className="text-faint">·</span>
+					<a
+						className="focus-ring rounded-sm text-dim underline decoration-line underline-offset-2 transition-colors hover:text-fg hover:decoration-current"
+						href={permalink}
+						target="_blank"
+						rel="noreferrer"
+					>
+						Open in Slack
+					</a>
+				</>
+			)}
+			<Button variant="ghost" size="sm" className="ml-auto phone:min-h-10" onClick={onSendAnother}>
+				Send another
+			</Button>
+		</div>
+	);
+}
+
 export interface ShippedChangeComposerProps {
 	sessionId: string;
 	defaultMessage: string;
@@ -28,8 +65,8 @@ export interface ShippedChangeComposerProps {
 		canUploadImages?: boolean;
 	}>;
 	defaultChannel?: string;
-	/** The message was sent. Keep its receipt in session data, not the transcript. */
-	sent?: boolean;
+	nextMessage?: string;
+	sent?: SlackSent;
 }
 
 export function ShippedChangeComposer({
@@ -44,6 +81,7 @@ export function ShippedChangeComposer({
 	onCancel,
 	loadChannels,
 	defaultChannel,
+	nextMessage,
 	sent,
 }: ShippedChangeComposerProps) {
 	const [message, setMessage] = useState(defaultMessage);
@@ -56,8 +94,12 @@ export function ShippedChangeComposer({
 	const [uploading, setUploading] = useState(false);
 	const [awaitingSlack, setAwaitingSlack] = useState(false);
 	const [canUploadImages, setCanUploadImages] = useState(true);
+	const [composingAfterSent, setComposingAfterSent] = useState(false);
 	const fileInputRef = useRef<HTMLInputElement>(null);
 	const sessionRef = useRef(sessionId);
+	const sentKey = sent
+		? `${sent.channelName}\0${sent.permalink || ""}\0${sent.receiptKey || ""}`
+		: "";
 
 	useEffect(() => {
 		setMessage(defaultMessage);
@@ -75,7 +117,10 @@ export function ShippedChangeComposer({
 			: current);
 	}, [screenshot]);
 	useEffect(() => {
-		if (sent) return;
+		setComposingAfterSent(false);
+	}, [sentKey]);
+	useEffect(() => {
+		if (sent && !composingAfterSent) return;
 		let current = true;
 		(loadChannels ? loadChannels() : fetchShippedChangeChannels(sessionId))
 			.then((result) => {
@@ -95,7 +140,7 @@ export function ShippedChangeComposer({
 		return () => {
 			current = false;
 		};
-	}, [sessionId, loadChannels, defaultChannel, sent]);
+	}, [sessionId, loadChannels, defaultChannel, sent, composingAfterSent]);
 	const addImages = async (files: File[]) => {
 		const candidates = files.filter((file) => file.type.startsWith("image/"));
 		const oversized = candidates.find((file) => file.size > MAX_SLACK_IMAGE_BYTES);
@@ -146,7 +191,18 @@ export function ShippedChangeComposer({
 		}
 	};
 
-	if (sent) return null;
+	if (sent && !composingAfterSent) {
+		return (
+			<SlackSentNotice
+				{...sent}
+				onSendAnother={() => {
+					setMessage(nextMessage?.trim().slice(0, 500) || "");
+					setScreenshots([]);
+					setComposingAfterSent(true);
+				}}
+			/>
+		);
+	}
 
 	return (
 		<div className="mx-auto mt-2 mb-6 w-full max-w-[var(--session-col)]">

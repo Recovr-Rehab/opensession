@@ -124,7 +124,7 @@ describe("TranscriptBlocks shipped change action", () => {
 		expect(html).not.toContain("Capturing screenshot");
 	});
 
-	test("removes the action after the message was sent", () => {
+	test("confirms the send and offers another message", () => {
 		const html = renderToStaticMarkup(
 			<TranscriptBlocks
 				entries={entries}
@@ -134,12 +134,14 @@ describe("TranscriptBlocks shipped change action", () => {
 					defaultMessage: "We updated the toggle style in Tella.",
 					status: "idle",
 					onShare: () => {},
-					sent: true,
+					sent: { channelName: "chat" },
 				}}
 			/>,
 		);
-		expect(html).not.toContain("Send to Slack");
-		expect(html).not.toContain("Sent to");
+		expect(html).toContain("Sent to");
+		expect(html).toContain("#chat");
+		expect(html).toContain("Send another");
+		expect(html).not.toContain('aria-label="Slack message"');
 	});
 
 	test("does not show the action for a different merged PR", () => {
