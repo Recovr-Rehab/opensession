@@ -66,7 +66,7 @@ export const APP_BODY =
 export const WORKSPACE_SHELL =
 	// Above the sidebar's pinned labels (z 20), so their scroll-under washes
 	// cannot cut the shadow. The resize grabber stays above both at z 30.
-	"relative z-[25] flex min-h-0 min-w-0 flex-1 overflow-hidden border-l border-line bg-surface desktop:shadow-[-2px_0_6px_rgba(0,0,0,0.05)] " +
+	"relative z-[25] flex min-h-0 min-w-0 flex-1 overflow-hidden border-l border-line bg-surface desktop:shadow-[-1px_0_3px_rgba(0,0,0,0.04)] " +
 	// Collapsed sidebar: nothing to divide from or cast depth onto.
 	"[.app-body.sidebar-collapsed_&]:border-l-0 [.app-body.sidebar-collapsed_&]:shadow-none " +
 	"phone:contents";
