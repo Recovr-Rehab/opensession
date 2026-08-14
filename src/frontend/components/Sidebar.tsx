@@ -4178,12 +4178,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									members={team}
 									size={20}
 									max={4}
-									// The faces ring themselves so the pile separates. One
-									// colour for both row states: a ring sits over the face
-									// behind it, so it can't be translucent ink the way the
-									// row's own fill now is, and the sidebar's surface reads
-									// as the gap it is meant to be either way.
-									ring="var(--bg-raised)"
+									// The ring is opaque so the face behind cannot bleed into
+									// the gap. Match whichever sidebar surface the trigger is
+									// currently painted on.
+									ring="var(--team-face-ring)"
 									compact
 									side="right"
 									align="start"
@@ -4192,7 +4190,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									onPick={(next) =>
 										setFilter({ person: personLensFilter(next, currentUser) })
 									}
-									className="absolute right-2 top-1/2 -translate-y-1/2"
+									className="absolute right-2 top-1/2 -translate-y-1/2 [--team-face-ring:var(--bg-raised)] hover:[--team-face-ring:var(--row-chip)] data-[popup-open]:[--team-face-ring:var(--row-chip)]"
 								/>
 							</div>
 						);
