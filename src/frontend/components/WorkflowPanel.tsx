@@ -656,9 +656,14 @@ function RunCard({
 					</div>
 				</div>
 				{run.status === "running" && (
+					// The app's raised control, not the outlined red one: at this size
+					// an outline chip is the same shape as the "running" badge beside
+					// it, so the one thing on the card you can press read as another
+					// state readout. Stopping a run is recoverable, so it does not
+					// take the destructive weight either.
 					<Button
-						variant="danger"
-						size="xs"
+						variant="default"
+						size="sm"
 						className="shrink-0"
 						onClick={() => onCancel(run.runId)}
 					>
