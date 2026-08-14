@@ -2,12 +2,12 @@ import React from "react";
 import { Menu } from "../ui/menu";
 import { IconSparkle, IconCheck, IconChevronRight } from "./icons";
 import type { ModelOption } from "../lib/api";
+import { useEngines } from "../hooks/useEngines";
+import { baseModelId, engineModelId, modelEngine } from "../lib/model-engine";
 import {
 	ENGINE_LABELS,
 	LEGACY_GROUP_LABEL,
-	baseModelId,
 	opencodeModelParts,
-	piModelId,
 	shortModelLabel,
 	splitModelOptions,
 } from "./ModelEffortSelect";
@@ -58,24 +58,41 @@ export function ModelMenuRow({
 		),
 	];
 
+	// Engine choice is the id's routing prefix, so it is read off the current
+	// model and written by recomposing it — no separate engine state.
+	const engineOptions = useEngines().engines.filter((e) => e.available);
+	const activeEngine = modelEngine(effective);
+	const activeEngineLabel =
+		engineOptions.find((e) => e.id === activeEngine)?.label ||
+		ENGINE_LABELS[activeEngine] ||
+		activeEngine;
+
 	// Legacy rows keep the full registry label so they never read as
 	// duplicates of the friendly names above them.
-	const row = (m: ModelOption, raw = false) => (
-		<Menu.Item
-			key={m.id}
-			onClick={() => {
-				// Engine stays sticky: on a pi-routed session a model change
-				// recomposes the pi/ prefix over the new id where it can route.
-				const piNext = effective.startsWith("pi/") ? piModelId(m.id) : null;
-				onChange(piNext ?? (m.id === defaultModel ? "" : m.id));
-			}}
-		>
-			<span className="min-w-0 flex-1 truncate">
-				{raw ? m.label : shortModelLabel(m.id, models)}
-			</span>
-			{m.id === effectiveBase && <IconCheck size={18} className="text-dim" />}
-		</Menu.Item>
-	);
+	const row = (m: ModelOption, raw = false) => {
+		// Engine stays sticky: a model change recomposes the current engine's
+		// prefix over the new id. An entry that can't route there is disabled.
+		const routed =
+			activeEngine === "opencode"
+				? m.id === defaultModel
+					? ""
+					: m.id
+				: engineModelId(activeEngine, m.id);
+		return (
+			<Menu.Item
+				key={m.id}
+				disabled={routed === null}
+				title={routed === null ? `Not available on the ${activeEngineLabel} engine` : undefined}
+				className={routed === null ? "opacity-55" : undefined}
+				onClick={() => onChange(routed ?? (m.id === defaultModel ? "" : m.id))}
+			>
+				<span className="min-w-0 flex-1 truncate">
+					{raw ? m.label : shortModelLabel(m.id, models)}
+				</span>
+				{m.id === effectiveBase && <IconCheck size={18} className="text-dim" />}
+			</Menu.Item>
+		);
+	};
 
 	return (
 		<Menu.Root>
@@ -113,6 +130,31 @@ export function ModelMenuRow({
 					))
 				) : (
 					models.map((m) => row(m))
+				)}
+				{engineOptions.length > 1 && (
+					<>
+						<Menu.Separator />
+						<Menu.Group>
+							<Menu.GroupLabel>Engine</Menu.GroupLabel>
+							{engineOptions.map((e) => {
+								const next = engineModelId(e.id, effective);
+								return (
+									<Menu.Item
+										key={e.id}
+										disabled={!next}
+										title={
+											next ? undefined : `${label} isn't available on the ${e.label} engine`
+										}
+										className={next ? undefined : "opacity-55"}
+										onClick={() => next && onChange(next === defaultModel ? "" : next)}
+									>
+										<span className="min-w-0 flex-1 truncate">{e.label}</span>
+										{e.id === activeEngine && <IconCheck size={18} className="text-dim" />}
+									</Menu.Item>
+								);
+							})}
+						</Menu.Group>
+					</>
 				)}
 			</Menu.Popup>
 		</Menu.Root>

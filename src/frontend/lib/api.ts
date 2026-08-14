@@ -17,3 +17,4 @@ export * from "./api/goals";
 export * from "./api/user-state";
 export * from "./api/code-storage";
 export * from "./api/runners";
+export * from "./api/engines";

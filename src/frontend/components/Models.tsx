@@ -2,6 +2,13 @@ import { BASE_PATH } from "../lib/base";
 import React, { useEffect, useState, useCallback } from "react";
 import { TEAM } from "./UserPicker";
 import { shortModelLabel, splitModelOptions } from "./ModelEffortSelect";
+import { fetchEngines, setModelEngineDefault } from "../lib/api/engines";
+import {
+	engineModelId,
+	modelEngineKey,
+	type EngineId,
+	type EngineOption,
+} from "../lib/model-engine";
 import { Menu } from "../ui/menu";
 import { Button } from "../ui/button";
 import { DeviceCode } from "../ui/device-code";
@@ -435,6 +442,99 @@ function EnginesSection() {
 				Both engines draw on the same account pools. Each engine advertises the models in
 				its config file's <code>pickerModels</code>, and any well-formed engine id still
 				resolves when typed. Changes apply to new runs.
+			</SettingsHint>
+
+			<ModelEngineDefaultsSection />
+		</>
+	);
+}
+
+/**
+ * Per-model default engine. The engine a session runs on is the model id's
+ * routing prefix, so this map only decides where a model goes when nobody has
+ * picked: an explicit choice in the composer still wins, and Auto leaves the
+ * model on the instance default engine.
+ *
+ * Hidden unless the server offers more than one engine — with one engine there
+ * is nothing to choose, and an older server sends no engine list at all.
+ */
+function ModelEngineDefaultsSection() {
+	const [models, setModels] = useState<ModelInfo[] | null>(null);
+	const [engines, setEngines] = useState<EngineOption[]>([]);
+	const [defaults, setDefaults] = useState<Record<string, EngineId>>({});
+	const [saving, setSaving] = useState<string | null>(null);
+
+	useEffect(() => {
+		fetch(`${BASE_PATH}/api/models`)
+			.then((r) => (r.ok ? r.json() : null))
+			.then((body) => body && setModels(body.models))
+			.catch(() => {});
+		fetchEngines()
+			.then((c) => {
+				setEngines(c.engines.filter((e) => e.available));
+				setDefaults(c.modelEngines);
+			})
+			.catch(() => {});
+	}, []);
+
+	async function handleChange(key: string, value: string) {
+		const engine = value ? (value as EngineId) : null;
+		setSaving(key);
+		const previous = defaults;
+		setDefaults((prev) => {
+			const next = { ...prev };
+			if (engine) next[key] = engine;
+			else delete next[key];
+			return next;
+		});
+		try {
+			setDefaults(await setModelEngineDefault(key, engine));
+		} catch (e: any) {
+			setDefaults(previous);
+			toast(e.message || "Failed to save the default engine", { variant: "error" });
+		}
+		setSaving(null);
+	}
+
+	if (engines.length < 2) return null;
+	const { opencode: engineModels } = splitModelOptions(models || []);
+	if (engineModels.length === 0) return null;
+
+	return (
+		<>
+			<SettingsGroupLabel>Default engine per model</SettingsGroupLabel>
+			<SettingCard>
+				{engineModels.map((m) => {
+					const key = modelEngineKey(m.id);
+					const value = defaults[key] || "";
+					return (
+						<SettingRow key={m.id}>
+							<SettingRowText>
+								<SettingRowTitle>{shortModelLabel(m.id, models || [])}</SettingRowTitle>
+							</SettingRowText>
+							<SettingRowControl>
+								<select
+									className={settingsSelectClass}
+									value={value}
+									disabled={saving === key}
+									onChange={(e) => handleChange(key, e.target.value)}
+									aria-label={`Default engine for ${shortModelLabel(m.id, models || [])}`}
+								>
+									<option value="">Auto</option>
+									{engines.map((e) => (
+										<option key={e.id} value={e.id} disabled={!engineModelId(e.id, m.id)}>
+											{e.label}
+										</option>
+									))}
+								</select>
+							</SettingRowControl>
+						</SettingRow>
+					);
+				})}
+			</SettingCard>
+			<SettingsHint>
+				Auto leaves a model on the default engine. A model an engine can't serve is not
+				offered for it.
 			</SettingsHint>
 		</>
 	);

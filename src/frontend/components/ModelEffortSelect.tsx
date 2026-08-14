@@ -1,5 +1,7 @@
 import React from "react";
 import type { ModelOption, ProviderAccountOption } from "../lib/api";
+import { useEngines } from "../hooks/useEngines";
+import { baseModelId, engineModelId, modelEngine, type EngineId } from "../lib/model-engine";
 import { Menu } from "../ui/menu";
 import { cn } from "../ui/cn";
 import { Switch } from "../ui/switch";
@@ -100,29 +102,10 @@ export function opencodeModelParts(
 	};
 }
 
-/** Strip a pi/ engine-routing prefix back to the id the picker lists:
- * "pi/anthropic/claude-opus-5" → "opencode/anthropic/claude-opus-5",
- * "pi/dial/opus-fable" → "dial/opus-fable". Non-pi ids pass through. The
- * model list is engine-agnostic — the prefix is routing, not a different
- * model — so label/effort/selection lookups all resolve through this. */
-export function baseModelId(id: string): string {
-	if (!id.startsWith("pi/")) return id;
-	const base = id.slice(3);
-	return base.startsWith("dial/") || base.startsWith("orchestrator/") || base.startsWith("workspace-preset/")
-		? base
-		: `opencode/${base}`;
-}
-
-/** Compose a picker id onto the pi engine ("dial/opus-fable" →
- * "pi/dial/opus-fable", "opencode/anthropic/claude-opus-5" →
- * "pi/anthropic/claude-opus-5"), or null when the entry can't route there
- * (legacy native ids). */
-export function piModelId(id: string): string | null {
-	if (id.startsWith("pi/")) return id;
-	if (id.startsWith("opencode/")) return `pi/${id.slice("opencode/".length)}`;
-	if (id.startsWith("dial/") || id.startsWith("orchestrator/") || id.startsWith("workspace-preset/")) return `pi/${id}`;
-	return null;
-}
+/** Engine routing (id prefixes, composition, the base id every lookup
+ * resolves through) lives in lib/model-engine. Re-exported here because the
+ * picker's callers have always imported it from this module. */
+export { baseModelId, engineModelId, modelEngine, piModelId } from "../lib/model-engine";
 
 /** Pure slug prettifier: "claude-sonnet-5" → "Sonnet 5", "claude-haiku-4-5" →
  * "Haiku 4.5", "gpt-5.4-mini" → "GPT-5.4 mini". Mirrors the server's
@@ -335,6 +318,21 @@ export function ModelEffortSelect({
 		!!(currentAccount || subscriptionAccount) &&
 		!!onFastModeChange;
 	const accountLabel = currentAccount ? currentAccount.name : "Auto";
+	// Engine choice is the model id's routing prefix, so it needs no state of
+	// its own: read it off the current id, and write it by recomposing that id.
+	const engineOptions = useEngines().engines.filter((e) => e.available);
+	const activeEngine = modelEngine(effectiveModel);
+	const hasEngine = engineOptions.length > 1;
+	const engineLabel =
+		engineOptions.find((e) => e.id === activeEngine)?.label ||
+		ENGINE_LABELS[activeEngine] ||
+		activeEngine;
+	/** Recompose the current model onto `engine`; "" keeps following the default. */
+	const changeEngine = (engine: EngineId) => {
+		const next = engineModelId(engine, effectiveModel);
+		if (!next) return;
+		onModelChange(next === defaultModel ? "" : next);
+	};
 
 	const optionFor = (id: string): ModelMenuOption => {
 		const info = models.find((m) => m.id === id);
@@ -439,22 +437,32 @@ export function ModelEffortSelect({
 	const renderModelOption = (option: ModelMenuOption) => {
 		const selected = isSelected(option);
 		const nextEfforts = models.find((m) => m.id === option.id)?.efforts ?? [];
+		// Engine stays sticky across model changes: the new id is recomposed onto
+		// the engine the session is already on. An entry that can't route there
+		// (wrong vendor for a direct-SDK engine, a legacy native id) is offered
+		// disabled rather than silently dropped back to opencode.
+		const routed =
+			activeEngine === "opencode" ? option.value : engineModelId(activeEngine, option.id);
+		const offEngine = routed === null;
+		const disabled = modelDisabled || offEngine;
 		const item = (
 			<Menu.Item
 				onClick={() => {
-					// Engine stays sticky: on a pi-routed session a model change
-					// recomposes the pi/ prefix over the new id (when it can route
-					// there — legacy/orchestrator entries fall back to opencode).
-					const piNext = effectiveModel.startsWith("pi/") ? piModelId(option.id) : null;
-					onModelChange(piNext ?? option.value);
+					onModelChange(routed ?? option.value);
 					if (onEffortChange && !nextEfforts.includes(effort ?? "")) {
 						const nextEffort = nextEfforts.includes("high") ? "high" : nextEfforts[0];
 						if (nextEffort) onEffortChange(nextEffort);
 					}
 				}}
-				disabled={modelDisabled}
-				title={modelDisabled ? modelTitle : undefined}
-				className={cn("justify-between gap-3", selected && "bg-hover", modelDisabled && "opacity-55")}
+				disabled={disabled}
+				title={
+					modelDisabled
+						? modelTitle
+						: offEngine
+							? `Not available on the ${engineLabel} engine`
+							: undefined
+				}
+				className={cn("justify-between gap-3", selected && "bg-hover", disabled && "opacity-55")}
 			>
 				{option.description ? (
 					<span className="flex min-w-0 flex-1 flex-col">
@@ -486,7 +494,7 @@ export function ModelEffortSelect({
 					className,
 				)}
 				title={title}
-				disabled={disabled || (!hasEffort && !hasFastMode && modelDisabled)}
+				disabled={disabled || (!hasEffort && !hasFastMode && !hasEngine && modelDisabled)}
 				aria-label={
 					hasAccount
 						? "Model, reasoning effort, and provider account"
@@ -569,7 +577,48 @@ export function ModelEffortSelect({
 						</Menu.Popup>
 					</Menu.SubmenuRoot>
 				)}
-				{(hasEffort || hasAccount || hasFastMode) && <Menu.Separator className="my-1" />}
+				{(hasEngine || hasEffort || hasAccount || hasFastMode) && (
+					<Menu.Separator className="my-1" />
+				)}
+				{hasEngine && (
+					<Menu.SubmenuRoot>
+						<Menu.SubmenuTrigger className="justify-between gap-3">
+							<span className="min-w-0 truncate">Engine</span>
+							<span className="flex flex-none items-center gap-1 text-dim">
+								{engineLabel}
+								<IconChevronRight className="shrink-0 text-dim" size={17} />
+							</span>
+						</Menu.SubmenuTrigger>
+						<Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
+							{engineOptions.map((e) => {
+								const selected = e.id === activeEngine;
+								// An engine that can't run the current model stays visible
+								// but unpickable — hiding it would read as "not configured".
+								const unavailable = !engineModelId(e.id, effectiveModel);
+								return (
+									<Menu.Item
+										key={e.id}
+										onClick={() => changeEngine(e.id)}
+										disabled={unavailable}
+										title={
+											unavailable
+												? `${modelLabel} isn't available on the ${e.label} engine`
+												: undefined
+										}
+										className={cn(
+											"justify-between gap-3",
+											selected && "bg-hover",
+											unavailable && "opacity-55",
+										)}
+									>
+										<span className="min-w-0 truncate">{e.label}</span>
+										{selected && <IconCheck className="shrink-0 text-dim" size={17} />}
+									</Menu.Item>
+								);
+							})}
+						</Menu.Popup>
+					</Menu.SubmenuRoot>
+				)}
 				{hasFastMode && (
 					<Menu.CheckboxItem
 						checked={!!fastMode}
