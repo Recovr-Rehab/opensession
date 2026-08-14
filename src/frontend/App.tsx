@@ -1551,12 +1551,21 @@ export function App(
 		// including the right sidebar — around the foregrounded pane (wsKey is
 		// unchanged, so the view-tab reset effect doesn't fire). Session-less
 		// workspaces stay on WorkspacePane, which renders its own info panel.
+		// An explicit pane URL lands in a LIVE session so the pane keeps the full
+		// session chrome. pickLandingSession falls back to the newest archived
+		// session to keep a workspace's history reachable, which is right for a
+		// bare workspace URL but would resurrect the session a pane-only workspace
+		// just closed, so the pane branches take live sessions only.
 		const firstSession = () =>
 			pickLandingSession(sessionsRef.current, key, getWorkspaceLastSession(key));
+		const firstLiveSession = () => {
+			const first = firstSession();
+			return first && !first.archived ? first : undefined;
+		};
 		if (tab === "review") {
 			setReviewOpen((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
 			setActiveViewTab("review");
-			const first = firstSession();
+			const first = firstLiveSession();
 			if (first) navigate({ view: "session", id: first.id }, { replace: true });
 		} else if (tab === "conversation") {
 			setConversationClosed((prev) => {
@@ -1566,7 +1575,7 @@ export function App(
 				return next;
 			});
 			setActiveViewTab("conversation");
-			const first = firstSession();
+			const first = firstLiveSession();
 			if (first) navigate({ view: "session", id: first.id }, { replace: true });
 		} else if (tab === "video") {
 			setVideoClosed((prev) => {
@@ -1576,7 +1585,7 @@ export function App(
 				return next;
 			});
 			setActiveViewTab("video");
-			const first = firstSession();
+			const first = firstLiveSession();
 			if (first) navigate({ view: "session", id: first.id }, { replace: true });
 		} else {
 			const first = firstSession();
@@ -1839,6 +1848,40 @@ export function App(
 		...assetsViewTabs,
 		...subagentViewTabs,
 	];
+	/**
+	 * The panes that keep rendering once a workspace has no session left: Review,
+	 * Conversation and Video hang off the workspace record, so the session-less
+	 * workspace route (WorkspacePane) can show them alone. Every other tab in the
+	 * strip is bound to a session and goes with it.
+	 *
+	 * Same presence rules as the view tabs above, minus the session. Closing a
+	 * workspace's last session leaves these behind instead of conjuring a
+	 * replacement session, and closing the last one of them brings a session back.
+	 */
+	type WorkspacePaneTab = "review" | "conversation" | "video";
+	function sessionlessPanes(
+		key: string | null,
+		record: Workspace | null,
+	): WorkspacePaneTab[] {
+		if (!key || !record) return [];
+		const prBacked =
+			record.prNumber !== undefined || !!record.key?.startsWith("ghpr-");
+		const panes: WorkspacePaneTab[] = [];
+		if (
+			(record.prNumber !== undefined || !!record.branch) &&
+			(reviewOpen.has(key) || (prBacked && !reviewClosed.has(key)))
+		)
+			panes.push("review");
+		if (record.plainThreadId && !conversationClosed.has(key))
+			panes.push("conversation");
+		if (
+			record.externalRefs?.some((r) => refWebPanel(r)) &&
+			!videoClosed.has(key)
+		)
+			panes.push("video");
+		return panes;
+	}
+	const openWsPanes = sessionlessPanes(wsKey, wsRecord);
 	function viewTabKind(id: string): Exclude<ActiveViewTab, null> | null {
 		if (id.startsWith("subagent:")) return "subagent";
 		if (id.startsWith("staging:")) return "staging";
@@ -2396,6 +2439,25 @@ export function App(
 	}
 
 	/**
+	 * Closing a workspace pane can empty the strip: a workspace whose sessions
+	 * are all closed has nothing else in it. You always have one session open, so
+	 * that close starts a fresh session from the one closed most recently (the
+	 * mirror of closing the last session tab, which now leaves the pane instead).
+	 * Returns whether it started one, since that navigation replaces the caller's.
+	 */
+	function reopenSessionAfterPaneClose(closed: WorkspacePaneTab): boolean {
+		if (currentSession || workspaceSessions.length) return false;
+		// `openWsPanes` is this render's list, so it still holds the closing pane.
+		if (openWsPanes.some((pane) => pane !== closed)) return false;
+		const src = archivedSessions[0];
+		if (!src) return false;
+		void createNewSessionFrom(src, "share").catch((e) =>
+			console.error("New session failed:", e),
+		);
+		return true;
+	}
+
+	/**
 	 * One tab bar. `side` is null when there is no split (a single bar owning
 	 * every tab); otherwise the bar renders only its own side's tabs, keeps its
 	 * own active tab and its own "+", and only the rightmost bar carries the
@@ -2466,6 +2528,10 @@ export function App(
 						if (closingTab === "conversation") closeConversationTab();
 						else if (closingTab === "video") closeVideoTab();
 						else closeReviewTab();
+						// A workspace always shows something: closing its last pane
+						// while every session is closed reopens one, and that
+						// navigation stands in for the URL cleanup below.
+						if (reopenSessionAfterPaneClose(closingTab)) return;
 						// Drop the tab suffix; the URL replace re-runs the seeding
 						// effect, so arm its one-shot suppress (a close with no
 						// suffix causes no replace and needs none).
@@ -2700,8 +2766,18 @@ export function App(
 		// Leaving the id in the record means restoring the session later puts it
 		// back in the bar it was closed from.
 		const next = wasOpen ? workspaceSessions.find((c) => c.id !== s.id) : null;
+		// Closing the last session doesn't have to conjure a new one: a workspace
+		// pane (Review, Conversation, Video) renders without a session, so the
+		// strip is left holding just that tab. The foregrounded pane wins, so
+		// closing the session you were reading Review beside stays on Review.
+		const survivingPane =
+			wasOpen && !next && activeWorkspaceId
+				? (openWsPanes.find((pane) => pane === activeViewTab) ??
+					openWsPanes[0] ??
+					null)
+				: null;
 		let replacementId: string | null = null;
-		if (wasOpen && !next) {
+		if (wasOpen && !next && !survivingPane) {
 			try {
 				replacementId = await createNewSessionFrom(s, "share");
 			} catch (e) {
@@ -2716,6 +2792,13 @@ export function App(
 		}
 		if (wasOpen) {
 			if (next) navigate({ view: "session", id: next.id });
+			else if (survivingPane && activeWorkspaceId) {
+				setActiveViewTab(survivingPane);
+				// The pane is already open, so the workspace landing has nothing to
+				// decide: arm its one-shot suppress.
+				suppressWsSeedRef.current = true;
+				navigate({ view: "workspace", id: activeWorkspaceId, tab: survivingPane });
+			}
 		}
 		try {
 			if (neverRan) await deleteSessionApi(s.id, false);
@@ -3699,7 +3782,23 @@ export function App(
 									id,
 									getWorkspaceLastSession(id),
 								);
-								if (session) {
+								// Every session closed but a pane still open: land on the
+								// pane rather than resurrecting the newest archived session
+								// (pickLandingSession's history fallback).
+								const panes = session?.archived
+									? sessionlessPanes(
+											id,
+											workspaces.find((x) => x.id === id) ?? null,
+										)
+									: [];
+								const remembered = getActiveViewTab(id);
+								const pane =
+									panes.find((p) => p === remembered) ?? panes[0] ?? null;
+								if (pane) {
+									setActiveViewTabState(pane);
+									setFocusComposerOnOpen(false);
+									navigate({ view: "workspace", id, tab: pane });
+								} else if (session) {
 									const rememberedTab = getActiveViewTab(id) ?? null;
 									setActiveViewTabState(rememberedTab);
 									setFocusComposerOnOpen(rememberedTab === null);
