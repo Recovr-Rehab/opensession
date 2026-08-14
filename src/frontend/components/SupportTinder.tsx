@@ -10,6 +10,8 @@ import {
 } from "../lib/api";
 import { PlainEntryRow, plainThreadUrl } from "./PlainThreadPanel";
 import { useCurrentUser } from "./UserPicker";
+import { Button } from "../ui/button";
+import { cn } from "../ui/cn";
 import { DeckDone, SwipeCard } from "../ui/swipe-deck";
 import { UNDO_MS, ageLabel, ageTone, shuffle } from "../lib/swipe-deck";
 
@@ -49,6 +51,10 @@ const PRIORITY: Record<number, { label: string; cls: string }> = {
 	2: { label: "Normal", cls: "border-line text-dim" },
 	3: { label: "Low", cls: "border-line text-faint" },
 };
+
+/** The deck's action row keeps a 44px touch target: it is the phone's only
+ * path through the queue, and `lg` alone is 36px. */
+const DECK_ACTION = "min-h-11";
 
 export function SupportTinder({ onExit, onOpenSession }: Props) {
 	const currentUser = useCurrentUser();
@@ -296,22 +302,25 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 		<div className="relative flex min-h-0 flex-1 flex-col items-center bg-surface">
 			{/* Header: back + "N Left" counter, with the phone-only back chevron. */}
 			<div className="relative flex w-full items-center justify-between px-4 py-3">
-				<button
-					className="hidden h-8 w-8 items-center justify-center rounded-control bg-transparent text-dim hover:bg-panel hover:text-fg phone:flex"
+				<Button
+					variant="ghost"
+					size="md"
+					className="hidden phone:inline-flex"
 					onClick={onExit}
 					title="Back (Esc)"
 					aria-label="Back"
-				>
-					<svg width="20" height="20" viewBox="0 0 16 16" fill="none">
-						<path
-							d="M10 3.5 5.5 8l4.5 4.5"
-							stroke="currentColor"
-							strokeWidth="1.6"
-							strokeLinecap="round"
-							strokeLinejoin="round"
-						/>
-					</svg>
-				</button>
+					icon={
+						<svg width="20" height="20" viewBox="0 0 16 16" fill="none">
+							<path
+								d="M10 3.5 5.5 8l4.5 4.5"
+								stroke="currentColor"
+								strokeWidth="1.6"
+								strokeLinecap="round"
+								strokeLinejoin="round"
+							/>
+						</svg>
+					}
+				/>
 				<div className="absolute left-1/2 -translate-x-1/2 text-sm font-semibold text-fg">
 					{deck === null
 						? "Support Tinder"
@@ -321,23 +330,26 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 				</div>
 				{/* ml-auto: with the chevron hidden this is the row's only in-flow
 				    child, and justify-between alone would pack it against the left. */}
-				<button
-					className="ml-auto flex h-8 w-8 items-center justify-center rounded-control bg-transparent text-dim hover:bg-panel hover:text-fg disabled:opacity-30 disabled:hover:bg-transparent"
+				<Button
+					variant="ghost"
+					size="md"
+					className="ml-auto"
 					onClick={undoLast}
 					disabled={historyLen === 0 || busy}
 					title="Undo last action (z)"
 					aria-label="Undo last action"
-				>
-					<svg width="20" height="20" viewBox="0 0 16 16" fill="none">
-						<path
-							d="M6.5 3.5 3 7l3.5 3.5M3 7h6.75A3.25 3.25 0 0 1 13 10.25v.25"
-							stroke="currentColor"
-							strokeWidth="1.6"
-							strokeLinecap="round"
-							strokeLinejoin="round"
-						/>
-					</svg>
-				</button>
+					icon={
+						<svg width="20" height="20" viewBox="0 0 16 16" fill="none">
+							<path
+								d="M6.5 3.5 3 7l3.5 3.5M3 7h6.75A3.25 3.25 0 0 1 13 10.25v.25"
+								stroke="currentColor"
+								strokeWidth="1.6"
+								strokeLinecap="round"
+								strokeLinejoin="round"
+							/>
+						</svg>
+					}
+				/>
 			</div>
 
 			{error ? (
@@ -395,46 +407,53 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 			{/* Action bar (works without gestures). */}
 			{deck !== null && !done && !error && (
 				<div className="flex w-full max-w-[640px] items-stretch gap-2.5 px-4 pb-[max(16px,env(safe-area-inset-bottom))]">
-					<button
-						className="flex items-center justify-center rounded-control border border-red/40 bg-red-soft px-4 py-3 text-sm font-semibold text-red hover:border-red/70 disabled:opacity-50"
+					<Button
+						variant="danger"
+						size="lg"
+						className={DECK_ACTION}
 						onClick={spam}
 						disabled={busy}
 						title="Mark customer as spam, closes the thread (← or s). Undo available."
 					>
 						Spam
-					</button>
-					<button
-						className="flex-1 rounded-control border border-line bg-panel px-3 py-3 text-sm font-semibold text-dim hover:bg-surface hover:text-green disabled:opacity-50"
+					</Button>
+					<Button
+						size="lg"
+						className={cn(DECK_ACTION, "flex-1 hover:text-green")}
 						onClick={markDone}
 						disabled={busy}
 						title="Mark this thread Done (d). Undo available."
 					>
 						Done
-					</button>
-					<button
-						className="flex-1 rounded-control border border-line bg-panel px-3 py-3 text-sm font-semibold text-dim hover:bg-surface hover:text-fg disabled:opacity-50"
+					</Button>
+					<Button
+						size="lg"
+						className={cn(DECK_ACTION, "flex-1")}
 						onClick={openSession}
 						disabled={opening}
 						title="Open the ticket's opensession session, starting triage if none exists (e)"
 					>
 						{opening ? "Opening…" : "Session"}
-					</button>
-					<button
-						className="flex-1 rounded-control border border-line bg-panel px-3 py-3 text-sm font-semibold text-dim hover:bg-surface hover:text-fg"
+					</Button>
+					<Button
+						size="lg"
+						className={cn(DECK_ACTION, "flex-1")}
 						onClick={() =>
 							card && window.open(plainThreadUrl(card.id), "_blank", "noopener")
 						}
 						title="Open in Plain (o)"
 					>
 						Plain
-					</button>
-					<button
-						className="flex-1 rounded-control bg-green px-4 py-3 text-sm font-semibold text-white hover:opacity-90"
+					</Button>
+					<Button
+						variant="positive"
+						size="lg"
+						className={cn(DECK_ACTION, "flex-1")}
 						onClick={skip}
 						title="Skip, leaving the ticket as-is (→ or k)"
 					>
 						Skip
-					</button>
+					</Button>
 				</div>
 			)}
 

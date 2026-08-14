@@ -51,6 +51,7 @@ type Variant =
 	| "success"
 	| "danger"
 	| "destructive"
+	| "positive"
 	| "warning";
 type Size = "xs" | "sm" | "md" | "lg";
 
@@ -170,6 +171,12 @@ const variants: Record<Variant, string> = {
 	// weight. Shares `primary`'s shape so the two swap cleanly in a footer.
 	destructive:
 		"bg-red border-transparent text-white plate-sheen smooth-shadow-xs hover:brightness-110",
+	// Solid green plate, the same pairing one step over: `success` proposes,
+	// `positive` commits. For the affirmative action a surface wants read
+	// first — the deck's Skip, a workspace's Approve — where an outline would
+	// let the destructive neighbour dominate the row.
+	positive:
+		"bg-green border-transparent text-white plate-sheen smooth-shadow-xs hover:brightness-110",
 	warning: "border-yellow text-yellow hover:bg-[color-mix(in_srgb,var(--yellow)_12%,transparent)]",
 };
 
@@ -183,6 +190,7 @@ const iconDim: Record<Variant, string> = {
 	success: "opacity-80",
 	danger: "opacity-80",
 	destructive: "opacity-80",
+	positive: "opacity-80",
 	warning: "opacity-80",
 };
 

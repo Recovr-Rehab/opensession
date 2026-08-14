@@ -6,7 +6,7 @@ import {
   type ScheduledPrompt,
 } from "../lib/api";
 import { getCurrentUser } from "./UserPicker";
-import { IconChevronDown, IconClock } from "./icons";
+import { IconChevronDown, IconClock, IconX } from "./icons";
 import {
   composerMenuAnchorRight,
   composerMenuIcon,
@@ -14,6 +14,7 @@ import {
   composerMenuPopup,
   composerMenuWidth,
 } from "../lib/composer-classes";
+import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 
 /** "in 45m" / "in 3h" / "in 2d" for a future instant (short form). */
@@ -337,14 +338,14 @@ export function SchedulePromptButton({
                 </div>
                 <div className="mt-[3px] text-meta text-dim">Time zone: {tz}</div>
               </div>
-              <button
-                type="button"
-                className="px-1 py-0.5 text-[15px] leading-none text-faint hover:text-fg"
+              <Button
+                variant="ghost"
+                size="sm"
+                className="-mt-0.5 -mr-1"
                 onClick={() => setCustomOpen(false)}
                 aria-label="Close"
-              >
-                ✕
-              </button>
+                icon={<IconX size={20} />}
+              />
             </div>
             <div className="mt-4 flex gap-2">
               <input
@@ -365,21 +366,17 @@ export function SchedulePromptButton({
               <div className="px-[9px] pt-1 pb-0.5 text-meta text-red">{error}</div>
             )}
             <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                className="rounded-control border border-line-strong px-4 py-[9px] text-label font-semibold text-fg"
-                onClick={() => setCustomOpen(false)}
-              >
+              <Button size="lg" onClick={() => setCustomOpen(false)}>
                 Cancel
-              </button>
-              <button
-                type="button"
-                className="rounded-control bg-accent px-4 py-[9px] text-label font-semibold text-on-accent transition-[background-color] enabled:hover:bg-accent-hover disabled:cursor-default disabled:opacity-45"
+              </Button>
+              <Button
+                variant="primary"
+                size="lg"
                 onClick={scheduleCustom}
                 disabled={saving || !date || !time}
               >
-                {saving ? "Scheduling…" : "Schedule Message"}
-              </button>
+                {saving ? "Scheduling…" : "Schedule message"}
+              </Button>
             </div>
           </div>
         </div>

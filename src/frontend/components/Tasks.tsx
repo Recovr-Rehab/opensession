@@ -91,15 +91,15 @@ function TaskRow({
 				)}
 			</div>
 			{!done && (
-				<button
-					type="button"
-					className="flex size-8 shrink-0 items-center justify-center rounded-control text-faint hover:bg-hover hover:text-fg active:scale-[0.96]"
+				<Button
+					variant="ghost"
+					size="md"
+					className="shrink-0 text-faint"
 					onClick={() => onDrop(task)}
 					aria-label={`Drop ${task.text}`}
 					title="Drop task"
-				>
-					<IconX size={16} />
-				</button>
+					icon={<IconX size={16} />}
+				/>
 			)}
 		</li>
 	);
