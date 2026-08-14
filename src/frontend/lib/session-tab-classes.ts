@@ -235,6 +235,26 @@ export const TAB_VICON = "inline-flex items-center justify-center leading-none";
 /** Unsent draft in a sibling session. */
 export const TAB_DRAFT = "inline-flex flex-none items-center text-dim";
 
+/**
+ * Teammates who have THIS tab open. The sidebar answers "someone is in this
+ * workspace"; a workspace is a strip of tabs, so the strip is where that
+ * answers "which one".
+ *
+ * The faces sit in a row with a small gap rather than an overlapping pile:
+ * a pile needs a gap ring painted in the surface behind it, and a tab has
+ * five of those (plain, hover, active, waiting, coloured, and none of them on
+ * desktop, where the tab is flat on the strip). Two faces plus a count is
+ * also all a 200px tab has room for.
+ */
+export const TAB_FACES = "flex flex-none items-center gap-0.5";
+
+/** One face. Small enough to read as a marker beside the label, not a
+ *  participant list. */
+export const TAB_FACE = "shrink-0";
+
+/** "+2" when more people are here than the strip shows faces for. */
+export const TAB_FACES_MORE = "text-meta leading-none text-dim";
+
 /** Inline rename input, sized to sit in place of the title. */
 export const TAB_RENAME =
 	"my-[-1px] max-w-[150px] rounded-xs border border-accent bg-surface px-[3px] font-[inherit] text-[inherit] outline-none";

@@ -192,6 +192,7 @@ import {
 	onTabColorsChanged,
 } from "./lib/tab-colors";
 import { PR_DOT_TONE } from "./lib/session-tab-classes";
+import { dedupeViewers, otherViewers } from "./lib/presence";
 import { copySessionTranscript } from "./lib/transcript-copy";
 import { effectiveTheme, setThemePref } from "./lib/theme";
 import { isApple } from "./lib/platform";
@@ -2260,6 +2261,19 @@ export function App(
 	const stripTabIds = tabOrderKey
 		? applyTabOrder(tabOrderKey, naturalStripTabIds)
 		: naturalStripTabIds;
+	// Teammates per tab, your own devices removed and one entry per person, so
+	// the strip can say WHICH session someone is in — the sidebar's workspace
+	// faces only say they are in this workspace somewhere.
+	const tabViewers: Record<string, string[]> = {};
+	for (const session of workspaceSessions) {
+		const here = dedupeViewers(
+			otherViewers(
+				teamViewing.filter((v) => v.sessionId === session.id).map((v) => v.user),
+				currentUser,
+			),
+		).map((v) => v.name);
+		if (here.length) tabViewers[session.id] = here;
+	}
 	const storedTabSplit = tabOrderKey ? getTabSplit(tabOrderKey) : null;
 	// The split projected onto the tabs that exist right now. Null once either
 	// bar runs out of tabs — that's what collapses the strip back to one bar.
@@ -2398,6 +2412,7 @@ export function App(
 				inSplit={!!side}
 				showHistory={side !== "left"}
 				colors={tabColors}
+				viewers={tabViewers}
 				onSelect={(s) => {
 					setActiveViewTab(null);
 					navigate({ view: "session", id: s.id });

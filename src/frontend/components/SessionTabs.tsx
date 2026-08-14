@@ -9,6 +9,7 @@ import { sessionPath, absoluteLink, copyToClipboard } from "../lib/share-link";
 import { copySessionTranscript } from "../lib/transcript-copy";
 import { IconChevronRight, IconHistory, IconPencil, IconPlus, IconRestore } from "./icons";
 import { useIsPhone } from "../hooks/useIsPhone";
+import { UserAvatar } from "./UserAvatar";
 import { isApple } from "../lib/platform";
 import {
 	NEW_MENU,
@@ -17,6 +18,9 @@ import {
 	TAB_ACTIONS,
 	TAB_DRAFT,
 	TAB_DROP_SLOT,
+	TAB_FACE,
+	TAB_FACES,
+	TAB_FACES_MORE,
 	TAB_GROUP,
 	TAB_HISTORY,
 	TAB_ITEM,
@@ -83,6 +87,13 @@ interface Props {
 	activeId: string | null;
 	/** Map of session id → swatch key for colored tabs. */
 	colors: Record<string, string>;
+	/**
+	 * Teammates currently in each session, by session id — one entry per person,
+	 * with your own devices already filtered out (see lib/presence). The sidebar
+	 * shows the same faces per WORKSPACE, which says someone is in this strip but
+	 * not which tab; this is that second half.
+	 */
+	viewers?: Record<string, string[]>;
 	onSelect: (session: UnifiedSession) => void;
 	onSetColor: (key: string, color: string | null) => void;
 	/**
@@ -154,6 +165,7 @@ export function SessionTabs({
 	archived,
 	activeId,
 	colors,
+	viewers,
 	onSelect,
 	onSetColor,
 	tabOrder,
@@ -609,6 +621,35 @@ export function SessionTabs({
 												{session.title}
 											</span>
 										)}
+										{/* Who else is in this tab. The sidebar's workspace row shows
+							    the same faces for the whole strip, which says a teammate
+							    is in here somewhere; on the tab it says where. Shown on
+							    the open tab too — being in the same session as someone is
+							    exactly what you want to know. */}
+										{(() => {
+											const here = viewers?.[key] || [];
+											if (!here.length) return null;
+											const shown = here.slice(0, 2);
+											const rest = here.length - shown.length;
+											const label = `${here.join(", ")} ${here.length > 1 ? "are" : "is"} here`;
+											return (
+												<span className={TAB_FACES} aria-label={label} title={label}>
+													{shown.map((viewer) => (
+														<UserAvatar
+															key={viewer}
+															name={viewer}
+															size={14}
+															className={TAB_FACE}
+														/>
+													))}
+													{rest > 0 && (
+														<span className={TAB_FACES_MORE} aria-hidden="true">
+															+{rest}
+														</span>
+													)}
+												</span>
+											);
+										})()}
 										{/* Unsent draft in a sibling session (the active tab's draft is
 							    already on screen in the composer — no pencil needed). */}
 										{key !== activeId && hasDraft(`session:${key}`) && (
