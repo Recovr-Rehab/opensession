@@ -1359,8 +1359,12 @@ export function PrPanel({
             open page needs on the right. Horizontal scrollbars are hidden
             because a 1px overflow here parks one (base.css opts Chrome out of
             overlay scrollbars). */}
-        <div className="sticky top-0 z-[8] flex h-[52px] shrink-0 items-center gap-2 overflow-x-auto overflow-y-hidden border-b border-line bg-surface px-6 [scrollbar-width:none] phone:px-2 [&::-webkit-scrollbar]:hidden">
-          <div className="flex shrink-0 items-center gap-1" role="tablist">
+        <div className="sticky top-0 z-[8] flex h-[52px] shrink-0 items-center gap-2 overflow-x-auto overflow-y-hidden bg-surface px-6 shadow-[inset_0_-1px_0_var(--border)] [scrollbar-width:none] phone:px-2 [&::-webkit-scrollbar]:hidden">
+          {/* Flat labels carrying a 2px underline, the same cue the session tab
+              strip and Reviews use. The strip's own hairline is an inset shadow
+              rather than a border so each tab's underline can paint over it —
+              the row clips its overflow, so a `-mb-px` border would be cut. */}
+          <div className="flex shrink-0 items-stretch gap-0.5 self-stretch" role="tablist">
             {([
               ["overview", "Overview", comments.length || undefined],
               ["files", "Files changed", files.length || undefined],
@@ -1369,7 +1373,11 @@ export function PrPanel({
                 key={key}
                 role="tab"
                 aria-selected={page === key}
-                className={`flex h-[32px] shrink-0 items-center gap-1.5 rounded-md border-0 px-3 text-control-label font-medium ${page === key ? "bg-active text-fg" : "bg-transparent text-dim hover:bg-hover hover:text-fg"}`}
+                className={`flex shrink-0 items-center gap-1.5 border-0 bg-transparent px-3 text-control-label font-medium transition-colors hover:bg-transparent ${
+                  page === key
+                    ? "text-fg shadow-[inset_0_-2px_0_var(--accent)]"
+                    : "text-dim shadow-[inset_0_-2px_0_transparent] hover:text-fg"
+                }`}
                 onClick={() => setPage(key)}
               >
                 {label}
