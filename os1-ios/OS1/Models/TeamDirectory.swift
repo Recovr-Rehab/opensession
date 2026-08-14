@@ -33,6 +33,19 @@ final class TeamDirectory {
         return githubLogins[key]
     }
 
+    /// The display name behind a GitHub login ("kentdebruin" → "Kent"), or nil
+    /// for a login outside the roster. The inverse of `githubLogin(for:)`,
+    /// needed wherever the wire carries a login rather than a name — a pull
+    /// request's author, for one — so a teammate pictures and reads as
+    /// themselves instead of as their login.
+    func displayName(forGithubLogin login: String) -> String? {
+        let needle = login.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !needle.isEmpty else { return nil }
+        guard let key = githubLogins.first(where: { $0.value.lowercased() == needle })?.key
+        else { return nil }
+        return displayNames[key]
+    }
+
     /// Full name when the roster knows one, for accessibility labels and
     /// tooltips; otherwise whatever the wire called them.
     func fullName(for name: String) -> String {

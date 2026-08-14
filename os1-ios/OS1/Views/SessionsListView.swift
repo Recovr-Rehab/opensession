@@ -3037,6 +3037,31 @@ struct SessionRow: View {
                     .foregroundStyle(OS1VisualStyle.textDim)
                     .accessibilityLabel("Unsent draft")
             }
+            // Whose review request this is. Badged, because the presence faces
+            // immediately after it are the same size and shape, and "someone is
+            // in here" and "someone is waiting on you" must not look alike.
+            if let reviewAskerName {
+                UserAvatar(person: reviewAskerName, size: faceSize)
+                    .overlay(alignment: .bottomTrailing) {
+                        // Sized and placed to sit ON the face's corner rather
+                        // than beside it: a badge that clears the avatar reads
+                        // as a second, smaller face at this size, and the row
+                        // has no width to spare for one.
+                        Image(systemName: "eye.fill")
+                            .font(.system(size: faceSize * 0.26, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(faceSize * 0.07)
+                            .background(OS1VisualStyle.blue, in: Circle())
+                            .background(
+                                OS1VisualStyle.chatCanvas,
+                                in: Circle().inset(by: -1.5)
+                            )
+                            .offset(x: faceSize * 0.08, y: faceSize * 0.08)
+                    }
+                    .accessibilityLabel(
+                        "Review requested on \(reviewAskerName)'s pull request"
+                    )
+            }
             // Teammates focused on any session represented by this row.
             if !rowViewers.isEmpty {
                 PresenceFacepile(
@@ -3178,6 +3203,12 @@ struct SessionRow: View {
     private var statusMark: some View {
         if session.lane == .needsInput {
             PulsingDot(color: OS1VisualStyle.blue, active: animatesStatus)
+        } else if reviewWaitsOnMe {
+            // Blocked on you, like an unanswered question, so it takes the same
+            // blue mark rather than a colour of its own. It outranks the PR's
+            // own state below: that a review is yours to give is what decides
+            // whether you open the row, and the state is a long-press away.
+            PulsingDot(color: OS1VisualStyle.blue, active: animatesStatus)
         } else if session.lane == .inProgress {
             PulsingDot(color: OS1VisualStyle.yellow, active: animatesStatus)
         } else if session.prState == "MERGED" {
@@ -3197,6 +3228,34 @@ struct SessionRow: View {
         #else
         false
         #endif
+    }
+
+    /// The sessions this row stands for — a workspace row speaks for all of
+    /// them, and a request on any of their pull requests is a request on the
+    /// row.
+    private var rowSessions: [Session] {
+        sessions.isEmpty ? [session] : sessions
+    }
+
+    private var reviewWaitsOnMe: Bool {
+        ReviewRequests.waitsOnViewer(
+            rowSessions,
+            viewerName: ServerConfig.shared.userName,
+            viewerLogin: ServerConfig.shared.githubLogin
+        )
+    }
+
+    /// Whose pull request is waiting, in the roster's spelling of their name
+    /// where it knows one, otherwise the GitHub login the wire carried.
+    private var reviewAskerName: String? {
+        guard
+            let login = ReviewRequests.askerLogin(
+                rowSessions,
+                viewerName: ServerConfig.shared.userName,
+                viewerLogin: ServerConfig.shared.githubLogin
+            )
+        else { return nil }
+        return TeamDirectory.shared.displayName(forGithubLogin: login) ?? login
     }
 
     private var accessibilityStatus: String {

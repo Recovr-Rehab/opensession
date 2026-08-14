@@ -56,6 +56,9 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     var prChangedFiles: Int?
     /// Person keys ("kent") of teammates with a pending review request.
     var prReviewRequested: [String]?
+    /// GitHub login of whoever opened the PR — who is waiting when one of
+    /// those requests is pointed at you (`ReviewRequests`).
+    var prAuthor: String?
     /// The last automated review of this PR, when one has run. Feeds the
     /// transcript's review-loop verdict (`ReviewLoopResult`).
     var prOsReview: OsReviewSummary?
