@@ -4340,7 +4340,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							)}
 							onClick={() => setFilterOpen((o) => !o)}
 						>
-							<IconFilter size={24} />
+							{/* 22, the scale's standalone step: these are section-header
+							    actions, not the primary buttons or window chrome that take
+							    24. At 24 the plus drew a 16px span against the 15.5 of the
+							    search glyph in the titlebar row right above, and the filter
+							    is filled bars, so the pair read a step larger than the row
+							    they sit under. */}
+							<IconFilter size={22} />
 						</button>
 						</Tooltip>
 						<Tooltip
@@ -4359,7 +4365,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							)}
 							onClick={onNewSession}
 						>
-							<IconPlus size={24} />
+							<IconPlus size={22} />
 						</button>
 						</Tooltip>
 					</div>
