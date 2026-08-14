@@ -105,11 +105,7 @@ import { Composer } from "./Composer";
 import { ComposerAgents } from "./ComposerAgents";
 import { UsageMeter } from "./UsageMeter";
 import { SchedulePromptButton } from "./SchedulePrompt";
-import {
-	ShippedChangeComposer,
-	SlackSentNotice,
-	type SlackSent,
-} from "./ShippedChangeComposer";
+import { ShippedChangeComposer } from "./ShippedChangeComposer";
 import { BrandMark } from "./BrandMark";
 import { readFileAsDataUrl, type FileAttachment } from "../lib/images";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
@@ -1224,9 +1220,6 @@ export function SessionViewer({
 	} | null>(null);
 	const [slackComposerStatus, setSlackComposerStatus] = useState<"idle" | "sharing">("idle");
 	const [slackComposerReconnect, setSlackComposerReconnect] = useState(false);
-	// The composer's own receipt. It is a pending request, not session state, so
-	// this lives as long as the view does and a reload leaves the transcript.
-	const [slackComposerSent, setSlackComposerSent] = useState<SlackSent | null>(null);
 	const { copied, share: shareLink } = useCopy();
 	// Inline rename of the header title (double-click), mirroring the tab strip.
 	// `null` = not editing; a string = the working draft.
@@ -2425,18 +2418,11 @@ export function SessionViewer({
 						setSlackComposer(msg.request);
 						setSlackComposerStatus("idle");
 						setSlackComposerReconnect(false);
-						setSlackComposerSent(null);
 					}
 					break;
 				case "slack_composer_resolved":
 					if (msg.sessionId === session.id) {
 						setSlackComposer((current) => current?.id === msg.requestId ? null : current);
-						if (msg.status === "sent" && msg.channel) {
-							setSlackComposerSent({
-								channelName: msg.channel.name,
-								permalink: msg.permalink,
-							});
-						}
 					}
 					break;
 				case "session_status":
@@ -3091,8 +3077,8 @@ export function SessionViewer({
 		!session.claudeSessionId &&
 		!session.codexThreadId &&
 		session.source !== "opensession";
-	// A merged PR that was already shared shows the receipt, not the card: the
-	// composer's whole job is done, and re-offering it invites a duplicate post.
+	// A merged PR that was already shared no longer needs a transcript action.
+	// Keep the receipt in session data so the same post is not offered twice.
 	const shippedSent =
 		shippedShare ||
 		(mergedPr
@@ -3114,14 +3100,7 @@ export function SessionViewer({
 						status: shippedChangeStatus,
 						onShare: sendShippedChangeToSlack,
 						onReconnectSlack: reconnectShippedSlack,
-						...(shippedSent
-							? {
-									sent: {
-										channelName: shippedSent.channelName,
-										permalink: shippedSent.permalink,
-									},
-								}
-							: {}),
+						sent: !!shippedSent,
 					}
 				: undefined,
 		[
@@ -3141,7 +3120,7 @@ export function SessionViewer({
 		if (!slackComposer) return;
 		setSlackComposerStatus("sharing");
 		try {
-			const result = await sendSlackComposer(session.id, {
+			await sendSlackComposer(session.id, {
 				requestId: slackComposer.id,
 				message,
 				channel,
@@ -3149,10 +3128,6 @@ export function SessionViewer({
 			});
 			setSlackComposer(null);
 			setSlackComposerStatus("idle");
-			setSlackComposerSent({
-				channelName: result.channel.name,
-				permalink: result.permalink,
-			});
 		} catch (error: any) {
 			setSlackComposerStatus("idle");
 			if (error?.status === 403 && /Reconnect Slack/.test(error?.message || "")) {
@@ -3987,7 +3962,6 @@ export function SessionViewer({
 			setSlackComposer(request);
 			setSlackComposerStatus("idle");
 			setSlackComposerReconnect(false);
-			setSlackComposerSent(null);
 			requestAnimationFrame(() => scrollToLatest("smooth"));
 		} catch (error: any) {
 			toast(error?.message || "Couldn't open the Slack composer");
@@ -5892,10 +5866,6 @@ export function SessionViewer({
 									}}
 									onCancel={cancelComposedSlackMessage}
 								/>
-							)}
-
-							{!slackComposer && slackComposerSent && (
-								<SlackSentNotice {...slackComposerSent} />
 							)}
 
 							{pendingBubbles.map((p) => (

@@ -124,6 +124,24 @@ describe("TranscriptBlocks shipped change action", () => {
 		expect(html).not.toContain("Capturing screenshot");
 	});
 
+	test("removes the action after the message was sent", () => {
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				entries={entries}
+				slackShare={{
+					prNumber: 5606,
+					sessionId: "session-1",
+					defaultMessage: "We updated the toggle style in Tella.",
+					status: "idle",
+					onShare: () => {},
+					sent: true,
+				}}
+			/>,
+		);
+		expect(html).not.toContain("Send to Slack");
+		expect(html).not.toContain("Sent to");
+	});
+
 	test("does not show the action for a different merged PR", () => {
 		const html = renderToStaticMarkup(
 			<TranscriptBlocks
