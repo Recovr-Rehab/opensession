@@ -245,6 +245,7 @@ import {
 	PANEL_BACK,
 	PANEL_BODY,
 	PANEL_OVERLAY,
+	PANEL_PR_PLATE,
 	PANEL_SHELL,
 } from "../lib/session-panel-classes";
 import { TURN_SPACER } from "../lib/app-shell-classes";
@@ -6070,31 +6071,36 @@ export function SessionViewer({
 				{!isPhone && panelAvailable && panelOpen ? (
 					<div className={PANEL_SHELL} style={panelStyle}>
 						{panelResizeHandle}
+						{/* A plate, not a band: the strip takes the same inset and
+						    corner as the sections under it, so it reads as the first
+						    element of the column rather than chrome across its top. */}
 						{hasRepoWork && (
-							<PrStatusBar
-								sessionId={session.id}
-								repo={session.repo || undefined}
-								archived={session.archived}
-								prs={session.prs}
-								send={connected ? send : undefined}
-								onOpenPrTab={focusPrInReview}
-								onOpenChecksTab={() => focusPrInReview(undefined, "checks")}
-								onArchive={handleArchive}
-								onNewSession={
-									onNewSession ? () => onNewSession("share") : undefined
-								}
-								running={isRunningLive}
-								refreshTick={gitRefreshTick}
-								leading={
-									!isPhone ? (
-										<StagingLink
-											session={session}
-											variant="header"
-											refreshTick={gitRefreshTick}
-										/>
-									) : undefined
-								}
-							/>
+							<div className={PANEL_PR_PLATE}>
+								<PrStatusBar
+									sessionId={session.id}
+									repo={session.repo || undefined}
+									archived={session.archived}
+									prs={session.prs}
+									send={connected ? send : undefined}
+									onOpenPrTab={focusPrInReview}
+									onOpenChecksTab={() => focusPrInReview(undefined, "checks")}
+									onArchive={handleArchive}
+									onNewSession={
+										onNewSession ? () => onNewSession("share") : undefined
+									}
+									running={isRunningLive}
+									refreshTick={gitRefreshTick}
+									leading={
+										!isPhone ? (
+											<StagingLink
+												session={session}
+												variant="header"
+												refreshTick={gitRefreshTick}
+											/>
+										) : undefined
+									}
+								/>
+							</div>
 						)}
 						{/* No tab strip. This panel is the workspace overview, and
 						    everything it used to hide behind a tab now opens full-width

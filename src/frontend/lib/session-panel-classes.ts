@@ -87,6 +87,23 @@ export const PANEL_RESIZE =
 	"[body:not(.resizing-panel)_&]:hover:after:bg-line-strong " +
 	"[body.resizing-panel_&]:after:bg-faint";
 
+/**
+ * The PR strip's plate at the top of the panel.
+ *
+ * The strip used to run edge to edge with a hairline under it, which made it
+ * chrome bolted to the panel's top rather than part of the column. It is a
+ * plate now: the same 8px inset and the same corner as every section under it
+ * (`rounded-lg`, matching INFO_LIST_CLASS), so it reads as the first element of
+ * the info column instead of a band across it.
+ *
+ * The inset and the corner live here rather than on the strip because only this
+ * call site wants them — on a phone the same strip is a row inside the session
+ * info card, which supplies its own edge. The clip is what lets a session with
+ * several PRs keep its series rows inside the corner: the stack renders as one
+ * plate, not a plate followed by loose rows.
+ */
+export const PANEL_PR_PLATE = "mx-2 mt-2 overflow-hidden rounded-lg";
+
 /** The panel's scrolling content. */
 export const PANEL_BODY = "min-h-0 flex-1 overflow-y-auto";
 
