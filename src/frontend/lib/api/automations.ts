@@ -18,6 +18,41 @@ export interface ModelOption {
 	fastModeSupported?: boolean;
 }
 
+type ModelCatalog = { models: ModelOption[]; default: string };
+const MODEL_CACHE_MS = 60_000;
+const modelCatalogCache = new Map<string, { value: ModelCatalog; fetchedAt: number; pending?: Promise<ModelCatalog> }>();
+
+function modelCatalogKey(cloud: boolean, workspaceId?: string): string {
+	return `${cloud ? "cloud" : "local"}:${workspaceId || "global"}`;
+}
+
+async function refreshModelCatalog(cloud: boolean, workspaceId?: string): Promise<ModelCatalog> {
+	const key = modelCatalogKey(cloud, workspaceId);
+	const current = modelCatalogCache.get(key);
+	if (current?.pending) return current.pending;
+	const params = new URLSearchParams();
+	if (cloud) params.set("cloud", "1");
+	if (workspaceId) params.set("workspace", workspaceId);
+	const pending = request<ModelCatalog>(`/models${params.size ? `?${params}` : ""}`, {
+		label: "Failed to fetch models",
+	}).then((value) => {
+		modelCatalogCache.set(key, { value, fetchedAt: Date.now() });
+		return value;
+	}).finally(() => {
+		const entry = modelCatalogCache.get(key);
+		if (entry?.pending) delete entry.pending;
+	});
+	modelCatalogCache.set(key, { value: current?.value || { models: [], default: "" }, fetchedAt: current?.fetchedAt || 0, pending });
+	return pending;
+}
+
+/** Clear one workspace's picker catalog after its preset settings change. */
+export function invalidateModelsCache(workspaceId?: string): void {
+	for (const key of modelCatalogCache.keys()) {
+		if (!workspaceId || key.endsWith(`:${workspaceId}`)) modelCatalogCache.delete(key);
+	}
+}
+
 /**
  * Ask the backend (a quick Haiku call) to suggest a branch name for a task
  * prompt. Returns null when the prompt is too thin or anything fails — callers
@@ -53,14 +88,17 @@ export async function transcribeClip(audio: Blob): Promise<string> {
 	return typeof data?.text === "string" ? data.text : "";
 }
 
-export async function fetchModels(cloud = false): Promise<{
+export async function fetchModels(cloud = false, workspaceId?: string): Promise<{
 	models: ModelOption[];
 	default: string;
 }> {
-	return request<{ models: ModelOption[]; default: string }>(
-		`/models${cloud ? "?cloud=1" : ""}`,
-		{ label: "Failed to fetch models" },
-	);
+	const cached = modelCatalogCache.get(modelCatalogKey(cloud, workspaceId));
+	if (cached?.value.models.length) {
+		if (Date.now() - cached.fetchedAt > MODEL_CACHE_MS)
+			void refreshModelCatalog(cloud, workspaceId).catch(() => {});
+		return cached.value;
+	}
+	return refreshModelCatalog(cloud, workspaceId);
 }
 
 /** Trimmed provider account shape for the per-session account picker. */

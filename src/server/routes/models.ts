@@ -15,6 +15,7 @@ import { MAX_AUDIO_BYTES, transcribeAudio } from "../transcribe";
 import { isLocalProfile } from "../profile";
 import { supportsOpenaiFastMode } from "../opencode-openai-auth";
 import { configuredServer } from "../config";
+import { getWorkspace } from "../workspaces";
 
 export async function handleModelsRoutes(
 	ctx: RouteContext,
@@ -41,6 +42,10 @@ export async function handleModelsRoutes(
 		// config flip like the Orchestrator opt-in shows up on the next picker
 		// open, not the next restart/settings-save.
 		refreshOpencodePickerModels();
+		const workspace = url.searchParams.get("workspace")
+			? getWorkspace(url.searchParams.get("workspace")!)
+			: null;
+		const settings = workspace?.modelSettings;
 		// One engine-agnostic list: every entry (models and presets alike) runs
 		// on any configured engine — the composer's Engine choice routes it by
 		// prefix at dispatch (`engines` below is the only engine signal). Native
@@ -50,8 +55,29 @@ export async function handleModelsRoutes(
 		// full registry so the picker is never empty.
 		const engineModels = KNOWN_MODELS.filter((m) => m.provider === "opencode");
 		const engineConfigured = engineModels.length > 0;
+		let visibleModels = engineConfigured ? engineModels : KNOWN_MODELS;
+		if (settings?.dialEnabled === false)
+			visibleModels = visibleModels.filter((model) => model.group !== "dial");
+		if (settings?.orchestratorEnabled === false)
+			visibleModels = visibleModels.filter((model) => model.group !== "orchestrator");
+		const customModels = (settings?.presets || [])
+			.filter((preset) =>
+				/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(preset.id) &&
+				!!preset.label?.trim() && !!preset.lead?.model?.trim(),
+			)
+			.map((preset) => ({
+				id: `workspace-preset/${workspace!.id}/${preset.id}`,
+				provider: "opencode" as const,
+				label: preset.label.trim(),
+				aliases: [],
+				group: "custom",
+				description: [
+					preset.instructions?.trim() || "Workspace model combination",
+					`${preset.lead.model}${preset.supporting?.length ? ` + ${preset.supporting.length} supporting model${preset.supporting.length === 1 ? "" : "s"}` : ""}`,
+				].join(" · "),
+			}));
 		return Response.json({
-			models: (engineConfigured ? engineModels : KNOWN_MODELS).map((model) => ({
+			models: [...customModels, ...visibleModels].map((model) => ({
 				...model,
 				efforts: modelEfforts(model.id),
 				accountProvider: accountProviderForModel(model.id),

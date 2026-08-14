@@ -34,9 +34,27 @@ import {
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { randomUUID } from "crypto";
 import type { AttachedRepo, ExternalRef } from "./types";
+import type { SessionEffort } from "./models";
 import { stateDir } from "./paths";
 
 const WORKSPACES_DIR = stateDir("workspaces");
+
+/** A workspace-owned model combination. The lead owns the conversation; the
+ * supporting models are available to it as focused worker sessions. */
+export interface WorkspaceModelPreset {
+  id: string;
+  label: string;
+  instructions?: string;
+  lead: { model: string; effort?: SessionEffort };
+  supporting?: Array<{ model: string; effort?: SessionEffort; role?: string }>;
+}
+
+export interface WorkspaceModelSettings {
+  /** Both built-ins default on. False hides the family in this workspace. */
+  dialEnabled?: boolean;
+  orchestratorEnabled?: boolean;
+  presets?: WorkspaceModelPreset[];
+}
 
 export interface Workspace {
   id: string;
@@ -73,6 +91,8 @@ export interface Workspace {
   worktreeDir?: string;
   /** Secondary repos attached at the workspace level; new sessions copy these. */
   attachedRepos?: AttachedRepo[];
+  /** Workspace-specific model families and combinations. */
+  modelSettings?: WorkspaceModelSettings;
 }
 
 function ensureDir(): void {
@@ -293,7 +313,7 @@ export function stampWorkspaceIdentity(
 export function updateWorkspace(
   id: string,
   patch: Partial<
-    Pick<Workspace, "name" | "repo" | "color" | "order" | "branch" | "worktreeDir" | "attachedRepos">
+    Pick<Workspace, "name" | "repo" | "color" | "order" | "branch" | "worktreeDir" | "attachedRepos" | "modelSettings">
   >,
 ): Workspace | null {
   const cur = getWorkspace(id);
@@ -307,6 +327,7 @@ export function updateWorkspace(
     ...(patch.branch !== undefined ? { branch: patch.branch } : {}),
     ...(patch.worktreeDir !== undefined ? { worktreeDir: patch.worktreeDir } : {}),
     ...(patch.attachedRepos !== undefined ? { attachedRepos: patch.attachedRepos } : {}),
+    ...(patch.modelSettings !== undefined ? { modelSettings: patch.modelSettings } : {}),
   };
   writeJsonAtomic(fileFor(id), next);
   return next;

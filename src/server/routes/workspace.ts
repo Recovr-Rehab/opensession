@@ -38,7 +38,7 @@ import { searchSkills } from "../skills";
 import { handleSlashCommand } from "../slash-commands";
 import { suggestBranchName } from "../suggest-branch";
 import { type NativeSessionFile, type StackedOn } from "../types";
-import { type Workspace, createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, updateWorkspace } from "../workspaces";
+import { type Workspace, type WorkspaceModelSettings, createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, updateWorkspace } from "../workspaces";
 import { resolveExternalWorkspace, resolvePlainWorkspace, resolvePrWorkspace } from "../workspace-resolve";
 import { resolveModel } from "../models";
 import { REPOS, createWorktree, createWorktreeForExistingBranch, ensureScratchDir, getRepo, isSharedCheckoutDir, listWorktrees, repoForPath, sessionRepoId, worktreeHasWork, worktreeHeadBranch } from "../worktree";
@@ -446,6 +446,7 @@ export async function handleWorkspaceRoutes(
 			repo?: string;
 			color?: string;
 			order?: number;
+			modelSettings?: WorkspaceModelSettings;
 		};
 		const workspace = updateWorkspace(id, body);
 		if (!workspace)

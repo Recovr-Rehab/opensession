@@ -163,6 +163,40 @@ export function resolvePinnedAccountId(
 		: undefined;
 }
 
+function resolveWorkspacePreset(
+	requested: unknown,
+	workspaceId: unknown,
+): { model: string; effort?: string; note: string } | undefined {
+	if (typeof requested !== "string" || typeof workspaceId !== "string") return undefined;
+	const pi = requested.startsWith("pi/");
+	const id = (pi ? requested.slice(3) : requested).trim();
+	const match = id.match(/^workspace-preset\/([^/]+)\/([A-Za-z0-9_-]{1,64})$/);
+	if (!match || match[1] !== workspaceId) return undefined;
+	const preset = getWorkspace(workspaceId)?.modelSettings?.presets?.find((p) => p.id === match[2]);
+	if (!preset?.lead?.model?.trim()) return undefined;
+	const lead = preset.lead.model.trim();
+	const routed = pi && !lead.startsWith("pi/")
+		? lead.startsWith("opencode/") ? `pi/${lead.slice("opencode/".length)}` : `pi/${lead}`
+		: lead;
+	const model = resolveModel(routed)?.id;
+	if (!model) return undefined;
+	const supporting = (preset.supporting || [])
+		.filter((member) => member.model?.trim())
+		.map((member) => `- ${member.role?.trim() || "Supporting worker"}: ${member.model.trim()}${member.effort ? ` at ${member.effort} effort` : ""}`)
+		.join("\n");
+	return {
+		model,
+		effort: preset.lead.effort,
+		note: [
+			`## Workspace model preset · ${preset.label.trim()}`,
+			preset.instructions?.trim() || "Lead this task and use the supporting models when a focused second perspective or implementation worker helps.",
+			supporting
+				? `Supporting models for this preset:\n${supporting}\nUse opensession-sessions to create focused worker sessions with these models. Give each worker a self-contained brief, then integrate and verify its result yourself.`
+				: "",
+		].filter(Boolean).join("\n\n"),
+	};
+}
+
 /**
  * A create resolved down to what the shared engine needs: where the session
  * lives, what it persists, and how its opening run is configured. Built by
@@ -208,6 +242,8 @@ export interface ResolvedCreate {
 	/** Undefined only for forks of sessions with no recorded model (historic). */
 	model?: string;
 	effort?: string;
+	/** Stable preset instructions captured at creation, even if the workspace changes later. */
+	presetNote?: string;
 	fastMode?: boolean;
 	accountId?: string;
 	images?: ImageInput[];
@@ -355,6 +391,7 @@ export async function openCreatedSession(
 					? { stackedOn: spec.stackedOn }
 					: {}),
 				...(spec.effort ? { effort: spec.effort } : {}),
+				...(spec.presetNote ? { presetNote: spec.presetNote } : {}),
 				...(spec.fastMode ? { fastMode: true } : {}),
 				...(spec.accountId ? { accountId: spec.accountId } : {}),
 				...(spec.plainThreadId ? { plainThreadId: spec.plainThreadId } : {}),
@@ -857,17 +894,18 @@ export async function handleCreateSessionMessage(
 	// default NOW: leaving it empty would let the init event persist the
 	// engine's resolved model — which for a dial default would silently
 	// disengage the dial (the preset id must be what the session stores).
+	const workspacePreset = forkSource ? undefined : resolveWorkspacePreset(msg.model, msg.workspaceId);
 	const model = forkSource
 		? forkSource.model
-		: (msg.model ? resolveModel(String(msg.model))?.id : undefined) ||
+		: workspacePreset?.model || (msg.model ? resolveModel(String(msg.model))?.id : undefined) ||
 			interactiveDefaultModel();
 	// Reasoning effort from the New-session palette (forks inherit).
 	const createEffort = forkSource
 		? forkSource.effort
-		: typeof msg.effort === "string" &&
+		: workspacePreset?.effort || (typeof msg.effort === "string" &&
 				SESSION_EFFORTS.has(msg.effort.trim().toLowerCase())
 			? msg.effort.trim().toLowerCase()
-			: undefined;
+			: undefined);
 	const createFastMode = forkSource?.fastMode;
 	// Pinned provider account from the palette (forks inherit).
 	const createAccountId = forkSource
@@ -1296,6 +1334,7 @@ export async function handleCreateSessionMessage(
 			autoNameWorkspace: wsAutoNamed ? workspace : null,
 			model,
 			effort: createEffort,
+			presetNote: workspacePreset?.note,
 			fastMode: createFastMode,
 			accountId: createAccountId,
 			images,

@@ -12,19 +12,16 @@
  * state, env vars and provider bookkeeping — agent-runner maps them onto
  * their opencode form at dispatch.
  *
- * Second engine (opt-in): explicit `pi/<provider>/<model>` ids run on the pi
- * runner (pi-runner.ts) instead — they resolve to provider "pi", never map
- * onto opencode (toOpencodeModel passes them through engine-prefix-intact;
- * only the retired-codex-slug reroute applies, staying pi-prefixed), and
- * surface in the picker only via ~/.opensession-pi.json
- * (refreshPiPickerModels). Nothing defaults to pi.
+ * Second engine (opt-in): the picker stays engine-neutral. Choosing Pi
+ * composes a `pi/` routing prefix onto any model or preset id; pi-runner.ts
+ * resolves presets to their concrete main model. Stored Pi ids resolve to
+ * provider "pi" and never map back onto OpenCode.
  */
 
 import { existsSync, readFileSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import {
   opencodePickerModels,
-  opencodeOrchestratorEnabled,
   bridgeEnabled,
   opencodeProviders,
   BRIDGE_PROVIDER_IDS,
@@ -564,21 +561,19 @@ export function refreshOpencodePickerModels(): void {
         description: p.description,
       });
     }
-    // The Orchestrator presets: same main-model gating as the dial (a broken
-    // worker degrades to a failed subagent call, so workers aren't gated), but
-    // additionally opt-in — off by default via opencodeOrchestratorEnabled().
-    if (opencodeOrchestratorEnabled()) {
-      for (const p of ORCHESTRATOR_PRESETS) {
-        if (!tails.has(p.model)) continue;
-        KNOWN_MODELS.push({
-          id: p.id,
-          provider: "opencode",
-          label: p.label,
-          aliases: [],
-          group: "orchestrator",
-          description: orchestratorPickerDescription(p),
-        });
-      }
+    // Workspace settings decide whether a family is shown. Keep the built-in
+    // Orchestrator entries in the live catalog so new workspaces get it by
+    // default and an existing workspace can opt out without a config flip.
+    for (const p of ORCHESTRATOR_PRESETS) {
+      if (!tails.has(p.model)) continue;
+      KNOWN_MODELS.push({
+        id: p.id,
+        provider: "opencode",
+        label: p.label,
+        aliases: [],
+        group: "orchestrator",
+        description: orchestratorPickerDescription(p),
+      });
     }
   } catch {}
 }

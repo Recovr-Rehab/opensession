@@ -54,6 +54,7 @@ export async function updateWorkspaceApi(
 		/** null clears the swatch color. */
 		color?: string | null;
 		order?: number;
+		modelSettings?: Workspace["modelSettings"];
 	},
 ): Promise<Workspace> {
 	const body = await request<{ workspace: Workspace }>(

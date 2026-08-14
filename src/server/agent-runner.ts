@@ -419,7 +419,12 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
   const requestedModel = resolveModel(opts.model || getDefaultModel());
   const wantsBestCodex = requestedModel?.id === BEST_AVAILABLE_CODEX_MODEL;
   const primaryModel = resolveConcreteModel(opts.model);
-  const preferredFallback = wantsBestCodex
+  // Pi is an explicit engine selection. Never cross its boundary into an
+  // OpenCode fallback when a provider/account fails: end the Pi turn and let
+  // the person retry or choose another engine deliberately.
+  const preferredFallback = primaryModel.startsWith("pi/")
+    ? "none"
+    : wantsBestCodex
     ? BEST_AVAILABLE_CODEX_MODEL
     : opts.fallbackModel;
   // No fallback configured (interactive auto-switch off, or an automation with

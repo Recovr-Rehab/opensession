@@ -652,7 +652,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   }
 
   useEffect(() => {
-    fetchModels(cloudTarget)
+		fetchModels(cloudTarget, workspaceId)
       .then((m) => {
         setModels(m.models);
         setDefaultModel(m.default);
@@ -672,7 +672,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
         });
       })
       .catch(() => {});
-  }, [cloudTarget]);
+	}, [cloudTarget, workspaceId]);
 
   // Worktrees are per-repo; refetch and reset the selection when it changes.
   // Inside a workspace, snap back to the shared sibling branch, not "New branch".

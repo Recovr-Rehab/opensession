@@ -487,6 +487,7 @@ export interface UnifiedSession {
 	 * Set server-side from the status-override registry; unset = derive as usual.
 	 */
 	manualStatus?: "needsinput" | "inprogress" | "review" | "merged" | "pending";
+	presetNote?: string;
 	/**
 	 * A pending "please review this" pointed at a teammate, set from the info
 	 * panel's Reviewer picker. Surfaces the session in a "Needs review" band at
@@ -525,6 +526,17 @@ export interface Workspace {
 	plainThreadId?: string;
 	/** Generic feed-item linkage (Tella videos, …) — the feeds design. */
 	externalRefs?: ExternalRef[];
+	modelSettings?: {
+		dialEnabled?: boolean;
+		orchestratorEnabled?: boolean;
+		presets?: Array<{
+			id: string;
+			label: string;
+			instructions?: string;
+			lead: { model: string; effort?: string };
+			supporting?: Array<{ model: string; effort?: string; role?: string }>;
+		}>;
+	};
 }
 
 

@@ -179,6 +179,8 @@ export interface UnifiedSession {
   externalRefs?: ExternalRef[];
   /** Model id for runs in this session; unset = default (OPENSESSION_MODEL). */
   model?: string;
+  /** Workspace model-preset instructions captured when this session was created. */
+  presetNote?: string;
   /** OpenCode reasoning variant for runs in this session; unset = model default. */
   effort?: string;
   /** Use OpenAI's priority service tier for ChatGPT OAuth Codex runs. */
@@ -513,6 +515,8 @@ export interface NativeSessionFile {
   plainThreadId?: string; // Plain thread this session is triaging
   externalRefs?: ExternalRef[]; // generic feed-item linkage (the feeds design)
   model?: string; // model id for this session's runs; unset = default
+	/** Workspace model-preset instructions captured when this session was created. */
+	presetNote?: string;
   effort?: string; // OpenCode reasoning variant for this session's runs; unset = model default
   fastMode?: boolean; // OpenAI priority service tier for ChatGPT OAuth Codex runs
   accountId?: string; // pinned Claude/Codex provider account; unset = auto pool

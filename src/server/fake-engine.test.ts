@@ -139,6 +139,24 @@ describe("fake engine through runAgent", () => {
 		expect(fake.calls[1].firstJournaledAt).toBe(fake.calls[0].firstJournaledAt);
 	});
 
+	test("Pi exhaustion stays on Pi and never enters the OpenCode fallback walk", async () => {
+		const fake = makeFakeEngine([{ kind: "usage_exhausted", engineSessionId: "pi_partial" }]);
+		__setEngineForTest(fake.engine);
+		const events = await collect(
+			runAgent({
+				prompt: "keep going",
+				cwd: "/tmp",
+				mcpServers: [],
+				model: "pi/openai/gpt-5.6-sol",
+				fallbackModel: "claude-opus-4-8",
+			}),
+		);
+		expect(types(events)).toEqual(["init", "done"]);
+		expect(events.at(-1)?.usageLimitExhausted).toBe(true);
+		expect(fake.calls).toHaveLength(1);
+		expect(fake.calls[0].model).toBe("pi/openai/gpt-5.6-sol");
+	});
+
 	test("known-dry Claude pool skips the doomed engine attempt and enters fallback directly", async () => {
 		const fake = makeFakeEngine([{ kind: "clean", text: ["direct fallback"] }]);
 		__setEngineForTest(fake.engine);

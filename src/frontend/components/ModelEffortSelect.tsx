@@ -108,7 +108,7 @@ export function opencodeModelParts(
 export function baseModelId(id: string): string {
 	if (!id.startsWith("pi/")) return id;
 	const base = id.slice(3);
-	return base.startsWith("dial/") || base.startsWith("orchestrator/")
+	return base.startsWith("dial/") || base.startsWith("orchestrator/") || base.startsWith("workspace-preset/")
 		? base
 		: `opencode/${base}`;
 }
@@ -120,7 +120,7 @@ export function baseModelId(id: string): string {
 export function piModelId(id: string): string | null {
 	if (id.startsWith("pi/")) return id;
 	if (id.startsWith("opencode/")) return `pi/${id.slice("opencode/".length)}`;
-	if (id.startsWith("dial/") || id.startsWith("orchestrator/")) return `pi/${id}`;
+	if (id.startsWith("dial/") || id.startsWith("orchestrator/") || id.startsWith("workspace-preset/")) return `pi/${id}`;
 	return null;
 }
 
