@@ -12,8 +12,7 @@ import { isLocalSessionUpgradeInProgress } from "./session-transfer-state";
 import { audit } from "./audit";
 import { pendingAsks } from "./asks";
 import { resendPendingSlackComposer } from "./slack-compose";
-import { mentionPreview, recordMentions } from "./mentions";
-import { sendPushToUser } from "./push";
+import { notifyMentions } from "./mentions";
 import { startWatching, stopAllWatchesForClient, transcriptRev } from "./file-watcher";
 import { INIT_WIRE_CLAMP_BYTES, entriesForWire, parseTranscriptAsync, parseTranscriptTail, parseTranscriptWindow } from "./jsonl-parser";
 import { providerFor } from "./models";
@@ -860,28 +859,13 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 				// @People-mentions in a prompt ping the tagged teammates (roster
 				// from the identity config, never the sender). Fires at send time
 				// on every path — direct, queued, steer.
-				{
-					const promptText = String(content || "");
-					if (promptText.includes("@")) {
-						const preview = mentionPreview(promptText);
-						const mentioned = recordMentions(
-							promptText,
-							String(user || ""),
-							sessionId,
-							"prompt",
-							(person, mention) =>
-								broadcastToAll({ type: "mention", user: person, mention }),
-						);
-						for (const name of mentioned) {
-							void sendPushToUser(name, {
-								title: `${user || "Someone"} mentioned you in ${session.title || "a session"}`,
-								body: preview,
-								url: `/session/${encodeURIComponent(sessionId)}`,
-								tag: `opensession-mention-${sessionId}`,
-							});
-						}
-					}
-				}
+				void notifyMentions(
+					String(content || ""),
+					String(user || ""),
+					sessionId,
+					"prompt",
+					session.title || "a session",
+				);
 
 				// Busy sends queue by default, so the user can still delete/edit or
 				// manually steer the message. Settings can opt the composer into

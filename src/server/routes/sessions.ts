@@ -32,8 +32,7 @@ import {
 	runErrors,
 } from "../session-cache";
 import { asDataUrlList, parseImageDataUrls } from "../uploads";
-import { mentionPreview, recordMentions } from "../mentions";
-import { broadcastToAll } from "../ws-hub";
+import { notifyMentions } from "../mentions";
 import { reviewTeamFor } from "../people";
 import { sendPushToUser } from "../push";
 import {
@@ -489,25 +488,14 @@ export async function handleSessionsRoutes(
 			}
 			// @People-mentions ping the tagged teammates on every delivery path,
 			// exactly like the WS prompt (same matcher, never the sender).
-			if (session && content.includes("@")) {
-				const preview = mentionPreview(content);
-				const mentioned = recordMentions(
+			if (session)
+				await notifyMentions(
 					content,
 					String(user || ""),
 					sessionId,
 					"prompt",
-					(person, mention) =>
-						broadcastToAll({ type: "mention", user: person, mention }),
+					session.title || "a session",
 				);
-				for (const name of mentioned) {
-					void sendPushToUser(name, {
-						title: `${user || "Someone"} mentioned you in ${session.title || "a session"}`,
-						body: preview,
-						url: `/session/${encodeURIComponent(sessionId)}`,
-						tag: `opensession-mention-${sessionId}`,
-					});
-				}
-			}
 			const payload = { ...res, ...(clientId ? { clientId } : {}) };
 			if (receiptKey) rememberPromptReceipt(receiptKey, payload);
 			return Response.json(payload);

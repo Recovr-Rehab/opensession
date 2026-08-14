@@ -594,8 +594,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	useEffect(() => onRecentsChanged(() => setRecents(getRecents())), []);
 	useEffect(() => onReadsChanged(() => setReads(getReads())), []);
 	// Sessions where a teammate tagged you. Server-owned, so it re-renders on
-	// the socket push as well as on your own clears.
-	const [, setMentionsRev] = useState(0);
+	// the socket push as well as on your own clears. The counter is a memo
+	// dependency, not just a re-render trigger: the rows read mentionFor()
+	// inside useMemo, so a push that changes nothing else would otherwise
+	// leave the badge out until an unrelated change rebuilt them.
+	const [mentionsRev, setMentionsRev] = useState(0);
 	useEffect(() => onMentionsChanged(() => setMentionsRev((n) => n + 1)), []);
 	// Re-render when a composer draft appears/disappears — rows check hasDraft()
 	// during render to show the Slack-style "unsent draft" pencil.
@@ -1209,8 +1212,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		const key = filter.sort === "created" ? "createdAt" : "lastActivity";
 		rows.sort((a, b) => (b[key] || "").localeCompare(a[key] || ""));
 		return rows;
-		// `lanes` feeds mineStatus/pinnedLane (read via the lib cache).
-	}, [filtered, sessions, workspaces, selectedId, reads, search, filter, lanes, activeReviewPrKeys]);
+		// `lanes` feeds mineStatus/pinnedLane (read via the lib cache), and
+		// `mentionsRev` the @-mention badge (mentionFor, same cache pattern).
+	}, [filtered, sessions, workspaces, selectedId, reads, search, filter, lanes, activeReviewPrKeys, mentionsRev]);
 	const rowOwnsSelection = (row: WsRow) =>
 		workspaceRowOwnsSession(row, selectedSession);
 	const selectionBelongsToWorkspaceRow = allWsRows.some(rowOwnsSelection);
@@ -1564,6 +1568,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							// same rule under any personal lens; a legacy global override
 							// still surfaces only under Everyone.
 							r.owner === focus ||
+							// Being @-mentioned is a claim on your attention, like a
+							// review request: the row comes into your lens whoever owns
+							// it, and leaves again when you open the session and the
+							// mention clears.
+							(!!r.mention && focus === currentUser.toLowerCase()) ||
 							// Ownership follows the people in the room, not whoever
 							// opened the door: a PR/ticket workspace is minted by an
 							// automation, so its creator is a bot even when the work
@@ -3242,7 +3251,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			// row counts as Recent whatever its day — live work is recent by
 			// definition — but ranks by lastActivity like its neighbours.
 			const t = Date.parse(r.lastActivity || "");
-			if (r.status === "needsinput") needsAction.rows.push(r);
+			// A teammate tagging you is the same kind of claim as a question the
+			// agent is blocked on: it is waiting on you, so it bands with them
+			// rather than sinking into whatever day it was last touched.
+			if (r.status === "needsinput" || r.mention) needsAction.rows.push(r);
 			else if (r.running || t >= todayMs) recent.rows.push(r);
 			else if (t >= yesterdayMs) yesterday.rows.push(r);
 			else earlier.rows.push(r);

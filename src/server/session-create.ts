@@ -31,6 +31,7 @@ import { onSessionIdle as onHumanAsksSessionIdle } from "./human-asks";
 import { interactiveMcpServers } from "./interactive-mcp";
 import { parseTranscriptAsync } from "./jsonl-parser";
 import { accountProviderForModel, interactiveDefaultModel, interactiveFallbackModel, modelLabel, providerFor, resolveModel, toPiModel } from "./models";
+import { notifyMentions } from "./mentions";
 import { newSessionId } from "./paths";
 import { wrapContext } from "./prompt-context";
 import { promptQueues } from "./queue-state";
@@ -464,6 +465,17 @@ export async function openCreatedSession(
 				createdAt: spec.createdAt,
 			});
 			announced = true;
+			// A teammate tagged in the opening message is tagged like one in
+			// any other message: the session exists now, so the badge has a row
+			// to land on. Scanned from the raw prompt, never the assembled one,
+			// so a repo note or a handoff cannot invent a mention.
+			void notifyMentions(
+				spec.titlePrompt,
+				spec.user || "",
+				bksId,
+				"prompt",
+				spec.title || "a session",
+			);
 
 			if (spec.needsWorktree && spec.materializeWorktree) {
 				try {

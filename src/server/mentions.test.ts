@@ -16,8 +16,10 @@ const {
 	clearMention,
 	listMentions,
 	mentionPreview,
+	notifyMentions,
 	recordMentions,
 } = await import("./mentions");
+const { teamFirstNames } = await import("./people");
 if (saved === undefined) delete process.env.OPENSESSION_STATE_DIR;
 else process.env.OPENSESSION_STATE_DIR = saved;
 
@@ -79,6 +81,25 @@ describe("mentions", () => {
 		expect(listMentions(sender).map((m) => m.sessionId)).not.toContain(
 			"os-self",
 		);
+	});
+
+	test("notifyMentions records what it announces", async () => {
+		// The surfaces (a note, a prompt, a new session's opening message) all
+		// call this one function, so the badge is what proves it ran: with no
+		// clients and no push subscriptions the other two legs are no-ops.
+		const team = teamFirstNames();
+		// A portable instance can have an empty roster; nothing to tag then.
+		if (team.length < 2) return;
+		const [person, sender] = team;
+		expect(
+			await notifyMentions(`@${person} take a look`, sender, "os-notify", "prompt", "a session"),
+		).toEqual([person]);
+		const stored = listMentions(person).find((m) => m.sessionId === "os-notify");
+		expect(stored?.by).toBe(sender);
+		expect(stored?.source).toBe("prompt");
+		expect(
+			await notifyMentions("nobody tagged", sender, "os-quiet", "note", "a session note"),
+		).toEqual([]);
 	});
 
 	test("preview is capped with an ellipsis, short text untouched", () => {

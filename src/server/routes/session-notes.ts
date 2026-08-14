@@ -16,7 +16,7 @@ import {
 	listSessionNotes,
 	sessionNoteActivity,
 } from "../session-notes";
-import { mentionPreview, recordMentions } from "../mentions";
+import { notifyMentions } from "../mentions";
 import { broadcastToAll } from "../ws-hub";
 import { removeStagedImages, stageInlineImages } from "../uploads";
 
@@ -86,25 +86,7 @@ export async function handleSessionNotesRoutes(
 		// @-mentions ping the tagged teammate's devices (works app-closed) and
 		// leave a durable badge on their sidebar row, which survives a
 		// notification they never saw.
-		const mentioned = recordMentions(
-			note.text,
-			user,
-			sessionId,
-			"note",
-			(person, mention) =>
-				broadcastToAll({ type: "mention", user: person, mention }),
-		);
-		if (mentioned.length) {
-			const { sendPushToUser } = await import("../push");
-			const preview = mentionPreview(note.text);
-			for (const name of mentioned)
-				void sendPushToUser(name, {
-					title: `${user} mentioned you in a session note`,
-					body: preview,
-					url: `/session/${encodeURIComponent(sessionId)}`,
-					tag: `opensession-note-${sessionId}`,
-				});
-		}
+		await notifyMentions(note.text, user, sessionId, "note", "a session note");
 		return Response.json({ note });
 	}
 
