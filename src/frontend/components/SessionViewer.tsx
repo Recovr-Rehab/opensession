@@ -154,6 +154,7 @@ import { PreviewButton } from "./PreviewButton";
 import { PreviewPane } from "./PreviewPane";
 import { PortalPane } from "./PortalPane";
 import { PortalsPage } from "./PortalsPanel";
+import { PanelPageHeader } from "./PanelPageHeader";
 import { portalTargetFor, type PortalTarget } from "../lib/portals";
 import { StagingLink } from "./StagingLink";
 import { WorkspaceInfo } from "./WorkspaceInfo";
@@ -432,17 +433,6 @@ interface Props {
 	onOpenAssets?: () => void;
 	/** Close this session's Assets view-tab (its last asset was deleted). */
 	onCloseAssets?: () => void;
-	/**
-	 * Whether the Changes pane (this session's uncommitted worktree diff,
-	 * full-width) is foregrounded — driven by the top tab strip's Changes
-	 * view-tab (App state). The Info panel's Changes card opens it and keeps
-	 * showing the live file count while it is up.
-	 */
-	showChanges?: boolean;
-	/** Open/foreground this session's Changes view-tab. */
-	onOpenChanges?: () => void;
-	/** Close this session's Changes view-tab. */
-	onCloseChanges?: () => void;
 	/**
 	 * Whether the Terminal pane (interactive shells in this session's
 	 * workspace) is foregrounded — driven by the top tab strip's Terminal
@@ -772,7 +762,6 @@ export function SessionViewer({
 	onOpenStaging,
 	onCloseStaging,
 	showAssets = false,
-	showChanges = false,
 	showTerminal = false,
 	terminalTabOpen = false,
 	showConversation = false,
@@ -789,8 +778,6 @@ export function SessionViewer({
 	onOpenPortal,
 	onOpenAssets,
 	onCloseAssets,
-	onOpenChanges,
-	onCloseChanges,
 	onOpenTerminal,
 	onCloseTerminal,
 	onOpenWorkspace,
@@ -943,7 +930,6 @@ export function SessionViewer({
 		showReview ||
 		showStaging ||
 		showAssets ||
-		showChanges ||
 		showTerminal ||
 		showPreviewTab ||
 		(showPortal && !!portalTarget) ||
@@ -1259,13 +1245,20 @@ export function SessionViewer({
 		resizeHandle: panelResizeHandle,
 	} = useSidePanel();
 	// The panel's own navigation stack, one level deep: null is the workspace
-	// overview, "portals" the page the bottom bar pushes on top of it. It lives
-	// here rather than in the bar so closing the panel (or switching session)
-	// lands back on the overview.
-	const [panelPage, setPanelPage] = useState<null | "portals">(null);
-	useEffect(() => {
-		if (!panelOpen) setPanelPage(null);
-	}, [panelOpen]);
+	// overview, and a page is what pushes on top of it: "portals" from the bar
+	// along the bottom, "changes" from the file list in the overview. It lives
+	// here rather than in either of them, so closing the panel (or switching
+	// session) lands back on the overview.
+	//
+	// On phones the same state drives the info page's own sub-page: that page
+	// IS this panel there, so a drill-in has to push inside it rather than open
+	// a column that phone layouts never render.
+	const [panelPage, setPanelPage] = useState<null | "portals" | "changes">(
+		null,
+	);
+	// Closing the host that shows pages returns to the overview; that effect
+	// needs `isPhone` to know which host to watch, so it lives beside the
+	// viewport state further down.
 	useEffect(() => {
 		setPanelPage(null);
 	}, [session.id]);
@@ -1835,23 +1828,14 @@ export function SessionViewer({
 	const waitingForWorkspace =
 		workspacePreparing && entries.length === 0 && !liveTurnStore.hasText();
 
-	// Live worktree diff, shared between the Changes-tab file-count badge and the
-	// DiffPanel (passed in as `diff=` below so they poll once, not twice). Parked
-	// unless either workspace surface is open on a code session.
+	// Live worktree diff, handed to the Changes page as `diff=` so opening it
+	// reads the poll the panel already runs rather than starting a second one.
+	// Parked unless a workspace surface is open on a code session: the panel
+	// column on desktop, the info page on a phone.
 	const diffState = useSessionDiff(session.id, {
-		enabled: hasRepoWork && panelOpen,
+		enabled: hasRepoWork && (panelOpen || infoPageOpen),
 		isRunning: isBusy,
 	});
-	const changesFileCount = React.useMemo(
-		() =>
-			diffState.repos
-				? diffState.repos.reduce(
-						(n, r) => n + (r.diff.files?.length || 0),
-						0,
-					)
-				: null,
-		[diffState.repos],
-	);
 
 	// Anchor for the agent-working elapsed timer. A run that starts
 	// while we're watching anchors to now; opening a session mid-run anchors to
@@ -3987,6 +3971,16 @@ export function SessionViewer({
 		mq.addEventListener("change", onChange);
 		return () => mq.removeEventListener("change", onChange);
 	}, []);
+	// Closing the panel (desktop) or the info page (phone) drops back to the
+	// overview, so re-opening it doesn't land mid-drill-in. Each width watches
+	// only its own host: a phone's side panel is never rendered, so keying this
+	// on panelOpen alone would clear the page the info page had just pushed.
+	useEffect(() => {
+		if (!isPhone && !panelOpen) setPanelPage(null);
+	}, [isPhone, panelOpen]);
+	useEffect(() => {
+		if (isPhone && !infoPageOpen) setPanelPage(null);
+	}, [isPhone, infoPageOpen]);
 	const focusComposerForQuote = useCallback(() => {
 		const composer = composerRef.current;
 		composer?.focus({ preventScroll: true });
@@ -4998,12 +4992,11 @@ export function SessionViewer({
 						<WorkspacePeek
 							session={session}
 							anchor={headerActionsRef}
-							// The peek card's Changes row goes straight to the full-width
-							// Changes tab; its other rows just open the panel, which is
-							// now a single overview rather than a set of tabs.
+							// The peek card's Changes row opens the panel already on its
+							// Changes page; its other rows land on the overview.
 							onOpenPanelTab={(tab) => {
-								if (tab === "changes") onOpenChanges?.();
-								else setPanelOpen(true);
+								setPanelPage(tab === "changes" ? "changes" : null);
+								setPanelOpen(true);
 							}}
 							onOpenPr={() => focusPrInReview()}
 							onOpenChecks={() => focusPrInReview(undefined, "checks")}
@@ -5054,15 +5047,32 @@ export function SessionViewer({
 								ref={infoPageRef}
 								role="dialog"
 								aria-modal="true"
-								aria-label="Workspace details"
+								aria-label={
+									panelPage === "changes" ? "Changes" : "Workspace details"
+								}
 							>
+								{/* The phone's drill-in: this page IS the workspace panel
+								    here, so Changes navigates it rather than opening a
+								    column this width never renders. Same chevron, one
+								    level further in, and the bar names where you are
+								    straight away since there's no hero to scroll past. */}
 								<div
-									className={infoTopbarClass(infoPageScrolled)}
+									className={infoTopbarClass(
+										infoPageScrolled || panelPage !== null,
+									)}
 								>
 									<button
 										className={`${PANEL_BACK} relative z-[1]`}
-										onClick={() => setInfoPageOpen(false)}
-										aria-label="Back to session"
+										onClick={() =>
+											panelPage
+												? setPanelPage(null)
+												: setInfoPageOpen(false)
+										}
+										aria-label={
+											panelPage
+												? "Back to workspace details"
+												: "Back to session"
+										}
 										autoFocus
 									>
 										<svg width="11" height="18" viewBox="0 0 11 18" fill="none">
@@ -5075,10 +5085,34 @@ export function SessionViewer({
 											/>
 										</svg>
 									</button>
-									<div className={infoTopbarTitleClass(infoPageScrolled)}>
-										{workspaceName || session.title}
+									<div
+										className={infoTopbarTitleClass(
+											infoPageScrolled || panelPage !== null,
+										)}
+									>
+										{panelPage === "changes"
+											? "Changes"
+											: workspaceName || session.title}
 									</div>
 								</div>
+								{panelPage === "changes" ? (
+									waitingForWorkspace ? (
+										<WorkspaceWaiting detail="This takes a moment." />
+									) : (
+										// Same offset as the panel's Changes page, against
+										// this page's taller bar (52px plus the notch).
+										<div className="[&_.sticky]:top-[calc(env(safe-area-inset-top,0px)+52px)]">
+											<DiffPanel
+												sessionId={session.id}
+												isRunning={isBusy}
+												canSend={connected && !isBusy && !noEngine}
+												send={send}
+												diff={diffState}
+											/>
+										</div>
+									)
+								) : (
+								<>
 								<div className={INFO_HERO}>
 									<RepoTile name={session.repo || "repository"} size={40} />
 									<div className={INFO_NAME} ref={infoHeroNameRef}>
@@ -5176,13 +5210,18 @@ export function SessionViewer({
 											setInfoPageOpen(false);
 											setOverlayAssetPath(path);
 										}}
-											// Changes now has a surface of its own, so it no longer
-											// has to borrow the Review tab the way it did when the
-											// only diff on a phone was the PR's.
+											// Changes has a surface of its own, so it no longer has to
+											// borrow the Review tab the way it did when the only
+											// diff on a phone was the PR's. It pushes a page inside
+											// this one rather than closing it. The rest of the
+											// tabs are elsewhere in the app, so they still do.
 											onOpenTab={(tab) => {
+												if (tab === "changes") {
+													setPanelPage("changes");
+													return;
+												}
 												setInfoPageOpen(false);
 												if (tab === "pr") onOpenReview?.();
-												else if (tab === "changes") onOpenChanges?.();
 												else if (tab === "staging") onOpenStaging?.();
 												else if (tab === "assets") onOpenAssets?.();
 											}}
@@ -5224,6 +5263,8 @@ export function SessionViewer({
 										</div>
 									)}
 								</div>
+								</>
+								)}
 							</div>,
 							document.body,
 						)
@@ -5517,24 +5558,6 @@ export function SessionViewer({
 								<FeedWebPane
 									panel={videoPanel}
 									title={videoTitle || undefined}
-								/>
-							)}
-						</div>
-					) : showChanges && hasRepoWork ? (
-						// The session's uncommitted worktree diff, full-width. It used
-						// to live in the right sidebar, where a 350px column was a poor
-						// surface for reading a diff; the Info panel keeps the live file
-						// count beside this pane, which is what glancing needed.
-						<div className={VIEWER_REVIEW_MAIN}>
-							{waitingForWorkspace ? (
-								<WorkspaceWaiting detail="This takes a moment." />
-							) : (
-								<DiffPanel
-									sessionId={session.id}
-									isRunning={isBusy}
-									canSend={connected && !isBusy && !noEngine}
-									send={send}
-									diff={diffState}
 								/>
 							)}
 						</div>
@@ -6119,7 +6142,32 @@ export function SessionViewer({
 						    App.tsx), Assets and the PR the same way. What stays here is
 						    what you read at a glance while your work runs beside it. */}
 						<div className={PANEL_BODY}>
-							{panelPage === "portals" ? (
+							{panelPage === "changes" ? (
+								<>
+									<PanelPageHeader
+										title="Changes"
+										onBack={() => setPanelPage(null)}
+									/>
+									{waitingForWorkspace ? (
+										<WorkspaceWaiting detail="This takes a moment." />
+									) : (
+										// DiffPanel's own bars stick to this same scroll
+										// container at top-0, which is behind the header
+										// above. Drop them by its height so the file summary
+										// and the Files/Code flow toggle stay reachable while
+										// you read, instead of hiding under it.
+										<div className="[&_.sticky]:top-12">
+											<DiffPanel
+												sessionId={session.id}
+												isRunning={isBusy}
+												canSend={connected && !isBusy && !noEngine}
+												send={send}
+												diff={diffState}
+											/>
+										</div>
+									)}
+								</>
+							) : panelPage === "portals" ? (
 								<PortalsPage
 									sessionId={session.id}
 									status={previewStatus}
@@ -6176,7 +6224,10 @@ export function SessionViewer({
 										if (tab === "pr") onOpenReview?.();
 										else if (tab === "staging") onOpenStaging?.();
 										else if (tab === "assets") onOpenAssets?.();
-										else if (tab === "changes") onOpenChanges?.();
+										// Changes stays in this panel: the file list you just
+										// clicked is the top of the diff you get, one level
+										// deeper, with a chevron back to here.
+										else if (tab === "changes") setPanelPage("changes");
 									}}
 									onAddToInput={(text) =>
 										setComposerPrefill((p) => ({

@@ -7,7 +7,8 @@ import {
 	INFO_SECTION_CLASS,
 } from "../lib/session-viewer-classes";
 import { cn } from "../ui/cn";
-import { IconArrowUpRight, IconChevronLeft } from "./icons";
+import { IconArrowUpRight } from "./icons";
+import { PanelPageHeader } from "./PanelPageHeader";
 
 /** What a service row says on its right: where it is, in one word. */
 function statusLabel(
@@ -66,25 +67,19 @@ export function PortalsPage({
 	).length;
 
 	return (
-		<div className="grid gap-4 px-2 pt-3 pb-[22px]">
-			<div className="flex items-center gap-1">
-				<button
-					type="button"
-					onClick={onBack}
-					aria-label="Back to workspace"
-					className="focus-ring inline-flex size-7 shrink-0 items-center justify-center rounded-control text-dim transition-colors hover:bg-hover hover:text-fg"
-				>
-					<IconChevronLeft size={16} />
-				</button>
-				<span className="min-w-0 flex-1 truncate text-supporting font-semibold text-fg">
-					Portals
-				</span>
-				{liveCount > 0 && (
-					<span className="shrink-0 px-1 text-label font-semibold tabular-nums text-faint">
-						{liveCount} live
-					</span>
-				)}
-			</div>
+		<>
+			<PanelPageHeader
+				title="Portals"
+				onBack={onBack}
+				trailing={
+					liveCount > 0 && (
+						<span className="shrink-0 px-1 text-label font-semibold tabular-nums text-faint">
+							{liveCount} live
+						</span>
+					)
+				}
+			/>
+			<div className="grid gap-4 px-2 pt-2 pb-[22px]">
 			{!status ? (
 				<DiscoveringRow />
 			) : (
@@ -218,6 +213,7 @@ export function PortalsPage({
 					</div>
 				</>
 			)}
-		</div>
+			</div>
+		</>
 	);
 }

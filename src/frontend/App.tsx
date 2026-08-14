@@ -1083,7 +1083,6 @@ export function App(
 	const assetsActive = activeViewTab === "assets";
 	const previewLiveActive = activeViewTab === "preview";
 	const portalActive = activeViewTab === "portal";
-	const changesActive = activeViewTab === "changes";
 	const terminalActive = activeViewTab === "terminal";
 	const subagentSelected = activeViewTab === "subagent";
 	// Workspaces whose Review / Conversation / Preview environment view-tab is
@@ -1122,12 +1121,6 @@ export function App(
 	>({});
 	const [assetsOpen, setAssetsOpen] = useState<Set<string>>(
 		() => new Set(getActiveViewTabKeys("assets")),
-	);
-	// Workspaces whose Changes (uncommitted worktree diff) view-tab is open —
-	// opened from the Info panel's Changes card, which keeps showing the live
-	// file count beside the pane.
-	const [changesOpen, setChangesOpen] = useState<Set<string>>(
-		() => new Set(getActiveViewTabKeys("changes")),
 	);
 	// Workspaces with a Terminal view-tab open. Starts empty every load: the
 	// tab owns live PTYs, so it is never restored (see active-view-tab.ts).
@@ -1832,20 +1825,6 @@ export function App(
 					},
 				]
 			: [];
-	// The Changes view-tab: this session's uncommitted worktree diff, full
-	// width — opened from the Info panel's Changes card. The file count stays
-	// in that card rather than riding the tab, so the strip has one label.
-	const changesViewTabs: ViewTab[] =
-		currentSession && wsKey && changesOpen.has(wsKey)
-			? [
-					{
-						id: `changes:${wsKey}`,
-						label: "Changes",
-						active: changesActive,
-						dotClass: null,
-					},
-				]
-			: [];
 	// The Terminal view-tab: an interactive shell in the session's workspace
 	// (inside its sandbox when sandboxed) — opened from the Info panel.
 	const terminalViewTabs: ViewTab[] =
@@ -1905,15 +1884,13 @@ export function App(
 					},
 				]
 			: [];
-	// Review leftmost, then Changes beside it (the two ways of reading the same
-	// work), then Conversation, Preview environment, Preview, Portal, Assets,
-	// Terminal, and the sub-agent drill-in last (it comes and goes with the
-	// session).
+	// Review leftmost, then Conversation, Preview environment, Preview, Portal,
+	// Assets, Terminal, and the sub-agent drill-in last (it comes and goes with
+	// the session).
 	// The workspace home joins these once the strip would otherwise be empty —
 	// see `homeViewTabs`, which needs the session tabs to know that.
 	const paneViewTabs: ViewTab[] = [
 		...reviewViewTabs,
-		...changesViewTabs,
 		...conversationViewTabs,
 		...videoViewTabs,
 		...stagingViewTabs,
@@ -1961,7 +1938,6 @@ export function App(
 		if (id.startsWith("subagent:")) return "subagent";
 		if (id.startsWith("staging:")) return "staging";
 		if (id.startsWith("assets:")) return "assets";
-		if (id.startsWith("changes:")) return "changes";
 		if (id.startsWith("terminal:")) return "terminal";
 		if (id.startsWith("preview:")) return "preview";
 		if (id.startsWith("portal:")) return "portal";
@@ -2144,26 +2120,6 @@ export function App(
 			});
 		}
 		if (assetsActive) setActiveViewTab(null);
-	}
-	// Open/foreground this workspace's Changes view-tab (the Info panel's
-	// Changes card, and the closed-panel peek card's Changes row).
-	function openChanges() {
-		if (!wsKey) return;
-		const key = wsKey;
-		setChangesOpen((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
-		setActiveViewTab("changes");
-	}
-	function closeChangesTab() {
-		if (wsKey) {
-			const key = wsKey;
-			setChangesOpen((prev) => {
-				if (!prev.has(key)) return prev;
-				const next = new Set(prev);
-				next.delete(key);
-				return next;
-			});
-		}
-		if (changesActive) setActiveViewTab(null);
 	}
 	// Open/foreground this workspace's Terminal view-tab (the Info panel's
 	// Terminal row). Closing it is what tears the shells down.
@@ -2697,7 +2653,6 @@ export function App(
 						closeSubagentTab(id.slice("subagent:".length));
 					else if (id.startsWith("staging:")) closeStagingTab();
 					else if (id.startsWith("assets:")) closeAssetsTab();
-					else if (id.startsWith("changes:")) closeChangesTab();
 					else if (id.startsWith("terminal:")) closeTerminalTab();
 					else if (id.startsWith("preview:")) closePreviewTab();
 					else if (id.startsWith("portal:")) closePortalTab();
@@ -3518,9 +3473,6 @@ export function App(
 				showAssets={
 					splitMode ? viewTabKind(surfaceId) === "assets" : focused && assetsActive
 				}
-				showChanges={
-					splitMode ? viewTabKind(surfaceId) === "changes" : focused && changesActive
-				}
 				showTerminal={
 					splitMode
 						? viewTabKind(surfaceId) === "terminal"
@@ -3556,8 +3508,6 @@ export function App(
 				onOpenPortal={openPortal}
 				onOpenAssets={openAssets}
 				onCloseAssets={closeAssetsTab}
-				onOpenChanges={openChanges}
-				onCloseChanges={closeChangesTab}
 				onOpenTerminal={openTerminal}
 				onCloseTerminal={closeTerminalTab}
 				onOpenWorkspace={() => setActiveViewTab(null)}

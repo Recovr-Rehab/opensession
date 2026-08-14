@@ -11,10 +11,6 @@ const VIEW_TABS = [
 	"staging",
 	"assets",
 	"preview",
-	// The session's uncommitted worktree diff. Full width because a diff is a
-	// document: the sidebar showed it in a 350px column, and its live file
-	// count still sits in the Info panel beside this pane.
-	"changes",
 	// An interactive shell in the session's workspace. Never persisted
 	// (saveActiveViewTab drops it): restoring it on load would spawn a PTY for
 	// anyone who once opened one.
