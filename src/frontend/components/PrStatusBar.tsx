@@ -61,6 +61,7 @@ import {
 	IconHash,
 	IconCheck,
 	IconPlus,
+	IconArchive,
 } from "./icons";
 
 /**
@@ -239,6 +240,7 @@ interface PrBarButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement>
 		| "status-red"
 		| "status-yellow"
 		| "secondary"
+		| "quiet"
 		| "solid";
 	icon?: React.ReactNode;
 	confirm?: boolean;
@@ -265,6 +267,10 @@ function PrBarButton({
 		solid:
 			"bg-[var(--text)] text-[var(--bg)] border-[color-mix(in_srgb,var(--text)_84%,transparent)]",
 		secondary: "bg-raised text-fg border-line-strong hover:bg-hover hover:brightness-100",
+		// The lightest step: text on the strip's own band, no edge and no lift,
+		// for the action that stands beside a primary one as the other choice.
+		quiet:
+			"border-transparent bg-transparent text-dim shadow-none hover:bg-hover hover:text-fg hover:brightness-100",
 	} as const;
 	return (
 		<button
@@ -729,21 +735,28 @@ export function PrStatusBar({
 						{onNewSession && (
 							<PrBarButton
 								className={cn(actionBtn, "@max-[440px]:px-1.5 @max-[440px]:gap-0")}
-								tone="secondary"
+								// The quietest step on the strip: filing the session away is
+								// the expected end of a merged PR, so carrying on is offered
+								// as the other choice rather than competing with it.
+								tone="quiet"
 								icon={<IconPlus size={18} />}
 								onClick={onNewSession}
 								title="Start a new session in this workspace"
-								aria-label="New session"
+								aria-label="Continue"
 							>
 								{/* The label is the first thing to go on a narrow panel: the
 								    headline beside it is what the strip exists to say. */}
-								<span className="@max-[440px]:hidden">New session</span>
+								<span className="@max-[440px]:hidden">Continue</span>
 							</PrBarButton>
 						)}
 						{canArchive && (
 							<PrBarButton
 								className={actionBtn}
-								tone="purple"
+								// Grey, not purple: archiving is housekeeping, and a filled
+								// purple button made the end of a session read as the loudest
+								// thing on the strip.
+								tone="secondary"
+								icon={<IconArchive size={18} />}
 								disabled={!!busy}
 								onClick={() =>
 									run("archive", async () => {
