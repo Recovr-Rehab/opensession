@@ -23,6 +23,7 @@ import { userMatchesAny } from "./shared/user-mappings";
 import { syncAgentSessionEngine } from "./agent-session-sync";
 import { touchNativeSession } from "./session-cache";
 import { broadcastToSession } from "./ws-hub";
+import { resolveWorkspaceModelPreset } from "./workspace-model-presets";
 import type { UnifiedSession } from "./types";
 
 /**
@@ -96,7 +97,10 @@ export function handleSlashCommand(
 			return "Can't change model while this session is running. Stop the run or wait for it to finish, then try again.";
 		}
 		const input = text.slice("/model ".length).trim();
-		const resolved = resolveModel(input);
+		const workspacePreset = resolveWorkspaceModelPreset(input, session.workspaceId);
+		const resolved = workspacePreset
+			? { id: workspacePreset.model }
+			: resolveModel(input);
 		if (!resolved) {
 			return [
 				`Unknown model "${input}". Available:`,
@@ -118,6 +122,8 @@ export function handleSlashCommand(
 				accountProviderForModel(prevModel) !== accountProviderForModel(resolved.id);
 			touchNativeSession(session.id, {
 				model: resolved.id,
+				presetNote: workspacePreset?.note,
+				...(workspacePreset?.effort ? { effort: workspacePreset.effort } : {}),
 				...(switchedProvider ? { accountId: undefined } : {}),
 				modelHistory: [
 					...(session.modelHistory || []),

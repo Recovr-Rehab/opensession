@@ -30,7 +30,7 @@ import { ensureGeneratedTitle } from "./generated-titles";
 import { onSessionIdle as onHumanAsksSessionIdle } from "./human-asks";
 import { interactiveMcpServers } from "./interactive-mcp";
 import { parseTranscriptAsync } from "./jsonl-parser";
-import { accountProviderForModel, interactiveDefaultModel, interactiveFallbackModel, modelLabel, providerFor, resolveModel, toPiModel } from "./models";
+import { accountProviderForModel, interactiveDefaultModel, interactiveFallbackModel, modelLabel, providerFor, resolveModel } from "./models";
 import { notifyMentions } from "./mentions";
 import { newSessionId } from "./paths";
 import { wrapContext } from "./prompt-context";
@@ -59,6 +59,7 @@ import { sanitizeBranchSlug } from "./suggest-branch";
 import { type NativeSessionFile, type SessionUsage, type UnifiedSession } from "./types";
 import { parseImageDataUrls, stageFileAttachments, withUploadsNote } from "./uploads";
 import { resolvePlainWorkspace } from "./workspace-resolve";
+import { resolveWorkspaceModelPreset } from "./workspace-model-presets";
 import { type Workspace, createWorkspace, getWorkspace, updateWorkspace } from "./workspaces";
 import { createWorktree, createWorktreeForExistingBranch, ensureAskCheckout, ensureScratchDir, getRepo, listWorktrees, NO_REPO, repoForPath, repoForPathOrNull, resolveUniqueBranch, sharedCheckoutForNewSessions, worktreeHeadBranch, worktreePathFor } from "./worktree";
 import { type WSClientData, broadcastToSession, preparingWorkspaces } from "./ws-hub";
@@ -164,44 +165,6 @@ export function resolvePinnedAccountId(
 		(!requested.owner || (!!user && userMatchesAny(user, [requested.owner])))
 		? (accountId as string)
 		: undefined;
-}
-
-function resolveWorkspacePreset(
-	requested: unknown,
-	workspaceId: unknown,
-): { model: string; effort?: string; note: string } | undefined {
-	if (typeof requested !== "string" || typeof workspaceId !== "string") return undefined;
-	const pi = requested.startsWith("pi/");
-	const id = (pi ? requested.slice(3) : requested).trim();
-	const match = id.match(/^workspace-preset\/([^/]+)\/([A-Za-z0-9_-]{1,64})$/);
-	if (!match || match[1] !== workspaceId) return undefined;
-	const preset = getWorkspace(workspaceId)?.modelSettings?.presets?.find((p) => p.id === match[2]);
-	if (!preset?.lead?.model?.trim()) return undefined;
-	const lead = preset.lead.model.trim();
-	const routed = pi && !lead.startsWith("pi/")
-		? lead.startsWith("opencode/") ? `pi/${lead.slice("opencode/".length)}` : `pi/${lead}`
-		: lead;
-	const model = resolveModel(routed)?.id;
-	if (!model) return undefined;
-	const supporting = (preset.supporting || [])
-		.filter((member) => member.model?.trim())
-		.map((member) => {
-			const configuredModel = member.model.trim();
-			const supportingModel = pi ? toPiModel(configuredModel) || configuredModel : configuredModel;
-			return `- ${member.role?.trim() || "Supporting worker"}: ${supportingModel}${member.effort ? ` at ${member.effort} effort` : ""}`;
-		})
-		.join("\n");
-	return {
-		model,
-		effort: preset.lead.effort,
-		note: [
-			`## Workspace model preset · ${preset.label.trim()}`,
-			preset.instructions?.trim() || "Lead this task and use the supporting models when a focused second perspective or implementation worker helps.",
-			supporting
-				? `Supporting models for this preset:\n${supporting}\nUse opensession-sessions to create focused worker sessions with these models. Give each worker a self-contained brief, then integrate and verify its result yourself.`
-				: "",
-		].filter(Boolean).join("\n\n"),
-	};
 }
 
 /**
@@ -922,7 +885,7 @@ export async function handleCreateSessionMessage(
 	// disengage the dial (the preset id must be what the session stores).
 	const workspacePreset = forkSource
 		? undefined
-		: resolveWorkspacePreset(msg.model, msg.workspaceId ?? msg.modelWorkspaceId);
+		: resolveWorkspaceModelPreset(msg.model, msg.workspaceId ?? msg.modelWorkspaceId);
 	const model = forkSource
 		? forkSource.model
 		: workspacePreset?.model || (msg.model ? resolveModel(String(msg.model))?.id : undefined) ||
