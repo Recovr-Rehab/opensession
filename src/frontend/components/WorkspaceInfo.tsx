@@ -70,8 +70,10 @@ import {
 	IconCheck,
 	IconChevronDown,
 	IconFile,
+	IconPeople,
 	IconPlay,
 	IconPullRequest,
+	IconRobot,
 	IconStack,
 } from "./icons";
 
@@ -154,6 +156,10 @@ interface Props {
 	liveMedia?: WorkspaceMediaItem[];
 }
 
+/** The leading visual on a Review row: the box a `UserAvatar size={20}` fills,
+    so a glyph and a face line up down the section. */
+const REVIEW_FACE =
+	"inline-flex size-5 shrink-0 items-center justify-center [&_svg]:block";
 const INFO_MORE_BUTTON_CLASS =
 	"cursor-pointer bg-panel px-[9px] py-[7px] text-left text-label font-semibold text-faint transition-colors hover:bg-hover hover:text-fg";
 
@@ -581,17 +587,6 @@ function AgentReviewCard({
 				: score
 					? "text-red"
 					: "text-dim";
-	const dotTone: keyof typeof GIT_DOT_BG = active
-		? "blue"
-		: !score
-			? "muted"
-			: stale
-				? "yellow"
-				: score >= 4
-					? "green"
-					: score === 3
-						? "yellow"
-						: "red";
 	// One line in the panel's git-status grammar: the reading, then the single
 	// thing worth knowing about it. The reviewer's reasoning and the run time
 	// are a hover away in the summary popup, so the row never carries both.
@@ -724,13 +719,15 @@ function AgentReviewCard({
 							)}
 							tabIndex={reviewMessage ? 0 : undefined}
 						>
-							{/* A state dot, then the reading: the same row grammar as Git
-							    status right below, so the panel reads as one column of
-							    facts rather than a card wedged between labels. */}
+							{/* Who, then the reading. The section is about people, so the
+							    row leads with a face rather than the state dot the Git
+							    status rows use: the state's colour is on the words. */}
 							<span
-								className={cn(GIT_DOT, GIT_DOT_BG[dotTone], active && "animate-pulse")}
+								className={cn(REVIEW_FACE, "text-dim", active && "animate-pulse")}
 								aria-hidden
-							/>
+							>
+								<IconRobot size={18} />
+							</span>
 							<span className={GIT_LABEL}>
 								{/* The row names its reviewer now that the section label is
 								    the shared "Review": this line is the agent's, the one
@@ -968,19 +965,21 @@ function ReviewerChip({
 	// menu, which is still worth reaching ("not me, ask Kent"). Without somewhere
 	// to open, the action IS the picker.
 	const reviewNow = needsMyReview && !!onReviewPr;
-	// The dot carries the state colour, exactly as the agent's row above it
-	// does, so the two reviewers read as one list rather than two widgets.
-	const dotTone: keyof typeof GIT_DOT_BG = needsMyReview
-		? "red"
-		: accepted
-			? "green"
-			: req || githubTarget
-				? "yellow"
-				: "muted";
 	// `who · where it stands`, in the agent row's grammar right above: the name
 	// keeps the row's own ink and the state carries the tone, exactly as the
 	// score does. The one state addressed to the reader says so instead, and
 	// takes the red plate with it — hue alone is a weak signal at 13px.
+	// The face is the person the review sits with — you, when it is waiting on
+	// you, even though the words say so rather than naming you.
+	const faceName = selectedTeam
+		? null
+		: needsMyReview
+			? currentUser
+			: accepted
+				? accepted.by
+				: req
+					? req.to
+					: githubTarget;
 	const rowName = needsMyReview
 		? null
 		: accepted
@@ -1025,7 +1024,16 @@ function ReviewerChip({
 					needsMyReview && "bg-red-soft",
 				)}
 			>
-				<span className={cn(GIT_DOT, GIT_DOT_BG[dotTone])} aria-hidden />
+				{/* The reviewer's own picture, beside the agent's face on the row
+				    above. A team has no one face, and an unasked review has nobody
+				    in it yet, so both fall back to a glyph. */}
+				{faceName ? (
+					<UserAvatar name={faceName} size={20} edge={false} />
+				) : (
+					<span className={cn(REVIEW_FACE, "text-dim")} aria-hidden>
+						{selectedTeam ? <IconStack size={18} /> : <IconPeople size={18} />}
+					</span>
+				)}
 				<span className={GIT_LABEL} title={rowTitle}>
 					{rowName && (
 						<>
