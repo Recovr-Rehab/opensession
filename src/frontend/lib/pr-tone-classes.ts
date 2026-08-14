@@ -87,7 +87,11 @@ export const CHECK_TEXT: Record<CheckRank, string> = {
  *  undraggable in the desktop shell. Same reason `.markdown` stays on the
  *  description. */
 export const PR_BAR =
-	"flex min-h-[var(--desktop-header-h)] items-center gap-2.5 border-b border-[var(--top-divider)] px-3 py-2 " +
+	// A container, so the actions can drop their labels when the panel is
+	// dragged narrow. The panel is resizable, so its width is not a function of
+	// the viewport and `phone:` cannot see it: at ~465px the headline — the one
+	// thing the strip is for — was the part that got squeezed out.
+	"@container flex min-h-[var(--desktop-header-h)] items-center gap-2.5 border-b border-[var(--top-divider)] px-3 py-2 " +
 	// The globe (staging) icon rides inside the strip, flush to its padding.
 	"[&>.staging-icon]:-ml-0.5 [&>.staging-icon]:shrink-0 " +
 	// Phone: a row of the bottom sheet, and a row of the info card.

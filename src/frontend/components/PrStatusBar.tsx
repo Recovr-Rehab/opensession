@@ -60,6 +60,7 @@ import {
 	IconCopy,
 	IconHash,
 	IconCheck,
+	IconPlus,
 } from "./icons";
 
 /**
@@ -211,6 +212,12 @@ interface Props {
 	onOpenChecksTab?: () => void;
 	/** Archive via the owning viewer so it can select the neighboring sidebar row. */
 	onArchive?: () => void;
+	/** Start a new session in this workspace (the tab strip's "+", as a labelled
+	    button). Offered beside Archive once the PR has landed, so a merged
+	    session is a fork in the road rather than a dead end: file it away, or
+	    keep going in a fresh session. Left unset in the session header, which
+	    carries its own "+". */
+	onNewSession?: () => void;
 	/** "header" renders just the PR chip + primary action while the panel is closed. */
 	variant?: "bar" | "header";
 	/** Optional element rendered inside the strip, left of the PR chip (bar
@@ -478,6 +485,7 @@ export function PrStatusBar({
 	onOpenPrTab,
 	onOpenChecksTab,
 	onArchive,
+	onNewSession,
 	variant = "bar",
 	leading,
 	running,
@@ -709,26 +717,48 @@ export function PrStatusBar({
 			);
 		}
 		switch (headline.key) {
-			case "merged":
-				// Don't offer to archive a session that still has open PRs in its
-				// series just because the primary one landed.
-				if (openSiblings > 0) return null;
-				return isArchived ? null : (
-					<PrBarButton
-						className={actionBtn}
-						tone="purple"
-						disabled={!!busy}
-						onClick={() =>
-							run("archive", async () => {
-								if (onArchive) onArchive();
-								else await archiveSessionApi(sessionId, true);
-								setIsArchived(true);
-							})
-						}
-					>
-						{busy === "archive" ? "Archiving…" : "Archive"}
-					</PrBarButton>
+			case "merged": {
+				// Landed work is a fork in the road: file the session away, or keep
+				// going in a fresh one. Don't offer to archive a session that still
+				// has open PRs in its series just because the primary one landed —
+				// the new session stands either way, since the branch is behind it.
+				const canArchive = !isArchived && openSiblings === 0;
+				if (!onNewSession && !canArchive) return null;
+				return (
+					<div className="flex items-center gap-2">
+						{onNewSession && (
+							<PrBarButton
+								className={cn(actionBtn, "@max-[440px]:px-1.5 @max-[440px]:gap-0")}
+								tone="secondary"
+								icon={<IconPlus size={18} />}
+								onClick={onNewSession}
+								title="Start a new session in this workspace"
+								aria-label="New session"
+							>
+								{/* The label is the first thing to go on a narrow panel: the
+								    headline beside it is what the strip exists to say. */}
+								<span className="@max-[440px]:hidden">New session</span>
+							</PrBarButton>
+						)}
+						{canArchive && (
+							<PrBarButton
+								className={actionBtn}
+								tone="purple"
+								disabled={!!busy}
+								onClick={() =>
+									run("archive", async () => {
+										if (onArchive) onArchive();
+										else await archiveSessionApi(sessionId, true);
+										setIsArchived(true);
+									})
+								}
+							>
+								{busy === "archive" ? "Archiving…" : "Archive"}
+							</PrBarButton>
+						)}
+					</div>
 				);
+			}
 			case "ahead":
 				return (
 					<PrBarButton

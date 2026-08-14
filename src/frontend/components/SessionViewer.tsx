@@ -5125,6 +5125,10 @@ export function SessionViewer({
 												setInfoPageOpen(false);
 												focusPrInReview(undefined, "checks");
 											}}
+											// No onNewSession: the phone strip has room for one
+											// action beside the chip (a second truncates the
+											// headline to "M…"), and the ⋯ menu already carries
+											// "New session in workspace" on phones.
 											onArchive={handleArchive}
 											running={isRunningLive}
 											refreshTick={gitRefreshTick}
@@ -6105,6 +6109,9 @@ export function SessionViewer({
 								onOpenPrTab={focusPrInReview}
 								onOpenChecksTab={() => focusPrInReview(undefined, "checks")}
 								onArchive={handleArchive}
+								onNewSession={
+									onNewSession ? () => onNewSession("share") : undefined
+								}
 								running={isRunningLive}
 								refreshTick={gitRefreshTick}
 								leading={
