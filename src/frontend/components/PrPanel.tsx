@@ -1334,8 +1334,9 @@ export function PrPanel({
 
      A rail is 48px of permanent width, though, which a phone reading a diff
      needs more than two buttons do. So at the width where the header already
-     drops its labels, the same pair moves INTO the header: the navigation
-     stays one tap away, and the code gets the canvas. */
+     drops its labels, the same pair moves onto the row above the diff, at the
+     start of the line where a tab strip is read: the navigation stays one tap
+     away, and the code gets the canvas. */
   const pageTabs = (
     [
       ["overview", "Overview", IconMessages, comments.length || undefined, true],
@@ -1452,23 +1453,6 @@ export function PrPanel({
             </a>
           </Tooltip>
         </h1>
-        {/* The pages, when there is no rail to hold them. They sit between the
-            identity and the actions: still navigation, still one tap, and the
-            badge keeps saying how many comments are waiting on the page you
-            are not reading. */}
-        {headerCompact && (
-          <div
-            /* Wider than the rail's gap: the Overview badge hangs past its
-               plate's right edge, and at a tighter gap it touched the Files
-               tab beside it. */
-            className="flex shrink-0 items-center gap-2"
-            role="tablist"
-            aria-orientation="horizontal"
-            aria-label="Pull request pages"
-          >
-            {pageTabs}
-          </div>
-        )}
         {pr.staging?.url && (
           <Tooltip label="Open the preview environment">
             <a
@@ -1560,127 +1544,146 @@ export function PrPanel({
             <StackSection pr={pr} sessionId={sessionId} repo={active?.repo} onOpenPr={onOpenPr} onLinked={load} />
           )}
 
-          {/* The pages name themselves, on the rail or in the header, so this
-              row is only what the code page needs: how big the change is, and
-              the two controls that scope and draw the diff. Overview asks for
-              none of them, so it gets no chrome row at all rather than an
-              empty bar.
+          {/* What the code page needs: how big the change is, and the two
+              controls that scope and draw the diff. With a rail there is
+              nothing else in it, so Overview gets no chrome row at all rather
+              than an empty bar — but without one this row is also where the
+              pages live, so then Overview keeps it and shows the tabs alone.
               Horizontal scrollbars are hidden because a 1px overflow here parks
               one (base.css opts Chrome out of overlay scrollbars). */}
-          {page === "files" && (
+          {(page === "files" || headerCompact) && (
             <div className="sticky top-0 z-[8] flex h-11 shrink-0 items-center gap-2 overflow-x-auto overflow-y-hidden bg-surface px-6 shadow-[inset_0_-1px_0_var(--border)] [scrollbar-width:none] phone:px-2 [&::-webkit-scrollbar]:hidden">
-              {/* How big the change is, on the row's own edge: it is a fact
-                  about the diff below rather than a control, so it reads at
-                  the start of the line, aligned with the files it counts,
-                  instead of queuing with the controls on the right. */}
-              <span className="flex shrink-0 items-center gap-1.5 text-label tabular-nums">
-                <span className="text-green">+{pr.additions}</span>
-                <span className="text-red">−{pr.deletions}</span>
-              </span>
-              <div className="ml-auto flex shrink-0 items-center gap-2">
-                {handEdited.length > 0 && send && (
-                  <Button
-                    variant="default"
-                    size="xs"
-                    onClick={tellAgentAboutEdits}
-                    title="Sends a note listing your hand-edits so they get committed and pushed"
-                  >
-                    Tell {AGENT_NAME} about {handEdited.length} edit
-                    {handEdited.length === 1 ? "" : "s"}
-                  </Button>
-                )}
-                {/* Two axes, two controls. The named dropdown picks WHAT you are
-                    reading — a diff, a guided walk through it, a call graph —
-                    and reports it, so it takes the outlined plate with its value
-                    in normal ink. Unified vs split and wrapping are how the diff
-                    is DRAWN: settings a reader picks once, which is why they sit
-                    behind a glyph rather than under a trigger labelled "All
-                    changes", where nobody would look for them. The glyph is a
-                    ghost for the same reason the ⋯ menu beside it is: a flyout of
-                    settings is chrome, and two plates side by side read as a
-                    toolbar. They drop out under the flow lens, which draws no
-                    diff. */}
-                <Menu.Root>
-                  <Tooltip label="Change the view">
-                    <Menu.Trigger
-                      render={
-                        <Button variant="default" size="sm" className="text-fg" caret>
-                          {CODE_VIEWS[codeView].label}
-                        </Button>
-                      }
-                    />
-                  </Tooltip>
-                  <Menu.Popup align="end" className="min-w-[210px]">
-                    <Menu.RadioGroup
-                      value={codeView}
-                      onValueChange={(next) => {
-                        const key = String(next) as CodeView;
-                        if (key === "flow" && codeView !== "flow" && codeFlowError) {
-                          setCodeFlow(null);
-                          setCodeFlowError(null);
-                        }
-                        setCodeView(key);
-                      }}
+              {/* The pages, when there is no rail to hold them: at the start of
+                  the line, where a tab strip is read. This row is then the only
+                  thing carrying them, so Overview keeps it too rather than
+                  losing its way back to the code. */}
+              {headerCompact && (
+                <div
+                  /* Wider than the rail's gap: the Overview badge hangs past
+                     its plate's right edge, and at a tighter gap it touched
+                     the Files tab beside it. */
+                  className="flex shrink-0 items-center gap-2"
+                  role="tablist"
+                  aria-orientation="horizontal"
+                  aria-label="Pull request pages"
+                >
+                  {pageTabs}
+                </div>
+              )}
+              {/* Everything that scopes or draws the diff, so it belongs to the
+                  code page alone. On Overview the row carries only the tabs. */}
+              {page === "files" && (
+                <div className="ml-auto flex shrink-0 items-center gap-2">
+                  {handEdited.length > 0 && send && (
+                    <Button
+                      variant="default"
+                      size="xs"
+                      onClick={tellAgentAboutEdits}
+                      title="Sends a note listing your hand-edits so they get committed and pushed"
                     >
-                      {(Object.keys(CODE_VIEWS) as CodeView[]).map((key) => {
-                        const { label, Icon } = CODE_VIEWS[key];
-                        return (
-                          <Menu.RadioItem
-                            key={key}
-                            value={key}
-                            closeOnClick
-                            disabled={
-                              key === "flow" &&
-                              ((!diff?.patch && !diff?.skippedFiles) || !prPatchVersion)
-                            }
-                          >
-                            <Icon size={18} className={MENU_ICON} />
-                            <span className="min-w-0 flex-1 truncate">{label}</span>
-                            {codeView === key && (
-                              <IconCheck className="shrink-0 text-accent" size={17} />
-                            )}
-                          </Menu.RadioItem>
-                        );
-                      })}
-                    </Menu.RadioGroup>
-                    {showDisplayMenu && headerCompact && (
-                      <>
-                        <Menu.Separator />
-                        {diffDisplayItems}
-                      </>
-                    )}
-                  </Menu.Popup>
-                </Menu.Root>
-                {/* `w-auto px-2` because an icon-only Button sizes to the glyph
-                    alone and the caret needs room beside it. */}
-                {showDisplayMenu && !headerCompact && (
+                      Tell {AGENT_NAME} about {handEdited.length} edit
+                      {handEdited.length === 1 ? "" : "s"}
+                    </Button>
+                  )}
+                  {/* How big the change is, beside the control that scopes it, so
+                      a reader knows what they are about to read. */}
+                  <span className="flex shrink-0 items-center gap-1.5 text-label tabular-nums">
+                    <span className="text-green">+{pr.additions}</span>
+                    <span className="text-red">−{pr.deletions}</span>
+                  </span>
+                  {/* Two axes, two controls. The named dropdown picks WHAT you are
+                      reading — a diff, a guided walk through it, a call graph —
+                      and reports it, so it takes the outlined plate with its value
+                      in normal ink. Unified vs split and wrapping are how the diff
+                      is DRAWN: settings a reader picks once, which is why they sit
+                      behind a glyph rather than under a trigger labelled "All
+                      changes", where nobody would look for them. The glyph is a
+                      ghost for the same reason the ⋯ menu beside it is: a flyout of
+                      settings is chrome, and two plates side by side read as a
+                      toolbar. They drop out under the flow lens, which draws no
+                      diff. */}
                   <Menu.Root>
-                    <Tooltip label="Diff display">
+                    <Tooltip label="Change the view">
                       <Menu.Trigger
                         render={
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="w-auto px-2"
-                            aria-label="Diff display"
-                            caret
-                            icon={
-                              diffStyle === "split" ? (
-                                <IconDiffSplit size={17} />
-                              ) : (
-                                <IconDiffUnified size={17} />
-                              )
-                            }
-                          />
+                          <Button variant="default" size="sm" className="text-fg" caret>
+                            {CODE_VIEWS[codeView].label}
+                          </Button>
                         }
                       />
                     </Tooltip>
-                    <Menu.Popup align="end" className="min-w-[190px]">
-                      {diffDisplayItems}
+                    <Menu.Popup align="end" className="min-w-[210px]">
+                      <Menu.RadioGroup
+                        value={codeView}
+                        onValueChange={(next) => {
+                          const key = String(next) as CodeView;
+                          if (key === "flow" && codeView !== "flow" && codeFlowError) {
+                            setCodeFlow(null);
+                            setCodeFlowError(null);
+                          }
+                          setCodeView(key);
+                        }}
+                      >
+                        {(Object.keys(CODE_VIEWS) as CodeView[]).map((key) => {
+                          const { label, Icon } = CODE_VIEWS[key];
+                          return (
+                            <Menu.RadioItem
+                              key={key}
+                              value={key}
+                              closeOnClick
+                              disabled={
+                                key === "flow" &&
+                                ((!diff?.patch && !diff?.skippedFiles) || !prPatchVersion)
+                              }
+                            >
+                              <Icon size={18} className={MENU_ICON} />
+                              <span className="min-w-0 flex-1 truncate">{label}</span>
+                              {codeView === key && (
+                                <IconCheck className="shrink-0 text-accent" size={17} />
+                              )}
+                            </Menu.RadioItem>
+                          );
+                        })}
+                      </Menu.RadioGroup>
+                      {showDisplayMenu && headerCompact && (
+                        <>
+                          <Menu.Separator />
+                          {diffDisplayItems}
+                        </>
+                      )}
                     </Menu.Popup>
                   </Menu.Root>
-                )}
-              </div>
+                  {/* `w-auto px-2` because an icon-only Button sizes to the glyph
+                      alone and the caret needs room beside it. */}
+                  {showDisplayMenu && !headerCompact && (
+                    <Menu.Root>
+                      <Tooltip label="Diff display">
+                        <Menu.Trigger
+                          render={
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="w-auto px-2"
+                              aria-label="Diff display"
+                              caret
+                              icon={
+                                diffStyle === "split" ? (
+                                  <IconDiffSplit size={17} />
+                                ) : (
+                                  <IconDiffUnified size={17} />
+                                )
+                              }
+                            />
+                          }
+                        />
+                      </Tooltip>
+                      <Menu.Popup align="end" className="min-w-[190px]">
+                        {diffDisplayItems}
+                      </Menu.Popup>
+                    </Menu.Root>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
