@@ -90,12 +90,11 @@ function Content({
 							// (the dictation HUD); `overflow-hidden` keeps the rows'
 							// dividers inside the rounded shell.
 							"relative flex flex-col overflow-hidden outline-none",
-							// --rf-lg rather than the scale's `rounded-xl`: a big
-							// overlay keeps its corner in browsers without
-							// `corner-shape` instead of shrinking to 0.85 (base.css).
-							// Same corner as the centered dialog, one step up from the
-							// 18px it used to carry.
-							"rounded-[calc(22px*var(--rf-lg))]",
+							// A 22px base rather than the scale's `rounded-xl`: an
+							// overlay this size carries a rounder corner than the
+							// controls inside it. Same corner as the centered dialog,
+							// one step up from the 18px it used to carry.
+							"rounded-[calc(22px*var(--rf))]",
 							// The same glass the menus and hover cards are made of
 							// (ui/menu.tsx), so the palette reads as one more floating
 							// surface rather than an opaque card — just denser, because
@@ -117,7 +116,7 @@ function Content({
 							"max-h-[85dvh] overflow-y-auto overscroll-contain outline-none",
 							// Match Tella's restrained Dialog2 shell: lifted surface, soft edge,
 							// and enough radius to read as a modal without becoming a card.
-							"rounded-[calc(22px*var(--rf-lg))] bg-raised smooth-shadow-ring-lg",
+							"rounded-[calc(22px*var(--rf))] bg-raised smooth-shadow-ring-lg",
 							"p-6",
 							"flex flex-col gap-4",
 							"origin-center transition-[transform,opacity] duration-[var(--dur)] ease-[var(--ease)]",

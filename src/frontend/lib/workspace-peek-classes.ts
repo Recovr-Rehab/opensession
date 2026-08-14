@@ -22,7 +22,7 @@
  * page" now that the shadow has been softened.
  */
 export const PEEK_CARD =
-	"flex w-[300px] flex-col rounded-[calc(16px*var(--rf-lg))] py-2 smooth-shadow-ring-soft";
+	"flex w-[300px] flex-col rounded-[calc(16px*var(--rf))] py-2 smooth-shadow-ring-soft";
 
 /** Section label ("Workspace", "Sources"). Shares the rows' 16px gutter so the
  *  whole card reads on one left edge, and their 31px pitch so it doesn't sit

@@ -228,23 +228,25 @@
 	--sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
 	--radius: 14px;
 	/* Squircle corner treatment (Chrome 139+ `corner-shape`). A superellipse
-	   hugs the corner tighter than a circular arc, so supported browsers use a
-	   larger radius multiplier than circular-corner fallbacks. --rf scales the
-	   app's legacy radii universally and --cs selects the corner shape. */
-	--rf: 0.85;
+	   hugs the corner tighter than a circular arc at the same radius, so a
+	   browser that can draw one carries a larger radius multiplier than the
+	   circular fallback. --rf scales every radius in the app and --cs picks the
+	   corner shape, so the pair flipped in the `@supports` block below is the
+	   whole switch.
+
+	   `corner-shape` is Chromium-only (WebKit has not shipped it), so Safari,
+	   and therefore the installed iOS PWA, draws circular corners at --rf 1:
+	   every corner comes out at the radius it is authored with, which is what
+	   the app shipped before the squircle. 1 rather than the 0.85 this used to
+	   carry. 0.85 is near the geometric match (a circular arc meets the
+	   diagonal at 0.41r against a squircle's 0.23r) but reads visibly squarer
+	   than the squircle it stands in for, and it only ever applied to
+	   controls: large overlays kept the full 1.35, so a Safari palette was a
+	   very round shell full of noticeably squarer buttons. One factor keeps a
+	   shell and the controls inside it in the same relationship they have in
+	   Chrome, which is what the eye reads before it reads either corner. */
+	--rf: 1;
 	--cs: round;
-	/* Large overlay surfaces — the phone bottom sheet, the centered modal, the
-	   palette — opt out of that fallback and keep the squircle-era factor in
-	   every browser. `corner-shape` is Chromium-only (WebKit has not shipped
-	   it), so on iOS Safari, and therefore in the installed PWA, --rf stays
-	   0.85 and every corner in the app comes out at 63% of the radius Chrome
-	   draws. On a 28px button that reads as a hairline difference; on a
-	   full-width sheet it is the difference between a 14px corner and a 22px
-	   one, and the sheet reads square. A circular arc at a given radius cuts
-	   MORE off the corner than a squircle at the same radius does (it meets
-	   the diagonal at 0.41r against 0.23r), so matching the radius outright is
-	   the conservative match here rather than an over-correction. */
-	--rf-lg: 1.35;
 	/* Session column width — messages, work blocks, composer, ask cards all share
 	   it so the conversation reads as one column. */
 	--session-col: 780px;

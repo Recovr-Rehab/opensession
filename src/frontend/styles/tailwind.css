@@ -186,7 +186,7 @@
 	--spacing: 4px;
 	/* Radii are authored the way base.css authors every corner in the app —
 	   `calc(<px> * var(--rf))` — so the one token flip at base.css's
-	   `@supports (corner-shape: squircle)` (0.85 round → 1.35 squircle) moves
+	   `@supports (corner-shape: squircle)` (1 round → 1.35 squircle) moves
 	   the legacy stylesheet and this scale together.
 
 	   These used to be two hand-maintained tiers: the plain values here, plus a
