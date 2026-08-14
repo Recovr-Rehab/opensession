@@ -81,7 +81,7 @@ export function WorkspaceModelPresets({
 	return (
 		<Modal.Root open={open} onOpenChange={onOpenChange}>
 			<Modal.Content widthClassName="max-w-[42rem]">
-				<Modal.Header title="Workspace model presets" description="Choose which built-ins appear here, then make combinations with a lead model, supporting models, and instructions." />
+				<Modal.Header title="Model combinations" description={`Choose which built-in combinations appear in ${workspace.name}, then add your own.`} />
 				<div className="flex flex-col gap-3">
 					{(["dialEnabled", "orchestratorEnabled"] as const).map((key) => {
 						const label = key === "dialEnabled" ? "The Dial" : "The Orchestrator";
@@ -113,15 +113,15 @@ export function WorkspaceModelPresetSettings({ workspace }: { workspace?: Worksp
 	const [open, setOpen] = useState(false);
 	return (
 		<>
-			<SettingsGroupLabel>Workspace presets</SettingsGroupLabel>
+			<SettingsGroupLabel>This workspace</SettingsGroupLabel>
 			<SettingCard>
 				<SettingRow>
 					<SettingRowText>
 						<SettingRowTitle>Model combinations</SettingRowTitle>
 						<SettingRowDescription>
 							{workspace
-								? `For ${workspace.name}. Choose the Dial and Orchestrator, then add model combinations for this workspace.`
-								: "Open a workspace, then return here to configure its model combinations."}
+								? `Choose which model combinations sessions in ${workspace.name} can pick.`
+								: "Open a workspace to set up its model combinations."}
 						</SettingRowDescription>
 					</SettingRowText>
 					<SettingRowControl>
