@@ -25,7 +25,7 @@ import {
 	PR_WEBHOOK_FALLBACK_POLL_MS,
 } from "../lib/poll";
 import { getCurrentUser, TEAM, useCurrentUser } from "./UserPicker";
-import { useReviewTeams } from "../lib/people";
+import { personNameForKey, usePeople, useReviewTeams } from "../lib/people";
 import { UserAvatar } from "./UserAvatar";
 import { Menu } from "../ui/menu";
 import { Popover } from "../ui/popover";
@@ -907,6 +907,10 @@ function ReviewerChip({
 }) {
 	const currentUser = useCurrentUser();
 	const reviewTeams = useReviewTeams();
+	// The roster arrives async and personNameForKey below reads it, so subscribe
+	// to it here or a GitHub reviewer stays a bare person key until something
+	// else re-renders the panel.
+	usePeople();
 	const [req, setReq] = useState(reviewRequest ?? null);
 	// Why the last pick/sign-off was rejected. Without this the chip just snaps
 	// back to its old state, which reads as the button doing nothing at all —
@@ -927,12 +931,21 @@ function ReviewerChip({
 	// both mean "somebody is waiting on you to look at this", so they wear the
 	// same chip. The picker below still only ever writes the Open Session request.
 	const me = personKey(currentUser);
-	const githubRequestsMe = (prReviewRequested || []).some(
-		(person) => person.toLowerCase() === me,
+	const githubRequested = (prReviewRequested || []).map((person) =>
+		person.toLowerCase(),
 	);
+	const githubRequestsMe = githubRequested.some((person) => person === me);
 	const needsMyReview =
 		githubRequestsMe ||
 		(!!req && !accepted && reviewRequestTargetsPerson(req, me));
+	// A review asked for on GitHub, aimed at someone else. The picker mirrors
+	// its own picks into GitHub's Reviewers list, so the two sides mean the same
+	// thing, but a request made on GitHub never came back here and the chip read
+	// "Request review" while a reviewer was already waiting. Only GitHub can
+	// clear these, so the chip reports them and the menu stays a picker.
+	const githubOthers = req ? [] : githubRequested.filter((p) => p !== me);
+	const githubNames = githubOthers.map(personNameForKey);
+	const githubTarget = githubNames[0] || null;
 	const selectedTeam = req
 		? reviewTeams.find((team) => team.github === req.to)
 		: undefined;
@@ -1034,7 +1047,7 @@ function ReviewerChip({
 									? REVIEW_WAITING_PLATE
 									: accepted
 										? "text-green hover:text-green data-[popup-open]:text-green"
-										: req
+										: req || githubTarget
 											? "text-yellow hover:text-yellow data-[popup-open]:text-yellow"
 											: "",
 							)}
@@ -1045,7 +1058,9 @@ function ReviewerChip({
 										? `Reviewed by ${accepted.by}`
 										: req
 											? `Review requested by ${req.by}`
-											: "Ask a teammate to review this session"
+											: githubTarget
+												? `Review requested on GitHub from ${githubNames.join(", ")}`
+												: "Ask a teammate to review this session"
 							}
 						>
 							{needsMyReview ? (
@@ -1064,6 +1079,8 @@ function ReviewerChip({
 								</span>
 							) : req ? (
 								<UserAvatar name={req.to} size={20} />
+							) : githubTarget ? (
+								<UserAvatar name={githubTarget} size={20} />
 							) : (
 								<span className={ACTION_ICON_CLASS}>
 									<IconBell size={20} />
@@ -1079,7 +1096,9 @@ function ReviewerChip({
 										? `Reviewed by ${accepted.by}`
 										: req
 											? `Review: ${targetLabel}`
-											: "Request review"}
+											: githubTarget
+												? `Review: ${githubTarget}${githubOthers.length > 1 ? ` +${githubOthers.length - 1}` : ""}`
+												: "Request review"}
 							</span>
 						</Button>
 						)

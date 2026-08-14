@@ -91,6 +91,20 @@ export function personNameForGithubLogin(login?: string | null): string | null {
 }
 
 /**
+ * The display name behind a person key ("michiel" → "Michiel"). Person keys are
+ * what the server puts in `prReviewRequested` and `prReviewedBy`. An off-roster
+ * reviewer keeps their key, capitalized, so they still read as a name.
+ */
+export function personNameForKey(key: string): string {
+	const lower = key.trim().toLowerCase();
+	if (!lower) return "";
+	const match = getPeople().find(
+		(p) => p.name.trim().split(/\s+/)[0]?.toLowerCase() === lower,
+	);
+	return match?.name || lower.charAt(0).toUpperCase() + lower.slice(1);
+}
+
+/**
  * People rows for the composer's @-mention popup. Only offered once a query
  * is typed (a bare "@" stays the familiar file browser); name matches list
  * before file results. Inserting yields `@Name`, which the server's mention
