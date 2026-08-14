@@ -17,6 +17,14 @@ import type { UnifiedSession } from "./types";
 /** One of `session.prs` — a PR the session spans. */
 export type SessionPrRef = NonNullable<UnifiedSession["prs"]>[number];
 
+/** The facts a PR's tone and state are derived from. A ref satisfies it; so
+ *  does anything else assembled from the same four fields, which is how a
+ *  transcript chip's card (lib/chip-hover.ts) words a PR the same way. */
+export type PrStateFacts = Pick<
+	SessionPrRef,
+	"state" | "isDraft" | "reviewDecision" | "checks"
+>;
+
 export type PrTone = "green" | "purple" | "red" | "yellow" | "muted";
 
 /** Worst-first, so a series folds down to the tone that needs attention. */
@@ -33,7 +41,7 @@ const TONE_RANK: Record<PrTone, number> = {
  * fetch, no local git (a sibling PR usually lives in another repo, or on a
  * branch this worktree isn't on). deriveHeadline minus every git case.
  */
-export function refTone(ref: SessionPrRef): PrTone {
+export function refTone(ref: PrStateFacts): PrTone {
 	if (ref.state === "MERGED") return "purple";
 	if (ref.state === "CLOSED") return "muted";
 	if (
@@ -51,7 +59,7 @@ export function refTone(ref: SessionPrRef): PrTone {
  * the words and the colour never disagree, and pending checks are counted the
  * way the primary headline counts them rather than collapsing to "Open".
  */
-export function refState(ref: SessionPrRef): string {
+export function refState(ref: PrStateFacts): string {
 	if (ref.state === "MERGED") return "Merged";
 	if (ref.state === "CLOSED") return "Closed";
 	if ((ref.checks?.failed ?? 0) > 0) return "Checks failed";

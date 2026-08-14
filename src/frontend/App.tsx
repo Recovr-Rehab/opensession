@@ -81,6 +81,7 @@ import type { SubagentRef } from "./components/SubagentPane";
 import { SessionSplit, type SplitSide } from "./components/SessionSplit";
 import { RestartOverlay } from "./components/RestartOverlay";
 import { MediaLightboxHost } from "./components/MediaLightbox";
+import { ChipHoverCards } from "./components/ChipHoverCard";
 import { UpdatePill } from "./components/UpdatePill";
 import {
 	IconArchive,
@@ -4146,6 +4147,11 @@ export function App(
 						}}
 					/>
 				)}
+
+				{/* Hover cards for the session and PR chips inside rendered
+				    markdown. One watcher for the whole app: the chips are HTML
+				    strings, so they can't each own a popover. */}
+				<ChipHoverCards sessions={sessions} />
 			</div>
 		</UserGate>
 	);

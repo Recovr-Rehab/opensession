@@ -31,21 +31,31 @@ const ROW_CARD_CLASS =
  * right, top-aligned with it, pointing back at it. Pass `anchor` for a row
  * that can't be a Popover.Trigger itself — the workspace list renders its rows
  * from a plain function, so it drives one shared card off the hovered element.
+ *
+ * Placement is overridable for the one card that isn't beside a list: a
+ * transcript chip sits inline in a paragraph, where the card belongs under the
+ * word rather than off in the margin.
  */
 export function RowCardPopup({
 	anchor,
+	side = "right",
+	align = "start",
+	// Sit on the sidebar's trailing gutter instead of aligning exactly with
+	// the content seam, which made the card and chat read as one surface.
+	sideOffset = 0,
 	children,
 }: {
 	anchor?: React.ComponentProps<typeof Popover.Popup>["anchor"];
+	side?: React.ComponentProps<typeof Popover.Popup>["side"];
+	align?: React.ComponentProps<typeof Popover.Popup>["align"];
+	sideOffset?: number;
 	children: React.ReactNode;
 }) {
 	return (
 		<Popover.Popup
-			side="right"
-			align="start"
-			// Sit on the sidebar's trailing gutter instead of aligning exactly with
-			// the content seam, which made the card and chat read as one surface.
-			sideOffset={0}
+			side={side}
+			align={align}
+			sideOffset={sideOffset}
 			arrow
 			elevation="lg"
 			anchor={anchor}
@@ -100,7 +110,9 @@ export function useRowHoverCard(
 	};
 }
 
-function CardRows({ rows }: { rows: Array<[string, React.ReactNode]> }) {
+/** The card's label/value block. Every card body lays its facts out this way,
+ *  so a PR reads the same whether it was raised from a row or from a chip. */
+export function CardRows({ rows }: { rows: Array<[string, React.ReactNode]> }) {
 	if (rows.length === 0) return null;
 	return (
 		<div className="mt-[9px] flex flex-col gap-[3px]">
