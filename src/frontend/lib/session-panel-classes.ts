@@ -92,9 +92,16 @@ export const PANEL_RESIZE =
  *
  * The strip used to run edge to edge with a hairline under it, which made it
  * chrome bolted to the panel's top rather than part of the column. It is a
- * plate now: the same 8px inset and the same corner as every section under it
- * (`rounded-lg`, matching INFO_LIST_CLASS), so it reads as the first element of
- * the info column instead of a band across it.
+ * plate now: the same corner as every section under it (`rounded-lg`, matching
+ * INFO_LIST_CLASS), so it reads as the first element of the info column instead
+ * of a band across it.
+ *
+ * The margin is the column's own padding rather than a value of its own. The
+ * sections below sit 12px off the panel's edges (WorkspaceInfo's `px-2` inside
+ * the `px-1` wrapper its two panel call sites give it) and open 12px under the
+ * plate (its `pt-3`), so the plate takes the same 12px above and beside it. One
+ * padding all the way round the content, not a tighter frame at the top than
+ * the gap to the first section.
  *
  * The inset and the corner live here rather than on the strip because only this
  * call site wants them — on a phone the same strip is a row inside the session
@@ -102,7 +109,7 @@ export const PANEL_RESIZE =
  * several PRs keep its series rows inside the corner: the stack renders as one
  * plate, not a plate followed by loose rows.
  */
-export const PANEL_PR_PLATE = "mx-2 mt-2 overflow-hidden rounded-lg";
+export const PANEL_PR_PLATE = "mx-3 mt-3 overflow-hidden rounded-lg";
 
 /** The panel's scrolling content. */
 export const PANEL_BODY = "min-h-0 flex-1 overflow-y-auto";
