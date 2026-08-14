@@ -174,7 +174,7 @@ summary:focus-visible {
 .card {
 	padding: 34px;
 	border: 1px solid var(--line);
-	border-radius: 28px;
+	border-radius: 32px;
 	background: var(--card);
 }
 
@@ -203,7 +203,7 @@ summary:focus-visible {
 	overflow: hidden;
 	aspect-ratio: 3 / 2;
 	border: 1px solid var(--line);
-	border-radius: 28px;
+	border-radius: 32px;
 	background: #cfcdc8;
 }
 
@@ -733,7 +733,7 @@ summary:focus-visible {
 
 	.card {
 		padding: 22px;
-		border-radius: 22px;
+		border-radius: 26px;
 	}
 
 	.card h2 {
@@ -742,7 +742,7 @@ summary:focus-visible {
 
 	.stage {
 		aspect-ratio: 5 / 4;
-		border-radius: 22px;
+		border-radius: 26px;
 	}
 
 	.button {

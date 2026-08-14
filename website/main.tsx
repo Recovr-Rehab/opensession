@@ -193,8 +193,8 @@ function LandingPage() {
 				</a>
 
 				<h1>
-					Open Session runs your coding agents{" "}
-					<span>in sessions your team can join</span>
+					Your team’s control room{" "}
+					<span>for coding agents</span>
 				</h1>
 
 				<div className="rail-foot">
