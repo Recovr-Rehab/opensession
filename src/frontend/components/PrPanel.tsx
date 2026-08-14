@@ -52,7 +52,14 @@ import { isOutdatedReviewComment } from "../lib/pr-comments";
 import { providerFromUrl, prCapabilities } from "../lib/provider";
 import { pollWhileVisible, PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import { Textarea } from "../ui/input";
-import { IconCheck, IconDotsHorizontal, IconReturn, IconX } from "./icons";
+import {
+  IconCheck,
+  IconDiffSplit,
+  IconDiffUnified,
+  IconDotsHorizontal,
+  IconReturn,
+  IconX,
+} from "./icons";
 import { Menu, MENU_ICON } from "../ui/menu";
 import { Modal, useEnterOnMount } from "../ui/modal";
 import { Tooltip } from "../ui/tooltip";
@@ -1411,24 +1418,28 @@ export function PrPanel({
               </div>
               {codeView !== "flow" && (
                 <div className="inline-flex rounded-md border border-line bg-panel p-0.5">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className={`rounded-sm border-0 px-2.5 py-1 text-meta font-medium ${diffStyle === "unified" ? "bg-active text-fg" : "hover:bg-transparent"}`}
-                    onClick={() => changeDiffStyle("unified")}
-                    aria-pressed={diffStyle === "unified"}
-                  >
-                    Unified
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className={`rounded-sm border-0 px-2.5 py-1 text-meta font-medium ${diffStyle === "split" ? "bg-active text-fg" : "hover:bg-transparent"}`}
-                    onClick={() => changeDiffStyle("split")}
-                    aria-pressed={diffStyle === "split"}
-                  >
-                    Split
-                  </Button>
+                  <Tooltip label="Unified diff">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={`rounded-sm border-0 ${diffStyle === "unified" ? "bg-active text-fg" : "hover:bg-transparent"}`}
+                      onClick={() => changeDiffStyle("unified")}
+                      aria-label="Unified diff"
+                      aria-pressed={diffStyle === "unified"}
+                      icon={<IconDiffUnified size={20} />}
+                    />
+                  </Tooltip>
+                  <Tooltip label="Split diff">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className={`rounded-sm border-0 ${diffStyle === "split" ? "bg-active text-fg" : "hover:bg-transparent"}`}
+                      onClick={() => changeDiffStyle("split")}
+                      aria-label="Split diff"
+                      aria-pressed={diffStyle === "split"}
+                      icon={<IconDiffSplit size={20} />}
+                    />
+                  </Tooltip>
                 </div>
               )}
               {codeView !== "flow" && (

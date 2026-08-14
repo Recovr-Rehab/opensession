@@ -1076,3 +1076,27 @@ export function IconDensityCompact(p: IconProps) {
     </Svg>
   );
 }
+
+// Diff layouts: one shared column for unified, two parallel columns for split.
+export function IconDiffUnified(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <rect {...stroke} x="4.75" y="5.25" width="14.5" height="13.5" rx="1.5" />
+      <path {...stroke} d="M8 9H16" />
+      <path {...stroke} d="M8 12H14" />
+      <path {...stroke} d="M8 15H16" />
+    </Svg>
+  );
+}
+
+export function IconDiffSplit(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <rect {...stroke} x="4.75" y="5.25" width="14.5" height="13.5" rx="1.5" />
+      <path {...stroke} d="M12 5.25V18.75" />
+      <path {...stroke} d="M7.25 9H9.5M14.5 9H16.75" />
+      <path {...stroke} d="M7.25 12H9.5M14.5 12H16.75" />
+      <path {...stroke} d="M7.25 15H9.5M14.5 15H16.75" />
+    </Svg>
+  );
+}
