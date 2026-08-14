@@ -222,9 +222,14 @@ export const TurnBlock = React.memo(function TurnBlock({
             )
           )}
           {expanded && (failures > 0 || editedFiles.length > 0) && (
-            <div className="ml-7 mt-1 flex flex-wrap items-center gap-x-0.5 gap-y-1 px-1 text-label leading-4 text-faint">
+            // The summary reads as one more row of the fold, so it starts
+            // where every other row does. Each child carries its own 4px lead
+            // (a chip's `ml-1`), which the negative margin cancels: the first
+            // chip's box then lands on the tool rows' box and its badge on
+            // their glyph, rather than a column of its own.
+            <div className="-ml-1 mt-1 flex flex-wrap items-center gap-x-0.5 gap-y-1 pr-1 text-label leading-4 text-faint">
               {failures > 0 && (
-                <span className="mr-1.5 text-red/80">
+                <span className="ml-1 mr-1.5 text-red/80">
                   {failures} failed {failures === 1 ? "step" : "steps"}
                 </span>
               )}
