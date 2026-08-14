@@ -11,8 +11,7 @@
   },
   "scripts": {
     "start": "electron .",
-    "vendor:opencode": "sh scripts/fetch-opencode.sh",
-    "dist": "bun run vendor:opencode && electron-builder --mac",
+    "dist": "electron-builder --mac",
     "postinstall": "sh scripts/brand-dev-electron.sh || true"
   },
   "devDependencies": {

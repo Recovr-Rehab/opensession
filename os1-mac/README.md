@@ -122,19 +122,13 @@ are Tella's — supply your own):
 
 Releasing: `git tag v0.1.0 && git push origin v0.1.0`.
 
-Local `bun run dist` produces an unsigned build (signing/notarization are
-skipped with a warning when no identity/credentials are present). It first
-fills the gitignored `build/vendor/` directory: pinned OpenCode 1.18.18
-(`scripts/fetch-opencode.sh`), pinned Bun 1.3.14 (`scripts/fetch-bun.sh`), and
-the server sidecar (`scripts/build-server-sidecar.ts` — requires `bun install`
-at the repository root first). Release builds copy those into
-`Contents/Resources` (`opencode`, `bun`, `server/`); `scripts/sign-binaries.js`
-signs the two Bun-based CLIs with `build/entitlements.opencode.plist` and every
-Mach-O inside the sidecar's node_modules with plain hardened-runtime
-signatures. The workflow verifies the versions, Developer ID signatures, JIT
-entitlements, sidecar layout, and enclosing app signature before notarization. The package keeps only Electron's English locale
-resources because OS¹ is currently English-only; Chromium's unused locale set
-otherwise adds roughly 49 MB to the installed app.
+Local `bun run dist` produces an unsigned build when signing credentials are
+absent. Release builds package the Electron shell and its icon resources. The
+pipeline embeds the Developer ID provisioning profile and signs only the outer
+app with the associated-domains entitlement, so Universal Links work without
+Electron helpers claiming an entitlement they cannot support. The package keeps
+only Electron's English locale resources because OS¹ is currently English-only;
+Chromium's unused locale set otherwise adds roughly 49 MB to the installed app.
 
 ## Auto-update
 

@@ -22,9 +22,6 @@ files:
 extraResources:
   - from: build/Assets.car
     to: Assets.car
-  - from: build/vendor/opencode
-    to: opencode
-afterPack: scripts/sign-binaries.js
 mac:
   category: public.app-category.developer-tools
   icon: build/icon.icns
@@ -35,10 +32,6 @@ mac:
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
-  # The afterPack hook signs the vendored OpenCode runtime. Keep the normal
-  # signer from replacing that signature.
-  signIgnore:
-    - Contents/Resources/opencode$
   # Universal links: once the Developer ID provisioning profile for
   # dev.tella.os1.shell exists (README "Universal links"), switch ONLY `entitlements`
   # above to build/entitlements.mac.applinks.plist and add:
