@@ -365,6 +365,26 @@ describe("opencodeRunPolicy (unattended least-privilege enforcement)", () => {
     expect(p.disables["workos_revoke_session"]).toBe(false);
   });
 
+  test("incident.io: an automation may declare, but not mutate anything else", () => {
+    const p = opencodeRunPolicy({
+      journalKind: "automation",
+      deniedTools: DENIED,
+      confirmTools: STRIPE_CONFIRM_TOOLS,
+    });
+    // Declaring is the point of the grant: it lands in triage with no
+    // severity, so a human still accepts it.
+    expect(p.disables["incident_incident_create"]).toBeUndefined();
+    // Reads stay available for deduping against open incidents.
+    expect(p.disables["incident_incident_list"]).toBeUndefined();
+    expect(p.disables["incident_incident_show"]).toBeUndefined();
+    // Everything that changes response state is stripped.
+    expect(p.disables["incident_incident_update"]).toBe(false);
+    expect(p.disables["incident_escalation_respond"]).toBe(false);
+    expect(p.disables["incident_follow_up_create"]).toBe(false);
+    expect(p.disables["incident_alert_attach"]).toBe(false);
+    expect(p.disables["incident_extension_plugin_update"]).toBe(false);
+  });
+
   test("Stripe money-movers fold into the deny-set (post-in-note), incl. stripe_api_write", () => {
     const p = opencodeRunPolicy({
       journalKind: "automation",

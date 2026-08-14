@@ -998,6 +998,16 @@ const WORKOS_WRITE_DENIAL =
   "This tool isn't available in automation runs — they get read-only WorkOS " +
   "access for investigation. Use get_*/list_* to look up the user/org; if a " +
   "change is needed, recommend it in the note for a human to do.";
+// incident.io: a run may DECLARE (incident_create, which lands in triage with
+// no severity for a human to accept) and read everything, but nothing else.
+// The workspace API key carries broad roles, so the ceiling has to come from
+// here: untrusted ticket text must not be able to close or rename someone
+// else's incident, acknowledge a live page, or change response settings.
+const INCIDENT_WRITE_DENIAL =
+  "This tool isn't available in automation runs — they may declare an incident " +
+  "(mcp__incident__incident_create, which starts in triage for a human to accept) " +
+  "and read incident data, nothing more. Put anything else you want done in your " +
+  "internal note or final report for a human to action.";
 const AUTOMATION_DENIED_TOOLS: Record<string, string> = {
   // Plain: read + internal note only, never customer-facing or state-changing
   mcp__plain__reply_to_thread: PLAIN_WRITE_DENIAL,
@@ -1020,6 +1030,19 @@ const AUTOMATION_DENIED_TOOLS: Record<string, string> = {
   mcp__workos__send_password_reset_email: WORKOS_WRITE_DENIAL,
   mcp__workos__send_verification_email: WORKOS_WRITE_DENIAL,
   mcp__workos__get_impersonation_url: WORKOS_WRITE_DENIAL,
+  // incident.io: declare + read only — no mutating anything else
+  mcp__incident__incident_update: INCIDENT_WRITE_DENIAL,
+  mcp__incident__follow_up_create: INCIDENT_WRITE_DENIAL,
+  mcp__incident__follow_up_update: INCIDENT_WRITE_DENIAL,
+  mcp__incident__escalation_respond: INCIDENT_WRITE_DENIAL,
+  mcp__incident__alert_attach: INCIDENT_WRITE_DENIAL,
+  mcp__incident__alert_detach: INCIDENT_WRITE_DENIAL,
+  mcp__incident__investigation_steer: INCIDENT_WRITE_DENIAL,
+  mcp__incident__investigation_sync: INCIDENT_WRITE_DENIAL,
+  mcp__incident__extension_plugin_create: INCIDENT_WRITE_DENIAL,
+  mcp__incident__extension_plugin_update: INCIDENT_WRITE_DENIAL,
+  mcp__incident__extension_plugin_sync: INCIDENT_WRITE_DENIAL,
+  mcp__incident__extension_skill_feedback_update: INCIDENT_WRITE_DENIAL,
 };
 
 /** Tool-permission denials applied to every automation run (and to interactive
