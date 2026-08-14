@@ -29,7 +29,7 @@ import type { FeedbackRecord } from "../agents/github/feedback-gates";
 const AUDIT_DIR = stateDir("audit");
 const CACHE_DIR = stateDir("analytics-cache");
 // Bump when the rollup shape changes — stale disk caches recompute.
-const ROLLUP_VERSION = 6;
+const ROLLUP_VERSION = 7;
 
 interface TokenTotals {
 	input: number;
@@ -100,6 +100,11 @@ interface DayRollup {
 	tokens: TokenTotals;
 	costUsd: number;
 	costedTurns: number;
+	/** Turns recorded before per-step usage accounting landed (2026-08-14),
+	 *  whose result event carries only the turn's LAST model request. They
+	 *  undercount tokens and cost by the number of steps in the turn, measured
+	 *  at ~7x. Their events have no `steps` field, which is how we tell. */
+	legacyUsageTurns: number;
 	byModel: Record<string, ModelAgg>;
 	/** Turns whose audit events carried no model (pre-2026-07-09 SDK-runner
 	 *  days), keyed by session id — resolved against the session store's
@@ -139,6 +144,7 @@ function rollupAuditDay(date: string): DayRollup {
 		tokens: emptyTokens(),
 		costUsd: 0,
 		costedTurns: 0,
+		legacyUsageTurns: 0,
 		byModel: {},
 		unknownModel: {},
 		bySession: {},
@@ -243,6 +249,7 @@ function rollupAuditDay(date: string): DayRollup {
 				rollup.tokens.cacheWrite += cacheWrite;
 				rollup.costUsd += cost;
 				if (cost > 0) rollup.costedTurns++;
+				if (e.steps === undefined) rollup.legacyUsageTurns++;
 				const model = e.model
 					? shortModel(String(e.model))
 					: promptModel.get(String(e.session_id || e.bks_session_id || "")) || "";
@@ -731,9 +738,13 @@ export interface AnalyticsSummary {
 		cacheWriteTokens: number;
 		totalTokens: number;
 		costUsd: number;
-		/** Turns that reported a price — the rest run on subscription pools
+		/** Turns that reported a price. The rest run on subscription pools
 		 *  and report $0, so cost covers `costedTurns` of `turns`. */
 		costedTurns: number;
+		/** Turns whose tokens and cost were recorded before per-step accounting
+		 *  (2026-08-14) and so undercount by roughly 7x. Zero once a range sits
+		 *  entirely after the fix, so a caveat built on it retires itself. */
+		legacyUsageTurns: number;
 		prsOpened: number;
 		prsMerged: number;
 		allPrsOpened: number;
@@ -863,6 +874,7 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 		totalTokens: 0,
 		costUsd: 0,
 		costedTurns: 0,
+		legacyUsageTurns: 0,
 		prsOpened: 0,
 		prsMerged: 0,
 		allPrsOpened: 0,
@@ -1051,6 +1063,7 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 		totals.cacheWriteTokens += r.tokens.cacheWrite;
 		totals.costUsd += r.costUsd || 0;
 		totals.costedTurns += r.costedTurns || 0;
+		totals.legacyUsageTurns += r.legacyUsageTurns || 0;
 	}
 	totals.totalTokens =
 		totals.inputTokens + totals.outputTokens + totals.cacheReadTokens + totals.cacheWriteTokens;

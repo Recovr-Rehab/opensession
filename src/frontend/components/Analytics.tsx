@@ -439,6 +439,10 @@ export function Analytics() {
 		const costUsd = data.totals.costUsd ?? 0;
 		const costedTurns = data.totals.costedTurns ?? 0;
 		const hasCost = costUsd > 0;
+		// Turns from before per-step accounting recorded only the last model
+		// request of each turn. A range straddling the fix mixes the two, which
+		// looks like a step change in usage rather than a change in measurement.
+		const legacyTurns = data.totals.legacyUsageTurns ?? 0;
 		const costModels = [...data.models]
 			.filter((m) => (m.costUsd ?? 0) > 0)
 			.sort((a, b) => (b.costUsd ?? 0) - (a.costUsd ?? 0))
@@ -507,7 +511,7 @@ export function Analytics() {
 		});
 		const splitDate = labels[Math.floor(labels.length / 2)] || "";
 
-		return { labels, kindSeries, kindValues, modelSeries, modelValues, tokenSeries, tokenValues, totalTokens, costSeries, costValues, costUsd, costedTurns, hasCost, prSeries, prValues, turnSeries, turnValues, factorySeries, factoryValues, rq, reviewSeries, reviewValues, splitDate, repoColor, personRepoRows, maxPersonOutput, personRepoSeries };
+		return { labels, kindSeries, kindValues, modelSeries, modelValues, tokenSeries, tokenValues, totalTokens, costSeries, costValues, costUsd, costedTurns, hasCost, legacyTurns, prSeries, prValues, turnSeries, turnValues, factorySeries, factoryValues, rq, reviewSeries, reviewValues, splitDate, repoColor, personRepoRows, maxPersonOutput, personRepoSeries };
 	}, [data]);
 
 	// Deliberately NOT ui/input's field: these two sit inside the range row
@@ -653,6 +657,13 @@ export function Analytics() {
 								series={derived.tokenSeries}
 							>
 								<BarChart labels={derived.labels} series={derived.tokenSeries} values={derived.tokenValues} mode="stacked" />
+								{derived.legacyTurns > 0 && (
+									<p className="m-0 mt-2 text-meta text-faint">
+										{fmtInt(derived.legacyTurns)} of {fmtInt(data.totals.turns)} turns in this range were
+										recorded before per-step accounting (14 Aug), which kept only the last model request of
+										each turn. Their tokens and cost read about 7x low.
+									</p>
+								)}
 							</ChartCard>
 							{derived.hasCost && (
 								<ChartCard

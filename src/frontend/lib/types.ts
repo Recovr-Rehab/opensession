@@ -978,6 +978,10 @@ export interface AnalyticsSummary {
 		/** Turns that reported a price. Cost covers these of `turns`; the rest
 		 *  run on subscription pools and report $0. */
 		costedTurns?: number;
+		/** Turns recorded before per-step usage accounting (2026-08-14), which
+		 *  undercount tokens and cost by roughly 7x. Goes to zero as the range
+		 *  moves past the fix, retiring the caveat that reads it. */
+		legacyUsageTurns?: number;
 		prsOpened: number;
 		prsMerged: number;
 		allPrsOpened: number;
