@@ -41,7 +41,6 @@ import {
 } from "../lib/api";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
-import { Segmented, SegmentedOption } from "../ui/segmented";
 import { toast } from "../ui/toast";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import { CommentableDiff, type CommentTarget, type PendingComment } from "./CommentableDiff";
@@ -55,12 +54,15 @@ import { providerFromUrl, prCapabilities } from "../lib/provider";
 import { pollWhileVisible, PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import { Textarea } from "../ui/input";
 import {
+  IconBranches,
   IconCheck,
   IconChevronRight,
   IconDiffSplit,
   IconDiffUnified,
   IconDotsHorizontal,
+  IconFile,
   IconGlobe,
+  IconListCircles,
   IconReturn,
   IconX,
 } from "./icons";
@@ -91,6 +93,14 @@ import { revealDiffFile } from "../lib/diff-navigation";
 export { checkClass, isDeployment, formatPrCommentPrompt, CheckRow, PrStateIcon };
 
 type ReviewEvent = "COMMENT" | "APPROVE" | "REQUEST_CHANGES";
+
+/** The lenses the code page can be read through, in menu order. */
+const CODE_VIEWS = {
+  all: { label: "All changes", Icon: IconFile },
+  guide: { label: "Review guide", Icon: IconListCircles },
+  flow: { label: "Code flow", Icon: IconBranches },
+} as const;
+type CodeView = keyof typeof CODE_VIEWS;
 
 interface Props {
   sessionId: string;
@@ -1407,99 +1417,97 @@ export function PrPanel({
                   {handEdited.length === 1 ? "" : "s"}
                 </Button>
               )}
-              {/* One lens at a time, named as briefly as the page allows: the
-                  strip already says Files changed, so "All changes" only
-                  repeats it. Both controls are the same segmented primitive at
-                  its `sm` density, so the row reads as one set of chrome
-                  rather than three differently-built groups. */}
-              <Segmented
-                label="Diff lens"
-                size="sm"
-                value={codeView}
-                onValueChange={(next) => {
-                  const key = next as "all" | "guide" | "flow";
-                  if (key === "flow" && codeView !== "flow" && codeFlowError) {
-                    setCodeFlow(null);
-                    setCodeFlowError(null);
-                  }
-                  setCodeView(key);
-                }}
-              >
-                {([
-                  ["all", "All"],
-                  ["guide", "Guide"],
-                  ["flow", "Flow"],
-                ] as const).map(([key, label]) => (
-                  <SegmentedOption
-                    key={key}
-                    value={key}
-                    disabled={key === "flow" && ((!diff?.patch && !diff?.skippedFiles) || !prPatchVersion)}
-                  >
-                    {label}
-                  </SegmentedOption>
-                ))}
-              </Segmented>
-              {/* How the diff is drawn is one menu, not a control per option:
-                  the trigger wears the layout in effect, so the row spends a
-                  single glyph on something read far less often than the lens.
-                  `w-auto px-1.5` because an icon-only Button sizes to the glyph
-                  alone and the caret needs room beside it; the phone height
-                  matches the tap box the segmented options grow to. */}
-              {codeView !== "flow" && (
-                <Menu.Root>
-                  <Tooltip label="Diff display">
-                    <Menu.Trigger
-                      render={
-                        <Button
-                          variant="ghost"
-                          size="xs"
-                          className="w-auto px-1.5 phone:min-h-8 phone:px-2"
-                          aria-label="Diff display"
-                          caret
-                          icon={
-                            diffStyle === "split" ? (
-                              <IconDiffSplit size={17} />
-                            ) : (
-                              <IconDiffUnified size={17} />
-                            )
-                          }
-                        />
+              {/* One view control for the code page. Which lens is reading the
+                  change, how the diff is drawn and whether lines wrap are the
+                  same kind of choice, so they share a menu rather than a
+                  control each, and the trigger names the lens in effect —
+                  the one a reader actually moves between. Layout and wrapping
+                  drop out under the flow lens, which draws no diff. */}
+              <Menu.Root>
+                <Tooltip label="Change the view">
+                  <Menu.Trigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        className="phone:min-h-8"
+                        caret
+                        icon={React.createElement(CODE_VIEWS[codeView].Icon, { size: 17 })}
+                      >
+                        {CODE_VIEWS[codeView].label}
+                      </Button>
+                    }
+                  />
+                </Tooltip>
+                <Menu.Popup align="end" className="min-w-[210px]">
+                  <Menu.RadioGroup
+                    value={codeView}
+                    onValueChange={(next) => {
+                      const key = String(next) as CodeView;
+                      if (key === "flow" && codeView !== "flow" && codeFlowError) {
+                        setCodeFlow(null);
+                        setCodeFlowError(null);
                       }
-                    />
-                  </Tooltip>
-                  <Menu.Popup align="end" className="min-w-[190px]">
-                    <Menu.RadioGroup
-                      value={diffStyle}
-                      onValueChange={(next) => changeDiffStyle(String(next) as "unified" | "split")}
-                    >
-                      <Menu.RadioItem value="unified" closeOnClick>
-                        <IconDiffUnified size={18} className={MENU_ICON} />
-                        <span className="min-w-0 flex-1 truncate">Unified diff</span>
-                        {diffStyle === "unified" && (
-                          <IconCheck className="shrink-0 text-accent" size={17} />
-                        )}
-                      </Menu.RadioItem>
-                      <Menu.RadioItem value="split" closeOnClick>
-                        <IconDiffSplit size={18} className={MENU_ICON} />
-                        <span className="min-w-0 flex-1 truncate">Split diff</span>
-                        {diffStyle === "split" && (
-                          <IconCheck className="shrink-0 text-accent" size={17} />
-                        )}
-                      </Menu.RadioItem>
-                    </Menu.RadioGroup>
-                    <Menu.Separator />
-                    <Menu.CheckboxItem
-                      checked={wrapLines}
-                      onCheckedChange={changeWrapLines}
-                      closeOnClick
-                    >
-                      <IconReturn size={18} className={MENU_ICON} />
-                      <span className="min-w-0 flex-1 truncate">Wrap long lines</span>
-                      {wrapLines && <IconCheck className="shrink-0 text-accent" size={17} />}
-                    </Menu.CheckboxItem>
-                  </Menu.Popup>
-                </Menu.Root>
-              )}
+                      setCodeView(key);
+                    }}
+                  >
+                    {(Object.keys(CODE_VIEWS) as CodeView[]).map((key) => {
+                      const { label, Icon } = CODE_VIEWS[key];
+                      return (
+                        <Menu.RadioItem
+                          key={key}
+                          value={key}
+                          closeOnClick
+                          disabled={
+                            key === "flow" &&
+                            ((!diff?.patch && !diff?.skippedFiles) || !prPatchVersion)
+                          }
+                        >
+                          <Icon size={18} className={MENU_ICON} />
+                          <span className="min-w-0 flex-1 truncate">{label}</span>
+                          {codeView === key && (
+                            <IconCheck className="shrink-0 text-accent" size={17} />
+                          )}
+                        </Menu.RadioItem>
+                      );
+                    })}
+                  </Menu.RadioGroup>
+                  {codeView !== "flow" && (
+                    <>
+                      <Menu.Separator />
+                      <Menu.RadioGroup
+                        value={diffStyle}
+                        onValueChange={(next) => changeDiffStyle(String(next) as "unified" | "split")}
+                      >
+                        <Menu.RadioItem value="unified" closeOnClick>
+                          <IconDiffUnified size={18} className={MENU_ICON} />
+                          <span className="min-w-0 flex-1 truncate">Unified diff</span>
+                          {diffStyle === "unified" && (
+                            <IconCheck className="shrink-0 text-accent" size={17} />
+                          )}
+                        </Menu.RadioItem>
+                        <Menu.RadioItem value="split" closeOnClick>
+                          <IconDiffSplit size={18} className={MENU_ICON} />
+                          <span className="min-w-0 flex-1 truncate">Split diff</span>
+                          {diffStyle === "split" && (
+                            <IconCheck className="shrink-0 text-accent" size={17} />
+                          )}
+                        </Menu.RadioItem>
+                      </Menu.RadioGroup>
+                      <Menu.Separator />
+                      <Menu.CheckboxItem
+                        checked={wrapLines}
+                        onCheckedChange={changeWrapLines}
+                        closeOnClick
+                      >
+                        <IconReturn size={18} className={MENU_ICON} />
+                        <span className="min-w-0 flex-1 truncate">Wrap long lines</span>
+                        {wrapLines && <IconCheck className="shrink-0 text-accent" size={17} />}
+                      </Menu.CheckboxItem>
+                    </>
+                  )}
+                </Menu.Popup>
+              </Menu.Root>
             </div>
           )}
         </div>
