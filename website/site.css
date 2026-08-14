@@ -317,29 +317,34 @@ summary:focus-visible {
 
 .features {
 	display: grid;
-	gap: 30px 44px;
+	gap: 38px 44px;
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .feature-icon {
 	display: block;
-	margin-bottom: 12px;
+	margin-bottom: 16px;
 	color: rgba(20, 22, 26, 0.62);
 }
 
-/* Name and meaning run as one paragraph, so the eye reads a sentence rather
-   than a heading with a caption under it. Weight alone separates them. */
-.feature p {
+/* A name on its own line, then what it means: the capability is the thing you
+   scan for, so it gets a line rather than a bold run-in that the eye has to
+   find inside a sentence. */
+.feature h3 {
 	margin: 0;
+	color: var(--ink);
+	font-size: 17px;
+	font-weight: 650;
+	letter-spacing: -0.015em;
+	line-height: 1.25;
+}
+
+.feature p {
+	margin: 7px 0 0;
 	color: var(--muted);
 	font-size: 15px;
 	line-height: 1.5;
 	text-wrap: pretty;
-}
-
-.feature b {
-	color: var(--ink);
-	font-weight: 650;
 }
 
 /* ── Steps ───────────────────────────────────────────────────────────── */
@@ -659,7 +664,7 @@ summary:focus-visible {
 	   a line. Below that the grid stops helping and starts shredding the
 	   sentences, so it goes to one column well before the layout does. */
 	.features {
-		gap: 24px;
+		gap: 32px;
 		grid-template-columns: minmax(0, 1fr);
 	}
 }

@@ -159,9 +159,8 @@ function Feature({
 			<span className="feature-icon" aria-hidden="true">
 				{icon}
 			</span>
-			<p>
-				<b>{name}</b> {children}
-			</p>
+			<h3>{name}</h3>
+			<p>{children}</p>
 		</div>
 	);
 }
@@ -223,43 +222,43 @@ function LandingPage() {
 
 				<section className="card">
 					<div className="features">
-						<Feature icon={<IconSparkle size={20} />} name="Any model">
+						<Feature icon={<IconSparkle size={28} />} name="Any model">
 							Point a session at whatever model suits the work, and change it
 							mid-run without losing the thread.
 						</Feature>
-						<Feature icon={<IconPeople size={20} />} name="Sessions are shared">
+						<Feature icon={<IconPeople size={28} />} name="Sessions are shared">
 							Anyone on the team opens the same session, sees the run as it
 							happens, and sends the next turn.
 						</Feature>
-						<Feature icon={<IconGlobe size={20} />} name="On your machines">
+						<Feature icon={<IconGlobe size={28} />} name="On your machines">
 							Self-hosted from the first minute. The checkouts, the transcripts
 							and the keys stay on hardware you run.
 						</Feature>
-						<Feature icon={<IconBranches size={20} />} name="A worktree each">
+						<Feature icon={<IconBranches size={28} />} name="A worktree each">
 							Every session gets its own branch and checkout, so ten agents work
 							at once without stepping on each other.
 						</Feature>
-						<Feature icon={<IconPullRequest size={20} />} name="Ends in a pull request">
+						<Feature icon={<IconPullRequest size={28} />} name="Ends in a pull request">
 							Read the diff, then open the PR from the same place the work
 							happened. Review stays next to the transcript.
 						</Feature>
-						<Feature icon={<IconRobot size={20} />} name="Agents that delegate">
+						<Feature icon={<IconRobot size={28} />} name="Agents that delegate">
 							A session hands focused work to its own sub-agents and keeps their
 							noise out of the conversation you are reading.
 						</Feature>
-						<Feature icon={<IconClock size={20} />} name="Runs without you">
+						<Feature icon={<IconClock size={28} />} name="Runs without you">
 							Schedules, webhooks and watched channels start sessions on their
 							own, each scoped to the tools it is allowed.
 						</Feature>
-						<Feature icon={<IconTerminal size={20} />} name="Shells and previews">
+						<Feature icon={<IconTerminal size={28} />} name="Shells and previews">
 							Open a terminal in the worktree, or a running preview of the
 							branch, beside the session that built it.
 						</Feature>
-						<Feature icon={<IconStack size={20} />} name="Everywhere you are">
+						<Feature icon={<IconStack size={28} />} name="Everywhere you are">
 							A web app, a Mac app, a native iOS app, a browser side panel and a
 							terminal client, all on one server.
 						</Feature>
-						<Feature icon={<IconRepo size={20} />} name="Open source">
+						<Feature icon={<IconRepo size={28} />} name="Open source">
 							Read it, fork it, run it. There is no hosted tier in the path that
 							you have to take on trust.
 						</Feature>
