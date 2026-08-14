@@ -63,6 +63,7 @@ export const DEFAULT_WORKSPACE_MODEL_SETTINGS: WorkspaceModelSettings = {
     { id: "dial-high", label: "Dial · High", group: "dial", lead: { model: "opencode/openai/gpt-5.6-sol", effort: "xhigh" }, supporting: [{ model: "opencode/anthropic/claude-fable-5", effort: "high", role: "Read-only oracle" }], instructions: "Use the oracle for a second opinion on hard plans, architecture decisions, and significant reviews. Integrate its advice yourself." },
     { id: "dial-medium", label: "Dial · Medium", group: "dial", lead: { model: "opencode/openai/gpt-5.6-sol", effort: "high" }, supporting: [{ model: "opencode/openai/gpt-5.6-sol", effort: "xhigh", role: "Read-only oracle" }], instructions: "Use the oracle for a second opinion when extra scrutiny helps." },
     { id: "dial-low", label: "Dial · Low", group: "dial", lead: { model: "opencode/openai/gpt-5.6-luna", effort: "high" }, supporting: [{ model: "opencode/openai/gpt-5.6-sol", effort: "xhigh", role: "Read-only oracle" }], instructions: "Use the oracle only when the task needs a second opinion." },
+    { id: "opus-fable", label: "Opus 5 + Fable oracle", group: "custom", lead: { model: "opencode/anthropic/claude-opus-5", effort: "xhigh" }, supporting: [{ model: "opencode/anthropic/claude-fable-5", effort: "high", role: "Read-only oracle" }], instructions: "Use the oracle for a second opinion on hard plans, architecture decisions, and significant reviews. Integrate its advice yourself." },
     { id: "orchestrator-fable", label: "Orchestrator · Fable 5", group: "orchestrator", lead: { model: "opencode/anthropic/claude-fable-5", effort: "high" }, supporting: [{ model: "opencode/anthropic/claude-sonnet-5", effort: "medium", role: "Implementation worker" }, { model: "opencode/anthropic/claude-haiku-4-5", effort: "high", role: "Fast worker" }], instructions: "Plan, review, and integrate. Delegate focused implementation work to supporting workers with self-contained briefs, then verify their results." },
     { id: "orchestrator-sol", label: "Orchestrator · Sol", group: "orchestrator", lead: { model: "opencode/openai/gpt-5.6-sol", effort: "xhigh" }, supporting: [{ model: "opencode/openai/gpt-5.6-terra", effort: "medium", role: "Implementation worker" }, { model: "opencode/openai/gpt-5.6-luna", effort: "low", role: "Fast worker" }], instructions: "Plan, review, and integrate. Delegate focused implementation work to supporting workers with self-contained briefs, then verify their results." },
   ],
@@ -152,10 +153,18 @@ export function getWorkspace(id: string): Workspace | null {
   if (!safeId(id)) return null;
   const f = fileFor(id);
   if (!existsSync(f)) return null;
-  try {
-    const workspace = JSON.parse(readFileSync(f, "utf8")) as Workspace;
-    return { ...workspace, modelSettings: workspace.modelSettings || copyModelSettings(DEFAULT_WORKSPACE_MODEL_SETTINGS) };
-  } catch {
+	try {
+		const workspace = JSON.parse(readFileSync(f, "utf8")) as Workspace;
+		if (workspace.modelSettings) return workspace;
+		// This is a one-time migration, not a merge. Once written, defaults are
+		// ordinary workspace JSON and a person can edit or remove any preset.
+		const seeded = {
+			...workspace,
+			modelSettings: copyModelSettings(DEFAULT_WORKSPACE_MODEL_SETTINGS),
+		};
+		writeJsonAtomic(f, seeded);
+		return seeded;
+	} catch {
     return null;
   }
 }

@@ -1027,8 +1027,22 @@ export function App(
 	const paletteOpenRef = useRef(palette.open);
 	paletteOpenRef.current = palette.open;
 	const openPalette = React.useCallback((prompt?: string) => {
-		setPalette({ open: true, prompt });
-	}, []);
+		const workspaceId = route.view === "workspace"
+			? route.id
+			: route.view === "session"
+				? sessions.find((session) => session.id === route.id)?.workspaceId
+				: undefined;
+		const workspace = workspaceId
+			? workspaces.find((item) => item.id === workspaceId)
+			: undefined;
+		setPalette({
+			open: true,
+			prompt,
+			...(workspaceId ? { workspaceId } : {}),
+			...(workspace?.repo ? { repo: workspace.repo } : {}),
+			...(workspace?.branch ? { branch: workspace.branch } : {}),
+		});
+	}, [route, sessions, workspaces]);
 	const openPrefilledSession = React.useCallback((prefill: NewSessionPrefill) => {
 		setPalette({ open: true, ...prefill });
 	}, []);
