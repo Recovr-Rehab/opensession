@@ -1025,22 +1025,11 @@ export function App(
 	const paletteOpenRef = useRef(palette.open);
 	paletteOpenRef.current = palette.open;
 	const openPalette = React.useCallback((prompt?: string) => {
-		const workspaceId = route.view === "workspace"
-			? route.id
-			: route.view === "session"
-				? sessions.find((session) => session.id === route.id)?.workspaceId
-				: undefined;
-		const workspace = workspaceId
-			? workspaces.find((item) => item.id === workspaceId)
-			: undefined;
-		setPalette({
-			open: true,
-			prompt,
-			...(workspaceId ? { workspaceId } : {}),
-			...(workspace?.repo ? { repo: workspace.repo } : {}),
-			...(workspace?.branch ? { branch: workspace.branch } : {}),
-		});
-	}, [route, sessions, workspaces]);
+		// This is the global new-session action. It must not inherit the workspace
+		// behind it: without workspaceId, NewSession creates a workspace with its
+		// first session. Explicit workspace controls use handleNewSession instead.
+		setPalette({ open: true, prompt });
+	}, []);
 	const openPrefilledSession = React.useCallback((prefill: NewSessionPrefill) => {
 		setPalette({ open: true, ...prefill });
 	}, []);
