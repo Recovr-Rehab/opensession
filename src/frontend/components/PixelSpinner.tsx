@@ -18,6 +18,11 @@ import {
  * color (via `currentColor`), so the color is controlled by the caller's text
  * class (e.g. `text-fg` for a neutral black/white loader).
  *
+ * Reserved for GENERATING: a model producing output. Anything that is merely
+ * fetching, uploading or preparing wears the ring in ui/spinner instead, or a
+ * skeleton in the shape of what is arriving. Worn on a slow fetch, the wave
+ * says the agent is working on a request nobody made.
+ *
  * Styling lives in lib/pixel-spinner-classes; the keyframe is in base.css,
  * with the other keyframes the utilities reference.
  *

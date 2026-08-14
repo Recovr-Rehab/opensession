@@ -16,7 +16,7 @@ import { Tooltip } from "../ui/tooltip";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { useResolvedTheme } from "./CodeHighlight";
-import { PixelSpinner } from "./PixelSpinner";
+import { Spinner } from "../ui/spinner";
 import { EmptyState } from "../ui/state";
 
 /* The +/− counts. DiffPanel's summary strip carries the same pair, and the two
@@ -811,7 +811,7 @@ export function CommentableDiff({
       <div className="-mb-1 flex items-center justify-end">
         {groupsLoading && (
           <span className={GROUPS_NOTE} role="status">
-            <PixelSpinner cycling={false} className="size-3 text-faint" />
+            <Spinner className="text-faint" />
             Organizing files…
           </span>
         )}

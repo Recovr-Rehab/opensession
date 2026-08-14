@@ -10,7 +10,7 @@ import { Tooltip } from "../ui/tooltip";
 import { BrandMark } from "./BrandMark";
 import { openLightbox } from "./MediaLightbox";
 import { IconChevronDown, IconPlus, IconX } from "./icons";
-import { PixelSpinner } from "./PixelSpinner";
+import { Spinner } from "../ui/spinner";
 
 const MAX_SLACK_IMAGE_BYTES = 20 * 1024 * 1024;
 
@@ -248,7 +248,7 @@ export function ShippedChangeComposer({
 				<div className="mt-2.5 flex items-center gap-1.5 phone:mt-2">
 					<input ref={fileInputRef} className="sr-only" type="file" accept="image/*" multiple onChange={(event) => { void addImages(Array.from(event.target.files || [])); event.currentTarget.value = ""; }} />
 					<button type="button" aria-label="Add images" title="Add images" className="focus-ring inline-flex size-8 shrink-0 items-center justify-center rounded-control text-dim transition-[background-color,color,scale] hover:bg-hover hover:text-fg active:scale-[0.96] disabled:opacity-40 phone:size-10" disabled={status !== "idle" || uploading || screenshots.length >= 10} onClick={() => fileInputRef.current?.click()}>
-						{uploading ? <PixelSpinner /> : <IconPlus size={20} />}
+						{uploading ? <Spinner size="md" /> : <IconPlus size={20} />}
 					</button>
 					<div className="flex-1" />
 					<label className="relative flex items-center">

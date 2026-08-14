@@ -187,7 +187,7 @@ import {
 	IconArrowUpRight,
 } from "./icons";
 import { SessionRelations, type RelatedSession } from "./SessionRelations";
-import { PixelSpinner } from "./PixelSpinner";
+import { Spinner } from "../ui/spinner";
 import {
 	SOURCE_CHIP,
 	SOURCE_CHIP_ARCHIVED,
@@ -6444,7 +6444,7 @@ export function SessionViewer({
 function WorkspaceWaiting({ detail }: { detail: string }) {
 	return (
 		<div className="flex h-full min-h-[240px] flex-col items-center justify-center gap-1 px-6 text-center">
-			<PixelSpinner className="mb-2 text-dim" />
+			<Spinner size="md" className="mb-2 text-dim" />
 			<div className="text-[14px] font-semibold text-fg">
 				Setting up your workspace
 			</div>

@@ -1,7 +1,7 @@
 import * as React from "react";
 import { IconX } from "../components/icons";
-import { PixelSpinner } from "../components/PixelSpinner";
 import { cn } from "./cn";
+import { Spinner } from "./spinner";
 
 /**
  * Async-state primitives — one language for "nothing here yet", "fetching"
@@ -20,7 +20,8 @@ import { cn } from "./cn";
  *    a card draws that card's surface (`card`); one living *inside* a card's
  *    row list just takes the row's padding and stays left-aligned (`row`), so
  *    it lines up with the rows it replaces instead of floating in the middle.
- *  - loading is the quietest register (faint label + the house PixelSpinner),
+ *  - loading is the quietest register (faint label + the waiting `Spinner`;
+ *    never the PixelSpinner, which means a model is generating),
  *    empty sits one step up (dim, with an optional title/icon/action when
  *    there's something to *do* about it), and alerts are the only state that
  *    gets a surface and a hue.
@@ -94,9 +95,8 @@ export function LoadingState({
 			className={cn(placements[placement], className)}
 			{...props}
 		>
-			{/* div, not span: PixelSpinner renders a grid div. */}
 			<div className="inline-flex items-center gap-2 text-supporting text-faint">
-				{spinner && <PixelSpinner className="shrink-0" />}
+				{spinner && <Spinner />}
 				{children}
 			</div>
 		</div>

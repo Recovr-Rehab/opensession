@@ -14,7 +14,7 @@ import { CommentableDiff, type CommentTarget } from "./CommentableDiff";
 import { getCurrentUser } from "./UserPicker";
 import { Tooltip } from "../ui/tooltip";
 import { Button } from "../ui/button";
-import { PixelSpinner } from "./PixelSpinner";
+import { Spinner } from "../ui/spinner";
 import { AGENT_NAME } from "../lib/brand";
 import { InlineAlert, LoadingState } from "../ui/state";
 import { CodeFlow } from "./CodeFlow";
@@ -479,7 +479,7 @@ function DiffEmptyState({ isRunning }: { isRunning: boolean }) {
       </div>
       {isRunning && (
         <div className="mt-1 flex items-center gap-2 text-xs text-faint">
-          <PixelSpinner slow className="text-faint" interval={4000} />
+          <Spinner className="text-faint" />
           <span>Pulling latest…</span>
         </div>
       )}
