@@ -5650,7 +5650,6 @@ export function SessionViewer({
 									addHandler={addHandler}
 									sessions={allSessions || workspaceSessions || []}
 									onOpenSessionById={onOpenSession}
-									reviewCanvas
 									editGate={connected && !isBusy && !noEngine}
 									onOpenSession={onOpenWorkspace}
 									onAddToInput={(text) =>

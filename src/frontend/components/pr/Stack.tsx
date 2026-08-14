@@ -5,7 +5,6 @@ import { prPath } from "../../lib/share-link";
 import type { PrDetails } from "../../lib/types";
 import { Button } from "../../ui/button";
 import { toast } from "../../ui/toast";
-import { PrCard } from "./PrCard";
 import { PrStateIcon } from "./PrStateIcon";
 
 /**
@@ -157,40 +156,7 @@ function hasStackToShow(pr: PrDetails, sessionId?: string): boolean {
   return !!pr.stack || (!!pr.stackBase && !!sessionId);
 }
 
-/** Card form — the narrow right-hand column layout. */
-export function StackCard({
-  pr,
-  sessionId,
-  repo,
-  onOpenPr,
-  onLinked,
-}: {
-  pr: PrDetails;
-  /** Absent on the session-less /pr/<repo>/<branch> view: the map still
-   *  renders there, only the link action needs a session to act on. */
-  sessionId?: string;
-  repo?: string;
-  onOpenPr?: (repo: string, branch: string) => void;
-  onLinked: () => void;
-}) {
-  if (!hasStackToShow(pr, sessionId)) return null;
-  return (
-    <PrCard
-      title="Stack"
-      headExtra={
-        pr.stack ? (
-          <span className="text-meta text-faint">
-            {pr.stack.position} of {pr.stack.size}
-          </span>
-        ) : undefined
-      }
-    >
-      <StackBody pr={pr} sessionId={sessionId} repo={repo} onOpenPr={onOpenPr} onLinked={onLinked} />
-    </PrCard>
-  );
-}
-
-/** Section form — the wide review-canvas layout, matching Git status above it. */
+/** Where this PR sits in its chain of layers, under the review header. */
 export function StackSection({
   pr,
   sessionId,

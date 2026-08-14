@@ -46,7 +46,6 @@ export function PrQueuePreview({
 				onOpenPr={onOpenPr}
 				sessionId={session?.id || ""}
 				previewTarget={session ? undefined : { repo, branch }}
-				reviewCanvas
 				send={send}
 				addHandler={addHandler}
 				sessions={sessions}

@@ -60,10 +60,6 @@ export const CHECK_TEXT: Record<CheckRank, string> = {
 	"check-neutral": "",
 };
 
-/** The "Deployments" / "Checks" divider inside the checks card. */
-export const CHECKS_GROUP =
-	"pb-1.5 text-label font-semibold tracking-[-0.01em] text-faint";
-
 /* ── PR status strip ─────────────────────────────────────────────────────
  *
  * The strip (PrStatusBar) and the series rows under it (PrSeriesRows) are one
@@ -293,67 +289,6 @@ export const prRepoTabClass = (selected: boolean) =>
 	`${PR_REPO_TAB} ${selected ? "border-line bg-panel text-fg" : "border-transparent bg-transparent text-dim hover:text-fg"}`;
 /** Unlink (×) inside the selected linked-PR tab. */
 export const PR_REPO_TAB_X = "-mr-1 inline-flex items-center text-dim hover:text-fg";
-
-/* ── Review guide ────────────────────────────────────────────────────────
- *
- * The generated walk through a PR: numbered sections, each a title, an
- * explanation and the patch it is about.
- */
-export const PR_GUIDE_SECTION = "mb-7";
-export const PR_GUIDE_COUNT = "mb-1.5 text-meta font-semibold tabular-nums text-faint";
-export const PR_GUIDE_TITLE = "mb-1.5 text-item-title font-bold text-fg";
-/** Capped at 60ch: an explanation is prose, and prose stops being readable
- *  when it runs the full width of a review canvas. */
-export const PR_GUIDE_EXPL = "mb-3 max-w-[60ch] text-label leading-[1.55] text-dim";
-
-/* ── Review comments ─────────────────────────────────────────────────────
- *
- * One row per comment: a marker, the author, the comment clamped to a line,
- * the outbound link, and "Add to session" — which only appears once the row is
- * hovered or the button takes focus, hence the group.
- */
-export const PR_COMMENT_ROW =
-	"group grid grid-cols-[16px_minmax(78px,auto)_minmax(0,1fr)_auto_auto] items-center gap-2 rounded-control border border-transparent px-1.5 py-[7px] hover:border-line-strong";
-export const PR_COMMENT_SELECT =
-	"size-[11px] justify-self-center rounded-full border border-faint";
-export const PR_COMMENT_META =
-	"flex min-w-0 items-center gap-[5px] text-label text-fg";
-export const PR_COMMENT_AUTHOR = "truncate font-semibold";
-export const PR_COMMENT_BODY =
-	"block truncate text-label leading-[1.25] text-faint";
-/** The outbound arrow is a glyph, not running text — 16px is its size, not a
- *  step on the type scale. */
-export const PR_COMMENT_LINK = "text-[16px] text-faint no-underline hover:text-fg";
-/** "Add to session", per row and once for the card. The quiet card-level one
- *  drops the outline and fill; both light up the same way. */
-export const PR_COMMENT_ADD =
-	"cursor-pointer whitespace-nowrap rounded-md border border-line bg-surface px-[7px] py-[3px] text-meta text-faint opacity-0 transition-[opacity,background-color,color] group-hover:opacity-100 focus-visible:opacity-100 hover:bg-hover hover:text-fg";
-export const PR_COMMENTS_ADD_ALL =
-	"cursor-pointer whitespace-nowrap rounded-md border border-transparent bg-transparent px-[7px] py-[3px] text-label text-faint hover:bg-hover hover:text-fg";
-
-/* ── PR description ──────────────────────────────────────────────────────
- *
- * The description is renderer output (dangerouslySetInnerHTML), so its
- * headings, lists and edge margins can only be reached from the container —
- * they were `.pr-body-md h1`, `.pr-body-md li` and friends, and they are child
- * variants here for the same reason. `.markdown` still supplies the
- * typography; these are the panel's overrides on top of it, and they keep
- * winning because the utility sheet is linked after the legacy one.
- */
-export const PR_BODY_MD =
-	"p-0 text-label leading-[1.42] break-words text-faint " +
-	"[&_:is(h1,h2,h3)]:text-label [&_:is(h1,h2,h3)]:font-medium [&_:is(h1,h2,h3)]:text-faint [&_:is(h1,h2,h3)]:[margin:0.8em_0_0.15em] " +
-	"[&_:is(ul,ol)]:pl-0 [&_:is(ul,ol)]:[list-style-position:inside] [&_li]:[margin:0.15em_0] " +
-	"[&>*:first-child]:mt-0 [&>*:last-child]:mb-0";
-
-/** Collapsed by default — the first couple of lines, so the checks sit right
- *  under the title, with a soft fade hinting there is more behind "Show more".
- *  Spelled out rather than composed from a shared fragment: Tailwind scans
- *  source text, so a class assembled from a variable is never generated. */
-export const PR_BODY_CLAMPED =
-	"max-h-[2.9em] overflow-hidden [mask-image:linear-gradient(to_bottom,#000_55%,transparent)] [-webkit-mask-image:linear-gradient(to_bottom,#000_55%,transparent)]";
-
-export const PR_BODY_TOGGLE = "mt-[3px] text-label font-medium text-dim hover:text-fg";
 
 export const PR_ROW_OUT =
 	"inline-flex size-6 shrink-0 items-center justify-center rounded-md text-dim hover:bg-[color-mix(in_srgb,currentColor_14%,transparent)] hover:text-fg";

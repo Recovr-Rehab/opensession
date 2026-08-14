@@ -272,7 +272,6 @@ export function WorkspacePane({
 					key={`${reviewTarget.repo}:${reviewTarget.branch}`}
 					sessionId={reviewSession?.id || ""}
 					previewTarget={reviewSession ? undefined : reviewTarget}
-					reviewCanvas
 					send={send}
 					addHandler={addHandler}
 					sessions={sessions}

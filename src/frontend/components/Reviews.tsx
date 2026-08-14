@@ -333,8 +333,6 @@ export function Reviews({
             sessionId={selected.id}
             onOpenSession={() => onOpenSession(selected.id)}
             onAddToInput={(text) => onAddToInput(selected.id, text)}
-            split
-            reviewCanvas
             send={send}
             addHandler={addHandler}
             sessions={sessions}

@@ -57,23 +57,28 @@ function reviewerStateMeta(state: PrReviewer["state"]): {
   }
 }
 
+/**
+ * One changed file, sized for a narrow column: the file name and its diff
+ * counts, with the full path on hover.
+ *
+ * The directory is deliberately absent. A path truncated to fit a 264px rail
+ * leaves every row reading `packages/core/webapp/…`, which is the half that
+ * tells you nothing, and the name is what a reviewer scans for. The whole path
+ * is a click away, on the file's own diff header.
+ */
 export function FileRow({ file, onClick }: { file: PrFile; onClick?: () => void }) {
   const slash = file.path.lastIndexOf("/");
-  const dir = slash >= 0 ? file.path.slice(0, slash + 1) : "";
   const base = slash >= 0 ? file.path.slice(slash + 1) : file.path;
   return (
     <button
       type="button"
-      className="flex w-full items-center gap-3 rounded-control border border-transparent px-1 py-1.5 text-left hover:border-line hover:bg-hover/50 disabled:cursor-default disabled:hover:border-transparent disabled:hover:bg-transparent"
+      className="flex w-full items-center gap-2 rounded-control border border-transparent px-1.5 py-1 text-left hover:border-line hover:bg-hover/50 disabled:cursor-default disabled:hover:border-transparent disabled:hover:bg-transparent"
       onClick={onClick}
       disabled={!onClick}
       title={file.path}
     >
-      <IconFile size={16} className="shrink-0 text-faint" />
-      <span className="min-w-0 flex-1 truncate text-sm text-fg">
-        {dir && <span className="text-faint">{dir}</span>}
-        {base}
-      </span>
+      <IconFile size={14} className="shrink-0 text-faint" />
+      <span className="min-w-0 flex-1 truncate text-label text-fg">{base}</span>
       <span className="inline-flex shrink-0 items-center gap-1.5 text-meta">
         {file.additions > 0 && <span className="text-green">+{file.additions}</span>}
         {file.deletions > 0 && <span className="text-red">−{file.deletions}</span>}

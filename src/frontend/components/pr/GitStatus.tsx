@@ -1,5 +1,4 @@
 import type React from "react";
-import { useIsPhone } from "../../hooks/useIsPhone";
 import { AGENT_NAME } from "../../lib/brand";
 import {
   type GitDotTone,
@@ -18,90 +17,6 @@ import {
 } from "../../lib/pr-tone-classes";
 import type { GitStatusInfo, PrDetails } from "../../lib/types";
 import { Button } from "../../ui/button";
-
-/**
- * Branch divergence for the review canvas: only the work that needs doing,
- * with each action sitting next to the sentence that explains it.
- *
- * The canvas used to carry a full "Git status" card here, which restated the
- * PR verdict and its Merge button a third time on one screen — the session
- * header's PrStatusBar carries the verdict plus the primary action whether the
- * workspace panel is open or closed, and the panel's own Git status section
- * says it again. What the canvas can usefully add is the local/remote
- * divergence, so that is all it shows, and only while something is outstanding.
- *
- * Phone is the exception: the session header drops the PR status bar at that
- * width, so the verdict and Merge would have nowhere else to live and the
- * strip takes them back.
- */
-export function GitDivergenceStrip({
-  git,
-  pr,
-  sessionId,
-  repo,
-  send,
-  onRefresh,
-  onMerge,
-  merging,
-  confirmMerge,
-}: {
-  git: GitStatusInfo | null;
-  pr: PrDetails | null;
-  sessionId: string;
-  repo?: string;
-  send?: (msg: any) => void;
-  onRefresh: () => Promise<void> | void;
-  onMerge?: () => void;
-  merging?: boolean;
-  confirmMerge?: boolean;
-}) {
-  const runner = useGitTaskRunner({ sessionId, repo, send, onRefresh });
-  const isPhone = useIsPhone();
-  const base = pr?.baseRefName || git?.baseBranch || "main";
-  const tasks = gitTasks(git, pr, base).filter(runner.runnable);
-  const verdict =
-    isPhone && pr && pr.state === "OPEN" && !pr.isDraft && onMerge
-      ? deriveStatus(pr)
-      : null;
-  if (!verdict && tasks.length === 0 && !runner.prompted && !runner.error)
-    return null;
-
-  return (
-    <section className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 px-6 pb-4 phone:px-3">
-      {verdict && (
-        <span className="inline-flex items-center gap-2 text-xs text-dim">
-          <span className={`${GIT_DOT} ${GIT_DOT_BG[verdict.tone]}`} aria-hidden />
-          {verdict.qualifier || verdict.label}
-          <Button
-            size="xs"
-            onClick={onMerge}
-            disabled={merging}
-            title="Squash and merge this pull request"
-          >
-            {merging ? "Merging…" : confirmMerge ? "Confirm merge" : "Merge"}
-          </Button>
-        </span>
-      )}
-      {tasks.map((task) => (
-        <span key={task.key} className="inline-flex items-center gap-2 text-xs text-dim">
-          <span className={`${GIT_DOT} ${GIT_DOT_BG[task.tone]}`} aria-hidden />
-          {task.label}
-          <Button
-            size="xs"
-            onClick={() => runner.run(task)}
-            disabled={task.run === "push" && runner.pushing}
-          >
-            {task.run === "push" && runner.pushing ? "Pushing…" : task.action}
-          </Button>
-        </span>
-      ))}
-      {runner.prompted && (
-        <span className="text-xs text-faint">Asked {AGENT_NAME} to {runner.prompted} ✓</span>
-      )}
-      {runner.error && <span className="text-xs text-red">{runner.error}</span>}
-    </section>
-  );
-}
 
 /**
  * Local/remote discrepancy rows for the Status card: each gets a line with one
