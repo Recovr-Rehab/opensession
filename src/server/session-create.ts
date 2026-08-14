@@ -86,6 +86,8 @@ export interface CreateSessionMessage {
 	runner?: unknown;
 	worktreeMode?: unknown;
 	workspaceId?: unknown;
+	/** Workspace that supplied a model preset for an otherwise independent create. */
+	modelWorkspaceId?: unknown;
 	plainThreadId?: unknown;
 	createWorkspace?: { name?: unknown };
 }
@@ -918,7 +920,9 @@ export async function handleCreateSessionMessage(
 	// default NOW: leaving it empty would let the init event persist the
 	// engine's resolved model — which for a dial default would silently
 	// disengage the dial (the preset id must be what the session stores).
-	const workspacePreset = forkSource ? undefined : resolveWorkspacePreset(msg.model, msg.workspaceId);
+	const workspacePreset = forkSource
+		? undefined
+		: resolveWorkspacePreset(msg.model, msg.workspaceId ?? msg.modelWorkspaceId);
 	const model = forkSource
 		? forkSource.model
 		: workspacePreset?.model || (msg.model ? resolveModel(String(msg.model))?.id : undefined) ||
