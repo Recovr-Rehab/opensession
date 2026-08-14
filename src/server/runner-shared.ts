@@ -21,6 +21,7 @@ export const CLAUDE_CODE_BIN = configuredPaths().claudeBin;
 /** Moved to the protocol package; re-exported for existing import sites. */
 export type { McpScope } from "@tellahq/opensession-protocol/runner";
 import type { McpScope } from "@tellahq/opensession-protocol/runner";
+import { GH_CHECKS_CLI_PATH } from "./run-instructions";
 
 /**
  * Resolve the MCP servers for a run: all configured, or just the allowlist,
@@ -355,3 +356,78 @@ export function declaredRunFailure(text: string): string | null {
 export function hasRunStatusDeclaration(text: string): boolean {
   return /^(?:SCAN|RUN) STATUS:[^\n]*$/m.test(text);
 }
+
+/** Read-only bash surface for ask mode: allow common inspection commands,
+ *  deny everything else.
+ *
+ *  ORDER MATTERS — the catch-all deny MUST come first. OpenCode evaluates
+ *  permission rules LAST-match-wins (Permission.evaluate is a findLast over
+ *  the rules in config-object insertion order; there is NO specificity
+ *  ranking), so later specific allows override the earlier "*" deny. With
+ *  the catch-all LAST it won every match — every command denied — and,
+ *  worse, Permission.disabled() hides a tool entirely when its last-matching
+ *  rule is a "*" deny, which is what made bash vanish from every unattended
+ *  ask run (the PR #4676 review starvation, the health-monitor blinding).
+ *  Shared by the opencode config generation (opencode-runner.ts) and the
+ *  claude-direct ask-mode canUseTool (engine/claude-direct-policy.ts) —
+ *  claude-direct evaluates the same rules last-match-wins in askBashDecision.
+ *  Verified against opencode v1.17.15 source (permission/index.ts
+ *  evaluate/disabled, session/llm/request.ts resolveTools). */
+export const ASK_BASH_PERMISSIONS: Record<string, "allow" | "deny"> = {
+  "*": "deny",
+  "cat *": "allow", "ls*": "allow", "rg *": "allow", "grep *": "allow",
+  "find *": "allow", "head *": "allow", "tail *": "allow", "wc *": "allow",
+  "tree*": "allow", "file *": "allow", "stat *": "allow", "du *": "allow",
+  "df*": "allow", "which *": "allow", "pwd": "allow", "echo *": "allow",
+  // Read-only clock reads (timestamp math in digests/triage). Only the read
+  // forms — bare "date */date -s" (setting the clock) needs root and is not
+  // allowed here; these globs cover `date +%s`, `date -u`, `date -d '…'`.
+  "date": "allow", "date +*": "allow", "date -u*": "allow",
+  "date -d*": "allow", "date -r*": "allow",
+  "git status*": "allow", "git log*": "allow", "git diff*": "allow",
+  "git show*": "allow", "git branch*": "allow", "git blame*": "allow",
+  "git grep*": "allow", "git ls-files*": "allow",
+  // git plumbing reads: rev-parse just prints resolved revs/paths (no mutation),
+  // and review agents routinely chain `… && git rev-parse HEAD` — opencode
+  // evaluates each sub-command, so an unlisted rev-parse denied the whole line.
+  "git rev-parse*": "allow", "git cat-file*": "allow", "git describe*": "allow",
+  "git merge-base*": "allow",
+  // Read-only stdout filters — the usual tails on allowed git/gh reads
+  // (`git show X:f | nl -ba`, `… | cut -d…`); an unlisted filter denies the
+  // whole pipeline (each sub-command is evaluated, see rev-parse note).
+  // Deliberately NOT sort/uniq (`sort -o FILE` and `uniq in out` both write
+  // files) and not awk/perl (arbitrary code; sed's exclusion is noted below).
+  "nl": "allow", "nl *": "allow", "cut *": "allow", "tr *": "allow",
+  "comm *": "allow", "column": "allow", "column *": "allow",
+  "diff *": "allow", "sha256sum*": "allow", "md5sum*": "allow",
+  // Exact spelling, no trailing glob: `git hash-object --stdin*` would also
+  // match `--stdin -w`, which writes the object into .git.
+  "git hash-object --stdin": "allow",
+  // The PR-checks helper every run's instructions point at (see the
+  // "GitHub checks authentication" block in run-instructions.ts).
+  // Read-only by construction: it wraps `gh pr checks` with a short-lived
+  // read-only App installation token.
+  [`bun ${GH_CHECKS_CLI_PATH} *`]: "allow",
+  // NOTE: sed stays denied even as `sed -n` — "sed -n *" also matches
+  // `sed -n -i …` (in-place edit) and scripts with the `w /path` write
+  // command, so no sed glob is actually read-only. Use head/tail/cat/rg
+  // for line ranges instead.
+  // Read-only GitHub inspection (PR-backlog digests, review triage). Only the
+  // non-mutating `gh pr`/`gh run` read verbs — NOT bare "gh *" (that would
+  // allow pr create/merge/close/comment, run rerun/cancel/delete) and NOT
+  // "gh api *" (which can -X POST/PATCH any endpoint). These only ever read.
+  "gh pr list*": "allow", "gh pr view*": "allow",
+  "gh pr checks*": "allow", "gh pr status*": "allow",
+  "gh run view*": "allow", "gh run list*": "allow", "gh run watch*": "allow",
+  // jq: a pure read-only JSON filter (no file writes, no shell-out, no code
+  // exec — its language is sandboxed data transformation), so it's on par with
+  // grep/wc for the allowlist. Lets ask-mode runs process `gh --json` / API
+  // output instead of thrashing on the (correctly denied) `python3 -c`.
+  "jq *": "allow", "jq*": "allow",
+  // Read-only system inspection (health checks, diagnosing the box). Only
+  // no-op systemctl verbs — bare "systemctl *" would allow restart/stop.
+  "free*": "allow", "uptime*": "allow", "nproc*": "allow",
+  "ps": "allow", "ps *": "allow", "top -b*": "allow",
+  "systemctl status*": "allow", "systemctl is-active*": "allow",
+  "systemctl is-enabled*": "allow", "systemctl list-units*": "allow",
+};

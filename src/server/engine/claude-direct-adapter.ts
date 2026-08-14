@@ -80,12 +80,7 @@
  *    emitted per completed assistant block.
  *  - seedTranscriptEntries: ignored, like every non-opencode runner — the
  *    store already holds unified history and handoffs ride the prompt.
- *
- * Integration note for the shared policy layer: ASK_BASH_RULES in
- * claude-direct-policy.ts is a COPY of ASK_BASH_PERMISSIONS
- * (opencode-runner.ts, module-private there). Exporting the original and
- * deleting the copy is a one-line change worth making the next time that file
- * is open.
+
  */
 
 import { query } from "@anthropic-ai/claude-agent-sdk";

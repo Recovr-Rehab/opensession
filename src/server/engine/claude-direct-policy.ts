@@ -10,11 +10,7 @@
  * The runner (claude-direct-adapter.ts) owns everything stateful: accounts,
  * the journal, the transcript, the SDK query and its event pump.
  *
- * Two deliberate ports rather than imports:
- *  - ASK_BASH_RULES is a port of opencode-runner.ts's ASK_BASH_PERMISSIONS,
- *    which is module-private there. Keeping a second copy is worse than
- *    sharing one; see the integration note in the module doc of
- *    claude-direct-adapter.ts (export the constant, then delete this copy).
+ * One deliberate port rather than an import:
  *  - The strip-set is derived from `opencodeRunPolicy` (imported), but the
  *    ids are re-projected into the SDK's `mcp__<server>__<tool>` naming —
  *    opencode's `<server>_<tool>` convention means nothing to this engine.
@@ -22,7 +18,7 @@
 
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import { buildOpencodeMcpConfig } from "../opencode-policy";
-import type { McpScope } from "../runner-shared";
+import { ASK_BASH_PERMISSIONS, type McpScope } from "../runner-shared";
 import { DIAL_ORACLE_AGENTS, sameBridgeDialOracle, dialPreset } from "../models";
 import type { SessionEffort } from "../models";
 import type { TurnUsage } from "./adapter-types";
@@ -307,48 +303,6 @@ export function claudeDirectBuiltinTools(input: {
   return input.mode === "ask" ? base : [...base, ...WRITE_BUILTIN_TOOLS];
 }
 
-/**
- * Read-only bash surface for ask mode — a port of ASK_BASH_PERMISSIONS
- * (opencode-runner.ts), which is module-private there.
- *
- * ORDER MATTERS exactly as it does at the original site: rules are evaluated
- * LAST-match-wins, so the catch-all deny comes FIRST and later specific
- * allows override it. Keep new entries below the "*" line.
- */
-export const ASK_BASH_RULES: Record<string, "allow" | "deny"> = {
-  "*": "deny",
-  "cat *": "allow", "ls*": "allow", "rg *": "allow", "grep *": "allow",
-  "find *": "allow", "head *": "allow", "tail *": "allow", "wc *": "allow",
-  "tree*": "allow", "file *": "allow", "stat *": "allow", "du *": "allow",
-  "df*": "allow", "which *": "allow", "pwd": "allow", "echo *": "allow",
-  // Read-only clock reads only — bare `date -s` sets the clock.
-  "date": "allow", "date +*": "allow", "date -u*": "allow",
-  "date -d*": "allow", "date -r*": "allow",
-  "git status*": "allow", "git log*": "allow", "git diff*": "allow",
-  "git show*": "allow", "git branch*": "allow", "git blame*": "allow",
-  "git grep*": "allow", "git ls-files*": "allow",
-  "git rev-parse*": "allow", "git cat-file*": "allow", "git describe*": "allow",
-  "git merge-base*": "allow",
-  // Read-only stdout filters. Deliberately not sort/uniq (both can write
-  // files) and not sed/awk/perl (arbitrary code, or in-place edits).
-  "nl": "allow", "nl *": "allow", "cut *": "allow", "tr *": "allow",
-  "comm *": "allow", "column": "allow", "column *": "allow",
-  "diff *": "allow", "sha256sum*": "allow", "md5sum*": "allow",
-  // Exact spelling: `git hash-object --stdin -w` would write the object.
-  "git hash-object --stdin": "allow",
-  // Read-only GitHub inspection — named read verbs only, never bare `gh *`
-  // (pr create/merge/close) and never `gh api *` (-X POST anywhere).
-  "gh pr list*": "allow", "gh pr view*": "allow",
-  "gh pr checks*": "allow", "gh pr status*": "allow",
-  "gh run view*": "allow", "gh run list*": "allow", "gh run watch*": "allow",
-  "jq *": "allow", "jq*": "allow",
-  // Read-only system inspection — no-op systemctl verbs only.
-  "free*": "allow", "uptime*": "allow", "nproc*": "allow",
-  "ps": "allow", "ps *": "allow", "top -b*": "allow",
-  "systemctl status*": "allow", "systemctl is-active*": "allow",
-  "systemctl is-enabled*": "allow", "systemctl list-units*": "allow",
-};
-
 /** Glob match with `*` spanning any characters (opencode's rule shape). */
 function globMatches(pattern: string, value: string): boolean {
   const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
@@ -399,7 +353,7 @@ export function askBashDecision(
   }
   for (const part of split.parts) {
     let verdict: "allow" | "deny" = "deny";
-    for (const [pattern, decision] of Object.entries(ASK_BASH_RULES)) {
+    for (const [pattern, decision] of Object.entries(ASK_BASH_PERMISSIONS)) {
       if (globMatches(pattern, part)) verdict = decision; // last match wins
     }
     if (verdict !== "allow") {
