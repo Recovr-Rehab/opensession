@@ -255,13 +255,15 @@ export function RestartOverlay({ connected, addHandler }: Props) {
               : "animate-[spin_0.8s_linear_infinite] border-line-strong border-t-accent"
           }`}
         />
+        {/* Deliberately not "is restarting": that's the calm pill's copy, and
+            this state is the one that reloads your page. */}
         <div className="text-body font-semibold text-fg">
-          {backOnline ? "Back online" : `${PRODUCT_NAME} is restarting`}
+          {backOnline ? "Back online" : `${PRODUCT_NAME} isn't responding`}
         </div>
         <div className="text-label leading-[1.5] text-dim">
           {backOnline
             ? "Refreshing…"
-            : "Hang tight. The page will refresh automatically once it's back up."}
+            : "The page will refresh automatically once the server is back."}
         </div>
         {!backOnline && restartBy && (
           <div className="mt-1.5 max-w-full truncate text-label font-medium leading-[1.4] text-dim opacity-80">Triggered by {restartBy}</div>
