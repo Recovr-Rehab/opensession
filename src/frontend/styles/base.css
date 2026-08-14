@@ -1269,22 +1269,24 @@ html.wco .app-body.sidebar-collapsed
 }
 /* The face. It is painted rather than laid out, because the mirror cannot take
    a pixel of width — so the `@` goes transparent and lends the circle its slot,
-   which is all the room there is. That happens to be enough: `@` is a wide
-   glyph, 13.8px against the 15px face at the composer's 14px type, so the face
-   only leans a hair past it on either side. Absolute, so it takes part in no
-   layout at all — and it sits at `left: 0` rather than centred in that slot,
-   because the pill's own corner is fully round: a circle nudged left by even a
-   pixel pokes out through the curve above and below its own middle. */
+   and that slot is the entire budget. It measures 13.8px at the composer's 14px
+   type, and the gap between the face and the name has to come out of it: a 12px
+   face starting 2px into the pill's outline leaves 3.8px before the first
+   letter — the same air the sent message's `person-chip` puts between its own
+   face and name. The 2px is as far left as the face can go: the pill is a
+   capsule, so its left edge curves away above and below the middle, and a
+   circle pushed to the very edge meets that curve and reads as clipped.
+   Absolute, so it takes part in no layout at all. */
 .composer-hl .cmp-at {
 	color: transparent;
 }
 .composer-hl .cmp-faced::before {
 	content: "";
 	position: absolute;
-	left: 0;
+	left: -2px;
 	top: 50%;
-	width: 15px;
-	height: 15px;
+	width: 12px;
+	height: 12px;
 	transform: translateY(-50%);
 	border-radius: 999px;
 	background: var(--cmp-face) center / cover no-repeat, var(--bg-active);

@@ -818,6 +818,38 @@ export function Composer({
     return true;
   }
 
+  // Backspace at a mention's end takes the whole name in one press, and Delete
+  // at its start does the same forwards. The pill reads as one object, so it
+  // has to erase like one — picking it apart a letter at a time would also
+  // spend two keystrokes rendering a half-name that chips back into prose.
+  //
+  // Backspace one step further out, from just past the space a mention is
+  // followed by, takes the space AND the name together. That is the common
+  // case, because the picker leaves the caret exactly there — and taking only
+  // the space would be worse than useless: the name loses the terminator that
+  // makes it a mention, so the pill would vanish into plain text and the next
+  // press would start eating letters.
+  function deleteWholeMention(key: string, el: HTMLTextAreaElement): boolean {
+    if (el.selectionStart !== el.selectionEnd) return false;
+    const caret = el.selectionStart;
+    const back = key === "Backspace";
+    const hit = mentionRanges.find((r) =>
+      back
+        ? caret === r.end || (caret === r.end + 1 && text[r.end] === " ")
+        : caret === r.start,
+    );
+    if (!hit) return false;
+    const end = back ? Math.max(caret, hit.end) : hit.end;
+    el.setSelectionRange(hit.start, end);
+    if (!document.execCommand("delete")) {
+      setText(text.slice(0, hit.start) + text.slice(end));
+      queueMicrotask(() =>
+        textareaRef.current?.setSelectionRange(hit.start, hit.start),
+      );
+    }
+    return true;
+  }
+
   // A pill that can be pressed has to look it, and the field on top owns the
   // cursor — so hover is hit-tested against the mirror's own spans and painted
   // by a data attribute on the one under the pointer.
@@ -864,6 +896,17 @@ export function Composer({
   function handleKeyDown(e: React.KeyboardEvent) {
     if (mentions.handleKeyDown(e)) return;
     if ((e.nativeEvent as any).isComposing) return;
+    if (
+      (e.key === "Backspace" || e.key === "Delete") &&
+      !e.metaKey &&
+      !e.ctrlKey &&
+      !e.altKey &&
+      textareaRef.current &&
+      deleteWholeMention(e.key, textareaRef.current)
+    ) {
+      e.preventDefault();
+      return;
+    }
     // Vim mode gets the key before the send/stop logic: in insert mode it only
     // claims Escape (drop to normal mode — a second, bare Escape in normal mode
     // falls through here to the busy-stop below), and Enter is never consumed,
