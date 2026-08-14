@@ -73,6 +73,8 @@ export function buildRunInstructions(input: {
     presetLabel: string;
     mainLabel: string;
     oracleLabel: string;
+    /** Pi exposes the advisor as a custom tool rather than an OpenCode task agent. */
+    tool?: boolean;
   };
   /** The Orchestrator: tells an orchestrator-preset run about its worker
    *  subagents. Only set for orchestrator runs — mirrors dialOracle. */
@@ -285,10 +287,13 @@ export function buildRunInstructions(input: {
   // knows when to reach for it — and when not to.
   if (input.dialOracle) {
     const d = input.dialOracle;
+    const availability = d.tool
+      ? `available as the \`${d.agent}\` tool`
+      : `available as the \`${d.agent}\` subagent via the task tool`;
     parts.push(
       `## The Dial — your oracle\nThis session runs on the "${d.presetLabel}" preset: you ` +
-        `(${d.mainLabel}) are paired with an oracle — ${d.oracleLabel}, available as the ` +
-        `\`${d.agent}\` subagent via the task tool. The oracle is a senior engineering ` +
+        `(${d.mainLabel}) are paired with an oracle — ${d.oracleLabel}, ${availability}. ` +
+        "The oracle is a senior engineering " +
         "advisor to think with, not an executor.\n" +
         "Consult it when planning a hard or open-ended task, to review your own significant " +
         "work after implementing it, for architecture decisions with real tradeoffs, and to " +

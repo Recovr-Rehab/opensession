@@ -27,6 +27,7 @@ import {
   makePiBashTool,
   parsePiModel,
   piGateReason,
+  resolvePiDialModel,
   runPi,
   runPiSmokeTurn,
 } from "./pi-runner";
@@ -53,6 +54,28 @@ describe("parsePiModel", () => {
     expect(parsePiModel("pi/anthropic")).toBeNull();
     expect(parsePiModel("pi/anthropic/")).toBeNull();
     expect(parsePiModel("pi//claude-opus-5")).toBeNull();
+  });
+});
+
+describe("resolvePiDialModel", () => {
+  test("keeps regular Pi models unchanged", () => {
+    expect(resolvePiDialModel("pi/anthropic/claude-opus-5")).toMatchObject({
+      providerID: "anthropic",
+      modelID: "claude-opus-5",
+    });
+  });
+
+  test("routes a Pi Dial preset to its main model while retaining the preset", () => {
+    const resolved = resolvePiDialModel("pi/dial/ultra");
+    expect(resolved).toMatchObject({
+      providerID: "anthropic",
+      modelID: "claude-fable-5",
+      dial: { id: "dial/ultra", effort: "high", oracleAgent: "oracle-sol" },
+    });
+  });
+
+  test("rejects unknown Pi preset ids", () => {
+    expect(resolvePiDialModel("pi/dial/not-real")).toBeNull();
   });
 });
 

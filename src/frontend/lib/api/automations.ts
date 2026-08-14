@@ -57,9 +57,10 @@ export async function fetchModels(cloud = false): Promise<{
 	models: ModelOption[];
 	default: string;
 }> {
-	return request<{ models: ModelOption[]; default: string }>(`/models${cloud ? "?cloud=1" : ""}`, {
-		label: "Failed to fetch models",
-	});
+	return request<{ models: ModelOption[]; default: string }>(
+		`/models${cloud ? "?cloud=1" : ""}`,
+		{ label: "Failed to fetch models" },
+	);
 }
 
 /** Trimmed provider account shape for the per-session account picker. */
@@ -148,6 +149,7 @@ export async function draftAutomationApi(description: string): Promise<Automatio
 export async function fetchConnections(): Promise<{
 	mcpServers: Array<{ name: string; status: string; allowedUsers?: string[] }>;
 	agents: Record<string, unknown>;
+	engines?: string[];
 }> {
 	const res = await fetch(`${BASE}/connections`);
 	if (!res.ok) throw new Error(`Failed to fetch connections: ${res.status}`);

@@ -4,6 +4,7 @@ import { getCurrentUser, useAuthStatus } from "./UserPicker";
 import { splitAttachments, imageFilesFromPaste, type FileAttachment } from "../lib/images";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
 import { getDefaultModelPref } from "../lib/default-model-pref";
+import { baseModelId, piModelId } from "./ModelEffortSelect";
 import { getSendKeyPref, onSendKeyChanged } from "../lib/send-key-pref";
 import { insideOpenFence, isSendCombo, MOD_ENTER_GLYPH } from "../lib/send-key";
 import { isApple } from "../lib/platform";
@@ -426,6 +427,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   const [edges, setEdges] = useState({ top: false, bottom: false });
   const [error, setError] = useState<string | null>(null);
   const [models, setModels] = useState<ModelOption[]>([]);
+  const [engines, setEngines] = useState<string[]>(["opencode"]);
   const [defaultModel, setDefaultModel] = useState("");
   const [model, setModel] = useState(""); // "" = default
   // Footer controls from the palette design. effort is persisted on the new
@@ -440,7 +442,9 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     fetchProviderAccounts(cloudTarget).then(setAccounts).catch(() => {});
   }, [cloudTarget]);
   const effectiveNewModel = model || defaultModel;
-  const accountProvider = models.find((item) => item.id === effectiveNewModel)?.accountProvider;
+  const accountProvider = models.find(
+    (item) => item.id === baseModelId(effectiveNewModel),
+  )?.accountProvider;
   // A pin belongs to one provider pool. Drop it when the selected model moves
   // to another family so an opaque id is never reinterpreted.
   useEffect(() => {
@@ -503,34 +507,31 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   // Provider-independent family check, driven by the same server list the
   // create path enforces.
   const effectiveModelId = model || defaultModel;
-  const effectiveModelProvider =
-    models.find((m) => m.id === effectiveModelId)?.provider ?? "claude";
+  const effectiveModelProvider = effectiveModelId.startsWith("pi/")
+    ? "pi"
+    : models.find((m) => m.id === effectiveModelId)?.provider ?? "claude";
   const modelFamily = (sandboxStatus?.modelFamilies || []).find(
     (f) => f.match.provider === effectiveModelProvider,
   );
-  // Engine switcher (advanced): flips the selected model between execution
-  // engines while keeping the same underlying model when both serve it
-  // (opencode/anthropic/claude-opus-5 ⇄ pi/anthropic/claude-opus-5). Only
-  // rendered when a second engine is actually configured (pi models present
-  // in /api/models); legacy native ids dispatch on opencode, so they count
-  // as that engine here. The model menu still lists every engine's models —
-  // this is a quick toggle, not a filter.
-  const engineChoices = models.some((m) => m.provider === "pi")
+  // Engine switcher (advanced): the model list is engine-agnostic, so this
+  // composes/strips the pi/ routing prefix on the current selection — any
+  // model or preset routes to either engine ("dial/opus-fable" ⇄
+  // "pi/dial/opus-fable"). Only rendered when a second engine is configured
+  // (`engines` from /api/models).
+  const engineChoices = engines.includes("pi")
     ? (["opencode", "pi"] as const)
     : null;
-  const currentEngine = effectiveModelProvider === "pi" ? "pi" : "opencode";
+  const currentEngine = effectiveModelId.startsWith("pi/") ? "pi" : "opencode";
   const engineLabel = (e: string) => (e === "pi" ? "Pi" : "OpenCode");
   const switchEngine = (target: "opencode" | "pi") => {
     if (target === currentEngine) return;
-    const tail = effectiveModelId.split("/").pop();
-    const candidates = models.filter((m) => m.provider === target);
-    const match =
-      candidates.find((m) => m.id.split("/").pop() === tail) ||
-      (target === "opencode" && candidates.some((m) => m.id === defaultModel)
-        ? candidates.find((m) => m.id === defaultModel)
-        : undefined) ||
-      candidates[0];
-    if (match) setModel(match.id);
+    if (target === "pi") {
+      const piId = piModelId(effectiveModelId);
+      if (piId) setModel(piId);
+    } else {
+      const base = baseModelId(effectiveModelId);
+      setModel(base === defaultModel ? "" : base);
+    }
   };
 
   const sandboxModelWarning = (() => {
@@ -573,7 +574,10 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   const [availableMcpServers, setAvailableMcpServers] = useState<string[]>([]);
   useEffect(() => {
     fetchConnections()
-      .then((c) => setAvailableMcpServers((c.mcpServers || []).map((s) => s.name)))
+      .then((c) => {
+        setAvailableMcpServers((c.mcpServers || []).map((s) => s.name));
+        setEngines(c.engines || ["opencode"]);
+      })
       .catch(() => {});
   }, []);
   function toggleMcpServer(name: string, on: boolean) {
@@ -654,7 +658,11 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
         setDefaultModel(m.default);
         setModel((current) => {
           if (current) {
-            return m.models.some((item) => item.id === current) ? current : "";
+            // Pi-routed ids validate against their base entry (the pi/ prefix
+            // is routing, not a listed model).
+            return m.models.some((item) => item.id === baseModelId(current))
+              ? current
+              : "";
           }
           // Untouched picker: preselect the user's own default-model pref
           // (Settings → Preferences) when it's set and still selectable; "" (no

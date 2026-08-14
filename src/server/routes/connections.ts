@@ -9,9 +9,9 @@
 import type { RouteContext } from "./context";
 import { getAgents } from "../agents-registry";
 import { addMcpServer, getConnections, removeMcpServer, setMcpAllowedUsers } from "../connections";
-import { refreshOpencodePickerModels, refreshPiPickerModels } from "../models";
+import { refreshOpencodePickerModels } from "../models";
 import { BRIDGE_PROVIDER_IDS, PROVIDER_ID_RE, addPickerModel, defaultPickerModelsForProvider, maskProviderKey, opencodeProviders, readOpencodeBridgeConfig, removeOpencodeProvider, removePickerModel, setBridgeEnabled, setOpencodeProvider } from "../opencode-config";
-import { isPiModelId, readPiEngineConfig, setPiEnabled, setPiPickerModels } from "../pi-config";
+import { isPiModelId, piEngineEnabled, readPiEngineConfig, setPiEnabled, setPiPickerModels } from "../pi-config";
 
 export async function handleConnectionsRoutes(
 	ctx: RouteContext,
@@ -24,7 +24,11 @@ export async function handleConnectionsRoutes(
 		const mcpServers = await getConnections(force);
 		const agentHealth: Record<string, unknown> = {};
 		for (const a of getAgents()) agentHealth[a.name] = a.health();
-		return Response.json({ mcpServers, agents: agentHealth });
+		return Response.json({
+			mcpServers,
+			agents: agentHealth,
+			engines: ["opencode", ...(piEngineEnabled() ? ["pi"] : [])],
+		});
 	}
 
 	if (path === "/api/connections/mcp" && req.method === "POST") {
@@ -437,8 +441,9 @@ export async function handleConnectionsRoutes(
 		}
 		try {
 			if (typeof body.enabled === "boolean") setPiEnabled(body.enabled);
+			// pickerModels is vestigial (the model list is engine-agnostic; every
+			// entry routes to pi by prefix) but the write path stays tolerant.
 			if (pickerModels) setPiPickerModels(pickerModels);
-			refreshPiPickerModels();
 			return Response.json(
 				readPiEngineConfig() ?? { enabled: false, pickerModels: [] },
 			);

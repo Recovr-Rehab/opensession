@@ -35,7 +35,7 @@ import { readOpencodeBridgeConfig, opencodeProviderOptions } from "./opencode-co
 import { ensureAnthropicBridge } from "./anthropic-bridge";
 import { isClaudeUsageLimitError } from "./runner-shared";
 import { markExhausted, getUsableAccountById, type ClaudeAccount } from "./claude-accounts";
-import { localProfileDefaultModel, toOpencodeModel } from "./models";
+import { localProfileDefaultModel, toOpencodeModel, type SessionEffort } from "./models";
 import { audit } from "./audit";
 import { isLocalProfile } from "./profile";
 import { bindOpenaiAccount, pickOpenaiAccount } from "./opencode-openai-auth";
@@ -58,6 +58,8 @@ export interface OneShotOpts {
   user?: string;
   /** Call-site label for the audit log (e.g. "generated-titles"). */
   label?: string;
+  /** Optional reasoning tier for models that support OpenCode variants. */
+  effort?: SessionEffort;
   timeoutMs?: number;
 }
 
@@ -253,6 +255,7 @@ export async function opencodeOneShot(
               model: parsed,
               system: opts.system,
               tools: { "*": false },
+              ...(opts.effort ? { variant: opts.effort } : {}),
               parts: [{ type: "text", text: prompt }],
             },
           }),

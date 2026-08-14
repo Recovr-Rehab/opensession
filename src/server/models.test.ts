@@ -28,7 +28,6 @@ import {
   opencodeModelLabel,
   piModelLabel,
   providerFor,
-  refreshPiPickerModels,
   resolveConcreteModel,
   resolveModel,
   toOpencodeModel,
@@ -220,36 +219,16 @@ describe("pi engine model routing", () => {
     );
   });
 
-  it("surfaces pi/anthropic AND pi/openai picker models; other pi providers stay unadvertised", () => {
-    const dir = mkdtempSync(join(tmpdir(), "pi-models-"));
-    const cfg = join(dir, "pi.json");
-    writeFileSync(
-      cfg,
-      JSON.stringify({
-        enabled: true,
-        pickerModels: [
-          "pi/anthropic/claude-opus-5",
-          "pi/openai/gpt-5.6-sol",
-          "pi/mistral/large",
-        ],
-      })
-    );
-    const prev = process.env.OPENSESSION_PI_CONFIG;
-    process.env.OPENSESSION_PI_CONFIG = cfg;
-    try {
-      refreshPiPickerModels();
-      const piIds = KNOWN_MODELS.filter((m) => m.provider === "pi").map((m) => m.id);
-      expect(piIds).toContain("pi/anthropic/claude-opus-5");
-      expect(piIds).toContain("pi/openai/gpt-5.6-sol");
-      expect(piIds).not.toContain("pi/mistral/large");
-    } finally {
-      // Restore the real config and re-fold so KNOWN_MODELS reflects boot
-      // state again for the rest of the process.
-      if (prev === undefined) delete process.env.OPENSESSION_PI_CONFIG;
-      else process.env.OPENSESSION_PI_CONFIG = prev;
-      refreshPiPickerModels();
-      rmSync(dir, { recursive: true, force: true });
-    }
+  it("never registers pi entries: the model list is engine-agnostic", () => {
+    expect(KNOWN_MODELS.some((m) => m.provider === "pi")).toBe(false);
+  });
+
+  it("resolves pi-routed preset ids to their preset", () => {
+    expect(dialPreset("pi/dial/opus-fable")?.id).toBe("dial/opus-fable");
+    expect(modelPreset("pi/dial/ultra")?.id).toBe("dial/ultra");
+    const orch = ORCHESTRATOR_PRESETS[0];
+    expect(orchestratorPreset(`pi/${orch.id}`)?.id).toBe(orch.id);
+    expect(piModelLabel("pi/dial/opus-fable")).toBe("Pi · Opus 5 + Fable oracle");
   });
 });
 
@@ -261,6 +240,10 @@ describe("accountProviderForModel", () => {
     expect(accountProviderForModel("openai/gpt-5.5")).toBe("codex");
     expect(accountProviderForModel("dial/ultra")).toBe("claude");
     expect(accountProviderForModel("dial/high")).toBe("codex");
+    // Pi-routed forms hit the same pools: the engine prefix is routing only.
+    expect(accountProviderForModel("pi/dial/ultra")).toBe("claude");
+    expect(accountProviderForModel("pi/dial/high")).toBe("codex");
+    expect(accountProviderForModel("pi/anthropic/claude-opus-5")).toBe("claude");
   });
 
   it("does not expose account pinning for unrelated providers", () => {

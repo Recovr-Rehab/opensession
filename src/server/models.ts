@@ -29,7 +29,6 @@ import {
   opencodeProviders,
   BRIDGE_PROVIDER_IDS,
 } from "./opencode-config";
-import { piPickerModels } from "./pi-config";
 import { stateDir } from "./paths";
 import { isLocalProfile, localProfileRoot } from "./profile";
 import { discoverLocalEngineCredentials } from "./local-engine-auth";
@@ -301,9 +300,11 @@ export const DIAL_PRESETS: DialPreset[] = [
   },
 ];
 
-/** The dial preset behind a model id, or undefined for non-dial ids. */
+/** The dial preset behind a model id, or undefined for non-dial ids.
+ *  Engine-agnostic: "pi/dial/<tier>" is the same preset routed to the pi
+ *  engine, so a leading pi/ strips before the lookup. */
 export function dialPreset(model?: string | null): DialPreset | undefined {
-  const id = (model || "").trim().toLowerCase();
+  const id = (model || "").trim().toLowerCase().replace(/^pi\//, "");
   if (!id.startsWith("dial/")) return undefined;
   return DIAL_PRESETS.find((p) => p.id === id);
 }
@@ -432,9 +433,10 @@ function orchestratorPickerDescription(preset: OrchestratorPreset): string {
   return `${preset.description}; delegates to ${workers.join(" and ")}`;
 }
 
-/** The orchestrator preset behind a model id, or undefined. */
+/** The orchestrator preset behind a model id, or undefined. Strips a leading
+ *  pi/ like dialPreset so the same preset can route through either engine. */
 export function orchestratorPreset(model?: string | null): OrchestratorPreset | undefined {
-  const id = (model || "").trim().toLowerCase();
+  const id = (model || "").trim().toLowerCase().replace(/^pi\//, "");
   if (!id.startsWith("orchestrator/")) return undefined;
   return ORCHESTRATOR_PRESETS.find((p) => p.id === id);
 }
@@ -488,6 +490,10 @@ export function opencodeModelLabel(id: string): string {
  * opencode-served model beside it in flat lists (/model output, Settings).
  */
 export function piModelLabel(id: string): string {
+  // A preset routed to pi ("pi/dial/<tier>") reads as the preset, not as a
+  // slug ("Pi · Opus 5 + Fable oracle").
+  const preset = modelPreset(id);
+  if (preset) return `Pi · ${preset.label}`;
   const tail = id.split("/").pop() || id;
   const native = KNOWN_MODELS.find(
     (m) => m.provider !== "opencode" && m.provider !== "pi" && m.id === tail
@@ -578,32 +584,12 @@ export function refreshOpencodePickerModels(): void {
 }
 refreshOpencodePickerModels();
 
-// Pi engine models are the same opt-in shape: `pickerModels` from
-// ~/.opensession-pi.json surface in the UI picker only while the engine is
-// enabled (piPickerModels returns [] otherwise); any other well-formed
-// pi/<provider>/<model> id still resolves via resolveModel's pi/ branch, it's
-// just not advertised. Folded at module load and re-folded from GET
-// /api/models, next to the opencode refresh.
-export function refreshPiPickerModels(): void {
-  for (let i = KNOWN_MODELS.length - 1; i >= 0; i--) {
-    if (KNOWN_MODELS[i].provider === "pi") KNOWN_MODELS.splice(i, 1);
-  }
-  try {
-    for (const id of piPickerModels()) {
-      // Served providers only: pi/anthropic/* (the loopback Anthropic bridge)
-      // and pi/openai/* (the ChatGPT-subscription codex pool). Anything else
-      // would just error at run start, so it stays unadvertised.
-      if (!id.startsWith("pi/anthropic/") && !id.startsWith("pi/openai/")) continue;
-      KNOWN_MODELS.push({
-        id,
-        provider: "pi",
-        label: piModelLabel(id),
-        aliases: [],
-      });
-    }
-  } catch {}
-}
-refreshPiPickerModels();
+// Pi engine entries no longer join KNOWN_MODELS: the model list is
+// engine-agnostic — every picker entry (models and presets alike) runs on
+// either engine, and the composer's Engine choice composes the pi/ prefix at
+// dispatch. Any well-formed pi/<provider>/<model> or pi/dial/<tier> id still
+// resolves via resolveModel's pi/ branch, so stored pi sessions keep working.
+// The pi config's pickerModels list is vestigial and no longer read here.
 
 /** Per-provider defaults: claude-fable-5 for Anthropic, gpt-5.6-sol for OpenAI. */
 export const DEFAULT_CLAUDE_MODEL = "claude-fable-5";
@@ -907,6 +893,20 @@ export function toOpencodeModel(model?: string | null): string | undefined {
   return reroute ? `${m[1]}/openai/${reroute}` : mapped;
 }
 
+/** Route any picker model or preset to the Pi engine. The picker stores one
+ * engine-neutral catalog entry; only the session model id carries execution
+ * routing. */
+export function toPiModel(model?: string | null): string | undefined {
+  const requested = (model || "").trim();
+  if (!requested) return model ?? undefined;
+  if (requested.startsWith("pi/")) return requested;
+  const preset = modelPreset(requested);
+  const concrete = toOpencodeModel(preset?.model || requested);
+  return concrete?.startsWith("opencode/")
+    ? `pi/${concrete.slice("opencode/".length)}`
+    : undefined;
+}
+
 function toOpencodeModelRaw(model?: string | null): string | undefined {
   const m = (model || "").trim();
   if (!m) return model ?? undefined;
@@ -951,6 +951,10 @@ export function accountProviderForModel(
 ): AccountProvider | undefined {
   const requested = model || interactiveDefaultModel();
   const resolved = toOpencodeModel(requested) || requested;
+  // Presets routed to pi ("pi/dial/<tier>") keep their pi/ prefix through
+  // toOpencodeModel — hop to the preset's MAIN model for the pool.
+  const piPreset = modelPreset(resolved);
+  if (piPreset) return accountProviderForModel(piPreset.model);
   // pi/anthropic/* draws from the same claude pool as opencode/anthropic —
   // the pi runner's loopback bridge picks from the designated claude accounts.
   const upstream = resolved.match(/^(?:opencode|pi)\/([^/]+)\//)?.[1];

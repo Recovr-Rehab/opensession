@@ -41,7 +41,6 @@ type Props = {
 	onAccountChange?: (accountId: string) => void;
 	/** Conversation usage shown inside this menu; omitted in new-session pickers. */
 	usage?: SessionUsage;
-	/** Keep the row visible as $0.00 before the first usage update arrives. */
 	showUsage?: boolean;
 	disabled?: boolean;
 	title?: string;
@@ -101,6 +100,30 @@ export function opencodeModelParts(
 	};
 }
 
+/** Strip a pi/ engine-routing prefix back to the id the picker lists:
+ * "pi/anthropic/claude-opus-5" → "opencode/anthropic/claude-opus-5",
+ * "pi/dial/opus-fable" → "dial/opus-fable". Non-pi ids pass through. The
+ * model list is engine-agnostic — the prefix is routing, not a different
+ * model — so label/effort/selection lookups all resolve through this. */
+export function baseModelId(id: string): string {
+	if (!id.startsWith("pi/")) return id;
+	const base = id.slice(3);
+	return base.startsWith("dial/") || base.startsWith("orchestrator/")
+		? base
+		: `opencode/${base}`;
+}
+
+/** Compose a picker id onto the pi engine ("dial/opus-fable" →
+ * "pi/dial/opus-fable", "opencode/anthropic/claude-opus-5" →
+ * "pi/anthropic/claude-opus-5"), or null when the entry can't route there
+ * (legacy native ids). */
+export function piModelId(id: string): string | null {
+	if (id.startsWith("pi/")) return id;
+	if (id.startsWith("opencode/")) return `pi/${id.slice("opencode/".length)}`;
+	if (id.startsWith("dial/") || id.startsWith("orchestrator/")) return `pi/${id}`;
+	return null;
+}
+
 /** Pure slug prettifier: "claude-sonnet-5" → "Sonnet 5", "claude-haiku-4-5" →
  * "Haiku 4.5", "gpt-5.4-mini" → "GPT-5.4 mini". Mirrors the server's
  * opencodeModelLabel (models.ts) but needs no models list, so it works in the
@@ -129,6 +152,10 @@ export function friendlyModelSlug(slug: string): string {
  * "Sonnet 5". The engine is an implementation detail — it never shows in a
  * model's name. */
 export function shortModelLabel(id: string, models: ModelOption[]): string {
+	// Pi-routed ids read as their base entry ("pi/dial/opus-fable" keeps the
+	// preset's label, not a slug).
+	if (id.startsWith("pi/") && models.some((m) => m.id === baseModelId(id)))
+		return shortModelLabel(baseModelId(id), models);
 	const oc = opencodeModelParts(id);
 	if (oc) return friendlyModelSlug(oc.model);
 	const raw = models.find((m) => m.id === id)?.label || id || "Default";
@@ -250,8 +277,11 @@ export function ModelEffortSelect({
 	onOpenChange,
 }: Props) {
 	const effectiveModel = model || defaultModel;
+	// Pi-routed ids resolve to their base list entry for label/effort/account
+	// lookups — the engine prefix is routing, not a different model.
+	const effectiveBase = baseModelId(effectiveModel);
 	const modelLabel = shortModelLabel(effectiveModel, models);
-	const supportedEffortIds = models.find((m) => m.id === effectiveModel)?.efforts ?? [];
+	const supportedEffortIds = models.find((m) => m.id === effectiveBase)?.efforts ?? [];
 	const supportedEfforts = EFFORTS.filter((e) => supportedEffortIds.includes(e.id));
 	const effectiveEffort = supportedEffortIds.includes(effort ?? "")
 		? effort!
@@ -260,7 +290,7 @@ export function ModelEffortSelect({
 			: supportedEffortIds[0];
 	const effortLabel = EFFORTS.find((e) => e.id === effectiveEffort)?.label;
 	const hasEffort = !!onEffortChange && supportedEfforts.length > 0;
-	const modelInfo = models.find((m) => m.id === effectiveModel);
+	const modelInfo = models.find((m) => m.id === effectiveBase);
 	const accountProvider = modelInfo?.accountProvider;
 	const providerAccounts = (accounts || []).filter((a) => a.provider === accountProvider);
 	const hasAccount = !!onAccountChange && providerAccounts.length > 0;
@@ -367,7 +397,9 @@ export function ModelEffortSelect({
 	const groupedPrimary = opencodeFirst && providerGroups.length > 1;
 
 	const isSelected = (option: ModelMenuOption) =>
-		option.value === model || (option.value === "" && (model === "" || model === defaultModel));
+		option.value === model ||
+		option.id === effectiveBase ||
+		(option.value === "" && (model === "" || model === defaultModel));
 	// Dim hint on the legacy submenu trigger when the CURRENT model lives in
 	// there — otherwise the open menu would show no checked row at all.
 	const selectedLegacyLabel =
@@ -381,7 +413,11 @@ export function ModelEffortSelect({
 		const item = (
 			<Menu.Item
 				onClick={() => {
-					onModelChange(option.value);
+					// Engine stays sticky: on a pi-routed session a model change
+					// recomposes the pi/ prefix over the new id (when it can route
+					// there — legacy/orchestrator entries fall back to opencode).
+					const piNext = effectiveModel.startsWith("pi/") ? piModelId(option.id) : null;
+					onModelChange(piNext ?? option.value);
 					if (onEffortChange && !nextEfforts.includes(effort ?? "")) {
 						const nextEffort = nextEfforts.includes("high") ? "high" : nextEfforts[0];
 						if (nextEffort) onEffortChange(nextEffort);

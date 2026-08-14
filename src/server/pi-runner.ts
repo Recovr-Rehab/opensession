@@ -200,6 +200,8 @@ import { buildEngineSwitchHandoffNote } from "./fork-handoff";
 import { piAnthropicTransport, piEngineEnabled } from "./pi-config";
 import { buildPiAnthropicProvider } from "./pi-anthropic-provider";
 import { createPiMcpBridge, type PiMcpBridge } from "./pi-mcp-bridge";
+import { opencodeOneShot } from "./opencode-oneshot";
+import { DIAL_ORACLE_AGENTS, dialPreset, toOpencodeModel } from "./models";
 import type { TranscriptEntry } from "./types";
 import type { RunAgentOpts } from "./agent-runner";
 import type { StreamEvent, ImageInput, TurnUsage } from "./run-events";
@@ -222,6 +224,60 @@ export function parsePiModel(
   const sep = rest.indexOf("/");
   if (sep <= 0 || sep === rest.length - 1) return null;
   return { providerID: rest.slice(0, sep), modelID: rest.slice(sep + 1) };
+}
+
+/** Resolve a Pi Dial id to the concrete Pi model that executes its main turn.
+ * The stored id stays `pi/dial/*`, so the preset's effort and oracle stay
+ * attached across continuation turns. */
+export function resolvePiDialModel(model: string): {
+  providerID: string;
+  modelID: string;
+  dial?: NonNullable<ReturnType<typeof dialPreset>>;
+} | null {
+  const dial = dialPreset(model);
+  if (model.toLowerCase().startsWith("pi/dial/") && !dial) return null;
+  const concrete = dial ? toOpencodeModel(dial.model) : model;
+  const parsed = concrete ? parsePiModel(concrete.replace(/^opencode\//, "pi/")) : null;
+  return parsed ? { ...parsed, ...(dial ? { dial } : {}) } : null;
+}
+
+function makePiDialOracleTool(dial: NonNullable<ReturnType<typeof dialPreset>>, user?: string): ToolDefinition<any, any, any> {
+  const oracle = DIAL_ORACLE_AGENTS[dial.oracleAgent];
+  return {
+    name: "oracle",
+    label: "Oracle",
+    description:
+      `Consult ${oracle?.label || dial.oracleAgent} for a read-only senior-engineering second opinion. ` +
+      "Use it for hard plans, significant reviews, architecture tradeoffs, or stubborn debugging, not routine searches or edits.",
+    parameters: {
+      type: "object",
+      properties: {
+        prompt: {
+          type: "string",
+          description: "Precise question with the relevant context, file paths, constraints, and options under consideration",
+        },
+      },
+      required: ["prompt"],
+    } as any,
+    async execute(_toolCallId, params, signal) {
+      const prompt = String((params as { prompt?: unknown })?.prompt ?? "").trim();
+      if (!prompt) throw new Error("oracle requires a prompt");
+      if (signal?.aborted) throw new Error("Oracle request aborted");
+      if (!oracle) throw new Error(`Dial oracle "${dial.oracleAgent}" is not configured`);
+      const answer = await opencodeOneShot(prompt, {
+        model: oracle.model,
+        effort: oracle.variant,
+        user,
+        label: "pi-dial-oracle",
+        system:
+          "You are a read-only senior engineering advisor. Give a concise, concrete second opinion. " +
+          "Do not claim to inspect files or run tools. State assumptions, tradeoffs, and recommended next steps.",
+      });
+      if (signal?.aborted) throw new Error("Oracle request aborted");
+      if (!answer) throw new Error("The Dial oracle was unavailable; continue using your own judgment");
+      return { content: [{ type: "text", text: answer }], details: undefined };
+    },
+  };
 }
 
 // ── SDK loading ──────────────────────────────────────────────────────────────
@@ -996,11 +1052,14 @@ export async function* runPi(
     yield { type: "error", content: gateReason, provider: PROVIDER, model };
     return;
   }
-  const parsed = parsePiModel(model);
+  const resolved = resolvePiDialModel(model);
+  const parsed = resolved
+    ? { providerID: resolved.providerID, modelID: resolved.modelID }
+    : null;
   if (!parsed) {
     yield {
       type: "error",
-      content: `Not a pi model id: "${model}" (expected pi/<provider>/<model>)`,
+      content: `Not a pi model id: "${model}" (expected pi/<provider>/<model> or pi/dial/<preset>)`,
       provider: PROVIDER,
       model,
     };
@@ -1417,7 +1476,10 @@ export async function* runPi(
     // in-process built-ins with server-env/unconstrained-path reach are never
     // activated. See the containment section above.
     const guardedOps = makeGuardedToolOps(cwd);
-    const customTools: ToolDefinition<any, any, any>[] = [...mcpBridge.discoveryTools];
+    const customTools: ToolDefinition<any, any, any>[] = [
+      ...mcpBridge.discoveryTools,
+      ...(resolved?.dial ? [makePiDialOracleTool(resolved.dial, user)] : []),
+    ];
     for (const name of localTools) {
       switch (name) {
         case "read":
@@ -1505,6 +1567,16 @@ export async function* runPi(
       githubUserLogin,
       deniedToolNotes: policy.noteGroups,
       commandPolicyGated: bashGated,
+      dialOracle: resolved?.dial
+        ? {
+            agent: "oracle",
+            presetLabel: resolved.dial.label,
+            mainLabel: parsed.modelID,
+            oracleLabel:
+              DIAL_ORACLE_AGENTS[resolved.dial.oracleAgent]?.label || resolved.dial.oracleAgent,
+            tool: true,
+          }
+        : undefined,
     });
 
     const agentDir = `${PI_STATE_DIR}/agent`;
@@ -1578,9 +1650,10 @@ export async function* runPi(
       ? sdk.SessionManager.open(resumePath, sessionDir)
       : sdk.SessionManager.create(cwd, sessionDir);
 
+    const selectedEffort = resolved?.dial?.effort ?? opts.effort;
     const thinkingLevel =
-      opts.effort && THINKING_LEVELS.has(opts.effort)
-        ? (opts.effort as "low" | "medium" | "high" | "xhigh" | "max")
+      selectedEffort && THINKING_LEVELS.has(selectedEffort)
+        ? (selectedEffort as "low" | "medium" | "high" | "xhigh" | "max")
         : undefined;
 
     const created = await sdk.createAgentSession({
@@ -1589,7 +1662,7 @@ export async function* runPi(
       modelRuntime: runtime,
       model: piModel,
       ...(thinkingLevel ? { thinkingLevel } : {}),
-      tools: [...localTools, ...mcpToolNames],
+      tools: [...localTools, ...mcpToolNames, ...(resolved?.dial ? ["oracle"] : [])],
       customTools,
       resourceLoader: loader,
       sessionManager,

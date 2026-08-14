@@ -5,7 +5,9 @@ import type { ModelOption } from "../lib/api";
 import {
 	ENGINE_LABELS,
 	LEGACY_GROUP_LABEL,
+	baseModelId,
 	opencodeModelParts,
+	piModelId,
 	shortModelLabel,
 	splitModelOptions,
 } from "./ModelEffortSelect";
@@ -37,7 +39,9 @@ export function ModelMenuRow({
 	prettyLabel: (id: string) => string;
 }) {
 	const effective = model || defaultModel;
-	const current = models.find((m) => m.id === effective);
+	// Pi-routed ids resolve to their base list entry (the prefix is routing).
+	const effectiveBase = baseModelId(effective);
+	const current = models.find((m) => m.id === effectiveBase);
 	const label =
 		current || opencodeModelParts(effective)
 			? shortModelLabel(effective, models)
@@ -59,12 +63,17 @@ export function ModelMenuRow({
 	const row = (m: ModelOption, raw = false) => (
 		<Menu.Item
 			key={m.id}
-			onClick={() => onChange(m.id === defaultModel ? "" : m.id)}
+			onClick={() => {
+				// Engine stays sticky: on a pi-routed session a model change
+				// recomposes the pi/ prefix over the new id where it can route.
+				const piNext = effective.startsWith("pi/") ? piModelId(m.id) : null;
+				onChange(piNext ?? (m.id === defaultModel ? "" : m.id));
+			}}
 		>
 			<span className="min-w-0 flex-1 truncate">
 				{raw ? m.label : shortModelLabel(m.id, models)}
 			</span>
-			{m.id === effective && <IconCheck size={18} className="text-dim" />}
+			{m.id === effectiveBase && <IconCheck size={18} className="text-dim" />}
 		</Menu.Item>
 	);
 

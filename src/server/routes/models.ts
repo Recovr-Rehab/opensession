@@ -7,7 +7,7 @@
  */
 
 import { requestUser, type RouteContext } from "./context";
-import { KNOWN_MODELS, accountProviderForModel, getDefaultModel, getModelFallbackAuto, interactiveDefaultModel, localProfileDefaultModel, localProfileModels, modelEfforts, refreshOpencodePickerModels, refreshPiPickerModels, setDefaultModel, setInteractiveDefaultModel, setModelFallbackAuto, toOpencodeModel } from "../models";
+import { KNOWN_MODELS, accountProviderForModel, getDefaultModel, getModelFallbackAuto, interactiveDefaultModel, localProfileDefaultModel, localProfileModels, modelEfforts, refreshOpencodePickerModels, setDefaultModel, setInteractiveDefaultModel, setModelFallbackAuto, toOpencodeModel } from "../models";
 import { type Sandbox } from "../sandbox";
 import { suggestBranchName } from "../suggest-branch";
 import { buildSystemPromptParts } from "../system-prompt";
@@ -36,20 +36,19 @@ export async function handleModelsRoutes(
 				autoFallback: false,
 			});
 		}
-		// Re-fold the opencode + pi entries from config on every fetch (cheap,
-		// tiny JSON reads — same "read fresh" contract as /sandbox/status below)
-		// so a config flip like the Orchestrator opt-in or the pi enable shows
-		// up on the next picker open, not the next restart/settings-save.
+		// Re-fold the opencode entries from config on every fetch (cheap, tiny
+		// JSON reads — same "read fresh" contract as /sandbox/status below) so a
+		// config flip like the Orchestrator opt-in shows up on the next picker
+		// open, not the next restart/settings-save.
 		refreshOpencodePickerModels();
-		refreshPiPickerModels();
-		// Engine-prefixed core: the picker surfaces ONLY opencode + pi models.
-		// Native claude/codex ids stay resolvable + executable (the direct
-		// Slack/Linear/Plain agent loops still run them on the SDK), just
-		// not selectable here. Guard: with neither engine configured, fall
-		// back to the full registry so the picker is never empty.
-		const engineModels = KNOWN_MODELS.filter(
-			(m) => m.provider === "opencode" || m.provider === "pi",
-		);
+		// One engine-agnostic list: every entry (models and presets alike) runs
+		// on any configured engine — the composer's Engine choice routes it by
+		// prefix at dispatch (`engines` below is the only engine signal). Native
+		// claude/codex ids stay resolvable + executable (the direct
+		// Slack/Linear/Plain agent loops still run them on the SDK), just not
+		// selectable here. Guard: with no engine configured, fall back to the
+		// full registry so the picker is never empty.
+		const engineModels = KNOWN_MODELS.filter((m) => m.provider === "opencode");
 		const engineConfigured = engineModels.length > 0;
 		return Response.json({
 			models: (engineConfigured ? engineModels : KNOWN_MODELS).map((model) => ({
