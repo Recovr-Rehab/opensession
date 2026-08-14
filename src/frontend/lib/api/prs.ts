@@ -66,12 +66,30 @@ export interface RecentCommit {
 	deletions: number;
 }
 
-/** Recent commits for repos with no pull requests (Open Session's own repo). */
-export async function fetchRecentCommits(): Promise<RecentCommit[]> {
-	const data = await request<{ commits: RecentCommit[] }>("/recent-commits", {
+/** One page of the commit feed: the window served, and whether older history
+ *  remains to ask for. */
+export interface RecentCommitPage {
+	commits: RecentCommit[];
+	days: number;
+	hasMore: boolean;
+}
+
+/**
+ * Recent commits for repos with no pull requests (Open Session's own repo),
+ * from the last `days`. The server clamps the window to what it reads and
+ * says whether anything older is left, so a caller can stop offering to widen
+ * a feed that has already reached the end of the history.
+ */
+export async function fetchRecentCommits(days?: number): Promise<RecentCommitPage> {
+	const suffix = days ? `?days=${days}` : "";
+	const data = await request<RecentCommitPage>(`/recent-commits${suffix}`, {
 		label: "Failed to fetch recent commits",
 	});
-	return data?.commits || [];
+	return {
+		commits: data?.commits || [],
+		days: data?.days || days || 0,
+		hasMore: !!data?.hasMore,
+	};
 }
 
 export async function fetchDiff(

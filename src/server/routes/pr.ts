@@ -162,9 +162,13 @@ export async function handlePrRoutes(
 
 	// The same window for repos that ship without pull requests: commits on
 	// their default branch, read from the checkout (see recent-commits.ts).
+	// `?days=` widens it — the feed asks for more as you page down, and the
+	// answer says which window it served so the client knows when it's at the
+	// end of what's readable.
 	if (path === "/api/recent-commits" && req.method === "GET") {
-		const { getRecentCommits } = await import("../recent-commits");
-		return Response.json({ commits: await getRecentCommits() });
+		const { getRecentCommits, DEFAULT_DAYS } = await import("../recent-commits");
+		const asked = Number(url.searchParams.get("days"));
+		return Response.json(await getRecentCommits(asked || DEFAULT_DAYS));
 	}
 
 	// PR details for a session's branch (PR tab). `?repo=<project>` targets an

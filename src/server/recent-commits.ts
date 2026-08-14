@@ -31,9 +31,16 @@ export interface RecentCommit {
 	deletions: number;
 }
 
-/** How far back to read per repo. Deep enough to fill the feed's own window
- *  several times over on a busy day, shallow enough to stay a cheap read. */
-const LOG_LIMIT = 250;
+/** How far back to read per repo. A flat commit count was the wrong unit: a
+ *  repo shipping 200 commits a day burned a 250-commit budget in thirty
+ *  hours, so the feed could not reach yesterday however far you scrolled.
+ *  The read is a date range now, with a count ceiling so a runaway repo still
+ *  costs a bounded `git log`. */
+const READ_DAYS = 45;
+const READ_LIMIT = 4000;
+/** What a caller gets when it doesn't ask for a window. A few days keeps the
+ *  first page cheap; the feed widens it from there. */
+export const DEFAULT_DAYS = 3;
 const CACHE_TTL_MS = 60_000;
 
 const RECORD = "\x1e";
@@ -94,7 +101,7 @@ async function readRepoCommits(repo: {
 	// morning and rebased on at noon shipped at noon, and sorting the feed by
 	// when it was written buries it under work that landed after it.
 	const format = `${RECORD}%H${FIELD}%an${FIELD}%ae${FIELD}%cI${FIELD}%s`;
-	const log = await $`git -C ${repo.repo} log ${ref} --no-merges -n ${LOG_LIMIT} --shortstat --format=${format}`
+	const log = await $`git -C ${repo.repo} log ${ref} --no-merges --since=${`${READ_DAYS}.days.ago`} -n ${READ_LIMIT} --shortstat --format=${format}`
 		.quiet()
 		.nothrow();
 	if (log.exitCode !== 0) return [];
@@ -104,12 +111,39 @@ async function readRepoCommits(repo: {
 let cache: { data: RecentCommit[]; ts: number } | null = null;
 let inFlight: Promise<RecentCommit[]> | null = null;
 
+export interface RecentCommitPage {
+	commits: RecentCommit[];
+	/** The window actually served, after clamping to what is read. */
+	days: number;
+	/** There is older history to ask for. False means this is all of it, so a
+	 *  caller offering "show more" can stop offering it. */
+	hasMore: boolean;
+}
+
 /**
  * Recent commits on the default branch of every repo that ships without PRs,
- * newest first. Cached briefly: the feed asks on every page load, and a repo's
- * log doesn't move faster than that.
+ * newest first, from the last `days`.
+ *
+ * One deep read is cached and every window is a slice of it, so widening the
+ * feed costs an array filter rather than another `git log` — and the response
+ * stays proportional to what was asked for, which is what keeps the first page
+ * of a busy repo small.
  */
-export async function getRecentCommits(): Promise<RecentCommit[]> {
+export async function getRecentCommits(days = DEFAULT_DAYS): Promise<RecentCommitPage> {
+	const all = await readAllCommits();
+	const window = clampDays(days);
+	const cutoff = Date.now() - window * 86_400_000;
+	const commits = all.filter((commit) => new Date(commit.committedAt).getTime() >= cutoff);
+	return { commits, days: window, hasMore: commits.length < all.length };
+}
+
+/** Windows outside the read range can't be honoured, so they aren't offered. */
+export function clampDays(days: number): number {
+	if (!Number.isFinite(days)) return DEFAULT_DAYS;
+	return Math.min(READ_DAYS, Math.max(1, Math.floor(days)));
+}
+
+async function readAllCommits(): Promise<RecentCommit[]> {
 	if (cache && Date.now() - cache.ts < CACHE_TTL_MS) return cache.data;
 	if (inFlight) return inFlight;
 	inFlight = (async () => {

@@ -58,10 +58,18 @@ interface Props {
 	onSelect: (session: UnifiedSession) => void;
 }
 
-/** How much of the feed to keep on screen. Far enough back to cover a quiet
- *  fortnight; past that it stops being what's happening and starts being
- *  history, which the Pull requests list holds properly. */
-const FEED_LIMIT = 80;
+/** How far back the feed reaches, in days, and the steps "Show more" walks.
+ *
+ *  This used to be a flat row count, which read as "the feed only shows
+ *  today" on a repo that ships a hundred times a day: the cap was spent
+ *  before the first date group ended, so no amount of scrolling reached
+ *  yesterday. A window is the honest unit — the list ends where the days do,
+ *  and the button says how much further it can go. */
+const DAY_STEPS = [3, 7, 14, 45];
+
+/** A ceiling on rendered rows, so a very wide window can't stall the page.
+ *  It sits far above a busy fortnight; the window is what normally binds. */
+const RENDER_CEILING = 1500;
 
 /** Everyone, or one person. */
 type Scope = { kind: "everyone" } | { kind: "person"; key: string };
@@ -137,18 +145,36 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 	// Repos that ship without pull requests — Open Session's own — say what
 	// they shipped in commits instead, and land in the same list.
 	const [commits, setCommits] = useState<RecentCommit[]>([]);
+	// How far back the list currently reaches. "Show more" walks it out, and
+	// the server answers with the window it could actually serve, so a step
+	// that hits the end of the readable history stops offering another one.
+	const [days, setDays] = useState(DAY_STEPS[0]);
+	const [hasOlder, setHasOlder] = useState(true);
+	const [widening, setWidening] = useState(false);
 	useEffect(() => {
 		let active = true;
 		fetchRecentPrs()
 			.then((prs) => active && setRecentPrs(prs))
 			.catch(() => {});
-		fetchRecentCommits()
-			.then((rows) => active && setCommits(rows))
-			.catch(() => {});
 		return () => {
 			active = false;
 		};
 	}, []);
+	useEffect(() => {
+		let active = true;
+		setWidening(true);
+		fetchRecentCommits(days)
+			.then((page) => {
+				if (!active) return;
+				setCommits(page.commits);
+				setHasOlder(page.hasMore);
+			})
+			.catch(() => {})
+			.finally(() => active && setWidening(false));
+		return () => {
+			active = false;
+		};
+	}, [days]);
 	// One person's own merges, on top of the global list: that list is capped
 	// across the whole team, so a quiet fortnight would drop someone out of
 	// their own feed.
@@ -184,11 +210,16 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 		(row) => inScope(row.person) && (repo === "all" || row.repo === repo),
 	);
 	const groups = new Map<string, FeedRow[]>();
-	for (const row of shipped.slice(0, FEED_LIMIT)) {
+	for (const row of shipped.slice(0, RENDER_CEILING)) {
 		const label = dateGroup(row.shippedAt);
 		groups.set(label, [...(groups.get(label) || []), row]);
 	}
-	const days = [...groups.entries()];
+	const dayGroups = [...groups.entries()];
+
+	// The next step out, offered only while the server still holds history
+	// older than the window it just served.
+	const nextStep = DAY_STEPS.find((step) => step > days);
+	const canWiden = !!nextStep && hasOlder;
 
 	const scopeName = scope.kind === "person" ? personLabel(scope.key) : null;
 
@@ -303,7 +334,7 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 								</Menu.Root>
 							)}
 						</div>
-						{days.length === 0 && (
+						{dayGroups.length === 0 && !widening && (
 							// A picked teammate or repo with nothing shipped is an answer,
 							// so the header stays and the sentence names the filter that
 							// emptied it. Both are on screen, so a sentence that names
@@ -320,7 +351,7 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 							</EmptyState>
 						)}
 						<div className={PR_LIST}>
-							{days.map(([label, rows]) => (
+							{dayGroups.map(([label, rows]) => (
 								<div key={label} className="mb-4">
 									<h4 className={PR_GROUP_LABEL}>
 										{label}
@@ -390,6 +421,23 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 								</div>
 							))}
 						</div>
+						{/* The end of the window, not the end of the work: the feed
+						    reaches back a few days by default so the first page stays
+						    cheap, and this walks it out. It goes when the server says
+						    it holds nothing older, so the last page ends in the list
+						    rather than in a button that would do nothing. */}
+						{canWiden && (
+							<div className="mt-1 flex justify-center">
+								<Button
+									variant="ghost"
+									size="sm"
+									onClick={() => nextStep && setDays(nextStep)}
+									disabled={widening}
+								>
+									{widening ? "Loading…" : "Show more"}
+								</Button>
+							</div>
+						)}
 					</>
 				)}
 			</div>
