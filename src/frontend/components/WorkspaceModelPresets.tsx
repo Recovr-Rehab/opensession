@@ -3,6 +3,15 @@ import type { Workspace } from "../lib/types";
 import { updateWorkspaceApi, invalidateModelsCache } from "../lib/api";
 import { Modal } from "../ui/modal";
 import { Switch } from "../ui/switch";
+import {
+	SettingCard,
+	SettingRow,
+	SettingRowControl,
+	SettingRowDescription,
+	SettingRowText,
+	SettingRowTitle,
+	SettingsGroupLabel,
+} from "../ui/settings";
 
 type Settings = NonNullable<Workspace["modelSettings"]>;
 
@@ -86,5 +95,31 @@ export function WorkspaceModelPresets({
 				<Modal.Footer><Modal.Close render={<button className="rounded-sm px-3 py-2 text-label text-dim hover:bg-hover">Cancel</button>} /><button className="rounded-sm bg-fg px-3 py-2 text-label text-bg disabled:opacity-50" disabled={saving} onClick={() => void save()}>{saving ? "Saving…" : "Save"}</button></Modal.Footer>
 			</Modal.Content>
 		</Modal.Root>
+	);
+}
+
+/** Workspace-specific entry inside Settings → Models. */
+export function WorkspaceModelPresetSettings({ workspace }: { workspace?: Workspace }) {
+	const [open, setOpen] = useState(false);
+	return (
+		<>
+			<SettingsGroupLabel>Workspace presets</SettingsGroupLabel>
+			<SettingCard>
+				<SettingRow>
+					<SettingRowText>
+						<SettingRowTitle>{workspace ? workspace.name : "No workspace selected"}</SettingRowTitle>
+						<SettingRowDescription>
+							{workspace
+								? "Choose the Dial and Orchestrator, then add model combinations for this workspace."
+								: "Open a workspace, then return here to configure its model combinations."}
+						</SettingRowDescription>
+					</SettingRowText>
+					<SettingRowControl>
+						<button className="rounded-sm border border-line px-3 py-2 text-label text-fg hover:bg-hover disabled:cursor-not-allowed disabled:opacity-50" disabled={!workspace} onClick={() => setOpen(true)}>Configure</button>
+					</SettingRowControl>
+				</SettingRow>
+			</SettingCard>
+			{workspace && <WorkspaceModelPresets workspace={workspace} open={open} onOpenChange={setOpen} onSaved={() => window.dispatchEvent(new Event("opensession:workspaces-changed"))} />}
+		</>
 	);
 }

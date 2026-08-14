@@ -166,6 +166,7 @@ import {
 	getPinNewWorkspaces,
 	receivePins,
 } from "./lib/pins";
+import { receiveMention, receiveMentionsCleared } from "./lib/mentions";
 import { applyTabOrder, saveTabOrder, onTabOrderChanged } from "./lib/tab-order";
 import {
 	clearTabSplit,
@@ -721,6 +722,11 @@ export function App(
 		window.addEventListener("focus", onFocus);
 		return () => window.removeEventListener("focus", onFocus);
 	}, [refreshWorkspaces]);
+	useEffect(() => {
+		const onWorkspaceSettingsChanged = () => refreshWorkspaces();
+		window.addEventListener("opensession:workspaces-changed", onWorkspaceSettingsChanged);
+		return () => window.removeEventListener("opensession:workspaces-changed", onWorkspaceSettingsChanged);
+	}, [refreshWorkspaces]);
 
 	// Subscribe to the per-user pin/color stores. Both hydrate async at module
 	// load, and on a fast localhost that load() can resolve (and emit) before
@@ -1241,6 +1247,14 @@ export function App(
 		return addHandler((msg) => {
 			if (msg.type === "pins_changed") {
 				receivePins(msg.user, msg.pins);
+				return;
+			}
+			if (msg.type === "mention") {
+				receiveMention(msg.user, msg.mention);
+				return;
+			}
+			if (msg.type === "mentions_cleared") {
+				receiveMentionsCleared(msg.user, msg.sessionId);
 				return;
 			}
 			if (msg.type === "global_presence") {
@@ -2094,6 +2108,10 @@ export function App(
 	// via + shows up next to its slack source. Failing that, the open session alone
 	// still gets a strip (one tab + the + button).
 	const activeWorkspaceId = routeWorkspaceId ?? (currentSession?.workspaceId || null);
+	const [settingsWorkspaceId, setSettingsWorkspaceId] = useState<string | null>(null);
+	useEffect(() => {
+		if (activeWorkspaceId) setSettingsWorkspaceId(activeWorkspaceId);
+	}, [activeWorkspaceId]);
 
 	// Feed the ⌘⇧C copy-link shortcut: the open session (workspace-scoped when it
 	// has one), the open workspace/PR preview, or nothing linkable.
@@ -3407,6 +3425,7 @@ export function App(
 				{settingsActive && (
 					<Settings
 						onBack={goBack}
+						workspace={settingsWorkspaceId ? workspaces.find((workspace) => workspace.id === settingsWorkspaceId) : undefined}
 						section={
 							route.view === "settings"
 								? route.section

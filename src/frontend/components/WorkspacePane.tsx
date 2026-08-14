@@ -16,7 +16,6 @@ import { PANEL_SHELL } from "../lib/session-panel-classes";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
 import { getDefaultModelPref } from "../lib/default-model-pref";
 import { InlineAlert } from "../ui/state";
-import { WorkspaceModelPresets } from "./WorkspaceModelPresets";
 
 interface Props {
 	workspace: Workspace;
@@ -81,7 +80,6 @@ export function WorkspacePane({
 	const [models, setModels] = useState<ModelOption[]>([]);
 	const [defaultModel, setDefaultModel] = useState("");
 	const [model, setModel] = useState(""); // "" = default
-	const [presetSettingsOpen, setPresetSettingsOpen] = useState(false);
 	const currentUser = useCurrentUser();
 	const isPhone = useIsPhone();
 
@@ -262,10 +260,7 @@ export function WorkspacePane({
 	// PR there (markdown.ts).
 	const withPanel = (main: React.ReactNode) => (
 		<MarkdownRepoProvider repo={workspace.repo}>
-			<>
-				<div className="flex h-full min-h-0"><div className="flex-1 min-w-0 min-h-0">{main}</div>{infoPanel}</div>
-				<WorkspaceModelPresets workspace={workspace} open={presetSettingsOpen} onOpenChange={setPresetSettingsOpen} onSaved={() => window.dispatchEvent(new Event("opensession:workspaces-changed"))} />
-			</>
+			<div className="flex h-full min-h-0"><div className="flex-1 min-w-0 min-h-0">{main}</div>{infoPanel}</div>
 		</MarkdownRepoProvider>
 	);
 
@@ -330,7 +325,6 @@ export function WorkspacePane({
 				<div className="w-full max-w-[760px] mx-auto px-5 py-6">
 					<div className="text-section-title font-semibold text-fg">
 						<span>{workspace.name}</span>
-						<button className="ml-2 rounded-sm px-2 py-1 text-supporting font-normal text-dim hover:bg-hover hover:text-fg" onClick={() => setPresetSettingsOpen(true)}>Models</button>
 					</div>
 					<div className="text-dim text-supporting mt-1 flex items-center gap-2 flex-wrap">
 						{workspace.repo && <span>{repoLabel(workspace.repo)}</span>}

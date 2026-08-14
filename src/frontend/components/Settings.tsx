@@ -43,6 +43,7 @@ import { SandboxesPanel } from "./settings/SandboxesPanel";
 import { RunnersPanel } from "./settings/RunnersPanel";
 import { SettingsAccountCard, SettingsAccountFooter } from "./SettingsAccount";
 import { SetupPanel } from "./Setup";
+import type { Workspace } from "../lib/types";
 
 // The full-window Settings surface: a left sub-nav + a scrolling body, reached
 // from the "Settings" item in the account menu. Designed to grow — each area is
@@ -658,11 +659,13 @@ function NavSearch({
 function SectionPanel({
 	section,
 	onBack,
+	workspace,
 	children,
 }: {
 	section: SettingsSectionKey;
 	/** Leaving settings — the Setup wizard's last step offers it as "Done". */
 	onBack?: () => void;
+	workspace?: Workspace;
 	children?: React.ReactNode;
 }) {
 	return (
@@ -678,7 +681,7 @@ function SectionPanel({
 			{section === "library" && <LibraryPanel />}
 			{section === "integrations" && <IntegrationsPanel />}
 			{section === "audit" && <AuditPanel />}
-			{section === "models" && <ModelsPanel />}
+			{section === "models" && <ModelsPanel workspace={workspace} />}
 			{section === "sandboxes" && <SandboxesPanel />}
 			{section === "runners" && <RunnersPanel />}
 			{section === "connections" && <Connections />}
@@ -697,6 +700,7 @@ export function Settings({
 	section,
 	onSelect,
 	onShowRoot,
+	workspace,
 	children,
 }: {
 	onBack: () => void;
@@ -708,6 +712,7 @@ export function Settings({
 	onSelect: (key: SettingsSectionKey) => void;
 	/** Phone sheet's back-to-root (navigate to sectionless /settings). */
 	onShowRoot?: () => void;
+	workspace?: Workspace;
 	/** The active tool's panel (App owns the tool components and their props). */
 	children?: React.ReactNode;
 }) {
@@ -740,6 +745,7 @@ export function Settings({
 				onSelect={onSelect}
 				onShowRoot={onShowRoot}
 				onBack={onBack}
+				workspace={workspace}
 			>
 				{children}
 			</MobileSettings>
@@ -819,10 +825,10 @@ export function Settings({
 				)}
 			>
 				{TOOL_SECTIONS.has(active) ? (
-					<SectionPanel section={active}>{children}</SectionPanel>
+					<SectionPanel section={active} workspace={workspace}>{children}</SectionPanel>
 				) : (
 					<div className={SETTINGS_PANEL_FRAME}>
-						<SectionPanel section={active} onBack={onBack}>
+						<SectionPanel section={active} onBack={onBack} workspace={workspace}>
 							{children}
 						</SectionPanel>
 					</div>
@@ -844,6 +850,7 @@ function MobileSettings({
 	onSelect,
 	onShowRoot,
 	onBack,
+	workspace,
 	children,
 }: {
 	groups: SectionGroup[];
@@ -851,6 +858,7 @@ function MobileSettings({
 	onSelect: (key: SettingsSectionKey) => void;
 	onShowRoot?: () => void;
 	onBack: () => void;
+	workspace?: Workspace;
 	children?: React.ReactNode;
 }) {
 	const [query, setQuery] = useState("");
@@ -966,10 +974,10 @@ function MobileSettings({
 							{shownSection && (
 								<div data-settings-scroll className={SETTINGS_CONTENT_SHEET}>
 									{TOOL_SECTIONS.has(shownSection) ? (
-										<SectionPanel section={shownSection}>{children}</SectionPanel>
+										<SectionPanel section={shownSection} workspace={workspace}>{children}</SectionPanel>
 									) : (
 										<div className={SETTINGS_PANEL_FRAME_SHEET}>
-											<SectionPanel section={shownSection} onBack={onBack}>
+											<SectionPanel section={shownSection} onBack={onBack} workspace={workspace}>
 												{children}
 											</SectionPanel>
 										</div>
