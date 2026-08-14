@@ -1194,13 +1194,13 @@ export function PrPanel({
       : pr.state === "MERGED"
         ? "Merged"
         : "Closed";
-  const stateClass = pr.isDraft
-    ? "bg-control text-dim"
+  const stateDotClass = pr.isDraft
+    ? "bg-faint"
     : pr.state === "OPEN"
-      ? "bg-green text-white"
+      ? "bg-green"
       : pr.state === "MERGED"
-        ? "bg-purple text-white"
-        : "bg-red text-white";
+        ? "bg-purple"
+        : "bg-red";
 
   const canMergeAfterReview =
     pr.state === "OPEN" &&
@@ -1273,8 +1273,8 @@ export function PrPanel({
       <main className="min-h-0 flex-1 overflow-y-auto bg-surface pb-24 [--review-file-header-top:52px] phone:pb-36">
         <header className={`flex shrink-0 items-center gap-3 px-6 phone:px-3 ${headerCompact ? "h-[52px]" : "h-16"}`}>
           {!headerCompact && (
-            <span className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-label font-semibold ${stateClass}`}>
-              <PrStateIcon state={pr.state} isDraft={pr.isDraft} />
+            <span className="inline-flex h-8 shrink-0 items-center gap-2 rounded-control bg-control px-2.5 text-label font-medium text-dim">
+              <span className={`size-2 rounded-full ${stateDotClass}`} aria-hidden="true" />
               {stateLabel}
             </span>
           )}
@@ -1292,8 +1292,8 @@ export function PrPanel({
               <div className="mt-0.5 flex items-center gap-1.5 overflow-hidden whitespace-nowrap text-meta text-dim">
                 <span className="truncate">
                   <strong className="font-semibold">{pr.author}</strong> wants to merge {pr.commits?.length || 0} commit{pr.commits?.length === 1 ? "" : "s"} into
-                  {" "}<span className="rounded-sm bg-blue-soft px-1.5 py-0.5 text-blue">{pr.baseRefName}</span>
-                  {" "}from <span className="rounded-sm bg-blue-soft px-1.5 py-0.5 text-blue">{pr.headRefName}</span>
+                  {" "}<span className="rounded-sm bg-control px-1.5 py-0.5 font-medium text-fg">{pr.baseRefName}</span>
+                  {" "}from <span className="rounded-sm bg-control px-1.5 py-0.5 font-medium text-fg">{pr.headRefName}</span>
                 </span>
                 <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
                   <span className="text-green">+{pr.additions}</span>
