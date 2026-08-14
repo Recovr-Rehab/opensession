@@ -385,6 +385,7 @@ export function PrPanel({
   const [diffLoading, setDiffLoading] = useState(true);
   const [diffError, setDiffError] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingComment[]>([]);
+  const [reviewing, setReviewing] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewEvent, setReviewEvent] = useState<ReviewEvent>("APPROVE");
   const [summary, setSummary] = useState("");
@@ -582,6 +583,8 @@ export function PrPanel({
     setDiff(null);
     setGit(null);
     setPending([]);
+    setReviewing(false);
+    setReviewOpen(false);
     setPrViewed(null);
     setCodeFlow(null);
     setCodeFlowLoading(false);
@@ -839,7 +842,11 @@ export function PrPanel({
       setReviewEvent("APPROVE");
       setMergeAfterReview(false);
       setReviewDone(merged ? "merged" : result.url || "submitted");
-      setTimeout(() => setReviewDone(null), 6000);
+      setTimeout(() => {
+        if (actionTargetKey !== activeLoadTargetRef.current) return;
+        setReviewDone(null);
+        setReviewing(false);
+      }, 6000);
       await load(true);
     } catch (e: any) {
       if (actionTargetKey === activeLoadTargetRef.current)
@@ -1246,11 +1253,13 @@ export function PrPanel({
     defaultExpandedFiles: Infinity,
     viewedFiles: prViewed?.key === viewedKey ? prViewed.viewed : undefined,
     onToggleViewed: handleToggleViewed,
-    disabled: !caps.reviewComments,
-    disabledHint: `Inline review comments aren't supported on ${provider.name}`,
+    disabled: !reviewing || !caps.reviewComments,
+    disabledHint: !caps.reviewComments
+      ? `Inline review comments aren't supported on ${provider.name}`
+      : "Start a review to add inline comments.",
     submitLabel: "Add comment",
     placeholder: `Comment on #${diff.number}, added to your pending review…`,
-    pendingComments: pending,
+    pendingComments: reviewing ? pending : undefined,
     onRemovePending: handleRemovePending,
     onSubmit: handleAddPending,
     imageSrcs,
@@ -1275,6 +1284,8 @@ export function PrPanel({
       mergeError={mergeError}
       onOpenFile={scrollToFile}
       onOpenFiles={() => setPage("files")}
+      onOpenSessions={sessions ? () => setSessionsOpen(true) : undefined}
+      sessionCount={relatedSessions.length}
       focusChecksSeq={focusChecksSeq}
       compact={railStacked}
     />
@@ -1321,7 +1332,9 @@ export function PrPanel({
 
       {/* The PR identity lives inside the scroll container, so it gets out of
           the way once the reviewer reaches the code. Only the page row sticks. */}
-      <main className="min-h-0 flex-1 overflow-y-auto bg-surface pb-24 [--review-file-header-top:52px] phone:pb-36">
+      <main
+        className={`min-h-0 flex-1 overflow-y-auto bg-surface [--review-file-header-top:52px] ${reviewing ? "pb-24 phone:pb-36" : "pb-4"}`}
+      >
         <header className="flex h-[52px] shrink-0 items-center gap-2 px-6 phone:px-3">
           <span className={`inline-flex h-6 shrink-0 items-center rounded-control px-2 text-meta font-semibold tracking-[0.04em] uppercase ${stateBadgeClass}`}>
             {stateLabel}
@@ -1340,58 +1353,72 @@ export function PrPanel({
               <IconChevronRight className="shrink-0 text-faint" size={14} />
             </>
           )}
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <a
-              className="flex min-w-0 items-baseline gap-1 text-dialog-title font-normal leading-[1.2] tracking-[-0.005em] text-fg no-underline hover:text-link phone:text-body"
-              href={pr.url}
-              target="_blank"
-              rel="noopener"
-              title={`${pr.title} #${pr.number}`}
-            >
-              <span className="truncate">{pr.title}</span>
-              <span className="shrink-0 text-faint">#{pr.number}</span>
-            </a>
-            {!headerCompact && (
-              <div
-                className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-meta text-dim tabular-nums"
-                title={`${pr.commits?.length || 0} commits · ${pr.changedFiles} files changed · ${pr.headRefName} into ${pr.baseRefName}`}
+          {/* Title only. Counts, commits and the sessions on this PR are the
+              rail's job, so the bar stays one line of identity. */}
+          <a
+            className="flex min-w-0 flex-1 items-baseline gap-1 text-item-title font-semibold leading-[1.2] tracking-[-0.01em] text-fg no-underline hover:text-link"
+            href={pr.url}
+            target="_blank"
+            rel="noopener"
+            title={`${pr.title} #${pr.number}`}
+          >
+            <span className="truncate">{pr.title}</span>
+            <span className="shrink-0 font-normal text-faint">#{pr.number}</span>
+          </a>
+          {pr.staging?.url && (
+            <Tooltip label="Open the preview environment">
+              <a
+                className="ml-auto inline-flex size-8 shrink-0 items-center justify-center rounded-control text-dim no-underline hover:bg-hover hover:text-fg"
+                href={pr.staging.url}
+                target="_blank"
+                rel="noopener"
+                aria-label="Open the preview environment"
               >
-                <span>{pr.commits?.length || 0} commit{pr.commits?.length === 1 ? "" : "s"}</span>
-                <span className="text-faint" aria-hidden="true">·</span>
-                <span>{pr.changedFiles} file{pr.changedFiles === 1 ? "" : "s"}</span>
-                <span className="text-faint" aria-hidden="true">·</span>
-                <span className="flex items-center gap-1.5">
-                  <span className="text-green">+{pr.additions}</span>
-                  <span className="text-red">−{pr.deletions}</span>
-                </span>
-              </div>
-            )}
-          </div>
-          {!railStacked && (
-            <div className="ml-auto flex shrink-0 items-center gap-1 text-meta text-dim">
-              {sessions && (
-                <button
-                  className="inline-flex h-8 items-center rounded-control border-0 bg-transparent px-2 font-medium text-dim hover:bg-hover hover:text-fg"
-                  onClick={() => setSessionsOpen(true)}
-                  title="Sessions linked to this PR"
+                <IconGlobe size={19} />
+              </a>
+            </Tooltip>
+          )}
+          {pr.state === "OPEN" && !pr.isDraft && caps.reviewComments && !reviewing && (
+            <Button
+              variant="success"
+              size="sm"
+              className={pr.staging?.url ? undefined : "ml-auto"}
+              onClick={() => {
+                setReviewing(true);
+                setPage("files");
+              }}
+            >
+              Review
+            </Button>
+          )}
+          {pr.state === "OPEN" && (
+            <Menu.Root>
+              <Tooltip label="Pull request actions">
+                <Menu.Trigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      aria-label="Pull request actions"
+                      icon={<IconDotsHorizontal size={18} />}
+                    />
+                  }
+                />
+              </Tooltip>
+              <Menu.Popup align="end">
+                <Menu.Item
+                  className="text-red data-[highlighted]:bg-red-soft"
+                  onClick={handleClose}
+                  disabled={closing}
                 >
-                  Sessions{relatedSessions.length > 0 ? ` · ${relatedSessions.length}` : ""}
-                </button>
-              )}
-              {pr.staging?.url && (
-                <Tooltip label="Open the preview environment">
-                  <a
-                    className="inline-flex size-8 items-center justify-center rounded-control text-dim no-underline hover:bg-hover hover:text-fg"
-                    href={pr.staging.url}
-                    target="_blank"
-                    rel="noopener"
-                    aria-label="Open the preview environment"
-                  >
-                    <IconGlobe size={19} />
-                  </a>
-                </Tooltip>
-              )}
-            </div>
+                  {closing
+                    ? "Closing…"
+                    : confirmClose
+                      ? "Confirm close pull request"
+                      : "Close pull request"}
+                </Menu.Item>
+              </Menu.Popup>
+            </Menu.Root>
           )}
         </header>
 
@@ -1625,7 +1652,9 @@ export function PrPanel({
                         {guide.sections.length} focused review step{guide.sections.length === 1 ? "" : "s"}
                       </h2>
                       <p className="mt-1 max-w-[680px] text-xs leading-relaxed text-dim">
-                        Review the change by intent rather than alphabetically. Comments stay pending until you finish the review.
+                        {reviewing
+                          ? "Review the change by intent rather than alphabetically. Comments stay pending until you finish the review."
+                          : "Read the change by intent rather than alphabetically."}
                       </p>
                     </div>
                   </div>
@@ -1705,66 +1734,53 @@ export function PrPanel({
         </>
       )}
 
-      {/* Caption and actions share a row until the actions need the whole
-          width — on a phone the three buttons alone are wider than the bar,
-          so side-by-side pushed them off its right edge. */}
-      <div className="pointer-events-none absolute bottom-4 left-4 right-4 z-10 flex min-h-[54px] items-center gap-3 rounded-md border border-line-strong bg-panel/95 px-3 py-2 smooth-shadow-soft backdrop-blur phone:flex-col phone:items-stretch phone:gap-2">
-        <div className="min-w-0 flex-1">
-          <div className="text-xs font-medium text-fg">
-            {reviewDone === "merged"
-              ? "Approved and merged"
-              : reviewDone
-                ? "Review submitted"
-                : !caps.reviewComments
-                  ? "Review"
-                  : pending.length > 0
-                    ? `${pending.length} pending comment${pending.length === 1 ? "" : "s"}`
-                    : "No pending comments"}
+      {/* Review controls only exist while the person is actively reviewing.
+          Passive PR browsing should not imply that a review is in progress. */}
+      {reviewing && (
+        <div className="pointer-events-none absolute bottom-4 left-4 right-4 z-10 flex min-h-[54px] items-center gap-3 rounded-md border border-line-strong bg-panel/95 px-3 py-2 smooth-shadow-soft backdrop-blur phone:flex-col phone:items-stretch phone:gap-2">
+          <div className="min-w-0 flex-1">
+            <div className="text-xs font-medium text-fg">
+              {reviewDone === "merged"
+                ? "Approved and merged"
+                : reviewDone
+                  ? "Review submitted"
+                  : !caps.reviewComments
+                    ? "Review"
+                    : pending.length > 0
+                      ? `${pending.length} pending comment${pending.length === 1 ? "" : "s"}`
+                      : "No pending comments"}
+            </div>
+            <div
+              className={`mt-0.5 truncate text-meta ${closeError ? "text-red" : "text-faint"}`}
+              title={closeError || undefined}
+            >
+              {closeError ||
+                (caps.reviewComments
+                  ? "Comments are sent together when you finish the review"
+                  : `${provider.name} has no reviews. Merge or close when you're done.`)}
+            </div>
           </div>
-          <div
-            className={`mt-0.5 truncate text-meta ${closeError ? "text-red" : "text-faint"}`}
-            title={closeError || undefined}
-          >
-            {closeError ||
-              (caps.reviewComments
-                ? "Comments are sent together when you finish the review"
-                : `${provider.name} has no reviews. Merge or close when you're done.`)}
+          <div className="pointer-events-auto flex shrink-0 flex-wrap justify-end gap-2">
+            {onOpenSession && (
+              <Button className="text-xs" onClick={onOpenSession}>
+                Open workspace
+              </Button>
+            )}
+            <Button className="text-xs" onClick={() => setReviewing(false)}>
+              Exit review
+            </Button>
+            {pr.state === "OPEN" && !pr.isDraft && caps.reviewComments && (
+              <Button
+                variant="success"
+                className="text-xs"
+                onClick={() => setReviewOpen(true)}
+              >
+                Finish review
+              </Button>
+            )}
           </div>
         </div>
-        <div className="pointer-events-auto flex shrink-0 flex-wrap justify-end gap-2">
-          {onOpenSession && (
-            <Button className="text-xs" onClick={onOpenSession}>
-              Open workspace
-            </Button>
-          )}
-          {/* Close lives here rather than at the foot of Overview: the bar is
-              the one chrome visible from both pages, and burying the only
-              close affordance under a long comment list meant people went to
-              GitHub for it. Two-click confirm, same as merge. */}
-          {pr.state === "OPEN" && (
-            <Button
-              /* Outline while it's still a proposal, solid once the next
-                 click commits — same pair the confirm modals use. */
-              variant={confirmClose ? "destructive" : "danger"}
-              className="text-xs"
-              onClick={handleClose}
-              disabled={closing}
-              title="Close this pull request without merging. The branch and its commits stay available."
-            >
-              {closing ? "Closing…" : confirmClose ? "Confirm close" : "Close"}
-            </Button>
-          )}
-          {pr.state === "OPEN" && !pr.isDraft && caps.reviewComments && (
-            <Button
-              variant="success"
-              className="text-xs"
-              onClick={() => setReviewOpen(true)}
-            >
-              Finish review
-            </Button>
-          )}
-        </div>
-      </div>
+      )}
 
       {reviewOpen && (
         <FinishReviewDialog

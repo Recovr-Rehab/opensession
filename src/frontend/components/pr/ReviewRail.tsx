@@ -10,15 +10,17 @@ import type {
   PrFile,
   PrReviewer,
 } from "../../lib/types";
-import { IconCheck, IconChevronRight, IconFile, IconX } from "../icons";
+import { IconCheck, IconChevronRight, IconFile, IconMessages, IconX } from "../icons";
 import { CheckRow } from "./CheckRow";
 import { GitStatusRows } from "./GitStatus";
 import { CommitIcon } from "./PrViews";
 import { FileRow, ReviewerRow } from "./PrRows";
 
 /**
- * The Overview page's metadata column: status, reviewers, checks, commits and
- * the changed files, in the order a reviewer asks about them.
+ * The Overview page's metadata column: status, reviewers, checks, commits, the
+ * changed files and the sessions on the branch, in the order a reviewer asks
+ * about them. Everything countable about a pull request belongs here rather
+ * than in the header, which stays one line of identity.
  *
  * Checks and commits used to be top-level tabs of the review canvas. They are
  * rollup rows here that expand in place, because they answer a question
@@ -44,6 +46,8 @@ export function ReviewRail({
   mergeError,
   onOpenFile,
   onOpenFiles,
+  onOpenSessions,
+  sessionCount = 0,
   focusChecksSeq,
   compact,
   className,
@@ -72,6 +76,9 @@ export function ReviewRail({
   onOpenFile: (path: string) => void;
   /** Go to the Files changed page. */
   onOpenFiles: () => void;
+  /** Open the list of sessions working on this pull request. */
+  onOpenSessions?: () => void;
+  sessionCount?: number;
   /**
    * A check chip elsewhere in the app asked for the checks. Bumped per click,
    * so asking twice re-reveals the section after the reader scrolled away.
@@ -246,6 +253,26 @@ export function ReviewRail({
           )}
         </RailSection>
       )}
+
+      {onOpenSessions && (
+        <RailSection title="Sessions">
+          <button
+            className={RAIL_ROW}
+            onClick={onOpenSessions}
+            title="Sessions working on this pull request"
+          >
+            <span className="inline-flex w-4 shrink-0 items-center justify-center [&>svg]:block">
+              <IconMessages size={15} className="text-faint" />
+            </span>
+            <span className="min-w-0 flex-1 truncate font-medium">
+              {sessionCount > 0
+                ? `${sessionCount} session${sessionCount === 1 ? "" : "s"}`
+                : "No sessions"}
+            </span>
+            <IconChevronRight size={14} className="shrink-0 text-faint" />
+          </button>
+        </RailSection>
+      )}
     </aside>
   );
 }
@@ -285,6 +312,11 @@ function RailGroupLabel({ children }: { children: React.ReactNode }) {
   return <div className="px-1.5 pb-1 pt-2 text-meta font-semibold text-faint">{children}</div>;
 }
 
+/** Shared shape for the rail's one-line summaries, whether they expand in
+ *  place or lead somewhere. */
+const RAIL_ROW =
+  "flex w-full items-center gap-2 rounded-row border-0 bg-transparent px-1.5 py-1.5 text-left text-label text-fg hover:bg-hover";
+
 /** A one-line summary that opens its own detail in place. */
 function RollupRow({
   open,
@@ -300,11 +332,7 @@ function RollupRow({
   trailing?: React.ReactNode;
 }) {
   return (
-    <button
-      className="flex w-full items-center gap-2 rounded-row border-0 bg-transparent px-1.5 py-1.5 text-left text-label text-fg hover:bg-hover"
-      onClick={onToggle}
-      aria-expanded={open}
-    >
+    <button className={RAIL_ROW} onClick={onToggle} aria-expanded={open}>
       <span className="inline-flex w-4 shrink-0 items-center justify-center [&>svg]:block">{icon}</span>
       <span className="min-w-0 flex-1 truncate font-medium">{label}</span>
       {trailing}
