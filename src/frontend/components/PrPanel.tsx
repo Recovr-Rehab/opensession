@@ -1280,7 +1280,7 @@ export function PrPanel({
           )}
           <div className="min-w-0 flex-1">
             <a
-              className="block truncate text-item-title font-semibold tracking-[-0.015em] text-fg no-underline hover:text-link phone:text-body"
+              className="block truncate text-dialog-title font-semibold leading-[1.2] tracking-[-0.005em] text-fg no-underline hover:text-link phone:text-body"
               href={pr.url}
               target="_blank"
               rel="noopener"
