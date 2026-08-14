@@ -227,7 +227,6 @@ export function TeamFacepile({
 	ring = "var(--bg)",
 	status,
 	selectedKey,
-	compact,
 	className,
 }: {
 	members: TeamMember[];
@@ -239,8 +238,6 @@ export function TeamFacepile({
 	status?: boolean;
 	/** Ring the face whose work the app is currently showing. */
 	selectedKey?: string | null;
-	/** Keep the +N tail outside the face surface. */
-	compact?: boolean;
 	className?: string;
 }) {
 	// A selected face must stay in the pile even when it would fall off the end.
@@ -260,52 +257,40 @@ export function TeamFacepile({
 	const selectedTuck = Math.max(2, Math.round(size * 0.08));
 	return (
 		<div className={cn("flex items-center", className)}>
-			<div
-				className={cn(
-					"flex items-center",
-					compact &&
-						"relative z-10 -m-0.5 rounded-full bg-[var(--team-face-ring)] p-0.5",
-				)}
-			>
-				{shown.map((m, i) => {
-					const selected = !!selectedKey && m.key === selectedKey;
-					const label = status
-						? `${m.person.fullName} · ${presenceLabel(m)}`
-						: m.person.fullName;
-					const besideSelected = i === selectedIndex || i === selectedIndex + 1;
-					const style: React.CSSProperties = {
-						// Tighten both gaps around the picked face. Its higher z-index keeps
-						// the larger face and accent ring above the neighbours tucked behind it.
-						marginLeft: i === 0 ? 0 : -(overlap + (besideSelected ? selectedTuck : 0)),
-						// The pile runs front-to-back, left to right: each face tucks
-						// behind the one before it, so nothing later covers what's read
-						// first. The picked face clears them all.
-						zIndex: selected ? shown.length + 1 : shown.length - i,
-					};
-					return (
-						<span key={m.key} className="relative" style={style} title={label}>
-							<Face
-								member={m}
-								size={size}
-								ring={ring}
-								status={status}
-								selected={selected}
-							/>
-						</span>
-					);
-				})}
-			</div>
+			{shown.map((m, i) => {
+				const selected = !!selectedKey && m.key === selectedKey;
+				const label = status
+					? `${m.person.fullName} · ${presenceLabel(m)}`
+					: m.person.fullName;
+				const besideSelected = i === selectedIndex || i === selectedIndex + 1;
+				const style: React.CSSProperties = {
+					// Tighten both gaps around the picked face. Its higher z-index keeps
+					// the larger face and accent ring above the neighbours tucked behind it.
+					marginLeft: i === 0 ? 0 : -(overlap + (besideSelected ? selectedTuck : 0)),
+					// The pile runs front-to-back, left to right: each face tucks
+					// behind the one before it, so nothing later covers what's read
+					// first. The picked face clears them all.
+					zIndex: selected ? shown.length + 1 : shown.length - i,
+				};
+				return (
+					<span key={m.key} className="relative" style={style} title={label}>
+						<Face
+							member={m}
+							size={size}
+							ring={ring}
+							status={status}
+							selected={selected}
+						/>
+					</span>
+				);
+			})}
 			{rest.length > 0 && (
 				// The rest of the team is a count, not another face: no tile, no
 				// border, just the number sitting on the row's centre line. It
 				// doesn't need to be reachable — the menu this pile opens lists
 				// everyone, capped or not.
 				<span
-					className={cn(
-						OVERFLOW_COUNT,
-						compact &&
-							"relative isolate before:absolute before:-inset-y-1.5 before:-right-5 before:-left-2 before:-z-10 before:bg-raised before:content-['']",
-					)}
+					className={OVERFLOW_COUNT}
 					style={{ height: size }}
 					title={rest.map((m) => m.person.fullName).join(", ")}
 				>
@@ -369,7 +354,7 @@ export function TeamLensMenu({
 				className={cn(
 					"flex min-w-0 items-center border-0 bg-transparent text-control-label text-dim",
 					compact
-						? "gap-0 rounded-full p-0.5 hover:text-fg data-[popup-open]:text-fg"
+						? "gap-0 rounded-full p-0.5 hover:bg-[var(--team-face-ring)] hover:text-fg data-[popup-open]:bg-[var(--team-face-ring)] data-[popup-open]:text-fg"
 						: "gap-2.5 rounded-control p-1 hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg",
 					className,
 				)}
@@ -386,7 +371,6 @@ export function TeamLensMenu({
 					selectedKey={
 						!compact && faces.some((m) => m.key === value) ? value : null
 					}
-					compact={compact}
 				/>
 				{!compact && (
 					<>
