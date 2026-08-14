@@ -731,9 +731,10 @@ function AgentReviewCard({
 			</div>
 			{/* Wider than the lists' hairline gap: these rows carry their own
 			    status band, and two bands a pixel apart read as one striped
-			    block. The gap matches the plate's own padding. */}
-			<div className={cn(INFO_LIST_CLASS, "gap-1")}>
-				<div className={cn(GIT_ROW, "rounded-control py-2", REVIEW_ROW_BG[rowTone])}>
+			    block. The gap matches the plate's own padding, and the two
+			    corners stay concentric: 14 inside + 8 of padding = 22. */}
+			<div className={cn(INFO_LIST_CLASS, "gap-2 rounded-2xl p-2")}>
+				<div className={cn(GIT_ROW, "rounded-lg py-2", REVIEW_ROW_BG[rowTone])}>
 					<Popover.Root>
 						<Popover.Trigger
 							render={<div />}
@@ -1052,7 +1053,7 @@ function ReviewerChip({
 			<div
 				className={cn(
 					GIT_ROW,
-					"rounded-control py-2",
+					"rounded-lg py-2",
 					// Background only: the row's own `text-fg` and a tone utility on
 					// the same element would resolve by Tailwind's output order, so
 					// the ink goes on the spans inside it instead.
@@ -1447,7 +1448,9 @@ export function WorkspaceInfo({
 			) : (
 				<div className={INFO_SECTION_CLASS}>
 					<div className={INFO_LABEL_CLASS}>Review</div>
-					<div className={INFO_LIST_CLASS}>{reviewerRow}</div>
+					<div className={cn(INFO_LIST_CLASS, "rounded-2xl p-2")}>
+						{reviewerRow}
+					</div>
 				</div>
 			)}
 			{sandbox && (
