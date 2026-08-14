@@ -507,10 +507,10 @@ private struct CatchUpStamp: View {
         HStack(spacing: 6) {
             Image(systemName: intent.symbol)
                 .font(.system(size: 15, weight: .bold))
-            Text(intent.label.uppercased())
+            // Sentence case, like the web deck's own stamps: the product sets
+            // no copy in caps.
+            Text(intent.label)
                 .font(.system(size: 15, weight: .heavy))
-                // Small caps-style labels read too tight at this weight.
-                .tracking(1.2)
         }
         .foregroundStyle(intent.tint)
         .padding(.horizontal, 12)

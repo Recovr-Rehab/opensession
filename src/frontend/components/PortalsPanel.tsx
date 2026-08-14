@@ -53,7 +53,7 @@ export function PortalsPanel({
 
 			{recipes.length ? (
 				<div className="space-y-2">
-					<div className="px-1 text-xs font-semibold uppercase tracking-wide text-dim">
+					<div className="px-1 text-label font-semibold text-faint">
 						Recommended
 					</div>
 					{recipes.map((recipe) => {

@@ -92,9 +92,13 @@ export function imageFilesFromPaste(e: React.ClipboardEvent): File[] {
     .filter((f): f is File => !!f);
 }
 
-/** Short uppercase extension badge for a filename (e.g. "PDF", "TS"), or "FILE". */
+/** Short extension badge for a filename (e.g. "PDF", "TS"), or "File".
+ *
+ * The extension keeps its caps: a type token is read like an acronym, the way
+ * every file browser sets one. The fallback is a word rather than a type, so
+ * it takes sentence case like the rest of the product's copy. */
 export function extBadge(name: string): string {
   const dot = name.lastIndexOf(".");
-  if (dot <= 0 || dot === name.length - 1) return "FILE";
+  if (dot <= 0 || dot === name.length - 1) return "File";
   return name.slice(dot + 1, dot + 5).toUpperCase();
 }

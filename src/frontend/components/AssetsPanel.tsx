@@ -129,7 +129,7 @@ export function AssetsPanel({
 		<div className="flex h-full min-h-0 flex-col">
 			<div className="flex max-h-[38%] min-h-[88px] flex-col overflow-hidden border-b border-line">
 				<div className="flex items-center justify-between px-3 pt-2 pb-1">
-					<span className="text-[11px] font-medium uppercase tracking-wide text-faint">
+					<span className="text-label font-semibold text-faint">
 						Files · {files.length}
 					</span>
 					<Button

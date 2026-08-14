@@ -18,7 +18,7 @@ export function PrCard({
   return (
     <div className="rounded-xl bg-panel">
       <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3 sm:px-5">
-        <span className="text-meta font-semibold uppercase tracking-[0.08em] text-faint">{title}</span>
+        <span className="text-label font-semibold text-faint">{title}</span>
         {headExtra}
       </div>
       <div className="flex flex-col gap-2 px-4 py-3 sm:px-5">{children}</div>
