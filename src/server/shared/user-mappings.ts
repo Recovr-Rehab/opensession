@@ -249,6 +249,28 @@ export function gitIdentityFor(user?: string | null): GitIdentity | null {
 }
 
 /**
+ * Who a turn's commits belong to: whoever sent the prompt, and failing that
+ * whoever the session belongs to.
+ *
+ * Not every turn has a sender. An auto-continue nudge, a restart resume, an
+ * engine handoff and a queue drain all run under a synthetic name that is on
+ * no roster, and the work they commit is still the session owner's — so
+ * without the fallback those commits land under the machine's default identity
+ * and drop out of every per-person view, in the middle of a session whose
+ * other commits carry the owner's name.
+ *
+ * The fallback is the owner and never a guess: an automation-owned session's
+ * owner is the automation's name, which resolves to nobody, so its commits
+ * keep the bot identity — the honest answer when no person asked for them.
+ */
+export function commitAuthorFor(
+  user?: string | null,
+  sessionOwner?: string | null,
+): GitIdentity | null {
+  return gitIdentityFor(user) ?? gitIdentityFor(sessionOwner);
+}
+
+/**
  * Does `user` resolve to one of the identities in `allowed`? Used to gate
  * per-user MCP servers (mcp-config.json `allowedUsers`): both sides are run
  * through the same identity table as commit attribution, so a configured name

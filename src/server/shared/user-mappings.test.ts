@@ -1,6 +1,8 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import type { TeamMember } from "../config";
 import {
+  __setIdentitiesForTest,
+  commitAuthorFor,
   deriveIdentityTables,
   githubLoginToPersonKeyFromTeam,
   personKeyToDisplayName,
@@ -80,5 +82,41 @@ describe("identity table derivation", () => {
     expect(githubLoginToPersonKeyFromTeam("unknown", TEAM)).toBeNull();
     expect(personKeyToDisplayName("ali", TEAM)).toBe("Alice");
     expect(personKeyToDisplayName("unknown", TEAM)).toBeNull();
+  });
+});
+
+describe("commit attribution", () => {
+  // Roster-dependent: pin a fixture team so the assertions don't read the
+  // operator's own ~/.opensession/config.json.
+  let restore: (() => void) | undefined;
+  beforeAll(() => {
+    restore = __setIdentitiesForTest(TEAM);
+  });
+  afterAll(() => restore?.());
+
+  test("the prompt's sender wins", () => {
+    expect(commitAuthorFor("alice", "Bob Builder")).toEqual({
+      name: "Alice Example",
+      email: "alice@example.com",
+    });
+  });
+
+  test("a turn nobody sent is the session owner's work", () => {
+    // The senders the server's own resume paths pass. None is a person, and
+    // without the fallback each one dropped the commit onto the bot identity.
+    for (const sender of [undefined, null, "", "auto-continue", "anonymous"]) {
+      expect(commitAuthorFor(sender, "Bob Builder")).toEqual({
+        name: "Bob Builder",
+        email: "bob@example.com",
+      });
+    }
+  });
+
+  test("an owner who is on no roster keeps the machine's identity", () => {
+    // What an automation-owned session looks like: its owner is the
+    // automation's name, so there is no person to credit and the commit
+    // stays the bot's.
+    expect(commitAuthorFor("auto-continue", "Dreaming (automation)")).toBeNull();
+    expect(commitAuthorFor(null, null)).toBeNull();
   });
 });

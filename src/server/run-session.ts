@@ -84,7 +84,7 @@ import {
 import { ensureSandboxWithTransientRetry } from "./sandbox/reliability";
 import { getTitleOverride } from "./title-overrides";
 import { ensureGeneratedTitle } from "./generated-titles";
-import { gitIdentityFor } from "./shared/user-mappings";
+import { commitAuthorFor } from "./shared/user-mappings";
 import { writeFileAtomic, writeJsonAtomic } from "./shared/atomic-write";
 import { startWatching } from "./file-watcher";
 import { ensureAskCheckout, ensureScratchDir, getRepo, isSharedCheckoutDir, repoForPath, repoForPathOrNull, reviveWorktree, sessionRepoId, worktreeHeadBranch } from "./worktree";
@@ -1207,7 +1207,7 @@ export async function maybeLaunchSandboxedRun(
 			reposNote: await buildSessionNote(session, opts.user),
 			confirmTools: STRIPE_CONFIRM_TOOLS,
 			aws: true,
-			author: gitIdentityFor(opts.user),
+			author: commitAuthorFor(opts.user, session.startedBy),
 			user: opts.user,
 			mcpGrantUser: session.startedBy || undefined,
 			fallbackModel: interactiveFallbackModel(session.model),
@@ -2047,8 +2047,10 @@ async function runSessionPromptInner(
 		deniedTools,
 		confirmTools: STRIPE_CONFIRM_TOOLS,
 		aws: true, // sessions keep AWS read access (via injected creds)
-		// Attribute any commits this turn makes to whoever sent the prompt.
-		author: gitIdentityFor(user),
+		// Attribute any commits this turn makes to whoever sent the prompt, or
+		// to whoever the session belongs to when nobody did (an auto-continue,
+		// a restart resume, a queue drain).
+		author: commitAuthorFor(user, session.startedBy),
 		// Gate per-user MCP servers (allowedUsers) to the prompt's author. Automation
 		// sessions pass no user, so they never see a user-restricted server.
 		user: isAutomationSession ? undefined : user,
