@@ -4,6 +4,8 @@ import {
   __setIdentitiesForTest,
   commitAuthorFor,
   deriveIdentityTables,
+  gitIdentityEnv,
+  labelIdentity,
   githubLoginToPersonKeyFromTeam,
   personKeyToDisplayName,
 } from "./user-mappings";
@@ -112,11 +114,35 @@ describe("commit attribution", () => {
     }
   });
 
-  test("an owner who is on no roster keeps the machine's identity", () => {
-    // What an automation-owned session looks like: its owner is the
-    // automation's name, so there is no person to credit and the commit
-    // stays the bot's.
-    expect(commitAuthorFor("auto-continue", "Dreaming (automation)")).toBeNull();
-    expect(commitAuthorFor(null, null)).toBeNull();
+  test("an owner who is on no roster signs under its own name", () => {
+    // What an automation-owned session looks like: no person to credit, but
+    // the automation is still the owner, and every unattended run in the
+    // instance would otherwise share one anonymous author.
+    expect(commitAuthorFor("auto-continue", "Dreaming (automation)")).toEqual({
+      name: "Dreaming",
+      email: "",
+    });
+  });
+
+  test("a placeholder owner is not written into history", () => {
+    for (const owner of [undefined, null, "", "Anonymous", "Assistant"]) {
+      expect(commitAuthorFor(null, owner)).toBeNull();
+    }
+  });
+
+  test("a name-only identity leaves the address to git's own config", () => {
+    // An empty GIT_AUTHOR_EMAIL is taken literally by git, so the variable
+    // has to be absent rather than blank.
+    expect(gitIdentityEnv(labelIdentity("Production Watchdog"))).toEqual({
+      GIT_AUTHOR_NAME: "Production Watchdog",
+      GIT_COMMITTER_NAME: "Production Watchdog",
+    });
+    expect(gitIdentityEnv(commitAuthorFor("alice"))).toEqual({
+      GIT_AUTHOR_NAME: "Alice Example",
+      GIT_AUTHOR_EMAIL: "alice@example.com",
+      GIT_COMMITTER_NAME: "Alice Example",
+      GIT_COMMITTER_EMAIL: "alice@example.com",
+    });
+    expect(gitIdentityEnv(null)).toEqual({});
   });
 });

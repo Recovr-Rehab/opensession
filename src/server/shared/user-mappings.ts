@@ -259,15 +259,33 @@ export function gitIdentityFor(user?: string | null): GitIdentity | null {
  * and drop out of every per-person view, in the middle of a session whose
  * other commits carry the owner's name.
  *
- * The fallback is the owner and never a guess: an automation-owned session's
- * owner is the automation's name, which resolves to nobody, so its commits
- * keep the bot identity — the honest answer when no person asked for them.
+ * An owner who is not a person still gets named. An automation owns its
+ * sessions, and "an automation did it" is an answer; the machine's default
+ * identity is not, because every unattended run in the instance shares it and
+ * the work becomes unattributable. So a non-roster owner is carried through as
+ * the author's name, and only a turn with no owner at all keeps the default.
  */
 export function commitAuthorFor(
   user?: string | null,
   sessionOwner?: string | null,
 ): GitIdentity | null {
-  return gitIdentityFor(user) ?? gitIdentityFor(sessionOwner);
+  return gitIdentityFor(user) ?? gitIdentityFor(sessionOwner) ?? labelIdentity(sessionOwner);
+}
+
+/**
+ * A git identity for something that isn't on the roster: an automation, a
+ * goal, an agent loop. The name is what the thing is called; the email is left
+ * to the machine's own git config, because these commits do belong to the
+ * instance's account and only the name is in question.
+ *
+ * Placeholder owners are dropped rather than written into history: "Anonymous"
+ * is the absence of an owner, and the persona name is what a session records
+ * when nobody was named at all.
+ */
+export function labelIdentity(label?: string | null): GitIdentity | null {
+  const name = (label || "").trim().replace(/\s*\(automation\)\s*$/i, "").trim();
+  if (!name || ["anonymous", "assistant", "unknown"].includes(name.toLowerCase())) return null;
+  return { name, email: "" };
 }
 
 /**
@@ -341,13 +359,16 @@ function applyDerivedTables(next: DerivedIdentityTables): void {
  * these on the process attributes every commit it makes during the run, without
  * mutating repo config (so parallel runs in different worktrees never race).
  * Empty when there's no resolved author — the run keeps the default identity.
+ *
+ * An identity may carry a name and no email (labelIdentity: an automation, a
+ * goal). Then only the name is set and git resolves the address from its own
+ * config, which is the instance's account and the right owner of the commit.
+ * Never write an empty GIT_AUTHOR_EMAIL: git takes it literally and writes a
+ * commit with no address rather than falling back.
  */
 export function gitIdentityEnv(author?: GitIdentity | null): Record<string, string> {
-  if (!author) return {};
-  return {
-    GIT_AUTHOR_NAME: author.name,
-    GIT_AUTHOR_EMAIL: author.email,
-    GIT_COMMITTER_NAME: author.name,
-    GIT_COMMITTER_EMAIL: author.email,
-  };
+  if (!author?.name) return {};
+  const named = { GIT_AUTHOR_NAME: author.name, GIT_COMMITTER_NAME: author.name };
+  if (!author.email) return named;
+  return { ...named, GIT_AUTHOR_EMAIL: author.email, GIT_COMMITTER_EMAIL: author.email };
 }

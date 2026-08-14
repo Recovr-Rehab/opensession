@@ -13,7 +13,7 @@ import {
 	dateGroup,
 	personLabel,
 } from "../lib/pr-rows";
-import { buildFeedRows, type FeedRow } from "../lib/feed-rows";
+import { buildFeedRows, type FeedOwner, type FeedRow } from "../lib/feed-rows";
 import { PR_FEED_ROW, PR_GROUP_LABEL, PR_LIST } from "../lib/pr-list-classes";
 import { RepoTile, repoLabel } from "./RepoTile";
 import { useCurrentUser } from "./UserPicker";
@@ -25,7 +25,7 @@ import { EmptyState } from "../ui/state";
 import { Button } from "../ui/button";
 import { Menu } from "../ui/menu";
 import { cn } from "../ui/cn";
-import { IconCheck, IconFeed, IconPeople, IconRepo } from "./icons";
+import { IconCheck, IconFeed, IconPeople, IconRepo, IconRobot } from "./icons";
 import {
 	PEOPLE_CHIP,
 	PEOPLE_CHIP_GLYPH,
@@ -86,6 +86,25 @@ function ScopeChip({
 			{mark}
 			<span className="min-w-0 truncate">{label}</span>
 		</button>
+	);
+}
+
+/**
+ * The owner of a row, in the same 24px slot whoever they are. A teammate wears
+ * their face; an automation wears a glyph in the avatar's own shape, so the
+ * column reads as one column of owners rather than faces and something else.
+ */
+function FeedOwnerMark({ owner }: { owner: FeedOwner }) {
+	if (owner.person) {
+		return <UserAvatar name={owner.label} size={24} title={owner.label} />;
+	}
+	return (
+		<span
+			className="flex size-[24px] shrink-0 items-center justify-center rounded-[32%] bg-active text-dim shadow-[var(--avatar-edge)]"
+			title={owner.label}
+		>
+			<IconRobot size={14} />
+		</span>
 	);
 }
 
@@ -319,14 +338,12 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 												}
 												title={`${repoLabel(row.repo)}${row.ref ? ` · ${row.ref}` : ""}`}
 											>
-												{/* Who shipped it, or the repo when the author isn't a
-												    teammate: the column always says where it came from. */}
-												{row.person ? (
-													<UserAvatar
-														name={personLabel(row.person)}
-														size={24}
-														title={personLabel(row.person)}
-													/>
+												{/* Who shipped it. An automation is an owner too, so
+												    it gets the column rather than the repo standing in
+												    for a name. The repo tile is left for the older work
+												    that recorded no author at all. */}
+												{row.owner ? (
+													<FeedOwnerMark owner={row.owner} />
 												) : (
 													<RepoTile name={row.repo} size={24} />
 												)}
@@ -343,6 +360,15 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 													</span>
 													<span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-meta text-faint">
 														<span className="truncate">{repoLabel(row.repo)}</span>
+														{/* Name an owner the picture can't: a glyph says
+														    "not a person", not which automation it was.
+														    A teammate's face is already their name. */}
+														{row.owner && !row.owner.person && (
+															<>
+																<span aria-hidden>·</span>
+																<span className="truncate">{row.owner.label}</span>
+															</>
+														)}
 													</span>
 												</span>
 												{/* A side that moved no lines is left off rather than

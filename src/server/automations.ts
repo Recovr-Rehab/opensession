@@ -7,6 +7,7 @@ import { randomUUIDv7 } from "bun";
 import { OPENSESSION_SESSIONS_DIR , newSessionId} from "./paths";
 import { mkdirSync, readdirSync, readFileSync, unlinkSync, existsSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
+import { labelIdentity } from "./shared/user-mappings";
 import { parseCron, cronMatches, nextRun } from "./cron";
 import {
   STRIPE_CONFIRM_TOOLS,
@@ -1469,6 +1470,11 @@ export async function runAutomation(
         usageCredits: automation.usageCredits,
         fallbackModel,
         prReviewer: automation.prReviewer,
+        // Commits say which automation made them. Nobody sent this prompt, so
+        // there is no person to credit, but the instance's default identity is
+        // shared by every unattended run and reduces all of them to one
+        // anonymous author. The automation is the owner, so it signs.
+        author: labelIdentity(automation.name),
         journal: { osSessionId: bksId, kind: "automation" },
       });
     }
