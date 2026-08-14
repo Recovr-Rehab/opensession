@@ -39,7 +39,7 @@ import {
   type MemoryEntry,
 } from "./memory";
 import { parseWhen } from "./parse-when";
-import { personaName } from "../../server/config";
+import { configuredRepos, defaultRepo, personaName } from "../../server/config";
 
 export interface AdminToolContext extends MemoryContext {
   /** Display name credited as the author of memories/automations. */
@@ -56,6 +56,31 @@ export interface AdminToolContext extends MemoryContext {
 
 function text(s: string) {
   return { content: [{ type: "text" as const, text: s }] };
+}
+
+/** The instance's default repo id, or "" when nothing is registered. The repo
+ * tools describe themselves against the live registry rather than a hardcoded
+ * list, so a newly added checkout is offerable straight away. */
+function defaultRepoId(): string {
+  try {
+    return defaultRepo().id;
+  } catch {
+    return "";
+  }
+}
+
+/** Description shared by the create/update `repo` params. An automation with
+ * no repo runs against the instance default, which is rarely what the caller
+ * meant when they asked for one somewhere else. */
+function repoParamHelp(): string {
+  const ids = Object.keys(configuredRepos());
+  const fallback = defaultRepoId();
+  return (
+    "Which registered repository the automation works in" +
+    (ids.length ? `. One of: ${ids.join(", ")}` : "") +
+    (fallback ? `. Omit to use the instance default (${fallback})` : "") +
+    "."
+  );
 }
 
 function fmtEntry(e: MemoryEntry): string {
@@ -133,6 +158,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
         async () => {
           const all = listAutomations();
           if (!all.length) return text("No automations configured.");
+          const fallbackRepo = defaultRepoId();
           const lines = all.map((a) => {
             const trig = a.runOnceAt
               ? `once at ${a.runOnceAt}`
@@ -143,14 +169,16 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
                   : "manual/webhook";
             const next = a.nextRunAt ? `, next ${a.nextRunAt}` : "";
             const last = a.lastRunStatus ? `, last ${a.lastRunStatus}` : "";
-            return `• *${a.name}* [\`${a.id}\`] — ${trig}, ${a.mode}, ${a.enabled ? "enabled" : "disabled"}${next}${last}`;
+            const runsIn = a.repo || fallbackRepo;
+            const repo = runsIn ? `, ${runsIn}` : "";
+            return `• *${a.name}* [\`${a.id}\`]: ${trig}, ${a.mode}${repo}, ${a.enabled ? "enabled" : "disabled"}${next}${last}`;
           });
           return text(lines.join("\n"));
         }
       ),
       tool(
         "create_automation",
-        "Create a new automation (routine). Provide a clear prompt describing the task. Use a 5-field UTC cron `schedule` for recurring jobs (omit for manual/webhook only). Pick mode 'ask' for read-only or 'code' if it must edit files / open PRs. Optionally restrict tools with mcpServers and set a model.",
+        "Create a new automation (routine). Provide a clear prompt describing the task. Set `repo` to the repository it works in, or it runs against the instance default. Use a 5-field UTC cron `schedule` for recurring jobs (omit for manual/webhook only). Pick mode 'ask' for read-only or 'code' if it must edit files / open PRs. Optionally restrict tools with mcpServers and set a model.",
         {
           name: z.string().describe("Short display name."),
           prompt: z
@@ -166,6 +194,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             .enum(["ask", "code"])
             .optional()
             .describe("'ask' = read-only (default), 'code' = worktree + can open PRs."),
+          repo: z.string().optional().describe(repoParamHelp()),
           mcpServers: z
             .array(z.string())
             .optional()
@@ -206,6 +235,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           prompt: string;
           schedule?: string;
           mode?: "ask" | "code";
+          repo?: string;
           mcpServers?: string[];
           model?: string;
           accountId?: string;
@@ -219,6 +249,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             schedule: args.schedule || "",
             mode: args.mode || "ask",
             createdBy: ctx.createdBy,
+            repo: args.repo,
             mcpServers: args.mcpServers,
             model: args.model,
             accountId: args.accountId,
@@ -227,10 +258,15 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             prReviewer: args.prReviewer,
           });
           if ("error" in res) return text(`Couldn't create it: ${res.error}`);
+          // Name the repo back, including when it was defaulted: a routine
+          // pointed at the wrong checkout only fails once it runs.
+          const runsIn = res.repo || defaultRepoId();
           return text(
             `Created automation *${res.name}* [\`${res.id}\`]` +
               (res.schedule ? ` on cron \`${res.schedule}\` (UTC)` : " (manual/webhook)") +
-              `, mode ${res.mode}.`
+              `, mode ${res.mode}` +
+              (runsIn ? `, repo ${runsIn}${res.repo ? "" : " (instance default)"}` : "") +
+              "."
           );
         }
       ),
@@ -244,6 +280,10 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           schedule: z.string().optional().describe("5-field UTC cron; '' clears it."),
           mode: z.enum(["ask", "code"]).optional(),
           enabled: z.boolean().optional(),
+          repo: z
+            .string()
+            .optional()
+            .describe(`${repoParamHelp()} '' resets it to the instance default.`),
           mcpServers: z.array(z.string()).optional(),
           model: z
             .string()
@@ -277,6 +317,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           schedule?: string;
           mode?: "ask" | "code";
           enabled?: boolean;
+          repo?: string;
           mcpServers?: string[];
           model?: string;
           accountId?: string;
@@ -287,8 +328,10 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           const { id, ...patch } = args;
           const res = updateAutomation(id, patch);
           if ("error" in res) return text(`Couldn't update it: ${res.error}`);
+          const runsIn = res.repo || defaultRepoId();
           return text(
-            `Updated *${res.name}* [\`${res.id}\`] — ${res.enabled ? "enabled" : "disabled"}, ${res.mode}` +
+            `Updated *${res.name}* [\`${res.id}\`]: ${res.enabled ? "enabled" : "disabled"}, ${res.mode}` +
+              (runsIn ? `, repo ${runsIn}${res.repo ? "" : " (instance default)"}` : "") +
               (res.schedule ? `, cron \`${res.schedule}\`` : "")
           );
         }
@@ -336,6 +379,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             .enum(["ask", "code"])
             .optional()
             .describe("'ask' = read-only (default), 'code' = worktree + can open PRs."),
+          repo: z.string().optional().describe(repoParamHelp()),
           mcpServers: z
             .array(z.string())
             .optional()
@@ -350,6 +394,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           prompt: string;
           name?: string;
           mode?: "ask" | "code";
+          repo?: string;
           mcpServers?: string[];
           replyInThread?: boolean;
         }) => {
@@ -384,6 +429,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             runOnceAt: iso,
             mode: args.mode || "ask",
             createdBy: ctx.createdBy,
+            repo: args.repo,
             mcpServers,
           });
           if ("error" in res) return text(`Couldn't schedule it: ${res.error}`);
