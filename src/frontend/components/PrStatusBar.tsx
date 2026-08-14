@@ -298,7 +298,12 @@ function PrBarButton({
 					{icon}
 				</span>
 			)}
-			<span className="inline-flex translate-y-[0.5px] items-center">{children}</span>
+			{/* Optically centered, not box-centered. The em box the label is
+			    centered in reserves 4px of descent and these labels spend at most
+			    1px of it, so a centered box leaves the cap-height ink a pixel
+			    high — the word reads as hanging from the top of the icon with a
+			    gap under it. Push it down by half the descent it never uses. */}
+			<span className="inline-flex translate-y-[1.5px] items-center">{children}</span>
 		</button>
 	);
 }
