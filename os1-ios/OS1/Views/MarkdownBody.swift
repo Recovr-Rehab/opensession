@@ -103,7 +103,7 @@ struct MarkdownBody: View {
         return out
     }
 
-    /// PR references, session ids, file paths, scratch files and bare URLs
+    /// PR references, automation and session ids, file paths, scratch files and bare URLs
     /// become links here rather than in the display pass: the entry's own text
     /// stays the raw markdown, so copying a message still yields what the
     /// agent actually wrote. `PrLinks` runs FIRST, because a pasted PR URL is
@@ -124,8 +124,10 @@ struct MarkdownBody: View {
         return AssetLinks.linkify(
             FileLinks.linkify(
                 SessionLinks.linkify(
-                    MarkdownAutolink.linkify(
-                        PrLinks.linkify(value, sessionId: openPanel.sessionId)
+                    AutomationLinks.linkify(
+                        MarkdownAutolink.linkify(
+                            PrLinks.linkify(value, sessionId: openPanel.sessionId)
+                        )
                     )
                 ),
                 sessionId: openPanel.sessionId

@@ -4,12 +4,18 @@ import SwiftUI
 // SettingsAPI so they can be embedded in the existing Settings navigation.
 
 struct AutomationSettingsView: View {
+    var initialAutomationId: String? = nil
     @State private var automations: [Automation] = SettingsCache.value("automations") ?? []
     @State private var loading = false
     @State private var error: String?
     @State private var showingEditor = false
+    @State private var selectedAutomationId: String?
+    @State private var openedInitialAutomation = false
 
     private var records: [Automation] { automations.filter { $0.id != nil } }
+    private var selectedAutomation: Automation? {
+        records.first { $0.id == selectedAutomationId }
+    }
 
     var body: some View {
         List {
@@ -50,12 +56,36 @@ struct AutomationSettingsView: View {
         .sheet(isPresented: $showingEditor) {
             NavigationStack { AutomationEditorView { body in await create(body) } }
         }
+        .navigationDestination(
+            isPresented: Binding(
+                get: { selectedAutomationId != nil },
+                set: { if !$0 { selectedAutomationId = nil } }
+            )
+        ) {
+            if let selectedAutomation {
+                AutomationDetailView(automation: selectedAutomation, onChanged: load)
+            } else {
+                ContentUnavailableView(
+                    "Automation not found",
+                    systemImage: "clock.badge.questionmark",
+                    description: Text(selectedAutomationId ?? "")
+                )
+            }
+        }
     }
 
     private func load() async {
         loading = true
         defer { loading = false }
-        do { automations = try await SettingsAPI.automations(); error = nil; SettingsCache.save("automations", automations) }
+        if !openedInitialAutomation, let initialAutomationId {
+            openedInitialAutomation = true
+            selectedAutomationId = initialAutomationId
+        }
+        do {
+            automations = try await SettingsAPI.automations()
+            error = nil
+            SettingsCache.save("automations", automations)
+        }
         catch { self.error = error.localizedDescription }
     }
 

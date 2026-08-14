@@ -196,6 +196,11 @@ const SESSION_ID_EXACT = new RegExp(
 // Bare (non-code) uuidv7-shaped ids in prose — strict so it can't misfire on
 // ordinary text.
 const SESSION_ID_BARE = new RegExp(`(?:os|bks)-${UUIDV7}`, "i");
+const AUTOMATION_ID_EXACT = new RegExp(`^auto-${UUIDV7}$`, "i");
+const AUTOMATION_ID_BARE = new RegExp(
+  `(?:^|[^\\w/-])(?=auto-${UUIDV7})`,
+  "i",
+);
 
 // Chip labels. A raw `bks-<uuid>` is 40 characters of noise in the middle of a
 // sentence, so a chip shows the referenced session's own title when we know it.
@@ -385,6 +390,22 @@ function sessionLink(id: string, href?: string): string {
   // full id always stays in the tooltip. data-session-label marks the id
   // fallback for the monospace treatment.
   return sessionChip(id, attr(label), { href, tip: sessionTip(id), idLabel: !title });
+}
+
+const AUTOMATION_CHIP_ICON =
+  `<span class="automation-link-icon" aria-hidden="true">` +
+  `<svg viewBox="0 0 24 24" fill="none"><path d="M12 6.25V12L15.5 14"/>` +
+  `<path d="M18.75 8.25V4.75H15.25"/><path d="M18.1 5.4A8 8 0 1 0 19.65 15"/></svg></span>`;
+
+function automationChip(id: string, label?: string, href?: string): string {
+  const text = label ?? `${id.slice(0, 13).replace(/-+$/, "")}…`;
+  const target = href ?? `${BASE_PATH}/automations/${encodeURIComponent(id)}`;
+  return (
+    `<a href="${attr(target)}" class="automation-link" data-automation-id="${attr(id)}"` +
+    `${label ? "" : ' data-automation-label="id"'}` +
+    ` title="${attr(`Open automation ${id}`)}">${AUTOMATION_CHIP_ICON}` +
+    `<span class="automation-link-label">${label ?? attr(text)}</span></a>`
+  );
 }
 
 /** What the chip promises: which session opens, and whether it is working. */
@@ -673,7 +694,11 @@ function flattenChips(tokens: any[] | undefined): void {
       token.text = token.label;
       token.raw = token.coded ? `\`${token.label}\`` : token.label;
       token.tokens = undefined;
-    } else if (token.type === "prMention" || token.type === "sessionId") {
+    } else if (
+      token.type === "prMention" ||
+      token.type === "sessionId" ||
+      token.type === "automationId"
+    ) {
       token.type = "text";
       token.text = token.raw;
       token.tokens = undefined;
@@ -691,6 +716,7 @@ function isBareUrlLink(token: any): boolean {
 
 function internalHref(href: string | null | undefined): {
   sessionId?: string;
+  automationId?: string;
 } | null {
   if (!href) return null;
   const loc =
@@ -711,7 +737,11 @@ function internalHref(href: string | null | undefined): {
     path.match(
       /^\/workspace\/[^/]+\/session\/((?:os|bks)-[a-z0-9][a-z0-9-]{5,})\/?$/i,
     );
-  return { sessionId: m ? decodeURIComponent(m[1]) : undefined };
+  const automation = path.match(new RegExp(`^/automations/(auto-${UUIDV7})/?$`, "i"));
+  return {
+    sessionId: m ? decodeURIComponent(m[1]) : undefined,
+    automationId: automation ? decodeURIComponent(automation[1]) : undefined,
+  };
 }
 
 md.use({
@@ -777,6 +807,9 @@ md.use({
         if (internal.sessionId && isBareUrlLink(token)) {
           return sessionLink(internal.sessionId, token.href);
         }
+        if (internal.automationId && isBareUrlLink(token)) {
+          return automationChip(internal.automationId, undefined, token.href);
+        }
         // Same app: navigate in place. Session URLs get the session-link
         // chip + data-session-id so the delegated handler (SessionViewer)
         // navigates client-side; href stays for middle/cmd-click and for
@@ -786,6 +819,8 @@ md.use({
             href: token.href,
             tip: token.title || sessionTip(internal.sessionId),
           });
+        if (internal.automationId)
+          return automationChip(internal.automationId, text, token.href);
         return `<a href="${attr(token.href)}"${title}>${text}</a>`;
       }
       return `<a href="${attr(token.href)}"${title} target="_blank" rel="noopener noreferrer">${text}</a>`;
@@ -794,6 +829,7 @@ md.use({
       const t = token.text ?? "";
       // A codespan that is exactly a session id becomes a link into that session.
       if (SESSION_ID_EXACT.test(t)) return sessionLink(t);
+      if (AUTOMATION_ID_EXACT.test(t)) return automationChip(t);
       return `<code>${attr(t)}</code>`;
     },
     image(token: any) {
@@ -856,6 +892,21 @@ md.use({
       renderer(token: any) {
         const person = knownPeople.get(String(token.name).toLowerCase());
         return person ? personChip(person) : attr(`@${token.name}`);
+      },
+    },
+    {
+      name: "automationId",
+      level: "inline",
+      start(src: string) {
+        const m = AUTOMATION_ID_BARE.exec(src);
+        return m ? m.index + m[0].length : undefined;
+      },
+      tokenizer(src: string) {
+        const m = new RegExp(`^auto-${UUIDV7}`, "i").exec(src);
+        if (m) return { type: "automationId", raw: m[0], id: m[0] };
+      },
+      renderer(token: any) {
+        return automationChip(token.id);
       },
     },
     {

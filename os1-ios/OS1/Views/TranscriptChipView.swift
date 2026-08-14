@@ -499,10 +499,11 @@ extension MarkdownRenderConfig.CitationConfig {
 
 private extension TranscriptChip.Kind {
     /// The glyph, named the way the web names it: what OPENS when you follow
-    /// the chip. A conversation, a document, a branch.
+    /// the chip. A conversation, a routine, a document, a branch.
     var symbolName: String {
         switch self {
         case .session: "bubble.left"
+        case .automation: "clock.arrow.circlepath"
         case .asset: "doc.text"
         case .pullRequest: "arrow.triangle.branch"
         }

@@ -72,6 +72,7 @@ struct MacSettingsView: View {
     }
 
     @State private var selection: Pane? = .preferences
+    @State private var automationId: String?
     @State private var authenticationMessage: String?
     @State private var config = ServerConfig.shared
     @AppStorage("os1.appearance") private var appearance = "system"
@@ -122,7 +123,7 @@ struct MacSettingsView: View {
                 paneView
                     .formStyle(.grouped)
             }
-            .id(selection)
+            .id("\(selection?.rawValue ?? "preferences"):\(automationId ?? "")")
         }
         .frame(minWidth: 840, idealWidth: 920, minHeight: 560, idealHeight: 660)
         .macSettingsWindowChrome()
@@ -134,6 +135,15 @@ struct MacSettingsView: View {
         }
         .onChange(of: config.token) { _, token in
             if !token.isEmpty { authenticationMessage = nil }
+        }
+        .onChange(of: selection) { _, pane in
+            if pane != .automations { automationId = nil }
+        }
+        .onAppear { openPendingAutomation() }
+        .onReceive(NotificationCenter.default.publisher(for: .os1OpenAutomationSettings)) { note in
+            guard let id = note.object as? String else { return }
+            automationId = id
+            selection = .automations
         }
     }
 
@@ -153,7 +163,7 @@ struct MacSettingsView: View {
         case .models: ModelsSettingsView()
         case .connections: ConnectionsSettingsView()
         case .memory: MemorySettingsView()
-        case .automations: AutomationSettingsView()
+        case .automations: AutomationSettingsView(initialAutomationId: automationId)
         case .goals: GoalSettingsView()
         case .actions: ActionSettingsView()
         case .security: SecuritySettingsView()
@@ -162,6 +172,12 @@ struct MacSettingsView: View {
         case .papercuts: PapercutsSettingsView()
         case .auditLog: AuditLogSettingsView()
         }
+    }
+
+    private func openPendingAutomation() {
+        guard let id = AutomationLinks.takePendingSettingsId() else { return }
+        automationId = id
+        selection = .automations
     }
 
     private var preferredColorScheme: ColorScheme? {

@@ -138,6 +138,40 @@ describe("renderMarkdown session links", () => {
   });
 });
 
+describe("renderMarkdown automation links", () => {
+  const id = "auto-019fffbe-997a-7000-8d11-a27c0b1d8452";
+
+  it("turns codespan and bare automation ids into settings links", () => {
+    for (const source of [`Ran \`${id}\`.`, `Ran ${id}.`]) {
+      const html = renderMarkdown(source);
+      expect(html).toContain('class="automation-link"');
+      expect(html).toContain(`data-automation-id="${id}"`);
+      expect(html).toContain(`href="/automations/${id}"`);
+      expect(html).toContain("auto-019fffbe…");
+    }
+  });
+
+  it("turns an internal automation URL into the same chip", () => {
+    const url = `http://127.0.0.1:3850/automations/${id}`;
+    const html = renderMarkdown(`[Production Watchdog](${url})`);
+    expect(html).toContain(`data-automation-id="${id}"`);
+    expect(html).toContain('<span class="automation-link-label">Production Watchdog</span>');
+    expect(html).not.toContain("target=");
+  });
+
+  it("keeps ordinary auto-prefixed code as code", () => {
+    const html = renderMarkdown("Run `auto-fix` next.");
+    expect(html).toContain("<code>auto-fix</code>");
+    expect(html).not.toContain("automation-link");
+  });
+
+  it("does not link an id embedded in another word or path", () => {
+    for (const source of [`not${id}`, `/tmp/${id}`]) {
+      expect(renderMarkdown(source)).not.toContain("automation-link");
+    }
+  });
+});
+
 describe("session chip labels", () => {
   const id = "bks-019f24b5-f31d-7000-a48f-31a9e829c4ae";
 

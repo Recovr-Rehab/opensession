@@ -918,6 +918,31 @@ export function App(
 		};
 	}, []);
 
+	// Automation-id chips carry a real href for browser gestures. Plain clicks
+	// stay inside the SPA and open that automation's settings drawer directly.
+	useEffect(() => {
+		const onClick = (e: MouseEvent) => {
+			if (
+				e.defaultPrevented ||
+				e.button !== 0 ||
+				e.metaKey ||
+				e.ctrlKey ||
+				e.shiftKey ||
+				e.altKey
+			)
+				return;
+			const el = (e.target as HTMLElement | null)?.closest?.(
+				"a.automation-link[data-automation-id]",
+			) as HTMLElement | null;
+			const id = el?.dataset.automationId;
+			if (!id) return;
+			e.preventDefault();
+			navigateRef.current({ view: "automations", id });
+		};
+		document.addEventListener("click", onClick);
+		return () => document.removeEventListener("click", onClick);
+	}, []);
+
 	// @-mention chips (markdown.ts) are anchors inside dangerouslySetInnerHTML
 	// too, so they get the same treatment: one document-level listener, and a
 	// click puts the sidebar on that person's sessions. Enter/Space as well —

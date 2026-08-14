@@ -1,10 +1,10 @@
 import Foundation
 import SwiftStreamingMarkdown
 
-/// The transcript's inline chips: a session, a scratch file, a pull request,
+/// The transcript's inline chips: a session, automation, scratch file or pull request,
 /// drawn as an object inside the sentence rather than as coloured words.
 ///
-/// The web draws all three the same way — a quiet wash, a glyph naming what
+/// The web draws all four the same way — a quiet wash, a glyph naming what
 /// opens, and room around the label (`.session-link`, `.asset-ref`, `.pr-ref`
 /// in src/frontend/styles/base.css) — and the PR chip additionally takes its
 /// live state as the wash's colour. Natively none of that was reachable:
@@ -30,6 +30,7 @@ struct TranscriptChip: Equatable {
     /// What the chip opens, which is also which glyph it wears.
     enum Kind: String {
         case session
+        case automation
         case asset
         case pullRequest = "pr"
     }

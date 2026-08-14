@@ -1636,7 +1636,8 @@ a.asset-ref:focus-visible {
    header's Linear/Plain pills (which carry their own literal ↗), and an
    unscoped rule here clobbered them into mono accent chips with a second
    arrow. */
-.session-link[data-session-id] {
+.session-link[data-session-id],
+.automation-link[data-automation-id] {
 	display: inline-flex;
 	align-items: center;
 	gap: 4px;
@@ -1670,21 +1671,25 @@ a.asset-ref:focus-visible {
 		background var(--dur-micro) var(--ease),
 		scale var(--dur-micro) var(--ease);
 }
-.session-link[data-session-id]:hover {
+.session-link[data-session-id]:hover,
+.automation-link[data-automation-id]:hover {
 	background: var(--hover-strong);
 	/* the chip lights up instead: .markdown a:hover would underline it, which
 	   reads as a text link striking through the chip's own fill */
 	text-decoration: none;
 }
-.session-link[data-session-id]:active {
+.session-link[data-session-id]:active,
+.automation-link[data-automation-id]:active {
 	background: var(--hover-strong);
 	scale: 0.96;
 }
-.session-link[data-session-id]:focus-visible {
+.session-link[data-session-id]:focus-visible,
+.automation-link[data-automation-id]:focus-visible {
 	outline: 2px solid var(--accent-ink);
 	outline-offset: 2px;
 }
-.session-link-icon {
+.session-link-icon,
+.automation-link-icon {
 	display: inline-grid;
 	width: 18px;
 	height: 18px;
@@ -1696,7 +1701,8 @@ a.asset-ref:focus-visible {
 	   Undo that, or the glyph looks like it is sinking past the words. */
 	transform: translateY(-1px);
 }
-.session-link-icon svg {
+.session-link-icon svg,
+.automation-link-icon svg {
 	width: 18px;
 	height: 18px;
 	stroke: currentColor;
@@ -1704,7 +1710,8 @@ a.asset-ref:focus-visible {
 	stroke-linecap: round;
 	stroke-linejoin: round;
 }
-.session-link-label {
+.session-link-label,
+.automation-link-label {
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -1712,6 +1719,10 @@ a.asset-ref:focus-visible {
 /* No title yet (archived, not polled): the label is a raw id, and mono is what
    makes it read as one rather than as a mangled sentence. */
 .session-link[data-session-label="id"] .session-link-label {
+	font-family: var(--mono);
+	font-size: 0.95em;
+}
+.automation-link[data-automation-label="id"] .automation-link-label {
 	font-family: var(--mono);
 	font-size: 0.95em;
 }

@@ -53,6 +53,7 @@ struct SessionsListView: View {
 
     @State private var viewModel = SessionsListViewModel()
     @State private var showSettings = false
+    @State private var settingsAutomationId: String?
     @State private var showDesk = false
     /// The Plain support queue. iOS reaches it from the Support card at the
     /// bottom of the sessions sidebar; Mac keeps it in the sidebar header.
@@ -276,6 +277,16 @@ struct SessionsListView: View {
                         return .handled
                     }
                     return .systemAction(github)
+                }
+                if let id = AutomationLinks.automationId(from: url) {
+                    #if os(macOS)
+                    AutomationLinks.queueSettingsOpen(id)
+                    openSettings()
+                    #else
+                    settingsAutomationId = id
+                    showSettings = true
+                    #endif
+                    return .handled
                 }
                 guard let id = SessionLinks.sessionId(from: url) else {
                     return .systemAction
@@ -903,7 +914,10 @@ struct SessionsListView: View {
                     }
                 }
                 .sheet(isPresented: $showSettings) {
-                    SettingsView()
+                    SettingsView(automationId: settingsAutomationId)
+                }
+                .onChange(of: showSettings) {
+                    if !showSettings { settingsAutomationId = nil }
                 }
                 .sheet(isPresented: $showDesk) {
                     DeskSheet()

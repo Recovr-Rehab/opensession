@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SettingsView: View {
+    var automationId: String? = nil
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
 
@@ -25,11 +26,17 @@ struct SettingsView: View {
             Group {
                 if showingConnection || !config.isConfigured {
                     connectionForm
+                } else if let automationId {
+                    AutomationSettingsView(initialAutomationId: automationId)
                 } else {
                     settingsHome
                 }
             }
-            .navigationTitle(showingConnection || !config.isConfigured ? "Connection" : "Settings")
+            .navigationTitle(
+                showingConnection || !config.isConfigured
+                    ? "Connection"
+                    : automationId == nil ? "Settings" : "Automations"
+            )
             .inlineTitleBarCompat()
             #if os(macOS)
             .frame(minWidth: 620, minHeight: 640)
