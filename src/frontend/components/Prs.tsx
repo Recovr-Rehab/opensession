@@ -4,18 +4,10 @@ import { fetchHomeStats, fetchRecentPrs, type HomeStats, type RecentPr } from ".
 import { prStatusMark, type PrStatusInput } from "../lib/pr-status";
 import { cleanSessionTitle } from "../lib/session-title";
 import { Button } from "../ui/button";
-import { useIsPhone } from "../hooks/useIsPhone";
 import { useCurrentUser } from "./UserPicker";
 import { UserAvatar } from "./UserAvatar";
 import { RepoTile, repoLabel } from "./RepoTile";
-import { TeamLensMenu, useTeamPresence } from "./TeamPresence";
-import {
-  personLensFilter,
-  personLensValue,
-  personScope,
-  setFilter,
-  useSidebarFilter,
-} from "../lib/sidebar-filter";
+import { usePeople } from "../lib/people";
 import { Menu } from "../ui/menu";
 import { Tooltip } from "../ui/tooltip";
 import { Input } from "../ui/input";
@@ -33,6 +25,7 @@ import {
   IconDotsHorizontal,
   IconFolder,
   IconGitMerge,
+  IconPeople,
   IconPlus,
   IconPullRequest,
   IconRepo,
@@ -45,8 +38,6 @@ interface Props {
   onNewSession: () => void;
   onShowArchived: () => void;
   onOpenAnalytics?: () => void;
-  /** Who's viewing what right now (global presence), for the team face pile. */
-  teamViewing?: Array<{ user: string; sessionId: string }>;
 }
 
 interface WorktreeRow extends PrStatusInput {
@@ -405,32 +396,24 @@ export function Prs({
   onNewSession,
   onShowArchived,
   onOpenAnalytics,
-  teamViewing,
 }: Props) {
   const currentUser = useCurrentUser();
-  const isPhone = useIsPhone();
-  const team = useTeamPresence({ sessions, teamViewing, currentUser });
   const [query, setQuery] = useState("");
   const [workspaceId, setWorkspaceId] = useState("all");
   const [repo, setRepo] = useState("all");
-  // Whose work this page shows. It is the same lens the sidebar's lanes use,
-  // so picking a face here is also the sidebar you turn back to — one person
-  // filter for the app, not one per surface.
-  const filter = useSidebarFilter();
-  const person = personScope(filter.person, currentUser);
-  const setPerson = (next: string) =>
-    setFilter({ person: personLensFilter(next, currentUser) });
-  // The lens in words. "Unassigned" is a sidebar-only lens — this page has no
-  // backlog rows of its own — but it still says so rather than claiming to be
-  // showing everyone.
-  const lensLabel =
-    person !== "all"
-      ? person === currentUser.toLowerCase()
-        ? "You"
-        : personLabel(person)
-      : filter.person === "unassigned"
-        ? "Unassigned"
-        : "All workspaces";
+  // Whose pull requests to show, and nothing more. This used to be the app's
+  // person lens, so narrowing the list here also swapped the sidebar out from
+  // under you. It is an ordinary filter now, alongside workspace and repo:
+  // switching whose work the app is showing is the People page's job.
+  const [person, setPerson] = useState("all");
+  // Everyone, not only whoever the default request happened to return, because
+  // picking someone fetches their pull requests below.
+  const roster = usePeople();
+  const people = [...roster].sort(
+    (a, b) =>
+      Number(b.name.toLowerCase() === currentUser.toLowerCase()) -
+      Number(a.name.toLowerCase() === currentUser.toLowerCase()),
+  );
   const [showArchived, setShowArchived] = useState(false);
   const [recentPrs, setRecentPrs] = useState<RecentPr[]>([]);
   const [personPrs, setPersonPrs] = useState<RecentPr[]>([]);
@@ -542,22 +525,7 @@ export function Prs({
       <div className="mx-auto w-full max-w-[920px] px-6 pb-15 pt-7 max-[560px]:px-4 max-[560px]:pb-12 max-[560px]:pt-[18px]">
         <PageHeader className="items-center max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-3.5">
           <PageTitle>Pull requests</PageTitle>
-          <div className="flex min-w-0 items-center gap-3 max-[560px]:w-full max-[560px]:justify-between">
-            {/* The team, as the app's person lens. Every face stays visually
-                neutral in the header, and the whole pile is one trigger: whose
-                work this page and the sidebar behind it show is a name you pick
-                from the menu, not a face you brush past. */}
-            {team.length > 0 && (
-              <TeamLensMenu
-                members={team}
-                size={isPhone ? 24 : 27}
-                max={isPhone ? 4 : 8}
-                ring="var(--bg-surface)"
-                value={personLensValue(filter.person, currentUser)}
-                label={lensLabel}
-                onPick={setPerson}
-              />
-            )}
+          <div className="flex min-w-0 items-center gap-3 max-[560px]:w-full max-[560px]:justify-end">
             {/* The page's one CTA carries its verb as a glyph as well as a
                 word: at this size a label alone is a coloured rectangle you
                 read, and the plus is what makes it scan as the button that
@@ -590,6 +558,49 @@ export function Prs({
           />
 
           <div className="ml-auto flex items-center gap-2">
+            {people.length > 0 && (
+              <Menu.Root>
+                <Menu.Trigger
+                  render={
+                    <Button variant="ghost" icon={<IconPeople size={18} />} caret>
+                      <span className="max-w-[150px] truncate">
+                        {person === "all" ? "From anyone" : `From ${personLabel(person)}`}
+                      </span>
+                    </Button>
+                  }
+                />
+                <Menu.Popup align="end" className="min-w-[200px]">
+                  <Menu.RadioGroup
+                    value={person}
+                    onValueChange={(value) => setPerson(String(value))}
+                  >
+                    <Menu.RadioItem value="all" closeOnClick>
+                      {/* Sized to the faces below so every label shares one edge. */}
+                      <span className="size-[18px] shrink-0" />
+                      <span className="min-w-0 flex-1 truncate">Anyone</span>
+                      {person === "all" && <IconCheck className="shrink-0 text-accent" size={17} />}
+                    </Menu.RadioItem>
+                    {people.map((who) => {
+                      const key = who.name.toLowerCase();
+                      return (
+                        <Menu.RadioItem key={key} value={key} closeOnClick>
+                          <UserAvatar name={who.name} size={18} />
+                          <span className="min-w-0 flex-1 truncate">
+                            {key === currentUser.toLowerCase()
+                              ? `${who.fullName} (you)`
+                              : who.fullName}
+                          </span>
+                          {person === key && (
+                            <IconCheck className="shrink-0 text-accent" size={17} />
+                          )}
+                        </Menu.RadioItem>
+                      );
+                    })}
+                  </Menu.RadioGroup>
+                </Menu.Popup>
+              </Menu.Root>
+            )}
+
             <Menu.Root>
               <Menu.Trigger
                 render={
@@ -710,7 +721,7 @@ export function Prs({
               ? "Try another search or workspace."
               : person === "all"
                 ? "Workspaces with pull requests appear here."
-                : "Pick another face, or clear the filter to go back to yours."}
+                : "Pick someone else, or set the filter back to anyone."}
           </EmptyState>
         ) : (
           <div className={PR_LIST}>
