@@ -120,6 +120,10 @@ export interface UnifiedSession {
    *  project — a project is the level above (a repo band or a feed band).
    *  See CONCEPTS.md. */
   workspaceId?: string | null;
+  /** That workspace's name, stamped on the row by the sessions route so a
+   *  client can title a workspace row without waiting for (or holding) the
+   *  workspace list. Absent on standalone sessions. */
+  workspaceName?: string;
   /** Parent/orchestrator session when spawned as a worker sub-session. */
   parentSessionId?: string;
   /** The session whose agent created this as an internal helper. Visible

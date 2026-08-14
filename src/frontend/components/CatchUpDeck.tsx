@@ -146,7 +146,13 @@ export function CatchUpDeck({
 			return {
 				key,
 				workspaceId: wsId,
-				name: ws?.name || sessions[0].title,
+				// Workspace name first, the same rule the sidebar rows follow: the
+				// server stamps it on every session, so a card is titled correctly
+				// before the workspace list has loaded.
+				name:
+					ws?.name ||
+					sessions.find((c) => c.workspaceName)?.workspaceName ||
+					sessions[0].title,
 				sessions,
 				repo: sessions[0].repo || DEFAULT_REPO,
 				owner: sessions[0].startedBy || "",

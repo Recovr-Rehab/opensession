@@ -1165,8 +1165,20 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		};
 		for (const [wsId, sessions] of byWs) {
 			const ws = workspaces.find((p) => p.id === wsId) || null;
+			// A row is named after its workspace, never after one of its tabs.
+			// The workspace list is its own fetch and lands seconds after the
+			// sessions on a cold load, so when it isn't here yet the name comes
+			// from the sessions themselves (the server stamps it on every row).
+			// A session title is the last resort, for a workspace this client
+			// has no name for at all.
+			const named = sessions.find((c) => c.workspaceName);
 			rows.push(
-				mkRow(`workspace:${wsId}`, ws, ws?.name || sessions[0].title, sessions),
+				mkRow(
+					`workspace:${wsId}`,
+					ws,
+					ws?.name || named?.workspaceName || sessions[0].title,
+					sessions,
+				),
 			);
 		}
 		// A workspace with no sessions gets NO row. Workspaces are minted with their

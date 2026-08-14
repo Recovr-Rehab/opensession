@@ -372,6 +372,10 @@ export interface UnifiedSession {
 	 *  project — a project is the level above (a repo band or a feed band).
 	 *  See CONCEPTS.md. */
 	workspaceId?: string | null;
+	/** That workspace's name, stamped on every row by the sessions route. A
+	 *  sidebar row names its workspace, and this is what lets it do so before
+	 *  the (much larger) workspace list has loaded. Absent when standalone. */
+	workspaceName?: string;
 	/** Parent/orchestrator session when spawned as a worker sub-session. */
 	parentSessionId?: string;
 	/** The session whose agent created this one through `create_session`, set

@@ -61,7 +61,7 @@ import { isManualStatus, setStatusOverride } from "../status-overrides";
 import { getSubagentTranscript } from "../subagents";
 import { setTitleOverride } from "../title-overrides";
 import { buildWorkspaceOverview, resolveTranscriptImage } from "../workspace-overview";
-import { type Workspace, deleteWorkspace, getWorkspace } from "../workspaces";
+import { type Workspace, deleteWorkspace, getWorkspace, workspaceName } from "../workspaces";
 import { prHostFor } from "../pr-host";
 import { getRepo, removeWorktree, repoForPath } from "../worktree";
 import { preparingWorkspaces } from "../ws-hub";
@@ -148,6 +148,14 @@ function enrichSession(s: UnifiedSession) {
 	return {
 		...s,
 		repo: s.repo || defaultRepo().id,
+		// The name of the workspace this session is filed under. A sidebar row
+		// names a workspace, never one of its tabs, and the workspace list is
+		// a separate (much larger) fetch that lands seconds later on a cold
+		// load — so a row that had only session titles to work with showed a
+		// tab name until it arrived, then changed under the reader.
+		...(s.workspaceId
+			? { workspaceName: workspaceName(s.workspaceId) ?? undefined }
+			: {}),
 		waitingForInput: pendingAsks.has(s.id),
 		queuedCount: promptQueues.get(s.id)?.length || 0,
 		// Worktree still being created by this session's create run — the

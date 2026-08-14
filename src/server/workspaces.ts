@@ -149,6 +149,47 @@ export function listWorkspaces(): Workspace[] {
   return out;
 }
 
+/**
+ * id → name for every workspace, held in memory.
+ *
+ * The session list stamps each row with its workspace's name so a client can
+ * title a workspace row before (or without) loading the workspace list. Doing
+ * that from disk would mean re-reading every workspace file on each list
+ * rebuild: 4,378 files and ~0.4s on this instance. The map is built once and
+ * then maintained by the writers below, which are the only code that ever
+ * writes a workspace file.
+ */
+let workspaceNameCache: Map<string, string> | null = null;
+
+function workspaceNameMap(): Map<string, string> {
+  if (workspaceNameCache) return workspaceNameCache;
+  const names = new Map<string, string>();
+  if (existsSync(WORKSPACES_DIR))
+    for (const file of readdirSync(WORKSPACES_DIR)) {
+      if (!file.endsWith(".json")) continue;
+      try {
+        const p = JSON.parse(readFileSync(`${WORKSPACES_DIR}/${file}`, "utf8"));
+        if (typeof p?.id === "string" && typeof p?.name === "string")
+          names.set(p.id, p.name);
+      } catch {}
+    }
+  workspaceNameCache = names;
+  return names;
+}
+
+/** The workspace's display name, or null when there is no such workspace. */
+export function workspaceName(id: string): string | null {
+  if (!safeId(id)) return null;
+  return workspaceNameMap().get(id) ?? null;
+}
+
+/** The one write path for a workspace file, so the name map stays current. */
+function saveWorkspace(workspace: Workspace): Workspace {
+  writeJsonAtomic(fileFor(workspace.id), workspace);
+  workspaceNameCache?.set(workspace.id, workspace.name);
+  return workspace;
+}
+
 export function getWorkspace(id: string): Workspace | null {
   if (!safeId(id)) return null;
   const f = fileFor(id);
@@ -158,12 +199,10 @@ export function getWorkspace(id: string): Workspace | null {
 		if (workspace.modelSettings) return workspace;
 		// This is a one-time migration, not a merge. Once written, defaults are
 		// ordinary workspace JSON and a person can edit or remove any preset.
-		const seeded = {
+		return saveWorkspace({
 			...workspace,
 			modelSettings: copyModelSettings(DEFAULT_WORKSPACE_MODEL_SETTINGS),
-		};
-		writeJsonAtomic(f, seeded);
-		return seeded;
+		});
 	} catch {
     return null;
   }
@@ -206,8 +245,7 @@ export function createWorkspace(input: {
       : {}),
     modelSettings: copyModelSettings(DEFAULT_WORKSPACE_MODEL_SETTINGS),
   };
-  writeJsonAtomic(fileFor(workspace.id), workspace);
-  return workspace;
+  return saveWorkspace(workspace);
 }
 
 /**
@@ -338,8 +376,7 @@ export function stampWorkspaceIdentity(
       : {}),
     ...(addRef ? { externalRefs: addRef } : {}),
   };
-  writeJsonAtomic(fileFor(id), next);
-  return next;
+  return saveWorkspace(next);
 }
 
 /** Merge a partial patch into a workspace. Returns the updated record, or null. */
@@ -362,8 +399,7 @@ export function updateWorkspace(
     ...(patch.attachedRepos !== undefined ? { attachedRepos: patch.attachedRepos } : {}),
     ...(patch.modelSettings !== undefined ? { modelSettings: patch.modelSettings } : {}),
   };
-  writeJsonAtomic(fileFor(id), next);
-  return next;
+  return saveWorkspace(next);
 }
 
 /**
@@ -387,8 +423,7 @@ export function restampWorkspaceWorktree(
     ...(next.branch ? { branch: next.branch } : {}),
     ...(next.worktreeDir ? { worktreeDir: next.worktreeDir } : {}),
   };
-  writeJsonAtomic(fileFor(id), updated);
-  return updated;
+  return saveWorkspace(updated);
 }
 
 /**
@@ -402,6 +437,7 @@ export function deleteWorkspace(id: string): boolean {
   if (!existsSync(f)) return false;
   try {
     rmSync(f);
+    workspaceNameCache?.delete(id);
     // A deleted workspace's scratch dir (scratch-mode sessions — see
     // worktree.ts ensureScratchDir) goes with it; safeId() already rules
     // out anything path-escaping.

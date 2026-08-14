@@ -11,9 +11,14 @@ scratch = mkdtempSync(join(tmpdir(), "opensession-workspaces-"));
 previous = process.env.OPENSESSION_STATE_DIR;
 process.env.OPENSESSION_STATE_DIR = scratch;
 
-const { createWorkspace, getWorkspace, stampWorkspaceIdentity } = await import(
-	"./workspaces"
-);
+const {
+	createWorkspace,
+	deleteWorkspace,
+	getWorkspace,
+	stampWorkspaceIdentity,
+	updateWorkspace,
+	workspaceName,
+} = await import("./workspaces");
 
 afterAll(() => {
 	if (previous === undefined) delete process.env.OPENSESSION_STATE_DIR;
@@ -81,5 +86,29 @@ describe("stampWorkspaceIdentity", () => {
 		});
 		const out = stampWorkspaceIdentity(ws.id, { prNumber: 9, repo: "tella-fusion" });
 		expect(out?.repo).toBe("tella-fusion");
+	});
+});
+
+// The sessions list stamps each row with this name, so a stale answer would
+// title a sidebar row after a workspace's old name (or after a workspace that
+// no longer exists) until the server restarted.
+describe("workspaceName", () => {
+	test("follows create, rename and delete", () => {
+		const ws = createWorkspace({ name: "Add sound effects", createdBy: "Kent" });
+		expect(workspaceName(ws.id)).toBe("Add sound effects");
+		updateWorkspace(ws.id, { name: "Add a sound library" });
+		expect(workspaceName(ws.id)).toBe("Add a sound library");
+		deleteWorkspace(ws.id);
+		expect(workspaceName(ws.id)).toBeNull();
+	});
+
+	test("survives identity stamping, which rewrites the file", () => {
+		const ws = createWorkspace({ name: "Adopted by a PR", createdBy: "Kent" });
+		stampWorkspaceIdentity(ws.id, { key: "ghpr-1", prNumber: 1 });
+		expect(workspaceName(ws.id)).toBe("Adopted by a PR");
+	});
+
+	test("refuses an unsafe id", () => {
+		expect(workspaceName("../etc/passwd")).toBeNull();
 	});
 });
