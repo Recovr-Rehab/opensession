@@ -1459,16 +1459,15 @@ export function PrPanel({
 
       <div className="flex min-h-0 flex-1">
         {/* The two pages as a rail rather than a strip. A review is Overview
-            and Files changed, and a menu at the canvas' bottom corner keeps
-            both a click away without spending a row of chrome on them, in the
-            same shape as the app's own sidebar one level out. The items are
+            and Files changed, and a menu down the canvas' edge keeps both a
+            click away without spending a row of chrome on them, in the same
+            shape as the app's own sidebar one level out. The items are
             icon-only, so each carries its name in a tooltip and an
-            aria-label, with the count the strip showed sitting under the
-            glyph. They sit at the bottom because the rail is a menu, not a
-            column of content: parked at the top it read as the first thing on
-            a page whose first thing is the diff. */}
+            aria-label, and the count the strip showed rides the glyph's
+            corner as a badge rather than sitting under it, which kept the
+            item two lines tall for a number nobody reads twice. */}
         <nav
-          className="flex w-12 shrink-0 flex-col items-center justify-end gap-1 border-r border-line bg-surface pb-2"
+          className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-line bg-surface pt-2"
           role="tablist"
           aria-orientation="vertical"
           aria-label="Pull request pages"
@@ -1496,19 +1495,27 @@ export function PrPanel({
                    `bg-transparent` in the shared half would win or lose the
                    source-order tie against it on Tailwind's output order,
                    not on which one is written last here. */
-                className={`flex h-11 w-10 shrink-0 flex-col items-center justify-center gap-0.5 rounded-control border-0 transition-colors ${
+                className={`relative flex size-10 shrink-0 items-center justify-center rounded-control border-0 transition-colors ${
                   page === key
                     ? "bg-accent-soft text-accent"
                     : "bg-transparent text-dim hover:bg-hover hover:text-fg"
                 }`}
                 onClick={() => setPage(key)}
               >
-                <Icon size={19} />
-                {count !== undefined && (
-                  <span className="text-meta font-semibold leading-none tabular-nums">
-                    {count}
-                  </span>
-                )}
+                {/* The badge hangs off the GLYPH's corner, not the plate's:
+                    anchored to the box it floats in the box's empty corner and
+                    reads as a second object beside the icon rather than a
+                    count on it. It carries the accent plate in both states so
+                    it stays legible over the selected item's own wash, and it
+                    is inert to the pointer so the whole box is still the tab. */}
+                <span className="relative inline-flex">
+                  <Icon size={19} />
+                  {count !== undefined && (
+                    <span className="pointer-events-none absolute -right-2.5 -top-1.5 min-w-[16px] rounded-full bg-accent px-1 py-px text-center text-meta font-semibold leading-[1.3] tabular-nums text-on-accent">
+                      {count}
+                    </span>
+                  )}
+                </span>
               </button>
             </Tooltip>
           ))}
