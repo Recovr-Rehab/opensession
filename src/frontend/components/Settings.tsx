@@ -12,6 +12,8 @@ import {
 	SETTINGS_PANEL_FRAME_SHEET,
 	SETTINGS_SHEET_LIST,
 	SETTINGS_SHEET_SEARCH_BAR,
+	SETTINGS_NAV_ICON,
+	SETTINGS_NAV_ROW,
 } from "../lib/settings-classes";
 import { matchSections, type SectionHit } from "../lib/settings-search";
 import { Input } from "../ui/input";
@@ -788,11 +790,11 @@ export function Settings({
 							{g.hits.map(({ item: s, hint }) => (
 								<button
 									key={s.key}
-									className="group flex w-full cursor-pointer items-center gap-[11px] rounded-row border-none bg-transparent px-2.5 py-2 text-left text-body font-medium text-dim hover:bg-hover hover:text-fg data-active:bg-active data-active:text-fg"
+									className={SETTINGS_NAV_ROW}
 									data-active={active === s.key || undefined}
 									onClick={() => onSelect(s.key)}
 								>
-									<span className="inline-flex size-[18px] flex-none items-center justify-center text-faint group-hover:text-fg group-data-active:text-fg">{s.icon}</span>
+									<span className={SETTINGS_NAV_ICON}>{s.icon}</span>
 									<span className="min-w-0 flex-1">
 										{s.label}
 										{hint && (

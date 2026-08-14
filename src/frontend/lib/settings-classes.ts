@@ -75,3 +75,21 @@ export const SETTINGS_SHEET_SEARCH_BAR =
 	"before:backdrop-blur-[16px] before:backdrop-saturate-[1.35] " +
 	"before:[-webkit-mask-image:linear-gradient(to_top,#000_0%,#000_62%,transparent_100%)] " +
 	"before:[mask-image:linear-gradient(to_top,#000_0%,#000_62%,transparent_100%)]";
+
+/**
+ * A row in the settings navigation — the desktop sidebar's list and the
+ * account block under it, which are one list visually and were two copies of
+ * this string.
+ *
+ * The gap is `gap-2` rather than the 11px it carried: measured on the rendered
+ * pixels, an 18px glyph leaves ~2.5px of whitespace inside its own box, so 11
+ * put 13.5 to 16px of air between icon and label while every button in the app
+ * sits near 9.5. A nav row can read a little looser than a control, but not
+ * half again as loose.
+ */
+export const SETTINGS_NAV_ROW =
+	"group flex w-full cursor-pointer items-center gap-2 rounded-row border-none bg-transparent px-2.5 py-2 text-left text-body font-medium text-dim hover:bg-hover hover:text-fg data-active:bg-active data-active:text-fg";
+
+/** The row's glyph well: fixed 18px so labels align whatever the icon draws. */
+export const SETTINGS_NAV_ICON =
+	"inline-flex size-[18px] flex-none items-center justify-center text-faint group-hover:text-fg group-data-active:text-fg";

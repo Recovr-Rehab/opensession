@@ -1,4 +1,5 @@
 import React from "react";
+import { SETTINGS_NAV_ICON, SETTINGS_NAV_ROW } from "../lib/settings-classes";
 import { Menu } from "../ui/menu";
 import { IconCheck, IconLogOut } from "./icons";
 import {
@@ -118,8 +119,8 @@ export function SettingsAccountFooter() {
 				</Menu.Root>
 			)}
 			{canSignOut && (
-				<button className="group flex w-full cursor-pointer items-center gap-[11px] rounded-row border-none bg-transparent px-2.5 py-2 text-left text-body font-medium text-dim hover:bg-hover hover:text-fg data-active:bg-active data-active:text-fg" onClick={() => void signOut()}>
-					<span className="inline-flex size-[18px] flex-none items-center justify-center text-faint group-hover:text-fg group-data-active:text-fg">
+				<button className={SETTINGS_NAV_ROW} onClick={() => void signOut()}>
+					<span className={SETTINGS_NAV_ICON}>
 						<IconLogOut size={18} />
 					</span>
 					Sign out
