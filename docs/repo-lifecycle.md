@@ -12,7 +12,7 @@ Six files, each optional:
 | `start.sh`    | when a preview starts                     | bring the dev server up in the foreground |
 | `preview.json`| warm-pool / warm-template refreshes       | declare which routes to pre-compile       |
 | `portals.json`| session Portals panel                     | declare skill-backed service starters     |
-| `environment.json` | when a private remote workspace is adopted | seed explicitly declared local env files |
+| `environment.json` | when a private remote workspace is adopted | legacy migration path for local env files |
 
 Why commit them rather than configure the host: the boot recipe travels with
 the code. Every worktree of every session starts provisioned, the Preview
@@ -225,11 +225,33 @@ Portal is ready.
 On wake, `.agents/resume` repairs the workspace first. Open Session then
 rechecks every registered Portal and reports whether it restored or stopped.
 
-## environment.json — private workspace files
+## Environment sources for sandboxes
+
+Do not make the Open Session host the source of a repository's secrets.
+The portable pattern is:
+
+1. Keep `.agents/setup` deterministic and safe to reuse in a prewarm.
+2. Give a sandbox a short-lived OIDC identity for an audience the operator
+   approved.
+3. In `.agents/start.sh`, after the session workspace is adopted, fetch or
+   decrypt the environment from the repository's own secret source and write
+   the local file mode `0600`.
+
+The source is repository-owned, not Open Session-owned. It can be an internal
+secret service, Vault, a cloud secret manager, SOPS plus a KMS, or any service
+that trusts the Open Session identity. The host never needs the secret values,
+and no provider-specific CLI needs to be baked into a sandbox image.
+
+Keep this work out of `.agents/setup`: remote prewarms may run setup before a
+shared template is published. A secret belongs only in the adopted session
+workspace, immediately before a preview starts.
+
+## environment.json — legacy local-file migration
 
 Remote providers clone the repository and therefore cannot see gitignored
-environment files from the registered local checkout. Declare the files a
-fresh remote workspace needs:
+environment files from the registered local checkout. `environment.json` can
+copy explicitly declared files during a transition away from host-managed
+configuration:
 
 ```json
 {
@@ -240,7 +262,8 @@ fresh remote workspace needs:
 Open Session copies each file from the same relative path in the registered
 checkout into the session-owned sandbox after a template is restored and
 before the session setup hook runs. The files are never included in a shared
-prewarm or provider snapshot.
+prewarm or provider snapshot. New repositories should use an external
+environment source instead.
 
 Every declared source is required, must be a regular gitignored text file
 inside the registered checkout, and is written mode `0600`. Individual files
