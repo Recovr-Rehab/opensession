@@ -18,6 +18,8 @@ export type Session = {
 	branch?: string | null;
 	worktreeDir?: string | null;
 	workspaceId?: string | null;
+	/** Name of that workspace, stamped on every row by the sessions route. */
+	workspaceName?: string | null;
 	mode?: string | null;
 	model?: string | null;
 	effort?: string | null;

@@ -79,9 +79,14 @@ export function groupSessions(
 		if (!group) {
 			group = {
 				id,
+				// The names map is its own request and lands after the first
+				// list, so prefer it but fall back to the name the session
+				// itself carries — an id is not a name to show anybody.
 				name:
 					workspaceNames.get(id) ||
-					(session.workspaceId ? session.workspaceId : session.repo || "unknown"),
+					(session.workspaceId
+						? session.workspaceName || session.workspaceId
+						: session.repo || "unknown"),
 				sessions: [],
 				waiting: 0,
 				running: 0,

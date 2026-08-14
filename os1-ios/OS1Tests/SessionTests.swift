@@ -189,11 +189,27 @@ final class SessionTests: XCTestCase {
         XCTAssertEqual(workspaces[0].mainSession.id, "first")
     }
 
-    /// The names map arrives from its own request, so it is empty on a cold
-    /// launch and stays empty whenever that request fails — which is what an
-    /// app build outliving a rename of the endpoint it reads looks like. A
-    /// workspace row degrades to the session's own title, never to its branch:
-    /// the whole sidebar reading as machine slugs is how that failure surfaced.
+    /// Every row carries its workspace's name, so a cold launch titles its
+    /// rows after their workspaces rather than after whichever tab happens to
+    /// be first — before the separate names request has landed.
+    func testWorkspaceRowUsesTheNameTheSessionCarries() throws {
+        let sessions = try JSONDecoder().decode(
+            [Session].self,
+            from: Data(
+                #"[{"id":"first","workspaceId":"ws-1","title":"Resolve merge conflicts on main","workspaceName":"Implement the shadow tokens"},{"id":"second","workspaceId":"ws-1","title":"New session"}]"#.utf8
+            )
+        )
+
+        let workspaces = SessionsListViewModel.sidebarWorkspaces(in: sessions)
+
+        XCTAssertEqual(workspaces.count, 1)
+        XCTAssertEqual(workspaces[0].title, "Implement the shadow tokens")
+    }
+
+    /// A row with no name from either source — an older server, or a session
+    /// whose workspace is gone — degrades to the session's own title, never to
+    /// its branch: the whole sidebar reading as machine slugs is how that
+    /// failure once surfaced.
     func testWorkspaceRowFallsBackToTheSessionTitleNotTheBranch() throws {
         let sessions = try JSONDecoder().decode(
             [Session].self,

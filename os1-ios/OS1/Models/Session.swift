@@ -15,6 +15,10 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     var branch: String?
     var worktreeDir: String?
     var workspaceId: String?
+    /// The name of that workspace, stamped on every row by the sessions route.
+    /// A sidebar row names its workspace, and this is what lets it do so
+    /// before (or without) the separate workspace-name request.
+    var workspaceName: String?
     var mode: String?
     var model: String?
     var effort: String?

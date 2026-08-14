@@ -337,6 +337,7 @@ final class SessionsListViewModel {
             guard let main = mainSession(in: rowSessions) else { return nil }
             let named = rowSessions.compactMap(\.workspaceId)
                 .compactMap { workspaceNames[$0] }.first
+                ?? rowSessions.compactMap(\.workspaceName).first
             let renamed = rowSessions.first { $0.titleOverridden == true }
             let worktreeName = main.worktreeDir.flatMap {
                 $0.contains("/worktrees/")
@@ -344,11 +345,13 @@ final class SessionsListViewModel {
                     : nil
             }
             // A real workspace row NEVER falls back to the branch, matching the
-            // web sidebar (`ws?.name || sessions[0].title`). The names map is
-            // fetched separately from the sessions list and is empty until that
-            // request lands — or for good, if an app build outlives a rename of
-            // the endpoint it reads (`/api/projects` -> `/api/workspaces`, which
-            // is exactly how every row came to be titled by its branch). Falling
+            // web sidebar. The names map is fetched separately from the sessions
+            // list and is empty until that request lands — or for good, if an
+            // app build outlives a rename of the endpoint it reads
+            // (`/api/projects` -> `/api/workspaces`, which is exactly how every
+            // row came to be titled by its branch). The name each session now
+            // carries covers both cases, so a row is titled after its workspace
+            // from the first paint rather than after one of its tabs. Falling
             // to the session's own title degrades to something a person wrote;
             // falling to `branch` degrades to machine slugs across the sidebar.
             // Branch/worktree naming stays where it's the only identity there
