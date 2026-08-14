@@ -41,6 +41,10 @@ let enginesConfigPath: string;
 let prevStorePath: string;
 let prevEnginesConfig: string | undefined;
 let prevCodexBin: string | undefined;
+/** Isolated CODEX_HOMEs live under the real engine state dir (its path is a
+ *  module-level constant, so it cannot be redirected after import). Every
+ *  account id the tests use is recorded here and removed in afterAll. */
+const seededAccountIds = new Set<string>();
 
 /** A JWT whose only meaningful claim is an expiry — buildSeededOpenaiAuth
  *  parses `exp` and refuses an already-expired token. */
@@ -69,7 +73,8 @@ function writeAccountHome(name: string, accessExpSeconds = 3_600): string {
   return home;
 }
 
-function setAccounts(accounts: unknown[]): void {
+function setAccounts(accounts: Array<Record<string, unknown>>): void {
+  for (const a of accounts) if (typeof a.id === "string") seededAccountIds.add(a.id);
   writeFileSync(storePath, JSON.stringify({ accounts }, null, 2));
 }
 
@@ -90,6 +95,9 @@ beforeAll(() => {
 });
 
 afterAll(() => {
+  for (const id of seededAccountIds) {
+    rmSync(codexDirectHomeFor(id), { recursive: true, force: true });
+  }
   __setCodexAccountsPathForTest(prevStorePath);
   if (prevEnginesConfig === undefined) delete process.env.OPENSESSION_ENGINES_CONFIG;
   else process.env.OPENSESSION_ENGINES_CONFIG = prevEnginesConfig;
@@ -299,6 +307,7 @@ describe("auth seeding", () => {
       value: home,
       createdAt: new Date().toISOString(),
     };
+    seededAccountIds.add(account.id);
     const bound = seedCodexDirectHome(account);
     expect("error" in bound).toBe(false);
     if ("error" in bound) return;
@@ -321,6 +330,7 @@ describe("auth seeding", () => {
 
   test("an expired access token is refused rather than seeded", () => {
     const home = writeAccountHome("seed-expired", -60);
+    seededAccountIds.add("acct-seed-expired");
     const bound = seedCodexDirectHome({
       id: "acct-seed-expired",
       name: "seed-expired",
@@ -333,6 +343,7 @@ describe("auth seeding", () => {
   });
 
   test("api_key accounts seed a key-only home", () => {
+    seededAccountIds.add("acct-key");
     const bound = seedCodexDirectHome({
       id: "acct-key",
       name: "key",
