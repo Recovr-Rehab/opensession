@@ -331,11 +331,13 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 														<span className="truncate">{repoLabel(row.repo)}</span>
 													</span>
 												</span>
+												{/* A side that moved no lines is left off rather than
+												    written as a zero: every commit carries both counts. */}
 												<span className="justify-self-end text-meta tabular-nums phone:hidden">
-													{row.additions !== undefined && (
+													{!!row.additions && (
 														<span className="text-green">+{compactDiff(row.additions)}</span>
 													)}
-													{row.deletions !== undefined && (
+													{!!row.deletions && (
 														<span className="ml-2 text-red">−{compactDiff(row.deletions)}</span>
 													)}
 												</span>
