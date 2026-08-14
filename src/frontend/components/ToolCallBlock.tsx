@@ -1,5 +1,6 @@
-import React, { Suspense, createContext, lazy, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 import type { TranscriptEntry } from "../lib/types";
+import { CodeHighlight } from "./LazyCode";
 import { langForFile, langForGrep } from "../lib/lang";
 import { currentPlanItem, parsePlanItems, planDoneCount } from "@tellahq/opensession-protocol/todo-plan";
 import { PlanChecklist } from "./PlanChecklist";
@@ -53,26 +54,6 @@ import {
   IconExpand,
   IconArrowUpRight,
 } from "./icons";
-
-// Shiki (the syntax highlighter) is multi-MB; keep it out of the initial
-// bundle and load it only when a tool call is actually expanded. Until the
-// chunk arrives, the code shows as a plain pre.
-const CodeHighlightLazy = lazy(() =>
-  import("./CodeHighlight").then((m) => ({ default: m.CodeHighlight }))
-);
-
-function CodeHighlight(props: {
-  code: string;
-  lang: string;
-  gutter?: boolean;
-  requireGutter?: boolean;
-}) {
-  return (
-    <Suspense fallback={<pre className={TOOL_PRE}>{props.code}</pre>}>
-      <CodeHighlightLazy {...props} />
-    </Suspense>
-  );
-}
 
 interface Props {
   entry: TranscriptEntry;

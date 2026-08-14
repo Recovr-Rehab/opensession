@@ -1,8 +1,11 @@
 import React, { useState } from "react";
 import type { TranscriptEntry } from "../lib/types";
 import { Menu } from "../ui/menu";
+import { Popover } from "../ui/popover";
 import { Tooltip } from "../ui/tooltip";
 import { cn } from "../ui/cn";
+import { CodeHighlight } from "./LazyCode";
+import { TOOL_CODE_WELL } from "../lib/tool-classes";
 import {
   IconArrowUpRight,
   IconBranches,
@@ -24,6 +27,12 @@ export interface TouchedFile {
   path: string;
   additions: number;
   deletions: number;
+  /**
+   * What the turn wrote there, as diff text: one entry per edit call, in call
+   * order. Empty when the tool reported a path without its content (Bash,
+   * codex FileChange), and the chip stays a plain label.
+   */
+  hunks: string[];
 }
 
 /**
@@ -238,7 +247,8 @@ function turnFooterPropsEqual(prev: Props, next: Props): boolean {
     if (
       a.path !== b.path ||
       a.additions !== b.additions ||
-      a.deletions !== b.deletions
+      a.deletions !== b.deletions ||
+      a.hunks.length !== b.hunks.length
     )
       return false;
   }
@@ -324,11 +334,18 @@ const CHIP =
   "ml-1 flex h-6 min-w-0 items-center gap-1.5 overflow-hidden rounded-control border-0 bg-fg/[0.03] py-0 pl-1 text-left";
 
 /**
- * One file the turn wrote, with the ±lines it moved there. A label rather than
- * a button: the per-file diff lives in the Changes tab, which reads the real
- * worktree instead of these tool inputs, and a chip that looked clickable
- * would promise a second, disagreeing answer. The tooltip carries the path the
- * name was cut from.
+ * One file the turn wrote, with the ±lines it moved there, and on click the
+ * lines themselves.
+ *
+ * The chip opens what THIS TURN wrote, read back out of the tool inputs the ±
+ * counts already come from, so the popup is those counts spelled out rather
+ * than a second answer that could disagree with them. The Changes tab stays
+ * the place for the file's current diff: it reads the real worktree, which by
+ * now holds every later turn's edits too. The path the name was cut from
+ * heads the popup, so the chip needs no tooltip fighting it.
+ *
+ * A file whose tool only reported a path carries no hunks; that chip stays the
+ * label it was, with the path on a tooltip.
  */
 function FileChip({
   file,
@@ -338,16 +355,57 @@ function FileChip({
   roots: readonly PathRoot[];
 }) {
   const name = fileName(file.path);
-  return (
-    <Tooltip label={tidyPath(file.path, roots)}>
-      <span className={cn(CHIP, "pr-1.5")}>
-        <ExtBadge name={name} />
-        <span className={cn("max-w-[180px] truncate text-dim", FOOTER_TEXT)}>
-          {name}
-        </span>
-        <LineStats additions={file.additions} deletions={file.deletions} />
+  const path = tidyPath(file.path, roots);
+  // A blank line between calls: four passes over one file are four hunks, and
+  // run together they read as one edit that contradicts itself.
+  const diff = file.hunks.filter(Boolean).join("\n\n");
+  const body = (
+    <>
+      <ExtBadge name={name} />
+      <span className={cn("max-w-[180px] truncate text-dim", FOOTER_TEXT)}>
+        {name}
       </span>
-    </Tooltip>
+      <LineStats additions={file.additions} deletions={file.deletions} />
+    </>
+  );
+  if (!diff)
+    return (
+      <Tooltip label={path}>
+        <span className={cn(CHIP, "pr-1.5")}>{body}</span>
+      </Tooltip>
+    );
+  return (
+    <Popover.Root>
+      <Popover.Trigger
+        className={cn(
+          CHIP,
+          "cursor-pointer pr-1.5 hover:bg-hover data-[popup-open]:bg-hover"
+        )}
+        aria-label={`Show what this turn wrote to ${name}`}
+      >
+        {body}
+      </Popover.Trigger>
+      <Popover.Popup
+        side="top"
+        align="start"
+        elevation="lg"
+        className="w-[min(620px,calc(100vw-24px))] p-2"
+      >
+        <div className="mb-1.5 flex items-center gap-1.5 px-1">
+          <ExtBadge name={name} />
+          <span
+            className={cn("min-w-0 flex-1 truncate text-dim", FOOTER_TEXT)}
+            title={path}
+          >
+            {path}
+          </span>
+          <LineStats additions={file.additions} deletions={file.deletions} />
+        </div>
+        <div className={TOOL_CODE_WELL}>
+          <CodeHighlight code={diff} lang="diff" />
+        </div>
+      </Popover.Popup>
+    </Popover.Root>
   );
 }
 
@@ -493,13 +551,17 @@ export function touchedFilesFromTool(entry: TranscriptEntry): TouchedFile[] {
       if (filePath && Array.isArray(inp.edits)) {
         let additions = 0;
         let deletions = 0;
+        const hunks: string[] = [];
         for (const e of inp.edits) {
           if (!e || typeof e !== "object") continue;
           const ee = e as Record<string, unknown>;
-          additions += lines(ee.new_string ?? ee.newString);
-          deletions += lines(ee.old_string ?? ee.oldString);
+          const oldStr = str(ee.old_string ?? ee.oldString);
+          const newStr = str(ee.new_string ?? ee.newString);
+          additions += lines(newStr);
+          deletions += lines(oldStr);
+          hunks.push(replaceHunk(oldStr, newStr));
         }
-        return [{ path: filePath, additions, deletions }];
+        return [{ path: filePath, additions, deletions, hunks }];
       }
       if (filePath) {
         const oldStr = key("old_string", "oldString");
@@ -508,6 +570,7 @@ export function touchedFilesFromTool(entry: TranscriptEntry): TouchedFile[] {
           path: filePath,
           additions: lines(newStr),
           deletions: lines(oldStr),
+          hunks: [replaceHunk(oldStr, newStr)],
         }];
       }
       // codex's apply_patch names its files inside the patch body.
@@ -519,6 +582,7 @@ export function touchedFilesFromTool(entry: TranscriptEntry): TouchedFile[] {
         path: filePath,
         additions: lines(inp.content),
         deletions: 0,
+        hunks: [addedHunk(str(inp.content))],
       }];
     case "NotebookEdit":
       if (typeof inp.notebook_path !== "string") return [];
@@ -526,6 +590,7 @@ export function touchedFilesFromTool(entry: TranscriptEntry): TouchedFile[] {
         path: inp.notebook_path,
         additions: lines(inp.new_source),
         deletions: 0,
+        hunks: [addedHunk(str(inp.new_source))],
       }];
     case "FileChange": {
       if (!Array.isArray(inp.changes)) return [];
@@ -533,7 +598,7 @@ export function touchedFilesFromTool(entry: TranscriptEntry): TouchedFile[] {
       for (const change of inp.changes) {
         const path = fileChangePath(change);
         if (!path) continue;
-        files.push({ path, additions: 0, deletions: 0 });
+        files.push({ path, additions: 0, deletions: 0, hunks: [] });
       }
       return mergeTouchedFiles(files);
     }
@@ -560,17 +625,32 @@ function patchTouchedFiles(patch: string): TouchedFile[] {
   if (!patch) return [];
   const files: TouchedFile[] = [];
   let current: TouchedFile | null = null;
+  // The patch body is already a diff, so each file's section is its own hunk:
+  // kept verbatim, minus the "*** … File:" headers the chip's name replaces.
+  let body: string[] = [];
+  const closeSection = () => {
+    if (current) current.hunks = body.length > 0 ? [body.join("\n")] : [];
+    body = [];
+  };
   for (const line of patch.split("\n")) {
     const header = line.match(/^\*\*\* (?:Add|Update|Delete) File: (.+)$/);
     if (header) {
-      current = { path: header[1].trim(), additions: 0, deletions: 0 };
+      closeSection();
+      current = {
+        path: header[1].trim(),
+        additions: 0,
+        deletions: 0,
+        hunks: [],
+      };
       files.push(current);
       continue;
     }
     if (!current || line.startsWith("***")) continue;
+    body.push(line);
     if (line.startsWith("+")) current.additions++;
     else if (line.startsWith("-")) current.deletions++;
   }
+  closeSection();
   return files;
 }
 
@@ -581,11 +661,38 @@ function mergeTouchedFiles(files: TouchedFile[]): TouchedFile[] {
     if (prev) {
       prev.additions += f.additions;
       prev.deletions += f.deletions;
+      prev.hunks.push(...f.hunks);
     } else {
-      byPath.set(f.path, { ...f });
+      // Copy the hunks too: merging appends into this array, and the caller's
+      // is the one a later turn would read.
+      byPath.set(f.path, { ...f, hunks: [...f.hunks] });
     }
   }
   return [...byPath.values()];
+}
+
+/** A replacement as diff text: the old lines cut, the new ones added. Same
+ *  shape the tool row renders for a single edit, so a chip and the call it
+ *  came from show one file the same way. */
+function replaceHunk(oldStr: string, newStr: string): string {
+  return [
+    ...(oldStr ? oldStr.split("\n").map((l) => `-${l}`) : []),
+    ...(newStr ? newStr.split("\n").map((l) => `+${l}`) : []),
+  ].join("\n");
+}
+
+/** A whole written file as diff text: every line is new. */
+function addedHunk(text: string): string {
+  if (!text) return "";
+  return text
+    .split("\n")
+    .map((l) => `+${l}`)
+    .join("\n");
+}
+
+/** Reads a possibly-absent tool input value as a string. */
+function str(value: unknown): string {
+  return typeof value === "string" ? value : "";
 }
 
 function fileChangePath(change: unknown): string | null {
