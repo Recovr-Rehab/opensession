@@ -1269,10 +1269,14 @@ html.wco .app-body.sidebar-collapsed
    the composer widens the space itself (`word-spacing`, lib/composer-classes.ts,
    on the field as well as the mirror so the two still agree glyph for glyph; a
    margin on this span alone would slide the painted text off the caret behind
-   it). That buys 5.2px: 3px of wash past the last letter, 2.2px still clear
-   before the next word.
+   it). That buys 7.2px, and the two ends do not want the same share of it: on
+   the left the face is a circle, whose own curve already reads as air, while
+   on the right a name ends on a flat stem with nothing to soften it. So the
+   wash reaches 4px to the left and 6px to the right, and the gap left over to
+   the neighbouring word is 3.2px and 1.2px — which lands even, because the
+   pill's round end gives back on the side that keeps less.
 
-   The mirror carries 4px of padding against a matching negative margin
+   The mirror carries 6px of padding against a matching negative margin
    (Composer.tsx): its content origin is unchanged, so nothing moves, but
    `overflow: hidden` then clips past the reach — otherwise a mention at the
    start of a line has its left edge cut off by the mirror's own bounds.
@@ -1286,7 +1290,7 @@ html.wco .app-body.sidebar-collapsed
 .composer-hl .cmp-mention::before {
 	content: "";
 	position: absolute;
-	inset: -2px -3px;
+	inset: -2px -6px -2px -4px;
 	z-index: -1;
 	border-radius: 999px;
 	background: color-mix(in srgb, var(--accent) 12%, transparent);
@@ -1299,7 +1303,7 @@ html.wco .app-body.sidebar-collapsed
    its slot. The circle hangs off THAT span rather than off the pill, so it
    stays fixed to the slot whatever the wash around it does, and the gap either
    side of it is the slot's own arithmetic: 13.8px at the composer's 14px type,
-   plus the 3px the wash reaches to its left, less a 0.74em circle, leaves 3px
+   plus the 4px the wash reaches to its left, less a 0.74em circle, leaves 4px
    of wash before the face and 3.4px between it and the first letter. The size
    is in `em` because the slot is: the phone composer sets 16px, where a fixed
    circle would sit small in a wider gap. Absolute, so it takes no part in

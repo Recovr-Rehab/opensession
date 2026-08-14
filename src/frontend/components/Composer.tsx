@@ -1108,12 +1108,13 @@ export function Composer({
                 composerTextarea,
                 composerTextareaPadding,
                 "pointer-events-none absolute inset-0 z-0 overflow-hidden text-fg break-words whitespace-pre-wrap select-none",
-                // A mention's wash reaches 3px past its own box (base.css), so
-                // one at the start of a line would be cut off by this box.
-                // The padding pushes the clip edge out; the matching negative
-                // margin takes it back out of the content origin, so every
-                // glyph still lands exactly where the textarea puts it.
-                "-mx-[4px] px-[4px]",
+                // A mention's wash reaches up to 6px past its own box
+                // (base.css), so one at the start or end of a line would be
+                // cut off by this box. The padding pushes the clip edge out;
+                // the matching negative margin takes it back out of the
+                // content origin, so every glyph still lands exactly where
+                // the textarea puts it.
+                "-mx-[6px] px-[6px]",
               )}
               aria-hidden="true"
               dangerouslySetInnerHTML={{ __html: hlHtml }}

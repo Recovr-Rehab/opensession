@@ -65,7 +65,7 @@ export const composerBoxMinimized =
  *  way to give that chip a margin — set on the field as well as the mirror, so
  *  the painted text stays under the caret it belongs to. */
 export const composerTextarea =
-	"block max-h-[320px] min-h-0 w-full resize-none border-none bg-transparent text-body leading-[1.55] [word-spacing:1.5px] outline-none phone:max-h-[240px] phone:text-[16px]";
+	"block max-h-[320px] min-h-0 w-full resize-none border-none bg-transparent text-body leading-[1.55] [word-spacing:3.5px] outline-none phone:max-h-[240px] phone:text-[16px]";
 export const composerTextareaPadding = "px-0 pt-0.5 pb-1";
 /** In the resting pill the field is one row inside a 4px-inset box, so it
  *  carries the horizontal breathing room and no vertical padding at all. */

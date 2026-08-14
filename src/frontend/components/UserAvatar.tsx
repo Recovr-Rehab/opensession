@@ -82,7 +82,13 @@ export function UserAvatar({
 				<img
 					src={`https://github.com/${login}.png?size=${size * 2}`}
 					alt={name}
-					className="absolute inset-0 size-full rounded-[inherit] object-cover shadow-[var(--avatar-edge)]"
+					// `corner-shape` is not inherited, and base.css squircles
+					// anything carrying a `rounded-*` class — so a photo inside a
+					// frame a caller made round (`rounded-full`, which opts out)
+					// took the radius but kept the squircle, and only the frame's
+					// clip hid it. Inheriting the shape as well as the radius is
+					// what makes the picture the frame's shape, always.
+					className="absolute inset-0 size-full rounded-[inherit] [corner-shape:inherit] object-cover shadow-[var(--avatar-edge)]"
 					loading="lazy"
 					draggable={false}
 					onError={() => setFailed(true)}
