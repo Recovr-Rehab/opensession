@@ -1280,6 +1280,37 @@ export function PrPanel({
     />
   );
 
+  /** How the diff is drawn: its own dropdown when there is room for one, and
+   *  folded into the view menu when there is not — a narrow panel scrolls its
+   *  chrome row, and a trigger parked past the right edge opens its popup
+   *  off screen. */
+  const diffDisplayItems = (
+    <>
+      <Menu.RadioGroup
+        value={diffStyle}
+        onValueChange={(next) => changeDiffStyle(String(next) as "unified" | "split")}
+      >
+        <Menu.RadioItem value="unified" closeOnClick>
+          <IconDiffUnified size={18} className={MENU_ICON} />
+          <span className="min-w-0 flex-1 truncate">Unified diff</span>
+          {diffStyle === "unified" && <IconCheck className="shrink-0 text-accent" size={17} />}
+        </Menu.RadioItem>
+        <Menu.RadioItem value="split" closeOnClick>
+          <IconDiffSplit size={18} className={MENU_ICON} />
+          <span className="min-w-0 flex-1 truncate">Split diff</span>
+          {diffStyle === "split" && <IconCheck className="shrink-0 text-accent" size={17} />}
+        </Menu.RadioItem>
+      </Menu.RadioGroup>
+      <Menu.Separator />
+      <Menu.CheckboxItem checked={wrapLines} onCheckedChange={changeWrapLines} closeOnClick>
+        <IconReturn size={18} className={MENU_ICON} />
+        <span className="min-w-0 flex-1 truncate">Wrap long lines</span>
+        {wrapLines && <IconCheck className="shrink-0 text-accent" size={17} />}
+      </Menu.CheckboxItem>
+    </>
+  );
+  const showDisplayMenu = codeView !== "flow";
+
   return (
     <div
       className="selectable relative flex h-full min-h-0 flex-col overflow-hidden bg-surface"
@@ -1417,16 +1448,14 @@ export function PrPanel({
                   {handEdited.length === 1 ? "" : "s"}
                 </Button>
               )}
-              {/* One view control for the code page. Which lens is reading the
-                  change, how the diff is drawn and whether lines wrap are the
-                  same kind of choice, so they share a menu rather than a
-                  control each, and the trigger names the lens in effect —
-                  the one a reader actually moves between. It is the outlined
-                  plate rather than a ghost, and carries no leading glyph,
-                  because what it reports is a value: it should read as the
-                  page's one dropdown, not as a quiet piece of chrome. Layout
-                  and wrapping drop out under the flow lens, which draws no
-                  diff. */}
+              {/* Two axes, two controls. The named dropdown picks WHAT you are
+                  reading — a diff, a guided walk through it, a call graph —
+                  and reports it, so it takes the outlined plate with its value
+                  in normal ink. Unified vs split and wrapping are how the diff
+                  is DRAWN: settings a reader picks once, which is why they sit
+                  behind a glyph rather than under a trigger labelled "All
+                  changes", where nobody would look for them. They drop out
+                  under the flow lens, which draws no diff. */}
               <Menu.Root>
                 <Tooltip label="Change the view">
                   <Menu.Trigger
@@ -1470,42 +1499,43 @@ export function PrPanel({
                       );
                     })}
                   </Menu.RadioGroup>
-                  {codeView !== "flow" && (
+                  {showDisplayMenu && headerCompact && (
                     <>
                       <Menu.Separator />
-                      <Menu.RadioGroup
-                        value={diffStyle}
-                        onValueChange={(next) => changeDiffStyle(String(next) as "unified" | "split")}
-                      >
-                        <Menu.RadioItem value="unified" closeOnClick>
-                          <IconDiffUnified size={18} className={MENU_ICON} />
-                          <span className="min-w-0 flex-1 truncate">Unified diff</span>
-                          {diffStyle === "unified" && (
-                            <IconCheck className="shrink-0 text-accent" size={17} />
-                          )}
-                        </Menu.RadioItem>
-                        <Menu.RadioItem value="split" closeOnClick>
-                          <IconDiffSplit size={18} className={MENU_ICON} />
-                          <span className="min-w-0 flex-1 truncate">Split diff</span>
-                          {diffStyle === "split" && (
-                            <IconCheck className="shrink-0 text-accent" size={17} />
-                          )}
-                        </Menu.RadioItem>
-                      </Menu.RadioGroup>
-                      <Menu.Separator />
-                      <Menu.CheckboxItem
-                        checked={wrapLines}
-                        onCheckedChange={changeWrapLines}
-                        closeOnClick
-                      >
-                        <IconReturn size={18} className={MENU_ICON} />
-                        <span className="min-w-0 flex-1 truncate">Wrap long lines</span>
-                        {wrapLines && <IconCheck className="shrink-0 text-accent" size={17} />}
-                      </Menu.CheckboxItem>
+                      {diffDisplayItems}
                     </>
                   )}
                 </Menu.Popup>
               </Menu.Root>
+              {/* `w-auto px-2` because an icon-only Button sizes to the glyph
+                  alone and the caret needs room beside it. */}
+              {showDisplayMenu && !headerCompact && (
+                <Menu.Root>
+                  <Tooltip label="Diff display">
+                    <Menu.Trigger
+                      render={
+                        <Button
+                          variant="default"
+                          size="sm"
+                          className="w-auto px-2 text-fg"
+                          aria-label="Diff display"
+                          caret
+                          icon={
+                            diffStyle === "split" ? (
+                              <IconDiffSplit size={17} />
+                            ) : (
+                              <IconDiffUnified size={17} />
+                            )
+                          }
+                        />
+                      }
+                    />
+                  </Tooltip>
+                  <Menu.Popup align="end" className="min-w-[190px]">
+                    {diffDisplayItems}
+                  </Menu.Popup>
+                </Menu.Root>
+              )}
             </div>
           )}
         </div>
