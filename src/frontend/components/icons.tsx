@@ -441,6 +441,20 @@ export function IconHome(p: IconProps) {
   );
 }
 
+export function IconPeople(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <circle {...stroke} cx="9.75" cy="9.25" r="3.5" />
+      <path
+        {...stroke}
+        d="M4.75 18.75C4.75 15.85 6.99 14.25 9.75 14.25C12.51 14.25 14.75 15.85 14.75 18.75"
+      />
+      <circle {...stroke} cx="17" cy="8.5" r="2.5" />
+      <path {...stroke} d="M16.5 13.6C18.35 13.85 19.75 15.45 19.75 17.75" />
+    </Svg>
+  );
+}
+
 export function IconGlobe(p: IconProps) {
   return (
     <Svg {...p}>

@@ -137,9 +137,10 @@ import {
 	IconChart,
 	IconFile,
 	IconGlobe,
-	IconHome,
 	IconListCircles,
 	IconMessages,
+	IconPeople,
+	IconPullRequest,
 } from "./icons";
 import { Button } from "../ui/button";
 import { Tooltip } from "../ui/tooltip";
@@ -261,8 +262,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	workspaceDataReady,
 	workspaces,
 	selectedId,
-	homeActive,
-	onOpenHome,
+	prsActive,
+	onOpenPrs,
+	peopleActive,
+	onOpenPeople,
 	tasksActive,
 	onOpenTasks,
 	taskCount = 0,
@@ -2302,12 +2305,20 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		count?: number;
 	}> = [
 		{
-			id: "home",
-			label: SIDEBAR_TOOL_LABELS.home,
-			icon: <IconHome />,
-			active: homeActive,
-			onClick: onOpenHome,
+			id: "prs",
+			label: SIDEBAR_TOOL_LABELS.prs,
+			icon: <IconPullRequest />,
+			active: prsActive,
+			onClick: onOpenPrs,
 			title: "Pull request worktrees",
+		},
+		{
+			id: "people",
+			label: SIDEBAR_TOOL_LABELS.people,
+			icon: <IconPeople />,
+			active: peopleActive,
+			onClick: onOpenPeople,
+			title: "Your teammates and their work",
 		},
 		{
 			id: "tasks",
@@ -2356,7 +2367,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// these, so a tool that doesn't fit the viewport is never listed as off.
 	const fittingTools = tools.filter((tool) => toolFitsViewport(tool.id, isPhone));
 	const visibleTools = fittingTools.filter(
-		(tool) => !hiddenTools.has(tool.id) && !(productEmpty && tool.id === "home"),
+		(tool) => !hiddenTools.has(tool.id) && !(productEmpty && tool.id === "prs"),
 	);
 
 	const setToolVisible = setSidebarToolVisible;
@@ -4127,13 +4138,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								</ContextMenu.Popup>
 							</ContextMenu.Root>
 						);
-						// Home carries the team at its right edge, with every face shown
-						// neutrally, and lets you pick up their sidebar without leaving
-						// the one you're in — the pile opens the same lens menu Home's
-						// header does. It has to be a sibling of the row, not a child:
-						// a button can't nest one. Phones render the tools as a card
-						// strip, where there's no room.
-						if (tool.id !== "home" || isPhone || team.length === 0) return row;
+						// People carries the team at its right edge, with every face
+						// shown neutrally, and lets you pick up someone's sidebar
+						// without leaving the row you're on. The pile opens the same
+						// lens menu the People page writes, so the row is both a way in
+						// and the shortcut past it. It has to be a sibling of the row,
+						// not a child: a button can't nest one. Phones render the tools
+						// as a card strip, where there's no room.
+						if (tool.id !== "people" || isPhone || team.length === 0) return row;
 						return (
 							<div key={tool.id} className="relative">
 								{row}

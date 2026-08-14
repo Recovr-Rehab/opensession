@@ -22,11 +22,11 @@ import { Input } from "../ui/input";
 import { PageHeader, PageTitle } from "../ui/page-header";
 import { EmptyState } from "../ui/state";
 import {
-  HOME_GROUP_LABEL,
-  HOME_LIST,
-  HOME_ROW,
-  HOME_SECTION_LABEL,
-} from "../lib/home-classes";
+  PR_GROUP_LABEL,
+  PR_LIST,
+  PR_ROW,
+  PR_SECTION_LABEL,
+} from "../lib/pr-list-classes";
 import {
   IconArchive,
   IconCheck,
@@ -398,7 +398,7 @@ export function buildWorktreeRows(recentPrs: RecentPr[], sessions: UnifiedSessio
   );
 }
 
-export function Home({
+export function Prs({
   sessions,
   workspaces,
   onSelect,
@@ -541,7 +541,7 @@ export function Home({
     <div className="min-h-0 w-full flex-1 overflow-y-auto bg-surface">
       <div className="mx-auto w-full max-w-[920px] px-6 pb-15 pt-7 max-[560px]:px-4 max-[560px]:pb-12 max-[560px]:pt-[18px]">
         <PageHeader className="items-center max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-3.5">
-          <PageTitle>Home</PageTitle>
+          <PageTitle>Pull requests</PageTitle>
           <div className="flex min-w-0 items-center gap-3 max-[560px]:w-full max-[560px]:justify-between">
             {/* The team, as the app's person lens. Every face stays visually
                 neutral in the header, and the whole pile is one trigger: whose
@@ -713,16 +713,16 @@ export function Home({
                 : "Pick another face, or clear the filter to go back to yours."}
           </EmptyState>
         ) : (
-          <div className={HOME_LIST}>
+          <div className={PR_LIST}>
             {sections.map((section) => (
               <section key={section.state} className="mb-7">
-                <h2 className={HOME_SECTION_LABEL}>
+                <h2 className={PR_SECTION_LABEL}>
                   {section.label}
                   <span className="text-meta font-medium text-faint">{section.rows.length}</span>
                 </h2>
                 {section.groups.map(([label, rows]) => (
                   <div key={label} className="mb-4">
-                    <h3 className={HOME_GROUP_LABEL}>
+                    <h3 className={PR_GROUP_LABEL}>
                       {label}
                       <span className="font-medium">{rows.length}</span>
                     </h3>
@@ -732,7 +732,7 @@ export function Home({
                         return (
                           <button
                             key={row.key}
-                            className={HOME_ROW}
+                            className={PR_ROW}
                             onClick={() =>
                               row.session ? onSelect(row.session) : row.url && window.open(row.url, "_blank", "noopener")
                             }

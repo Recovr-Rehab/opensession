@@ -18,12 +18,22 @@ beforeEach(() => store.clear());
 
 describe("readHiddenSidebarTools", () => {
 	// A tool added to SIDEBAR_TOOL_IDS must not switch itself on for everyone
-	// who has never touched the setting — new accounts start with Home only.
-	test("a new account sees Home and nothing else", () => {
+	// who has never touched the setting. New accounts start with the two tools
+	// that need nothing set up.
+	test("a new account sees Pull requests and People, and nothing else", () => {
 		const hidden = readHiddenSidebarTools();
 		expect([...SIDEBAR_TOOL_IDS].filter((id) => !hidden.has(id))).toEqual([
-			"home",
+			"prs",
+			"people",
 		]);
+	});
+
+	// The tool was called "home" until 2026-08-14. Someone who had hidden it
+	// then must still have it hidden now, or the rename un-hides a tool they
+	// deliberately turned off.
+	test("a hidden 'home' is read as a hidden 'prs'", () => {
+		store.set("opensession-sidebar-hidden-tools", JSON.stringify(["home"]));
+		expect([...readHiddenSidebarTools()]).toEqual(["prs"]);
 	});
 
 	test("an explicit empty list means the user showed everything", () => {
@@ -53,14 +63,14 @@ describe("toolFitsViewport", () => {
 		}
 	});
 
-	test("Home is the phone's root list, not one of its tools", () => {
-		expect(toolFitsViewport("home", false)).toBe(true);
-		expect(toolFitsViewport("home", true)).toBe(false);
+	test("Pull requests is the phone's root list, not one of its tools", () => {
+		expect(toolFitsViewport("prs", false)).toBe(true);
+		expect(toolFitsViewport("prs", true)).toBe(false);
 	});
 
 	test("every other tool is offered at both widths", () => {
 		for (const id of SIDEBAR_TOOL_IDS) {
-			if (id === "home" || id === "catchup" || id === "supporttinder") continue;
+			if (id === "prs" || id === "catchup" || id === "supporttinder") continue;
 			expect(toolFitsViewport(id, true)).toBe(true);
 			expect(toolFitsViewport(id, false)).toBe(true);
 		}

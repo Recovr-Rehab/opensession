@@ -57,7 +57,8 @@ import {
 	SessionSearch,
 	type CommandPaletteAction,
 } from "./components/SessionSearch";
-import { Home } from "./components/Home";
+import { Prs } from "./components/Prs";
+import { People } from "./components/People";
 import { CatchUpDeck } from "./components/CatchUpDeck";
 import { SupportTinder } from "./components/SupportTinder";
 import { Automations } from "./components/Automations";
@@ -93,12 +94,13 @@ import {
 	IconFile,
 	IconGear,
 	IconGlobe,
-	IconHome,
 	IconInbox,
 	IconListCircles,
 	IconMessages,
 	IconMoon,
+	IconPeople,
 	IconPlus,
+	IconPullRequest,
 	IconSearch,
 	IconSidebarLeft,
 	IconStack,
@@ -201,7 +203,12 @@ import "./styles/legacy.css";
 import { EmptyState, LoadingState } from "./ui/state";
 
 type Route =
-	| { view: "home" }
+	// The app's root. There is no home: `/` lands on the pull request list,
+	// which is the page that was called Home until it was named after what it
+	// had always listed. On a phone this view is the sidebar itself (the tool
+	// is desktop-only), so it doubles as "nothing pushed on top".
+	| { view: "prs" }
+	| { view: "people" }
 	| { view: "new"; prompt?: string }
 	| { view: "session"; id: string }
 	// The workspace container without a session selected: its view tabs (Review /
@@ -331,6 +338,7 @@ function parseRoute(pathname: string): Route {
 			reportId: reportsMatch[2] ? decodeURIComponent(reportsMatch[2]) : undefined,
 		};
 	if (pathname === "/analytics") return { view: "analytics" };
+	if (pathname === "/people") return { view: "people" };
 	if (pathname === "/tasks") return { view: "tasks" };
 	if (pathname === "/new") return { view: "new" };
 	// <base>/automations/<id-or-name>: the automations page with one selected
@@ -373,7 +381,7 @@ function parseRoute(pathname: string): Route {
 			view: "reviews",
 			id: reviewsMatch[1] ? decodeURIComponent(reviewsMatch[1]) : undefined,
 		};
-	return { view: "home" };
+	return { view: "prs" };
 }
 
 function routePath(route: Route): string {
@@ -396,6 +404,8 @@ function routePath(route: Route): string {
 				: `${BASE_PATH}/reports`;
 		case "analytics":
 			return `${BASE_PATH}/analytics`;
+		case "people":
+			return `${BASE_PATH}/people`;
 		case "tasks":
 			return `${BASE_PATH}/tasks`;
 		case "new":
@@ -494,7 +504,7 @@ export function App(
 	// pushState), so tapping the logo to go home still works.
 	const [route, setRoute] = useState<Route>(() => {
 		const parsed = parseRoute(location.pathname);
-		if (parsed.view === "home") {
+		if (parsed.view === "prs") {
 			// Landing on the root: stamp it as the base of the page stack so panels
 			// pushed over it can count their way back down.
 			history.replaceState(navState(0), "", location.pathname);
@@ -809,7 +819,7 @@ export function App(
 	// A pushed detail page is showing (anything but the sidebar-root home view).
 	// On phones, Settings is a sheet floating over the root page rather than a
 	// pushed page — the bar keeps the brand and the sidebar stays underneath.
-	const mobileDetail = route.view !== "home" && !(isPhone && settingsActive);
+	const mobileDetail = route.view !== "prs" && !(isPhone && settingsActive);
 
 	// Keep the latest route readable from stable callbacks — `navigate` is
 	// recreated each render, but effects/handlers can capture an older copy.
@@ -830,7 +840,7 @@ export function App(
 	function navigate(next: Route, opts?: { replace?: boolean }) {
 		const path = routePath(next);
 		const cur = routeRef.current;
-		const toRoot = next.view === "home";
+		const toRoot = next.view === "prs";
 		// Compare on the route, not `location.pathname`: an open session's URL gets
 		// canonicalized to /workspace/<id>/session/<id> below, so the raw path no
 		// longer matches the /session/<id> we would build for the same session.
@@ -914,8 +924,8 @@ export function App(
 	function goBack() {
 		const depth = entryDepth();
 		if (depth !== null && depth > 0)
-			popOr(depth, () => navigate({ view: "home" }, { replace: true }));
-		else navigate({ view: "home" }, { replace: true });
+			popOr(depth, () => navigate({ view: "prs" }, { replace: true }));
+		else navigate({ view: "prs" }, { replace: true });
 	}
 
 	// Leave a full-page deck (catch-up, PR, support) for wherever you came from,
@@ -926,8 +936,8 @@ export function App(
 	function leaveDeck() {
 		const depth = entryDepth();
 		if (depth !== null && depth > 0)
-			popOr(1, () => navigate({ view: "home" }, { replace: true }));
-		else navigate({ view: "home" }, { replace: true });
+			popOr(1, () => navigate({ view: "prs" }, { replace: true }));
+		else navigate({ view: "prs" }, { replace: true });
 	}
 
 	// Edge-swipe-from-left pops the pushed page back to the sidebar on phones.
@@ -1227,7 +1237,7 @@ export function App(
 			localStorage.setItem("opensession-last-session", route.id);
 			localStorage.setItem("opensession-last-session-user", getCurrentUser());
 			pushRecent(route.id);
-		} else if (route.view === "home") {
+		} else if (route.view === "prs") {
 			localStorage.removeItem("opensession-last-session");
 			localStorage.removeItem("opensession-last-session-user");
 		}
@@ -1573,7 +1583,7 @@ export function App(
 				.catch(() => {});
 		} else if (route.view === "reviews") {
 			if (!route.id) {
-				navigate({ view: "home" }, { replace: true });
+				navigate({ view: "prs" }, { replace: true });
 			} else {
 				const id = route.id;
 				const s = sessionsRef.current.find(
@@ -2817,6 +2827,8 @@ export function App(
 				? "Archived"
 				: route.view === "tasks"
 					? "Tasks"
+				: route.view === "people"
+					? "People"
 				: route.view === "new"
 					? "New session"
 					: route.view === "workspace"
@@ -2974,12 +2986,20 @@ export function App(
 			run: () => setThemePref(currentTheme === "dark" ? "light" : "dark"),
 		},
 		{
-			id: "home",
-			label: "Home",
-			description: "Open the workspace overview",
+			id: "prs",
+			label: "Pull requests",
+			description: "Open the pull request list",
 			category: "Navigate",
-			icon: <IconHome size={18} />,
-			run: () => navigate({ view: "home" }),
+			icon: <IconPullRequest size={18} />,
+			run: () => navigate({ view: "prs" }),
+		},
+		{
+			id: "people",
+			label: "People",
+			description: "Open the team",
+			category: "Navigate",
+			icon: <IconPeople size={18} />,
+			run: () => navigate({ view: "people" }),
 		},
 		// Catch up is offered at phone widths only (lib/sidebar-tools.ts), so
 		// the palette doesn't offer it where the sidebar doesn't.
@@ -3322,7 +3342,7 @@ export function App(
 				<header
 					className={appHeader({
 						detail: mobileDetail,
-						floating: route.view === "home" || route.view === "session",
+						floating: route.view === "prs" || route.view === "session",
 					})}
 				>
 					<div className={APP_HEADER_LEFT}>
@@ -3569,8 +3589,10 @@ export function App(
 							workspaces={workspaces}
 							teamViewing={teamViewing}
 							selectedId={currentSession?.id || null}
-							homeActive={route.view === "home"}
-							onOpenHome={() => navigate({ view: "home" })}
+							prsActive={route.view === "prs"}
+							onOpenPrs={() => navigate({ view: "prs" })}
+							peopleActive={route.view === "people"}
+							onOpenPeople={() => navigate({ view: "people" })}
 							tasksActive={route.view === "tasks"}
 							onOpenTasks={() => navigate({ view: "tasks" })}
 							taskCount={taskCount}
@@ -3874,6 +3896,8 @@ export function App(
 							/>
 						) : route.view === "analytics" ? (
 							<Analytics />
+						) : route.view === "people" ? (
+							<People sessions={sessions} teamViewing={teamViewing} />
 						) : route.view === "tasks" ? (
 							<Tasks
 								addHandler={addHandler}
@@ -4063,7 +4087,7 @@ export function App(
 								</span>
 							</EmptyState>
 						) : (
-							<Home
+							<Prs
 								sessions={sessions}
 								workspaces={workspaces}
 								teamViewing={teamViewing}

@@ -27,10 +27,14 @@ export interface Props {
 	/** Workspace folders that group sessions. */
 	workspaces: Workspace[];
 	selectedId: string | null;
-	/** True while the Home view is open — highlights the Home entry. */
-	homeActive: boolean;
-	/** Open the home worktree index. */
-	onOpenHome: () => void;
+	/** True while the pull request list is open: highlights its entry. */
+	prsActive: boolean;
+	/** Open the pull request list. */
+	onOpenPrs: () => void;
+	/** True while the People page is open: highlights its entry. */
+	peopleActive: boolean;
+	/** Open the People page. */
+	onOpenPeople: () => void;
 	/** True while the Tasks tool is open. */
 	tasksActive: boolean;
 	/** Open the current user's task list. */

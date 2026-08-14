@@ -155,9 +155,9 @@ export interface StoredFilterState extends Omit<FilterState, "groupBy"> {
 }
 
 /**
- * The person lens is shared, not the sidebar's private business: Home's
- * facepile and the sidebar's lanes read and write this one value, so the face
- * you pick on Home is the sidebar you land in. Everything else in
+ * The person lens is shared, not the sidebar's private business: the People
+ * page, the facepiles and the sidebar's lanes read and write this one value,
+ * so the person you pick is the sidebar you land in. Everything else in
  * `FilterState` still only has one reader (the sidebar's own popover), but it
  * rides along here because the whole state persists as one blob.
  */
@@ -196,9 +196,9 @@ export function onFilterChanged(handler: () => void): () => void {
 }
 
 // Another tab's write: drop the cache so subscribers re-read from storage.
-// Guarded because this module is reached from plain `bun test` runs (Home's
-// row-merging test imports the component), where there is no window to listen
-// on and a module-scope call throws before the first test runs.
+// Guarded because this module is reached from plain `bun test` runs (the pull
+// request list's row-merging test imports the component), where there is no
+// window to listen on and a module-scope call throws before the first test runs.
 if (typeof window !== "undefined") {
 	window.addEventListener("storage", (event) => {
 		if (event.key !== FILTER_KEY) return;
@@ -241,9 +241,10 @@ export function personFilterFor(key: string, currentUser: string): string {
 	return key === currentUser.trim().toLowerCase() ? "me" : key;
 }
 
-// The person lens is picked from two places — Home's header and the sidebar's
-// Home row — so the mapping between "what the menu is showing" and "what the
-// filter stores" lives here rather than once per surface.
+// The person lens is picked from several places: the People page, the pull
+// request list's header, and the sidebar's People row. The mapping between
+// "what the menu is showing" and "what the filter stores" lives here rather
+// than once per surface.
 
 /** The lens as the menu spells it: a person key, or "everyone" / "unassigned". */
 export function personLensValue(person: string, currentUser: string): string {

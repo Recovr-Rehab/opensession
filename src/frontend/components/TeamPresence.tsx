@@ -7,10 +7,11 @@ import { IconCheck, IconChevronDown } from "./icons";
 import { UserAvatar } from "./UserAvatar";
 
 /**
- * The team, as a face row. One derivation (`useTeamPresence`) feeds both
- * places the pile appears — the Home header and the sidebar's Home entry — and
- * in both it opens the same thing: the app's person lens (`TeamLensMenu`), so
- * you can pick up someone else's sidebar from wherever you noticed them.
+ * The team, as a face row. One derivation (`useTeamPresence`) feeds every
+ * place the pile appears: the sidebar's People entry, the People page, and the
+ * pull request list's header. In all of them it opens the same thing, the
+ * app's person lens (`TeamLensMenu`), so you can pick up someone else's
+ * sidebar from wherever you noticed them.
  *
  * Your own face isn't in it — the pile answers "who else is around", and the
  * menu behind it is where you appear, as the lens you switch back to.
@@ -321,7 +322,7 @@ export function TeamLensMenu({
 	size?: number;
 	max?: number;
 	ring?: string;
-	/** Faces only: for the sidebar's Home row, where the words don't fit. The
+	/** Faces only: for the sidebar's People row, where the words don't fit. The
 	 *  accessible name still carries the lens. */
 	compact?: boolean;
 	side?: React.ComponentProps<typeof Menu.Popup>["side"];
