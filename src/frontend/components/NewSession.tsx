@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { fetchWorktrees, fetchModels, fetchFileMentions, fetchSkillMentions, fetchConnections, fetchSandboxStatus, requestSandboxPrewarm, suggestBranch, fetchProviderAccounts, fetchRepos, type ProviderAccountOption, type ModelOption, type SandboxStatusInfo } from "../lib/api";
-import { getCurrentUser, useAuthStatus } from "./UserPicker";
+import { getCurrentUser } from "./UserPicker";
 import { splitAttachments, imageFilesFromPaste, type FileAttachment } from "../lib/images";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
 import { getDefaultModelPref } from "../lib/default-model-pref";
@@ -23,7 +23,6 @@ import {
   IconEye,
   IconReturn,
   IconBox,
-  IconFolderPlus,
   IconMessage,
   IconStack,
 } from "./icons";
@@ -36,7 +35,6 @@ import { ModelEffortSelect } from "./ModelEffortSelect";
 import { Menu } from "../ui/menu";
 import { displayName } from "../brand-logos";
 import { IconTile } from "./BrandTile";
-import { AddRepoDialog } from "./AddRepoDialog";
 import { Tooltip } from "../ui/tooltip";
 import { Modal, useEnterOnMount } from "../ui/modal";
 import { tintedSurfaceParts } from "../lib/tinted-surface";
@@ -88,8 +86,6 @@ interface RepoOption {
 }
 
 const LAST_REPO_KEY = "opensession-new-session-repo";
-const ADD_REPO_VALUE = "__add_repo__";
-
 
 /* ── Palette chrome ───────────────────────────────────────────────────────
    Every class is written out in full: Tailwind scans source TEXT, so a name
@@ -212,12 +208,10 @@ type CreateAction = (typeof CREATE_ACTIONS)[number];
  *  Chrome and Safari own ⌘⌥← / ⌘⌥→ for tab switching. */
 const CYCLE_SHORTCUT = isApple ? ["⌘", "⌥", "↓"] : ["Ctrl", "Alt", "↓"];
 
-/** Each label is written out per target rather than suffixed with " locally",
- *  which would read as "Create in background locally". */
-const CREATE_LABELS: Record<CreateAction, { cloud: string; local: string }> = {
-	open: { cloud: "Create", local: "Create locally" },
-	background: { cloud: "Create in background", local: "Create locally in background" },
-	more: { cloud: "Create more", local: "Create more locally" },
+const CREATE_LABELS: Record<CreateAction, string> = {
+	open: "Create",
+	background: "Create in background",
+	more: "Create more",
 };
 
 /* Split button: primary Create action + a caret that opens a mode dropdown.
@@ -302,10 +296,6 @@ function slugifyBranch(text: string): string {
 }
 
 export function NewSession({ onBack, send, addHandler, connected, prefillPrompt, forceMode, workspaceId, forceRepo, forceBranch, onCreateStarted }: Props) {
-  const auth = useAuthStatus();
-  const desktopShell =
-    (window as { os1?: { desktop?: boolean } }).os1?.desktop === true ||
-    navigator.userAgent.includes("Electron/");
   const [prefill] = useState(readPrefill);
   // What the session may do, and nothing else — the footer's Ask toggle. The
   // repo is a separate axis, so Scratch is not a third value here: it is what
@@ -315,16 +305,6 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     (forceMode || prefill.mode) === "ask" ? "ask" : "code",
   );
   const permission = forceMode === "ask" ? "ask" : permissionState;
-  // The desktop app's local bridge merges local and hosted sessions. Hosted is
-  // deliberately the default; local execution is still experimental and must
-  // be selected explicitly for each palette lifetime.
-  const [createTarget, setCreateTarget] = useState<"cloud" | "local">(
-    auth?.local || desktopShell ? "cloud" : "local",
-  );
-  useEffect(() => {
-    if (auth?.local || desktopShell) setCreateTarget("cloud");
-  }, [auth?.local, desktopShell]);
-  const cloudTarget = auth?.local === true && createTarget === "cloud";
   // In a workspace, default to its shared repo; else the prefill/filter repo.
   // `forceMode: "scratch"` (a feed workspace) is a repo-less create, so it
   // arrives here as the repo rather than as a mode.
@@ -362,37 +342,27 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     permission === "ask" ? "ask" : repo === NO_REPO ? "scratch" : "code";
   const [repos, setRepos] = useState<RepoOption[]>([]);
   const [configuredDefaultRepo, setConfiguredDefaultRepo] = useState("");
-  const [addRepoOpen, setAddRepoOpen] = useState(false);
-  const locallyAddedRepos = useRef(new Map<string, { id: string; label: string }>());
-  const localReposLoaded = useRef(false);
   useEffect(() => {
     let live = true;
-    fetchRepos(cloudTarget).then((items) => {
+    fetchRepos().then((items) => {
       if (!live) return;
       const options: RepoOption[] = items.map((item) => ({
         id: item.id,
         label: item.label || item.id,
         default: item.default,
       }));
-      if (!cloudTarget) {
-        for (const added of locallyAddedRepos.current.values()) {
-          if (!options.some((item) => item.id === added.id)) options.push(added);
-        }
-      }
-      localReposLoaded.current = true;
       setRepos(options);
       setConfiguredDefaultRepo(
         options.find((item) => item.default)?.id || options[0]?.id || "",
       );
     }).catch(() => {
       if (!live) return;
-      localReposLoaded.current = true;
-      setRepos(cloudTarget ? [] : [...locallyAddedRepos.current.values()]);
+      setRepos([]);
     });
     return () => {
       live = false;
     };
-  }, [cloudTarget]);
+  }, []);
   useEffect(() => {
 	setRepo((current) => {
       // "No repo" is a real choice, not an unresolved id — without this it
@@ -439,8 +409,8 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   const [accountId, setAccountId] = useState("");
   const [accounts, setAccounts] = useState<ProviderAccountOption[]>([]);
   useEffect(() => {
-    fetchProviderAccounts(cloudTarget).then(setAccounts).catch(() => {});
-  }, [cloudTarget]);
+    fetchProviderAccounts().then(setAccounts).catch(() => {});
+  }, []);
   const effectiveNewModel = model || defaultModel;
   const accountProvider = models.find(
     (item) => item.id === baseModelId(effectiveNewModel),
@@ -634,9 +604,8 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   }, [createMenuOpen]);
 
   // Step through the Create options without leaving the prompt: the primary
-  // button's label is the feedback, and an open dropdown moves its check. Only
-  // the action group cycles — hosted vs local is a separate axis of the same
-  // menu. This rides on the dialog rather than on window because Base UI's
+  // button's label is the feedback, and an open dropdown moves its check. This
+  // rides on the dialog rather than on window because Base UI's
   // popup stops keydown propagation before it leaves the card, which is also
   // why it can use a chord the rest of the app is free to bind elsewhere.
   function cycleCreateAction(e: React.KeyboardEvent) {
@@ -652,7 +621,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   }
 
   useEffect(() => {
-		fetchModels(cloudTarget, workspaceId)
+		fetchModels(false, workspaceId)
       .then((m) => {
         setModels(m.models);
         setDefaultModel(m.default);
@@ -668,11 +637,16 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
           // (Settings → Preferences) when it's set and still selectable; "" (no
           // preference) keeps the workspace default.
           const pref = getDefaultModelPref();
-          return pref && m.models.some((item) => item.id === pref) ? pref : "";
+          if (pref && m.models.some((item) => item.id === pref)) return pref;
+          // A workspace default is an actual combination, not merely display
+          // state: retain its id so create_session receives and stores it.
+          return baseModelId(m.default).startsWith("workspace-preset/")
+            ? m.default
+            : "";
         });
       })
       .catch(() => {});
-	}, [cloudTarget, workspaceId]);
+	}, [workspaceId]);
 
   // Worktrees are per-repo; refetch and reset the selection when it changes.
   // Inside a workspace, snap back to the shared sibling branch, not "New branch".
@@ -800,7 +774,6 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     });
     send({
       type: "create_session",
-      ...(auth?.local && createTarget === "cloud" ? { cloud: true } : {}),
       mode,
       repo,
       ...(workspaceId
@@ -970,21 +943,8 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 label: "No repo",
                 icon: <IconMessage size={20} />,
               },
-              ...(auth?.local && createTarget === "local"
-                ? [
-                    {
-                      value: ADD_REPO_VALUE,
-                      label: "Add repo…",
-                      icon: <IconFolderPlus size={20} />,
-                    },
-                  ]
-                : []),
             ]}
             onChange={(nextRepo) => {
-              if (nextRepo === ADD_REPO_VALUE) {
-                setAddRepoOpen(true);
-                return;
-              }
               setRepo(nextRepo);
               if (nextRepo !== NO_REPO) rememberSelectedRepo(nextRepo);
             }}
@@ -1042,23 +1002,6 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
           </PaletteSelect>
           )}
         </div>
-
-        {auth?.local && (
-          <AddRepoDialog
-            open={addRepoOpen}
-            onOpenChange={setAddRepoOpen}
-            onAdded={(added) => {
-              const next = { id: added.id, label: added.id };
-              locallyAddedRepos.current.set(added.id, next);
-              setRepos((current) => [
-                ...(localReposLoaded.current ? current : []).filter((item) => item.id !== added.id),
-                next,
-              ]);
-              setRepo(added.id);
-              rememberSelectedRepo(added.id);
-            }}
-          />
-        )}
 
         {/* Prompt */}
         <div
@@ -1361,11 +1304,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
               >
                 {creating
                   ? "Creating…"
-                  : CREATE_LABELS[createAction][
-                      (auth?.local || desktopShell) && createTarget === "local"
-                        ? "local"
-                        : "cloud"
-                    ]}
+                  : CREATE_LABELS[createAction]}
                 {/* The hint has to match the preference — a bare ↩ next to a
                     field that only creates on ⌘↩ is what made Enter look
                     broken in the first place. */}
@@ -1409,37 +1348,6 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
               </Tooltip>
               {createMenuOpen && (
                 <div className={CREATE_MENU} role="menu">
-                  {auth?.local && (
-                    <>
-                      {[
-                        { target: "cloud" as const, title: "Create", desc: "Run on the hosted instance" },
-                        { target: "local" as const, title: "Create locally", desc: "Experimental - run on this Mac" },
-                      ].map((opt) => (
-                        <button
-                          key={opt.target}
-                          type="button"
-                          role="menuitemradio"
-                          aria-checked={createTarget === opt.target}
-                          className={CREATE_MENU_ITEM}
-                          onClick={() => {
-                            setCreateTarget(opt.target);
-                            setCreateMenuOpen(false);
-                          }}
-                        >
-                          <IconCheck
-                            className="mt-px shrink-0 text-dim"
-                            size={22}
-                            style={{ visibility: createTarget === opt.target ? "visible" : "hidden" }}
-                          />
-                          <span className="flex min-w-0 flex-col gap-px">
-                            <span className="text-label font-semibold">{opt.title}</span>
-                            <span className="text-meta text-dim">{opt.desc}</span>
-                          </span>
-                        </button>
-                      ))}
-                      <div className="my-1 border-t border-line" />
-                    </>
-                  )}
                   {[
                     { action: "open" as const, title: "Create", desc: "Open the new session" },
                     {

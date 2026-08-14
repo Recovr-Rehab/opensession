@@ -73,6 +73,23 @@ export async function handleModelsRoutes(
 					`${preset.lead.model}${preset.supporting?.length ? ` + ${preset.supporting.length} supporting model${preset.supporting.length === 1 ? "" : "s"}` : ""}`,
 				].join(" · "),
 			})) : [];
+		const interactiveDefault = engineConfigured ? interactiveDefaultModel() : getDefaultModel();
+		// Older installations may still have a Dial/Orchestrator id as their
+		// interactive default. In a workspace that id now means the matching
+		// editable preset record, so the picker and the created session agree.
+		const defaultForWorkspace = (() => {
+			if (!workspace) return interactiveDefault;
+			const pi = interactiveDefault.startsWith("pi/");
+			const legacyId = (pi ? interactiveDefault.slice(3) : interactiveDefault)
+				.toLowerCase();
+			const presetId = legacyId === "dial/opus-fable"
+				? "opus-fable"
+				: legacyId.replace(/\//g, "-");
+			const preset = settings.presets?.find((item) => item.id.toLowerCase() === presetId);
+			return preset
+				? `${pi ? "pi/" : ""}workspace-preset/${workspace.id}/${preset.id}`
+				: interactiveDefault;
+		})();
 		return Response.json({
 			models: [...presetModels, ...visibleModels].map((model) => ({
 				...model,
@@ -80,7 +97,7 @@ export async function handleModelsRoutes(
 				accountProvider: accountProviderForModel(model.id),
 				fastModeSupported: supportsOpenaiFastMode(toOpencodeModel(model.id)),
 			})),
-			default: engineConfigured ? interactiveDefaultModel() : getDefaultModel(),
+			default: defaultForWorkspace,
 			autoFallback: getModelFallbackAuto(),
 		});
 	}
@@ -199,7 +216,14 @@ export async function handleModelsRoutes(
 			);
 		}
 		try {
-			if ("model" in body) setDefaultModel(body.model ?? null);
+			if ("model" in body) {
+				setDefaultModel(body.model ?? null);
+				// The Settings control is the default for new sessions too. Keep the
+				// historic interactive override only when an API caller explicitly
+				// supplies one, so the two defaults cannot silently diverge.
+				if (!("interactiveModel" in body))
+					setInteractiveDefaultModel(body.model ?? null);
+			}
 			if ("interactiveModel" in body)
 				setInteractiveDefaultModel(body.interactiveModel ?? null);
 			return Response.json({
