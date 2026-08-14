@@ -1,7 +1,11 @@
 import React, { useEffect, useState } from "react";
 import type { Workspace } from "../lib/types";
 import { fetchModels, updateWorkspaceApi, invalidateModelsCache, type ModelOption } from "../lib/api";
+import { Button } from "../ui/button";
+import { CardList } from "../ui/card";
+import { cn } from "../ui/cn";
 import { Modal } from "../ui/modal";
+import { InlineAlert } from "../ui/state";
 import {
 	SettingCard,
 	SettingRow,
@@ -9,18 +13,220 @@ import {
 	SettingRowDescription,
 	SettingRowText,
 	SettingRowTitle,
+	SettingsField,
 	SettingsGroupLabel,
+	rowMenuTriggerClasses,
+	settingsInputClass,
+	settingsSelectClass,
+	settingsTextareaClass,
 } from "../ui/settings";
+import { EFFORTS, shortModelLabel } from "./ModelEffortSelect";
+import { IconChevronDown, IconPlus, IconTrash } from "./icons";
 
 type Settings = NonNullable<Workspace["modelSettings"]>;
+type Preset = NonNullable<Settings["presets"]>[number];
+type Supporting = NonNullable<Preset["supporting"]>[number];
 
-const blankPreset = () => ({
+const blankPreset = (): Preset => ({
 	id: crypto.randomUUID().slice(0, 8),
-	label: "New combination",
+	label: "New preset",
 	instructions: "",
 	lead: { model: "", effort: "high" },
 	supporting: [],
 });
+
+/**
+ * One preset in the list: a row you can read at a glance, and its editor
+ * underneath once you open it. Seven presets ship by default, so showing every
+ * field at once turned this dialog into a wall of inputs with no way to see
+ * what a preset actually is.
+ */
+function PresetRow({
+	preset,
+	models,
+	open,
+	onToggle,
+	onPatch,
+	onRemove,
+}: {
+	preset: Preset;
+	models: ModelOption[];
+	open: boolean;
+	onToggle: () => void;
+	onPatch: (patch: Partial<Preset>) => void;
+	onRemove: () => void;
+}) {
+	const supporting = preset.supporting || [];
+	const effortsFor = (model: string) => {
+		const supported = models.find((option) => option.id === model)?.efforts || [];
+		return EFFORTS.filter((effort) => supported.includes(effort.id));
+	};
+	const leadEfforts = effortsFor(preset.lead.model);
+	// The catalog's own label, so a row reads the same as the select under it.
+	// shortModelLabel is the fallback for a model the catalog no longer lists.
+	const labelFor = (model: string) =>
+		models.find((option) => option.id === model)?.label || shortModelLabel(model, models);
+	const patchSupporting = (index: number, patch: Partial<Supporting>) =>
+		onPatch({ supporting: supporting.map((member, i) => (i === index ? { ...member, ...patch } : member)) });
+	const modelOptions = (placeholder: string) => (
+		<>
+			<option value="">{placeholder}</option>
+			{models.map((model) => (
+				<option key={model.id} value={model.id}>{model.label}</option>
+			))}
+		</>
+	);
+	return (
+		<div>
+			<button
+				type="button"
+				aria-expanded={open}
+				onClick={onToggle}
+				className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-hover"
+			>
+				<span className="min-w-0 flex-1">
+					<span className="block truncate text-item-title font-medium text-fg">
+						{preset.label.trim() || "Untitled preset"}
+					</span>
+					<span className="mt-0.5 block truncate text-supporting text-dim">
+						{preset.lead.model
+							? [
+									labelFor(preset.lead.model),
+									supporting.length === 1
+										? "1 supporting model"
+										: supporting.length
+											? `${supporting.length} supporting models`
+											: "no supporting models",
+								].join(" · ")
+							: "No lead model yet"}
+					</span>
+				</span>
+				<IconChevronDown
+					size={18}
+					className={cn("shrink-0 text-faint transition-transform", open && "rotate-180")}
+				/>
+			</button>
+			{open && (
+				<div className="flex flex-col gap-3 px-4 pb-4">
+					<SettingsField className="mb-0">
+						Name
+						<input
+							className={settingsInputClass}
+							value={preset.label}
+							onChange={(event) => onPatch({ label: event.target.value })}
+							placeholder="Preset name"
+						/>
+					</SettingsField>
+					<div className="flex flex-wrap items-end gap-2">
+						<SettingsField className="mb-0 min-w-[13rem] flex-1">
+							Lead model
+							<select
+								className={settingsSelectClass}
+								value={preset.lead.model}
+								onChange={(event) => onPatch({ lead: { ...preset.lead, model: event.target.value } })}
+							>
+								{modelOptions("Choose a lead model")}
+							</select>
+						</SettingsField>
+						{leadEfforts.length > 0 && (
+							<SettingsField className="mb-0 w-32">
+								Effort
+								<select
+									className={settingsSelectClass}
+									value={preset.lead.effort || ""}
+									onChange={(event) => onPatch({ lead: { ...preset.lead, effort: event.target.value } })}
+								>
+									{leadEfforts.map((effort) => (
+										<option key={effort.id} value={effort.id}>{effort.label}</option>
+									))}
+								</select>
+							</SettingsField>
+						)}
+					</div>
+					<div className="flex flex-col gap-2">
+						<span className="text-label font-medium text-dim">Supporting models</span>
+						{supporting.map((member, index) => {
+							const memberEfforts = effortsFor(member.model);
+							return (
+								// Four controls in one line only where they fit. A phone gets the
+								// model and its remove button on the first line, then role and
+								// effort under them, instead of four fields fighting over 200px.
+								<div
+									key={index}
+									className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 desktop:grid-cols-[minmax(0,1fr)_10rem_8rem_auto]"
+								>
+									<select
+										className={cn(settingsSelectClass, "col-start-1 row-start-1")}
+										value={member.model}
+										aria-label="Supporting model"
+										onChange={(event) => patchSupporting(index, { model: event.target.value })}
+									>
+										{modelOptions("Choose a supporting model")}
+									</select>
+									<button
+										type="button"
+										className={cn(rowMenuTriggerClasses, "col-start-2 row-start-1 desktop:col-start-4")}
+										aria-label="Remove supporting model"
+										onClick={() => onPatch({ supporting: supporting.filter((_, i) => i !== index) })}
+									>
+										<IconTrash size={16} />
+									</button>
+									<input
+										className={cn(settingsInputClass, "col-span-2 desktop:col-span-1 desktop:col-start-2 desktop:row-start-1")}
+										value={member.role || ""}
+										aria-label="What this model does"
+										placeholder="Role"
+										onChange={(event) => patchSupporting(index, { role: event.target.value })}
+									/>
+									{memberEfforts.length > 0 && (
+										<select
+											className={cn(settingsSelectClass, "col-span-2 desktop:col-span-1 desktop:col-start-3 desktop:row-start-1")}
+											value={member.effort || ""}
+											aria-label="Supporting model effort"
+											onChange={(event) => patchSupporting(index, { effort: event.target.value })}
+										>
+											{memberEfforts.map((effort) => (
+												<option key={effort.id} value={effort.id}>{effort.label}</option>
+											))}
+										</select>
+									)}
+								</div>
+							);
+						})}
+						<Button
+							size="sm"
+							icon={<IconPlus size={16} />}
+							className="w-fit"
+							onClick={() => onPatch({ supporting: [...supporting, { model: "" }] })}
+						>
+							Add supporting model
+						</Button>
+					</div>
+					<SettingsField className="mb-0">
+						Instructions
+						<textarea
+							className={cn(settingsTextareaClass, "min-h-18")}
+							value={preset.instructions || ""}
+							onChange={(event) => onPatch({ instructions: event.target.value })}
+							placeholder="When to use supporting models and how to integrate their work."
+						/>
+					</SettingsField>
+					<div className="flex justify-end">
+						<Button
+							size="sm"
+							variant="ghost"
+							icon={<IconTrash size={16} />}
+							className="text-red hover:bg-red-soft hover:text-red"
+							onClick={onRemove}
+						>
+							Remove preset
+						</Button>
+					</div>
+				</div>
+			)}
+		</div>
+	);
+}
 
 export function WorkspaceModelPresets({
 	workspace,
@@ -35,21 +241,27 @@ export function WorkspaceModelPresets({
 }) {
 	const [settings, setSettings] = useState<Settings>(workspace.modelSettings || {});
 	const [models, setModels] = useState<ModelOption[]>([]);
+	const [openPreset, setOpenPreset] = useState<string | null>(null);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	useEffect(() => setSettings(workspace.modelSettings || {}), [workspace]);
 	useEffect(() => {
 		if (!open) return;
-		fetchModels(false, workspace.id)
+		fetchModels(workspace.id)
 			.then((catalog) => setModels(catalog.models.filter((model) => !model.id.startsWith("workspace-preset/"))))
 			.catch(() => setModels([]));
 	}, [open, workspace.id]);
 	const presets = settings.presets || [];
-	const patchPreset = (index: number, patch: Partial<(typeof presets)[number]>) =>
+	const patchPreset = (index: number, patch: Partial<Preset>) =>
 		setSettings((current) => ({
 			...current,
 			presets: (current.presets || []).map((preset, i) => i === index ? { ...preset, ...patch } : preset),
 		}));
+	const addPreset = () => {
+		const preset = blankPreset();
+		setSettings((current) => ({ ...current, presets: [...(current.presets || []), preset] }));
+		setOpenPreset(preset.id);
+	};
 	const save = async () => {
 		setSaving(true);
 		setError(null);
@@ -80,18 +292,46 @@ export function WorkspaceModelPresets({
 	return (
 		<Modal.Root open={open} onOpenChange={onOpenChange}>
 			<Modal.Content widthClassName="max-w-[42rem]">
-				<Modal.Header title="Model combinations" description={`Choose which built-in combinations appear in ${workspace.name}, then add your own.`} />
-				<div className="flex flex-col gap-3">
-					<div className="mt-2 flex items-center justify-between"><div><div className="text-label font-semibold text-fg">Presets</div><div className="text-supporting text-dim">Dial and Orchestrator are ordinary default presets. Remove or change them, then add your own.</div></div><button className="rounded-sm border border-line px-2.5 py-1.5 text-supporting text-fg hover:bg-hover" onClick={() => setSettings((current) => ({ ...current, presets: [...(current.presets || []), blankPreset()] }))}>Add preset</button></div>
-					{presets.map((preset, index) => <div key={preset.id} className="flex flex-col gap-2 rounded-md border border-line p-3">
-						<div className="flex gap-2"><input className="min-w-0 flex-1 rounded-sm border border-line bg-surface px-2 py-1.5 text-label text-fg" value={preset.label} onChange={(e) => patchPreset(index, { label: e.target.value })} placeholder="Combination name" /><button className="rounded-sm px-2 text-supporting text-dim hover:bg-hover hover:text-fg" onClick={() => setSettings((current) => ({ ...current, presets: (current.presets || []).filter((_, i) => i !== index) }))}>Remove</button></div>
-						<label className="text-supporting text-dim">Lead model<select className="mt-1 w-full rounded-sm border border-line bg-surface px-2 py-1.5 text-label text-fg" value={preset.lead.model} onChange={(e) => patchPreset(index, { lead: { ...preset.lead, model: e.target.value } })}><option value="">Choose a lead model</option>{models.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}</select></label>
-						<label className="text-supporting text-dim">Instructions<textarea className="mt-1 min-h-18 w-full resize-y rounded-sm border border-line bg-surface px-2 py-1.5 text-label text-fg" value={preset.instructions || ""} onChange={(e) => patchPreset(index, { instructions: e.target.value })} placeholder="When to use supporting models and how to integrate their work." /></label>
-						<div className="flex flex-col gap-1.5"><span className="text-supporting text-dim">Supporting models</span>{(preset.supporting || []).map((member, memberIndex) => <div key={`${preset.id}-${memberIndex}`} className="flex gap-2"><select className="min-w-0 flex-1 rounded-sm border border-line bg-surface px-2 py-1.5 text-label text-fg" value={member.model} onChange={(e) => patchPreset(index, { supporting: (preset.supporting || []).map((current, i) => i === memberIndex ? { ...current, model: e.target.value } : current) })}><option value="">Choose a supporting model</option>{models.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}</select><button className="rounded-sm px-2 text-supporting text-dim hover:bg-hover hover:text-fg" onClick={() => patchPreset(index, { supporting: (preset.supporting || []).filter((_, i) => i !== memberIndex) })}>Remove</button></div>)}<button className="w-fit rounded-sm border border-line px-2.5 py-1.5 text-supporting text-fg hover:bg-hover" onClick={() => patchPreset(index, { supporting: [...(preset.supporting || []), { model: "" }] })}>Add supporting model</button></div>
-					</div>)}
+				<Modal.Header
+					title="Model presets"
+					description="A lead model, the supporting models it can delegate to, and how to use them. Sessions in this workspace pick one from the model menu."
+				/>
+				<div className="flex flex-col gap-2.5">
+					{presets.length > 0 ? (
+						<CardList>
+							{presets.map((preset, index) => (
+								<PresetRow
+									key={preset.id}
+									preset={preset}
+									models={models}
+									open={openPreset === preset.id}
+									onToggle={() => setOpenPreset((current) => (current === preset.id ? null : preset.id))}
+									onPatch={(patch) => patchPreset(index, patch)}
+									onRemove={() =>
+										setSettings((current) => ({
+											...current,
+											presets: (current.presets || []).filter((_, i) => i !== index),
+										}))
+									}
+								/>
+							))}
+						</CardList>
+					) : (
+						<div className="rounded-xl bg-panel px-4 py-6 text-center text-supporting text-dim">
+							No presets yet.
+						</div>
+					)}
+					<Button icon={<IconPlus size={16} />} className="w-fit" onClick={addPreset}>
+						Add preset
+					</Button>
 				</div>
-				{error && <div className="text-supporting text-danger">{error}</div>}
-				<Modal.Footer><Modal.Close render={<button className="rounded-sm px-3 py-2 text-label text-dim hover:bg-hover">Cancel</button>} /><button className="rounded-sm bg-fg px-3 py-2 text-label text-bg disabled:opacity-50" disabled={saving} onClick={() => void save()}>{saving ? "Saving…" : "Save"}</button></Modal.Footer>
+				{error && <InlineAlert>{error}</InlineAlert>}
+				<Modal.Footer>
+					<Modal.Close render={<Button variant="ghost">Cancel</Button>} />
+					<Button variant="primary" disabled={saving} onClick={() => void save()}>
+						{saving ? "Saving…" : "Save"}
+					</Button>
+				</Modal.Footer>
 			</Modal.Content>
 		</Modal.Root>
 	);
@@ -106,15 +346,15 @@ export function WorkspaceModelPresetSettings({ workspace }: { workspace?: Worksp
 			<SettingCard>
 				<SettingRow>
 					<SettingRowText>
-						<SettingRowTitle>Model combinations</SettingRowTitle>
+						<SettingRowTitle>Model presets</SettingRowTitle>
 						<SettingRowDescription>
 							{workspace
-								? `Choose which model combinations sessions in ${workspace.name} can pick.`
-								: "Open a workspace to set up its model combinations."}
+								? "Lead and supporting models that sessions here can pick."
+								: "Open a workspace to set up its model presets."}
 						</SettingRowDescription>
 					</SettingRowText>
 					<SettingRowControl>
-						<button className="rounded-sm border border-line px-3 py-2 text-label text-fg hover:bg-hover disabled:cursor-not-allowed disabled:opacity-50" disabled={!workspace} onClick={() => setOpen(true)}>Configure</button>
+						<Button disabled={!workspace} onClick={() => setOpen(true)}>Configure</Button>
 					</SettingRowControl>
 				</SettingRow>
 			</SettingCard>
