@@ -26,8 +26,8 @@ import {
 	RowCardPopup,
 	checksLabel,
 	osReviewLabel,
-	pointerCanHover,
 } from "./SidebarRowCards";
+import { pointerCanHover } from "../lib/pointer";
 import { SessionCardBody } from "./sidebar/HoverCards";
 import { IconGitMerge, IconPullRequest } from "./icons";
 

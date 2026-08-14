@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { TranscriptEntry } from "../lib/types";
 import { Menu } from "../ui/menu";
 import { Popover } from "../ui/popover";
@@ -21,6 +21,7 @@ import { friendlyModelSlug, opencodeModelParts } from "./ModelEffortSelect";
 import { canonicalToolName, useToolPathRoots } from "./ToolCallBlock";
 import { tidyPath, type PathRoot } from "../lib/tidy-path";
 import { useIsPhone } from "../hooks/useIsPhone";
+import { pointerCanHover } from "../lib/pointer";
 import { LANG_MARKS } from "./lang-marks";
 
 export interface TouchedFile {
@@ -339,7 +340,9 @@ const CHIP =
  *
  * The chip opens what THIS TURN wrote, read back out of the tool inputs the ±
  * counts already come from, so the popup is those counts spelled out rather
- * than a second answer that could disagree with them. The Changes tab stays
+ * than a second answer that could disagree with them. Hover opens it after a
+ * beat, since reading a diff is the whole reason to notice the chip; the
+ * trigger stays a real button, so a tap opens it on touch. The Changes tab stays
  * the place for the file's current diff: it reads the real worktree, which by
  * now holds every later turn's edits too. The path the name was cut from
  * heads the popup, so the chip needs no tooltip fighting it.
@@ -356,9 +359,7 @@ function FileChip({
 }) {
   const name = fileName(file.path);
   const path = tidyPath(file.path, roots);
-  // A blank line between calls: four passes over one file are four hunks, and
-  // run together they read as one edit that contradicts itself.
-  const diff = file.hunks.filter(Boolean).join("\n\n");
+  const diff = turnDiff(file);
   const body = (
     <>
       <ExtBadge name={name} />
@@ -377,6 +378,9 @@ function FileChip({
   return (
     <Popover.Root>
       <Popover.Trigger
+        openOnHover
+        delay={300}
+        closeDelay={120}
         className={cn(
           CHIP,
           "cursor-pointer pr-1.5 hover:bg-hover data-[popup-open]:bg-hover"
@@ -385,27 +389,154 @@ function FileChip({
       >
         {body}
       </Popover.Trigger>
-      <Popover.Popup
-        side="top"
-        align="start"
-        elevation="lg"
-        className="w-[min(620px,calc(100vw-24px))] p-2"
-      >
-        <div className="mb-1.5 flex items-center gap-1.5 px-1">
-          <ExtBadge name={name} />
-          <span
-            className={cn("min-w-0 flex-1 truncate text-dim", FOOTER_TEXT)}
-            title={path}
-          >
-            {path}
-          </span>
-          <LineStats additions={file.additions} deletions={file.deletions} />
-        </div>
+      <Popover.Popup side="top" align="start" elevation="lg" className={DIFF_CARD}>
+        <FileDiffCard file={file} roots={roots} />
+      </Popover.Popup>
+    </Popover.Root>
+  );
+}
+
+/** The lines one turn wrote to one file. A blank line between calls: four
+ * passes over one file are four hunks, and run together they read as one edit
+ * that contradicts itself. */
+function turnDiff(file: TouchedFile): string {
+  return file.hunks.filter(Boolean).join("\n\n");
+}
+
+/** Wide enough for real code, still a card. Shared, so the file chip and the
+ * fold header's counts open the same object rather than two sizes of it. */
+const DIFF_CARD = "w-[min(620px,calc(100vw-24px))] p-2";
+
+/** One file inside a diff card: its path over what the turn wrote there. A
+ * file whose tool only reported a path keeps the heading and drops the well. */
+function FileDiffCard({
+  file,
+  roots,
+}: {
+  file: TouchedFile;
+  roots: readonly PathRoot[];
+}) {
+  const name = fileName(file.path);
+  const path = tidyPath(file.path, roots);
+  const diff = turnDiff(file);
+  return (
+    <div>
+      <div className="mb-1.5 flex items-center gap-1.5 px-1">
+        <ExtBadge name={name} />
+        <span
+          className={cn("min-w-0 flex-1 truncate text-dim", FOOTER_TEXT)}
+          title={path}
+        >
+          {path}
+        </span>
+        <LineStats additions={file.additions} deletions={file.deletions} />
+      </div>
+      {diff && (
         <div className={TOOL_CODE_WELL}>
           <CodeHighlight code={diff} lang="diff" />
         </div>
-      </Popover.Popup>
-    </Popover.Root>
+      )}
+    </div>
+  );
+}
+
+/** Dwell before the fold header's counts raise their card, and the grace to
+ * cross into it. The same beat as a file chip's. */
+const CARD_OPEN_MS = 300;
+const CARD_CLOSE_MS = 120;
+
+/** Files the card spells out before the rest become one line. */
+const MAX_CARD_FILES = 4;
+
+/**
+ * A turn's ±lines, and on hover the lines themselves — every file the turn
+ * wrote, each under its own path, in the card a single file chip opens.
+ *
+ * Folded, these counts are all a turn says about what it changed, so this is
+ * where reading them without unfolding belongs. The header is a button (it
+ * toggles the fold), so the card can't hang off a Popover.Trigger nested in
+ * it; it drives a controlled popup off the counts' own box instead, the way
+ * the transcript's chip cards do. Hover only, for the same reason those are:
+ * a tap belongs to the fold, and the fold names the same files as chips.
+ */
+export function TurnLineStatsCard({ files }: { files: TouchedFile[] }) {
+  const roots = useToolPathRoots();
+  const [open, setOpen] = useState(false);
+  const anchor = useRef<HTMLSpanElement | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const additions = files.reduce((n, f) => n + f.additions, 0);
+  const deletions = files.reduce((n, f) => n + f.deletions, 0);
+  const shown = files
+    .filter((f) => f.hunks.some(Boolean))
+    .slice(0, MAX_CARD_FILES);
+  const rest = files.length - shown.length;
+
+  const hold = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = null;
+  };
+  const schedule = (next: boolean, ms: number) => {
+    hold();
+    timer.current = setTimeout(() => setOpen(next), ms);
+  };
+  const close = () => {
+    hold();
+    setOpen(false);
+  };
+  useEffect(() => hold, []);
+
+  const stats = <LineStats additions={additions} deletions={deletions} />;
+  // Nothing to spell out: every file came from a tool that reported a path and
+  // no content, so the counts stay the plain label they were.
+  if (shown.length === 0) return stats;
+  return (
+    <>
+      <span
+        ref={anchor}
+        className="flex flex-shrink-0 items-center"
+        onMouseEnter={() => {
+          if (pointerCanHover()) schedule(true, CARD_OPEN_MS);
+        }}
+        onMouseLeave={() => schedule(false, CARD_CLOSE_MS)}
+        // The press under it is the fold opening, which puts the same files on
+        // the page as chips; a card left over them is in the way.
+        onPointerDown={close}
+      >
+        {stats}
+      </span>
+      <Popover.Root
+        open={open}
+        onOpenChange={(next) => {
+          if (!next) close();
+        }}
+      >
+        {open && (
+          <Popover.Popup
+            side="bottom"
+            align="start"
+            elevation="lg"
+            anchor={anchor}
+            className={DIFF_CARD}
+          >
+            <div
+              className="flex max-h-[min(60vh,420px)] flex-col gap-2 overflow-y-auto"
+              onMouseEnter={hold}
+              onMouseLeave={() => schedule(false, CARD_CLOSE_MS)}
+            >
+              {shown.map((f) => (
+                <FileDiffCard key={f.path} file={f} roots={roots} />
+              ))}
+              {rest > 0 && (
+                <div className={cn("px-1 text-faint", FOOTER_TEXT)}>
+                  +{rest} more {rest === 1 ? "file" : "files"}
+                </div>
+              )}
+            </div>
+          </Popover.Popup>
+        )}
+      </Popover.Root>
+    </>
   );
 }
 

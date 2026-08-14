@@ -24,6 +24,7 @@ import {
   collectTouchedFiles,
   LineStats,
   TouchedFileChips,
+  TurnLineStatsCard,
 } from "./TurnFooter";
 
 interface Props {
@@ -177,9 +178,9 @@ export const TurnBlock = React.memo(function TurnBlock({
             {metaLabel}
           </span>
         )}
-        {additions + deletions > 0 && (
-          <LineStats additions={additions} deletions={deletions} />
-        )}
+        {/* Hovering the counts opens what they count: the lines this turn
+            wrote, per file, without unfolding it. */}
+        {additions + deletions > 0 && <TurnLineStatsCard files={editedFiles} />}
         {live && !expanded && lastTool && (
           <span className="min-w-0 truncate text-label leading-4 text-faint">
             {toolDisplayName(lastTool.toolName)}:{" "}

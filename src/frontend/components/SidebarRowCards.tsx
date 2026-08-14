@@ -7,6 +7,7 @@ import { TONE_TEXT, prettyReview, type HoverTone } from "../lib/sidebar-hover";
 import { plainThreadUrl } from "./PlainThreadPanel";
 import { IconArrowUpRight, IconGitMerge } from "./icons";
 import { Popover } from "../ui/popover";
+import { pointerCanHover } from "../lib/pointer";
 
 /**
  * Hover cards for the sidebar's rows.
@@ -63,16 +64,6 @@ export function RowCardPopup({
 		>
 			{children}
 		</Popover.Popup>
-	);
-}
-
-/** Touch devices can't hover, and a tap that raises a card covers the view
- *  that same tap just opened — so no row's card is ever raised there. (iOS
- *  synthesizes a mouseenter on first tap, so this can't be left to hover.) */
-export function pointerCanHover() {
-	return (
-		typeof window === "undefined" ||
-		window.matchMedia("(hover: hover)").matches
 	);
 }
 
