@@ -80,10 +80,10 @@ export function SettingsGroupLabel({
  * quiet blocks rather than a stack of outlined boxes.
  *
  * Card supplies the borderless part now, so all this adds is the corner and the
- * fill. A settings group is a stack of ROWS rather than a card of content, so it
- * takes the row corner (12px × --rf) instead of Card's `rounded-xl`, which reads
- * too soft wrapped around a list of full-width rows. */
-const settingsSurface = "rounded-[calc(12px*var(--rf))] bg-raised";
+ * fill. A settings group is a CONTAINER of rows rather than a single card, and
+ * the scale gives a container the largest step: `rounded-2xl` (22px × --rf), the
+ * same corner the phone sheet's section list already carries. */
+const settingsSurface = "rounded-2xl bg-raised";
 
 export function SettingCard({
 	className,
@@ -208,7 +208,7 @@ export function SettingsForm({
 }: React.ComponentPropsWithoutRef<"div">) {
 	return (
 		<div
-			className={cn(settingsSurface, "mb-3 flex flex-col gap-3.5 rounded-lg p-[18px]", className)}
+			className={cn(settingsSurface, "mb-3 flex flex-col gap-3.5 p-[18px]", className)}
 			{...props}
 		/>
 	);
