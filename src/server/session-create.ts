@@ -542,6 +542,7 @@ export async function openCreatedSession(
 				mcpServers: spec.runMcpServers as McpScope,
 				reposNote:
 					[
+						spec.presetNote || "",
 						buildBranchNote({
 							mode: spec.mode,
 							branch: spec.branch,
@@ -888,7 +889,7 @@ export async function handleCreateSessionMessage(
 		: resolveWorkspaceModelPreset(msg.model, msg.workspaceId ?? msg.modelWorkspaceId);
 	const model = forkSource
 		? forkSource.model
-		: workspacePreset?.model || (msg.model ? resolveModel(String(msg.model))?.id : undefined) ||
+		: workspacePreset?.id || (msg.model ? resolveModel(String(msg.model))?.id : undefined) ||
 			interactiveDefaultModel();
 	// Reasoning effort from the New-session palette (forks inherit).
 	const createEffort = forkSource
@@ -901,7 +902,7 @@ export async function handleCreateSessionMessage(
 	// Pinned provider account from the palette (forks inherit).
 	const createAccountId = forkSource
 		? forkSource.accountId
-		: resolvePinnedAccountId(model, msg.accountId, user);
+		: resolvePinnedAccountId(workspacePreset?.model || model, msg.accountId, user);
 	const createMcpServers = Array.isArray(msg.mcpServers)
 		? msg.mcpServers.map(String)
 		: undefined;

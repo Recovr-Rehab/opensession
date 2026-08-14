@@ -208,6 +208,7 @@ import {
   orchestratorWorkerForBridge,
   opencodeModelLabel,
 } from "./models";
+import { resolveWorkspaceModelPreset } from "./workspace-model-presets";
 import {
   registerRunToken,
   unregisterRunToken,
@@ -3040,8 +3041,9 @@ async function* runOpencodeAttempt(
   // carries the stored preset id — that's the hook that overrides the
   // reasoning effort and switches on the oracle/worker instructions below.
   // Non-preset runs: all undefined.
-  const dial = dialPreset(opts.model);
-  const orch = orchestratorPreset(opts.model);
+  const workspacePreset = resolveWorkspaceModelPreset(opts.model);
+  const dial = dialPreset(opts.model) ?? dialPreset(workspacePreset?.enginePresetId);
+  const orch = orchestratorPreset(opts.model) ?? orchestratorPreset(workspacePreset?.enginePresetId);
   const effort = dial?.effort ?? orch?.effort ?? opts.effort;
 
   // Test hook: pretend usage limits are exhausted on every model, so the

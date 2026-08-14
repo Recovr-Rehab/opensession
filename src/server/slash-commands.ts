@@ -99,7 +99,7 @@ export function handleSlashCommand(
 		const input = text.slice("/model ".length).trim();
 		const workspacePreset = resolveWorkspaceModelPreset(input, session.workspaceId);
 		const resolved = workspacePreset
-			? { id: workspacePreset.model }
+			? { id: workspacePreset.id }
 			: resolveModel(input);
 		if (!resolved) {
 			return [
@@ -108,9 +108,11 @@ export function handleSlashCommand(
 			].join("\n");
 		}
 		const prevModel = session.model || getDefaultModel();
+		const prevEffectiveModel = resolveWorkspaceModelPreset(prevModel)?.model || prevModel;
+		const effectiveResolvedModel = workspacePreset?.model || resolved.id;
 		if (session.source === "slack") {
-			if (resolveModel(prevModel)?.id === resolved.id) {
-				return `Already on ${resolved.id}.`;
+			if (prevModel === resolved.id) {
+				return `Already on ${workspacePreset?.label || resolved.id}.`;
 			}
 			// Slack session files don't carry modelHistory; the sync writer
 			// patches the model field only (existing files, atomic).
@@ -119,7 +121,7 @@ export function handleSlashCommand(
 			}
 		} else {
 			const switchedProvider =
-				accountProviderForModel(prevModel) !== accountProviderForModel(resolved.id);
+				accountProviderForModel(prevEffectiveModel) !== accountProviderForModel(effectiveResolvedModel);
 			touchNativeSession(session.id, {
 				model: resolved.id,
 				presetNote: workspacePreset?.note,
@@ -152,11 +154,11 @@ export function handleSlashCommand(
 		// stored opencode/<provider>/<model> id reports provider "opencode",
 		// which would false-positive against a native id's "claude"/"codex".
 		const switchedProvider =
-			engineFamily(prevModel) !== engineFamily(resolved.id);
+			engineFamily(prevEffectiveModel) !== engineFamily(effectiveResolvedModel);
 		return (
-			`Model set to ${resolved.id} (${modelLabel(resolved.id)}). Applies from the next prompt.` +
+			`Model set to ${workspacePreset?.label || modelLabel(resolved.id)}. Applies from the next prompt.` +
 			(switchedProvider
-				? engineFamily(resolved.id) === "openai"
+				? engineFamily(effectiveResolvedModel) === "openai"
 					? " Heads up: this hands the wheel to Codex on the next prompt. The Codex engine can't share Claude's internal thread, so it gets a transcript handoff of the conversation so far and continues from there (switching back to a Claude model resumes its own history)."
 					: " Heads up: this hands the wheel back to Claude on the next prompt. Claude resumes its own earlier history (if any) and gets a transcript handoff of the turns Codex ran in between."
 				: "")
@@ -168,7 +170,9 @@ export function handleSlashCommand(
 	const accountInput = accountCommand
 		? text.replace(/^\/(?:account|sub)\s*/, "").trim()
 		: "";
-	const accountProvider = accountProviderForModel(session.model);
+	const accountProvider = accountProviderForModel(
+		resolveWorkspaceModelPreset(session.model)?.model || session.model,
+	);
 	if (accountCommand && !accountProvider) {
 		return `${modelLabel(session.model)} does not use a managed Claude or Codex account pool.`;
 	}

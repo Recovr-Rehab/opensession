@@ -63,6 +63,7 @@ import {
   resolveModel,
   toOpencodeModel,
 } from "./models";
+import { resolveWorkspaceModelPreset } from "./workspace-model-presets";
 import {
   isProviderOverloadError,
   isTransientRunError,
@@ -416,9 +417,12 @@ export async function* runAgent(opts: RunAgentOpts): AsyncGenerator<StreamEvent>
 async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
   const wasCancelled = () => opts.shouldCancel?.() === true;
   if (wasCancelled()) return;
-  const requestedModel = resolveModel(opts.model || getDefaultModel());
+  // Workspace presets stay as their picker id on the session. Resolve their
+  // lead only for dispatch, so the session never loses its preset identity.
+  const workspacePreset = resolveWorkspaceModelPreset(opts.model);
+  const requestedModel = resolveModel(workspacePreset?.model || opts.model || getDefaultModel());
   const wantsBestCodex = requestedModel?.id === BEST_AVAILABLE_CODEX_MODEL;
-  const primaryModel = resolveConcreteModel(opts.model);
+  const primaryModel = workspacePreset?.model || resolveConcreteModel(opts.model);
   // Pi is an explicit engine selection. Never cross its boundary into an
   // OpenCode fallback when a provider/account fails: end the Pi turn and let
   // the person retry or choose another engine deliberately.
