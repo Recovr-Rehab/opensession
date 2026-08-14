@@ -1804,7 +1804,8 @@ struct SessionsListView: View {
         }
 
         if let link = workspace.shareURL {
-            ShareLink(item: link) {
+            // Named after the workspace, like the sheet in SessionView.
+            ShareLink(item: link, preview: SharePreview(workspace.title)) {
                 Label("Share link", systemImage: "square.and.arrow.up")
             }
         }

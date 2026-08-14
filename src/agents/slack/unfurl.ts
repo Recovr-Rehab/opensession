@@ -11,6 +11,7 @@
 
 import { slackApiCall } from "./slack-api";
 import { findSession } from "../../server/session-cache";
+import { getWorkspace } from "../../server/workspaces";
 import type { UnifiedSession } from "../../server/types";
 import { configuredServer } from "../../server/config";
 
@@ -126,11 +127,31 @@ function reviewLabel(decision?: string): string {
   }
 }
 
+/**
+ * What the card is named after. A session is a tab inside a workspace, and the
+ * workspace is what the app titles the page with, so the headline is the
+ * workspace name and the session's own title drops to a context bit beside the
+ * status. Workspace-less sessions (Slack and Linear agent runs) keep their own
+ * title as the headline, and a lone session whose title still matches its
+ * workspace prints it once.
+ */
+export function cardTitle(s: UnifiedSession): { title: string; session?: string } {
+  const sessionTitle = (s.title || s.id).trim();
+  const workspace = s.workspaceId ? getWorkspace(s.workspaceId) : null;
+  const name = workspace?.name?.trim();
+  if (!name) return { title: sessionTitle };
+  return {
+    title: name,
+    session: sessionTitle && sessionTitle !== name ? sessionTitle : undefined,
+  };
+}
+
 /** Build the Block Kit unfurl body for one session. */
 function unfurlForSession(s: UnifiedSession, url: string): { blocks: any[] } {
-  const title = (s.title || s.id).trim();
+  const { title, session: sessionTitle } = cardTitle(s);
 
   const bits: string[] = [statusChip(s)];
+  if (sessionTitle) bits.push(esc(sessionTitle));
   if (s.repo) bits.push(s.branch ? `${s.repo} · \`${s.branch}\`` : s.repo);
   if (s.model) bits.push(modelLabel(s.model));
   if (s.mode) bits.push(s.mode);

@@ -1425,8 +1425,11 @@ private struct SessionActionsMenu: View {
                         Label("Rename", systemImage: "pencil")
                     }
                 }
-                if let link = workspace?.shareURL {
-                    ShareLink(item: link) {
+                // The share sheet names the link after the workspace, the same
+                // name the header shows and the Slack unfurl leads with. A
+                // session is a tab inside it, so its own title isn't the page.
+                if let workspace, let link = workspace.shareURL {
+                    ShareLink(item: link, preview: SharePreview(workspace.title)) {
                         Label("Share link", systemImage: "square.and.arrow.up")
                     }
                 }

@@ -2130,14 +2130,15 @@ export function SessionViewer({
 		composerRef.current?.focus();
 	}, [newSessionSeq, scrollToLatest]);
 
-	// Browser tab title follows the session
+	// Browser tab title follows the workspace, the same name the header shows.
+	// The session's own title names a tab inside it, not the page.
 	useEffect(() => {
 		if (!focused) return;
-		document.title = session.title || DEFAULT_DOC_TITLE;
+		document.title = workspaceName || session.title || DEFAULT_DOC_TITLE;
 		return () => {
 			document.title = DEFAULT_DOC_TITLE;
 		};
-	}, [focused, session.title]);
+	}, [focused, workspaceName, session.title]);
 
 	// Subscribe to WebSocket messages
 	useEffect(() => {
@@ -3943,7 +3944,11 @@ export function SessionViewer({
 		const link = `${location.origin}${path}`;
 		// Phone: native share sheet. Desktop: copy, with the inline check on
 		// the button + a floating "Link copied" toast.
-		shareLink(link, { toast: "Link copied", title: session.title || undefined });
+		// The native sheet titles the link with the workspace, matching the header.
+		shareLink(link, {
+			toast: "Link copied",
+			title: workspaceName || session.title || undefined,
+		});
 	}
 
 	async function handleOpenSlackComposer() {
