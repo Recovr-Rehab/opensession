@@ -48,8 +48,8 @@
  * page stack's positioning context instead, and the plain page colour.
  */
 export const APP_BODY =
-	"app-body flex min-h-0 flex-1 bg-raised " +
-	"desktop:[background:linear-gradient(var(--sidebar-material),var(--sidebar-material)),var(--bg-raised)] " +
+	"app-body flex min-h-0 flex-1 bg-sidebar " +
+	"desktop:[background:linear-gradient(var(--sidebar-material),var(--sidebar-material)),var(--sidebar-bg)] " +
 	"phone:relative phone:overflow-hidden phone:bg-surface";
 
 /**

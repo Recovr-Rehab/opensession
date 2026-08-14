@@ -55,6 +55,9 @@
 	--color-bg: var(--bg);
 	--color-surface: var(--bg);
 	--color-raised: var(--bg-raised);
+	/* The sidebar column and the chrome band around it. Same surface as
+	   `raised` in dark; in light it sits closer to the page (see base.css). */
+	--color-sidebar: var(--sidebar-bg);
 	--color-panel: var(--bg-panel);
 	/* Floating popups (hover cards, menus). Its own surface rather than
 	   bg-panel: in light a popup is paper on the page, not a panel in it.

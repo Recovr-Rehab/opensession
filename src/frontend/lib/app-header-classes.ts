@@ -46,7 +46,7 @@
  * full safe-area inset.
  */
 const APP_HEADER_BASE =
-	"hidden h-[var(--header-h)] shrink-0 items-center justify-between bg-raised " +
+	"hidden h-[var(--header-h)] shrink-0 items-center justify-between bg-sidebar " +
 	"px-4 pt-[env(safe-area-inset-top,0px)] pb-0 " +
 	"phone:flex phone:px-3 phone:pt-[max(env(safe-area-inset-top,0px),8px)]";
 

@@ -3752,7 +3752,7 @@ export function App(
 					    fallback) paints this surface by name. */}
 					<div
 						className={cn(
-							"sidebar-container flex min-h-0 shrink-0 flex-col bg-raised [--sidebar-icon-left:16px]",
+							"sidebar-container flex min-h-0 shrink-0 flex-col bg-sidebar [--sidebar-icon-left:16px]",
 							// Desktop and the exposed workspace gutter share one chrome
 							// material, so opaque sticky headers scroll over the exact same
 							// surface instead of revealing a gradient seam. No
@@ -3760,7 +3760,7 @@ export function App(
 							// nothing but our own flat background while forcing the
 							// compositor to re-rasterize the whole sidebar on any repaint
 							// behind it (a scroll-flash amplifier).
-							"desktop:[background:linear-gradient(var(--sidebar-material),var(--sidebar-material)),var(--bg-raised)]",
+							"desktop:[background:linear-gradient(var(--sidebar-material),var(--sidebar-material)),var(--sidebar-bg)]",
 							// On phones the sidebar is the root PAGE of the iOS-style
 							// stack — full bleed under the pushed detail pane — rather than
 							// a fixed-width column.

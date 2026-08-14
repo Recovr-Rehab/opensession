@@ -426,7 +426,7 @@ export const SIDEBAR_STICKY_BAND_ROW =
  */
 export const SIDEBAR_STICKY_LANE =
 	"desktop:sticky desktop:top-[var(--sidebar-band-slot)] desktop:z-[15] " +
-	"desktop:[&.is-stuck::after]:pointer-events-none desktop:[&.is-stuck::after]:absolute desktop:[&.is-stuck::after]:top-[calc(100%-8px)] desktop:[&.is-stuck::after]:left-[-400px] desktop:[&.is-stuck::after]:right-[-400px] desktop:[&.is-stuck::after]:z-[-1] desktop:[&.is-stuck::after]:h-5 desktop:[&.is-stuck::after]:content-[''] desktop:[&.is-stuck::after]:[background:linear-gradient(to_bottom,var(--sidebar-material),transparent),linear-gradient(to_bottom,var(--bg-raised),transparent)]";
+	"desktop:[&.is-stuck::after]:pointer-events-none desktop:[&.is-stuck::after]:absolute desktop:[&.is-stuck::after]:top-[calc(100%-8px)] desktop:[&.is-stuck::after]:left-[-400px] desktop:[&.is-stuck::after]:right-[-400px] desktop:[&.is-stuck::after]:z-[-1] desktop:[&.is-stuck::after]:h-5 desktop:[&.is-stuck::after]:content-[''] desktop:[&.is-stuck::after]:[background:linear-gradient(to_bottom,var(--sidebar-material),transparent),linear-gradient(to_bottom,var(--sidebar-bg),transparent)]";
 
 /**
  * A status lane nested inside a repo band sits one row lower again — its repo
@@ -507,7 +507,7 @@ export const SIDEBAR_BAND_CHEVRON_COLLAPSED = "visible";
  * listener re-rasterized the whole sidebar mid-scroll on loaded machines.
  */
 export const SIDEBAR_STUCK_BACKING =
-	"desktop:[&.is-stuck::before]:absolute desktop:[&.is-stuck::before]:top-0 desktop:[&.is-stuck::before]:bottom-[-1px] desktop:[&.is-stuck::before]:left-[-400px] desktop:[&.is-stuck::before]:right-[-400px] desktop:[&.is-stuck::before]:z-[-1] desktop:[&.is-stuck::before]:content-[''] desktop:[&.is-stuck::before]:[background:linear-gradient(var(--sidebar-material),var(--sidebar-material)),var(--bg-raised)]";
+	"desktop:[&.is-stuck::before]:absolute desktop:[&.is-stuck::before]:top-0 desktop:[&.is-stuck::before]:bottom-[-1px] desktop:[&.is-stuck::before]:left-[-400px] desktop:[&.is-stuck::before]:right-[-400px] desktop:[&.is-stuck::before]:z-[-1] desktop:[&.is-stuck::before]:content-[''] desktop:[&.is-stuck::before]:[background:linear-gradient(var(--sidebar-material),var(--sidebar-material)),var(--sidebar-bg)]";
 
 /**
  * The live-state dot a row, group header or hover card carries, minus the
@@ -701,7 +701,7 @@ export const SIDEBAR_WS_TICKER =
  * The separation is a 2px ring on the face ON TOP, offset left so it only ever
  * paints over the face beneath — never around the pile, where it would ring
  * each avatar against a backdrop that is four different things (sidebar
- * material, hover ink, selected, waiting). Painting it in `--bg-raised` reads
+ * material, hover ink, selected, waiting). Painting it in `--sidebar-bg` reads
  * as the row showing through the seam on all four.
  *
  * A radial mask on the LOWER face was the first attempt: it needs no colour at
@@ -713,7 +713,7 @@ export const SIDEBAR_WS_TICKER =
 export const SIDEBAR_WS_FACES = "flex shrink-0 items-center";
 export const SIDEBAR_WS_FACE =
 	"[&:not(:first-child)]:-ml-1.5 " +
-	"[&:not(:first-child)]:[box-shadow:-2px_0_0_0_var(--bg-raised)]";
+	"[&:not(:first-child)]:[box-shadow:-2px_0_0_0_var(--sidebar-bg)]";
 
 /**
  * Slack-style unsent-draft pencil. Its left margin is the call site's: on a
