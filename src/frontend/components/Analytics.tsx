@@ -35,6 +35,8 @@ const fmtInt = (n: number) => n.toLocaleString("en-US");
 /** Cents up to $1K, compact above it — a table of four-figure sums is easier
  *  to compare as $1.2K than as $1,238.47. */
 const fmtUsd = (n: number) => (n >= 1000 ? `$${compactFmt.format(n)}` : `$${n.toFixed(2)}`);
+/** Whole dollars, compact — for the axis gutter, where cents don't fit. */
+const fmtUsdTick = (n: number) => `$${compactFmt.format(n)}`;
 /** A zero here means "nothing billed by token", not "free" — the dash says so
  *  without claiming a price. */
 const fmtUsdCell = (n: number) => (n > 0 ? fmtUsd(n) : "–");
@@ -111,11 +113,15 @@ interface BarChartProps {
 	mode: "stacked" | "grouped";
 	height?: number;
 	formatValue?: (n: number) => string;
+	/** Axis ticks live in a 34px gutter, so a format that reads fine in the
+	 *  tooltip ($612.15) can overflow it. Defaults to `formatValue`. */
+	formatTick?: (n: number) => string;
 }
 
 /** Stacked/grouped bar chart: hairline gridlines, clean ticks, 2px surface
  *  gaps between stacked segments, rounded caps, and a per-day hover tooltip. */
-function BarChart({ labels, series, values, mode, height = 190, formatValue = fmt }: BarChartProps) {
+function BarChart({ labels, series, values, mode, height = 190, formatValue = fmt, formatTick }: BarChartProps) {
+	const tickLabel = formatTick ?? formatValue;
 	const [ref, width] = useWidth<HTMLDivElement>();
 	const [hover, setHover] = useState<number | null>(null);
 
@@ -161,7 +167,7 @@ function BarChart({ labels, series, values, mode, height = 190, formatValue = fm
 							strokeDasharray="2 4"
 						/>
 						<text x={gutter - 8} y={yOf(t) + 3} textAnchor="end" fontSize={10} fill="var(--text-faint)">
-							{formatValue(t)}
+							{tickLabel(t)}
 						</text>
 					</g>
 				))}
@@ -656,6 +662,7 @@ export function Analytics() {
 										values={derived.costValues}
 										mode="stacked"
 										formatValue={fmtUsd}
+										formatTick={fmtUsdTick}
 									/>
 									<p className="m-0 mt-2 text-meta text-faint">
 										Only models billed per token report a price. Turns on a subscription pool report $0, so this covers{" "}
@@ -780,13 +787,15 @@ export function Analytics() {
 									<table className="w-full border-collapse text-label">
 										<thead>
 											<tr className="text-left text-meta text-faint">
+												{/* Headline numbers first, breakdown after: at phone width the
+												    table scrolls, and Tokens/Cost are what must survive the cut. */}
 												<th className="pb-1.5 font-medium">Model</th>
 												<th className="pb-1.5 text-right font-medium">Turns</th>
+												<th className="pb-1.5 text-right font-medium">Tokens</th>
+												<th className="pb-1.5 text-right font-medium">Cost</th>
 												<th className="pb-1.5 text-right font-medium">In</th>
 												<th className="pb-1.5 text-right font-medium">Out</th>
 												<th className="pb-1.5 text-right font-medium">Cache read</th>
-												<th className="pb-1.5 text-right font-medium">Tokens</th>
-												<th className="pb-1.5 text-right font-medium">Cost</th>
 											</tr>
 										</thead>
 										<tbody>
@@ -796,9 +805,6 @@ export function Analytics() {
 														{m.model}
 													</td>
 													<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(m.turns)}</td>
-													<td className="py-1.5 text-right tabular-nums text-dim">{fmt(m.inputTokens)}</td>
-													<td className="py-1.5 text-right tabular-nums text-dim">{fmt(m.outputTokens)}</td>
-													<td className="py-1.5 text-right tabular-nums text-dim">{fmt(m.cacheReadTokens)}</td>
 													<td className="py-1.5 text-right tabular-nums text-fg">
 														{fmt(
 															m.totalTokens ??
@@ -806,6 +812,9 @@ export function Analytics() {
 														)}
 													</td>
 													<td className="py-1.5 text-right tabular-nums text-dim">{fmtUsdCell(m.costUsd ?? 0)}</td>
+													<td className="py-1.5 text-right tabular-nums text-dim">{fmt(m.inputTokens)}</td>
+													<td className="py-1.5 text-right tabular-nums text-dim">{fmt(m.outputTokens)}</td>
+													<td className="py-1.5 text-right tabular-nums text-dim">{fmt(m.cacheReadTokens)}</td>
 												</tr>
 											))}
 										</tbody>

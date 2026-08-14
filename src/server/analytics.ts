@@ -3,7 +3,10 @@
  * Analytics view (sidebar → Analytics). Three sources, all read-only:
  *
  * - The audit log (~/.opensession-audit/audit-YYYY-MM-DD.jsonl) for per-turn
- *   facts: turns, tokens, models, run kinds, errors, cancellations. Day files
+ *   facts: turns, tokens, cost, models, run kinds, errors, cancellations. Cost
+ *   is the engine's own `total_cost_usd`, which is 0 for models billed against
+ *   a subscription pool — hence the parallel `costedTurns` count, so a summary
+ *   can say what share of its turns the price actually covers. Day files
  *   are 10-20MB, so each day is parsed once into a compact rollup and disk-
  *   cached (keyed by source size — today's growing file recomputes, past days
  *   never do).
