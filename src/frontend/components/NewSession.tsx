@@ -4,7 +4,7 @@ import { getCurrentUser } from "./UserPicker";
 import { splitAttachments, imageFilesFromPaste, type FileAttachment } from "../lib/images";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
 import { getDefaultModelPref } from "../lib/default-model-pref";
-import { baseModelId, piModelId } from "./ModelEffortSelect";
+import { baseModelId, modelEngine } from "./ModelEffortSelect";
 import { getSendKeyPref, onSendKeyChanged } from "../lib/send-key-pref";
 import { insideOpenFence, isSendCombo, MOD_ENTER_GLYPH } from "../lib/send-key";
 import { isApple } from "../lib/platform";
@@ -437,7 +437,6 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   const [edges, setEdges] = useState({ top: false, bottom: false });
   const [error, setError] = useState<string | null>(null);
   const [models, setModels] = useState<ModelOption[]>([]);
-  const [engines, setEngines] = useState<string[]>(["opencode"]);
   const [defaultModel, setDefaultModel] = useState("");
   const [model, setModel] = useState(""); // "" = default
   // Footer controls from the palette design. effort is persisted on the new
@@ -527,27 +526,6 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   const modelFamily = (sandboxStatus?.modelFamilies || []).find(
     (f) => f.match.provider === effectiveModelProvider,
   );
-  // Engine switcher (advanced): the model list is engine-agnostic, so this
-  // composes/strips the pi/ routing prefix on the current selection — any
-  // model or preset routes to either engine ("dial/opus-fable" ⇄
-  // "pi/dial/opus-fable"). Only rendered when a second engine is configured
-  // (`engines` from /api/models).
-  const engineChoices = engines.includes("pi")
-    ? (["opencode", "pi"] as const)
-    : null;
-  const currentEngine = effectiveModelId.startsWith("pi/") ? "pi" : "opencode";
-  const engineLabel = (e: string) => (e === "pi" ? "Pi" : "OpenCode");
-  const switchEngine = (target: "opencode" | "pi") => {
-    if (target === currentEngine) return;
-    if (target === "pi") {
-      const piId = piModelId(effectiveModelId);
-      if (piId) setModel(piId);
-    } else {
-      const base = baseModelId(effectiveModelId);
-      setModel(base === defaultModel ? "" : base);
-    }
-  };
-
   const sandboxModelWarning = (() => {
     if (sandboxProvider && !selectedSandboxAvailable) {
 		return `${sandboxLabel(sandboxProvider)} is unavailable. Choose This machine or a ready Sandbox.`;
@@ -590,7 +568,6 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     fetchConnections()
       .then((c) => {
         setAvailableMcpServers((c.mcpServers || []).map((s) => s.name));
-        setEngines(c.engines || ["opencode"]);
       })
       .catch(() => {});
   }, []);
@@ -1156,7 +1133,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                   type="button"
                   className={cn(
                     FOOTER_ICON_BTN,
-						(sandboxProvider || currentEngine === "pi" || selectedMcpServers.length > 0) &&
+						(sandboxProvider || modelEngine(effectiveModelId) !== "opencode" || selectedMcpServers.length > 0) &&
                       paletteIconBtnOn,
                   )}
                   disabled={creating}
@@ -1216,41 +1193,6 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                           );
                         },
                       )}
-                    </Menu.Popup>
-                  </Menu.SubmenuRoot>
-                )}
-                {engineChoices && (
-                  <Menu.SubmenuRoot>
-                    <Menu.SubmenuTrigger className="justify-between gap-3">
-                      <span className="flex min-w-0 items-center gap-2">
-                        <IconStack className="shrink-0 text-dim" size={20} />
-                        <span className="truncate">Engine</span>
-                      </span>
-                      <span className="flex flex-none items-center gap-1 text-dim">
-                        {engineLabel(currentEngine)}
-                        <IconChevronRight className="shrink-0 text-faint" size={17} />
-                      </span>
-                    </Menu.SubmenuTrigger>
-                    <Menu.Popup className="max-w-[min(300px,calc(100vw-1rem))]">
-                      {engineChoices.map((e) => {
-                        const selected = currentEngine === e;
-                        return (
-                          <Menu.Item key={e} onClick={() => switchEngine(e)} className="items-start">
-                            <IconCheck
-                              size={17}
-                              className={`mt-0.5 shrink-0 text-dim ${selected ? "" : "invisible"}`}
-                            />
-                            <span className="flex min-w-0 flex-col gap-0.5">
-                              <span>{engineLabel(e)}</span>
-                              <span className="whitespace-normal text-[11px] font-medium leading-snug text-faint">
-                                {e === "pi"
-                                  ? "pi.dev harness, in-process · native mid-turn steering"
-                                  : "Default engine · server pools, sandboxes, detached runs"}
-                              </span>
-                            </span>
-                          </Menu.Item>
-                        );
-                      })}
                     </Menu.Popup>
                   </Menu.SubmenuRoot>
                 )}
