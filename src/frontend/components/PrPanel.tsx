@@ -91,7 +91,7 @@ type ReviewEvent = "COMMENT" | "APPROVE" | "REQUEST_CHANGES";
 
 interface Props {
   sessionId: string;
-  /** When provided, renders an "Open workspace" action (used by the Reviews view). */
+  /** When provided, the review action bar offers "Open workspace" (Reviews view). */
   onOpenSession?: () => void;
   /** Append PR/check/comment context to this session's composer draft. */
   onAddToInput?: (text: string) => void;
@@ -1336,14 +1336,6 @@ export function PrPanel({
                     <IconGlobe size={19} />
                   </a>
                 </Tooltip>
-              )}
-              {onOpenSession && (
-                <button
-                  className="inline-flex h-8 items-center rounded-control border-0 bg-transparent px-2 font-medium text-dim hover:bg-hover hover:text-fg"
-                  onClick={onOpenSession}
-                >
-                  Open workspace
-                </button>
               )}
             </div>
           )}
