@@ -320,18 +320,14 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
   const lineStats = toolLineStats(toolName, shownInput);
   const duration = stepDuration(entry, result);
   const failed = Boolean(shownResult?.isError);
-  // A file step wears its language mark where the family glyph goes, the same
-  // mark the turn's file chips wear: the tool's own name is spelled beside it
-  // already, so a column of identical pencils says nothing, while a fold full
-  // of reads and edits is scanned for WHICH file each one touched.
-  //
-  // It needs an extension to be a mark at all, and a failed step keeps the
-  // glyph: that glyph is the only red on the row, and the mark would take the
-  // language's colour instead.
-  const filePath = isFileTool && !failed
-    ? filePathOf((shownInput || {}) as Record<string, unknown>)
+  // The language mark a file row wears in front of its path, the same one the
+  // turn's file chips wear: the family glyph says a file was read or written,
+  // and this says which kind of file, so a fold full of reads and edits is
+  // scanned by language rather than by reading every path to its last word.
+  // A name with no extension has no mark, and keeps the path it always had.
+  const baseName = isFileTool
+    ? (filePathOf((shownInput || {}) as Record<string, unknown>).split("/").pop() ?? "")
     : "";
-  const baseName = filePath.split("/").pop() || "";
   const fileMark = fileExt(baseName) ? baseName : "";
   const inputNode = expanded ? toolInputNode(canonical, shownInput) : null;
   const resultContent = visibleResultContent(shownResult?.content, hasMedia, failed);
@@ -391,11 +387,7 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
           )}
         >
           <span className="transition-opacity duration-150 group-hover:opacity-0">
-            {fileMark ? (
-              <ExtBadge name={fileMark} size={14} />
-            ) : (
-              <ToolGlyph toolName={toolName} size={20} />
-            )}
+            <ToolGlyph toolName={toolName} size={20} />
           </span>
           <IconChevronDown
             size={20}
@@ -417,15 +409,20 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
         )}
 
         {/* Baseline, not centre: the path is mono and the ± counts are sans, so
-            at one size their line boxes still centre to different baselines. */}
+            at one size their line boxes still centre to different baselines.
+            The mark opts back out: it has no text baseline of its own, so
+            aligning it to one hangs the drawn logo below the path it labels. */}
         <span className="flex min-w-0 flex-1 items-baseline gap-2">
-          <span
-            className={cn(
-              "min-w-0 truncate text-label leading-4",
-              failed ? "text-red/80" : "text-dim"
-            )}
-          >
-            {isFileTool ? <PathSummary path={summary} /> : summary}
+          <span className="flex min-w-0 items-baseline gap-1.5">
+            {fileMark && <ExtBadge name={fileMark} className="self-center" />}
+            <span
+              className={cn(
+                "min-w-0 truncate text-label leading-4",
+                failed ? "text-red/80" : "text-dim"
+              )}
+            >
+              {isFileTool ? <PathSummary path={summary} /> : summary}
+            </span>
           </span>
           {lineStats && (
             <span className="flex flex-shrink-0 gap-1.5 text-label leading-4">
