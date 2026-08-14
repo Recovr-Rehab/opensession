@@ -153,8 +153,8 @@ import type { WorkflowRunSnapshot } from "../../server/workflow-types";
 import { PreviewButton } from "./PreviewButton";
 import { PreviewPane } from "./PreviewPane";
 import { PortalPane } from "./PortalPane";
-import { PortalsPage, PortalsSummary } from "./PortalsPanel";
-import type { PortalTarget } from "../lib/portals";
+import { PortalsPage } from "./PortalsPanel";
+import { portalTargetFor, type PortalTarget } from "../lib/portals";
 import { StagingLink } from "./StagingLink";
 import { WorkspaceInfo } from "./WorkspaceInfo";
 import { WorkspacePeek } from "./WorkspacePeek";
@@ -244,6 +244,8 @@ import { PulseDot } from "../ui/status";
 import {
 	PANEL_BACK,
 	PANEL_BODY,
+	PANEL_FOOTER,
+	PANEL_FOOTER_ITEM,
 	PANEL_OVERLAY,
 	PANEL_PR_PLATE,
 	PANEL_SHELL,
@@ -1257,8 +1259,8 @@ export function SessionViewer({
 		resizeHandle: panelResizeHandle,
 	} = useSidePanel();
 	// The panel's own navigation stack, one level deep: null is the workspace
-	// overview, "portals" the page a summary section pushes. It lives here
-	// rather than in the section so closing the panel (or switching session)
+	// overview, "portals" the page the bottom bar pushes on top of it. It lives
+	// here rather than in the bar so closing the panel (or switching session)
 	// lands back on the overview.
 	const [panelPage, setPanelPage] = useState<null | "portals">(null);
 	useEffect(() => {
@@ -4298,11 +4300,17 @@ export function SessionViewer({
 	}, [showAssets, assetFiles.length, onCloseAssets]);
 	const [previewStatus, setPreviewStatus] = useState<PreviewStatus | null>(null);
 	useEffect(() => setPreviewStatus(null), [session.id]);
+	// Services with a route we can open: what the panel's bottom bar reports
+	// beside Portals, so the count is the openable ones rather than every port
+	// the repository declares.
+	const livePortals = (previewStatus?.services ?? []).filter((service) =>
+		portalTargetFor(session.id, service),
+	).length;
 	// The header preview control used to keep this status warm. Now that the
 	// launcher lives in the overflow menu. Keep status warm while Preview or the
-	// portal browser is up, and while the workspace panel is open — the Portals
-	// list is a section of it, so its rows need live status. Status requests also
-	// renew the authenticated Caddy routes for remote sandbox services.
+	// portal browser is up, and while the workspace panel is open — its bottom
+	// bar counts live portals and its portals page lists them. Status requests
+	// also renew the authenticated Caddy routes for remote sandbox services.
 	useEffect(() => {
 		if (
 			(!showPreviewTab && !showPortal && !panelOpen && !infoPageOpen) ||
@@ -6189,18 +6197,6 @@ export function SessionViewer({
 										onOpenNewSession={onOpenNewSession}
 									/>
 								)}
-								{/* Portals reads short here: a live count and the first few
-								    services. Starting, restarting and stopping them lives on
-								    the portals page, one level deeper in this panel. */}
-								{hasWorkspace && (
-									<PortalsSummary
-										sessionId={session.id}
-										status={previewStatus}
-										activePortal={portalTarget}
-										onOpenPortal={onOpenPortal}
-										onOpenPortals={() => setPanelPage("portals")}
-									/>
-								)}
 								{/* Only once a run exists. The workflows empty state is a
 								    teaching block several hundred pixels tall, which is fine
 								    on a tab you chose to open and wrong as a permanent
@@ -6215,24 +6211,49 @@ export function SessionViewer({
 										onOpenSubagent={openSubagent}
 									/>
 								)}
-								{/* Terminal last and quiet: one row, on the same plate the
-								    sections above use, opening the full-width view tab. */}
-								{hasWorkspace && (
-									<div className={INFO_LIST_CLASS}>
-										<button
-											type="button"
-											className="flex w-full min-w-0 items-center gap-2 rounded-control px-[7px] py-[5px] text-left text-label text-fg transition-colors hover:bg-hover"
-											onClick={() => onOpenTerminal?.()}
-										>
-											<IconTerminal size={15} className="shrink-0 text-faint" />
-											Terminal
-										</button>
-									</div>
-								)}
 							</div>
 							</>
 							)}
 						</div>
+						{/* Portals and Terminal are places, not readings, so they live on
+						    a bar along the bottom rather than as sections you scroll to.
+						    Portals opens the page on top of this panel; Terminal opens the
+						    full-width view tab beside it. */}
+						{hasWorkspace && (
+							<div className={PANEL_FOOTER}>
+								<button
+									type="button"
+									aria-pressed={panelPage === "portals"}
+									className={cn(
+										PANEL_FOOTER_ITEM,
+										panelPage === "portals" && "bg-hover text-fg",
+									)}
+									onClick={() =>
+										setPanelPage(panelPage === "portals" ? null : "portals")
+									}
+								>
+									<IconGlobe size={15} className="shrink-0" />
+									Portals
+									{livePortals > 0 && (
+										<span className="shrink-0 tabular-nums text-faint">
+											{livePortals}
+										</span>
+									)}
+								</button>
+								<button
+									type="button"
+									aria-pressed={showTerminal}
+									className={cn(
+										PANEL_FOOTER_ITEM,
+										showTerminal && "bg-hover text-fg",
+									)}
+									onClick={() => onOpenTerminal?.()}
+								>
+									<IconTerminal size={15} className="shrink-0" />
+									Terminal
+								</button>
+							</div>
+						)}
 					</div>
 				) : null}
 					</>

@@ -108,6 +108,19 @@ export const PANEL_PR_PLATE = "mx-2 mt-2 overflow-hidden rounded-lg";
 export const PANEL_BODY = "min-h-0 flex-1 overflow-y-auto";
 
 /**
+ * The bar along the bottom of the panel: the places this workspace can open,
+ * on one line. It sits outside PANEL_BODY so it stays put while the panel
+ * scrolls, and it is a genuine edge between two regions, so it takes a rule.
+ */
+export const PANEL_FOOTER =
+	"flex shrink-0 items-center gap-1 border-t border-divider px-2 py-1.5";
+
+/** One place on that bar: an icon, a word, and whatever it wants to report. */
+export const PANEL_FOOTER_ITEM =
+	"focus-ring flex min-w-0 items-center gap-1.5 rounded-control px-2 py-1 " +
+	"text-label text-dim transition-colors hover:bg-hover hover:text-fg";
+
+/**
  * The scrim behind the panel once it stops being a column and starts being an
  * overlay. It only exists from 920px down; above that the panel sits in the
  * layout and dims nothing.

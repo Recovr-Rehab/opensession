@@ -9,11 +9,6 @@ import {
 import { cn } from "../ui/cn";
 import { IconArrowUpRight, IconChevronLeft } from "./icons";
 
-/** How many services the info panel's summary shows before it defers to the
-    portals page. Three rows is what fits beside the sections around it without
-    the panel becoming a list of ports. */
-const SUMMARY_PREVIEW = 3;
-
 /** What a service row says on its right: where it is, in one word. */
 function statusLabel(
 	service: PreviewService,
@@ -40,108 +35,9 @@ function DiscoveringRow() {
 }
 
 /**
- * Portals in the info panel: the short read. A live count, the first few
- * services, and a way into the portals page — starting, restarting and
- * stopping live one level deeper, because the panel is what you read at a
- * glance while your work runs beside it.
- */
-export function PortalsSummary({
-	sessionId,
-	status,
-	activePortal,
-	onOpenPortal,
-	onOpenPortals,
-}: {
-	sessionId: string;
-	status: PreviewStatus | null;
-	activePortal?: PortalTarget | null;
-	onOpenPortal?: (target: PortalTarget) => void;
-	onOpenPortals?: () => void;
-}) {
-	if (!status) return <DiscoveringRow />;
-
-	const services = status.services;
-	const recipes = status.portalRecipes ?? [];
-	const live = services.filter((service) => portalTargetFor(sessionId, service));
-	// Running first, so the short read is the part you can actually open.
-	// Array#sort is stable, so everything else keeps discovery order.
-	const shown = [...services]
-		.sort((a, b) => Number(live.includes(b)) - Number(live.includes(a)))
-		.slice(0, SUMMARY_PREVIEW);
-
-	return (
-		<div className={INFO_SECTION_CLASS}>
-			<div className={cn(INFO_LABEL_CLASS, "flex items-center justify-between gap-2")}>
-				<span>Portals</span>
-				{live.length > 0 && (
-					<span className="shrink-0 tabular-nums">{live.length} live</span>
-				)}
-			</div>
-			<div className={INFO_LIST_CLASS}>
-				{shown.length ? (
-					shown.map((service) => {
-						const target = portalTargetFor(sessionId, service);
-						const active =
-							!!target &&
-							activePortal?.sessionId === sessionId &&
-							activePortal.key === service.key;
-						return (
-							<button
-								key={service.key}
-								type="button"
-								onClick={() =>
-									target ? onOpenPortal?.(target) : onOpenPortals?.()
-								}
-								className={cn(
-									"flex w-full min-w-0 items-center gap-2 rounded-control px-[7px] py-[5px] text-left transition-colors",
-									active ? "bg-hover" : "hover:bg-hover",
-								)}
-							>
-								<span
-									className={cn(
-										"size-[7px] shrink-0 rounded-full",
-										service.running ? "bg-green" : "bg-line-strong",
-									)}
-									aria-hidden="true"
-								/>
-								<span className="min-w-0 flex-1 truncate text-label text-fg">
-									{service.name}
-								</span>
-								<span className="shrink-0 truncate text-label text-faint">
-									{statusLabel(service, target, active)}
-								</span>
-							</button>
-						);
-					})
-				) : (
-					<div className="px-[9px] py-[7px] text-label text-dim">
-						{status.starting
-							? "Starting services…"
-							: recipes.length
-								? "No portals running yet."
-								: "No services exposed yet. Start Preview to expose the ones this repository declares."}
-					</div>
-				)}
-				{(services.length > 0 || recipes.length > 0) && onOpenPortals && (
-					<button
-						type="button"
-						onClick={onOpenPortals}
-						className="cursor-pointer bg-panel px-[9px] py-[7px] text-left text-label font-semibold text-faint transition-colors hover:bg-hover hover:text-fg"
-					>
-						{services.length > shown.length
-							? `View all ${services.length} portals`
-							: "Manage portals"}
-					</button>
-				)}
-			</div>
-		</div>
-	);
-}
-
-/**
- * The portals page: the panel one level deeper. Everything the summary leaves
- * out lives here — the recipes this repository can start, every discovered
- * service, and the restart and stop controls for the ones we manage.
+ * The portals page: the panel one level deeper, opened from the Portals item
+ * on the panel's bottom bar. The recipes this repository can start, every
+ * discovered service, and the restart and stop controls for the ones we manage.
  */
 export function PortalsPage({
 	sessionId,
