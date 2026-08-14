@@ -4672,7 +4672,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							</Button>
 						}
 					>
-						Couldn't load sessions.
+						{/* The one red thing: the sentence itself carries the hue, so
+						    the failure is legible at a glance without a box around
+						    it. EmptyState's own copy colour is `text-dim`, which a
+						    class on the wrapper would not beat. */}
+						<span className="text-red">Couldn't load sessions.</span>
 					</EmptyState>
 				)}
 				{workspaceListEmpty && !sessionsLoading && !sessionsError && hasWorkspaceFilter && (
