@@ -442,15 +442,19 @@ export function PrPanel({
    */
   const [rootEl, setRootEl] = useState<HTMLDivElement | null>(null);
   const [railStacked, setRailStacked] = useState(false);
+  const [headerCompact, setHeaderCompact] = useState(
+    () => window.matchMedia("(max-width: 720px)").matches,
+  );
   const setRoot = useCallback((el: HTMLDivElement | null) => {
     rootRef.current = el;
     setRootEl(el);
   }, []);
   useEffect(() => {
     if (!rootEl || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(([entry]) =>
-      setRailStacked(entry.contentRect.width < 880),
-    );
+    const observer = new ResizeObserver(([entry]) => {
+      setRailStacked(entry.contentRect.width < 880);
+      setHeaderCompact(entry.contentRect.width < 640);
+    });
     observer.observe(rootEl);
     return () => observer.disconnect();
   }, [rootEl]);
@@ -1183,6 +1187,20 @@ export function PrPanel({
   const comments = (pr.comments || []).filter(
     (c) => stripHtmlComments(c.body) && !isOutdatedReviewComment(c.body),
   );
+  const stateLabel = pr.isDraft
+    ? "Draft"
+    : pr.state === "OPEN"
+      ? "Open"
+      : pr.state === "MERGED"
+        ? "Merged"
+        : "Closed";
+  const stateClass = pr.isDraft
+    ? "bg-control text-dim"
+    : pr.state === "OPEN"
+      ? "bg-green text-white"
+      : pr.state === "MERGED"
+        ? "bg-purple text-white"
+        : "bg-red text-white";
 
   const canMergeAfterReview =
     pr.state === "OPEN" &&
@@ -1253,31 +1271,39 @@ export function PrPanel({
       {/* The PR identity lives inside the scroll container, so it gets out of
           the way once the reviewer reaches the code. Only the page row sticks. */}
       <main className="min-h-0 flex-1 overflow-y-auto bg-surface pb-24 [--review-file-header-top:52px] phone:pb-36">
-        <header className="flex h-14 shrink-0 items-center gap-4 px-6 phone:h-[52px] phone:px-3">
-          <a
-            className="min-w-0 flex-1 truncate text-item-title font-semibold tracking-[-0.015em] text-fg no-underline hover:text-link phone:text-body"
-            href={pr.url}
-            target="_blank"
-            rel="noopener"
-            title={`${pr.title} #${pr.number}`}
-          >
-            {pr.title} <span className="font-normal text-faint">#{pr.number}</span>
-          </a>
+        <header className={`flex shrink-0 items-center gap-3 px-6 phone:px-3 ${headerCompact ? "h-[52px]" : "h-16"}`}>
+          {!headerCompact && (
+            <span className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-label font-semibold ${stateClass}`}>
+              <PrStateIcon state={pr.state} isDraft={pr.isDraft} />
+              {stateLabel}
+            </span>
+          )}
+          <div className="min-w-0 flex-1">
+            <a
+              className="block truncate text-item-title font-semibold tracking-[-0.015em] text-fg no-underline hover:text-link phone:text-body"
+              href={pr.url}
+              target="_blank"
+              rel="noopener"
+              title={`${pr.title} #${pr.number}`}
+            >
+              {pr.title} <span className="font-normal text-faint">#{pr.number}</span>
+            </a>
+            {!headerCompact && (
+              <div className="mt-0.5 flex items-center gap-1.5 overflow-hidden whitespace-nowrap text-meta text-dim">
+                <span className="truncate">
+                  <strong className="font-semibold">{pr.author}</strong> wants to merge {pr.commits?.length || 0} commit{pr.commits?.length === 1 ? "" : "s"} into
+                  {" "}<span className="rounded-sm bg-blue-soft px-1.5 py-0.5 text-blue">{pr.baseRefName}</span>
+                  {" "}from <span className="rounded-sm bg-blue-soft px-1.5 py-0.5 text-blue">{pr.headRefName}</span>
+                </span>
+                <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
+                  <span className="text-green">+{pr.additions}</span>
+                  <span className="text-red">−{pr.deletions}</span>
+                </span>
+              </div>
+            )}
+          </div>
           {!railStacked && (
-            <div className="ml-auto flex min-w-0 shrink-0 items-center gap-2 text-meta text-dim">
-              <span
-                className="flex min-w-0 items-center gap-1.5"
-                title={`${pr.headRefName} into ${pr.baseRefName}`}
-              >
-                <span className="max-w-28 truncate">{pr.headRefName}</span>
-                <span className="text-faint" aria-hidden="true">→</span>
-                <span className="max-w-20 truncate">{pr.baseRefName}</span>
-              </span>
-              <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
-                <span className="text-green">+{pr.additions}</span>
-                <span className="text-red">−{pr.deletions}</span>
-              </span>
-              <span className="mx-1 h-4 w-px shrink-0 bg-line" aria-hidden="true" />
+            <div className="ml-auto flex shrink-0 items-center gap-1 text-meta text-dim">
               {sessions && (
                 <button
                   className="inline-flex h-8 items-center rounded-control border-0 bg-transparent px-2 font-medium text-dim hover:bg-hover hover:text-fg"
@@ -1566,7 +1592,7 @@ export function PrPanel({
             onClick={() => setSessionsOpen(false)}
           />
           <div
-            className={`absolute right-5 ${showBar ? "top-[100px]" : "top-14"} z-30 w-[460px] max-w-[calc(100%-40px)] rounded-md border border-line-strong bg-panel p-4 smooth-shadow-lg`}
+            className={`absolute right-5 ${showBar ? "top-[108px]" : "top-16"} z-30 w-[460px] max-w-[calc(100%-40px)] rounded-md border border-line-strong bg-panel p-4 smooth-shadow-lg`}
           >
             <div className="mb-2 flex items-center">
               <span className="text-sm font-semibold text-fg">
