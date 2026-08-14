@@ -1257,6 +1257,7 @@ html.wco .app-body.sidebar-collapsed
    shadow would have sat under the background. Hover is set by the composer,
    which hit-tests these spans through the textarea covering them. */
 .composer-hl .cmp-mention {
+	position: relative;
 	background: color-mix(in srgb, var(--accent) 12%, transparent);
 	outline: 3px solid color-mix(in srgb, var(--accent) 12%, transparent);
 	border-radius: 999px;
@@ -1265,6 +1266,29 @@ html.wco .app-body.sidebar-collapsed
 .composer-hl .cmp-mention[data-hover] {
 	background: color-mix(in srgb, var(--accent) 22%, transparent);
 	outline-color: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+/* The face. It is painted rather than laid out, because the mirror cannot take
+   a pixel of width — so the `@` goes transparent and lends the circle its slot,
+   which is all the room there is. That happens to be enough: `@` is a wide
+   glyph, 13.8px against the 15px face at the composer's 14px type, so the face
+   only leans a hair past it on either side. Absolute, so it takes part in no
+   layout at all — and it sits at `left: 0` rather than centred in that slot,
+   because the pill's own corner is fully round: a circle nudged left by even a
+   pixel pokes out through the curve above and below its own middle. */
+.composer-hl .cmp-at {
+	color: transparent;
+}
+.composer-hl .cmp-faced::before {
+	content: "";
+	position: absolute;
+	left: 0;
+	top: 50%;
+	width: 15px;
+	height: 15px;
+	transform: translateY(-50%);
+	border-radius: 999px;
+	background: var(--cmp-face) center / cover no-repeat, var(--bg-active);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 14%, transparent);
 }
 html[data-theme="light"] .composer-hl .cmp-code {
 	background: rgba(0, 0, 0, 0.07);

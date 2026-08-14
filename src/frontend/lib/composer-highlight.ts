@@ -21,6 +21,8 @@ export interface MentionRange {
 	end: number;
 	/** Roster spelling, which may differ in case from what was typed. */
 	name: string;
+	/** GitHub login, when they have one — the pill's face comes from it. */
+	github?: string;
 }
 
 /** An `@` that starts a word, and the name after it. */
@@ -59,9 +61,34 @@ export function composerMentionRanges(
 				p.name.toLowerCase() === name.toLowerCase() ||
 				p.fullName.toLowerCase() === name.toLowerCase(),
 		);
-		if (person) out.push({ start, end, name: person.name });
+		if (person)
+			out.push({ start, end, name: person.name, github: person.github });
 	}
 	return out;
+}
+
+/**
+ * One mention pill. The face is the tricky part: the mirror may not take a
+ * pixel of width, so there is nowhere to PUT a picture — the pill is exactly
+ * as wide as `@Michiel` is in the field behind it. So the face is painted, not
+ * laid out: it replaces the `@`, which goes transparent and hands over its
+ * slot, and it leans left into the space before the name (base.css). An
+ * `<img>` would be wrong here for a second reason: this HTML is rewritten on
+ * every keystroke, so the element would be destroyed and re-decoded sixty
+ * times a minute; a background image is fetched once and stays painted.
+ *
+ * Nobody's face is a fallback: a teammate with no GitHub login keeps a plain
+ * `@` and just gets the pill.
+ */
+function mentionHtml(text: string, range: MentionRange): string {
+	const at = esc(text.slice(range.start, range.start + 1));
+	const name = esc(text.slice(range.start + 1, range.end));
+	if (!range.github) return `<span class="cmp-mention">${at}${name}</span>`;
+	const face = `https://github.com/${encodeURIComponent(range.github)}.png?size=48`;
+	return (
+		`<span class="cmp-mention cmp-faced" style="--cmp-face:url(&quot;${face}&quot;)">` +
+		`<span class="cmp-at">${at}</span>${name}</span>`
+	);
 }
 
 /** Mentions inside a plain (non-code) run of the draft. */
@@ -76,7 +103,7 @@ function mentions(
 	for (const range of ranges) {
 		if (range.start < last || range.end > to) continue;
 		out += esc(text.slice(last, range.start));
-		out += `<span class="cmp-mention">${esc(text.slice(range.start, range.end))}</span>`;
+		out += mentionHtml(text, range);
 		last = range.end;
 	}
 	return out + esc(text.slice(last, to));

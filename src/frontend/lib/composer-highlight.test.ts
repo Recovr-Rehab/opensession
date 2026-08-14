@@ -95,6 +95,15 @@ describe("mentions in the mirror", () => {
 		);
 	});
 
+	test("a teammate with a GitHub login gets a face over the @", () => {
+		const html = composerHighlightHtml("ask @Kent now", [
+			{ name: "Kent", fullName: "Kent de Bruin", github: "kentdebruin" },
+		]);
+		expect(html).toBe(
+			'ask <span class="cmp-mention cmp-faced" style="--cmp-face:url(&quot;https://github.com/kentdebruin.png?size=48&quot;)"><span class="cmp-at">@</span>Kent</span> now​',
+		);
+	});
+
 	test("without a roster nothing chips", () => {
 		expect(composerHighlightHtml("ask @Kent now")).toBe("ask @Kent now​");
 	});
