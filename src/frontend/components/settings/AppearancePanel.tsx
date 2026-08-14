@@ -47,11 +47,13 @@ import {
 	type WsTimePref,
 } from "../../lib/workspace-time";
 import {
+	DENSITY_OPTIONS,
 	getSidebarDensity,
 	onSidebarDensityChanged,
 	setSidebarDensity,
 	type SidebarDensity,
 } from "../../lib/sidebar-density";
+import { cn } from "../../ui/cn";
 import {
 	SettingCard,
 	SettingRow as SettingsRow,
@@ -363,16 +365,34 @@ export function AppearancePanel() {
 					</Reorder.Group>
 				</SettingsRow>
 				<SettingRow
-					title="Compact rows"
-					desc="Tighten the sidebar so more workspaces fit on screen. Phone layouts keep their larger touch targets."
+					title="Row density"
+					desc="Compact tightens the sidebar so more workspaces fit on screen. Phone layouts keep their larger touch targets at either setting."
 					control={
-						<Switch
-							aria-label="Compact sidebar rows"
-							checked={density === "compact"}
-							onCheckedChange={(on) =>
-								setSidebarDensity(on ? "compact" : "default")
-							}
-						/>
+						// Two named choices rather than a switch: the same pair the
+						// sidebar's filter menu offers, wearing the same marks, so the
+						// two ways in read as one setting.
+						<div
+							className="flex items-center gap-1.5"
+							role="radiogroup"
+							aria-label="Sidebar row density"
+						>
+							{DENSITY_OPTIONS.map(({ value, label, Icon }) => (
+								<button
+									key={value}
+									role="radio"
+									aria-checked={density === value}
+									onClick={() => setSidebarDensity(value)}
+									className={cn(
+										"flex cursor-pointer items-center gap-1.5 rounded-md border border-line bg-transparent px-2.5 py-1.5 text-label text-dim hover:bg-hover hover:text-fg",
+										density === value &&
+											"border-line-strong bg-pressed text-fg",
+									)}
+								>
+									<Icon size={20} />
+									{label}
+								</button>
+							))}
+						</div>
 					}
 				/>
 				<SettingRow

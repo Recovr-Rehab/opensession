@@ -13,9 +13,27 @@
 // reads dense lists reads them dense everywhere, and the section order sitting
 // in the same settings card already follows them across devices.
 
+import { IconDensityCompact, IconDensityDefault } from "../components/icons";
 import { makeUserPref } from "./user-pref";
 
 export type SidebarDensity = "default" | "compact";
+
+/**
+ * The two settings as both surfaces offer them — the sidebar's filter menu and
+ * Settings → Appearance. One list, so the label and the mark can't drift into
+ * saying different things about the same preference in two places.
+ *
+ * The glyph is the thing the setting changes: rows in a list, the same band
+ * filled by three lines or four. See components/icons.tsx.
+ */
+export const DENSITY_OPTIONS: {
+	value: SidebarDensity;
+	label: string;
+	Icon: typeof IconDensityDefault;
+}[] = [
+	{ value: "default", label: "Default", Icon: IconDensityDefault },
+	{ value: "compact", label: "Compact", Icon: IconDensityCompact },
+];
 
 const pref = makeUserPref<SidebarDensity>({
 	localKey: "opensession-sidebar-density",

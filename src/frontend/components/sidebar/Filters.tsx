@@ -1,6 +1,7 @@
 import type { FilterState, GroupBy, PrsFilter, SortBy } from "../../lib/sidebar-filter";
 import { SIDEBAR_HOVER_LAYER } from "../../lib/sidebar-classes";
 import {
+	DENSITY_OPTIONS,
 	getSidebarDensity,
 	onSidebarDensityChanged,
 	setSidebarDensity,
@@ -174,10 +175,11 @@ export function FilterPopover({
 						<span className={FILTER_ROW_LABEL}>Density</span>
 						<MiniSelect
 							value={density}
-							options={[
-								{ value: "default", label: "Default" },
-								{ value: "compact", label: "Compact" },
-							]}
+							options={DENSITY_OPTIONS.map(({ value, label, Icon }) => ({
+								value,
+								label,
+								icon: <Icon size={20} className="shrink-0 text-dim" />,
+							}))}
 							onSelect={(v) => setSidebarDensity(v as SidebarDensity)}
 						/>
 					</div>

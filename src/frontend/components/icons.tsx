@@ -1046,3 +1046,33 @@ export function IconDesk(p: IconProps) {
     </Svg>
   );
 }
+
+// The two sidebar densities, drawn as the thing they change: rows in a list.
+// Both fill the same 6.75–17.25 band, so the pair differs in how many lines
+// fit it and how much air each one gets — which is exactly what the setting
+// does to the rail. Reading the count is what makes them legible side by side;
+// spacing alone is too fine a difference at 20px.
+//
+// Four lines is the floor for the compact mark. At five the 1.5 stroke leaves
+// about a pixel of air between rows once the glyph is scaled to 20px, and the
+// whole thing sinters into a grey block.
+export function IconDensityDefault(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path {...stroke} d="M4.75 6.75H19.25" />
+      <path {...stroke} d="M4.75 12H19.25" />
+      <path {...stroke} d="M4.75 17.25H19.25" />
+    </Svg>
+  );
+}
+
+export function IconDensityCompact(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path {...stroke} d="M4.75 6.75H19.25" />
+      <path {...stroke} d="M4.75 10.25H19.25" />
+      <path {...stroke} d="M4.75 13.75H19.25" />
+      <path {...stroke} d="M4.75 17.25H19.25" />
+    </Svg>
+  );
+}
