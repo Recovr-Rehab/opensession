@@ -53,7 +53,7 @@ import { SESSION_EFFORTS, findSession, invalidateSessionsCache, recordRunOutcome
 import { buildBranchNote, memoryNoteFor, workspaceOwningWorktree } from "./session-repos";
 import { ownedWorktree } from "./session-workspace";
 import { engineSessionPatch } from "./sessions";
-import { userMatchesAny } from "./shared/user-mappings";
+import { commitAuthorFor, userMatchesAny } from "./shared/user-mappings";
 import { sanitizeBranchSlug } from "./suggest-branch";
 import { type NativeSessionFile, type SessionUsage, type UnifiedSession } from "./types";
 import { parseImageDataUrls, stageFileAttachments, withUploadsNote } from "./uploads";
@@ -587,6 +587,14 @@ export async function openCreatedSession(
 				inProcessMcp: interactiveMcpServers(spec.user, bksId),
 				confirmTools: STRIPE_CONFIRM_TOOLS,
 				aws: true, // interactive sessions keep AWS read access (via injected creds)
+				// Whose commits these are. Passing `user` alone is not enough:
+				// the git identity is a separate option, and this is a
+				// session's whole first turn, which for most sessions is where
+				// the work lands. Without it that work commits under the
+				// machine's default identity and shows up under nobody. The
+				// sandbox and runner paths above resolve the same identity
+				// inside their own launchers.
+				author: commitAuthorFor(spec.user, spec.createdBy),
 				user: spec.user, // gate per-user MCP servers (allowedUsers) to the creator
 				journal: { osSessionId: bksId, kind: "create" },
 				startToken,

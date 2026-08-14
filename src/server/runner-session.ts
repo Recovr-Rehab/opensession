@@ -20,7 +20,7 @@ import type { UnifiedSession } from "./types";
 import { interactiveMcpServers } from "./interactive-mcp";
 import { interactiveFallbackModel } from "./models";
 import { STRIPE_CONFIRM_TOOLS } from "./runner-shared";
-import { gitIdentityFor } from "./shared/user-mappings";
+import { commitAuthorFor } from "./shared/user-mappings";
 import { makeAskHandler } from "./asks";
 import type { McpScope } from "./runner-shared";
 import type { StreamEvent } from "./agent-runner";
@@ -80,7 +80,7 @@ export async function maybeLaunchRunnerRun(
 		wsToken,
 		reposNote: opts.reposNote,
 		confirmTools: STRIPE_CONFIRM_TOOLS,
-		author: gitIdentityFor(opts.user),
+		author: commitAuthorFor(opts.user, session.startedBy),
 		user: opts.user,
 		mcpGrantUser: session.startedBy || undefined,
 		fallbackModel: interactiveFallbackModel(session.model),
