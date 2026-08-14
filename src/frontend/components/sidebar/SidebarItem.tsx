@@ -4,6 +4,7 @@ import { markRead, markUnread } from "../../lib/reads";
 import {
 	SIDEBAR_HOVER_LAYER,
 	SIDEBAR_RAIL,
+	SIDEBAR_RAIL_GAP,
 	SIDEBAR_ROW_CHIP,
 	SIDEBAR_STATUS_DOT,
 	SIDEBAR_SWIPE_ACTION,
@@ -451,10 +452,10 @@ export function SidebarItem({
 				/>
 			}
 		>
-			{/* Same gap as SIDEBAR_GROUP_HEADER and SIDEBAR_WS_ROW: with the
-			    shared SIDEBAR_RAIL slot in front, that's what puts every title on
+			{/* The shared rail gap, as every other family takes it: with the
+			    SIDEBAR_RAIL slot in front, that pair is what puts every title on
 			    one rail. */}
-			<div className="flex min-w-0 items-center gap-[9px]">
+			<div className={cn("flex min-w-0 items-center", SIDEBAR_RAIL_GAP)}>
 				{/* Match workspace rows: blocked-on-you takes the rail first and in
 				    blue, then the live run, then the PR glyph — where merged PRs keep
 				    the glyph itself purple instead of adding metadata. */}

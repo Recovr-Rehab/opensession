@@ -112,6 +112,21 @@ export const SIDEBAR_RAIL =
 	"relative flex size-[22px] flex-[0_0_22px] items-center justify-center";
 
 /**
+ * The air between that rail and the title after it — one value, shared by
+ * every family that opens with a rail (session rows, workspace rows, group
+ * headings, the tool strip). It has to be shared: the left edge the titles
+ * sit on is rail width plus this gap, so a family that sets its own number
+ * rags its list against the others.
+ *
+ * 7px, not 9. The rail is sized for an 18px mark, so a 7px status dot already
+ * carries 7px of its own margin inside the slot, and at 9 the gap read as a
+ * hole in front of the dot rows while the icon rows next to them looked
+ * closed up. Tightening the shared gap keeps that difference where it belongs
+ * (inside the rail, centred) instead of adding to it.
+ */
+export const SIDEBAR_RAIL_GAP = "gap-[7px]";
+
+/**
  * ── Containers ──────────────────────────────────────────────────────────────
  * The boxes the row families sit in. Written phone-first with a `desktop:`
  * desktop override, which is the exact complement of the `max-width: 720px`
@@ -261,7 +276,7 @@ export const SIDEBAR_REPO_TILE = "size-[18px] shrink-0 text-meta";
  * a caption is still a toggle once the pill is gone.
  */
 export const SIDEBAR_GROUP_HEADER =
-	"group/gh flex w-full items-center gap-[9px] rounded-[calc(10px*var(--rf))] border-none bg-transparent text-[16px] font-medium tracking-[0px] text-dim desktop:text-body hover:text-fg";
+	`group/gh flex w-full items-center ${SIDEBAR_RAIL_GAP} rounded-[calc(10px*var(--rf))] border-none bg-transparent text-[16px] font-medium tracking-[0px] text-dim desktop:text-body hover:text-fg`;
 
 /**
  * A FULL-LINE heading — a repo or feed band, an automation group, Archived.
@@ -608,7 +623,7 @@ export const SIDEBAR_ATTN_COUNT =
 /**
  * A workspace row: {@link SIDEBAR_ROW} laid out as one flex line, so the rail,
  * the title and the trailing cluster sit on the sidebar's shared columns. The
- * gap matches {@link SIDEBAR_GROUP_HEADER} — see {@link SIDEBAR_RAIL}.
+ * gap is {@link SIDEBAR_RAIL_GAP}, the same one every railed family takes.
  *
  * On hover the line gives up its right end to {@link SIDEBAR_WS_ACTIONS}, which
  * floats over that spot. The reserve lives here, on the row, because it is the
@@ -620,7 +635,7 @@ export const SIDEBAR_ATTN_COUNT =
  * group variant only matches a group's DESCENDANTS. Either way it is
  * hover-device-only, so touch layouts never pay for it.
  */
-export const SIDEBAR_WS_ROW = "flex items-center gap-[9px] hover:pr-20";
+export const SIDEBAR_WS_ROW = `flex items-center ${SIDEBAR_RAIL_GAP} hover:pr-20`;
 
 /**
  * Pin + archive, floated over the row's right edge so revealing them can never
