@@ -84,6 +84,8 @@ test("multi-select and free-text answers retain the explicit Answer action", () 
 			onAnswer={() => {}}
 		/>,
 	);
-	expect(html).toContain(">Answer</button>");
+	// Button wraps a string label in its own span (cap-band trim), so the
+	// label is the button's last element rather than its text node.
+	expect(html).toContain(">Answer</span></button>");
 	expect(html).toContain("Select all that apply");
 });

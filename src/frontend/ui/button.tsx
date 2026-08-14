@@ -213,6 +213,21 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 	) {
 		const hasLabel = children != null && children !== false && children !== "";
 		const iconOnly = icon != null && !hasLabel;
+		// A text label is centered on its CAP BAND, not on its line box. The
+		// line box carries the font's descender space, so flex centering puts
+		// the ink about 1.75px high — measured on the sm button: 6.5px of air
+		// above the cap, 10px below the baseline. `text-box` trims the box to
+		// cap height and baseline, which lands both within a quarter pixel and
+		// costs nothing per font, where a hand-tuned nudge would be wrong on
+		// every font but the one it was measured in. It only applies to a
+		// plain string child: an element child brings its own layout, and
+		// wrapping it would make it a flex item of a flex item.
+		const label =
+			typeof children === "string" || typeof children === "number" ? (
+				<span className="[text-box:trim-both_cap_alphabetic]">{children}</span>
+			) : (
+				children
+			);
 		return (
 			<button
 				type="button"
@@ -250,7 +265,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 						{icon}
 					</span>
 				)}
-				{children}
+				{label}
 				{caret && (
 					<IconChevronDown
 						className="shrink-0 opacity-55"
