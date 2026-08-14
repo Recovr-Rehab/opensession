@@ -57,6 +57,7 @@ import {
   IconDiffSplit,
   IconDiffUnified,
   IconDotsHorizontal,
+  IconGlobe,
   IconReturn,
   IconX,
 } from "./icons";
@@ -1324,14 +1325,17 @@ export function PrPanel({
                 </button>
               )}
               {pr.staging?.url && (
-                <a
-                  className="inline-flex h-8 items-center rounded-control px-2 font-medium text-dim no-underline hover:bg-hover hover:text-fg"
-                  href={pr.staging.url}
-                  target="_blank"
-                  rel="noopener"
-                >
-                  Preview
-                </a>
+                <Tooltip label="Open the preview environment">
+                  <a
+                    className="inline-flex size-8 items-center justify-center rounded-control text-dim no-underline hover:bg-hover hover:text-fg"
+                    href={pr.staging.url}
+                    target="_blank"
+                    rel="noopener"
+                    aria-label="Open the preview environment"
+                  >
+                    <IconGlobe size={19} />
+                  </a>
+                </Tooltip>
               )}
               {onOpenSession && (
                 <button
