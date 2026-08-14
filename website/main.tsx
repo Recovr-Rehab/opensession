@@ -1,8 +1,20 @@
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import markUrl from "../os1-mac/build/icon-512.png";
-import { IconCheck } from "../src/frontend/components/icons";
+import {
+	IconBranches,
+	IconCheck,
+	IconClock,
+	IconGlobe,
+	IconPeople,
+	IconPullRequest,
+	IconRepo,
+	IconRobot,
+	IconSparkle,
+	IconStack,
+	IconTerminal,
+} from "../src/frontend/components/icons";
 import "./site.css";
 import { ProductDemo } from "./ProductDemo";
 import { TellaBackground } from "./TellaBackground";
@@ -113,7 +125,7 @@ function WaitlistDialog({ open, onClose }: { open: boolean; onClose: () => void 
 			}}
 		>
 			<div className="waitlist-dialog-head">
-				<h2>Request a demo</h2>
+				<h2>Request access</h2>
 				<button
 					type="button"
 					className="waitlist-dialog-close"
@@ -132,50 +144,217 @@ function WaitlistDialog({ open, onClose }: { open: boolean; onClose: () => void 
 	);
 }
 
-/** The whole page: header, the pitch, and the product running beside it. */
+/** One cell of the capability grid: a glyph, a name, and what it means. */
+function Feature({
+	icon,
+	name,
+	children,
+}: {
+	icon: ReactNode;
+	name: string;
+	children: ReactNode;
+}) {
+	return (
+		<div className="feature">
+			<span className="feature-icon" aria-hidden="true">
+				{icon}
+			</span>
+			<p>
+				<b>{name}</b> {children}
+			</p>
+		</div>
+	);
+}
+
+function Question({ q, children }: { q: string; children: ReactNode }) {
+	return (
+		<details className="faq-item">
+			<summary>
+				{q}
+				<span className="faq-sign" aria-hidden="true" />
+			</summary>
+			<p>{children}</p>
+		</details>
+	);
+}
+
+/**
+ * The page: a rail that stays put, and a feed that explains the product one
+ * quiet card at a time. The rail holds the whole pitch and the only CTA, so
+ * the ask never scrolls away and the feed never has to repeat it.
+ */
 function LandingPage() {
 	const [waitlistOpen, setWaitlistOpen] = useState(false);
 
 	return (
-		<section className="hero">
-			<div className="gradient-fallback" aria-hidden="true" />
-			<TellaBackground />
-			<div className="hero-wash" aria-hidden="true" />
-
-			<header className="site-header page-width">
+		<div className="shell">
+			<aside className="rail">
 				<a className="brand" href="/" aria-label="Open Session home">
 					<Mark />
-					<span>Open Session</span>
 				</a>
-			</header>
 
-			<div className="hero-content page-width">
-				<div className="hero-copy">
-					<h1>Your team’s control room for coding agents.</h1>
-					<p className="hero-description">
-						Use any model, in sessions anyone on the team can join. Open source,
-						on your own machines.
+				<h1>
+					Open Session runs your coding agents{" "}
+					<span>in sessions your team can join</span>
+				</h1>
+
+				<div className="rail-foot">
+					<button
+						type="button"
+						className="button button-primary"
+						onClick={() => setWaitlistOpen(true)}
+					>
+						Request access
+					</button>
+					<p className="rail-note">
+						Open source and self-hosted.
+						<br />
+						Any model, on machines you own.
 					</p>
-					<div className="hero-actions">
-						<button
-							type="button"
-							className="button button-primary"
-							onClick={() => setWaitlistOpen(true)}
-						>
-							Request a demo
-						</button>
-					</div>
 				</div>
-				<div className="hero-stage">
+			</aside>
+
+			<main className="feed">
+				<section className="stage">
+					<div className="gradient-fallback" aria-hidden="true" />
+					<TellaBackground />
 					<ProductDemo />
-				</div>
-			</div>
+				</section>
+
+				<section className="card">
+					<div className="features">
+						<Feature icon={<IconSparkle size={20} />} name="Any model">
+							Point a session at whatever model suits the work, and change it
+							mid-run without losing the thread.
+						</Feature>
+						<Feature icon={<IconPeople size={20} />} name="Sessions are shared">
+							Anyone on the team opens the same session, sees the run as it
+							happens, and sends the next turn.
+						</Feature>
+						<Feature icon={<IconGlobe size={20} />} name="On your machines">
+							Self-hosted from the first minute. The checkouts, the transcripts
+							and the keys stay on hardware you run.
+						</Feature>
+						<Feature icon={<IconBranches size={20} />} name="A worktree each">
+							Every session gets its own branch and checkout, so ten agents work
+							at once without stepping on each other.
+						</Feature>
+						<Feature icon={<IconPullRequest size={20} />} name="Ends in a pull request">
+							Read the diff, then open the PR from the same place the work
+							happened. Review stays next to the transcript.
+						</Feature>
+						<Feature icon={<IconRobot size={20} />} name="Agents that delegate">
+							A session hands focused work to its own sub-agents and keeps their
+							noise out of the conversation you are reading.
+						</Feature>
+						<Feature icon={<IconClock size={20} />} name="Runs without you">
+							Schedules, webhooks and watched channels start sessions on their
+							own, each scoped to the tools it is allowed.
+						</Feature>
+						<Feature icon={<IconTerminal size={20} />} name="Shells and previews">
+							Open a terminal in the worktree, or a running preview of the
+							branch, beside the session that built it.
+						</Feature>
+						<Feature icon={<IconStack size={20} />} name="Everywhere you are">
+							A web app, a Mac app, a native iOS app, a browser side panel and a
+							terminal client, all on one server.
+						</Feature>
+						<Feature icon={<IconRepo size={20} />} name="Open source">
+							Read it, fork it, run it. There is no hosted tier in the path that
+							you have to take on trust.
+						</Feature>
+					</div>
+				</section>
+
+				<section className="card">
+					<h2>How a session goes</h2>
+					<p className="card-sub">
+						Four steps, and your team can join at any of them.
+					</p>
+					<ol className="steps">
+						<li className="step">
+							<span className="step-n">01</span>
+							<p>
+								<b>Start it.</b> Describe the work and pick a model. Open Session
+								cuts a branch and a worktree for it.
+							</p>
+						</li>
+						<li className="step">
+							<span className="step-n">02</span>
+							<p>
+								<b>Watch it.</b> The transcript streams live, and so does who
+								else is reading it. Nobody has to ask for a status update.
+							</p>
+						</li>
+						<li className="step">
+							<span className="step-n">03</span>
+							<p>
+								<b>Steer it.</b> Send a correction mid-run, answer a question the
+								agent asked, or take the keyboard yourself.
+							</p>
+						</li>
+						<li className="step">
+							<span className="step-n">04</span>
+							<p>
+								<b>Ship it.</b> Review the diff, open the pull request, and keep
+								the session that produced it attached to the change.
+							</p>
+						</li>
+					</ol>
+				</section>
+
+				<section className="card">
+					<h2>Common questions</h2>
+					<div className="faq">
+						<Question q="Is it really self-hosted?">
+							Yes. You run the server and the agents run against your checkouts
+							on your hardware. There is no Open Session cloud in the path.
+						</Question>
+						<Question q="Which agents can it run?">
+							Whatever the engine supports. A session names a model rather than a
+							vendor, and you can change that model between turns.
+						</Question>
+						<Question q="What does shared actually mean?">
+							One session, many people. The transcript updates live for everyone
+							watching, you can see who else is there, and anyone can send the
+							next turn or answer a question the agent asked.
+						</Question>
+						<Question q="Do parallel agents share a checkout?">
+							No. Each session gets its own git worktree and branch. A session
+							can attach a second repository when the work spans more than one.
+						</Question>
+						<Question q="How does the work get reviewed?">
+							As a pull request on the session's branch, with the diff and the
+							review beside the transcript that produced them.
+						</Question>
+						<Question q="Can it run when nobody is watching?">
+							Yes. An automation starts a session on a schedule, a webhook or a
+							message in a watched channel, with its own allowlist of tools and
+							read-only access unless you grant more.
+						</Question>
+						<Question q="When can I use it?">
+							We are opening it to a few teams at a time. Ask for access and we
+							will get in touch when it is your turn.
+						</Question>
+					</div>
+				</section>
+
+				<footer className="feed-foot">
+					<span>Open source</span>
+					<span aria-hidden="true">·</span>
+					<span>Self-hosted</span>
+					<span aria-hidden="true">·</span>
+					<span>Made by Tella</span>
+					<span aria-hidden="true">·</span>
+					<span>©2026</span>
+				</footer>
+			</main>
 
 			<WaitlistDialog
 				open={waitlistOpen}
 				onClose={() => setWaitlistOpen(false)}
 			/>
-		</section>
+		</div>
 	);
 }
 
