@@ -1472,10 +1472,15 @@ export function PrPanel({
           aria-orientation="vertical"
           aria-label="Pull request pages"
         >
+          {/* Only Overview wears its count. A comment count is news about a
+              page you are not on; the file count is already stated twice on
+              the page it leads to (the diff total beside the view control, and
+              "n of m viewed"), so on the rail it would just repeat itself. It
+              stays in the tooltip. */}
           {([
-            ["overview", "Overview", IconMessages, comments.length || undefined],
-            ["files", "Files changed", IconFile, files.length || undefined],
-          ] as const).map(([key, label, Icon, count]) => (
+            ["overview", "Overview", IconMessages, comments.length || undefined, true],
+            ["files", "Files changed", IconFile, files.length || undefined, false],
+          ] as const).map(([key, label, Icon, count, badged]) => (
             <Tooltip
               key={key}
               side="right"
@@ -1510,7 +1515,7 @@ export function PrPanel({
                     is inert to the pointer so the whole box is still the tab. */}
                 <span className="relative inline-flex">
                   <Icon size={19} />
-                  {count !== undefined && (
+                  {badged && count !== undefined && (
                     <span className="pointer-events-none absolute -right-2.5 -top-1.5 min-w-[16px] rounded-full bg-accent px-1 py-px text-center text-meta font-semibold leading-[1.3] tabular-nums text-on-accent">
                       {count}
                     </span>
