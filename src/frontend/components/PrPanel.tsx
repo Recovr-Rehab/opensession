@@ -56,6 +56,7 @@ import { Textarea } from "../ui/input";
 import {
   IconBranches,
   IconCheck,
+  IconChevronRight,
   IconDiffSplit,
   IconDiffUnified,
   IconDotsHorizontal,
@@ -1335,7 +1336,7 @@ export function PrPanel({
       <main
         className={`min-h-0 flex-1 overflow-y-auto bg-surface [--review-file-header-top:52px] ${reviewing ? "pb-24 phone:pb-36" : "pb-4"}`}
       >
-        <header className="flex h-[52px] shrink-0 items-center gap-2 px-6 phone:px-3">
+        <header className="flex h-[52px] shrink-0 items-center gap-2.5 px-6 phone:px-3">
           {/* State, in the app's own PR language: the glyph carries the colour
               and the word stays quiet beside it. It is its own object, so it
               gets more air than the pieces of the identity line it precedes. */}
@@ -1351,17 +1352,24 @@ export function PrPanel({
               )}
             </span>
           </Tooltip>
-          <UserAvatar
-            name={pr.author}
-            login={provider.key === "github" ? pr.author : null}
-            size={18}
-            edge={false}
-            title={pr.author}
-          />
+          {/* Author and title in the session header's own breadcrumb shape: a
+              tight picture-and-name pill, a chevron, then the name of the thing
+              you are looking at. Same spacing and weights as RepoBar's
+              `[icon] repo › title`, so the two headers read as one bar. */}
+          <span className="flex shrink-0 items-center gap-[7px] text-body font-medium text-fg">
+            <UserAvatar
+              name={pr.author}
+              login={provider.key === "github" ? pr.author : null}
+              size={18}
+              edge={false}
+              title={pr.author}
+            />
+            {!headerCompact && (
+              <span className="max-w-[180px] truncate">{pr.author}</span>
+            )}
+          </span>
           {!headerCompact && (
-            <span className="max-w-24 shrink-0 truncate text-label font-medium text-dim">
-              {pr.author}
-            </span>
+            <IconChevronRight size={18} className="shrink-0 text-faint" />
           )}
           {/* Title only. Counts, commits and the sessions on this PR are the
               rail's job, so the bar stays one line of identity.
@@ -1370,7 +1378,7 @@ export function PrPanel({
               inert. The outbound jump rides the number, which is the reference
               everywhere else in the app. */}
           <h1
-            className="flex min-w-0 flex-1 items-baseline gap-1 text-item-title font-semibold leading-[1.2] tracking-[-0.01em] text-fg"
+            className="flex min-w-0 flex-1 items-baseline gap-1 text-body font-medium leading-[1.2] text-fg"
             title={`${pr.title} #${pr.number}`}
           >
             <span className="truncate">{pr.title}</span>
