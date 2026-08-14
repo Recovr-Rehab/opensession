@@ -118,9 +118,12 @@ export const DETAIL_PANE =
  * only for the drop that CREATES a split; once one exists App.tsx overrides
  * `--split-preview-share` with the target column's real ratio. The 12px it
  * subtracts is the 8px inset on its own side plus the gutter to the divider.
+ *
+ * The 36px is the desktop tab strip (32px, see `TAB_STRIP`) plus the same 4px
+ * gutter the other edges keep; it moves with the band's height.
  */
 export const tabSplitDropPreviewClass = (side: "left" | "right") =>
-	"pointer-events-none absolute top-[calc(var(--desktop-header-h)+44px)] bottom-2 z-[25] " +
+	"pointer-events-none absolute top-[calc(var(--desktop-header-h)+36px)] bottom-2 z-[25] " +
 	"w-[calc(var(--split-preview-share,50%)-12px)] " +
 	"rounded-[calc(10px*var(--rf))] [corner-shape:var(--cs)] border-2 border-accent " +
 	"bg-[color-mix(in_srgb,var(--accent)_18%,transparent)] " +
