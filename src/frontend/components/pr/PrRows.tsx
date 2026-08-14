@@ -21,7 +21,7 @@ export function ReviewerRow({ reviewer, provider }: { reviewer: PrReviewer; prov
           ? "text-yellow"
           : "text-faint";
   return (
-    <div className="flex items-center gap-3 rounded-sm border border-transparent px-1 py-1.5 hover:border-line hover:bg-hover/50">
+    <div className="flex items-center gap-3 rounded-row border border-transparent px-1.5 py-1.5 hover:border-line hover:bg-hover/50">
       {src ? (
         <img className="size-7 rounded-full object-cover" src={src} alt="" loading="lazy" />
       ) : (
@@ -72,7 +72,7 @@ export function FileRow({ file, onClick }: { file: PrFile; onClick?: () => void 
   return (
     <button
       type="button"
-      className="flex w-full items-center gap-2 rounded-control border border-transparent px-1.5 py-1 text-left hover:border-line hover:bg-hover/50 disabled:cursor-default disabled:hover:border-transparent disabled:hover:bg-transparent"
+      className="flex w-full items-center gap-2 rounded-row border border-transparent px-1.5 py-1 text-left hover:border-line hover:bg-hover/50 disabled:cursor-default disabled:hover:border-transparent disabled:hover:bg-transparent"
       onClick={onClick}
       disabled={!onClick}
       title={file.path}

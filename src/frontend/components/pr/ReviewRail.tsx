@@ -301,7 +301,7 @@ function RollupRow({
 }) {
   return (
     <button
-      className="flex w-full items-center gap-2 rounded-control border-0 bg-transparent px-1.5 py-1.5 text-left text-label text-fg hover:bg-hover"
+      className="flex w-full items-center gap-2 rounded-row border-0 bg-transparent px-1.5 py-1.5 text-left text-label text-fg hover:bg-hover"
       onClick={onToggle}
       aria-expanded={open}
     >

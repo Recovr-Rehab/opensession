@@ -10,7 +10,7 @@ export function CheckRow({ check }: { check: PrCheck }) {
   const mark = cls === "check-success" ? "✓" : cls === "check-failure" ? "✕" : "●";
   const duration = formatCheckDuration(check);
   return (
-    <div className="group flex items-center gap-2 rounded-md px-1.5 py-1 text-label text-fg transition-[background] hover:bg-hover">
+    <div className="group flex items-center gap-2 rounded-row px-1.5 py-1 text-label text-fg transition-[background] hover:bg-hover">
       <a
         className="flex min-w-0 flex-1 items-center gap-2 text-inherit no-underline"
         href={check.url}
