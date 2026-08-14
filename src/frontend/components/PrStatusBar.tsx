@@ -352,7 +352,10 @@ function PrNumberChip({
 						/>
 					}
 				>
-					<span className="translate-y-px">#{pr.number}</span>
+					{/* Cap-band centered, like the action button beside it. */}
+					<span className="[text-box:trim-both_cap_alphabetic]">
+						#{pr.number}
+					</span>
 				</ContextMenu.Trigger>
 				<ContextMenu.Popup>
 					<ContextMenu.Item

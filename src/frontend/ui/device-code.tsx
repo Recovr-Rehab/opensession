@@ -40,7 +40,12 @@ export function DeviceCode({
 					className,
 				)}
 			>
-				<span className="translate-y-px tracking-[0.14em] -mr-[0.14em]">{code}</span>
+				{/* Cap-band centered against the copy glyph: `text-box` trims the
+				    line box to cap height and baseline, so the code's own ink sits
+				    on the button's middle whatever font the platform picks. */}
+				<span className="tracking-[0.14em] -mr-[0.14em] [text-box:trim-both_cap_alphabetic]">
+					{code}
+				</span>
 				<CopyCheck
 					copied={copied}
 					size={20}
