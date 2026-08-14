@@ -76,6 +76,12 @@ export type ViewTab = {
 	 * icon (e.g. Staging → a globe). `label` still supplies the tooltip/aria.
 	 */
 	icon?: React.ReactNode;
+	/**
+	 * Whether the tab carries a ×. Defaults to true; the workspace home sets it
+	 * false, because it only exists when it is the strip's last tab and closing
+	 * it would leave the workspace with none.
+	 */
+	closable?: boolean;
 };
 
 interface Props {
@@ -551,18 +557,20 @@ export function SessionTabs({
 										) : (
 											<span className={TAB_TITLE}>{v.label}</span>
 										)}
-										<button
-											type="button"
-											className={tabCloseClass(v.active)}
-											aria-label={`Close ${v.label}`}
-											title={`Close ${v.label}`}
-											onClick={(e) => {
-												e.stopPropagation();
-												onCloseView(v.id);
-											}}
-										>
-											×
-										</button>
+										{v.closable !== false && (
+											<button
+												type="button"
+												className={tabCloseClass(v.active)}
+												aria-label={`Close ${v.label}`}
+												title={`Close ${v.label}`}
+												onClick={(e) => {
+													e.stopPropagation();
+													onCloseView(v.id);
+												}}
+											>
+												×
+											</button>
+										)}
 									</div>
 								</Reorder.Item>
 							);

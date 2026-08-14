@@ -1850,7 +1850,9 @@ export function App(
 			: [];
 	// Review leftmost, then Conversation, Preview environment, Preview, Portal,
 	// Assets, and the sub-agent drill-in last (it comes and goes with the session).
-	const viewTabs: ViewTab[] = [
+	// The workspace home joins these once the strip would otherwise be empty —
+	// see `homeViewTabs`, which needs the session tabs to know that.
+	const paneViewTabs: ViewTab[] = [
 		...reviewViewTabs,
 		...conversationViewTabs,
 		...videoViewTabs,
@@ -1906,6 +1908,14 @@ export function App(
 		return null;
 	}
 	function selectViewTab(id: string) {
+		// The workspace home has no pane of its own: it is what the strip shows
+		// with no view tab foregrounded.
+		if (id.startsWith("home:")) {
+			setActiveViewTab(null);
+			if (route.view === "workspace" && route.tab)
+				navigate({ view: "workspace", id: route.id }, { replace: true });
+			return;
+		}
 		const tab = viewTabKind(id);
 		if (!tab) return;
 		setActiveViewTab(tab);
@@ -2311,6 +2321,26 @@ export function App(
 			.map((id) => byId.get(id))
 			.filter((s): s is UnifiedSession => !!s);
 	})();
+	/**
+	 * A workspace always has at least one tab. Close its last session and dismiss
+	 * its last pane and there is nothing left to put in the strip, so the
+	 * workspace home — the composer that starts the next session — takes the slot
+	 * rather than leaving a workspace with no tabs at all. It is the only tab
+	 * whenever it exists, which is why it carries no × of its own.
+	 */
+	const homeViewTabs: ViewTab[] =
+		wsKey && routeWorkspace && !workspaceSessions.length && !paneViewTabs.length
+			? [
+					{
+						id: `home:${wsKey}`,
+						label: "New session",
+						active: true,
+						dotClass: null,
+						closable: false,
+					},
+				]
+			: [];
+	const viewTabs: ViewTab[] = [...paneViewTabs, ...homeViewTabs];
 	// A sub-agent tab whose stack just went away (its session switched, or the tab
 	// was closed) is no longer in the strip, and the session is what's rendered —
 	// so treat it as no view tab rather than leaving the strip with nothing lit
