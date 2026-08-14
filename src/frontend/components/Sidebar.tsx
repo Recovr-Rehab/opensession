@@ -250,7 +250,7 @@ import {
 } from "./sidebar/HoverCards";
 import { DraftRow } from "./sidebar/DraftRow";
 import { SidebarCtxMenu } from "./sidebar/SidebarCtxMenu";
-import { InlineAlert, ListSkeleton } from "../ui/state";
+import { EmptyState, ListSkeleton } from "../ui/state";
 import {
 	SIDEBAR_ROW,
 	SIDEBAR_ROW_TITLE,
@@ -4658,10 +4658,22 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						rowClassName="px-2.5 py-[9px] phone:px-2 phone:py-[13px]"
 					/>
 				)}
+				{/* A list that failed to fetch is an empty list with a reason, not a
+				    validation error: it takes the same quiet centred treatment as
+				    "No matching workspaces" below, one step up in ink, plus the
+				    button that fixes it. The red alert box this replaced framed the
+				    sidebar's own column in a border and outshouted the rows. */}
 				{sessionsError && sessions.length === 0 && !sessionsLoading && (
-					<InlineAlert onRetry={onRetrySessions} className="mx-3 my-3">
+					<EmptyState
+						className="mx-4 my-7 gap-1.5 py-0"
+						action={
+							<Button size="sm" onClick={onRetrySessions}>
+								Try again
+							</Button>
+						}
+					>
 						Couldn't load sessions.
-					</InlineAlert>
+					</EmptyState>
 				)}
 				{workspaceListEmpty && !sessionsLoading && !sessionsError && hasWorkspaceFilter && (
 					<div className="mx-4 my-7 text-center text-[13px] leading-[1.4] text-faint">
