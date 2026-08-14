@@ -22,8 +22,10 @@ import { personLensFilter, setFilter } from "../lib/sidebar-filter";
 import { presenceState, StatusDot, useTeamPresence } from "./TeamPresence";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
 import { EmptyState } from "../ui/state";
+import { Button } from "../ui/button";
+import { Menu } from "../ui/menu";
 import { cn } from "../ui/cn";
-import { IconFeed, IconPeople } from "./icons";
+import { IconCheck, IconFeed, IconPeople, IconRepo } from "./icons";
 import {
 	PEOPLE_CHIP,
 	PEOPLE_CHIP_GLYPH,
@@ -91,6 +93,10 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 	const currentUser = useCurrentUser();
 	const team = useTeamPresence({ sessions, teamViewing, currentUser });
 	const [scope, setScope] = useState<Scope>({ kind: "everyone" });
+	// The other axis: which repo shipped it. Unlike the person scope this is
+	// the page's own filter and touches nothing else, because a repo is not
+	// something the sidebar can be turned to.
+	const [repo, setRepo] = useState("all");
 
 	// You first, then the team in the order `useTeamPresence` already sorted
 	// them: working, then online, then whoever moved most recently.
@@ -149,7 +155,15 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 	const merged = buildWorktreeRows([...prs.values()], sessions).filter(
 		(row) => row.state === "MERGED",
 	);
-	const shipped = buildFeedRows(merged, commits).filter((row) => inScope(row.person));
+	// The repo list comes from everything shipped, not from what the current
+	// scopes leave: a repo has to stay pickable while you are looking at a
+	// person who has not touched it, or the control drops the option you were
+	// about to use.
+	const allShipped = buildFeedRows(merged, commits);
+	const repoOptions = [...new Set(allShipped.map((row) => row.repo).filter(Boolean))].sort();
+	const shipped = allShipped.filter(
+		(row) => inScope(row.person) && (repo === "all" || row.repo === repo),
+	);
 	const groups = new Map<string, FeedRow[]>();
 	for (const row of shipped.slice(0, FEED_LIMIT)) {
 		const label = dateGroup(row.shippedAt);
@@ -218,20 +232,74 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 					<EmptyState icon={<IconFeed size={22} />} title="Nothing yet">
 						Work shows up here as the team ships it.
 					</EmptyState>
-				) : days.length === 0 ? (
-					// The heading stays rather than disappearing: a picked teammate with
-					// nothing shipped is an answer, and a page that empties itself as you
-					// click faces reads as a bug.
-					<EmptyState title="Nothing shipped yet">
-						{scopeName
-							? `${scopeName} hasn't shipped anything recently.`
-							: "Merged pull requests and commits show up here."}
-					</EmptyState>
 				) : (
 					<>
-						<h3 className={PEOPLE_SECTION_LABEL}>
-							{scopeName ? `${scopeName} shipped` : "Shipped"}
-						</h3>
+						{/* The list's own header: what it is on the left, the second
+						    axis on the right. The repo filter belongs here rather than
+						    among the faces because it narrows the list rather than
+						    changing whose sidebar you are in, and it has to stay on
+						    screen when a pick empties the list, or the only way back
+						    is gone. */}
+						<div className="mb-2 flex min-h-[30px] items-center justify-between gap-3">
+							<h3 className={cn(PEOPLE_SECTION_LABEL, "mb-0")}>
+								{scopeName ? `${scopeName} shipped` : "Shipped"}
+							</h3>
+							{repoOptions.length > 1 && (
+								<Menu.Root>
+									<Menu.Trigger
+										render={
+											<Button variant="ghost" size="sm" icon={<IconRepo size={18} />} caret>
+												<span className="max-w-[150px] truncate">
+													{repo === "all" ? "In all repos" : `In ${repoLabel(repo)}`}
+												</span>
+											</Button>
+										}
+									/>
+									<Menu.Popup align="end" className="min-w-[200px]">
+										<Menu.RadioGroup
+											value={repo}
+											onValueChange={(value) => setRepo(String(value))}
+										>
+											<Menu.RadioItem value="all" closeOnClick>
+												{/* Sized to the tiles below so every label shares one edge. */}
+												<span className="size-[18px] shrink-0" />
+												<span className="min-w-0 flex-1 truncate">All repos</span>
+												{repo === "all" && (
+													<IconCheck className="shrink-0 text-accent" size={17} />
+												)}
+											</Menu.RadioItem>
+											{repoOptions.map((name) => (
+												<Menu.RadioItem key={name} value={name} closeOnClick>
+													<RepoTile name={name} size={18} />
+													<span className="min-w-0 flex-1 truncate">
+														{repoLabel(name)}
+													</span>
+													{repo === name && (
+														<IconCheck className="shrink-0 text-accent" size={17} />
+													)}
+												</Menu.RadioItem>
+											))}
+										</Menu.RadioGroup>
+									</Menu.Popup>
+								</Menu.Root>
+							)}
+						</div>
+						{days.length === 0 && (
+							// A picked teammate or repo with nothing shipped is an answer,
+							// so the header stays and the sentence names the filter that
+							// emptied it. Both are on screen, so a sentence that names
+							// neither reads as "there is nothing", which is the one thing
+							// it does not mean.
+							<EmptyState title="Nothing shipped yet">
+								{scopeName && repo !== "all"
+									? `${scopeName} hasn't shipped anything in ${repoLabel(repo)} recently.`
+									: scopeName
+										? `${scopeName} hasn't shipped anything recently.`
+										: repo !== "all"
+											? `Nothing has shipped in ${repoLabel(repo)} recently.`
+											: "Merged pull requests and commits show up here."}
+							</EmptyState>
+						)}
 						<div className={PR_LIST}>
 							{days.map(([label, rows]) => (
 								<div key={label} className="mb-4">
