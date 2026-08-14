@@ -279,6 +279,15 @@ function PrBarButton({
 			className={cn(
 				"inline-flex min-h-[30px] items-center justify-center gap-1.5 rounded-control border px-2.5 py-[5px] text-[13px] leading-none font-semibold whitespace-nowrap smooth-shadow-sm transition-[background-color,border-color,color,filter,transform] duration-150 ease-in-out hover:brightness-[1.08] active:scale-[0.98] active:brightness-[0.98] focus-visible:outline-2 focus-visible:outline-[var(--accent-ink)] focus-visible:outline-offset-2 disabled:cursor-default disabled:opacity-60 disabled:shadow-none",
 				tones[tone],
+				// A leading glyph carries its own margin: the icon set draws in a
+				// 4.75–19.25 span of a 24 grid, so an 18px box holds ~3.5px of
+				// empty on each side. Equal padding therefore lands the ink 3.5px
+				// deeper on the left than the label sits from the right edge, and
+				// the pair reads as pushed. Pay the padding back on the icon side,
+				// and close the inner gap so the two read as one group rather than
+				// two things. Icon-only callers override px themselves, so this
+				// never lands on a lone glyph.
+				icon && "gap-1 pl-[6.5px]",
 				confirm && "outline-2 outline-[color-mix(in_srgb,var(--green)_45%,transparent)] outline-offset-1",
 				className,
 			)}
