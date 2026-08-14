@@ -140,6 +140,23 @@ export function githubLoginToPersonKey(login?: string | null): string | null {
   return githubLoginToPersonKeyFromTeam(login, identity.team);
 }
 
+/**
+ * A commit's git author → the same web user-picker key PRs are attributed
+ * with, so a repo that ships as commits credits the same face as one that
+ * ships as pull requests. The email is the strong signal; the name covers a
+ * teammate committing from a machine whose git email isn't the configured one.
+ * Null for anyone off the roster, including the bot identity.
+ */
+export function personKeyForGitAuthor(
+  name?: string | null,
+  email?: string | null,
+): string | null {
+  const id = gitIdentityFor(email) ?? gitIdentityFor(name);
+  const member = id ? identity.team.find((m) => m.name === id.name) : undefined;
+  if (!member) return null;
+  return member.aliases?.[0]?.toLowerCase() || member.name.split(" ")[0].toLowerCase();
+}
+
 /** Resolve a web-picker person key to the canonical first name used by push
  * subscriptions. This intentionally covers configured members without a git
  * email; receiving notifications should not depend on commit attribution. */

@@ -160,6 +160,13 @@ export async function handlePrRoutes(
 		return Response.json({ prs: person ? await getRecentPrsForPerson(person) : getRecentPrs() });
 	}
 
+	// The same window for repos that ship without pull requests: commits on
+	// their default branch, read from the checkout (see recent-commits.ts).
+	if (path === "/api/recent-commits" && req.method === "GET") {
+		const { getRecentCommits } = await import("../recent-commits");
+		return Response.json({ commits: await getRecentCommits() });
+	}
+
 	// PR details for a session's branch (PR tab). `?repo=<project>` targets an
 	// attached repo's PR; `?repo=&branch=` a linked PR (which may be another
 	// branch of the primary repo); default/primary the session's own branch.

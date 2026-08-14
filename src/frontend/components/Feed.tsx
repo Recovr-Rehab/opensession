@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import type { UnifiedSession } from "../lib/types";
 import { useReviewTeams } from "../lib/people";
-import { fetchRecentPrs, type RecentPr } from "../lib/api";
+import {
+	fetchRecentCommits,
+	fetchRecentPrs,
+	type RecentCommit,
+	type RecentPr,
+} from "../lib/api";
 import {
 	buildWorktreeRows,
 	compactAge,
@@ -9,6 +14,7 @@ import {
 	dateGroup,
 	personLabel,
 } from "../lib/pr-rows";
+import { buildFeedRows, type FeedRow } from "../lib/feed-rows";
 import { PR_FEED_ROW, PR_GROUP_LABEL, PR_LIST } from "../lib/pr-list-classes";
 import { RepoTile, repoLabel } from "./RepoTile";
 import { useCurrentUser } from "./UserPicker";
@@ -114,10 +120,16 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 
 	const [recentPrs, setRecentPrs] = useState<RecentPr[]>([]);
 	const [personPrs, setPersonPrs] = useState<RecentPr[]>([]);
+	// Repos that ship without pull requests — Open Session's own — say what
+	// they shipped in commits instead, and land in the same list.
+	const [commits, setCommits] = useState<RecentCommit[]>([]);
 	useEffect(() => {
 		let active = true;
 		fetchRecentPrs()
 			.then((prs) => active && setRecentPrs(prs))
+			.catch(() => {});
+		fetchRecentCommits()
+			.then((rows) => active && setCommits(rows))
 			.catch(() => {});
 		return () => {
 			active = false;
@@ -149,11 +161,12 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 	const prs = new Map(recentPrs.map((pr) => [pr.url, pr]));
 	for (const pr of personPrs) prs.set(pr.url, pr);
 	const merged = buildWorktreeRows([...prs.values()], sessions).filter(
-		(row) => row.state === "MERGED" && inScope(row.person),
+		(row) => row.state === "MERGED",
 	);
-	const groups = new Map<string, typeof merged>();
-	for (const row of merged.slice(0, FEED_LIMIT)) {
-		const label = dateGroup(row.updatedAt);
+	const shipped = buildFeedRows(merged, commits).filter((row) => inScope(row.person));
+	const groups = new Map<string, FeedRow[]>();
+	for (const row of shipped.slice(0, FEED_LIMIT)) {
+		const label = dateGroup(row.shippedAt);
 		groups.set(label, [...(groups.get(label) || []), row]);
 	}
 	const days = [...groups.entries()];
@@ -255,18 +268,18 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 					</div>
 				)}
 
-				{recentPrs.length === 0 ? (
+				{recentPrs.length === 0 && commits.length === 0 ? (
 					<EmptyState icon={<IconFeed size={22} />} title="Nothing yet">
-						Merged pull requests show up here as the team ships them.
+						Work shows up here as the team ships it.
 					</EmptyState>
 				) : days.length === 0 ? (
 					// The heading stays rather than disappearing: a picked teammate with
-					// nothing merged is an answer, and a page that empties itself as you
+					// nothing shipped is an answer, and a page that empties itself as you
 					// click faces reads as a bug.
-					<EmptyState title="Nothing merged yet">
+					<EmptyState title="Nothing shipped yet">
 						{scopeName
-							? `${scopeName} hasn't merged a pull request recently.`
-							: "Merged pull requests show up here."}
+							? `${scopeName} hasn't shipped anything recently.`
+							: "Merged pull requests and commits show up here."}
 					</EmptyState>
 				) : (
 					<>
@@ -290,7 +303,7 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 														? onSelect(row.session)
 														: row.url && window.open(row.url, "_blank", "noopener")
 												}
-												title={`${repoLabel(row.repo)} · ${row.branch}`}
+												title={`${repoLabel(row.repo)}${row.ref ? ` · ${row.ref}` : ""}`}
 											>
 												{/* Who shipped it, or the repo when the author isn't a
 												    teammate: the column always says where it came from. */}
@@ -308,9 +321,9 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 														<span className="truncate text-body font-medium leading-[1.3] text-fg">
 															{row.title}
 														</span>
-														{row.number && (
+														{row.ref && (
 															<span className="shrink-0 text-meta tabular-nums text-faint">
-																#{row.number}
+																{row.ref}
 															</span>
 														)}
 													</span>
@@ -327,7 +340,7 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 													)}
 												</span>
 												<span className="justify-self-end text-meta tabular-nums text-faint">
-													{compactAge(row.updatedAt)}
+													{compactAge(row.shippedAt)}
 												</span>
 											</button>
 										))}

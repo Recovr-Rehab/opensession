@@ -53,6 +53,27 @@ export async function fetchRecentPrs(person?: string): Promise<RecentPr[]> {
 	return data?.prs || [];
 }
 
+/** One commit on the default branch of a repo that ships without PRs. */
+export interface RecentCommit {
+	repo: string;
+	sha: string;
+	title: string;
+	url?: string;
+	author: string;
+	person: string | null;
+	committedAt: string;
+	additions: number;
+	deletions: number;
+}
+
+/** Recent commits for repos with no pull requests (Open Session's own repo). */
+export async function fetchRecentCommits(): Promise<RecentCommit[]> {
+	const data = await request<{ commits: RecentCommit[] }>("/recent-commits", {
+		label: "Failed to fetch recent commits",
+	});
+	return data?.commits || [];
+}
+
 export async function fetchDiff(
 	sessionId: string,
 ): Promise<import("../types").SessionDiffResponse> {
