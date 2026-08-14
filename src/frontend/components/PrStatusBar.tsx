@@ -301,11 +301,18 @@ function PrBarButton({
 			{/* Centered on the cap band, not on the em box: `text-box` trims the
 			    line box down to cap height and baseline, so the flex centering
 			    lands the ink itself in the middle of the button and beside the
-			    icon. A hand-tuned nudge can only be right for the font it was
-			    measured against, and the strip renders in SF, Inter or Segoe
-			    depending on the platform. Browsers without `text-box` (Firefox)
-			    center the em box, which lands within a pixel of it. */}
-			<span className="[text-box:trim-both_cap_alphabetic]">{children}</span>
+			    icon, whatever font the platform picks. Browsers without
+			    `text-box` (Firefox) center the em box, which lands within a pixel
+			    of it.
+
+			    The half pixel on top is deliberate and is the only part chosen by
+			    eye: a word carries more mass under its cap band than over it, so
+			    the geometric center reads a touch high. It settles the label
+			    without going back to a nudge that has to carry the whole
+			    correction. */}
+			<span className="translate-y-[0.5px] [text-box:trim-both_cap_alphabetic]">
+				{children}
+			</span>
 		</button>
 	);
 }
@@ -352,8 +359,9 @@ function PrNumberChip({
 						/>
 					}
 				>
-					{/* Cap-band centered, like the action button beside it. */}
-					<span className="[text-box:trim-both_cap_alphabetic]">
+					{/* Cap band plus the same half pixel as the action button beside
+					    it, so the pair reads level. */}
+					<span className="translate-y-[0.5px] [text-box:trim-both_cap_alphabetic]">
 						#{pr.number}
 					</span>
 				</ContextMenu.Trigger>
