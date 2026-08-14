@@ -599,7 +599,7 @@ export function Analytics() {
 								value={derived.hasCost ? fmtUsd(derived.costUsd) : "–"}
 								sub={
 									derived.hasCost
-										? `at API list price · ${fmtInt(derived.requests)} model requests`
+										? `at list price · ${fmt(derived.requests)} model requests`
 										: "no priced requests in range"
 								}
 							/>
