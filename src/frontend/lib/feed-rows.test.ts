@@ -53,6 +53,25 @@ describe("buildFeedRows", () => {
 		expect(row.session).toBe(session);
 	});
 
+	it("gives a teammate a face and an automation its name", () => {
+		const isTeammate = (key: string) => key === "kent";
+		const [teammate] = buildFeedRows([pr({ person: "kent" })], [], isTeammate);
+		expect(teammate.owner).toEqual({ person: "kent", label: "Kent" });
+
+		// An automation owns its own sessions, so the field holds its name.
+		const [auto] = buildFeedRows([pr({ person: "plain ticket triage" })], [], isTeammate);
+		expect(auto.owner).toEqual({ person: null, label: "Plain ticket triage" });
+	});
+
+	it("falls back to the recorded author, and to nothing when there is none", () => {
+		const isTeammate = () => false;
+		const [signed] = buildFeedRows([], [commit({ person: null, author: "SEO Sweep" })], isTeammate);
+		expect(signed.owner).toEqual({ person: null, label: "SEO Sweep" });
+
+		const [unsigned] = buildFeedRows([], [commit({ person: null, author: "" })], isTeammate);
+		expect(unsigned.owner).toBeNull();
+	});
+
 	it("keys a commit by repo and sha, so two repos can't collide", () => {
 		const rows = buildFeedRows([], [commit(), commit({ repo: "other" })]);
 		expect(new Set(rows.map((row) => row.key)).size).toBe(2);

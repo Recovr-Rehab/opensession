@@ -47,19 +47,38 @@ export function shortSha(sha: string): string {
 }
 
 /**
- * Resolve a row's owner. A teammate wins; otherwise the recorded author is
- * used as it stands, because an unattended run signs its own name (an
- * automation, the review agent). Null only when nothing was recorded, which is
- * how work from before commits carried a name still reads.
+ * Resolve a row's owner.
+ *
+ * A row's `person` is whoever owns the session behind it, and that is not
+ * always a teammate: an automation owns its own sessions, so the field holds
+ * the automation's name. Checking it against the roster is what keeps an
+ * automation from wearing a face and reading as a colleague you could ask.
+ * Its name is still the best label it has, so it keeps it.
+ *
+ * Failing that, the recorded author stands: an unattended run signs its own
+ * name. Null only when nothing was recorded at all, which is how work from
+ * before commits carried a name still reads.
  */
-export function feedOwner(person: string | null, author?: string | null): FeedOwner | null {
-	if (person) return { person, label: personLabel(person) };
+export function feedOwner(
+	person: string | null,
+	author?: string | null,
+	isTeammate?: (key: string) => boolean,
+): FeedOwner | null {
+	if (person) {
+		const label = personLabel(person);
+		if (!isTeammate || isTeammate(person)) return { person, label };
+		return { person: null, label };
+	}
 	const label = (author || "").trim();
 	return label ? { person: null, label } : null;
 }
 
 /** Merged PRs and commits in one list, newest first. */
-export function buildFeedRows(prRows: WorktreeRow[], commits: RecentCommit[]): FeedRow[] {
+export function buildFeedRows(
+	prRows: WorktreeRow[],
+	commits: RecentCommit[],
+	isTeammate?: (key: string) => boolean,
+): FeedRow[] {
 	const rows: FeedRow[] = [
 		...prRows.map((row) => ({
 			key: row.key,
@@ -67,7 +86,7 @@ export function buildFeedRows(prRows: WorktreeRow[], commits: RecentCommit[]): F
 			title: row.title,
 			repo: row.repo,
 			person: row.person,
-			owner: feedOwner(row.person, row.author),
+			owner: feedOwner(row.person, row.author, isTeammate),
 			url: row.url,
 			...(row.number ? { ref: `#${row.number}` } : {}),
 			additions: row.additions,
@@ -81,7 +100,7 @@ export function buildFeedRows(prRows: WorktreeRow[], commits: RecentCommit[]): F
 			title: commit.title,
 			repo: commit.repo,
 			person: commit.person,
-			owner: feedOwner(commit.person, commit.author),
+			owner: feedOwner(commit.person, commit.author, isTeammate),
 			url: commit.url,
 			ref: shortSha(commit.sha),
 			additions: commit.additions,

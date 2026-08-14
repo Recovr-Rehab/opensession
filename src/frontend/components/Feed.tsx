@@ -17,6 +17,7 @@ import { buildFeedRows, type FeedOwner, type FeedRow } from "../lib/feed-rows";
 import { PR_FEED_ROW, PR_GROUP_LABEL, PR_LIST } from "../lib/pr-list-classes";
 import { RepoTile, repoLabel } from "./RepoTile";
 import { useCurrentUser } from "./UserPicker";
+import { usePeople } from "../lib/people";
 import { UserAvatar } from "./UserAvatar";
 import { personLensFilter, setFilter } from "../lib/sidebar-filter";
 import { presenceState, StatusDot, useTeamPresence } from "./TeamPresence";
@@ -119,6 +120,7 @@ function FeedOwnerMark({ owner }: { owner: FeedOwner }) {
 export function Feed({ sessions, teamViewing, onSelect }: Props) {
 	const currentUser = useCurrentUser();
 	const team = useTeamPresence({ sessions, teamViewing, currentUser });
+	const people = usePeople();
 	const [scope, setScope] = useState<Scope>({ kind: "everyone" });
 	// The other axis: which repo shipped it. Unlike the person scope this is
 	// the page's own filter and touches nothing else, because a repo is not
@@ -204,7 +206,11 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 	// scopes leave: a repo has to stay pickable while you are looking at a
 	// person who has not touched it, or the control drops the option you were
 	// about to use.
-	const allShipped = buildFeedRows(merged, commits);
+	// A row's person is whoever owns the session behind it, which is an
+	// automation as often as a teammate. The roster decides which, so an
+	// automation is named rather than given a face.
+	const teammates = new Set(people.map((p) => p.name.toLowerCase()));
+	const allShipped = buildFeedRows(merged, commits, (key) => teammates.has(key));
 	const repoOptions = [...new Set(allShipped.map((row) => row.repo).filter(Boolean))].sort();
 	const shipped = allShipped.filter(
 		(row) => inScope(row.person) && (repo === "all" || row.repo === repo),
