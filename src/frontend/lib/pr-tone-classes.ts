@@ -139,7 +139,6 @@ export const PR_STATE_TEXT: Record<PrTone, string> = {
 };
 
 export const PR_BAR_ERROR = "max-w-[180px] truncate text-meta text-red";
-export const PR_BAR_PROMPTED = "whitespace-nowrap text-label text-dim";
 
 /** Compact chip + primary action in the session header, shown while the
  *  workspace panel is closed. */
@@ -148,8 +147,6 @@ export const PR_HEAD =
 /** The header's error/prompted lines are tighter than the strip's — the header
  *  has a title to leave room for. */
 export const PR_HEAD_ERROR = "max-w-[120px] truncate text-meta text-red";
-export const PR_HEAD_PROMPTED =
-	"max-w-[180px] truncate whitespace-nowrap text-label text-dim";
 /** Sized to the header chip so the pair reads as one control. */
 export const PR_HEAD_BTN = "min-h-[32px] px-[11px]";
 

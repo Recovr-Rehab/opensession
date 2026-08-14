@@ -33,20 +33,19 @@ import {
 	PR_BAR_CHECKING,
 	PR_BAR_ERROR,
 	PR_BAR_IN_CARD,
-	PR_BAR_PROMPTED,
 	PR_BAR_STACK,
 	PR_BAR_STATE,
 	PR_CHIP_SEAM,
 	PR_HEAD,
 	PR_HEAD_BTN,
 	PR_HEAD_ERROR,
-	PR_HEAD_PROMPTED,
 	PR_SIB_DOT,
 	PR_SIB_DOT_BG,
 	PR_STATE_TEXT,
 } from "../lib/pr-tone-classes";
 import { Tooltip } from "../ui/tooltip";
 import { ContextMenu, Menu } from "../ui/menu";
+import { Spinner } from "../ui/spinner";
 import { cn } from "../ui/cn";
 import { isApple } from "../lib/platform";
 import { PrChecksPopover } from "./PrChecksPopover";
@@ -691,14 +690,24 @@ export function PrStatusBar({
 	// chip and the action read as a matched pair.
 	const actionBtn = variant === "header" ? PR_HEAD_BTN : "";
 	function renderAction(): React.ReactNode {
-		if (prompted)
+		if (prompted) {
+			const tone: PrBarButtonProps["tone"] =
+				headline.key === "conflicts"
+					? "red"
+					: headline.key === "no-pr"
+						? "secondary"
+						: "status-red";
 			return (
-				<span
-					className={variant === "header" ? PR_HEAD_PROMPTED : PR_BAR_PROMPTED}
+				<PrBarButton
+					className={actionBtn}
+					tone={tone}
+					icon={<Spinner size="sm" />}
+					disabled
 				>
 					{prompted}
-				</span>
+				</PrBarButton>
 			);
+		}
 		switch (headline.key) {
 			case "merged":
 				// Don't offer to archive a session that still has open PRs in its
@@ -761,7 +770,7 @@ export function PrStatusBar({
 						tone="red"
 						onClick={() =>
 							promptSession(
-								"Resolving conflicts…",
+								"Resolving…",
 								`The PR has merge conflicts with ${pr?.baseRefName || git?.baseBranch || "main"}. Rebase this branch on the latest origin/${pr?.baseRefName || git?.baseBranch || "main"}, resolve the conflicts, and push.`,
 							)
 						}
