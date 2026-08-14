@@ -24,7 +24,6 @@ import {
   IconBox,
   IconFolderPlus,
   IconMessage,
-  IconPencil,
   IconStack,
 } from "./icons";
 import type { WSServerMessage } from "../lib/types";
@@ -90,25 +89,6 @@ interface RepoOption {
 const LAST_REPO_KEY = "opensession-new-session-repo";
 const ADD_REPO_VALUE = "__add_repo__";
 
-
-/* The Code/Ask switch — the palette's first decision, and a switch rather
-   than a menu because it has exactly two answers and you flip between them
-   while writing the prompt. Both labels stay visible: a dropdown showing only
-   the current mode makes you open it to learn what the other one is.
-
-   Same shape as the range control in Analytics (a `p-0.5` bordered group of
-   `rounded-control` cells) — that is the house pattern for a segmented
-   control, and it still has no primitive of its own. Ask's active cell is
-   green rather than neutral, tying it to the card tint it turns on and to the
-   composer's Ask pill, so one mode reads the same in all three places. */
-const SWITCH_GROUP =
-	"flex shrink-0 items-center gap-0.5 rounded-md border border-line bg-panel/70 p-0.5";
-const SWITCH_ITEM =
-	"inline-flex cursor-pointer items-center gap-1.5 rounded-control border-0 px-2 py-[3px] text-control-label font-medium transition-colors disabled:cursor-default disabled:opacity-55";
-const SWITCH_ITEM_ON = "bg-active text-fg";
-const SWITCH_ITEM_ON_ASK =
-	"bg-[color-mix(in_srgb,var(--green)_18%,transparent)] text-green";
-const SWITCH_ITEM_OFF = "bg-transparent text-dim hover:text-fg";
 
 /* ── Palette chrome ───────────────────────────────────────────────────────
    Every class is written out in full: Tailwind scans source TEXT, so a name
@@ -183,6 +163,18 @@ const FOOTER =
 const FOOTER_LEFT = "flex min-w-0 items-center gap-1.5 max-[560px]:gap-1";
 const FOOTER_RIGHT = "flex min-w-0 items-center gap-1.5 max-[560px]:gap-1 phone:ml-auto";
 const FOOTER_ICON_BTN = cn(paletteIconBtn, "shrink-0 max-[560px]:w-9");
+/** Ask mode's toggle. Off, it is one of the footer's quiet icon tools. On, it
+ *  wears the same green marker the session composer's toolbar shows for the
+ *  same mode, so one mode reads identically in both places — and it names
+ *  itself, because the mode governs the whole session and an unlabelled glyph
+ *  would leave read-only running silently.
+ *
+ *  A complete string rather than a variant stacked on FOOTER_ICON_BTN: the two
+ *  states differ in width, height and colour, and `max-[560px]:w-9` from the
+ *  icon button would crush the labelled chip on phones. 32px tall, the size
+ *  the icon buttons' hover wash paints, so the row keeps one rhythm. */
+const ASK_BTN_ON =
+	"inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-control px-2.5 text-[12px] font-medium transition-colors bg-[color-mix(in_srgb,var(--green)_18%,transparent)] text-green hover:bg-[color-mix(in_srgb,var(--green)_26%,transparent)] disabled:cursor-default disabled:opacity-50";
 /** Ask mode paints the whole card, not just its toggle — the same thing the
  *  session composer does for ask and for note mode, because the mode governs
  *  everything you are about to type rather than one control in the corner.
@@ -282,8 +274,12 @@ function readPrefill() {
   const repoParam = params.get("repo") ?? params.get("project");
   const mode = params.get("mode") === "ask" ? ("ask" as const) : ("code" as const);
   // `?repo=none` is honored in either mode: Ask with no repo reads nothing,
-  // Code with no repo is a scratch session.
-  const repo = repoParam || lastSelectedRepo() || filteredRepo() || "";
+  // Code with no repo is a scratch session. Ask defaults to no repo, matching
+  // the toggle — otherwise an Ask deep link would silently inherit whichever
+  // repo the last code session used.
+  const repo =
+    repoParam ||
+    (mode === "ask" ? NO_REPO : lastSelectedRepo() || filteredRepo() || "");
   return {
     mode,
     prompt: params.get("prompt") || "",
@@ -310,14 +306,14 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     (window as { os1?: { desktop?: boolean } }).os1?.desktop === true ||
     navigator.userAgent.includes("Electron/");
   const [prefill] = useState(readPrefill);
-  // What the session may do, and nothing else — the two-state switcher. The
-  // repo below it is a separate axis, so Scratch is not a third value here:
-  // it is what Code with no repo already is (same write access, same
-  // repo-less scratch dir), and `mode` below derives it rather than asking
-  // anyone to pick it.
-  const [permission, setPermission] = useState<"ask" | "code">(
+  // What the session may do, and nothing else — the footer's Ask toggle. The
+  // repo is a separate axis, so Scratch is not a third value here: it is what
+  // Code with no repo already is (same write access, same repo-less scratch
+  // dir), and `mode` below derives it rather than asking anyone to pick it.
+  const [permissionState, setPermissionState] = useState<"ask" | "code">(
     (forceMode || prefill.mode) === "ask" ? "ask" : "code",
   );
+  const permission = forceMode === "ask" ? "ask" : permissionState;
   // The desktop app's local bridge merges local and hosted sessions. Hosted is
   // deliberately the default; local execution is still experimental and must
   // be selected explicitly for each palette lifetime.
@@ -334,6 +330,30 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   const [repo, setRepo] = useState(
     forceMode === "scratch" ? NO_REPO : forceRepo || prefill.repo,
   );
+  /**
+   * Flipping Ask moves the repo with it: Ask means "no repo" unless you go and
+   * pick one, and Code goes back to the repo you were last working in. Most
+   * asking is not about a checkout, and the pair that stayed pointed at a repo
+   * you had chosen for a code session read as Ask silently inheriting it.
+   *
+   * A palette scoped to a workspace (`forceRepo`) is exempt: there the repo is
+   * the whole point of the create, so Ask stays on it.
+   */
+  function togglePermission() {
+    const next = permission === "ask" ? "code" : "ask";
+    setPermissionState(next);
+    if (forceRepo) return;
+    if (next === "ask") setRepo(NO_REPO);
+    else if (repo === NO_REPO)
+      setRepo(
+        lastSelectedRepo() ||
+          configuredDefaultRepo ||
+          repos.find((p) => p.default)?.id ||
+          repos[0]?.id ||
+          "",
+      );
+  }
+
   // The three modes the server stores, from the two axes above. Ask reads (a
   // repo, or nothing); Code writes, on a branch when it has a repo and in a
   // plain scratch dir when it doesn't.
@@ -924,40 +944,8 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
             with no repo is a scratch dir. On phones the create-from picker
             stays hidden until the footer's options toggle opens it. */}
         <div className={cn(HEADER, edges.top && EDGE_DIVIDER)}>
-          <div className="flex min-w-0 items-center gap-2">
-          <div
-            className={SWITCH_GROUP}
-            role="group"
-            aria-label="Mode"
-            title="What this session may do"
-          >
-            {(["code", "ask"] as const).map((value) => (
-              <button
-                key={value}
-                type="button"
-                className={cn(
-                  SWITCH_ITEM,
-                  permission === value
-                    ? value === "ask"
-                      ? SWITCH_ITEM_ON_ASK
-                      : SWITCH_ITEM_ON
-                    : SWITCH_ITEM_OFF,
-                )}
-                aria-pressed={permission === value}
-                disabled={creating || !!forceMode}
-                onClick={() => setPermission(value)}
-              >
-                {value === "ask" ? <IconEye size={15} /> : <IconPencil size={15} />}
-                {value === "ask" ? "Ask" : "Code"}
-              </button>
-            ))}
-          </div>
-
           <PaletteSelect
-            // The repo is the picker that gives: the switch beside it never
-            // shrinks (its two labels are short and fixed), so on a narrow
-            // phone the repo name truncates rather than the pair overlapping.
-            className={cn(TRIGGER_STRONG, "max-w-none")}
+            className={TRIGGER_STRONG}
             title="Repository"
             value={repo}
             options={[
@@ -966,9 +954,9 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 label: p.label,
                 icon: <RepoTile name={p.id} />,
               })),
-              // Both modes can run without a repo, and the switch above says
-              // which one you get: Ask reads nothing, Code writes in a plain
-              // scratch dir with no branch or PR flow.
+              // Either mode can run without a repo, and the Ask toggle in the
+              // footer says which one you get: Ask reads nothing, Code writes
+              // in a plain scratch dir with no branch or PR flow.
               {
                 value: NO_REPO,
                 label: "No repo",
@@ -1012,7 +1000,6 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
               <IconChevronDown className={CHEVRON} size={22} />
             )}
           </PaletteSelect>
-          </div>
 
           {mode === "code" && (
           <PaletteSelect
@@ -1154,11 +1141,34 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 e.target.value = "";
               }}
             />
-            {/* The mode used to live here as an Ask toggle, with Scratch
-                disguised as a repo. Both are now the header's first picker:
-                the mode governs the whole session, so it reads as the
-                palette's title rather than as one tool among the paperclip
-                and the overflow menu. */}
+            {/* Ask sits with the tools rather than in the header: Code is what
+                you are almost always doing, so the header should show what you
+                are working on (the repo, the branch) and this is the one
+                switch that changes it. Off it is a quiet icon; on it names
+                itself and wears the green the card and the composer's Ask pill
+                also wear, because read-only running silently is the one state
+                worth being loud about. */}
+            {!forceMode && (
+              <Tooltip
+                label={
+                  permission === "ask"
+                    ? "Ask mode on · reads, changes nothing. Click to write code instead"
+                    : "Ask mode · read-only, and no repo unless you pick one"
+                }
+              >
+                <button
+                  type="button"
+                  className={permission === "ask" ? ASK_BTN_ON : FOOTER_ICON_BTN}
+                  onClick={togglePermission}
+                  disabled={creating}
+                  aria-pressed={permission === "ask"}
+                  aria-label="Ask mode"
+                >
+                  <IconEye size={permission === "ask" ? 14 : 20} />
+                  {permission === "ask" && "Ask"}
+                </button>
+              </Tooltip>
+            )}
             {/* Rarely changed execution settings stay one level behind a single
                 overflow button. Their current values remain visible in the
                 submenu rows, while attachment stays one tap away. */}
