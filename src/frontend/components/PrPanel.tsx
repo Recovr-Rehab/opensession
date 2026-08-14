@@ -56,7 +56,6 @@ import { Textarea } from "../ui/input";
 import {
   IconBranches,
   IconCheck,
-  IconChevronRight,
   IconDiffSplit,
   IconDiffUnified,
   IconDotsHorizontal,
@@ -71,6 +70,7 @@ import { Modal, useEnterOnMount } from "../ui/modal";
 import { Tooltip } from "../ui/tooltip";
 
 import { checkClass, isDeployment, summarize } from "../lib/pr-status-derive";
+import { prStatusMark } from "../lib/pr-status";
 import {
   PR_REPO_TAB_X,
   PR_REPO_TABS,
@@ -1222,13 +1222,13 @@ export function PrPanel({
       : pr.state === "MERGED"
         ? "Merged"
         : "Closed";
-  const stateBadgeClass = pr.isDraft
-    ? "bg-blue-soft text-blue"
-    : pr.state === "OPEN"
-      ? "bg-green-soft text-green"
-      : pr.state === "MERGED"
-        ? "bg-[color-mix(in_srgb,var(--purple)_12%,transparent)] text-purple"
-        : "bg-red-soft text-red";
+  // The state reads in the app's own PR language rather than a badge of its
+  // own: the glyph carries the colour (prStatusMark, the same green/yellow/
+  // red/purple the sidebar row and the workspace rows paint) and the word
+  // beside it stays coarse. That way the header agrees with the sidebar entry
+  // for this PR, including the states a badge cannot show at all: a conflict,
+  // or checks still running.
+  const statusMark = prStatusMark({ ...pr, checks: checkSummary });
   const canMergeAfterReview =
     pr.state === "OPEN" &&
     !pr.isDraft &&
@@ -1336,9 +1336,21 @@ export function PrPanel({
         className={`min-h-0 flex-1 overflow-y-auto bg-surface [--review-file-header-top:52px] ${reviewing ? "pb-24 phone:pb-36" : "pb-4"}`}
       >
         <header className="flex h-[52px] shrink-0 items-center gap-2 px-6 phone:px-3">
-          <span className={`inline-flex h-6 shrink-0 items-center rounded-control px-2 text-meta font-semibold tracking-[0.04em] uppercase ${stateBadgeClass}`}>
-            {stateLabel}
-          </span>
+          {/* State, in the app's own PR language: the glyph carries the colour
+              and the word stays quiet beside it. It is its own object, so it
+              gets more air than the pieces of the identity line it precedes. */}
+          <Tooltip label={statusMark.label}>
+            <span className="mr-2 flex shrink-0 items-center gap-1.5">
+              {/* Only the glyph is toned. The word stays coarse: "Open" in the
+                  red of a conflict would read as a contradiction. */}
+              <span className={`flex ${statusMark.className}`}>
+                <PrStateIcon state={pr.state} isDraft={pr.isDraft} />
+              </span>
+              {!headerCompact && (
+                <span className="text-label font-medium text-dim">{stateLabel}</span>
+              )}
+            </span>
+          </Tooltip>
           <UserAvatar
             name={pr.author}
             login={provider.key === "github" ? pr.author : null}
@@ -1347,25 +1359,32 @@ export function PrPanel({
             title={pr.author}
           />
           {!headerCompact && (
-            <>
-              <span className="max-w-24 shrink-0 truncate text-label font-medium text-dim">
-                {pr.author}
-              </span>
-              <IconChevronRight className="shrink-0 text-faint" size={14} />
-            </>
+            <span className="max-w-24 shrink-0 truncate text-label font-medium text-dim">
+              {pr.author}
+            </span>
           )}
           {/* Title only. Counts, commits and the sessions on this PR are the
-              rail's job, so the bar stays one line of identity. */}
-          <a
-            className="flex min-w-0 flex-1 items-baseline gap-1 text-item-title font-semibold leading-[1.2] tracking-[-0.01em] text-fg no-underline hover:text-link"
-            href={pr.url}
-            target="_blank"
-            rel="noopener"
+              rail's job, so the bar stays one line of identity.
+
+              The title is the name of the page you are already on, so it is
+              inert. The outbound jump rides the number, which is the reference
+              everywhere else in the app. */}
+          <h1
+            className="flex min-w-0 flex-1 items-baseline gap-1 text-item-title font-semibold leading-[1.2] tracking-[-0.01em] text-fg"
             title={`${pr.title} #${pr.number}`}
           >
             <span className="truncate">{pr.title}</span>
-            <span className="shrink-0 font-normal text-faint">#{pr.number}</span>
-          </a>
+            <Tooltip label={`Open on ${provider.name}`}>
+              <a
+                className="shrink-0 font-normal text-faint no-underline hover:text-link"
+                href={pr.url}
+                target="_blank"
+                rel="noopener"
+              >
+                #{pr.number}
+              </a>
+            </Tooltip>
+          </h1>
           {pr.staging?.url && (
             <Tooltip label="Open the preview environment">
               <a
@@ -1384,8 +1403,13 @@ export function PrPanel({
             </Tooltip>
           )}
           {pr.state === "OPEN" && !pr.isDraft && caps.reviewComments && !reviewing && (
+            /* The one call to action on this canvas, so it takes the accent
+               plate. Green is the app's affirmative tone (approve, merge) and
+               the state glyph beside it is already wearing it; a green Review
+               button next to a green Open glyph made two different things
+               claim the same colour. */
             <Button
-              variant="success"
+              variant="primary"
               size="sm"
               className={pr.staging?.url ? undefined : "ml-auto"}
               onClick={() => {
@@ -1461,7 +1485,15 @@ export function PrPanel({
               >
                 {label}
                 {count !== undefined && (
-                  <span className="text-meta font-semibold text-faint">{count}</span>
+                  /* The counter Reviews puts on its tabs, so the two PR
+                     surfaces count the same way. */
+                  <span
+                    className={`min-w-5 rounded-full px-[7px] py-px text-center text-meta font-semibold tabular-nums ${
+                      page === key ? "bg-accent-soft text-accent" : "bg-active text-dim"
+                    }`}
+                  >
+                    {count}
+                  </span>
                 )}
               </button>
             ))}
@@ -1473,7 +1505,6 @@ export function PrPanel({
                 <Button
                   variant="default"
                   size="xs"
-                  className="min-h-0 px-2 py-0.5 text-meta"
                   onClick={tellAgentAboutEdits}
                   title="Sends a note listing your hand-edits so they get committed and pushed"
                 >
@@ -1487,8 +1518,11 @@ export function PrPanel({
                   in normal ink. Unified vs split and wrapping are how the diff
                   is DRAWN: settings a reader picks once, which is why they sit
                   behind a glyph rather than under a trigger labelled "All
-                  changes", where nobody would look for them. They drop out
-                  under the flow lens, which draws no diff. */}
+                  changes", where nobody would look for them. The glyph is a
+                  ghost for the same reason the ⋯ menu beside it is: a flyout of
+                  settings is chrome, and two plates side by side read as a
+                  toolbar. They drop out under the flow lens, which draws no
+                  diff. */}
               <Menu.Root>
                 <Tooltip label="Change the view">
                   <Menu.Trigger
@@ -1548,9 +1582,9 @@ export function PrPanel({
                     <Menu.Trigger
                       render={
                         <Button
-                          variant="default"
+                          variant="ghost"
                           size="sm"
-                          className="w-auto px-2 text-fg"
+                          className="w-auto px-2"
                           aria-label="Diff display"
                           caret
                           icon={
