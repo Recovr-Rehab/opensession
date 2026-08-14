@@ -13,10 +13,9 @@ import { cn } from "./cn";
  *
  *  - icon ↔ label gap is 4px, with 20px iconic glyphs (their `w-5 h-5`
  *    convention; matches our icons.tsx size-20 "inline/meta" step);
- *  - when an icon LEADS a label, pull the icon-side padding in 2px
- *    (Tella: px-3 → pl-2.5), and 4px on the large tier, so the pair reads
- *    optically balanced against a text-only button — the glyph's built-in
- *    whitespace otherwise makes the icon side look padded out;
+ *  - when an icon LEADS a label, pull the icon-side padding in, so the pair
+ *    reads optically balanced against a text-only button — the glyph's
+ *    built-in whitespace otherwise makes the icon side look padded out;
  *  - dim the leading icon relative to the label (Tella: opacity-50 on
  *    neutral weights, a lighter tint on the primary) — the label stays the
  *    dominant read, the icon is support;
@@ -25,10 +24,22 @@ import { cn } from "./cn";
  *  - press feedback is a whole-button scale tick (Tella: active:scale-97).
  *
  * `caret` is the mirror of `icon` for menu triggers: one trailing chevron,
- * sized off the LABEL rather than the 20px glyph step, with the same 2px
- * padding pull on its own side. Every "label opens a menu" trigger in the app
- * was drawing its own chevron at 14, 16, 17 or 18 — the affordance belongs to
- * the primitive, so the whole family reads as one control.
+ * sized off the LABEL rather than the 20px glyph step, with the same padding
+ * pull on its own side. Every "label opens a menu" trigger in the app was
+ * drawing its own chevron at 14, 16, 17 or 18 — the affordance belongs to the
+ * primitive, so the whole family reads as one control.
+ *
+ * How big the pull and the gap are is measured, not chosen. Padding is a box
+ * measurement and the eye reads ink, so the two disagree by whatever
+ * whitespace the glyph carries: a 20px iconic-pro icon sits about 5px inside
+ * its own box, while a label's first letter starts about 1.3px inside its
+ * text box. Rendered, `px-3` with a 2px pull put the icon 15.0px from the
+ * edge against the label's 13.3px, and left only 7.5px of air between icon
+ * and label — so the icon read as pushed off the edge and glued to the word.
+ * Pulling 4px on the glyph's side lands both outer insets on ~13px, and
+ * `gap-1.5` opens the inner air to ~9.5px, under the outer inset so the pair
+ * still binds. The chevron carries more whitespace still (~6.5px), which is
+ * why it keeps `gap-1` and reaches the same ~9.8px optical gap.
  */
 
 type Variant =
@@ -61,22 +72,28 @@ const sizes: Record<Size, string> = {
 	lg: "min-h-9 px-3.5 text-base rounded-control",
 };
 
-// Leading icon + label: shave 2px off the icon side, or 4px at lg where the
-// 20px glyph's whitespace is most apparent (see doc block).
+// Leading icon + label: shave 4px off the icon side, which is the glyph's own
+// whitespace minus the label's side bearing (see doc block).
 const iconLeadPad: Record<Size, string> = {
-	xs: "pl-2",
-	sm: "pl-2",
-	md: "pl-2.5",
+	xs: "pl-1.5",
+	sm: "pl-1.5",
+	md: "pl-2",
 	lg: "pl-2.5",
 };
 
-// Trailing caret + label: the same 2px shave, on the caret's side.
+// Trailing caret + label: the same 4px shave, on the caret's side.
 const caretTrailPad: Record<Size, string> = {
-	xs: "pr-2",
-	sm: "pr-2",
-	md: "pr-2.5",
-	lg: "pr-3",
+	xs: "pr-1.5",
+	sm: "pr-1.5",
+	md: "pr-2",
+	lg: "pr-2.5",
 };
+
+// The air between glyph and label. One gap utility only: a second one on the
+// same element resolves by Tailwind's output order rather than by the order
+// they are written, so the two cases pick a value instead of layering.
+const LEAD_GAP = "gap-1.5";
+const PLAIN_GAP = "gap-1";
 
 // The caret keys off the label, not the 20px icon step: an iconic-pro glyph at
 // 14 draws an arrow about as tall as the cap height of a 12px label, which is
@@ -193,7 +210,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 				type="button"
 				ref={ref}
 				className={cn(
-					"inline-flex items-center justify-center gap-1 border whitespace-nowrap select-none",
+					"inline-flex items-center justify-center border whitespace-nowrap select-none",
+					icon != null && hasLabel ? LEAD_GAP : PLAIN_GAP,
 					// Text utilities carry different stock line heights even though this
 					// button scale pins its own heights. A single tight line box gives
 					// labels the same optical centre as fixed-size icons and chevrons.
