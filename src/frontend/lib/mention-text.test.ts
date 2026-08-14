@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mentionsMe, parseMentions } from "./mention-text";
+import { parseMentions } from "./mention-text";
 import type { Person } from "./people";
 
 const PEOPLE: Person[] = [
@@ -63,18 +63,5 @@ describe("parseMentions", () => {
 		expect(parseMentions("@Kent", []).every((t) => t.kind === "text")).toBe(
 			true,
 		);
-	});
-});
-
-describe("mentionsMe", () => {
-	test("matches the display name and its longer form", () => {
-		expect(mentionsMe("Kent", "Kent")).toBe(true);
-		expect(mentionsMe("Kent", "Kent de Bruin")).toBe(true);
-		expect(mentionsMe("kent", "Kent")).toBe(true);
-	});
-
-	test("does not match a different teammate or an empty identity", () => {
-		expect(mentionsMe("Grant", "Kent")).toBe(false);
-		expect(mentionsMe("Kent", "")).toBe(false);
 	});
 });

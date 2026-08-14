@@ -18,7 +18,7 @@ const flag = (name: string, fallback?: string) => {
 };
 if (!outputArg) {
   console.error(
-    "usage: bun scripts/capture-ui.ts <output.png> [--route /] [--width 1440] [--height 900] [--theme light|dark] [--web]",
+    "usage: bun scripts/capture-ui.ts <output.png> [--route /] [--width 1440] [--height 900] [--theme light|dark] [--web] [--wait 3000]",
   );
   process.exit(2);
 }
@@ -29,6 +29,12 @@ const route = flag("route", "/")!;
 const width = Number(flag("width", "1440"));
 const height = Number(flag("height", "900"));
 const theme = flag("theme", "light");
+// A session route loads its transcript after the app shell, so 3s catches it
+// mid-"Checking sign-in". Give slow routes a longer settle rather than a
+// screenshot of the loading state.
+const settleMs = Number(flag("wait", "3000"));
+if (!Number.isFinite(settleMs) || settleMs < 0)
+  throw new Error("wait must be a non-negative number of milliseconds");
 if (
   !Number.isInteger(width) ||
   !Number.isInteger(height) ||
@@ -104,7 +110,7 @@ try {
   });
   await send("Emulation.setDeviceMetricsOverride", viewport);
   await send("Page.navigate", { url: new URL(route, APP).href });
-  await sleep(3_000);
+  await sleep(settleMs);
   await send("Page.bringToFront");
   const probe = await send("Runtime.evaluate", {
     expression: `({

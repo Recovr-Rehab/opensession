@@ -169,6 +169,7 @@ import {
 	receivePins,
 } from "./lib/pins";
 import { receiveMention, receiveMentionsCleared } from "./lib/mentions";
+import { personFilterFor, setFilter } from "./lib/sidebar-filter";
 import { applyTabOrder, saveTabOrder, onTabOrderChanged } from "./lib/tab-order";
 import {
 	clearTabSplit,
@@ -913,6 +914,44 @@ export function App(
 		return () => {
 			document.removeEventListener("click", onClick);
 			document.removeEventListener("auxclick", onAuxClick);
+		};
+	}, []);
+
+	// @-mention chips (markdown.ts) are anchors inside dangerouslySetInnerHTML
+	// too, so they get the same treatment: one document-level listener, and a
+	// click puts the sidebar on that person's sessions. Enter/Space as well —
+	// the chip is a role="button", so the keyboard has to reach it.
+	useEffect(() => {
+		const personAt = (e: Event) => {
+			if (e.defaultPrevented) return null;
+			const el = (e.target as HTMLElement | null)?.closest?.(
+				"a.person-chip[data-person]",
+			) as HTMLElement | null;
+			return el?.dataset.person || null;
+		};
+		const show = (person: string) => {
+			setFilter({ person: personFilterFor(person.toLowerCase(), getCurrentUser()) });
+		};
+		const onClick = (e: MouseEvent) => {
+			if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)
+				return;
+			const person = personAt(e);
+			if (!person) return;
+			e.preventDefault();
+			show(person);
+		};
+		const onKeyDown = (e: KeyboardEvent) => {
+			if (e.key !== "Enter" && e.key !== " ") return;
+			const person = personAt(e);
+			if (!person) return;
+			e.preventDefault();
+			show(person);
+		};
+		document.addEventListener("click", onClick);
+		document.addEventListener("keydown", onKeyDown);
+		return () => {
+			document.removeEventListener("click", onClick);
+			document.removeEventListener("keydown", onKeyDown);
 		};
 	}, []);
 
@@ -4090,7 +4129,6 @@ export function App(
 							<Prs
 								sessions={sessions}
 								workspaces={workspaces}
-								teamViewing={teamViewing}
 								onSelect={(s) => navigate({ view: "session", id: s.id })}
 								onNewSession={() => openPalette()}
 								onShowArchived={refreshArchived}

@@ -243,6 +243,77 @@ export function setSessionTitles(
   mdCache.clear();
 }
 
+// ── @-mentions of teammates ────────────────────────────────────────────────
+// `@Kent` in a prompt or a note is a message to a person, so it renders as
+// that person: their face, their name, and a click that puts the sidebar on
+// their sessions (App.tsx delegates it, like the PR and session chips).
+//
+// Only names on the roster become chips. Prose is full of `@` that means
+// nothing to us — an email address, a handle on another service, `@media` in
+// quoted CSS — and turning those into a person would invent a teammate.
+
+/** Lowercased first name → GitHub login (absent when they have none). */
+let knownPeople = new Map<string, { name: string; github?: string }>();
+
+/** Publish the mentionable roster (lib/people.ts owns fetching it). */
+export function setKnownPeople(
+  people: Iterable<{ name: string; github?: string }>,
+): void {
+  const next = new Map<string, { name: string; github?: string }>();
+  for (const person of people)
+    if (person.name)
+      next.set(person.name.toLowerCase(), {
+        name: person.name,
+        github: person.github,
+      });
+  if (
+    next.size === knownPeople.size &&
+    [...next].every(
+      ([key, p]) => knownPeople.get(key)?.github === p.github,
+    )
+  )
+    return;
+  knownPeople = next;
+  // Chips are baked into the cached HTML, so it has to go when they change.
+  mdCache.clear();
+}
+
+/** A mention starts at an `@` that isn't inside a word or an email address. */
+const PERSON_MENTION_START = /(^|[\s(\[])@([A-Za-z][\w.-]*)/g;
+const PERSON_MENTION_EXACT = /^@([A-Za-z][\w.-]*)/;
+
+/** Trailing punctuation belongs to the sentence, not to the name. */
+function mentionName(typed: string): string {
+	return typed.replace(/[.,;:!?]+$/, "");
+}
+
+/**
+ * Where the next real mention begins, or undefined. This has to resolve the
+ * name against the roster, not just find an `@`: `start` cuts the text token
+ * at the index it reports, and a cut in front of an `@` that turns out to be
+ * nobody hands the following word to the other inline extensions as if it
+ * stood alone — which is how `@report.html` briefly became an asset link.
+ */
+function personMentionStart(src: string): number | undefined {
+	PERSON_MENTION_START.lastIndex = 0;
+	for (let m = PERSON_MENTION_START.exec(src); m; m = PERSON_MENTION_START.exec(src)) {
+		if (knownPeople.has(mentionName(m[2]!).toLowerCase()))
+			return m.index + m[0].indexOf("@");
+	}
+	return undefined;
+}
+
+function personChip(person: { name: string; github?: string }): string {
+  const face = person.github
+    ? `<img class="person-chip-face" src="https://github.com/${attr(person.github)}.png?size=36" alt="" loading="lazy" />`
+    : `<span class="person-chip-face person-chip-initial" aria-hidden="true">${attr(person.name.slice(0, 1).toUpperCase())}</span>`;
+  return (
+    `<a role="button" tabindex="0" class="person-chip" data-person="${attr(person.name)}"` +
+    ` title="Show ${attr(person.name)}'s sidebar">` +
+    `${face}<span class="person-chip-label">${attr(person.name)}</span></a>`
+  );
+}
+
 /** Keep already-rendered session chips in step with who is running now. */
 function syncRenderedSessionRuns(): void {
   if (typeof document === "undefined") return;
@@ -768,6 +839,23 @@ md.use({
       },
       renderer(token: any) {
         return assetReferenceLink(token.path, token.label, token.coded);
+      },
+    },
+    {
+      name: "personMention",
+      level: "inline",
+      start: personMentionStart,
+      tokenizer(src: string) {
+        const m = PERSON_MENTION_EXACT.exec(src);
+        if (!m) return undefined;
+        const typed = mentionName(m[1]!);
+        const person = knownPeople.get(typed.toLowerCase());
+        if (!person) return undefined;
+        return { type: "personMention", raw: `@${typed}`, name: person.name };
+      },
+      renderer(token: any) {
+        const person = knownPeople.get(String(token.name).toLowerCase());
+        return person ? personChip(person) : attr(`@${token.name}`);
       },
     },
     {

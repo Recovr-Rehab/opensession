@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 import { BASE_PATH } from "./base";
 import { registerGithubLogins } from "../components/UserAvatar";
+import { setKnownPeople } from "./markdown";
 import type { FileMention } from "./api";
 
 export interface Person {
@@ -59,6 +60,9 @@ export function ensurePeople(): Promise<void> {
 						Array.isArray(team.members),
 				) ?? [];
 			fetched = true;
+			// The markdown renderer mints the @-mention chips, so it needs the
+			// same roster: a name nobody on it stays prose.
+			setKnownPeople(list);
 			registerGithubLogins(
 				Object.fromEntries(
 					list

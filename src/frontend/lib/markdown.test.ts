@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeAll, describe, expect, it } from "bun:test";
 import {
   renderMarkdown,
   renderPrCommentMarkdown,
+  setKnownPeople,
   setKnownRepos,
   setKnownPrStates,
   setSessionTitles,
@@ -693,5 +694,66 @@ describe("renderPrCommentMarkdown bot markup", () => {
     // after a PR comment still escapes its raw HTML.
     renderPrCommentMarkdown("<kbd>K</kbd>");
     expect(renderMarkdown("<kbd>K</kbd>")).toContain("&lt;kbd&gt;");
+  });
+});
+
+describe("renderMarkdown @-mentions", () => {
+  // The roster is module state, so publish it once for this block. The
+  // renderer's cache is keyed on the source text, and setKnownPeople clears
+  // it, so this cannot leak a stale render into the assertions below.
+  beforeAll(() => {
+    setKnownPeople([
+      { name: "Kent", github: "kentdebruin" },
+      { name: "Nolan" },
+    ]);
+  });
+
+  const persons = (html: string) =>
+    [...html.matchAll(/data-person="([^"]+)"/g)].map((m) => m[1]);
+
+  it("renders a roster name as that person's chip", () => {
+    const html = renderMarkdown("@Kent can you look?");
+    expect(persons(html)).toEqual(["Kent"]);
+    expect(html).toContain("https://github.com/kentdebruin.png");
+  });
+
+  it("falls back to an initial for somebody with no GitHub login", () => {
+    const html = renderMarkdown("@Nolan too");
+    expect(persons(html)).toEqual(["Nolan"]);
+    expect(html).toContain("person-chip-initial");
+    expect(html).not.toContain("<img class=\"person-chip-face\"");
+  });
+
+  it("matches case-insensitively and reports the roster spelling", () => {
+    expect(persons(renderMarkdown("@kent"))).toEqual(["Kent"]);
+  });
+
+  it("leaves trailing punctuation in the sentence", () => {
+    const html = renderMarkdown("ping @Kent, please");
+    expect(persons(html)).toEqual(["Kent"]);
+    expect(html).toContain(", please");
+  });
+
+  it("does not fire on the things that merely look like a mention", () => {
+    // An email address, another service's handle, quoted CSS, a name nobody
+    // has. Turning any of these into a person invents a teammate.
+    for (const src of [
+      "mail me@tella.com",
+      "@media (hover: hover)",
+      "@nobody here",
+      "`@Kent` in code",
+    ])
+      expect(persons(renderMarkdown(src))).toEqual([]);
+  });
+
+  it("still links an email while chipping a real mention beside it", () => {
+    const html = renderMarkdown("mail kent@tella.com and tag @Kent");
+    expect(persons(html)).toEqual(["Kent"]);
+    expect(html).toContain('href="mailto:kent@tella.com"');
+  });
+
+  it("mentions nobody once the roster is empty", () => {
+    setKnownPeople([]);
+    expect(persons(renderMarkdown("@Kent"))).toEqual([]);
   });
 });

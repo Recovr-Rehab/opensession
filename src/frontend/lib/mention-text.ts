@@ -59,11 +59,3 @@ export function parseMentions(text: string, people: Person[]): MentionToken[] {
 	}
 	return out;
 }
-
-/** Whether `name` refers to `me`, by the app's usual loose identity compare. */
-export function mentionsMe(name: string, me: string): boolean {
-	const a = name.trim().toLowerCase();
-	const b = me.trim().toLowerCase();
-	if (!a || !b) return false;
-	return a === b || a.startsWith(b) || b.startsWith(a);
-}

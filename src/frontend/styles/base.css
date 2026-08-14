@@ -1675,6 +1675,63 @@ a.asset-ref:focus-visible {
 	background: radial-gradient(circle at 50% 50%, var(--yellow) 3.5px, transparent 3.6px);
 }
 
+/* An @-mention of a teammate, minted by markdown.ts. Third member of the chip
+   family above, and it follows their rules: the face is the first flex item,
+   so the sentence takes its baseline from that box rather than from the label,
+   and the padding is unequal on purpose so the name reads centred. The accent
+   fill is deliberate — a mention is addressed at somebody, so it should carry
+   more weight in a paragraph than a session or a PR does. */
+a.person-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	/* The face box is 16px against the session chip's 18px glyph, so it hangs
+	   less far below the label — a slightly smaller correction than that
+	   chip's -0.43em. */
+	vertical-align: -0.32em;
+	max-width: 100%;
+	font-size: 0.95em;
+	font-weight: 560;
+	background: color-mix(in srgb, var(--accent) 12%, transparent);
+	color: var(--accent-ink);
+	border: 0;
+	border-radius: 999px;
+	/* Round, so the sides need the room the corners take away; the 3/1 split
+	   top-to-bottom is the same reading correction as its neighbours. */
+	padding: 3px 9px 1px 3px;
+	line-height: 1.3;
+	cursor: pointer;
+	text-decoration: none;
+	white-space: nowrap;
+	transition: background var(--dur-micro) var(--ease);
+}
+a.person-chip:hover {
+	background: color-mix(in srgb, var(--accent) 20%, transparent);
+	text-decoration: none;
+}
+a.person-chip:focus-visible {
+	outline: 2px solid var(--accent-ink);
+	outline-offset: 2px;
+}
+.person-chip-face {
+	width: 16px;
+	height: 16px;
+	flex: none;
+	border-radius: 999px;
+	object-fit: cover;
+	/* Same 1px lift as the session chip's glyph: flex centres on the line box,
+	   which sits below the cap band the eye reads the name by. */
+	transform: translateY(-1px);
+}
+.person-chip-initial {
+	display: inline-grid;
+	place-items: center;
+	background: var(--bg-active);
+	color: var(--text-dim);
+	font-size: 10px;
+	line-height: 1;
+}
+
 /* A pull-request reference (`#5528` or an explicit GitHub PR link) linked into
    our own review surface by markdown.ts. The branch glyph and quiet wash make
    it read as a PR object rather than another highlighted word; its live state
