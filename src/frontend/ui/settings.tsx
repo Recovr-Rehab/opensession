@@ -79,12 +79,11 @@ export function SettingsGroupLabel({
  * alone separates a group from the page, so a page of settings reads as a few
  * quiet blocks rather than a stack of outlined boxes.
  *
- * The corner is authored in the chrome's own language — `calc(Npx * var(--rf))`,
- * which base.css bumps under `corner-shape: squircle` — rather than the flat
- * `rounded-lg` Card ships. A squircle at a flat radius reads visibly squarer
- * than the panels around it; 12px × --rf lands these blocks on the same softness
- * as the rest of the app's large surfaces. */
-const settingsSurface = "rounded-[calc(12px*var(--rf))] border-0 bg-raised";
+ * Card supplies the borderless part now, so all this adds is the corner and the
+ * fill. A settings group is a stack of ROWS rather than a card of content, so it
+ * takes the row corner (12px × --rf) instead of Card's `rounded-xl`, which reads
+ * too soft wrapped around a list of full-width rows. */
+const settingsSurface = "rounded-[calc(12px*var(--rf))] bg-raised";
 
 export function SettingCard({
 	className,

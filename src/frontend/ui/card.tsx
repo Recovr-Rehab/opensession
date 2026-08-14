@@ -11,7 +11,13 @@ export function Card({ as: Component = "div", className, ...props }: CardProps) 
 	return React.createElement(Component, {
 		...props,
 		className: cn(
-			"rounded-lg border border-line bg-panel",
+			// No border, and the card step of the radius scale. A block sitting on
+			// its own fill is already separated from the page, and a hairline round
+			// it adds a second edge that makes a page of cards read as a form. That
+			// is the house rule (see src/frontend/AGENTS.md), and both surfaces that
+			// had grown their own card optics — settings' `settingsSurface`, the
+			// analytics tiles — were open-coding `border-0` to get back to it.
+			"rounded-xl bg-panel",
 			// `as="ul"` is one of the shapes this primitive offers, and the
 			// browser's own list styling doesn't know that: a card rendered as a
 			// list arrives with 40px of marker indent and 14px of vertical margin,

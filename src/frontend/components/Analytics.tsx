@@ -277,7 +277,7 @@ function ChartCard({
 	children: React.ReactNode;
 }) {
 	return (
-		<Card as="section" className="min-w-0 rounded-xl border-0 p-5">
+		<Card as="section" className="min-w-0 p-5">
 			<h3 className="m-0 text-item-title font-semibold tracking-[-0.01em] text-fg">{title}</h3>
 			{subtitle && <p className="m-0 mb-3 mt-1 text-supporting text-dim">{subtitle}</p>}
 			{series && <Legend series={series} />}
@@ -299,7 +299,7 @@ function StatTile({
 	sub?: string;
 }) {
 	return (
-		<Card className="min-w-0 rounded-xl border-0 px-5 py-4">
+		<Card className="min-w-0 px-5 py-4">
 			<div className="text-label font-medium text-dim">{label}</div>
 			<div className="mt-1 text-stat font-semibold text-fg">
 				{value}
