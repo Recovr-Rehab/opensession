@@ -91,7 +91,7 @@ export const PR_BAR =
 	// dragged narrow. The panel is resizable, so its width is not a function of
 	// the viewport and `phone:` cannot see it: at ~465px the headline — the one
 	// thing the strip is for — was the part that got squeezed out.
-	"@container flex min-h-[var(--desktop-header-h)] items-center gap-2.5 border-b border-[var(--top-divider)] px-3 py-2 " +
+	"@container flex min-h-[var(--desktop-header-h)] items-center gap-2.5 border-b border-divider px-3 py-2 " +
 	// The globe (staging) icon rides inside the strip, flush to its padding.
 	"[&>.staging-icon]:-ml-0.5 [&>.staging-icon]:shrink-0 " +
 	// Phone: a row of the bottom sheet, and a row of the info card.
@@ -260,7 +260,7 @@ export const PR_SIB_DOT_BG: Record<PrTone, string> = {
 /** A series row: repo · number · title · state. It repeats the primary row one
  * weight down and paints the whole row in its own state colour. */
 export const PR_ROW =
-	"flex min-h-[38px] items-center gap-0.5 border-t border-[var(--top-divider)] pr-2 hover:brightness-[1.08]";
+	"flex min-h-[38px] items-center gap-0.5 border-t border-divider pr-2 hover:brightness-[1.08]";
 export const PR_ROW_BG: Record<PrTone, string> = {
 	green: "bg-green-soft",
 	purple: "bg-[color-mix(in_srgb,var(--purple)_10%,transparent)]",
@@ -283,7 +283,7 @@ export const PR_ROW_STATE =
  * they are written. Phone keeps the bigger tap target it already had.
  */
 export const PR_REPO_TABS =
-	"flex gap-1 overflow-x-auto border-b border-line px-3 py-2";
+	"flex gap-1 overflow-x-auto border-b border-divider px-3 py-2";
 const PR_REPO_TAB =
 	"inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-md border px-2.5 py-[3px] text-label phone:px-3 phone:py-2";
 export const prRepoTabClass = (selected: boolean) =>

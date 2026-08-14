@@ -5409,7 +5409,7 @@ export function SessionViewer({
 							// first-party "Open" break-out to log in, then come back.
 							<div className={VIEWER_REVIEW_MAIN}>
 								<div className="flex h-full flex-col">
-									<div className="flex items-center gap-2 border-b border-line bg-panel px-3 py-1.5 text-xs text-dim">
+									<div className="flex items-center gap-2 border-b border-divider bg-panel px-3 py-1.5 text-xs text-dim">
 										<IconGlobe size={14} />
 										<span className="truncate">
 											Preview environment

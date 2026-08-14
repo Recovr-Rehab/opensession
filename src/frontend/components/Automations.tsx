@@ -411,7 +411,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
 
       {sel && (
         <aside className="flex min-h-0 min-w-0 flex-auto flex-col border-l border-line bg-panel max-[900px]:border-l-0">
-          <div className="flex shrink-0 items-center gap-2.5 border-b border-line px-4 py-3">
+          <div className="flex shrink-0 items-center gap-2.5 border-b border-divider px-4 py-3">
             {/* Phones get Back instead of Close: there the drawer is the page. */}
             <button
               className="-my-1 -ml-0.5 hidden shrink-0 items-center gap-1.75 px-1.5 py-1 text-body font-medium text-fg max-[900px]:inline-flex"
@@ -1160,7 +1160,7 @@ function McpPicker({
         </a>
       </div>
       <div className="bg-surface rounded-panel overflow-hidden">
-        <div className="flex items-center gap-2 border-b border-line px-3 py-2">
+        <div className="flex items-center gap-2 border-b border-divider px-3 py-2">
           {/* Chrome-less on purpose: the picker's own panel is the surface, so
               a second well inside it would read as a box in a box. */}
           <input

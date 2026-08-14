@@ -78,7 +78,7 @@ export function SessionReportsPanel({
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
-			<div className="shrink-0 border-b border-line px-3 py-2.5">
+			<div className="shrink-0 border-b border-divider px-3 py-2.5">
 				<div className="flex items-start gap-2">
 					<div className="min-w-0 flex-1">
 						<div className="truncate text-label font-semibold text-fg">

@@ -60,7 +60,7 @@ export function PreviewPane({
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
-			<div className="flex items-center gap-2 border-b border-line bg-panel px-3 py-1.5">
+			<div className="flex items-center gap-2 border-b border-divider bg-panel px-3 py-1.5">
 				<span
 					className={`h-2 w-2 shrink-0 rounded-full ${url ? "bg-green-500" : "animate-pulse bg-amber-400"}`}
 					aria-hidden="true"

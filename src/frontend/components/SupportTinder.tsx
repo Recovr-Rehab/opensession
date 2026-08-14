@@ -488,7 +488,7 @@ function TicketCard({
 			onSwipeRight={onSkip}
 		>
 			{/* Card head: customer, ages, priority, title. */}
-			<div className="shrink-0 border-b border-line px-5 py-3.5">
+			<div className="shrink-0 border-b border-divider px-5 py-3.5">
 				<div className="flex flex-wrap items-center gap-2 text-xs text-faint">
 					<span className="font-semibold text-dim">
 						{thread.customer.name || thread.customer.email || "Unknown customer"}

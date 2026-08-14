@@ -291,7 +291,7 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
 
       {sel && (
         <aside className="flex min-h-0 min-w-0 flex-auto flex-col border-l border-line bg-panel max-[900px]:border-l-0">
-          <div className="flex shrink-0 items-center gap-2.5 border-b border-line px-4 py-3">
+          <div className="flex shrink-0 items-center gap-2.5 border-b border-divider px-4 py-3">
             {/* Phones get Back instead of Close: there the drawer is the page. */}
             <button
               className="-my-1 -ml-0.5 hidden shrink-0 items-center gap-1.75 px-1.5 py-1 text-body font-medium text-fg max-[900px]:inline-flex"

@@ -427,7 +427,7 @@ export function SessionSearch({
 				initialFocus={inputRef}
 				onKeyDown={onKeyDown}
 			>
-				<div className="flex items-center gap-3 border-b border-line px-5 py-4">
+				<div className="flex items-center gap-3 border-b border-divider px-5 py-4">
 					<IconSearch className="shrink-0 text-faint" size={22} />
 					<input
 						ref={inputRef}
@@ -463,7 +463,7 @@ export function SessionSearch({
 				</div>
 
 				<div
-					className="flex flex-wrap items-center gap-2 border-b border-line px-4 py-2.5"
+					className="flex flex-wrap items-center gap-2 border-b border-divider px-4 py-2.5"
 					aria-label="Session filters"
 				>
 					<FilterPill

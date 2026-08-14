@@ -54,7 +54,7 @@
 export const VIEWER_HEADER =
 	"viewer-header flex h-[var(--desktop-header-h)] min-w-0 shrink-0 items-center justify-between gap-3 " +
 	"bg-surface px-4 " +
-	"border-b border-b-[var(--top-divider)] " +
+	"border-b border-b-divider " +
 	"[.detail-topbar:has(+_.session-tabs)_&]:border-b-0 " +
 	// Collapsed desktop sidebar: the floating re-open + nav cluster overlays the
 	// pane's left edge, so the row's text starts past it.
@@ -249,7 +249,7 @@ export const VIEWER_INPUT =
 /* ── Banners and the delete overlay ─────────────────────────────────────── */
 
 export const SESSION_BANNERS =
-	"flex flex-wrap gap-2 border-b border-line bg-raised px-4 py-[7px]";
+	"flex flex-wrap gap-2 border-b border-divider bg-raised px-4 py-[7px]";
 
 /** A single notice pill. It carries no ink of its own: the caller supplies the
  *  tone, because two text-colour utilities on one element are resolved by

@@ -142,7 +142,7 @@ export function PlainThreadPanel({ sessionId, threadId, plainUrl }: Props) {
 
 	return (
 		<div className="flex h-full min-h-0 flex-col bg-raised">
-			<div className="flex shrink-0 items-center justify-between gap-2 border-b border-line px-3 py-2">
+			<div className="flex shrink-0 items-center justify-between gap-2 border-b border-divider px-3 py-2">
 				<div className="flex min-w-0 items-center gap-2">
 					<span className="truncate text-label font-semibold text-fg" title={thread?.customer?.email || ""}>
 						{thread?.customer?.name || thread?.customer?.email || "Plain thread"}
@@ -176,11 +176,11 @@ export function PlainThreadPanel({ sessionId, threadId, plainUrl }: Props) {
 					threadId={threadId}
 					thread={thread}
 					onChanged={load}
-					className="shrink-0 px-3 py-2 border-b border-line"
+					className="shrink-0 px-3 py-2 border-b border-divider"
 				/>
 			)}
 
-			{thread?.title && <div className="shrink-0 border-b border-line px-3 py-2 text-label font-semibold text-fg">{thread.title}</div>}
+			{thread?.title && <div className="shrink-0 border-b border-divider px-3 py-2 text-label font-semibold text-fg">{thread.title}</div>}
 
 			<div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3" ref={bodyRef}>
 				{loading && !thread ? (

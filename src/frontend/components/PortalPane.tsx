@@ -10,7 +10,7 @@ export function PortalPane({ target }: { target: PortalTarget }) {
 
 	return (
 		<div className="flex h-full min-h-0 flex-col bg-panel">
-			<div className="flex min-h-11 items-center gap-2 border-b border-line px-3 py-1.5">
+			<div className="flex min-h-11 items-center gap-2 border-b border-divider px-3 py-1.5">
 				<span className="h-2 w-2 shrink-0 rounded-full bg-green" aria-hidden="true" />
 				<div
 					className="flex min-w-0 flex-1 items-center gap-2 rounded-control border border-line bg-surface px-3 py-1.5 text-supporting text-dim"

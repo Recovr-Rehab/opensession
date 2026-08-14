@@ -208,7 +208,7 @@ export function Reports({
 			{showDetail && (
 				<section className="flex min-w-0 flex-1 flex-col bg-bg">
 					{isPhone ? (
-						<header className="shrink-0 border-b border-line px-3 pb-3 pt-2">
+						<header className="shrink-0 border-b border-divider px-3 pb-3 pt-2">
 							<button
 								type="button"
 								className="-ml-1 flex items-center gap-0.5 rounded-control border-0 bg-transparent py-1.5 pl-1 pr-2.5 text-sm font-medium text-accent cursor-pointer"
@@ -240,7 +240,7 @@ export function Reports({
 						</header>
 					) : (
 						selected && (
-							<header className="flex shrink-0 items-start gap-4 border-b border-line px-5 py-3">
+							<header className="flex shrink-0 items-start gap-4 border-b border-divider px-5 py-3">
 								<div className="min-w-0 flex-1">
 									<h2 className="m-0 truncate text-base font-semibold text-fg">{selected.title}</h2>
 									<div className="mt-1 flex min-w-0 items-center gap-2">

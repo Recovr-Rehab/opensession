@@ -141,7 +141,7 @@ export function CodeFlow({
 			<div className="space-y-2">
 				{[...files].map(([file, trees]) => (
 					<article key={file} className="overflow-hidden rounded-xl bg-panel">
-						<header className="flex min-h-10 items-center border-b border-line bg-raised px-3 phone:px-2">
+						<header className="flex min-h-10 items-center border-b border-divider bg-raised px-3 phone:px-2">
 							{file !== "Project structure" && onOpenLocation ? (
 								<Button
 									variant="ghost"

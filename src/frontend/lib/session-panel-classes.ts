@@ -58,7 +58,7 @@ const PILL = "rounded-[calc(8px*var(--rf))]";
  */
 export const PANEL_SHELL =
 	"viewer-panel relative flex min-h-0 w-[var(--panel-w,40%)] min-w-[320px] shrink-0 flex-col " +
-	"max-w-[max(480px,calc(100vw-620px))] border-l border-line bg-surface " +
+	"max-w-[max(480px,calc(100vw-620px))] border-l border-divider bg-surface " +
 	// From 920px down it stops being a column in the layout and becomes an
 	// overlay over the session, anchored under the top bar (--header-h is 0 on
 	// desktop, the bar's height on a phone) with PANEL_OVERLAY dimming behind it.

@@ -316,7 +316,7 @@ export function Reviews({
   if (selected) {
     return (
       <div className="flex h-full min-h-0 flex-col bg-surface">
-        <div className="hidden shrink-0 items-center border-b border-line px-3 py-2 phone:flex">
+        <div className="hidden shrink-0 items-center border-b border-divider px-3 py-2 phone:flex">
           <button
             className="inline-flex items-center gap-1.5 rounded-control border-0 bg-transparent px-2 py-1.5 text-sm font-medium text-fg hover:bg-hover"
             onClick={() => onSelect("")}
@@ -368,7 +368,7 @@ export function Reviews({
               underline sits on top of it. The negative margin cancels the
               header's 22px padding. Five tabs + counts don't fit a phone, so
               below 720px the strip scrolls edge to edge instead. */}
-          <div className="-mx-[22px] flex gap-0.5 border-b border-line px-[22px] phone:overflow-x-auto phone:[scrollbar-width:none] phone:[&::-webkit-scrollbar]:hidden">
+          <div className="-mx-[22px] flex gap-0.5 border-b border-divider px-[22px] phone:overflow-x-auto phone:[scrollbar-width:none] phone:[&::-webkit-scrollbar]:hidden">
             {TABS.map((t) => {
               const on = filter === t.key;
               return (

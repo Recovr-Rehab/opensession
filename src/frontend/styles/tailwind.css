@@ -81,6 +81,10 @@
 	/* Borders (border-border reads terribly, so: line) */
 	--color-line: var(--border);
 	--color-line-strong: var(--border-strong);
+	/* The chrome seam: a top bar's underline, the sidebar and panel edges, a
+	   pane header. Softer than `line`, which stays for the edge of a control.
+	   See base.css for why the chrome takes a wash and not a full hairline. */
+	--color-divider: var(--divider);
 
 	/* Text */
 	--color-fg: var(--text);

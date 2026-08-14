@@ -217,7 +217,7 @@ export function PrStackChip({
 				    green chip and has to keep saying what the green means. */}
 				<div
 					className={cn(
-						"shrink-0 border-b border-line px-3 py-2.5 text-item-title font-semibold",
+						"shrink-0 border-b border-divider px-3 py-2.5 text-item-title font-semibold",
 						PR_STATE_TEXT[tone],
 					)}
 				>

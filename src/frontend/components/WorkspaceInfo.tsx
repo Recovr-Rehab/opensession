@@ -796,7 +796,7 @@ function AgentReviewCard({
 							className="flex max-h-[min(680px,calc(100vh-24px),var(--available-height))] w-[min(680px,calc(100vw-24px),var(--available-width))] min-h-0 overflow-hidden"
 						>
 							<div className="flex min-h-0 w-full flex-col">
-								<div className="flex items-center gap-2.5 border-b border-line px-4 py-3">
+								<div className="flex items-center gap-2.5 border-b border-divider px-4 py-3">
 									<CommentAvatar author={reviewComment?.author || GITHUB_BOT_NAME || AGENT_NAME} />
 									<div className="min-w-0 flex-1">
 										<div className="truncate text-[13px] font-semibold text-fg">

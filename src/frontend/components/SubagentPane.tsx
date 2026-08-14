@@ -102,7 +102,7 @@ export function SubagentPane({ sessionId, stack, onOpenSubagent, onBack }: Props
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b border-line bg-raised px-2.5 pt-2 pb-2.5">
+      <div className="border-b border-divider bg-raised px-2.5 pt-2 pb-2.5">
         <div className="flex items-center gap-2">
           <Badge tone="accent">
             sub-agent
