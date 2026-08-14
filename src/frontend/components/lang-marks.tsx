@@ -24,10 +24,19 @@ interface MarkProps {
 
 /**
  * Every mark's viewBox is cropped to its own ink (measured with getBBox), so
- * `size` is the ink's longer side rather than a box it floats inside — the
+ * `size` is the ink's longer side rather than a box it floats inside. The
  * source logos pad themselves by different amounts, which is what left the
  * badges with uneven side air. Width and height are derived from the crop's
  * aspect, so the ink fills the element exactly in both axes.
+ *
+ * That exact fit is why the mark must not clip. An SVG's default
+ * `overflow: hidden` cuts at the viewport, and a crop-to-ink viewBox puts the
+ * drawing ON that edge, so the rasterizer drops whatever falls in the
+ * boundary's own fraction of a device pixel. On a curve that runs nearly
+ * parallel to the edge that is not a hairline, it is the whole tip: React's
+ * atom lost the bottom of both diagonals at 12px, sliced flat. Nothing paints
+ * outside the box anyway (the ink's rect measures the element's rect), so
+ * `overflow-visible` costs no layout and hands the tips back.
  */
 function Mark({
   size,
@@ -42,6 +51,7 @@ function Mark({
       height={h * px}
       viewBox={viewBox}
       fill="currentColor"
+      className="overflow-visible"
       aria-hidden="true"
     >
       {children}
