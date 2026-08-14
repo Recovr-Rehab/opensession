@@ -4046,7 +4046,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 										<ContextMenu.GroupLabel>
 											Show in toolbar
 										</ContextMenu.GroupLabel>
-										{tools.map((t) => (
+										{fittingTools.map((t) => (
 											<ContextMenu.CheckboxItem
 												key={t.id}
 												checked={!hiddenTools.has(t.id)}
