@@ -129,6 +129,7 @@
 	   it cannot follow is the vibrancy sidebar — see the material block for
 	   what was measured there and why it still takes this. */
 	--row-chip: color-mix(in srgb, #ffffff 11%, var(--bg-raised));
+	--row-chip-hover: color-mix(in srgb, #ffffff 7%, var(--row-chip));
 	--border: #333333;
 	--border-strong: #464646;
 	--top-divider: color-mix(in srgb, var(--border) 68%, transparent);
@@ -336,6 +337,7 @@ html[data-theme="light"] {
 	--hover: rgba(0, 0, 0, 0.055);
 	--hover-strong: rgba(0, 0, 0, 0.095);
 	--row-chip: color-mix(in srgb, #000000 9.5%, var(--bg-raised));
+	--row-chip-hover: color-mix(in srgb, #000000 5.5%, var(--row-chip));
 	--border: #e2e2e2;
 	--border-strong: #d0d0d0;
 	--text: #1a1a1a;
