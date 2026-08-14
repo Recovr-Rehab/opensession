@@ -1,4 +1,5 @@
 import React from "react";
+import { cn } from "../ui/cn";
 
 /**
  * Brand marks for the file-type badge — a different family from the interface
@@ -136,4 +137,98 @@ export const LANG_MARKS: Record<string, (p: MarkProps) => React.ReactNode> = {
   toml: TomlMark,
   rb: RubyMark,
   py: PythonMark,
+};
+
+/**
+ * The file's language mark: the brand glyph where one reads at this size, its
+ * letters otherwise. Worn by the turn footer's file chips and by the work
+ * fold's file rows, so one file looks the same wherever a turn mentions it.
+ *
+ * The badge carries no fill of its own: a chip's faint background belongs to
+ * the whole chip, so the mark, the name and the counts read as one object.
+ *
+ * Mixing a quarter of the theme's own text colour into the ink lifts the dark
+ * ones (Ruby's #701516, JSON's #953800) off `--bg` in dark mode and settles the
+ * bright ones in light mode, from one expression and without a second palette
+ * to keep in sync. The ink sits 1px low inside the centred tint: its optical
+ * baseline then meets the filename beside it instead of floating above it.
+ */
+export function ExtBadge({
+  name,
+  size = 12,
+  className,
+}: {
+  name: string;
+  /** The mark's ink, in px. The letters ride along at the badge's own size. */
+  size?: number;
+  className?: string;
+}) {
+  const ext = fileExt(name);
+  const color = EXT_COLORS[ext] || "#6e7681";
+  const Glyph = LANG_MARKS[ext];
+  return (
+    <span
+      className={cn(
+        "flex h-4 min-w-4 flex-shrink-0 items-center justify-center px-0.5 text-meta font-bold leading-none",
+        className
+      )}
+      style={{ color: `color-mix(in oklab, ${color} 75%, var(--text))` }}
+    >
+      <span className="flex translate-y-px items-center justify-center">
+        {Glyph ? <Glyph size={size} /> : extLabel(ext)}
+      </span>
+    </span>
+  );
+}
+
+/** A filename's extension, lowercased, or "" when it has none. */
+export function fileExt(name: string): string {
+  const dot = name.lastIndexOf(".");
+  return dot > 0 && dot < name.length - 1
+    ? name.slice(dot + 1).toLowerCase()
+    : "";
+}
+
+/**
+ * An extension keeps its real name up to four characters and is cut to three
+ * beyond that. A blind three-letter cut spelled "JSO", "YAM", "SCS" and "JAV",
+ * word-shaped enough to read as a typo rather than an abbreviation, and the
+ * badge is elastic, so the fourth character costs a few pixels.
+ */
+function extLabel(ext: string): string {
+  if (!ext) return "?";
+  return (ext.length <= 4 ? ext : ext.slice(0, 3)).toUpperCase();
+}
+
+const EXT_COLORS: Record<string, string> = {
+  ts: "#3178c6",
+  tsx: "#3178c6",
+  js: "#a38319",
+  jsx: "#a38319",
+  mjs: "#a38319",
+  cjs: "#a38319",
+  css: "#663399",
+  scss: "#c6538c",
+  html: "#e34c26",
+  md: "#0969da",
+  mdx: "#0969da",
+  json: "#953800",
+  yaml: "#cb171e",
+  yml: "#cb171e",
+  toml: "#9c4221",
+  sh: "#459721",
+  bash: "#459721",
+  py: "#3572a5",
+  rs: "#b7410e",
+  go: "#0091b5",
+  rb: "#701516",
+  swift: "#f05138",
+  java: "#b07219",
+  sql: "#bf7600",
+  svg: "#ca6f06",
+  // Linguist's ReScript red (#ed5051) is the loudest hue in this map and only
+  // clears 3.6:1 against the white label, so it is darkened to sit with its
+  // neighbours.
+  res: "#c93a3c",
+  resi: "#c93a3c",
 };

@@ -31,6 +31,7 @@ import {
   toolLineStats,
 } from "@tellahq/opensession-protocol/tool-presentation";
 import { formatDuration } from "../lib/time";
+import { ExtBadge, fileExt } from "./lang-marks";
 import { openGalleryFrom } from "./MediaLightbox";
 import { useOpenAsset } from "../lib/open-asset";
 // Re-exported so the session view keeps one import for the transcript's
@@ -319,6 +320,19 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
   const lineStats = toolLineStats(toolName, shownInput);
   const duration = stepDuration(entry, result);
   const failed = Boolean(shownResult?.isError);
+  // A file step wears its language mark where the family glyph goes, the same
+  // mark the turn's file chips wear: the tool's own name is spelled beside it
+  // already, so a column of identical pencils says nothing, while a fold full
+  // of reads and edits is scanned for WHICH file each one touched.
+  //
+  // It needs an extension to be a mark at all, and a failed step keeps the
+  // glyph: that glyph is the only red on the row, and the mark would take the
+  // language's colour instead.
+  const filePath = isFileTool && !failed
+    ? filePathOf((shownInput || {}) as Record<string, unknown>)
+    : "";
+  const baseName = filePath.split("/").pop() || "";
+  const fileMark = fileExt(baseName) ? baseName : "";
   const inputNode = expanded ? toolInputNode(canonical, shownInput) : null;
   const resultContent = visibleResultContent(shownResult?.content, hasMedia, failed);
   const inputNeedsPanel = canonical === "TodoWrite";
@@ -377,7 +391,11 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
           )}
         >
           <span className="transition-opacity duration-150 group-hover:opacity-0">
-            <ToolGlyph toolName={toolName} size={20} />
+            {fileMark ? (
+              <ExtBadge name={fileMark} size={14} />
+            ) : (
+              <ToolGlyph toolName={toolName} size={20} />
+            )}
           </span>
           <IconChevronDown
             size={20}

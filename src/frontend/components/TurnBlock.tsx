@@ -23,7 +23,6 @@ import {
 import {
   collectTouchedFiles,
   LineStats,
-  TouchedFileChips,
   TurnLineStatsCard,
 } from "./TurnFooter";
 
@@ -222,23 +221,15 @@ export const TurnBlock = React.memo(function TurnBlock({
               </div>
             )
           )}
-          {expanded && (failures > 0 || editedFiles.length > 0) && (
-            // The summary reads as one more row of the fold, so it starts
-            // where every other row does. Each child carries its own 4px lead
-            // (a chip's `ml-1`), which the negative margin cancels: the first
-            // chip's box then lands on the tool rows' box and its badge on
-            // their glyph, rather than a column of its own.
-            <div className="-ml-1 mt-1 flex flex-wrap items-center gap-x-0.5 gap-y-1 pr-1 text-label leading-4 text-faint">
-              {failures > 0 && (
-                <span className="ml-1 mr-1.5 text-red/80">
-                  {failures} failed {failures === 1 ? "step" : "steps"}
-                </span>
-              )}
-              {/* The same chips the answer's footer ends with: a bare count
-                  said how many files without saying which, and the name is
-                  the part worth reading. The fold header keeps the turn's
-                  totals; these carry each file's own. */}
-              <TouchedFileChips files={editedFiles} max={FOLD_FILE_CHIPS} />
+          {/* Failures only. The files this turn wrote were repeated here as
+              chips back when a step row named a path and nothing else. Every
+              file step now wears its own language mark, so an open fold
+              already says which files it touched, and the answer's footer
+              still carries them for the folded turn. */}
+          {expanded && failures > 0 && (
+            // The row starts where every other row in the fold does.
+            <div className="mt-1 flex flex-wrap items-center gap-x-0.5 gap-y-1 px-1 text-label leading-4 text-red/80">
+              {failures} failed {failures === 1 ? "step" : "steps"}
             </div>
           )}
         </div>
@@ -246,11 +237,6 @@ export const TurnBlock = React.memo(function TurnBlock({
     </div>
   );
 }, turnBlockPropsEqual);
-
-/** Files named in the expanded summary before the rest become one count. This
- * row wraps onto as many lines as it needs, unlike the answer footer's single
- * row, so it can afford to name more of them. */
-const FOLD_FILE_CHIPS = 6;
 
 const COMPACT_TOOL_FAMILIES = new Set([
   "run",
