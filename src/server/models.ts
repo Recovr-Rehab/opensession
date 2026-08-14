@@ -894,9 +894,12 @@ export function toOpencodeModel(model?: string | null): string | undefined {
 export function toPiModel(model?: string | null): string | undefined {
   const requested = (model || "").trim();
   if (!requested) return model ?? undefined;
-  if (requested.startsWith("pi/")) return requested;
-  const preset = modelPreset(requested);
-  const concrete = toOpencodeModel(preset?.model || requested);
+  // Resolve a routed preset BEFORE preserving an explicit pi/ id. Otherwise
+  // pi/dial/… reaches Pi as provider "dial" instead of its concrete lead.
+  const pickerId = requested.startsWith("pi/") ? requested.slice("pi/".length) : requested;
+  const preset = modelPreset(pickerId);
+  if (!preset && requested.startsWith("pi/")) return requested;
+  const concrete = toOpencodeModel(preset?.model || pickerId);
   return concrete?.startsWith("opencode/")
     ? `pi/${concrete.slice("opencode/".length)}`
     : undefined;
