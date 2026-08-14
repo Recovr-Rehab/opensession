@@ -30,6 +30,7 @@ import { IconCheck, IconFeed, IconPeople, IconRepo, IconRobot } from "./icons";
 import {
 	PEOPLE_CHIP,
 	PEOPLE_CHIP_GLYPH,
+	PEOPLE_CHIP_GLYPH_SELECTED,
 	PEOPLE_CHIP_ROW,
 	PEOPLE_CHIP_SELECTED,
 	PEOPLE_SECTION_LABEL,
@@ -264,7 +265,12 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 							selected={scope.kind === "everyone"}
 							onClick={() => pick({ kind: "everyone" })}
 							mark={
-								<span className={PEOPLE_CHIP_GLYPH}>
+								<span
+									className={cn(
+										PEOPLE_CHIP_GLYPH,
+										scope.kind === "everyone" && PEOPLE_CHIP_GLYPH_SELECTED,
+									)}
+								>
 									<IconPeople size={17} />
 								</span>
 							}
@@ -285,7 +291,7 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 											state={presenceState(member)}
 											ring={
 												scope.kind === "person" && scope.key === member.key
-													? "color-mix(in srgb, var(--text) 10%, var(--bg-surface))"
+													? "var(--accent)"
 													: "var(--bg-panel)"
 											}
 											size={8}

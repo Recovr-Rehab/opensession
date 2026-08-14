@@ -19,12 +19,21 @@ export const PEOPLE_CHIP =
 	"transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] " +
 	"hover:bg-hover hover:text-fg";
 
-/** The scope the feed is on. */
-export const PEOPLE_CHIP_SELECTED = "bg-pressed text-fg";
+/** The scope the feed is on. A wash the strength of a hover state read as one
+ *  more chip you happened to be pointing at, on a row where the pick also
+ *  decides what the sidebar holds. It takes the accent plate instead, which is
+ *  the same mark the rest of the app puts on a chosen thing. */
+export const PEOPLE_CHIP_SELECTED =
+	"bg-accent font-semibold text-on-accent hover:bg-accent-hover hover:text-on-accent";
 
 /** The glyph slot in a chip that has no face of its own (Everyone). */
 export const PEOPLE_CHIP_GLYPH =
 	"flex size-[26px] shrink-0 items-center justify-center rounded-full bg-hover text-dim";
+
+/** The same slot on the accent plate: the wash is ink, which disappears into a
+ *  dark fill, so it inverts with the chip. */
+export const PEOPLE_CHIP_GLYPH_SELECTED =
+	"bg-[color-mix(in_srgb,var(--on-accent)_22%,transparent)] text-on-accent";
 
 /** "Shipped" and any other heading on the page. */
 export const PEOPLE_SECTION_LABEL = "m-0 mb-2 text-label font-semibold text-fg";
