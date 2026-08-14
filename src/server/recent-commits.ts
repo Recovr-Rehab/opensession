@@ -90,7 +90,10 @@ async function readRepoCommits(repo: {
 }): Promise<RecentCommit[]> {
 	const ref = await shippedRef(repo.repo, repo.defaultBranch);
 	if (!ref) return [];
-	const format = `${RECORD}%H${FIELD}%an${FIELD}%ae${FIELD}%aI${FIELD}%s`;
+	// The committer date, not the author date: a commit that was written in the
+	// morning and rebased on at noon shipped at noon, and sorting the feed by
+	// when it was written buries it under work that landed after it.
+	const format = `${RECORD}%H${FIELD}%an${FIELD}%ae${FIELD}%cI${FIELD}%s`;
 	const log = await $`git -C ${repo.repo} log ${ref} --no-merges -n ${LOG_LIMIT} --shortstat --format=${format}`
 		.quiet()
 		.nothrow();
