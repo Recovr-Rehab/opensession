@@ -9,6 +9,7 @@ import { sessionPath, absoluteLink, copyToClipboard } from "../lib/share-link";
 import { copySessionTranscript } from "../lib/transcript-copy";
 import { IconChevronRight, IconHistory, IconPencil, IconPlus, IconRestore, IconRobot } from "./icons";
 import { isAutomationSession } from "../lib/landing-session";
+import { ArchivedSessionItems } from "./ArchivedSessionItems";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { UserAvatar } from "./UserAvatar";
 import { isApple } from "../lib/platform";
@@ -463,15 +464,13 @@ export function SessionTabs({
 	// Closed sessions of this workspace, if there are any to offer.
 	const hasHistory = showHistory && archived.length > 0;
 
-	// One session and no view tabs → no strip. The lone workspace's "+ New tab"
-	// button lives next to the session title in the header instead. But once a
-	// non-session pane (Review) is open, the strip appears so it has somewhere to
-	// live — a lone code session then reads as [session][Review]. A workspace
-	// that has closed tabs keeps its strip for the same reason: the history
-	// button is the only way back to them, and a workspace down to its last
-	// session is exactly when someone goes looking.
-	if (!inSplit && tabs.length <= 1 && viewTabs.length === 0 && !hasHistory)
-		return null;
+	// One session and no view tabs → no strip. A bar holding a single tab is a
+	// row of chrome that names what the header already names, so it goes: the
+	// lone workspace's "+ New tab" button lives next to the session title in the
+	// header instead, and its closed sessions move to the header's ⋯ menu. But
+	// once a non-session pane (Review) is open, the strip appears so it has
+	// somewhere to live — a lone code session then reads as [session][Review].
+	if (!inSplit && tabs.length <= 1 && viewTabs.length === 0) return null;
 
 	// New-tab "+" — plain-click shares the workspace worktree; right-click offers
 	// the stacked/ask modes.
@@ -494,41 +493,14 @@ export function SessionTabs({
 
 	// History: every archived (closed) session of this workspace, in one list.
 	// Clicking a row opens the session read-only-ish (it gets a tab while viewed);
-	// the ⟲ restores it into the strip for good. A workspace closes far more
-	// agent runs than conversations — review runs, auto-fixes, the workers a
-	// session spawned — so those carry a robot and the rest of the list reads
-	// as the sessions people actually had.
+	// the ⟲ restores it into the strip for good.
 	const historyMenu = hasHistory && (
 		<Menu.Root>
 			<Menu.Trigger className={TAB_HISTORY} aria-label="Archived sessions" title="Archived sessions">
 				<IconHistory size={ctrlIconSize} />
 			</Menu.Trigger>
 			<Menu.Popup align="end" sideOffset={4} className="min-w-[240px] max-w-[320px]">
-				{archived.map((s) => (
-					<Menu.Item key={s.id} onClick={() => onSelect(s)}>
-						{(isAutomationSession(s) || !!s.parentSessionId) && (
-							<IconRobot
-								size={14}
-								className="shrink-0 text-faint"
-								aria-label="Agent run"
-							/>
-						)}
-						<span className="min-w-0 flex-1 truncate">{s.title}</span>
-						<span className="shrink-0 text-meta text-faint">{relativeTime(s.lastActivity)}</span>
-						<button
-							type="button"
-							className="flex shrink-0 cursor-pointer items-center rounded-control border-0 bg-transparent p-0.5 text-dim hover:text-fg"
-							aria-label="Restore session"
-							title="Restore to tabs"
-							onClick={(e) => {
-								e.stopPropagation();
-								onRestore(s);
-							}}
-						>
-							<IconRestore size={20} />
-						</button>
-					</Menu.Item>
-				))}
+				<ArchivedSessionItems sessions={archived} onSelect={onSelect} onRestore={onRestore} />
 			</Menu.Popup>
 		</Menu.Root>
 	);
@@ -800,7 +772,7 @@ export function SessionTabs({
 							onNewSession("share");
 						}}
 					>
-						New session — share worktree
+						New session · share worktree
 					</button>
 					<button
 						type="button"
@@ -810,7 +782,7 @@ export function SessionTabs({
 							onNewSession("stack");
 						}}
 					>
-						New session — stacked worktree
+						New session · stacked worktree
 					</button>
 					<button
 						type="button"
@@ -820,7 +792,7 @@ export function SessionTabs({
 							onNewSession("ask");
 						}}
 					>
-						New session — ask (no worktree)
+						New session · ask (no worktree)
 					</button>
 				</div>
 			)}

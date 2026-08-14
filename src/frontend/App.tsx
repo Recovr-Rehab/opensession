@@ -2683,14 +2683,7 @@ export function App(
 				}}
 				onClose={closeSession}
 				onToast={showToast}
-				onRestore={async (s) => {
-					try {
-						await archiveSessionApi(s.id, false);
-					} catch (e) {
-						console.error("Restore failed:", e);
-					}
-					refresh();
-				}}
+				onRestore={restoreSession}
 			/>
 		);
 	}
@@ -2698,6 +2691,16 @@ export function App(
 	// activity first. Grouping is not the workspace id alone — see
 	// lib/workspace-archive, which also adopts the sessions a duplicate
 	// workspace record holds for the same worktree.
+	/** Un-archive a closed session, back among the workspace's tabs. Shared by
+	 *  the strip's history button and the header ⋯ menu that stands in for it. */
+	async function restoreSession(s: UnifiedSession) {
+		try {
+			await archiveSessionApi(s.id, false);
+		} catch (e) {
+			console.error("Restore failed:", e);
+		}
+		refresh();
+	}
 	const archivedSessions: UnifiedSession[] = workspaceArchivedSessions({
 		sessions,
 		fetched: workspaceArchive,
@@ -3514,13 +3517,19 @@ export function App(
 				allSessions={sessions}
 				onNewSession={handleNewSession}
 				// Mirrors SessionTabs' own "render nothing" rule so the header's
-				// lone-session + never doubles up with the strip's.
+				// lone-session + never doubles up with the strip's — and, just as
+				// important, so it APPEARS whenever the strip doesn't. Closed
+				// sessions are not part of the rule: they live in the strip's
+				// history button when there is a strip and in the header's ⋯ menu
+				// when there isn't, so counting them here would leave a lone
+				// session with neither + .
 				tabStripVisible={
 					!!activeTabSplit ||
 					workspaceSessions.length > 1 ||
-					viewTabs.length > 0 ||
-					archivedSessions.length > 0
+					viewTabs.length > 0
 				}
+				archivedSessions={archivedSessions}
+				onRestoreSession={restoreSession}
 				parentSession={
 					viewerSession.parentSessionId
 						? (() => {

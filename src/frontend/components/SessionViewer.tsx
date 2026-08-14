@@ -153,6 +153,7 @@ import {
 import type { NewSessionPrefill } from "../lib/new-session-link";
 import type { WorkflowRunSnapshot } from "../../server/workflow-types";
 import { PreviewButton } from "./PreviewButton";
+import { ArchivedSessionItems } from "./ArchivedSessionItems";
 import { PreviewPane } from "./PreviewPane";
 import { PortalPane } from "./PortalPane";
 import { PortalsPage } from "./PortalsPanel";
@@ -184,6 +185,7 @@ import {
 	IconTerminal,
 	IconCopy,
 	IconChevronRight,
+	IconHistory,
 	IconFile,
 	IconListCircles,
 	IconGlobe,
@@ -385,6 +387,11 @@ interface Props {
 	    split). The strip carries its own "+", so the header one stands down
 	    rather than showing a second plus a few pixels above it. */
 	tabStripVisible?: boolean;
+	/** This workspace's closed sessions, newest activity first. With no strip
+	    there is no history button, so the ⋯ menu carries the list instead. */
+	archivedSessions?: UnifiedSession[];
+	/** Un-archive a closed session, putting it back among the tabs. */
+	onRestoreSession?: (session: UnifiedSession) => void;
 	/** Orchestrator this session was delegated from (when it's a worker
 	    sub-session), and the worker sessions it in turn spawned. Powers the
 	    header relationship chips. */
@@ -758,6 +765,8 @@ export function SessionViewer({
 	allSessions,
 	onNewSession,
 	tabStripVisible,
+	archivedSessions,
+	onRestoreSession,
 	parentSession,
 	workerSessions,
 	onOpenSession,
@@ -4492,6 +4501,36 @@ export function SessionViewer({
 						<span className="grow">New session in workspace</span>
 					</Menu.Item>
 				);
+				// Closed sessions of this workspace. They normally hang off the tab
+				// strip's history button, so this appears exactly when there is no
+				// strip to hold it — a lone session, which is when someone is most
+				// likely to go looking for what was closed.
+				const archivedActions =
+					!tabStripVisible &&
+					!!archivedSessions?.length &&
+					onOpenSession &&
+					onRestoreSession && (
+						<Menu.SubmenuRoot>
+							<Menu.SubmenuTrigger title="Closed sessions in this workspace">
+								<IconHistory size={20} className={MENU_ICON} />
+								<span className="grow">Archived sessions</span>
+								<IconChevronRight size={16} className="text-faint" />
+							</Menu.SubmenuTrigger>
+							<Menu.Popup className="min-w-[240px] max-w-[320px]">
+								<ArchivedSessionItems
+									sessions={archivedSessions}
+									onSelect={(s) => {
+										setOverflowOpen(false);
+										onOpenSession(s.id);
+									}}
+									onRestore={(s) => {
+										setOverflowOpen(false);
+										onRestoreSession(s);
+									}}
+								/>
+							</Menu.Popup>
+						</Menu.SubmenuRoot>
+					);
 				// Copy transcript. These normally live on a tab's right-click menu,
 				// but a lone-session workspace has no tab strip (and phones hide it at
 				// every count), so the only place to grab this session's full text is the
@@ -4954,6 +4993,7 @@ export function SessionViewer({
 								{isPhone && secondaryActions(true)}
 								{(compactHeader || isPhone) && shareAction(true)}
 								{newSessionAction}
+								{archivedActions}
 								{transcriptActions}
 								{overflowActions}
 								{archiveAction}
