@@ -1,6 +1,8 @@
 import { repoLabel } from "../lib/repo-label";
 import { AGENT_NAME } from "../lib/brand";
-import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import React, { useEffect, useState, useCallback, useId, useMemo, useRef } from "react";
+import { motion } from "motion/react";
+import { duration, ease } from "../ui/motion";
 import type {
   GitStatusInfo,
   DiffFileGroup,
@@ -469,6 +471,12 @@ export function PrPanel({
   const [headerCompact, setHeaderCompact] = useState(
     () => window.matchMedia("(max-width: 720px)").matches,
   );
+  /* One underline that MOVES between the two tabs rather than a mark that
+     blinks on and off, so the strip says which way the choice went — the same
+     shape (and the same id-per-instance rule) as the Segmented knob. It is
+     minted up here with the other hooks: the render below returns early while
+     the PR loads, and a `useId` past that point is a conditional hook. */
+  const tabUnderlineId = useId();
   const setRoot = useCallback((el: HTMLDivElement | null) => {
     rootRef.current = el;
     setRootEl(el);
@@ -1358,17 +1366,40 @@ export function PrPanel({
         role="tab"
         aria-selected={page === key}
         aria-label={label}
-        /* The selected plate has to name its own background. A
-           `bg-transparent` in the shared half would win or lose the
-           source-order tie against it on Tailwind's output order,
-           not on which one is written last here. */
-        className={`relative flex ${headerCompact ? "size-8" : "size-10"} shrink-0 items-center justify-center rounded-control border-0 transition-colors ${
-          page === key
-            ? "bg-accent-soft text-accent"
-            : "bg-transparent text-dim hover:bg-hover hover:text-fg"
-        }`}
+        /* Two shapes for one state, because the two placements read
+           differently. Down a rail the item is a row in a list, so the one you
+           are on takes a filled plate, the way every sidebar row does. Along a
+           strip it is a tab, and a tab says so with a line on the edge it
+           shares with the content below — a plate there reads as a pressed
+           button instead. Selected keeps its own background named either way:
+           a `bg-transparent` in the shared half would win or lose the
+           source-order tie on Tailwind's output order, not on which one is
+           written last here. */
+        className={
+          headerCompact
+            ? `group relative flex h-11 w-9 shrink-0 items-center justify-center border-0 bg-transparent transition-colors before:absolute before:inset-x-0 before:inset-y-1.5 before:rounded-control before:content-[''] ${
+                page === key
+                  ? "text-accent"
+                  : "text-dim hover:text-fg hover:before:bg-hover"
+              }`
+            : `relative flex size-10 shrink-0 items-center justify-center rounded-control border-0 transition-colors ${
+                page === key
+                  ? "bg-accent-soft text-accent"
+                  : "bg-transparent text-dim hover:bg-hover hover:text-fg"
+              }`
+        }
         onClick={() => setPage(key)}
       >
+        {/* On the hairline the row already draws, so the tab and its page read
+            as one surface. */}
+        {headerCompact && page === key && (
+          <motion.span
+            layoutId={tabUnderlineId}
+            aria-hidden
+            className="absolute inset-x-0 bottom-0 h-0.5 bg-accent"
+            transition={{ type: "tween", duration: duration.base, ease }}
+          />
+        )}
         {/* The badge hangs off the GLYPH's corner, not the plate's:
             anchored to the box it floats in the box's empty corner and
             reads as a second object beside the icon rather than a
