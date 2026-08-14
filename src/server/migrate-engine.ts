@@ -1,28 +1,30 @@
 /**
- * Migrate a opensession session onto the OpenCode engine — the "flip the model,
- * let the next turn hand off" affordance behind the opensession-sessions
+ * Migrate a opensession session onto another engine — the "flip the model, let
+ * the next turn hand off" affordance behind the opensession-sessions
  * `migrate_session_engine` tool and scripts/migrate-sessions-to-opencode.ts.
  *
  * Deliberately does NOT start a run: it only sets `session.model` to an
- * opencode/* id (recording the switch in modelHistory, exactly like a /model
- * command). The session's NEXT prompt takes the normal cross-provider path in
- * runSessionPromptInner: lastEngineProvider ≠ "opencode" ⇒ the prior engine's
- * transcript (claude jsonl / codex rollout) becomes an engine-switch handoff
- * note, a fresh OpenCode session starts carrying it, and the new id is
- * persisted in `opencodeSessionId`. The session keeps its file, workspace,
- * branch, title and UI history — only the engine changes.
+ * engine-routed id (recording the switch in modelHistory, exactly like a
+ * /model command). The session's NEXT prompt takes the normal cross-engine
+ * path in runSessionPromptInner: the engine changed ⇒ the prior engine's
+ * transcript becomes an engine-switch handoff note, a fresh session starts on
+ * the target engine carrying it, and the new id is persisted in that engine's
+ * slot. The session keeps its file, workspace, branch, title and UI history —
+ * only the engine changes.
  *
  * Hard gates (fail closed):
- *  - automation-owned sessions: the opencode runner deny-by-default gate
- *    refuses automation runs, so flipping their model would just brick them.
+ *  - automation-owned sessions: the engines' deny-by-default gate refuses
+ *    automation runs, so flipping their model would just brick them.
  *  - sessions with an in-flight run (per the shared run journal): flipping the
  *    model mid-turn races the run's own end-of-turn session patch.
- *  - targets that don't resolve to the opencode provider.
+ *  - targets that don't name an engine, and direct engines that are switched
+ *    off.
  */
 import { existsSync, readFileSync } from "fs";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
-import { resolveModel } from "./models";
+import { explicitEngineFor, resolveModel } from "./models";
+import { directEngineEnabled } from "./engine/engines-config";
 import type { ActiveRunRecord } from "./run-journal";
 import type { NativeSessionFile } from "./types";
 
@@ -96,12 +98,32 @@ export function migrateSessionEngine(
   }
 
   const resolved = resolveModel(targetModel);
-  if (!resolved || resolved.provider !== "opencode") {
+  // The target must NAME an engine: an engine-prefixed id, or a preset id
+  // (dial/…, orchestrator/…) which the opencode engine resolves at dispatch. A
+  // bare native slug ("claude-opus-5") names a model, not an engine, and is
+  // rejected the way it always was.
+  const engine = resolved
+    ? (explicitEngineFor(resolved.id) ??
+      (resolved.provider === "opencode" ? "opencode" : null))
+    : null;
+  if (!resolved || !engine) {
     return {
       ok: false,
       error:
-        `"${targetModel}" is not an opencode engine model — expected ` +
-        "opencode/<provider>/<model>, e.g. opencode/anthropic/claude-sonnet-5.",
+        `"${targetModel}" is not an engine model id — expected ` +
+        "<engine>/<provider>/<model>, e.g. opencode/anthropic/claude-sonnet-5, " +
+        "pi/anthropic/claude-opus-5 or claude/anthropic/claude-opus-5.",
+    };
+  }
+  // A direct engine that is switched off would leave the session unable to run
+  // at all, so refuse the flip rather than produce a broken session — the same
+  // fail-closed reasoning as the automation gate below.
+  if ((engine === "claude" || engine === "codex") && !directEngineEnabled(engine)) {
+    return {
+      ok: false,
+      error:
+        `The ${engine} engine is off — turn it on in Settings before ` +
+        `migrating ${sessionId} onto it.`,
     };
   }
 

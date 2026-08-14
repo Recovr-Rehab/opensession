@@ -76,10 +76,44 @@ describe("migrateSessionEngine", () => {
     ).toHaveLength(1);
   });
 
-  test("rejects non-opencode targets", () => {
-    const res = migrateSessionEngine("bks-mig-ok", "claude-sonnet-5");
-    expect(res.ok).toBe(false);
-    if (!res.ok) expect(res.error).toContain("not an opencode engine model");
+  test("rejects targets that name a model rather than an engine", () => {
+    // A bare native slug dispatches to whatever the default engine is — it is
+    // not an engine choice, so it can't be a migration target.
+    for (const target of ["claude-sonnet-5", "gpt-5.6-sol", "nonsense"]) {
+      const res = migrateSessionEngine("bks-mig-ok", target);
+      expect(res.ok).toBe(false);
+      if (!res.ok) expect(res.error).toContain("not an engine model id");
+    }
+  });
+
+  test("accepts any enabled engine, not just opencode", () => {
+    // pi ids need no extra switch here (the pi runner reports its own config
+    // gate); the direct engines are refused while switched off, so a flip can
+    // never leave a session on an engine that cannot run it.
+    const pi = migrateSessionEngine("bks-mig-ok", "pi/anthropic/claude-opus-5");
+    expect(pi.ok).toBe(true);
+    if (pi.ok) expect(pi.to).toBe("pi/anthropic/claude-opus-5");
+
+    const off = migrateSessionEngine("bks-mig-ok", "claude/anthropic/claude-opus-5");
+    expect(off.ok).toBe(false);
+    if (!off.ok) expect(off.error).toContain("engine is off");
+
+    const priorConfig = process.env.OPENSESSION_ENGINES_CONFIG;
+    process.env.OPENSESSION_ENGINES_CONFIG = join(scratch, "engines.json");
+    writeFileSync(
+      join(scratch, "engines.json"),
+      JSON.stringify({ claude: { enabled: true } })
+    );
+    try {
+      const on = migrateSessionEngine("bks-mig-ok", "claude/anthropic/claude-opus-5");
+      expect(on.ok).toBe(true);
+      if (on.ok) expect(on.to).toBe("claude/anthropic/claude-opus-5");
+    } finally {
+      if (priorConfig === undefined) delete process.env.OPENSESSION_ENGINES_CONFIG;
+      else process.env.OPENSESSION_ENGINES_CONFIG = priorConfig;
+    }
+    // Leave the session where the other tests expect it.
+    migrateSessionEngine("bks-mig-ok", "opencode/anthropic/claude-haiku-4-5");
   });
 
   test("rejects automation-owned sessions (both markers)", () => {

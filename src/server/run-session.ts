@@ -48,6 +48,7 @@ import {
 	interactiveFallbackModel,
 	modelLabel,
 	providerFor,
+	routeModel,
 } from "./models";
 import {
 	isOpencodeSessionId,
@@ -1531,7 +1532,20 @@ async function runSessionPromptInner(
 	// Native picker ids still dispatch through OpenCode. Once a session has run,
 	// resume the engine that actually owns its session id rather than inferring a
 	// legacy provider from the unchanged user selection.
-	const provider = session.lastEngineProvider || providerFor(session.model);
+	// An explicit engine choice on the model id (pi/, claude/, codex/), or the
+	// per-model default engine for an interactive session, decides which engine
+	// this turn runs on — ahead of the engine that last drove the session. The
+	// routing changed, and that IS the cross-engine switch the handoff below
+	// exists for; without this the turn would hand the previous engine's
+	// session id to the new engine and resume nothing. Unrouted ids (native
+	// slugs, opencode/…) keep the historic order exactly.
+	const routedEngine = routeModel(session.model, {
+		interactive: !session.automation,
+	}).engine;
+	const provider =
+		routedEngine === "opencode"
+			? session.lastEngineProvider || providerFor(session.model)
+			: routedEngine;
 	let effectiveProvider = provider;
 	let effectiveModel = session.model;
 	const modelHistory = [...(session.modelHistory || [])];

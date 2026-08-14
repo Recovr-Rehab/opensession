@@ -122,6 +122,8 @@ export function getEngineTranscriptPath(
   return getTranscriptPath(worktreeDir, engineSessionId);
 }
 
+
+
 /**
  * A session's engine transcript as entries, whatever the engine: claude jsonl
  * and codex rollouts parse from their transcript file; opencode reads straight
@@ -135,9 +137,10 @@ export function readEngineTranscript(
   provider: "claude" | "codex" | "opencode" | "pi"
 ): TranscriptEntry[] {
   if (provider === "opencode") return readOpencodeTranscript(engineSessionId);
-  if (provider === "pi") return piStoreTranscript(engineSessionId);
+  if (provider === "pi") return engineStoreTranscript(engineSessionId);
   const path = getEngineTranscriptPath(worktreeDir, engineSessionId, provider);
-  return path ? parseTranscript(path) : [];
+  if (!path || !existsSync(path)) return engineStoreTranscript(engineSessionId);
+  return parseTranscript(path);
 }
 
 /** readEngineTranscript with the file parse yielding to the event loop —
@@ -149,41 +152,45 @@ export async function readEngineTranscriptAsync(
   provider: "claude" | "codex" | "opencode" | "pi"
 ): Promise<TranscriptEntry[]> {
   if (provider === "opencode") return readOpencodeTranscript(engineSessionId);
-  if (provider === "pi") return piStoreTranscript(engineSessionId);
+  if (provider === "pi") return engineStoreTranscript(engineSessionId);
   const path = getEngineTranscriptPath(worktreeDir, engineSessionId, provider);
-  return path ? parseTranscriptAsync(path) : [];
+  if (!path || !existsSync(path)) return engineStoreTranscript(engineSessionId);
+  return parseTranscriptAsync(path);
 }
 
 /**
- * A pi engine session's transcript as entries. Pi has no engine-owned store
- * to read (no jsonl, no SQLite) — the pi runner persists every turn into the
- * owned transcript store under the UNIFIED session id. So this resolves the
- * owning session from the pi engine id and serves its merged transcript
- * (store-first, legacy merge fallback) — the same read
+ * A STORE-ONLY engine session's transcript as entries — pi, and the two
+ * direct-SDK engines (claude-direct, codex-direct). None of them has an
+ * engine-owned store to read: no jsonl, no codex rollout, no SQLite. They
+ * persist every turn into the owned transcript store under the UNIFIED session
+ * id, so this resolves the owning session from the ENGINE id and serves its
+ * merged transcript (store-first, legacy merge fallback) — the same read
  * engine-handoff-transcript.ts uses for fresh-engine recovery. Feeds the
- * cross-engine handoff notes in the pi→anything direction; unresolvable ids
- * return [] and the handoff degrades to the "partial work may exist" note.
+ * cross-engine handoff notes in the store-only→anything direction;
+ * unresolvable ids return [] and the handoff degrades to the "partial work may
+ * exist" note.
  *
  * The main consumer is the mid-turn fallback hop (agent-runner), which can
  * read while the 2s session cache still predates the init patch — or, once
- * the dead run unwound, after runPi's finally already journal-cleared its
+ * the dead run unwound, after the runner's finally already journal-cleared its
  * record. So the owner resolves through sources in durability-at-read-time
  * order:
- *  1. the run journal — live for the whole turn (pi journals its engine id
- *     in the claudeSessionId slot, legacy name, with the owning osSessionId);
- *  2. the persisted pi→unified map (bksSessionFor — recorded before the
+ *  1. the run journal — live for the whole turn (these engines journal their
+ *     engine id in the claudeSessionId slot, legacy name, with the owning
+ *     osSessionId);
+ *  2. the persisted engine→unified map (bksSessionFor — recorded before the
  *     runner ever yields init, and never cleared on run end);
- *  3. the session scan — the piSessionId slot, plus a claude-slot match for
+ *  3. the session scan — every engine slot, including a claude-slot match for
  *     slack/linear files whose pi id predates the pi slot there (equality on
  *     the uuid can only mean this engine session; ses_/claude ids of other
- *     sessions never collide with a pi uuid).
+ *     sessions never collide with one of these uuids).
  */
-function piStoreTranscript(piSessionId: string): TranscriptEntry[] {
-  if (!piSessionId) return [];
+function engineStoreTranscript(engineSessionId: string): TranscriptEntry[] {
+  if (!engineSessionId) return [];
   try {
     // Call-time require, not a static import: session-cache imports this
     // module (getAllSessions), so the static edge must stay one-directional.
-    // By the time a pi transcript is read the cache module is long-loaded —
+    // By the time a transcript is read the cache module is long-loaded —
     // this is a module-cache hit (the importLegacyIntoStore pattern in
     // opencode-transcript.ts).
     const cacheMod = require("./session-cache") as typeof import("./session-cache");
@@ -195,18 +202,21 @@ function piStoreTranscript(piSessionId: string): TranscriptEntry[] {
           )
         : undefined;
     const journaled = activeRunRecords().find(
-      (r) => r.claudeSessionId === piSessionId && r.osSessionId
+      (r) => r.claudeSessionId === engineSessionId && r.osSessionId
     );
     const owner =
       byUnifiedId(journaled?.osSessionId) ??
-      byUnifiedId(bksSessionFor(piSessionId)) ??
+      byUnifiedId(bksSessionFor(engineSessionId)) ??
       sessions.find(
-        (s) => s.piSessionId === piSessionId || s.claudeSessionId === piSessionId
+        (s) =>
+          s.piSessionId === engineSessionId ||
+          s.codexThreadId === engineSessionId ||
+          s.claudeSessionId === engineSessionId
       );
     return owner ? mergedSessionTranscript(owner) : [];
   } catch (e) {
     console.warn(
-      `[sessions] pi transcript read failed for ${piSessionId}:`,
+      `[sessions] engine store transcript read failed for ${engineSessionId}:`,
       e instanceof Error ? e.message : e
     );
     return [];

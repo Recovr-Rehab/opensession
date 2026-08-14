@@ -1,5 +1,5 @@
 /**
- * Model catalog + default model, sandbox capability/prewarm, system-prompt preview, branch-name suggestion, voice transcription.
+ * Model catalog + default model + per-model default engine, sandbox capability/prewarm, system-prompt preview, branch-name suggestion, voice transcription.
  *
  * Extracted verbatim from the opensession.ts fetch chain. Every handler
  * returns a Response for a matched route or undefined to fall through to the
@@ -7,7 +7,11 @@
  */
 
 import { requestUser, type RouteContext } from "./context";
-import { KNOWN_MODELS, accountProviderForModel, getDefaultModel, getModelFallbackAuto, interactiveDefaultModel, modelEfforts, refreshOpencodePickerModels, setDefaultModel, setInteractiveDefaultModel, setModelFallbackAuto, toOpencodeModel } from "../models";
+import { KNOWN_MODELS, accountProviderForModel, baseModelId, getDefaultModel, getModelFallbackAuto, interactiveDefaultModel, modelEfforts, refreshOpencodePickerModels, setDefaultModel, setInteractiveDefaultModel, setModelFallbackAuto, toOpencodeModel } from "../models";
+import { ENGINE_IDS, directEngineEnabled, modelEngineDefaults, setModelEngineDefault, type EngineId } from "../engine/engines-config";
+import { listAccountsPublic } from "../claude-accounts";
+import { listCodexAccountsPublic } from "../codex-accounts";
+import { piEngineEnabled } from "../pi-config";
 import { type Sandbox } from "../sandbox";
 import { suggestBranchName } from "../suggest-branch";
 import { buildSystemPromptParts } from "../system-prompt";
@@ -15,6 +19,36 @@ import { MAX_AUDIO_BYTES, transcribeAudio } from "../transcribe";
 import { supportsOpenaiFastMode } from "../opencode-openai-auth";
 import { configuredServer } from "../config";
 import { getWorkspace, workspaceModelSettings } from "../workspaces";
+
+/** Engine ids in picker order, with their labels and whether each one can
+ *  actually run a turn right now. "Available" is deliberately cheap and
+ *  local — configured/enabled plus, for the direct engines, an account in the
+ *  pool they draw from (the same signal engine-status.ts reports); it is not a
+ *  liveness probe. */
+function availableEngines(): { id: EngineId; label: string; available: boolean }[] {
+	const directAvailable = (engine: "claude" | "codex", accounts: () => number) =>
+		directEngineEnabled(engine) && accounts() > 0;
+	return [
+		{
+			id: "opencode",
+			label: "OpenCode",
+			// Configured = the picker has opencode entries to offer (bridge on, or
+			// a keyed third-party provider). Same signal the model list uses.
+			available: KNOWN_MODELS.some((m) => m.provider === "opencode"),
+		},
+		{ id: "pi", label: "Pi", available: piEngineEnabled() },
+		{
+			id: "claude",
+			label: "Claude",
+			available: directAvailable("claude", () => listAccountsPublic().length),
+		},
+		{
+			id: "codex",
+			label: "Codex",
+			available: directAvailable("codex", () => listCodexAccountsPublic().length),
+		},
+	];
+}
 
 export async function handleModelsRoutes(
 	ctx: RouteContext,
@@ -85,6 +119,12 @@ export async function handleModelsRoutes(
 			})),
 			default: defaultForWorkspace,
 			autoFallback: getModelFallbackAuto(),
+			// The engines a model can be routed to, and which of them are ready
+			// to run: the composer's Engine choice composes the engine's prefix
+			// onto whatever model is selected (models.ts routeModel).
+			engines: availableEngines(),
+			// Per-model default engine, keyed by the engine-stripped base id.
+			modelEngines: modelEngineDefaults(),
 		});
 	}
 
@@ -185,6 +225,40 @@ export async function handleModelsRoutes(
 			return Response.json(
 				{ error: e?.message || "transcription failed" },
 				{ status: 500 },
+			);
+		}
+	}
+
+	// Set (or clear, with engine:null) the default ENGINE for one model —
+	// { model: "<base id>", engine: "<engine id>" | null }. Interactive
+	// sessions on that model route to this engine unless their model id names
+	// one explicitly (models.ts routeModel).
+	if (path === "/api/models/engine-default" && req.method === "PUT") {
+		const body = await req.json().catch(() => null);
+		const model = typeof body?.model === "string" ? body.model.trim() : "";
+		if (!model) {
+			return Response.json(
+				{ error: "model (base id) is required" },
+				{ status: 400 },
+			);
+		}
+		const engine = body?.engine ?? null;
+		if (engine !== null && !ENGINE_IDS.includes(engine)) {
+			return Response.json(
+				{ error: `engine must be one of ${ENGINE_IDS.join(", ")}, or null to clear` },
+				{ status: 400 },
+			);
+		}
+		try {
+			// Store the engine-stripped id whatever the caller sent, so one entry
+			// covers a model however it was written.
+			return Response.json({
+				modelEngines: setModelEngineDefault(baseModelId(model), engine as EngineId | null),
+			});
+		} catch (e: any) {
+			return Response.json(
+				{ error: e?.message || "Failed to set the default engine" },
+				{ status: 400 },
 			);
 		}
 	}

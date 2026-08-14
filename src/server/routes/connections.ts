@@ -12,6 +12,7 @@ import { addMcpServer, getConnections, removeMcpServer, setMcpAllowedUsers } fro
 import { refreshOpencodePickerModels } from "../models";
 import { BRIDGE_PROVIDER_IDS, PROVIDER_ID_RE, addPickerModel, defaultPickerModelsForProvider, maskProviderKey, opencodeProviders, readOpencodeBridgeConfig, removeOpencodeProvider, removePickerModel, setBridgeEnabled, setOpencodeProvider } from "../opencode-config";
 import { isPiModelId, piEngineEnabled, readPiEngineConfig, setPiEnabled, setPiPickerModels } from "../pi-config";
+import { directEngineEnabled } from "../engine/engines-config";
 
 export async function handleConnectionsRoutes(
 	ctx: RouteContext,
@@ -27,7 +28,12 @@ export async function handleConnectionsRoutes(
 		return Response.json({
 			mcpServers,
 			agents: agentHealth,
-			engines: ["opencode", ...(piEngineEnabled() ? ["pi"] : [])],
+			engines: [
+				"opencode",
+				...(piEngineEnabled() ? ["pi"] : []),
+				...(directEngineEnabled("claude") ? ["claude"] : []),
+				...(directEngineEnabled("codex") ? ["codex"] : []),
+			],
 		});
 	}
 
