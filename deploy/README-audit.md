@@ -27,6 +27,13 @@ inputs): small logs, but every entry can be reconciled against the full
 engine transcript on disk. Local files are pruned after 400 days, matching
 the retention in the example CloudWatch shipping config.
 
+The other engines keep the same discipline under their own event families:
+one `in`/`out` pair per turn, plus a denial event when the deny-by-default
+kind gate refuses a run. The pi engine logs `pi_turn` / `pi_gate_denied`
+(and `pi_mcp_call` per bridged MCP call), the Claude Agent SDK engine logs
+`claude_direct_turn` / `claude_direct_gate_denied`, and the Codex engine
+logs `codex_direct_turn` / `codex_direct_gate_denied`.
+
 ## Shipping to CloudWatch (optional, one-time setup, needs admin)
 
 Open Session runs as a systemd unit that hard-denies IMDS
