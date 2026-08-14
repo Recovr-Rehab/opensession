@@ -34,15 +34,33 @@ import { duration, ease } from "./motion";
  * a menu — spelled out, it wraps to a second line and outweighs the content it
  * is choosing for.
  */
-const SegmentedContext = React.createContext<{ knobId: string; value: string | null }>({
+/** Two densities, one shape. `sm` only tightens the option's padding, so the
+ *  knob keeps `rounded-control` and the track its `rounded-lg` — the same
+ *  concentric pair at both sizes, and the same "goes pill when short" the
+ *  Button primitive relies on. Use it where the control is chrome beside the
+ *  content it filters rather than a setting being read on its own. */
+type Size = "sm" | "md";
+
+const optionSizes: Record<Size, string> = {
+	sm: "px-2 py-0.5",
+	md: "px-2.5 py-1",
+};
+
+const SegmentedContext = React.createContext<{
+	knobId: string;
+	value: string | null;
+	size: Size;
+}>({
 	knobId: "",
 	value: null,
+	size: "md",
 });
 
 export function Segmented({
 	label,
 	value,
 	onValueChange,
+	size = "md",
 	className,
 	children,
 	...props
@@ -56,10 +74,11 @@ export function Segmented({
 	 *  range that matches no preset). */
 	value: string | null;
 	onValueChange: (value: string) => void;
+	size?: Size;
 }) {
 	const knobId = React.useId();
 	return (
-		<SegmentedContext.Provider value={{ knobId, value }}>
+		<SegmentedContext.Provider value={{ knobId, value, size }}>
 			<ToggleGroup
 				aria-label={label}
 				value={value === null ? [] : [value]}
@@ -82,17 +101,21 @@ export function SegmentedOption({
 	children,
 	...props
 }: Omit<React.ComponentPropsWithoutRef<"button">, "value"> & { value: string }) {
-	const { knobId, value: current } = React.useContext(SegmentedContext);
+	const { knobId, value: current, size } = React.useContext(SegmentedContext);
 	const selected = current === value;
 	return (
 		<Toggle
 			value={value}
 			className={cn(
-				"relative cursor-pointer rounded-control border-0 bg-transparent px-2.5 py-1 text-control-label font-medium",
+				"relative cursor-pointer rounded-control border-0 bg-transparent text-control-label font-medium",
+				optionSizes[size],
 				"whitespace-nowrap transition-colors duration-[var(--dur-micro)] ease-[var(--ease)]",
 				// Phones get the tap box; the desktop control is a reading size.
 				"phone:px-3 phone:py-2 phone:text-body",
 				selected ? "text-fg" : "text-dim hover:text-fg",
+				// An option the data can't offer yet stays in place, greyed: taking
+				// it out would shift the ones beside it as the page loads.
+				"disabled:cursor-default disabled:text-faint disabled:hover:text-faint",
 				className,
 			)}
 			{...props}

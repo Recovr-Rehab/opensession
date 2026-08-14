@@ -41,6 +41,7 @@ import {
 } from "../lib/api";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
+import { Segmented, SegmentedOption } from "../ui/segmented";
 import { toast } from "../ui/toast";
 import type { FileDiffMetadata } from "@pierre/diffs";
 import { CommentableDiff, type CommentTarget, type PendingComment } from "./CommentableDiff";
@@ -1394,57 +1395,52 @@ export function PrPanel({
                   {handEdited.length === 1 ? "" : "s"}
                 </Button>
               )}
-              <div className="inline-flex rounded-md border border-line bg-panel p-0.5" role="tablist">
+              {/* One lens at a time, named as briefly as the page allows: the
+                  strip already says Files changed, so "All changes" only
+                  repeats it. Both controls are the same segmented primitive at
+                  its `sm` density, so the row reads as one set of chrome
+                  rather than three differently-built groups. */}
+              <Segmented
+                label="Diff lens"
+                size="sm"
+                value={codeView}
+                onValueChange={(next) => {
+                  const key = next as "all" | "guide" | "flow";
+                  if (key === "flow" && codeView !== "flow" && codeFlowError) {
+                    setCodeFlow(null);
+                    setCodeFlowError(null);
+                  }
+                  setCodeView(key);
+                }}
+              >
                 {([
-                  ["all", "All changes"],
-                  ["guide", "Review guide"],
-                  ["flow", "Code flow"],
+                  ["all", "All"],
+                  ["guide", "Guide"],
+                  ["flow", "Flow"],
                 ] as const).map(([key, label]) => (
-                  <Button
+                  <SegmentedOption
                     key={key}
-                    variant="ghost"
-                    size="sm"
-                    role="tab"
-                    aria-selected={codeView === key}
-                    className={`rounded-sm border-0 px-3 py-1.5 text-xs font-medium ${codeView === key ? "bg-active text-fg" : "hover:bg-transparent"}`}
-                    onClick={() => {
-                      if (key === "flow" && codeView !== "flow" && codeFlowError) {
-                        setCodeFlow(null);
-                        setCodeFlowError(null);
-                      }
-                      setCodeView(key);
-                    }}
+                    value={key}
                     disabled={key === "flow" && ((!diff?.patch && !diff?.skippedFiles) || !prPatchVersion)}
                   >
                     {label}
-                  </Button>
+                  </SegmentedOption>
                 ))}
-              </div>
+              </Segmented>
               {codeView !== "flow" && (
-                <div className="inline-flex rounded-md border border-line bg-panel p-0.5">
-                  <Tooltip label="Unified diff">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={`rounded-sm border-0 ${diffStyle === "unified" ? "bg-active text-fg" : "hover:bg-transparent"}`}
-                      onClick={() => changeDiffStyle("unified")}
-                      aria-label="Unified diff"
-                      aria-pressed={diffStyle === "unified"}
-                      icon={<IconDiffUnified size={20} />}
-                    />
-                  </Tooltip>
-                  <Tooltip label="Split diff">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={`rounded-sm border-0 ${diffStyle === "split" ? "bg-active text-fg" : "hover:bg-transparent"}`}
-                      onClick={() => changeDiffStyle("split")}
-                      aria-label="Split diff"
-                      aria-pressed={diffStyle === "split"}
-                      icon={<IconDiffSplit size={20} />}
-                    />
-                  </Tooltip>
-                </div>
+                <Segmented
+                  label="Diff layout"
+                  size="sm"
+                  value={diffStyle}
+                  onValueChange={(next) => changeDiffStyle(next as "unified" | "split")}
+                >
+                  <SegmentedOption value="unified" aria-label="Unified diff" title="Unified diff">
+                    <IconDiffUnified size={17} />
+                  </SegmentedOption>
+                  <SegmentedOption value="split" aria-label="Split diff" title="Split diff">
+                    <IconDiffSplit size={17} />
+                  </SegmentedOption>
+                </Segmented>
               )}
               {codeView !== "flow" && (
                 <Menu.Root>
@@ -1453,9 +1449,9 @@ export function PrPanel({
                       render={
                         <Button
                           variant="ghost"
-                          size="sm"
+                          size="xs"
                           aria-label="Diff options"
-                          icon={<IconDotsHorizontal size={18} />}
+                          icon={<IconDotsHorizontal size={17} />}
                         />
                       }
                     />
