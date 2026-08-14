@@ -1194,13 +1194,16 @@ export function PrPanel({
       : pr.state === "MERGED"
         ? "Merged"
         : "Closed";
-  const stateDotClass = pr.isDraft
-    ? "bg-faint"
+  const stateTone = pr.isDraft
+    ? { pill: "bg-blue-soft text-blue", dot: "bg-blue" }
     : pr.state === "OPEN"
-      ? "bg-green"
+      ? { pill: "bg-green-soft text-green", dot: "bg-green" }
       : pr.state === "MERGED"
-        ? "bg-purple"
-        : "bg-red";
+        ? {
+            pill: "bg-[color-mix(in_srgb,var(--purple)_12%,transparent)] text-purple",
+            dot: "bg-purple",
+          }
+        : { pill: "bg-red-soft text-red", dot: "bg-red" };
 
   const canMergeAfterReview =
     pr.state === "OPEN" &&
@@ -1273,8 +1276,8 @@ export function PrPanel({
       <main className="min-h-0 flex-1 overflow-y-auto bg-surface pb-24 [--review-file-header-top:52px] phone:pb-36">
         <header className={`flex shrink-0 items-center gap-3 px-6 phone:px-3 ${headerCompact ? "h-[52px]" : "h-16"}`}>
           {!headerCompact && (
-            <span className="inline-flex h-8 shrink-0 items-center gap-2 rounded-control bg-control px-2.5 text-label font-medium text-dim">
-              <span className={`size-2 rounded-full ${stateDotClass}`} aria-hidden="true" />
+            <span className={`inline-flex h-8 shrink-0 items-center gap-2 rounded-control px-2.5 text-label font-medium ${stateTone.pill}`}>
+              <span className={`size-2 rounded-full ${stateTone.dot}`} aria-hidden="true" />
               {stateLabel}
             </span>
           )}
