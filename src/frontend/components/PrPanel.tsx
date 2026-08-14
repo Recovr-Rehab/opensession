@@ -46,7 +46,7 @@ import type { FileDiffMetadata } from "@pierre/diffs";
 import { CommentableDiff, type CommentTarget, type PendingComment } from "./CommentableDiff";
 import { SelectionToSession } from "./SelectionToSession";
 import { getCurrentUser } from "./UserPicker";
-import { renderMarkdown } from "../lib/markdown";
+import { renderPrCommentMarkdown } from "../lib/markdown";
 import { useMarkdownRepo } from "./MarkdownBody";
 import { isOutdatedReviewComment } from "../lib/pr-comments";
 import { providerFromUrl, prCapabilities } from "../lib/provider";
@@ -905,7 +905,9 @@ export function PrPanel({
         "",
       )
       .trim();
-    return stripped ? renderMarkdown(stripped, { repo: markdownRepo }) : "";
+    // A PR body is PR prose like its comments: the same `<details>` blocks,
+    // `<img>` screenshots and bot markup, rendered by the same allowlist.
+    return stripped ? renderPrCommentMarkdown(stripped, { repo: markdownRepo }) : "";
   }, [pr?.body, markdownRepo]);
   const provider = useMemo(() => providerFromUrl(pr?.url), [pr?.url]);
   // Host capability gating: absent (GitHub, older cache entries) means all

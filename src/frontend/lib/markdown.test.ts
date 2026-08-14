@@ -625,11 +625,73 @@ describe("renderPrCommentMarkdown GitHub details", () => {
     expect(html).not.toContain("<script>");
   });
 
-  it("does not allow attributes on whitelisted tags", () => {
+  it("still builds the card when the tags carry attributes", () => {
+    const html = renderPrCommentMarkdown(
+      '<details open><summary class="x">Logs</summary>\n\nfirst\n\nsecond\n</details>',
+    );
+    expect(html).toContain('<details class="md-details" open>');
+    expect(html).toContain("<summary>Logs</summary>");
+    expect(html).toContain('<div class="md-details-body">');
+    expect(html).toContain("<p>first</p>");
+    // One card, not a summary followed by loose paragraphs.
+    expect(html.match(/<details/g)?.length).toBe(1);
+  });
+
+  it("gives a nested details its own card", () => {
+    const html = renderPrCommentMarkdown(
+      "<details><summary>Outer</summary>\n\nbefore\n\n<details><summary>Inner</summary>\n\ninside\n</details>\n</details>",
+    );
+    expect(html.match(/<details class="md-details">/g)?.length).toBe(2);
+    expect(html).toContain("<summary>Inner</summary>");
+    // Balanced: every card closes.
+    expect(html.match(/<details/g)?.length).toBe(
+      html.match(/<\/details>/g)?.length,
+    );
+  });
+
+  it("keeps a placeholder-looking comment intact", () => {
+    const html = renderPrCommentMarkdown(
+      "OPENSESSIONDETAILSTOKEN0END\n\n<details><summary>S</summary>\n\nbody\n</details>",
+    );
+    expect(html).toContain("OPENSESSIONDETAILSTOKEN0END");
+    expect(html).toContain("<summary>S</summary>");
+    expect(html).toContain("<p>body</p>");
+  });
+
+  it("drops the attributes a tag is not allowed to keep", () => {
     const html = renderPrCommentMarkdown(
       '<details open onclick="alert(1)"><summary>Unsafe</summary>Body</details>',
     );
-    expect(html).toContain("&lt;details open onclick=&quot;alert(1)&quot;&gt;");
-    expect(html).not.toContain('<details open onclick="alert(1)">');
+    expect(html).toContain('<details class="md-details" open>');
+    expect(html).not.toContain("onclick");
+  });
+});
+
+describe("renderPrCommentMarkdown bot markup", () => {
+  // Vercel writes the project avatar as raw HTML inside a markdown table cell,
+  // which markdown has no syntax for.
+  const row =
+    '| <a href="https://vercel.com/tella/internal"><sup><img src="https://vercel.com/api/www/avatar?projectId=prj_x&teamId=team_y&s=32" width="16" height="16" align="middle" alt="" /></sup></a> [internal](https://vercel.com/tella/internal) | Ready |';
+  const table = `| Project | Deployment |\n| :--- | :--- |\n${row}`;
+
+  it("renders the avatar link instead of showing its tags", () => {
+    const html = renderPrCommentMarkdown(table);
+    expect(html).toContain('<sup><img src="https://vercel.com/api/www/avatar');
+    expect(html).toContain('<a href="https://vercel.com/tella/internal"');
+    expect(html).not.toContain("&lt;a href");
+    expect(html).not.toContain("&lt;sup&gt;");
+  });
+
+  it("opens a hand-written link in a new tab", () => {
+    expect(renderPrCommentMarkdown(table)).toContain(
+      '<a href="https://vercel.com/tella/internal" target="_blank" rel="noopener noreferrer">',
+    );
+  });
+
+  it("leaves session markdown escaping alone", () => {
+    // The sanitizer is asked for per call, so a transcript rendered right
+    // after a PR comment still escapes its raw HTML.
+    renderPrCommentMarkdown("<kbd>K</kbd>");
+    expect(renderMarkdown("<kbd>K</kbd>")).toContain("&lt;kbd&gt;");
   });
 });

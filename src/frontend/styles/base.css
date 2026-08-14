@@ -1413,6 +1413,29 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 .md-image {
 	cursor: zoom-in;
 }
+/* An <img> written as raw HTML in PR prose (html-sanitize.ts tags them). The
+   block treatment above is right for a pasted screenshot and wrong here: bots
+   use raw images for 16px avatars and status badges inside a table cell, where
+   a block with a border and a 6px margin breaks the row. Keep the author's own
+   sizing, only capped to the container. */
+.markdown img.md-inline-image {
+	display: inline-block;
+	vertical-align: middle;
+	max-height: none;
+	margin: 0;
+	border: 0;
+	border-radius: 0;
+}
+/* An image in a table cell is a badge, not a figure: bots put a status dot
+   beside the word it labels, and a block image breaks the row onto two lines. */
+.markdown td img,
+.markdown th img {
+	display: inline-block;
+	vertical-align: middle;
+	margin: 0;
+	border: 0;
+	border-radius: 0;
+}
 /* Rendered ```mermaid diagram (MarkdownBody swaps the fence for the SVG) */
 .md-mermaid {
 	margin: 2px 0 8px;
