@@ -1439,36 +1439,55 @@ export function PrPanel({
                   </SegmentedOption>
                 ))}
               </Segmented>
-              {codeView !== "flow" && (
-                <Segmented
-                  label="Diff layout"
-                  size="sm"
-                  value={diffStyle}
-                  onValueChange={(next) => changeDiffStyle(next as "unified" | "split")}
-                >
-                  <SegmentedOption value="unified" aria-label="Unified diff" title="Unified diff">
-                    <IconDiffUnified size={17} />
-                  </SegmentedOption>
-                  <SegmentedOption value="split" aria-label="Split diff" title="Split diff">
-                    <IconDiffSplit size={17} />
-                  </SegmentedOption>
-                </Segmented>
-              )}
+              {/* How the diff is drawn is one menu, not a control per option:
+                  the trigger wears the layout in effect, so the row spends a
+                  single glyph on something read far less often than the lens.
+                  `w-auto px-1.5` because an icon-only Button sizes to the glyph
+                  alone and the caret needs room beside it; the phone height
+                  matches the tap box the segmented options grow to. */}
               {codeView !== "flow" && (
                 <Menu.Root>
-                  <Tooltip label="Diff options">
+                  <Tooltip label="Diff display">
                     <Menu.Trigger
                       render={
                         <Button
                           variant="ghost"
                           size="xs"
-                          aria-label="Diff options"
-                          icon={<IconDotsHorizontal size={17} />}
+                          className="w-auto px-1.5 phone:min-h-8 phone:px-2"
+                          aria-label="Diff display"
+                          caret
+                          icon={
+                            diffStyle === "split" ? (
+                              <IconDiffSplit size={17} />
+                            ) : (
+                              <IconDiffUnified size={17} />
+                            )
+                          }
                         />
                       }
                     />
                   </Tooltip>
-                  <Menu.Popup align="end">
+                  <Menu.Popup align="end" className="min-w-[190px]">
+                    <Menu.RadioGroup
+                      value={diffStyle}
+                      onValueChange={(next) => changeDiffStyle(String(next) as "unified" | "split")}
+                    >
+                      <Menu.RadioItem value="unified" closeOnClick>
+                        <IconDiffUnified size={18} className={MENU_ICON} />
+                        <span className="min-w-0 flex-1 truncate">Unified diff</span>
+                        {diffStyle === "unified" && (
+                          <IconCheck className="shrink-0 text-accent" size={17} />
+                        )}
+                      </Menu.RadioItem>
+                      <Menu.RadioItem value="split" closeOnClick>
+                        <IconDiffSplit size={18} className={MENU_ICON} />
+                        <span className="min-w-0 flex-1 truncate">Split diff</span>
+                        {diffStyle === "split" && (
+                          <IconCheck className="shrink-0 text-accent" size={17} />
+                        )}
+                      </Menu.RadioItem>
+                    </Menu.RadioGroup>
+                    <Menu.Separator />
                     <Menu.CheckboxItem
                       checked={wrapLines}
                       onCheckedChange={changeWrapLines}
