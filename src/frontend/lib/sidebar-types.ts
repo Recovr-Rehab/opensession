@@ -74,6 +74,17 @@ export interface Props {
 	onNewSession: () => void;
 	/** Start a new session with a repo pre-selected (the repo-band "+" action). */
 	onNewSessionInRepo: (repo: string) => void;
+	/**
+	 * Show the row for the session that hasn't started yet: with nothing in the
+	 * list, the sidebar still has one entry, and the main panel is its input.
+	 * App owns the flag so the row waits for the same loaded-and-empty answer
+	 * the panel does, instead of flashing while the first list request is out.
+	 */
+	showDraftRow?: boolean;
+	/** True while the main panel is showing that input. */
+	draftRowActive?: boolean;
+	/** Put the caret back in it. */
+	onOpenDraft?: () => void;
 	/** Open a project — its sessions surface in the top tab strip. */
 	onOpenWorkspace: (id: string) => void;
 	/** Rename a project folder. */

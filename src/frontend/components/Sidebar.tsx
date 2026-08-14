@@ -247,6 +247,7 @@ import {
 	WsPrStatusMark,
 	WsStatusMark,
 } from "./sidebar/HoverCards";
+import { DraftRow } from "./sidebar/DraftRow";
 import { SidebarCtxMenu } from "./sidebar/SidebarCtxMenu";
 import { InlineAlert, ListSkeleton } from "../ui/state";
 import {
@@ -290,6 +291,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	onOpenFeedItem,
 	onNewSession,
 	onNewSessionInRepo,
+	showDraftRow,
+	draftRowActive,
+	onOpenDraft,
 	onOpenWorkspace,
 	onRenameWorkspace,
 	onDeleteWorkspace,
@@ -1784,6 +1788,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		snoozedWsRows.length === 0 &&
 		prRowItems.length === 0;
 	const productEmpty = sessions.length === 0 && workspaces.length === 0;
+	// The unstarted session's row. App decides WHEN there is nothing at all
+	// (its flag waits for the first list request to settle, which the local
+	// `productEmpty` above cannot know); this decides where it can be shown.
+	const draftRow = !!showDraftRow && !isPhone && !sessionsError;
 
 	function archiveWorkspaceWithNext(row: WsRow) {
 		// Sessionless rows can't be opened, so they're not "next" candidates.
@@ -4635,10 +4643,23 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						No matching workspaces
 					</div>
 				)}
+				{/* One row even with nothing in the list: the session you have not
+				    started yet, whose input is the main panel. It stands in for the
+				    "No workspaces yet" line, which said the same thing without
+				    offering anything to do about it. Phones keep their own empty
+				    state below, where the sidebar is the whole screen and the panel
+				    it would point at is a nav push away. */}
+				{draftRow && (
+					<DraftRow
+						active={!!draftRowActive}
+						onClick={() => onOpenDraft?.()}
+					/>
+				)}
 				{workspaceListEmpty &&
 					!sessionsLoading &&
 					!sessionsError &&
 					!hasWorkspaceFilter &&
+					!draftRow &&
 					(!isPhone || !productEmpty) && (
 					<div className="mx-4 my-7 text-center text-[13px] leading-[1.4] text-faint">
 						No workspaces yet

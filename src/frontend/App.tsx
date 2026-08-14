@@ -1047,6 +1047,10 @@ export function App(
 	}>(() =>
 		route.view === "new" ? { open: true, prompt: route.prompt } : { open: false },
 	);
+	// Bumped by the sidebar's draft row to put the caret back in the empty
+	// state's session input. The row and that card are the same unstarted
+	// session seen from two places.
+	const [draftFocusSeq, setDraftFocusSeq] = useState(0);
 	const paletteOpenRef = useRef(palette.open);
 	paletteOpenRef.current = palette.open;
 	const openPalette = React.useCallback((prompt?: string) => {
@@ -3806,6 +3810,15 @@ export function App(
 							onOpenTicket={openTicketWorkspace}
 						onOpenFeedItem={openFeedItemWorkspace}
 							onNewSession={() => openPalette()}
+							showDraftRow={productEmpty}
+							draftRowActive={productEmpty && route.view === "prs"}
+							onOpenDraft={() => {
+								// The row and the panel's card are one unstarted session, so
+								// pressing the row is "put me back in it": return to the panel
+								// if some other view is up, then take the caret.
+								if (route.view !== "prs") navigate({ view: "prs" });
+								setDraftFocusSeq((seq) => seq + 1);
+							}}
 							onNewSessionInRepo={(repo) =>
 								// The Ask band's "+" is not a repo: it opens the palette
 								// already in Ask with the repo turned off.
@@ -4266,38 +4279,44 @@ export function App(
 								Check the connection to this server.
 							</EmptyState>
 						) : productEmpty ? (
-							<EmptyState
-								icon={<IconMessages size={32} />}
-								title={
-									<span className="text-[19px] leading-[1.15] font-semibold tracking-[-0.02em]">
-										No sessions
-									</span>
-								}
-								action={
-									<div className="flex flex-col items-center gap-1">
-										<Button
-											variant="soft"
-											size="md"
-											className="rounded-full px-4"
-											onClick={() => openPalette()}
-										>
-											New session
-										</Button>
-										<Button
-											variant="ghost"
-											size="sm"
-											onClick={() => navigate({ view: "archived" })}
-										>
-											Archived
-										</Button>
-									</div>
-								}
-								className="min-h-0 flex-1"
-							>
-								<span className="text-[14px] leading-[1.45] text-pretty">
-									Start one and it shows up here.
-								</span>
-							</EmptyState>
+							/* With nothing to open, the page IS the new-session card: the
+							   same palette rendered in place, so the empty state is
+							   something you can type into rather than a button that opens
+							   somewhere else. The sidebar carries the matching row for the
+							   session this will become.
+
+							   The overlay still wins when it is open (⌘K, a /new link, the
+							   sidebar +): one instance at a time, and since both persist
+							   the same "new-session" draft, whatever was typed here is
+							   already in the one that opens. */
+							<div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-5 py-8">
+								<div className="flex w-full max-w-[680px] flex-col">
+									<h1 className="text-[19px] leading-[1.15] font-semibold tracking-[-0.02em] text-fg">
+										Start a session
+									</h1>
+									<p className="mt-1 mb-4 text-[14px] leading-[1.45] text-dim text-pretty">
+										Sessions show up in the sidebar once you start one.
+									</p>
+									{!palette.open && (
+										<NewSession
+											inline
+											focusSeq={draftFocusSeq}
+											onBack={() => {}}
+											send={send}
+											addHandler={addHandler}
+											connected={connected}
+											onCreateStarted={(draft) => {
+												pendingCreateDraftRef.current = {
+													...draft,
+													startedAt: new Date().toISOString(),
+													user: getCurrentUser(),
+													originPath: routePath(routeRef.current),
+												};
+											}}
+										/>
+									)}
+								</div>
+							</div>
 						) : (
 							<Prs
 								sessions={sessions}

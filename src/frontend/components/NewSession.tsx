@@ -37,6 +37,7 @@ import { displayName } from "../brand-logos";
 import { IconTile } from "./BrandTile";
 import { Tooltip } from "../ui/tooltip";
 import { Modal, useEnterOnMount } from "../ui/modal";
+import { composerBox } from "../lib/composer-classes";
 import { tintedSurfaceParts } from "../lib/tinted-surface";
 import { cn } from "../ui/cn";
 import {
@@ -48,6 +49,16 @@ import {
 interface Props {
   /** Close the palette (Esc, backdrop click, or after a create without "Create more"). */
   onBack: () => void;
+  /**
+   * Render the same card on the page instead of over a backdrop: the empty
+   * state's session input. There is no view behind it to dismiss back to, so
+   * the create options collapse to the one that means anything (open what you
+   * just made) and `onBack` is only the reset after a create.
+   */
+  inline?: boolean;
+  /** Inline only: bumping this puts the caret back in the prompt. The sidebar's
+      draft row points at this field. */
+  focusSeq?: number;
   send: (msg: any) => void;
   addHandler: (handler: (msg: WSServerMessage) => void) => () => void;
   connected: boolean;
@@ -225,7 +236,14 @@ const CREATE_LABELS: Record<CreateAction, string> = {
    plate read visibly square next to its neighbours. */
 const CREATE_SPLIT = "relative inline-flex shrink-0 items-stretch";
 const CREATE_MAIN =
-	"inline-flex cursor-pointer items-center gap-[7px] border-none bg-accent px-3.5 py-[7px] text-label font-semibold text-on-accent transition-[background-color,opacity] enabled:hover:bg-accent-hover disabled:cursor-default disabled:opacity-40 desktop:rounded-l-control phone:rounded-[999px] max-[560px]:px-3";
+	"inline-flex cursor-pointer items-center gap-[7px] border-none bg-accent px-3.5 py-[7px] text-label font-semibold text-on-accent transition-[background-color,opacity] enabled:hover:bg-accent-hover disabled:cursor-default disabled:opacity-40 phone:rounded-[999px] max-[560px]:px-3";
+/** The desktop corner, split between the two shapes the button takes: half of
+ *  a split button beside its caret, or the whole button when there is no caret
+ *  (inline). Written as two whole classes rather than one plus an override,
+ *  because both set `border-top-left-radius`, and which one wins is decided by
+ *  the compiled sheet's order rather than the order they are listed here. */
+const CREATE_MAIN_SPLIT = "desktop:rounded-l-control";
+const CREATE_MAIN_WHOLE = "desktop:rounded-control";
 const CREATE_CARET =
 	"inline-flex cursor-pointer items-center gap-[7px] rounded-r-control border-none bg-accent p-[7px] text-label font-semibold text-on-accent shadow-[inset_1px_0_0_rgba(0,0,0,0.14)] transition-[background-color,opacity] enabled:hover:bg-accent-hover phone:hidden";
 const CREATE_KBD = "opacity-70";
@@ -233,6 +251,28 @@ const CREATE_MENU =
 	"absolute bottom-[calc(100%+6px)] right-0 z-20 min-w-[208px] rounded-control bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] p-[5px] smooth-shadow-ring-md";
 const CREATE_MENU_ITEM =
 	"flex w-full cursor-pointer items-start gap-[9px] rounded-md border-none bg-transparent px-[9px] py-[7px] text-left text-fg transition-colors hover:bg-hover";
+
+/**
+ * The same card rendered on the page rather than over a dimmed one: what the
+ * empty state shows when there is no session to open yet.
+ *
+ * Not the palette's glass: `--palette-glass` is mixed to composite over a
+ * backdrop, and on the pane's own surface there is little behind it to blur
+ * (nothing at all under the mac shell's vibrancy, where the app's layers go
+ * transparent). So it takes the composer's lift instead, the tokens for the
+ * surface you type into, which is also what the workspace home's first-session
+ * composer already wears.
+ *
+ * The layout half is the palette's and is load-bearing, not decoration: BODY is
+ * `min-h-0 flex-1` and only scrolls inside a bounded column, and the header and
+ * footer hairlines are keyed off that scroll. `relative` anchors the dictation
+ * HUD; `overflow-hidden` keeps the rows' dividers inside the rounded shell.
+ */
+const INLINE_CARD = cn(
+	"relative flex w-full flex-col overflow-hidden rounded-2xl",
+	"max-h-[min(560px,68dvh)]",
+	composerBox,
+);
 
 function lastSelectedRepo(): string | null {
   try {
@@ -295,7 +335,7 @@ function slugifyBranch(text: string): string {
   return slug || "new-session";
 }
 
-export function NewSession({ onBack, send, addHandler, connected, prefillPrompt, forceMode, workspaceId, forceRepo, forceBranch, onCreateStarted }: Props) {
+export function NewSession({ onBack, inline, focusSeq, send, addHandler, connected, prefillPrompt, forceMode, workspaceId, modelWorkspaceId, forceRepo, forceBranch, onCreateStarted }: Props) {
   const [prefill] = useState(readPrefill);
   // What the session may do, and nothing else — the footer's Ask toggle. The
   // repo is a separate axis, so Scratch is not a third value here: it is what
@@ -423,7 +463,11 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
   }, [accountProvider, accountId, accounts]);
   // What a create does with the view behind the palette. Chosen from the
   // Create split-button's dropdown; the primary button reflects the choice.
-  const [createAction, setCreateAction] = useState<CreateAction>("open");
+  const [chosenCreateAction, setCreateAction] = useState<CreateAction>("open");
+  // Inline there is no view behind the card: "background" would leave you on an
+  // empty page and "more" is what the card already does, so a create opens the
+  // session it just made. The caret that picks between them is hidden too.
+  const createAction: CreateAction = inline ? "open" : chosenCreateAction;
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const createSplitRef = useRef<HTMLDivElement>(null);
   const isPhone = useIsPhone();
@@ -575,6 +619,14 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
 
   // (The prompt is focused on open by Modal.Content's initialFocus — a mount
   // effect here would run a frame before the dialog's popup exists.)
+  //
+  // Inline there is no dialog to do it, and the children mount in the same
+  // commit, so an ordinary effect is enough. On a phone it waits for an
+  // explicit `focusSeq` bump: arriving on a page should not raise the keyboard.
+  useEffect(() => {
+    if (!inline || (isPhone && !focusSeq)) return;
+    promptRef.current?.focus();
+  }, [inline, focusSeq, isPhone]);
 
   // Auto-grow the prompt so a long draft isn't crammed into the resting height.
   // CSS min-height/max-height clamp the field, so it rests tall, grows with the
@@ -708,7 +760,11 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
         // still navigates into the created session behind the overlay). The
         // other two close it: "Create" lets App drop us into the new session,
         // "Create in background" leaves the view we came from in place.
-        if (createAction === "more") {
+        //
+        // Inline takes the same reset: App navigates into the session, which
+        // unmounts this card. If anything ever kept it mounted, what is left
+        // behind should be an empty prompt rather than the one just sent.
+        if (createAction === "more" || inline) {
           setCreating(false);
           setPrompt("");
           setImages([]);
@@ -726,7 +782,7 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
         }
       }
     });
-  }, [addHandler, createAction]);
+  }, [addHandler, createAction, inline]);
 
   async function addAttachments(picked: FileList | File[]) {
     const { images: imgs, files: fls, rejected } = await splitAttachments(picked);
@@ -885,39 +941,10 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
     "--palette-ask-border": askSurface.border,
   } as React.CSSProperties;
 
-  return (
-    <Modal.Root
-      open={open}
-      // Escape and outside presses both land here. App's global Esc-closes-a-
-      // palette shortcut can't double-fire: Base UI stops the keydown before it
-      // reaches window, so this is the only close (which matters — closePalette
-      // also pops a /new deep link off history).
-      onOpenChange={(next) => {
-        if (!next) onBack();
-      }}
-      // Focus is trapped, but the page is neither inerted nor scroll-locked: the
-      // "@"-mention popup portals to <body>, and inerting would leave it dead.
-      modal="trap-focus"
-      // Mid-create the palette isn't dismissable. An open mention popup also
-      // owns the next click — it lives outside the dialog, so pressing it would
-      // otherwise read as an outside press and close the whole palette.
-      disablePointerDismissal={creating || mentions.open}
-    >
-      <Modal.Content
-        variant="palette"
-        className={cn(
-          "max-h-[calc(89dvh-1rem)] max-[560px]:max-h-[calc(93dvh-1rem)]",
-          ASK_SURFACE,
-          mode === "ask" && "before:opacity-100 after:opacity-100",
-        )}
-        style={askSurfaceStyle}
-        aria-label="New session"
-        onKeyDown={cycleCreateAction}
-        // The prompt, not the repo picker Base UI would otherwise land on as the
-        // first tabbable.
-        initialFocus={promptRef}
-        finalFocus={() => !createdRef.current}
-      >
+  // The card itself: the same rows whether it floats over the page as a
+  // palette or sits on it as the empty state's session input.
+  const card = (
+    <>
         {/* Header: the Code/Ask switch and the repo (left) · create-from
             (right). Two axes, in the order they're decided: what the session
             may do, then what it is pointed at. Either mode can be pointed at
@@ -1298,7 +1325,10 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
 
             <div className={CREATE_SPLIT} ref={createSplitRef}>
               <button
-                className={CREATE_MAIN}
+                className={cn(
+                  CREATE_MAIN,
+                  inline ? CREATE_MAIN_WHOLE : CREATE_MAIN_SPLIT,
+                )}
                 onClick={handleCreate}
                 disabled={!canCreate}
               >
@@ -1323,7 +1353,10 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 )}
               </button>
               {/* The tooltip is where the cycle shortcut is taught: the caret
-                  is the only thing on screen that says these options exist. */}
+                  is the only thing on screen that says these options exist.
+                  Inline there are no options to pick between, so the button is
+                  whole and the caret is gone. */}
+              {!inline && (
               <Tooltip label="Create options" shortcut={CYCLE_SHORTCUT}>
               <button
                 type="button"
@@ -1346,7 +1379,8 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
                 />
               </button>
               </Tooltip>
-              {createMenuOpen && (
+              )}
+              {!inline && createMenuOpen && (
                 <div className={CREATE_MENU} role="menu">
                   {[
                     { action: "open" as const, title: "Create", desc: "Open the new session" },
@@ -1384,6 +1418,60 @@ export function NewSession({ onBack, send, addHandler, connected, prefillPrompt,
             </div>
           </div>
         </div>
+    </>
+  );
+
+  if (inline) {
+    return (
+      <div
+        className={cn(
+          INLINE_CARD,
+          ASK_SURFACE,
+          mode === "ask" && "before:opacity-100 after:opacity-100",
+        )}
+        style={askSurfaceStyle}
+        role="group"
+        aria-label="New session"
+      >
+        {card}
+      </div>
+    );
+  }
+
+  return (
+    <Modal.Root
+      open={open}
+      // Escape and outside presses both land here. App's global Esc-closes-a-
+      // palette shortcut can't double-fire: Base UI stops the keydown before it
+      // reaches window, so this is the only close (which matters, because
+      // closePalette also pops a /new deep link off history).
+      onOpenChange={(next) => {
+        if (!next) onBack();
+      }}
+      // Focus is trapped, but the page is neither inerted nor scroll-locked: the
+      // "@"-mention popup portals to <body>, and inerting would leave it dead.
+      modal="trap-focus"
+      // Mid-create the palette isn't dismissable. An open mention popup also
+      // owns the next click: it lives outside the dialog, so pressing it would
+      // otherwise read as an outside press and close the whole palette.
+      disablePointerDismissal={creating || mentions.open}
+    >
+      <Modal.Content
+        variant="palette"
+        className={cn(
+          "max-h-[calc(89dvh-1rem)] max-[560px]:max-h-[calc(93dvh-1rem)]",
+          ASK_SURFACE,
+          mode === "ask" && "before:opacity-100 after:opacity-100",
+        )}
+        style={askSurfaceStyle}
+        aria-label="New session"
+        onKeyDown={cycleCreateAction}
+        // The prompt, not the repo picker Base UI would otherwise land on as the
+        // first tabbable.
+        initialFocus={promptRef}
+        finalFocus={() => !createdRef.current}
+      >
+        {card}
       </Modal.Content>
     </Modal.Root>
   );
