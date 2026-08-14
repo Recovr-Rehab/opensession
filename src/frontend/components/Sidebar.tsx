@@ -4172,7 +4172,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						// as a card strip, where there's no room.
 						if (tool.id !== "feed" || isPhone || team.length === 0) return row;
 						return (
-							<div key={tool.id} className="relative">
+							<div key={tool.id} className="group/team-lens relative">
 								{row}
 								<TeamLensMenu
 									members={team}
@@ -4190,7 +4190,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									onPick={(next) =>
 										setFilter({ person: personLensFilter(next, currentUser) })
 									}
-									className="absolute right-2 top-1/2 -translate-y-1/2 [--team-face-ring:var(--bg-raised)] hover:[--team-face-ring:var(--row-chip)] data-[popup-open]:[--team-face-ring:var(--row-chip)]"
+									className="absolute right-2 top-1/2 -translate-y-1/2 [--team-face-ring:var(--bg-raised)] group-hover/team-lens:[--team-face-ring:var(--row-chip)] data-[popup-open]:[--team-face-ring:var(--row-chip)]"
 								/>
 							</div>
 						);
