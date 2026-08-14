@@ -373,11 +373,16 @@ export const TAB_NEW =
 	"desktop:px-[5px] desktop:py-[3px] desktop:text-[22px] " +
 	CTRL_REVEAL;
 
-/** Archived-sessions menu. Keeps the tab pill's corner; it stays lit while its
- *  menu is open (`data-popup-open`). */
+/**
+ * Archived-sessions menu. Same desktop footprint as the "+" it sits beside:
+ * the two are one pair of quiet square controls after the last tab, and a
+ * taller plate here read as a control stretched to fill the 40px band. Stays
+ * lit while its menu is open (`data-popup-open`).
+ */
 export const TAB_HISTORY =
-	`${CTRL_BASE} ` +
-	"desktop:min-h-auto desktop:px-2.5 desktop:py-[7px] " +
+	`${CTRL_BASE} justify-center ` +
+	"desktop:min-h-auto desktop:self-center desktop:rounded-control " +
+	"desktop:px-[5px] desktop:py-[3px] " +
 	"data-[popup-open]:bg-hover data-[popup-open]:text-fg " +
 	CTRL_REVEAL;
 
