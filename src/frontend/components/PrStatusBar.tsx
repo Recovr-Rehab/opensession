@@ -240,8 +240,7 @@ interface PrBarButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement>
 		| "status-red"
 		| "status-yellow"
 		| "secondary"
-		| "white"
-		| "gray"
+		| "purple-dashed"
 		| "solid";
 	icon?: React.ReactNode;
 	confirm?: boolean;
@@ -268,19 +267,11 @@ function PrBarButton({
 		solid:
 			"bg-[var(--text)] text-[var(--bg)] border-[color-mix(in_srgb,var(--text)_84%,transparent)]",
 		secondary: "bg-raised text-fg border-line-strong hover:bg-hover hover:brightness-100",
-		// Paper: the button surface, lifted by its hairline and cast shadow
-		// rather than a fill (see --button-surface in base.css). The action to
-		// take when the work continues.
-		white:
-			"bg-button text-fg border-line-strong hover:bg-hover hover:brightness-100",
-		// The filled chip beside it: flat grey, no edge, no lift, dim ink, so
-		// housekeeping reads quieter than the button it stands next to. Its
-		// fill is the one token that has to differ per theme — grey against
-		// paper in light, a step past the button in dark, where the button is
-		// grey too (see --button-quiet-surface in base.css). Hover is the base
-		// brightness lift, like the other filled tones.
-		gray:
-			"border-transparent bg-[var(--button-quiet-surface)] text-dim shadow-none hover:text-fg",
+		// The open outline beside a filled button: purple ink on the strip's own
+		// band, dashed, so it reads as the road not yet taken next to the solid
+		// action. Nothing to fill and nothing to lift, so it drops the shadow.
+		"purple-dashed":
+			"border-dashed border-[color-mix(in_srgb,var(--purple)_45%,transparent)] bg-transparent text-purple shadow-none hover:bg-[color-mix(in_srgb,var(--purple)_10%,transparent)] hover:brightness-100",
 	} as const;
 	return (
 		<button
@@ -745,9 +736,9 @@ export function PrStatusBar({
 						{onNewSession && (
 							<PrBarButton
 								className={cn(actionBtn, "@max-[440px]:px-1.5 @max-[440px]:gap-0")}
-								// The raised paper button: carrying the work on is the
-								// action here, and archiving is the filing that follows.
-								tone="white"
+								// The open outline: carrying the work on is the choice
+								// beside the filed-away one, not the same weight as it.
+								tone="purple-dashed"
 								icon={<IconPlus size={18} />}
 								onClick={onNewSession}
 								title="Start a new session in this workspace"
@@ -761,10 +752,10 @@ export function PrStatusBar({
 						{canArchive && (
 							<PrBarButton
 								className={actionBtn}
-								// Grey, not purple: archiving is housekeeping, and a filled
-								// purple button made the end of a session read as the loudest
-								// thing on the strip.
-								tone="gray"
+								// The merged strip's own purple, filled: archiving is what
+								// a landed PR is for, and the band around it already says
+								// purple, so the button is that colour rather than a neutral.
+								tone="purple"
 								icon={<IconArchive size={18} />}
 								disabled={!!busy}
 								onClick={() =>
