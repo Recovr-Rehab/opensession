@@ -125,6 +125,7 @@ import {
 	deleteWorkspaceApi,
 	newSessionApi,
 	fetchRepos,
+	fetchSessionsSnapshot,
 	resolveWorkspaceApi,
 	type OpenPr,
 } from "./lib/api";
@@ -2495,12 +2496,56 @@ export function App(
 		if (currentSession || workspaceSessions.length) return false;
 		// `openWsPanes` is this render's list, so it still holds the closing pane.
 		if (openWsPanes.some((pane) => pane !== closed)) return false;
-		const src = archivedSessions[0];
-		if (!src) return false;
-		void createNewSessionFrom(src, "share").catch((e) =>
-			console.error("New session failed:", e),
-		);
+		const wsId = activeWorkspaceId;
+		if (!wsId) return false;
+		void (async () => {
+			// The polled list is the live slice only, so a workspace opened cold
+			// carries no archived session to clone. Ask for the archived index
+			// rather than leaving the strip empty.
+			let src = archivedSessions[0];
+			if (!src) {
+				try {
+					const snapshot = await fetchSessionsSnapshot({
+						query: "?archived=only&slim=1",
+					});
+					const index: UnifiedSession[] = snapshot.text
+						? JSON.parse(snapshot.text)
+						: [];
+					src = index
+						.filter((s) => s.workspaceId === wsId)
+						.sort((a, b) =>
+							(b.lastActivity || "").localeCompare(a.lastActivity || ""),
+						)[0];
+				} catch (e) {
+					console.error("Archived index failed:", e);
+				}
+			}
+			// A workspace that never had a session (a PR someone else opened) has
+			// nothing to clone, and its home is a fine place to land: the composer
+			// there starts the first one.
+			if (!src) {
+				dropPaneUrlSuffix(closed);
+				return;
+			}
+			try {
+				await createNewSessionFrom(src, "share");
+			} catch (e) {
+				console.error("New session failed:", e);
+				dropPaneUrlSuffix(closed);
+			}
+		})();
 		return true;
+	}
+
+	/**
+	 * Drop a closed pane's URL suffix (/review, /conversation, /video). The
+	 * replace re-runs the workspace seeding effect, so arm its one-shot suppress
+	 * or it reopens the tab that was just closed.
+	 */
+	function dropPaneUrlSuffix(closed: WorkspacePaneTab) {
+		if (route.view !== "workspace" || route.tab !== closed) return;
+		suppressWsSeedRef.current = true;
+		navigate({ view: "workspace", id: route.id }, { replace: true });
 	}
 
 	/**
@@ -2575,16 +2620,10 @@ export function App(
 						else if (closingTab === "video") closeVideoTab();
 						else closeReviewTab();
 						// A workspace always shows something: closing its last pane
-						// while every session is closed reopens one, and that
-						// navigation stands in for the URL cleanup below.
-						if (reopenSessionAfterPaneClose(closingTab)) return;
-						// Drop the tab suffix; the URL replace re-runs the seeding
-						// effect, so arm its one-shot suppress (a close with no
-						// suffix causes no replace and needs none).
-						if (route.view === "workspace" && route.tab === closingTab) {
-							suppressWsSeedRef.current = true;
-							navigate({ view: "workspace", id: route.id }, { replace: true });
-						}
+						// while every session is closed reopens one, and its
+						// navigation stands in for dropping the tab suffix.
+						if (!reopenSessionAfterPaneClose(closingTab))
+							dropPaneUrlSuffix(closingTab);
 					}
 				}}
 				onNewSession={(mode) => handleNewSession(mode, side)}
