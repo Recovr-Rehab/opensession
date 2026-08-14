@@ -26,7 +26,7 @@ import type { FeedbackRecord } from "../agents/github/feedback-gates";
 const AUDIT_DIR = stateDir("audit");
 const CACHE_DIR = stateDir("analytics-cache");
 // Bump when the rollup shape changes — stale disk caches recompute.
-const ROLLUP_VERSION = 5;
+const ROLLUP_VERSION = 6;
 
 interface TokenTotals {
 	input: number;
@@ -37,12 +37,20 @@ interface TokenTotals {
 
 interface ModelAgg extends TokenTotals {
 	turns: number;
+	costUsd: number;
+	/** Turns that reported a price. Models billed against a subscription pool
+	 *  (the OpenAI accounts) report 0 per turn, so cost without this count
+	 *  reads as "cheap" when it means "not billed by token". */
+	costedTurns: number;
 }
 
 interface SessionAgg {
 	kind: string;
 	turns: number;
 	output: number;
+	/** input + output + cache read + cache write. */
+	tokens: number;
+	costUsd: number;
 	errors: number;
 }
 
@@ -87,6 +95,8 @@ interface DayRollup {
 	durationMs: number;
 	oneshots: number;
 	tokens: TokenTotals;
+	costUsd: number;
+	costedTurns: number;
 	byModel: Record<string, ModelAgg>;
 	/** Turns whose audit events carried no model (pre-2026-07-09 SDK-runner
 	 *  days), keyed by session id — resolved against the session store's
@@ -105,6 +115,16 @@ function emptyTokens(): TokenTotals {
 	return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 }
 
+function emptyModelAgg(): ModelAgg {
+	return { turns: 0, costUsd: 0, costedTurns: 0, ...emptyTokens() };
+}
+
+/** Costs are summed from per-turn floats; round at the edge so the payload
+ *  carries cents rather than 48.410000000000004. */
+function round2(n: number): number {
+	return Math.round(n * 100) / 100;
+}
+
 function rollupAuditDay(date: string): DayRollup {
 	const rollup: DayRollup = {
 		date,
@@ -114,6 +134,8 @@ function rollupAuditDay(date: string): DayRollup {
 		durationMs: 0,
 		oneshots: 0,
 		tokens: emptyTokens(),
+		costUsd: 0,
+		costedTurns: 0,
 		byModel: {},
 		unknownModel: {},
 		bySession: {},
@@ -131,6 +153,8 @@ function rollupAuditDay(date: string): DayRollup {
 			kind: String(e.run_kind || "?").replace(/-reattach$/, ""),
 			turns: 0,
 			output: 0,
+			tokens: 0,
+			costUsd: 0,
 			errors: 0,
 		});
 	};
@@ -209,24 +233,31 @@ function rollupAuditDay(date: string): DayRollup {
 				const output = Number(e.output_tokens) || 0;
 				const cacheRead = Number(e.cache_read_input_tokens) || 0;
 				const cacheWrite = Number(e.cache_creation_input_tokens) || 0;
+				const cost = Number(e.total_cost_usd) || 0;
 				rollup.tokens.input += input;
 				rollup.tokens.output += output;
 				rollup.tokens.cacheRead += cacheRead;
 				rollup.tokens.cacheWrite += cacheWrite;
+				rollup.costUsd += cost;
+				if (cost > 0) rollup.costedTurns++;
 				const model = e.model
 					? shortModel(String(e.model))
 					: promptModel.get(String(e.session_id || e.bks_session_id || "")) || "";
 				const m = model
-					? (rollup.byModel[model] ||= { turns: 0, ...emptyTokens() })
-					: (rollup.unknownModel[String(e.session_id || e.bks_session_id || "")] ||= { turns: 0, ...emptyTokens() });
+					? (rollup.byModel[model] ||= emptyModelAgg())
+					: (rollup.unknownModel[String(e.session_id || e.bks_session_id || "")] ||= emptyModelAgg());
 				m.turns++;
 				m.input += input;
 				m.output += output;
 				m.cacheRead += cacheRead;
 				m.cacheWrite += cacheWrite;
+				m.costUsd += cost;
+				if (cost > 0) m.costedTurns++;
 				if (s) {
 					s.turns++;
 					s.output += output;
+					s.tokens += input + output + cacheRead + cacheWrite;
+					s.costUsd += cost;
 				}
 				break;
 			}
@@ -674,7 +705,11 @@ export interface AnalyticsSummary {
 		inputTokens: number;
 		cacheReadTokens: number;
 		cacheWriteTokens: number;
+		/** input + output + cache read + cache write. */
+		totalTokens: number;
+		costUsd: number;
 		outputByModel: Record<string, number>;
+		costByModel: Record<string, number>;
 		prsOpened: number;
 		prsMerged: number;
 		durationMs: number;
@@ -691,19 +726,30 @@ export interface AnalyticsSummary {
 		inputTokens: number;
 		cacheReadTokens: number;
 		cacheWriteTokens: number;
+		totalTokens: number;
+		costUsd: number;
+		/** Turns that reported a price — the rest run on subscription pools
+		 *  and report $0, so cost covers `costedTurns` of `turns`. */
+		costedTurns: number;
 		prsOpened: number;
 		prsMerged: number;
 		allPrsOpened: number;
 		allPrsMerged: number;
 		activePeople: number;
 	};
-	models: Array<{ model: string; turns: number } & { [K in keyof TokenTotals as `${K}Tokens`]: number }>;
+	models: Array<
+		{ model: string; turns: number; totalTokens: number; costUsd: number; costedTurns: number } & {
+			[K in keyof TokenTotals as `${K}Tokens`]: number;
+		}
+	>;
 	people: Array<{
 		name: string;
 		sessionsCreated: number;
 		sessionsActive: number;
 		turns: number;
 		outputTokens: number;
+		totalTokens: number;
+		costUsd: number;
 		/** This person's activity split by repo ("" = not attributable). */
 		repos: Array<{ repo: string; sessions: number; turns: number; outputTokens: number }>;
 	}>;
@@ -713,6 +759,8 @@ export interface AnalyticsSummary {
 		sessionsActive: number;
 		turns: number;
 		outputTokens: number;
+		totalTokens: number;
+		costUsd: number;
 		errors: number;
 	}>;
 	repos: Array<{
@@ -722,6 +770,8 @@ export interface AnalyticsSummary {
 		sessions: number;
 		turns: number;
 		outputTokens: number;
+		totalTokens: number;
+		costUsd: number;
 		errors: number;
 		prsOpened: number;
 		prsMerged: number;
@@ -807,6 +857,9 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 		inputTokens: 0,
 		cacheReadTokens: 0,
 		cacheWriteTokens: 0,
+		totalTokens: 0,
+		costUsd: 0,
+		costedTurns: 0,
 		prsOpened: 0,
 		prsMerged: 0,
 		allPrsOpened: 0,
@@ -824,6 +877,8 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 		sessionsActive: Set<string>;
 		turns: number;
 		outputTokens: number;
+		totalTokens: number;
+		costUsd: number;
 		errors: number;
 		byRepo: Map<string, OwnerRepoAgg>;
 	}
@@ -835,17 +890,36 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 		sessions: Set<string>;
 		turns: number;
 		outputTokens: number;
+		totalTokens: number;
+		costUsd: number;
 		errors: number;
 	}
 	const repoActivity = new Map<string, RepoActivity>();
 	const repoActivityOf = (repo: string): RepoActivity => {
 		let a = repoActivity.get(repo);
-		if (!a) repoActivity.set(repo, (a = { sessions: new Set(), turns: 0, outputTokens: 0, errors: 0 }));
+		if (!a)
+			repoActivity.set(
+				repo,
+				(a = { sessions: new Set(), turns: 0, outputTokens: 0, totalTokens: 0, costUsd: 0, errors: 0 }),
+			);
 		return a;
 	};
 	const ownerAgg = (m: Map<string, OwnerAgg>, name: string): OwnerAgg => {
 		let a = m.get(name);
-		if (!a) m.set(name, (a = { sessionsCreated: 0, sessionsActive: new Set(), turns: 0, outputTokens: 0, errors: 0, byRepo: new Map() }));
+		if (!a)
+			m.set(
+				name,
+				(a = {
+					sessionsCreated: 0,
+					sessionsActive: new Set(),
+					turns: 0,
+					outputTokens: 0,
+					totalTokens: 0,
+					costUsd: 0,
+					errors: 0,
+					byRepo: new Map(),
+				}),
+			);
 		return a;
 	};
 	const allSessions = new Set<string>();
@@ -904,12 +978,16 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 			agg.sessionsActive.add(id);
 			agg.turns += s.turns;
 			agg.outputTokens += s.output;
+			agg.totalTokens += s.tokens || 0;
+			agg.costUsd += s.costUsd || 0;
 			agg.errors += s.errors;
 			const repoKey = m?.repo || "";
 			const ra = repoActivityOf(repoKey);
 			ra.sessions.add(id);
 			ra.turns += s.turns;
 			ra.outputTokens += s.output;
+			ra.totalTokens += s.tokens || 0;
+			ra.costUsd += s.costUsd || 0;
 			ra.errors += s.errors;
 			let orr = agg.byRepo.get(repoKey);
 			if (!orr) agg.byRepo.set(repoKey, (orr = { sessions: new Set(), turns: 0, outputTokens: 0 }));
@@ -918,14 +996,18 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 			orr.outputTokens += s.output;
 		}
 		const outputByModel: Record<string, number> = {};
+		const costByModel: Record<string, number> = {};
 		const addModel = (model: string, m: ModelAgg) => {
 			outputByModel[model] = (outputByModel[model] || 0) + m.output;
-			const agg = modelAgg.get(model) || { turns: 0, ...emptyTokens() };
+			if (m.costUsd) costByModel[model] = (costByModel[model] || 0) + m.costUsd;
+			const agg = modelAgg.get(model) || emptyModelAgg();
 			agg.turns += m.turns;
 			agg.input += m.input;
 			agg.output += m.output;
 			agg.cacheRead += m.cacheRead;
 			agg.cacheWrite += m.cacheWrite;
+			agg.costUsd += m.costUsd || 0;
+			agg.costedTurns += m.costedTurns || 0;
 			modelAgg.set(model, agg);
 		};
 		for (const [model, m] of Object.entries(r.byModel)) addModel(model, m);
@@ -947,7 +1029,10 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 			inputTokens: r.tokens.input,
 			cacheReadTokens: r.tokens.cacheRead,
 			cacheWriteTokens: r.tokens.cacheWrite,
+			totalTokens: r.tokens.input + r.tokens.output + r.tokens.cacheRead + r.tokens.cacheWrite,
+			costUsd: round2(r.costUsd || 0),
 			outputByModel,
+			costByModel: Object.fromEntries(Object.entries(costByModel).map(([m, c]) => [m, round2(c)])),
 			prsOpened,
 			prsMerged,
 			durationMs: r.durationMs,
@@ -961,7 +1046,12 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 		totals.inputTokens += r.tokens.input;
 		totals.cacheReadTokens += r.tokens.cacheRead;
 		totals.cacheWriteTokens += r.tokens.cacheWrite;
+		totals.costUsd += r.costUsd || 0;
+		totals.costedTurns += r.costedTurns || 0;
 	}
+	totals.totalTokens =
+		totals.inputTokens + totals.outputTokens + totals.cacheReadTokens + totals.cacheWriteTokens;
+	totals.costUsd = round2(totals.costUsd);
 	totals.sessions = allSessions.size;
 
 	const repoAgg = new Map<string, AnalyticsSummary["repos"][number]>();
@@ -975,6 +1065,8 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 					sessions: 0,
 					turns: 0,
 					outputTokens: 0,
+					totalTokens: 0,
+					costUsd: 0,
 					errors: 0,
 					prsOpened: 0,
 					prsMerged: 0,
@@ -990,6 +1082,8 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 		r.sessions = a.sessions.size;
 		r.turns = a.turns;
 		r.outputTokens = a.outputTokens;
+		r.totalTokens = a.totalTokens;
+		r.costUsd = round2(a.costUsd);
 		r.errors = a.errors;
 	}
 	for (const pr of allPrs) {
@@ -1018,6 +1112,9 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 			outputTokens: m.output,
 			cacheReadTokens: m.cacheRead,
 			cacheWriteTokens: m.cacheWrite,
+			totalTokens: m.input + m.output + m.cacheRead + m.cacheWrite,
+			costUsd: round2(m.costUsd),
+			costedTurns: m.costedTurns,
 		}))
 		.sort((a, b) => b.outputTokens - a.outputTokens);
 	const people = [...peopleAgg.entries()]
@@ -1027,6 +1124,8 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 			sessionsActive: a.sessionsActive.size,
 			turns: a.turns,
 			outputTokens: a.outputTokens,
+			totalTokens: a.totalTokens,
+			costUsd: round2(a.costUsd),
 			repos: [...a.byRepo.entries()]
 				.map(([repo, r]) => ({ repo, sessions: r.sessions.size, turns: r.turns, outputTokens: r.outputTokens }))
 				.sort((x, y) => y.outputTokens - x.outputTokens),
@@ -1041,6 +1140,8 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 			sessionsActive: a.sessionsActive.size,
 			turns: a.turns,
 			outputTokens: a.outputTokens,
+			totalTokens: a.totalTokens,
+			costUsd: round2(a.costUsd),
 			errors: a.errors,
 		}))
 		.sort((a, b) => b.sessionsActive - a.sessionsActive || b.runs - a.runs);

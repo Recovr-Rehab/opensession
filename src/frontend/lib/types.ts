@@ -866,7 +866,12 @@ export interface AnalyticsDay {
 	inputTokens: number;
 	cacheReadTokens: number;
 	cacheWriteTokens: number;
+	/** input + output + cache read + cache write. Optional: absent from a
+	 *  not-yet-restarted server's payload. */
+	totalTokens?: number;
+	costUsd?: number;
 	outputByModel: Record<string, number>;
+	costByModel?: Record<string, number>;
 	prsOpened: number;
 	prsMerged: number;
 	durationMs: number;
@@ -879,6 +884,10 @@ export interface AnalyticsModel {
 	outputTokens: number;
 	cacheReadTokens: number;
 	cacheWriteTokens: number;
+	totalTokens?: number;
+	costUsd?: number;
+	/** Turns that reported a price; the rest bill against a subscription pool. */
+	costedTurns?: number;
 }
 
 export interface AnalyticsPersonRepo {
@@ -895,6 +904,8 @@ export interface AnalyticsPerson {
 	sessionsActive: number;
 	turns: number;
 	outputTokens: number;
+	totalTokens?: number;
+	costUsd?: number;
 	/** Optional: absent from a not-yet-restarted server's payload. */
 	repos?: AnalyticsPersonRepo[];
 }
@@ -905,6 +916,8 @@ export interface AnalyticsAutomation {
 	sessionsActive: number;
 	turns: number;
 	outputTokens: number;
+	totalTokens?: number;
+	costUsd?: number;
 	errors: number;
 }
 
@@ -914,6 +927,8 @@ export interface AnalyticsRepo {
 	sessions: number;
 	turns: number;
 	outputTokens: number;
+	totalTokens?: number;
+	costUsd?: number;
 	errors: number;
 	prsOpened: number;
 	prsMerged: number;
@@ -958,6 +973,11 @@ export interface AnalyticsSummary {
 		inputTokens: number;
 		cacheReadTokens: number;
 		cacheWriteTokens: number;
+		totalTokens?: number;
+		costUsd?: number;
+		/** Turns that reported a price. Cost covers these of `turns`; the rest
+		 *  run on subscription pools and report $0. */
+		costedTurns?: number;
 		prsOpened: number;
 		prsMerged: number;
 		allPrsOpened: number;

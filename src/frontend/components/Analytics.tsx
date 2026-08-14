@@ -32,6 +32,13 @@ const compactFmt = new Intl.NumberFormat("en", {
 });
 const fmt = (n: number) => compactFmt.format(n);
 const fmtInt = (n: number) => n.toLocaleString("en-US");
+/** Cents up to $1K, compact above it — a table of four-figure sums is easier
+ *  to compare as $1.2K than as $1,238.47. */
+const fmtUsd = (n: number) => (n >= 1000 ? `$${compactFmt.format(n)}` : `$${n.toFixed(2)}`);
+/** A zero here means "nothing billed by token", not "free" — the dash says so
+ *  without claiming a price. */
+const fmtUsdCell = (n: number) => (n > 0 ? fmtUsd(n) : "–");
+const pct = (part: number, whole: number) => (whole > 0 ? `${Math.round((100 * part) / whole)}%` : "–");
 
 function shortDate(iso: string): string {
 	return new Intl.DateTimeFormat(undefined, {
@@ -397,6 +404,43 @@ export function Analytics() {
 			return row;
 		});
 
+		// Tokens per day, split by kind. Cache reads dwarf the rest by two
+		// orders of magnitude, so the stack is really "how much context got
+		// re-read" with a sliver of new work on top — which is the honest shape.
+		const totalTokens =
+			data.totals.totalTokens ??
+			data.totals.inputTokens +
+				data.totals.outputTokens +
+				data.totals.cacheReadTokens +
+				data.totals.cacheWriteTokens;
+		const tokenSeries: Series[] = [
+			{ label: "Cache read", color: slot(1) },
+			{ label: "Input", color: slot(4) },
+			{ label: "Output", color: slot(2) },
+		];
+		// Cache writes are zero on every current engine path; only carry the
+		// series when a day actually has some, so the legend stays honest.
+		const hasCacheWrite = data.days.some((d) => d.cacheWriteTokens > 0);
+		if (hasCacheWrite) tokenSeries.push({ label: "Cache write", color: slot(7) });
+		const tokenValues = data.days.map((d) => {
+			const row = [d.cacheReadTokens, d.inputTokens, d.outputTokens];
+			if (hasCacheWrite) row.push(d.cacheWriteTokens);
+			return row;
+		});
+
+		// Cost per day by model. Only the API-billed models report a price, so
+		// this chart is deliberately a subset of the turns above it.
+		const costUsd = data.totals.costUsd ?? 0;
+		const costedTurns = data.totals.costedTurns ?? 0;
+		const hasCost = costUsd > 0;
+		const costModels = [...data.models]
+			.filter((m) => (m.costUsd ?? 0) > 0)
+			.sort((a, b) => (b.costUsd ?? 0) - (a.costUsd ?? 0))
+			.slice(0, 5)
+			.map((m) => m.model);
+		const costSeries: Series[] = costModels.map((m, i) => ({ label: m, color: slot(i + 1) }));
+		const costValues = data.days.map((d) => costModels.map((m) => d.costByModel?.[m] || 0));
+
 		const prSeries: Series[] = [
 			{ label: "Opened", color: slot(1) },
 			{ label: "Merged", color: slot(2) },
@@ -418,8 +462,6 @@ export function Analytics() {
 			const d = factoryByDate.get(date);
 			return [d?.reviewed || 0, d?.unreviewed || 0];
 		});
-
-		const maxModelOutput = Math.max(1, ...data.models.map((m) => m.outputTokens));
 
 		// Per-person repo mix: colors follow the repos table's order (slots 1-8,
 		// tail and the "no repo" bucket fold into neutral gray).
@@ -459,7 +501,7 @@ export function Analytics() {
 		});
 		const splitDate = labels[Math.floor(labels.length / 2)] || "";
 
-		return { labels, kindSeries, kindValues, modelSeries, modelValues, prSeries, prValues, turnSeries, turnValues, factorySeries, factoryValues, maxModelOutput, rq, reviewSeries, reviewValues, splitDate, repoColor, personRepoRows, maxPersonOutput, personRepoSeries };
+		return { labels, kindSeries, kindValues, modelSeries, modelValues, tokenSeries, tokenValues, totalTokens, costSeries, costValues, costUsd, costedTurns, hasCost, prSeries, prValues, turnSeries, turnValues, factorySeries, factoryValues, rq, reviewSeries, reviewValues, splitDate, repoColor, personRepoRows, maxPersonOutput, personRepoSeries };
 	}, [data]);
 
 	// Deliberately NOT ui/input's field: these two sit inside the range row
@@ -540,9 +582,25 @@ export function Analytics() {
 								sub={`${fmtInt(data.totals.errors)} errors · ${fmtInt(data.totals.cancelled)} cancelled`}
 							/>
 							<StatTile
-								label="Output tokens"
-								value={fmt(data.totals.outputTokens)}
-								sub={`${fmt(data.totals.inputTokens)} input · ${fmt(data.totals.cacheReadTokens)} cache read`}
+								label="Tokens"
+								value={fmt(derived.totalTokens)}
+								sub={`${fmt(data.totals.inputTokens)} in · ${fmt(data.totals.outputTokens)} out${
+									data.totals.cacheWriteTokens ? ` · ${fmt(data.totals.cacheWriteTokens)} cache write` : ""
+								}`}
+							/>
+							<StatTile
+								label="Cost"
+								value={derived.hasCost ? fmtUsd(derived.costUsd) : "–"}
+								sub={
+									derived.hasCost
+										? `${fmtInt(derived.costedTurns)} of ${fmtInt(data.totals.turns)} turns billed by token`
+										: "no turns billed by token in range"
+								}
+							/>
+							<StatTile
+								label="Cache reads"
+								value={fmt(data.totals.cacheReadTokens)}
+								sub={`${pct(data.totals.cacheReadTokens, derived.totalTokens)} of all tokens`}
 							/>
 							<StatTile
 								label="Agent time"
@@ -583,6 +641,28 @@ export function Analytics() {
 							<ChartCard title="Output tokens per day" subtitle="By model, top 5 in range" series={derived.modelSeries}>
 								<BarChart labels={derived.labels} series={derived.modelSeries} values={derived.modelValues} mode="stacked" />
 							</ChartCard>
+							<ChartCard
+								title="Tokens per day"
+								subtitle="Every token the engines read and wrote, by kind"
+								series={derived.tokenSeries}
+							>
+								<BarChart labels={derived.labels} series={derived.tokenSeries} values={derived.tokenValues} mode="stacked" />
+							</ChartCard>
+							{derived.hasCost && (
+								<ChartCard title="Cost per day" subtitle="By model, top 5 in range" series={derived.costSeries}>
+									<BarChart
+										labels={derived.labels}
+										series={derived.costSeries}
+										values={derived.costValues}
+										mode="stacked"
+										formatValue={fmtUsd}
+									/>
+									<p className="m-0 mt-2 text-meta text-faint">
+										Only models billed per token report a price. Turns on a subscription pool report $0, so this covers{" "}
+										{fmtInt(derived.costedTurns)} of {fmtInt(data.totals.turns)} turns in range.
+									</p>
+								</ChartCard>
+							)}
 							<ChartCard title="Pull requests per day" subtitle={`Opened & merged from ${PRODUCT_NAME} sessions`} series={derived.prSeries}>
 								<BarChart labels={derived.labels} series={derived.prSeries} values={derived.prValues} mode="grouped" formatValue={fmtInt} />
 							</ChartCard>
@@ -695,29 +775,47 @@ export function Analytics() {
 						</div>
 
 						<div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
-							<ChartCard title="Models" subtitle="Output tokens and turns per model">
-								<div className="flex flex-col gap-2">
-									{data.models.slice(0, 8).map((m, i) => (
-										<div key={m.model} className="flex items-center gap-3 text-label">
-											<span className="w-[42%] truncate text-fg" title={m.model}>
-												{m.model}
-											</span>
-											<span className="h-3 min-w-0 flex-1">
-												<span
-													// min-w = the bar's own height, so the smallest value is a
-													// clean dot rather than a squeezed sliver of a capsule.
-													className="block h-3 min-w-3 rounded-[999px]"
-													style={{
-														width: `${Math.max(1.5, (100 * m.outputTokens) / derived.maxModelOutput)}%`,
-														background: i < 5 ? slot(i + 1) : OTHER_COLOR,
-													}}
-												/>
-											</span>
-											<span className="w-14 text-right tabular-nums text-dim">{fmt(m.outputTokens)}</span>
-											<span className="w-14 text-right tabular-nums text-faint">{fmt(m.turns)} turns</span>
-										</div>
-									))}
+							<ChartCard title="Models" subtitle="Tokens and cost per model">
+								<div className="overflow-x-auto">
+									<table className="w-full border-collapse text-label">
+										<thead>
+											<tr className="text-left text-meta text-faint">
+												<th className="pb-1.5 font-medium">Model</th>
+												<th className="pb-1.5 text-right font-medium">Turns</th>
+												<th className="pb-1.5 text-right font-medium">In</th>
+												<th className="pb-1.5 text-right font-medium">Out</th>
+												<th className="pb-1.5 text-right font-medium">Cache read</th>
+												<th className="pb-1.5 text-right font-medium">Tokens</th>
+												<th className="pb-1.5 text-right font-medium">Cost</th>
+											</tr>
+										</thead>
+										<tbody>
+											{data.models.slice(0, 10).map((m) => (
+												<tr key={m.model} className="border-t border-line">
+													<td className="max-w-32 truncate py-1.5 text-fg" title={m.model}>
+														{m.model}
+													</td>
+													<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(m.turns)}</td>
+													<td className="py-1.5 text-right tabular-nums text-dim">{fmt(m.inputTokens)}</td>
+													<td className="py-1.5 text-right tabular-nums text-dim">{fmt(m.outputTokens)}</td>
+													<td className="py-1.5 text-right tabular-nums text-dim">{fmt(m.cacheReadTokens)}</td>
+													<td className="py-1.5 text-right tabular-nums text-fg">
+														{fmt(
+															m.totalTokens ??
+																m.inputTokens + m.outputTokens + m.cacheReadTokens + m.cacheWriteTokens,
+														)}
+													</td>
+													<td className="py-1.5 text-right tabular-nums text-dim">{fmtUsdCell(m.costUsd ?? 0)}</td>
+												</tr>
+											))}
+										</tbody>
+									</table>
 								</div>
+								{derived.hasCost && (
+									<p className="m-0 mt-2 text-meta text-faint">
+										A dash means the model bills against a subscription pool, not per token.
+									</p>
+								)}
 							</ChartCard>
 							<ChartCard title="Repos" subtitle="Sessions, turns, tokens and PRs per repo">
 								<div className="overflow-x-auto">
@@ -727,7 +825,8 @@ export function Analytics() {
 												<th className="pb-1.5 font-medium">Repo</th>
 												<th className="pb-1.5 text-right font-medium">Sessions</th>
 												<th className="pb-1.5 text-right font-medium">Turns</th>
-												<th className="pb-1.5 text-right font-medium">Output</th>
+												<th className="pb-1.5 text-right font-medium">Tokens</th>
+												<th className="pb-1.5 text-right font-medium">Cost</th>
 												<th className="pb-1.5 text-right font-medium">Opened</th>
 												<th className="pb-1.5 text-right font-medium">Merged</th>
 												<th className="pb-1.5 text-right font-medium">Share</th>
@@ -741,7 +840,10 @@ export function Analytics() {
 													</td>
 													<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(r.sessions || 0)}</td>
 													<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(r.turns || 0)}</td>
-													<td className="py-1.5 text-right tabular-nums text-dim">{fmt(r.outputTokens || 0)}</td>
+													<td className="py-1.5 text-right tabular-nums text-dim">
+														{fmt(r.totalTokens ?? r.outputTokens ?? 0)}
+													</td>
+													<td className="py-1.5 text-right tabular-nums text-dim">{fmtUsdCell(r.costUsd ?? 0)}</td>
 													<td className="py-1.5 text-right tabular-nums text-dim">
 														{fmtInt(r.prsOpened)} <span className="text-faint">/ {fmtInt(r.allOpened)}</span>
 													</td>
@@ -763,7 +865,7 @@ export function Analytics() {
 						</div>
 
 						<div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
-							<ChartCard title="People" subtitle="Sessions and turns per person">
+							<ChartCard title="People" subtitle="Sessions, turns, tokens and cost per person">
 								<div className="overflow-x-auto">
 									<table className="w-full border-collapse text-label">
 										<thead>
@@ -772,7 +874,8 @@ export function Analytics() {
 												<th className="pb-1.5 text-right font-medium">Created</th>
 												<th className="pb-1.5 text-right font-medium">Active</th>
 												<th className="pb-1.5 text-right font-medium">Turns</th>
-												<th className="pb-1.5 text-right font-medium">Output</th>
+												<th className="pb-1.5 text-right font-medium">Tokens</th>
+												<th className="pb-1.5 text-right font-medium">Cost</th>
 											</tr>
 										</thead>
 										<tbody>
@@ -782,14 +885,17 @@ export function Analytics() {
 													<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(p.sessionsCreated)}</td>
 													<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(p.sessionsActive)}</td>
 													<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(p.turns)}</td>
-													<td className="py-1.5 text-right tabular-nums text-dim">{fmt(p.outputTokens)}</td>
+													<td className="py-1.5 text-right tabular-nums text-dim">
+														{fmt(p.totalTokens ?? p.outputTokens)}
+													</td>
+													<td className="py-1.5 text-right tabular-nums text-dim">{fmtUsdCell(p.costUsd ?? 0)}</td>
 												</tr>
 											))}
 										</tbody>
 									</table>
 								</div>
 							</ChartCard>
-							<ChartCard title="Automations" subtitle="Runs, turns and errors per automation">
+							<ChartCard title="Automations" subtitle="Runs, turns, tokens and cost per automation">
 								<div className="overflow-x-auto">
 									<table className="w-full border-collapse text-label">
 										<thead>
@@ -797,7 +903,8 @@ export function Analytics() {
 												<th className="pb-1.5 font-medium">Automation</th>
 												<th className="pb-1.5 text-right font-medium">Runs</th>
 												<th className="pb-1.5 text-right font-medium">Turns</th>
-												<th className="pb-1.5 text-right font-medium">Output</th>
+												<th className="pb-1.5 text-right font-medium">Tokens</th>
+												<th className="pb-1.5 text-right font-medium">Cost</th>
 												<th className="pb-1.5 text-right font-medium">Errors</th>
 											</tr>
 										</thead>
@@ -809,7 +916,10 @@ export function Analytics() {
 													</td>
 													<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(a.runs)}</td>
 													<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(a.turns)}</td>
-													<td className="py-1.5 text-right tabular-nums text-dim">{fmt(a.outputTokens)}</td>
+													<td className="py-1.5 text-right tabular-nums text-dim">
+														{fmt(a.totalTokens ?? a.outputTokens)}
+													</td>
+													<td className="py-1.5 text-right tabular-nums text-dim">{fmtUsdCell(a.costUsd ?? 0)}</td>
 													<td className={`py-1.5 text-right tabular-nums ${a.errors ? "text-red" : "text-faint"}`}>
 														{fmtInt(a.errors)}
 													</td>
