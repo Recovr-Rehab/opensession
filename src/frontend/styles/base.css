@@ -1628,12 +1628,16 @@ a.asset-ref:focus-visible {
 .session-link[data-session-running] .session-link-icon svg {
 	display: none;
 }
+/* Painted into the glyph's own 18px box instead of being a 7px box of its
+   own. The chip is an inline-flex, so the sentence takes its baseline from
+   the first item, the icon, and a 7px box centred in that slot puts that
+   baseline 5.5px higher than the glyph does. That dropped the whole running
+   chip half a line below the words around it. */
 .session-link[data-session-running] .session-link-icon::before {
 	content: "";
-	width: 7px;
-	height: 7px;
-	border-radius: 999px;
-	background: var(--yellow);
+	width: 18px;
+	height: 18px;
+	background: radial-gradient(circle at 50% 50%, var(--yellow) 3.5px, transparent 3.6px);
 }
 
 /* A pull-request reference (`#5528` or an explicit GitHub PR link) linked into
