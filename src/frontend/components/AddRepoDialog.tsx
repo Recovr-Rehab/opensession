@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { registerRepoApi, type RepoInfo } from "../lib/api";
+import { Segmented, SegmentedOption } from "../ui/segmented";
 import { Button } from "../ui/button";
 import { Modal } from "../ui/modal";
 import { fieldClasses } from "../ui/input";
@@ -64,35 +65,29 @@ export function AddRepoDialog({
 					description="Clone a Git repository (GitHub or a code.storage remote), or register a checkout already on this Mac."
 				/>
 
-				<div
-					className="grid grid-cols-2 rounded-md bg-panel p-1"
-					role="tablist"
-					aria-label="Repository source"
+				<Segmented
+					className="w-full"
+					label="Repository source"
+					value={mode}
+					onValueChange={(next) => {
+						setMode(next as typeof mode);
+						setError(null);
+					}}
 				>
 					{([
 						["clone", "Clone URL"],
 						["path", "Local folder"],
 					] as const).map(([nextMode, label]) => (
-						<button
+						<SegmentedOption
 							key={nextMode}
-							type="button"
-							role="tab"
-							aria-selected={mode === nextMode}
-							className={`rounded-control border-0 px-3 py-2 text-sm font-medium transition-colors ${
-								mode === nextMode
-									? "bg-raised text-fg smooth-shadow-sm"
-									: "bg-transparent text-dim hover:text-fg"
-							}`}
-							onClick={() => {
-								setMode(nextMode);
-								setError(null);
-							}}
+							value={nextMode}
+							className="flex-1 justify-center"
 							disabled={adding}
 						>
 							{label}
-						</button>
+						</SegmentedOption>
 					))}
-				</div>
+				</Segmented>
 
 				<form className="flex flex-col gap-3" onSubmit={submit}>
 					<label className="flex flex-col gap-1.5 text-sm font-medium text-fg">

@@ -15,6 +15,7 @@ import {
 } from "../lib/api";
 import { getCurrentUser } from "./UserPicker";
 import { AGENT_NAME, docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
+import { Segmented, SegmentedOption } from "../ui/segmented";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { cn } from "../ui/cn";
@@ -143,23 +144,23 @@ export function Security({ onOpenSession }: Props) {
 				</Button>
       </PageHeader>
 
-      <div className="flex items-center gap-1.5 mb-4">
+      <Segmented
+        className="mb-4"
+        label="Security view"
+        value={tab}
+        onValueChange={(next) => setTab(next as Tab)}
+      >
         {(
           [
             ["scans", `Scans ${scans.length}`],
             ["profiles", `Profiles ${profiles.length}`],
           ] as Array<[Tab, string]>
         ).map(([t, label]) => (
-          <Button
-            key={t}
-            size="sm"
-            className={cn(tab === t && "bg-active text-fg")}
-            onClick={() => setTab(t)}
-          >
+          <SegmentedOption key={t} value={t}>
             {label}
-          </Button>
+          </SegmentedOption>
         ))}
-      </div>
+      </Segmented>
 
       {error && (
         <InlineAlert className="text-label" onDismiss={() => setError(null)}>
@@ -439,26 +440,22 @@ function NewScanModal({
           </div>
         </div>
 
-        <div className="flex gap-1.5">
-          <Button
-            size="sm"
-            className={cn(scope === "single" && "bg-active text-fg")}
-            onClick={() => setScope("single")}
-          >
-            Single repo
-          </Button>
-          <Button
-            size="sm"
-            className={cn(scope === "all" && "bg-active text-fg")}
-            onClick={() => {
+        <Segmented
+          label="Scan scope"
+          value={scope}
+          onValueChange={(next) => {
+            if (next === "all") {
               setScope("all");
               setInteractive(false);
               setRecurrence("none");
-            }}
-          >
-            All repos
-          </Button>
-        </div>
+              return;
+            }
+            setScope("single");
+          }}
+        >
+          <SegmentedOption value="single">Single repo</SegmentedOption>
+          <SegmentedOption value="all">All repos</SegmentedOption>
+        </Segmented>
 
         {scope === "single" && (
           <label className={FIELD_LABEL}>

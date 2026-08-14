@@ -12,6 +12,7 @@ import {
 } from "../lib/api";
 import { CommentableDiff, type CommentTarget } from "./CommentableDiff";
 import { getCurrentUser } from "./UserPicker";
+import { Segmented, SegmentedOption } from "../ui/segmented";
 import { Tooltip } from "../ui/tooltip";
 import { Button } from "../ui/button";
 import { Spinner } from "../ui/spinner";
@@ -335,33 +336,28 @@ export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) 
             {handEdited.length === 1 ? "" : "s"}
           </Button>
         )}
-        <div className="ml-auto inline-flex rounded-md border border-line bg-panel p-0.5">
-          <Button
-            variant="ghost"
-            size="xs"
-            className={`min-h-0 rounded-sm border-0 px-2 py-0.5 text-meta ${view === "files" ? "bg-active text-fg" : "hover:bg-transparent"}`}
-            onClick={() => setView("files")}
-            aria-pressed={view === "files"}
-          >
-            Files
-          </Button>
-          <Button
-            variant="ghost"
-            size="xs"
-            className={`min-h-0 rounded-sm border-0 px-2 py-0.5 text-meta ${view === "flow" ? "bg-active text-fg" : "hover:bg-transparent"}`}
-            onClick={() => {
+        <Segmented
+          className="ml-auto"
+          size="sm"
+          label="Diff view"
+          value={view}
+          onValueChange={(next) => {
+            if (next === "flow") {
               if (view !== "flow" && flowError) {
                 setFlow(null);
                 setFlowError(null);
               }
               setView("flow");
-            }}
-            aria-pressed={view === "flow"}
-            disabled={!patchVersion}
-          >
+              return;
+            }
+            setView("files");
+          }}
+        >
+          <SegmentedOption value="files">Files</SegmentedOption>
+          <SegmentedOption value="flow" disabled={!patchVersion}>
             Code flow
-          </Button>
-        </div>
+          </SegmentedOption>
+        </Segmented>
         <Tooltip label="Refresh diff">
           <Button
             variant="ghost"
