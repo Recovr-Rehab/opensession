@@ -143,8 +143,8 @@ jobs:
 
           OPENCODE="$APP/Contents/Resources/opencode"
           test -x "$OPENCODE" || fail 'Bundled OpenCode is missing or not executable'
-          "$OPENCODE" --version | grep -q '1\.18\.4' ||
-            fail "Bundled OpenCode is not 1.18.4 but $("$OPENCODE" --version)"
+          "$OPENCODE" --version | grep -q '1\.18\.18' ||
+            fail "Bundled OpenCode is not 1.18.18 but $("$OPENCODE" --version)"
           codesign --verify --strict --verbose=2 "$OPENCODE" ||
             fail 'Bundled OpenCode failed signature verification'
           require_jit "$OPENCODE"

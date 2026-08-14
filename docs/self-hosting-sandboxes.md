@@ -58,7 +58,7 @@ root. Pins are `ARG`s — override with `--build-arg` per build:
 | `BUN_VERSION` | 1.3.14 | host `bun --version` |
 | `CLAUDE_VERSION` | 2.1.218 | host `claude --version` |
 | `NODE_MAJOR` | 24 | host Node LTS |
-| `OPENCODE_VERSION` | 1.17.15 | host opencode |
+| `OPENCODE_VERSION` | 1.18.18 | host opencode |
 
 Rebuild whenever: the host Claude CLI or bun is bumped, `bun.lock` changes
 (any dep, incl. the Agent SDK / vendored codex binary), or **anything under

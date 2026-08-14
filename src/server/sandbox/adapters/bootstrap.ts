@@ -124,7 +124,7 @@ const REMOTE_MCP_CONFIG = `${REMOTE_HOME}/.opensession-mcp-config.json`;
 /** Same pin as deploy/sandbox/Dockerfile's OPENCODE_VERSION (host runs this
  *  too) — bump BOTH together. Part of bootstrapSignature, so a bump
  *  invalidates existing sandboxes/prewarms and re-bootstraps them. */
-const REMOTE_OPENCODE_VERSION = "1.17.15";
+const REMOTE_OPENCODE_VERSION = "1.18.18";
 /** Keep these aligned with deploy/sandbox/Dockerfile. The runtime revision is
  * part of bootstrapSignature, so changing this contract invalidates old
  * prewarms and provider templates instead of calling them Ready. */

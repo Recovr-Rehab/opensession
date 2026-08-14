@@ -16,7 +16,7 @@ session's git worktree **bind-mounted at its identical host path**.
 | `python3`, `build-essential` | worktree `bun install` native deps | apt |
 | `just`, `direnv`, `lsof` | common repo dev-server bring-up chains (in-sandbox previews) | apt / pinned release |
 | Claude Code CLI | baked at the identical host CLI path for session-resume parity | `2.1.218` (host); build FAILS on version mismatch |
-| `opencode` | the engine — runs in-sandbox | `1.17.15` (host), npm -g, build asserts version |
+| `opencode` | the engine — runs in-sandbox | `1.18.18` (host), npm -g, build asserts version |
 | runner bundle | `/home/ubuntu/projects/opensession` (`src/`, `opensession.ts`, `tsconfig.json`) + `node_modules` | from lockfile |
 | minimal `~/.claude/settings.json` | so `settingSources:["user"]` doesn't error | `{}` |
 

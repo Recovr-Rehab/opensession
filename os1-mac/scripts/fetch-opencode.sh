@@ -1,8 +1,8 @@
 #!/bin/sh
 set -eu
 
-VERSION=1.18.4
-SHA512=fc675c52fddac411589a9742637c8c191081ab77f00096b27e59e7f6cb57b481cab9c91ced96946199b2b9d214a66ce464fe56f17b0054c268991e116ebdbe22
+VERSION=1.18.18
+SHA512=5641be6f3f2ef17aa0f4dccf2bedbfef59c47780ca2a5a3634b66ead0d5e2c0cc39e66f508c61989ffe8e92865f1816e4ee614ff7d24eb2b9f97866bd088fae2
 PACKAGE="opencode-darwin-arm64"
 URL="https://registry.npmjs.org/$PACKAGE/-/$PACKAGE-$VERSION.tgz"
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)

@@ -21,7 +21,7 @@ FROM ubuntu:24.04
 ARG BUN_VERSION=1.3.14
 ARG CLAUDE_VERSION=2.1.218
 ARG NODE_MAJOR=24
-ARG OPENCODE_VERSION=1.17.15
+ARG OPENCODE_VERSION=1.18.18
 
 # Locale parity note: the host runs a full en_US.UTF-8 locale; the image uses
 # C.UTF-8 (no `locales` package) on the assumption that nothing in the runner

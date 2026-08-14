@@ -124,7 +124,7 @@ Releasing: `git tag v0.1.0 && git push origin v0.1.0`.
 
 Local `bun run dist` produces an unsigned build (signing/notarization are
 skipped with a warning when no identity/credentials are present). It first
-fills the gitignored `build/vendor/` directory: pinned OpenCode 1.18.4
+fills the gitignored `build/vendor/` directory: pinned OpenCode 1.18.18
 (`scripts/fetch-opencode.sh`), pinned Bun 1.3.14 (`scripts/fetch-bun.sh`), and
 the server sidecar (`scripts/build-server-sidecar.ts` — requires `bun install`
 at the repository root first). Release builds copy those into
