@@ -63,9 +63,15 @@ export const composerBoxMinimized =
  *  is the space character beside it, and 3.7px of it has to cover both the
  *  pill's padding and the gap to the next word. Widening the space is the only
  *  way to give that chip a margin — set on the field as well as the mirror, so
- *  the painted text stays under the caret it belongs to. */
+ *  the painted text stays under the caret it belongs to.
+ *
+ *  Every space in the draft pays this, not just the ones beside a mention, so
+ *  it stays as small as the pill can live with: 1.5px sets a space at 5.2px,
+ *  already 1.4x its natural width. 3.5px was tried and is what a person reads
+ *  as broken word spacing in ordinary prose. If the pill wants more air, take
+ *  it out of the wash, not out of the space. */
 export const composerTextarea =
-	"block max-h-[320px] min-h-0 w-full resize-none border-none bg-transparent text-body leading-[1.55] [word-spacing:3.5px] outline-none phone:max-h-[240px] phone:text-[16px]";
+	"block max-h-[320px] min-h-0 w-full resize-none border-none bg-transparent text-body leading-[1.55] [word-spacing:1.5px] outline-none phone:max-h-[240px] phone:text-[16px]";
 export const composerTextareaPadding = "px-0 pt-0.5 pb-1";
 /** In the resting pill the field is one row inside a 4px-inset box, so it
  *  carries the horizontal breathing room and no vertical padding at all. */
