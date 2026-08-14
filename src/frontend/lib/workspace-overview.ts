@@ -8,6 +8,7 @@
 
 import {
 	ApiError,
+	fetchSessionOverview,
 	fetchTranscript,
 	fetchWorkspaceOverview,
 	type WorkspaceMediaItem,
@@ -78,6 +79,29 @@ export async function buildClientOverview(
 	});
 	media.sort((a, b) => (b.at || "").localeCompare(a.at || ""));
 	return { prompt, lastMessage, media: media.slice(0, 100) };
+}
+
+/**
+ * One session's own overview, for its hover card. Same cache as the workspace
+ * loader below, under the session-set key a one-session row would use, so a
+ * chip and a single-session workspace row share the answer. A server that
+ * predates the route (they do not hot-apply) falls back to assembling it from
+ * the transcript here.
+ */
+export async function loadSessionOverview(
+	session: OverviewSessionRef,
+): Promise<WorkspaceOverview> {
+	const cacheKey = `sessions:${session.id}`;
+	let ov: WorkspaceOverview;
+	try {
+		ov = await fetchSessionOverview(session.id);
+	} catch (e) {
+		if (e instanceof ApiError && e.status === 404)
+			ov = await buildClientOverview([session]);
+		else throw e;
+	}
+	overviewCache.set(cacheKey, { data: ov, at: Date.now() });
+	return ov;
 }
 
 /**

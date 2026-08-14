@@ -10,9 +10,9 @@ import type { OsReview, UnifiedSession } from "./types";
  * hovered anchor instead (components/ChipHoverCard.tsx), and this module
  * answers what that card should say.
  *
- * Everything comes from data the app already holds — the polled session list
- * covers most chips — with one lazy, cached fetch behind each kind for the
- * rest: a session that has been archived out of the list, and a PR that no
+ * Everything comes from data the app already holds, since the polled session
+ * list covers most chips. One lazy, cached fetch behind each kind answers for
+ * the rest: a session that has been archived out of the list, and a PR that no
  * loaded session owns.
  */
 
@@ -37,7 +37,7 @@ export function chipTarget(el: HTMLElement): ChipTarget | null {
 
 /**
  * One PR, assembled from wherever this client already knows it. Shaped to be
- * readable by the PR vocabulary the rest of the app shares — `refTone` and
+ * readable by the PR vocabulary the rest of the app shares: `refTone` and
  * `refState` (lib/pr-refs.ts) take exactly the state/draft/review/checks
  * quartet, so the chip card words a PR the way every other surface does.
  */
@@ -186,7 +186,7 @@ export function loadOpenPrs(): Promise<OpenPr[]> {
 }
 
 // Sessions the list doesn't carry (archived, or someone else's standalone).
-// Null is cached too — a chip pointing at a deleted session shouldn't retry
+// Null is cached too, so a chip pointing at a deleted session does not retry
 // on every hover.
 const fetchedSessions = new Map<string, UnifiedSession | null>();
 const sessionsInFlight = new Map<string, Promise<UnifiedSession | null>>();

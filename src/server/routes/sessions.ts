@@ -603,6 +603,20 @@ export async function handleSessionsRoutes(
 		}
 	}
 
+	// The same overview for ONE session, which is what a session's hover card
+	// shows: its latest message and its own media. Scoping matters here. A
+	// workspace overview answers with whichever member session spoke last, and
+	// on a card headed by one session's title that is the wrong session's story.
+	{
+		const m = path.match(/^\/api\/sessions\/(.+)\/overview$/);
+		if (m && req.method === "GET") {
+			const session = findSession(decodeURIComponent(m[1]));
+			if (!session)
+				return Response.json({ error: "session not found" }, { status: 404 });
+			return Response.json(await buildWorkspaceOverview([session]));
+		}
+	}
+
 	// One image out of a transcript entry, served as real bytes (decoded
 	// from the base64 block) so the overview panel can lazy-load and the
 	// browser can cache thumbnails instead of shipping data URLs in JSON.

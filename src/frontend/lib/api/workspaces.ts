@@ -34,6 +34,18 @@ export async function fetchWorkspaceOverview(
 	);
 }
 
+/** The same overview for a single session, which is what its hover card shows.
+ *  It lives beside the workspace one because it returns the same shape; the
+ *  difference is only whose story it tells. */
+export async function fetchSessionOverview(
+	sessionId: string,
+): Promise<WorkspaceOverview> {
+	return request<WorkspaceOverview>(
+		`/sessions/${encodeURIComponent(sessionId)}/overview`,
+		{ label: "Failed to fetch session overview" },
+	);
+}
+
 // ── Workspaces (containers that group sessions) ──
 
 export async function fetchWorkspaces(): Promise<Workspace[]> {

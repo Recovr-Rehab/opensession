@@ -2,7 +2,7 @@ import { relativeTime, type WorkspaceOverview } from "../../lib/api";
 import { DEFAULT_REPO_ID } from "../../lib/brand";
 import { providerFromUrl } from "../../lib/provider";
 import { sessionPrMerged } from "../../lib/session-prs";
-import { MAX_HOVERCARD_MEDIA, TONE_TEXT, WS_ACTION, compactNum, hoverState, prTone, prettyReview, useWsOverview, wsPrInfo, type WsCardRow } from "../../lib/sidebar-hover";
+import { MAX_HOVERCARD_MEDIA, TONE_TEXT, WS_ACTION, compactNum, hoverState, prTone, prettyReview, useSessionOverview, useWsOverview, wsPrInfo, type WsCardRow } from "../../lib/sidebar-hover";
 import { SIDEBAR_STATUS_DOT, SIDEBAR_WS_SNOOZE, SIDEBAR_WS_TICKER } from "../../lib/sidebar-classes";
 import { frontingPrSession, mineStatus, pinnedLane, runNeedsAttention } from "../../lib/sidebar-lanes";
 import { MINE_STATUS_META, type LaneChoice, type MineStatus } from "../../lib/sidebar-types";
@@ -18,28 +18,20 @@ import { CardFooter, CardLink, checksLabel, osReviewLabel } from "../SidebarRowC
 import { IconArrowUpRight, IconGitMerge, IconInbox, IconLink, IconMail, IconMoon, IconPin, IconPullRequest } from "../icons";
 import React, { useEffect, useState } from "react";
 
-// The session row's card body. Content is state-dependent: the prominent status
-// line and the rows that render depend on whether the session is
-// waiting/running/merged/etc. and which of its optional facets (PR, Linear
-// issue, goal, loop, extra repos) are populated. Everything comes off the
-// already-loaded UnifiedSession — the card fetches nothing.
+// The session card, in the shape the workspace card already proved: what the
+// session is, where it stands, what it last said, and the stills it produced.
+// Model, mode, branch and created date used to sit here as rows; they are what
+// the session's own Info tab is for, and on a hover card they pushed the one
+// thing worth reading (the latest message) off the bottom. What survives as a
+// row is what changes what you do next: who is behind it, a Linear issue, an
+// autonomous goal or loop, and the PR's review and checks.
 export function SessionCardBody({ session: s }: { session: UnifiedSession }) {
 	const state = hoverState(s);
+	const ov = useSessionOverview(s);
 	const rows: Array<[string, React.ReactNode]> = [];
 
 	const owner = s.automation || s.startedBy;
 	if (owner) rows.push([s.automation ? "Automation" : "Started by", owner]);
-	if (s.model) rows.push(["Model", s.model]);
-	if (s.mode) rows.push(["Mode", s.mode]);
-
-	const repoName = repoLabel(s.repo || DEFAULT_REPO_ID);
-	const extra = s.attachedRepos?.length || 0;
-	rows.push(["Repo", extra ? `${repoName} +${extra} more` : repoName]);
-	if (s.branch)
-		rows.push([
-			"Branch",
-			<span className="text-[0.95em]">{s.branch}</span>,
-		]);
 
 	if (s.linearIssue)
 		rows.push([
@@ -53,18 +45,19 @@ export function SessionCardBody({ session: s }: { session: UnifiedSession }) {
 	if (s.loop)
 		rows.push(["Loop", `Every ${s.loop.intervalMinutes} min`]);
 
-	// The PR facts go in rows, worded exactly as the PR row's card words them —
-	// the state itself is already the card's status line, so it isn't repeated.
+	// The PR facts are worded exactly as the PR row's card words them. The
+	// state itself is already the card's status line, so it isn't repeated.
 	if (s.prReviewDecision) rows.push(["Review", prettyReview(s.prReviewDecision)]);
 	const checks = checksLabel(s.prChecks);
 	if (checks) rows.push(["Checks", checks]);
 
-	rows.push(["Created", relativeTime(s.createdAt)]);
+	const repoName = repoLabel(s.repo || DEFAULT_REPO_ID);
+	const extra = s.attachedRepos?.length || 0;
 
 	return (
 		<>
 			{/* Same head as the workspace card: what changed, not which branch it
-			    changed on. The branch is a row below for anyone who wants it. */}
+			    changed on. */}
 			<div className="flex min-w-0 items-center gap-[7px]">
 				<span className={`size-2 shrink-0 rounded-full ${state.dotClass}`} />
 				<span className="min-w-0 flex-1 truncate text-meta">
@@ -74,9 +67,19 @@ export function SessionCardBody({ session: s }: { session: UnifiedSession }) {
 							<span className="text-red">-{compactNum(s.prDeletions)}</span>
 						</>
 					) : (
-						<span className="text-dim">{repoName}</span>
+						<span className="text-dim">
+							{extra ? `${repoName} +${extra} more` : repoName}
+						</span>
 					)}
 				</span>
+				{/* What the automated review made of this session's PR, in the same
+				    place the workspace card puts it. */}
+				{s.prOsReview && (
+					<span className="min-w-0 shrink truncate text-right text-meta">
+						<span className="text-faint">OS review </span>
+						{osReviewLabel(s.prOsReview)}
+					</span>
+				)}
 			</div>
 
 			<div className="mt-[5px] text-label font-semibold leading-[1.3]">{s.title}</div>
@@ -101,14 +104,18 @@ export function SessionCardBody({ session: s }: { session: UnifiedSession }) {
 				</div>
 			)}
 
-			<div className="mt-[9px] flex flex-col gap-[3px]">
-				{rows.map(([label, value], i) => (
-					<div className="flex gap-2 text-meta leading-[1.35]" key={i}>
-						<span className="w-[74px] shrink-0 text-faint">{label}</span>
-						<span className="min-w-0 truncate text-dim">{value}</span>
-					</div>
-				))}
-			</div>
+			<CardOverview ov={ov} />
+
+			{rows.length > 0 && (
+				<div className="mt-[9px] flex flex-col gap-[3px]">
+					{rows.map(([label, value], i) => (
+						<div className="flex gap-2 text-meta leading-[1.35]" key={i}>
+							<span className="w-[74px] shrink-0 text-faint">{label}</span>
+							<span className="min-w-0 truncate text-dim">{value}</span>
+						</div>
+					))}
+				</div>
+			)}
 
 			<CardFooter
 				time={`Updated ${relativeTime(s.lastActivity)}`}
@@ -298,6 +305,78 @@ export function WsStatusMark({
 	return dot(SIDEBAR_STATUS_DOT.idle);
 }
 
+/**
+ * Where the work stands, in the two things that carry it: the latest message,
+ * and the stills the session produced. Shared by the workspace card and the
+ * session card, because "what happened here" is the same question of both, and
+ * it is the half of the card people actually read.
+ */
+export function CardOverview({ ov }: { ov: WorkspaceOverview | null }) {
+	const desc = (ov?.lastMessage?.content || ov?.prompt?.content || "")
+		.replace(/\s+/g, " ")
+		.trim();
+	const media = ov?.media || [];
+	return (
+		<>
+			{desc && (
+				<div className="selectable mt-1 text-xs leading-snug text-dim line-clamp-2">
+					{desc}
+				</div>
+			)}
+
+			{media.length > 0 && (
+				// A filmstrip, like the info panel's screenshots: a 62px square
+				// crop of a 1440px screenshot is a grey band of text, not a
+				// picture of anything. Whole frames, scrolled sideways, and
+				// everything is reachable instead of hidden behind a "+3". Bleed
+				// through the card's right inset so the carousel peek is clipped
+				// at the card edge rather than stopping inside its padding.
+				<div className="mt-2 -mr-[13px] flex snap-x snap-mandatory gap-1.5 overflow-x-auto pr-[13px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+					{media.slice(0, MAX_HOVERCARD_MEDIA).map((m, i) => (
+						<button
+							key={`${m.sessionId}:${m.at}:${i}`}
+							type="button"
+							onClick={() => openLightbox(media, i)}
+							className="relative block aspect-video w-[124px] shrink-0 snap-start overflow-hidden rounded-sm border border-line bg-surface p-0"
+							title={[m.sessionTitle, fullTime(m.at)]
+								.filter(Boolean)
+								.join(" · ")}
+						>
+							{m.kind === "image" ? (
+								<img
+									src={m.src}
+									alt=""
+									loading="lazy"
+									className="h-full w-full object-contain"
+								/>
+							) : (
+								<>
+									<video
+										src={m.src}
+										muted
+										playsInline
+										preload="metadata"
+										className="h-full w-full object-contain"
+									/>
+									<span className="pointer-events-none absolute inset-0 grid place-items-center text-sm text-white drop-shadow">
+										▶
+									</span>
+								</>
+							)}
+							{i === MAX_HOVERCARD_MEDIA - 1 &&
+								media.length > MAX_HOVERCARD_MEDIA && (
+									<span className="absolute inset-0 grid place-items-center bg-black/55 text-xs font-semibold text-white">
+										+{media.length - MAX_HOVERCARD_MEDIA + 1}
+									</span>
+								)}
+						</button>
+					))}
+				</div>
+			)}
+		</>
+	);
+}
+
 // The info half of the workspace card: diff + status mark, title,
 // blocked-question callout, latest-message description, media thumbnails.
 // Rendered inside the hover card (desktop) and the long-press sheet (mobile).
@@ -310,10 +389,6 @@ function WsOverviewInfo({
 }) {
 	const { prSession } = wsPrInfo(row);
 	const meta = MINE_STATUS_META.find((m) => m.key === row.status);
-	const desc = (ov?.lastMessage?.content || ov?.prompt?.content || "")
-		.replace(/\s+/g, " ")
-		.trim();
-	const media = ov?.media || [];
 	return (
 		<>
 			{/* The PR facts, on one strip above the title: what changed, what the
@@ -371,61 +446,7 @@ function WsOverviewInfo({
 					</div>
 				))}
 
-			{desc && (
-				<div className="selectable mt-1 text-xs leading-snug text-dim line-clamp-2">
-					{desc}
-				</div>
-			)}
-
-			{media.length > 0 && (
-				// A filmstrip, like the info panel's screenshots: a 62px square
-				// crop of a 1440px screenshot is a grey band of text, not a
-				// picture of anything. Whole frames, scrolled sideways — and
-				// everything is reachable instead of hidden behind a "+3". Bleed
-				// through the card's right inset so the carousel peek is clipped
-				// at the card edge rather than stopping inside its padding.
-				<div className="mt-2 -mr-[13px] flex snap-x snap-mandatory gap-1.5 overflow-x-auto pr-[13px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-					{media.slice(0, MAX_HOVERCARD_MEDIA).map((m, i) => (
-						<button
-							key={`${m.sessionId}:${m.at}:${i}`}
-							type="button"
-							onClick={() => openLightbox(media, i)}
-							className="relative block aspect-video w-[124px] shrink-0 snap-start overflow-hidden rounded-sm border border-line bg-surface p-0"
-							title={[m.sessionTitle, fullTime(m.at)]
-								.filter(Boolean)
-								.join(" · ")}
-						>
-							{m.kind === "image" ? (
-								<img
-									src={m.src}
-									alt=""
-									loading="lazy"
-									className="h-full w-full object-contain"
-								/>
-							) : (
-								<>
-									<video
-										src={m.src}
-										muted
-										playsInline
-										preload="metadata"
-										className="h-full w-full object-contain"
-									/>
-									<span className="pointer-events-none absolute inset-0 grid place-items-center text-sm text-white drop-shadow">
-										▶
-									</span>
-								</>
-							)}
-							{i === MAX_HOVERCARD_MEDIA - 1 &&
-								media.length > MAX_HOVERCARD_MEDIA && (
-									<span className="absolute inset-0 grid place-items-center bg-black/55 text-xs font-semibold text-white">
-										+{media.length - MAX_HOVERCARD_MEDIA + 1}
-									</span>
-								)}
-						</button>
-					))}
-				</div>
-			)}
+			<CardOverview ov={ov} />
 		</>
 	);
 }

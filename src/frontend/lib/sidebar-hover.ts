@@ -3,7 +3,11 @@ import { SIDEBAR_STATUS_DOT } from "./sidebar-classes";
 import { runNeedsAttention } from "./sidebar-lanes";
 import type { MineStatus } from "./sidebar-types";
 import type { UnifiedSession, Workspace } from "./types";
-import { loadOverview, overviewCache } from "./workspace-overview";
+import {
+	loadOverview,
+	loadSessionOverview,
+	overviewCache,
+} from "./workspace-overview";
 import { useEffect, useState } from "react";
 
 // The single prominent status line + its dot/tone. Ordering mirrors how a person
@@ -144,6 +148,49 @@ export function useWsOverview(row: WsCardRow): WorkspaceOverview | null {
 			})
 			.catch(() => {
 				// The view just stays without a description/thumbnails.
+			});
+		return () => {
+			alive = false;
+		};
+	}, [cacheKey, activityKey]);
+	return ov;
+}
+
+/**
+ * The same overview for one session's card: its latest message and its own
+ * media. Cached under the key a one-session workspace row uses, so a session
+ * chip and that row answer from one fetch.
+ */
+export function useSessionOverview(
+	session: UnifiedSession,
+): WorkspaceOverview | null {
+	const cacheKey = `sessions:${session.id}`;
+	const activityKey = session.lastActivity || "";
+	const [ov, setOv] = useState<WorkspaceOverview | null>(
+		() => overviewCache.get(cacheKey)?.data ?? null,
+	);
+	useEffect(() => {
+		let alive = true;
+		const cached = overviewCache.get(cacheKey);
+		setOv(cached?.data ?? null);
+		const activityAt = activityKey ? new Date(activityKey).getTime() : 0;
+		if (
+			cached &&
+			Date.now() - cached.at < 30_000 &&
+			(!activityAt || cached.at >= activityAt)
+		)
+			return;
+		loadSessionOverview({
+			id: session.id,
+			title: session.title,
+			createdAt: session.createdAt,
+			lastActivity: session.lastActivity,
+		})
+			.then((d) => {
+				if (alive) setOv(d);
+			})
+			.catch(() => {
+				// The card just stays without a description or thumbnails.
 			});
 		return () => {
 			alive = false;

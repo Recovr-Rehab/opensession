@@ -32,15 +32,15 @@ import { SessionCardBody } from "./sidebar/HoverCards";
 import { IconGitMerge, IconPullRequest } from "./icons";
 
 /**
- * Hover cards for the chips inside rendered markdown — a session reference
+ * Hover cards for the chips inside rendered markdown: a session reference
  * (`os-019f…`) and a PR mention (`opensession#128`).
  *
  * Same card a sidebar row raises, driven the same way the workspace list
  * drives its one: markdown.ts renders these chips into an HTML string, so they
  * can't each own a popover, and one document-level watcher raises a single
  * card off whichever chip the pointer is dwelling on. That also means it
- * covers every markdown surface at once — transcript, review, notes, ask
- * cards — rather than only the transcript it was asked for.
+ * covers every markdown surface at once (transcript, review, notes, ask
+ * cards) rather than only the transcript it was asked for.
  *
  * A chip whose subject this client can't name keeps its own tooltip and gets
  * no card: "Open the review for tella-fusion #3662" is what the chip already
@@ -51,13 +51,13 @@ import { IconGitMerge, IconPullRequest } from "./icons";
  *  paragraph passes over chips it isn't asking about. */
 const DWELL_MS = 340;
 /** Moving between chips while a card is up: the question has already been
- *  asked, so answering the next one is nearly immediate — but not instant,
- *  which would flash three cards on the way across a line. */
+ *  asked, so answering the next one is nearly immediate. Instant would flash
+ *  three cards on the way across a line. */
 const SWITCH_MS = 120;
 /** Grace on the way out, so the pointer can cross the gap into the card. */
 const CLOSE_MS = 140;
 
-/** Marks the card's own subtree — hovering it must hold it open. */
+/** Marks the card's own subtree, so hovering it holds it open. */
 const CARD_ATTR = "data-chip-card";
 
 type ChipCard =
@@ -169,7 +169,7 @@ export function ChipHoverCards({ sessions }: { sessions: UnifiedSession[] }) {
 
 	useEffect(() => {
 		// Touch has no dwell, and a tap that raised a card would cover the thing
-		// the same tap just opened — the sidebar rows hold back for this reason
+		// the same tap just opened. The sidebar rows hold back for this reason
 		// too. Keyboard focus still opens one (below).
 		if (!pointerCanHover()) return;
 		const onOver = (e: Event) => {
@@ -254,7 +254,7 @@ export function ChipHoverCards({ sessions }: { sessions: UnifiedSession[] }) {
 
 /**
  * The card body for a PR mention. Same shape and wording as the Pull requests
- * row's card (SidebarRowCards), minus the review queue's bucket — a chip is a
+ * row's card (SidebarRowCards), minus the review queue's bucket. A chip is a
  * reference to a PR, not a row in someone's queue, so the state line is the
  * one every PR surface derives (lib/pr-refs) and the session that opened it
  * takes the row the queue would have spent on why it is waiting.
@@ -276,7 +276,7 @@ function PrChipCardBody({ pr }: { pr: ChipPr }) {
 	return (
 		<>
 			{/* What changed, if we know it, and the branch it changed on when we
-			    don't — the same head the sidebar's PR and session cards carry. */}
+			    don't, which is the head the sidebar's PR and session cards carry. */}
 			<div className="flex min-w-0 items-center gap-[7px]">
 				<span className="min-w-0 flex-1 truncate text-meta text-dim">
 					{pr.additions != null && pr.deletions != null ? (
