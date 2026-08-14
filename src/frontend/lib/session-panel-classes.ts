@@ -38,6 +38,14 @@ const PILL = "rounded-[calc(8px*var(--rf))]";
  * sidebar plus a readable session column rather than a fixed pixel width:
  * reviewing code wants real width on a wide display.
  *
+ * It paints `bg-surface`, the same fill as the transcript beside it, and is
+ * divided from it by the left hairline alone. It used to be `bg-raised`, which
+ * in light is #f6f6f6 against a white page: a full-height column of grey next
+ * to the content, and the largest flat area in the window whenever the Info tab
+ * is short. The panel is a second column of the same page rather than chrome
+ * over it, so it takes the page's own surface and lets the cards inside it (the
+ * media strip, the diff wells) be the things that step off white.
+ *
  * There is deliberately no phone shape here, though the old sheet had one (a
  * full-width bottom sheet: rounded top, `sheet-up` animation, its own shadow).
  * Neither call site renders on a phone — both are gated on `!isPhone`, and the
@@ -50,7 +58,7 @@ const PILL = "rounded-[calc(8px*var(--rf))]";
  */
 export const PANEL_SHELL =
 	"viewer-panel relative flex min-h-0 w-[var(--panel-w,40%)] min-w-[320px] shrink-0 flex-col " +
-	"max-w-[max(480px,calc(100vw-620px))] border-l border-line bg-raised " +
+	"max-w-[max(480px,calc(100vw-620px))] border-l border-line bg-surface " +
 	// From 920px down it stops being a column in the layout and becomes an
 	// overlay over the session, anchored under the top bar (--header-h is 0 on
 	// desktop, the bar's height on a phone) with PANEL_OVERLAY dimming behind it.
@@ -110,7 +118,7 @@ const PANEL_TAB_BASE =
 export const panelTabClass = (active: boolean) =>
 	`${PANEL_TAB_BASE} ` +
 	(active
-		? "bg-[color-mix(in_srgb,var(--bg-active)_28%,var(--bg-raised))] text-fg"
+		? "bg-panel text-fg"
 		: "bg-transparent text-dim hover:bg-hover hover:text-fg");
 
 /** Count suffix on a tab ("Changes 10"): dimmer than the label, and tabular so

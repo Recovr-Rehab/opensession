@@ -285,7 +285,7 @@ export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) 
   return (
     <div className="flex min-h-0 flex-col" ref={panelRef}>
       {multi && (
-        <div className="sticky top-0 z-2 flex gap-1 overflow-x-auto border-b border-line bg-raised px-2.5 py-1.5">
+        <div className="sticky top-0 z-2 flex gap-1 overflow-x-auto border-b border-line bg-surface px-2.5 py-1.5">
           {changed.map((r, i) => {
             const n = r.diff.totalAdditions + r.diff.totalDeletions;
             return (
@@ -312,7 +312,7 @@ export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) 
         </div>
       )}
 
-      <div className="sticky top-0 z-1 flex items-center gap-2.5 overflow-x-auto border-b border-line bg-raised px-3.5 py-2.5 text-label whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="sticky top-0 z-1 flex items-center gap-2.5 overflow-x-auto border-b border-line bg-surface px-3.5 py-2.5 text-label whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <span className="text-dim">
           {d.files.length} file{d.files.length === 1 ? "" : "s"} changed
         </span>

@@ -179,7 +179,7 @@ function WriteChips({ a }: { a: WorkflowAgentSnapshot }) {
 
 function DetailPre({ text }: { text: string }) {
 	return (
-		<pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-sm bg-surface p-2 font-mono text-meta leading-relaxed text-dim">
+		<pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-sm bg-panel p-2 font-mono text-meta leading-relaxed text-dim">
 			{text}
 		</pre>
 	);
@@ -365,7 +365,7 @@ function WorkflowsEmptyState() {
 			</EmptyState>
 			<div>
 				<div className="mb-1.5 text-meta font-medium text-faint">Try</div>
-				<CardList as="ul" className="bg-surface">
+				<CardList as="ul">
 					{[
 						"Use a workflow to audit every route handler for missing auth checks.",
 						"Use a workflow: one agent per file in src/, each naming its biggest refactor.",
