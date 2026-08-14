@@ -212,8 +212,17 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 	const teammates = new Set(people.map((p) => p.name.toLowerCase()));
 	const allShipped = buildFeedRows(merged, commits, (key) => teammates.has(key));
 	const repoOptions = [...new Set(allShipped.map((row) => row.repo).filter(Boolean))].sort();
-	const shipped = allShipped.filter(
+	const scoped = allShipped.filter(
 		(row) => inScope(row.person) && (repo === "all" || row.repo === repo),
+	);
+	// One horizon for the whole list. Commits arrive already windowed, but
+	// merged PRs come from a cache that reaches much further back, so without
+	// this the page runs a few days of commits and then a month of pull
+	// requests under date headings that read as the team having stopped
+	// committing. "Show more" moves the horizon, and both sides move with it.
+	const cutoff = Date.now() - days * 86_400_000;
+	const shipped = scoped.filter(
+		(row) => new Date(row.shippedAt).getTime() >= cutoff,
 	);
 	const groups = new Map<string, FeedRow[]>();
 	for (const row of shipped.slice(0, RENDER_CEILING)) {
@@ -222,10 +231,11 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 	}
 	const dayGroups = [...groups.entries()];
 
-	// The next step out, offered only while the server still holds history
-	// older than the window it just served.
+	// The next step out, offered while either side of the list still has
+	// something older to show: commits the server is holding back, or merged
+	// PRs the horizon is currently cutting off.
 	const nextStep = DAY_STEPS.find((step) => step > days);
-	const canWiden = !!nextStep && hasOlder;
+	const canWiden = !!nextStep && (hasOlder || scoped.length > shipped.length);
 
 	const scopeName = scope.kind === "person" ? personLabel(scope.key) : null;
 
