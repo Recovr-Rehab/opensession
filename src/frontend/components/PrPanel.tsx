@@ -1560,14 +1560,23 @@ export function PrPanel({
             <StackSection pr={pr} sessionId={sessionId} repo={active?.repo} onOpenPr={onOpenPr} onLinked={load} />
           )}
 
-          {/* The page rail on the left says which page you are on, so this row is
-              only what the code page needs: how big the change is, and the two
-              controls that scope and draw the diff. Overview asks for none of
-              them, so it gets no chrome row at all rather than an empty bar.
+          {/* The pages name themselves, on the rail or in the header, so this
+              row is only what the code page needs: how big the change is, and
+              the two controls that scope and draw the diff. Overview asks for
+              none of them, so it gets no chrome row at all rather than an
+              empty bar.
               Horizontal scrollbars are hidden because a 1px overflow here parks
               one (base.css opts Chrome out of overlay scrollbars). */}
           {page === "files" && (
             <div className="sticky top-0 z-[8] flex h-11 shrink-0 items-center gap-2 overflow-x-auto overflow-y-hidden bg-surface px-6 shadow-[inset_0_-1px_0_var(--border)] [scrollbar-width:none] phone:px-2 [&::-webkit-scrollbar]:hidden">
+              {/* How big the change is, on the row's own edge: it is a fact
+                  about the diff below rather than a control, so it reads at
+                  the start of the line, aligned with the files it counts,
+                  instead of queuing with the controls on the right. */}
+              <span className="flex shrink-0 items-center gap-1.5 text-label tabular-nums">
+                <span className="text-green">+{pr.additions}</span>
+                <span className="text-red">−{pr.deletions}</span>
+              </span>
               <div className="ml-auto flex shrink-0 items-center gap-2">
                 {handEdited.length > 0 && send && (
                   <Button
@@ -1580,13 +1589,6 @@ export function PrPanel({
                     {handEdited.length === 1 ? "" : "s"}
                   </Button>
                 )}
-                {/* How big the change is, beside the control that scopes it —
-                    the same pair the rail counts, so a reader who never opens
-                    the rail still knows what they are about to read. */}
-                <span className="flex shrink-0 items-center gap-1.5 text-label tabular-nums">
-                  <span className="text-green">+{pr.additions}</span>
-                  <span className="text-red">−{pr.deletions}</span>
-                </span>
                 {/* Two axes, two controls. The named dropdown picks WHAT you are
                     reading — a diff, a guided walk through it, a call graph —
                     and reports it, so it takes the outlined plate with its value
