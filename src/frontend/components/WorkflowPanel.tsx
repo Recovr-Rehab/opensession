@@ -11,8 +11,12 @@ import { Button } from "../ui/button";
 import { CardList } from "../ui/card";
 import { EmptyState } from "../ui/state";
 import { IconStack } from "./icons";
+import { PanelPageHeader } from "./PanelPageHeader";
 import { formatDuration } from "../lib/time";
-import { INFO_SECTION_CLASS } from "../lib/session-viewer-classes";
+import {
+	INFO_LABEL_CLASS,
+	INFO_SECTION_CLASS,
+} from "../lib/session-viewer-classes";
 import { friendlyModelSlug, opencodeModelParts } from "./ModelEffortSelect";
 import { WorkflowAgentTranscript } from "./WorkflowAgentTranscript";
 import { Badge } from "../ui/badge";
@@ -46,15 +50,37 @@ interface Props {
 	subagents?: SessionSubagentSnapshot[];
 	/** Opens a sub-agent's conversation in its own view tab. */
 	onOpenSubagent?: (agentId: string, label: string) => void;
+	/** Set when this renders as a page pushed on top of the workspace panel
+	 *  (the Agents item on its bottom bar). Page mode carries a back header and
+	 *  shows the empty state; without it this is a section of the phone info
+	 *  page, which renders nothing until a run exists. */
+	onBack?: () => void;
 }
 
-const RUN_PILL: Record<WorkflowRunSnapshot["status"], string> = {
-	running: "bg-yellow-soft text-yellow",
-	done: "bg-active text-dim",
-	error: "bg-red-soft text-red",
-	cancelled: "bg-active text-faint",
-	interrupted: "bg-active text-yellow",
+/** A finished run says so with its green marks and its totals, so `done` gets
+ *  no badge. The badge is for a run that still wants your attention. */
+const RUN_TONE: Record<
+	WorkflowRunSnapshot["status"],
+	"warning" | "danger" | "neutral" | null
+> = {
+	running: "warning",
+	done: null,
+	error: "danger",
+	cancelled: "neutral",
+	interrupted: "warning",
 };
+
+/** The card's plate and the rows inside it: the Info panel's list grammar
+ *  (INFO_LIST_CLASS), so an agent row lines up with a portal or a changed
+ *  file rather than inventing a third row shape. */
+const CARD_CLASS = "overflow-hidden rounded-lg bg-panel p-1";
+const ROW_CLASS =
+	"flex w-full items-center gap-2 rounded-control px-2 py-1 text-left transition-colors";
+/** A toggle under the agent rows (tool calls, the result): the same row, in
+ *  the quieter ink a reading gets. */
+const FOOTER_ROW =
+	"flex w-full items-center gap-2 rounded-control px-2 py-1 text-left text-meta " +
+	"font-medium text-dim transition-colors hover:bg-hover hover:text-fg";
 
 /** Status mark: glyphs for the terminal states (✓/✕ stay legible at a glance
  *  — a red accent dot and an error dot would read the same), pulsing yellow
@@ -104,10 +130,12 @@ function fmtTokens(n: number): string {
 	return String(n);
 }
 
-/** "opencode/anthropic/claude-sonnet-5" → "Sonnet 5" (chips stay short). */
+/** "opencode/anthropic/claude-sonnet-5" → "Sonnet 5", and
+ *  "…/claude-haiku-4-5-20251001" → "Haiku 4.5": the trailing release date is
+ *  version noise that doubles the width of every row's model readout. */
 function shortModel(id: string): string {
 	const oc = opencodeModelParts(id);
-	return friendlyModelSlug(oc ? oc.model : id);
+	return friendlyModelSlug((oc ? oc.model : id).replace(/-\d{8}$/, ""));
 }
 
 function agentDuration(a: WorkflowAgentSnapshot, now: number): string {
@@ -121,6 +149,10 @@ function agentDuration(a: WorkflowAgentSnapshot, now: number): string {
 	return fmtDuration(end - new Date(a.startedAt).getTime());
 }
 
+/** Row chips report an outcome worth a second look: a branch, a merge, a cache
+ *  hit. Everything a row always carries (its model, its tokens, its duration)
+ *  is plain text in the rail instead, because a chip on every row in every
+ *  column made this list read as a table of boxes. */
 function Chip({
 	children,
 	tone,
@@ -132,48 +164,79 @@ function Chip({
 	title?: string;
 }) {
 	return (
-		<span
+		<Badge
 			title={title}
-			className={cn(
-				"shrink-0 rounded-sm border px-1 py-px text-meta font-medium",
-				tone === "green"
-					? "border-transparent bg-green-soft text-green"
-					: tone === "red"
-						? "border-transparent bg-red-soft text-red"
-						: "border-line text-faint",
-			)}
+			tone={tone === "green" ? "success" : tone === "red" ? "danger" : "neutral"}
+			variant={tone ? "soft" : "outline"}
+			className="max-w-[120px] truncate"
 		>
 			{children}
-		</span>
+		</Badge>
 	);
 }
 
-/** Write-agent readout: branch + diffstat (or "no changes") + merge outcome. */
-function WriteChips({ a }: { a: WorkflowAgentSnapshot }) {
+/** Write-agent readout: branch, diffstat (or "no changes") and merge outcome.
+ *  Its own line under the label rather than more cargo on the row, because a
+ *  branch name and a diffstat beside a model and two numbers left nothing of
+ *  the filename in a panel this narrow. */
+function WriteLine({ a }: { a: WorkflowAgentSnapshot }) {
 	const files = a.filesChanged ?? 0;
 	return (
-		<>
+		<div className="flex min-w-0 items-center gap-1.5 pl-5 text-meta text-faint">
 			{a.branch && (
-				<Chip title={a.branch}>
-					<span>⑂ {a.branch}</span>
-				</Chip>
+				<span className="min-w-0 truncate" title={a.branch}>
+					⑂ {a.branch}
+				</span>
 			)}
 			{a.changed ? (
-				<span className="shrink-0 text-meta tabular-nums">
+				<span className="shrink-0 tabular-nums">
 					<span className="text-green">+{a.insertions ?? 0}</span>{" "}
 					<span className="text-red">−{a.deletions ?? 0}</span>
 					{files > 0 && (
-						<span className="text-faint">
+						<span>
 							{" "}
 							· {files} file{files === 1 ? "" : "s"}
 						</span>
 					)}
 				</span>
 			) : (
-				a.status === "done" && <Chip>no changes</Chip>
+				a.status === "done" && <span className="shrink-0">no changes</span>
 			)}
-			{a.merged === "merged" && <Chip tone="green">merged</Chip>}
-			{a.merged === "conflict" && <Chip tone="red">conflict</Chip>}
+			{a.merged === "merged" && (
+				<span className="shrink-0 font-medium text-green">merged</span>
+			)}
+			{a.merged === "conflict" && (
+				<span className="shrink-0 font-medium text-red">conflict</span>
+			)}
+		</div>
+	);
+}
+
+/** The readout every agent row ends with: model, tokens, duration. The two
+ *  numbers keep fixed columns so a list of rows reads down as well as across,
+ *  and they hold their width when a row has nothing to report. */
+function AgentRail({
+	model,
+	tokens,
+	duration,
+}: {
+	model?: string;
+	tokens?: number;
+	duration: string;
+}) {
+	return (
+		<>
+			{model && (
+				<span className="min-w-0 max-w-[84px] shrink truncate text-meta text-faint">
+					{shortModel(model)}
+				</span>
+			)}
+			<span className="w-[46px] shrink-0 whitespace-nowrap text-right text-meta text-faint tabular-nums">
+				{tokens ? `${fmtTokens(tokens)} tok` : ""}
+			</span>
+			<span className="w-11 shrink-0 whitespace-nowrap text-right text-meta text-faint tabular-nums">
+				{duration}
+			</span>
 		</>
 	);
 }
@@ -192,6 +255,7 @@ export function WorkflowPanel({
 	onCancel,
 	subagents,
 	onOpenSubagent,
+	onBack,
 }: Props) {
 	// Server list + WS prepends both keep newest-first; re-sorting is cheap
 	// insurance against an out-of-order upsert.
@@ -225,7 +289,7 @@ export function WorkflowPanel({
 		(runId: string, seq: number) => setOpenConvo({ runId, seq }),
 		[],
 	);
-	const onBack = useCallback(() => setOpenConvo(null), []);
+	const closeConvo = useCallback(() => setOpenConvo(null), []);
 	const convoAgent = useMemo(() => {
 		if (!openConvo) return undefined;
 		return ordered
@@ -238,25 +302,13 @@ export function WorkflowPanel({
 			<WorkflowAgentTranscript
 				runId={openConvo.runId}
 				agent={convoAgent}
-				onBack={onBack}
+				onBack={closeConvo}
 			/>
 		);
 
-	if (ordered.length === 0 && subs.length === 0) return <WorkflowsEmptyState />;
-	// A section of the Info panel: its own faint label over a stack of plates,
-	// like Git status or the changed-files list. No padding of its own — the
-	// panel owns the inset.
-	return (
-		<div className={INFO_SECTION_CLASS}>
-			<div className="flex items-center justify-between gap-2 px-2 text-label font-semibold tracking-[-0.01em] text-faint">
-				<span>Agents</span>
-				{anyRunning && (
-					<span className="inline-flex shrink-0 items-center gap-1.5 text-yellow">
-						<span className="size-1.5 animate-pulse rounded-full bg-current" />
-						running
-					</span>
-				)}
-			</div>
+	const empty = ordered.length === 0 && subs.length === 0;
+	const cards = (
+		<>
 			{subs.length > 0 && (
 				<SubagentsCard subagents={subs} now={now} onOpen={onOpenSubagent} />
 			)}
@@ -269,6 +321,52 @@ export function WorkflowPanel({
 					onOpenAgent={onOpenAgent}
 				/>
 			))}
+		</>
+	);
+
+	// Page mode: pushed on top of the workspace panel from its bottom bar, the
+	// same one level deep that Portals opens to. It owns the whole column, so
+	// it carries the back header and can afford the empty state.
+	if (onBack)
+		return (
+			<>
+				<PanelPageHeader
+					title="Agents"
+					onBack={onBack}
+					trailing={
+						anyRunning && (
+							<Badge tone="warning" dot className="mr-1 animate-pulse">
+								running
+							</Badge>
+						)
+					}
+				/>
+				<div className="grid gap-4 px-2 pt-2 pb-[22px]">
+					{empty ? (
+						<WorkflowsEmptyState />
+					) : (
+						<div className="grid gap-2">{cards}</div>
+					)}
+				</div>
+			</>
+		);
+
+	if (empty) return null;
+	// Section mode (the phone info page): a faint label over a stack of plates,
+	// like Git status or the changed-files list. No padding of its own, because
+	// the page owns the inset.
+	return (
+		<div className={INFO_SECTION_CLASS}>
+			<div className={cn(INFO_LABEL_CLASS, "flex items-center justify-between gap-2")}>
+				<span>Agents</span>
+				{anyRunning && (
+					<span className="inline-flex shrink-0 items-center gap-1.5 text-yellow">
+						<span className="size-1.5 animate-pulse rounded-full bg-current" />
+						running
+					</span>
+				)}
+			</div>
+			{cards}
 		</div>
 	);
 }
@@ -297,24 +395,23 @@ function SubagentsCard({
 	if (errorN) meta.push(`${errorN} failed`);
 	if (tokens) meta.push(`${fmtTokens(tokens)} tok`);
 	return (
-		<div className="rounded-lg bg-panel">
-			<div className="px-2.5 pb-1 pt-2">
+		<div className={CARD_CLASS}>
+			<div className="px-2 pb-1.5 pt-1">
 				<div className="flex items-center gap-2">
-					<span className="truncate text-label font-semibold text-fg">
+					<span className="min-w-0 flex-1 truncate text-label font-semibold text-fg">
 						Sub-agents
 					</span>
 					{runningN > 0 && (
-						<Badge tone="warning" className="gap-1.5">
-							<span className="size-1.5 animate-pulse rounded-full bg-current" />
+						<Badge tone="warning" dot className="animate-pulse">
 							running
 						</Badge>
 					)}
 				</div>
-				<div className="mt-0.5 truncate text-xs text-dim tabular-nums">
+				<div className="mt-0.5 truncate text-meta text-faint tabular-nums">
 					{meta.join(" · ")}
 				</div>
 			</div>
-			<div className="flex flex-col px-1 pb-1.5 pt-0.5">
+			<div className="flex flex-col">
 				{subagents.map((s, i) => {
 					const openable = Boolean(s.id && onOpen);
 					const durMs =
@@ -328,7 +425,8 @@ function SubagentsCard({
 						<button
 							key={s.id ?? `pending-${i}`}
 							className={cn(
-								"flex w-full items-center gap-2 rounded-control px-2 py-1 text-left transition-colors",
+								ROW_CLASS,
+								"flex-col items-stretch gap-0.5",
 								openable ? "hover:bg-hover" : "cursor-default",
 							)}
 							onClick={() => {
@@ -336,22 +434,25 @@ function SubagentsCard({
 							}}
 							title={openable ? "Open this sub-agent's conversation" : undefined}
 						>
-							<StatusMark status={s.status} />
-							<span className="min-w-0 flex-1 truncate text-label text-fg">
-								{s.label}
-							</span>
-							{s.agentType && <Chip>{s.agentType}</Chip>}
-							{s.model && <Chip>{shortModel(s.model)}</Chip>}
-							{s.tokensOut ? (
-								<span className="shrink-0 text-meta text-faint tabular-nums">
-									{fmtTokens(s.tokensOut)} tok
+							<span className="flex min-w-0 items-center gap-2">
+								<StatusMark status={s.status} />
+								<span className="min-w-0 flex-1 truncate text-label text-fg">
+									{s.label}
 								</span>
-							) : null}
-							<span className="w-11 shrink-0 text-right text-meta text-faint tabular-nums">
-								{durMs !== undefined ? fmtDuration(durMs) : ""}
+								<AgentRail
+									tokens={s.tokensOut}
+									duration={durMs !== undefined ? fmtDuration(durMs) : ""}
+								/>
 							</span>
-							{openable && (
-								<span className="shrink-0 text-meta text-faint">→</span>
+							{/* A sub-agent is asked for in a sentence, so its label wants
+							    the whole line. What kind it is and what it runs on go
+							    under it, the same second line a write agent gets. */}
+							{(s.agentType || s.model) && (
+								<span className="truncate pl-5 text-meta text-faint">
+									{[s.agentType, s.model && shortModel(s.model)]
+										.filter(Boolean)
+										.join(" · ")}
+								</span>
 							)}
 						</button>
 					);
@@ -361,40 +462,36 @@ function SubagentsCard({
 	);
 }
 
-/** The discovery surface: with no runs yet, this tab is the only place that
- *  tells you dynamic workflows exist and how to kick one off. Same shape as
- *  every other empty tab — the EmptyState block, then one card of rows. */
+/** The discovery surface: with nothing running, this page is the only place
+ *  that says workflows exist and how to start one. Same shape as every other
+ *  empty surface, the EmptyState block over one card of rows, and short enough
+ *  to read in a panel column. */
 function WorkflowsEmptyState() {
 	return (
-		<div className="flex flex-col gap-4 p-4 pb-6">
+		<div className="grid gap-3">
 			<EmptyState
 				icon={<IconStack size={22} />}
-				title="No agent runs yet"
-				className="py-6"
+				title="No agents yet"
+				className="py-5"
 			>
 				Ask this session to <span className="text-fg">use a workflow</span> and
-				it fans out many small agents at once, one per file, topic or candidate,
-				then combines their results. They show up here live.
+				it fans out many small agents at once, then combines what they find.
 			</EmptyState>
-			<div>
-				<div className="mb-1.5 text-meta font-medium text-faint">Try</div>
-				<CardList as="ul">
+			<div className="grid gap-[5px]">
+				<div className={INFO_LABEL_CLASS}>Try</div>
+				<CardList as="ul" className="rounded-lg">
 					{[
-						"Use a workflow to audit every route handler for missing auth checks.",
-						"Use a workflow: one agent per file in src/, each naming its biggest refactor.",
-						"Use a workflow to compare 3 approaches in parallel and pick a winner.",
-						"Use a workflow with write agents: one per file, migrate each, then merge.",
+						"Use a workflow to audit every route for missing auth checks.",
+						"Use a workflow to compare 3 approaches and pick a winner.",
+						"Use a workflow with write agents: one per file, then merge.",
 					].map((s) => (
-						<li
-							key={s}
-							className="px-2.5 py-2 text-supporting leading-snug text-dim"
-						>
+						<li key={s} className="px-2 py-1.5 text-label leading-snug text-dim">
 							{s}
 						</li>
 					))}
 				</CardList>
 			</div>
-			<p className="text-meta leading-snug text-faint">
+			<p className="px-2 text-meta leading-snug text-faint">
 				Agents read this worktree. Write agents each get their own branch, and
 				merging back is explicit.
 			</p>
@@ -535,34 +632,33 @@ function RunCard({
 		);
 	}
 
+	const tone = RUN_TONE[run.status];
 	return (
-		<div className="rounded-lg bg-panel">
-			<div className="flex items-start justify-between gap-2 px-2.5 pb-1 pt-2">
+		<div className={CARD_CLASS}>
+			<div className="flex items-start justify-between gap-2 px-2 pb-1.5 pt-1">
 				<div className="min-w-0">
-					<div className="flex items-center gap-2">
+					<div className="flex items-center gap-1.5">
 						<span className="truncate text-label font-semibold text-fg">
 							{run.name}
 						</span>
-						<span
-							className={cn(
-								"inline-flex shrink-0 items-center gap-1.5 rounded-sm px-1.5 py-0.5 text-meta font-medium",
-								RUN_PILL[run.status],
-							)}
-						>
-							{run.status === "running" && (
-								<span className="size-1.5 animate-pulse rounded-full bg-yellow" />
-							)}
-							{run.status}
-						</span>
+						{tone && (
+							<Badge
+								tone={tone}
+								dot={run.status === "running"}
+								className={cn(run.status === "running" && "animate-pulse")}
+							>
+								{run.status}
+							</Badge>
+						)}
 					</div>
-					<div className="mt-0.5 truncate text-xs text-dim tabular-nums">
+					<div className="mt-0.5 truncate text-meta text-faint tabular-nums">
 						{meta.join(" · ")}
 					</div>
 				</div>
 				{run.status === "running" && (
 					<Button
 						variant="danger"
-						size="sm"
+						size="xs"
 						className="shrink-0"
 						onClick={() => onCancel(run.runId)}
 					>
@@ -572,7 +668,7 @@ function RunCard({
 			</div>
 			{(run.agents.length > 0 ||
 				(run.status === "running" && groups.order.length > 0)) && (
-				<div className="flex flex-col px-1 pb-1.5 pt-0.5">
+				<div className="flex flex-col">
 					{groups.loose.map(agentRow)}
 					{groups.order.map((title) => {
 						const agents = groups.byPhase.get(title)!;
@@ -581,12 +677,15 @@ function RunCard({
 						const doneN = agents.filter((a) => a.status === "done").length;
 						return (
 							<div key={title}>
-								<div className="flex items-baseline gap-2 px-2 pb-0.5 pt-1.5">
+								{/* The phase label sits quieter than the agent names under
+								    it, and its count holds the rail's right edge, so a
+								    group reads as a heading over rows. */}
+								<div className="flex items-baseline gap-2 px-2 pb-px pt-2 first:pt-0.5">
 									<span
 										className={cn(
-											"truncate text-xs font-medium",
+											"min-w-0 flex-1 truncate text-meta font-medium",
 											run.status === "running" && title === run.currentPhase
-												? "text-fg"
+												? "text-dim"
 												: "text-faint",
 										)}
 									>
@@ -602,25 +701,34 @@ function RunCard({
 					})}
 				</div>
 			)}
+			{/* What the run left behind: its tool calls, its narration, its result.
+			    One rule under the agent rows separates the readings from the work,
+			    and each toggle is a row in the same shape as an agent above it
+			    rather than a band of its own. */}
+			{(!!run.mcpCalls?.length ||
+				run.logs.length > 0 ||
+				(run.status === "error" && run.error) ||
+				(run.status === "done" && run.result !== undefined)) && (
+				<div className="mx-2 mt-1 border-t border-divider" />
+			)}
 			{!!run.mcpCalls?.length && (
-				<div className="border-t border-line px-3 py-2">
-					<button
-						className="text-meta font-medium text-dim transition-colors hover:text-fg"
-						onClick={() => setShowMcp((v) => !v)}
-					>
+				<div>
+					<button className={FOOTER_ROW} onClick={() => setShowMcp((v) => !v)}>
 						{showMcp ? "Hide" : "Show"} tool calls
-						{run.totals.mcpCalls && run.totals.mcpCalls > run.mcpCalls.length
-							? ` (last ${run.mcpCalls.length} of ${run.totals.mcpCalls})`
-							: ""}
+						<span className="ml-auto shrink-0 tabular-nums text-faint">
+							{run.totals.mcpCalls ?? run.mcpCalls.length}
+						</span>
 					</button>
 					{showMcp && (
-						<div className="mt-1 flex flex-col gap-0.5">
+						<div className="flex flex-col gap-0.5 px-2 pb-1.5 pt-0.5">
 							{run.mcpCalls.map((c, i) => (
 								<div
 									key={`${c.seq}-${i}`}
-									className="flex items-baseline gap-2 text-xs leading-snug"
+									className="flex items-baseline gap-2 text-meta leading-snug"
 								>
-									<span className={cn("shrink-0", c.ok ? "text-faint" : "text-red")}>
+									<span
+										className={cn("shrink-0", c.ok ? "text-faint" : "text-red")}
+									>
 										{c.ok ? "·" : "✗"}
 									</span>
 									<span className="truncate text-dim">
@@ -636,12 +744,12 @@ function RunCard({
 				</div>
 			)}
 			{run.logs.length > 0 && (
-				<div className="border-t border-line px-3 py-2">
+				<div className="px-2 py-1.5">
 					<div className="flex flex-col gap-0.5">
 						{(allLogs ? run.logs : run.logs.slice(-20)).map((l, i) => (
 							<div
 								key={`${l.ts}-${i}`}
-								className="text-xs leading-snug text-faint"
+								className="text-meta leading-snug text-faint"
 							>
 								{l.message}
 							</div>
@@ -658,20 +766,20 @@ function RunCard({
 				</div>
 			)}
 			{run.status === "error" && run.error && (
-				<div className="border-t border-line px-3 py-2 text-xs text-red">
+				<div className="px-2 py-1.5 text-meta leading-snug text-red">
 					{run.error}
 				</div>
 			)}
 			{run.status === "done" && run.result !== undefined && (
-				<div className="border-t border-line px-3 py-2">
+				<div>
 					<button
-						className="text-meta font-medium text-dim transition-colors hover:text-fg"
+						className={FOOTER_ROW}
 						onClick={() => setShowResult((v) => !v)}
 					>
 						{showResult ? "Hide result" : "Show result"}
 					</button>
 					{showResult && (
-						<div className="mt-1.5">
+						<div className="px-2 pb-1.5 pt-0.5">
 							<DetailPre
 								text={
 									typeof run.result === "string"
@@ -721,31 +829,28 @@ const AgentRow = React.memo(function AgentRow({
 	return (
 		<>
 			<button
-				className="flex w-full items-center gap-2 rounded-control px-2 py-1 text-left transition-colors hover:bg-hover"
+				className={cn(ROW_CLASS, "flex-col items-stretch gap-0.5 hover:bg-hover")}
+				aria-expanded={open}
 				onClick={() => onToggle(a.seq)}
 			>
-				<StatusMark status={a.status} />
-				<span
-					className={cn(
-						"min-w-0 flex-1 truncate text-label",
-						a.status === "cancelled"
-							? "text-faint line-through"
-							: "text-fg",
-					)}
-				>
-					{a.label}
-				</span>
-				{a.write && <WriteChips a={a} />}
-				{a.cached && <Chip>cached</Chip>}
-				{a.model && <Chip>{shortModel(a.model)}</Chip>}
-				{a.tokens && (
-					<span className="shrink-0 text-meta text-faint tabular-nums">
-						{fmtTokens(a.tokens.output)} tok
+				<span className="flex min-w-0 items-center gap-2">
+					<StatusMark status={a.status} />
+					<span
+						className={cn(
+							"min-w-0 flex-1 truncate text-label",
+							a.status === "cancelled" ? "text-faint line-through" : "text-fg",
+						)}
+					>
+						{a.label}
 					</span>
-				)}
-				<span className="w-11 shrink-0 text-right text-meta text-faint tabular-nums">
-					{duration}
+					{a.cached && <Chip>cached</Chip>}
+					<AgentRail
+						model={a.model}
+						tokens={a.tokens?.output}
+						duration={duration}
+					/>
 				</span>
+				{a.write && <WriteLine a={a} />}
 			</button>
 			<div
 				className={cn(
@@ -757,7 +862,7 @@ const AgentRow = React.memo(function AgentRow({
 			>
 				<div className="min-h-0 overflow-hidden">
 					{open && (
-						<div className="mx-2 mb-1.5 mt-0.5 flex flex-col gap-1.5 rounded-sm bg-hover p-2">
+						<div className="mx-1 mb-1.5 mt-0.5 flex flex-col gap-1.5 rounded-md bg-hover p-2">
 							{/* The headline affordance: what the agent actually DID, not
 							    just what it said at the end. Available even while it runs
 							    (the transcript view polls). */}

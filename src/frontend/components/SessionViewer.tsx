@@ -187,6 +187,7 @@ import {
 	IconGlobe,
 	IconRobot,
 	IconArrowUpRight,
+	IconStack,
 } from "./icons";
 import { SessionRelations, type RelatedSession } from "./SessionRelations";
 import { Spinner } from "../ui/spinner";
@@ -1253,9 +1254,9 @@ export function SessionViewer({
 	// On phones the same state drives the info page's own sub-page: that page
 	// IS this panel there, so a drill-in has to push inside it rather than open
 	// a column that phone layouts never render.
-	const [panelPage, setPanelPage] = useState<null | "portals" | "changes">(
-		null,
-	);
+	const [panelPage, setPanelPage] = useState<
+		null | "portals" | "agents" | "changes"
+	>(null);
 	// Closing the host that shows pages returns to the overview; that effect
 	// needs `isPhone` to know which host to watch, so it lives beside the
 	// viewport state further down.
@@ -4300,6 +4301,13 @@ export function SessionViewer({
 	const livePortals = (previewStatus?.services ?? []).filter((service) =>
 		portalTargetFor(session.id, service),
 	).length;
+	// Same reading beside Agents: how many are working right now. A finished
+	// run stays on its page rather than keeping a number on the bar.
+	const runningAgents =
+		workflowRuns.reduce(
+			(n, run) => n + run.agents.filter((a) => a.status === "running").length,
+			0,
+		) + subagents.filter((s) => s.status === "running").length;
 	// The header preview control used to keep this status warm. Now that the
 	// launcher lives in the overflow menu. Keep status warm while Preview or the
 	// portal browser is up, and while the workspace panel is open — its bottom
@@ -6192,6 +6200,15 @@ export function SessionViewer({
 										);
 									}}
 								/>
+							) : panelPage === "agents" ? (
+								<WorkflowPanel
+									sessionId={session.id}
+									runs={workflowRuns}
+									onCancel={cancelWorkflowRun}
+									subagents={subagents}
+									onOpenSubagent={openSubagent}
+									onBack={() => setPanelPage(null)}
+								/>
 							) : (
 							<>
 							<div className="px-1">
@@ -6241,28 +6258,17 @@ export function SessionViewer({
 								/>
 							</div>
 							{/* Everything below is a section of this same panel, in the
-							    panel's own grammar: a faint label over a borderless plate.
-							    Each panel renders its own label (Portals, Agents), so they
-							    line up with Git status and the changed files above. */}
+							    panel's own grammar: a faint label over a borderless plate,
+							    lining up with Git status and the changed files above.
+							    Agents is not one of them any more: it is a place the
+							    bottom bar opens, like Portals, so its empty state has
+							    somewhere to live and a long run cannot bury the
+							    overview. */}
 							<div className="flex flex-col gap-4 px-2 pb-[22px]">
 								{sessionReports.length > 0 && (
 									<SessionReportsPanel
 										reports={sessionReports}
 										onOpenNewSession={onOpenNewSession}
-									/>
-								)}
-								{/* Only once a run exists. The workflows empty state is a
-								    teaching block several hundred pixels tall, which is fine
-								    on a tab you chose to open and wrong as a permanent
-								    fixture in the sidebar — the phone info page already drew
-								    that line. */}
-								{(workflowRuns.length > 0 || subagents.length > 0) && (
-									<WorkflowPanel
-										sessionId={session.id}
-										runs={workflowRuns}
-										onCancel={cancelWorkflowRun}
-										subagents={subagents}
-										onOpenSubagent={openSubagent}
 									/>
 								)}
 							</div>
@@ -6291,6 +6297,28 @@ export function SessionViewer({
 									{livePortals > 0 && (
 										<span className="shrink-0 tabular-nums text-faint">
 											{livePortals}
+										</span>
+									)}
+								</button>
+								<button
+									type="button"
+									aria-pressed={panelPage === "agents"}
+									className={cn(
+										PANEL_FOOTER_ITEM,
+										panelPage === "agents" && "bg-hover text-fg",
+									)}
+									onClick={() =>
+										setPanelPage(panelPage === "agents" ? null : "agents")
+									}
+								>
+									<IconStack size={15} className="shrink-0" />
+									Agents
+									{/* Only the live count, like Portals: a finished run is
+									    something you go and read, not something the bar has
+									    to keep announcing. */}
+									{runningAgents > 0 && (
+										<span className="shrink-0 tabular-nums text-yellow">
+											{runningAgents}
 										</span>
 									)}
 								</button>
