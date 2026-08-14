@@ -72,6 +72,11 @@
 	   composer's case at chip scale, so it takes the composer's answer; see the
 	   light block. */
 	--button-surface: var(--control-surface);
+	/* The segmented control's knob, which is the one plate that sits in a WELL
+	   rather than on the page, so it needs its own answer per theme. In dark a
+	   cast shadow lands on an almost-black track and does nothing, so the edge
+	   has to be drawn. In light it must not be — see the light block. */
+	--segmented-knob-edge: var(--border);
 	/* Floating popups — hover cards, menus, context menus. Same L3 tier as the
 	   controls above, and in dark that is all it needs: lighter than the page,
 	   so the fill alone reads as lifted and the hairline is just an edge. Light
@@ -336,6 +341,13 @@ html[data-theme="light"] {
 	   which is the disabled signal again. So it goes paper and lets the shadow
 	   do the lifting, exactly as the composer and the popups below do. */
 	--button-surface: #ffffff;
+	/* No edge on the segmented knob here. A --border hairline is darker than
+	   the --bg-hover track it lies on, so it reads as an outline drawn around
+	   the option rather than a plate raised out of the group, and the top of
+	   that outline has no shadow to justify it. White on a light grey track
+	   plus the cast shadow is enough separation; dark needs the line, and
+	   takes it in the block above. */
+	--segmented-knob-edge: transparent;
 	/* The composer is the exception to the ramp above, and it has to be. The
 	   ramp steps AWAY from the page — darker in light — which is right for a
 	   small chip read against its neighbours, but the composer is a big empty

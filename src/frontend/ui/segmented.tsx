@@ -10,15 +10,15 @@ import { duration, ease } from "./motion";
  * option is worth reading at a glance: Default / Compact, 7d / 14d / 30d / 90d.
  *
  * Recessed track, raised knob: the option in effect sits ON the group rather
- * than being a darker hole cut into it. The knob takes its edge from
- * `smooth-shadow-ring-sm` rather than the Button plate's `border-line` — a
- * plate sitting IN a well is not the same problem as one sitting on the page.
- * A `--line` border reads darker than the track it lies on, so the knob looked
- * like an outlined chip pasted over the group, with a hard top edge that no
- * shadow justifies (light falls downward). The ring tier is theme-aware where
- * a border is not: near-invisible on a light track, where the cast shadow does
- * the separating, and 14% light ink in dark, where a cast shadow does almost
- * nothing and the edge has to be drawn. The
+ * than being a darker hole cut into it. A plate sitting IN a well is not the
+ * same problem as one sitting on the page, so the knob does not borrow the
+ * Button plate's `border-line`: that hairline is darker than the `bg-hover`
+ * track it lies on, which made the knob read as an outline drawn around the
+ * option, its top edge unjustified by any shadow (light falls downward). The
+ * edge is a per-theme token instead, `--segmented-knob-edge` in base.css —
+ * transparent in light, where white plus the cast shadow separates it, and a
+ * real hairline in dark, where a cast shadow on a near-black track does
+ * nothing at all and the plate would otherwise vanish. The
  * track is `bg-hover` — one of the few places that absolute surface is right,
  * because here it is a real surface (a well the options sit in) rather than an
  * interaction wash. Concentric corners: the knob's `rounded-control` (12) plus
@@ -131,7 +131,7 @@ export function SegmentedOption({
 				<motion.span
 					layoutId={knobId}
 					aria-hidden
-					className="absolute inset-0 rounded-control bg-button smooth-shadow-ring-sm"
+					className="absolute inset-0 rounded-control border border-[var(--segmented-knob-edge)] bg-button smooth-shadow-sm"
 					transition={{ type: "tween", duration: duration.base, ease }}
 				/>
 			)}
