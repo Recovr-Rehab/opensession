@@ -1251,38 +1251,51 @@ html.wco .app-body.sidebar-collapsed
 }
 /* A finished @-mention of a teammate, the draft's counterpart to the
    `person-chip` a sent message renders. It reads as a pill without being one:
-   the mirror may not take padding, so the breathing room around the name is an
-   `outline`, which follows the radius and is drawn outside the box — so a
-   translucent accent stays one flat wash instead of doubling where a spread
-   shadow would have sat under the background. Hover is set by the composer,
-   which hit-tests these spans through the textarea covering them. */
+   the span may not take a pixel of padding, because the mirror has to stay
+   glyph-identical to the textarea behind it. So the wash is painted by a
+   pseudo-element instead, inset negatively past the box — which an `outline`
+   also does, but only by the same amount on every side, and the room this
+   needs is horizontal. `inset: -2px -5px` keeps the pill inside its own line
+   box while giving the name 5px past its last letter, and one element painting
+   one translucent colour stays flat where two overlapping shadows would have
+   doubled. `z-index: -1` puts it behind the name, in front of the mirror.
+
+   The 5px is why the mirror carries 5px of padding against a matching negative
+   margin (Composer.tsx): its content origin is unchanged, so nothing moves,
+   but `overflow: hidden` now clips 5px further out — otherwise a mention at
+   the start of a line has its left edge cut off by the mirror's own bounds.
+
+   Hover is set by the composer, which hit-tests these spans through the
+   textarea covering them. */
 .composer-hl .cmp-mention {
 	position: relative;
-	background: color-mix(in srgb, var(--accent) 12%, transparent);
-	outline: 3px solid color-mix(in srgb, var(--accent) 12%, transparent);
-	border-radius: 999px;
 	color: var(--accent-ink);
 }
-.composer-hl .cmp-mention[data-hover] {
-	background: color-mix(in srgb, var(--accent) 22%, transparent);
-	outline-color: color-mix(in srgb, var(--accent) 22%, transparent);
+.composer-hl .cmp-mention::before {
+	content: "";
+	position: absolute;
+	inset: -2px -5px;
+	z-index: -1;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
-/* The face. It is painted rather than laid out, because the mirror cannot take
-   a pixel of width — so the `@` goes transparent and lends the circle its slot,
-   and that slot, plus the 3px the outline reaches past it, is the entire
-   budget: 16.8px at the composer's 14px type, from the wash's left edge to the
-   first letter. Both gaps come out of it, so the face is what gives. Sitting at
-   `left: 0` puts the outline's full 3px between the wash's edge and the circle,
-   and a 0.72em circle leaves 3.8px before the name — the same rhythm the sent
-   message's `person-chip` keeps at its own larger size. A bigger face has to
-   take that room from one side or the other, and pressed against either it
-   reads as cut rather than as generous. The size is in `em` because the slot
-   is: the phone composer sets 16px, where a fixed circle would sit small in a
-   wider gap. Absolute, so it takes part in no layout at all. */
+.composer-hl .cmp-mention[data-hover]::before {
+	background: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+/* The face. It is painted rather than laid out, for the same reason: there is
+   nowhere to put a picture, so the `@` goes transparent and lends the circle
+   its slot. The circle hangs off THAT span rather than off the pill, so it
+   stays fixed to the slot whatever the wash around it does, and the gap either
+   side of it is the slot's own arithmetic: 13.8px at the composer's 14px type,
+   less a 0.72em circle, leaves 3.7px before the first letter — the rhythm the
+   sent message's `person-chip` keeps at its own larger size. The size is in
+   `em` because the slot is: the phone composer sets 16px, where a fixed circle
+   would sit small in a wider gap. Absolute, so it takes part in no layout. */
 .composer-hl .cmp-at {
+	position: relative;
 	color: transparent;
 }
-.composer-hl .cmp-faced::before {
+.composer-hl .cmp-faced .cmp-at::before {
 	content: "";
 	position: absolute;
 	left: 0;
