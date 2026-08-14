@@ -49,6 +49,12 @@ export const GIT_LABEL = "flex-1 overflow-hidden text-ellipsis";
  *  their own menu is open. */
 export const GIT_ACTION =
 	"inline-flex min-h-[22px] shrink-0 items-center whitespace-nowrap rounded-md bg-control px-2 text-label font-semibold text-dim transition-[color,background-color] enabled:hover:bg-active enabled:hover:text-fg data-[popup-open]:bg-active data-[popup-open]:text-fg disabled:cursor-default disabled:opacity-60";
+/** The same weak plate when the action opens a menu rather than doing the
+ *  thing: one trailing chevron, on the Button primitive's caret terms. That is
+ *  14px beside a 12px label, `gap-1`, and 4px shaved off the caret's side so
+ *  the glyph's own whitespace doesn't push the pair off balance. */
+export const GIT_ACTION_MENU = `${GIT_ACTION} gap-1 pr-1`;
+export const GIT_ACTION_CARET = "shrink-0 opacity-55";
 /** Follow-up line under the rows. Carries no colour: the caller adds
  *  `text-faint` ("Asked … ✓") or `text-red` (an error), because two colour
  *  utilities on one element resolve by Tailwind output order, not by the

@@ -52,6 +52,8 @@ import {
 } from "../lib/workspace-overview";
 import {
 	GIT_ACTION,
+	GIT_ACTION_CARET,
+	GIT_ACTION_MENU,
 	GIT_DOT,
 	GIT_DOT_BG,
 	GIT_LABEL,
@@ -1090,17 +1092,18 @@ function ReviewerChip({
 					className={
 						reviewNow
 							? "-mr-1 ml-1 grid size-6 shrink-0 place-items-center rounded-md text-faint transition-[color,background-color] hover:bg-hover hover:text-fg"
-							: GIT_ACTION
+							: GIT_ACTION_MENU
 					}
 					aria-label="Review options"
 					title={rowTitle}
 				>
 					{reviewNow ? (
 						<IconChevronDown size={14} />
-					) : req || githubTarget ? (
-						"Change"
 					) : (
-						"Request"
+						<>
+							{req || githubTarget ? "Change" : "Request"}
+							<IconChevronDown size={14} className={GIT_ACTION_CARET} />
+						</>
 					)}
 				</Menu.Trigger>
 				<Menu.Popup align="start" sideOffset={6} className="min-w-[200px]">
