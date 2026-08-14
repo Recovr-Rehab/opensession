@@ -47,6 +47,7 @@ import type { FileDiffMetadata } from "@pierre/diffs";
 import { CommentableDiff, type CommentTarget, type PendingComment } from "./CommentableDiff";
 import { SelectionToSession } from "./SelectionToSession";
 import { getCurrentUser } from "./UserPicker";
+import { UserAvatar } from "./UserAvatar";
 import { renderPrCommentMarkdown } from "../lib/markdown";
 import { useMarkdownRepo } from "./MarkdownBody";
 import { isOutdatedReviewComment } from "../lib/pr-comments";
@@ -1196,24 +1197,6 @@ export function PrPanel({
   const comments = (pr.comments || []).filter(
     (c) => stripHtmlComments(c.body) && !isOutdatedReviewComment(c.body),
   );
-  const stateLabel = pr.isDraft
-    ? "Draft"
-    : pr.state === "OPEN"
-      ? "Open"
-      : pr.state === "MERGED"
-        ? "Merged"
-        : "Closed";
-  const stateTone = pr.isDraft
-    ? { pill: "bg-blue-soft text-blue", dot: "bg-blue" }
-    : pr.state === "OPEN"
-      ? { pill: "bg-green-soft text-green", dot: "bg-green" }
-      : pr.state === "MERGED"
-        ? {
-            pill: "bg-[color-mix(in_srgb,var(--purple)_12%,transparent)] text-purple",
-            dot: "bg-purple",
-          }
-        : { pill: "bg-red-soft text-red", dot: "bg-red" };
-
   const canMergeAfterReview =
     pr.state === "OPEN" &&
     !pr.isDraft &&
@@ -1283,14 +1266,14 @@ export function PrPanel({
       {/* The PR identity lives inside the scroll container, so it gets out of
           the way once the reviewer reaches the code. Only the page row sticks. */}
       <main className="min-h-0 flex-1 overflow-y-auto bg-surface pb-24 [--review-file-header-top:52px] phone:pb-36">
-        <header className={`flex shrink-0 items-center gap-3 px-6 phone:px-3 ${headerCompact ? "h-[52px]" : "h-16"}`}>
-          {!headerCompact && (
-            <span className={`inline-flex h-8 shrink-0 items-center gap-2 rounded-control px-2.5 text-label font-medium ${stateTone.pill}`}>
-              <span className={`size-2 rounded-full ${stateTone.dot}`} aria-hidden="true" />
-              {stateLabel}
-            </span>
-          )}
-          <div className="min-w-0 flex-1">
+        <header className="flex h-[52px] shrink-0 items-center gap-2.5 px-6 phone:px-3">
+          <UserAvatar
+            name={pr.author}
+            login={provider.key === "github" ? pr.author : null}
+            size={28}
+            title={pr.author}
+          />
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
             <a
               className="block truncate text-dialog-title font-semibold leading-[1.2] tracking-[-0.005em] text-fg no-underline hover:text-link phone:text-body"
               href={pr.url}
@@ -1301,13 +1284,15 @@ export function PrPanel({
               {pr.title} <span className="font-normal text-faint">#{pr.number}</span>
             </a>
             {!headerCompact && (
-              <div className="mt-0.5 flex items-center gap-1.5 overflow-hidden whitespace-nowrap text-meta text-dim">
-                <span className="truncate">
-                  <strong className="font-semibold">{pr.author}</strong> wants to merge {pr.commits?.length || 0} commit{pr.commits?.length === 1 ? "" : "s"} into
-                  {" "}<span className="rounded-sm bg-control px-1.5 py-0.5 font-medium text-fg">{pr.baseRefName}</span>
-                  {" "}from <span className="rounded-sm bg-control px-1.5 py-0.5 font-medium text-fg">{pr.headRefName}</span>
-                </span>
-                <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
+              <div
+                className="flex shrink-0 items-center gap-1.5 whitespace-nowrap text-meta text-dim tabular-nums"
+                title={`${pr.commits?.length || 0} commits · ${pr.changedFiles} files changed · ${pr.headRefName} into ${pr.baseRefName}`}
+              >
+                <span>{pr.commits?.length || 0} commit{pr.commits?.length === 1 ? "" : "s"}</span>
+                <span className="text-faint" aria-hidden="true">·</span>
+                <span>{pr.changedFiles} file{pr.changedFiles === 1 ? "" : "s"}</span>
+                <span className="text-faint" aria-hidden="true">·</span>
+                <span className="flex items-center gap-1.5">
                   <span className="text-green">+{pr.additions}</span>
                   <span className="text-red">−{pr.deletions}</span>
                 </span>
