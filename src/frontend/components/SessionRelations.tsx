@@ -2,6 +2,7 @@ import type { ModelOption } from "../lib/api";
 import { Menu } from "../ui/menu";
 import { cn } from "../ui/cn";
 import { IconArrowDownRight } from "./icons";
+import { shortModelLabel } from "./ModelEffortSelect";
 
 /**
  * Orchestrator/executor relationship chips for the session header. A session
@@ -22,7 +23,7 @@ export interface RelatedSession {
 
 function shortModel(model: string | undefined, models: ModelOption[]): string | null {
 	if (!model) return null;
-	return models.find((m) => m.id === model)?.label || model;
+	return shortModelLabel(model, models);
 }
 
 const chip =

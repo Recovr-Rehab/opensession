@@ -147,6 +147,33 @@ export function friendlyModelSlug(slug: string): string {
 	return [words.join(" "), nums.join(".")].filter(Boolean).join(" ") || slug;
 }
 
+/**
+ * A workspace preset's own name for an id that carries the workspace it was
+ * defined in ("workspace-preset/ws-b985…/opus-fable" → "Opus 5 + Fable
+ * oracle"), or null when the id isn't one.
+ *
+ * A session can run a preset from a DIFFERENT workspace — /model and a carried
+ * default both allow it, and the runner resolves either — while the catalog is
+ * always fetched for the session's own workspace. So the exact id can be
+ * absent; every workspace seeds the same preset ids, so the trailing segment
+ * still names it. Without a catalog at all, the slug is still a name, and the
+ * storage path never is.
+ */
+export function workspacePresetLabel(
+	id: string,
+	models: ModelOption[],
+): string | null {
+	const slug = id.match(/^workspace-preset\/[^/]+\/(.+)$/)?.[1];
+	if (!slug) return null;
+	return (
+		models.find((m) => m.id === id)?.label ||
+		models.find(
+			(m) => m.id.startsWith("workspace-preset/") && m.id.endsWith(`/${slug}`),
+		)?.label ||
+		friendlyModelSlug(slug)
+	);
+}
+
 /** Display name without the vendor noise: "Claude Fable 5" → "Fable 5",
  * "GPT-5.5 (Codex)" → "GPT-5.5", "opencode/anthropic/claude-sonnet-5" →
  * "Sonnet 5". The engine is an implementation detail — it never shows in a
@@ -156,6 +183,8 @@ export function shortModelLabel(id: string, models: ModelOption[]): string {
 	// preset's label, not a slug).
 	if (id.startsWith("pi/") && models.some((m) => m.id === baseModelId(id)))
 		return shortModelLabel(baseModelId(id), models);
+	const preset = workspacePresetLabel(baseModelId(id), models);
+	if (preset) return preset;
 	const oc = opencodeModelParts(id);
 	if (oc) return friendlyModelSlug(oc.model);
 	const raw = models.find((m) => m.id === id)?.label || id || "Default";

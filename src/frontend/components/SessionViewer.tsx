@@ -130,8 +130,10 @@ import { SandboxBadge } from "./SandboxBadge";
 import { ModelMenuRow } from "./ModelMenuRow";
 import {
 	EFFORTS,
+	baseModelId,
 	friendlyModelSlug,
 	opencodeModelParts,
+	workspacePresetLabel,
 } from "./ModelEffortSelect";
 import { AskCard } from "./AskCard";
 import { PrPanel } from "./PrPanel";
@@ -583,6 +585,10 @@ const MODEL_NAMES: Record<string, string> = {
 	codex: "Codex",
 };
 function prettyModel(id: string): string {
+	// A workspace preset names itself; with no models list to read its label
+	// from, its slug is still a name and its storage path is not.
+	const preset = workspacePresetLabel(baseModelId(id), []);
+	if (preset) return preset;
 	// Opencode ids get their friendly name with no engine suffix — the engine
 	// is an implementation detail ("Sonnet 5", not "… · OpenCode").
 	const oc = opencodeModelParts(id);
@@ -595,6 +601,8 @@ function prettyModel(id: string): string {
  * opencode ids always take the pure friendly-name path (the server's labels
  * for them only refresh on restart). */
 function metadataModelLabel(effectiveModel: string, models: ModelOption[]): string {
+	const preset = workspacePresetLabel(baseModelId(effectiveModel), models);
+	if (preset) return preset;
 	if (opencodeModelParts(effectiveModel)) return prettyModel(effectiveModel);
 	return models.find((m) => m.id === effectiveModel)?.label || prettyModel(effectiveModel);
 }
