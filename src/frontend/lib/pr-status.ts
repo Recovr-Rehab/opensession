@@ -18,12 +18,30 @@ export interface PrStatusInput {
 	checks?: { failed?: number; pending?: number } | null;
 }
 
+/**
+ * The wash a surface paints behind the glyph when the state is a chip rather
+ * than a bare mark. Same tones as the status strip's band (PR_BAR_BG), so a
+ * PR's colour is the same wherever it is filled rather than drawn: purple and
+ * yellow have no soft token and mix from their own variable, and the muted
+ * states take translucent ink instead of a hue.
+ */
+const MARK_BG = {
+	purple: "bg-[color-mix(in_srgb,var(--purple)_10%,transparent)]",
+	muted: "bg-hover",
+	red: "bg-red-soft",
+	yellow: "bg-[color-mix(in_srgb,var(--yellow)_9%,transparent)]",
+	green: "bg-green-soft",
+} as const;
+
 export function prStatusMark(pr: PrStatusInput): {
 	className: string;
+	bgClassName: string;
 	label: string;
 } {
-	if (pr.state === "MERGED") return { className: "text-purple", label: "PR merged" };
-	if (pr.state === "CLOSED") return { className: "text-faint", label: "PR closed" };
+	if (pr.state === "MERGED")
+		return { className: "text-purple", bgClassName: MARK_BG.purple, label: "PR merged" };
+	if (pr.state === "CLOSED")
+		return { className: "text-faint", bgClassName: MARK_BG.muted, label: "PR closed" };
 
 	const conflicting = pr.mergeable === "CONFLICTING";
 	const failed = (pr.checks?.failed || 0) > 0;
@@ -31,11 +49,17 @@ export function prStatusMark(pr: PrStatusInput): {
 	const decision = (pr.reviewDecision || "").toUpperCase();
 	const changesRequested = decision === "CHANGES_REQUESTED";
 
-	if (conflicting) return { className: "text-red", label: "PR has conflicts" };
-	if (changesRequested) return { className: "text-red", label: "PR changes requested" };
-	if (failed) return { className: "text-red", label: "PR checks failing" };
-	if (pending) return { className: "text-yellow", label: "PR checks running" };
-	if (pr.isDraft) return { className: "text-faint", label: "Draft PR" };
-	if (decision === "APPROVED") return { className: "text-green", label: "PR approved" };
-	return { className: "text-green", label: "PR open" };
+	if (conflicting)
+		return { className: "text-red", bgClassName: MARK_BG.red, label: "PR has conflicts" };
+	if (changesRequested)
+		return { className: "text-red", bgClassName: MARK_BG.red, label: "PR changes requested" };
+	if (failed)
+		return { className: "text-red", bgClassName: MARK_BG.red, label: "PR checks failing" };
+	if (pending)
+		return { className: "text-yellow", bgClassName: MARK_BG.yellow, label: "PR checks running" };
+	if (pr.isDraft)
+		return { className: "text-faint", bgClassName: MARK_BG.muted, label: "Draft PR" };
+	if (decision === "APPROVED")
+		return { className: "text-green", bgClassName: MARK_BG.green, label: "PR approved" };
+	return { className: "text-green", bgClassName: MARK_BG.green, label: "PR open" };
 }

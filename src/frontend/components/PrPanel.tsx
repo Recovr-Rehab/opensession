@@ -1336,19 +1336,18 @@ export function PrPanel({
       <main
         className={`min-h-0 flex-1 overflow-y-auto bg-surface [--review-file-header-top:52px] ${reviewing ? "pb-24 phone:pb-36" : "pb-4"}`}
       >
-        <header className="flex h-[52px] shrink-0 items-center gap-2.5 px-6 phone:px-3">
-          {/* State, in the app's own PR language: the glyph carries the colour
-              and the word stays quiet beside it. It is its own object, so it
-              gets more air than the pieces of the identity line it precedes. */}
+        <header className="flex h-11 shrink-0 items-center gap-2.5 px-6 phone:px-3">
+          {/* State, in the app's own PR language, filled rather than drawn: the
+              tone washes the whole chip and the glyph and word share its ink.
+              It is its own object, so it gets more air than the pieces of the
+              identity line it precedes. */}
           <Tooltip label={statusMark.label}>
-            <span className="mr-2 flex shrink-0 items-center gap-1.5">
-              {/* Only the glyph is toned. The word stays coarse: "Open" in the
-                  red of a conflict would read as a contradiction. */}
-              <span className={`flex ${statusMark.className}`}>
-                <PrStateIcon state={pr.state} isDraft={pr.isDraft} />
-              </span>
+            <span
+              className={`mr-1.5 flex h-6 shrink-0 items-center gap-1.5 rounded-control px-2 ${statusMark.bgClassName} ${statusMark.className}`}
+            >
+              <PrStateIcon state={pr.state} isDraft={pr.isDraft} />
               {!headerCompact && (
-                <span className="text-label font-medium text-dim">{stateLabel}</span>
+                <span className="text-label font-medium">{stateLabel}</span>
               )}
             </span>
           </Tooltip>
@@ -1530,6 +1529,13 @@ export function PrPanel({
                   {handEdited.length === 1 ? "" : "s"}
                 </Button>
               )}
+              {/* How big the change is, beside the control that scopes it —
+                  the same pair the rail counts, so a reader who never opens
+                  the rail still knows what they are about to read. */}
+              <span className="flex shrink-0 items-center gap-1.5 text-label tabular-nums">
+                <span className="text-green">+{pr.additions}</span>
+                <span className="text-red">−{pr.deletions}</span>
+              </span>
               {/* Two axes, two controls. The named dropdown picks WHAT you are
                   reading — a diff, a guided walk through it, a call graph —
                   and reports it, so it takes the outlined plate with its value
