@@ -168,7 +168,7 @@ export function StatusDot({
 
 /** The "+N" tail of a capped pile, in both its readings (plain count, menu). */
 const OVERFLOW_COUNT =
-	"ml-1.5 flex items-center text-meta font-semibold tabular-nums text-dim";
+	"ml-1.5 flex items-center text-meta font-semibold tabular-nums";
 
 /** A face. `status` adds the dim/dot presence reading; the accessible name
  *  says the same thing in words, so the colour isn't carrying it alone. */
