@@ -95,6 +95,7 @@ import {
 	IconHome,
 	IconInbox,
 	IconListCircles,
+	IconMessages,
 	IconMoon,
 	IconPlus,
 	IconSearch,
@@ -702,6 +703,11 @@ export function App(
 	// change (a new PR session can auto-create a workspace server-side).
 	const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
 	const [workspacesLoaded, setWorkspacesLoaded] = useState(false);
+	const productEmpty =
+		!loading &&
+		workspacesLoaded &&
+		sessions.length === 0 &&
+		workspaces.length === 0;
 	const refreshWorkspaces = React.useCallback(() => {
 		fetchWorkspaces()
 			.then(setWorkspaces)
@@ -4002,6 +4008,39 @@ export function App(
 								}
 							>
 								Check the connection to this server.
+							</EmptyState>
+						) : productEmpty ? (
+							<EmptyState
+								icon={<IconMessages size={32} />}
+								title={
+									<span className="text-[19px] leading-[1.15] font-semibold tracking-[-0.02em]">
+										No sessions
+									</span>
+								}
+								action={
+									<div className="flex flex-col items-center gap-1">
+										<Button
+											variant="soft"
+											size="md"
+											className="rounded-full px-4"
+											onClick={() => openPalette()}
+										>
+											New session
+										</Button>
+										<Button
+											variant="ghost"
+											size="sm"
+											onClick={() => navigate({ view: "archived" })}
+										>
+											Archived
+										</Button>
+									</div>
+								}
+								className="min-h-0 flex-1"
+							>
+								<span className="text-[14px] leading-[1.45] text-pretty">
+									Start one and it shows up here.
+								</span>
 							</EmptyState>
 						) : (
 							<Home

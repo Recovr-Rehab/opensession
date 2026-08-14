@@ -2328,7 +2328,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// Tools this width offers at all — the switches below only choose among
 	// these, so a tool that doesn't fit the viewport is never listed as off.
 	const fittingTools = tools.filter((tool) => toolFitsViewport(tool.id, isPhone));
-	const visibleTools = fittingTools.filter((tool) => !hiddenTools.has(tool.id));
+	const visibleTools = fittingTools.filter(
+		(tool) => !hiddenTools.has(tool.id) && !(productEmpty && tool.id === "home"),
+	);
 
 	const setToolVisible = setSidebarToolVisible;
 

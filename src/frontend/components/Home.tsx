@@ -33,7 +33,6 @@ import {
   IconDotsHorizontal,
   IconFolder,
   IconGitMerge,
-  IconMessages,
   IconPlus,
   IconPullRequest,
   IconRepo,
@@ -535,7 +534,6 @@ export function Home({
     () => [...new Set(allWorktrees.map((row) => row.repo).filter(Boolean))].sort(),
     [allWorktrees],
   );
-  const productEmpty = sessions.length === 0 && workspaces.length === 0;
 
   return (
     // The page frame every other list page in the app uses: one centred
@@ -575,37 +573,6 @@ export function Home({
             </Button>
           </div>
         </PageHeader>
-        {productEmpty ? (
-          <EmptyState
-            icon={<IconMessages size={32} />}
-            title={
-              <span className="text-[19px] leading-[1.15] font-semibold tracking-[-0.02em]">
-                No sessions
-              </span>
-            }
-            action={
-              <div className="flex flex-col items-center gap-1">
-                <Button
-                  variant="soft"
-                  size="md"
-                  className="rounded-full px-4"
-                  onClick={onNewSession}
-                >
-                  New session
-                </Button>
-                <Button variant="ghost" size="sm" onClick={onShowArchived}>
-                  Archived
-                </Button>
-              </div>
-            }
-            className="min-h-[520px] py-20"
-          >
-            <span className="text-[14px] leading-[1.45] text-pretty">
-              Start one and it shows up here.
-            </span>
-          </EmptyState>
-        ) : (
-          <>
         <OverviewStrip running={running} stats={stats} onOpenAnalytics={onOpenAnalytics} />
 
         {/* Search and the two scopes, in the app's field-and-button vocabulary:
@@ -814,8 +781,6 @@ export function Home({
               </section>
             ))}
           </div>
-        )}
-          </>
         )}
       </div>
     </div>
