@@ -35,6 +35,7 @@ export function UserAvatar({
 	name,
 	login: loginProp,
 	size = 24,
+	edge = true,
 	className,
 	title,
 	style,
@@ -43,6 +44,9 @@ export function UserAvatar({
 	name: string;
 	login?: string | null;
 	size?: number;
+	/** Draw the hairline around a photo. Off where the picture is one glyph in
+	 *  a row of chrome and an edge reads as a second box. */
+	edge?: boolean;
 	className?: string;
 	title?: string;
 	style?: React.CSSProperties;
@@ -59,7 +63,7 @@ export function UserAvatar({
 				// initial fallback is already its own flat tile, so it takes no
 				// edge — the variable stays defined (transparent) because callers
 				// compose it into a larger box-shadow (TeamPresence's pile ring).
-				picture
+				picture && edge
 					? "[--avatar-edge:inset_0_0_0_1px_color-mix(in_srgb,var(--text)_14%,transparent)]"
 					: "[--avatar-edge:0_0_0_0_transparent]",
 				"relative inline-flex shrink-0 items-center justify-center",

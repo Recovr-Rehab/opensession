@@ -1342,7 +1342,8 @@ export function PrPanel({
           <UserAvatar
             name={pr.author}
             login={provider.key === "github" ? pr.author : null}
-            size={22}
+            size={18}
+            edge={false}
             title={pr.author}
           />
           {!headerCompact && (
