@@ -11,7 +11,11 @@ import {
 import { IconPullRequest, IconSearch } from "./icons";
 import { Modal, useEnterOnMount } from "../ui/modal";
 import { cn } from "../ui/cn";
-import { prLinksMatch, sessionUsesPrLink } from "../lib/session-prs";
+import {
+	collapsePrLinkSessions,
+	prLinksMatch,
+	sessionUsesPrLink,
+} from "../lib/session-prs";
 
 export interface CommandPaletteAction {
 	id: string;
@@ -346,6 +350,9 @@ export function SessionSearch({
 				new Date(b.lastActivity).getTime() -
 				new Date(a.lastActivity).getTime(),
 		);
+		if (sessionResults.some((session) => sessionUsesPrLink(session, q))) {
+			sessionResults = collapsePrLinkSessions(sessionResults);
+		}
 		const sessionRows: PaletteResult[] = sessionResults.slice(0, 100).map((s) => {
 			// Show the snippet only when the title/metadata didn't already match —
 			// otherwise the row explains itself.

@@ -1,4 +1,5 @@
 import type { UnifiedSession } from "./types";
+import { mainSession } from "./landing-session";
 
 export type SessionPrRef = NonNullable<UnifiedSession["prs"]>[number];
 
@@ -68,6 +69,35 @@ export function sessionUsesPrLink(session: UnifiedSession, query: string): boole
 		(ref) =>
 			ref.repo?.toLowerCase() === target.repo && ref.number === target.number,
 	);
+}
+
+/**
+ * A PR-backed workspace can contain the human implementation chat plus review
+ * automations. A link search represents that workspace once, using the same
+ * main-session choice as normal workspace navigation.
+ */
+export function collapsePrLinkSessions(
+	sessions: UnifiedSession[],
+): UnifiedSession[] {
+	const byWorkspace = new Map<string, UnifiedSession[]>();
+	for (const session of sessions) {
+		if (!session.workspaceId) continue;
+		const group = byWorkspace.get(session.workspaceId) || [];
+		group.push(session);
+		byWorkspace.set(session.workspaceId, group);
+	}
+
+	const emitted = new Set<string>();
+	return sessions.flatMap((session) => {
+		const workspaceId = session.workspaceId;
+		if (!workspaceId) return [session];
+		if (emitted.has(workspaceId)) return [];
+		emitted.add(workspaceId);
+		const oldestFirst = [...(byWorkspace.get(workspaceId) || [session])].sort(
+			(a, b) => (a.createdAt || "").localeCompare(b.createdAt || ""),
+		);
+		return [mainSession(oldestFirst) || session];
+	});
 }
 
 /** Bare attached branches are targets, not PRs; every explicit PR still counts. */

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { UnifiedSession } from "./types";
 import {
+	collapsePrLinkSessions,
 	prLinksMatch,
 	sessionHasPr,
 	sessionPrApproved,
@@ -217,6 +218,33 @@ describe("sessionHasPr", () => {
 });
 
 describe("PR link search", () => {
+	test("represents a PR-backed workspace with its human session", () => {
+		const human = session({
+			id: "human",
+			workspaceId: "ws-1",
+			claudeSessionId: "human-run",
+			createdAt: "2026-08-01T00:00:00Z",
+			lastActivity: "2026-08-02T00:00:00Z",
+		});
+		const review = session({
+			id: "review",
+			workspaceId: "ws-1",
+			automation: "github-pr-review",
+			claudeSessionId: "review-run",
+			createdAt: "2026-08-02T00:00:00Z",
+			lastActivity: "2026-08-03T00:00:00Z",
+		});
+
+		expect(collapsePrLinkSessions([review, human])).toEqual([human]);
+	});
+
+	test("keeps matches from separate workspaces", () => {
+		const first = session({ id: "first", workspaceId: "ws-1" });
+		const second = session({ id: "second", workspaceId: "ws-2" });
+
+		expect(collapsePrLinkSessions([first, second])).toEqual([first, second]);
+	});
+
 	test("matches a primary PR from a pasted GitHub tab URL", () => {
 		const value = session({
 			prUrl: "https://github.com/tellahq/tella-fusion/pull/5513",
