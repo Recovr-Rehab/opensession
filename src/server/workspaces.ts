@@ -44,16 +44,37 @@ const WORKSPACES_DIR = stateDir("workspaces");
 export interface WorkspaceModelPreset {
   id: string;
   label: string;
+  /** Picker section, so workspaces can make their own families. */
+  group?: string;
   instructions?: string;
   lead: { model: string; effort?: SessionEffort };
   supporting?: Array<{ model: string; effort?: SessionEffort; role?: string }>;
 }
 
 export interface WorkspaceModelSettings {
-  /** Both built-ins default on. False hides the family in this workspace. */
-  dialEnabled?: boolean;
-  orchestratorEnabled?: boolean;
   presets?: WorkspaceModelPreset[];
+}
+
+/** Seeded into every new workspace. These are ordinary presets, not runtime
+ * feature flags: removing one removes it, and new combinations use this shape. */
+export const DEFAULT_WORKSPACE_MODEL_SETTINGS: WorkspaceModelSettings = {
+  presets: [
+    { id: "dial-ultra", label: "Dial · Ultra", group: "dial", lead: { model: "opencode/anthropic/claude-fable-5", effort: "high" }, supporting: [{ model: "opencode/openai/gpt-5.6-sol", effort: "xhigh", role: "Read-only oracle" }], instructions: "Use the oracle for a second opinion on hard plans, architecture decisions, and significant reviews. Integrate its advice yourself." },
+    { id: "dial-high", label: "Dial · High", group: "dial", lead: { model: "opencode/openai/gpt-5.6-sol", effort: "xhigh" }, supporting: [{ model: "opencode/anthropic/claude-fable-5", effort: "high", role: "Read-only oracle" }], instructions: "Use the oracle for a second opinion on hard plans, architecture decisions, and significant reviews. Integrate its advice yourself." },
+    { id: "dial-medium", label: "Dial · Medium", group: "dial", lead: { model: "opencode/openai/gpt-5.6-sol", effort: "high" }, supporting: [{ model: "opencode/openai/gpt-5.6-sol", effort: "xhigh", role: "Read-only oracle" }], instructions: "Use the oracle for a second opinion when extra scrutiny helps." },
+    { id: "dial-low", label: "Dial · Low", group: "dial", lead: { model: "opencode/openai/gpt-5.6-luna", effort: "high" }, supporting: [{ model: "opencode/openai/gpt-5.6-sol", effort: "xhigh", role: "Read-only oracle" }], instructions: "Use the oracle only when the task needs a second opinion." },
+    { id: "orchestrator-fable", label: "Orchestrator · Fable 5", group: "orchestrator", lead: { model: "opencode/anthropic/claude-fable-5", effort: "high" }, supporting: [{ model: "opencode/anthropic/claude-sonnet-5", effort: "medium", role: "Implementation worker" }, { model: "opencode/anthropic/claude-haiku-4-5", effort: "high", role: "Fast worker" }], instructions: "Plan, review, and integrate. Delegate focused implementation work to supporting workers with self-contained briefs, then verify their results." },
+    { id: "orchestrator-sol", label: "Orchestrator · Sol", group: "orchestrator", lead: { model: "opencode/openai/gpt-5.6-sol", effort: "xhigh" }, supporting: [{ model: "opencode/openai/gpt-5.6-terra", effort: "medium", role: "Implementation worker" }, { model: "opencode/openai/gpt-5.6-luna", effort: "low", role: "Fast worker" }], instructions: "Plan, review, and integrate. Delegate focused implementation work to supporting workers with self-contained briefs, then verify their results." },
+  ],
+};
+
+function copyModelSettings(settings: WorkspaceModelSettings): WorkspaceModelSettings {
+  return JSON.parse(JSON.stringify(settings)) as WorkspaceModelSettings;
+}
+
+/** Existing workspaces gain the same defaults until they save a local config. */
+export function workspaceModelSettings(workspace?: Workspace | null): WorkspaceModelSettings {
+  return workspace?.modelSettings || copyModelSettings(DEFAULT_WORKSPACE_MODEL_SETTINGS);
 }
 
 export interface Workspace {
@@ -115,7 +136,8 @@ export function listWorkspaces(): Workspace[] {
     if (!file.endsWith(".json")) continue;
     try {
       const p = JSON.parse(readFileSync(`${WORKSPACES_DIR}/${file}`, "utf8"));
-      if (p && typeof p.id === "string" && typeof p.name === "string") out.push(p);
+      if (p && typeof p.id === "string" && typeof p.name === "string")
+        out.push({ ...p, modelSettings: p.modelSettings || copyModelSettings(DEFAULT_WORKSPACE_MODEL_SETTINGS) });
     } catch {}
   }
   out.sort(
@@ -131,7 +153,8 @@ export function getWorkspace(id: string): Workspace | null {
   const f = fileFor(id);
   if (!existsSync(f)) return null;
   try {
-    return JSON.parse(readFileSync(f, "utf8")) as Workspace;
+    const workspace = JSON.parse(readFileSync(f, "utf8")) as Workspace;
+    return { ...workspace, modelSettings: workspace.modelSettings || copyModelSettings(DEFAULT_WORKSPACE_MODEL_SETTINGS) };
   } catch {
     return null;
   }
@@ -172,6 +195,7 @@ export function createWorkspace(input: {
     ...(input.attachedRepos && input.attachedRepos.length
       ? { attachedRepos: input.attachedRepos }
       : {}),
+    modelSettings: copyModelSettings(DEFAULT_WORKSPACE_MODEL_SETTINGS),
   };
   writeJsonAtomic(fileFor(workspace.id), workspace);
   return workspace;

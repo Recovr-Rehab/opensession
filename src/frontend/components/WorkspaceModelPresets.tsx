@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import type { Workspace } from "../lib/types";
 import { fetchModels, updateWorkspaceApi, invalidateModelsCache, type ModelOption } from "../lib/api";
 import { Modal } from "../ui/modal";
-import { Switch } from "../ui/switch";
 import {
 	SettingCard,
 	SettingRow,
@@ -83,17 +82,7 @@ export function WorkspaceModelPresets({
 			<Modal.Content widthClassName="max-w-[42rem]">
 				<Modal.Header title="Model combinations" description={`Choose which built-in combinations appear in ${workspace.name}, then add your own.`} />
 				<div className="flex flex-col gap-3">
-					{(["dialEnabled", "orchestratorEnabled"] as const).map((key) => {
-						const label = key === "dialEnabled" ? "The Dial" : "The Orchestrator";
-						const detail = key === "dialEnabled"
-							? "A lead model can ask a read-only oracle for a second opinion. Its tiers pair Fable 5, Sol, or Luna with a Fable or Sol oracle."
-							: "A lead model plans, reviews, and integrates. It delegates focused implementation work to a standard worker or a faster worker, then verifies the result.";
-						return <div key={key} className="flex items-center justify-between gap-4 rounded-md border border-line bg-panel px-3 py-2.5">
-							<div><div className="text-label text-fg">{label}</div><div className="mt-0.5 max-w-[32rem] text-supporting text-dim">{detail}</div></div>
-							<Switch checked={settings[key] !== false} onCheckedChange={(checked) => setSettings((current) => ({ ...current, [key]: checked }))} />
-						</div>;
-					})}
-					<div className="mt-2 flex items-center justify-between"><div className="text-label font-semibold text-fg">Your combinations</div><button className="rounded-sm border border-line px-2.5 py-1.5 text-supporting text-fg hover:bg-hover" onClick={() => setSettings((current) => ({ ...current, presets: [...(current.presets || []), blankPreset()] }))}>Add combination</button></div>
+					<div className="mt-2 flex items-center justify-between"><div><div className="text-label font-semibold text-fg">Presets</div><div className="text-supporting text-dim">Dial and Orchestrator are ordinary default presets. Remove or change them, then add your own.</div></div><button className="rounded-sm border border-line px-2.5 py-1.5 text-supporting text-fg hover:bg-hover" onClick={() => setSettings((current) => ({ ...current, presets: [...(current.presets || []), blankPreset()] }))}>Add preset</button></div>
 					{presets.map((preset, index) => <div key={preset.id} className="flex flex-col gap-2 rounded-md border border-line p-3">
 						<div className="flex gap-2"><input className="min-w-0 flex-1 rounded-sm border border-line bg-surface px-2 py-1.5 text-label text-fg" value={preset.label} onChange={(e) => patchPreset(index, { label: e.target.value })} placeholder="Combination name" /><button className="rounded-sm px-2 text-supporting text-dim hover:bg-hover hover:text-fg" onClick={() => setSettings((current) => ({ ...current, presets: (current.presets || []).filter((_, i) => i !== index) }))}>Remove</button></div>
 						<label className="text-supporting text-dim">Lead model<select className="mt-1 w-full rounded-sm border border-line bg-surface px-2 py-1.5 text-label text-fg" value={preset.lead.model} onChange={(e) => patchPreset(index, { lead: { ...preset.lead, model: e.target.value } })}><option value="">Choose a lead model</option>{models.map((model) => <option key={model.id} value={model.id}>{model.label}</option>)}</select></label>

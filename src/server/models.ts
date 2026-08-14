@@ -541,40 +541,8 @@ export function refreshOpencodePickerModels(): void {
         aliases: [],
       });
     }
-    // Dial presets surface only when their MAIN model is in the live picker
-    // set (an unusable oracle degrades to a failed subagent call, not a broken
-    // session, so the oracle model isn't gated). Registered as opencode
-    // entries so the single-engine picker filter carries them for free.
-    const tails = new Set(
-      KNOWN_MODELS.filter((m) => m.provider === "opencode").map(
-        (m) => m.id.split("/").pop() || ""
-      )
-    );
-    for (const p of DIAL_PRESETS) {
-      if (!tails.has(p.model)) continue;
-      KNOWN_MODELS.push({
-        id: p.id,
-        provider: "opencode",
-        label: p.label,
-        aliases: [],
-        group: p.group ?? "dial",
-        description: p.description,
-      });
-    }
-    // Workspace settings decide whether a family is shown. Keep the built-in
-    // Orchestrator entries in the live catalog so new workspaces get it by
-    // default and an existing workspace can opt out without a config flip.
-    for (const p of ORCHESTRATOR_PRESETS) {
-      if (!tails.has(p.model)) continue;
-      KNOWN_MODELS.push({
-        id: p.id,
-        provider: "opencode",
-        label: p.label,
-        aliases: [],
-        group: "orchestrator",
-        description: orchestratorPickerDescription(p),
-      });
-    }
+    // Workspace presets are injected by /api/models from that workspace's
+    // persisted configuration. Keep this catalog to concrete models only.
   } catch {}
 }
 refreshOpencodePickerModels();

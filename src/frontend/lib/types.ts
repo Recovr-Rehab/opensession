@@ -528,11 +528,10 @@ export interface Workspace {
 	/** Generic feed-item linkage (Tella videos, …) — the feeds design. */
 	externalRefs?: ExternalRef[];
 	modelSettings?: {
-		dialEnabled?: boolean;
-		orchestratorEnabled?: boolean;
 		presets?: Array<{
 			id: string;
 			label: string;
+			group?: string;
 			instructions?: string;
 			lead: { model: string; effort?: string };
 			supporting?: Array<{ model: string; effort?: string; role?: string }>;

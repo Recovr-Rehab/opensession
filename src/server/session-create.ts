@@ -30,7 +30,7 @@ import { ensureGeneratedTitle } from "./generated-titles";
 import { onSessionIdle as onHumanAsksSessionIdle } from "./human-asks";
 import { interactiveMcpServers } from "./interactive-mcp";
 import { parseTranscriptAsync } from "./jsonl-parser";
-import { accountProviderForModel, interactiveDefaultModel, interactiveFallbackModel, modelLabel, providerFor, resolveModel } from "./models";
+import { accountProviderForModel, interactiveDefaultModel, interactiveFallbackModel, modelLabel, providerFor, resolveModel, toPiModel } from "./models";
 import { newSessionId } from "./paths";
 import { wrapContext } from "./prompt-context";
 import { promptQueues } from "./queue-state";
@@ -182,7 +182,11 @@ function resolveWorkspacePreset(
 	if (!model) return undefined;
 	const supporting = (preset.supporting || [])
 		.filter((member) => member.model?.trim())
-		.map((member) => `- ${member.role?.trim() || "Supporting worker"}: ${member.model.trim()}${member.effort ? ` at ${member.effort} effort` : ""}`)
+		.map((member) => {
+			const configuredModel = member.model.trim();
+			const supportingModel = pi ? toPiModel(configuredModel) || configuredModel : configuredModel;
+			return `- ${member.role?.trim() || "Supporting worker"}: ${supportingModel}${member.effort ? ` at ${member.effort} effort` : ""}`;
+		})
 		.join("\n");
 	return {
 		model,
