@@ -14,7 +14,7 @@ import { DeckDone, SwipeCard } from "../ui/swipe-deck";
 import { UNDO_MS, ageLabel, ageTone, shuffle } from "../lib/swipe-deck";
 
 /**
- * Support Tinder — PR Tinder's sibling for the Plain Todo queue, one ticket at
+ * Support Tinder — the swipe deck for the Plain Todo queue, one ticket at
  * a time:
  *   swipe right / Skip  (→ or k) → leave it as-is (status untouched), next
  *   swipe left  / Spam  (← or s) → mark the customer spam (closes thread), next
@@ -23,8 +23,8 @@ import { UNDO_MS, ageLabel, ageTone, shuffle } from "../lib/swipe-deck";
  *   Done  (d) → mark the thread Done, next
  *   Plain (o) → open the thread in the Plain app
  *   Back  (b) → previous card · Esc → leave
- * Spam and Done land on the undo stack (z / header ↩ / toast) like PR Tinder's
- * actions. The deck is shuffled per visit — random order beats the queue's
+ * Spam and Done land on the undo stack (z / header ↩ / toast). The deck is
+ * shuffled per visit — random order beats the queue's
  * age order here, so old tickets don't wall off the fresh ones.
  */
 
@@ -294,8 +294,7 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 
 	return (
 		<div className="relative flex min-h-0 flex-1 flex-col items-center bg-surface">
-			{/* Header: back + "N Left" counter (same chrome as PR Tinder), with the
-			    same phone-only back chevron. */}
+			{/* Header: back + "N Left" counter, with the phone-only back chevron. */}
 			<div className="relative flex w-full items-center justify-between px-4 py-3">
 				<button
 					className="hidden h-8 w-8 items-center justify-center rounded-control bg-transparent text-dim hover:bg-panel hover:text-fg phone:flex"

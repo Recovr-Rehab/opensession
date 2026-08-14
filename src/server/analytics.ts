@@ -886,6 +886,8 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 			// stack slice — they're volume-dominant and qualitatively different.
 			// (Id-prefix fallback: review sessions get pruned from the store.)
 			const isReview = m?.isReview || id.startsWith("bks-ghpr-");
+			// "action" is the retired Actions feature; sessions it created are
+			// still in the store, so the kind stays counted.
 			const isUnattendedKind =
 				["automation", "plain", "action", "security-scan"].includes(s.kind) || s.kind.startsWith("github");
 			const kind = isReview ? "review" : m?.automationName || (!m && isUnattendedKind) ? "automation" : s.kind;

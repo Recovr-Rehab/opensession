@@ -113,7 +113,7 @@ Then read the real setup guide — secrets, accounts, integrations, systemd:
 > [networking.md](docs/setup/networking.md) for how to set that up.
 
 Repositories, identity, branding, public URLs, integration enablement,
-deployment policy, client endpoints, action seeds, and automation seeds are
+deployment policy, client endpoints, and automation seeds are
 instance configuration
 ([docs/instance-configuration.md](docs/instance-configuration.md)). The source
 defaults to a local, single-repository Open Session install.

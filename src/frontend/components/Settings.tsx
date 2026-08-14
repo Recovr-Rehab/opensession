@@ -61,11 +61,7 @@ import { SetupPanel } from "./Setup";
 // "Activity" is the read-only record agents leave behind.
 
 /** Tool surfaces hosted inside Settings — App renders their panel as children. */
-export type ToolSectionKey =
-	| "automations"
-	| "goals"
-	| "actions"
-	| "security";
+export type ToolSectionKey = "automations" | "goals" | "security";
 
 /** Listed in nav order (SECTIONS below). */
 export type SettingsSectionKey =
@@ -94,7 +90,6 @@ export type SettingsSectionKey =
 const TOOL_SECTIONS = new Set<SettingsSectionKey>([
 	"automations",
 	"goals",
-	"actions",
 	"security",
 ]);
 
@@ -441,26 +436,6 @@ const SECTIONS: {
 				<circle cx="8" cy="8" r="6" />
 				<circle cx="8" cy="8" r="3" />
 				<circle cx="8" cy="8" r="0.6" fill="currentColor" stroke="none" />
-			</svg>
-		),
-	},
-	{
-		key: "actions",
-		label: "Actions",
-		group: "Automation",
-		icon: (
-			<svg
-				width="20"
-				height="20"
-				viewBox="0 0 16 16"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="1.4"
-			>
-				<path
-					d="M8.5 1.5L3 9h4l-.5 5.5L13 7H9l-.5-5.5z"
-					strokeLinejoin="round"
-				/>
 			</svg>
 		),
 	},

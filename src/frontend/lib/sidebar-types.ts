@@ -48,10 +48,6 @@ export interface Props {
 	onOpenPrItem: (item: ReviewQueueItem) => void;
 	/** The open workspace id (route or the open session's), for row selection. */
 	selectedWorkspaceId?: string | null;
-	/** True while the PR Tinder deck is open — highlights its entry. */
-	prTinderActive: boolean;
-	/** Open PR Tinder (swipe triage of the repo's open PRs). */
-	onOpenPrTinder: () => void;
 	/** True while the Support Tinder deck is open — highlights its entry. */
 	supportTinderActive: boolean;
 	/** Open Support Tinder (swipe triage of the Plain Todo queue). */

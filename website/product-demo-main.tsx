@@ -660,10 +660,8 @@ localStorage.setItem(
 		"tasks",
 		"reports",
 		"catchup",
-		"prtinder",
 		"supporttinder",
 		"analytics",
-		"notes",
 		"desk",
 	]),
 );

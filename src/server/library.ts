@@ -133,13 +133,6 @@ const CORE_TOOLS: {
 		category: "Review",
 	},
 	{
-		slug: "prtinder",
-		name: "PR Tinder",
-		description:
-			"Review open pull requests one at a time.",
-		category: "Review",
-	},
-	{
 		slug: "supporttinder",
 		name: "Support Tinder",
 		description:

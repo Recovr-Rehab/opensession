@@ -40,7 +40,6 @@ import { handlePeopleRoutes } from "./people";
 import { handlePrefsRoutes } from "./prefs";
 import { handleSecurityRoutes } from "./security";
 import { handleGoalsRoutes } from "./goals";
-import { handleActionsRoutes } from "./actions";
 import { handleConnectionsRoutes } from "./connections";
 import { handleAccountsRoutes } from "./accounts";
 import { handleModelsRoutes } from "./models";
@@ -105,7 +104,6 @@ export const routeHandlers: RouteHandler[] = [
 	handlePrefsRoutes,
 	handleSecurityRoutes,
 	handleGoalsRoutes,
-	handleActionsRoutes,
 	handleConnectionsRoutes,
 	handleAccountsRoutes,
 	handleModelsRoutes,

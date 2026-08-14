@@ -46,9 +46,11 @@ describe("readHiddenSidebarTools", () => {
 });
 
 describe("toolFitsViewport", () => {
-	test("Catch up is offered on phones only", () => {
-		expect(toolFitsViewport("catchup", true)).toBe(true);
-		expect(toolFitsViewport("catchup", false)).toBe(false);
+	test("the swipe decks are offered on phones only", () => {
+		for (const deck of ["catchup", "supporttinder"] as const) {
+			expect(toolFitsViewport(deck, true)).toBe(true);
+			expect(toolFitsViewport(deck, false)).toBe(false);
+		}
 	});
 
 	test("Home is the phone's root list, not one of its tools", () => {
@@ -58,7 +60,7 @@ describe("toolFitsViewport", () => {
 
 	test("every other tool is offered at both widths", () => {
 		for (const id of SIDEBAR_TOOL_IDS) {
-			if (id === "home" || id === "catchup") continue;
+			if (id === "home" || id === "catchup" || id === "supporttinder") continue;
 			expect(toolFitsViewport(id, true)).toBe(true);
 			expect(toolFitsViewport(id, false)).toBe(true);
 		}

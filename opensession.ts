@@ -3,7 +3,6 @@
 import { createGoalSelfMcpServer } from "./src/agents/slack/goal-tools";
 import { type AgentModule } from "./src/agents/types";
 import { loadIntegrations } from "./src/server/integrations/load";
-import { ensureSeedActions } from "./src/server/actions";
 import {
 	activeAgentRunCount,
 	activeDetachedAgentRunCount,
@@ -222,13 +221,10 @@ const server: import("bun").Server<WSClientData> = hotServe({
 				"/analytics",
 				"/reports",
 				"/reports/*",
-				"/pr-tinder",
 				"/support-tinder",
 				"/connections",
 				"/settings",
 				"/settings/*",
-				"/actions",
-				"/actions/*",
 				"/archived",
 				"/catchup",
 				"/reviews",
@@ -570,10 +566,9 @@ if (!g.__opensessionBooted) {
 	// records and anything created through the UI are unaffected.
 	if (configuredIntegration("seeds").enabled === true) {
 		try {
-			ensureSeedActions();
 			ensureConfiguredAutomations();
 		} catch (e) {
-			console.error("[seeds] Failed to seed instance actions/automations:", e);
+			console.error("[seeds] Failed to seed instance automations:", e);
 		}
 	}
 

@@ -69,7 +69,6 @@ export const SETTINGS_KEYWORDS: Record<string, string[]> = {
 	memory: ["facts", "remember", "scopes"],
 	automations: ["scheduled", "cron", "triggers", "watchers", "jobs"],
 	goals: ["standing goals", "objectives"],
-	actions: ["quick actions", "confirm before running"],
 	security: ["scans", "deepsec", "vulnerabilities", "findings"],
 	prewarming: ["acceleration", "faster starts", "dependency cache", "preview pool", "warm", "install"],
 	deploys: ["releases", "restart", "version"],

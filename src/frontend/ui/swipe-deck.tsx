@@ -9,8 +9,8 @@ import { cn } from "./cn";
 import { SWIPE_DISTANCE, SWIPE_VELOCITY } from "../lib/swipe-deck";
 
 /**
- * The swipe-card mechanics shared by the decks (PR Tinder, Support Tinder,
- * catch-up): drag-to-commit with the same distance/velocity thresholds, the
+ * The swipe-card mechanics shared by the decks (Support Tinder, catch-up):
+ * drag-to-commit with the same distance/velocity thresholds, the
  * rotate-with-drag tilt, the red/green intent stamps, and the directional
  * exit fling. Each deck supplies its own card content as children and maps
  * its actions to fling directions via `exitFor`.

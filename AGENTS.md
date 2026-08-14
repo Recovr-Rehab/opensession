@@ -351,7 +351,7 @@ Follow Apple's Human Interface Guidelines. The rules that decide most cases:
   Existing em dashes in comments and module docs are being retired as their
   lines are touched, so do not add new ones there either.
 - **Terminology comes from CONCEPTS.md.** Project, workspace, session, turn,
-  worktree, automation, goal, action. Do not invent a synonym in one panel.
+  worktree, automation, goal. Do not invent a synonym in one panel.
 
 Read the rendered result at the real width before calling it done, not the
 string in the file. Copy that wraps to four lines under a card is too long

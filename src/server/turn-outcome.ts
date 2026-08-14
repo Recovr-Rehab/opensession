@@ -105,6 +105,8 @@ export function isReachTool(toolName: string | undefined): boolean {
  * ledger only ever sees agent tool calls, so every github run would verdict
  * as a silent drop no matter what it shipped.
  */
+// "action" is the retired Actions feature — kept so historical runs still
+// classify the way they did when they ran.
 const CHECKED_KINDS = new Set(["automation", "plain", "action", "security-scan"]);
 
 export function isCheckedKind(journalKind: string | undefined): boolean {

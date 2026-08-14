@@ -34,9 +34,8 @@ point.
   Plain" affordances) and `integrations.plain.apiUrl` (the GraphQL endpoint
   for direct API calls, defaulting to Plain's hosted
   `https://core-api.uk.plain.com/graphql/v1`).
-- Company routines are data. `integrations.seeds.actions` and
-  `integrations.seeds.automations` create records only when
-  `integrations.seeds.enabled` is true. Existing persisted records are never
+- Company routines are data. `integrations.seeds.automations` creates records
+  only when `integrations.seeds.enabled` is true. Existing persisted records are never
   deleted when seeds are disabled.
 
 Client distributions have their own packaging configuration. The values

@@ -17,7 +17,7 @@ A dev instance is `bun run opensession.ts` with:
   (Slack/Linear/Plain/GitHub/Stripe/Grafana), the webhook server, the cron
   automation scheduler and all background tickers/sweeps, the public-ingress
   listener, detached-engine-server adoption, run resume/redelivery, and the
-  seed writes to automations/actions. What remains is the web server, the
+  seed writes to automations. What remains is the web server, the
   session store, and the UI.
 - `OPENSESSION_DEMO=1` — demo mode: the instance seeds generated demo
   sessions/transcripts into its (empty) state dir so the UI has something to

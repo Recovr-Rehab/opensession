@@ -1,5 +1,5 @@
 /**
- * Shared mechanics for the swipe decks (PR Tinder, Support Tinder, catch-up).
+ * Shared mechanics for the swipe decks (Support Tinder, catch-up).
  * The motion numbers are deliberately identical across decks — change them
  * here and every deck keeps the same feel.
  */
@@ -35,8 +35,8 @@ export function ageLabel(ts: string | null): string {
 
 /**
  * Fresh green, drifting yellow, stale red — the CLI's age tint. The thresholds
- * are per-deck (PR Tinder reads PR activity at 3/14 days, Support Tinder reads
- * ticket age at 1/4 days), so each caller passes its own.
+ * are per-deck (Support Tinder reads ticket age at 1/4 days), so each caller
+ * passes its own.
  */
 export function ageTone(
 	ts: string | null,

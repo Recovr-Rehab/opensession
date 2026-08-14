@@ -1,5 +1,6 @@
 /**
- * Everything pull-request: open-PR list, PR Tinder, per-session PR details/diff/comment/review/merge/close, PR agent actions, session-less PR previews.
+ * Everything pull-request: open-PR list, per-session PR details/diff/comment/
+ * review/merge/close, PR agent actions, session-less PR previews.
  *
  * Extracted verbatim from the opensession.ts fetch chain. Every handler
  * returns a Response for a matched route or undefined to fall through to the
@@ -11,7 +12,6 @@ import { defaultRepo, personaName } from "../config";
 import { hostRepoId, prHostFor } from "../pr-host";
 import { cachedPrDetailsForSession, reconcilePrDetails } from "../pr-info";
 import { getPrStack, linkPrStack, mergePrStack } from "../pr-stack";
-import { closeTinderPr, commentTinderPr, deleteTinderComment, getSeenPrs, labelTinderPr, listTinderLabels, listTinderPrs, markPrSeen, markPrUnseen, reopenTinderPr } from "../pr-tinder";
 import { findSession, invalidateSessionsCache } from "../session-cache";
 import { getSessionControl } from "../session-control";
 import { resolvePrTarget } from "../session-repos";
@@ -158,110 +158,6 @@ export async function handlePrRoutes(
 	if (path === "/api/recent-prs" && req.method === "GET") {
 		const person = url.searchParams.get("person");
 		return Response.json({ prs: person ? await getRecentPrsForPerson(person) : getRecentPrs() });
-	}
-
-	// PR Tinder: the triage deck — every open tella-fusion PR with the
-	// rich card fields, the repo's labels, and which PRs this user already
-	// kept (so the deck doesn't re-deal them for 14 days).
-	if (path === "/api/pr-tinder" && req.method === "GET") {
-		const user = requestUser(ctx, url.searchParams.get("user"));
-		try {
-			const [prs, labels] = await Promise.all([
-				listTinderPrs(),
-				listTinderLabels(),
-			]);
-			return Response.json({
-				prs,
-				labels,
-				seen: user ? getSeenPrs(user) : [],
-			});
-		} catch (e: any) {
-			return Response.json(
-				{ error: e.message || String(e) },
-				{ status: 502 },
-			);
-		}
-	}
-
-	// PR Tinder actions: keep (per-user, local state only), close (with an
-	// optional reason comment), reopen (the close undo), comment, label.
-	{
-		const m = path.match(/^\/api\/pr-tinder\/(\d+)\/(\w+)$/);
-		if (m && req.method === "POST") {
-			const number = parseInt(m[1], 10);
-			const body = await req.json().catch(() => ({}));
-			const user = requestUser(ctx, body.user);
-			try {
-				switch (m[2]) {
-					case "keep": {
-						if (!user)
-							return Response.json(
-								{ error: "user required" },
-								{ status: 400 },
-							);
-						markPrSeen(user, number);
-						return Response.json({ ok: true });
-					}
-					case "unkeep": {
-						if (!user)
-							return Response.json(
-								{ error: "user required" },
-								{ status: 400 },
-							);
-						markPrUnseen(user, number);
-						return Response.json({ ok: true });
-					}
-					case "close": {
-						const credential = githubMutationCredential(ctx);
-						if (!credential) return githubCredentialRequiredResponse();
-						const r = await closeTinderPr(number, body.reason, credential);
-						return Response.json(r, { status: "error" in r ? 502 : 200 });
-					}
-					case "reopen": {
-						const credential = githubMutationCredential(ctx);
-						if (!credential) return githubCredentialRequiredResponse();
-						const r = await reopenTinderPr(number, credential);
-						return Response.json(r, { status: "error" in r ? 502 : 200 });
-					}
-					case "comment": {
-						const credential = githubMutationCredential(ctx);
-						if (!credential) return githubCredentialRequiredResponse();
-						const r = await commentTinderPr(number, body.body || "", credential);
-						// Commenting is a triage verdict too — don't re-deal the PR.
-						if ("ok" in r && user) markPrSeen(user, number);
-						return Response.json(r, { status: "error" in r ? 502 : 200 });
-					}
-					case "uncomment": {
-						// Undo for a comment: delete it and put the PR back in the
-						// user's deck.
-						if (!body.commentId)
-							return Response.json(
-								{ error: "commentId required" },
-								{ status: 400 },
-							);
-						const credential = githubMutationCredential(ctx);
-						if (!credential) return githubCredentialRequiredResponse();
-						const r = await deleteTinderComment(Number(body.commentId), credential);
-						if ("ok" in r && user) markPrUnseen(user, number);
-						return Response.json(r, { status: "error" in r ? 502 : 200 });
-					}
-					case "labels": {
-						const credential = githubMutationCredential(ctx);
-						if (!credential) return githubCredentialRequiredResponse();
-						const r = await labelTinderPr(number, {
-							add: body.add,
-							remove: body.remove,
-						}, credential);
-						return Response.json(r, { status: "error" in r ? 502 : 200 });
-					}
-				}
-			} catch (e: any) {
-				return Response.json(
-					{ error: e.message || String(e) },
-					{ status: 500 },
-				);
-			}
-		}
 	}
 
 	// PR details for a session's branch (PR tab). `?repo=<project>` targets an

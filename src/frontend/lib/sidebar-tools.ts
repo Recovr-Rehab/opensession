@@ -2,7 +2,6 @@ export const SIDEBAR_TOOL_IDS = [
 	"home",
 	"tasks",
 	"catchup",
-	"prtinder",
 	"supporttinder",
 	"reports",
 	"analytics",
@@ -14,18 +13,17 @@ export const SIDEBAR_TOOL_LABELS: Record<SidebarToolId, string> = {
 	home: "Home",
 	tasks: "Tasks",
 	catchup: "Catch up",
-	prtinder: "PR Tinder",
 	supporttinder: "Support Tinder",
 	reports: "Reports",
 	analytics: "Analytics",
 };
 
-// Catch up is a swipe deck: one workspace at a time, moved on with a thumb.
-// That is the wrong shape for a desktop window, which already shows every
-// unread workspace in the sidebar at once, so it is offered at phone widths
-// only. Nothing else in the app hides by viewport, so the rule lives here
-// rather than in each surface that lists tools.
-const PHONE_ONLY_TOOLS: SidebarToolId[] = ["catchup"];
+// The swipe decks are one card at a time, moved on with a thumb. That is the
+// wrong shape for a desktop window, which already shows the same unread
+// workspaces and waiting tickets as lists you can scan at once, so they are
+// offered at phone widths only. Nothing else in the app hides by viewport, so
+// the rule lives here rather than in each surface that lists tools.
+const PHONE_ONLY_TOOLS: SidebarToolId[] = ["catchup", "supporttinder"];
 
 /** Is this tool offered at the current width? Home is the phone's root list
  *  rather than a tool row, so it drops out there; phone-only tools drop out

@@ -58,7 +58,8 @@ export const INTERACTIVE_KINDS = new Set(["prompt", "goal", "create", "linear", 
 /** Unattended kinds allowed on this engine — with the least-privilege policy
  *  (opencodeRunPolicy) enforced via stripped tools. "automation" is the
  *  automations engine; "plain" is the Plain support agent (untrusted ticket
- *  text); "action" is one-shot session actions; "security-scan" the security
+ *  text); "action" is the retired Actions feature, kept so an old action
+ *  session resumed from the store still passes this gate; "security-scan" the security
  *  sweep; github-* the PR behaviors (review/auto-fix/simplify — headless,
  *  no approval card). Runs with no journal kind at all stay fail-closed
  *  (deny by default). */

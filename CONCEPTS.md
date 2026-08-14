@@ -4,7 +4,7 @@ Open Session is a server that runs coding agents on your own machines. Almost
 everything you do with it is one of five nouns: a **project** that is a source
 of work, a **workspace** that groups the work on one thing, a **session** where an
 agent actually thinks, and the ways a session gets started without you typing —
-**automations**, **goals** and **actions**.
+**automations** and **goals**.
 
 This page is the core model. It is deliberately short on configuration; the
 linked docs go deeper on each part.
@@ -37,7 +37,6 @@ And a third — *what starts a session when you are not there*:
 | --- | --- | --- |
 | **Automation** | a cron schedule or an external event | none — every run is a fresh session |
 | **Goal** | its own self-set wake time | yes — one session resumed over days |
-| **Action** | a human filling in a form | none — one session per run |
 | **Workflow** | a script fanning out many agents | none — agents report into the script |
 
 ## Projects
@@ -128,7 +127,7 @@ working directory, a queue of pending prompts, and a state you can see from the
 sidebar (running, waiting on you, idle).
 
 Sessions are the unit everything else produces. An automation run is a session. A goal
-wake is a session. An action run is a session. That is deliberate: whatever started
+wake is a session. That is deliberate: whatever started
 it, you can open it, read the whole transcript, steer it mid-flight, and fork it
 into a normal conversation.
 
@@ -228,17 +227,6 @@ continuity rather than in a clean slate.
 
 A goal has a mode like a session: `ask` for research and measurement, `code` for a
 persistent worktree it can keep opening pull requests from.
-
-## Actions
-
-An action is a form in front of a script. You register a script that already
-lives in a repository, describe its inputs as form fields, and anyone can run it
-without a terminal.
-
-A run is not a bespoke output panel — it spins up a real session on a fast, cheap
-model that executes the command and reports the output. So it lands in the
-sidebar with a transcript, and if the output is surprising you fork it into a
-full session and dig in.
 
 ## Workflows
 

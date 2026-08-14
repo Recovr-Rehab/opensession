@@ -899,22 +899,6 @@ export function IconEyeOff(p: IconProps) {
   );
 }
 
-export function IconFlame(p: IconProps) {
-  return (
-    <Svg {...p}>
-      <path
-        {...stroke}
-        d="M12 19.25C15.55 19.25 17.75 16.95 17.75 13.75C17.75 11.45 16.5 9.85 15.25 8.25C14.15 6.85 13.1 5.55 12.6 4.25C11.95 4.85 10.95 6.15 11.1 8.25C10 8.05 9.25 7.25 8.9 6.25C7.35 7.65 6.25 10.05 6.25 13.75C6.25 16.95 8.45 19.25 12 19.25Z"
-      />
-      <path
-        {...stroke}
-        d="M12 19.25C13.55 19.25 14.55 18.2 14.55 16.8C14.55 15.35 13.25 14.45 12 13C10.75 14.45 9.45 15.35 9.45 16.8C9.45 18.2 10.45 19.25 12 19.25Z"
-      />
-    </Svg>
-  );
-}
-
-// Two stacked rounded squares: copy to clipboard.
 export function IconCopy(p: IconProps) {
   return (
     <Svg {...p}>

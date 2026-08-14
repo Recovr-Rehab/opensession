@@ -59,12 +59,10 @@ import {
 } from "./components/SessionSearch";
 import { Home } from "./components/Home";
 import { CatchUpDeck } from "./components/CatchUpDeck";
-import { PrTinder } from "./components/PrTinder";
 import { SupportTinder } from "./components/SupportTinder";
 import { Automations } from "./components/Automations";
 import { Security } from "./components/Security";
 import { Goals } from "./components/Goals";
-import { Actions } from "./components/Actions";
 import { Archived } from "./components/Archived";
 import { Reviews } from "./components/Reviews";
 import { PrQueuePreview } from "./components/PrQueuePreview";
@@ -92,7 +90,6 @@ import {
 	IconCopy,
 	IconDesk,
 	IconFile,
-	IconFlame,
 	IconGear,
 	IconGlobe,
 	IconHome,
@@ -220,16 +217,13 @@ type Route =
 	| { view: "analytics" }
 	| { view: "tasks" }
 	| { view: "reviews"; id?: string }
-	// PR Tinder — one-at-a-time swipe triage of the repo's open PRs.
-	| { view: "prtinder" }
-	// Support Tinder — the same swipe triage over the Plain Todo queue.
+	// Support Tinder — one-at-a-time swipe triage of the Plain Todo queue.
 	| { view: "supporttinder" }
-	// Tool surfaces (Automations/Security/Goals/Actions) render inside the
+	// Tool surfaces (Automations/Security/Goals) render inside the
 	// Settings chrome but keep their own routes, so old links stay deep-linkable.
 	| { view: "automations"; id?: string }
 	| { view: "security" }
 	| { view: "goals"; id?: string }
-	| { view: "actions"; id?: string }
 	| { view: "settings"; section?: SettingsSectionKey }
 	| { view: "archived" }
 	| { view: "catchup" };
@@ -239,7 +233,7 @@ type Route =
 const NO_SUBAGENTS: SubagentRef[] = [];
 
 // Route views that render as a tool section inside the Settings surface.
-const TOOL_VIEWS = ["automations", "security", "goals", "actions"] as const;
+const TOOL_VIEWS = ["automations", "security", "goals"] as const;
 type ToolView = (typeof TOOL_VIEWS)[number];
 function isToolView(view: string): view is ToolView {
 	return (TOOL_VIEWS as readonly string[]).includes(view);
@@ -346,18 +340,12 @@ function parseRoute(pathname: string): Route {
 			id: autoMatch[1] ? decodeURIComponent(autoMatch[1]) : undefined,
 		};
 	if (pathname === "/security") return { view: "security" };
-	// Goals/Actions mirror /automations/:id — one selected opens its drawer.
+	// Goals mirrors /automations/:id — one selected opens its drawer.
 	const goalsMatch = pathname.match(/^\/goals(?:\/(.+))?$/);
 	if (goalsMatch)
 		return {
 			view: "goals",
 			id: goalsMatch[1] ? decodeURIComponent(goalsMatch[1]) : undefined,
-		};
-	const actionsMatch = pathname.match(/^\/actions(?:\/(.+))?$/);
-	if (actionsMatch)
-		return {
-			view: "actions",
-			id: actionsMatch[1] ? decodeURIComponent(actionsMatch[1]) : undefined,
 		};
 	// Back-compat: Connections moved into Settings (a Workspace section).
 	if (pathname === "/connections")
@@ -375,7 +363,6 @@ function parseRoute(pathname: string): Route {
 	}
 	if (pathname === "/archived") return { view: "archived" };
 	if (pathname === "/catchup") return { view: "catchup" };
-	if (pathname === "/pr-tinder") return { view: "prtinder" };
 	if (pathname === "/support-tinder") return { view: "supporttinder" };
 	const reviewsMatch = pathname.match(/^\/reviews(?:\/(.+))?$/);
 	if (reviewsMatch)
@@ -422,10 +409,6 @@ function routePath(route: Route): string {
 			return route.id
 				? `${BASE_PATH}/goals/${encodeURIComponent(route.id)}`
 				: `${BASE_PATH}/goals`;
-		case "actions":
-			return route.id
-				? `${BASE_PATH}/actions/${encodeURIComponent(route.id)}`
-				: `${BASE_PATH}/actions`;
 		case "settings":
 			return route.section
 				? `${BASE_PATH}/settings/${route.section}`
@@ -434,8 +417,6 @@ function routePath(route: Route): string {
 			return `${BASE_PATH}/archived`;
 		case "catchup":
 			return `${BASE_PATH}/catchup`;
-		case "prtinder":
-			return `${BASE_PATH}/pr-tinder`;
 		case "supporttinder":
 			return `${BASE_PATH}/support-tinder`;
 		case "reviews":
@@ -2990,24 +2971,19 @@ export function App(
 					},
 				] as CommandPaletteAction[])
 			: []),
-		{
-			id: "pr-tinder",
-			label: "PR Tinder",
-			description: "Triage open pull requests",
-			category: "Navigate",
-			keywords: ["pull requests", "review", "swipe"],
-			icon: <IconFlame size={18} />,
-			run: () => navigate({ view: "prtinder" }),
-		},
-		{
-			id: "support-tinder",
-			label: "Support Tinder",
-			description: "Triage the Plain todo queue",
-			category: "Navigate",
-			keywords: ["tickets", "plain", "support"],
-			icon: <IconInbox size={18} />,
-			run: () => navigate({ view: "supporttinder" }),
-		},
+		...(isPhone
+			? ([
+					{
+						id: "support-tinder",
+						label: "Support Tinder",
+						description: "Triage the Plain todo queue",
+						category: "Navigate",
+						keywords: ["tickets", "plain", "support"],
+						icon: <IconInbox size={18} />,
+						run: () => navigate({ view: "supporttinder" }),
+					},
+				] as CommandPaletteAction[])
+			: []),
 		{
 			id: "reports",
 			label: "Reports",
@@ -3049,14 +3025,6 @@ export function App(
 			category: "Navigate",
 			icon: <IconListCircles size={18} />,
 			run: () => navigate({ view: "goals" }),
-		},
-		{
-			id: "actions",
-			label: "Actions",
-			description: "Open event-triggered action runs",
-			category: "Navigate",
-			icon: <IconStack size={18} />,
-			run: () => navigate({ view: "actions" }),
 		},
 		{
 			id: "security",
@@ -3466,14 +3434,6 @@ export function App(
 									navigate({ view: "goals", id: id || undefined })
 								}
 							/>
-						) : route.view === "actions" ? (
-							<Actions
-								onOpenSession={(id) => navigate({ view: "session", id })}
-								selectedId={route.id}
-								onSelect={(id) =>
-									navigate({ view: "actions", id: id || undefined })
-								}
-							/>
 						) : null}
 					</Settings>
 				)}
@@ -3593,8 +3553,6 @@ export function App(
 							}
 							onOpenPrItem={openPrWorkspace}
 							selectedWorkspaceId={activeWorkspaceId}
-							prTinderActive={route.view === "prtinder"}
-							onOpenPrTinder={() => navigate({ view: "prtinder" })}
 							supportTinderActive={route.view === "supporttinder"}
 							onOpenSupportTinder={() => navigate({ view: "supporttinder" })}
 							reportsActive={route.view === "reports"}
@@ -3924,8 +3882,6 @@ export function App(
 								onSelect={(s) => navigate({ view: "session", id: s.id })}
 								onChanged={refresh}
 							/>
-						) : route.view === "prtinder" ? (
-							<PrTinder onExit={leaveDeck} />
 						) : route.view === "supporttinder" ? (
 							<SupportTinder
 								onExit={leaveDeck}

@@ -137,7 +137,6 @@ const spaRoutes = [
 	"/goals",
 	"/connections",
 	"/settings",
-	"/actions",
 	"/archived",
 	"/catchup",
 	"/reviews",

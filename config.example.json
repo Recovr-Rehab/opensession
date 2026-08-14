@@ -163,17 +163,6 @@
     },
     "seeds": {
       "enabled": false,
-      "actions": [
-        {
-          "id": "act-seed-maintenance",
-          "name": "Run maintenance",
-          "kind": "repo",
-          "repo": "widget",
-          "scriptPath": "scripts/maintenance.ts",
-          "inputs": [],
-          "confirm": true
-        }
-      ],
       "automations": [
         {
           "name": "Weekly dependency review",

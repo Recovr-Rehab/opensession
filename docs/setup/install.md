@@ -265,8 +265,8 @@ The two sections a team install normally sets:
   identity-dependent features no-op.
 
 Integrations are opt-in with `integrations.<name>.enabled`. The optional
-`integrations.seeds` section can create deployment-owned actions and
-automations without putting company playbooks in application source.
+`integrations.seeds` section can create deployment-owned automations without
+putting company playbooks in application source.
 `policy`, `persona`, and `branding` are applied at runtime; frontend branding,
 the default repo id, public URL, and GitHub bot identities are injected into
 the SPA bootstrap.
