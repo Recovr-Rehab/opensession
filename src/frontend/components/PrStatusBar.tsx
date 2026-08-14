@@ -240,7 +240,8 @@ interface PrBarButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement>
 		| "status-red"
 		| "status-yellow"
 		| "secondary"
-		| "quiet"
+		| "white"
+		| "gray"
 		| "solid";
 	icon?: React.ReactNode;
 	confirm?: boolean;
@@ -267,10 +268,17 @@ function PrBarButton({
 		solid:
 			"bg-[var(--text)] text-[var(--bg)] border-[color-mix(in_srgb,var(--text)_84%,transparent)]",
 		secondary: "bg-raised text-fg border-line-strong hover:bg-hover hover:brightness-100",
-		// The lightest step: text on the strip's own band, no edge and no lift,
-		// for the action that stands beside a primary one as the other choice.
-		quiet:
-			"border-transparent bg-transparent text-dim shadow-none hover:bg-hover hover:text-fg hover:brightness-100",
+		// Paper: the button surface, lifted by its hairline and cast shadow
+		// rather than a fill (see --button-surface in base.css). The action to
+		// take when the work continues.
+		white:
+			"bg-button text-fg border-line-strong hover:bg-hover hover:brightness-100",
+		// The filled chip beside it: the chrome's grey control surface, flat —
+		// no edge, no lift, dim ink — so housekeeping reads quieter than the
+		// button it stands next to. Dark has no paper, so the flatness is what
+		// separates the pair there.
+		gray:
+			"border-transparent bg-control text-dim shadow-none hover:bg-active hover:text-fg hover:brightness-100",
 	} as const;
 	return (
 		<button
@@ -735,10 +743,9 @@ export function PrStatusBar({
 						{onNewSession && (
 							<PrBarButton
 								className={cn(actionBtn, "@max-[440px]:px-1.5 @max-[440px]:gap-0")}
-								// The quietest step on the strip: filing the session away is
-								// the expected end of a merged PR, so carrying on is offered
-								// as the other choice rather than competing with it.
-								tone="quiet"
+								// The raised paper button: carrying the work on is the
+								// action here, and archiving is the filing that follows.
+								tone="white"
 								icon={<IconPlus size={18} />}
 								onClick={onNewSession}
 								title="Start a new session in this workspace"
@@ -755,7 +762,7 @@ export function PrStatusBar({
 								// Grey, not purple: archiving is housekeeping, and a filled
 								// purple button made the end of a session read as the loudest
 								// thing on the strip.
-								tone="secondary"
+								tone="gray"
 								icon={<IconArchive size={18} />}
 								disabled={!!busy}
 								onClick={() =>
