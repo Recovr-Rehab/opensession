@@ -498,7 +498,12 @@ export function WalkthroughCard({
 														<figure className="m-0 min-w-0" key={side}>
 															<button
 																type="button"
-																className="relative flex w-full cursor-zoom-in items-start justify-center overflow-hidden rounded-md border-0 bg-surface p-0 text-left outline-none transition-[filter] hover:brightness-[0.98] focus-visible:shadow-[inset_0_0_0_3px_var(--accent-soft)]"
+																// The hairline is the edge of the picture, not a
+																// frame around a section: a screenshot of a white
+																// UI ends nowhere on a white card. The folded
+																// tiles and the demo video above carry the same
+																// one, so open is where it was missing.
+																className="relative flex w-full cursor-zoom-in items-start justify-center overflow-hidden rounded-md border border-line bg-surface p-0 text-left outline-none transition-[filter] hover:brightness-[0.98] focus-visible:shadow-[inset_0_0_0_3px_var(--accent-soft)]"
 																onClick={(event) =>
 																	open(`${i}:${side}`, event.currentTarget)
 																}
