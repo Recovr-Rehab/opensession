@@ -73,15 +73,14 @@ import {
 	IconFile,
 	IconPlay,
 	IconPullRequest,
-	IconSparkle,
 	IconStack,
 } from "./icons";
 
 /**
  * Workspace info block at the top of the right side panel (the "Info" tab): a
- * dense, at-a-glance catch-all - workspace actions, local git state, PR
- * comments, changed files, and a compact filmstrip of every screenshot / video
- * from the workspace's sessions. PR state and local git deltas share one
+ * dense, at-a-glance catch-all - workspace actions, local git
+ * state, PR comments, changed files, and a compact filmstrip of every screenshot
+ * / video from the workspace's sessions. PR state and local git deltas share one
  * compact Git status section; the transcript remains the opening-prompt source.
  *
  * Loading/caching for the overview lives in lib/workspace-overview (shared with
@@ -165,8 +164,6 @@ const REVIEW_WAITING_PLATE =
 const INFO_MORE_BUTTON_CLASS =
 	"cursor-pointer bg-panel px-[9px] py-[7px] text-left text-label font-semibold text-faint transition-colors hover:bg-hover hover:text-fg";
 
-const ACTION_BUTTON_CLASS =
-	"flex min-w-0 items-center gap-2 rounded-md px-2.5 py-2 text-left text-supporting font-semibold text-fg outline-none transition-colors hover:bg-hover focus-visible:bg-hover disabled:cursor-default disabled:opacity-50";
 const ACTION_ICON_CLASS =
 	"inline-flex size-5 shrink-0 items-center justify-center text-faint [&_svg]:block";
 
@@ -590,36 +587,31 @@ function AgentReviewCard({
 				: score
 					? "text-red"
 					: "text-dim";
-	const meterTone = stale
-		? "bg-faint"
-		: score && score >= 4
-			? "bg-green"
-			: score === 3
-				? "bg-yellow"
-				: score
-					? "bg-red"
-					: "bg-dim";
-	let verdict = "Not scored yet";
-	if (pr.state === "MERGED") verdict = "Merged with this score";
-	else if (pr.state === "CLOSED") verdict = "Pull request closed";
-	else if (active) verdict = "Review in progress";
-	else if (stale) verdict = "New commits since review";
-	else if (score === 5) verdict = "Safe to merge";
-	else if (score === 4) verdict = "Looks mergeable";
-	else if (score === 3) verdict = "Worth another pass";
-	else if (score) verdict = "Needs work";
+	const dotTone: keyof typeof GIT_DOT_BG = active
+		? "blue"
+		: !score
+			? "muted"
+			: stale
+				? "yellow"
+				: score >= 4
+					? "green"
+					: score === 3
+						? "yellow"
+						: "red";
+	// One line in the panel's git-status grammar: the reading, then the single
+	// thing worth knowing about it. The reviewer's reasoning and the run time
+	// are a hover away in the summary popup, so the row never carries both.
+	let state = "Not reviewed yet";
+	if (active) state = "Reviewing…";
+	else if (pr.state === "MERGED") state = "Merged";
+	else if (pr.state === "CLOSED") state = "Closed";
+	else if (stale) state = "New commits since review";
+	else if (review?.findings)
+		state = `${review.findings} finding${review.findings === 1 ? "" : "s"}${
+			review.blocking ? `, ${review.blocking} blocking` : ""
+		}`;
+	else if (review) state = "No findings";
 	const reviewedAgo = review ? relTime(review.at) : "";
-	const detail = review
-		? [
-				review.findings
-					? `${review.findings} finding${review.findings === 1 ? "" : "s"}`
-					: "No findings",
-				review.blocking
-					? `${review.blocking} blocking`
-					: null,
-				reviewedAgo ? `reviewed ${reviewedAgo} ago` : "reviewed recently",
-			].filter(Boolean).join(" · ")
-		: `Run ${AGENT_NAME}'s merge-safety review`;
 	// The score is intentionally compact; the matching GitHub summary comment
 	// retains the reviewer's complete reasoning and is available on hover/focus.
 	const reviewComment = review
@@ -677,155 +669,126 @@ function AgentReviewCard({
 		}
 	}
 
-	const reviewAction = PR_AGENT_ACTIONS[0];
-	const fixAction = PR_AGENT_ACTIONS[1];
-	const moreActions = PR_AGENT_ACTIONS.slice(2);
+	// One action on the row, all of them in the menu: the row offers whichever
+	// one the current state actually calls for, so the section header stays a
+	// label rather than a toolbar.
+	const primary = canFix ? PR_AGENT_ACTIONS[1] : PR_AGENT_ACTIONS[0];
+	const primaryLabel = busy ? "Starting…" : canFix ? "Fix" : "Review";
 
 	return (
 		<div data-agent-score className={INFO_SECTION_CLASS}>
 			<div className="flex items-center gap-2">
 				<div className={INFO_LABEL_CLASS}>{AGENT_NAME} score</div>
-				<div className="ml-auto flex items-center gap-2">
-					{active ? (
-						<span className="inline-flex items-center gap-1 text-meta font-semibold text-accent">
-							<span className="size-1.5 animate-pulse rounded-full bg-accent" />
-							Reviewing
-						</span>
-					) : stale ? (
-						<span className="text-meta font-semibold text-faint">Stale</span>
-					) : null}
-					{actionable && (
-						<Button
-							variant="ghost"
-							size="xs"
-							className="shrink-0 text-meta"
-							disabled={busy !== null || active}
-							onClick={() => run(reviewAction)}
-							title={reviewAction.hint}
+				{actionable && (
+					<Menu.Root>
+						<Menu.Trigger
+							className="-mr-1 ml-auto grid size-6 shrink-0 place-items-center rounded-md text-faint transition-[color,background-color] hover:bg-hover hover:text-fg disabled:opacity-50"
+							disabled={busy !== null}
+							aria-label={`${AGENT_NAME} actions`}
 						>
-							{busy === "review" ? "Starting..." : review ? "Review again" : "Run review"}
-						</Button>
-					)}
-					{actionable && (
-						<Menu.Root>
-							<Menu.Trigger
-								className="-mr-1 grid size-6 shrink-0 place-items-center rounded-md text-faint transition-[color,background-color] hover:bg-hover hover:text-fg disabled:opacity-50"
-								disabled={busy !== null}
-								aria-label={`More ${AGENT_NAME} actions`}
-							>
-								<IconChevronDown size={14} />
-							</Menu.Trigger>
-							<Menu.Popup align="end" sideOffset={6} className="min-w-[280px]">
-								<Menu.Group>
-									<Menu.GroupLabel>More {AGENT_NAME} actions</Menu.GroupLabel>
-									{moreActions.map((action) => (
-										<Menu.Item
-											key={action.kind}
-											disabled={busy !== null}
-											onClick={() => run(action)}
-											className="items-start py-2"
-										>
-											<div className="min-w-0">
-												<div className="font-semibold text-fg">{action.label}</div>
-												<div className="mt-0.5 text-meta leading-[1.35] text-faint">
-													{action.hint}
-												</div>
+							<IconChevronDown size={14} />
+						</Menu.Trigger>
+						<Menu.Popup align="end" sideOffset={6} className="min-w-[280px]">
+							<Menu.Group>
+								<Menu.GroupLabel>{AGENT_NAME} actions</Menu.GroupLabel>
+								{PR_AGENT_ACTIONS.map((action) => (
+									<Menu.Item
+										key={action.kind}
+										disabled={busy !== null || (action.kind === "review" && active)}
+										onClick={() => run(action)}
+										className="items-start py-2"
+									>
+										<div className="min-w-0">
+											<div className="font-semibold text-fg">{action.label}</div>
+											<div className="mt-0.5 text-meta leading-[1.35] text-faint">
+												{action.hint}
 											</div>
-										</Menu.Item>
-									))}
-								</Menu.Group>
-							</Menu.Popup>
-						</Menu.Root>
+										</div>
+									</Menu.Item>
+								))}
+							</Menu.Group>
+						</Menu.Popup>
+					</Menu.Root>
+				)}
+			</div>
+			<div className={INFO_LIST_CLASS}>
+				<div className={`${GIT_ROW} py-2`}>
+					<Popover.Root>
+						<Popover.Trigger
+							render={<div />}
+							nativeButton={false}
+							openOnHover={Boolean(reviewMessage)}
+							delay={200}
+							closeDelay={120}
+							className={cn(
+								"flex min-w-0 flex-1 items-center gap-2",
+								reviewMessage && "cursor-help",
+							)}
+							tabIndex={reviewMessage ? 0 : undefined}
+						>
+							{/* A state dot, then the reading: the same row grammar as Git
+							    status right below, so the panel reads as one column of
+							    facts rather than a card wedged between labels. */}
+							<span
+								className={cn(GIT_DOT, GIT_DOT_BG[dotTone], active && "animate-pulse")}
+								aria-hidden
+							/>
+							<span className={GIT_LABEL}>
+								{score ? (
+									<>
+									{/* No live region: the panel repolls, and a `status` role
+									    here would re-announce an unchanged score every time.
+									    The section label above already names the reading. */}
+									<span className={cn("font-semibold tabular-nums", scoreTone)}>
+										{score}/5
+									</span>
+										<span className="text-faint"> · </span>
+									</>
+								) : null}
+								<span className={score ? "text-dim" : ""}>{state}</span>
+							</span>
+						</Popover.Trigger>
+						{reviewMessage && (
+							<Popover.Popup
+								side="left"
+								align="start"
+								sideOffset={12}
+								className="flex max-h-[min(680px,calc(100vh-24px),var(--available-height))] w-[min(680px,calc(100vw-24px),var(--available-width))] min-h-0 overflow-hidden"
+							>
+								<div className="flex min-h-0 w-full flex-col">
+									<div className="flex items-center gap-2.5 border-b border-divider px-4 py-3">
+										<CommentAvatar author={reviewComment?.author || GITHUB_BOT_NAME || AGENT_NAME} />
+										<div className="min-w-0 flex-1">
+											<div className="truncate text-[13px] font-semibold text-fg">
+												{reviewComment?.author || GITHUB_BOT_NAME || AGENT_NAME}
+											</div>
+											<div className="text-meta text-faint">
+												Automated review{reviewedAgo ? ` · reviewed ${reviewedAgo} ago` : ""}
+											</div>
+										</div>
+										<span className={cn("shrink-0 text-[13px] font-semibold", scoreTone)}>
+											{score ?? "–"}/5
+										</span>
+									</div>
+									<div className="min-h-0 overflow-auto px-4 py-3">
+										<MarkdownBody html={reviewHtml} className="markdown review-preview-markdown" />
+									</div>
+								</div>
+							</Popover.Popup>
+						)}
+					</Popover.Root>
+					{actionable && (
+						<button
+							type="button"
+							className={GIT_ACTION}
+							disabled={busy !== null || active}
+							onClick={() => run(primary)}
+							title={primary.hint}
+						>
+							{primaryLabel}
+						</button>
 					)}
 				</div>
-			</div>
-			<div className="flex items-center gap-1 rounded-lg bg-panel p-1">
-				<Popover.Root>
-					<Popover.Trigger
-						render={<div />}
-						nativeButton={false}
-						openOnHover={Boolean(reviewMessage)}
-						delay={200}
-						closeDelay={120}
-						className={cn(
-							"flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-2 py-2",
-							reviewMessage && "cursor-help",
-						)}
-						tabIndex={reviewMessage ? 0 : undefined}
-					>
-						{/* The meter sits under the score itself, so the reading and its
-						    scale stay one glance and the row's right edge is free for the
-						    action. */}
-						<div className="grid shrink-0 gap-1.5">
-							<div className={cn("leading-none", scoreTone)}>
-								<span className="text-section-title font-[750] tracking-[-0.06em]">{score ?? "–"}</span>
-								<span className="ml-0.5 text-meta font-semibold tracking-normal text-faint">/5</span>
-							</div>
-							<div
-								className="flex gap-0.5"
-								role={score ? "meter" : "status"}
-								aria-label={`${AGENT_NAME} merge-safety score`}
-								aria-valuemin={score ? 1 : undefined}
-								aria-valuemax={score ? 5 : undefined}
-								aria-valuenow={score}
-							>
-								{[1, 2, 3, 4, 5].map((step) => (
-									<span
-										key={step}
-										className={cn(
-											"h-1 flex-1 rounded-full",
-											score && step <= score ? meterTone : "bg-active",
-										)}
-									/>
-								))}
-							</div>
-						</div>
-						<div className="min-w-0 flex-1">
-							<div className="truncate text-label font-semibold text-fg">{verdict}</div>
-							<div className="mt-0.5 truncate text-meta text-faint">{detail}</div>
-						</div>
-					</Popover.Trigger>
-					{reviewMessage && (
-						<Popover.Popup
-							side="left"
-							align="start"
-							sideOffset={12}
-							className="flex max-h-[min(680px,calc(100vh-24px),var(--available-height))] w-[min(680px,calc(100vw-24px),var(--available-width))] min-h-0 overflow-hidden"
-						>
-							<div className="flex min-h-0 w-full flex-col">
-								<div className="flex items-center gap-2.5 border-b border-divider px-4 py-3">
-									<CommentAvatar author={reviewComment?.author || GITHUB_BOT_NAME || AGENT_NAME} />
-									<div className="min-w-0 flex-1">
-										<div className="truncate text-[13px] font-semibold text-fg">
-											{reviewComment?.author || GITHUB_BOT_NAME || AGENT_NAME}
-										</div>
-										<div className="text-meta text-faint">
-											Automated review{reviewedAgo ? ` · reviewed ${reviewedAgo} ago` : ""}
-										</div>
-									</div>
-									<span className={cn("shrink-0 text-[13px] font-semibold", scoreTone)}>
-										{score ?? "–"}/5
-									</span>
-								</div>
-								<div className="min-h-0 overflow-auto px-4 py-3">
-									<MarkdownBody html={reviewHtml} className="markdown review-preview-markdown" />
-								</div>
-							</div>
-						</Popover.Popup>
-					)}
-				</Popover.Root>
-				{canFix && (
-					<button
-						type="button"
-						className={cn(ACTION_BUTTON_CLASS, "shrink-0 gap-1.5 px-2 text-meta")}
-						disabled={busy !== null}
-						onClick={() => run(fixAction)}
-						title={fixAction.hint}
-					>
-						<IconSparkle size={14} className="shrink-0 text-faint" />
-						{busy === "autofix" ? "Starting..." : "Fix findings"}
-					</button>
-				)}
 			</div>
 			{done && (
 				<div className="px-1 text-[11px] font-medium text-dim">
