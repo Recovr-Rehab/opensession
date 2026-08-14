@@ -17,10 +17,12 @@
  *  say anything more than the first two words of a session title. */
 export const PEOPLE_GRID = "grid grid-cols-[repeat(auto-fill,minmax(244px,1fr))] gap-2";
 
-/** One person, or the lens that clears the filter. */
+/** One person, or the lens that clears the filter. Padding is the page's one
+ *  inset (12px), which is also what the headers are indented by, so a heading
+ *  lines up with the faces under it rather than with the card's edge. */
 export const PEOPLE_CARD =
 	"group focus-ring flex w-full min-w-0 cursor-pointer items-center gap-2.5 rounded-xl " +
-	"bg-panel p-2.5 text-left transition-colors " +
+	"bg-panel p-3 text-left transition-colors " +
 	"duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-hover";
 
 /** Whose work the app is showing. Without a hairline to firm up, the state is
@@ -28,15 +30,21 @@ export const PEOPLE_CARD =
  *  the check at the end of the row. */
 export const PEOPLE_CARD_SELECTED = "bg-pressed";
 
+/** The page's own inset. Headings sit at the same x as the content inside a
+ *  card, not at the card's edge, so a section reads as a label over its rows
+ *  the way a grouped list does. Every list page in the app lines these two up;
+ *  the row pages get there by outdenting the list instead. */
+export const PEOPLE_INSET = "px-3";
+
 /** "Organizations" — the one heading on the page. */
-export const PEOPLE_SECTION_LABEL = "m-0 mt-7 mb-2 text-label font-semibold text-fg";
+export const PEOPLE_SECTION_LABEL = `m-0 mt-7 mb-2 ${PEOPLE_INSET} text-label font-semibold text-fg`;
 
 /**
  * An organization is a card of people rather than a target of its own: the
  * sidebar's lens holds one person, so a team has nothing to switch to. It
  * carries its members instead, and those are the buttons.
  */
-export const PEOPLE_ORG_CARD = "rounded-2xl bg-panel p-3.5";
+export const PEOPLE_ORG_CARD = "rounded-2xl bg-panel p-3";
 
 /** A member inside an organization card: the face, with the name under it. */
 export const PEOPLE_ORG_MEMBER =

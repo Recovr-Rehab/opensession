@@ -51,6 +51,29 @@ language instead of introducing a new local style for each feature.
   form. Separate by surface, spacing, and radius instead. Borders stay for the
   things that are genuinely a line: a divider between rows, the edge of an
   input or a control, a table rule.
+- Round generously, and scale the radius with the box. The scale in
+  `styles/tailwind.css` runs `rounded-sm` 4, `rounded-md` 7, `rounded-lg` 14,
+  `rounded-xl` 18, `rounded-2xl` 22, plus the named chrome corners
+  `rounded-control` / `rounded-row` (12) and `rounded-popup` (16) — each of them
+  authored as `calc(<n>px * var(--rf))`, so a browser with `corner-shape`
+  support renders them 1.35x larger. A small
+  control keeps a small corner; a card takes `rounded-xl`, and a container that
+  holds cards takes `rounded-2xl`. Never write an arbitrary radius, and never
+  give one surface two different corners.
+- Keep nested corners concentric: an inner radius plus the padding around it
+  should equal the outer radius. A child rounded as hard as its parent pinches
+  the gap between them, and a square child inside a round parent reads as a
+  mistake at the corner.
+- Corners are squircles. `base.css` grants `corner-shape: squircle` to anything
+  carrying a `rounded-*` class, with one exception: `rounded-full` opts out. Use
+  `rounded-[999px]` for a pill or circle that should stay a squircle, and
+  `rounded-full` only where a true circle is wanted.
+- Align a heading with the content inside the rows under it, not with the row's
+  outer edge. A grouped list reads as a label over its items only when the two
+  share an x. Row pages get there by outdenting the list past the content edge
+  (`-mx-3` with `px-3` on rows and labels, see `lib/archived-classes.ts`); card
+  pages get there by indenting the headings by the card's padding (see
+  `PEOPLE_INSET`). Pick one inset per page and use it for both.
 - Compose classes with `cn()`. Accept and merge `className` in shared
   primitives so callers can adjust layout without copying the component.
 - Paint interaction states with the hover washes — `hover:bg-hover` /
