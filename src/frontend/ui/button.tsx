@@ -45,7 +45,6 @@ import { cn } from "./cn";
 type Variant =
 	| "default"
 	| "primary"
-	| "ink"
 	| "soft"
 	| "ghost"
 	| "success"
@@ -111,10 +110,10 @@ const iconOnlyPad: Record<Size, string> = {
 };
 
 // Solid ink: the heaviest weight, for the one dominant action on a surface (a
-// page header's CTA, a panel's single call to action). This variant existed
-// because the brand accent was red and, at that size, it shouted — ink carried
-// the same emphasis without it. The accent is now ink itself, so `primary` and
-// `ink` describe the same plate and share one definition.
+// page header's CTA, a panel's single call to action). It was once a second
+// variant named `ink`, because the brand accent was red and, at that size, it
+// shouted. The accent is ink now, so the two names described one plate; the
+// older one is gone.
 //
 // The label is `text-on-accent` rather than a literal white: on an ink fill,
 // white-on-white is what you get in dark mode. And `brightness-110` (what
@@ -136,12 +135,7 @@ const variants: Record<Variant, string> = {
 	// --button-surface note in base.css.
 	default:
 		"bg-button border-line text-dim smooth-shadow-xs hover:text-fg hover:border-line-strong",
-	// One plate, two names. `primary` is the one to reach for — it carries 46
-	// call sites to `ink`'s 2, and now that the accent *is* ink the older name
-	// no longer describes anything the newer one doesn't. `ink` stays so its
-	// two callers keep working.
 	primary: INK,
-	ink: INK,
 	// A plate with no hairline: the filled-chip surface base.css describes as
 	// having "nothing but its fill to read against the page". `default` cannot
 	// simply drop its border, because its fill is paper in light and the border
@@ -184,7 +178,6 @@ const variants: Record<Variant, string> = {
 const iconDim: Record<Variant, string> = {
 	default: "opacity-60",
 	primary: "opacity-80",
-	ink: "opacity-80",
 	soft: "opacity-60",
 	ghost: "opacity-60",
 	success: "opacity-80",
