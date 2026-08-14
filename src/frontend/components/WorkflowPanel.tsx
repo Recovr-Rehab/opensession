@@ -73,13 +73,13 @@ const RUN_TONE: Record<
 /** The card's plate and the rows inside it: the Info panel's list grammar
  *  (INFO_LIST_CLASS), so an agent row lines up with a portal or a changed
  *  file rather than inventing a third row shape. */
-const CARD_CLASS = "overflow-hidden rounded-lg bg-panel p-1";
+const CARD_CLASS = "overflow-hidden rounded-lg bg-panel p-2";
 const ROW_CLASS =
-	"flex w-full items-center gap-2 rounded-control px-2 py-1 text-left transition-colors";
+	"flex w-full items-center gap-2 rounded-control px-2 py-1.5 text-left transition-colors";
 /** A toggle under the agent rows (tool calls, the result): the same row, in
  *  the quieter ink a reading gets. */
 const FOOTER_ROW =
-	"flex w-full items-center gap-2 rounded-control px-2 py-1 text-left text-meta " +
+	"flex w-full items-center gap-2 rounded-control px-2 py-1.5 text-left text-meta " +
 	"font-medium text-dim transition-colors hover:bg-hover hover:text-fg";
 
 /** Status mark: glyphs for the terminal states (✓/✕ stay legible at a glance
@@ -341,11 +341,11 @@ export function WorkflowPanel({
 						)
 					}
 				/>
-				<div className="grid gap-4 px-2 pt-2 pb-[22px]">
+				<div className="grid gap-4 px-2 pt-1 pb-[22px]">
 					{empty ? (
 						<WorkflowsEmptyState />
 					) : (
-						<div className="grid gap-2">{cards}</div>
+						<div className="grid gap-3">{cards}</div>
 					)}
 				</div>
 			</>
@@ -396,7 +396,7 @@ function SubagentsCard({
 	if (tokens) meta.push(`${fmtTokens(tokens)} tok`);
 	return (
 		<div className={CARD_CLASS}>
-			<div className="px-2 pb-1.5 pt-1">
+			<div className="px-2 pb-2 pt-0.5">
 				<div className="flex items-center gap-2">
 					<span className="min-w-0 flex-1 truncate text-label font-semibold text-fg">
 						Sub-agents
@@ -468,11 +468,11 @@ function SubagentsCard({
  *  to read in a panel column. */
 function WorkflowsEmptyState() {
 	return (
-		<div className="grid gap-3">
+		<div className="grid gap-4">
 			<EmptyState
 				icon={<IconStack size={22} />}
 				title="No agents yet"
-				className="py-5"
+				className="px-2 py-7"
 			>
 				Ask this session to <span className="text-fg">use a workflow</span> and
 				it fans out many small agents at once, then combines what they find.
@@ -485,7 +485,7 @@ function WorkflowsEmptyState() {
 						"Use a workflow to compare 3 approaches and pick a winner.",
 						"Use a workflow with write agents: one per file, then merge.",
 					].map((s) => (
-						<li key={s} className="px-2 py-1.5 text-label leading-snug text-dim">
+						<li key={s} className="px-3 py-2.5 text-label leading-snug text-dim">
 							{s}
 						</li>
 					))}
@@ -635,7 +635,7 @@ function RunCard({
 	const tone = RUN_TONE[run.status];
 	return (
 		<div className={CARD_CLASS}>
-			<div className="flex items-start justify-between gap-2 px-2 pb-1.5 pt-1">
+			<div className="flex items-start justify-between gap-2 px-2 pb-2 pt-0.5">
 				<div className="min-w-0">
 					<div className="flex items-center gap-1.5">
 						<span className="truncate text-label font-semibold text-fg">
