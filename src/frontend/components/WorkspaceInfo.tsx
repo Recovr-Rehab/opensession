@@ -40,7 +40,7 @@ import type {
 import { formatPrCommentPrompt } from "./PrPanel";
 import { renderMarkdown } from "../lib/markdown";
 import { fullTime } from "../lib/time";
-import { isOutdatedReviewComment } from "../lib/pr-comments";
+import { isMachinePrComment, isOutdatedReviewComment } from "../lib/pr-comments";
 import {
 	personKey,
 	reviewRequestTargetsPerson,
@@ -1449,11 +1449,13 @@ export function WorkspaceInfo({
 		.filter(Boolean)
 		.join(" · ");
 
-	// Clean each body up front and drop the noise: Vercel deploy bots and
-	// anything that reduces to nothing (link-ref markers, pure HTML-comment
-	// bot pings) so no blank/useless cards show.
+	// This list is what the team said about the PR, so machines are dropped:
+	// deploy bots, preview tables, and the agent's own review, which the review
+	// card above already carries in full. Also drop anything that reduces to
+	// nothing (link-ref markers, pure HTML-comment bot pings) so no blank cards
+	// show. The Review tab keeps the whole conversation.
 	const comments = (pr?.comments ?? [])
-		.filter((c) => !/vercel/i.test(c.author || ""))
+		.filter((c) => !isMachinePrComment(c))
 		.filter((c) => !isOutdatedReviewComment(c.body))
 		.map((c) => ({ ...c, preview: plainComment(c.body) }))
 		.filter((c) => c.preview.length > 0);
