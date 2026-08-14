@@ -56,6 +56,7 @@ import { pollWhileVisible, PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import { Textarea } from "../ui/input";
 import {
   IconCheck,
+  IconChevronRight,
   IconDiffSplit,
   IconDiffUnified,
   IconDotsHorizontal,
@@ -1197,6 +1198,20 @@ export function PrPanel({
   const comments = (pr.comments || []).filter(
     (c) => stripHtmlComments(c.body) && !isOutdatedReviewComment(c.body),
   );
+  const stateLabel = pr.isDraft
+    ? "Draft"
+    : pr.state === "OPEN"
+      ? "Open"
+      : pr.state === "MERGED"
+        ? "Merged"
+        : "Closed";
+  const stateBadgeClass = pr.isDraft
+    ? "bg-blue-soft text-blue"
+    : pr.state === "OPEN"
+      ? "bg-green-soft text-green"
+      : pr.state === "MERGED"
+        ? "bg-[color-mix(in_srgb,var(--purple)_12%,transparent)] text-purple"
+        : "bg-red-soft text-red";
   const canMergeAfterReview =
     pr.state === "OPEN" &&
     !pr.isDraft &&
@@ -1266,22 +1281,34 @@ export function PrPanel({
       {/* The PR identity lives inside the scroll container, so it gets out of
           the way once the reviewer reaches the code. Only the page row sticks. */}
       <main className="min-h-0 flex-1 overflow-y-auto bg-surface pb-24 [--review-file-header-top:52px] phone:pb-36">
-        <header className="flex h-[52px] shrink-0 items-center gap-2.5 px-6 phone:px-3">
+        <header className="flex h-[52px] shrink-0 items-center gap-2 px-6 phone:px-3">
+          <span className={`inline-flex h-6 shrink-0 items-center rounded-control px-2 text-meta font-semibold tracking-[0.04em] uppercase ${stateBadgeClass}`}>
+            {stateLabel}
+          </span>
           <UserAvatar
             name={pr.author}
             login={provider.key === "github" ? pr.author : null}
-            size={28}
+            size={22}
             title={pr.author}
           />
-          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+          {!headerCompact && (
+            <>
+              <span className="max-w-24 shrink-0 truncate text-label font-medium text-dim">
+                {pr.author}
+              </span>
+              <IconChevronRight className="shrink-0 text-faint" size={14} />
+            </>
+          )}
+          <div className="flex min-w-0 flex-1 items-center gap-2">
             <a
-              className="block truncate text-dialog-title font-semibold leading-[1.2] tracking-[-0.005em] text-fg no-underline hover:text-link phone:text-body"
+              className="flex min-w-0 items-baseline gap-1 text-dialog-title font-normal leading-[1.2] tracking-[-0.005em] text-fg no-underline hover:text-link phone:text-body"
               href={pr.url}
               target="_blank"
               rel="noopener"
               title={`${pr.title} #${pr.number}`}
             >
-              {pr.title} <span className="font-normal text-faint">#{pr.number}</span>
+              <span className="truncate">{pr.title}</span>
+              <span className="shrink-0 text-faint">#{pr.number}</span>
             </a>
             {!headerCompact && (
               <div
