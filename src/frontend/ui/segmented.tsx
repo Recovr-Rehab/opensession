@@ -15,10 +15,11 @@ import { duration, ease } from "./motion";
  * Button plate's `border-line`: that hairline is darker than the `bg-hover`
  * track it lies on, which made the knob read as an outline drawn around the
  * option, its top edge unjustified by any shadow (light falls downward). The
- * edge is a per-theme token instead, `--segmented-knob-edge` in base.css —
- * transparent in light, where white plus the cast shadow separates it, and a
- * real hairline in dark, where a cast shadow on a near-black track does
- * nothing at all and the plate would otherwise vanish. The
+ * knob's surface and edge are per-theme tokens instead, `--segmented-knob-*`
+ * in base.css: paper and no edge in light, where the cast shadow separates it,
+ * and in dark a fill well above the ramp's last step with a hair-lighter edge,
+ * because a shadow on a near-black track does nothing and a plate at or below
+ * the track's own tier reads as a hole rather than a knob. The
  * track is `bg-hover` — one of the few places that absolute surface is right,
  * because here it is a real surface (a well the options sit in) rather than an
  * interaction wash. Concentric corners: the knob's `rounded-control` (12) plus
@@ -131,7 +132,7 @@ export function SegmentedOption({
 				<motion.span
 					layoutId={knobId}
 					aria-hidden
-					className="absolute inset-0 rounded-control border border-[var(--segmented-knob-edge)] bg-button smooth-shadow-sm"
+					className="absolute inset-0 rounded-control border border-[var(--segmented-knob-edge)] bg-[var(--segmented-knob-surface)] smooth-shadow-sm"
 					transition={{ type: "tween", duration: duration.base, ease }}
 				/>
 			)}

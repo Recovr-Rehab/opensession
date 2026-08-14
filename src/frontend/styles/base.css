@@ -72,11 +72,24 @@
 	   composer's case at chip scale, so it takes the composer's answer; see the
 	   light block. */
 	--button-surface: var(--control-surface);
-	/* The segmented control's knob, which is the one plate that sits in a WELL
-	   rather than on the page, so it needs its own answer per theme. In dark a
-	   cast shadow lands on an almost-black track and does nothing, so the edge
-	   has to be drawn. In light it must not be — see the light block. */
-	--segmented-knob-edge: var(--border);
+	/* The segmented control's knob: the one plate that sits in a WELL rather
+	   than on the page, so it gets its own pair of tokens.
+
+	   It is deliberately ABOVE the ramp's last step (--bg-active #353535). A
+	   cast shadow on a near-black track does nothing, so in dark the fill is
+	   the only thing that can say "raised" — and the knob's own track is
+	   already --bg-hover, so anything at or below that tier reads as a hole
+	   cut in the group rather than a plate lifted out of it. That is what
+	   --control-surface (#292929, BELOW the track) looked like. iOS solves it
+	   the same way: its selected segment is a light grey well clear of the
+	   track, with no outline at all.
+
+	   The edge is a hair LIGHTER than the fill, not darker — a dark line
+	   around a light plate is a drawn outline, while a light one reads as the
+	   top of the plate catching the light. Light mode wants neither; see the
+	   light block. */
+	--segmented-knob-surface: #454545;
+	--segmented-knob-edge: #525252;
 	/* Floating popups — hover cards, menus, context menus. Same L3 tier as the
 	   controls above, and in dark that is all it needs: lighter than the page,
 	   so the fill alone reads as lifted and the hairline is just an edge. Light
@@ -341,12 +354,14 @@ html[data-theme="light"] {
 	   which is the disabled signal again. So it goes paper and lets the shadow
 	   do the lifting, exactly as the composer and the popups below do. */
 	--button-surface: #ffffff;
-	/* No edge on the segmented knob here. A --border hairline is darker than
-	   the --bg-hover track it lies on, so it reads as an outline drawn around
-	   the option rather than a plate raised out of the group, and the top of
-	   that outline has no shadow to justify it. White on a light grey track
-	   plus the cast shadow is enough separation; dark needs the line, and
-	   takes it in the block above. */
+	/* The segmented knob goes paper here, like every other raised control, and
+	   wears no edge at all. A --border hairline is darker than the --bg-hover
+	   track it lies on, so it reads as an outline drawn around the option
+	   rather than a plate raised out of the group, and the top of that outline
+	   has no shadow to justify it. White on a light grey track plus the cast
+	   shadow is enough; dark cannot do that and takes a fill and an edge of
+	   its own in the block above. */
+	--segmented-knob-surface: var(--button-surface);
 	--segmented-knob-edge: transparent;
 	/* The composer is the exception to the ramp above, and it has to be. The
 	   ramp steps AWAY from the page — darker in light — which is right for a
