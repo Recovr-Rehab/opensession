@@ -152,6 +152,15 @@ function deriveHeadline(
 			label: `Behind by ${behind} commit${behind === 1 ? "" : "s"}`,
 			tone: "yellow",
 		};
+	// A shared-checkout repo (Open Session's own) lands work as a commit on its
+	// default branch and never opens a PR, so unpushed commits are the whole
+	// story there — "No PR open · Create PR" would be the wrong move.
+	if (git?.sharedCheckout && ahead > 0)
+		return {
+			key: "ahead",
+			label: `Ahead by ${ahead} commit${ahead === 1 ? "" : "s"}`,
+			tone: "yellow",
+		};
 	if (ahead > 0 || (git?.uncommittedFiles ?? 0) > 0)
 		return { key: "no-pr", label: "No PR open", tone: "muted" };
 	if ((git?.behindBase ?? 0) > 0)
@@ -700,20 +709,21 @@ export function PrStatusBar({
 		setTimeout(() => setPrompted(null), 6000);
 	}
 
-	// Every word this strip knows is about a pull request, so a session that has
-	// none can leave it with nothing to say. Two ways that happens:
+	// The strip is where this branch stands against the remote and the base: the
+	// PR, or failing that the commits still to push or pull. So it stands down
+	// for the two states that hold neither.
 	//
 	//  - Clean: level with the upstream, the base and the working tree. One
 	//    muted "Up to date" over a link to an empty PR tab.
-	//  - A shared-checkout repo (Open Session's own), where work lands as a
-	//    commit on the default branch and no PR is ever opened. "Create PR" is
-	//    the wrong move there, and the Git status rows directly under the plate
-	//    already name the real ones — commit, push, pull — in their own words.
-	//
-	// So the strip shows up when it has a fact, rather than holding a plate for
-	// a state that has no pull request in it.
+	//  - Nothing but a dirty tree on a shared-checkout repo (Open Session's
+	//    own), where work lands as a commit on the default branch and no PR is
+	//    ever opened. "Create PR" is the wrong move there, and uncommitted work
+	//    is the Git status section's subject, not this strip's.
 	const noPr = !pr && statusRows.length === 0;
-	const empty = noPr && (headline.key === "clean" || !!git?.sharedCheckout);
+	const empty =
+		noPr &&
+		(headline.key === "clean" ||
+			(!!git?.sharedCheckout && headline.key === "no-pr"));
 
 	// The strip still holds its place while the PR fetch runs (Kent: a topbar
 	// that blinks in and out of existence shouldn't exist), so a session that
