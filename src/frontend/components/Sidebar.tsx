@@ -100,6 +100,7 @@ import {
 import { Reorder } from "motion/react";
 import { getRecents, onRecentsChanged } from "../lib/recents";
 import { getReads, isUnread, markRead, markUnread, onReadsChanged } from "../lib/reads";
+import { mentionFor, onMentionsChanged } from "../lib/mentions";
 import { TeamLensMenu, useTeamPresence } from "./TeamPresence";
 import { sessionPath, absoluteLink, copyToClipboard } from "../lib/share-link";
 import { hasDraft, onDraftsChanged } from "../lib/drafts";
@@ -579,6 +580,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	useEffect(() => onLanesChanged(() => setLanesState(getLanes())), []);
 	useEffect(() => onRecentsChanged(() => setRecents(getRecents())), []);
 	useEffect(() => onReadsChanged(() => setReads(getReads())), []);
+	// Sessions where a teammate tagged you. Server-owned, so it re-renders on
+	// the socket push as well as on your own clears.
+	const [, setMentionsRev] = useState(0);
+	useEffect(() => onMentionsChanged(() => setMentionsRev((n) => n + 1)), []);
 	// Re-render when a composer draft appears/disappears — rows check hasDraft()
 	// during render to show the Slack-style "unsent draft" pencil.
 	const [, setDraftsRev] = useState(0);
@@ -1010,6 +1015,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		lastActivity: string;
 		createdAt: string;
 		unread: boolean;
+		/** Who tagged you in one of this row's sessions, if anyone. */
+		mention?: string;
 		running: boolean;
 		/** Lowercased owner (workspace creator, else the first session's starter). */
 		owner: string;
@@ -1127,6 +1134,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				unread: sessions.some(
 					(c) => c.id !== selectedId && isUnread(c.id, c.lastActivity, reads),
 				),
+				// A tag on any session in the workspace marks the whole row: the
+				// person who wrote it asked for you, not for a particular tab.
+				mention: sessions
+					.filter((c) => c.id !== selectedId)
+					.map((c) => mentionFor(c.id))
+					.find(Boolean)?.by,
 				running: sessions.some((c) => c.isRunning) || reviewRunning,
 				owner: (workspace?.createdBy || sessions[0]?.startedBy || "").toLowerCase(),
 			};
@@ -2693,6 +2706,23 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						}}
 					>
 						{stripPrTitlePrefix(row.name)}
+					</span>
+				)}
+				{row.mention && !editing && (
+					// Same badge as a session row (SidebarItem): the face of whoever
+					// tagged you, with an accent @ so it can't read as a viewer.
+					<span
+						className="relative ml-1 flex shrink-0 items-center"
+						title={`${row.mention} mentioned you`}
+						aria-label={`${row.mention} mentioned you`}
+					>
+						<UserAvatar name={row.mention} size={16} className="shrink-0" />
+						<span
+							aria-hidden="true"
+							className="absolute -right-1 -bottom-1 flex size-3 items-center justify-center rounded-full bg-accent text-[8px] font-bold leading-none text-on-accent ring-2 ring-panel"
+						>
+							@
+						</span>
 					</span>
 				)}
 				{localMode && row.sessions.some((session) => session.local) && !editing && (
@@ -4797,6 +4827,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 										s.id !== selectedId &&
 										isUnread(s.id, s.lastActivity, reads)
 									}
+									mention={
+										s.id !== selectedId ? mentionFor(s.id)?.by : undefined
+									}
 									mine={
 										!!s.startedBy &&
 										!s.automation &&
@@ -5207,6 +5240,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 														unread={
 															s.id !== selectedId &&
 															isUnread(s.id, s.lastActivity, reads)
+														}
+														mention={
+															s.id !== selectedId
+																? mentionFor(s.id)?.by
+																: undefined
 														}
 														mine={
 															!!s.startedBy &&

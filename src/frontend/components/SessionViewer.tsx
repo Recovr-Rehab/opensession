@@ -23,6 +23,7 @@ import {
 import { AGENT_NAME, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { withQuotes, type Quote } from "../lib/quotes";
 import { markNotesRead } from "../lib/note-reads";
+import { clearMention, onMentionsChanged } from "../lib/mentions";
 import { QuoteSelection } from "./QuoteSelection";
 import { plainThreadUrl } from "./PlainThreadPanel";
 import { isGitHubAttribution } from "@tellahq/opensession-protocol/notices";
@@ -1447,6 +1448,14 @@ export function SessionViewer({
 		if (!notes.length) return;
 		markNotesRead(session.id, notes[notes.length - 1]!.ts);
 	}, [notes, session.id]);
+	// Opening the session is what clears an @-mention of you: looking at it is
+	// what "seen" means, so there is no separate dismiss. Runs on the session
+	// id alone — a mention that lands while you are already here clears too,
+	// which is right: you are looking at it.
+	useEffect(() => {
+		clearMention(session.id);
+		return onMentionsChanged(() => clearMention(session.id));
+	}, [session.id]);
 	const panelResizeHandle = (
 		<div
 			className={PANEL_RESIZE}

@@ -14,9 +14,9 @@ import {
 	editSessionNote,
 	isValidNoteSession,
 	listSessionNotes,
-	mentionedTeammates,
 	sessionNoteActivity,
 } from "../session-notes";
+import { mentionPreview, recordMentions } from "../mentions";
 import { broadcastToAll } from "../ws-hub";
 import { removeStagedImages, stageInlineImages } from "../uploads";
 
@@ -83,12 +83,20 @@ export async function handleSessionNotesRoutes(
 		// Everyone gets it live: clients watching this session render it, and
 		// the rest can use the same event for an unread indicator.
 		broadcastToAll({ type: "session_note", sessionId, note });
-		// @-mentions ping the tagged teammate's devices (works app-closed).
-		const mentioned = mentionedTeammates(note.text, user);
+		// @-mentions ping the tagged teammate's devices (works app-closed) and
+		// leave a durable badge on their sidebar row, which survives a
+		// notification they never saw.
+		const mentioned = recordMentions(
+			note.text,
+			user,
+			sessionId,
+			"note",
+			(person, mention) =>
+				broadcastToAll({ type: "mention", user: person, mention }),
+		);
 		if (mentioned.length) {
 			const { sendPushToUser } = await import("../push");
-			const preview =
-				note.text.length > 140 ? `${note.text.slice(0, 139)}…` : note.text;
+			const preview = mentionPreview(note.text);
 			for (const name of mentioned)
 				void sendPushToUser(name, {
 					title: `${user} mentioned you in a session note`,

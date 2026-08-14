@@ -16,7 +16,6 @@ const {
 	editSessionNote,
 	isValidNoteSession,
 	listSessionNotes,
-	mentionedTeammates,
 	sessionNoteActivity,
 } = await import("./session-notes");
 const { stageInlineImages } = await import("./uploads");
@@ -127,11 +126,4 @@ describe("session notes", () => {
 		});
 	});
 
-	test("mentions never include the sender", () => {
-		// The roster comes from the instance identity config, so assert the
-		// shape rather than specific teammates: a sender's own name is dropped.
-		const sender = "Kent";
-		expect(mentionedTeammates(`@${sender} look at this`, sender)).toEqual([]);
-		expect(mentionedTeammates("nobody tagged here", sender)).toEqual([]);
-	});
 });

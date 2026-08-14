@@ -5,6 +5,7 @@ import { Menu } from "../ui/menu";
 import { toast } from "../ui/toast";
 import { deleteSessionNoteApi, editSessionNoteApi } from "../lib/api";
 import { IconDotsHorizontal, IconPencil, IconTrash } from "./icons";
+import { MentionText } from "./MentionText";
 import { UserAvatar } from "./UserAvatar";
 import { getCurrentUser } from "./UserPicker";
 import { openLightbox } from "./MediaLightbox";
@@ -25,39 +26,6 @@ function noteTime(ts: number): string {
 	const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 	if (d.toDateString() === new Date().toDateString()) return time;
 	return `${d.toLocaleDateString([], { month: "short", day: "numeric" })} ${time}`;
-}
-
-const NOTE_TOKEN_RE = /(@[A-Za-z][\w.-]*|https?:\/\/[^\s<>"')\]]+)/g;
-
-/** Note text with @Name emphasized and bare URLs clickable. */
-function NoteText({ text }: { text: string }) {
-	const parts = text.split(NOTE_TOKEN_RE);
-	if (parts.length === 1) return <>{text}</>;
-	return (
-		<>
-			{parts.map((p, i) => {
-				if (/^https?:\/\//.test(p))
-					return (
-						<a
-							key={i}
-							href={p}
-							target="_blank"
-							rel="noreferrer"
-							className="text-accent underline decoration-accent/40 underline-offset-2 hover:decoration-accent"
-						>
-							{p}
-						</a>
-					);
-				if (p.startsWith("@"))
-					return (
-						<span key={i} className="font-semibold text-fg">
-							{p}
-						</span>
-					);
-				return <React.Fragment key={i}>{p}</React.Fragment>;
-			})}
-		</>
-	);
 }
 
 export function NoteBubble({
@@ -229,7 +197,7 @@ export function NoteBubble({
 				<>
 					{note.text && (
 						<div className="whitespace-pre-wrap text-body leading-relaxed text-fg">
-							<NoteText text={note.text} />
+							<MentionText text={note.text} />
 						</div>
 					)}
 					{!!note.images?.length && (

@@ -22,6 +22,36 @@ export async function savePinsApi(
 	return Array.isArray(body?.pins) ? body.pins : pins;
 }
 
+// ── Mentions (sessions where a teammate tagged you) ──
+
+export interface MentionRecord {
+	sessionId: string;
+	by: string;
+	source: "prompt" | "note";
+	preview: string;
+	ts: number;
+}
+
+export async function fetchMentions(user: string): Promise<MentionRecord[]> {
+	const body = await request<{ mentions?: MentionRecord[] }>(
+		`/mentions?user=${encodeURIComponent(user)}`,
+		{ label: "Failed to fetch mentions" },
+	);
+	return Array.isArray(body?.mentions) ? body.mentions : [];
+}
+
+/** Clear one session's mention, or every one when `sessionId` is omitted. */
+export async function clearMentionApi(
+	user: string,
+	sessionId?: string,
+): Promise<void> {
+	await request("/mentions/clear", {
+		method: "POST",
+		body: { user, ...(sessionId ? { sessionId } : {}) },
+		label: "Failed to clear mention",
+	});
+}
+
 // ── Reads (per-user unread marks; server mirror of localStorage) ──
 
 export async function fetchReads(user: string): Promise<Record<string, string>> {

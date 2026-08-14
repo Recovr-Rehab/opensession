@@ -12,13 +12,14 @@
  * Notes persist per session in `~/.opensession-session-notes/<id>.json` (the
  * flat-file pattern of pins.ts/push.ts). Realtime delivery rides the app
  * WebSocket from the route; an `@Name` mention web-pushes that teammate's
- * devices via src/server/push.ts.
+ * devices via src/server/push.ts and records a sidebar badge via
+ * src/server/mentions.ts, which owns the mention scan for notes and prompts
+ * alike.
  */
 
 import { existsSync, mkdirSync, readFileSync, readdirSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { stateDir } from "./paths";
-import { teamFirstNames } from "./people";
 import { removeStagedImages } from "./uploads";
 
 const NOTES_DIR = stateDir("session-notes");
@@ -180,14 +181,3 @@ export function sessionNoteActivity(): Array<{
 	return out;
 }
 
-/** Distinct teammates `@`-mentioned in `text` — never the sender themself. */
-export function mentionedTeammates(text: string, sender: string): string[] {
-	const team = teamFirstNames();
-	const found = new Set<string>();
-	for (const m of text.matchAll(/@([A-Za-z][\w.-]*)/g)) {
-		const name = team.find((n) => n.toLowerCase() === m[1]!.toLowerCase());
-		if (name && name.toLowerCase() !== sender.trim().toLowerCase())
-			found.add(name);
-	}
-	return [...found];
-}

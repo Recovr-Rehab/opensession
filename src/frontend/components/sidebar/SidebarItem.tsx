@@ -28,6 +28,7 @@ import { RowCardPopup, useRowHoverCard } from "../SidebarRowCards";
 import { IconArchive, IconInbox, IconMail, IconPencil, IconPin } from "../icons";
 import { SessionCardBody, WsPrStatusMark } from "../sidebar/HoverCards";
 import { SidebarCtxMenu } from "../sidebar/SidebarCtxMenu";
+import { UserAvatar } from "../UserAvatar";
 import React, { useEffect, useRef, useState } from "react";
 
 /** The sidebar's selectable row — the shape every list family wears: session,
@@ -78,6 +79,7 @@ export function SidebarItem({
 	localMode,
 	selected,
 	unread,
+	mention,
 	mine,
 	onClick,
 	onArchive,
@@ -92,6 +94,10 @@ export function SidebarItem({
 	/** New activity since this session was last opened — brightens and bolds the
 	    title, like an unread Slack conversation. */
 	unread: boolean;
+	/** Who @-mentioned you in this session, if anyone. Cleared by opening it
+	    (lib/mentions.ts), so it only ever marks a session you have not read
+	    since being tagged. */
+	mention?: string | null;
 	/** The current user's own session — the owner name is redundant, so it's
 	    dropped and the timestamp moves up onto the title line. */
 	mine: boolean;
@@ -489,6 +495,24 @@ export function SidebarItem({
 						}}
 					>
 						{stripPrTitlePrefix(session.title)}
+					</span>
+				)}
+				{mention && !editing && (
+					// Somebody tagged you here. It takes the slot the unread dot would
+					// use and wins over it, because "you were asked" is the stronger
+					// signal — and it names who asked, which a dot cannot.
+					<span
+						className="relative ml-1 flex shrink-0 items-center"
+						title={`${mention} mentioned you`}
+						aria-label={`${mention} mentioned you`}
+					>
+						<UserAvatar name={mention} size={16} className="shrink-0" />
+						<span
+							aria-hidden="true"
+							className="absolute -right-1 -bottom-1 flex size-3 items-center justify-center rounded-full bg-accent text-[8px] font-bold leading-none text-on-accent ring-2 ring-panel"
+						>
+							@
+						</span>
 					</span>
 				)}
 				{localMode && session.local && !editing && (

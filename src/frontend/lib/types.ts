@@ -1,6 +1,7 @@
 // Type-only (erased at build): the dynamic-workflow run snapshot broadcast to
 // the session's Agents panel.
 import type { WorkflowRunSnapshot } from "../../shared/workflow-types";
+import type { MentionRecord } from "./api/user-state";
 // The protocol core: durable record types and the WebSocket frames any
 // session client speaks. This file re-exports them and layers the reference
 // app's own variants on top — new frames go in the package when any client
@@ -833,7 +834,15 @@ export type WSServerMessage =
 	// Broadcast to every client, not just the session's watchers, so a client
 	// elsewhere can still tell that a session has new notes.
 	| { type: "session_note"; sessionId: string; note: SessionNote }
-	| { type: "session_note_deleted"; sessionId: string; noteId: string };
+	| { type: "session_note_deleted"; sessionId: string; noteId: string }
+	// Somebody @-mentioned a teammate in a prompt or a note. Broadcast to
+	// everyone and addressed by name — clients keep the ones for themselves
+	// (lib/mentions.ts) and ignore the rest, the same way session_note is
+	// broadcast wide and filtered client-side.
+	| { type: "mention"; user: string; mention: MentionRecord }
+	// The mention was seen: one session when `sessionId` is set, otherwise all
+	// of them. Keeps a person's other devices in step.
+	| { type: "mentions_cleared"; user: string; sessionId?: string };
 
 
 // ── Analytics (sidebar → Analytics; GET /api/analytics) ──

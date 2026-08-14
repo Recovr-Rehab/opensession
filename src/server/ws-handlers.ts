@@ -12,7 +12,7 @@ import { isLocalSessionUpgradeInProgress } from "./session-transfer-state";
 import { audit } from "./audit";
 import { pendingAsks } from "./asks";
 import { resendPendingSlackComposer } from "./slack-compose";
-import { mentionedUsers } from "./people";
+import { mentionPreview, recordMentions } from "./mentions";
 import { sendPushToUser } from "./push";
 import { startWatching, stopAllWatchesForClient, transcriptRev } from "./file-watcher";
 import { INIT_WIRE_CLAMP_BYTES, entriesForWire, parseTranscriptAsync, parseTranscriptTail, parseTranscriptWindow } from "./jsonl-parser";
@@ -38,7 +38,7 @@ import { resumeSessionFeed } from "./session-feed";
 import { type SeqEntry, transcriptStore } from "./transcript-store";
 import { startTranscriptWatch } from "./transcript-watch";
 import { MAX_UPLOAD_BYTES, WS_MAX_PAYLOAD_BYTES, asDataUrlList, parseImageDataUrls } from "./uploads";
-import { BOOT_ID, allClients, broadcastToSession, globalPresenceFrame, joinSession, leaveSession, markClientSeen, revalidateLocalClients, setClientAway } from "./ws-hub";
+import { BOOT_ID, allClients, broadcastToAll, broadcastToSession, globalPresenceFrame, joinSession, leaveSession, markClientSeen, revalidateLocalClients, setClientAway } from "./ws-hub";
 import { existsSync, readFileSync, statSync, watch } from "fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -863,11 +863,16 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 				{
 					const promptText = String(content || "");
 					if (promptText.includes("@")) {
-						const preview =
-							promptText.length > 140
-								? `${promptText.slice(0, 139)}…`
-								: promptText;
-						for (const name of mentionedUsers(promptText, String(user || ""))) {
+						const preview = mentionPreview(promptText);
+						const mentioned = recordMentions(
+							promptText,
+							String(user || ""),
+							sessionId,
+							"prompt",
+							(person, mention) =>
+								broadcastToAll({ type: "mention", user: person, mention }),
+						);
+						for (const name of mentioned) {
 							void sendPushToUser(name, {
 								title: `${user || "Someone"} mentioned you in ${session.title || "a session"}`,
 								body: preview,
