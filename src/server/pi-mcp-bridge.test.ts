@@ -73,6 +73,12 @@ function toolByName(bridge: PiMcpBridge, name: string) {
   return def;
 }
 
+function discoveryToolByName(bridge: PiMcpBridge, name: string) {
+  const def = bridge.discoveryTools.find((t) => t.name === name);
+  if (!def) throw new Error(`discovery tool ${name} not registered`);
+  return def;
+}
+
 const exec = (def: { execute: Function }, params: unknown = {}) =>
   def.execute("call-1", params, undefined, undefined, {} as any);
 
@@ -102,6 +108,23 @@ describe("registration", () => {
     expect(bridge.tools.length).toBeGreaterThan(0);
   });
 
+  test("exposes a compact search-and-call surface instead of every MCP schema", async () => {
+    const { bridge } = await makeBridge();
+    expect(bridge.discoveryTools.map((t) => t.name)).toEqual(["mcp_search", "mcp_call"]);
+
+    const search = await exec(discoveryToolByName(bridge, "mcp_search"), {
+      query: "echo text",
+    });
+    expect(search.content[0].text).toContain("alpha_echo");
+    expect(search.content[0].text).toContain("arguments:");
+
+    const call = await exec(discoveryToolByName(bridge, "mcp_call"), {
+      name: "alpha_echo",
+      arguments: { text: "through dispatcher" },
+    });
+    expect(call.content).toEqual([{ type: "text", text: "echo:through dispatcher" }]);
+  });
+
   test("non-sdk inProcessMcp values are skipped and an empty bridge is fine", async () => {
     const bridge = await createPiMcpBridge({
       mcpServers: [],
@@ -110,6 +133,7 @@ describe("registration", () => {
     });
     openBridges.push(bridge);
     expect(bridge.tools).toEqual([]);
+    expect(bridge.discoveryTools).toEqual([]);
     await bridge.close();
   });
 });

@@ -66,8 +66,15 @@ type PiContent =
   | { type: "image"; data: string; mimeType: string };
 
 export interface PiMcpBridge {
-  /** Post-policy Pi tool definitions — the model never sees more. */
+  /** Full post-policy catalog, used by the bridge's compact dispatcher. */
   tools: ToolDefinition<any, any, any>[];
+  /**
+   * Small MCP surface exposed to Pi. Keeping hundreds of JSON schemas out of
+   * every provider request avoids turning a normal code task into a massive
+   * cached prompt. Search always returns only tools already admitted to
+   * `tools`, and call can execute only a catalogued definition.
+   */
+  discoveryTools: ToolDefinition<any, any, any>[];
   /** Tear down every transport (and connected in-process instance). */
   close(): Promise<void>;
 }
@@ -352,6 +359,85 @@ export async function createPiMcpBridge(opts: {
     }
   }
 
+  // Pi forwards every custom tool's JSON schema through the Agent SDK on
+  // every model request. The full catalog is often hundreds of tools, which
+  // can turn into a several-hundred-thousand-token cached prefix and make a
+  // healthy turn look wedged. Keep the catalog server-side and expose a
+  // two-step surface instead. This is discovery, not an access grant: both
+  // tools close over the already policy-filtered `tools` list above.
+  const byName = new Map(tools.map((definition) => [definition.name, definition]));
+  const searchable = tools.map((definition) => ({
+    name: definition.name,
+    label: definition.label,
+    description: definition.description,
+    parameters: definition.parameters,
+    haystack: `${definition.name} ${definition.label} ${definition.description}`.toLowerCase(),
+  }));
+  const searchCatalog: ToolDefinition<any, any, any> = {
+    name: "mcp_search",
+    label: "Search MCP tools",
+    description:
+      "Search the available MCP tool catalog before calling mcp_call. " +
+      "Use the returned tool name and argument schema exactly.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "What capability you need" },
+        limit: { type: "number", description: "Maximum matches to return, 1 to 12 (default 6)" },
+      },
+      required: ["query"],
+    } as any,
+    async execute(_toolCallId, params) {
+      const query = String((params as { query?: unknown })?.query ?? "").trim().toLowerCase();
+      if (!query) throw new Error("mcp_search requires a query");
+      const requested = Number((params as { limit?: unknown })?.limit);
+      const limit = Number.isFinite(requested) ? Math.max(1, Math.min(12, Math.floor(requested))) : 6;
+      const terms = query.split(/\s+/).filter(Boolean);
+      const matches = searchable
+        .map((entry) => ({
+          entry,
+          score: terms.reduce((score, term) => score + (entry.haystack.includes(term) ? 1 : 0), 0),
+        }))
+        .filter(({ score }) => score > 0)
+        .sort((a, b) => b.score - a.score || a.entry.name.localeCompare(b.entry.name))
+        .slice(0, limit);
+      const text = matches.length
+        ? matches
+            .map(
+              ({ entry }) =>
+                `${entry.name}: ${entry.description}\narguments: ${JSON.stringify(entry.parameters)}`,
+            )
+            .join("\n\n")
+        : `No permitted MCP tools matched "${query}". Try broader capability words.`;
+      return { content: [{ type: "text", text }], details: undefined };
+    },
+  };
+  const callCatalog: ToolDefinition<any, any, any> = {
+    name: "mcp_call",
+    label: "Call MCP tool",
+    description:
+      "Call a tool returned by mcp_search. Pass its exact name and an arguments object matching its schema.",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Exact tool name returned by mcp_search" },
+        arguments: { type: "object", description: "Arguments for that tool" },
+      },
+      required: ["name", "arguments"],
+    } as any,
+    async execute(toolCallId, params, signal, onUpdate, ctx) {
+      const name = String((params as { name?: unknown })?.name ?? "");
+      const definition = byName.get(name);
+      if (!definition) throw new Error(`MCP tool "${name}" is unavailable. Search the catalog first.`);
+      const args = (params as { arguments?: unknown })?.arguments;
+      if (!args || typeof args !== "object" || Array.isArray(args)) {
+        throw new Error("mcp_call arguments must be an object");
+      }
+      return definition.execute(toolCallId, args as any, signal, onUpdate, ctx);
+    },
+  };
+  const discoveryTools = tools.length ? [searchCatalog, callCatalog] : [];
+
   const close = async () => {
     if (closed) return;
     closed = true;
@@ -367,5 +453,5 @@ export async function createPiMcpBridge(opts: {
     conns.clear();
   };
 
-  return { tools, close };
+  return { tools, discoveryTools, close };
 }

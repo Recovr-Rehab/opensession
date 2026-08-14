@@ -1401,7 +1401,7 @@ export async function* runPi(
           ms: e.ms,
         }),
     });
-    const mcpToolNames = mcpBridge.tools.map((t) => t.name);
+    const mcpToolNames = mcpBridge.discoveryTools.map((t) => t.name);
 
     // Tool policy: ask mode is read-only (no bash/edit/write — conservative
     // v0); code/scratch get the read set + edit/write + the custom bash.
@@ -1417,7 +1417,7 @@ export async function* runPi(
     // in-process built-ins with server-env/unconstrained-path reach are never
     // activated. See the containment section above.
     const guardedOps = makeGuardedToolOps(cwd);
-    const customTools: ToolDefinition<any, any, any>[] = [...mcpBridge.tools];
+    const customTools: ToolDefinition<any, any, any>[] = [...mcpBridge.discoveryTools];
     for (const name of localTools) {
       switch (name) {
         case "read":
