@@ -1324,6 +1324,68 @@ export function PrPanel({
   );
   const showDisplayMenu = codeView !== "flow";
 
+  /* The two pages as a rail rather than a strip. A review is Overview and
+     Files changed, and a menu down the canvas' edge keeps both a click away
+     without spending a row of chrome on them, in the same shape as the app's
+     own sidebar one level out. The items are icon-only, so each carries its
+     name in a tooltip and an aria-label, and the count the strip showed rides
+     the glyph's corner as a badge rather than sitting under it, which kept the
+     item two lines tall for a number nobody reads twice.
+
+     A rail is 48px of permanent width, though, which a phone reading a diff
+     needs more than two buttons do. So at the width where the header already
+     drops its labels, the same pair moves INTO the header: the navigation
+     stays one tap away, and the code gets the canvas. */
+  const pageTabs = (
+    [
+      ["overview", "Overview", IconMessages, comments.length || undefined, true],
+      ["files", "Files changed", IconFile, files.length || undefined, false],
+    ] as const
+  ).map(([key, label, Icon, count, badged]) => (
+    <Tooltip
+      key={key}
+      side={headerCompact ? "bottom" : "right"}
+      label={
+        count === undefined
+          ? label
+          : key === "overview"
+            ? `Overview · ${count} comment${count === 1 ? "" : "s"}`
+            : `${count} file${count === 1 ? "" : "s"} changed`
+      }
+    >
+      <button
+        role="tab"
+        aria-selected={page === key}
+        aria-label={label}
+        /* The selected plate has to name its own background. A
+           `bg-transparent` in the shared half would win or lose the
+           source-order tie against it on Tailwind's output order,
+           not on which one is written last here. */
+        className={`relative flex ${headerCompact ? "size-8" : "size-10"} shrink-0 items-center justify-center rounded-control border-0 transition-colors ${
+          page === key
+            ? "bg-accent-soft text-accent"
+            : "bg-transparent text-dim hover:bg-hover hover:text-fg"
+        }`}
+        onClick={() => setPage(key)}
+      >
+        {/* The badge hangs off the GLYPH's corner, not the plate's:
+            anchored to the box it floats in the box's empty corner and
+            reads as a second object beside the icon rather than a
+            count on it. It carries the accent plate in both states so
+            it stays legible over the selected item's own wash, and it
+            is inert to the pointer so the whole box is still the tab. */}
+        <span className="relative inline-flex">
+          <Icon size={19} />
+          {badged && count !== undefined && (
+            <span className="pointer-events-none absolute -right-2.5 -top-1.5 min-w-[16px] rounded-full bg-accent px-1 py-px text-center text-meta font-semibold leading-[1.3] tabular-nums text-on-accent">
+              {count}
+            </span>
+          )}
+        </span>
+      </button>
+    </Tooltip>
+  ));
+
   return (
     <div
       className="selectable relative flex h-full min-h-0 flex-col overflow-hidden bg-surface"
@@ -1390,6 +1452,23 @@ export function PrPanel({
             </a>
           </Tooltip>
         </h1>
+        {/* The pages, when there is no rail to hold them. They sit between the
+            identity and the actions: still navigation, still one tap, and the
+            badge keeps saying how many comments are waiting on the page you
+            are not reading. */}
+        {headerCompact && (
+          <div
+            /* Wider than the rail's gap: the Overview badge hangs past its
+               plate's right edge, and at a tighter gap it touched the Files
+               tab beside it. */
+            className="flex shrink-0 items-center gap-2"
+            role="tablist"
+            aria-orientation="horizontal"
+            aria-label="Pull request pages"
+          >
+            {pageTabs}
+          </div>
+        )}
         {pr.staging?.url && (
           <Tooltip label="Open the preview environment">
             <a
@@ -1458,73 +1537,19 @@ export function PrPanel({
       </header>
 
       <div className="flex min-h-0 flex-1">
-        {/* The two pages as a rail rather than a strip. A review is Overview
-            and Files changed, and a menu down the canvas' edge keeps both a
-            click away without spending a row of chrome on them, in the same
-            shape as the app's own sidebar one level out. The items are
-            icon-only, so each carries its name in a tooltip and an
-            aria-label, and the count the strip showed rides the glyph's
-            corner as a badge rather than sitting under it, which kept the
-            item two lines tall for a number nobody reads twice. */}
-        <nav
-          className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-line bg-surface pt-2"
-          role="tablist"
-          aria-orientation="vertical"
-          aria-label="Pull request pages"
-        >
-          {/* Only Overview wears its count. A comment count is news about a
-              page you are not on; the file count is already stated twice on
-              the page it leads to (the diff total beside the view control, and
-              "n of m viewed"), so on the rail it would just repeat itself. It
-              stays in the tooltip. */}
-          {([
-            ["overview", "Overview", IconMessages, comments.length || undefined, true],
-            ["files", "Files changed", IconFile, files.length || undefined, false],
-          ] as const).map(([key, label, Icon, count, badged]) => (
-            <Tooltip
-              key={key}
-              side="right"
-              label={
-                count === undefined
-                  ? label
-                  : key === "overview"
-                    ? `Overview · ${count} comment${count === 1 ? "" : "s"}`
-                    : `${count} file${count === 1 ? "" : "s"} changed`
-              }
-            >
-              <button
-                role="tab"
-                aria-selected={page === key}
-                aria-label={label}
-                /* The selected plate has to name its own background. A
-                   `bg-transparent` in the shared half would win or lose the
-                   source-order tie against it on Tailwind's output order,
-                   not on which one is written last here. */
-                className={`relative flex size-10 shrink-0 items-center justify-center rounded-control border-0 transition-colors ${
-                  page === key
-                    ? "bg-accent-soft text-accent"
-                    : "bg-transparent text-dim hover:bg-hover hover:text-fg"
-                }`}
-                onClick={() => setPage(key)}
-              >
-                {/* The badge hangs off the GLYPH's corner, not the plate's:
-                    anchored to the box it floats in the box's empty corner and
-                    reads as a second object beside the icon rather than a
-                    count on it. It carries the accent plate in both states so
-                    it stays legible over the selected item's own wash, and it
-                    is inert to the pointer so the whole box is still the tab. */}
-                <span className="relative inline-flex">
-                  <Icon size={19} />
-                  {badged && count !== undefined && (
-                    <span className="pointer-events-none absolute -right-2.5 -top-1.5 min-w-[16px] rounded-full bg-accent px-1 py-px text-center text-meta font-semibold leading-[1.3] tabular-nums text-on-accent">
-                      {count}
-                    </span>
-                  )}
-                </span>
-              </button>
-            </Tooltip>
-          ))}
-        </nav>
+        {/* The rail, when the canvas can spare the 48px. Its shape and its
+            reasoning live with `pageTabs` above; below that width the same
+            tabs ride the header instead. */}
+        {!headerCompact && (
+          <nav
+            className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-line bg-surface pt-2"
+            role="tablist"
+            aria-orientation="vertical"
+            aria-label="Pull request pages"
+          >
+            {pageTabs}
+          </nav>
+        )}
 
         <main
           className={`min-w-0 flex-1 overflow-y-auto bg-surface [--review-file-header-top:44px] ${reviewing ? "pb-24 phone:pb-36" : "pb-4"}`}
