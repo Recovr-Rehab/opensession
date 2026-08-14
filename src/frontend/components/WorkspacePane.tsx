@@ -232,11 +232,12 @@ export function WorkspacePane({
 					<div className="text-meta font-semibold uppercase tracking-wide text-faint">
 						Sessions
 					</div>
+					{/* This panel sits beside the workspace home AND beside a pane
+					    (Review, Conversation, Video), and only the home has a composer,
+					    so the empty state can't point at one. The branch is a row
+					    above either way. */}
 					{workspaceSessions.length === 0 ? (
-						<div className="text-dim text-supporting mt-1.5">
-							None yet. The composer below starts the first one.
-							{workspace.branch ? " on the PR's branch" : ""}.
-						</div>
+						<div className="text-dim text-supporting mt-1.5">None yet.</div>
 					) : (
 						<div className="flex flex-col mt-1.5">
 							{workspaceSessions.map((c) => (
@@ -331,10 +332,11 @@ export function WorkspacePane({
 							<span className="text-label">{workspace.branch}</span>
 						)}
 					</div>
+					{/* The repo and branch are the line directly above, so the empty
+					    state doesn't repeat them. */}
 					{workspaceSessions.length === 0 && (
 						<div className="text-dim text-[13px] mt-5">
-							No sessions in this workspace yet. Start one below.
-							{workspace.branch ? " on the PR's branch" : ""}.
+							No sessions yet. Start one below.
 						</div>
 					)}
 				</div>
