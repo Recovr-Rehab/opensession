@@ -31,10 +31,14 @@ export interface Props {
 	prsActive: boolean;
 	/** Open the pull request list. */
 	onOpenPrs: () => void;
-	/** True while the People page is open: highlights its entry. */
-	peopleActive: boolean;
-	/** Open the People page. */
-	onOpenPeople: () => void;
+	/**
+	 * True while the Feed page is open: highlights its entry. Note this is the
+	 * Feed *tool*, not the sidebar's `feeds` (the Slack/Linear/GitHub sources,
+	 * which the UI calls Sources).
+	 */
+	feedActive: boolean;
+	/** Open the Feed page. */
+	onOpenFeed: () => void;
 	/** True while the Tasks tool is open. */
 	tasksActive: boolean;
 	/** Open the current user's task list. */

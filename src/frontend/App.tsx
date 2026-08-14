@@ -58,7 +58,7 @@ import {
 	type CommandPaletteAction,
 } from "./components/SessionSearch";
 import { Prs } from "./components/Prs";
-import { People } from "./components/People";
+import { Feed } from "./components/Feed";
 import { CatchUpDeck } from "./components/CatchUpDeck";
 import { SupportTinder } from "./components/SupportTinder";
 import { Automations } from "./components/Automations";
@@ -98,7 +98,7 @@ import {
 	IconListCircles,
 	IconMessages,
 	IconMoon,
-	IconPeople,
+	IconFeed,
 	IconPlus,
 	IconPullRequest,
 	IconSearch,
@@ -210,7 +210,7 @@ type Route =
 	// had always listed. On a phone this view is the sidebar itself (the tool
 	// is desktop-only), so it doubles as "nothing pushed on top".
 	| { view: "prs" }
-	| { view: "people" }
+	| { view: "feed" }
 	| { view: "new"; prompt?: string }
 	| { view: "session"; id: string }
 	// The workspace container without a session selected: its view tabs (Review /
@@ -340,7 +340,9 @@ function parseRoute(pathname: string): Route {
 			reportId: reportsMatch[2] ? decodeURIComponent(reportsMatch[2]) : undefined,
 		};
 	if (pathname === "/analytics") return { view: "analytics" };
-	if (pathname === "/people") return { view: "people" };
+	// /people is what the Feed page was called for half a day; keep old
+	// links and open tabs landing somewhere real.
+	if (pathname === "/feed" || pathname === "/people") return { view: "feed" };
 	if (pathname === "/tasks") return { view: "tasks" };
 	if (pathname === "/new") return { view: "new" };
 	// <base>/automations/<id-or-name>: the automations page with one selected
@@ -406,8 +408,8 @@ function routePath(route: Route): string {
 				: `${BASE_PATH}/reports`;
 		case "analytics":
 			return `${BASE_PATH}/analytics`;
-		case "people":
-			return `${BASE_PATH}/people`;
+		case "feed":
+			return `${BASE_PATH}/feed`;
 		case "tasks":
 			return `${BASE_PATH}/tasks`;
 		case "new":
@@ -2881,8 +2883,8 @@ export function App(
 				? "Archived"
 				: route.view === "tasks"
 					? "Tasks"
-				: route.view === "people"
-					? "People"
+				: route.view === "feed"
+					? "Feed"
 				: route.view === "new"
 					? "New session"
 					: route.view === "workspace"
@@ -3048,12 +3050,12 @@ export function App(
 			run: () => navigate({ view: "prs" }),
 		},
 		{
-			id: "people",
-			label: "People",
-			description: "Open the team",
+			id: "feed",
+			label: "Feed",
+			description: "Open what the team has been shipping",
 			category: "Navigate",
-			icon: <IconPeople size={18} />,
-			run: () => navigate({ view: "people" }),
+			icon: <IconFeed size={18} />,
+			run: () => navigate({ view: "feed" }),
 		},
 		// Catch up is offered at phone widths only (lib/sidebar-tools.ts), so
 		// the palette doesn't offer it where the sidebar doesn't.
@@ -3645,8 +3647,8 @@ export function App(
 							selectedId={currentSession?.id || null}
 							prsActive={route.view === "prs"}
 							onOpenPrs={() => navigate({ view: "prs" })}
-							peopleActive={route.view === "people"}
-							onOpenPeople={() => navigate({ view: "people" })}
+							feedActive={route.view === "feed"}
+							onOpenFeed={() => navigate({ view: "feed" })}
 							tasksActive={route.view === "tasks"}
 							onOpenTasks={() => navigate({ view: "tasks" })}
 							taskCount={taskCount}
@@ -3950,8 +3952,8 @@ export function App(
 							/>
 						) : route.view === "analytics" ? (
 							<Analytics />
-						) : route.view === "people" ? (
-							<People
+						) : route.view === "feed" ? (
+							<Feed
 								sessions={sessions}
 								teamViewing={teamViewing}
 								onSelect={(s) => navigate({ view: "session", id: s.id })}

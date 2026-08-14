@@ -139,7 +139,7 @@ import {
 	IconGlobe,
 	IconListCircles,
 	IconMessages,
-	IconPeople,
+	IconFeed,
 	IconPullRequest,
 } from "./icons";
 import { Button } from "../ui/button";
@@ -267,8 +267,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	selectedId,
 	prsActive,
 	onOpenPrs,
-	peopleActive,
-	onOpenPeople,
+	feedActive,
+	onOpenFeed,
 	tasksActive,
 	onOpenTasks,
 	taskCount = 0,
@@ -2308,12 +2308,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		count?: number;
 	}> = [
 		{
-			id: "people",
-			label: SIDEBAR_TOOL_LABELS.people,
-			icon: <IconPeople />,
-			active: peopleActive,
-			onClick: onOpenPeople,
-			title: "Your teammates and their work",
+			id: "feed",
+			label: SIDEBAR_TOOL_LABELS.feed,
+			icon: <IconFeed />,
+			active: feedActive,
+			onClick: onOpenFeed,
+			title: "What the team has been shipping",
 		},
 		{
 			id: "prs",
@@ -4146,14 +4146,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								</ContextMenu.Popup>
 							</ContextMenu.Root>
 						);
-						// People carries the team at its right edge, with every face
-						// shown neutrally, and lets you pick up someone's sidebar
-						// without leaving the row you're on. The pile opens the same
-						// lens menu the People page writes, so the row is both a way in
+						// Feed carries the team at its right edge, with every face shown
+						// neutrally, and lets you pick up someone's sidebar without
+						// leaving the row you're on. The pile opens the same lens menu
+						// the Feed page's own chips write, so the row is both a way in
 						// and the shortcut past it. It has to be a sibling of the row,
 						// not a child: a button can't nest one. Phones render the tools
 						// as a card strip, where there's no room.
-						if (tool.id !== "people" || isPhone || team.length === 0) return row;
+						if (tool.id !== "feed" || isPhone || team.length === 0) return row;
 						return (
 							<div key={tool.id} className="relative">
 								{row}

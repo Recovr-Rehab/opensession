@@ -1,8 +1,8 @@
-// People leads. The tools below it are places to read work; People is who the
-// work belongs to, and picking someone re-scopes the whole sidebar under it,
-// so it reads as the thing the rest is filtered by rather than a peer of them.
+// Feed leads. The tools below it are places you go to act on one kind of
+// thing; Feed is what the team has actually been doing, which is the page you
+// want in front of you when you have not decided what to work on yet.
 export const SIDEBAR_TOOL_IDS = [
-	"people",
+	"feed",
 	"prs",
 	"tasks",
 	"catchup",
@@ -14,7 +14,7 @@ export const SIDEBAR_TOOL_IDS = [
 export type SidebarToolId = (typeof SIDEBAR_TOOL_IDS)[number];
 
 export const SIDEBAR_TOOL_LABELS: Record<SidebarToolId, string> = {
-	people: "People",
+	feed: "Feed",
 	prs: "Pull requests",
 	tasks: "Tasks",
 	catchup: "Catch up",
@@ -24,13 +24,16 @@ export const SIDEBAR_TOOL_LABELS: Record<SidebarToolId, string> = {
 };
 
 /**
- * `prs` was called `home` until 2026-08-14. There was never a home: the page
- * has always been the pull request list, and the name promised a place the
- * app doesn't have — you go to a tool, not back to a lobby. Stored preferences
- * still carry the old id, so it is read as the new one rather than dropped,
- * which would silently un-hide the tool for anyone who had turned it off.
+ * Both of these were renamed on 2026-08-14. `home` became `prs` because there
+ * was never a home: the page has always been the pull request list, and the
+ * name promised a place the app does not have. `people` became `feed` because
+ * the team is how you scope that page, not what it is for.
+ *
+ * Stored preferences still carry the old ids, so they are read as the new ones
+ * rather than dropped, which would silently un-hide a tool someone had turned
+ * off.
  */
-const RENAMED_TOOL_IDS: Record<string, SidebarToolId> = { home: "prs" };
+const RENAMED_TOOL_IDS: Record<string, SidebarToolId> = { home: "prs", people: "feed" };
 
 // The swipe decks are one card at a time, moved on with a thumb. That is the
 // wrong shape for a desktop window, which already shows the same unread
@@ -48,14 +51,14 @@ export function toolFitsViewport(id: SidebarToolId, isPhone: boolean): boolean {
 
 const HIDDEN_TOOLS_KEY = "opensession-sidebar-hidden-tools";
 const TOOLS_CHANGED_EVENT = "opensession-sidebar-tools-changed";
-// A new account starts with the two tools that need nothing set up: Pull
-// requests and People. Every other tool is either empty until something else
+// A new account starts with the two tools that need nothing set up: Feed and
+// Pull requests. Every other tool is either empty until something else
 // exists (Tasks needs todos, Reports needs automations) or needs an
 // integration (Support Tinder, Analytics), so shipping them on makes the
 // sidebar look busy and broken at once. They're one click away in the Tools
 // band's ••• menu and in Settings. Derived from the visible list so a tool
 // added later defaults to hidden rather than silently showing up for everyone.
-const DEFAULT_VISIBLE_TOOLS: SidebarToolId[] = ["people", "prs"];
+const DEFAULT_VISIBLE_TOOLS: SidebarToolId[] = ["feed", "prs"];
 const DEFAULT_HIDDEN_TOOLS: SidebarToolId[] = SIDEBAR_TOOL_IDS.filter(
 	(id) => !DEFAULT_VISIBLE_TOOLS.includes(id),
 );
