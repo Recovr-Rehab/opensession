@@ -2161,15 +2161,6 @@ export function SessionViewer({
 				: ready && cursor?.sessionId === session.id
 					? { sinceOffset: cursor.offset, sinceRev: cursor.rev }
 					: {};
-		send({
-			type: "watch",
-			sessionId: session.id,
-			user: getCurrentUser(),
-			supportsSeq: true,
-			supportsChangeSeq: true,
-			...resume,
-		});
-
 		const unsubscribe = addHandler((msg) => {
 			// Session-scoped messages carry the session id — drop anything meant
 			// for a different session. Without this, a socket race (or a lingering
@@ -2499,6 +2490,17 @@ export function SessionViewer({
 					}
 					break;
 			}
+		});
+		// Register first: `watch` synchronously receives a presence snapshot. On a
+		// reconnect, sending before this handler exists can drop the empty snapshot
+		// and leave a departed viewer's face rendered indefinitely.
+		send({
+			type: "watch",
+			sessionId: session.id,
+			user: getCurrentUser(),
+			supportsSeq: true,
+			supportsChangeSeq: true,
+			...resume,
 		});
 
 		return () => {
