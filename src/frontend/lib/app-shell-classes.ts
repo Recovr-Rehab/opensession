@@ -119,8 +119,9 @@ export const DETAIL_PANE =
  * `--split-preview-share` with the target column's real ratio. The 12px it
  * subtracts is the 8px inset on its own side plus the gutter to the divider.
  *
- * The 36px is the desktop tab strip (32px, see `TAB_STRIP`) plus the same 4px
- * gutter the other edges keep; it moves with the band's height.
+ * The 36px is where the desktop tab strip ends (a 40px band pulled 8px up into
+ * the header, see `TAB_STRIP`) plus the same 4px gutter the other edges keep;
+ * it moves with the band.
  */
 export const tabSplitDropPreviewClass = (side: "left" | "right") =>
 	"pointer-events-none absolute top-[calc(var(--desktop-header-h)+36px)] bottom-2 z-[25] " +

@@ -65,11 +65,13 @@ export const TAB_STRIP =
 	// content. The header above deliberately drops its own border when this strip
 	// follows, so adding a top inset here would recreate the unwanted middle line.
 	//
-	// 32px, not 40: the tabs name the session the header above them just named,
-	// so they should sit under that title rather than a row away from it. The
-	// band is the only place that space can come from, since the header holds
-	// its own height to stay level with the sidebar's brand row.
-	"desktop:h-8 desktop:items-stretch desktop:py-0 " +
+	// The band is pulled 8px up into the header. The tabs name the session the
+	// header just named, so they should read as part of that title block rather
+	// than a row below it, and the space between the two is the header's own
+	// bottom air: its title is centred in 48px, so the band overlaps padding
+	// and never the text. Taking it here rather than from either box keeps the
+	// header level with the sidebar's brand row and the tabs at full size.
+	"desktop:-mt-2 desktop:h-10 desktop:items-stretch desktop:py-0 " +
 	"desktop:shadow-[inset_0_-1px_0_var(--border)] " +
 	// Phone: pulled out of flow and pinned flush under the header's bottom edge,
 	// so it reads as fixed chrome rather than a strip the transcript scrolls by.
