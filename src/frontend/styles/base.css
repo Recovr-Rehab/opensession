@@ -1299,10 +1299,11 @@ html.wco .app-body.sidebar-collapsed
    its slot. The circle hangs off THAT span rather than off the pill, so it
    stays fixed to the slot whatever the wash around it does, and the gap either
    side of it is the slot's own arithmetic: 13.8px at the composer's 14px type,
-   less a 0.62em circle set 1px in, leaves 4px of wash before the face and 4.1px
-   between it and the first letter. The size is in `em` because the slot is: the
-   phone composer sets 16px, where a fixed circle would sit small in a wider
-   gap. Absolute, so it takes part in no layout. */
+   plus the 3px the wash reaches to its left, less a 0.74em circle, leaves 3px
+   of wash before the face and 3.4px between it and the first letter. The size
+   is in `em` because the slot is: the phone composer sets 16px, where a fixed
+   circle would sit small in a wider gap. Absolute, so it takes no part in
+   layout. */
 .composer-hl .cmp-at {
 	position: relative;
 	color: transparent;
@@ -1310,10 +1311,10 @@ html.wco .app-body.sidebar-collapsed
 .composer-hl .cmp-faced .cmp-at::before {
 	content: "";
 	position: absolute;
-	left: 1px;
+	left: 0;
 	top: 50%;
-	width: 0.62em;
-	height: 0.62em;
+	width: 0.74em;
+	height: 0.74em;
 	transform: translateY(-50%);
 	border-radius: 999px;
 	background: var(--cmp-face) center / cover no-repeat, var(--bg-active);
