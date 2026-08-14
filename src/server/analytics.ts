@@ -25,6 +25,7 @@ import { configuredRepos, defaultRepo, githubBotLogins } from "./config";
 import { ghRateLimited, isGhRateLimitMsg, noteGhRateLimited } from "./github-limit";
 import { readFeedback } from "../agents/github/feedback";
 import type { FeedbackRecord } from "../agents/github/feedback-gates";
+import { engineUsageForDates } from "./engine-usage";
 
 const AUDIT_DIR = stateDir("audit");
 const CACHE_DIR = stateDir("analytics-cache");
@@ -737,22 +738,24 @@ export interface AnalyticsSummary {
 		cacheReadTokens: number;
 		cacheWriteTokens: number;
 		totalTokens: number;
+		/** API list-price equivalent of every model request in range. Nothing
+		 *  is billed per token (every model runs on a subscription pool), so
+		 *  this is comparable value, not spend. */
 		costUsd: number;
-		/** Turns that reported a price. The rest run on subscription pools
-		 *  and report $0, so cost covers `costedTurns` of `turns`. */
-		costedTurns: number;
-		/** Turns whose tokens and cost were recorded before per-step accounting
-		 *  (2026-08-14) and so undercount by roughly 7x. Zero once a range sits
-		 *  entirely after the fix, so a caveat built on it retires itself. */
-		legacyUsageTurns: number;
+		/** Model requests behind the turns above. One turn is many requests. */
+		requests: number;
+		/** Requests on a model with no catalog price, excluded from costUsd. */
+		unpricedRequests: number;
 		prsOpened: number;
 		prsMerged: number;
 		allPrsOpened: number;
 		allPrsMerged: number;
 		activePeople: number;
 	};
+	/** Per model, from the engine stores. `turns` is audit-derived (a turn is
+	 *  ours); everything else counts model requests. */
 	models: Array<
-		{ model: string; turns: number; totalTokens: number; costUsd: number; costedTurns: number } & {
+		{ model: string; turns: number; requests: number; totalTokens: number; costUsd: number } & {
 			[K in keyof TokenTotals as `${K}Tokens`]: number;
 		}
 	>;
@@ -762,8 +765,6 @@ export interface AnalyticsSummary {
 		sessionsActive: number;
 		turns: number;
 		outputTokens: number;
-		totalTokens: number;
-		costUsd: number;
 		/** This person's activity split by repo ("" = not attributable). */
 		repos: Array<{ repo: string; sessions: number; turns: number; outputTokens: number }>;
 	}>;
@@ -773,8 +774,6 @@ export interface AnalyticsSummary {
 		sessionsActive: number;
 		turns: number;
 		outputTokens: number;
-		totalTokens: number;
-		costUsd: number;
 		errors: number;
 	}>;
 	repos: Array<{
@@ -784,8 +783,6 @@ export interface AnalyticsSummary {
 		sessions: number;
 		turns: number;
 		outputTokens: number;
-		totalTokens: number;
-		costUsd: number;
 		errors: number;
 		prsOpened: number;
 		prsMerged: number;
@@ -873,8 +870,8 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 		cacheWriteTokens: 0,
 		totalTokens: 0,
 		costUsd: 0,
-		costedTurns: 0,
-		legacyUsageTurns: 0,
+		requests: 0,
+		unpricedRequests: 0,
 		prsOpened: 0,
 		prsMerged: 0,
 		allPrsOpened: 0,
@@ -892,8 +889,6 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 		sessionsActive: Set<string>;
 		turns: number;
 		outputTokens: number;
-		totalTokens: number;
-		costUsd: number;
 		errors: number;
 		byRepo: Map<string, OwnerRepoAgg>;
 	}
@@ -905,8 +900,6 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 		sessions: Set<string>;
 		turns: number;
 		outputTokens: number;
-		totalTokens: number;
-		costUsd: number;
 		errors: number;
 	}
 	const repoActivity = new Map<string, RepoActivity>();
@@ -915,7 +908,7 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 		if (!a)
 			repoActivity.set(
 				repo,
-				(a = { sessions: new Set(), turns: 0, outputTokens: 0, totalTokens: 0, costUsd: 0, errors: 0 }),
+				(a = { sessions: new Set(), turns: 0, outputTokens: 0, errors: 0 }),
 			);
 		return a;
 	};
@@ -929,8 +922,6 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 					sessionsActive: new Set(),
 					turns: 0,
 					outputTokens: 0,
-					totalTokens: 0,
-					costUsd: 0,
 					errors: 0,
 					byRepo: new Map(),
 				}),
@@ -963,9 +954,16 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 		agg.sessionsCreated++;
 	}
 
+	// Tokens and cost come from the engines' own message stores, not the audit
+	// log: one row per model request, so sub-sessions and multi-step turns are
+	// counted. See engine-usage.ts for why the audit log cannot do this.
+	const engineDays = await engineUsageForDates(dates);
+	const engineModels = new Map<string, { requests: number; costUsd: number } & TokenTotals>();
+
 	const reviewByDate = new Map<string, ReviewDayAgg>();
 	for (const date of dates) {
 		const r = cachedRollup(date);
+		const engine = engineDays.get(date);
 		reviewByDate.set(date, r.review || emptyReviewAgg());
 		const sessionsByKind: Record<string, number> = {};
 		for (const [id, s] of Object.entries(r.bySession)) {
@@ -993,16 +991,12 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 			agg.sessionsActive.add(id);
 			agg.turns += s.turns;
 			agg.outputTokens += s.output;
-			agg.totalTokens += s.tokens || 0;
-			agg.costUsd += s.costUsd || 0;
 			agg.errors += s.errors;
 			const repoKey = m?.repo || "";
 			const ra = repoActivityOf(repoKey);
 			ra.sessions.add(id);
 			ra.turns += s.turns;
 			ra.outputTokens += s.output;
-			ra.totalTokens += s.tokens || 0;
-			ra.costUsd += s.costUsd || 0;
 			ra.errors += s.errors;
 			let orr = agg.byRepo.get(repoKey);
 			if (!orr) agg.byRepo.set(repoKey, (orr = { sessions: new Set(), turns: 0, outputTokens: 0 }));
@@ -1012,9 +1006,19 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 		}
 		const outputByModel: Record<string, number> = {};
 		const costByModel: Record<string, number> = {};
+		for (const m of engine?.byModel || []) {
+			outputByModel[m.model] = (outputByModel[m.model] || 0) + m.output;
+			if (m.costUsd) costByModel[m.model] = (costByModel[m.model] || 0) + m.costUsd;
+			const agg = engineModels.get(m.model) || { requests: 0, costUsd: 0, ...emptyTokens() };
+			agg.requests += m.requests;
+			agg.input += m.input;
+			agg.output += m.output;
+			agg.cacheRead += m.cacheRead;
+			agg.cacheWrite += m.cacheWrite;
+			agg.costUsd += m.costUsd;
+			engineModels.set(m.model, agg);
+		}
 		const addModel = (model: string, m: ModelAgg) => {
-			outputByModel[model] = (outputByModel[model] || 0) + m.output;
-			if (m.costUsd) costByModel[model] = (costByModel[model] || 0) + m.costUsd;
 			const agg = modelAgg.get(model) || emptyModelAgg();
 			agg.turns += m.turns;
 			agg.input += m.input;
@@ -1040,12 +1044,12 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 			turns: r.turns,
 			errors: r.errors,
 			cancelled: r.cancelled,
-			outputTokens: r.tokens.output,
-			inputTokens: r.tokens.input,
-			cacheReadTokens: r.tokens.cacheRead,
-			cacheWriteTokens: r.tokens.cacheWrite,
-			totalTokens: r.tokens.input + r.tokens.output + r.tokens.cacheRead + r.tokens.cacheWrite,
-			costUsd: round2(r.costUsd || 0),
+			outputTokens: engine?.output || 0,
+			inputTokens: engine?.input || 0,
+			cacheReadTokens: engine?.cacheRead || 0,
+			cacheWriteTokens: engine?.cacheWrite || 0,
+			totalTokens: engine?.totalTokens || 0,
+			costUsd: round2(engine?.costUsd || 0),
 			outputByModel,
 			costByModel: Object.fromEntries(Object.entries(costByModel).map(([m, c]) => [m, round2(c)])),
 			prsOpened,
@@ -1057,13 +1061,13 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 		totals.cancelled += r.cancelled;
 		totals.oneshots += r.oneshots;
 		totals.durationMs += r.durationMs;
-		totals.outputTokens += r.tokens.output;
-		totals.inputTokens += r.tokens.input;
-		totals.cacheReadTokens += r.tokens.cacheRead;
-		totals.cacheWriteTokens += r.tokens.cacheWrite;
-		totals.costUsd += r.costUsd || 0;
-		totals.costedTurns += r.costedTurns || 0;
-		totals.legacyUsageTurns += r.legacyUsageTurns || 0;
+		totals.outputTokens += engine?.output || 0;
+		totals.inputTokens += engine?.input || 0;
+		totals.cacheReadTokens += engine?.cacheRead || 0;
+		totals.cacheWriteTokens += engine?.cacheWrite || 0;
+		totals.costUsd += engine?.costUsd || 0;
+		totals.requests += engine?.requests || 0;
+		totals.unpricedRequests += engine?.unpricedRequests || 0;
 	}
 	totals.totalTokens =
 		totals.inputTokens + totals.outputTokens + totals.cacheReadTokens + totals.cacheWriteTokens;
@@ -1081,8 +1085,6 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 					sessions: 0,
 					turns: 0,
 					outputTokens: 0,
-					totalTokens: 0,
-					costUsd: 0,
 					errors: 0,
 					prsOpened: 0,
 					prsMerged: 0,
@@ -1098,8 +1100,6 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 		r.sessions = a.sessions.size;
 		r.turns = a.turns;
 		r.outputTokens = a.outputTokens;
-		r.totalTokens = a.totalTokens;
-		r.costUsd = round2(a.costUsd);
 		r.errors = a.errors;
 	}
 	for (const pr of allPrs) {
@@ -1120,19 +1120,20 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 		totals.allPrsMerged += r.allMerged;
 	}
 
-	const models = [...modelAgg.entries()]
+	const models = [...engineModels.entries()]
 		.map(([model, m]) => ({
 			model,
-			turns: m.turns,
+			// Turns are ours (audit); requests and tokens are the engine's.
+			turns: modelAgg.get(model)?.turns || 0,
+			requests: m.requests,
 			inputTokens: m.input,
 			outputTokens: m.output,
 			cacheReadTokens: m.cacheRead,
 			cacheWriteTokens: m.cacheWrite,
 			totalTokens: m.input + m.output + m.cacheRead + m.cacheWrite,
 			costUsd: round2(m.costUsd),
-			costedTurns: m.costedTurns,
 		}))
-		.sort((a, b) => b.outputTokens - a.outputTokens);
+		.sort((a, b) => b.costUsd - a.costUsd || b.totalTokens - a.totalTokens);
 	const people = [...peopleAgg.entries()]
 		.map(([name, a]) => ({
 			name,
@@ -1140,8 +1141,6 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 			sessionsActive: a.sessionsActive.size,
 			turns: a.turns,
 			outputTokens: a.outputTokens,
-			totalTokens: a.totalTokens,
-			costUsd: round2(a.costUsd),
 			repos: [...a.byRepo.entries()]
 				.map(([repo, r]) => ({ repo, sessions: r.sessions.size, turns: r.turns, outputTokens: r.outputTokens }))
 				.sort((x, y) => y.outputTokens - x.outputTokens),
@@ -1156,8 +1155,6 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 			sessionsActive: a.sessionsActive.size,
 			turns: a.turns,
 			outputTokens: a.outputTokens,
-			totalTokens: a.totalTokens,
-			costUsd: round2(a.costUsd),
 			errors: a.errors,
 		}))
 		.sort((a, b) => b.sessionsActive - a.sessionsActive || b.runs - a.runs);

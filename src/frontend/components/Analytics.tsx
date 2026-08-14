@@ -434,15 +434,11 @@ export function Analytics() {
 			return row;
 		});
 
-		// Cost per day by model. Only the API-billed models report a price, so
-		// this chart is deliberately a subset of the turns above it.
+		// Cost per day by model, priced from the engine stores' per-request
+		// token counts against the model catalog.
 		const costUsd = data.totals.costUsd ?? 0;
-		const costedTurns = data.totals.costedTurns ?? 0;
+		const requests = data.totals.requests ?? 0;
 		const hasCost = costUsd > 0;
-		// Turns from before per-step accounting recorded only the last model
-		// request of each turn. A range straddling the fix mixes the two, which
-		// looks like a step change in usage rather than a change in measurement.
-		const legacyTurns = data.totals.legacyUsageTurns ?? 0;
 		const costModels = [...data.models]
 			.filter((m) => (m.costUsd ?? 0) > 0)
 			.sort((a, b) => (b.costUsd ?? 0) - (a.costUsd ?? 0))
@@ -511,7 +507,7 @@ export function Analytics() {
 		});
 		const splitDate = labels[Math.floor(labels.length / 2)] || "";
 
-		return { labels, kindSeries, kindValues, modelSeries, modelValues, tokenSeries, tokenValues, totalTokens, costSeries, costValues, costUsd, costedTurns, hasCost, legacyTurns, prSeries, prValues, turnSeries, turnValues, factorySeries, factoryValues, rq, reviewSeries, reviewValues, splitDate, repoColor, personRepoRows, maxPersonOutput, personRepoSeries };
+		return { labels, kindSeries, kindValues, modelSeries, modelValues, tokenSeries, tokenValues, totalTokens, costSeries, costValues, costUsd, requests, hasCost, prSeries, prValues, turnSeries, turnValues, factorySeries, factoryValues, rq, reviewSeries, reviewValues, splitDate, repoColor, personRepoRows, maxPersonOutput, personRepoSeries };
 	}, [data]);
 
 	// Deliberately NOT ui/input's field: these two sit inside the range row
@@ -603,8 +599,8 @@ export function Analytics() {
 								value={derived.hasCost ? fmtUsd(derived.costUsd) : "–"}
 								sub={
 									derived.hasCost
-										? `API-equivalent · ${pct(derived.costedTurns, data.totals.turns)} of turns priced`
-										: "no priced turns in range"
+										? `at API list price · ${fmtInt(derived.requests)} model requests`
+										: "no priced requests in range"
 								}
 							/>
 							<StatTile
@@ -657,13 +653,6 @@ export function Analytics() {
 								series={derived.tokenSeries}
 							>
 								<BarChart labels={derived.labels} series={derived.tokenSeries} values={derived.tokenValues} mode="stacked" />
-								{derived.legacyTurns > 0 && (
-									<p className="m-0 mt-2 text-meta text-faint">
-										{fmtInt(derived.legacyTurns)} of {fmtInt(data.totals.turns)} turns in this range were
-										recorded before per-step accounting (14 Aug), which kept only the last model request of
-										each turn. Their tokens and cost read about 7x low.
-									</p>
-								)}
 							</ChartCard>
 							{derived.hasCost && (
 								<ChartCard
@@ -680,9 +669,8 @@ export function Analytics() {
 										formatTick={fmtUsdTick}
 									/>
 									<p className="m-0 mt-2 text-meta text-faint">
-										What these turns would have cost at API list price, not what was paid: the models run on
-										subscription pools. Models the engine does not price report nothing at all, so this covers{" "}
-										{fmtInt(derived.costedTurns)} of {fmtInt(data.totals.turns)} turns in range.
+										What this traffic would have cost on the API, not what was paid: every model runs on a
+										subscription pool. Counted per model request, so tool calls and sub-agents are included.
 									</p>
 								</ChartCard>
 							)}
@@ -806,7 +794,7 @@ export function Analytics() {
 												{/* Headline numbers first, breakdown after: at phone width the
 												    table scrolls, and Tokens/Cost are what must survive the cut. */}
 												<th className="pb-1.5 font-medium">Model</th>
-												<th className="pb-1.5 text-right font-medium">Turns</th>
+												<th className="pb-1.5 text-right font-medium">Requests</th>
 												<th className="pb-1.5 text-right font-medium">Tokens</th>
 												<th className="pb-1.5 text-right font-medium">Cost</th>
 												<th className="pb-1.5 text-right font-medium">In</th>
@@ -820,7 +808,7 @@ export function Analytics() {
 													<td className="max-w-32 truncate py-1.5 text-fg" title={m.model}>
 														{m.model}
 													</td>
-													<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(m.turns)}</td>
+													<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(m.requests ?? m.turns)}</td>
 													<td className="py-1.5 text-right tabular-nums text-fg">
 														{fmt(
 															m.totalTokens ??
@@ -836,13 +824,13 @@ export function Analytics() {
 										</tbody>
 									</table>
 								</div>
-								{derived.hasCost && (
+								{(data.totals.unpricedRequests ?? 0) > 0 && (
 									<p className="m-0 mt-2 text-meta text-faint">
-										A dash means the model bills against a subscription pool, not per token.
+										A dash means the model carries no catalog price, so its requests are left out of the total.
 									</p>
 								)}
 							</ChartCard>
-							<ChartCard title="Repos" subtitle="Sessions, turns, tokens and PRs per repo">
+							<ChartCard title="Repos" subtitle="Sessions, turns and PRs per repo">
 								<div className="overflow-x-auto">
 									<table className="w-full border-collapse text-label">
 										<thead>
@@ -850,8 +838,6 @@ export function Analytics() {
 												<th className="pb-1.5 font-medium">Repo</th>
 												<th className="pb-1.5 text-right font-medium">Sessions</th>
 												<th className="pb-1.5 text-right font-medium">Turns</th>
-												<th className="pb-1.5 text-right font-medium">Tokens</th>
-												<th className="pb-1.5 text-right font-medium">Cost</th>
 												<th className="pb-1.5 text-right font-medium">Opened</th>
 												<th className="pb-1.5 text-right font-medium">Merged</th>
 												<th className="pb-1.5 text-right font-medium">Share</th>
@@ -865,10 +851,6 @@ export function Analytics() {
 													</td>
 													<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(r.sessions || 0)}</td>
 													<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(r.turns || 0)}</td>
-													<td className="py-1.5 text-right tabular-nums text-dim">
-														{fmt(r.totalTokens ?? r.outputTokens ?? 0)}
-													</td>
-													<td className="py-1.5 text-right tabular-nums text-dim">{fmtUsdCell(r.costUsd ?? 0)}</td>
 													<td className="py-1.5 text-right tabular-nums text-dim">
 														{fmtInt(r.prsOpened)} <span className="text-faint">/ {fmtInt(r.allOpened)}</span>
 													</td>
@@ -890,7 +872,7 @@ export function Analytics() {
 						</div>
 
 						<div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
-							<ChartCard title="People" subtitle="Sessions, turns, tokens and cost per person">
+							<ChartCard title="People" subtitle="Sessions and turns per person">
 								<div className="overflow-x-auto">
 									<table className="w-full border-collapse text-label">
 										<thead>
@@ -899,8 +881,6 @@ export function Analytics() {
 												<th className="pb-1.5 text-right font-medium">Created</th>
 												<th className="pb-1.5 text-right font-medium">Active</th>
 												<th className="pb-1.5 text-right font-medium">Turns</th>
-												<th className="pb-1.5 text-right font-medium">Tokens</th>
-												<th className="pb-1.5 text-right font-medium">Cost</th>
 											</tr>
 										</thead>
 										<tbody>
@@ -910,17 +890,13 @@ export function Analytics() {
 													<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(p.sessionsCreated)}</td>
 													<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(p.sessionsActive)}</td>
 													<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(p.turns)}</td>
-													<td className="py-1.5 text-right tabular-nums text-dim">
-														{fmt(p.totalTokens ?? p.outputTokens)}
-													</td>
-													<td className="py-1.5 text-right tabular-nums text-dim">{fmtUsdCell(p.costUsd ?? 0)}</td>
 												</tr>
 											))}
 										</tbody>
 									</table>
 								</div>
 							</ChartCard>
-							<ChartCard title="Automations" subtitle="Runs, turns, tokens and cost per automation">
+							<ChartCard title="Automations" subtitle="Runs, turns and errors per automation">
 								<div className="overflow-x-auto">
 									<table className="w-full border-collapse text-label">
 										<thead>
@@ -928,8 +904,6 @@ export function Analytics() {
 												<th className="pb-1.5 font-medium">Automation</th>
 												<th className="pb-1.5 text-right font-medium">Runs</th>
 												<th className="pb-1.5 text-right font-medium">Turns</th>
-												<th className="pb-1.5 text-right font-medium">Tokens</th>
-												<th className="pb-1.5 text-right font-medium">Cost</th>
 												<th className="pb-1.5 text-right font-medium">Errors</th>
 											</tr>
 										</thead>
@@ -941,10 +915,6 @@ export function Analytics() {
 													</td>
 													<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(a.runs)}</td>
 													<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(a.turns)}</td>
-													<td className="py-1.5 text-right tabular-nums text-dim">
-														{fmt(a.totalTokens ?? a.outputTokens)}
-													</td>
-													<td className="py-1.5 text-right tabular-nums text-dim">{fmtUsdCell(a.costUsd ?? 0)}</td>
 													<td className={`py-1.5 text-right tabular-nums ${a.errors ? "text-red" : "text-faint"}`}>
 														{fmtInt(a.errors)}
 													</td>

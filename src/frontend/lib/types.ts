@@ -886,8 +886,8 @@ export interface AnalyticsModel {
 	cacheWriteTokens: number;
 	totalTokens?: number;
 	costUsd?: number;
-	/** Turns that reported a price; the rest bill against a subscription pool. */
-	costedTurns?: number;
+	/** Model requests behind those turns. One turn is many requests. */
+	requests?: number;
 }
 
 export interface AnalyticsPersonRepo {
@@ -904,8 +904,6 @@ export interface AnalyticsPerson {
 	sessionsActive: number;
 	turns: number;
 	outputTokens: number;
-	totalTokens?: number;
-	costUsd?: number;
 	/** Optional: absent from a not-yet-restarted server's payload. */
 	repos?: AnalyticsPersonRepo[];
 }
@@ -916,8 +914,6 @@ export interface AnalyticsAutomation {
 	sessionsActive: number;
 	turns: number;
 	outputTokens: number;
-	totalTokens?: number;
-	costUsd?: number;
 	errors: number;
 }
 
@@ -927,8 +923,6 @@ export interface AnalyticsRepo {
 	sessions: number;
 	turns: number;
 	outputTokens: number;
-	totalTokens?: number;
-	costUsd?: number;
 	errors: number;
 	prsOpened: number;
 	prsMerged: number;
@@ -974,14 +968,11 @@ export interface AnalyticsSummary {
 		cacheReadTokens: number;
 		cacheWriteTokens: number;
 		totalTokens?: number;
+		/** API list-price equivalent. Nothing is billed per token, so this is
+		 *  comparable value rather than spend. */
 		costUsd?: number;
-		/** Turns that reported a price. Cost covers these of `turns`; the rest
-		 *  run on subscription pools and report $0. */
-		costedTurns?: number;
-		/** Turns recorded before per-step usage accounting (2026-08-14), which
-		 *  undercount tokens and cost by roughly 7x. Goes to zero as the range
-		 *  moves past the fix, retiring the caveat that reads it. */
-		legacyUsageTurns?: number;
+		requests?: number;
+		unpricedRequests?: number;
 		prsOpened: number;
 		prsMerged: number;
 		allPrsOpened: number;
