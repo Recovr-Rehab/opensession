@@ -6081,8 +6081,11 @@ export function SessionViewer({
 						{panelResizeHandle}
 						{/* A plate, not a band: the strip takes the same inset and
 						    corner as the sections under it, so it reads as the first
-						    element of the column rather than chrome across its top. */}
-						{hasRepoWork && (
+						    element of the column rather than chrome across its top.
+						    It belongs to the overview, so a page pushed on top of it
+						    (Portals) gets the whole column — the strip would read as
+						    chrome that page owns rather than the panel underneath. */}
+						{hasRepoWork && !panelPage && (
 							<div className={PANEL_PR_PLATE}>
 								<PrStatusBar
 									sessionId={session.id}
