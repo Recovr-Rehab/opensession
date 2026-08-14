@@ -1384,7 +1384,7 @@ function ClaudeSignInForm({
 	}
 
 	return (
-		<div className="flex flex-col gap-3.5 bg-panel px-4 py-3.5">
+		<div className="flex flex-col gap-3.5 bg-panel px-5 py-3.5">
 			<SettingRowDescription>
 				Connect usage tracking with its own auto-refreshing Claude login (runs keep using the
 				setup-token). Open the link, sign in as{" "}
