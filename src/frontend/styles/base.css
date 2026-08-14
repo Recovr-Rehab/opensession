@@ -658,7 +658,7 @@ html[data-accent="mono"] {
 	}
 }
 html[data-theme="light"] .markdown code {
-	background: rgba(0, 0, 0, 0.06);
+	background: rgba(149, 59, 57, 0.09);
 	color: #953b39;
 }
 /* A code block is a well: it has to read as sunk BELOW whatever it sits on.
@@ -1228,12 +1228,19 @@ html.wco .app-body.sidebar-collapsed
 	line-height: 1.55;
 }
 
+/* An inline code chip is small enough that a 4px corner reads as a square
+   slab, and a paragraph of them reads as a row of boxes rather than words
+   with a highlight. At 7px (9.45 once --rf scales it) the corner takes the
+   full height of the chip, so it reads as a capsule around the word. The
+   wash is tinted with the chip's own ink rather than neutral black/white:
+   a grey fill under coloured text is a second, unrelated colour in the
+   sentence, and it is what made these read as slabs. */
 .markdown code {
 	font-family: var(--mono);
 	font-size: 0.9em;
-	background: rgba(255, 255, 255, 0.06);
-	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
-	padding: 1.5px 5px;
+	background: rgba(221, 225, 240, 0.07);
+	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
+	padding: 1.5px 6px;
 	color: #dde1f0;
 }
 .markdown pre code {
@@ -1256,7 +1263,8 @@ html.wco .app-body.sidebar-collapsed
    mirror and the field have to agree on every metric. */
 .composer-hl .cmp-code {
 	background: rgba(255, 255, 255, 0.09);
-	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
+	/* Same capsule corner the chip gets once the draft is sent. */
+	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
 	color: #e8b3b9;
 }
 .composer-hl .cmp-fence {
@@ -1341,7 +1349,7 @@ html.wco .app-body.sidebar-collapsed
 	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 14%, transparent);
 }
 html[data-theme="light"] .composer-hl .cmp-code {
-	background: rgba(0, 0, 0, 0.07);
+	background: rgba(149, 59, 57, 0.1);
 	color: #953b39;
 }
 html[data-theme="light"] .composer-hl .cmp-fence {
@@ -1687,7 +1695,10 @@ a.asset-ref:focus-visible {
 	background: var(--hover);
 	border: 0;
 	color: var(--text);
-	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
+	/* Same corner as the asset chip above: at this height 9px (12.15 once
+	   --rf scales it) takes the full box, so the chip reads as a capsule
+	   around its label rather than a rounded rectangle sitting in prose. */
+	border-radius: calc(9px * var(--rf)); corner-shape: var(--cs);
 	/* Top and bottom are unequal on purpose, and that is what makes them LOOK
 	   equal. The line box hangs 4.6px below the baseline and only 2.6px above
 	   the cap, so symmetric padding leaves the words riding high in the pill
@@ -1854,7 +1865,8 @@ a.pr-ref {
 	background: var(--hover);
 	color: var(--text);
 	border: 0;
-	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
+	/* Capsule corner, same as the session chip above. */
+	border-radius: calc(9px * var(--rf)); corner-shape: var(--cs);
 	/* Unequal to read as equal, the same 4/1 split as the session chip above
 	   and for the same reason: the line box hangs ~5px below the baseline and
 	   only ~3px over the caps, so it is the TOP that needs the padding. A
