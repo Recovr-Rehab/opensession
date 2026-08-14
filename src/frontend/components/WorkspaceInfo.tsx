@@ -10,8 +10,6 @@ import {
 	fetchDiff,
 	fetchPr,
 	fetchGitStatus,
-	gitPushApi,
-	gitPullApi,
 	setSessionReviewerApi,
 	acceptReviewApi,
 	triggerPrActionApi,
@@ -731,7 +729,10 @@ function AgentReviewCard({
 					</Menu.Root>
 				)}
 			</div>
-			<div className={INFO_LIST_CLASS}>
+			{/* Wider than the lists' hairline gap: these rows carry their own
+			    status band, and two bands a pixel apart read as one striped
+			    block. The gap matches the plate's own padding. */}
+			<div className={cn(INFO_LIST_CLASS, "gap-1")}>
 				<div className={cn(GIT_ROW, "rounded-control py-2", REVIEW_ROW_BG[rowTone])}>
 					<Popover.Root>
 						<Popover.Trigger
@@ -1367,19 +1368,6 @@ export function WorkspaceInfo({
 		};
 	}, [sessionId, repo, liveMediaCount]);
 
-	// Refetch git status right after a Push/Update lands, so the row clears
-	// without waiting on the 45s poll.
-	const reloadStatus = () => {
-		if (repo)
-			fetchGitStatus(sessionId, repo)
-				.then(setGit)
-				.catch(() => {});
-		if (prState)
-			fetchPr(sessionId, repo)
-				.then(setPr)
-				.catch(() => {});
-	};
-
 	// This list is what the team said about the PR, so machines are dropped:
 	// deploy bots, preview tables, and the agent's own review, which the review
 	// card above already carries in full. Also drop anything that reduces to
@@ -1415,13 +1403,9 @@ export function WorkspaceInfo({
 			) === i,
 	);
 
-	// PR status has its own section; this block only appears for local git facts.
-	const showGit = Boolean(
-		git &&
-			(git.ahead > 0 ||
-				(prState !== "MERGED" && (git.behind > 0 || git.behindBase > 0)) ||
-				git.uncommittedFiles > 0),
-	);
+	// Ahead, behind and the PR itself are the status strip's; this section is
+	// only the uncommitted work in the tree.
+	const showGit = Boolean(git && git.uncommittedFiles > 0);
 	const hasBody = Boolean(
 		comments.length > 0 ||
 		changed.length > 0 ||
@@ -1472,14 +1456,7 @@ export function WorkspaceInfo({
 				</div>
 			)}
 			{showGit && (
-				<GitStatusRows
-					sessionId={sessionId}
-					repo={repo}
-					git={git}
-					prState={prState}
-					send={send}
-					onReload={reloadStatus}
-				/>
+				<GitStatusRows sessionId={sessionId} git={git} send={send} />
 			)}
 			{hasBody ? (
 				<div className="grid gap-4">
