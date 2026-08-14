@@ -38,9 +38,17 @@ export const GIT_DOT = "mx-0.5 size-1.5 shrink-0 rounded-full";
 export const GIT_ROW = "flex items-center gap-2 px-2 py-1 text-label text-fg";
 export const GIT_LABEL = "flex-1 overflow-hidden text-ellipsis";
 /** The one action that clears the row, quiet on the right. 12px in the old
- *  sheet; it is a control label, so it snaps to text-label. */
+ *  sheet; it is a control label, so it snaps to text-label.
+ *
+ *  A weak plate rather than bare words: as text it read as part of the row's
+ *  own sentence, and the only thing saying "press me" arrived on hover. The
+ *  fill is `--control-surface`, one step over whatever the row sits on (the
+ *  panel plate, the review canvas), so it reads as a control at the quietest
+ *  weight the row can carry — the Button primitive's `soft`, at chip size.
+ *  `data-popup-open` keeps the menu triggers ("Request", "Change") lit while
+ *  their own menu is open. */
 export const GIT_ACTION =
-	"whitespace-nowrap py-0.5 pl-2 text-label font-semibold text-dim enabled:hover:text-fg disabled:cursor-default disabled:opacity-60";
+	"inline-flex min-h-[22px] shrink-0 items-center whitespace-nowrap rounded-md bg-control px-2 text-label font-semibold text-dim transition-[color,background-color] enabled:hover:bg-active enabled:hover:text-fg data-[popup-open]:bg-active data-[popup-open]:text-fg disabled:cursor-default disabled:opacity-60";
 /** Follow-up line under the rows. Carries no colour: the caller adds
  *  `text-faint` ("Asked … ✓") or `text-red` (an error), because two colour
  *  utilities on one element resolve by Tailwind output order, not by the
