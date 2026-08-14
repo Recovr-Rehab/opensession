@@ -1332,16 +1332,143 @@ export function PrPanel({
     >
       {switcher}
 
+      {/* The PR identity, edge to edge above everything else: it names the
+          canvas, so it spans it rather than starting past the rail. */}
+      <header className="flex h-10 shrink-0 items-center gap-2.5 bg-surface px-6 shadow-[inset_0_-1px_0_var(--border)] phone:px-3">
+        {/* State, in the app's own PR language, filled rather than drawn: the
+            tone washes the whole chip and the glyph and word share its ink.
+            It is its own object, so it gets more air than the pieces of the
+            identity line it precedes. */}
+        <Tooltip label={statusMark.label}>
+          <span
+            className={`mr-1.5 flex h-6 shrink-0 items-center gap-1.5 rounded-control px-2 ${statusMark.bgClassName} ${statusMark.className}`}
+          >
+            <PrStateIcon state={pr.state} isDraft={pr.isDraft} />
+            {!headerCompact && (
+              <span className="text-label font-medium">{stateLabel}</span>
+            )}
+          </span>
+        </Tooltip>
+        {/* Author and title in the session header's own breadcrumb shape: a
+            tight picture-and-name pill, a chevron, then the name of the thing
+            you are looking at. Same spacing and weights as RepoBar's
+            `[icon] repo › title`, so the two headers read as one bar. */}
+        <span className="flex shrink-0 items-center gap-[7px] text-body font-medium text-fg">
+          <UserAvatar
+            name={pr.author}
+            login={provider.key === "github" ? pr.author : null}
+            size={18}
+            edge={false}
+            title={pr.author}
+          />
+          {!headerCompact && (
+            <span className="max-w-[180px] truncate">{pr.author}</span>
+          )}
+        </span>
+        {!headerCompact && (
+          <IconChevronRight size={18} className="shrink-0 text-faint" />
+        )}
+        {/* Title only. Counts, commits and the sessions on this PR are the
+            rail's job, so the bar stays one line of identity.
+
+            The title is the name of the page you are already on, so it is
+            inert. The outbound jump rides the number, which is the reference
+            everywhere else in the app. */}
+        <h1
+          className="flex min-w-0 flex-1 items-baseline gap-1 text-body font-medium leading-[1.2] text-fg"
+          title={`${pr.title} #${pr.number}`}
+        >
+          <span className="truncate">{pr.title}</span>
+          <Tooltip label={`Open on ${provider.name}`}>
+            <a
+              className="shrink-0 font-normal text-faint no-underline hover:text-link"
+              href={pr.url}
+              target="_blank"
+              rel="noopener"
+            >
+              #{pr.number}
+            </a>
+          </Tooltip>
+        </h1>
+        {pr.staging?.url && (
+          <Tooltip label="Open the preview environment">
+            <a
+              /* An icon-only control carries its glyph ~6px inside its box,
+                 so the last one in the row is outdented to put that glyph on
+                 the row's content edge — where the view control below it
+                 sits, since a bordered control is flush with its own box. */
+              className={`ml-auto inline-flex size-8 shrink-0 items-center justify-center rounded-control text-dim no-underline hover:bg-hover hover:text-fg ${pr.state === "OPEN" ? "" : "-mr-1.5"}`}
+              href={pr.staging.url}
+              target="_blank"
+              rel="noopener"
+              aria-label="Open the preview environment"
+            >
+              <IconGlobe size={19} />
+            </a>
+          </Tooltip>
+        )}
+        {pr.state === "OPEN" && !pr.isDraft && caps.reviewComments && !reviewing && (
+          /* The one call to action on this canvas, so it takes the accent
+             plate. Green is the app's affirmative tone (approve, merge) and
+             the state glyph beside it is already wearing it; a green Review
+             button next to a green Open glyph made two different things
+             claim the same colour. */
+          <Button
+            variant="primary"
+            size="sm"
+            className={pr.staging?.url ? undefined : "ml-auto"}
+            onClick={() => {
+              setReviewing(true);
+              setPage("files");
+            }}
+          >
+            Review
+          </Button>
+        )}
+        {pr.state === "OPEN" && (
+          <Menu.Root>
+            <Tooltip label="Pull request actions">
+              <Menu.Trigger
+                render={
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="-mr-1.5"
+                    aria-label="Pull request actions"
+                    icon={<IconDotsHorizontal size={18} />}
+                  />
+                }
+              />
+            </Tooltip>
+            <Menu.Popup align="end">
+              <Menu.Item
+                className="text-red data-[highlighted]:bg-red-soft"
+                onClick={handleClose}
+                disabled={closing}
+              >
+                {closing
+                  ? "Closing…"
+                  : confirmClose
+                    ? "Confirm close pull request"
+                    : "Close pull request"}
+              </Menu.Item>
+            </Menu.Popup>
+          </Menu.Root>
+        )}
+      </header>
+
       <div className="flex min-h-0 flex-1">
         {/* The two pages as a rail rather than a strip. A review is Overview
-            and Files changed, and a menu down the canvas edge keeps both a
-            click away without spending a row of chrome on them, in the same
-            shape as the app's own sidebar one level out. The items are
+            and Files changed, and a menu at the canvas' bottom corner keeps
+            both a click away without spending a row of chrome on them, in the
+            same shape as the app's own sidebar one level out. The items are
             icon-only, so each carries its name in a tooltip and an
             aria-label, with the count the strip showed sitting under the
-            glyph. */}
+            glyph. They sit at the bottom because the rail is a menu, not a
+            column of content: parked at the top it read as the first thing on
+            a page whose first thing is the diff. */}
         <nav
-          className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-line bg-surface py-2"
+          className="flex w-12 shrink-0 flex-col items-center justify-end gap-1 border-r border-line bg-surface pb-2"
           role="tablist"
           aria-orientation="vertical"
           aria-label="Pull request pages"
@@ -1387,134 +1514,9 @@ export function PrPanel({
           ))}
         </nav>
 
-        {/* The PR identity lives inside the scroll container, so it gets out of
-            the way once the reviewer reaches the code. Only the page row sticks. */}
         <main
           className={`min-w-0 flex-1 overflow-y-auto bg-surface [--review-file-header-top:44px] ${reviewing ? "pb-24 phone:pb-36" : "pb-4"}`}
         >
-          <header className="flex h-10 shrink-0 items-center gap-2.5 px-6 phone:px-3">
-            {/* State, in the app's own PR language, filled rather than drawn: the
-                tone washes the whole chip and the glyph and word share its ink.
-                It is its own object, so it gets more air than the pieces of the
-                identity line it precedes. */}
-            <Tooltip label={statusMark.label}>
-              <span
-                className={`mr-1.5 flex h-6 shrink-0 items-center gap-1.5 rounded-control px-2 ${statusMark.bgClassName} ${statusMark.className}`}
-              >
-                <PrStateIcon state={pr.state} isDraft={pr.isDraft} />
-                {!headerCompact && (
-                  <span className="text-label font-medium">{stateLabel}</span>
-                )}
-              </span>
-            </Tooltip>
-            {/* Author and title in the session header's own breadcrumb shape: a
-                tight picture-and-name pill, a chevron, then the name of the thing
-                you are looking at. Same spacing and weights as RepoBar's
-                `[icon] repo › title`, so the two headers read as one bar. */}
-            <span className="flex shrink-0 items-center gap-[7px] text-body font-medium text-fg">
-              <UserAvatar
-                name={pr.author}
-                login={provider.key === "github" ? pr.author : null}
-                size={18}
-                edge={false}
-                title={pr.author}
-              />
-              {!headerCompact && (
-                <span className="max-w-[180px] truncate">{pr.author}</span>
-              )}
-            </span>
-            {!headerCompact && (
-              <IconChevronRight size={18} className="shrink-0 text-faint" />
-            )}
-            {/* Title only. Counts, commits and the sessions on this PR are the
-                rail's job, so the bar stays one line of identity.
-
-                The title is the name of the page you are already on, so it is
-                inert. The outbound jump rides the number, which is the reference
-                everywhere else in the app. */}
-            <h1
-              className="flex min-w-0 flex-1 items-baseline gap-1 text-body font-medium leading-[1.2] text-fg"
-              title={`${pr.title} #${pr.number}`}
-            >
-              <span className="truncate">{pr.title}</span>
-              <Tooltip label={`Open on ${provider.name}`}>
-                <a
-                  className="shrink-0 font-normal text-faint no-underline hover:text-link"
-                  href={pr.url}
-                  target="_blank"
-                  rel="noopener"
-                >
-                  #{pr.number}
-                </a>
-              </Tooltip>
-            </h1>
-            {pr.staging?.url && (
-              <Tooltip label="Open the preview environment">
-                <a
-                  /* An icon-only control carries its glyph ~6px inside its box,
-                     so the last one in the row is outdented to put that glyph on
-                     the row's content edge — where the view control below it
-                     sits, since a bordered control is flush with its own box. */
-                  className={`ml-auto inline-flex size-8 shrink-0 items-center justify-center rounded-control text-dim no-underline hover:bg-hover hover:text-fg ${pr.state === "OPEN" ? "" : "-mr-1.5"}`}
-                  href={pr.staging.url}
-                  target="_blank"
-                  rel="noopener"
-                  aria-label="Open the preview environment"
-                >
-                  <IconGlobe size={19} />
-                </a>
-              </Tooltip>
-            )}
-            {pr.state === "OPEN" && !pr.isDraft && caps.reviewComments && !reviewing && (
-              /* The one call to action on this canvas, so it takes the accent
-                 plate. Green is the app's affirmative tone (approve, merge) and
-                 the state glyph beside it is already wearing it; a green Review
-                 button next to a green Open glyph made two different things
-                 claim the same colour. */
-              <Button
-                variant="primary"
-                size="sm"
-                className={pr.staging?.url ? undefined : "ml-auto"}
-                onClick={() => {
-                  setReviewing(true);
-                  setPage("files");
-                }}
-              >
-                Review
-              </Button>
-            )}
-            {pr.state === "OPEN" && (
-              <Menu.Root>
-                <Tooltip label="Pull request actions">
-                  <Menu.Trigger
-                    render={
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="-mr-1.5"
-                        aria-label="Pull request actions"
-                        icon={<IconDotsHorizontal size={18} />}
-                      />
-                    }
-                  />
-                </Tooltip>
-                <Menu.Popup align="end">
-                  <Menu.Item
-                    className="text-red data-[highlighted]:bg-red-soft"
-                    onClick={handleClose}
-                    disabled={closing}
-                  >
-                    {closing
-                      ? "Closing…"
-                      : confirmClose
-                        ? "Confirm close pull request"
-                        : "Close pull request"}
-                  </Menu.Item>
-                </Menu.Popup>
-              </Menu.Root>
-            )}
-          </header>
-
           {/* Where this PR sits in its chain of layers — above the pages, because
               it reframes what everything under it means. */}
           {caps.stacks && (
