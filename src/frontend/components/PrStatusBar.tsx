@@ -273,12 +273,14 @@ function PrBarButton({
 		// take when the work continues.
 		white:
 			"bg-button text-fg border-line-strong hover:bg-hover hover:brightness-100",
-		// The filled chip beside it: the chrome's grey control surface, flat —
-		// no edge, no lift, dim ink — so housekeeping reads quieter than the
-		// button it stands next to. Dark has no paper, so the flatness is what
-		// separates the pair there.
-		gray:
-			"border-transparent bg-control text-dim shadow-none hover:bg-active hover:text-fg hover:brightness-100",
+		// The filled chip beside it: flat grey, no edge, no lift, dim ink, so
+		// housekeeping reads quieter than the button it stands next to. It
+		// takes the ramp's top surface rather than --control-surface, which in
+		// dark IS the button surface — the two would have shared one fill and
+		// the pair would have read as one grey slab. This step is grey against
+		// paper in light and against the button in dark. Hover is the base
+		// brightness lift, like the other filled tones.
+		gray: "border-transparent bg-active text-dim shadow-none hover:text-fg",
 	} as const;
 	return (
 		<button
