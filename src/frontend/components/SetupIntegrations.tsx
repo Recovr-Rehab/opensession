@@ -79,7 +79,7 @@ function IntegrationCard({
 	return (
 		<>
 			<SettingCard>
-				<div className="flex flex-wrap items-start gap-3 px-4 py-4">
+				<div className="flex flex-wrap items-start gap-3 px-5 py-4">
 					<IconTile name={integration.id} size={40} />
 					<div className="min-w-[14rem] flex-1">
 						<div className="flex flex-wrap items-center gap-2">
@@ -353,7 +353,7 @@ export function GithubAuthCard({
 		<>
 			<div className="grid px-4">
 				<SettingCard>
-					<div className="flex flex-wrap items-start gap-3 px-4 py-4">
+					<div className="flex flex-wrap items-start gap-3 px-5 py-4">
 					<IconTile name="github" size={40} />
 					<div className="min-w-[14rem] flex-1">
 						<div className="flex flex-wrap items-center gap-2">

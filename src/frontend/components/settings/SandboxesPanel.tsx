@@ -463,7 +463,7 @@ function ConnectionCard({
 	return (
 		<>
 			<SettingCard>
-				<div className="flex flex-wrap items-start gap-3 px-4 py-4">
+				<div className="flex flex-wrap items-start gap-3 px-5 py-4">
 					<SandboxProviderLogo provider={connection.provider} />
 					<div className="min-w-[14rem] flex-1">
 						<div className="flex flex-wrap items-center gap-2">
@@ -808,7 +808,7 @@ export function SandboxesPanel() {
 					<div className="grid gap-3 px-4">
 						{configuredEnvironments.length === 0 && (
 							<SettingCard>
-								<div className="px-4 py-5 text-center">
+								<div className="px-5 py-5 text-center">
 									<div className="text-item-title font-medium text-fg">No project snapshots</div>
 									<p className="mx-auto mb-0 mt-1 max-w-[30rem] text-supporting leading-relaxed text-dim">
 										Choose only the projects that should get a reusable sandbox snapshot. Nothing
@@ -835,7 +835,7 @@ export function SandboxesPanel() {
 											: "Snapshot is stale";
 								return (
 									<SettingCard key={`${environment.repo}:${environment.provider}`}>
-										<div className="flex flex-wrap items-start gap-3 px-4 py-3.5">
+										<div className="flex flex-wrap items-start gap-3 px-5 py-3.5">
 											<SandboxProviderLogo provider={environment.provider} />
 											<div className="min-w-0 flex-1">
 												<div className="text-item-title font-medium text-fg">{environment.repo}</div>

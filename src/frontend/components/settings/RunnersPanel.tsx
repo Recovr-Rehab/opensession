@@ -130,8 +130,8 @@ export function RunnersPanel() {
 
 		<SettingsGroupLabel actions={<Button size="xs" variant="ghost" onClick={() => void load()}>Refresh</Button>}>Workspace inventory</SettingsGroupLabel>
 		<SettingCard>
-			{loading && <div className="px-4 py-5 text-supporting text-dim">Loading Runners…</div>}
-			{!loading && !runners.length && <div className="px-4 py-5">
+			{loading && <div className="px-5 py-5 text-supporting text-dim">Loading Runners…</div>}
+			{!loading && !runners.length && <div className="px-5 py-5">
 				<div className="text-item-title font-medium text-fg">No Runners connected</div>
 				<p className="mb-0 mt-1 text-supporting leading-relaxed text-dim">Choose a computer, connect it with a pairing command, then choose its permissions.</p>
 			</div>}
@@ -163,7 +163,7 @@ function RunnerRow({ runner, admin, busy, onChange, onRevoke }: { runner: Runner
 				{admin && <Button size="xs" variant="ghost" onClick={() => setEditing((value) => !value)}>{editing ? "Close" : "Details"}</Button>}
 			</div>
 		</SettingRow>
-		{editing && <div className="border-t border-line px-4 py-3">
+		{editing && <div className="border-t border-line px-5 py-3">
 			<div className="grid gap-2 sm:grid-cols-2">
 				<label className="text-label text-dim">Label<Input value={label} onChange={(event) => setLabel(event.target.value)} /></label>
 				<label className="text-label text-dim">Tags<Input value={tags} onChange={(event) => setTags(event.target.value)} /></label>

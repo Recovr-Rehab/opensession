@@ -82,7 +82,7 @@ function PresetRow({
 				type="button"
 				aria-expanded={open}
 				onClick={onToggle}
-				className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-hover"
+				className="flex w-full items-center gap-3 px-5 py-3 text-left transition-colors hover:bg-hover"
 			>
 				<span className="min-w-0 flex-1">
 					<span className="block truncate text-item-title font-medium text-fg">
@@ -107,7 +107,7 @@ function PresetRow({
 				/>
 			</button>
 			{open && (
-				<div className="flex flex-col gap-3 px-4 pb-4">
+				<div className="flex flex-col gap-3 px-5 pb-4">
 					<SettingsField className="mb-0">
 						Name
 						<input

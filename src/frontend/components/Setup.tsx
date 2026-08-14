@@ -126,7 +126,7 @@ function StepRail({
 	onSelect: (index: number) => void;
 }) {
 	return (
-		<nav aria-label="Setup steps" className="mb-5 flex flex-wrap gap-1 px-4">
+		<nav aria-label="Setup steps" className="mb-5 flex flex-wrap gap-1 px-5">
 			{STEPS.map((step, i) => {
 				const tone = stepTone(step.id, status);
 				const active = i === current;
@@ -201,7 +201,7 @@ export function SetupPanel({ onDone }: { onDone?: () => void }) {
 				<>
 					<StepRail current={index} status={status} onSelect={goTo} />
 
-					<div className="px-4">
+					<div className="px-5">
 						<h2 className="m-0 text-section-title font-semibold text-fg">
 							{step.title}
 						</h2>
@@ -256,7 +256,7 @@ export function SetupPanel({ onDone }: { onDone?: () => void }) {
 						)}
 					</div>
 
-					<div className="mt-8 flex items-center gap-3 px-4">
+					<div className="mt-8 flex items-center gap-3 px-5">
 						<Button
 							variant="ghost"
 							onClick={() => goTo(index - 1)}

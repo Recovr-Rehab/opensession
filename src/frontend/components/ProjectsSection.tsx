@@ -126,7 +126,7 @@ export function ProjectsSection() {
 			{!!repoProjects.length && (
 				<SettingCard>
 					{repoProjects.map((p) => (
-						<div key={p.key} className="flex items-center gap-3 px-4 py-3">
+						<div key={p.key} className="flex items-center gap-3 px-5 py-3">
 							<IconTile name={p.id} size={30} />
 							<div className="min-w-0 flex-1">
 								<div className="text-body font-medium text-fg">{p.label}</div>
@@ -145,7 +145,7 @@ export function ProjectsSection() {
 				{(feeds || []).map((f) => (
 					<div
 						key={f.id}
-						className="group flex items-center gap-3 px-4 py-3"
+						className="group flex items-center gap-3 px-5 py-3"
 					>
 						<IconTile name={f.id} size={30} />
 						<div className="min-w-0 flex-1">
@@ -170,7 +170,7 @@ export function ProjectsSection() {
 					</div>
 				))}
 				<button
-					className="flex w-full items-center gap-2 px-4 py-3 text-control-label font-medium text-dim transition-colors hover:bg-hover hover:text-fg"
+					className="flex w-full items-center gap-2 px-5 py-3 text-control-label font-medium text-dim transition-colors hover:bg-hover hover:text-fg"
 					onClick={() => setOpen(true)}
 				>
 					<IconPlus size={16} /> New project

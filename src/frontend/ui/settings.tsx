@@ -29,7 +29,7 @@ export function SettingsHeader({
 }) {
 	return (
 		<header
-			className={cn("mb-5 flex items-start justify-between gap-4 px-4", className)}
+			className={cn("mb-5 flex items-start justify-between gap-4 px-5", className)}
 			{...props}
 		>
 			<div className="min-w-0">
@@ -64,7 +64,7 @@ export function SettingsGroupLabel({
 			className={cn(
 				// mt-9: a group's card and the hint under it read as one block, so
 				// the space above the next label is what separates the groups.
-				"mb-2 mt-9 flex min-h-6 flex-wrap items-center justify-between gap-x-2 gap-y-1.5 px-4 text-label font-semibold text-faint",
+				"mb-2 mt-9 flex min-h-6 flex-wrap items-center justify-between gap-x-2 gap-y-1.5 px-5 text-label font-semibold text-faint",
 				className,
 			)}
 			{...props}
@@ -99,7 +99,7 @@ export function SettingsSection({
 	className,
 	...props
 }: React.ComponentPropsWithoutRef<"div">) {
-	return <Card className={cn(settingsSurface, "p-4", className)} {...props} />;
+	return <Card className={cn(settingsSurface, "p-5", className)} {...props} />;
 }
 
 /**
@@ -121,7 +121,7 @@ export function SettingRow({
 }: React.ComponentPropsWithoutRef<"div">) {
 	return (
 		<div
-			className={cn("flex flex-wrap items-center gap-x-4 gap-y-2.5 px-4 py-3.5", className)}
+			className={cn("flex flex-wrap items-center gap-x-4 gap-y-2.5 px-5 py-4", className)}
 			{...props}
 		/>
 	);
@@ -184,7 +184,7 @@ export function SettingsHint({
 	className,
 	...props
 }: React.ComponentPropsWithoutRef<"div">) {
-	return <div className={cn("mt-2 px-4 text-meta text-faint", className)} {...props} />;
+	return <div className={cn("mt-2 px-5 text-meta text-faint", className)} {...props} />;
 }
 
 /**
@@ -208,7 +208,7 @@ export function SettingsForm({
 }: React.ComponentPropsWithoutRef<"div">) {
 	return (
 		<div
-			className={cn(settingsSurface, "mb-3 flex flex-col gap-3.5 p-[18px]", className)}
+			className={cn(settingsSurface, "mb-3 flex flex-col gap-3.5 p-5", className)}
 			{...props}
 		/>
 	);

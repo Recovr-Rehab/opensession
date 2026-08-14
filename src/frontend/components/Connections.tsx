@@ -335,7 +335,7 @@ export function Connections() {
               return (
                 <div
                   key={s.name}
-                  className="group flex items-start gap-3 px-4 py-3 transition-colors hover:bg-hover"
+                  className="group flex items-start gap-3 px-5 py-3 transition-colors hover:bg-hover"
                 >
                   <IconTile name={s.name} />
                   <div className="min-w-0 flex-1">
@@ -632,7 +632,7 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
           // narrower than a desktop. Three short stacked lines — what to do,
           // the two controls, what we're waiting for — never wrap badly and
           // let the code be the thing the eye lands on.
-          <div className="flex flex-col gap-2.5 px-4 py-3.5">
+          <div className="flex flex-col gap-2.5 px-5 py-3.5">
             <div className="text-supporting text-dim">
               Enter this code at{" "}
               <span className="font-medium text-fg">
@@ -673,7 +673,7 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
         )}
 
         {justConnected && (
-          <div className="px-4 py-2.5 text-label text-dim">
+          <div className="px-5 py-2.5 text-label text-dim">
             Connected <span className="font-medium text-fg">@{justConnected}</span>. Their new
             session runs now open PRs as this account.
           </div>
@@ -849,7 +849,7 @@ function CodeStorageCard() {
       <SectionHeading>Code Storage: branch-based repo host</SectionHeading>
       {error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
       <SettingCard>
-        <div className="flex items-center gap-3 px-4 py-3">
+        <div className="flex items-center gap-3 px-5 py-3">
           <IconTile name="codestorage" size={30} />
           <div className="min-w-0 flex-1">
             <div className="text-body font-medium text-fg">code.storage (Pierre)</div>
@@ -886,10 +886,10 @@ function CodeStorageCard() {
           )}
         </div>
 
-        {note && <div className="px-4 py-2.5 text-label text-dim">{note}</div>}
+        {note && <div className="px-5 py-2.5 text-label text-dim">{note}</div>}
 
         {!connected ? (
-          <div className="flex flex-col gap-3 border-t border-line px-4 py-3">
+          <div className="flex flex-col gap-3 border-t border-line px-5 py-3">
             <SettingsFormRow>
               <SettingsField>
                 Organization
@@ -933,12 +933,12 @@ function CodeStorageCard() {
         ) : (
           <>
             {status.error && (
-              <div className="border-t border-line px-4 py-2.5 text-label leading-snug text-red">
+              <div className="border-t border-line px-5 py-2.5 text-label leading-snug text-red">
                 {status.error}
               </div>
             )}
             {wh && (
-              <div className="flex flex-col gap-2 border-t border-line px-4 py-3">
+              <div className="flex flex-col gap-2 border-t border-line px-5 py-3">
                 <div className="text-label font-medium text-fg">Webhook receiver</div>
                 <div className="flex flex-wrap items-center gap-2 text-label text-dim">
                   <code className="rounded-sm bg-active px-1.5 py-0.5 font-mono text-fg">

@@ -78,7 +78,7 @@ function MemoryEntryRow({
 
 	if (editing)
 		return (
-			<div className="border-b border-line px-4 py-3 last:border-b-0">
+			<div className="border-b border-line px-5 py-3 last:border-b-0">
 				<textarea
 					className={settingsTextareaClass}
 					rows={2}
@@ -113,7 +113,7 @@ function MemoryEntryRow({
 		);
 
 	return (
-		<div className="group flex items-start gap-2 border-b border-line px-4 py-3 last:border-b-0">
+		<div className="group flex items-start gap-2 border-b border-line px-5 py-3 last:border-b-0">
 			<div className="min-w-0 flex-1">
 				<div className="text-body font-medium leading-snug text-fg">
 					{entry.text}
@@ -178,7 +178,7 @@ function MemoryScopeCard({
 
 	return (
 		<SettingsSection className="mb-2 overflow-hidden p-0">
-			<div className="flex items-center justify-between border-b border-line px-4 py-2.5">
+			<div className="flex items-center justify-between border-b border-line px-5 py-2.5">
 				<div className="text-supporting font-semibold text-fg">
 					{scoped.scope.label}
 				</div>
@@ -193,7 +193,7 @@ function MemoryScopeCard({
 				</Button>
 			</div>
 			{scoped.entries.length === 0 && !adding && (
-				<div className="px-4 py-3 text-body font-medium text-faint">
+				<div className="px-5 py-3 text-body font-medium text-faint">
 					No memories yet.
 				</div>
 			)}
@@ -206,7 +206,7 @@ function MemoryScopeCard({
 				/>
 			))}
 			{adding && (
-				<div className="border-t border-line px-4 py-3">
+				<div className="border-t border-line px-5 py-3">
 					<textarea
 						className={settingsTextareaClass}
 						rows={2}

@@ -78,7 +78,7 @@ export function AuditPanel() {
 				description="Review prompts, tool decisions, account switches, and confirmations from every agent run. Events are read-only and kept for 400 days."
 			/>
 
-			<div className="mb-3 flex flex-wrap items-center gap-2 px-4">
+			<div className="mb-3 flex flex-wrap items-center gap-2 px-5">
 				<select className={settingsSelectClass} value={date} onChange={(e) => setDate(e.target.value)} aria-label="Date">
 					{dates.map((d) => (
 						<option key={d} value={d}>
@@ -107,7 +107,7 @@ export function AuditPanel() {
 				/>
 			</div>
 
-			<div className="mb-2 px-4 text-meta text-faint">
+			<div className="mb-2 px-5 text-meta text-faint">
 				{loading ? "Loading…" : `${events.length} of ${total} events (newest first)`}
 			</div>
 
@@ -119,7 +119,7 @@ export function AuditPanel() {
 					return (
 						<div key={i} className={expanded === i ? "bg-pressed" : ""}>
 							<button
-								className="flex w-full min-w-0 cursor-pointer items-baseline gap-2 px-4 py-1.5 text-left text-label hover:bg-hover"
+								className="flex w-full min-w-0 cursor-pointer items-baseline gap-2 px-5 py-1.5 text-left text-label hover:bg-hover"
 								onClick={() => setExpanded(expanded === i ? null : i)}
 							>
 								<span className="text-faint shrink-0">{time}</span>
@@ -137,7 +137,7 @@ export function AuditPanel() {
 								)}
 							</button>
 							{expanded === i && (
-								<pre className="m-0 overflow-x-auto border-t border-line px-4 py-2.5 text-meta leading-relaxed text-dim">
+								<pre className="m-0 overflow-x-auto border-t border-line px-5 py-2.5 text-meta leading-relaxed text-dim">
 									{JSON.stringify(e, null, 2)}
 								</pre>
 							)}

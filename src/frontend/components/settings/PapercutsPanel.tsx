@@ -110,7 +110,7 @@ export function PapercutsPanel() {
 					{entries.map((e, i) => (
 						<div
 							key={`${e.ts}-${i}`}
-							className="border-b border-line px-4 py-3 last:border-b-0"
+							className="border-b border-line px-5 py-3 last:border-b-0"
 						>
 							<div className="text-body leading-relaxed text-fg">
 								{e.message}
