@@ -4335,12 +4335,6 @@ export function App(
 							   already in the one that opens. */
 							<div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-5 py-8">
 								<div className="flex w-full max-w-[680px] flex-col">
-									<h1 className="text-[19px] leading-[1.15] font-semibold tracking-[-0.02em] text-fg">
-										Start a session
-									</h1>
-									<p className="mt-1 mb-4 text-[14px] leading-[1.45] text-dim text-pretty">
-										Sessions show up in the sidebar once you start one.
-									</p>
 									{!palette.open && (
 										<NewSession
 											inline
