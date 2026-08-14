@@ -153,7 +153,7 @@ import type { WorkflowRunSnapshot } from "../../server/workflow-types";
 import { PreviewButton } from "./PreviewButton";
 import { PreviewPane } from "./PreviewPane";
 import { PortalPane } from "./PortalPane";
-import { PortalsPanel } from "./PortalsPanel";
+import { PortalsPage, PortalsSummary } from "./PortalsPanel";
 import type { PortalTarget } from "../lib/portals";
 import { StagingLink } from "./StagingLink";
 import { WorkspaceInfo } from "./WorkspaceInfo";
@@ -1255,6 +1255,17 @@ export function SessionViewer({
 		style: panelStyle,
 		resizeHandle: panelResizeHandle,
 	} = useSidePanel();
+	// The panel's own navigation stack, one level deep: null is the workspace
+	// overview, "portals" the page a summary section pushes. It lives here
+	// rather than in the section so closing the panel (or switching session)
+	// lands back on the overview.
+	const [panelPage, setPanelPage] = useState<null | "portals">(null);
+	useEffect(() => {
+		if (!panelOpen) setPanelPage(null);
+	}, [panelOpen]);
+	useEffect(() => {
+		setPanelPage(null);
+	}, [session.id]);
 	// Session scratch assets (Assets tab): fetched once per session + on
 	// assets_changed broadcasts; the tab only appears once files exist.
 	const { files: assetFiles, refresh: refreshAssets } = useSessionAssets(
@@ -6091,6 +6102,33 @@ export function SessionViewer({
 						    App.tsx), Assets and the PR the same way. What stays here is
 						    what you read at a glance while your work runs beside it. */}
 						<div className={PANEL_BODY}>
+							{panelPage === "portals" ? (
+								<PortalsPage
+									sessionId={session.id}
+									status={previewStatus}
+									activePortal={portalTarget}
+									onBack={() => setPanelPage(null)}
+									onOpenPortal={onOpenPortal}
+									onStartPortal={(recipe) =>
+										send({
+											type: "prompt",
+											sessionId: session.id,
+											user: getCurrentUser(),
+											content:
+												`Use the $${recipe.skill} skill to start the “${recipe.name}” portal for this session. ` +
+												(recipe.serviceKey
+													? `Make sure it listens on the ${recipe.serviceKey} port declared in .ports.conf, then report when it is ready.`
+													: "Expose its listening port in .ports.conf with a descriptive *_PORT key, then report when it is ready."),
+										})
+									}
+									onPortalAction={async (name, action) => {
+										setPreviewStatus(
+											await portalActionApi(session.id, name, action),
+										);
+									}}
+								/>
+							) : (
+							<>
 							<div className="px-1">
 								<WorkspaceInfo
 									sessionId={session.id}
@@ -6134,15 +6172,35 @@ export function SessionViewer({
 									liveMedia={liveOverviewMedia}
 								/>
 							</div>
-							{/* Agents: the session's workflow runs and sub-agents. Rendered
-							    whenever the session CAN run them (it needs a worktree for
-							    their cwd), not only once one exists — the empty state is
-							    how you discover workflows at all. Same section the phone
-							    info page shows. */}
-							{(hasWorkspace ||
-								workflowRuns.length > 0 ||
-								subagents.length > 0) && (
-								<div className={INFO_SECTION}>
+							{/* Everything below is a section of this same panel, in the
+							    panel's own grammar: a faint label over a borderless plate.
+							    Each panel renders its own label (Portals, Agents), so they
+							    line up with Git status and the changed files above. */}
+							<div className="flex flex-col gap-4 px-2 pb-[22px]">
+								{sessionReports.length > 0 && (
+									<SessionReportsPanel
+										reports={sessionReports}
+										onOpenNewSession={onOpenNewSession}
+									/>
+								)}
+								{/* Portals reads short here: a live count and the first few
+								    services. Starting, restarting and stopping them lives on
+								    the portals page, one level deeper in this panel. */}
+								{hasWorkspace && (
+									<PortalsSummary
+										sessionId={session.id}
+										status={previewStatus}
+										activePortal={portalTarget}
+										onOpenPortal={onOpenPortal}
+										onOpenPortals={() => setPanelPage("portals")}
+									/>
+								)}
+								{/* Only once a run exists. The workflows empty state is a
+								    teaching block several hundred pixels tall, which is fine
+								    on a tab you chose to open and wrong as a permanent
+								    fixture in the sidebar — the phone info page already drew
+								    that line. */}
+								{(workflowRuns.length > 0 || subagents.length > 0) && (
 									<WorkflowPanel
 										sessionId={session.id}
 										runs={workflowRuns}
@@ -6150,59 +6208,23 @@ export function SessionViewer({
 										subagents={subagents}
 										onOpenSubagent={openSubagent}
 									/>
-								</div>
-							)}
-							{sessionReports.length > 0 && (
-								<div className={INFO_SECTION}>
-									<SessionReportsPanel
-										reports={sessionReports}
-										onOpenNewSession={onOpenNewSession}
-									/>
-								</div>
-							)}
-							{/* Portals: the services this session exposes. Opening one
-							    still takes over the centre pane (the Portal view tab), so
-							    what lives here is the launcher and the status list. */}
-							{hasWorkspace && (
-								<div className={INFO_SECTION}>
-									<PortalsPanel
-										sessionId={session.id}
-										status={previewStatus}
-										activePortal={portalTarget}
-										onOpenPortal={onOpenPortal}
-										onStartPortal={(recipe) =>
-											send({
-												type: "prompt",
-												sessionId: session.id,
-												user: getCurrentUser(),
-												content:
-													`Use the $${recipe.skill} skill to start the “${recipe.name}” portal for this session. ` +
-													(recipe.serviceKey
-														? `Make sure it listens on the ${recipe.serviceKey} port declared in .ports.conf, then report when it is ready.`
-														: "Expose its listening port in .ports.conf with a descriptive *_PORT key, then report when it is ready."),
-											})
-										}
-										onPortalAction={async (name, action) => {
-											setPreviewStatus(await portalActionApi(session.id, name, action));
-										}}
-									/>
-								</div>
-							)}
-							{/* Terminal sits last and quiet: a shell in this session's
-							    workspace (inside its sandbox when sandboxed), opened as a
-							    full-width view tab because a terminal wants the width. */}
-							{hasWorkspace && (
-								<div className={INFO_SECTION}>
-									<Button
-										variant="ghost"
-										size="md"
-										className="w-full justify-start gap-2 rounded-row px-2 text-dim hover:bg-hover hover:text-fg"
-										icon={<IconTerminal size={16} />}
-										onClick={() => onOpenTerminal?.()}
-									>
-										Terminal
-									</Button>
-								</div>
+								)}
+								{/* Terminal last and quiet: one row, on the same plate the
+								    sections above use, opening the full-width view tab. */}
+								{hasWorkspace && (
+									<div className={INFO_LIST_CLASS}>
+										<button
+											type="button"
+											className="flex w-full min-w-0 items-center gap-2 rounded-control px-[7px] py-[5px] text-left text-label text-fg transition-colors hover:bg-hover"
+											onClick={() => onOpenTerminal?.()}
+										>
+											<IconTerminal size={15} className="shrink-0 text-faint" />
+											Terminal
+										</button>
+									</div>
+								)}
+							</div>
+							</>
 							)}
 						</div>
 					</div>
