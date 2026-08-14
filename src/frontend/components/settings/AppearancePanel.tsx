@@ -53,7 +53,7 @@ import {
 	setSidebarDensity,
 	type SidebarDensity,
 } from "../../lib/sidebar-density";
-import { cn } from "../../ui/cn";
+import { Segmented, SegmentedOption } from "../../ui/segmented";
 import {
 	SettingCard,
 	SettingRow as SettingsRow,
@@ -369,30 +369,20 @@ export function AppearancePanel() {
 					desc="Compact tightens the sidebar so more workspaces fit on screen. Phone layouts keep their larger touch targets at either setting."
 					control={
 						// Two named choices rather than a switch: the same pair the
-						// sidebar's filter menu offers, wearing the same marks, so the
-						// two ways in read as one setting.
-						<div
-							className="flex items-center gap-1.5"
-							role="radiogroup"
-							aria-label="Sidebar row density"
+						// sidebar's filter menu offers, in the same control, wearing the
+						// same marks, so the two ways in read as one setting.
+						<Segmented
+							label="Sidebar row density"
+							value={density}
+							onValueChange={(v) => setSidebarDensity(v as SidebarDensity)}
 						>
 							{DENSITY_OPTIONS.map(({ value, label, Icon }) => (
-								<button
-									key={value}
-									role="radio"
-									aria-checked={density === value}
-									onClick={() => setSidebarDensity(value)}
-									className={cn(
-										"flex cursor-pointer items-center gap-1.5 rounded-md border border-line bg-transparent px-2.5 py-1.5 text-label text-dim hover:bg-hover hover:text-fg",
-										density === value &&
-											"border-line-strong bg-pressed text-fg",
-									)}
-								>
+								<SegmentedOption key={value} value={value}>
 									<Icon size={20} />
 									{label}
-								</button>
+								</SegmentedOption>
 							))}
-						</div>
+						</Segmented>
 					}
 				/>
 				<SettingRow

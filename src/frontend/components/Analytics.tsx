@@ -1,12 +1,11 @@
 import { repoLabel } from "../lib/repo-label";
-import { motion } from "motion/react";
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { duration, ease } from "../ui/motion";
 import { PRODUCT_NAME, docTitle } from "../lib/brand";
 import { fetchAnalytics } from "../lib/api";
 import type { AnalyticsSummary } from "../lib/types";
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
+import { Segmented, SegmentedOption } from "../ui/segmented";
 
 /**
  * Analytics: what happened on/because of Open Session over a date range —
@@ -483,41 +482,22 @@ export function Analytics() {
 						</p>
 					</div>
 					<div className="flex flex-wrap items-center gap-2">
-						{/* Recessed track, raised knob: the selected range sits ON the
-						    group rather than being a darker hole cut into it, and the
-						    knob is the Button primitive's own raised plate so it reads
-						    the same way in both themes. Concentric corners: the knob's
-						    `rounded-control` (12) plus the track's 2px padding is the
-						    track's `rounded-lg` (14). */}
-						<div className="flex rounded-lg bg-hover p-0.5">
-							{PRESETS.map((p) => {
-								const selected = activePresetDays === p.days;
-								return (
-									<button
-										key={p.label}
-										type="button"
-										aria-pressed={selected}
-										className={`relative cursor-pointer rounded-control border-0 bg-transparent px-2.5 py-1 text-control-label font-medium ${
-											selected ? "text-fg" : "text-dim hover:text-fg"
-										}`}
-										onClick={() => {
-											setFrom(daysAgo(p.days - 1));
-											setTo(utcToday());
-										}}
-									>
-										{selected && (
-											<motion.span
-												layoutId="analytics-range-knob"
-												aria-hidden
-												className="absolute inset-0 rounded-control border border-line bg-button smooth-shadow-xs"
-												transition={{ type: "tween", duration: duration.base, ease }}
-											/>
-										)}
-										<span className="relative">{p.label}</span>
-									</button>
-								);
-							})}
-						</div>
+						{/* A custom range matches no preset, so the control can sit with
+						    nothing pressed — the dates beside it are the value then. */}
+						<Segmented
+							label="Date range"
+							value={activePresetDays === null ? null : String(activePresetDays)}
+							onValueChange={(v) => {
+								setFrom(daysAgo(Number(v) - 1));
+								setTo(utcToday());
+							}}
+						>
+							{PRESETS.map((p) => (
+								<SegmentedOption key={p.label} value={String(p.days)}>
+									{p.label}
+								</SegmentedOption>
+							))}
+						</Segmented>
 						<div className="flex items-center gap-1.5">
 							<input
 								type="date"

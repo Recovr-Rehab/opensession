@@ -1,62 +1,112 @@
+import { Toggle } from "@base-ui/react/toggle";
+import { ToggleGroup } from "@base-ui/react/toggle-group";
+import { motion } from "motion/react";
 import * as React from "react";
 import { cn } from "./cn";
+import { duration, ease } from "./motion";
 
 /**
- * Segmented control — a short, exclusive choice shown in full: "My archived /
- * Everyone", "All / Auto-archived / Manual".
+ * Segmented control — a short, exclusive choice shown in full, where every
+ * option is worth reading at a glance: Default / Compact, 7d / 14d / 30d / 90d.
  *
- * The shape already existed in three hand-copied class strings on one page,
- * which is how the app ends up with two controls that mean the same thing and
- * look 1px apart. It also arrived with `role="group"` and no pressed state, so
- * the choice was visible but unspoken: `aria-pressed` is what makes each
- * option announce whether it is the one in effect.
+ * Recessed track, raised knob: the option in effect sits ON the group rather
+ * than being a darker hole cut into it, and the knob is the same raised plate
+ * the Button primitive uses, so it reads the same way in both themes. The
+ * track is `bg-hover` — one of the few places that absolute surface is right,
+ * because here it is a real surface (a well the options sit in) rather than an
+ * interaction wash. Concentric corners: the knob's `rounded-control` (12) plus
+ * the track's 2px padding is the track's `rounded-lg` (14).
  *
- * The track is `--bg-hover`, one of the few places that absolute surface is
- * correct — it is a real surface here (a well the options sit in), not a hover
- * wash. The option in effect is a raised plate (`bg-active`); the rest are
- * plain text that only warms on hover, so the control reads as one object with
- * a current value rather than a row of buttons.
+ * The knob is one element that MOVES between options (Motion's `layoutId`), not
+ * a background that blinks on and off, so the control says which way the value
+ * went. Each mounted group gets its own id from `useId`, or two segmented
+ * controls on one page would trade a single knob back and forth across the
+ * screen.
+ *
+ * Built on Base UI's ToggleGroup, which is what makes the keyboard right:
+ * arrow keys move between the options, the group is one tab stop, and each
+ * option announces through `aria-pressed` whether it is the one in effect.
+ * Re-pressing the current option is ignored — a segmented control always has a
+ * value, so there is nothing for it to mean.
  *
  * Reach for it only for two or three short options that all deserve to be
  * visible. A longer list (every repo on the instance) belongs in a `Select` or
  * a menu — spelled out, it wraps to a second line and outweighs the content it
- * is filtering.
+ * is choosing for.
  */
+const SegmentedContext = React.createContext<{ knobId: string; value: string | null }>({
+	knobId: "",
+	value: null,
+});
+
 export function Segmented({
 	label,
+	value,
+	onValueChange,
 	className,
+	children,
 	...props
-}: React.ComponentPropsWithoutRef<"div"> & { label: string }) {
+}: Omit<
+	React.ComponentPropsWithoutRef<"div">,
+	"value" | "onChange" | "defaultValue"
+> & {
+	label: string;
+	/** The option in effect. `null` leaves every option unpressed — for a
+	 *  control whose value can also be set from outside it (a custom date
+	 *  range that matches no preset). */
+	value: string | null;
+	onValueChange: (value: string) => void;
+}) {
+	const knobId = React.useId();
 	return (
-		<div
-			role="group"
-			aria-label={label}
-			className={cn(
-				"inline-flex gap-0.5 rounded-md bg-[var(--bg-hover)] p-0.5",
-				className,
-			)}
-			{...props}
-		/>
+		<SegmentedContext.Provider value={{ knobId, value }}>
+			<ToggleGroup
+				aria-label={label}
+				value={value === null ? [] : [value]}
+				onValueChange={(next) => {
+					const picked = next[0];
+					if (picked !== undefined && picked !== value) onValueChange(picked);
+				}}
+				className={cn("inline-flex rounded-lg bg-hover p-0.5", className)}
+				{...props}
+			>
+				{children}
+			</ToggleGroup>
+		</SegmentedContext.Provider>
 	);
 }
 
 export function SegmentedOption({
-	selected,
+	value,
 	className,
+	children,
 	...props
-}: React.ComponentPropsWithoutRef<"button"> & { selected: boolean }) {
+}: Omit<React.ComponentPropsWithoutRef<"button">, "value"> & { value: string }) {
+	const { knobId, value: current } = React.useContext(SegmentedContext);
+	const selected = current === value;
 	return (
-		<button
-			type="button"
-			aria-pressed={selected}
+		<Toggle
+			value={value}
 			className={cn(
-				"cursor-pointer rounded-sm border-none bg-transparent px-2.5 py-1 text-label font-medium",
+				"relative cursor-pointer rounded-control border-0 bg-transparent px-2.5 py-1 text-control-label font-medium",
 				"whitespace-nowrap transition-colors duration-[var(--dur-micro)] ease-[var(--ease)]",
-				"phone:px-[13px] phone:py-[9px] phone:text-body",
-				selected ? "bg-active text-fg" : "text-faint hover:text-dim",
+				// Phones get the tap box; the desktop control is a reading size.
+				"phone:px-3 phone:py-2 phone:text-body",
+				selected ? "text-fg" : "text-dim hover:text-fg",
 				className,
 			)}
 			{...props}
-		/>
+		>
+			{selected && (
+				<motion.span
+					layoutId={knobId}
+					aria-hidden
+					className="absolute inset-0 rounded-control border border-line bg-button smooth-shadow-xs"
+					transition={{ type: "tween", duration: duration.base, ease }}
+				/>
+			)}
+			{/* Above the knob, which is absolutely positioned over the option. */}
+			<span className="relative flex items-center gap-1.5">{children}</span>
+		</Toggle>
 	);
 }

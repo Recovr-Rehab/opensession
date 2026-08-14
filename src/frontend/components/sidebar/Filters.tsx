@@ -10,6 +10,7 @@ import {
 import type { Group } from "../../lib/sidebar-types";
 import { useIsPhone } from "../../hooks/useIsPhone";
 import { cn } from "../../ui/cn";
+import { Segmented, SegmentedOption } from "../../ui/segmented";
 import { RepoTile, repoLabel } from "../RepoTile";
 import { UserAvatar } from "../UserAvatar";
 import React, { useEffect, useRef, useState } from "react";
@@ -173,15 +174,23 @@ export function FilterPopover({
 				{!isPhone && (
 					<div className={FILTER_ROW}>
 						<span className={FILTER_ROW_LABEL}>Density</span>
-						<MiniSelect
+						{/* Both settings at once, rather than one behind a menu: there
+						    are only two of them, and this is the one control here that
+						    changes the list's shape rather than what is in it, so it
+						    shows its choice instead of naming it. Same control and same
+						    marks as Settings → Appearance. */}
+						<Segmented
+							label="Sidebar row density"
 							value={density}
-							options={DENSITY_OPTIONS.map(({ value, label, Icon }) => ({
-								value,
-								label,
-								icon: <Icon size={20} className="shrink-0 text-dim" />,
-							}))}
-							onSelect={(v) => setSidebarDensity(v as SidebarDensity)}
-						/>
+							onValueChange={(v) => setSidebarDensity(v as SidebarDensity)}
+						>
+							{DENSITY_OPTIONS.map(({ value, label, Icon }) => (
+								<SegmentedOption key={value} value={value}>
+									<Icon size={20} />
+									{label}
+								</SegmentedOption>
+							))}
+						</Segmented>
 					</div>
 				)}
 			</div>
