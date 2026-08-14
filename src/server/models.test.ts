@@ -5,7 +5,8 @@ import { join } from "path";
 import {
   BEST_AVAILABLE_CODEX_MODEL,
   accountProviderForModel,
-  baseModelId,
+  modelEngineKey,
+  modelSupportsSteer,
   directModelLabel,
   explicitEngineFor,
   modelLabel,
@@ -357,6 +358,17 @@ describe("direct-SDK engine model routing (claude/ and codex/)", () => {
     expect(modelLabel("claude/anthropic/claude-opus-5")).toBe("Claude · Claude Opus 5");
   });
 
+  it("reports steer support by engine, not by model slug", () => {
+    // Was providerFor(model) !== "codex", from when a bare gpt-* id ran on the
+    // Codex CLI engine. That engine is gone: bare slugs run on opencode, and
+    // codex-direct steers natively.
+    expect(modelSupportsSteer("codex/openai/gpt-5.6-sol")).toBe(true);
+    expect(modelSupportsSteer("gpt-5.6-sol")).toBe(true);
+    expect(modelSupportsSteer("opencode/openai/gpt-5.6-sol")).toBe(true);
+    expect(modelSupportsSteer("claude/anthropic/claude-opus-5")).toBe(true);
+    expect(modelSupportsSteer("pi/anthropic/claude-opus-5")).toBe(true);
+  });
+
   it("never registers direct entries: the model list stays engine-agnostic", () => {
     expect(
       KNOWN_MODELS.some((m) => m.id.startsWith("claude/") || m.id.startsWith("codex/"))
@@ -401,7 +413,7 @@ describe("routeModel (engine resolution order)", () => {
   it("honors an explicit engine prefix over everything else", () => {
     writeConfig({
       claude: { enabled: true },
-      modelEngines: { "anthropic/claude-opus-5": "claude" },
+      modelEngines: { "claude-opus-5": "claude" },
     });
     expect(routeModel("pi/anthropic/claude-opus-5", { interactive: true })).toEqual({
       engine: "pi",
@@ -420,10 +432,7 @@ describe("routeModel (engine resolution order)", () => {
     writeConfig({
       claude: { enabled: true },
       codex: { enabled: true },
-      modelEngines: {
-        "anthropic/claude-opus-5": "claude",
-        "openai/gpt-5.6-sol": "codex",
-      },
+      modelEngines: { "claude-opus-5": "claude", "gpt-5.6-sol": "codex" },
     });
     expect(routeModel("opencode/anthropic/claude-opus-5", { interactive: true })).toEqual({
       engine: "claude",
@@ -440,7 +449,7 @@ describe("routeModel (engine resolution order)", () => {
   it("fails soft on a stale default: disabled or un-routable stays on opencode", () => {
     writeConfig({
       claude: { enabled: false },
-      modelEngines: { "anthropic/claude-opus-5": "claude" },
+      modelEngines: { "claude-opus-5": "claude" },
     });
     expect(routeModel("opencode/anthropic/claude-opus-5", { interactive: true }).engine).toBe(
       "opencode"
@@ -448,7 +457,7 @@ describe("routeModel (engine resolution order)", () => {
     // Enabled but cross-vendor: ignored rather than silently rerouted.
     writeConfig({
       codex: { enabled: true },
-      modelEngines: { "anthropic/claude-opus-5": "codex" },
+      modelEngines: { "claude-opus-5": "codex" },
     });
     expect(routeModel("opencode/anthropic/claude-opus-5", { interactive: true })).toEqual({
       engine: "opencode",
@@ -457,14 +466,14 @@ describe("routeModel (engine resolution order)", () => {
   });
 
   it("keys the default map by the engine-stripped base id", () => {
-    expect(baseModelId("opencode/anthropic/claude-opus-5")).toBe(
-      "anthropic/claude-opus-5"
-    );
-    expect(baseModelId("claude/anthropic/claude-opus-5")).toBe(
-      "anthropic/claude-opus-5"
-    );
-    expect(baseModelId("pi/dial/ultra")).toBe("dial/ultra");
-    expect(baseModelId("claude-opus-5")).toBe("claude-opus-5");
+    // Same key shape the UI writes (frontend lib/model-engine.ts): the bare
+    // model slug, or the whole preset id.
+    expect(modelEngineKey("opencode/anthropic/claude-opus-5")).toBe("claude-opus-5");
+    expect(modelEngineKey("claude/anthropic/claude-opus-5")).toBe("claude-opus-5");
+    expect(modelEngineKey("codex/openai/gpt-5.6-sol")).toBe("gpt-5.6-sol");
+    expect(modelEngineKey("pi/dial/ultra")).toBe("dial/ultra");
+    expect(modelEngineKey("claude/dial/opus-fable")).toBe("dial/opus-fable");
+    expect(modelEngineKey("claude-opus-5")).toBe("claude-opus-5");
     expect(explicitEngineFor("claude/anthropic/claude-opus-5")).toBe("claude");
     expect(explicitEngineFor("claude-opus-5")).toBeNull();
     expect(explicitEngineFor("anthropic/claude-opus-5")).toBeNull();

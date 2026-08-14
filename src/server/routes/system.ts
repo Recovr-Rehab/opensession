@@ -461,6 +461,42 @@ export async function handleSystemRoutes(
 		}
 	}
 
+	// Codex-direct smoke turn: the codex/ sibling of the route above — one
+	// scripted turn against a throwaway `os-test-codex-direct-*` session
+	// through the in-process Codex SDK adapter, for post-restart verification
+	// (SDK turn → transcripts.db rows → bus). Config-gated
+	// (~/.opensession-engines.json), so with the engine off (or dryRun: true)
+	// it never picks an account or spawns the SDK — ok:false + reason (200),
+	// never a 500.
+	if (path === "/api/admin/codex-direct-smoke" && req.method === "POST") {
+		let body: { dryRun?: unknown } = {};
+		try {
+			body = ((await req.json()) ?? {}) as typeof body;
+		} catch {
+			// empty/non-JSON body → defaults
+		}
+		const dryRun = body.dryRun === true;
+		const by = requestUser(ctx);
+		console.log(
+			`[codex-direct-smoke] admin trigger${by ? ` by ${by}` : ""}${dryRun ? " (dry-run)" : ""}`,
+		);
+		try {
+			const { runCodexDirectSmokeTurn } = await import(
+				"../engine/codex-direct-adapter"
+			);
+			const result = await runCodexDirectSmokeTurn({
+				dryRun,
+				timeoutMs: 120_000,
+			});
+			return Response.json({ ...result, text: result.text.slice(0, 400) });
+		} catch (e) {
+			return Response.json(
+				{ ok: false, error: String((e as Error)?.message || e) },
+				{ status: 500 },
+			);
+		}
+	}
+
 	// Pi engine smoke turn: one scripted turn against a throwaway
 	// `os-test-pi-*` session through the in-process pi SDK runner, for
 	// post-restart verification (SDK turn → bridge → transcripts.db rows).

@@ -7,7 +7,7 @@
  */
 
 import { requestUser, type RouteContext } from "./context";
-import { KNOWN_MODELS, accountProviderForModel, baseModelId, getDefaultModel, getModelFallbackAuto, interactiveDefaultModel, modelEfforts, refreshOpencodePickerModels, setDefaultModel, setInteractiveDefaultModel, setModelFallbackAuto, toOpencodeModel } from "../models";
+import { KNOWN_MODELS, accountProviderForModel, getDefaultModel, getModelFallbackAuto, interactiveDefaultModel, modelEfforts, modelEngineKey, refreshOpencodePickerModels, setDefaultModel, setInteractiveDefaultModel, setModelFallbackAuto, toOpencodeModel } from "../models";
 import { ENGINE_IDS, directEngineEnabled, modelEngineDefaults, setModelEngineDefault, type EngineId } from "../engine/engines-config";
 import { listAccountsPublic } from "../claude-accounts";
 import { listCodexAccountsPublic } from "../codex-accounts";
@@ -253,7 +253,7 @@ export async function handleModelsRoutes(
 			// Store the engine-stripped id whatever the caller sent, so one entry
 			// covers a model however it was written.
 			return Response.json({
-				modelEngines: setModelEngineDefault(baseModelId(model), engine as EngineId | null),
+				modelEngines: setModelEngineDefault(modelEngineKey(model), engine as EngineId | null),
 			});
 		} catch (e: any) {
 			return Response.json(

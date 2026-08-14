@@ -22,7 +22,7 @@ import {
   interruptAndSteerAgentRun,
   cancelAgentRun,
 } from "../agent-runner";
-import { providerFor } from "../models";
+import { modelSupportsSteer, providerFor } from "../models";
 import {
   getRepo,
   repoForPath,
@@ -108,7 +108,7 @@ function makeLocalSandbox(cwd: string): Sandbox {
       const ids = [spec.osSessionId, spec.engineSessionId];
       return {
         events: () => gen,
-        steerable: providerFor(spec.model) !== "codex",
+        steerable: modelSupportsSteer(spec.model),
         steer: (text) => steerAgentRun(ids, text),
         interruptSteer: (text) => interruptAndSteerAgentRun(ids, text),
         cancel: () => cancelAgentRun(...ids),

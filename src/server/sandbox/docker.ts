@@ -116,7 +116,7 @@ import { stateDir, } from "../paths";
 import { journalSet, journalClear, type ActiveRunRecord } from "../run-journal";
 import { shouldPersistModelSwitch, type StreamEvent } from "../run-events";
 import { recoveryKind, RESUME_CONTINUATION_PROMPT } from "../agent-runner";
-import { providerFor } from "../models";
+import { modelSupportsSteer, providerFor } from "../models";
 import { hostRunBusy, hostSteer, hostInterruptSteer, hostCancel } from "../host-registry";
 import { registerRunToken, unregisterRunToken } from "../run-rpc";
 import { writeJsonAtomic } from "../shared/atomic-write";
@@ -1167,7 +1167,7 @@ function makeDockerSandbox(
       const gen = withRunJournal(handle.events(), record);
       return {
         events: () => gen,
-        steerable: providerFor(spec.model) !== "codex",
+        steerable: modelSupportsSteer(spec.model),
         // HostHandle registers its control in host-registry keyed by the bks
         // session id — route through the same helpers the WS handlers use.
         steer: (text) => hostSteer(spec.osSessionId, text),
@@ -1196,7 +1196,7 @@ function makeDockerSandbox(
       })();
       return {
         events: () => gen,
-        steerable: providerFor(spec.model) !== "codex",
+        steerable: modelSupportsSteer(spec.model),
         steer: (text) => hostSteer(spec.osSessionId, text),
         interruptSteer: (text) => hostInterruptSteer(spec.osSessionId, text),
         cancel: () => hostCancel(spec.osSessionId),

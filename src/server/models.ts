@@ -949,10 +949,59 @@ export function explicitEngineFor(model?: string | null): Provider | null {
   return m ? (m[1] as Provider) : null;
 }
 
-/** A model id with any engine routing prefix stripped — the key shape the
- *  per-model default-engine map (engine/engines-config.ts) is stored under. */
-export function baseModelId(model?: string | null): string {
-  return (model || "").trim().replace(ENGINE_PREFIX_RE, "");
+/** Preset id heads that carry no upstream provider segment. */
+const PRESET_HEADS = ["dial/", "orchestrator/", "workspace-preset/"];
+
+/** An engine-routed id back to the id the picker lists:
+ *  "pi/anthropic/claude-opus-5" → "opencode/anthropic/claude-opus-5",
+ *  "claude/dial/opus-fable" → "dial/opus-fable". Unprefixed ids pass through. */
+function pickerBaseId(id: string): string {
+  const engine = explicitEngineFor(id);
+  if (!engine || engine === "opencode") return id;
+  const rest = id.slice(engine.length + 1);
+  return PRESET_HEADS.some((head) => rest.startsWith(head)) ? rest : `opencode/${rest}`;
+}
+
+/**
+ * The key a per-model default engine is stored under: the bare model slug
+ * ("claude-opus-5", "gpt-5.6-sol"), or the whole preset id for entries with no
+ * provider segment. Never engine-prefixed — the map answers "which engine runs
+ * this model by default", so a prefixed key would double-route.
+ *
+ * Mirrors modelEngineKey in src/frontend/lib/model-engine.ts exactly: one map,
+ * one key shape, written by the UI and read here.
+ */
+export function modelEngineKey(model?: string | null): string {
+  const base = pickerBaseId((model || "").trim());
+  if (!base.startsWith("opencode/")) return base;
+  const rest = base.slice("opencode/".length);
+  const slash = rest.indexOf("/");
+  return slash > 0 ? rest.slice(slash + 1) : rest;
+}
+
+/** Which engines fold a message into a LIVE turn: opencode in-band, pi and the
+ *  two direct SDKs natively. One table so a future engine that can't steer has
+ *  a single place to say so. */
+const STEERABLE_ENGINES: Record<Provider, boolean> = {
+  opencode: true,
+  pi: true,
+  claude: true,
+  codex: true,
+};
+
+/**
+ * Whether mid-turn steer is offered for a model — asked by the sandbox
+ * surfaces when they build a run handle.
+ *
+ * Engine-based, not slug-based. The old predicate was `providerFor(model) !==
+ * "codex"`, from when a bare gpt-* id ran on the Codex CLI engine, which had
+ * no steer. That engine is deleted: bare gpt-* ids run on opencode, and the
+ * codex-direct engine steers natively — so the slug says nothing and the
+ * engine says everything. A live run that still can't take a steer answers
+ * false at the call site (steerAgentRun) and the caller queues.
+ */
+export function modelSupportsSteer(model?: string | null): boolean {
+  return STEERABLE_ENGINES[routeModel(model).engine];
 }
 
 /**
@@ -981,7 +1030,7 @@ export function routeModel(
   // default the way pi/, claude/ and codex/ do.
   if (explicit && explicit !== "opencode") return { engine: explicit, model: requested };
   if (opts?.interactive) {
-    const preferred = modelEngineDefault(baseModelId(requested));
+    const preferred = modelEngineDefault(modelEngineKey(requested));
     if (preferred && preferred !== "opencode" && engineUsableAsDefault(preferred)) {
       const routed = toEngineModel(requested, preferred);
       if (routed) return { engine: preferred, model: routed };

@@ -77,7 +77,7 @@ import {
   maskOpenaiAccount,
   openaiSeedAuthPath,
 } from "../../opencode-openai-auth";
-import { providerFor } from "../../models";
+import { modelSupportsSteer, providerFor } from "../../models";
 import { filterMcpServers } from "../../runner-shared";
 import {
   appendOpencodeTranscript,
@@ -1882,7 +1882,7 @@ export function makeRemoteSandbox(parts: RemoteSandboxParts): Sandbox {
       };
       return {
         events: () => gen,
-        steerable: providerFor(spec.model) !== "codex",
+        steerable: modelSupportsSteer(spec.model),
         steer: (text) => mirrorSteer(text, hostSteer(spec.osSessionId, text)),
         interruptSteer: (text) =>
           mirrorSteer(text, hostInterruptSteer(spec.osSessionId, text)),
@@ -1906,7 +1906,7 @@ export function makeRemoteSandbox(parts: RemoteSandboxParts): Sandbox {
       })();
       return {
         events: () => gen,
-        steerable: providerFor(spec.model) !== "codex",
+        steerable: modelSupportsSteer(spec.model),
         steer: (text) => hostSteer(spec.osSessionId, text),
         interruptSteer: (text) => hostInterruptSteer(spec.osSessionId, text),
         cancel: () => hostCancel(spec.osSessionId),

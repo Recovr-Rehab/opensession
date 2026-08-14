@@ -36,7 +36,7 @@ import {
 import type { ActiveRunRecord } from "./run-journal";
 import { shouldPersistModelSwitch, type ImageInput } from "./run-events";
 import type { GitIdentity } from "./shared/user-mappings";
-import { providerFor } from "./models";
+import { modelSupportsSteer, providerFor } from "./models";
 import { homeDir, OPENSESSION_SESSIONS_DIR } from "./paths";
 import { statePath, } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
@@ -470,7 +470,7 @@ export class HostHandle {
     this.ctl = {
       hostId: spec.hostId,
       osSessionId: spec.osSessionId,
-      steerable: providerFor(spec.model) !== "codex",
+      steerable: modelSupportsSteer(spec.model),
       connected: () => this.up,
       steer: (text) => this.send({ t: "steer", text }),
       interruptSteer: (text) => this.send({ t: "interrupt_steer", text }),
@@ -548,7 +548,7 @@ export class HostHandle {
         if (msg.engineSessionId) this.noteEngineId(msg.engineSessionId);
         if (msg.effectiveModel) {
           this.effectiveModel = msg.effectiveModel;
-          this.ctl.steerable = providerFor(msg.effectiveModel) !== "codex";
+          this.ctl.steerable = modelSupportsSteer(msg.effectiveModel);
         }
         if (msg.transientFallback !== undefined) {
           this.transientFallback = msg.transientFallback;
@@ -588,7 +588,7 @@ export class HostHandle {
         if (ev.type === "model_switch" && ev.toModel) {
           this.effectiveModel = ev.toModel;
           this.transientFallback = ev.temporaryFallback === true;
-          this.ctl.steerable = providerFor(ev.toModel) !== "codex";
+          this.ctl.steerable = modelSupportsSteer(ev.toModel);
           if (shouldPersistModelSwitch(ev)) this.reportedSelectedModel = ev.toModel;
         }
         if (ev.type === "done" || ev.type === "error") this.sawTerminal = true;
