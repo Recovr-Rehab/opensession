@@ -51,6 +51,7 @@ export {
   markCachedPrClosed,
   markCachedPrMerged,
   markCachedPrReviewed,
+  markCachedPrReviewRequestsCleared,
   cachedPrBranchByNumber,
   applyPrWebhookToBulkCache,
   refreshPrCache,

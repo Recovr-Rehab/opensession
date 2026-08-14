@@ -136,10 +136,16 @@ type CachedReviewMutation = {
 const prReviewState: {
 	generation: number;
 	reviews: Map<string, CachedReviewMutation>;
+	/** PRs whose review requests were withdrawn in OS1 → the generation at
+	 *  which that happened, same staleness guard the reviews above use. */
+	cleared: Map<string, number>;
 } = ((globalThis as any).__opensessionPrReviewState ??= {
 	generation: 0,
 	reviews: new Map(),
+	cleared: new Map(),
 });
+// A hot reload can hand back an object parked before `cleared` existed.
+prReviewState.cleared ??= new Map();
 
 function closeTombstoneKey(ghRepo: string, number: number): string {
 	return `${ghRepo}#${number}`;
@@ -306,6 +312,32 @@ export function markCachedPrReviewed(
 		event,
 	});
 	byBranch.set(branch, applyCachedReview(pr, reviewer, event));
+	prCache.ts = Date.now();
+	persistPrCache(prCache.data);
+}
+
+/**
+ * Keep the sidebar's repo-wide PR cache coherent after OS1 withdraws every
+ * pending review request on a PR (the info panel's "Clear review request",
+ * which also clears GitHub's own Reviewers list). Same reasoning as
+ * markCachedPrReviewed: the bulk sweep is throttled, so without this the chip
+ * keeps reporting reviewers that are already gone for up to 30 minutes.
+ */
+export function markCachedPrReviewRequestsCleared(
+	ghRepo: string,
+	branch: string,
+): void {
+	const repoId = prRepos().find((repo) => repo.ghRepo === ghRepo)?.id;
+	if (!repoId) return;
+	const byBranch = prCache.data.get(repoId);
+	const pr = byBranch?.get(branch);
+	if (!byBranch || !pr) return;
+	prReviewState.generation++;
+	prReviewState.cleared.set(
+		reviewMutationKey(ghRepo, pr.number, "*"),
+		prReviewState.generation,
+	);
+	byBranch.set(branch, { ...pr, reviewRequested: [] });
 	prCache.ts = Date.now();
 	persistPrCache(prCache.data);
 }
@@ -817,6 +849,28 @@ async function refreshPrCacheInner(): Promise<Set<string>> {
       for (const [branch, pr] of byBranch) {
         if (pr.number !== number) continue;
         byBranch.set(branch, applyCachedReview(pr, mutation.person, mutation.event));
+        break;
+      }
+    }
+    // Withdrawn review requests, held over the same way: the sweep may have
+    // fetched this PR before the clear reached GitHub.
+    for (const [key, generation] of prReviewState.cleared) {
+      const [ghRepo, numberText] = key.split("#");
+      const repoId = prRepos().find((repo) => repo.ghRepo === ghRepo)?.id;
+      if (
+        generation <= reviewRefreshGeneration &&
+        repoId &&
+        reviewAuthoritativeRepos.has(repoId)
+      ) {
+        prReviewState.cleared.delete(key);
+        continue;
+      }
+      const byBranch = repoId ? next.get(repoId) : undefined;
+      if (!byBranch) continue;
+      const number = Number(numberText);
+      for (const [branch, pr] of byBranch) {
+        if (pr.number !== number) continue;
+        byBranch.set(branch, { ...pr, reviewRequested: [] });
         break;
       }
     }

@@ -16,7 +16,12 @@ import { classifyEntries, classifyEntry } from "@tellahq/opensession-protocol/no
 import { withToolPresentations } from "@tellahq/opensession-protocol/tool-presentation";
 import { transcriptDbPath, transcriptStore } from "../transcript-store";
 import { clearSessionFileArchive } from "../plain-archive";
-import { editPrReviewers, isNoPrError, prMetaForBranch } from "../pr-info";
+import {
+	editPrReviewers,
+	isNoPrError,
+	prMetaForBranch,
+	prReviewerSpecs,
+} from "../pr-info";
 import { promptQueues, requeueSteerReceipts, stoppedSessions } from "../queue-state";
 import { markPrReviewNotified } from "../pr-review-notifications";
 import { getReviewRequest, setReviewAccepted, setReviewRequest } from "../review-requests";
@@ -50,6 +55,7 @@ import {
 	deleteSession,
 	engineUserTexts,
 	getAllSessions,
+	markCachedPrReviewRequestsCleared,
 	mergedSessionTranscriptAsync,
 } from "../sessions";
 import { githubLoginFor } from "../shared/user-mappings";
@@ -952,7 +958,20 @@ export async function handleSessionsRoutes(
 		// Whether the reviewer actually reached GitHub's list — false when there
 		// was no PR to mirror onto, which the push marker below depends on.
 		let mirroredToGithub = false;
-		if (target && hostReviewers && (addLogin || removeLogin)) {
+		// What has to change on GitHub's Reviewers list. Clearing a session with
+		// no request of its own withdraws GitHub's own pending requests instead:
+		// the chip reports those as the same "somebody is waiting on you" state
+		// (WorkspaceInfo's ReviewerChip falls back to them), and this is the only
+		// way to take one down from here. Read as the service identity, so a clear
+		// with nothing on GitHub to remove never demands a personal credential.
+		const removeSpecs = new Set(removeLogin ? [removeLogin] : []);
+		if (!reviewer && !prevReviewer && target && hostReviewers) {
+			const specs = await prReviewerSpecs(target.branch, target.ghRepo).catch(
+				() => null,
+			);
+			for (const spec of specs || []) removeSpecs.add(spec);
+		}
+		if (target && hostReviewers && (addLogin || removeSpecs.size)) {
 			const credential = githubMutationCredential(ctx);
 			// No personal credential only actually blocks this when there is a PR
 			// to mirror onto: `target` comes from branch metadata alone, so most
@@ -969,7 +988,7 @@ export async function handleSessionsRoutes(
 			} else {
 				const mirrored = await editPrReviewers(
 					target.branch,
-					{ add: addLogin, remove: removeLogin },
+					{ add: addLogin, remove: [...removeSpecs] },
 					target.ghRepo,
 					credential,
 				).catch((e: any) => ({ error: e?.message || String(e) }));
@@ -995,6 +1014,11 @@ export async function handleSessionsRoutes(
 					}
 				: null,
 		);
+		// The chip's GitHub fallback reads the bulk PR cache, which the throttled
+		// sweep only refills every 10-30 minutes. Without a write-through, a clear
+		// that did reach GitHub still leaves the reviewers on screen.
+		if (!reviewer && mirroredToGithub && target)
+			markCachedPrReviewRequestsCleared(target.ghRepo, target.branch);
 		invalidateSessionsCache();
 		if (reviewer) {
 			// Only suppress the watcher's own push when the request really landed on

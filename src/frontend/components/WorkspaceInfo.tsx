@@ -931,9 +931,12 @@ function ReviewerChip({
 	// both mean "somebody is waiting on you to look at this", so they wear the
 	// same chip. The picker below still only ever writes the Open Session request.
 	const me = personKey(currentUser);
-	const githubRequested = (prReviewRequested || []).map((person) =>
-		person.toLowerCase(),
-	);
+	// Local so clearing them lands immediately; the polled session confirms.
+	const [ghRequested, setGhRequested] = useState(prReviewRequested || []);
+	useEffect(() => {
+		setGhRequested(prReviewRequested || []);
+	}, [(prReviewRequested || []).join("\n")]);
+	const githubRequested = ghRequested.map((person) => person.toLowerCase());
 	const githubRequestsMe = githubRequested.some((person) => person === me);
 	const needsMyReview =
 		githubRequestsMe ||
@@ -941,8 +944,9 @@ function ReviewerChip({
 	// A review asked for on GitHub, aimed at someone else. The picker mirrors
 	// its own picks into GitHub's Reviewers list, so the two sides mean the same
 	// thing, but a request made on GitHub never came back here and the chip read
-	// "Request review" while a reviewer was already waiting. Only GitHub can
-	// clear these, so the chip reports them and the menu stays a picker.
+	// "Request review" while a reviewer was already waiting. The chip reports
+	// them, and "Clear review request" withdraws them on GitHub (there is no
+	// local request to drop), so the state the chip shows is always clearable.
 	const githubOthers = req ? [] : githubRequested.filter((p) => p !== me);
 	const githubNames = githubOthers.map(personNameForKey);
 	const githubTarget = githubNames[0] || null;
@@ -953,6 +957,7 @@ function ReviewerChip({
 
 	function pick(name: string | null, recipients?: string[]) {
 		const prev = req;
+		const prevGithub = ghRequested;
 		const me = getCurrentUser();
 		// Re-assigning drops any prior sign-off (a fresh reviewer, fresh review).
 		const next = name
@@ -964,10 +969,14 @@ function ReviewerChip({
 				}
 			: null;
 		setReq(next);
+		// Clearing a session that has no request of its own withdraws GitHub's
+		// pending ones instead, which is what the server does with the same call.
+		if (!name && !prev) setGhRequested([]);
 		setError(null);
 		onReviewChange?.(owner, next);
 		setSessionReviewerApi(owner, name, me).catch((e: any) => {
 			setReq(prev);
+			setGhRequested(prevGithub);
 			onReviewChange?.(owner, prev);
 			setError(e?.message || "Failed to set reviewer");
 		});
@@ -1146,7 +1155,7 @@ function ReviewerChip({
 							)}
 						</Menu.Item>
 					))}
-					{req && (
+					{(req || githubRequested.length > 0) && (
 						<>
 							<Menu.Separator />
 							<Menu.Item className="text-dim" onClick={() => pick(null)}>

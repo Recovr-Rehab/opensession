@@ -15,6 +15,7 @@ import { audited } from "./audit";
 import { ghRateLimited, noteGhRateLimited, isGhRateLimitMsg } from "./github-limit";
 import { serviceGithubCredential, type GithubCredential } from "./github-auth";
 import { githubAppEnv } from "./github-app";
+import { reviewRequestRemovalSpecs } from "./github-review-requests";
 import { getPrStack, unmergedLayersBelow, type PrStack } from "./pr-stack";
 // Type-only: pr-host.ts imports this module at runtime; the reverse edge must
 // stay erased or the two would cycle.
@@ -908,19 +909,23 @@ export async function mergePr(
  * caller ignores the result on failure). Mirrors the Open Session review-request
  * chip onto GitHub's own Reviewers list: setting a reviewer in the info panel
  * also `--add-reviewer`s them, re-assigning removes the old and adds the new,
- * and clearing removes them. `gh pr edit` takes the branch as the PR selector,
+ * and clearing removes them. `remove` takes a list so a clear can also withdraw
+ * requests made on GitHub itself. `gh pr edit` takes the branch as the PR selector,
  * so no separate lookup is needed; a branch with no open PR just errors.
  */
 export async function editPrReviewers(
   branch: string,
-  opts: { add?: string | null; remove?: string | null },
+  opts: { add?: string | null; remove?: string | string[] | null },
   repo: string = DEFAULT_REPO(),
   credential: GithubCredential = serviceGithubCredential,
 ): Promise<{ ok: true } | { error: string }> {
   const args = ["pr", "edit", branch, "--repo", repo];
   if (opts.add) args.push("--add-reviewer", opts.add);
-  if (opts.remove && opts.remove !== opts.add)
-    args.push("--remove-reviewer", opts.remove);
+  // A list, because withdrawing a request made on GitHub rather than here can
+  // mean several reviewers at once (see prReviewerSpecs).
+  const removals = (Array.isArray(opts.remove) ? opts.remove : [opts.remove])
+    .filter((person): person is string => !!person && person !== opts.add);
+  for (const person of removals) args.push("--remove-reviewer", person);
   if (args.length === 4) return { ok: true }; // nothing to do
   try {
     const proc = spawnGh(args, credential);
@@ -935,6 +940,38 @@ export async function editPrReviewers(
   } catch (e: any) {
     return { error: e.message || String(e) };
   }
+}
+
+/**
+ * The PR's pending review requests as `--remove-reviewer` specs: user logins,
+ * and `owner/team-slug` for a team request. This is what lets the info panel
+ * withdraw a request made on GitHub itself, which Open Session has no local
+ * record of. Person keys can't stand in: a team request is expanded to its
+ * members' keys for display (github-review-requests.ts), and removing a member
+ * never withdraws the team's request. `null` when the branch has no PR.
+ */
+export async function prReviewerSpecs(
+  branch: string,
+  repo: string = DEFAULT_REPO(),
+  credential: GithubCredential = serviceGithubCredential,
+): Promise<string[] | null> {
+  const proc = spawnGh(
+    ["pr", "view", branch, "--repo", repo, "--json", "reviewRequests"],
+    credential,
+  );
+  const [out, err, code] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+  if (code !== 0) {
+    if (isNoPrError(err)) return null;
+    throw new Error(prApiErrorMessage(err));
+  }
+  return reviewRequestRemovalSpecs(
+    JSON.parse(out || "{}")?.reviewRequests || [],
+    repo.split("/")[0] || "",
+  );
 }
 
 /**

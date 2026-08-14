@@ -47,6 +47,24 @@ export function expandReviewRequestLogins(
   return [...logins.values()];
 }
 
+/**
+ * The same requests as `gh pr edit --remove-reviewer` specs: a user login, or
+ * `owner/team-slug` for a team. Withdrawing a team's request needs the team
+ * itself — removing the members it expands to leaves the request standing.
+ */
+export function reviewRequestRemovalSpecs(
+  requests: ReviewRequestRef[],
+  owner: string,
+): string[] {
+  const specs = requests.map((request) =>
+    request.login ||
+    (request.slug
+      ? `${owner}/${normalizeReviewTeamSlug(request.slug)}`
+      : null),
+  );
+  return [...new Set(specs.filter((spec): spec is string => !!spec))];
+}
+
 export function cachedReviewTeamLogins(owner: string, slug: string): string[] | null {
   const teamSlug = normalizeReviewTeamSlug(slug);
   const entry = reviewTeamCache.get(`${owner.toLowerCase()}/${teamSlug.toLowerCase()}`);
