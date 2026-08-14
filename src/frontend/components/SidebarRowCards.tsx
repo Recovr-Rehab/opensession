@@ -167,7 +167,7 @@ export function CardFooter({
 	return (
 		<div className="mt-3.5 flex min-w-0 items-center gap-2">
 			{children}
-			<span className="ml-auto shrink-0 text-[11px] text-faint" title={timeTitle}>
+			<span className="ml-auto shrink-0 text-meta text-faint" title={timeTitle}>
 				{time}
 			</span>
 		</div>
@@ -291,7 +291,7 @@ export function PrRowCard({ item }: { item: ReviewQueueItem }) {
 			<div className="flex min-w-0 items-center gap-[7px]">
 				<span className="min-w-0 flex-1 truncate text-meta text-dim">{pr.branch}</span>
 				{pr.isDraft && (
-					<span className="shrink-0 text-[11px] text-faint">draft</span>
+					<span className="shrink-0 text-meta text-faint">draft</span>
 				)}
 				<span className="flex shrink-0 items-center">
 					{item.bucket === "ready" ? (
@@ -385,7 +385,7 @@ export function SupportRowCard({
 		<>
 			<div className="flex min-w-0 items-center gap-[7px]">
 				<span className="min-w-0 flex-1 truncate text-meta text-dim">{customer}</span>
-				<span className={`shrink-0 text-[11px] ${priority.cls}`}>
+				<span className={`shrink-0 text-meta ${priority.cls}`}>
 					{priority.label}
 				</span>
 			</div>

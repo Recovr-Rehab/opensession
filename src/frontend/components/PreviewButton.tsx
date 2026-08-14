@@ -229,7 +229,7 @@ export function PreviewButton({
     >
       <div className="bg-raised border border-line rounded-panel smooth-shadow-lg p-3 max-w-[90vw] max-h-[90vh] flex flex-col gap-2.5">
         {shotError ? (
-          <div className="text-red text-[13px] px-2 py-4">{shotError}</div>
+          <div className="text-red text-label px-2 py-4">{shotError}</div>
         ) : (
           <img
             src={shot!}
@@ -291,7 +291,7 @@ export function PreviewButton({
       initialFocus
       className="min-w-[240px] p-2.5"
     >
-      <div className="mb-2 text-[11px] font-bold tracking-[-0.01em] text-faint">Dev services</div>
+      <div className="mb-2 text-meta font-bold tracking-[-0.01em] text-faint">Dev services</div>
       {status.services.length === 0 ? (
         <div className="px-0 py-1 text-xs text-faint">
           {isStarting ? "Starting up…" : "Not started yet"}
@@ -321,7 +321,7 @@ export function PreviewButton({
                 <span className="font-semibold">{s.name}</span>
               )}
               <span className="text-faint">:{s.port}</span>
-              <span className={cn("ml-auto text-[11px] text-faint", s.running && "text-green")}>
+              <span className={cn("ml-auto text-meta text-faint", s.running && "text-green")}>
                 {s.running ? "running" : "stopped"}
               </span>
             </li>
@@ -593,7 +593,7 @@ export function PreviewButton({
           <a
             className={cn(
               splitSegmentBase,
-              "gap-1.5 whitespace-nowrap rounded-l-[calc(5px*var(--rf))] px-[11px] py-[5px] text-[13px] font-semibold text-green no-underline",
+              "gap-1.5 whitespace-nowrap rounded-l-[calc(5px*var(--rf))] px-[11px] py-[5px] text-label font-semibold text-green no-underline",
               "hover:relative hover:z-[1] hover:border-[rgba(63,185,80,0.5)] hover:bg-[rgba(63,185,80,0.12)] hover:text-green",
             )}
             href={url}
@@ -615,7 +615,7 @@ export function PreviewButton({
           <button
             className={cn(
               splitSegmentBase,
-              "group gap-1.5 whitespace-nowrap rounded-l-[calc(5px*var(--rf))] px-[11px] py-[5px] text-[13px] font-semibold text-dim",
+              "group gap-1.5 whitespace-nowrap rounded-l-[calc(5px*var(--rf))] px-[11px] py-[5px] text-label font-semibold text-dim",
               "cursor-pointer hover:relative hover:z-[1] hover:border-[rgba(248,81,73,0.4)] hover:bg-[rgba(248,81,73,0.1)] hover:text-red",
             )}
             onClick={stop}
@@ -632,7 +632,7 @@ export function PreviewButton({
           <button
             className={cn(
               splitSegmentBase,
-              "gap-1.5 whitespace-nowrap rounded-l-[calc(5px*var(--rf))] px-[11px] py-[5px] text-[13px] font-semibold text-dim opacity-45",
+              "gap-1.5 whitespace-nowrap rounded-l-[calc(5px*var(--rf))] px-[11px] py-[5px] text-label font-semibold text-dim opacity-45",
               "cursor-not-allowed",
             )}
             onClick={openServices}
@@ -646,7 +646,7 @@ export function PreviewButton({
           <button
             className={cn(
               splitSegmentBase,
-              "gap-1.5 whitespace-nowrap rounded-l-[calc(5px*var(--rf))] px-[11px] py-[5px] text-[13px] font-semibold text-dim",
+              "gap-1.5 whitespace-nowrap rounded-l-[calc(5px*var(--rf))] px-[11px] py-[5px] text-label font-semibold text-dim",
               "cursor-pointer hover:relative hover:z-[1] hover:border-accent hover:bg-hover hover:text-fg",
             )}
             onClick={start}

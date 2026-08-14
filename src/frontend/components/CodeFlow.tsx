@@ -4,6 +4,7 @@ import { Button } from "../ui/button";
 import { InlineAlert, LoadingState } from "../ui/state";
 import { cn } from "../ui/cn";
 import { IconBranches } from "./icons";
+import { Badge } from "../ui/badge";
 
 const TONE: Record<CodeFlowNode["status"], string> = {
 	same: "text-dim",
@@ -134,7 +135,7 @@ export function CodeFlow({
 				<h2 id={titleId} className="m-0 text-sm font-semibold text-fg">Code flow</h2>
 				<span className="text-xs text-faint">{data.languages.join(" · ")}</span>
 				{loading && <span className="ml-auto text-meta text-faint" role="status">Updating…</span>}
-				{data.truncated && !loading && <span className="ml-auto rounded-sm bg-yellow/15 px-1.5 py-0.5 text-meta font-semibold text-yellow">bounded</span>}
+				{data.truncated && !loading && <Badge tone="warning" className="ml-auto">bounded</Badge>}
 			</header>
 			{error && <InlineAlert className="mb-3" onRetry={onRetry}>{error}</InlineAlert>}
 			<div className="space-y-2">

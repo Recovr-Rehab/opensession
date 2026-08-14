@@ -35,6 +35,7 @@ import {
 	type BrowseRepo,
 	type SetupStatus,
 } from "./setup-shared";
+import { Badge } from "../ui/badge";
 
 // Settings → Setup → Repositories: the registered repos sessions work in,
 // plus an add flow. With a GitHub credential (a connected account or the bot
@@ -396,9 +397,9 @@ function RepoPickRow({
 						{repo.fullName}
 					</span>
 					{repo.private && (
-						<span className="shrink-0 rounded-sm bg-active px-1.5 py-px text-meta text-dim">
+						<Badge>
 							private
-						</span>
+						</Badge>
 					)}
 				</div>
 				{repo.description && (

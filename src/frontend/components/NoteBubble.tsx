@@ -108,7 +108,7 @@ export function NoteBubble({
 				>
 					Note
 				</span>
-				<span className="text-[11px] text-faint">
+				<span className="text-meta text-faint">
 					{noteTime(note.ts)}
 					{note.editedAt ? " · edited" : ""}
 				</span>

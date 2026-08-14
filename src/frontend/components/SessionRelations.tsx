@@ -94,7 +94,7 @@ export function SessionRelations({
 									/>
 									<span className="truncate">{w.title}</span>
 									{shortModel(w.model, models) && (
-										<span className="ml-auto shrink-0 pl-2 text-[11px] text-faint">
+										<span className="ml-auto shrink-0 pl-2 text-meta text-faint">
 											{shortModel(w.model, models)}
 										</span>
 									)}

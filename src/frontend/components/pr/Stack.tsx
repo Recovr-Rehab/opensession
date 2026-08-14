@@ -6,6 +6,7 @@ import type { PrDetails } from "../../lib/types";
 import { Button } from "../../ui/button";
 import { toast } from "../../ui/toast";
 import { PrStateIcon } from "./PrStateIcon";
+import { Badge } from "../../ui/badge";
 
 /**
  * The stack map: every layer of a GitHub stack, top layer first (the trunk
@@ -64,9 +65,9 @@ function StackBody({
       <>
         <div className="text-xs leading-relaxed text-dim">
           This branch was cut from{" "}
-          <span className="rounded-sm border border-line bg-surface px-1.5 py-0.5 text-meta">
+          <Badge variant="outline">
             {pr.stackBase}
-          </span>{" "}
+          </Badge>{" "}
           but the PRs aren't a stack on GitHub yet, so each is still reviewed against the whole chain.
         </div>
         <div className="flex items-center gap-3 pt-1">

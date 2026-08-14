@@ -5,6 +5,7 @@ import { sessionPath } from "../lib/share-link";
 import { Button } from "../ui/button";
 import { getCurrentUser } from "./UserPicker";
 import { Input } from "../ui/input";
+import { Badge } from "../ui/badge";
 
 /**
  * Sessions related to a PR: primarily via the server-enriched `prs` refs
@@ -175,9 +176,9 @@ export function PrSessionsList({
 					/>
 					<span className="truncate">{s.title}</span>
 					{s.id === currentSessionId && (
-						<span className="shrink-0 rounded-full border border-line bg-surface px-1.5 py-px text-meta text-faint">
+						<Badge variant="outline">
 							current
-						</span>
+						</Badge>
 					)}
 					{s.archived && (
 						<span className="shrink-0 text-meta text-faint">archived</span>

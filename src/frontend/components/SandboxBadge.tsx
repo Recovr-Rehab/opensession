@@ -66,8 +66,8 @@ export function SandboxBadge({
 				<span className={cn("size-2 rounded-full", dot)} aria-hidden="true" /><IconConnections size={20} className="text-faint" /><span>{runner.name}</span>
 			</Popover.Trigger>
 			<Popover.Popup side="bottom" align="start" initialFocus className="w-[300px] p-2.5">
-				<div className="px-2 pb-2 pt-1"><div className="flex items-center gap-2 text-xs font-semibold text-fg"><span className={cn("size-2 rounded-full", dot)} /><span>{label}</span><span className="ml-auto font-medium text-faint">Runtime</span></div><div className="mt-1 text-[11px] text-dim">Runner · trusted machine</div><div className="mt-1 truncate font-mono text-[10px] text-faint" title={runner.workspacePath}>{runner.workspacePath}</div></div>
-				{runner.lastLifecycleError ? <div className="px-2 py-1.5 text-[11px] font-medium text-red">{runner.lastLifecycleError}</div> : null}
+				<div className="px-2 pb-2 pt-1"><div className="flex items-center gap-2 text-xs font-semibold text-fg"><span className={cn("size-2 rounded-full", dot)} /><span>{label}</span><span className="ml-auto font-medium text-faint">Runtime</span></div><div className="mt-1 text-meta text-dim">Runner · trusted machine</div><div className="mt-1 truncate font-mono text-[10px] text-faint" title={runner.workspacePath}>{runner.workspacePath}</div></div>
+				{runner.lastLifecycleError ? <div className="px-2 py-1.5 text-meta font-medium text-red">{runner.lastLifecycleError}</div> : null}
 			</Popover.Popup>
 		</Popover.Root>;
 	}
@@ -127,7 +127,7 @@ export function SandboxBadge({
 						<span>{lifecycleLabel[lifecycle]}</span>
 						<span className="ml-auto font-medium text-faint">Runtime</span>
 					</div>
-					<div className="mt-1 text-[11px] text-dim">{sandbox.provider} · session workspace</div>
+					<div className="mt-1 text-meta text-dim">{sandbox.provider} · session workspace</div>
 					{status?.cwd ? (
 						<div className="mt-1 truncate font-mono text-[10px] text-faint" title={status.cwd}>
 							{status.cwd}
@@ -160,7 +160,7 @@ export function SandboxBadge({
 					{working === "recreate" ? "Recreating…" : "Recreate from clean image"}
 				</button>
 				{status?.logs?.setup || status?.logs?.resume ? (
-					<details className="mt-1 rounded-md bg-surface px-2.5 py-2 text-[11px] text-dim">
+					<details className="mt-1 rounded-md bg-surface px-2.5 py-2 text-meta text-dim">
 						<summary className="cursor-pointer font-semibold text-fg">Lifecycle logs</summary>
 						<pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap font-mono text-[10px] leading-relaxed">
 							{status.logs.setup ? `setup\n${status.logs.setup}` : ""}
@@ -168,7 +168,7 @@ export function SandboxBadge({
 						</pre>
 					</details>
 				) : null}
-				{status?.lastLifecycleError || error ? <div className="px-2 py-1.5 text-[11px] font-medium text-red">{status?.lastLifecycleError || error}</div> : null}
+				{status?.lastLifecycleError || error ? <div className="px-2 py-1.5 text-meta font-medium text-red">{status?.lastLifecycleError || error}</div> : null}
 			</Popover.Popup>
 		</Popover.Root>
 	);

@@ -7,6 +7,7 @@ import { relativeTime } from "../lib/api";
 import { PrPanel } from "./PrPanel";
 import { providerFromUrl, avatarUrl } from "../lib/provider";
 import { EmptyState } from "../ui/state";
+import { Badge } from "../ui/badge";
 
 interface Props {
   sessions: UnifiedSession[];
@@ -463,9 +464,7 @@ export function Reviews({
                     </span>
                     <span className="flex min-w-0 items-center gap-3 text-meta text-faint">
                       {multiRepo && (
-                        <span className="shrink-0 rounded-sm bg-active px-1.5 py-px text-meta font-semibold text-dim">
-                          {s.repo ? repoLabel(s.repo) : "repository"}
-                        </span>
+                        <Badge>{s.repo ? repoLabel(s.repo) : "repository"}</Badge>
                       )}
                       {s.branch && (
                         <span className="inline-flex min-w-0 max-w-full items-center gap-1 overflow-hidden text-meta text-dim [&>svg]:shrink-0 [&>svg]:opacity-70">
@@ -476,9 +475,7 @@ export function Reviews({
                         </span>
                       )}
                       {s.linearIssue && (
-                        <span className="shrink-0 rounded-sm bg-active px-1.5 py-px text-meta font-semibold tracking-[0.02em] text-dim">
-                          {s.linearIssue.identifier}
-                        </span>
+                        <Badge className="tracking-[0.02em]">{s.linearIssue.identifier}</Badge>
                       )}
                       {s.isRunning && (
                         <span className="shrink-0 text-meta text-yellow">● running</span>

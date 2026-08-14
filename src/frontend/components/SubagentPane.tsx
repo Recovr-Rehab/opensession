@@ -4,6 +4,7 @@ import { friendlyModelSlug, opencodeModelParts } from "./ModelEffortSelect";
 import { TranscriptBlocks } from "./TranscriptBlocks";
 import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
 import { PANEL_BODY } from "../lib/session-panel-classes";
+import { Badge } from "../ui/badge";
 
 export interface SubagentRef {
   agentId: string;
@@ -103,9 +104,9 @@ export function SubagentPane({ sessionId, stack, onOpenSubagent, onBack }: Props
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="border-b border-line bg-raised px-2.5 pt-2 pb-2.5">
         <div className="flex items-center gap-2">
-          <span className="rounded-sm bg-accent-soft px-1.5 py-0.5 text-meta font-semibold tracking-[-0.01em] whitespace-nowrap text-accent">
+          <Badge tone="accent">
             sub-agent
-          </span>
+          </Badge>
           <span
             className="overflow-hidden text-ellipsis whitespace-nowrap text-label font-semibold text-fg"
             title={meta?.description || current.label}
@@ -114,7 +115,7 @@ export function SubagentPane({ sessionId, stack, onOpenSubagent, onBack }: Props
           </span>
           {modelLabel && (
             <span
-              className="shrink-0 rounded-sm bg-surface px-1.5 py-0.5 text-[11px] text-dim"
+              className="shrink-0 rounded-sm bg-surface px-1.5 py-0.5 text-meta text-dim"
               title={meta?.model}
             >
               {modelLabel}

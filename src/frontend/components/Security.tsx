@@ -162,7 +162,7 @@ export function Security({ onOpenSession }: Props) {
       </div>
 
       {error && (
-        <InlineAlert className="text-[13px]" onDismiss={() => setError(null)}>
+        <InlineAlert className="text-label" onDismiss={() => setError(null)}>
           {error}
         </InlineAlert>
       )}
@@ -243,7 +243,7 @@ export function Security({ onOpenSession }: Props) {
         <div className="flex flex-col gap-2.5">
           {recurring.length > 0 && (
             <div className="bg-panel border border-line rounded-panel px-3.5 py-3">
-              <div className="text-fg text-[13px] font-medium mb-1.5">Recurring</div>
+              <div className="text-fg text-label font-medium mb-1.5">Recurring</div>
               <div className="flex flex-col gap-1">
                 {recurring.map((r) => (
                   <div key={r.id} className="flex items-baseline gap-2 text-supporting text-dim min-w-0">
@@ -434,7 +434,7 @@ function NewScanModal({
       <div className={cn(FORM_CARD, "my-auto w-full max-w-[560px] smooth-shadow-lg")}>
         <div>
           <div className={FORM_TITLE}>New scan</div>
-          <div className="text-dim text-[13px] mt-0.5">
+          <div className="text-dim text-label mt-0.5">
             Start a search for findings across your repositories.
           </div>
         </div>
@@ -541,7 +541,7 @@ function NewScanModal({
           </span>
         </label>
 
-        {error && <InlineAlert className="text-[13px]">{error}</InlineAlert>}
+        {error && <InlineAlert className="text-label">{error}</InlineAlert>}
 
         <div className={FORM_ACTIONS}>
           <Button size="sm" onClick={onClose} disabled={starting}>
@@ -637,7 +637,7 @@ function ProfileModal({
           />
         </label>
 
-        {error && <InlineAlert className="text-[13px]">{error}</InlineAlert>}
+        {error && <InlineAlert className="text-label">{error}</InlineAlert>}
 
         <div className={FORM_ACTIONS}>
           <Button size="sm" onClick={onClose} disabled={saving}>

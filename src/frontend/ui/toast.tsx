@@ -137,7 +137,7 @@ function ToastCard({ toast: t }: { toast: Toast }) {
 			{t.variant === "error" && (
 				<span
 					aria-hidden
-					className="grid size-[17px] shrink-0 place-items-center rounded-full text-[13px] font-semibold text-accent"
+					className="grid size-[17px] shrink-0 place-items-center rounded-full text-label font-semibold text-accent"
 				>
 					!
 				</span>

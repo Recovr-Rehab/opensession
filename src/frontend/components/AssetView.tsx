@@ -129,7 +129,7 @@ function AssetPager({
 					<span
 						role="status"
 						className={cn(
-							"px-1 text-[11px] tabular-nums",
+							"px-1 text-meta tabular-nums",
 							onDark ? "text-white/60" : "text-faint",
 						)}
 					>
@@ -380,11 +380,11 @@ export function AssetActions({
 					</div>
 				)}
 				{folder && (
-					<div className="truncate text-[11px] text-faint">{folder}</div>
+					<div className="truncate text-meta text-faint">{folder}</div>
 				)}
 			</div>
 			{showSize && (
-				<span className="shrink-0 text-[11px] text-faint">
+				<span className="shrink-0 text-meta text-faint">
 					{formatAssetSize(file.size)}
 				</span>
 			)}
@@ -544,7 +544,7 @@ export function AssetPreview({
 					<div className="p-4 text-label text-faint">Loading…</div>
 				) : (
 					<MarkdownBody
-						className="markdown px-4 py-3 text-[13px]"
+						className="markdown px-4 py-3 text-label"
 						html={marked.parse(text, { async: false }) as string}
 					/>
 				)
@@ -721,7 +721,7 @@ export function AssetOverlay({
 					className="flex min-h-10 shrink-0 items-center justify-end gap-1 px-3 pr-12"
 				>
 					{listed && (
-						<span className="shrink-0 text-[11px] text-faint">
+						<span className="shrink-0 text-meta text-faint">
 							{formatAssetSize(file.size)}
 						</span>
 					)}

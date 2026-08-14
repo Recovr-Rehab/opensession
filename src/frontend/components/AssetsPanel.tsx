@@ -115,7 +115,7 @@ export function AssetsPanel({
 	if (!files.length) {
 		return (
 			<div className="flex h-full min-h-[240px] flex-col items-center justify-center gap-1 px-6 text-center">
-				<div className="text-[13px] text-dim">No assets yet</div>
+				<div className="text-label text-dim">No assets yet</div>
 				<div className="max-w-[360px] text-label text-faint">
 					Ask the agent to save a visualization, report, or demo page here.
 					It writes files with opensession-assets' write_asset and they

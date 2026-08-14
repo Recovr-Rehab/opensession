@@ -241,7 +241,7 @@ export const SIDEBAR_PIN_DRAG_ACTIVE = "[&>*]:pointer-events-none";
  * arbitrary rather than `text-xs` because it is the tile's geometry — it tracks
  * the 18px box, not the sidebar's type scale.
  */
-export const SIDEBAR_REPO_TILE = "size-[18px] shrink-0 text-[11px]";
+export const SIDEBAR_REPO_TILE = "size-[18px] shrink-0 text-meta";
 
 /**
  * ── Group headers ───────────────────────────────────────────────────────────
@@ -261,7 +261,7 @@ export const SIDEBAR_REPO_TILE = "size-[18px] shrink-0 text-[11px]";
  * a caption is still a toggle once the pill is gone.
  */
 export const SIDEBAR_GROUP_HEADER =
-	"group/gh flex w-full items-center gap-[9px] rounded-[calc(10px*var(--rf))] border-none bg-transparent text-[16px] font-medium tracking-[0px] text-dim desktop:text-[14px] hover:text-fg";
+	"group/gh flex w-full items-center gap-[9px] rounded-[calc(10px*var(--rf))] border-none bg-transparent text-[16px] font-medium tracking-[0px] text-dim desktop:text-body hover:text-fg";
 
 /**
  * A FULL-LINE heading — a repo or feed band, an automation group, Archived.
@@ -301,7 +301,7 @@ export const SIDEBAR_GROUP_HEADER_INSET =
  * rows that lead nowhere between the rows that do.
  */
 export const SIDEBAR_LANE_HEADER =
-	"gap-[5px] pt-[9px] pb-[5px] text-[13px] font-semibold desktop:h-[var(--sidebar-cap-h)] desktop:min-h-[var(--sidebar-cap-h)] desktop:pt-1 desktop:pb-1 desktop:text-[12px]";
+	"gap-[5px] pt-[9px] pb-[5px] text-label font-semibold desktop:h-[var(--sidebar-cap-h)] desktop:min-h-[var(--sidebar-cap-h)] desktop:pt-1 desktop:pb-1 desktop:text-[12px]";
 
 /**
  * The heading's own name. `truncate` before any width utility: it is the pair
@@ -348,7 +348,7 @@ export const SIDEBAR_GROUP_CHEVRON_COLLAPSED = "opacity-100";
  * actually wants it, not to the shared string.
  */
 export const SIDEBAR_GROUP_COUNT =
-	"text-[13px] font-medium text-faint desktop:text-[12px]";
+	"text-label font-medium text-faint desktop:text-[12px]";
 
 /**
  * The same count on a status-lane heading, which pins 12px at both widths.

@@ -150,7 +150,7 @@ function DeskBody({
 				</span>
 				{voiceEnabled && voiceState !== "idle" && (
 					<span
-						className="max-w-[160px] shrink-0 truncate text-[11px] font-medium text-dim"
+						className="max-w-[160px] shrink-0 truncate text-meta font-medium text-dim"
 						title={voiceError ?? undefined}
 					>
 						{voiceState === "error"
@@ -209,7 +209,7 @@ function DeskBody({
 			{/* Concierge session */}
 			<div className="min-h-0 flex-1">
 				{ensureError ? (
-					<div className="px-4 py-6 text-center text-[13px] font-medium text-dim">
+					<div className="px-4 py-6 text-center text-label font-medium text-dim">
 						{ensureError}
 					</div>
 				) : sessionId ? (
@@ -238,7 +238,7 @@ function DeskBody({
 						suggestions={DESK_SUGGESTIONS}
 					/>
 				) : (
-					<div className="px-4 py-6 text-center text-[13px] font-medium text-dim">
+					<div className="px-4 py-6 text-center text-label font-medium text-dim">
 						Opening…
 					</div>
 				)}

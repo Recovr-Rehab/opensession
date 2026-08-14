@@ -160,7 +160,7 @@ export const TurnBlock = React.memo(function TurnBlock({
         // no baseline of its own, so it keeps centring individually.
         // The 8px overhang gives the icon-aligned chevron breathing room; the
         // compensating padding keeps every child at its previous coordinate.
-        className="-mx-2 flex w-[calc(100%+16px)] min-w-0 cursor-pointer items-baseline gap-2 rounded-control border-0 bg-transparent px-3 py-1 text-left font-sans text-[14px] leading-5 text-dim transition-colors hover:bg-hover/40 hover:text-fg"
+        className="-mx-2 flex w-[calc(100%+16px)] min-w-0 cursor-pointer items-baseline gap-2 rounded-control border-0 bg-transparent px-3 py-1 text-left font-sans text-body leading-5 text-dim transition-colors hover:bg-hover/40 hover:text-fg"
       >
         <span
           className={cn(
@@ -403,7 +403,7 @@ function ToolRunBlock({
             and one click puts every step back with its own glyph, so naming
             them here only asks to be read. The names stay in the aria-label,
             where the count alone would tell a screen reader nothing. */}
-        <span className="flex-shrink-0 truncate text-[14px] font-medium leading-5 text-dim transition-colors group-hover:text-fg">
+        <span className="flex-shrink-0 truncate text-body font-medium leading-5 text-dim transition-colors group-hover:text-fg">
           {items.length} step{items.length === 1 ? "" : "s"}
         </span>
         {/* What the count can't say: a run that edited files moved lines, in

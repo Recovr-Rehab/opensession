@@ -332,7 +332,7 @@ export function SchedulePromptButton({
           <div className="w-[420px] max-w-[92vw] rounded-xl border border-line-strong bg-raised p-5 smooth-shadow-lg">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <div className="text-[17px] font-semibold text-fg">
+                <div className="text-dialog-title font-semibold text-fg">
                   Schedule message
                 </div>
                 <div className="mt-[3px] text-meta text-dim">Time zone: {tz}</div>

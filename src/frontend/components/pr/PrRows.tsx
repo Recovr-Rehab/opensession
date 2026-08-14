@@ -26,7 +26,7 @@ export function ReviewerRow({ reviewer, provider }: { reviewer: PrReviewer; prov
         <img className="size-7 rounded-full object-cover" src={src} alt="" loading="lazy" />
       ) : (
         <span
-          className="inline-flex size-7 items-center justify-center rounded-full border border-line bg-surface text-[11px] font-semibold text-faint"
+          className="inline-flex size-7 items-center justify-center rounded-full border border-line bg-surface text-meta font-semibold text-faint"
           aria-hidden
         >
           {reviewer.login.slice(0, 1).toUpperCase()}

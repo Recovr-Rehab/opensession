@@ -483,7 +483,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                     onCheckedChange={() => handleToggle(sel)}
                     aria-label={`${sel.name} · ${sel.enabled ? "on" : "off"}`}
                   />
-                  <span className="text-dim text-[13px]">
+                  <span className="text-dim text-label">
                     {sel.enabled ? "Enabled" : "Disabled"}
                   </span>
                   {(sel.isRunning || sel.lastRunStatus === "running") && (
@@ -498,14 +498,14 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
 
                 <div>
                   <div className={SECTION_LABEL}>Instructions</div>
-                  <div className="bg-surface rounded-panel px-3.5 py-3 text-[13px] leading-relaxed text-dim whitespace-pre-wrap">
+                  <div className="bg-surface rounded-panel px-3.5 py-3 text-label leading-relaxed text-dim whitespace-pre-wrap">
                     {sel.prompt}
                   </div>
                 </div>
 
                 <div>
                   <div className={SECTION_LABEL}>Configuration</div>
-                  <div className="grid grid-cols-[max-content_1fr] items-baseline gap-x-5 gap-y-2 text-[13px]">
+                  <div className="grid grid-cols-[max-content_1fr] items-baseline gap-x-5 gap-y-2 text-label">
                     <DetailKey>Trigger</DetailKey>
                     <span className="text-dim min-w-0">
                       {sel.slackWatch?.channel ? (
@@ -1018,7 +1018,7 @@ function TypeChooser({
     <>
       <div>
         <div className={FORM_TITLE}>Create automation</div>
-        <div className="text-dim text-[13px] mt-0.5">
+        <div className="text-dim text-label mt-0.5">
           Choose the type of automation you want to create.
         </div>
       </div>
@@ -1028,7 +1028,7 @@ function TypeChooser({
           className="text-left bg-surface rounded-panel px-4 py-3.5 cursor-pointer hover:bg-hover transition-colors"
           onClick={() => onPick(null, "classic")}
         >
-          <div className="text-fg text-[14px] font-medium mb-1">Classical automation</div>
+          <div className="text-fg text-body font-medium mb-1">Classical automation</div>
           <div className="text-dim text-supporting leading-snug">
             Trigger {AGENT_NAME} sessions based on schedules, internal events, and webhooks.
           </div>
@@ -1037,7 +1037,7 @@ function TypeChooser({
           className="text-left bg-surface rounded-panel px-4 py-3.5 cursor-pointer hover:bg-hover transition-colors"
           onClick={() => onPick(null, "watch")}
         >
-          <div className="text-fg text-[14px] font-medium mb-1">Watch a channel</div>
+          <div className="text-fg text-body font-medium mb-1">Watch a channel</div>
           <div className="text-dim text-supporting leading-snug">
             {AGENT_NAME} triages every incoming message in a Slack channel, using the
             channel's memory as standing context.
@@ -1081,7 +1081,7 @@ function TypeChooser({
                 onClick={() => onPick(t, "classic")}
               >
                 <div className="flex items-baseline gap-2 mb-1">
-                  <span className="text-fg text-[13px] font-medium">{t.name}</span>
+                  <span className="text-fg text-label font-medium">{t.name}</span>
                   <span className="ml-auto shrink-0 text-meta tracking-[-0.01em] text-faint">
                     {CATEGORY_LABELS[t.category] || t.category}
                   </span>
@@ -1094,7 +1094,7 @@ function TypeChooser({
       )}
 
       <div className={FORM_ACTIONS}>
-        <Button size="sm" className="px-3 text-[13px]" onClick={onClose}>
+        <Button size="sm" className="px-3 text-label" onClick={onClose}>
           Cancel
         </Button>
       </div>
@@ -1148,7 +1148,7 @@ function McpPicker({
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-baseline gap-2">
-        <span className="text-fg text-[13px] font-medium">MCPs</span>
+        <span className="text-fg text-label font-medium">MCPs</span>
         <span className="text-dim text-label">
           Select which connectors this automation's runs can use
         </span>
@@ -1167,10 +1167,10 @@ function McpPicker({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search MCPs…"
-            className="flex-1 bg-transparent border-0 outline-none text-[13px] text-fg placeholder:text-faint"
+            className="flex-1 bg-transparent border-0 outline-none text-label text-fg placeholder:text-faint"
             style={{ border: "none", padding: 0, background: "transparent" }}
           />
-          <span className="text-faint text-[11px] shrink-0">
+          <span className="text-faint text-meta shrink-0">
             {all ? "all connectors" : `${selected.length} selected`}
           </span>
         </div>
@@ -1179,7 +1179,7 @@ function McpPicker({
         >
           <Checkbox checked={all} onCheckedChange={() => onChange(all ? [] : undefined)} />
           <span className="text-fg">All connectors</span>
-          <span className="text-faint text-[11px]">
+          <span className="text-faint text-meta">
             every configured server (pre-least-privilege default)
           </span>
         </label>
@@ -1195,7 +1195,7 @@ function McpPicker({
               />
               <span className="text-fg">{s.name}</span>
               {s.status !== "connected" && s.status !== "ready" && (
-                <span className="text-yellow text-[11px]">{s.status}</span>
+                <span className="text-yellow text-meta">{s.status}</span>
               )}
             </label>
           ))}
@@ -1246,7 +1246,7 @@ function DataFlowEditor({
   return (
     <div className="flex flex-col gap-2.5">
       <div>
-        <span className="text-[13px] font-medium text-fg">Data flow</span>
+        <span className="text-label font-medium text-fg">Data flow</span>
         <span className="ml-2 text-label text-dim">
           Gather and flatten inputs before each run, then publish the result
         </span>
@@ -1508,7 +1508,7 @@ function DataFlowEditor({
           outputs.map((output, index) => (
             <div key={output.id} className="rounded-panel bg-surface p-3">
               <div className="flex min-h-10 items-center gap-2">
-                <span className="w-[110px] shrink-0 text-[13px] font-medium text-fg">
+                <span className="w-[110px] shrink-0 text-label font-medium text-fg">
                   {output.type === "report" ? "Report" : "Slack"}
                 </span>
                 {output.type === "report" ? (
@@ -1780,7 +1780,7 @@ function AutomationForm({
       ) : (
         <div className="flex flex-col gap-1.5">
           <div>
-            <span className="text-fg text-[13px] font-medium">Triggers</span>
+            <span className="text-fg text-label font-medium">Triggers</span>
             <span className="text-dim text-label ml-2">
               Run the automation when any of these conditions are met
             </span>
@@ -1971,7 +1971,7 @@ function AutomationForm({
       {error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
 
       <div className={FORM_ACTIONS}>
-        <Button size="sm" className="px-3 text-[13px]" onClick={onClose} disabled={saving}>
+        <Button size="sm" className="px-3 text-label" onClick={onClose} disabled={saving}>
           Cancel
         </Button>
         <Button

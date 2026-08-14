@@ -388,14 +388,14 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
 
                 <div>
                   <div className={SECTION_LABEL}>Mission</div>
-                  <div className="bg-surface border border-line rounded-panel px-3.5 py-3 text-[13px] leading-relaxed text-dim whitespace-pre-wrap">
+                  <div className="bg-surface border border-line rounded-panel px-3.5 py-3 text-label leading-relaxed text-dim whitespace-pre-wrap">
                     {sel.mission}
                   </div>
                 </div>
 
                 <div>
                   <div className={SECTION_LABEL}>Configuration</div>
-                  <div className="grid grid-cols-[max-content_1fr] items-baseline gap-x-5 gap-y-2 text-[13px]">
+                  <div className="grid grid-cols-[max-content_1fr] items-baseline gap-x-5 gap-y-2 text-label">
                     <DetailKey>Mode</DetailKey>
                     <span className="text-dim">
                       {sel.mode === "ask"

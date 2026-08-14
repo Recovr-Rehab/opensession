@@ -389,13 +389,13 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
         </span>
 
         {mcp ? (
-          <span className="flex min-w-0 flex-shrink-0 items-baseline gap-1 text-[14px] leading-5 font-medium text-dim transition-colors group-hover:text-fg">
+          <span className="flex min-w-0 flex-shrink-0 items-baseline gap-1 text-body leading-5 font-medium text-dim transition-colors group-hover:text-fg">
             <span>{mcpServerDisplayName(mcp.server)}</span>
             <span className="text-faint">·</span>
             <span>{mcpToolDisplayName(mcp.tool)}</span>
           </span>
         ) : (
-          <span className="flex-shrink-0 text-[14px] leading-5 font-medium text-dim transition-colors group-hover:text-fg">{toolName}</span>
+          <span className="flex-shrink-0 text-body leading-5 font-medium text-dim transition-colors group-hover:text-fg">{toolName}</span>
         )}
 
         {/* Baseline, not centre: the path is mono and the ± counts are sans, so

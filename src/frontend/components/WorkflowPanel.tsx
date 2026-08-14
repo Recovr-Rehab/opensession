@@ -14,6 +14,7 @@ import { IconStack } from "./icons";
 import { formatDuration } from "../lib/time";
 import { friendlyModelSlug, opencodeModelParts } from "./ModelEffortSelect";
 import { WorkflowAgentTranscript } from "./WorkflowAgentTranscript";
+import { Badge } from "../ui/badge";
 
 /**
  * Agents tab: live view of a session's dynamic workflow runs (the
@@ -133,7 +134,7 @@ function Chip({
 		<span
 			title={title}
 			className={cn(
-				"shrink-0 rounded-sm border px-1 py-px text-[11px] font-medium",
+				"shrink-0 rounded-sm border px-1 py-px text-meta font-medium",
 				tone === "green"
 					? "border-transparent bg-green-soft text-green"
 					: tone === "red"
@@ -157,7 +158,7 @@ function WriteChips({ a }: { a: WorkflowAgentSnapshot }) {
 				</Chip>
 			)}
 			{a.changed ? (
-				<span className="shrink-0 text-[11px] tabular-nums">
+				<span className="shrink-0 text-meta tabular-nums">
 					<span className="text-green">+{a.insertions ?? 0}</span>{" "}
 					<span className="text-red">−{a.deletions ?? 0}</span>
 					{files > 0 && (
@@ -290,10 +291,10 @@ function SubagentsCard({
 						Sub-agents
 					</span>
 					{runningN > 0 && (
-						<span className="inline-flex shrink-0 items-center gap-1.5 rounded-sm bg-yellow-soft px-1.5 py-0.5 text-[11px] font-medium text-yellow">
-							<span className="size-1.5 animate-pulse rounded-full bg-yellow" />
+						<Badge tone="warning" className="gap-1.5">
+							<span className="size-1.5 animate-pulse rounded-full bg-current" />
 							running
-						</span>
+						</Badge>
 					)}
 				</div>
 				<div className="mt-0.5 truncate text-xs text-dim tabular-nums">
@@ -329,15 +330,15 @@ function SubagentsCard({
 							{s.agentType && <Chip>{s.agentType}</Chip>}
 							{s.model && <Chip>{shortModel(s.model)}</Chip>}
 							{s.tokensOut ? (
-								<span className="shrink-0 text-[11px] text-faint tabular-nums">
+								<span className="shrink-0 text-meta text-faint tabular-nums">
 									{fmtTokens(s.tokensOut)} tok
 								</span>
 							) : null}
-							<span className="w-11 shrink-0 text-right text-[11px] text-faint tabular-nums">
+							<span className="w-11 shrink-0 text-right text-meta text-faint tabular-nums">
 								{durMs !== undefined ? fmtDuration(durMs) : ""}
 							</span>
 							{openable && (
-								<span className="shrink-0 text-[11px] text-faint">→</span>
+								<span className="shrink-0 text-meta text-faint">→</span>
 							)}
 						</button>
 					);
@@ -531,7 +532,7 @@ function RunCard({
 						</span>
 						<span
 							className={cn(
-								"inline-flex shrink-0 items-center gap-1.5 rounded-sm px-1.5 py-0.5 text-[11px] font-medium",
+								"inline-flex shrink-0 items-center gap-1.5 rounded-sm px-1.5 py-0.5 text-meta font-medium",
 								RUN_PILL[run.status],
 							)}
 						>
@@ -578,7 +579,7 @@ function RunCard({
 									>
 										{title}
 									</span>
-									<span className="shrink-0 text-[11px] text-faint tabular-nums">
+									<span className="shrink-0 text-meta text-faint tabular-nums">
 										{agents.length ? `${doneN}/${agents.length}` : "queued"}
 									</span>
 								</div>
@@ -591,7 +592,7 @@ function RunCard({
 			{!!run.mcpCalls?.length && (
 				<div className="border-t border-line px-3 py-2">
 					<button
-						className="text-[11px] font-medium text-dim transition-colors hover:text-fg"
+						className="text-meta font-medium text-dim transition-colors hover:text-fg"
 						onClick={() => setShowMcp((v) => !v)}
 					>
 						{showMcp ? "Hide" : "Show"} tool calls
@@ -612,7 +613,7 @@ function RunCard({
 									<span className="truncate text-dim">
 										{c.server}.{c.tool}
 									</span>
-									<span className="ml-auto shrink-0 text-[11px] text-faint tabular-nums">
+									<span className="ml-auto shrink-0 text-meta text-faint tabular-nums">
 										{c.cached ? "cached" : `${c.ms}ms`}
 									</span>
 								</div>
@@ -635,7 +636,7 @@ function RunCard({
 					</div>
 					{run.logs.length > 20 && (
 						<button
-							className="mt-1 text-[11px] font-medium text-dim transition-colors hover:text-fg"
+							className="mt-1 text-meta font-medium text-dim transition-colors hover:text-fg"
 							onClick={() => setAllLogs((v) => !v)}
 						>
 							{allLogs ? "Show recent" : `Show all ${run.logs.length}`}
@@ -651,7 +652,7 @@ function RunCard({
 			{run.status === "done" && run.result !== undefined && (
 				<div className="border-t border-line px-3 py-2">
 					<button
-						className="text-[11px] font-medium text-dim transition-colors hover:text-fg"
+						className="text-meta font-medium text-dim transition-colors hover:text-fg"
 						onClick={() => setShowResult((v) => !v)}
 					>
 						{showResult ? "Hide result" : "Show result"}
@@ -725,11 +726,11 @@ const AgentRow = React.memo(function AgentRow({
 				{a.cached && <Chip>cached</Chip>}
 				{a.model && <Chip>{shortModel(a.model)}</Chip>}
 				{a.tokens && (
-					<span className="shrink-0 text-[11px] text-faint tabular-nums">
+					<span className="shrink-0 text-meta text-faint tabular-nums">
 						{fmtTokens(a.tokens.output)} tok
 					</span>
 				)}
-				<span className="w-11 shrink-0 text-right text-[11px] text-faint tabular-nums">
+				<span className="w-11 shrink-0 text-right text-meta text-faint tabular-nums">
 					{duration}
 				</span>
 			</button>
@@ -757,13 +758,13 @@ const AgentRow = React.memo(function AgentRow({
 									<span className="text-faint">→</span>
 								</Button>
 							)}
-							<div className="text-[11px] font-medium text-faint">Prompt</div>
+							<div className="text-meta font-medium text-faint">Prompt</div>
 							<DetailPre text={promptText} />
 							{(resultText || a.status === "error") && (
 								<>
 									<div
 										className={cn(
-											"text-[11px] font-medium",
+											"text-meta font-medium",
 											a.status === "error" || full?.outcome.error
 												? "text-red"
 												: "text-faint",
@@ -779,20 +780,20 @@ const AgentRow = React.memo(function AgentRow({
 							{detail === undefined &&
 								(a.status === "done" || a.status === "error") && (
 									<button
-										className="self-start text-[11px] font-medium text-link hover:underline"
+										className="self-start text-meta font-medium text-link hover:underline"
 										onClick={() => onLoadDetail(a.seq)}
 									>
 										Show full prompt & result
 									</button>
 								)}
 							{detail === "loading" && (
-								<span className="text-[11px] text-faint">Loading…</span>
+								<span className="text-meta text-faint">Loading…</span>
 							)}
 							{detail === "missing" && (
 								// Transient failures happen (the snapshot flips done before
 								// the journal entry lands) — keep the miss retryable.
 								<button
-									className="self-start text-[11px] font-medium text-link hover:underline"
+									className="self-start text-meta font-medium text-link hover:underline"
 									onClick={() => onLoadDetail(a.seq)}
 								>
 									Couldn't load the full record. Retry

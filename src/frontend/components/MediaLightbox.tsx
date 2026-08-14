@@ -1169,7 +1169,7 @@ function MediaLightbox({
 						</div>
 					)}
 					{many && (
-						<span className="text-[11px] font-medium tabular-nums text-white/50">
+						<span className="text-meta font-medium tabular-nums text-white/50">
 							{index + 1} of {items.length}
 						</span>
 					)}

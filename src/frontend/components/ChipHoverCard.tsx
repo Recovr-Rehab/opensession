@@ -289,7 +289,7 @@ function PrChipCardBody({ pr }: { pr: ChipPr }) {
 					)}
 				</span>
 				{pr.isDraft && (
-					<span className="shrink-0 text-[11px] text-faint">draft</span>
+					<span className="shrink-0 text-meta text-faint">draft</span>
 				)}
 				<span className="flex shrink-0 items-center">
 					{pr.state === "MERGED" ? (

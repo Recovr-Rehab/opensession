@@ -18,7 +18,7 @@ function PrDescriptionCard({
   return (
     <article className="min-w-0 rounded-md border border-line bg-panel">
       <div className="flex items-center gap-2 border-b border-line px-4 py-3">
-        <span className="flex size-7 items-center justify-center rounded-full bg-active text-[11px] font-semibold text-fg">
+        <span className="flex size-7 items-center justify-center rounded-full bg-active text-meta font-semibold text-fg">
           {author.slice(0, 1).toUpperCase()}
         </span>
         <div>
@@ -84,7 +84,7 @@ export function ConversationView({
               key={`${comment.url || comment.createdAt || index}`}
             >
               <div className="flex items-center gap-2 border-b border-line px-4 py-3">
-                <span className="flex size-7 items-center justify-center rounded-full bg-active text-[11px] font-semibold text-fg">
+                <span className="flex size-7 items-center justify-center rounded-full bg-active text-meta font-semibold text-fg">
                   {(comment.author || "?").slice(0, 1).toUpperCase()}
                 </span>
                 <div className="min-w-0 flex-1">

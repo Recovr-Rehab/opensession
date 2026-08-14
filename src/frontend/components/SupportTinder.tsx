@@ -522,7 +522,7 @@ function TicketCard({
 			<div className="flex flex-col gap-3 px-5 py-4">
 				{timeline === undefined ? (
 					thread.previewText ? (
-						<div className="text-[13px] leading-relaxed text-dim">
+						<div className="text-label leading-relaxed text-dim">
 							{thread.previewText}
 						</div>
 					) : (

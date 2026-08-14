@@ -48,8 +48,8 @@ function AccountIdentity({
 		<>
 			<UserAvatar name={name} size={28} className="shrink-0" />
 			<span className="flex min-w-0 flex-1 flex-col gap-0.5 text-left leading-tight">
-				<span className="truncate text-[13px] font-semibold text-fg">{name}</span>
-				<span className="truncate text-[11px] font-medium text-faint">
+				<span className="truncate text-label font-semibold text-fg">{name}</span>
+				<span className="truncate text-meta font-medium text-faint">
 					{subtitle}
 				</span>
 			</span>
