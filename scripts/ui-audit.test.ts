@@ -19,10 +19,16 @@ test("design-system drift stays under budget", () => {
 	}
 });
 
-test("budgets are ratcheted down when the count falls", () => {
-	const slack = auditCounts().filter(({ count, budget }) => count < budget);
-	expect(
-		slack.map((s) => `${s.id} ${s.count} < ${s.budget}`),
-		"run bun scripts/ui-audit.ts --save to bank the progress",
-	).toEqual([]);
-});
+/*
+ * There is deliberately no companion test asserting the budget EQUALS the
+ * count. One existed for a few hours and was wrong for this repo: Open Session
+ * develops itself out of a single shared checkout, so `src/frontend` almost
+ * always holds another session's half-finished work, including its deletions.
+ * A count that dips below the budget is usually somebody else mid-edit, not
+ * progress waiting to be banked, and failing everyone's test run over it
+ * teaches people to edit the budget file — the one thing this guard exists to
+ * prevent.
+ *
+ * Banking progress stays a deliberate act: `bun scripts/ui-audit.ts --save`,
+ * measured against HEAD in a detached worktree (the CLI refuses a dirty tree).
+ */

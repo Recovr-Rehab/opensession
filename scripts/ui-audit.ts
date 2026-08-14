@@ -7,6 +7,8 @@
  *   bun scripts/ui-audit.ts --files <id>    # where one signal lives
  *   bun scripts/ui-audit.ts --json
  *   bun scripts/ui-audit.ts --save          # write the current counts as the budget
+ *                                           (measure HEAD in a detached worktree:
+ *                                            the shared checkout is usually dirty)
  *
  * This is the guard `css-audit.ts` can no longer be. That one asks whether a
  * rule in legacy.css is still reachable, and legacy.css has been empty since
@@ -164,6 +166,29 @@ export function auditCounts(): UiAuditResult {
 
 if (import.meta.main) {
 	if (argv.includes("--save")) {
+		// A ratchet saved from a dirty tree is not a ratchet. This repo runs
+		// itself out of one shared checkout, so `src/frontend` routinely holds
+		// another session's half-finished work — including its DELETIONS. Saving
+		// then records a number the committed tree never had, and the guard goes
+		// red on main the moment that session commits something else. Measure
+		// what is committed: `git worktree add --detach /tmp/wt HEAD` and run the
+		// audit there, or pass --force if the dirt is genuinely yours.
+		const dirty = Bun.spawnSync([
+			"git",
+			"status",
+			"--porcelain",
+			"--",
+			relative(ROOT, FRONTEND),
+		], { cwd: ROOT })
+			.stdout.toString()
+			.trim();
+		if (dirty && !argv.includes("--force")) {
+			console.error(
+				`Refusing to save: ${dirty.split("\n").length} uncommitted file(s) under ${relative(ROOT, FRONTEND)}.`,
+			);
+			console.error("Measure HEAD in a detached worktree, or pass --force.");
+			process.exit(2);
+		}
 		const saved = Object.fromEntries(SIGNALS.map((s) => [s.id, counts.get(s.id) ?? 0]));
 		writeFileSync(BUDGET_FILE, `${JSON.stringify(saved, null, "\t")}\n`);
 		console.log(`Wrote ${relative(ROOT, BUDGET_FILE)}`);
