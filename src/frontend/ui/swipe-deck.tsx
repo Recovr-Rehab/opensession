@@ -85,7 +85,7 @@ export function SwipeCard<A extends string>({
 	return (
 		<motion.div
 			className={cn(
-				"flex touch-pan-y flex-col overflow-hidden rounded-lg border border-line bg-panel smooth-shadow-soft",
+				"flex touch-pan-y flex-col overflow-hidden rounded-xl bg-panel smooth-shadow-soft",
 				className,
 			)}
 			style={{ x, rotate }}

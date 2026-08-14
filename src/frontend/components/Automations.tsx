@@ -43,7 +43,7 @@ const FORM_FIELDS =
  *  already provides the surface and the padding. */
 const FORM_INLINE = `flex flex-col gap-3.5 ${FORM_FIELDS}`;
 /** .automation-form */
-const FORM_CARD = `${FORM_INLINE} rounded-panel border border-line-strong bg-panel p-4.5`;
+const FORM_CARD = `${FORM_INLINE} rounded-panel bg-panel p-4.5`;
 /** .automation-form label */
 const FIELD_LABEL = "flex flex-1 flex-col gap-1.5 text-label font-medium text-dim";
 /** .automation-form-title */
@@ -498,7 +498,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
 
                 <div>
                   <div className={SECTION_LABEL}>Instructions</div>
-                  <div className="bg-surface border border-line rounded-panel px-3.5 py-3 text-[13px] leading-relaxed text-dim whitespace-pre-wrap">
+                  <div className="bg-surface rounded-panel px-3.5 py-3 text-[13px] leading-relaxed text-dim whitespace-pre-wrap">
                     {sel.prompt}
                   </div>
                 </div>
@@ -1025,7 +1025,7 @@ function TypeChooser({
 
       <div className="grid gap-2 sm:grid-cols-2">
         <button
-          className="text-left bg-surface border border-line rounded-panel px-4 py-3.5 cursor-pointer hover:border-line-strong hover:bg-hover transition-colors"
+          className="text-left bg-surface rounded-panel px-4 py-3.5 cursor-pointer hover:bg-hover transition-colors"
           onClick={() => onPick(null, "classic")}
         >
           <div className="text-fg text-[14px] font-medium mb-1">Classical automation</div>
@@ -1034,7 +1034,7 @@ function TypeChooser({
           </div>
         </button>
         <button
-          className="text-left bg-surface border border-line rounded-panel px-4 py-3.5 cursor-pointer hover:border-line-strong hover:bg-hover transition-colors"
+          className="text-left bg-surface rounded-panel px-4 py-3.5 cursor-pointer hover:bg-hover transition-colors"
           onClick={() => onPick(null, "watch")}
         >
           <div className="text-fg text-[14px] font-medium mb-1">Watch a channel</div>
@@ -1077,7 +1077,7 @@ function TypeChooser({
             {templates.map((t) => (
               <button
                 key={t.id}
-                className="text-left bg-surface border border-line rounded-panel px-3 py-2.5 cursor-pointer hover:border-line-strong hover:bg-hover transition-colors"
+                className="text-left bg-surface rounded-panel px-3 py-2.5 cursor-pointer hover:bg-hover transition-colors"
                 onClick={() => onPick(t, "classic")}
               >
                 <div className="flex items-baseline gap-2 mb-1">
@@ -1159,7 +1159,7 @@ function McpPicker({
           Manage MCPs
         </a>
       </div>
-      <div className="bg-surface border border-line rounded-panel overflow-hidden">
+      <div className="bg-surface rounded-panel overflow-hidden">
         <div className="flex items-center gap-2 border-b border-line px-3 py-2">
           {/* Chrome-less on purpose: the picker's own panel is the surface, so
               a second well inside it would read as a box in a box. */}
@@ -1307,7 +1307,7 @@ function DataFlowEditor({
             const slack = input.source.type === "slack_channel" ? input.source : null;
             const reports = input.source.type === "reports" ? input.source : null;
             return (
-              <div key={input.id} className="rounded-panel border border-line bg-surface p-3">
+              <div key={input.id} className="rounded-panel bg-surface p-3">
                 <div className="mb-2 flex min-h-10 items-center gap-2">
                   <Select
                     className="max-w-[150px]"
@@ -1506,7 +1506,7 @@ function DataFlowEditor({
           </div>
         ) : (
           outputs.map((output, index) => (
-            <div key={output.id} className="rounded-panel border border-line bg-surface p-3">
+            <div key={output.id} className="rounded-panel bg-surface p-3">
               <div className="flex min-h-10 items-center gap-2">
                 <span className="w-[110px] shrink-0 text-[13px] font-medium text-fg">
                   {output.type === "report" ? "Report" : "Slack"}
@@ -1785,7 +1785,7 @@ function AutomationForm({
               Run the automation when any of these conditions are met
             </span>
           </div>
-          <div className="bg-surface border border-line rounded-panel px-3 py-2.5 flex flex-col gap-2.5">
+          <div className="bg-surface rounded-panel px-3 py-2.5 flex flex-col gap-2.5">
             <label className={FIELD_LABEL}>
               Schedule
               <Select value={preset} onChange={(e) => setPreset(e.target.value)}>

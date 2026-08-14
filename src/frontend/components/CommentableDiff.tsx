@@ -27,7 +27,7 @@ const DIFF_DEL = "font-semibold text-red";
 /* One collapsible file. The header is the hover group for everything revealed
    inside it — the copy-path button, the edit and discard actions, and the
    stats that hide beneath them. */
-const FILE_ROW = "mb-2 overflow-clip rounded-lg border border-line bg-panel";
+const FILE_ROW = "mb-2 overflow-clip rounded-xl bg-panel";
 const FILE_HEADER =
   "group relative flex w-full min-w-0 cursor-pointer items-center gap-2 border-none px-2.5 py-2 text-left text-fg hover:bg-hover";
 const STICKY_FILE_HEADER =

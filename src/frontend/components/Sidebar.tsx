@@ -4055,7 +4055,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							// desktop gets a compact full-width row.
 							"group flex text-left transition-colors",
 							isPhone &&
-								"relative w-[132px] min-h-[84px] flex-[0_0_auto] flex-col items-start justify-between gap-2.5 rounded-lg border border-line bg-panel p-3 text-[13px] leading-[1.25] font-semibold text-fg",
+								"relative w-[132px] min-h-[84px] flex-[0_0_auto] flex-col items-start justify-between gap-2.5 rounded-xl bg-panel p-3 text-[13px] leading-[1.25] font-semibold text-fg",
 							// The card owns a real surface (--bg-panel), so its states
 							// ride ON that as layers rather than replacing it — the same
 							// translucent ink the rows use, just stacked over a fill

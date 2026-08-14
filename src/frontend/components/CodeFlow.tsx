@@ -139,7 +139,7 @@ export function CodeFlow({
 			{error && <InlineAlert className="mb-3" onRetry={onRetry}>{error}</InlineAlert>}
 			<div className="space-y-2">
 				{[...files].map(([file, trees]) => (
-					<article key={file} className="overflow-hidden rounded-lg border border-line bg-panel">
+					<article key={file} className="overflow-hidden rounded-xl bg-panel">
 						<header className="flex min-h-10 items-center border-b border-line bg-raised px-3 phone:px-2">
 							{file !== "Project structure" && onOpenLocation ? (
 								<Button

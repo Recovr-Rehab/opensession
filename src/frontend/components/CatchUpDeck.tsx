@@ -275,7 +275,7 @@ export function CatchUpDeck({
 					{/* Peek of the next card behind the top one, for depth. */}
 					{next && (
 						<div
-							className="absolute inset-x-4 top-1 bottom-5 scale-[0.97] rounded-lg border border-line bg-panel opacity-60"
+							className="absolute inset-x-4 top-1 bottom-5 scale-[0.97] rounded-xl bg-panel opacity-60"
 							aria-hidden
 						/>
 					)}

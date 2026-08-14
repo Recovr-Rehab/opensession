@@ -374,7 +374,7 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 						{/* Peek of the next card behind the top one, for depth. */}
 						{next && (
 							<div
-								className="absolute inset-x-0 -bottom-1.5 top-3 scale-x-[0.97] rounded-lg border border-line bg-panel opacity-60"
+								className="absolute inset-x-0 -bottom-1.5 top-3 scale-x-[0.97] rounded-xl bg-panel opacity-60"
 								aria-hidden
 							/>
 						)}

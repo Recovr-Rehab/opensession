@@ -64,7 +64,7 @@ export function PortalsPanel({
 						return (
 							<div
 								key={`${recipe.skill}:${recipe.serviceKey ?? recipe.name}`}
-								className="rounded-lg border border-line bg-surface p-3"
+								className="rounded-xl bg-surface p-3"
 							>
 								<div className="text-label font-semibold text-fg">{recipe.name}</div>
 								<p className="mt-0.5 text-supporting leading-relaxed text-dim">
@@ -106,10 +106,10 @@ export function PortalsPanel({
 							<div
 								key={service.key}
 								className={cn(
-									"group flex min-h-14 items-center gap-2 rounded-lg border px-2 py-2 transition-[background-color,border-color,box-shadow]",
+									"group flex min-h-14 items-center gap-2 rounded-row px-2 py-2 transition-[background-color,box-shadow]",
 									active
-										? "border-line-strong bg-hover smooth-shadow-sm"
-										: "border-line bg-surface hover:border-line-strong hover:bg-hover",
+										? "bg-hover smooth-shadow-sm"
+										: "bg-surface hover:bg-hover",
 								)}
 							>
 								<button
