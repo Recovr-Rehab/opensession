@@ -64,8 +64,10 @@ export function mineStatus(s: UnifiedSession): MineStatus {
 	const lane = pinnedLane(s);
 	if (lane) return lane;
 	if (s.isRunning) return "inprogress";
-	// Everything else is idle-but-unfinished. PR lifecycle belongs in the review
-	// UI, not the workspace state shown in the sidebar. Finishing a session is an
+	// Everything else is idle. A single session knows nothing about the PR
+	// lifecycle — the workspace row reads that across its sessions
+	// (prLaneForSessions), because a session that shipped one feature as three
+	// PRs has only landed once they all have. Leaving the sidebar stays an
 	// explicit act (Archive), never inferred from a merged PR or inactivity.
 	return "pending";
 }
@@ -102,13 +104,20 @@ export function wsPrReviewGivenBy(
 	);
 }
 
-// Since the PR-queue dissolution the status lanes carry the PR lifecycle too,
-// but only one promotion: a green, mergeable, non-draft PR parks its idle row
-// in Ready to merge ("review"). Every other open PR — conflicts, failing
-// checks, changes requested, drafts, awaiting review — stays in Backlog with
-// the red/yellow PR glyph carrying the problem, so In progress keeps meaning
-// "a run is live". Returns null to leave the derived lane alone.
+// Since the PR-queue dissolution the status lanes carry the PR lifecycle too.
+// A landed PR parks its idle row in Done ("merged"): the work shipped, so it
+// reads as finished rather than sinking into Backlog beside work that hasn't
+// started. Done is still a lane and not a hiding place — archiving stays the
+// explicit act it always was. Of the PRs still open only one promotes: a
+// green, mergeable, non-draft one parks its row in Ready to merge ("review").
+// Every other open PR — conflicts, failing checks, changes requested, drafts,
+// awaiting review — stays in Backlog with the red/yellow PR glyph carrying the
+// problem, so In progress keeps meaning "a run is live". Returns null to leave
+// the derived lane alone.
 export function prLaneForSessions(sessions: UnifiedSession[]): MineStatus | null {
+	// Same "the workspace has landed" rule the review bands use (wsPrMerged),
+	// so a row can't be done here and still awaiting review there.
+	if (sessions.some(sessionPrMerged)) return "merged";
 	const session = frontingPrSession(sessions);
 	if (!session || session.prState !== "OPEN" || session.prIsDraft) return null;
 	const checks = session.prChecks;

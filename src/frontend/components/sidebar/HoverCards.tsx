@@ -295,10 +295,11 @@ export function WsStatusMark({
 	}
 	if (row.status === "merged")
 		return slot(<IconGitMerge size={size} className="text-purple" />);
-	// Lanes never infer "merged" (archiving is explicit — see mineStatus), so an
-	// idle row whose latest PR landed still sits in Backlog. Its mark should
-	// carry the PR lifecycle anyway, like the lane-grouped view's
-	// WsPrStatusMark does — a grey idle dot on a merged row reads as "no PR".
+	// A landed PR files its idle row under Done (prLaneForSessions), but a
+	// human-pinned lane wins, so a row parked in Backlog stays there after its
+	// PR merges. Its mark should carry the PR lifecycle anyway, like the
+	// lane-grouped view's WsPrStatusMark does — a grey idle dot on a merged row
+	// reads as "no PR".
 	const prSession = frontingPrSession(row.sessions);
 	if (row.status === "pending" && prSession && sessionPrMerged(prSession))
 		return slot(<IconGitMerge size={size} className="text-purple" />);

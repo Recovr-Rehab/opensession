@@ -1128,9 +1128,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				!sessions.some((c) => pinnedLane(c))
 			)
 				status = "inprogress";
-			// An idle row's lane follows its PR lifecycle (ready → Ready to
-			// merge, otherwise-open → In progress). A human-pinned lane wins —
-			// deliberately parking a row in Backlog must stick.
+			// An idle row's lane follows its PR lifecycle (merged → Done, ready
+			// → Ready to merge). A human-pinned lane wins — deliberately
+			// parking a row in Backlog must stick.
 			if (status === "pending" && !sessions.some((c) => pinnedLane(c))) {
 				// …unless an automated review is still running. The row already
 				// wears the spinner for it (see `running` below), and a spinning
@@ -3222,8 +3222,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// ── Inbox mode: the workspace rows as one activity-ranked list ─────────
 	// No repo/status grouping — bands mirror an email inbox instead: Needs
 	// action (blocked on you) → Recent (running or touched today, one
-	// activity-ranked mix) → Yesterday → Earlier. Bands are exclusive with
-	// priority needs-action > recent > date, and the ranking always follows
+	// activity-ranked mix) → Yesterday → Earlier → Done (merged). Bands are
+	// exclusive with priority needs-action > done > date, and the ranking follows
 	// lastActivity ("Sort by: Created" deliberately doesn't apply — an inbox
 	// orders by what moved last).
 	//
@@ -3257,8 +3257,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			{ key: "recent", label: "Recent", rows: [], prs: [] },
 			{ key: "yesterday", label: "Yesterday", rows: [], prs: [] },
 			{ key: "earlier", label: "Earlier", rows: [], prs: [] },
+			// Landed work leaves the day bands entirely and settles at the
+			// bottom, the way the status lanes end on Done. A row that merged an
+			// hour ago is finished, not recent, and the inbox is for what still
+			// wants something from you.
+			{ key: "done", label: "Done", rows: [], prs: [] },
 		];
-		const [needsAction, recent, yesterday, earlier] = bands;
+		const [needsAction, recent, yesterday, earlier, done] = bands;
 		for (const r of sorted) {
 			// NaN (no lastActivity) compares false on both → Earlier. A running
 			// row counts as Recent whatever its day — live work is recent by
@@ -3268,6 +3273,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			// agent is blocked on: it is waiting on you, so it bands with them
 			// rather than sinking into whatever day it was last touched.
 			if (r.status === "needsinput" || r.mention) needsAction.rows.push(r);
+			else if (r.status === "merged") done.rows.push(r);
 			else if (r.running || t >= todayMs) recent.rows.push(r);
 			else if (t >= yesterdayMs) yesterday.rows.push(r);
 			else earlier.rows.push(r);
@@ -3332,7 +3338,17 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					</div>
 				);
 			});
-		if (snoozedRows.length > 0) nodes.push(renderSnoozedGroup(snoozedRows, ns));
+		if (snoozedRows.length > 0) {
+			// Snoozed sits ahead of Done, the way it does between Backlog and
+			// Done in the status lanes: parked work is still work, and the list
+			// ends on what has shipped.
+			const doneAt = nodes.findIndex((n) => n.key === `${ns}inbox:done`);
+			nodes.splice(
+				doneAt === -1 ? nodes.length : doneAt,
+				0,
+				renderSnoozedGroup(snoozedRows, ns),
+			);
+		}
 		return nodes;
 	}
 
@@ -3342,7 +3358,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// holds a Conductor-style row list (status reads from
 	// each row's own glyph, needs-input rows float to the top), while "status"
 	// nests the labeled status lanes under each band and "inbox" nests the
-	// activity bands (Needs action / Recent / Yesterday / Earlier) instead. In
+	// activity bands (Needs action / Recent / Yesterday / Earlier / Done). In
 	// both, a collapsed band wears a count of the urgent rows it hides. Repos
 	// are ordered by the user's shared preference (`repos`), with newly seen
 	// repositories appended in frequency order; a band is force-open while it
