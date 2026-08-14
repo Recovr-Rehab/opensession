@@ -34,6 +34,12 @@ export function reviewRowMatchesPersonFilter(
 	requests: Array<UnifiedSession["reviewRequest"]>,
 	person: string,
 	currentUser: string,
+	/**
+	 * GitHub lists you as a requested reviewer on this row's PR. It reaches your
+	 * own lens on its own: the row is usually a teammate's, and a GitHub request
+	 * writes no Open Session review request to match on.
+	 */
+	githubRequestsMe = false,
 ): boolean {
 	if (person === "unassigned") return false;
 	if (person === "everyone") return true;
@@ -42,11 +48,40 @@ export function reviewRowMatchesPersonFilter(
 	const me = currentUser.toLowerCase();
 	return (
 		owner === me ||
+		githubRequestsMe ||
 		requests.some(
 			(request) =>
 				reviewRequestTargetsPerson(request, me) ||
 				request?.by.toLowerCase() === me,
 		)
+	);
+}
+
+/**
+ * Is `person` (a lowercase person key) a requested reviewer on this row's PR,
+ * according to GitHub?
+ *
+ * This is the other half of a review waiting on you. The info panel's Reviewer
+ * picker writes Open Session's own request (`reviewRequest`); being added as a
+ * reviewer on the pull request itself writes nothing there at all, so a review
+ * somebody asked you for on GitHub used to reach the sidebar only as a
+ * standalone PR row — which disappeared the moment you opened it, because
+ * opening it mints the workspace row that covers it.
+ *
+ * GitHub drops a reviewer from this list the instant they submit a review and
+ * puts them back on a re-request, so "still listed" is the whole test: the row
+ * leaves your band when you have actually reviewed, not when you have looked.
+ * Team requests are expanded to their members server-side, so a team ask
+ * reaches every member here, exactly as it does in GitHub's own review queue.
+ */
+export function wsPrRequestsReviewFrom(
+	row: { sessions: Pick<UnifiedSession, "prReviewRequested">[] },
+	person: string,
+): boolean {
+	return row.sessions.some((session) =>
+		(session.prReviewRequested || []).some(
+			(reviewer) => reviewer.toLowerCase() === person,
+		),
 	);
 }
 

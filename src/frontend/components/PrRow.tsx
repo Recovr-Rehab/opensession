@@ -4,6 +4,7 @@ import { prStatusMark } from "../lib/pr-status";
 import {
 	SIDEBAR_HOVER_LAYER,
 	SIDEBAR_RAIL,
+	SIDEBAR_STATUS_DOT,
 	SIDEBAR_WS_ACTION,
 	SIDEBAR_WS_ACTIONS,
 	SIDEBAR_WS_ACTIONS_HOVER,
@@ -79,6 +80,9 @@ export function PrRow({
 }) {
 	const isPhone = useIsPhone();
 	const card = useRowHoverCard();
+	// `requested` means GitHub has you down as a reviewer on this PR and you
+	// have not submitted a review yet (buildReviewQueue).
+	const needsMyReview = item.source === "requested";
 	return (
 		<Popover.Root {...card.rootProps}>
 		<ContextMenu.Root>
@@ -103,14 +107,28 @@ export function PrRow({
 								data-selected={selected || undefined}
 								onClick={onOpen}
 								onContextMenu={card.close}
-								aria-label={item.pr.title}
+								aria-label={
+									needsMyReview
+										? `${item.pr.title}, needs your review`
+										: item.pr.title
+								}
 							/>
 						}
 					/>
 				}
 			>
+			{/* Being asked to review outranks the PR's own health, and takes the
+			    blue "blocked on you" dot the workspace rows use for the same thing.
+			    The state glyph it replaces is a step away, in the hover card. */}
 			<span className={SIDEBAR_RAIL}>
-				<PrStateMark item={item} size={18} />
+				{needsMyReview ? (
+					<span
+						className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.waiting}`}
+						title="Needs your review"
+					/>
+				) : (
+					<PrStateMark item={item} size={18} />
+				)}
 			</span>
 			<span className={SIDEBAR_ROW_TITLE}>{item.pr.title}</span>
 			{!isPhone && (

@@ -4,6 +4,7 @@ import {
 	buildReviewQueue,
 	prReviewCompletion,
 	reviewRowMatchesPersonFilter,
+	wsPrRequestsReviewFrom,
 	type ReviewQueuePr,
 } from "./review-queue";
 
@@ -90,6 +91,56 @@ describe("reviewRowMatchesPersonFilter", () => {
 		};
 		expect(
 			reviewRowMatchesPersonFilter("louise", [teamRequest], "me", "Grace"),
+		).toBe(true);
+	});
+
+	test("shows a GitHub review request with no Open Session request behind it", () => {
+		expect(
+			reviewRowMatchesPersonFilter("louise", [], "me", "Kent", true),
+		).toBe(true);
+		expect(
+			reviewRowMatchesPersonFilter("louise", [], "me", "Kent", false),
+		).toBe(false);
+	});
+
+	test("keeps a GitHub review request out of an explicit teammate filter", () => {
+		expect(
+			reviewRowMatchesPersonFilter("louise", [], "alex", "Kent", true),
+		).toBe(false);
+	});
+});
+
+describe("wsPrRequestsReviewFrom", () => {
+	const row = (prReviewRequested: string[], prReviewedBy?: string[]) => ({
+		sessions: [
+			session({ id: "pr", branch: "pr", prReviewRequested, prReviewedBy }),
+		],
+	});
+
+	test("matches the person GitHub is still asking", () => {
+		expect(wsPrRequestsReviewFrom(row(["kent", "alex"]), "kent")).toBe(true);
+		expect(wsPrRequestsReviewFrom(row(["alex"]), "kent")).toBe(false);
+	});
+
+	test("clears once they have reviewed, and returns on a re-request", () => {
+		// GitHub drops a reviewer from the requested list when they submit a
+		// review, so having reviewed is expressed by the absence — not by
+		// prReviewedBy, which a re-request must be able to outrank.
+		expect(wsPrRequestsReviewFrom(row([], ["kent"]), "kent")).toBe(false);
+		expect(wsPrRequestsReviewFrom(row(["kent"], ["kent"]), "kent")).toBe(true);
+	});
+
+	test("counts a request on any of the workspace's PRs", () => {
+		expect(
+			wsPrRequestsReviewFrom(
+				{
+					sessions: [
+						session({ id: "a", branch: "a", prReviewRequested: [] }),
+						session({ id: "b", branch: "b", prReviewRequested: ["kent"] }),
+					],
+				},
+				"kent",
+			),
 		).toBe(true);
 	});
 });

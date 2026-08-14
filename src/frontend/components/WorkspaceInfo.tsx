@@ -123,6 +123,9 @@ interface Props {
 	reviewRequest?: ReviewRequestInfo | null;
 	/** The session that owns `reviewRequest` (may be a sibling, not the open one). */
 	reviewRequestSessionId?: string;
+	/** GitHub's requested reviewers on this workspace's PR (person keys) — the
+	    other way a review lands on you, alongside `reviewRequest`. */
+	prReviewRequested?: string[];
 	/** The request is complete because its reviewer submitted a GitHub review. */
 	reviewAcceptedFromPr?: boolean;
 	/** Optimistically push a reviewer pick / sign-off into the app-level session
@@ -153,6 +156,12 @@ interface Props {
 }
 
 const INFO_LABEL_CLASS = "px-2 text-label font-semibold tracking-[-0.01em] text-faint";
+/** The review chip's plate when the review is waiting on YOU. The one state
+    addressed to the reader swaps the neutral plate for a red one, so "act on
+    this" separates from the states that only report where the review stands —
+    hue alone is a weak signal at 13px. */
+const REVIEW_WAITING_PLATE =
+	"bg-red-soft text-red hover:bg-red-soft hover:text-red data-[popup-open]:bg-red-soft data-[popup-open]:text-red";
 const INFO_SECTION_CLASS = "grid gap-[5px]";
 const INFO_LIST_CLASS =
 	"grid gap-px overflow-hidden rounded-lg bg-panel p-1";
@@ -875,6 +884,7 @@ function ReviewerChip({
 	sessionId,
 	reviewRequest,
 	requestSessionId,
+	prReviewRequested,
 	acceptedFromPr,
 	onReviewPr,
 	onReviewChange,
@@ -886,6 +896,8 @@ function ReviewerChip({
 	    chip stays consistent with the sidebar's workspace-level band; a brand-new
 	    request (none exists) targets the open `sessionId`. */
 	requestSessionId?: string;
+	/** GitHub's requested reviewers on this workspace's PR (person keys). */
+	prReviewRequested?: string[];
 	acceptedFromPr?: boolean;
 	/** Open the PR review canvas — offered when a review is waiting on you. */
 	onReviewPr?: () => void;
@@ -910,12 +922,17 @@ function ReviewerChip({
 	// The session that owns an existing request; a brand-new one anchors to the open session.
 	const owner = (req && requestSessionId) || sessionId;
 	const accepted = req?.accepted ?? null;
-	// This chip controls Open Session's sidebar state. GitHub's automatic
-	// requested-reviewer list stays separate; only a group picked here expands
-	// into explicit sidebar requests for its configured members.
+	// Picking here writes Open Session's own review request. Being listed as a
+	// reviewer on the PR itself is GitHub's, and only that side can clear it — but
+	// both mean "somebody is waiting on you to look at this", so they wear the
+	// same chip. The picker below still only ever writes the Open Session request.
 	const me = personKey(currentUser);
+	const githubRequestsMe = (prReviewRequested || []).some(
+		(person) => person.toLowerCase() === me,
+	);
 	const needsMyReview =
-		!!req && !accepted && reviewRequestTargetsPerson(req, me);
+		githubRequestsMe ||
+		(!!req && !accepted && reviewRequestTargetsPerson(req, me));
 	const selectedTeam = req
 		? reviewTeams.find((team) => team.github === req.to)
 		: undefined;
@@ -961,11 +978,46 @@ function ReviewerChip({
 		});
 	}
 
+	// A review waiting on you is an action, not a picker. The chip does the thing
+	// — it opens the review — and the caret beside it keeps the reassign and
+	// sign-off menu, which is still worth reaching ("not me, ask Kent"). Without
+	// somewhere to open, there is nothing to promote, so the plain menu chip
+	// stands in.
+	const reviewNow = needsMyReview && !!onReviewPr;
 	return (
 		<div className="mt-1.5 grid w-fit min-w-0 gap-1">
+			<div className="flex min-w-0 items-center gap-1">
+			{reviewNow && (
+				<Button
+					variant="soft"
+					size="sm"
+					className={cn("min-w-0 py-[6px] pl-2 text-supporting", REVIEW_WAITING_PLATE)}
+					title={
+						req
+							? `Review requested by ${req.by}`
+							: "You are a requested reviewer on this pull request"
+					}
+					onClick={onReviewPr}
+				>
+					<span className={cn(ACTION_ICON_CLASS, "text-red opacity-80")}>
+						<IconBell size={20} />
+					</span>
+					<span className="min-w-0 truncate">Review now</span>
+				</Button>
+			)}
 			<Menu.Root>
 				<Menu.Trigger
 					render={
+						reviewNow ? (
+							<Button
+								variant="soft"
+								size="sm"
+								caret
+								aria-label="Review options"
+								title="Review options"
+								className="py-[6px] text-supporting"
+							/>
+						) : (
 						<Button
 							variant="soft"
 							size="sm"
@@ -979,11 +1031,7 @@ function ReviewerChip({
 								// avatar, which must stay at full strength.
 								"max-w-full py-[6px] pl-2 text-supporting",
 								needsMyReview
-									? // The one state addressed TO you swaps the neutral
-										// plate for a red one, so "act on this" separates
-										// from the states that only report where the review
-										// stands — hue alone is a weak signal at 13px.
-										"bg-red-soft text-red hover:bg-red-soft hover:text-red data-[popup-open]:bg-red-soft data-[popup-open]:text-red"
+									? REVIEW_WAITING_PLATE
 									: accepted
 										? "text-green hover:text-green data-[popup-open]:text-green"
 										: req
@@ -1023,7 +1071,10 @@ function ReviewerChip({
 							)}
 							<span className="min-w-0 truncate">
 								{needsMyReview
-									? "Needs your review"
+									? // Only the promoted chip above can open the review, so
+										// this one reports the state instead of naming an
+										// action it cannot perform.
+										"Needs your review"
 									: accepted
 										? `Reviewed by ${accepted.by}`
 										: req
@@ -1031,18 +1082,10 @@ function ReviewerChip({
 											: "Request review"}
 							</span>
 						</Button>
+						)
 					}
 				/>
 				<Menu.Popup align="start" sideOffset={6} className="min-w-[200px]">
-					{needsMyReview && onReviewPr && (
-						<>
-							<Menu.Item onClick={onReviewPr}>
-								<IconPullRequest size={20} className="text-dim" />
-								<span className="min-w-0 flex-1 truncate">Review PR</span>
-							</Menu.Item>
-							<Menu.Separator />
-						</>
-					)}
 					{req &&
 						(accepted ? (
 							<Menu.Item
@@ -1094,6 +1137,7 @@ function ReviewerChip({
 					)}
 				</Menu.Popup>
 			</Menu.Root>
+			</div>
 			{error && <p className="text-supporting text-red">{error}</p>}
 		</div>
 	);
@@ -1246,6 +1290,7 @@ export function WorkspaceInfo({
 	sandbox,
 	reviewRequest,
 	reviewRequestSessionId,
+	prReviewRequested,
 	reviewAcceptedFromPr,
 	onReviewChange,
 	onOpenTab,
@@ -1469,6 +1514,7 @@ export function WorkspaceInfo({
 					sessionId={sessionId}
 					reviewRequest={reviewRequest}
 					requestSessionId={reviewRequestSessionId}
+					prReviewRequested={prReviewRequested}
 					acceptedFromPr={reviewAcceptedFromPr}
 					onReviewPr={onOpenTab ? () => onOpenTab("pr") : undefined}
 					onReviewChange={onReviewChange}

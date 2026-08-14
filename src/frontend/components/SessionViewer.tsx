@@ -3269,8 +3269,10 @@ export function SessionViewer({
 	// the band while the open session's Reviewer chip read empty. Surface the
 	// workspace's request in the chip: the open session's own if it has one, else a
 	// sibling's, carrying the owner id so clear/re-assign target the right session.
-	// GitHub reviews can complete an explicit request, but GitHub's automatically
-	// expanded reviewer list does not create Open Session sidebar state.
+	// GitHub reviews can complete an explicit request; GitHub's own requested
+	// reviewers ride alongside as `prReviewRequested`, since being added as a
+	// reviewer on the PR is the other way a review lands on you. It writes no
+	// Open Session request — only the picker does that — so the chip reads both.
 	const effectiveReview = useMemo(() => {
 		const owner = session.reviewRequest
 			? session
@@ -3286,6 +3288,15 @@ export function SessionViewer({
 				: null,
 			ownerId: owner?.id ?? session.id,
 			acceptedFromPr: !!completion,
+			// A workspace can span several PRs; a request on any of them is a
+			// request on the workspace, which is the unit the chip speaks for.
+			prReviewRequested: [
+				...new Set(
+					(workspaceSessions?.length ? workspaceSessions : [session]).flatMap(
+						(c) => c.prReviewRequested || [],
+					),
+				),
+			],
 		};
 	}, [
 		session.reviewRequest,
@@ -5254,6 +5265,7 @@ export function SessionViewer({
 											sandbox={session.sandbox}
 											reviewRequest={effectiveReview?.req ?? null}
 											reviewRequestSessionId={effectiveReview?.ownerId}
+											prReviewRequested={effectiveReview?.prReviewRequested}
 											reviewAcceptedFromPr={effectiveReview?.acceptedFromPr}
 											onReviewChange={onReviewChange}
 											send={connected ? send : undefined}
@@ -6308,6 +6320,7 @@ export function SessionViewer({
 										sandbox={session.sandbox}
 										reviewRequest={effectiveReview?.req ?? null}
 										reviewRequestSessionId={effectiveReview?.ownerId}
+										prReviewRequested={effectiveReview?.prReviewRequested}
 										reviewAcceptedFromPr={effectiveReview?.acceptedFromPr}
 										onReviewChange={onReviewChange}
 										send={connected ? send : undefined}

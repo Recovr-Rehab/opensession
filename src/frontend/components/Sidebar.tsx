@@ -152,9 +152,11 @@ import { useIsPhone } from "../hooks/useIsPhone";
 import { PrRow } from "./PrRow";
 import {
 	buildReviewQueue,
+	personKey,
 	prReviewCompletion,
 	reviewRequestTargetsPerson,
 	reviewRowMatchesPersonFilter,
+	wsPrRequestsReviewFrom,
 } from "../lib/review-queue";
 import {
 	readHiddenSidebarTools,
@@ -1363,6 +1365,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		return () => clearInterval(t);
 	}, [snoozes, wsRows]);
 
+	// Your person key ("Kent de Bruin" → "kent") — what GitHub's requested-reviewer
+	// and reviewed-by lists are keyed by, unlike the display name the info panel's
+	// own review requests carry.
+	const mePersonKey = personKey(currentUser);
 	const reviewScopeRows = useMemo(() => {
 		return wsRows.filter(
 			(r) =>
@@ -1372,25 +1378,33 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					r.sessions.map((session) => session.reviewRequest),
 					filter.person,
 					currentUser,
+					wsPrRequestsReviewFrom(r, mePersonKey),
 				),
 		);
-	}, [wsRows, activeSnoozeKeys, filter.person, currentUser]);
+	}, [wsRows, activeSnoozeKeys, filter.person, currentUser, mePersonKey]);
 	const needsReviewRows = useMemo(() => {
 		const me = currentUser.toLowerCase();
-		return reviewScopeRows.filter(
-			(r) =>
-				!wsPrMerged(r) &&
-				!wsPrApproved(r) &&
-				// You already reviewed the PR on GitHub (approve/changes/comment,
-				// no re-request since) → your part is done, so hide the row.
-				r.sessions.some(
-					(c) =>
-						reviewRequestTargetsPerson(c.reviewRequest, me) &&
-						!c.reviewRequest?.accepted &&
-						!prReviewCompletion(c.reviewRequest!, c),
-				),
-		);
-	}, [reviewScopeRows, currentUser]);
+		return reviewScopeRows.filter((r) => {
+			if (wsPrMerged(r)) return false;
+			// GitHub asking you to review is its own claim on your attention, and
+			// it clears itself the moment you submit a review. It therefore sits
+			// ahead of the approval guard below — another reviewer's approval does
+			// not answer a request GitHub is still making of you — and it is what
+			// keeps the row here after you click it: opening a PR mints its
+			// workspace row, which would otherwise cover the PR row and drop the
+			// whole thing out of the band before you had reviewed anything.
+			if (wsPrRequestsReviewFrom(r, mePersonKey)) return true;
+			if (wsPrApproved(r)) return false;
+			// You already reviewed the PR on GitHub (approve/changes/comment,
+			// no re-request since) → your part is done, so hide the row.
+			return r.sessions.some(
+				(c) =>
+					reviewRequestTargetsPerson(c.reviewRequest, me) &&
+					!c.reviewRequest?.accepted &&
+					!prReviewCompletion(c.reviewRequest!, c),
+			);
+		});
+	}, [reviewScopeRows, currentUser, mePersonKey]);
 	// The mirror of "Needs review": workspaces where YOU asked a teammate to
 	// review (the info panel's Reviewer picker, `reviewRequest.by === me`). They
 	// get their own band so a session you've sent out for review moves out of the
@@ -2449,6 +2463,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		const active = rowOwnsSelection(row);
 		const editing = rowRenameEditing(row);
 		const waiting = row.status === "needsinput";
+		// A review GitHub is still asking you for. Blocked on you, like an
+		// unanswered question, so it wears the same blue mark — and it wears it in
+		// every band, not only under Needs review, because the whole point is that
+		// you can see you were asked without opening anything.
+		const needsMyReview = wsPrRequestsReviewFrom(row, mePersonKey);
 		// The "in progress" ticker start: the earliest running session's start, so a
 		// workspace with several live sessions shows how long it's been busy overall.
 		// Done/idle sessions don't count — only sessions actually running feed the clock.
@@ -2629,17 +2648,25 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					// The button's label replaces its content for assistive tech, so
 					// the blocked state — now carried visually by the row's wash —
 					// rides here rather than on a marker element.
-					aria-label={waiting ? `${row.name}, needs your attention` : row.name}
+					aria-label={
+						waiting
+							? `${row.name}, needs your attention`
+							: needsMyReview
+								? `${row.name}, needs your review`
+								: row.name
+					}
 				>
 				{/* Blocked-on-you outranks every other mark, in every grouping: a
 				    row waiting on you looks the same wherever the list puts it, and
 				    the blue is the one the lane dot, the collapsed-band count and the
-				    native app already spend on it. Below that, flat repo grouping has
-				    no lane heading so its mark carries the workspace status, while
-				    grouped lanes provide that context and keep the richer PR
-				    lifecycle mark here instead. */}
+				    native app already spend on it. A review you were asked for is the
+				    same kind of claim, so it takes the same dot rather than a colour
+				    of its own — the PR's own health keeps its place in the hover card.
+				    Below that, flat repo grouping has no lane heading so its mark
+				    carries the workspace status, while grouped lanes provide that
+				    context and keep the richer PR lifecycle mark here instead. */}
 				<span className={SIDEBAR_RAIL}>
-					{waiting ? (
+					{waiting || needsMyReview ? (
 						<span
 							className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.waiting}`}
 						/>
