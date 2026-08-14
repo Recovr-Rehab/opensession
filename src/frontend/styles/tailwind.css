@@ -213,7 +213,8 @@
 	   13px -> text-label / text-supporting / text-control-label (interface copy)
 	   14px -> text-body / text-item-title (content and item titles)
 	   17px -> text-dialog-title (modal headings)
-	   19px -> text-section-title / text-page-title (all headings) */
+	   19px -> text-section-title / text-page-title (all headings)
+	   28px -> text-stat (the figure on a metric tile) */
 	--text-meta: 11px;
 	--text-label: 13px;
 	--text-supporting: 13px;
@@ -223,6 +224,15 @@
 	--text-dialog-title: 17px;
 	--text-section-title: 19px;
 	--text-page-title: 19px;
+	/* The display step, above every heading: the number on a stat tile, whose
+	   whole job is to be read before the label above it. A heading token is the
+	   wrong size for it, since 19px is an item title rather than a figure, and
+	   without a step of its own each dashboard invents an arbitrary one. Its
+	   tracking is part of the role: large numerals read too loose at the
+	   tracking a heading wants. */
+	--text-stat: 28px;
+	--text-stat--line-height: 32px;
+	--text-stat--letter-spacing: -0.025em;
 
 	/* Interaction geometry: `hit-target` uses 40px for pointer layouts and
 	   expands to the WCAG-friendly 44px touch convention on coarse pointers. */

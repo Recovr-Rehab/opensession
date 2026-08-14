@@ -1,5 +1,7 @@
 import { repoLabel } from "../lib/repo-label";
+import { motion } from "motion/react";
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { duration, ease } from "../ui/motion";
 import { PRODUCT_NAME, docTitle } from "../lib/brand";
 import { fetchAnalytics } from "../lib/api";
 import type { AnalyticsSummary } from "../lib/types";
@@ -140,15 +142,26 @@ function BarChart({ labels, series, values, mode, height = 190, formatValue = fm
 			<svg width={width} height={height} role="img">
 				{ticks.map((t) => (
 					<g key={t}>
-						<line x1={gutter} x2={width} y1={yOf(t)} y2={yOf(t)} stroke="var(--border)" strokeWidth={1} />
-						<text x={gutter - 6} y={yOf(t) + 3} textAnchor="end" fontSize={10} fill="var(--text-faint)">
+						{/* Dashed gridlines, solid baseline: the value lines are a
+						    reading aid and stay out of the way, the zero line is the
+						    floor the bars actually stand on. */}
+						<line
+							x1={gutter}
+							x2={width}
+							y1={yOf(t)}
+							y2={yOf(t)}
+							stroke="var(--border)"
+							strokeWidth={1}
+							strokeDasharray="2 4"
+						/>
+						<text x={gutter - 8} y={yOf(t) + 3} textAnchor="end" fontSize={10} fill="var(--text-faint)">
 							{formatValue(t)}
 						</text>
 					</g>
 				))}
 				<line x1={gutter} x2={width} y1={yOf(0)} y2={yOf(0)} stroke="var(--border)" strokeWidth={1} />
 				{hover !== null && band > 0 && (
-					<rect x={gutter + hover * band} y={6} width={band} height={plotH} fill="var(--bg-hover)" />
+					<rect x={gutter + hover * band} y={6} width={band} height={plotH} rx={6} fill="var(--hover)" />
 				)}
 				{labels.map((label, i) => {
 					const x0 = gutter + i * band;
@@ -167,7 +180,7 @@ function BarChart({ labels, series, values, mode, height = 190, formatValue = fm
 							// every segment that has another stacked above it).
 							const gap = j === topIdx ? 0 : Math.min(2, h);
 							if (j === topIdx) {
-								marks.push(<path key={j} d={roundedTopRect(x, y, barW, h, 4)} fill={series[j].color} />);
+								marks.push(<path key={j} d={roundedTopRect(x, y, barW, h, 6)} fill={series[j].color} />);
 							} else {
 								marks.push(<rect key={j} x={x} y={y + gap} width={barW} height={Math.max(0, h - gap)} fill={series[j].color} />);
 							}
@@ -180,10 +193,13 @@ function BarChart({ labels, series, values, mode, height = 190, formatValue = fm
 						values[i].forEach((v, j) => {
 							if (v <= 0) return;
 							const h = hOf(v);
+							// A thin bar gets a fully capsuled cap. At 10px wide, a
+							// square-ish corner is the only thing left in the chart that
+							// still reads as a rectangle.
 							marks.push(
 								<path
 									key={j}
-									d={roundedTopRect(x + j * (barW + 2), yOf(0) - h, barW, h, 4)}
+									d={roundedTopRect(x + j * (barW + 2), yOf(0) - h, barW, h, barW / 2)}
 									fill={series[j].color}
 								/>,
 							);
@@ -191,7 +207,10 @@ function BarChart({ labels, series, values, mode, height = 190, formatValue = fm
 					}
 					return (
 						<g key={label}>
-							{marks}
+							{/* Hovering a day pushes every other day back instead of just
+							    marking the one. The read is "this day against the month",
+							    and dimming carries that better than a highlight does. */}
+							<g opacity={hover === null || hover === i ? 1 : 0.28}>{marks}</g>
 							{i % labelEvery === 0 && (
 								<text x={x0 + band / 2} y={height - 4} textAnchor="middle" fontSize={10} fill="var(--text-faint)">
 									{shortDate(label)}
@@ -212,13 +231,16 @@ function BarChart({ labels, series, values, mode, height = 190, formatValue = fm
 			</svg>
 			{hover !== null && tooltipRows.length > 0 && (
 				<div
-					className="pointer-events-none absolute top-1 z-10 -translate-x-1/2 rounded-md border border-line bg-panel px-2.5 py-2 smooth-shadow-md"
+					// Opaque, unlike the app's other popups: this one floats directly
+					// over the densest, most colourful thing on the page, and a
+					// translucent surface there tints every row with the bars behind it.
+					className="pointer-events-none absolute top-1 z-10 -translate-x-1/2 rounded-popup [corner-shape:squircle] bg-popup [--smooth-ring-color:var(--popup-ring)] px-3 py-2.5 smooth-shadow-ring-md"
 					style={{ left: tooltipLeft }}
 				>
 					<div className="mb-1 text-meta font-semibold text-fg">{shortDate(labels[hover])}</div>
 					{tooltipRows.map((r) => (
 						<div key={r.label} className="flex items-center gap-1.5 whitespace-nowrap text-meta leading-4.5">
-							<span className="size-2 shrink-0 rounded-xs" style={{ background: r.color }} />
+							<span className="size-2 shrink-0 rounded-full" style={{ background: r.color }} />
 							<span className="text-dim">{r.label}</span>
 							<span className="ml-auto pl-3 font-medium tabular-nums text-fg">{formatValue(r.value)}</span>
 						</div>
@@ -232,10 +254,10 @@ function BarChart({ labels, series, values, mode, height = 190, formatValue = fm
 function Legend({ series }: { series: Series[] }) {
 	if (series.length < 2) return null;
 	return (
-		<div className="mb-2 flex flex-wrap gap-x-3 gap-y-1">
+		<div className="mb-3 flex flex-wrap gap-x-3.5 gap-y-1">
 			{series.map((s) => (
 				<span key={s.label} className="flex items-center gap-1.5 text-meta text-dim">
-					<span className="size-2.5 rounded-xs" style={{ background: s.color }} />
+					<span className="size-2 rounded-full" style={{ background: s.color }} />
 					{s.label}
 				</span>
 			))}
@@ -255,21 +277,35 @@ function ChartCard({
 	children: React.ReactNode;
 }) {
 	return (
-		<Card as="section" className="min-w-0 rounded-xl border-0 p-4">
-			<h3 className="m-0 text-item-title font-semibold text-fg">{title}</h3>
-			{subtitle && <p className="m-0 mb-2 mt-0.5 text-supporting text-dim">{subtitle}</p>}
+		<Card as="section" className="min-w-0 rounded-xl border-0 p-5">
+			<h3 className="m-0 text-item-title font-semibold tracking-[-0.01em] text-fg">{title}</h3>
+			{subtitle && <p className="m-0 mb-3 mt-1 text-supporting text-dim">{subtitle}</p>}
 			{series && <Legend series={series} />}
 			{children}
 		</Card>
 	);
 }
 
-function StatTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function StatTile({
+	label,
+	value,
+	unit,
+	sub,
+}: {
+	label: string;
+	value: string;
+	/** Rendered a step down from the figure, so "1.3K" reads and "h" annotates. */
+	unit?: string;
+	sub?: string;
+}) {
 	return (
-		<Card className="min-w-0 rounded-xl border-0 px-4 py-3">
-			<div className="text-label text-dim">{label}</div>
-			<div className="mt-0.5 text-page-title font-semibold leading-7 text-fg">{value}</div>
-			{sub && <div className="mt-0.5 truncate text-meta text-faint">{sub}</div>}
+		<Card className="min-w-0 rounded-xl border-0 px-5 py-4">
+			<div className="text-label font-medium text-dim">{label}</div>
+			<div className="mt-1 text-stat font-semibold text-fg">
+				{value}
+				{unit && <span className="ml-0.5 text-item-title font-medium text-dim">{unit}</span>}
+			</div>
+			{sub && <div className="mt-1 truncate text-meta text-faint">{sub}</div>}
 		</Card>
 	);
 }
@@ -428,12 +464,12 @@ export function Analytics() {
 	}, [data]);
 
 	// Deliberately NOT ui/input's field: these two sit inside the range row
-	// beside the 7d/14d/30d/90d segmented control, which is its own hand-rolled
-	// 30px `rounded-md` group. Plating the dates alone makes them the odd pair
-	// in their own row — the row should move together, once the segmented
-	// control has a primitive of its own.
+	// beside the 7d/14d/30d/90d segmented control, and they match its knob:
+	// same `rounded-control` corner, same hairline. An input keeps its border
+	// (a card doesn't; the edge of a field is one of the things that is
+	// genuinely a line), so this is the one bordered thing left in the header.
 	const dateInput =
-		"rounded-md border border-line bg-panel px-2 py-1.5 text-control-label text-fg [color-scheme:inherit]";
+		"rounded-control border border-line bg-control px-2.5 py-1.5 text-control-label text-fg [color-scheme:inherit]";
 
 	return (
 		<div className="analytics-viz flex min-h-0 flex-1 flex-col overflow-y-auto bg-bg">
@@ -447,22 +483,40 @@ export function Analytics() {
 						</p>
 					</div>
 					<div className="flex flex-wrap items-center gap-2">
-						<div className="flex rounded-md border border-line bg-panel p-0.5">
-							{PRESETS.map((p) => (
-								<button
-									key={p.label}
-									type="button"
-									className={`cursor-pointer rounded-control border-0 px-2.5 py-1 text-control-label font-medium ${
-										activePresetDays === p.days ? "bg-active text-fg" : "bg-transparent text-dim hover:text-fg"
-									}`}
-									onClick={() => {
-										setFrom(daysAgo(p.days - 1));
-										setTo(utcToday());
-									}}
-								>
-									{p.label}
-								</button>
-							))}
+						{/* Recessed track, raised knob: the selected range sits ON the
+						    group rather than being a darker hole cut into it, and the
+						    knob is the Button primitive's own raised plate so it reads
+						    the same way in both themes. Concentric corners: the knob's
+						    `rounded-control` (12) plus the track's 2px padding is the
+						    track's `rounded-lg` (14). */}
+						<div className="flex rounded-lg bg-hover p-0.5">
+							{PRESETS.map((p) => {
+								const selected = activePresetDays === p.days;
+								return (
+									<button
+										key={p.label}
+										type="button"
+										aria-pressed={selected}
+										className={`relative cursor-pointer rounded-control border-0 bg-transparent px-2.5 py-1 text-control-label font-medium ${
+											selected ? "text-fg" : "text-dim hover:text-fg"
+										}`}
+										onClick={() => {
+											setFrom(daysAgo(p.days - 1));
+											setTo(utcToday());
+										}}
+									>
+										{selected && (
+											<motion.span
+												layoutId="analytics-range-knob"
+												aria-hidden
+												className="absolute inset-0 rounded-control border border-line bg-button smooth-shadow-xs"
+												transition={{ type: "tween", duration: duration.base, ease }}
+											/>
+										)}
+										<span className="relative">{p.label}</span>
+									</button>
+								);
+							})}
 						</div>
 						<div className="flex items-center gap-1.5">
 							<input
@@ -494,7 +548,7 @@ export function Analytics() {
 
 				{data && derived && (
 					<div className={loading ? "opacity-60 transition-opacity" : "transition-opacity"}>
-						<div className="mt-4 grid grid-cols-2 gap-2.5 md:grid-cols-4">
+						<div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
 							<StatTile
 								label="Active sessions"
 								value={fmtInt(data.totals.sessions)}
@@ -512,7 +566,8 @@ export function Analytics() {
 							/>
 							<StatTile
 								label="Agent time"
-								value={`${fmt(Math.round(data.totals.durationMs / 3_600_000))}h`}
+								value={fmt(Math.round(data.totals.durationMs / 3_600_000))}
+								unit="h"
 								sub="wall-clock across turns"
 							/>
 							<StatTile
@@ -669,7 +724,9 @@ export function Analytics() {
 											</span>
 											<span className="h-3 min-w-0 flex-1">
 												<span
-													className="block h-3 rounded-xs"
+													// min-w = the bar's own height, so the smallest value is a
+													// clean dot rather than a squeezed sliver of a capsule.
+													className="block h-3 min-w-3 rounded-[999px]"
 													style={{
 														width: `${Math.max(1.5, (100 * m.outputTokens) / derived.maxModelOutput)}%`,
 														background: i < 5 ? slot(i + 1) : OTHER_COLOR,
@@ -799,7 +856,7 @@ export function Analytics() {
 												</span>
 												<span className="h-3 min-w-0 flex-1">
 													<span
-														className="flex h-3 overflow-hidden rounded-xs"
+														className="flex h-3 min-w-3 overflow-hidden rounded-[999px]"
 														style={{ width: `${Math.max(1.5, (100 * p.outputTokens) / derived.maxPersonOutput)}%` }}
 													>
 														{p.segments.map((s) => (
@@ -838,7 +895,7 @@ export function Analytics() {
 													href={pr.url}
 													target="_blank"
 													rel="noopener noreferrer"
-													className="-mx-2 flex items-center gap-2.5 rounded-md px-2 py-1.5 text-label no-underline hover:bg-hover"
+													className="-mx-2 flex items-center gap-2.5 rounded-row px-2 py-1.5 text-label no-underline hover:bg-hover"
 												>
 													<span
 														className="size-2 shrink-0 rounded-full"
