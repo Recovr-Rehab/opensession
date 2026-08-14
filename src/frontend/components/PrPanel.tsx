@@ -1250,62 +1250,63 @@ export function PrPanel({
     >
       {switcher}
 
-      {/* The whole PR — title, branch line, stack, page tabs — lives inside the
-          one scroll container so the identity scrolls away with the code. Only
-          the page row sticks, so the reviewer keeps a way back to Overview once
-          they are deep in a file. */}
+      {/* The PR identity lives inside the scroll container, so it gets out of
+          the way once the reviewer reaches the code. Only the page row sticks. */}
       <main className="min-h-0 flex-1 overflow-y-auto bg-surface pb-24 [--review-file-header-top:52px] phone:pb-36">
-        <header className="flex min-h-[92px] shrink-0 items-center gap-5 px-6 py-4 phone:min-h-[78px] phone:px-3">
-          <div className="min-w-0 flex-1">
-            <a
-              className="block truncate text-page-title font-semibold tracking-[-0.025em] text-fg no-underline hover:text-link phone:text-section-title"
-              href={pr.url}
-              target="_blank"
-              rel="noopener"
-            >
-              {pr.title} <span className="font-normal text-faint">#{pr.number}</span>
-            </a>
-            <div className="mt-2 flex items-center gap-2 overflow-hidden whitespace-nowrap text-xs text-dim">
-              <span className="truncate">
-                <strong>{pr.author}</strong> wants to merge {pr.commits?.length || 0} commit{pr.commits?.length === 1 ? "" : "s"} into
-                {" "}<span className="rounded-sm bg-blue-soft px-1.5 py-0.5 text-blue">{pr.baseRefName}</span>
-                {" "}from <span className="rounded-sm bg-blue-soft px-1.5 py-0.5 text-blue">{pr.headRefName}</span>
+        <header className="flex h-14 shrink-0 items-center gap-4 px-6 phone:h-[52px] phone:px-3">
+          <a
+            className="min-w-0 flex-1 truncate text-item-title font-semibold tracking-[-0.015em] text-fg no-underline hover:text-link phone:text-body"
+            href={pr.url}
+            target="_blank"
+            rel="noopener"
+            title={`${pr.title} #${pr.number}`}
+          >
+            {pr.title} <span className="font-normal text-faint">#{pr.number}</span>
+          </a>
+          {!railStacked && (
+            <div className="ml-auto flex min-w-0 shrink-0 items-center gap-2 text-meta text-dim">
+              <span
+                className="flex min-w-0 items-center gap-1.5"
+                title={`${pr.headRefName} into ${pr.baseRefName}`}
+              >
+                <span className="max-w-28 truncate">{pr.headRefName}</span>
+                <span className="text-faint" aria-hidden="true">→</span>
+                <span className="max-w-20 truncate">{pr.baseRefName}</span>
               </span>
-              <span className="shrink-0 text-meta">
-                <span className="text-green">+{pr.additions}</span>{" "}
+              <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
+                <span className="text-green">+{pr.additions}</span>
                 <span className="text-red">−{pr.deletions}</span>
               </span>
+              <span className="mx-1 h-4 w-px shrink-0 bg-line" aria-hidden="true" />
+              {sessions && (
+                <button
+                  className="inline-flex h-8 items-center rounded-control border-0 bg-transparent px-2 font-medium text-dim hover:bg-hover hover:text-fg"
+                  onClick={() => setSessionsOpen(true)}
+                  title="Sessions linked to this PR"
+                >
+                  Sessions{relatedSessions.length > 0 ? ` · ${relatedSessions.length}` : ""}
+                </button>
+              )}
+              {pr.staging?.url && (
+                <a
+                  className="inline-flex h-8 items-center rounded-control px-2 font-medium text-dim no-underline hover:bg-hover hover:text-fg"
+                  href={pr.staging.url}
+                  target="_blank"
+                  rel="noopener"
+                >
+                  Preview
+                </a>
+              )}
+              {onOpenSession && (
+                <button
+                  className="inline-flex h-8 items-center rounded-control border-0 bg-transparent px-2 font-medium text-dim hover:bg-hover hover:text-fg"
+                  onClick={onOpenSession}
+                >
+                  Open workspace
+                </button>
+              )}
             </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-2 max-[760px]:hidden">
-            {sessions && (
-              <button
-                className="border-0 bg-transparent px-1 py-2 text-xs font-medium text-dim hover:text-fg"
-                onClick={() => setSessionsOpen(true)}
-                title="Sessions linked to this PR"
-              >
-                Sessions{relatedSessions.length > 0 ? ` · ${relatedSessions.length}` : ""}
-              </button>
-            )}
-            {pr.staging?.url && (
-              <a
-                className="px-1 py-2 text-xs font-medium text-dim no-underline hover:text-fg"
-                href={pr.staging.url}
-                target="_blank"
-                rel="noopener"
-              >
-                Preview
-              </a>
-            )}
-            {onOpenSession && (
-              <button
-                className="border-0 bg-transparent px-1 py-2 text-xs font-medium text-dim hover:text-fg"
-                onClick={onOpenSession}
-              >
-                Open workspace
-              </button>
-            )}
-          </div>
+          )}
         </header>
 
         {/* Where this PR sits in its chain of layers — above the pages, because
@@ -1564,7 +1565,9 @@ export function PrPanel({
             aria-label="Close sessions"
             onClick={() => setSessionsOpen(false)}
           />
-          <div className="absolute right-5 top-[92px] z-30 w-[460px] max-w-[calc(100%-40px)] rounded-md border border-line-strong bg-panel p-4 smooth-shadow-lg">
+          <div
+            className={`absolute right-5 ${showBar ? "top-[100px]" : "top-14"} z-30 w-[460px] max-w-[calc(100%-40px)] rounded-md border border-line-strong bg-panel p-4 smooth-shadow-lg`}
+          >
             <div className="mb-2 flex items-center">
               <span className="text-sm font-semibold text-fg">
                 Sessions on this PR
