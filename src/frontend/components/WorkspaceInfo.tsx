@@ -30,7 +30,6 @@ import { UserAvatar } from "./UserAvatar";
 import { Menu } from "../ui/menu";
 import { Popover } from "../ui/popover";
 import { cn } from "../ui/cn";
-import { Button } from "../ui/button";
 import type {
 	DiffFile,
 	GitStatusInfo,
@@ -155,17 +154,8 @@ interface Props {
 	liveMedia?: WorkspaceMediaItem[];
 }
 
-/** The review chip's plate when the review is waiting on YOU. The one state
-    addressed to the reader swaps the neutral plate for a red one, so "act on
-    this" separates from the states that only report where the review stands —
-    hue alone is a weak signal at 13px. */
-const REVIEW_WAITING_PLATE =
-	"bg-red-soft text-red hover:bg-red-soft hover:text-red data-[popup-open]:bg-red-soft data-[popup-open]:text-red";
 const INFO_MORE_BUTTON_CLASS =
 	"cursor-pointer bg-panel px-[9px] py-[7px] text-left text-label font-semibold text-faint transition-colors hover:bg-hover hover:text-fg";
-
-const ACTION_ICON_CLASS =
-	"inline-flex size-5 shrink-0 items-center justify-center text-faint [&_svg]:block";
 
 function initial(name: string): string {
 	return (name.trim()[0] || "?").toUpperCase();
@@ -556,11 +546,15 @@ function AgentReviewCard({
 	repo,
 	pr,
 	onOpenSession,
+	children,
 }: {
 	sessionId: string;
 	repo?: string;
 	pr: PrDetails;
 	onOpenSession?: (id: string, created?: UnifiedSession | null) => void;
+	/** The human reviewer's row, rendered under the agent's inside the same
+	    plate. One section, two people you can ask. */
+	children?: React.ReactNode;
 }) {
 	const [busy, setBusy] = useState<PrAgentAction | null>(null);
 	const [done, setDone] = useState<{
@@ -678,7 +672,11 @@ function AgentReviewCard({
 	return (
 		<div data-agent-score className={INFO_SECTION_CLASS}>
 			<div className="flex items-center gap-2">
-				<div className={INFO_LABEL_CLASS}>{AGENT_NAME} score</div>
+				{/* One section for both reviewers: the agent's reading and the
+				    teammate's request are the same question, so they share a label
+				    and a plate rather than sitting in two sections that each say
+				    "review". Who each row is about is on the row. */}
+				<div className={INFO_LABEL_CLASS}>Review</div>
 				{actionable && (
 					<Menu.Root>
 						<Menu.Trigger
@@ -734,18 +732,22 @@ function AgentReviewCard({
 								aria-hidden
 							/>
 							<span className={GIT_LABEL}>
+								{/* The row names its reviewer now that the section label is
+								    the shared "Review": this line is the agent's, the one
+								    under it is the teammate's. */}
+								{AGENT_NAME}
+								<span className="text-faint"> · </span>
 								{score ? (
 									<>
 									{/* No live region: the panel repolls, and a `status` role
-									    here would re-announce an unchanged score every time.
-									    The section label above already names the reading. */}
+									    here would re-announce an unchanged score every time. */}
 									<span className={cn("font-semibold tabular-nums", scoreTone)}>
 										{score}/5
 									</span>
 										<span className="text-faint"> · </span>
 									</>
 								) : null}
-								<span className={score ? "text-dim" : ""}>{state}</span>
+								<span className="text-dim">{state}</span>
 							</span>
 						</Popover.Trigger>
 						{reviewMessage && (
@@ -789,6 +791,7 @@ function AgentReviewCard({
 						</button>
 					)}
 				</div>
+				{children}
 			</div>
 			{done && (
 				<div className="px-1 text-[11px] font-medium text-dim">
@@ -960,119 +963,106 @@ function ReviewerChip({
 		});
 	}
 
-	// A review waiting on you is an action, not a picker. The chip does the thing
-	// — it opens the review — and the caret beside it keeps the reassign and
-	// sign-off menu, which is still worth reaching ("not me, ask Kent"). Without
-	// somewhere to open, there is nothing to promote, so the plain menu chip
-	// stands in.
+	// A review waiting on you is an action, not a picker: the row's own action
+	// opens the review, and the caret beside it keeps the reassign and sign-off
+	// menu, which is still worth reaching ("not me, ask Kent"). Without somewhere
+	// to open, the action IS the picker.
 	const reviewNow = needsMyReview && !!onReviewPr;
+	// The dot carries the state colour, exactly as the agent's row above it
+	// does, so the two reviewers read as one list rather than two widgets.
+	const dotTone: keyof typeof GIT_DOT_BG = needsMyReview
+		? "red"
+		: accepted
+			? "green"
+			: req || githubTarget
+				? "yellow"
+				: "muted";
+	// `who · where it stands`, in the agent row's grammar right above: the name
+	// keeps the row's own ink and the state carries the tone, exactly as the
+	// score does. The one state addressed to the reader says so instead, and
+	// takes the red plate with it — hue alone is a weak signal at 13px.
+	const rowName = needsMyReview
+		? null
+		: accepted
+			? accepted.by
+			: req
+				? targetLabel
+				: githubTarget
+					? `${githubTarget}${githubOthers.length > 1 ? ` +${githubOthers.length - 1}` : ""}`
+					: null;
+	const rowState = needsMyReview
+		? "Needs your review"
+		: accepted
+			? "reviewed"
+			: req || githubTarget
+				? "requested"
+				: "No reviewer";
+	const stateTone = needsMyReview
+		? "font-semibold text-red"
+		: accepted
+			? "text-green"
+			: req || githubTarget
+				? "text-yellow"
+				: "text-dim";
+	const rowTitle = needsMyReview
+		? `Review requested by ${req?.by || "a teammate"}`
+		: accepted
+			? `Reviewed by ${accepted.by}`
+			: req
+				? `Review requested by ${req.by}`
+				: githubTarget
+					? `Review requested on GitHub from ${githubNames.join(", ")}`
+					: "Ask a teammate to review this session";
 	return (
-		<div className="mt-1.5 grid w-fit min-w-0 gap-1">
-			<div className="flex min-w-0 items-center gap-1">
-			{reviewNow && (
-				<Button
-					variant="soft"
-					size="sm"
-					className={cn("min-w-0 py-[6px] pl-2 text-supporting", REVIEW_WAITING_PLATE)}
-					title={
-						req
-							? `Review requested by ${req.by}`
-							: "You are a requested reviewer on this pull request"
-					}
-					onClick={onReviewPr}
-				>
-					<span className={cn(ACTION_ICON_CLASS, "text-red opacity-80")}>
-						<IconBell size={20} />
-					</span>
-					<span className="min-w-0 truncate">Review now</span>
-				</Button>
-			)}
+		<>
+			<div
+				className={cn(
+					GIT_ROW,
+					"rounded-control py-2",
+					// Background only: the row's own `text-fg` and a tone utility on
+					// the same element would resolve by Tailwind's output order, so
+					// the ink goes on the spans inside it instead.
+					needsMyReview && "bg-red-soft",
+				)}
+			>
+				<span className={cn(GIT_DOT, GIT_DOT_BG[dotTone])} aria-hidden />
+				<span className={GIT_LABEL} title={rowTitle}>
+					{rowName && (
+						<>
+							{rowName}
+							<span className="text-faint"> · </span>
+						</>
+					)}
+					<span className={stateTone}>{rowState}</span>
+				</span>
+				{reviewNow && (
+					<button
+						type="button"
+						className={GIT_ACTION}
+						title={rowTitle}
+						onClick={onReviewPr}
+					>
+						Review now
+					</button>
+				)}
 			<Menu.Root>
 				<Menu.Trigger
-					render={
-						reviewNow ? (
-							<Button
-								variant="soft"
-								size="sm"
-								caret
-								aria-label="Review options"
-								title="Review options"
-								className="py-[6px] text-supporting"
-							/>
-						) : (
-						<Button
-							variant="soft"
-							size="sm"
-							caret
-							className={cn(
-								// The panel's interface-copy step, so the chip reads as
-								// part of the meta line it sits under rather than a
-								// control dropped on top of it. `pl-2` is the leading
-								// visual's 2px pull, which `icon` would give us — but
-								// `icon` also dims, and half of these states lead with an
-								// avatar, which must stay at full strength.
-								"max-w-full py-[6px] pl-2 text-supporting",
-								needsMyReview
-									? REVIEW_WAITING_PLATE
-									: accepted
-										? "text-green hover:text-green data-[popup-open]:text-green"
-										: req || githubTarget
-											? "text-yellow hover:text-yellow data-[popup-open]:text-yellow"
-											: "",
-							)}
-							title={
-								needsMyReview
-									? `Review requested by ${req?.by || "a teammate"}`
-									: accepted
-										? `Reviewed by ${accepted.by}`
-										: req
-											? `Review requested by ${req.by}`
-											: githubTarget
-												? `Review requested on GitHub from ${githubNames.join(", ")}`
-												: "Ask a teammate to review this session"
-							}
-						>
-							{needsMyReview ? (
-								<span className={cn(ACTION_ICON_CLASS, "text-red opacity-80")}>
-									<IconBell size={20} />
-								</span>
-							) : accepted ? (
-								<UserAvatar name={accepted.by} size={20}>
-									<span className="absolute -bottom-px -right-px grid size-4 place-items-center rounded-full border border-panel bg-green text-white shadow-[0_0_0_1px_var(--bg-panel)] [&_svg]:size-3">
-										<IconCheck size={12} />
-									</span>
-								</UserAvatar>
-							) : selectedTeam ? (
-								<span className={ACTION_ICON_CLASS}>
-									<IconStack size={20} />
-								</span>
-							) : req ? (
-								<UserAvatar name={req.to} size={20} />
-							) : githubTarget ? (
-								<UserAvatar name={githubTarget} size={20} />
-							) : (
-								<span className={ACTION_ICON_CLASS}>
-									<IconBell size={20} />
-								</span>
-							)}
-							<span className="min-w-0 truncate">
-								{needsMyReview
-									? // Only the promoted chip above can open the review, so
-										// this one reports the state instead of naming an
-										// action it cannot perform.
-										"Needs your review"
-									: accepted
-										? `Reviewed by ${accepted.by}`
-										: req
-											? `Review: ${targetLabel}`
-											: githubTarget
-												? `Review: ${githubTarget}${githubOthers.length > 1 ? ` +${githubOthers.length - 1}` : ""}`
-												: "Request review"}
-							</span>
-						</Button>
-						)
+					className={
+						reviewNow
+							? "-mr-1 ml-1 grid size-6 shrink-0 place-items-center rounded-md text-faint transition-[color,background-color] hover:bg-hover hover:text-fg"
+							: GIT_ACTION
 					}
-				/>
+					aria-label="Review options"
+					title={rowTitle}
+				>
+					{reviewNow ? (
+						<IconChevronDown size={14} />
+					) : req || githubTarget ? (
+						"Change"
+					) : (
+						"Request"
+					)}
+				</Menu.Trigger>
 				<Menu.Popup align="start" sideOffset={6} className="min-w-[200px]">
 					{req &&
 						(accepted ? (
@@ -1126,8 +1116,10 @@ function ReviewerChip({
 				</Menu.Popup>
 			</Menu.Root>
 			</div>
-			{error && <p className="text-supporting text-red">{error}</p>}
-		</div>
+			{error && (
+				<div className="px-2 pb-1 text-[11px] font-medium text-red">{error}</div>
+			)}
+		</>
 	);
 }
 
@@ -1465,36 +1457,47 @@ export function WorkspaceInfo({
 		assets.length > 0,
 	);
 
+	// The teammate's review row, rendered into whichever section owns the plate
+	// below. Held here so both branches pass the same element.
+	const reviewerRow = (
+		<ReviewerChip
+			sessionId={sessionId}
+			reviewRequest={reviewRequest}
+			requestSessionId={reviewRequestSessionId}
+			prReviewRequested={prReviewRequested}
+			acceptedFromPr={reviewAcceptedFromPr}
+			onReviewPr={onOpenTab ? () => onOpenTab("pr") : undefined}
+			onReviewChange={onReviewChange}
+		/>
+	);
+
 	// `workspace-info-panel` is a DOM hook, not styling: the phone session-info
 	// page reaches it from an ancestor — `[&_.workspace-info-panel]:pt-0` in
 	// INFO_OVERVIEW (lib/session-viewer-classes).
 	return (
 		<div className="workspace-info-panel flex flex-col gap-4 px-2 pb-[22px] pt-3">
-			{/* px-2 like INFO_LABEL_CLASS: the review chip shares a left edge
-			    with the section headings below it. */}
-			<div className="grid gap-1 px-2">
-				<ReviewerChip
-					sessionId={sessionId}
-					reviewRequest={reviewRequest}
-					requestSessionId={reviewRequestSessionId}
-					prReviewRequested={prReviewRequested}
-					acceptedFromPr={reviewAcceptedFromPr}
-					onReviewPr={onOpenTab ? () => onOpenTab("pr") : undefined}
-					onReviewChange={onReviewChange}
-				/>
-				{sandbox && (
-					<div className="mt-1 flex flex-wrap items-center gap-1.5">
-						<SandboxBadge sessionId={sessionId} sandbox={sandbox} />
-					</div>
-				)}
-			</div>
-			{pr?.number && (
+			{/* Both reviewers in one section. With a PR the agent's card owns the
+			    plate and the teammate's row goes in under it; without one there is
+			    no agent reading to show, so the row stands in its own section. */}
+			{pr?.number ? (
 				<AgentReviewCard
 					sessionId={sessionId}
 					repo={repo}
 					pr={pr}
 					onOpenSession={onOpenSession}
-				/>
+				>
+					{reviewerRow}
+				</AgentReviewCard>
+			) : (
+				<div className={INFO_SECTION_CLASS}>
+					<div className={INFO_LABEL_CLASS}>Review</div>
+					<div className={INFO_LIST_CLASS}>{reviewerRow}</div>
+				</div>
+			)}
+			{sandbox && (
+				<div className="flex flex-wrap items-center gap-1.5 px-2">
+					<SandboxBadge sessionId={sessionId} sandbox={sandbox} />
+				</div>
 			)}
 			{showGit && (
 				<GitStatusRows
