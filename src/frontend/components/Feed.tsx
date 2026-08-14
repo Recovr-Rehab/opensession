@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import type { UnifiedSession } from "../lib/types";
-import { useReviewTeams } from "../lib/people";
 import {
 	fetchRecentCommits,
 	fetchRecentPrs,
@@ -20,12 +19,7 @@ import { RepoTile, repoLabel } from "./RepoTile";
 import { useCurrentUser } from "./UserPicker";
 import { UserAvatar } from "./UserAvatar";
 import { personLensFilter, setFilter } from "../lib/sidebar-filter";
-import {
-	presenceState,
-	StatusDot,
-	useTeamPresence,
-	type TeamMember,
-} from "./TeamPresence";
+import { presenceState, StatusDot, useTeamPresence } from "./TeamPresence";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
 import { EmptyState } from "../ui/state";
 import { cn } from "../ui/cn";
@@ -47,10 +41,12 @@ import {
  * exists as their sidebar.
  *
  * So picking a teammate does two things at once, which is the point: it
- * narrows the feed to their merges, and it hands you their sidebar. Picking
- * an organization narrows the feed to its members; the sidebar's lens holds
- * one person, so it goes back to everyone rather than staying on whoever you
- * had before.
+ * narrows the feed to their merges, and it hands you their sidebar.
+ *
+ * The row is people, and only people. GitHub review teams used to sit at the
+ * end of it, but a team is a routing rule for reviews rather than a group
+ * whose work you would go and read. The sidebar's lens holds one person
+ * anyway, so picking a team could not leave the sidebar anywhere sensible.
  */
 
 interface Props {
@@ -65,11 +61,8 @@ interface Props {
  *  history, which the Pull requests list holds properly. */
 const FEED_LIMIT = 80;
 
-/** Everyone, one person, or one organization's members. */
-type Scope =
-	| { kind: "everyone" }
-	| { kind: "person"; key: string }
-	| { kind: "org"; github: string; members: string[] };
+/** Everyone, or one person. */
+type Scope = { kind: "everyone" } | { kind: "person"; key: string };
 
 function ScopeChip({
 	selected,
@@ -97,17 +90,13 @@ function ScopeChip({
 export function Feed({ sessions, teamViewing, onSelect }: Props) {
 	const currentUser = useCurrentUser();
 	const team = useTeamPresence({ sessions, teamViewing, currentUser });
-	const orgs = useReviewTeams();
 	const [scope, setScope] = useState<Scope>({ kind: "everyone" });
 
 	// You first, then the team in the order `useTeamPresence` already sorted
 	// them: working, then online, then whoever moved most recently.
 	const chips = [...team].sort((a, b) => Number(b.isYou) - Number(a.isYou));
-	const byKey = new Map(team.map((m) => [m.key, m]));
 
-	// Picking a person is also the sidebar you turn to. An organization has no
-	// single-person lens to be, so it clears back to everyone rather than
-	// leaving the sidebar on whoever you had picked before.
+	// Picking a person is also the sidebar you turn to.
 	const pick = (next: Scope) => {
 		setScope(next);
 		setFilter({
@@ -153,11 +142,8 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 		};
 	}, [scopedPerson]);
 
-	const inScope = (person: string | null) => {
-		if (scope.kind === "everyone") return true;
-		if (scope.kind === "person") return person === scope.key;
-		return !!person && scope.members.includes(person);
-	};
+	const inScope = (person: string | null) =>
+		scope.kind === "everyone" || person === scope.key;
 	const prs = new Map(recentPrs.map((pr) => [pr.url, pr]));
 	for (const pr of personPrs) prs.set(pr.url, pr);
 	const merged = buildWorktreeRows([...prs.values()], sessions).filter(
@@ -171,12 +157,7 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 	}
 	const days = [...groups.entries()];
 
-	const scopeName =
-		scope.kind === "person"
-			? personLabel(scope.key)
-			: scope.kind === "org"
-				? orgs.find((o) => o.github === scope.github)?.name
-				: null;
+	const scopeName = scope.kind === "person" ? personLabel(scope.key) : null;
 
 	return (
 		// The page frame every other list page in the app uses: one centred
@@ -230,41 +211,6 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 								label={member.isYou ? "You" : member.person.name}
 							/>
 						))}
-						{orgs.map((org) => {
-							const members = org.members.map((name) => name.trim().toLowerCase());
-							const faces = members
-								.map((key) => byKey.get(key))
-								.filter((m): m is TeamMember => !!m)
-								.slice(0, 3);
-							return (
-								<ScopeChip
-									key={org.github}
-									selected={scope.kind === "org" && scope.github === org.github}
-									onClick={() => pick({ kind: "org", github: org.github, members })}
-									mark={
-										// An organization wears its members rather than a glyph:
-										// it is the people, and the pile says which ones without
-										// spending a line on names.
-										<span className="flex shrink-0 items-center pl-0.5">
-											{faces.map((m, i) => (
-												<span
-													key={m.key}
-													className="relative flex"
-													style={{ marginLeft: i === 0 ? 0 : -8, zIndex: faces.length - i }}
-												>
-													<UserAvatar
-														name={m.person.name}
-														size={26}
-														style={{ boxShadow: "var(--avatar-edge), 0 0 0 2px var(--bg-panel)" }}
-													/>
-												</span>
-											))}
-										</span>
-									}
-									label={org.name}
-								/>
-							);
-						})}
 					</div>
 				)}
 
