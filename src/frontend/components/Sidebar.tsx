@@ -155,10 +155,12 @@ import {
 	buildReviewQueue,
 	personKey,
 	prReviewCompletion,
+	reviewAskerFor,
 	reviewRequestTargetsPerson,
 	reviewRowMatchesPersonFilter,
 	wsPrRequestsReviewFrom,
 } from "../lib/review-queue";
+import { ReviewAskerFace } from "./ReviewAskerFace";
 import {
 	readHiddenSidebarTools,
 	setSidebarToolVisible,
@@ -2479,6 +2481,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		// every band, not only under Needs review, because the whole point is that
 		// you can see you were asked without opening anything.
 		const needsMyReview = wsPrRequestsReviewFrom(row, mePersonKey);
+		// Who is waiting. Covers the Reviewer picker's request as well as the
+		// GitHub one: "somebody is waiting on you" is a poor prompt to act on
+		// until you know which somebody.
+		const reviewAsker = reviewAskerFor(row, currentUser);
 		// The "in progress" ticker start: the earliest running session's start, so a
 		// workspace with several live sessions shows how long it's been busy overall.
 		// Done/idle sessions don't count — only sessions actually running feed the clock.
@@ -2762,6 +2768,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							@
 						</span>
 					</span>
+				)}
+				{reviewAsker && !editing && (
+					<ReviewAskerFace asker={reviewAsker} />
 				)}
 				{localMode && row.sessions.some((session) => session.local) && !editing && (
 					<span className="shrink-0 rounded-full border border-line px-1.5 py-px text-meta font-medium tracking-wide text-faint">

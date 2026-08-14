@@ -25,6 +25,7 @@ import { ContextMenu } from "../ui/menu";
 import { Popover } from "../ui/popover";
 import { Tooltip } from "../ui/tooltip";
 import { SIDEBAR_ROW, SIDEBAR_ROW_TITLE } from "./sidebar/SidebarItem";
+import { ReviewAskerFace } from "./ReviewAskerFace";
 import {
 	PrRowCard,
 	RowCardPopup,
@@ -131,6 +132,15 @@ export function PrRow({
 				)}
 			</span>
 			<span className={SIDEBAR_ROW_TITLE}>{item.pr.title}</span>
+			{needsMyReview && (
+				<ReviewAskerFace
+					asker={{
+						name: item.pr.person || item.pr.author,
+						login: item.pr.author,
+						viaPr: true,
+					}}
+				/>
+			)}
 			{!isPhone && (
 				<span
 					className={cn(SIDEBAR_WS_TIME, SIDEBAR_WS_TIME_HOVER)}

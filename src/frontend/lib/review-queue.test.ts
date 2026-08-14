@@ -3,6 +3,7 @@ import type { UnifiedSession } from "./types";
 import {
 	buildReviewQueue,
 	prReviewCompletion,
+	reviewAskerFor,
 	reviewRowMatchesPersonFilter,
 	wsPrRequestsReviewFrom,
 	type ReviewQueuePr,
@@ -142,6 +143,127 @@ describe("wsPrRequestsReviewFrom", () => {
 				"kent",
 			),
 		).toBe(true);
+	});
+});
+
+describe("reviewAskerFor", () => {
+	test("names the teammate who made the Open Session request", () => {
+		expect(
+			reviewAskerFor(
+				{
+					sessions: [
+						session({
+							id: "asked",
+							branch: "asked",
+							reviewRequest: {
+								to: "Kent",
+								by: "Louise",
+								at: "2026-07-23T14:10:00Z",
+							},
+						}),
+					],
+				},
+				"Kent",
+			),
+		).toEqual({ name: "Louise", viaPr: false });
+	});
+
+	test("falls back to the PR author for a GitHub request", () => {
+		expect(
+			reviewAskerFor(
+				{
+					sessions: [
+						session({
+							id: "gh",
+							branch: "gh",
+							prReviewRequested: ["kent"],
+							prAuthor: "jfrolich",
+						}),
+					],
+				},
+				"Kent de Bruin",
+			),
+		).toEqual({ name: "jfrolich", login: "jfrolich", viaPr: true });
+	});
+
+	test("prefers the person who actually asked over the PR author", () => {
+		expect(
+			reviewAskerFor(
+				{
+					sessions: [
+						session({
+							id: "both",
+							branch: "both",
+							reviewRequest: {
+								to: "Kent",
+								by: "Louise",
+								at: "2026-07-23T14:10:00Z",
+							},
+							prReviewRequested: ["kent"],
+							prAuthor: "jfrolich",
+						}),
+					],
+				},
+				"Kent",
+			)?.name,
+		).toBe("Louise");
+	});
+
+	test("names nobody once the request is answered", () => {
+		const signedOff = reviewAskerFor(
+			{
+				sessions: [
+					session({
+						id: "done",
+						branch: "done",
+						reviewRequest: {
+							to: "Kent",
+							by: "Louise",
+							at: "2026-07-23T14:10:00Z",
+							accepted: { by: "Kent", at: "2026-07-23T15:00:00Z" },
+						},
+					}),
+				],
+			},
+			"Kent",
+		);
+		expect(signedOff).toBeNull();
+		// A review submitted on GitHub drops you from the requested list, which
+		// is the only thing the PR branch reads.
+		expect(
+			reviewAskerFor(
+				{
+					sessions: [
+						session({
+							id: "reviewed",
+							branch: "reviewed",
+							prReviewRequested: [],
+							prReviewedBy: ["kent"],
+							prAuthor: "jfrolich",
+						}),
+					],
+				},
+				"Kent",
+			),
+		).toBeNull();
+	});
+
+	test("ignores a request pointed at somebody else", () => {
+		expect(
+			reviewAskerFor(
+				{
+					sessions: [
+						session({
+							id: "theirs",
+							branch: "theirs",
+							prReviewRequested: ["alex"],
+							prAuthor: "jfrolich",
+						}),
+					],
+				},
+				"Kent",
+			),
+		).toBeNull();
 	});
 });
 

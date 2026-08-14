@@ -85,6 +85,65 @@ export function wsPrRequestsReviewFrom(
 	);
 }
 
+export interface ReviewAsker {
+	/** Display name, or the GitHub login when the asker isn't a teammate. */
+	name: string;
+	/** GitHub login, when known — lets the avatar load their picture. */
+	login?: string;
+	/**
+	 * The claim came from the pull request rather than the Reviewer picker, so
+	 * this is its AUTHOR. GitHub does not record who added you as a reviewer,
+	 * and the author is who is waiting either way — but a label must not say
+	 * they asked when it only knows they opened it.
+	 */
+	viaPr: boolean;
+}
+
+/**
+ * Who is waiting on your review of this row, or null when nobody is.
+ *
+ * Open Session's own request names the person who made it, so it answers
+ * first and exactly. A GitHub request falls back to the pull request's
+ * author. Both are filtered the same way the Needs review band filters them,
+ * so a row that has left the band never still names someone.
+ */
+export function reviewAskerFor(
+	row: {
+		sessions: Pick<
+			UnifiedSession,
+			| "reviewRequest"
+			| "prReviewRequested"
+			| "prAuthor"
+			| "prReviewedBy"
+			| "prUpdatedAt"
+		>[];
+	},
+	currentUser: string,
+): ReviewAsker | null {
+	const me = currentUser.trim().toLowerCase();
+	const key = personKey(currentUser);
+	for (const session of row.sessions) {
+		const request = session.reviewRequest;
+		if (
+			request?.by &&
+			!request.accepted &&
+			reviewRequestTargetsPerson(request, me) &&
+			!prReviewCompletion(request, session as UnifiedSession)
+		)
+			return { name: request.by, viaPr: false };
+	}
+	for (const session of row.sessions) {
+		if (
+			session.prAuthor &&
+			(session.prReviewRequested || []).some(
+				(reviewer) => reviewer.toLowerCase() === key,
+			)
+		)
+			return { name: session.prAuthor, login: session.prAuthor, viaPr: true };
+	}
+	return null;
+}
+
 export function prReviewCompletion(
 	request: NonNullable<UnifiedSession["reviewRequest"]>,
 	session: UnifiedSession,

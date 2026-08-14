@@ -80,6 +80,17 @@ export function ensurePeople(): Promise<void> {
 }
 
 /**
+ * The display name behind a GitHub login ("kentdebruin" → "Kent"), or null
+ * when that login isn't a teammate. The inverse of UserAvatar's login map,
+ * which only resolves name → login.
+ */
+export function personNameForGithubLogin(login?: string | null): string | null {
+	const key = login?.trim().toLowerCase();
+	if (!key) return null;
+	return getPeople().find((p) => p.github?.toLowerCase() === key)?.name || null;
+}
+
+/**
  * People rows for the composer's @-mention popup. Only offered once a query
  * is typed (a bare "@" stays the familiar file browser); name matches list
  * before file results. Inserting yields `@Name`, which the server's mention
