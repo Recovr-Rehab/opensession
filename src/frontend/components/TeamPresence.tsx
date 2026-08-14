@@ -138,12 +138,21 @@ export function useTeamPresence({
  * surface under it so it separates from the picture. It doesn't pulse: this
  * sits in a page header all day, and a blinking light is a summons.
  */
-function StatusDot({ state, ring }: { state: PresenceState; ring: string }) {
+export function StatusDot({
+	state,
+	ring,
+	size = 7,
+}: {
+	state: PresenceState;
+	ring: string;
+	/** Scale the dot to the face it sits on. */
+	size?: number;
+}) {
 	if (state === "away") return null;
 	return (
 		<span
-			className="absolute bottom-0 right-0 size-[7px] rounded-full"
-			style={{ boxShadow: `0 0 0 1.5px ${ring}` }}
+			className="absolute bottom-0 right-0 rounded-full"
+			style={{ width: size, height: size, boxShadow: `0 0 0 1.5px ${ring}` }}
 			aria-hidden="true"
 		>
 			<span

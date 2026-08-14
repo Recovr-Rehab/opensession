@@ -45,6 +45,12 @@ language instead of introducing a new local style for each feature.
 - Use the semantic tokens from `styles/tailwind.css`, such as `bg-panel`,
   `text-fg`, `text-dim`, and `border-line`. Never add raw color values or stock
   Tailwind palette colors to product UI.
+- Do not frame a section, card, or tile in a border. A block that sits on its
+  own fill (`bg-panel` on `bg-surface`) is already separated from the page, and
+  a hairline around it adds a second edge that makes a page of them read as a
+  form. Separate by surface, spacing, and radius instead. Borders stay for the
+  things that are genuinely a line: a divider between rows, the edge of an
+  input or a control, a table rule.
 - Compose classes with `cn()`. Accept and merge `className` in shared
   primitives so callers can adjust layout without copying the component.
 - Paint interaction states with the hover washes — `hover:bg-hover` /

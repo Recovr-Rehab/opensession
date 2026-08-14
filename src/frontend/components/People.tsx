@@ -8,7 +8,13 @@ import {
 	setFilter,
 	useSidebarFilter,
 } from "../lib/sidebar-filter";
-import { presenceLabel, useTeamPresence, type TeamMember } from "./TeamPresence";
+import {
+	presenceLabel,
+	presenceState,
+	StatusDot,
+	useTeamPresence,
+	type TeamMember,
+} from "./TeamPresence";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
 import { EmptyState } from "../ui/state";
 import { cn } from "../ui/cn";
@@ -52,7 +58,24 @@ function PersonCard({
 			onClick={() => onPick(member.key)}
 			aria-pressed={selected}
 		>
-			<UserAvatar name={member.person.name} size={34} />
+			{/* The face carries whether they're around; the line under the name
+			    says the same thing in words, so the colour isn't alone. The dot
+			    rings itself in the card's own fill to cut a gap into the picture,
+			    and steps to the selected fill so it stays a gap there too. That
+			    fill is translucent ink over the page, so the ring mixes the same
+			    step rather than naming a surface token that doesn't exist. */}
+			<span className="relative flex">
+				<UserAvatar name={member.person.name} size={34} />
+				<StatusDot
+					state={presenceState(member)}
+					ring={
+						selected
+							? "color-mix(in srgb, var(--text) 10%, var(--bg-surface))"
+							: "var(--bg-panel)"
+					}
+					size={9}
+				/>
+			</span>
 			<span className="flex min-w-0 flex-1 flex-col gap-0.5">
 				<span className="truncate text-control-label font-medium text-fg">
 					{member.isYou ? `${member.person.fullName} (you)` : member.person.fullName}
@@ -118,7 +141,7 @@ export function People({ sessions, teamViewing }: Props) {
 							onClick={() => pick("everyone")}
 							aria-pressed={lens === "everyone"}
 						>
-							<span className="flex size-[34px] shrink-0 items-center justify-center rounded-control bg-hover text-dim">
+							<span className="flex size-[34px] shrink-0 items-center justify-center rounded-[32%] bg-hover text-dim">
 								<IconPeople size={20} />
 							</span>
 							<span className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -162,18 +185,25 @@ export function People({ sessions, teamViewing }: Props) {
 														aria-pressed={lens === member.key}
 														title={presenceLabel(member)}
 													>
-														<UserAvatar
-															name={member.person.name}
-															size={30}
-															style={
-																lens === member.key
-																	? {
-																			outline: "2px solid var(--accent)",
-																			outlineOffset: "1px",
-																		}
-																	: undefined
-															}
-														/>
+														<span className="relative flex">
+															<UserAvatar
+																name={member.person.name}
+																size={30}
+																style={
+																	lens === member.key
+																		? {
+																				outline: "2px solid var(--accent)",
+																				outlineOffset: "1px",
+																			}
+																		: undefined
+																}
+															/>
+															<StatusDot
+																state={presenceState(member)}
+																ring="var(--bg-panel)"
+																size={8}
+															/>
+														</span>
 														<span className="w-full truncate text-meta text-dim">
 															{member.person.name}
 														</span>
