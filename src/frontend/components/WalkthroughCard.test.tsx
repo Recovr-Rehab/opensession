@@ -3,20 +3,29 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { WalkthroughCard } from "./WalkthroughCard";
 
-(globalThis as { localStorage?: unknown }).localStorage = {
-	getItem: () => null,
-	setItem: () => {},
-	removeItem: () => {},
-};
-(globalThis as { window?: unknown }).window = {
-	addEventListener: () => {},
-	removeEventListener: () => {},
-	matchMedia: () => ({
-		matches: false,
+Object.assign(
+	((globalThis as unknown as { localStorage?: Record<string, unknown> })
+		.localStorage ??= {}),
+	{
+		getItem: () => null,
+		setItem: () => {},
+		removeItem: () => {},
+	},
+);
+// See TranscriptBlocks.test.tsx: one process, so `window` may already be
+// installed (and readonly) by whichever test file ran first. Fill it in.
+Object.assign(
+	((globalThis as unknown as { window?: Record<string, unknown> }).window ??= {}),
+	{
 		addEventListener: () => {},
 		removeEventListener: () => {},
-	}),
-};
+		matchMedia: () => ({
+			matches: false,
+			addEventListener: () => {},
+			removeEventListener: () => {},
+		}),
+	},
+);
 
 const walkthrough = {
 	summary: "The clearer controls make the next action easier to find.",

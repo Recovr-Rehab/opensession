@@ -3,19 +3,35 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { TranscriptEntry } from "../lib/types";
 
-(globalThis as { window?: unknown }).window = {
-	addEventListener: () => {},
-	matchMedia: () => ({ matches: false }),
-};
-(globalThis as { document?: unknown }).document = {
-	documentElement: { dataset: {}, style: {} },
-	querySelector: () => null,
-};
-(globalThis as { localStorage?: unknown }).localStorage = {
-	getItem: () => null,
-	setItem: () => {},
-	removeItem: () => {},
-};
+// `bun test` runs every file in one process, so a `window` may already be
+// installed by whichever file ran first (@opentui/core's stub, a sibling
+// shim) — and a readonly one, which a plain assignment throws on. Fill in
+// what this file needs instead of replacing it. Which file gets here first
+// changes whenever a test file is added, so this cannot depend on order.
+Object.assign(
+	((globalThis as unknown as { window?: Record<string, unknown> }).window ??= {}),
+	{
+		addEventListener: () => {},
+		matchMedia: () => ({ matches: false }),
+	},
+);
+Object.assign(
+	((globalThis as unknown as { document?: Record<string, unknown> }).document ??=
+		{}),
+	{
+		documentElement: { dataset: {}, style: {} },
+		querySelector: () => null,
+	},
+);
+Object.assign(
+	((globalThis as unknown as { localStorage?: Record<string, unknown> })
+		.localStorage ??= {}),
+	{
+		getItem: () => null,
+		setItem: () => {},
+		removeItem: () => {},
+	},
+);
 
 const { TranscriptBlocks } = await import("./TranscriptBlocks");
 

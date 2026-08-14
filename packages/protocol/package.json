@@ -13,7 +13,8 @@
     "./notices": "./src/notices.ts",
     "./todo-plan": "./src/todo-plan.ts",
     "./tool-presentation": "./src/tool-presentation.ts",
-    "./identity": "./src/identity.ts"
+    "./identity": "./src/identity.ts",
+    "./workspace-group": "./src/workspace-group.ts"
   },
   "repository": {
     "type": "git",

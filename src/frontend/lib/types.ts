@@ -527,6 +527,11 @@ export interface Workspace {
 	/** Present on auto-created PR folders. */
 	prNumber?: number;
 	branch?: string;
+	/**
+	 * The shared worktree new share-mode sessions inherit. Absent = the workspace
+	 * does not own one yet (ask-style / unmaterialized).
+	 */
+	worktreeDir?: string;
 	/** For support-ticket workspaces: the Plain thread they're attached to. */
 	plainThreadId?: string;
 	/** Generic feed-item linkage (Tella videos, …) — the feeds design. */

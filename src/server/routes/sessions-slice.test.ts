@@ -11,10 +11,18 @@
 
 import { describe, expect, test } from "bun:test";
 import type { UnifiedSession } from "../types";
-import { archivedIndexRow, sessionsVariant } from "./sessions";
+import { archivedScope, archivedIndexRow, sessionsVariant } from "./sessions";
+
+function paramsOf(query: string) {
+	return new URL(`http://x/api/sessions${query}`).searchParams;
+}
 
 function variantOf(query: string) {
-	return sessionsVariant(new URL(`http://x/api/sessions${query}`).searchParams);
+	return sessionsVariant(paramsOf(query));
+}
+
+function scopeOf(query: string) {
+	return archivedScope(paramsOf(query), sessionsVariant(paramsOf(query)));
 }
 
 function archivedSession(over: Partial<UnifiedSession> = {}): UnifiedSession {
@@ -58,6 +66,37 @@ describe("sessionsVariant", () => {
 	});
 });
 
+describe("archivedScope", () => {
+	test("scopes an archived slice to one workspace", () => {
+		expect(scopeOf("?archived=only&slim=1&workspace=ws-1")).toMatchObject({
+			workspaceId: "ws-1",
+		});
+		expect(scopeOf("?archived=only&workspace=ws-1")).toMatchObject({
+			workspaceId: "ws-1",
+		});
+	});
+
+	test("the live list is never scoped", () => {
+		// The sidebar and the tab strip poll it whole; narrowing it here would
+		// silently empty them.
+		expect(scopeOf("?archived=exclude&workspace=ws-1")).toBeNull();
+		expect(scopeOf("?workspace=ws-1")).toBeNull();
+	});
+
+	test("no workspace means the whole index", () => {
+		expect(scopeOf("?archived=only&slim=1")).toBeNull();
+	});
+
+	test("an unknown workspace scopes by id, so a stale link shows nothing", () => {
+		// Failing open here would hand the whole instance's history to a link
+		// naming a workspace that no longer exists.
+		expect(scopeOf("?archived=only&workspace=ws-gone")).toEqual({
+			workspaceId: "ws-gone",
+			worktreeDir: undefined,
+		});
+	});
+});
+
 describe("archivedIndexRow", () => {
 	test("carries what the Archived surfaces render", () => {
 		const row = archivedIndexRow(archivedSession());
@@ -76,6 +115,20 @@ describe("archivedIndexRow", () => {
 			workspaceId: "ws-1",
 			worktreeDir: "/home/ubuntu/worktrees/thing",
 		});
+	});
+
+	test("keeps the worker marker the history menu reads", () => {
+		// A workspace closes far more agent runs than conversations, and the
+		// menu marks them so the sessions people had still stand out.
+		const row = archivedIndexRow(
+			archivedSession({ parentSessionId: "os-019fea32-0000-7000-0000-000000000000" }),
+		);
+		expect(row.parentSessionId).toBe(
+			"os-019fea32-0000-7000-0000-000000000000",
+		);
+		expect(archivedIndexRow(archivedSession())).not.toHaveProperty(
+			"parentSessionId",
+		);
 	});
 
 	test("is archived by construction, so client filters still match", () => {

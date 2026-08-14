@@ -125,7 +125,6 @@ import {
 	deleteWorkspaceApi,
 	newSessionApi,
 	fetchRepos,
-	fetchSessionsSnapshot,
 	resolveWorkspaceApi,
 	type OpenPr,
 } from "./lib/api";
@@ -172,6 +171,8 @@ import {
 import { receiveMention, receiveMentionsCleared } from "./lib/mentions";
 import { personFilterFor, setFilter } from "./lib/sidebar-filter";
 import { applyTabOrder, saveTabOrder, onTabOrderChanged } from "./lib/tab-order";
+import { workspaceArchivedSessions } from "./lib/workspace-archive";
+import { useWorkspaceArchive } from "./hooks/useWorkspaceArchive";
 import {
 	clearTabSplit,
 	getTabSplit,
@@ -2337,6 +2338,14 @@ export function App(
 			.map((id) => byId.get(id))
 			.filter((s): s is UnifiedSession => !!s);
 	})();
+	// This workspace's closed sessions, fetched scoped rather than pulled out of
+	// the whole archived index (which the app doesn't hold outside Archived).
+	// The live tab count is the refetch trigger: an archive, a restore and a new
+	// session all move it, and nothing else has to.
+	const workspaceArchive = useWorkspaceArchive(
+		activeWorkspaceId,
+		naturalSessions.length,
+	);
 	/**
 	 * A workspace always has at least one tab. Close its last session and dismiss
 	 * its last pane and there is nothing left to put in the strip, so the
@@ -2510,27 +2519,10 @@ export function App(
 		const wsId = activeWorkspaceId;
 		if (!wsId) return false;
 		void (async () => {
-			// The polled list is the live slice only, so a workspace opened cold
-			// carries no archived session to clone. Ask for the archived index
-			// rather than leaving the strip empty.
-			let src = archivedSessions[0];
-			if (!src) {
-				try {
-					const snapshot = await fetchSessionsSnapshot({
-						query: "?archived=only&slim=1",
-					});
-					const index: UnifiedSession[] = snapshot.text
-						? JSON.parse(snapshot.text)
-						: [];
-					src = index
-						.filter((s) => s.workspaceId === wsId)
-						.sort((a, b) =>
-							(b.lastActivity || "").localeCompare(a.lastActivity || ""),
-						)[0];
-				} catch (e) {
-					console.error("Archived index failed:", e);
-				}
-			}
+			// `archivedSessions` is this workspace's own closed list (scoped
+			// fetch + whatever was archived here), newest first, so the clone
+			// source is the session closed most recently.
+			const src = archivedSessions[0];
 			// A workspace that never had a session (a PR someone else opened) has
 			// nothing to clone, and its home is a fine place to land: the composer
 			// there starts the first one.
@@ -2659,25 +2651,17 @@ export function App(
 			/>
 		);
 	}
-	// The strip's history menu: archived (closed) sessions of the same workspace,
-	// newest activity first. The open session is excluded — if it's archived it
-	// already holds a live tab via liveTab().
-	const archivedSessions: UnifiedSession[] = (
-		activeWorkspaceId
-			? sessions.filter(
-					(s) =>
-						s.archived && s.workspaceId === activeWorkspaceId,
-				)
-			: currentSession?.worktreeDir?.includes("/worktrees/")
-				? sessions.filter(
-						(s) =>
-							s.archived &&
-							s.worktreeDir === currentSession.worktreeDir,
-					)
-				: []
-	)
-		.filter((s) => s.id !== currentSession?.id)
-		.sort((a, b) => (b.lastActivity || "").localeCompare(a.lastActivity || ""));
+	// The strip's history menu: closed sessions of the same workspace, newest
+	// activity first. Grouping is not the workspace id alone — see
+	// lib/workspace-archive, which also adopts the sessions a duplicate
+	// workspace record holds for the same worktree.
+	const archivedSessions: UnifiedSession[] = workspaceArchivedSessions({
+		sessions,
+		fetched: workspaceArchive,
+		workspaceId: activeWorkspaceId,
+		worktreeDir: wsRecord?.worktreeDir ?? currentSession?.worktreeDir,
+		excludeId: currentSession?.id,
+	});
 
 	async function createNewSessionFrom(
 		src: UnifiedSession,
@@ -3479,7 +3463,10 @@ export function App(
 				// Mirrors SessionTabs' own "render nothing" rule so the header's
 				// lone-session + never doubles up with the strip's.
 				tabStripVisible={
-					!!activeTabSplit || workspaceSessions.length > 1 || viewTabs.length > 0
+					!!activeTabSplit ||
+					workspaceSessions.length > 1 ||
+					viewTabs.length > 0 ||
+					archivedSessions.length > 0
 				}
 				parentSession={
 					viewerSession.parentSessionId
@@ -3823,8 +3810,6 @@ export function App(
 						<Sidebar
 							ref={sidebarRef}
 							sessions={sessions}
-							localMode={localMode}
-							cloudUnreachable={cloudUnreachable}
 							sessionsError={sessionsError}
 							sessionsLoading={loading}
 							onRetrySessions={() => void refresh()}

@@ -13,6 +13,10 @@ import { audit } from "../audit";
 import { pendingAsks } from "../asks";
 import { transcriptMatchSnippet } from "../jsonl-parser";
 import { classifyEntries, classifyEntry } from "@tellahq/opensession-protocol/notices";
+import {
+	inWorkspaceGroup,
+	type WorkspaceGroup,
+} from "@tellahq/opensession-protocol/workspace-group";
 import { withToolPresentations } from "@tellahq/opensession-protocol/tool-presentation";
 import { transcriptDbPath, transcriptStore } from "../transcript-store";
 import { clearSessionFileArchive } from "../plain-archive";
@@ -105,6 +109,24 @@ export function sessionsVariant(params: URLSearchParams): SessionsVariant {
 	if (archived === "exclude") return "exclude";
 	if (archived !== "only") return "include";
 	return params.get("slim") === "1" ? "only-slim" : "only";
+}
+
+/**
+ * The workspace an archived slice is scoped to, or null for the whole index.
+ *
+ * Only an archived slice takes a scope: the live list is what the sidebar and
+ * the strip poll whole, and narrowing it would be a different feature. An
+ * unknown workspace id still scopes (by id alone, matching nothing), so a
+ * stale link degrades to an empty history rather than to the whole instance's.
+ */
+export function archivedScope(
+	params: URLSearchParams,
+	variant: SessionsVariant,
+): WorkspaceGroup | null {
+	if (variant !== "only" && variant !== "only-slim") return null;
+	const workspaceId = params.get("workspace");
+	if (!workspaceId) return null;
+	return { workspaceId, worktreeDir: getWorkspace(workspaceId)?.worktreeDir };
 }
 
 // Parked on globalThis so invalidateSessionsCache() can clear it without this
@@ -214,6 +236,10 @@ export function archivedIndexRow(s: UnifiedSession): UnifiedSession {
 		...(s.archivedReason ? { archivedReason: s.archivedReason } : {}),
 		...(s.mode ? { mode: s.mode } : {}),
 		...(s.automation ? { automation: s.automation } : {}),
+		// Says the row is a worker rather than someone's own conversation.
+		// The history menu marks those, so a workspace whose archive is mostly
+		// review and worker runs still reads as a list of what PEOPLE closed.
+		...(s.parentSessionId ? { parentSessionId: s.parentSessionId } : {}),
 		...(s.repo ? { repo: s.repo } : {}),
 		...(s.workspaceId ? { workspaceId: s.workspaceId } : {}),
 		// sessionRepo() falls back to the first external ref's kind, so a
@@ -366,6 +392,29 @@ export async function handleSessionsRoutes(
 	// they learn to fetch the index and hydrate what they open.
 	if (path === "/api/sessions" && req.method === "GET") {
 		const variant = sessionsVariant(url.searchParams);
+		// `?workspace=<id>` narrows an archived slice to one workspace's group,
+		// which is what the tab strip's history menu needs: a few rows instead
+		// of the whole index (1,984 KB and growing on this instance), fetched
+		// per workspace someone opens. Answered before the shared snapshot
+		// cache and never stored in it: that cache exists to amortize a
+		// MB-scale stringify across every poller, while a scoped body is a
+		// cheap filter over the already-cached session list, and keying it per
+		// workspace would grow an entry per workspace forever.
+		const scope = archivedScope(url.searchParams, variant);
+		if (scope) {
+			const rows = getCachedSessions()
+				.filter((s) => s.archived && inWorkspaceGroup(s, scope))
+				.map(enrichSession);
+			const text = JSON.stringify(
+				variant === "only-slim" ? rows.map(archivedIndexRow) : rows,
+			);
+			// Still ETagged, so a client polling its workspace settles into 304s.
+			return sessionsListResponse(req, {
+				text,
+				hash: Bun.hash(text).toString(16),
+				expiresAt: 0,
+			});
+		}
 		const cached = sessionsResponseSnapshots.get(variant);
 		if (cached && cached.expiresAt > Date.now())
 			return sessionsListResponse(req, cached);

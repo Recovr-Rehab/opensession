@@ -37,7 +37,11 @@ export function rememberRepoCount(count: number): void {
 	} catch {
 		// A browser with storage blocked still gets the in-memory count.
 	}
-	if (typeof window !== "undefined")
+	// The method is checked, not just the object: `bun test` runs every file in
+	// one process and os1-tui's renderer leaves a stub `window` behind that has
+	// requestAnimationFrame and nothing else, so a bare `typeof window` check
+	// throws here in whichever unrelated test happens to run after it.
+	if (typeof window !== "undefined" && typeof window.dispatchEvent === "function")
 		window.dispatchEvent(new Event(CHANGE_EVENT));
 }
 

@@ -7,7 +7,8 @@ import { relativeTime } from "../lib/api";
 import { Menu, ContextMenu } from "../ui/menu";
 import { sessionPath, absoluteLink, copyToClipboard } from "../lib/share-link";
 import { copySessionTranscript } from "../lib/transcript-copy";
-import { IconChevronRight, IconHistory, IconPencil, IconPlus, IconRestore } from "./icons";
+import { IconChevronRight, IconHistory, IconPencil, IconPlus, IconRestore, IconRobot } from "./icons";
+import { isAutomationSession } from "../lib/landing-session";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { UserAvatar } from "./UserAvatar";
 import { isApple } from "../lib/platform";
@@ -43,10 +44,11 @@ import { cn } from "../ui/cn";
 /**
  * The tab strip is scoped to ONE Workspace: it shows the sibling sessions of the
  * currently-open session (every session sharing its `workspaceId`/workspace). It
- * only renders once a workspace has TWO or more sessions — a lone session needs no
- * strip, so the "+ New tab" affordance moves next to the session title in
- * SessionViewer's header instead (and ⌘⌥N does the same thing). A pre-migration
- * standalone session (empty list) likewise renders nothing.
+ * renders once a workspace has TWO or more sessions, or has a pane or a closed
+ * session to offer. A lone session with nothing else needs no strip, so the
+ * "+ New tab" affordance moves next to the session title in SessionViewer's
+ * header instead (and ⌘⌥N does the same thing). A pre-migration standalone
+ * session (empty list) likewise renders nothing.
  *
  * There is no pinning here anymore (pinning moved to the sidebar). Right-click
  * opens a context menu (rename / copy concise or full transcript / copy link /
@@ -458,11 +460,18 @@ export function SessionTabs({
 		};
 	}, [newMenu]);
 
+	// Closed sessions of this workspace, if there are any to offer.
+	const hasHistory = showHistory && archived.length > 0;
+
 	// One session and no view tabs → no strip. The lone workspace's "+ New tab"
 	// button lives next to the session title in the header instead. But once a
 	// non-session pane (Review) is open, the strip appears so it has somewhere to
-	// live — a lone code session then reads as [session][Review].
-	if (!inSplit && tabs.length <= 1 && viewTabs.length === 0) return null;
+	// live — a lone code session then reads as [session][Review]. A workspace
+	// that has closed tabs keeps its strip for the same reason: the history
+	// button is the only way back to them, and a workspace down to its last
+	// session is exactly when someone goes looking.
+	if (!inSplit && tabs.length <= 1 && viewTabs.length === 0 && !hasHistory)
+		return null;
 
 	// New-tab "+" — plain-click shares the workspace worktree; right-click offers
 	// the stacked/ask modes.
@@ -485,8 +494,11 @@ export function SessionTabs({
 
 	// History: every archived (closed) session of this workspace, in one list.
 	// Clicking a row opens the session read-only-ish (it gets a tab while viewed);
-	// the ⟲ restores it into the strip for good.
-	const historyMenu = showHistory && archived.length > 0 && (
+	// the ⟲ restores it into the strip for good. A workspace closes far more
+	// agent runs than conversations — review runs, auto-fixes, the workers a
+	// session spawned — so those carry a robot and the rest of the list reads
+	// as the sessions people actually had.
+	const historyMenu = hasHistory && (
 		<Menu.Root>
 			<Menu.Trigger className={TAB_HISTORY} aria-label="Archived sessions" title="Archived sessions">
 				<IconHistory size={ctrlIconSize} />
@@ -494,6 +506,13 @@ export function SessionTabs({
 			<Menu.Popup align="end" sideOffset={4} className="min-w-[240px] max-w-[320px]">
 				{archived.map((s) => (
 					<Menu.Item key={s.id} onClick={() => onSelect(s)}>
+						{(isAutomationSession(s) || !!s.parentSessionId) && (
+							<IconRobot
+								size={14}
+								className="shrink-0 text-faint"
+								aria-label="Agent run"
+							/>
+						)}
 						<span className="min-w-0 flex-1 truncate">{s.title}</span>
 						<span className="shrink-0 text-meta text-faint">{relativeTime(s.lastActivity)}</span>
 						<button
