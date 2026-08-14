@@ -1,10 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import type { UnifiedSession } from "./types";
 import {
+	prLinksMatch,
 	sessionHasPr,
 	sessionPrApproved,
 	sessionPrMerged,
 	sessionPrPresentation,
+	sessionUsesPrLink,
 } from "./session-prs";
 
 function session(overrides: Partial<UnifiedSession>): UnifiedSession {
@@ -211,5 +213,74 @@ describe("sessionHasPr", () => {
 
 	test("a session with no PR at all", () => {
 		expect(sessionHasPr(session({}))).toBe(false);
+	});
+});
+
+describe("PR link search", () => {
+	test("matches a primary PR from a pasted GitHub tab URL", () => {
+		const value = session({
+			prUrl: "https://github.com/tellahq/tella-fusion/pull/5513",
+		});
+
+		expect(
+			sessionUsesPrLink(
+				value,
+				"https://github.com/tellahq/tella-fusion/pull/5513/files?diff=split",
+			),
+		).toBe(true);
+	});
+
+	test("matches additional and manually linked PRs", () => {
+		const value = session({
+			prs: [
+				{
+					repo: "shared-infra",
+					branch: "infra-feature",
+					source: "attached",
+					number: 126,
+					url: "https://github.com/tellahq/shared-infra/pull/126",
+				},
+			],
+			linkedPrs: [
+				{
+					repo: "tella-mac",
+					branch: "desktop-feature",
+					url: "https://github.com/tellahq/tella-mac/pull/22",
+				},
+			],
+		});
+
+		expect(sessionUsesPrLink(value, "https://github.com/tellahq/shared-infra/pull/126")).toBe(true);
+		expect(sessionUsesPrLink(value, "https://github.com/tellahq/tella-mac/pull/22/")).toBe(true);
+		expect(sessionUsesPrLink(value, "https://github.com/tellahq/tella-mac/pull/23")).toBe(false);
+	});
+
+	test("matches an associated PR whose cached URL is missing", () => {
+		const value = session({
+			prs: [
+				{
+					repo: "shared-infra",
+					branch: "infra-feature",
+					source: "discovered",
+					number: 126,
+				},
+			],
+		});
+
+		expect(
+			sessionUsesPrLink(
+				value,
+				"https://github.com/tellahq/shared-infra/pull/126",
+			),
+		).toBe(true);
+	});
+
+	test("matches the pull request row for the same normalized URL", () => {
+		expect(
+			prLinksMatch(
+				"https://github.com/tellahq/tella-fusion/pull/5513/checks",
+				"https://github.com/tellahq/tella-fusion/pull/5513",
+			),
+		).toBe(true);
 	});
 });

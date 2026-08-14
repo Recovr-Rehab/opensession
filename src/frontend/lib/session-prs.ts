@@ -2,6 +2,74 @@ import type { UnifiedSession } from "./types";
 
 export type SessionPrRef = NonNullable<UnifiedSession["prs"]>[number];
 
+function githubPrIdentity(
+	value: string | undefined,
+): { repo: string; number: number } | undefined {
+	if (!value) return undefined;
+	try {
+		const url = new URL(value.trim());
+		if (url.hostname.toLowerCase() !== "github.com") return undefined;
+		const match = url.pathname.match(
+			/^\/([^/]+)\/([^/]+)\/pull\/(\d+)(?:\/|$)/i,
+		);
+		if (!match?.[2] || !match[3]) return undefined;
+		return { repo: match[2].toLowerCase(), number: Number(match[3]) };
+	} catch {
+		return undefined;
+	}
+}
+
+function canonicalPrUrl(value: string | undefined): string | undefined {
+	if (!value) return undefined;
+	try {
+		const url = new URL(value.trim());
+		const github =
+			url.hostname.toLowerCase() === "github.com"
+				? url.pathname.match(/^\/([^/]+)\/([^/]+)\/pull\/(\d+)(?:\/|$)/i)
+				: null;
+		if (github) {
+			return `https://github.com/${github[1]?.toLowerCase()}/${github[2]?.toLowerCase()}/pull/${github[3]}`;
+		}
+		url.hash = "";
+		url.search = "";
+		url.pathname = url.pathname.replace(/\/+$/, "");
+		return url.toString().toLowerCase();
+	} catch {
+		return undefined;
+	}
+}
+
+/** Match pasted PR links even when GitHub adds a tab, query, or trailing slash. */
+export function prLinksMatch(
+	query: string,
+	candidate: string | undefined,
+): boolean {
+	const target = canonicalPrUrl(query);
+	return target !== undefined && target === canonicalPrUrl(candidate);
+}
+
+/** Does a pasted PR link belong to any PR associated with this session? */
+export function sessionUsesPrLink(session: UnifiedSession, query: string): boolean {
+	const urls = [
+		session.prUrl,
+		...(session.prs || []).map((pr) => pr.url),
+		...(session.linkedPrs || []).map((pr) => pr.url),
+	];
+	if (urls.some((url) => prLinksMatch(query, url))) return true;
+
+	const target = githubPrIdentity(query);
+	if (!target) return false;
+	const refs = [
+		{ repo: session.repo, number: session.prNumber },
+		...(session.prs || []),
+		...(session.linkedPrs || []),
+	];
+	return refs.some(
+		(ref) =>
+			ref.repo?.toLowerCase() === target.repo && ref.number === target.number,
+	);
+}
+
 /** Bare attached branches are targets, not PRs; every explicit PR still counts. */
 function pullRequests(session: UnifiedSession) {
 	return (session.prs || []).filter(

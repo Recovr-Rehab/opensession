@@ -11,6 +11,7 @@ import {
 import { IconPullRequest, IconSearch } from "./icons";
 import { Modal, useEnterOnMount } from "../ui/modal";
 import { cn } from "../ui/cn";
+import { prLinksMatch, sessionUsesPrLink } from "../lib/session-prs";
 
 export interface CommandPaletteAction {
 	id: string;
@@ -310,14 +311,16 @@ export function SessionSearch({
 			.map((action) => ({ type: "action", category: action.category, action }));
 		const prResults: PaletteResult[] = (hasSessionFilter ? [] : openPrs)
 			.filter((pr) =>
+				prLinksMatch(q, pr.url) ||
 				matches([
-					pr.title,
-					pr.repo,
-					pr.branch,
-					pr.author,
-					`#${pr.number}`,
-					prStatus(pr),
-				]),
+						pr.title,
+						pr.repo,
+						pr.branch,
+						pr.author,
+						`#${pr.number}`,
+						prStatus(pr),
+						pr.url,
+					]),
 			)
 			.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
 			.slice(0, 40)
@@ -329,9 +332,13 @@ export function SessionSearch({
 			if (status !== "all" && sessionStatus(s) !== status) return false;
 			if (terms.length === 0) return true;
 			// A session shows if its metadata matches every term OR the query turned
-			// up inside its conversation (the backend transcript search).
+			// up inside its conversation, or the pasted PR link belongs to it.
 			const hay = haystack(s);
-			return terms.every((t) => hay.includes(t)) || snippets.has(s.id);
+			return (
+				terms.every((t) => hay.includes(t)) ||
+				sessionUsesPrLink(s, q) ||
+				snippets.has(s.id)
+			);
 		});
 		// Most-recently-active first — the same order the sidebar defaults to.
 		sessionResults = sessionResults.sort(
@@ -342,7 +349,10 @@ export function SessionSearch({
 		const sessionRows: PaletteResult[] = sessionResults.slice(0, 100).map((s) => {
 			// Show the snippet only when the title/metadata didn't already match —
 			// otherwise the row explains itself.
-			const metaMatch = terms.length > 0 && terms.every((t) => haystack(s).includes(t));
+			const metaMatch =
+				terms.length > 0 &&
+				(terms.every((t) => haystack(s).includes(t)) ||
+					sessionUsesPrLink(s, q));
 			return {
 				type: "session",
 				category: "Sessions",
