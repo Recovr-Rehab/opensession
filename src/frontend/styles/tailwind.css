@@ -59,6 +59,12 @@
 	   `raised` in dark; in light it sits closer to the page (see base.css). */
 	--color-sidebar: var(--sidebar-bg);
 	--color-panel: var(--bg-panel);
+	/* The session's right-hand panel column. A hair off the page rather than a
+	   tier below it, the way `sidebar` is (see base.css). The plate its sections
+	   sit on has no utility of its own: PANEL_SHELL re-points --bg-panel at
+	   `--panel-plate`, so `bg-panel` inside the column resolves to the lighter
+	   step and every plate, chip and pill in there moves together. */
+	--color-panel-surface: var(--panel-surface);
 	/* Floating popups (hover cards, menus). Its own surface rather than
 	   bg-panel: in light a popup is paper on the page, not a panel in it.
 	   `popup-glass` is that same paper held up to the light — pair it with

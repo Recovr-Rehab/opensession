@@ -38,13 +38,20 @@ const PILL = "rounded-[calc(8px*var(--rf))]";
  * sidebar plus a readable session column rather than a fixed pixel width:
  * reviewing code wants real width on a wide display.
  *
- * It paints `bg-surface`, the same fill as the transcript beside it, and is
- * divided from it by the left hairline alone. It used to be `bg-raised`, which
- * in light is #f6f6f6 against a white page: a full-height column of grey next
- * to the content, and the largest flat area in the window whenever the Info tab
- * is short. The panel is a second column of the same page rather than chrome
- * over it, so it takes the page's own surface and lets the cards inside it (the
- * media strip, the diff wells) be the things that step off white.
+ * It paints `bg-panel-surface`, four units off white rather than the tier below
+ * it that `bg-raised` gave (#f6f6f6 against a white page): at column height
+ * that was a wall of grey next to the content, and the largest flat area in the
+ * window whenever the Info tab was short. The panel is a second column of the
+ * same page rather than chrome over it, so it sits a shade off the page and
+ * lets its seam do the dividing, exactly as the sidebar does on the other side.
+ *
+ * It also re-points `--bg-panel` at `--panel-plate`, which is the whole reason
+ * the sections inside it are not addressed one by one: five or six plates stack
+ * down one narrow column, and the page's plate strength repeated that many
+ * times reads as a pile of blocks rather than a list of sections. Every
+ * `bg-panel` in the subtree steps together instead: the Info sections, the
+ * selected tab pill, the Portals cards, the avatar rings that ring themselves
+ * in `var(--bg-panel)`.
  *
  * There is deliberately no phone shape here, though the old sheet had one (a
  * full-width bottom sheet: rounded top, `sheet-up` animation, its own shadow).
@@ -58,7 +65,7 @@ const PILL = "rounded-[calc(8px*var(--rf))]";
  */
 export const PANEL_SHELL =
 	"viewer-panel relative flex min-h-0 w-[var(--panel-w,40%)] min-w-[320px] shrink-0 flex-col " +
-	"max-w-[max(480px,calc(100vw-620px))] border-l border-divider bg-surface " +
+	"max-w-[max(480px,calc(100vw-620px))] border-l border-divider bg-panel-surface [--bg-panel:var(--panel-plate)] " +
 	// From 920px down it stops being a column in the layout and becomes an
 	// overlay over the session, anchored under the top bar (--header-h is 0 on
 	// desktop, the bar's height on a phone) with PANEL_OVERLAY dimming behind it.
