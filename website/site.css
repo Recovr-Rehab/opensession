@@ -32,6 +32,7 @@
 	.card,
 	.stage,
 	.mark,
+	.button,
 	.waitlist-dialog,
 	.waitlist-form,
 	.waitlist-form button,
@@ -149,7 +150,7 @@ summary:focus-visible {
 .card {
 	padding: 34px;
 	border: 1px solid var(--line);
-	border-radius: 22px;
+	border-radius: 28px;
 	background: var(--card);
 }
 
@@ -178,7 +179,7 @@ summary:focus-visible {
 	overflow: hidden;
 	aspect-ratio: 3 / 2;
 	border: 1px solid var(--line);
-	border-radius: 22px;
+	border-radius: 28px;
 	background: #cfcdc8;
 }
 
@@ -462,32 +463,34 @@ summary:focus-visible {
 
 /* ── Controls ────────────────────────────────────────────────────────── */
 
+/* Measured off the reference: a 50px control on a 14px corner, flat fill, no
+   shadow, and a medium weight rather than a bold one. The corner goes to 16
+   because a squircle reads squarer than a plain radius at the same number. */
 .button {
 	display: inline-flex;
-	min-height: 52px;
+	min-height: 50px;
 	align-items: center;
 	justify-content: center;
 	gap: 8px;
-	padding: 0 26px;
+	padding: 0 24px;
 	border: 1px solid transparent;
-	border-radius: 999px;
+	border-radius: 16px;
 	cursor: pointer;
 	font-size: 15px;
-	font-weight: 700;
+	font-weight: 600;
+	letter-spacing: -0.012em;
 	transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1), filter 160ms ease;
 }
 
 /* The filled control, shared by the rail CTA and the modal's submit: the
-   product's blue, and a 1px seat rather than a glow. The app's filled buttons
-   sit ON the surface — a cast shadow is what made this read as a marketing
-   badge instead. */
+   product's blue, laid on flat. No cast shadow and no gradient — a filled
+   button on a quiet page is a plate of colour, and the lit top edge is the
+   only relief it needs. */
 .button-primary,
 .waitlist-form button {
 	border: 0;
-	background-image: linear-gradient(180deg, var(--accent-blue) 0%, var(--accent-blue-deep) 100%);
-	box-shadow:
-		inset 0 1px 0 rgba(255, 255, 255, 0.16),
-		0 1px 2px rgba(16, 24, 40, 0.14);
+	background-color: var(--accent-blue);
+	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
 	color: #fff;
 }
 
@@ -512,7 +515,7 @@ summary:focus-visible {
 	margin-top: 20px;
 	padding: 7px 7px 7px 14px;
 	border: 1px solid rgba(20, 22, 26, 0.14);
-	border-radius: 18px;
+	border-radius: 19px;
 	background: #fbfbfa;
 }
 
@@ -542,10 +545,11 @@ summary:focus-visible {
 	align-items: center;
 	justify-content: center;
 	padding: 0 18px;
-	border-radius: 14px;
+	border-radius: 13px;
+	letter-spacing: -0.012em;
 	cursor: pointer;
 	font-size: 14px;
-	font-weight: 700;
+	font-weight: 600;
 	white-space: nowrap;
 	transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1), filter 160ms ease;
 }
@@ -581,7 +585,7 @@ summary:focus-visible {
 	width: min(100% - 32px, 440px);
 	padding: clamp(26px, 4vw, 34px);
 	border: 0;
-	border-radius: 26px;
+	border-radius: 30px;
 	background: #fff;
 	box-shadow: 0 24px 60px rgba(16, 18, 22, 0.22);
 	color: var(--ink);
@@ -700,7 +704,7 @@ summary:focus-visible {
 
 	.card {
 		padding: 22px;
-		border-radius: 18px;
+		border-radius: 22px;
 	}
 
 	.card h2 {
@@ -709,7 +713,7 @@ summary:focus-visible {
 
 	.stage {
 		aspect-ratio: 5 / 4;
-		border-radius: 18px;
+		border-radius: 22px;
 	}
 
 	.button {
