@@ -79,7 +79,6 @@ export const SIDEBAR_ROW_TITLE =
 
 export function SidebarItem({
 	session,
-	localMode,
 	selected,
 	unread,
 	mention,
@@ -92,7 +91,6 @@ export function SidebarItem({
 	onSetStatus,
 }: {
 	session: UnifiedSession;
-	localMode: boolean;
 	selected: boolean;
 	/** New activity since this session was last opened — brightens and bolds the
 	    title, like an unread Slack conversation. */
@@ -518,11 +516,6 @@ export function SidebarItem({
 						>
 							@
 						</span>
-					</span>
-				)}
-				{localMode && session.local && !editing && (
-					<span className="shrink-0 rounded-full border border-line px-1.5 py-px text-meta font-medium tracking-wide text-faint">
-						local
 					</span>
 				)}
 				{/* Own sessions collapse to one line: the timestamp (+ any PR/Linear

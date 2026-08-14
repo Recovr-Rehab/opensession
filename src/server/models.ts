@@ -27,8 +27,6 @@ import {
   BRIDGE_PROVIDER_IDS,
 } from "./opencode-config";
 import { stateDir } from "./paths";
-import { isLocalProfile, localProfileRoot } from "./profile";
-import { discoverLocalEngineCredentials } from "./local-engine-auth";
 
 export type Provider = "claude" | "codex" | "opencode" | "pi";
 
@@ -118,41 +116,6 @@ export const KNOWN_MODELS: ModelInfo[] = [
   { id: "gpt-5.4-mini", provider: "codex", label: "GPT-5.4 mini (Codex)", aliases: ["mini"] },
   { id: "gpt-5.3-codex-spark", provider: "codex", label: "GPT-5.3 Codex Spark", aliases: ["spark"] },
 ];
-
-/** Provider/model ids offered when the matching local CLI subscription exists. */
-export const LOCAL_PROFILE_MODELS: ModelInfo[] = [
-  { id: "anthropic/claude-sonnet-5", provider: "opencode", label: "Claude Sonnet 5", aliases: [] },
-  { id: "anthropic/claude-opus-5", provider: "opencode", label: "Claude Opus 5", aliases: [] },
-  { id: "anthropic/claude-haiku-4-5", provider: "opencode", label: "Claude Haiku 4.5", aliases: [] },
-  { id: "openai/gpt-5.6-sol", provider: "opencode", label: "GPT-5.6 Sol", aliases: [] },
-];
-
-export function localProfileModels(): ModelInfo[] {
-  const providers = new Set(discoverLocalEngineCredentials().providers);
-  return LOCAL_PROFILE_MODELS.filter((model) =>
-    providers.has(model.id.split("/")[0] as "anthropic" | "openai"),
-  );
-}
-
-export function localProfileDefaultModel(): string {
-  const models = localProfileModels();
-  if (!models.length) {
-    throw new Error(
-      "No local model subscriptions found. Log into Claude Code with `claude` and/or Codex with `codex login`.",
-    );
-  }
-  const envRequested = process.env.OPENSESSION_MODEL;
-  const requested = envRequested || loadInteractiveOverride() || loadOverride();
-  if (!requested) return models[0].id;
-  const native = (toOpencodeModel(requested) || requested).replace(/^opencode\//, "");
-  if (models.some((model) => model.id === native)) return native;
-  if (envRequested) {
-    throw new Error(
-      `OPENSESSION_MODEL=${envRequested} is unavailable because its CLI subscription credentials were not found`,
-    );
-  }
-  return models[0].id;
-}
 
 // ── The Dial ──────────────────────────────────────────────────────────────
 //
@@ -632,10 +595,7 @@ const FALLBACK_DESTINATIONS = [
  *  preselected row) start on, without touching those loops. Dial preset ids
  *  are valid here — interactiveDefaultModel returns them unresolved so the
  *  session stores `dial/<tier>` and keeps its oracle+effort. */
-const defaultModelStore = () =>
-  isLocalProfile()
-    ? `${localProfileRoot()}/default-model.json`
-    : stateDir("default-model.json");
+const defaultModelStore = () => stateDir("default-model.json");
 const FALLBACK_AUTO_STORE = stateDir("model-fallback.json");
 
 // undefined = not yet loaded from disk; null = no override set.
@@ -805,7 +765,6 @@ export function resolveConcreteModel(
  * explicitly configured. This no longer invents a Claude → Codex fallback.
  */
 export function interactiveFallbackModel(_primaryModel?: string): string | undefined {
-  if (isLocalProfile()) return undefined;
   if (!getModelFallbackAuto()) return undefined;
   return DEFAULT_FALLBACK_MODEL;
 }
@@ -939,7 +898,6 @@ export function accountProviderForModel(
  * on the SDK — so this is deliberately a separate, interactive-only default.
  */
 export function interactiveDefaultModel(): string {
-  if (isLocalProfile()) return `opencode/${localProfileDefaultModel()}`;
   const o = loadInteractiveOverride();
   // Preset ids (dial/orchestrator) return unresolved: the session must store
   // the preset id for the runner's hook (oracle/workers + effort) to engage —

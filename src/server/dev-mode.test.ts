@@ -11,7 +11,6 @@ const SAVED_KEYS = [
 	"OPENSESSION_STATE_DIR",
 	"OPENSESSION_SESSIONS_DIR",
 	"OPENSESSION_SESSIONS_DIR",
-	"OPENSESSION_PROFILE",
 	"HOME",
 ] as const;
 const saved: Record<string, string | undefined> = {};

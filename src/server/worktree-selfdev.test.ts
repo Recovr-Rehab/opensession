@@ -30,7 +30,6 @@ const ENV_KEYS = [
   "OPENSESSION_CONFIG",
   "OPENSESSION_WORKTREES_DIR",
   "OPENSESSION_WORKTREES_DIR",
-  "OPENSESSION_PROFILE",
 ] as const;
 const saved: Record<string, string | undefined> = {};
 for (const k of ENV_KEYS) saved[k] = process.env[k];

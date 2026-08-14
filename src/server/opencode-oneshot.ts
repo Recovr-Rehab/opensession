@@ -26,7 +26,6 @@ import {
   meridianStackInfo,
   meridianAccountEnv,
   meridianProxyBaseUrl,
-  ensureLocalMeridianReady,
   pickMeridianAccount,
   OPENCODE_STATE_DIR,
   type OpencodeServerEntry,
@@ -35,11 +34,8 @@ import { readOpencodeBridgeConfig, opencodeProviderOptions } from "./opencode-co
 import { ensureAnthropicBridge } from "./anthropic-bridge";
 import { isClaudeUsageLimitError } from "./runner-shared";
 import { markExhausted, getUsableAccountById, type ClaudeAccount } from "./claude-accounts";
-import { localProfileDefaultModel, toOpencodeModel, type SessionEffort } from "./models";
+import { toOpencodeModel, type SessionEffort } from "./models";
 import { audit } from "./audit";
-import { isLocalProfile } from "./profile";
-import { bindOpenaiAccount, pickOpenaiAccount } from "./opencode-openai-auth";
-import { localOpencodeDataRoot, localProviderError } from "./local-engine-auth";
 
 const DEFAULT_ONESHOT_MODEL = "opencode/anthropic/claude-haiku-4-5";
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -118,13 +114,7 @@ export async function opencodeOneShot(
   // One-shots are real model calls on a real engine server — never from bun
   // test (title/branch-name callers all tolerate null and fall back).
   if (process.env.NODE_ENV === "test") return null;
-  const localProfile = isLocalProfile();
-  const requested = localProfile
-    ? process.env.OPENSESSION_ONESHOT_MODEL ||
-      `opencode/${localProfileDefaultModel()}`
-    : opts.model ||
-      process.env.OPENSESSION_ONESHOT_MODEL ||
-      DEFAULT_ONESHOT_MODEL;
+  const requested = opts.model || process.env.OPENSESSION_ONESHOT_MODEL || DEFAULT_ONESHOT_MODEL;
   const model = toOpencodeModel(requested) || requested;
   const parsed = parseOpencodeModel(model);
   const label = opts.label || "oneshot";
@@ -134,18 +124,8 @@ export async function opencodeOneShot(
     console.warn(`[oneshot:${label}] model "${requested}" doesn't resolve to an opencode id — skipping`);
     return null;
   }
-  if (localProfile) {
-    const localAuthError = localProviderError(parsed.providerID);
-    if (localAuthError) {
-      console.warn(`[oneshot:${label}] ${localAuthError} — skipping`);
-      return null;
-    }
-  }
-
   const startedAt = Date.now();
-  const serverKey = localProfile
-    ? `oneshot:local:${parsed.providerID}`
-    : `oneshot:${parsed.providerID}`;
+  const serverKey = `oneshot:${parsed.providerID}`;
   // Two attempts max: an unhealthy meridian account (a usage limit, or a wedged
   // subscription/provider fault that only ever reaches us as our own 120s
   // timeout — opencode swallows the real error into an internal retry loop) is
@@ -178,10 +158,7 @@ export async function opencodeOneShot(
           // chattiest client on the box and were a top contender for the shared
           // store's lock contention (see MERIDIAN_SESSION_ROOT).
           const meridianEnv = meridianAccountEnv(picked, meridianKey, serverKey);
-          extraEnv = {
-            ...meridianEnv,
-            ...(localProfile ? { XDG_DATA_HOME: localOpencodeDataRoot("anthropic") } : {}),
-          };
+          extraEnv = meridianEnv;
           plugin = [stack.pluginPath];
           providerOverride = {
             anthropic: {
@@ -200,13 +177,6 @@ export async function opencodeOneShot(
           console.warn(`[oneshot:${label}] anthropic bridge disabled — skipping`);
           return null;
         }
-      } else if (localProfile && parsed.providerID === "openai") {
-        const picked = pickOpenaiAccount(parsed.modelID, undefined, serverKey);
-        if ("error" in picked) throw new Error(`opencode/openai: ${picked.error}`);
-        const bound = bindOpenaiAccount(picked);
-        if ("error" in bound) throw new Error(`opencode/openai: ${bound.error}`);
-        extraEnv = bound.extraEnv;
-        providerOverride = bound.providerOverride;
       }
 
       mkdirSync(ONESHOT_CWD, { recursive: true });
@@ -214,7 +184,7 @@ export async function opencodeOneShot(
       // bridge override (anthropic/openai always win); key omitted when both
       // are empty so the no-providers config hash is unchanged.
       const providerConfig = {
-        ...(localProfile ? {} : opencodeProviderOptions()),
+        ...opencodeProviderOptions(),
         ...(providerOverride || {}),
       };
       const config: Record<string, unknown> = {
@@ -243,9 +213,6 @@ export async function opencodeOneShot(
         const created = await client.session.create({ body: { title: `oneshot ${label}` } });
         if (!created.data) throw new Error(`session create failed: ${JSON.stringify(created.error ?? "")}`);
         ocSessionId = created.data.id;
-        if (localProfile && parsed.providerID === "anthropic") {
-          await ensureLocalMeridianReady(entry, meridianStackInfo());
-        }
 
         const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
         const result = await Promise.race([

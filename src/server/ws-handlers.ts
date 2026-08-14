@@ -8,7 +8,6 @@
 import type { WebSocketHandler } from "bun";
 import type { WSClientData } from "./ws-hub";
 import { cancelAgentRun, interruptAndSteerAgentRun, isAgentSessionBusy, steerAgentRun, stopAgentRunTurn } from "./agent-runner";
-import { isLocalSessionUpgradeInProgress } from "./session-transfer-state";
 import { audit } from "./audit";
 import { pendingAsks } from "./asks";
 import { resendPendingSlackComposer } from "./slack-compose";
@@ -37,20 +36,10 @@ import { resumeSessionFeed } from "./session-feed";
 import { type SeqEntry, transcriptStore } from "./transcript-store";
 import { startTranscriptWatch } from "./transcript-watch";
 import { MAX_UPLOAD_BYTES, WS_MAX_PAYLOAD_BYTES, asDataUrlList, parseImageDataUrls } from "./uploads";
-import { BOOT_ID, allClients, broadcastToAll, broadcastToSession, globalPresenceFrame, joinSession, leaveSession, markClientSeen, revalidateLocalClients, setClientAway } from "./ws-hub";
+import { BOOT_ID, allClients, broadcastToAll, broadcastToSession, globalPresenceFrame, joinSession, leaveSession, markClientSeen, setClientAway } from "./ws-hub";
 import { existsSync, readFileSync, statSync, watch } from "fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import {
-	cloudWebSocketClientClosed,
-	routeCloudWebSocketMessage,
-	verifiedCloudIdentity,
-} from "./cloud-proxy";
-import { isLocalProfile, setLocalProfileIdentity } from "./profile";
-import {
-	closeCloudProxyProtocol,
-	handleCloudProxyProtocolMessage,
-} from "./cloud-proxy-protocol";
 
 // Who likely triggered the restart that booted THIS process — read once from
 // the marker the previous process wrote in gracefulShutdown, and only trusted
@@ -441,15 +430,6 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 		if (sandboxWsMessage(ws, message as any)) return;
 		if (runnerWsMessage(ws, message as any)) return;
 		if (sandboxPortalRelayMessage(ws, message as any)) return;
-		if (isLocalProfile()) {
-			const identity = await verifiedCloudIdentity();
-			setLocalProfileIdentity(identity);
-			revalidateLocalClients(identity);
-			if (!identity || ws.data.authLogin !== identity.login) {
-				ws.close(4001, "Hosted GitHub session expired");
-				return;
-			}
-		}
 		let msg: any;
 		try {
 			msg = JSON.parse(String(message));
@@ -470,17 +450,6 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 		// name the client claims in any message, so attribution and per-user
 		// gating stop trusting self-declared users.
 		if (ws.data?.authUser) msg.user = ws.data.authUser;
-		if (
-			await handleCloudProxyProtocolMessage(
-				ws,
-				msg,
-				(lane, payload) => websocketHandlers.message?.(lane, payload),
-				(lane) => websocketHandlers.close?.(lane, 1000, "cloud proxy lane closed"),
-			)
-		) {
-			return;
-		}
-		if (routeCloudWebSocketMessage(ws, msg)) return;
 		// Anything that isn't a heartbeat is a person doing something, so it
 		// refreshes this socket's attention (ws-hub's idle window — a face means
 		// "here now"). `away` carries its own stamp.
@@ -536,7 +505,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 				if (msg.user) data.user = msg.user;
 				joinSession(ws, sessionId);
 				console.log(
-					`[presence] watch user=${JSON.stringify(data.user || "Anonymous")} login=${JSON.stringify(data.authLogin || null)} session=${JSON.stringify(sessionId)} client=${JSON.stringify((data as any).presenceClient || (data.cloudProxy ? "cloud-proxy" : "unknown"))}`,
+					`[presence] watch user=${JSON.stringify(data.user || "Anonymous")} login=${JSON.stringify(data.authLogin || null)} session=${JSON.stringify(sessionId)} client=${JSON.stringify((data as any).presenceClient || "unknown")}`,
 				);
 
 				// Opening a session whose last turn finished with nobody watching →
@@ -829,15 +798,6 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					);
 					return;
 				}
-				if (session.upgradedTo || isLocalSessionUpgradeInProgress(sessionId)) {
-					ws.send(
-						JSON.stringify({
-							type: "error",
-							message: "This session is being upgraded to the cloud. Retry the prompt in the cloud session.",
-						}),
-					);
-					return;
-				}
 
 				// The composer's effort pill rides every send; persist a change so
 				// this and future runs (queue drains, resumes) honor it.
@@ -981,15 +941,6 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 				if (!session) {
 					ws.send(
 						JSON.stringify({ type: "error", message: "Session not found" }),
-					);
-					return;
-				}
-				if (session.upgradedTo || isLocalSessionUpgradeInProgress(sessionId)) {
-					ws.send(
-						JSON.stringify({
-							type: "error",
-							message: "This session is being upgraded to the cloud. Retry the prompt in the cloud session.",
-						}),
 					);
 					return;
 				}
@@ -1280,10 +1231,6 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 		if (sandboxWsClose(ws)) return;
 		if (runnerWsClose(ws)) return;
 		if (sandboxPortalRelayClose(ws)) return;
-		closeCloudProxyProtocol(ws, (lane) =>
-			websocketHandlers.close?.(lane, 1000, "cloud proxy disconnected"),
-		);
-		cloudWebSocketClientClosed(ws);
 		allClients.delete(ws);
 		stopAllWatchesForClient(ws);
 		releaseTranscriptV2(ws);

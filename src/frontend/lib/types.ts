@@ -307,7 +307,7 @@ export interface SessionNote {
 
 export interface UnifiedSession {
 	id: string;
-	/** Present and true when the local-profile server owns this session. */
+	/** Historical marker retained while old session files age out. */
 	local?: boolean;
 	claudeSessionId: string | null;
 	source: SessionSource;

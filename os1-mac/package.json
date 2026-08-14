@@ -12,9 +12,7 @@
   "scripts": {
     "start": "electron .",
     "vendor:opencode": "sh scripts/fetch-opencode.sh",
-    "vendor:bun": "sh scripts/fetch-bun.sh",
-    "vendor:server": "bun run scripts/build-server-sidecar.ts",
-    "dist": "bun run vendor:opencode && bun run vendor:bun && bun run vendor:server && electron-builder --mac",
+    "dist": "bun run vendor:opencode && electron-builder --mac",
     "postinstall": "sh scripts/brand-dev-electron.sh || true"
   },
   "devDependencies": {

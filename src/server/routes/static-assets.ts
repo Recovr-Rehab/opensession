@@ -10,7 +10,6 @@ import { existsSync, readFileSync, statSync } from "fs";
 import type { RouteContext } from "./context";
 import { configuredIntegration, configuredRepos, productName } from "../config";
 import { FRONTEND_DIST, FRONTEND_SRC, devTailwindCss, frontend } from "../frontend-build";
-import { isLocalProfile } from "../profile";
 import { trimIconMargin } from "../png-trim";
 import { resolveRepoIcon } from "../repo-appearance";
 
@@ -77,10 +76,6 @@ function localIcon(iconPath: string): Response | undefined {
 export async function handleStaticAssetsRoutes(
 	ctx: RouteContext,
 ): Promise<Response | undefined> {
-	// Local servers proxy the hosted shell and every matching asset so the Mac
-	// app never runs frontend code from a stale checkout.
-	if (isLocalProfile()) return undefined;
-
 	const { req, url, path, publicPrefix } = ctx;
 
 	// Dev-mode Tailwind sheet. In prod the utilities ride in the built bundle

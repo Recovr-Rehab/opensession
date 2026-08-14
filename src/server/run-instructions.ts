@@ -82,6 +82,8 @@ export function buildRunInstructions(input: {
     presetLabel: string;
     mainLabel: string;
     workers: Array<{ agent: string; label: string; modelLabel: string }>;
+    /** Pi delegates through the sessions MCP instead of OpenCode task agents. */
+    tool?: "task" | "sessions";
   };
 }): string {
   const parts: string[] = [];
@@ -314,10 +316,14 @@ export function buildRunInstructions(input: {
     const workerLines = o.workers
       .map((w) => `- \`${w.agent}\` (${w.modelLabel}): ${w.label.toLowerCase()} for delegated subtasks.`)
       .join("\n");
+    const delegation =
+      o.tool === "sessions"
+        ? "through the opensession-sessions spawn_task MCP tool"
+        : "via the task tool";
     parts.push(
       `## The Orchestrator — your workers\nThis session runs on the "${o.presetLabel}" preset: ` +
-        `you (${o.mainLabel}) are the lead, paired with worker subagents you delegate ` +
-        "execution to via the task tool:\n" +
+      `you (${o.mainLabel}) are the lead, paired with worker subagents you delegate ` +
+        `execution to ${delegation}:\n` +
         `${workerLines}\n` +
         "You do the thinking, workers do the typing. Keep for yourself: understanding the " +
         "problem, design decisions, anything with real tradeoffs, tricky debugging, and the " +

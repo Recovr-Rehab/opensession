@@ -100,14 +100,10 @@ import {
   listCodexAccounts,
   type CodexAccount,
 } from "./codex-accounts";
-import { isLocalProfile } from "./profile";
 import { userMatchesAny } from "./shared/user-mappings";
-import { localCodexAccount, localOpencodeDataRoot } from "./local-engine-auth";
 
 const HOME = homeDir();
-export const OPENAI_DATA_ROOT = isLocalProfile()
-  ? localOpencodeDataRoot("openai")
-  : `${stateDir("opencode")}/openai-data`;
+export const OPENAI_DATA_ROOT = `${stateDir("opencode")}/openai-data`;
 
 /**
  * Point `$XDG_DATA_HOME/gh` at the real one so the gh CLI keeps finding its
@@ -207,7 +203,6 @@ export function pickOpenaiAccount(
    *  to the existing pick behavior. */
   exclude?: ReadonlySet<string>
 ): CodexAccount | { error: string } {
-  if (isLocalProfile()) return localCodexAccount();
   const all = listCodexAccounts();
   if (!all.length) {
     return {
@@ -310,11 +305,6 @@ export function buildSeededOpenaiAuth(
     };
   }
   const expMs = jwtExpMs(access);
-  if (isLocalProfile() && expMs === null) {
-    return {
-      error: `codex account "${account.name}" ChatGPT access token is malformed — run \`codex login\`, then retry`,
-    };
-  }
   if (expMs !== null && expMs <= Date.now()) {
     return {
       error: `codex account "${account.name}" ChatGPT access token is expired — run a codex turn (or \`codex login\`) to refresh it, then retry`,

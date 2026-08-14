@@ -4,7 +4,6 @@ import { resolve as resolvePath } from "path";
 import type { UnifiedSession } from "./types";
 import { stopPreview } from "./preview";
 import { configuredPaths, configuredRepos, configuredSelfDev, defaultRepo, type Repo } from "./config";
-import { isLocalProfile } from "./profile";
 import { stateDir } from "./paths";
 
 // The Repo type + registry defaults live in config.ts now. Re-exported so existing
@@ -316,7 +315,6 @@ export async function ensureAskCheckout(repoId?: string): Promise<string> {
   }
   return withGitLock(async () => {
     if (existsSync(dir)) return dir; // lost the create race to a sibling call
-    if (isLocalProfile()) mkdirSync(worktreesDir(), { recursive: true });
     await $`git -C ${repo.repo} fetch origin ${repo.defaultBranch} --quiet`.nothrow();
     await $`git -C ${repo.repo} worktree prune`.quiet().nothrow();
     const add =
@@ -686,23 +684,12 @@ async function resolveStartPoint(
     (await $`git -C ${repoDir} rev-parse --verify --quiet origin/${base}`.nothrow()).exitCode === 0
   )
     return `origin/${base}`;
-  if (!isLocalProfile()) return `origin/${defaultBranch}`;
-  if (
-    (await $`git -C ${repoDir} rev-parse --verify --quiet ${defaultBranch}`.nothrow()).exitCode === 0
-  ) return defaultBranch;
-  return "HEAD";
+  return `origin/${defaultBranch}`;
 }
 
 async function defaultStartPoint(repo: Repo): Promise<string> {
   const remote = `origin/${repo.defaultBranch}`;
-  if (!isLocalProfile()) return remote;
-  if (
-    (await $`git -C ${repo.repo} rev-parse --verify --quiet ${remote}`.nothrow()).exitCode === 0
-  ) return remote;
-  if (
-    (await $`git -C ${repo.repo} rev-parse --verify --quiet ${repo.defaultBranch}`.nothrow()).exitCode === 0
-  ) return repo.defaultBranch;
-  return "HEAD";
+  return remote;
 }
 
 /**
@@ -802,8 +789,6 @@ export async function createWorktree(
 
   const wtPath = `${worktreesDir()}/${repo.wtPrefix}-${branch}`;
   const base = opts?.base;
-
-  if (isLocalProfile()) mkdirSync(worktreesDir(), { recursive: true });
 
   await withGitLock(async () => {
     await $`git -C ${repo.repo} fetch origin ${repo.defaultBranch} --quiet`.nothrow();

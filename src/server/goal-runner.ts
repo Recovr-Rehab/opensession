@@ -15,7 +15,6 @@ import { createGoalSelfMcpServer } from "../agents/slack/goal-tools";
 import { runAgent, isAgentSessionBusy } from "./agent-runner";
 import { defaultRepo, personaName } from "./config";
 import { isDevInstance } from "./dev-mode";
-import { isLocalProfile } from "./profile";
 import { getGoal, listGoals, saveGoal, type Goal } from "./goals";
 import { DEFAULT_FALLBACK_MODEL, providerFor } from "./models";
 import { engineSessionPatch } from "./sessions";
@@ -289,7 +288,7 @@ export async function runGoal(goal: Goal): Promise<void> {
 // Goals ticker: wake due goals (self-pacing, so this only fires them).
 // Guarded so a hot reload doesn't stack a second interval. Dev instances
 // never wake goals (real engine runs — see src/server/dev-mode.ts).
-if (!g.__opensessionBooted && !isLocalProfile() && !isDevInstance()) {
+if (!g.__opensessionBooted && !isDevInstance()) {
 	setInterval(() => {
 		const now = Date.now();
 		for (const goal of listGoals()) {

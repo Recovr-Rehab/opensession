@@ -19,20 +19,16 @@ export async function fetchSessionsSnapshot(
 	text: string | null;
 	etag: string | null;
 	notModified: boolean;
-	cloudUnreachable: boolean;
 }> {
 	const res = await fetch(`${BASE}/sessions${opts.query || ""}`, {
 		signal: opts.signal,
 		headers: opts.etag ? { "If-None-Match": opts.etag } : undefined,
 	});
-	const cloudUnreachable =
-		res.headers.get("X-OpenSession-Cloud-Unreachable") === "true";
 	if (res.status === 304) {
 		return {
 			text: null,
 			etag: res.headers.get("ETag") || opts.etag || null,
 			notModified: true,
-			cloudUnreachable,
 		};
 	}
 	if (!res.ok)
@@ -41,7 +37,6 @@ export async function fetchSessionsSnapshot(
 		text: await res.text(),
 		etag: res.headers.get("ETag"),
 		notModified: false,
-		cloudUnreachable,
 	};
 }
 
@@ -341,46 +336,6 @@ export async function deleteSessionApi(
 		method: "DELETE",
 		label: "Failed to delete",
 	});
-}
-
-export class SessionUpgradeError extends ApiError {
-	uncommittedFiles: string[];
-
-	constructor(message: string, status: number, uncommittedFiles: string[] = []) {
-		super(message, status);
-		this.name = "SessionUpgradeError";
-		this.uncommittedFiles = uncommittedFiles;
-	}
-}
-
-export async function upgradeSessionApi(
-	sessionId: string,
-): Promise<{ id: string; url: string }> {
-	const res = await fetch(
-		`${BASE}/sessions/${encodeURIComponent(sessionId)}/upgrade`,
-		{ method: "POST" },
-	);
-	const body = (await res.json().catch(() => null)) as {
-		id?: string;
-		url?: string;
-		error?: string;
-		uncommittedFiles?: unknown;
-	} | null;
-	// Import completed even if the local archive marker failed. The returned
-	// destination is authoritative and lets the user continue in cloud.
-	if (body?.id && body.url) return { id: body.id, url: body.url };
-	if (!res.ok) {
-		throw new SessionUpgradeError(
-			body?.error || `Failed to move session: ${res.status}`,
-			res.status,
-			Array.isArray(body?.uncommittedFiles)
-				? body.uncommittedFiles.filter(
-						(file): file is string => typeof file === "string",
-					)
-				: [],
-		);
-	}
-	throw new SessionUpgradeError("Cloud upgrade returned an invalid response", 502);
 }
 
 /** Returns `stoppedRun: true` when archiving gracefully stopped an in-flight,

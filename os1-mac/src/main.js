@@ -1,6 +1,6 @@
-// OS¹ desktop — thin shell around the cloud or a supervised local server.
-// The frontend ships from the server, so this app only owns the window,
-// navigation policy, local process lifecycle, notifications, badge and links.
+// OS¹ desktop — a thin shell around an Open Session server. The frontend ships
+// from the server, so this app only owns the window, navigation policy,
+// notifications, badge and links.
 const {
   app,
   BrowserWindow,
@@ -16,7 +16,6 @@ const {
 const path = require("node:path");
 const fs = require("node:fs");
 const { execFile } = require("node:child_process");
-const { configForCloudSession, LocalServerSupervisor } = require("./local-server.js");
 const packageConfig = require("../package.json").opensession || {};
 
 // AppKit can show its persistent-window crash-recovery prompt before Electron
@@ -40,17 +39,10 @@ let APP_ORIGIN = new URL(APP_URL).origin;
 let IN_WINDOW_ORIGINS = [APP_ORIGIN, "https://github.com"];
 
 const stateFile = () => path.join(app.getPath("userData"), "window-state.json");
-const settingsFile = () => path.join(app.getPath("userData"), "settings.json");
-
 let win = null;
 let quitting = false;
 let appReady = false;
 let pendingDeepLink = null;
-let shellSettings = {};
-let localMode = false;
-let localSupervisor = null;
-let localPageLoaded = false;
-let localRecoveryTimer = null;
 let windowReady = false;
 // Chromium keeps a zoom level per origin for the life of the process only, and
 // the View menu's zoom roles change it without any event we can subscribe to
@@ -59,29 +51,6 @@ let windowReady = false;
 // scaled display the app is unreadable at 100% and the setting has to survive
 // both an in-app navigation and a relaunch.
 let zoomLevel = 0;
-
-function loadShellSettings() {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(settingsFile(), "utf8"));
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveShellSettings(next) {
-  const file = settingsFile();
-  const temporary = `${file}.tmp`;
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(temporary, `${JSON.stringify(next, null, 2)}\n`, { mode: 0o600 });
-  fs.renameSync(temporary, file);
-}
-
-function setAppUrl(url) {
-  APP_URL = url;
-  APP_ORIGIN = new URL(url).origin;
-  IN_WINDOW_ORIGINS = [APP_ORIGIN, "https://github.com"];
-}
 
 // ---- Auto-update ------------------------------------------------------------
 // Electron's built-in Squirrel.Mac updater against the Open Session server's
@@ -344,13 +313,6 @@ function deepLinkToUrl(raw) {
       return target.toString();
     }
     if (u.origin === APP_ORIGIN) return raw;
-    if (localMode && u.origin === CLOUD_ORIGIN) {
-      const target = new URL(APP_URL);
-      target.pathname = u.pathname;
-      target.search = u.search;
-      target.hash = u.hash;
-      return target.toString();
-    }
   } catch {}
   return null;
 }
@@ -358,7 +320,7 @@ function deepLinkToUrl(raw) {
 function openDeepLink(raw) {
   const url = deepLinkToUrl(raw);
   if (!url) return;
-  if (!appReady || (localMode && localSupervisor?.state !== "ready")) {
+  if (!appReady) {
     pendingDeepLink = raw;
     return;
   }
@@ -382,46 +344,7 @@ function showStatusPage(mode, detail = "", logFile = "") {
   });
 }
 
-function scheduleLocalRecovery() {
-  if (localRecoveryTimer || quitting || !localSupervisor?.prepared) return;
-  localRecoveryTimer = setTimeout(async () => {
-    localRecoveryTimer = null;
-    if (quitting || !win || win.isDestroyed()) return;
-    try {
-      const response = await fetch(new URL("api/health", APP_URL), {
-        signal: AbortSignal.timeout(1_500),
-      });
-      const body = response.ok ? await response.json() : null;
-      if (body?.ok) {
-        localPageLoaded = true;
-        win.loadURL(pendingDeepLink ? deepLinkToUrl(pendingDeepLink) : APP_URL);
-        pendingDeepLink = null;
-        return;
-      }
-    } catch {}
-    scheduleLocalRecovery();
-  }, 1_000);
-  localRecoveryTimer.unref();
-}
-
-function handleLocalServerState({ state, detail, logFile }) {
-  if (state === "ready") {
-    if (localRecoveryTimer) clearTimeout(localRecoveryTimer);
-    localRecoveryTimer = null;
-    const showingStatus = win?.webContents.getURL().startsWith("file:");
-    if (win && !win.isDestroyed() && (!localPageLoaded || showingStatus || pendingDeepLink)) {
-      localPageLoaded = true;
-      win.loadURL(pendingDeepLink ? deepLinkToUrl(pendingDeepLink) : APP_URL);
-      pendingDeepLink = null;
-    }
-    return;
-  }
-  if (!localPageLoaded && (state === "starting" || state === "backoff")) {
-    showStatusPage("starting", detail, logFile);
-  }
-}
-
-function createWindow(initialStatus = null) {
+function createWindow() {
   const { zoomLevel: savedZoom, ...state } = loadWindowState();
   zoomLevel = clampZoom(savedZoom);
   windowReady = false;
@@ -552,31 +475,17 @@ function createWindow(initialStatus = null) {
   // Show a themed recovery page instead of Chromium's network error.
   win.webContents.on("did-fail-load", (_e, code, _desc, _url, isMainFrame) => {
     if (!isMainFrame || code === -3 /* ERR_ABORTED */) return;
-    showStatusPage(
-      localMode ? (localPageLoaded ? "local-offline" : "starting") : "offline",
-      "",
-      localSupervisor?.logFile,
-    );
-    if (localMode) scheduleLocalRecovery();
+    showStatusPage("offline");
   });
 
   // Belt-and-braces: if the renderer ever dies, come back instead of showing
   // a dead window.
   win.webContents.on("render-process-gone", (_e, details) => {
     if (details.reason === "clean-exit") return;
-    if (localMode && localSupervisor?.state !== "ready") {
-      showStatusPage("starting", "Waiting for the local server to restart…", localSupervisor.logFile);
-      scheduleLocalRecovery();
-    } else {
-      win.loadURL(APP_URL);
-    }
+    win.loadURL(APP_URL);
   });
 
-  if (initialStatus) showStatusPage(initialStatus.mode, initialStatus.detail, initialStatus.logFile);
-  else if (localMode && localSupervisor?.state !== "ready") {
-    showStatusPage("starting", "Waiting for the local server to start…", localSupervisor.logFile);
-    scheduleLocalRecovery();
-  } else win.loadURL(APP_URL);
+  win.loadURL(APP_URL);
 }
 
 // Electron's default menu, plus "Check for Updates…" in the app menu — the
@@ -590,20 +499,6 @@ function buildAppMenu() {
         submenu: [
           { role: "about" },
           { label: "Check for Updates…", click: checkForUpdatesFromMenu },
-          {
-            label: "Use Local Sessions",
-            type: "checkbox",
-            checked: localMode,
-            enabled: process.env.OS1_LOCAL !== "1",
-            click: (item) => {
-              shellSettings = { ...shellSettings, localMode: item.checked };
-              saveShellSettings(shellSettings);
-              localSupervisor?.stop();
-              quitting = true;
-              app.relaunch();
-              app.quit();
-            },
-          },
           { type: "separator" },
           { role: "services" },
           { type: "separator" },
@@ -628,39 +523,6 @@ app.whenReady().then(async () => {
   // electron-builder; only the development runtime needs this explicit PNG.
   if (process.platform === "darwin" && !app.isPackaged) {
     app.dock.setIcon(path.join(__dirname, "../build/icon-512.png"));
-  }
-
-  shellSettings = loadShellSettings();
-  localMode = process.env.OS1_LOCAL === "1" || shellSettings.localMode === true;
-  let initialStatus = null;
-  if (localMode) {
-    const cloudSession = await session.defaultSession.cookies
-      .get({ url: CLOUD_URL, name: "opensession_auth" })
-      .then((cookies) => cookies[0]?.value || null)
-      .catch(() => null);
-    localSupervisor = new LocalServerSupervisor({
-      config: configForCloudSession(shellSettings, cloudSession),
-      resourcesPath: process.resourcesPath,
-      userDataDir: app.getPath("userData"),
-      onState: handleLocalServerState,
-    });
-    try {
-      const prepared = await localSupervisor.prepare();
-      setAppUrl(prepared.url);
-      initialStatus = {
-        mode: "starting",
-        detail: `Starting local server on port ${prepared.port}…`,
-        logFile: localSupervisor.logFile,
-      };
-    } catch (error) {
-      localSupervisor.setState("error", error.message);
-      const missingServer = String(error.message).startsWith("Open Session server source is missing");
-      initialStatus = {
-        mode: missingServer ? "missing" : "error",
-        detail: error.message,
-        logFile: localSupervisor.logFile,
-      };
-    }
   }
 
   // The web app's service worker only exists for Web Push, app-shell caching
@@ -714,10 +576,9 @@ app.whenReady().then(async () => {
   buildAppMenu();
 
   appReady = true;
-  createWindow(initialStatus);
+  createWindow();
 
-  if (localMode && localSupervisor?.prepared) localSupervisor.start();
-  else if (pendingDeepLink && !localMode) {
+  if (pendingDeepLink) {
     const deepLink = pendingDeepLink;
     pendingDeepLink = null;
     openDeepLink(deepLink);
@@ -744,9 +605,6 @@ app.on("continue-activity", (e, _type, _userInfo, details) => {
 
 app.on("before-quit", () => {
   quitting = true;
-  if (localRecoveryTimer) clearTimeout(localRecoveryTimer);
-  localRecoveryTimer = null;
-  localSupervisor?.stop();
   saveWindowState();
 });
 

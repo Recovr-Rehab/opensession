@@ -49,29 +49,6 @@ export function reconcilePendingSessionPatches(
   });
 }
 
-export function reconcileCloudOutageSessions(
-  previous: UnifiedSession[],
-  localSnapshot: UnifiedSession[],
-): UnifiedSession[] {
-  const previousCloud = new Map(
-    previous
-      .filter((session) => !session.local)
-      .map((session) => [session.id, session]),
-  );
-  const local = localSnapshot.filter(
-    (session) =>
-      !(session as UnifiedSession & { upgradedTo?: unknown }).upgradedTo ||
-      !previousCloud.has(session.id),
-  );
-  const localIds = new Set(local.map((session) => session.id));
-  const retainedCloud = [...previousCloud.values()].filter(
-    (session) => !localIds.has(session.id),
-  );
-  return [...local, ...retainedCloud].sort((a, b) =>
-    b.lastActivity.localeCompare(a.lastActivity),
-  );
-}
-
 export function useSessions({
   loadArchived = false,
   pollInterval = 5000,
@@ -96,7 +73,6 @@ export function useSessions({
   >(() => new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [cloudUnreachable, setCloudUnreachable] = useState(false);
   const mountedRef = useRef(true);
   // Read by `patch` to capture the row it is archiving, which the very next
   // live poll will drop. Assigned during render, like App.tsx's own *Ref
@@ -125,15 +101,13 @@ export function useSessions({
   // entry is removed once a server snapshot contains the same field values.
   const pendingPatchRef = useRef<Map<string, Partial<UnifiedSession>>>(new Map());
 
-  const applyServer = useCallback((parsed: UnifiedSession[], preserveCloud: boolean) => {
+  const applyServer = useCallback((parsed: UnifiedSession[]) => {
     const reconciled = reconcilePendingSessionPatches(
       parsed,
       pendingPatchRef.current,
     );
     setLive((previous) => {
-      const next = preserveCloud
-        ? reconcileCloudOutageSessions(previous, reconciled)
-        : reconciled;
+      const next = reconciled;
       if (stickyRef.current.size === 0) return next;
       const present = new Set(next.map((s) => s.id));
       const extras: UnifiedSession[] = [];
@@ -158,12 +132,11 @@ export function useSessions({
           query: LIVE_QUERY,
         });
         if (!mountedRef.current) return;
-        setCloudUnreachable(snapshot.cloudUnreachable);
         if (!snapshot.notModified && snapshot.text !== null) {
           etagRef.current = snapshot.etag;
           if (snapshot.text !== lastTextRef.current) {
             lastTextRef.current = snapshot.text;
-            applyServer(JSON.parse(snapshot.text), snapshot.cloudUnreachable);
+            applyServer(JSON.parse(snapshot.text));
           }
         }
         setLiveAt(startedAt);
@@ -433,7 +406,6 @@ export function useSessions({
     sessions,
     loading,
     error,
-    cloudUnreachable,
     /** False until the archived index lands — the Archived page's own
      *  loading state, which it never needed while the list carried
      *  everything. */

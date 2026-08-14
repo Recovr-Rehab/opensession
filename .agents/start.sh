@@ -62,8 +62,6 @@ mkdir -p "$STATE_DIR"
 #   -u WEBHOOK_PORT / OPENSESSION_MCP_HTTP_PORT
 #       production webhook (3848) / MCP-HTTP (3852) ports ride in via env;
 #       the dev boot gate skips both binds when they are unset.
-#   -u OPENSESSION_PROFILE
-#       a stray local-profile setting must not repoint state to ~/os1.
 #   -u OPENSESSION_SESSIONS_DIR / _CONFIG / _RUN_JOURNAL
 #       per-store overrides would defeat OPENSESSION_STATE_DIR isolation.
 #   PORT/HOST
@@ -100,7 +98,6 @@ mkdir -p "$STATE_DIR"
 exec env \
 	-u WEBHOOK_PORT \
 	-u OPENSESSION_MCP_HTTP_PORT \
-	-u OPENSESSION_PROFILE \
 	-u OPENSESSION_SESSIONS_DIR \
 	-u OPENSESSION_CONFIG \
 	-u OPENSESSION_RUN_JOURNAL \

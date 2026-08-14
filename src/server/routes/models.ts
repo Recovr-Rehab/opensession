@@ -7,12 +7,11 @@
  */
 
 import { requestUser, type RouteContext } from "./context";
-import { KNOWN_MODELS, accountProviderForModel, getDefaultModel, getModelFallbackAuto, interactiveDefaultModel, localProfileDefaultModel, localProfileModels, modelEfforts, refreshOpencodePickerModels, setDefaultModel, setInteractiveDefaultModel, setModelFallbackAuto, toOpencodeModel } from "../models";
+import { KNOWN_MODELS, accountProviderForModel, getDefaultModel, getModelFallbackAuto, interactiveDefaultModel, modelEfforts, refreshOpencodePickerModels, setDefaultModel, setInteractiveDefaultModel, setModelFallbackAuto, toOpencodeModel } from "../models";
 import { type Sandbox } from "../sandbox";
 import { suggestBranchName } from "../suggest-branch";
 import { buildSystemPromptParts } from "../system-prompt";
 import { MAX_AUDIO_BYTES, transcribeAudio } from "../transcribe";
-import { isLocalProfile } from "../profile";
 import { supportsOpenaiFastMode } from "../opencode-openai-auth";
 import { configuredServer } from "../config";
 import { getWorkspace, workspaceModelSettings } from "../workspaces";
@@ -24,19 +23,6 @@ export async function handleModelsRoutes(
 
 	// ── Models available to sessions ──
 	if (path === "/api/models" && req.method === "GET") {
-		if (isLocalProfile()) {
-			const models = localProfileModels();
-			return Response.json({
-				models: models.map((model) => ({
-					...model,
-					efforts: modelEfforts(model.id),
-					accountProvider: accountProviderForModel(model.id),
-					fastModeSupported: supportsOpenaiFastMode(toOpencodeModel(model.id)),
-				})),
-				default: localProfileDefaultModel(),
-				autoFallback: false,
-			});
-		}
 		// Re-fold the opencode entries from config on every fetch (cheap, tiny
 		// JSON reads — same "read fresh" contract as /sandbox/status below) so a
 		// config flip like the Orchestrator opt-in shows up on the next picker
@@ -166,7 +152,7 @@ export async function handleModelsRoutes(
 			);
 		}
 		return Response.json({
-			autoFallback: isLocalProfile() ? false : setModelFallbackAuto(body.auto),
+			autoFallback: setModelFallbackAuto(body.auto),
 		});
 	}
 

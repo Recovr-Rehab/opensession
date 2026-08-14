@@ -198,13 +198,6 @@ import { homeDir, OPENSESSION_SESSIONS_DIR } from "./paths";
 import { stateDir } from "./paths";
 import { resolveOpencodeBin, versionTuple } from "./opencode-bin";
 import { isDevInstance } from "./dev-mode";
-import { isLocalProfile } from "./profile";
-import {
-  localClaudeAccount,
-  localOpencodeDataRoot,
-  localProviderError,
-  type LocalEngineProvider,
-} from "./local-engine-auth";
 import {
   normalizeModelEffort,
   dialPreset,
@@ -349,68 +342,6 @@ function freshOpencodeBin(): string {
 
 // Source-verified floor: anomalyco/opencode@fa95a61c4 first classified
 // absolute paths as file plugins, and v1.3.8 is the first release containing it.
-export const LOCAL_OPENCODE_MIN_VERSION = "1.3.8";
-
-function executableAvailable(path: string): boolean {
-  return path.includes("/") ? existsSync(path) : !!Bun.which(path);
-}
-
-export function assertLocalOpencodeVersion(found: string, bin = OPENCODE_BIN): void {
-  const current = versionTuple(found);
-  const minimum = versionTuple(LOCAL_OPENCODE_MIN_VERSION)!;
-  const supported =
-    current &&
-    (current[0] > minimum[0] ||
-      (current[0] === minimum[0] &&
-        (current[1] > minimum[1] ||
-          (current[1] === minimum[1] && current[2] >= minimum[2]))));
-  if (supported) return;
-
-  const shown = found.trim() || "an unreadable version";
-  throw new Error(
-    `OPENSESSION_PROFILE=local requires OpenCode >= ${LOCAL_OPENCODE_MIN_VERSION} for local bridge plugins, ` +
-      `but ${bin} reports ${shown}. Update OpenCode or point OPENSESSION_OPENCODE_BIN at a newer binary.`,
-  );
-}
-
-function installedOpencodeVersion(): string {
-  const result = Bun.spawnSync([OPENCODE_BIN, "--version"], {
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const stdout = new TextDecoder().decode(result.stdout).trim();
-  const stderr = new TextDecoder().decode(result.stderr).trim();
-  const output = stdout || stderr;
-  if (result.exitCode === 0 && output) return output;
-  const detail = stderr || stdout || `exit code ${result.exitCode}`;
-  throw new Error(
-    `OPENSESSION_PROFILE=local could not read the OpenCode version from ${OPENCODE_BIN} --version (${detail}). ` +
-      `Install OpenCode >= ${LOCAL_OPENCODE_MIN_VERSION} or point OPENSESSION_OPENCODE_BIN at a newer binary.`,
-  );
-}
-
-/** Fail at local-profile startup instead of deferring missing engine binaries
- * to a first turn that can otherwise look like a silently empty response. */
-export function assertLocalEngineRuntime(providers: LocalEngineProvider[]): void {
-  if (!isLocalProfile()) return;
-  if (!executableAvailable(OPENCODE_BIN)) {
-    throw new Error(
-      `OPENSESSION_PROFILE=local could not find OpenCode at ${OPENCODE_BIN}. ` +
-        "Install it with `npm i -g opencode-ai` or set OPENSESSION_OPENCODE_BIN.",
-    );
-  }
-  assertLocalOpencodeVersion(installedOpencodeVersion());
-  if (providers.includes("anthropic")) {
-    if (!executableAvailable(CLAUDE_CODE_BIN)) {
-      throw new Error(
-        `OPENSESSION_PROFILE=local could not find Claude Code at ${CLAUDE_CODE_BIN}. ` +
-          "Install Claude Code or set OPENSESSION_CLAUDE_BIN.",
-      );
-    }
-    meridianStackInfo();
-  }
-}
-
 /** Instructions/state under the session store (exported for the state-path
  *  regression test — must stay derived from the SAME dual-read resolution the
  *  docker adapter mounts by, or in-container runs break; see
@@ -850,7 +781,6 @@ export function pickMeridianAccount(
   recordPick = true,
   allowExtraUsage?: boolean,
 ): ClaudeAccount | { error: string } {
-  if (isLocalProfile()) return localClaudeAccount();
   const allowedOwner = (a: ClaudeAccount) => !a.owner || (!!user && userMatchesAny(user, [a.owner]));
   const designated = (id: string) => !ids?.length || ids.includes(id);
   if (pinnedId) {
@@ -904,7 +834,6 @@ export function claudePoolDryReason(
   >,
   model: string,
 ): string | null {
-  if (isLocalProfile()) return null;
   // Unattended runs intentionally wait for a near reset instead of model-
   // hopping immediately; preserve that backpressure path in runOpencode.
   if (poolWaitMsFor(opts.journal?.kind) > 0) return null;
@@ -1678,58 +1607,6 @@ export function clientFor(entry: OpencodeServerEntry): OpencodeClient {
     baseUrl: entry.url,
     headers: { Authorization: `Basic ${btoa(`opencode:${entry.password}`)}` },
   });
-}
-
-export async function ensureLocalMeridianReady(
-  entry: OpencodeServerEntry,
-  stack: MeridianStackInfo,
-  opts: {
-    timeoutMs?: number;
-    fetcher?: typeof fetch;
-    sleep?: (ms: number) => Promise<unknown>;
-    signal?: AbortSignal;
-  } = {},
-): Promise<void> {
-  if (!isLocalProfile() || entry.meridianReady) return;
-  opts.signal?.throwIfAborted();
-  if (!entry.meridianPort) {
-    throw new Error("Local Claude bridge started without an allocated Meridian proxy port.");
-  }
-
-  const timeoutMs = opts.timeoutMs ?? 10_000;
-  const fetcher = opts.fetcher ?? fetch;
-  const sleep = opts.sleep ?? Bun.sleep;
-  const healthUrl = `${meridianProxyBaseUrl(entry.meridianPort)}/health`;
-  const deadline = Date.now() + timeoutMs;
-  let lastError = "proxy did not answer";
-
-  do {
-    try {
-      const requestTimeout = AbortSignal.timeout(Math.min(2_000, Math.max(1, timeoutMs)));
-      const response = await fetcher(healthUrl, {
-        signal: opts.signal ? AbortSignal.any([opts.signal, requestTimeout]) : requestTimeout,
-      });
-      const health = response.ok ? await response.json().catch(() => null) : null;
-      if (health?.status === "healthy") {
-        entry.meridianReady = true;
-        return;
-      }
-      lastError = response.ok
-        ? `unexpected health response ${JSON.stringify(health)}`
-        : `HTTP ${response.status}`;
-    } catch (error: any) {
-      opts.signal?.throwIfAborted();
-      lastError = error?.message || String(error);
-    }
-    if (Date.now() < deadline) await sleep(100);
-    opts.signal?.throwIfAborted();
-  } while (Date.now() < deadline);
-
-  throw new Error(
-    `Local Claude bridge failed to start at ${healthUrl} within ${timeoutMs}ms ` +
-      `(opencode-with-claude ${stack.pluginVersion}, Meridian ${stack.meridianVersion}): ${lastError}. ` +
-      "Run `bun install`, verify the Claude CLI works, and retry.",
-  );
 }
 
 export async function reconnectSharedInProcessMcp(
@@ -3212,13 +3089,6 @@ async function* runOpencodeAttempt(
     };
     return;
   }
-  if (isLocalProfile()) {
-    const localAuthError = localProviderError(parsed.providerID);
-    if (localAuthError) {
-      yield { type: "error", content: localAuthError, provider: PROVIDER, model };
-      return;
-    }
-  }
   const meridianModels = meridianRequiredModels(parsed.modelID, dial?.oracleAgent);
 
   const runKey = opts.sessionId || journal?.osSessionId || crypto.randomUUID();
@@ -3299,7 +3169,7 @@ async function* runOpencodeAttempt(
   // provider setup so shared-server reuse (including Meridian's stable proxy
   // key) addresses the correct service- or user-credential pool.
   const githubUserLogin =
-    !isLocalProfile() && !policy.unattended && INTERACTIVE_KINDS.has(baseJournalKind(journal?.kind))
+    !policy.unattended && INTERACTIVE_KINDS.has(baseJournalKind(journal?.kind))
       ? githubUserLoginForRun(user || author?.name)
       : null;
   const turnId = crypto.randomUUID();
@@ -3521,11 +3391,7 @@ async function* runOpencodeAttempt(
         seedMeridianSessionDir(meridianEnv.MERIDIAN_SESSION_DIR);
         // Repointing XDG_DATA_HOME hides gh's installed extensions from the
         // run unless gh's data dir is linked in (see linkGhDataDir).
-        if (isLocalProfile()) linkGhDataDir(localOpencodeDataRoot("anthropic"));
-        serverExtraEnv = {
-          ...meridianEnv,
-          ...(isLocalProfile() ? { XDG_DATA_HOME: localOpencodeDataRoot("anthropic") } : {}),
-        };
+        serverExtraEnv = meridianEnv;
         // Ensure the server-side fingerprint scrub is present before this
         // server's proxy starts (engine-agnostic billing — see fn doc).
         ensureMeridianProxyScrub();
@@ -3687,12 +3553,9 @@ async function* runOpencodeAttempt(
       // scoped store + rotation-proof seeds per launch (bootstrap.ts), so a
       // sandbox hitting this was created before those fixes (recreate it) or
       // the host truly has no usable codex account.
-      if ("error" in picked && isLocalProfile()) {
-        throw new Error(`opencode/openai: ${picked.error}`);
-      }
       if (
         "error" in picked &&
-        ((!isLocalProfile() && opts.accountId && opts.accountStrict) ||
+        ((opts.accountId && opts.accountStrict) ||
           !opencodeHasNativeOpenaiAuth())
       ) {
         // Also exhaustion-shaped (no account can serve this model here) —
@@ -3728,7 +3591,7 @@ async function* runOpencodeAttempt(
     // identically; per-session unattended runs gate at their call site
     // (automations/github yes, plain no). In sandboxes the mint fails (IMDS
     // blocked) and the run proceeds without AWS — documented docker caveat.
-    if (!isLocalProfile() && opts.aws) {
+    if (opts.aws) {
       const awsPointerEnv = await ensureAgentAwsCredsFile();
       if (Object.keys(awsPointerEnv).length) {
         serverExtraEnv = { ...(serverExtraEnv || {}), ...awsPointerEnv };
@@ -3923,7 +3786,7 @@ async function* runOpencodeAttempt(
     // keeps the config hash (and thus server reuse) identical for setups with
     // no providers configured.
     const providerConfig = {
-      ...(isLocalProfile() ? {} : opencodeProviderOptions()),
+      ...opencodeProviderOptions(),
       ...(providerOverride || {}),
     };
 
@@ -4344,11 +4207,6 @@ async function* runOpencodeAttempt(
     });
     yield { type: "init", sessionId: ocSessionId, provider: PROVIDER, model };
 
-    if (parsed.providerID === "anthropic" && pickedMeridian && isLocalProfile()) {
-      await ensureLocalMeridianReady(entry, meridianStackInfo(), {
-        signal: abortController.signal,
-      });
-    }
     if (abortController.signal.aborted) return;
 
     // Abort → tell the server to stop the turn (best-effort), our loops exit
@@ -4975,10 +4833,7 @@ async function* runOpencodeAttempt(
       // instead of failing the turn. No account left ⇒ terminal error with
       // usageLimitExhausted so agent-runner's model fallback takes over.
       if (usageLimitHit && pickedMeridian) {
-        if (isLocalProfile()) {
-          runFailure +=
-            " — the local Claude Code subscription is unavailable; retry after its limit resets or switch models.";
-        } else {
+        {
           const failureDetail = (lastProviderRetryError || runFailure).toLowerCase();
           const exhaustedModel =
             meridianModels.find(
@@ -5061,10 +4916,7 @@ async function* runOpencodeAttempt(
       // sidelined account. No account left ⇒ terminal with usageLimitExhausted
       // so agent-runner's model fallback takes over.
       if (usageLimitHit && pickedOpenai) {
-        if (isLocalProfile()) {
-          runFailure +=
-            " — the local Codex subscription is unavailable; retry after its limit resets or switch models.";
-        } else {
+        {
           markCodexExhausted(pickedOpenai.id, parsed.modelID);
           const next = pickOpenaiAccount(
             parsed.modelID,
@@ -5100,7 +4952,7 @@ async function* runOpencodeAttempt(
       // attemptIndex 0: a second wedge still marks the account for the rest of
       // the pool even though this run won't retry again.
       let wedgeSwitchTo: string | undefined;
-      if (livenessWedged && !isLocalProfile()) {
+      if (livenessWedged) {
         if (pickedOpenai) {
           const marked = markCodexWedged(pickedOpenai.id);
           const next = pickOpenaiAccount(

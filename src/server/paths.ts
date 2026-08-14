@@ -8,7 +8,6 @@
 import { existsSync } from "fs";
 import { homedir } from "os";
 import { randomUUIDv7 } from "bun";
-import { isLocalProfile, localProfileRoot } from "./profile";
 
 /** The current user's home directory ($HOME wins so tests can repoint it). */
 export function homeDir(): string {
@@ -45,7 +44,6 @@ function resolveSessionsDir(): string {
   // the live instance's socket.
   const stateRoot = process.env.OPENSESSION_STATE_DIR;
   if (stateRoot) return `${stateRoot}/.opensession-sessions`;
-  if (isLocalProfile()) return `${localProfileRoot()}/sessions`;
   return stateDir("sessions");
 }
 

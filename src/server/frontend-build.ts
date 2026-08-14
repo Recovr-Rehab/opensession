@@ -10,7 +10,6 @@ import { dirname, join, resolve } from "path";
 import { activeRunRecords } from "./run-journal";
 import { writeFileAtomic } from "./shared/atomic-write";
 import { broadcastToAll } from "./ws-hub";
-import { isLocalProfile } from "./profile";
 import { configuredServer, defaultRepo, githubBotLogins, personaName, plainWorkspaceId, productMark, productName } from "./config";
 
 const g = globalThis as any;
@@ -84,7 +83,7 @@ let devTailwind: string | null = null;
 
 /** The dev-mode Tailwind sheet, or null in prod / on a failed compile. */
 export async function devTailwindCss(): Promise<string | null> {
-	if (!IS_DEV || isLocalProfile()) return null;
+	if (!IS_DEV) return null;
 	if (devTailwind !== null) return devTailwind;
 	try {
 		devTailwind = await compileTailwind(`${FRONTEND_DIST}/.tailwind-dev.css`);
@@ -102,9 +101,6 @@ export async function devTailwindCss(): Promise<string | null> {
 // restart` that would interrupt every in-flight Claude run. `version` changes
 // whenever the entry or CSS hash changes, so clients know to refresh.
 export async function buildFrontend(): Promise<string> {
-	if (isLocalProfile()) {
-		throw new Error("Local profile uses the hosted frontend");
-	}
 	// Stamped before the build so edits landing mid-build hash as "changed" on
 	// the next boot rather than being masked by a post-build stamp.
 	const inputsHash = frontendInputsHash();
@@ -365,7 +361,7 @@ function tryReuseFrontendDist(): boolean {
 	}
 }
 
-if (!IS_DEV && !isLocalProfile() && !g.__opensessionFrontend) {
+if (!IS_DEV && !g.__opensessionFrontend) {
 	if (!tryReuseFrontendDist()) {
 		console.log("Building frontend (split + minified)…");
 		await buildFrontend();
@@ -374,9 +370,7 @@ if (!IS_DEV && !isLocalProfile() && !g.__opensessionFrontend) {
 
 export const frontend: FrontendBundle | null = IS_DEV
 	? null
-	: isLocalProfile()
-		? null
-		: (g.__opensessionFrontend as FrontendBundle);
+	: (g.__opensessionFrontend as FrontendBundle);
 
 export const SPA_HEADERS = {
 	"Content-Type": "text/html; charset=utf-8",
@@ -387,7 +381,7 @@ export const SPA_HEADERS = {
 // SPA entry: the HMR bundle in dev, the prebuilt index.html in prod. Reads
 // `frontend.indexHtml` fresh on each request so an in-process rebuild is served
 // immediately (the object is mutated, not replaced).
-const homepage = IS_DEV && !isLocalProfile()
+const homepage = IS_DEV
 	? (await import("../frontend/index.html")).default
 	: null;
 

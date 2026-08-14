@@ -8,7 +8,6 @@ import {
   configuredPaths,
   configuredServer,
   configuredIdentity,
-  configuredCloud,
   configPath,
   defaultRepo,
   personaName,
@@ -26,9 +25,6 @@ const ENV_KEYS = [
   "OPENSESSION_CLAUDE_BIN",
   "OPENSESSION_OPENCODE_BIN",
   "OPENSESSION_MCP_CONFIG",
-  "OPENSESSION_PROFILE",
-  "OPENSESSION_CLOUD_UPSTREAM",
-  "OPENSESSION_CLOUD_TOKEN",
   "OPENSESSION_UI_BASE",
   "PREVIEW_HOST",
 ] as const;
@@ -94,52 +90,6 @@ describe("config loader", () => {
     expect(configuredServer().caddyAdmin).toBe("http://localhost:2019");
   });
 
-  test("local profile starts with an empty registry and local paths", () => {
-    delete process.env.OPENSESSION_CONFIG;
-    delete process.env.OPENSESSION_CONFIG;
-    delete process.env.OPENSESSION_WORKTREES_DIR;
-    delete process.env.OPENSESSION_WORKTREES_DIR;
-    delete process.env.OPENSESSION_CLAUDE_BIN;
-    delete process.env.OPENSESSION_CLAUDE_BIN;
-    process.env.OPENSESSION_PROFILE = "local";
-
-    expect(configuredRepos()).toEqual({});
-    expect(configuredPaths().worktreesDir).toBe(`${process.env.HOME}/os1/worktrees`);
-    expect(configuredPaths().claudeBin).toBe(Bun.which("claude") || "claude");
-    expect(configPath()).toBe(`${process.env.HOME}/os1/config.json`);
-		expect(configuredIdentity()).toEqual({
-			team: [],
-			reviewTeams: [],
-			slackNames: {},
-      defaultTimezone: "UTC",
-    });
-    expect(() => defaultRepo()).toThrow("No repositories are registered");
-		expect(configuredCloud()).toEqual({
-			upstream: "http://127.0.0.1:3850",
-			token: null,
-		});
-  });
-
-	test("cloud config uses environment overrides over the local config", () => {
-		withConfig(JSON.stringify({ cloud: { upstream: "https://config.example", token: "config" } }));
-		process.env.OPENSESSION_PROFILE = "local";
-		process.env.OPENSESSION_CLOUD_UPSTREAM = "https://env.example";
-		process.env.OPENSESSION_CLOUD_TOKEN = "env-token";
-		expect(configuredCloud()).toEqual({
-			upstream: "https://env.example",
-			token: "env-token",
-		});
-	});
-
-	test("cloud config is parsed from the local config file", () => {
-		withConfig(JSON.stringify({ cloud: { upstream: "https://config.example", token: "config-token" } }));
-		delete process.env.OPENSESSION_CLOUD_UPSTREAM;
-		delete process.env.OPENSESSION_CLOUD_TOKEN;
-		expect(configuredCloud()).toEqual({
-			upstream: "https://config.example",
-			token: "config-token",
-		});
-	});
 
   test("repos section is authoritative and applies id-derived defaults", () => {
     withConfig(

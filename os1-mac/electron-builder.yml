@@ -24,22 +24,6 @@ extraResources:
     to: Assets.car
   - from: build/vendor/opencode
     to: opencode
-  # Local Sessions with zero setup: a pinned Bun runtime plus the prebundled
-  # server sidecar (scripts/build-server-sidecar.ts + scripts/fetch-bun.sh).
-  - from: build/vendor/bun
-    to: bun
-  - from: build/vendor/server
-    to: server
-  # The sidecar's own dependencies need their own entry. electron-builder's
-  # copy filter drops a top-level node_modules outright — createFilter in
-  # app-builder-lib returns false for `relative === "node_modules"` before it
-  # looks at any pattern, so no `filter:` can let it back in. Copying the
-  # directory as its own root sidesteps that: nothing inside it is called
-  # "node_modules" at the root. Without this the packaged sidecar has no
-  # bridge packages at all and Local Sessions cannot resolve
-  # opencode-with-claude at run time.
-  - from: build/vendor/server/node_modules
-    to: server/node_modules
 afterPack: scripts/sign-binaries.js
 mac:
   category: public.app-category.developer-tools
@@ -51,13 +35,10 @@ mac:
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
-  # The afterPack hook signs the vendored runtimes (opencode + bun get the JIT
-  # entitlement; the sidecar's native modules get plain hardened-runtime
-  # signatures). Keep the normal signer from replacing those signatures.
+  # The afterPack hook signs the vendored OpenCode runtime. Keep the normal
+  # signer from replacing that signature.
   signIgnore:
     - Contents/Resources/opencode$
-    - Contents/Resources/bun$
-    - Contents/Resources/server/
   # Universal links: once the Developer ID provisioning profile for
   # dev.tella.os1.shell exists (README "Universal links"), switch ONLY `entitlements`
   # above to build/entitlements.mac.applinks.plist and add:

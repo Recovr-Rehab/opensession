@@ -7,12 +7,6 @@
  */
 
 import type { RouteHandler } from "./context";
-import {
-	proxyCloudFrontendRequest,
-	proxyCloudSessionRequest,
-	proxyCloudTargetRequest,
-} from "../cloud-proxy";
-import { handleSessionTransferRoutes } from "./session-transfer";
 import { handleAuthRoutes } from "./auth";
 import { handleMediaRoutes } from "./media";
 import { handleStaticAssetsRoutes } from "./static-assets";
@@ -32,7 +26,6 @@ import { handlePrRoutes } from "./pr";
 import { handleSessionGitRoutes } from "./session-git";
 import { handlePreviewRoutes } from "./preview";
 import { handleWorkspaceRoutes } from "./workspace";
-import { handleLocalReposRoutes } from "./local-repos";
 import { handleAutomationsRoutes } from "./automations";
 import { handleHumanAsksRoutes } from "./human-asks";
 import { handleKeychainRoutes } from "./keychain";
@@ -65,13 +58,7 @@ export const routeHandlers: RouteHandler[] = [
 	// before dispatch in opensession.ts) and must never be shadowed.
 	handleAuthRoutes,
 	handleMediaRoutes,
-	// Local profile only: serve the current hosted shell and assets from the
-	// loopback origin. API and WebSocket paths are excluded by the handler.
-	proxyCloudFrontendRequest,
 	handleStaticAssetsRoutes,
-	// Resolve session ownership before local session-domain handlers consume
-	// request bodies or answer from process-local state.
-	proxyCloudSessionRequest,
 	handlePlainRoutes,
 	handleFeedsRoutes,
 	handleSlackChannelRoutes,
@@ -79,10 +66,6 @@ export const routeHandlers: RouteHandler[] = [
 	handleSystemRoutes,
 	handleOs1UpdateRoutes,
 	handleLiveActivityRoutes,
-	handleSessionTransferRoutes,
-	// Local profile only: the cloud-target New Session palette reads the hosted
-	// model catalog and account pools instead of the reduced local equivalents.
-	proxyCloudTargetRequest,
 	// Before the generic session routes: /api/sessions/:id/assets* and
 	// /api/sessions/:id/notes are inside their path family and must not be
 	// swallowed by broader matches.
@@ -96,7 +79,6 @@ export const routeHandlers: RouteHandler[] = [
 	handlePrRoutes,
 	handleSessionGitRoutes,
 	handlePreviewRoutes,
-	handleLocalReposRoutes,
 	handleWorkspaceRoutes,
 	handleAutomationsRoutes,
 	handleHumanAsksRoutes,

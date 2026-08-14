@@ -533,7 +533,6 @@ export function App(
 		error: sessionsError,
 		archivedLoaded,
 		refreshArchived,
-		cloudUnreachable,
 		refresh,
 		inject,
 		unstick,
@@ -542,7 +541,6 @@ export function App(
 	} = useSessions({ loadArchived: route.view === "archived" });
 	const auth = useAuthStatus();
 	const currentUser = useCurrentUser();
-	const localMode = auth?.local === true;
 	const { connected, send, addHandler } = useWebSocket();
 	const sessionsRef = useRef(sessions);
 	sessionsRef.current = sessions;
@@ -3293,7 +3291,6 @@ export function App(
 				focused={focused}
 				hideHeader={splitMode && !focused}
 				hideRightPanel={splitMode && !focused}
-				localMode={localMode}
 				onBack={goBack}
 				onArchive={() =>
 					focused

@@ -33,7 +33,6 @@ import { githubUserAuthActive } from "./github-auth";
 import { homeDir, isNativeSessionId, OPENSESSION_SESSIONS_DIR } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { githubLoginFor } from "./shared/user-mappings";
-import { isLocalProfile } from "./profile";
 
 const HOME = homeDir();
 /** Env override is for tests; read once at first use (the map loads lazily). */
@@ -98,7 +97,7 @@ function persist(): void {
 
 /** Sign-in is required exactly when per-user GitHub auth is opted in. */
 export function webAuthRequired(): boolean {
-  return !isLocalProfile() && githubUserAuthActive();
+  return githubUserAuthActive();
 }
 
 /**

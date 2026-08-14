@@ -233,7 +233,6 @@ import { Tooltip } from "../ui/tooltip";
 import { CopyCheck, useCopy } from "../ui/copy";
 import { toast } from "../ui/toast";
 import { copySessionTranscript } from "../lib/transcript-copy";
-import { MoveToCloudDialog } from "./MoveToCloudDialog";
 import { isPinned, togglePin, onPinsChanged } from "../lib/pins";
 import { getLane, onLanesChanged, type Lane } from "../lib/lanes";
 import { ownedBy } from "../lib/sidebar-lanes";
@@ -317,8 +316,6 @@ interface Props {
 	/** The unfocused half of a split keeps its conversation chrome-free. */
 	hideHeader?: boolean;
 	hideRightPanel?: boolean;
-	/** True only when auth/status identifies this SPA as the local profile. */
-	localMode: boolean;
 	onBack: () => void;
 	/** Archive through the sidebar so the nearest visible row becomes active. */
 	onArchive?: () => void;
@@ -730,7 +727,6 @@ export function SessionViewer({
 	focused = true,
 	hideHeader = false,
 	hideRightPanel = false,
-	localMode,
 	onBack,
 	onArchive,
 	onArchived,
@@ -789,26 +785,6 @@ export function SessionViewer({
 	onOpenSubagent,
 	onSubagentBack,
 }: Props) {
-	const [localRepos, setLocalRepos] = useState<
-		Awaited<ReturnType<typeof fetchRepos>> | null | undefined
-	>(() => (localMode && session.local ? undefined : null));
-	useEffect(() => {
-		if (!localMode || !session.local) return;
-		let live = true;
-		setLocalRepos(undefined);
-		fetchRepos()
-			.then((repos) => {
-				if (live) setLocalRepos(repos);
-			})
-			.catch(() => {
-				if (live) setLocalRepos(null);
-			});
-		return () => {
-			live = false;
-		};
-	}, [localMode, session.local]);
-	const localRepoCapabilityLoading =
-		localMode && session.local && localRepos === undefined;
 	const reviewRepos = [
 		{ repo: session.repo || "repository", primary: true },
 		...(session.attachedRepos || []).map((repo) => ({
@@ -931,19 +907,8 @@ export function SessionViewer({
 			].filter((root) => Boolean(root.dir)),
 		[session.worktreeDir, session.attachedRepos],
 	);
-	const githubReviewRepos =
-		localMode && session.local && Array.isArray(localRepos)
-			? reviewRepos.filter(
-					(target) => localRepos.find((repo) => repo.id === target.repo)?.ghRepo,
-				)
-			: reviewRepos;
+	const githubReviewRepos = reviewRepos;
 	const panelReviewRepos = promotedPr ? [] : githubReviewRepos;
-	const localRepoHasNoGitHubRemote =
-		localMode &&
-		session.local &&
-		Array.isArray(localRepos) &&
-		githubReviewRepos.length === 0 &&
-		!session.linkedPrs?.length;
 	const shellTimingRef = useRef({
 		sessionId: session.id,
 		startedAt: performance.now(),
@@ -4056,7 +4021,6 @@ export function SessionViewer({
 	}
 
 	const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-	const [moveToCloudOpen, setMoveToCloudOpen] = useState(false);
 	const [deleting, setDeleting] = useState(false);
 	const [archiving, setArchiving] = useState(false);
 	const [deleteLabel, setDeleteLabel] = useState("");
@@ -4495,13 +4459,6 @@ export function SessionViewer({
 
 	return (
 		<div className="relative flex h-full min-h-0 flex-col">
-			{localMode && session.local && (
-				<MoveToCloudDialog
-					open={moveToCloudOpen}
-					sessionId={session.id}
-					onOpenChange={setMoveToCloudOpen}
-				/>
-			)}
 			{deleting && (
 				<div
 					/* `session-delete-overlay` stays on the markup as a bare hook with
@@ -4671,17 +4628,6 @@ export function SessionViewer({
 							send={send}
 							connected={connected}
 						/>
-						{localMode && session.local && (
-							<Menu.Item
-								onClick={() => {
-									setOverflowOpen(false);
-									setMoveToCloudOpen(true);
-								}}
-							>
-								<IconGlobe size={20} className={MENU_ICON} />
-								<span className="grow">Move to cloud</span>
-							</Menu.Item>
-						)}
 					</>
 				);
 				// Archive is the reversible primary "done with this" action — it sits
@@ -5644,20 +5590,7 @@ export function SessionViewer({
 						</div>
 					) : showReview && hasWorkspace ? (
 						<div className={VIEWER_REVIEW_MAIN}>
-							{localRepoCapabilityLoading ? (
-								<div className="flex h-full items-center justify-center text-sm text-faint">
-									Loading repository…
-								</div>
-							) : localRepoHasNoGitHubRemote ? (
-								<div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
-									<IconGlobe size={32} className="text-faint" />
-									<div className="text-sm font-medium text-fg">No GitHub remote</div>
-									<div className="max-w-xs text-xs leading-relaxed text-dim">
-										This repository is not connected to GitHub, so pull request details are unavailable.
-									</div>
-								</div>
-							) : (
-								<PrPanel
+							<PrPanel
 									onOpenPr={onOpenPr}
 									sessionId={session.id}
 									send={send}
@@ -5679,7 +5612,6 @@ export function SessionViewer({
 									linkable
 									walkthrough={session.walkthrough}
 								/>
-							)}
 						</div>
 					) : (
 					<>

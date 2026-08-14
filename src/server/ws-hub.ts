@@ -18,25 +18,6 @@ const g = globalThis as any;
 export const BOOT_ID: string = (g.__bootId ??= crypto.randomUUID());
 export const allClients: Set<any> = (g.__allClients ??= new Set());
 
-/** Close retained UI sockets that no longer belong to the verified local user. */
-export function revalidateLocalClients(
-	identity: { login: string; name: string } | null,
-): number {
-	let closed = 0;
-	for (const ws of allClients) {
-		if (identity && ws.data?.authLogin === identity.login) {
-			ws.data.authUser = identity.name;
-			ws.data.user = identity.name;
-			continue;
-		}
-		closed++;
-		try {
-			ws.close(4001, "Hosted GitHub session expired");
-		} catch {}
-	}
-	return closed;
-}
-
 export function broadcastToAll(msg: object) {
 	const payload = JSON.stringify(msg);
 	for (const ws of allClients) {
@@ -49,15 +30,6 @@ export function broadcastToAll(msg: object) {
 // WebSocket client state
 export interface WSClientData {
 	watchingSessionId: string | null;
-	/** Hosted session watched through the local profile's shared cloud lane. */
-	cloudWatchingSessionId?: string | null;
-	/** Stable virtual-client lane on the one hosted WebSocket connection. */
-	cloudLaneId?: string | null;
-	/** termIds of shell tabs currently proxied to the cloud upstream. */
-	cloudTermIds?: Set<string> | null;
-	/** Hosted-side authorization for the virtual-client multiplex protocol. */
-	cloudProxy?: boolean;
-	cloudProxyLanes?: Map<string, any>;
 	user: string | null;
 	/** Verified sign-in identity stamped at upgrade (web-auth.ts). When set,
 	 *  it overrides any client-claimed `user` in messages (ws-handlers.ts). */

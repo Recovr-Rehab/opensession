@@ -353,7 +353,7 @@ export function PrewarmingPanel() {
 		<SettingsPanel>
 			<SettingsHeader
 				title="Session acceleration"
-				description="Host-side caches and preview capacity that make local sessions start quickly. Project snapshots for remote sandboxes live in Sandboxes."
+				description="Host-side caches and preview capacity that make sessions start quickly. Project snapshots for remote sandboxes live in Sandboxes."
 			/>
 			<WarmPreviewsPanel />
 			<PreviewPoolPanel />

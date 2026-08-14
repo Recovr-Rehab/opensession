@@ -13,10 +13,6 @@ export const KNOWN_PEOPLE = new Set([...TEAM, AGENT_NAME].map((n) => n.toLowerCa
 
 export interface Props {
 	sessions: UnifiedSession[];
-	/** Local-profile-only chrome; false on the hosted app. */
-	localMode: boolean;
-	/** The configured cloud upstream did not answer the latest merged-list poll. */
-	cloudUnreachable: boolean;
 	/** The initial/live session list request failed entirely. */
 	sessionsError: string | null;
 	/** True until the first session-list request settles. */

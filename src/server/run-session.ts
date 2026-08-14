@@ -36,7 +36,6 @@ import {
 } from "./automations";
 import { defaultRepo } from "./config";
 import { isDevInstance } from "./dev-mode";
-import { isLocalProfile } from "./profile";
 import {
 	buildSessionContextNote,
 	buildEngineSwitchHandoffNote,
@@ -1547,13 +1546,7 @@ async function runSessionPromptInner(
 	// claude slot — recognizable by the ses_ shape; see engineSessionPatch).
 	// A claude run never resumes a ses_-shaped id: that ride was written by an
 	// opencode run, and handing it to the Claude SDK would fail the resume.
-	const pendingImportedEngineId =
-		session.importedFrom === "local" &&
-		session.opencodeSessionId?.startsWith("ses_import_")
-			? session.opencodeSessionId
-			: undefined;
 	const engineSessionId =
-		pendingImportedEngineId ||
 		(provider === "codex"
 			? session.codexThreadId
 			: provider === "pi"
@@ -1682,23 +1675,6 @@ async function runSessionPromptInner(
 			console.log(
 				`[prompt] ${sessionId}: cross-${familySwitch ? "family" : "provider"} switch ${lastProvider}→${provider}; bridging ${prevEntries.length} transcript entries`,
 			);
-		}
-	}
-	// A local-to-cloud import deliberately carries a synthetic OpenCode id so
-	// the first cloud turn attempts a resume, falls back to a fresh engine
-	// session, and then persists that real id. Its history lives in transcript
-	// v2 under the unified bks id, not in the retired OpenCode JSONL mirror, so
-	// bridge that store history into the fresh engine's first prompt here.
-	if (pendingImportedEngineId) {
-		const importedEntries = await mergedSessionTranscriptAsync(session);
-		if (importedEntries.length) {
-			switchHandoffEntries = importedEntries;
-			switchHandoff = buildEngineSwitchHandoffNote({
-				fromProvider: "opencode",
-				toProvider: "opencode",
-				sameEngineRestart: true,
-				entries: importedEntries,
-			});
 		}
 	}
 
@@ -2457,7 +2433,7 @@ export function sessionMentionsNote(
 // Loop ticker: fire due session loops (skips busy/archived sessions).
 // Guarded so a hot reload doesn't stack a second interval. Dev instances
 // never fire loops (real engine runs — see src/server/dev-mode.ts).
-if (!g.__opensessionBooted && !isLocalProfile() && !isDevInstance()) {
+if (!g.__opensessionBooted && !isDevInstance()) {
 	setInterval(() => {
 		for (const session of getCachedSessions()) {
 			const loop = session.loop;

@@ -902,8 +902,6 @@ function scanNativeSessions(): UnifiedSession[] {
       automationId: data.automationId,
       archived: data.archived || undefined,
       archivedReason: data.archivedReason,
-      upgradedTo: data.upgradedTo,
-      importedFrom: data.importedFrom,
       plainThreadId: data.plainThreadId,
       externalRefs: data.externalRefs,
       model: data.model,

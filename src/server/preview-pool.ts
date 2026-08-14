@@ -56,7 +56,6 @@ import { codeStorageConfig, configuredRepos, type Repo } from "./config";
 import { authedRemoteUrl } from "./codestorage/auth";
 import { homeDir, OPENSESSION_SESSIONS_DIR } from "./paths";
 import { isDevInstance } from "./dev-mode";
-import { isLocalProfile } from "./profile";
 import { sandboxConfig } from "./sandbox/config";
 import { redactUrl } from "./shared/redact";
 
@@ -2049,7 +2048,7 @@ async function reapOrphanGoldenbuilds(): Promise<void> {
 export function ensurePreviewPoolScheduler(): void {
   // Dev instances: the sweep docker-rm's os-preview-*/golden containers on
   // the shared docker daemon — it would reap production's warm pool.
-  if (isLocalProfile() || isDevInstance()) return;
+  if (isDevInstance()) return;
   if (g.__previewPoolTimer) return;
   const t = setInterval(() => {
     sweepPool().catch((e) => console.warn("[preview-pool] sweep failed:", e));

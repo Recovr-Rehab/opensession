@@ -44,12 +44,8 @@ export interface OsReviewSummary {
 
 export interface UnifiedSession {
   id: string;
-  /** Present and true when a local-profile server owns this session. */
+  /** Historical marker retained while old session files age out. */
   local?: boolean;
-  /** Cloud destination after a local session was upgraded. */
-  upgradedTo?: { id: string; url: string };
-  /** Marks a cloud session created by importing a local session. */
-  importedFrom?: "local";
   claudeSessionId: string | null;
   source: SessionSource;
   branch: string | null;
@@ -164,7 +160,7 @@ export interface UnifiedSession {
   archived?: boolean;
   /** Why this session is archived — powers the "Auto-archived" filter. */
   archivedReason?: "manual" | "idle" | "auto" | "plain";
-  /**
+	/**
    * This row is a SUMMARY, not the whole session — it came from the archived
    * index (`GET /api/sessions?archived=only&slim=1`), which carries what the
    * Archived surfaces render and drops the rest. Anything that reads beyond
@@ -533,10 +529,6 @@ export interface NativeSessionFile {
   archived?: boolean;
   archivedAt?: string;
   archivedReason?: "manual" | "idle" | "auto" | "plain";
-  /** Cloud destination after this local session was upgraded. */
-  upgradedTo?: { id: string; url: string };
-  /** Marks a cloud session created by importing a local session. */
-  importedFrom?: "local";
   goal?: string; // pinned goal, appended to every prompt until cleared
   goalId?: string; // Goal record this session is driven by (src/server/goals.ts)
   lastRunError?: { message: string; at: string }; // last run died on a terminal error; cleared on the next clean run

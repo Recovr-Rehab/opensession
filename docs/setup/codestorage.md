@@ -104,10 +104,6 @@ Beyond editing config by hand, three registration paths know code.storage:
 - `POST /api/setup/repos` with `{"source": "codestorage", "repoId":
   "acme/widget"}` — resolves the repo via the REST API, clones it (JWT-authed),
   registers it with `host`/`csRepo` set, and wires the credential helper.
-- `POST /api/repos` (desktop/local profile) accepts the same
-  `{"source": "codestorage", "repoId": ...}` body, and also recognizes a pasted
-  `https://<org>.code.storage/<repo>.git` clone URL or a local `path` whose
-  origin is a code.storage remote.
 
 In every path the persisted remote is the **credential-free** URL — auth comes
 from the URL-scoped credential helper, which mints a fresh JWT per fetch/push.

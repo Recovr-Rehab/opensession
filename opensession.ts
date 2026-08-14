@@ -30,19 +30,7 @@ import { initHumanAsks } from "./src/server/human-asks";
 import { interactiveMcpServers } from "./src/server/interactive-mcp";
 import { homeDir, OPENSESSION_SESSIONS_DIR } from "./src/server/paths";
 import { startPlainArchiveSweep } from "./src/server/plain-archive";
-import {
-	isLocalProfile,
-	isLoopbackHostname,
-	localAuthRequestKind,
-	localProfileLogin,
-	localProfileUser,
-	localRequestAllowed,
-	setLocalProfileIdentity,
-} from "./src/server/profile";
 import { devInstanceBootError, isDevInstance } from "./src/server/dev-mode";
-import { verifiedCloudIdentity } from "./src/server/cloud-proxy";
-import { assertLocalEngineCredentials } from "./src/server/local-engine-auth";
-import { assertLocalEngineRuntime } from "./src/server/opencode-runner";
 import { startPrReviewNotificationTicker } from "./src/server/pr-review-notifications";
 import { startPublicIngress } from "./src/server/public-ingress";
 import { recordRecoveredRunEvent, restorePromptQueues, resumeDrainedSessions, snapshotActiveSessions } from "./src/server/run-session";
@@ -70,7 +58,6 @@ import { sweepArchivedWorktrees } from "./src/server/worktree";
 import {
 	type WSClientData,
 	broadcastToAll,
-	revalidateLocalClients,
 } from "./src/server/ws-hub";
 import { mkdirSync, watch, writeFileSync } from "fs";
 import { homedir } from "node:os";
@@ -97,6 +84,11 @@ const HOST = process.env.HOST || "127.0.0.1";
 const HOME = homeDir();
 const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
 
+function isLoopbackHostname(hostname: string): boolean {
+	const normalized = hostname.replace(/^\[|\]$/g, "").toLowerCase();
+	return normalized === "127.0.0.1" || normalized === "::1" || normalized === "localhost";
+}
+
 // A dev instance (OPENSESSION_DEV=1, src/server/dev-mode.ts) sharing the live
 // state is the fleet-outage class bug: the run-rpc unix socket lives under the
 // sessions dir, and a second instance would unlink and steal it from the
@@ -109,22 +101,6 @@ const SESSIONS_DIR = OPENSESSION_SESSIONS_DIR;
 		console.error(devBootError);
 		process.exit(1);
 	}
-}
-
-if (isLocalProfile() && !isLoopbackHostname(HOST)) {
-	throw new Error("OPENSESSION_PROFILE=local only supports a loopback HOST");
-}
-if (isLocalProfile()) {
-	const identity = await verifiedCloudIdentity();
-	if (!identity) {
-		throw new Error(
-			"Local profile requires a valid hosted GitHub session; sign in through cloud mode first",
-		);
-	}
-	setLocalProfileIdentity(identity);
-	revalidateLocalClients(identity);
-	const localCredentials = assertLocalEngineCredentials();
-	assertLocalEngineRuntime(localCredentials.providers);
 }
 
 mkdirSync(SESSIONS_DIR, { recursive: true });
@@ -141,19 +117,6 @@ mkdirSync(SESSIONS_DIR, { recursive: true });
 // graceful (see SIGTERM handler below). A plain `bun run` (no --hot) just runs
 // each branch once, exactly as before.
 const g = globalThis as any;
-
-if (g.__localIdentityTimer) clearInterval(g.__localIdentityTimer);
-if (isLocalProfile()) {
-	g.__localIdentityTimer = setInterval(() => {
-		void verifiedCloudIdentity(fetch, 0).then((identity) => {
-			setLocalProfileIdentity(identity);
-			revalidateLocalClients(identity);
-		});
-	}, 15_000);
-	g.__localIdentityTimer.unref?.();
-} else {
-	delete g.__localIdentityTimer;
-}
 
 // Loaded agents (Plain/Linear/Slack/Stripe/…). Module-scoped because request
 // handlers (health routes) read it, and globalThis-backed so the set survives a
@@ -203,7 +166,7 @@ const server: import("bun").Server<WSClientData> = hotServe({
 		// OPENSESSION_DEV=1), so on a dev/demo instance anything missing here
 		// 404s instead of deep-linking — /workspace/<id>/review did exactly
 		// that (2026-08-05).
-		routes: isLocalProfile() ? {} : Object.fromEntries(
+		routes: Object.fromEntries(
 			[
 				"/",
 				"/index.html",
@@ -240,12 +203,6 @@ const server: import("bun").Server<WSClientData> = hotServe({
 			// confirmed poisoning self-restarts the process (run-ws.ts tripwire).
 			timerPoisonRequestCheck();
 			const url = new URL(req.url);
-			if (isLocalProfile() && !localRequestAllowed(req)) {
-				return Response.json(
-					{ error: "Local profile only accepts same-origin loopback requests" },
-					{ status: 403 },
-				);
-			}
 			const workloadIdentity = await handleWorkloadIdentityRequest(req);
 			if (workloadIdentity) return workloadIdentity;
 			// The bare domain root is the ONLY public URL form (os.tella.dev,
@@ -307,26 +264,9 @@ const server: import("bun").Server<WSClientData> = hotServe({
 			// page/asset loads (the sign-in screen must render). The verified
 			// identity rides RouteContext and the WS upgrade data, where it
 			// overrides any client-claimed user name.
-			const hostedLoopback =
-				!isLocalProfile() && isLoopbackHostname(url.hostname);
+			const hostedLoopback = isLoopbackHostname(url.hostname);
 			let authUser: WebIdentity | null = null;
-			if (isLocalProfile()) {
-				const localAuthKind = localAuthRequestKind(path, req.method);
-				if (localAuthKind) {
-					authUser = await verifiedCloudIdentity();
-					setLocalProfileIdentity(authUser);
-					revalidateLocalClients(authUser);
-					if (!authUser && localAuthKind === "protected") {
-						return Response.json(
-							{ error: "Hosted GitHub session expired; sign in through cloud mode again" },
-							{ status: 401 },
-						);
-					}
-				} else if (localProfileLogin()) {
-					authUser = { login: localProfileLogin(), name: localProfileUser() };
-				}
-			}
-			if (!isLocalProfile() && webAuthRequired()) {
+			if (webAuthRequired()) {
 				authUser = resolveWebAuth(req);
 				// Server-local CDP/CLI traffic has its own machine principal. A
 				// teammate's cookie must never let automation act as that person.
@@ -402,20 +342,13 @@ const server: import("bun").Server<WSClientData> = hotServe({
 				// The verified identity is stamped in the historical picker format
 				// (first name — what createdBy/attribution have always stored);
 				// the GitHub login rides along for createdByLogin stamping.
-				const authFirst = authUser
-					? isLocalProfile()
-						? authUser.name
-						: authUser.name.split(" ")[0]
-					: null;
+				const authFirst = authUser ? authUser.name.split(" ")[0] : null;
 				const upgraded = server.upgrade(req, {
 					data: {
 						watchingSessionId: null,
 						user: authFirst,
 						authUser: authFirst,
 						authLogin: authUser?.login || null,
-						cloudProxy:
-							!isLocalProfile() &&
-							req.headers.get("x-opensession-cloud-proxy") === "1",
 						// Headful/headless CDP browsers used by agents open the hosted app
 						// through loopback and can leave inspection tabs alive for days. They
 						// may subscribe to transcripts, but are never a human looking at the
@@ -518,15 +451,14 @@ async function loadAgents(): Promise<AgentModule[]> {
 // any of it — the already-running agents/timers keep going untouched (only a
 // real restart reloads their code, and that restart is now graceful, below).
 if (!g.__opensessionBooted) {
-	const localProfile = isLocalProfile();
-	// Dev instances (src/server/dev-mode.ts) boot like the local profile here:
+	// Dev instances (src/server/dev-mode.ts) skip background work here:
 	// no agents, no webhook intake, no schedulers/sweeps, no detached-server
 	// adoption — a second instance next to production must never double-send
 	// or steal live runs. State writes are additionally isolated (the
 	// devInstanceBootError guard at the top of this file enforces it).
 	const devInstance = isDevInstance();
 	let detachedAdoption: Promise<number> | undefined;
-	if (!localProfile && !devInstance) {
+	if (!devInstance) {
 	startLiveActivitySync();
 	// Detached engine servers (src/server/opencode-detach.ts): opt this — and
 	// only this — process into spawning `opencode serve` in transient systemd
@@ -661,11 +593,7 @@ if (!g.__opensessionBooted) {
 	} else {
 		agents = [];
 		g.__agents = agents;
-		console.log(
-			localProfile
-				? "[profile] Local profile active: background agents and schedulers are disabled"
-				: "[dev-mode] Dev instance: background agents, webhooks and schedulers are disabled",
-		);
+		console.log("[dev-mode] Dev instance: background agents, webhooks and schedulers are disabled");
 	}
 
 	// code.storage-hosted repos: make sure existing main checkouts have the
@@ -691,15 +619,13 @@ if (!g.__opensessionBooted) {
 		// Adopt detached `opencode serve` scopes that survived the restart FIRST —
 		// resumeInterruptedRuns reattaches journaled runs to these adopted pool
 		// entries (tryReattachOpencodeRun) instead of re-prompting their sessions.
-		if (!localProfile) {
-			try {
-				const adopted = await (detachedAdoption ?? adoptDetachedOpencodeServers());
-				if (adopted > 0) {
-					console.log(`[runner] Adopted ${adopted} detached opencode server(s) from before restart`);
-				}
-			} catch (e) {
-				console.error("[runner] Detached-server adoption failed:", e);
+		try {
+			const adopted = await (detachedAdoption ?? adoptDetachedOpencodeServers());
+			if (adopted > 0) {
+				console.log(`[runner] Adopted ${adopted} detached opencode server(s) from before restart`);
 			}
+		} catch (e) {
+			console.error("[runner] Detached-server adoption failed:", e);
 		}
 		const resumedIds = resumeInterruptedRuns(
 			(bksSessionId, terminalEvent) => {
@@ -806,7 +732,7 @@ if (!g.__opensessionBooted) {
 	// Ongoing hygiene (every 6h): remove worktrees of sessions that were manually
 	// archived more than 14 days ago and have no WIP. Destructive on the shared
 	// filesystem/docker daemon, so dev instances skip it too.
-	if (!localProfile && !devInstance) setInterval(
+	if (!devInstance) setInterval(
 		async () => {
 			try {
 				const removed = await sweepArchivedWorktrees(getAllSessions(), 14);

@@ -167,7 +167,7 @@ export function SpinOffMenu({ session, entries, send, connected }: Props) {
       {/* The form used to be an absolutely-positioned panel inside this menu
           popup — which clips overflow, so a 380px form in a ≤300px menu was
           sawn down to a sliver of its own buttons. It's a form opened from a
-          menu row, so it takes the same shape as the sibling Move-to-cloud
+          menu row, so it takes the same shape as the sibling action
           dialog: ui/modal, which portals out of the menu and brings the shared
           focus trap, Escape/backdrop dismissal and enter/exit motion. */}
       <Modal.Root

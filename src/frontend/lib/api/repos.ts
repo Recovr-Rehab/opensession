@@ -74,11 +74,11 @@ export async function uploadRepoIconApi(
 
 const REPO_FETCH_RETRY_DELAYS_MS = [250, 750, 1_500];
 
-export async function fetchRepos(cloud = false): Promise<RepoInfo[]> {
+export async function fetchRepos(): Promise<RepoInfo[]> {
 	for (let attempt = 0; ; attempt++) {
 		try {
 			const data = await request<{ repos?: RepoInfo[] }>(
-				`/repos${cloud ? "?cloud=1" : ""}`,
+				"/repos",
 				{ label: "Failed to load repositories" },
 			);
 			// Recorded here rather than at the call sites: every tile reads the
@@ -86,9 +86,8 @@ export async function fetchRepos(cloud = false): Promise<RepoInfo[]> {
 			rememberRepoColors(data?.repos ?? []);
 			// The sidebar's default grouping depends on how many projects there
 			// are, and has to resolve before this request can answer — so the
-			// size of the registered set is cached for the next load. Only the
-			// local set counts; `cloud` lists a different one.
-			if (!cloud) rememberRepoCount((data?.repos ?? []).length);
+			// size of the registered set is cached for the next load.
+			rememberRepoCount((data?.repos ?? []).length);
 			return data?.repos ?? [];
 		} catch (error) {
 			const retryDelay = REPO_FETCH_RETRY_DELAYS_MS[attempt];

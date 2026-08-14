@@ -1,11 +1,7 @@
 # OS¹ for Mac
 
-A thin Electron shell around a configured Open Session server, with
-an opt-in local mode that supervises a local Open Session backend. Both modes use
-the current hosted frontend; in local mode the loopback server proxies that app
-shell so its same-origin API and WebSocket requests stay local. The app only
-owns the window, navigation policy, local process lifecycle, notifications,
-dock badge and deep links.
+A thin Electron shell around a configured Open Session server. The app owns
+the window, navigation policy, notifications, dock badge and deep links.
 
 The shell lives in `os1-mac/` inside the Open Session repository so native
 window changes and their frontend counterparts can ship together.
@@ -20,50 +16,6 @@ bun start
 
 Requires network access to the configured server; otherwise you get the
 built-in retry screen.
-
-### Local sessions
-
-Choose **OS¹ → Use Local Sessions** and the app relaunches against a supervised
-local server. Packaged builds work out of the box: the app bundle ships a
-prebundled server sidecar (`Contents/Resources/server`, built by
-`scripts/build-server-sidecar.ts`) and a pinned Bun runtime
-(`Contents/Resources/bun`), so no checkout, bun install, or PATH setup is
-needed. What local sessions still need from the machine is a model login —
-the Claude Code or Codex CLI credentials the local engine runs on.
-`OS1_LOCAL=1 bun start` forces the same mode for development.
-
-To hack on the server itself, a source checkout overrides the sidecar:
-
-```sh
-git clone https://github.com/tellahq/opensession ~/os1/server
-cd ~/os1/server
-bun install
-```
-
-The shell configuration is `settings.json` in Electron's `app.getPath("userData")`
-directory:
-
-```json
-{
-  "localMode": true,
-  "serverDir": "/Users/ada/code/opensession"
-}
-```
-
-All fields are optional. `localMode` defaults to `false`. The server is
-resolved in order: `serverDir` (a source checkout or a sidecar-shaped
-directory), then the `~/os1/server` checkout when it exists, then the bundled
-sidecar. Local mode accepts only the active
-`opensession_auth` cookie from the Electron cloud session: sign in through cloud
-mode first, then enable local sessions. An expired or revoked session locks the
-local API and WebSocket until cloud sign-in and local mode are restarted. Child
-output is appended to `local-server.log` in the same user-data directory.
-
-The local server supplies backend code only. It never builds or serves its
-frontend; shell documents and assets are proxied from the configured cloud
-upstream (the distribution's `opensession.defaultServer`, or `OS1_CLOUD_URL`)
-while the browser origin remains the loopback server. The sidecar is frozen at the shell's release (auto-update
-keeps it current); a source checkout tracks whatever you pull.
 
 ### Iterating on the frontend before it ships
 
@@ -91,19 +43,11 @@ empty local state, optionally rsync'd from prod.
 
 ## Architecture
 
-- `src/main.js` — a single sandboxed `BrowserWindow` loading the cloud or active
-  loopback server (`contextIsolation`, no Node in the renderer). In-window
+- `src/main.js` — a single sandboxed `BrowserWindow` loading the configured
+  server (`contextIsolation`, no Node in the renderer). In-window
   navigation is limited to the active app origin plus
   `github.com` (the OAuth redirect flow); everything else opens in the default
   browser. Window close hides to the dock; state persists across launches.
-- `src/local-server.js` — local-mode server resolution and supervision. It
-  resolves which server to run (configured dir → `~/os1/server` checkout →
-  bundled sidecar) and which Bun to run it with (bundled → `~/.bun` → PATH),
-  picks a free loopback port, starts `bun run opensession.ts` (or the
-  sidecar's `opensession.js`, pointing OPENSESSION_MCP_PROXY_ENTRY at its
-  prebundled `mcp-proxy.js`), waits for `/api/health`, restarts crashes with
-  exponential backoff, logs output under user data, and sends SIGTERM on app
-  quit.
 - `src/preload.js` — exposes `window.os1` (`desktop`, `setBadge`, `clearBadge`)
   for the frontend to feature-detect and mirror its app badge to the dock.
 - `src/offline.html` — retry screen for when the configured server is

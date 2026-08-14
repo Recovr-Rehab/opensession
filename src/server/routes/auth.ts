@@ -30,7 +30,6 @@ import {
 } from "../github-auth";
 import { configuredServer } from "../config";
 import { randomBytes } from "crypto";
-import { isLocalProfile, localProfileLogin, localProfileUser } from "../profile";
 import { workspaceAdminAuthorized } from "../workspace-auth";
 
 const STATE_COOKIE = "opensession_oauth_state";
@@ -59,17 +58,6 @@ export async function handleAuthRoutes(
 	if (!path.startsWith("/api/auth/")) return undefined;
 
 	if (path === "/api/auth/status" && req.method === "GET") {
-		if (isLocalProfile()) {
-			const login = localProfileLogin();
-			const name = localProfileUser();
-			return Response.json({
-				required: true,
-				authenticated: !!login && !!name,
-				local: true,
-				admin: true,
-				...(login && name ? { login, name } : {}),
-			});
-		}
 		const identity = resolveWebAuth(req);
 		return Response.json({
 			required: webAuthRequired(),

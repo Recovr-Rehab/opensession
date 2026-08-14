@@ -66,7 +66,6 @@ import { prHostFor } from "../pr-host";
 import { getRepo, removeWorktree, repoForPath } from "../worktree";
 import { preparingWorkspaces } from "../ws-hub";
 import { existsSync } from "fs";
-import { mergedCloudSessions } from "../cloud-proxy";
 import {
 	githubCredentialRequiredResponse,
 	githubMutationCredential,
@@ -78,7 +77,6 @@ const SESSIONS_RESPONSE_TTL_MS = 5_000;
 interface SessionsResponseSnapshot {
 	text: string;
 	hash: string;
-	cloudUnreachable: boolean;
 	expiresAt: number;
 	gzip?: Blob;
 }
@@ -125,8 +123,6 @@ function sessionsListResponse(
 		ETag: etag,
 		Vary: "Accept-Encoding",
 	});
-	if (snapshot.cloudUnreachable)
-		headers.set("X-OpenSession-Cloud-Unreachable", "true");
 	if (gzip) headers.set("Content-Encoding", "gzip");
 	if (req.headers.get("If-None-Match") === etag)
 		return new Response(null, { status: 304, headers });
@@ -360,10 +356,7 @@ export async function handleSessionsRoutes(
 		if (cached && cached.expiresAt > Date.now())
 			return sessionsListResponse(req, cached);
 		const enriched = getCachedSessions().map(enrichSession);
-		// Slice AFTER the cloud merge: on a local profile the upstream's
-		// archived sessions belong on the Archived page too, and filtering
-		// first would drop them without a trace.
-		const { sessions, cloudUnreachable } = await mergedCloudSessions(enriched);
+		const sessions = enriched;
 		const sliced =
 			variant === "include"
 				? sessions
@@ -376,7 +369,6 @@ export async function handleSessionsRoutes(
 		const snapshot: SessionsResponseSnapshot = {
 			text,
 			hash: Bun.hash(text).toString(16),
-			cloudUnreachable,
 			expiresAt: Date.now() + SESSIONS_RESPONSE_TTL_MS,
 		};
 		sessionsResponseSnapshots.set(variant, snapshot);
@@ -1033,8 +1025,7 @@ export async function handleSessionsRoutes(
 	//
 	// Last in the family on purpose — every more specific /api/sessions/…
 	// route, here and in the modules ahead of this one, has already had its
-	// refusal. On a local profile the cloud proxy claims non-local ids before
-	// dispatch reaches here, so hydrating a cloud session works unchanged.
+	// refusal.
 	{
 		const m = path.match(/^\/api\/sessions\/([^/]+)$/);
 		if (m && req.method === "GET") {

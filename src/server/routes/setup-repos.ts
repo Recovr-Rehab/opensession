@@ -5,11 +5,7 @@
  *   GET  /api/setup/github/repos  — repos the instance's GitHub credential can
  *                                   see, for the registration picker.
  *   POST /api/setup/repos         — clone `owner/name` and register it in
- *                                   config.repos (generalizes the desktop-only
- *                                   flow in local-repos.ts to server installs).
- *
- * The desktop-only `GET/POST /api/repos` routes and their isLocalProfile()
- * fence are untouched — this is the server path.
+ *                                   config.repos.
  */
 
 import { existsSync, mkdirSync, rmSync } from "fs";
@@ -24,10 +20,9 @@ import {
 } from "../config-mutation";
 import { githubCredentialForLogin } from "../github-auth";
 import { homeDir } from "../paths";
-import { isLocalProfile, localProfileRoot } from "../profile";
 import { fetchWithTimeout } from "../shared/fetch-with-timeout";
 import type { RouteContext } from "./context";
-import { inspectRepo, localRepoId } from "./local-repos";
+import { inspectRepo, repoIdFromName } from "./repo-inspection";
 
 /** Strict: this value reaches a spawn argv (always array-spawned, never a
  *  shell string — the regex is belt AND suspenders). */
@@ -231,9 +226,7 @@ async function cloneGithubRepo(fullName: string, dest: string): Promise<void> {
 }
 
 function checkoutsRoot(): string {
-  return isLocalProfile()
-    ? `${localProfileRoot()}/repos`
-    : `${homeDir()}/checkouts`;
+  return `${homeDir()}/checkouts`;
 }
 
 async function registerGithubRepo(input: {
@@ -241,7 +234,7 @@ async function registerGithubRepo(input: {
   id?: string;
 }): Promise<RepoSection & { id: string }> {
   const name = input.fullName.split("/")[1];
-  const id = localRepoId(input.id?.trim() || name);
+  const id = repoIdFromName(input.id?.trim() || name);
   if (configuredRepos()[id]) {
     const err = new Error(`Repository id already registered: ${id}`);
     (err as any).status = 409;
@@ -300,7 +293,7 @@ async function registerCodestorageRepo(input: {
   const resolved = await getCsRepo(input.repoId);
   const csRepo = resolved.url || input.repoId;
   const name = csRepo.split("/").pop() || csRepo;
-  const id = localRepoId(input.id?.trim() || name);
+  const id = repoIdFromName(input.id?.trim() || name);
   if (configuredRepos()[id]) {
     const err = new Error(`Repository id already registered: ${id}`);
     (err as any).status = 409;

@@ -28,7 +28,6 @@ import { mergedSessionTranscriptAsync } from "./sessions";
 import { opencodeOneShot } from "./opencode-oneshot";
 import { audit } from "./audit";
 import { isDevInstance } from "./dev-mode";
-import { isLocalProfile } from "./profile";
 import {
 	SessionSearchStore,
 	type SearchHit,
@@ -344,7 +343,7 @@ export async function sweepSessionIndex(): Promise<{
 // Sweeper ticker — one interval process-wide; hot reloads must not stack a
 // second one (same guard as goal-runner's ticker). Dev instances skip it:
 // distillation runs engine one-shots and writes the search db.
-if (!g.__opensessionBooted && !isLocalProfile() && !isDevInstance()) {
+if (!g.__opensessionBooted && !isDevInstance()) {
 	setTimeout(() => void sweepSessionIndex().catch(() => {}), FIRST_SWEEP_DELAY_MS);
 	setInterval(() => void sweepSessionIndex().catch(() => {}), SWEEP_MS);
 }

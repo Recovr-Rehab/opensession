@@ -262,8 +262,6 @@ const AUTOMATION_COLOR = "#d29922";
 
 export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	sessions,
-	localMode,
-	cloudUnreachable,
 	sessionsError,
 	sessionsLoading,
 	onRetrySessions,
@@ -2792,11 +2790,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				{reviewAsker && !editing && (
 					<ReviewAskerFace asker={reviewAsker} />
 				)}
-				{localMode && row.sessions.some((session) => session.local) && !editing && (
-					<span className="shrink-0 rounded-full border border-line px-1.5 py-px text-meta font-medium tracking-wide text-faint">
-						local
-					</span>
-				)}
 				{/* Teammates currently focused on a session in this workspace. */}
 				{!editing &&
 					(() => {
@@ -3990,16 +3983,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					</button>
 				</Tooltip>
 			)}
-			{localMode && cloudUnreachable && (
-				<div
-					className="mx-2 mt-2 flex items-center gap-2 rounded-md border border-line bg-panel px-2.5 py-2 text-[11px] text-dim"
-					role="status"
-					title="Local sessions are still available"
-				>
-					<IconGlobe size={15} className="shrink-0 text-faint" />
-					<span>Cloud temporarily unavailable</span>
-				</div>
-			)}
 			<div
 				className="block max-w-full min-w-0 flex-none"
 				style={{ order: 0 }}
@@ -4895,7 +4878,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							node: (
 								<SidebarItem
 									session={s}
-									localMode={localMode}
 									selected={automationRowSelected(s)}
 									unread={
 										s.id !== selectedId &&
@@ -5309,7 +5291,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 													<SidebarItem
 														key={s.id}
 														session={s}
-														localMode={localMode}
 														selected={automationRowSelected(s)}
 														unread={
 															s.id !== selectedId &&

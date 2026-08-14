@@ -24,7 +24,6 @@ import { type SessionState, type SessionSummary, registerSessionControl } from "
 import { type ResolvedCreate, forkHandoffContext, openCreatedSession, resolveForkContext, resolvePinnedAccountId } from "./session-create";
 import { resolveSessionRepoContext, workspaceOwningWorktree } from "./session-repos";
 import { engineUserTexts, getAllSessions, mergedSessionTranscript } from "./sessions";
-import { isLocalSessionUpgradeInProgress } from "./session-transfer-state";
 import { rebuildIndex } from "./slack-links";
 import { handleSlashCommand } from "./slash-commands";
 import { type UnifiedSession } from "./types";
@@ -111,13 +110,6 @@ registerSessionControl({
 		const session = findSession(id);
 		if (!session)
 			return { status: "error" as const, message: "No session with that id.", deliveryId };
-		if (session.upgradedTo || isLocalSessionUpgradeInProgress(id)) {
-			return {
-				status: "error" as const,
-				message: "This session is being upgraded to the cloud. Retry there after the upgrade completes.",
-				deliveryId,
-			};
-		}
 
 		// Slash commands (/loop, /goal, /model, /help) are handled by opensession
 		// itself, exactly like the WebSocket prompt path — checked BEFORE the

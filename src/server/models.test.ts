@@ -21,9 +21,6 @@ import {
   interactiveDefaultModel,
   interactiveFallbackModel,
   KNOWN_MODELS,
-  LOCAL_PROFILE_MODELS,
-  localProfileDefaultModel,
-  localProfileModels,
   normalizeModelEffort,
   opencodeModelLabel,
   piModelLabel,
@@ -251,54 +248,6 @@ describe("accountProviderForModel", () => {
   });
 });
 
-describe("local profile models", () => {
-  it("offers only providers whose CLI credentials exist", () => {
-    const home = mkdtempSync(join(tmpdir(), "local-models-"));
-    mkdirSync(`${home}/.claude`, { recursive: true });
-    writeFileSync(
-      `${home}/.claude/.credentials.json`,
-      JSON.stringify({
-        claudeAiOauth: { accessToken: "claude-access", refreshToken: "claude-refresh", expiresAt: Date.now() + 60_000 },
-      }),
-    );
-    process.env.HOME = home;
-    expect(LOCAL_PROFILE_MODELS.length).toBeGreaterThan(0);
-    expect(localProfileModels().every((model) => model.id.startsWith("anthropic/"))).toBe(true);
-    rmSync(home, { recursive: true, force: true });
-  });
-
-  it("maps the local default straight through OpenCode and disables fallback", () => {
-    const home = mkdtempSync(join(tmpdir(), "local-models-"));
-    mkdirSync(`${home}/.codex`, { recursive: true });
-    const payload = Buffer.from(
-      JSON.stringify({ exp: Math.floor((Date.now() + 60_000) / 1000) }),
-    ).toString("base64url");
-    writeFileSync(
-      `${home}/.codex/auth.json`,
-      JSON.stringify({ tokens: { access_token: `header.${payload}.signature` } }),
-    );
-    process.env.HOME = home;
-    process.env.OPENSESSION_PROFILE = "local";
-    process.env.OPENSESSION_MODEL = "openai/gpt-5.6-sol";
-    expect(localProfileDefaultModel()).toBe("openai/gpt-5.6-sol");
-    expect(interactiveDefaultModel()).toBe("opencode/openai/gpt-5.6-sol");
-    expect(interactiveFallbackModel()).toBeUndefined();
-    rmSync(home, { recursive: true, force: true });
-  });
-
-  it("rejects an explicit default whose CLI provider is unavailable", () => {
-    const home = mkdtempSync(join(tmpdir(), "local-models-"));
-    mkdirSync(`${home}/.claude`, { recursive: true });
-    writeFileSync(`${home}/.claude/.credentials.json`, JSON.stringify({
-      claudeAiOauth: { accessToken: "claude-access", refreshToken: "claude-refresh", expiresAt: Date.now() + 60_000 },
-    }));
-    process.env.HOME = home;
-    process.env.OPENSESSION_PROFILE = "local";
-    process.env.OPENSESSION_MODEL = "openai/gpt-5.6-sol";
-    expect(() => localProfileDefaultModel()).toThrow("CLI subscription credentials were not found");
-    rmSync(home, { recursive: true, force: true });
-  });
-});
 
 describe("The Dial", () => {
   it("resolves preset ids without minting a bogus opencode/dial passthrough", () => {

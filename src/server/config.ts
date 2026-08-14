@@ -18,7 +18,6 @@ import { homeDir } from "./paths";
 import { existsSync, readFileSync, statSync } from "fs";
 import { resolve as resolvePath } from "path";
 import { statePath } from "./paths";
-import { isLocalProfile, localProfileRoot } from "./profile";
 import { writeFileAtomic } from "./shared/atomic-write";
 
 const HOME = homeDir();
@@ -27,7 +26,6 @@ const OPENSESSION_ROOT = resolvePath(import.meta.dir, "../..");
 export function configPath(): string {
   return (
     process.env.OPENSESSION_CONFIG ||
-    (isLocalProfile() ? `${localProfileRoot()}/config.json` : undefined) ||
     statePath(".opensession/config.json")
   );
 }
@@ -53,13 +51,6 @@ export interface PathsSection {
   opencodeBin?: string;
   worktreesDir?: string;
   mcpConfig?: string;
-}
-
-export interface CloudSection {
-  /** Hosted Open Session instance merged into the local profile. */
-  upstream?: string;
-  /** Web-session bearer token for the hosted instance. */
-  token?: string;
 }
 
 /** How NEW sessions on a `sharedCheckout` repo get their working dir — see
@@ -203,7 +194,6 @@ export interface BrandingSection {
 export interface OpenSessionConfig {
   server?: ServerSection;
   paths?: PathsSection;
-  cloud?: CloudSection;
   /** Working-dir policy for `sharedCheckout` repos' new sessions. */
   selfDev?: SelfDevMode;
   repos?: Record<string, RepoSection>;
@@ -282,11 +272,6 @@ export interface ResolvedPaths {
   opencodeBin: string | null;
   worktreesDir: string;
   mcpConfig: string;
-}
-
-export interface ResolvedCloud {
-  upstream: string;
-  token: string | null;
 }
 
 export interface ResolvedIdentity {
@@ -439,14 +424,6 @@ function parseConfig(text: string): OpenSessionConfig {
       });
     }
 
-    const cloud = obj(raw.cloud);
-    if (cloud) {
-      cfg.cloud = defined({
-        upstream: str(cloud.upstream),
-        token: str(cloud.token),
-      });
-    }
-
     // Unknown values fall back to the default ("shared") but warn — a typo'd
     // "worktree" silently running sessions in the live checkout would defeat
     // the whole point of setting the flag. Parse results are cached by
@@ -582,7 +559,6 @@ export function configuredServer(): ResolvedServer {
 
 export function configuredPaths(): ResolvedPaths {
   const p = getConfig().paths || {};
-  const localRoot = localProfileRoot();
   return {
     claudeBin:
       process.env.OPENSESSION_CLAUDE_BIN ||
@@ -595,11 +571,11 @@ export function configuredPaths(): ResolvedPaths {
       p.worktreesDir ||
       // statePath, so a dev/demo instance's worktrees land in its own state
       // root instead of the operator's home. Unset ⇒ $HOME (unchanged).
-      (isLocalProfile() ? `${localRoot}/worktrees` : statePath(".opensession/worktrees")),
+      statePath(".opensession/worktrees"),
     mcpConfig:
       process.env.OPENSESSION_MCP_CONFIG ||
       p.mcpConfig ||
-      (isLocalProfile() ? `${localRoot}/mcp-config.json` : `${OPENSESSION_ROOT}/mcp-config.json`),
+      `${OPENSESSION_ROOT}/mcp-config.json`,
   };
 }
 
@@ -617,27 +593,13 @@ export function configuredSelfDev(): SelfDevMode {
   return getConfig().selfDev || "shared";
 }
 
-export function configuredCloud(): ResolvedCloud {
-  const cloud = getConfig().cloud || {};
-  return {
-    upstream:
-      process.env.OPENSESSION_CLOUD_UPSTREAM?.trim() ||
-      cloud.upstream?.trim() ||
-      configuredServer().publicBaseUrl,
-    token:
-      process.env.OPENSESSION_CLOUD_TOKEN?.trim() ||
-      cloud.token?.trim() ||
-      null,
-  };
-}
-
 /**
  * The repo registry. An explicit `repos` object is authoritative; without one,
  * a source checkout gets a portable self-repo so a first run is useful.
  */
 export function configuredRepos(): Record<string, Repo> {
   const configured = getConfig().repos;
-  const merged = (configured || isLocalProfile()) ? {} : builtinRepos();
+  const merged = configured ? {} : builtinRepos();
   for (const [id, entry] of Object.entries(configured || {})) {
     const base = merged[id];
     if (base) {
