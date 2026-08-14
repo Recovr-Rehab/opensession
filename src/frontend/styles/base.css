@@ -296,15 +296,17 @@ html[data-theme="light"] {
 	   white on charcoal. */
 	--bg: #ffffff;
 	--bg-raised: #f6f6f6;
-	/* The one L1 surface that does not take the full step, matched to the Codex
-	   sidebar: two units off white. The sidebar is a whole column of chrome, not
-	   a card, and at column scale the L1 grey reads as a panel bolted to the side
-	   of the page. What separates it is the seam and the shadow on the
-	   workspace's left edge, so the fill only has to be a shade cooler than the
-	   page, not a tier below it. --topbar-bg follows it, and --bg-raised keeps
-	   the full step for the cards and panels that need a fill of their own. */
-	--sidebar-bg: #fdfdfd;
-	--sidebar-material: rgba(253, 253, 253, 0.72);
+	/* The one L1 surface that does not take the full step: half of it, five
+	   units off white. The sidebar is a whole column of chrome, not a card, and
+	   at column scale the L1 grey reads as a panel bolted to the side of the
+	   page. What separates it is the seam and the shadow on the workspace's left
+	   edge, so the fill only has to be a shade cooler than the page, not a tier
+	   below it. Codex sets its sidebar two units off white, which was the first
+	   answer here and came out too faint to hold the column at all; this is the
+	   step in between. --topbar-bg follows it, and --bg-raised keeps the full
+	   step for the cards and panels that need a fill of their own. */
+	--sidebar-bg: #fafafa;
+	--sidebar-material: rgba(250, 250, 250, 0.72);
 	--sidebar-material-sheen: rgba(255, 255, 255, 0.42);
 	/* L3 + a barely-there shadow — the clean lifted chip from the Codex
 	   reference. It used to be #ffffff, byte-identical to --bg, so a chip, the
