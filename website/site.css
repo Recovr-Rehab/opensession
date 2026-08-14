@@ -503,7 +503,7 @@ summary:focus-visible {
 	gap: 8px;
 	padding: 0 24px;
 	border: 1px solid transparent;
-	border-radius: 16px;
+	border-radius: 20px;
 	cursor: pointer;
 	font-size: 15px;
 	font-weight: 600;
@@ -574,7 +574,7 @@ summary:focus-visible {
 	align-items: center;
 	justify-content: center;
 	padding: 0 18px;
-	border-radius: 13px;
+	border-radius: 16px;
 	letter-spacing: -0.012em;
 	cursor: pointer;
 	font-size: 14px;
