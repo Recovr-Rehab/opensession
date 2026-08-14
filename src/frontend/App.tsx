@@ -84,6 +84,7 @@ import { RestartOverlay } from "./components/RestartOverlay";
 import { MediaLightboxHost } from "./components/MediaLightbox";
 import { ChipHoverCards } from "./components/ChipHoverCard";
 import { UpdatePill } from "./components/UpdatePill";
+import { DesktopLinkButton } from "./components/DesktopLinkButton";
 import {
 	IconArchive,
 	IconUnarchive,
@@ -3867,6 +3868,7 @@ export function App(
 								onOpenSettings={() => navigate({ view: "settings" })}
 								connected={connected}
 							/>
+							<DesktopLinkButton />
 							<TitleBar onSearch={() => setSearchOpen(true)} />
 						</div>
 						<Sidebar

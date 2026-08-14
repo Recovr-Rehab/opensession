@@ -73,9 +73,11 @@ allowed navigation origin); the device-flow fallback link works too. The
 ## Deep links
 
 - `os1://…` opens the app and maps to the active server
-  (e.g. `os1://session/abc` → `/session/abc`). In local mode, incoming
-  universal links for the cloud host preserve their path on the local
-  origin.
+  (e.g. `os1://session/abc` → `/session/abc`). Shared session, workspace and
+  PR pages show **Open app** in a Mac browser. The click opens this protocol
+  while leaving the web page in place when the app is not installed. In local
+  mode, incoming universal links for the cloud host preserve their path on the
+  local origin.
 - **Universal links** (plain `https://os.tella.dev/…` links opening the app,
   e.g. from Slack — Tella's host; see the rebrand note under Signing & release):
   the server side is done — Open Session serves
@@ -95,8 +97,8 @@ allowed navigation origin); the device-flow fallback link works too. The
   Caveat: os.tella.dev resolves to a tailnet IP, so Apple's AASA CDN cannot
   fetch the association file. The entitlement therefore also lists the
   `?mode=developer` alternate, which fetches directly — each team device must
-  enable Associated Domains development mode for the links to activate. If
-  that proves too fiddly, `os1://` links remain the reliable path.
+  enable Associated Domains development mode for native Universal Links. The
+  **Open app** action above is the fallback on Macs without that setting.
 
 ## Signing & release
 
