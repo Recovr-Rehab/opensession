@@ -2305,20 +2305,20 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		count?: number;
 	}> = [
 		{
-			id: "prs",
-			label: SIDEBAR_TOOL_LABELS.prs,
-			icon: <IconPullRequest />,
-			active: prsActive,
-			onClick: onOpenPrs,
-			title: "Pull request worktrees",
-		},
-		{
 			id: "people",
 			label: SIDEBAR_TOOL_LABELS.people,
 			icon: <IconPeople />,
 			active: peopleActive,
 			onClick: onOpenPeople,
 			title: "Your teammates and their work",
+		},
+		{
+			id: "prs",
+			label: SIDEBAR_TOOL_LABELS.prs,
+			icon: <IconPullRequest />,
+			active: prsActive,
+			onClick: onOpenPrs,
+			title: "Pull request worktrees",
 		},
 		{
 			id: "tasks",

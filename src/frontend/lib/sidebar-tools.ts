@@ -1,6 +1,9 @@
+// People leads. The tools below it are places to read work; People is who the
+// work belongs to, and picking someone re-scopes the whole sidebar under it,
+// so it reads as the thing the rest is filtered by rather than a peer of them.
 export const SIDEBAR_TOOL_IDS = [
-	"prs",
 	"people",
+	"prs",
 	"tasks",
 	"catchup",
 	"supporttinder",
@@ -11,8 +14,8 @@ export const SIDEBAR_TOOL_IDS = [
 export type SidebarToolId = (typeof SIDEBAR_TOOL_IDS)[number];
 
 export const SIDEBAR_TOOL_LABELS: Record<SidebarToolId, string> = {
-	prs: "Pull requests",
 	people: "People",
+	prs: "Pull requests",
 	tasks: "Tasks",
 	catchup: "Catch up",
 	supporttinder: "Support Tinder",
@@ -52,7 +55,7 @@ const TOOLS_CHANGED_EVENT = "opensession-sidebar-tools-changed";
 // sidebar look busy and broken at once. They're one click away in the Tools
 // band's ••• menu and in Settings. Derived from the visible list so a tool
 // added later defaults to hidden rather than silently showing up for everyone.
-const DEFAULT_VISIBLE_TOOLS: SidebarToolId[] = ["prs", "people"];
+const DEFAULT_VISIBLE_TOOLS: SidebarToolId[] = ["people", "prs"];
 const DEFAULT_HIDDEN_TOOLS: SidebarToolId[] = SIDEBAR_TOOL_IDS.filter(
 	(id) => !DEFAULT_VISIBLE_TOOLS.includes(id),
 );

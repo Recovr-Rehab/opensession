@@ -20,11 +20,11 @@ describe("readHiddenSidebarTools", () => {
 	// A tool added to SIDEBAR_TOOL_IDS must not switch itself on for everyone
 	// who has never touched the setting. New accounts start with the two tools
 	// that need nothing set up.
-	test("a new account sees Pull requests and People, and nothing else", () => {
+	test("a new account sees People and Pull requests, and nothing else", () => {
 		const hidden = readHiddenSidebarTools();
 		expect([...SIDEBAR_TOOL_IDS].filter((id) => !hidden.has(id))).toEqual([
-			"prs",
 			"people",
+			"prs",
 		]);
 	});
 
