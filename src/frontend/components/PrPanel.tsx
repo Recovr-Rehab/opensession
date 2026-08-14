@@ -1334,9 +1334,9 @@ export function PrPanel({
       {/* The PR identity lives inside the scroll container, so it gets out of
           the way once the reviewer reaches the code. Only the page row sticks. */}
       <main
-        className={`min-h-0 flex-1 overflow-y-auto bg-surface [--review-file-header-top:52px] ${reviewing ? "pb-24 phone:pb-36" : "pb-4"}`}
+        className={`min-h-0 flex-1 overflow-y-auto bg-surface [--review-file-header-top:44px] ${reviewing ? "pb-24 phone:pb-36" : "pb-4"}`}
       >
-        <header className="flex h-11 shrink-0 items-center gap-2.5 px-6 phone:px-3">
+        <header className="flex h-10 shrink-0 items-center gap-2.5 px-6 phone:px-3">
           {/* State, in the app's own PR language, filled rather than drawn: the
               tone washes the whole chip and the glyph and word share its ink.
               It is its own object, so it gets more air than the pieces of the
@@ -1470,16 +1470,16 @@ export function PrPanel({
             because a 1px overflow here parks one (base.css opts Chrome out of
             overlay scrollbars).
 
-            The row is bottom-weighted rather than centred: `pt-2.5` shrinks the
-            content box while the border box stays 52px, so everything in the
-            row sits 5px lower. A tab label belongs to the underline beneath it,
+            The row is bottom-weighted rather than centred: `pt-2` shrinks the
+            content box while the border box stays 44px, so everything in the
+            row sits 4px lower. A tab label belongs to the underline beneath it,
             and centring parked it as far from that underline as from the title
             row above, which read as two loose halves. The padding is on the row
             so the tabs and the view control cannot drift apart, and it leaves
             the tabs full-height (they self-stretch to the content box, whose
             bottom is still the border box's) so each underline still paints
             over the hairline. */}
-        <div className="sticky top-0 z-[8] flex h-[52px] shrink-0 items-center gap-2 overflow-x-auto overflow-y-hidden bg-surface px-6 pt-2.5 shadow-[inset_0_-1px_0_var(--border)] [scrollbar-width:none] phone:px-2 [&::-webkit-scrollbar]:hidden">
+        <div className="sticky top-0 z-[8] flex h-11 shrink-0 items-center gap-2 overflow-x-auto overflow-y-hidden bg-surface px-6 pt-2 shadow-[inset_0_-1px_0_var(--border)] [scrollbar-width:none] phone:px-2 [&::-webkit-scrollbar]:hidden">
           {/* Flat labels carrying a 2px underline, the same cue the session tab
               strip and Reviews use. The strip's own hairline is an inset shadow
               rather than a border so each tab's underline can paint over it —
