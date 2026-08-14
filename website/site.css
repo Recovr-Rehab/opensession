@@ -36,7 +36,7 @@
 	   (#1f82bb in light). The foot is one step down so the fill has somewhere
 	   to shade to. */
 	--accent-blue: #1f82bb;
-	--accent-blue-deep: #186a90;
+	--accent-blue-deep: #1a6f9f;
 }
 
 * {
@@ -512,13 +512,20 @@ summary:focus-visible {
 }
 
 /* The filled control, shared by the rail CTA and the modal's submit: the
-   product's blue, laid on flat. No cast shadow and no gradient — a filled
-   button on a quiet page is a plate of colour, and the lit top edge is the
-   only relief it needs. */
+   product's blue at the top edge, shading one step deeper at the foot. Still
+   no cast shadow, which is what used to make it read as a marketing badge;
+   the relief comes from the fill itself plus the lit top edge. The shade runs
+   downward, so the deeper foot lifts white text to 5.5:1 instead of pushing
+   it below the top stop's 4.2. */
 .button-primary,
 .waitlist-form button {
 	border: 0;
 	background-color: var(--accent-blue);
+	background-image: linear-gradient(
+		180deg,
+		var(--accent-blue) 0%,
+		var(--accent-blue-deep) 100%
+	);
 	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
 	color: #fff;
 }
