@@ -373,10 +373,10 @@ final class SessionsListViewModel {
     }
 
     /// Workspace rows split into the web sidebar's Inbox bands. The bands are
-    /// exclusive, with priority needs-action > live-or-today > yesterday >
-    /// earlier, and every band ranks by last activity — deliberately ignoring
-    /// the "Created" sort, since an inbox orders by what moved last. Empty
-    /// bands are dropped.
+    /// exclusive, with priority needs-action > done > live-or-today >
+    /// yesterday > earlier, and every band ranks by last activity —
+    /// deliberately ignoring the "Created" sort, since an inbox orders by what
+    /// moved last. Empty bands are dropped.
     nonisolated static func inboxBands(
         _ workspaces: [SidebarWorkspace],
         now: Date = Date(),
@@ -393,6 +393,11 @@ final class SessionsListViewModel {
             let band: InboxBand
             if workspace.lane == .needsInput {
                 band = .needsAction
+            } else if workspace.lane == .done {
+                // Landed work leaves the day bands and settles at the bottom,
+                // the way the status lanes end on Done. A row that merged an
+                // hour ago is finished, not recent.
+                band = .done
             } else if workspace.isRunning || date >= dayStart {
                 // A live row is recent whatever its day — work in flight is
                 // recent by definition — but ranks by activity like the rest.
@@ -938,7 +943,7 @@ final class SessionsListViewModel {
 /// The web sidebar's Inbox bands: an email-style split of the rows by when
 /// they last moved, with "blocked on you" lifted out in front.
 enum InboxBand: String, CaseIterable {
-    case needsAction, recent, yesterday, earlier
+    case needsAction, recent, yesterday, earlier, done
 
     var label: String {
         switch self {
@@ -946,6 +951,7 @@ enum InboxBand: String, CaseIterable {
         case .recent: "Recent"
         case .yesterday: "Yesterday"
         case .earlier: "Earlier"
+        case .done: "Done"
         }
     }
 }
