@@ -30,12 +30,12 @@ struct WorkspaceReviewRows: View {
     /// "Agent" and a picker that offers nobody must not stay that way. The
     /// web subscribes to the same roster for the same reason (`usePeople`).
     ///
-    /// These start at their empty values rather than at whatever the
-    /// singletons already hold: a `@State` default is evaluated while the
-    /// PARENT builds this view, so reading an `@Observable` there registers
-    /// the roster as a dependency of the whole info sheet, and every refresh
-    /// of it restarted the sheet's own loads. The task below fills them in
-    /// the same frame when the fetch has already happened.
+    /// They start at their empty values rather than at whatever the singletons
+    /// already hold, because a `@State` default is evaluated while the PARENT
+    /// builds this view: reading an `@Observable` there registers the roster
+    /// as a dependency of the info sheet rather than of this section, which is
+    /// the wrong scope to invalidate. The task below fills them in, in the same
+    /// frame when the fetch has already happened.
     @State private var agentName = "Agent"
     @State private var roster: [String] = []
     @State private var teams: [OS1API.ReviewTeam] = []
