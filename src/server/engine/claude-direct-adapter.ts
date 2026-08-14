@@ -571,6 +571,16 @@ export async function* runClaudeDirect(
       ...claudeDirectInProcessServers(opts.inProcessMcp),
     };
 
+    // Per-call deny wording, keyed by tool name. noteGroups already merges
+    // deniedTools with the confirm-list's "propose it, don't execute it"
+    // guidance (and picks the unattended vs interactive phrasing), so a tool
+    // that slips the strip-set is refused with the same words the run's
+    // instructions used, not a generic line.
+    const denyMessages: Record<string, string> = {};
+    for (const group of policy.noteGroups) {
+      for (const name of group.tools) denyMessages[name] = group.message;
+    }
+
     const effortConfig = claudeDirectEffortConfig(dial?.effort ?? opts.effort);
     const disallowedTools = claudeDirectDisallowedTools({
       deniedTools: opts.deniedTools,
@@ -666,7 +676,7 @@ export async function* runClaudeDirect(
         canUseTool: async (toolName, input) => {
           const decision = claudeDirectToolDecision(toolName, input, {
             mode,
-            denyMessages: { ...(opts.deniedTools || {}) },
+            denyMessages,
             disables: policy.disables,
           });
           if (decision?.behavior === "deny") {
