@@ -409,7 +409,10 @@ export const INFO_SUB = "text-label font-medium text-dim";
 /** Phone PR strip frame: spacing + clipping only. The status tone itself
  * reaches the outer radius, so the row does not become a card inside a card. */
 export const INFO_STATUS =
-	"session-info-status mx-3 mb-3 overflow-hidden rounded-xl";
+	// `empty:hidden` for the same reason as PANEL_PR_PLATE: the strip renders
+	// nothing when the session has no pull request to report, and a wrapper with
+	// only a margin left in it is a gap with no row above it.
+	"session-info-status mx-3 mb-3 overflow-hidden rounded-xl empty:hidden";
 
 export const INFO_CONTENT = "min-h-[320px]";
 export const INFO_SECTION = "mt-2 border-t border-line p-3";

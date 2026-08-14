@@ -700,13 +700,31 @@ export function PrStatusBar({
 		setTimeout(() => setPrompted(null), 6000);
 	}
 
-	// The strip is a permanent fixture of the panel (Kent: a topbar that blinks
-	// in and out of existence shouldn't exist). First visit with nothing known
-	// yet holds its place with a quiet checking line instead of popping the bar
-	// in seconds late (the PR fetch can take a GitHub round-trip); a clean
-	// session reads "Up to date" rather than vanishing.
-	if (!loaded && variant !== "header") {
-		const checking = (
+	// Every word this strip knows is about a pull request, so a session that has
+	// none can leave it with nothing to say. Two ways that happens:
+	//
+	//  - Clean: level with the upstream, the base and the working tree. One
+	//    muted "Up to date" over a link to an empty PR tab.
+	//  - A shared-checkout repo (Open Session's own), where work lands as a
+	//    commit on the default branch and no PR is ever opened. "Create PR" is
+	//    the wrong move there, and the Git status rows directly under the plate
+	//    already name the real ones — commit, push, pull — in their own words.
+	//
+	// So the strip shows up when it has a fact, rather than holding a plate for
+	// a state that has no pull request in it.
+	const noPr = !pr && statusRows.length === 0;
+	const empty = noPr && (headline.key === "clean" || !!git?.sharedCheckout);
+
+	// The strip still holds its place while the PR fetch runs (Kent: a topbar
+	// that blinks in and out of existence shouldn't exist), so a session that
+	// has a PR doesn't pop the bar in a GitHub round-trip late. Only when the
+	// session's refs already say a PR is coming, though: reserving the row for a
+	// session that turns out to have nothing is the same blink, pointed the
+	// other way.
+	if (!loaded) {
+		if (variant === "header" || !(prs || []).some((ref) => ref.number))
+			return null;
+		return (
 			<div
 				className={`pr-bar ${PR_BAR} ${PR_BAR_BG.muted} ${PR_BAR_IN_CARD}`}
 			>
@@ -714,13 +732,8 @@ export function PrStatusBar({
 				<span className={`pr-bar-checking ${PR_BAR_CHECKING}`}>Checking status…</span>
 			</div>
 		);
-		return checking;
 	}
-	if (
-		!loaded ||
-		(headline.key === "clean" && variant === "header" && siblings.length === 0)
-	)
-		return null;
+	if (empty) return null;
 
 	// Header mode: only once a PR exists — the chip is the anchor; a bare
 	// Create PR/Push button in the chrome would just be noise. A session whose

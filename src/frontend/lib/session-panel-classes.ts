@@ -109,7 +109,11 @@ export const PANEL_RESIZE =
  * several PRs keep its series rows inside the corner: the stack renders as one
  * plate, not a plate followed by loose rows.
  */
-export const PANEL_PR_PLATE = "mx-3 mt-3 overflow-hidden rounded-lg";
+export const PANEL_PR_PLATE =
+	// `empty:hidden` because the strip renders nothing on a session with no pull
+	// request to report (see PrStatusBar): the plate is a wrapper, so without it
+	// the column would still pay this margin for a row that isn't there.
+	"mx-3 mt-3 overflow-hidden rounded-lg empty:hidden";
 
 /** The panel's scrolling content. */
 export const PANEL_BODY = "min-h-0 flex-1 overflow-y-auto";
