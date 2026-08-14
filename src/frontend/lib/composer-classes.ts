@@ -57,8 +57,15 @@ export const composerBoxMinimized =
    The mirror div that paints code tints behind the field (`.composer-hl`)
    shares these metrics exactly — any difference in font, padding or wrap
    desyncs the caret from the painted glyphs — so both read the same strings. */
+/** The draft field and the code/mention mirror behind it both take this, which
+ *  is what keeps them glyph-identical. `word-spacing` is here for the mention
+ *  pill: its wash is painted rather than laid out, so the only room it can take
+ *  is the space character beside it, and 3.7px of it has to cover both the
+ *  pill's padding and the gap to the next word. Widening the space is the only
+ *  way to give that chip a margin — set on the field as well as the mirror, so
+ *  the painted text stays under the caret it belongs to. */
 export const composerTextarea =
-	"block max-h-[320px] min-h-0 w-full resize-none border-none bg-transparent text-body leading-[1.55] outline-none phone:max-h-[240px] phone:text-[16px]";
+	"block max-h-[320px] min-h-0 w-full resize-none border-none bg-transparent text-body leading-[1.55] [word-spacing:1.5px] outline-none phone:max-h-[240px] phone:text-[16px]";
 export const composerTextareaPadding = "px-0 pt-0.5 pb-1";
 /** In the resting pill the field is one row inside a 4px-inset box, so it
  *  carries the horizontal breathing room and no vertical padding at all. */
