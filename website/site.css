@@ -1,17 +1,36 @@
+/* Inter, self-hosted rather than left to whatever the visitor has installed:
+   the stack used to fall through to SF on a Mac, so none of the settings below
+   applied. Subset to latin with every layout feature kept, because two of them
+   are the point (see font-feature-settings). */
+@font-face {
+	font-family: Inter;
+	src: url("./fonts/inter-latin.woff2") format("woff2");
+	font-weight: 100 900;
+	font-style: normal;
+	font-display: swap;
+}
+
 :root {
 	color-scheme: light;
 	font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+	/* cv11 is Inter's single-storey a, ss07 its square punctuation. They are
+	   what make the face read as a grotesque rather than default Inter, and
+	   they cost nothing but the two lines. */
+	font-feature-settings: "cv11", "ss07";
 	font-synthesis: none;
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
-	--ink: #14161a;
+	/* Neutral greys, not blue-black ink on a warm card: text is near-black,
+	   everything secondary is one flat mid grey, and the hairline is plain
+	   black at 9%. A single hue family is what keeps the page quiet. */
+	--ink: #0a0a0a;
 	--page: #fff;
 	/* One quiet card fill and one hairline, used by every section in the feed.
 	   The page is white and the cards are a step off it, so a section reads as
 	   a panel without a shadow or a second colour doing the work. */
-	--card: #fafaf9;
-	--line: rgba(20, 22, 26, 0.09);
-	--muted: rgba(20, 22, 26, 0.55);
+	--card: #fafafb;
+	--line: rgba(0, 0, 0, 0.09);
+	--muted: #787878;
 	/* The product's own accent, not a marketing blue: base.css's "sky" pair,
 	   which is what the app's filled controls and its send disc are painted in
 	   (#1f82bb in light). The foot is one step down so the fill has somewhere
@@ -46,6 +65,11 @@ body {
 	margin: 0;
 	background: var(--page);
 	color: var(--ink);
+	/* Medium, slightly tightened, everywhere. Inter at 400 goes thin and loose
+	   on a near-white panel; 500 with a hair of negative tracking is what the
+	   text on this kind of page is set in. */
+	font-weight: 500;
+	letter-spacing: -0.011em;
 }
 
 button,
@@ -112,9 +136,9 @@ summary:focus-visible {
 	margin: 30px 0 0;
 	color: var(--ink);
 	font-size: clamp(28px, 2.4vw, 35px);
-	font-weight: 650;
-	letter-spacing: -0.03em;
-	line-height: 1.14;
+	font-weight: 600;
+	letter-spacing: -0.012em;
+	line-height: 1.12;
 	text-wrap: balance;
 }
 
@@ -123,7 +147,7 @@ summary:focus-visible {
    breaks where the thought does instead of wherever the column runs out. */
 .rail h1 span {
 	display: block;
-	color: rgba(20, 22, 26, 0.42);
+	color: var(--muted);
 }
 
 .rail-foot {
@@ -157,16 +181,16 @@ summary:focus-visible {
 .card h2 {
 	margin: 0;
 	font-size: 26px;
-	font-weight: 650;
-	letter-spacing: -0.025em;
-	line-height: 1.15;
+	font-weight: 600;
+	letter-spacing: -0.012em;
+	line-height: 1.1;
 }
 
 .card-sub {
 	margin: 10px 0 0;
 	color: var(--muted);
 	font-size: 15px;
-	line-height: 1.5;
+	line-height: 1.42;
 }
 
 /* ── The product, on its own background ──────────────────────────────── */
@@ -218,7 +242,7 @@ summary:focus-visible {
 	/* It is a <figure>, and a figure's UA margin offsets an absolutely
 	   positioned box even with all four insets set. */
 	margin: 0;
-	border: 1px solid rgba(20, 22, 26, 0.1);
+	border: 1px solid rgba(0, 0, 0, 0.1);
 	/* A macOS 26 window corner, measured off Finder and Safari at 2x: a 26.7pt
 	   radius that fits a plain circle to within half a pixel. */
 	border-radius: 20px;
@@ -234,7 +258,7 @@ summary:focus-visible {
 	background:
 		radial-gradient(circle at 72% 42%, rgba(119, 161, 147, 0.09), transparent 34%),
 		#f0f1ef;
-	color: rgba(20, 22, 26, 0.54);
+	color: rgba(0, 0, 0, 0.54);
 	opacity: 1;
 	transition: opacity 180ms ease;
 }
@@ -245,14 +269,14 @@ summary:focus-visible {
 	right: 0;
 	left: min(22%, 210px);
 	height: 1px;
-	background: rgba(20, 22, 26, 0.08);
+	background: rgba(0, 0, 0, 0.08);
 	content: "";
 }
 
 .product-demo-loading-sidebar {
 	display: flex;
 	padding: 76px 22px;
-	border-right: 1px solid rgba(20, 22, 26, 0.08);
+	border-right: 1px solid rgba(0, 0, 0, 0.08);
 	background: rgba(255, 255, 255, 0.42);
 	flex-direction: column;
 	gap: 16px;
@@ -262,7 +286,7 @@ summary:focus-visible {
 	width: 72%;
 	height: 8px;
 	border-radius: 999px;
-	background: rgba(20, 22, 26, 0.08);
+	background: rgba(0, 0, 0, 0.08);
 }
 
 .product-demo-loading-sidebar span:nth-child(2) {
@@ -280,7 +304,7 @@ summary:focus-visible {
 	flex-direction: column;
 	gap: 14px;
 	font-size: 12px;
-	font-weight: 650;
+	font-weight: 600;
 	letter-spacing: -0.01em;
 }
 
@@ -324,7 +348,7 @@ summary:focus-visible {
 .feature-icon {
 	display: block;
 	margin-bottom: 16px;
-	color: rgba(20, 22, 26, 0.62);
+	color: rgba(0, 0, 0, 0.62);
 }
 
 /* A name on its own line, then what it means: the capability is the thing you
@@ -333,17 +357,17 @@ summary:focus-visible {
 .feature h3 {
 	margin: 0;
 	color: var(--ink);
-	font-size: 17px;
-	font-weight: 650;
-	letter-spacing: -0.015em;
-	line-height: 1.25;
+	font-size: 16px;
+	font-weight: 600;
+	letter-spacing: -0.008em;
+	line-height: 1.3;
 }
 
 .feature p {
 	margin: 7px 0 0;
 	color: var(--muted);
 	font-size: 15px;
-	line-height: 1.5;
+	line-height: 1.42;
 	text-wrap: pretty;
 }
 
@@ -368,10 +392,10 @@ summary:focus-visible {
 }
 
 .step-n {
-	color: rgba(20, 22, 26, 0.32);
+	color: rgba(0, 0, 0, 0.32);
 	font-size: 14px;
 	font-variant-numeric: tabular-nums;
-	font-weight: 650;
+	font-weight: 600;
 	line-height: 1.55;
 }
 
@@ -380,13 +404,13 @@ summary:focus-visible {
 	max-width: 62ch;
 	color: var(--muted);
 	font-size: 15px;
-	line-height: 1.55;
+	line-height: 1.45;
 	text-wrap: pretty;
 }
 
 .step b {
 	color: var(--ink);
-	font-weight: 650;
+	font-weight: 600;
 }
 
 /* ── Questions ───────────────────────────────────────────────────────── */
@@ -407,7 +431,7 @@ summary:focus-visible {
 	padding: 15px 0;
 	cursor: pointer;
 	font-size: 15px;
-	font-weight: 650;
+	font-weight: 600;
 	letter-spacing: -0.01em;
 	list-style: none;
 }
@@ -423,7 +447,7 @@ summary:focus-visible {
 	width: 13px;
 	height: 13px;
 	flex: none;
-	color: rgba(20, 22, 26, 0.45);
+	color: rgba(0, 0, 0, 0.45);
 }
 
 .faq-sign::before,
@@ -452,7 +476,7 @@ summary:focus-visible {
 	max-width: 62ch;
 	color: var(--muted);
 	font-size: 15px;
-	line-height: 1.55;
+	line-height: 1.45;
 	text-wrap: pretty;
 }
 
@@ -462,7 +486,7 @@ summary:focus-visible {
 	justify-content: flex-end;
 	gap: 8px;
 	padding: 2px 6px;
-	color: rgba(20, 22, 26, 0.38);
+	color: rgba(0, 0, 0, 0.38);
 	font-size: 13px;
 }
 
@@ -519,7 +543,7 @@ summary:focus-visible {
 	gap: 8px;
 	margin-top: 20px;
 	padding: 7px 7px 7px 14px;
-	border: 1px solid rgba(20, 22, 26, 0.14);
+	border: 1px solid rgba(0, 0, 0, 0.14);
 	border-radius: 19px;
 	background: #fbfbfa;
 }
@@ -541,7 +565,7 @@ summary:focus-visible {
 }
 
 .waitlist-form input::placeholder {
-	color: rgba(20, 22, 26, 0.4);
+	color: rgba(0, 0, 0, 0.4);
 }
 
 .waitlist-form button {
@@ -611,9 +635,9 @@ summary:focus-visible {
 
 .waitlist-dialog-body {
 	margin: 8px 0 0;
-	color: rgba(20, 22, 26, 0.6);
+	color: rgba(0, 0, 0, 0.6);
 	font-size: 15px;
-	line-height: 1.5;
+	line-height: 1.42;
 }
 
 /* The heading and its dismiss share a row, so the × sits on the title's line
@@ -634,7 +658,7 @@ summary:focus-visible {
 	border: 0;
 	border-radius: 50%;
 	background: none;
-	color: rgba(20, 22, 26, 0.45);
+	color: rgba(0, 0, 0, 0.45);
 	cursor: pointer;
 	font-size: 22px;
 	line-height: 1;
@@ -643,7 +667,7 @@ summary:focus-visible {
 }
 
 .waitlist-dialog-close:hover {
-	background: rgba(20, 22, 26, 0.06);
+	background: rgba(0, 0, 0, 0.06);
 	color: var(--ink);
 }
 
