@@ -59,6 +59,11 @@ import {
 	GIT_NOTE,
 	GIT_ROW,
 } from "../lib/pr-tone-classes";
+import {
+	INFO_LABEL_CLASS,
+	INFO_LIST_CLASS,
+	INFO_SECTION_CLASS,
+} from "../lib/session-viewer-classes";
 import { openLightbox } from "./MediaLightbox";
 import { SandboxBadge } from "./SandboxBadge";
 import {
@@ -151,16 +156,12 @@ interface Props {
 	liveMedia?: WorkspaceMediaItem[];
 }
 
-const INFO_LABEL_CLASS = "px-2 text-label font-semibold tracking-[-0.01em] text-faint";
 /** The review chip's plate when the review is waiting on YOU. The one state
     addressed to the reader swaps the neutral plate for a red one, so "act on
     this" separates from the states that only report where the review stands —
     hue alone is a weak signal at 13px. */
 const REVIEW_WAITING_PLATE =
 	"bg-red-soft text-red hover:bg-red-soft hover:text-red data-[popup-open]:bg-red-soft data-[popup-open]:text-red";
-const INFO_SECTION_CLASS = "grid gap-[5px]";
-const INFO_LIST_CLASS =
-	"grid gap-px overflow-hidden rounded-lg bg-panel p-1";
 const INFO_MORE_BUTTON_CLASS =
 	"cursor-pointer bg-panel px-[9px] py-[7px] text-left text-label font-semibold text-faint transition-colors hover:bg-hover hover:text-fg";
 

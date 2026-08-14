@@ -415,6 +415,19 @@ export const INFO_CONTENT = "min-h-[320px]";
 export const INFO_SECTION = "mt-2 border-t border-line p-3";
 
 /**
+ * The Info panel's section grammar, shared by everything that renders into it
+ * (WorkspaceInfo's own blocks, plus the Portals and Agents sections beneath
+ * them). One faint label over one borderless plate: the plate's `bg-panel`
+ * against the panel's own surface is what separates a section, so a section
+ * never takes a border — a hairline there would turn a column of them into a
+ * form. Rows go straight into the plate and are divided by `gap-px`.
+ */
+export const INFO_SECTION_CLASS = "grid gap-[5px]";
+export const INFO_LABEL_CLASS =
+	"px-2 text-label font-semibold tracking-[-0.01em] text-faint";
+export const INFO_LIST_CLASS = "grid gap-px overflow-hidden rounded-lg bg-panel p-1";
+
+/**
  * A static, full-width settings list. Its rows come from RepoBar and
  * ModelMenuRow, so their shape is a child variant here rather than a prop two
  * components away — the same relationship the old `> button` rule expressed.

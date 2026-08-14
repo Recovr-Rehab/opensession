@@ -12,6 +12,7 @@ import { CardList } from "../ui/card";
 import { EmptyState } from "../ui/state";
 import { IconStack } from "./icons";
 import { formatDuration } from "../lib/time";
+import { INFO_SECTION_CLASS } from "../lib/session-viewer-classes";
 import { friendlyModelSlug, opencodeModelParts } from "./ModelEffortSelect";
 import { WorkflowAgentTranscript } from "./WorkflowAgentTranscript";
 import { Badge } from "../ui/badge";
@@ -179,7 +180,7 @@ function WriteChips({ a }: { a: WorkflowAgentSnapshot }) {
 
 function DetailPre({ text }: { text: string }) {
 	return (
-		<pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-sm bg-panel p-2 font-mono text-meta leading-relaxed text-dim">
+		<pre className="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-sm bg-hover p-2 font-mono text-meta leading-relaxed text-dim">
 			{text}
 		</pre>
 	);
@@ -242,8 +243,20 @@ export function WorkflowPanel({
 		);
 
 	if (ordered.length === 0 && subs.length === 0) return <WorkflowsEmptyState />;
+	// A section of the Info panel: its own faint label over a stack of plates,
+	// like Git status or the changed-files list. No padding of its own — the
+	// panel owns the inset.
 	return (
-		<div className="flex flex-col gap-3 p-3 pb-6">
+		<div className={INFO_SECTION_CLASS}>
+			<div className="flex items-center justify-between gap-2 px-2 text-label font-semibold tracking-[-0.01em] text-faint">
+				<span>Agents</span>
+				{anyRunning && (
+					<span className="inline-flex shrink-0 items-center gap-1.5 text-yellow">
+						<span className="size-1.5 animate-pulse rounded-full bg-current" />
+						running
+					</span>
+				)}
+			</div>
 			{subs.length > 0 && (
 				<SubagentsCard subagents={subs} now={now} onOpen={onOpenSubagent} />
 			)}
@@ -284,10 +297,10 @@ function SubagentsCard({
 	if (errorN) meta.push(`${errorN} failed`);
 	if (tokens) meta.push(`${fmtTokens(tokens)} tok`);
 	return (
-		<div className="rounded-md border border-line bg-surface">
-			<div className="px-3 pb-1 pt-2.5">
+		<div className="rounded-lg bg-panel">
+			<div className="px-2.5 pb-1 pt-2">
 				<div className="flex items-center gap-2">
-					<span className="truncate text-sm font-semibold text-fg">
+					<span className="truncate text-label font-semibold text-fg">
 						Sub-agents
 					</span>
 					{runningN > 0 && (
@@ -301,7 +314,7 @@ function SubagentsCard({
 					{meta.join(" · ")}
 				</div>
 			</div>
-			<div className="flex flex-col px-1.5 pb-2 pt-1">
+			<div className="flex flex-col px-1 pb-1.5 pt-0.5">
 				{subagents.map((s, i) => {
 					const openable = Boolean(s.id && onOpen);
 					const durMs =
@@ -324,7 +337,7 @@ function SubagentsCard({
 							title={openable ? "Open this sub-agent's conversation" : undefined}
 						>
 							<StatusMark status={s.status} />
-							<span className="min-w-0 flex-1 truncate text-sm text-fg">
+							<span className="min-w-0 flex-1 truncate text-label text-fg">
 								{s.label}
 							</span>
 							{s.agentType && <Chip>{s.agentType}</Chip>}
@@ -523,11 +536,11 @@ function RunCard({
 	}
 
 	return (
-		<div className="rounded-md border border-line bg-surface">
-			<div className="flex items-start justify-between gap-2 px-3 pb-1 pt-2.5">
+		<div className="rounded-lg bg-panel">
+			<div className="flex items-start justify-between gap-2 px-2.5 pb-1 pt-2">
 				<div className="min-w-0">
 					<div className="flex items-center gap-2">
-						<span className="truncate text-sm font-semibold text-fg">
+						<span className="truncate text-label font-semibold text-fg">
 							{run.name}
 						</span>
 						<span
@@ -559,7 +572,7 @@ function RunCard({
 			</div>
 			{(run.agents.length > 0 ||
 				(run.status === "running" && groups.order.length > 0)) && (
-				<div className="flex flex-col px-1.5 pb-2 pt-1">
+				<div className="flex flex-col px-1 pb-1.5 pt-0.5">
 					{groups.loose.map(agentRow)}
 					{groups.order.map((title) => {
 						const agents = groups.byPhase.get(title)!;
@@ -714,7 +727,7 @@ const AgentRow = React.memo(function AgentRow({
 				<StatusMark status={a.status} />
 				<span
 					className={cn(
-						"min-w-0 flex-1 truncate text-sm",
+						"min-w-0 flex-1 truncate text-label",
 						a.status === "cancelled"
 							? "text-faint line-through"
 							: "text-fg",
@@ -744,7 +757,7 @@ const AgentRow = React.memo(function AgentRow({
 			>
 				<div className="min-h-0 overflow-hidden">
 					{open && (
-						<div className="mx-2 mb-1.5 mt-0.5 flex flex-col gap-1.5 rounded-sm bg-panel p-2">
+						<div className="mx-2 mb-1.5 mt-0.5 flex flex-col gap-1.5 rounded-sm bg-hover p-2">
 							{/* The headline affordance: what the agent actually DID, not
 							    just what it said at the end. Available even while it runs
 							    (the transcript view polls). */}
