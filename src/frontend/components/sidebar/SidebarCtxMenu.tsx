@@ -239,6 +239,7 @@ export function SidebarCtxMenu({
 							icon={entry.icon}
 							label={entry.label}
 							shortcut={entry.shortcut}
+							trailing={entry.trailing}
 							danger={entry.danger}
 							onMouseEnter={scheduleClose}
 							onClick={() => {

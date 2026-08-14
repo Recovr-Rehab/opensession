@@ -2348,14 +2348,24 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// the only place a tool or source that took itself off the sidebar can be
 	// put back without going to Settings. The rows stay open on click so
 	// turning three of them on is one gesture, not three.
+	//
+	// Each row wears the same mark it wears in the sidebar — the tool's glyph,
+	// the source's brand tile — so the menu reads as the list it edits rather
+	// than as seven words. That spends the leading slot, so the tick moves to
+	// the trailing edge, where the status flyout already puts its own.
 	const sidebarMenuEntries: CtxEntry[] = [
 		{ kind: "label", label: "Tools" },
 		...fittingTools.map((tool): CtxEntry => {
 			const shown = !hiddenTools.has(tool.id);
 			return {
 				kind: "item",
-				icon: shown ? <IconCheck size={20} /> : <span />,
+				// The glyphs are drawn at the sidebar's 22px rail size; the menu's
+				// icon column is 20, the size every other row here uses.
+				icon: <span className="inline-flex [&_svg]:size-[20px]">{tool.icon}</span>,
 				label: tool.label,
+				trailing: shown ? (
+					<IconCheck size={20} style={{ color: "var(--text-dim)" }} />
+				) : undefined,
 				keepOpen: true,
 				onClick: () => setToolVisible(tool.id, !shown),
 			};
@@ -2368,8 +2378,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						const shown = !hiddenFeeds.has(feed.id);
 						return {
 							kind: "item",
-							icon: shown ? <IconCheck size={20} /> : <span />,
+							icon: <RepoTile name={feed.id} className={SIDEBAR_REPO_TILE} />,
 							label: feed.title,
+							trailing: shown ? (
+								<IconCheck size={20} style={{ color: "var(--text-dim)" }} />
+							) : undefined,
 							keepOpen: true,
 							onClick: () => setSidebarFeedVisible(feed.id, !shown),
 						};

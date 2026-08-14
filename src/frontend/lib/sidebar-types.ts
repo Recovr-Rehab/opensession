@@ -190,6 +190,10 @@ export type CtxEntry =
 			icon?: React.ReactNode;
 			label: string;
 			shortcut?: string;
+			/** Pinned to the row's trailing edge, past the label. A tick for a
+			 * row that toggles something, where the leading slot is spent on
+			 * the thing's own icon. */
+			trailing?: React.ReactNode;
 			danger?: boolean;
 			/** Leave the menu open after the click. For rows that toggle
 			 * something you often set more than one of (what shows in the
