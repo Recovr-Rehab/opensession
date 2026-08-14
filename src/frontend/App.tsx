@@ -3700,11 +3700,9 @@ export function App(
 									getWorkspaceLastSession(id),
 								);
 								if (session) {
-									// Workspace rows always foreground the remembered session, not
-									// a previously selected Review/Preview pane.
-									saveActiveViewTab(id, null);
-									setActiveViewTabState(null);
-									setFocusComposerOnOpen(true);
+									const rememberedTab = getActiveViewTab(id) ?? null;
+									setActiveViewTabState(rememberedTab);
+									setFocusComposerOnOpen(rememberedTab === null);
 									navigate({ view: "session", id: session.id });
 								} else {
 									const p = workspaces.find((x) => x.id === id);
