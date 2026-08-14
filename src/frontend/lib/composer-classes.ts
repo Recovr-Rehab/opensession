@@ -58,20 +58,22 @@ export const composerBoxMinimized =
    shares these metrics exactly — any difference in font, padding or wrap
    desyncs the caret from the painted glyphs — so both read the same strings. */
 /** The draft field and the code/mention mirror behind it both take this, which
- *  is what keeps them glyph-identical. `word-spacing` is here for the mention
- *  pill: its wash is painted rather than laid out, so the only room it can take
- *  is the space character beside it, and 3.7px of it has to cover both the
- *  pill's padding and the gap to the next word. Widening the space is the only
- *  way to give that chip a margin — set on the field as well as the mirror, so
- *  the painted text stays under the caret it belongs to.
- *
- *  Every space in the draft pays this, not just the ones beside a mention, so
- *  it stays as small as the pill can live with: 1.5px sets a space at 5.2px,
- *  already 1.4x its natural width. 3.5px was tried and is what a person reads
- *  as broken word spacing in ordinary prose. If the pill wants more air, take
- *  it out of the wash, not out of the space. */
+ *  is what keeps them glyph-identical. */
 export const composerTextarea =
-	"block max-h-[320px] min-h-0 w-full resize-none border-none bg-transparent text-body leading-[1.55] [word-spacing:1.5px] outline-none phone:max-h-[240px] phone:text-[16px]";
+	"block max-h-[320px] min-h-0 w-full resize-none border-none bg-transparent text-body leading-[1.55] outline-none phone:max-h-[240px] phone:text-[16px]";
+/** The only room a mention pill can take is the space character beside it: its
+ *  wash is painted rather than laid out, and 3.7px of natural space has to
+ *  cover both the pill's own padding and the gap to the next word. Widening
+ *  the space is the only way to give that chip a margin, and it goes on the
+ *  field as well as the mirror, so the painted text stays under the caret it
+ *  belongs to.
+ *
+ *  It is worn only while the draft actually holds a mention (Composer.tsx),
+ *  because every space pays it, not just the two beside the pill. A sentence
+ *  set this way on its own reads as broken word spacing, which is what a
+ *  permanent 3.5px did. Scoped, the cost lands on the draft that wanted the
+ *  chip and ordinary prose keeps the type's own spacing. */
+export const composerMentionSpacing = "[word-spacing:3.5px]";
 export const composerTextareaPadding = "px-0 pt-0.5 pb-1";
 /** In the resting pill the field is one row inside a 4px-inset box, so it
  *  carries the horizontal breathing room and no vertical padding at all. */

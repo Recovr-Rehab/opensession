@@ -41,6 +41,7 @@ import {
   composerSendQueue,
   composerSendSteer,
   composerSendStop,
+  composerMentionSpacing,
   composerTextarea,
   composerTextareaPadding,
   composerTextareaPaddingMinimized,
@@ -786,6 +787,10 @@ export function Composer({
     () => composerMentionRanges(text, people),
     [text, people],
   );
+  // A pill's padding is bought out of the space beside it, so the draft pays a
+  // wider word space only while it holds a mention. Both the field and the
+  // mirror wear it, or the painted text slides off the caret behind it.
+  const hasMention = mentionRanges.length > 0;
   useEffect(() => {
     // The textarea scrolls internally at max-height; keep the mirror locked to it.
     const el = textareaRef.current;
@@ -1108,13 +1113,13 @@ export function Composer({
                 composerTextarea,
                 composerTextareaPadding,
                 "pointer-events-none absolute inset-0 z-0 overflow-hidden text-fg break-words whitespace-pre-wrap select-none",
-                // A mention's wash reaches up to 4px past its own box
-                // (base.css), so one at either end of a line would be cut off
-                // by this box.
+                hasMention && composerMentionSpacing,
+                // A mention's wash reaches 5px past its own box (base.css), so
+                // one at either end of a line would be cut off by this box.
                 // The padding pushes the clip edge out; the matching negative
                 // margin takes it back out of the content origin, so every
                 // glyph still lands exactly where the textarea puts it.
-                "-mx-[4px] px-[4px]",
+                "-mx-[6px] px-[6px]",
               )}
               aria-hidden="true"
               dangerouslySetInnerHTML={{ __html: hlHtml }}
@@ -1128,6 +1133,7 @@ export function Composer({
             className={cn(
               "composer-textarea",
               composerTextarea,
+              hasMention && composerMentionSpacing,
               minimized
                 ? composerTextareaPaddingMinimized
                 : composerTextareaPadding,

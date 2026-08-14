@@ -1277,23 +1277,22 @@ html.wco .app-body.sidebar-collapsed
    How far it reaches is arithmetic rather than taste. The only room beside a
    mention is the space character next to it, and that one space has to cover
    both the pill's own padding and the gap to the neighbouring word. A 14px
-   draft sets words 3.7px apart, which is not enough for either — at 5px the
-   wash sat ON the next word, which is what read as the pill being cut off. So
-   the composer widens the space itself (`word-spacing`, lib/composer-classes.ts,
-   on the field as well as the mirror so the two still agree glyph for glyph; a
-   margin on this span alone would slide the painted text off the caret behind
-   it). That buys 5.2px, and it is the whole budget: the space it widens is
-   every space in the draft, so buying the pill more air makes ordinary prose
-   read wrong. A 6px reach needed a 7.2px space, and a sentence set that way
-   is visibly gappy. The wash lives inside 5.2px.
+   draft sets words 3.7px apart, which is not enough for either: a wash of any
+   real width sits ON the next word, which is what reads as the pill being cut
+   off. So the composer widens the space itself (`word-spacing`, on the field
+   as well as the mirror so the two still agree glyph for glyph; a margin on
+   this span alone would slide the painted text off the caret behind it), and
+   wears it only while a mention is in the draft, so an ordinary sentence keeps
+   the type's own spacing. See `composerMentionSpacing` in
+   lib/composer-classes.ts.
 
-   The two ends split it unevenly, because they are not the same shape: on the
-   left the face is a circle, whose own curve already reads as air, while on
-   the right a name ends on a flat stem with nothing to soften it. So the wash
-   reaches 2.5px to the left and 4px to the right, leaving 2.7px and 1.2px
-   clear to the neighbouring word.
+   That sets a space at 7.2px, and the wash takes 5px of it on each side. What
+   is left, 2.2px, is the gap a neighbouring word sees. The two ends look even
+   at the same number even though they are not the same shape, because the
+   circle at one end and the name's flat stem at the other are each 1px inside
+   their own edge of the box.
 
-   The mirror carries 4px of padding against a matching negative margin
+   The mirror carries 6px of padding against a matching negative margin
    (Composer.tsx): its content origin is unchanged, so nothing moves, but
    `overflow: hidden` then clips past the reach — otherwise a mention at the
    start of a line has its left edge cut off by the mirror's own bounds.
@@ -1307,7 +1306,7 @@ html.wco .app-body.sidebar-collapsed
 .composer-hl .cmp-mention::before {
 	content: "";
 	position: absolute;
-	inset: -2px -4px -2px -2.5px;
+	inset: -2px -5px;
 	z-index: -1;
 	border-radius: 999px;
 	background: color-mix(in srgb, var(--accent) 12%, transparent);
@@ -1320,11 +1319,11 @@ html.wco .app-body.sidebar-collapsed
    its slot. The circle hangs off THAT span rather than off the pill, so it
    stays fixed to the slot whatever the wash around it does, and the gap either
    side of it is the slot's own arithmetic: 13.8px at the composer's 14px type,
-   plus the 2.5px the wash reaches to its left, less a 0.74em circle, leaves
-   2.5px of wash before the face and 3.4px between it and the first letter. The size
-   is in `em` because the slot is: the phone composer sets 16px, where a fixed
-   circle would sit small in a wider gap. Absolute, so it takes no part in
-   layout. */
+   plus the 5px the wash reaches to its left, less a 0.8em circle set 1px past
+   the box, leaves 4px of wash before the face and 3.6px between it and the
+   first letter. The size is in `em` because the slot is: the phone composer
+   sets 16px, where a fixed circle would sit small in a wider gap. Absolute, so
+   it takes no part in layout. */
 .composer-hl .cmp-at {
 	position: relative;
 	color: transparent;
@@ -1332,10 +1331,10 @@ html.wco .app-body.sidebar-collapsed
 .composer-hl .cmp-faced .cmp-at::before {
 	content: "";
 	position: absolute;
-	left: 0;
+	left: -1px;
 	top: 50%;
-	width: 0.74em;
-	height: 0.74em;
+	width: 0.8em;
+	height: 0.8em;
 	transform: translateY(-50%);
 	border-radius: 999px;
 	background: var(--cmp-face) center / cover no-repeat, var(--bg-active);
