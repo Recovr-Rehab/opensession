@@ -18,11 +18,6 @@
  * variant on the element itself.
  */
 
-/** 8px, the tab pill's corner — no step in the radius scale lands there, and
- *  it is authored the way base.css authors corners so it tracks the squircle
- *  bump on its own. */
-const PILL = "rounded-[calc(8px*var(--rf))]";
-
 /**
  * The panel shell itself — a resizable column beside the transcript, and a
  * fixed overlay column from 920px down. Both of its call sites (SessionViewer's
@@ -92,50 +87,6 @@ export const PANEL_RESIZE =
 	"[body:not(.resizing-panel)_&]:hover:after:bg-line-strong " +
 	"[body.resizing-panel_&]:after:bg-faint";
 
-/**
- * Floating pill nav with no bottom divider: the active tab is a filled pill
- * rather than an underline, so the strip reads as a free-standing control group
- * over the panel body. The left inset lands the first pill's label on the panel
- * body's 22px content edge (10px strip + 12px pill padding). When the tabs
- * don't fit it scrolls — on phones behind a soft edge fade rather than a clip.
- */
-export const PANEL_TABS =
-	"flex items-center gap-0.5 overflow-x-auto px-2.5 pt-[13px] pb-2 " +
-	"[scrollbar-width:none] [&::-webkit-scrollbar]:hidden " +
-	"phone:gap-1.5 phone:px-3.5 phone:pt-1.5 phone:pb-2.5 " +
-	"phone:[-webkit-mask-image:linear-gradient(to_right,transparent_0,#000_10px,#000_calc(100%_-_28px),transparent)] " +
-	"phone:[mask-image:linear-gradient(to_right,transparent_0,#000_10px,#000_calc(100%_-_28px),transparent)]";
-
-/** `group/ptab` is what dims the count with its tab. `shrink-0`: tabs never
- *  squish when the strip overflows — it scrolls instead. */
-const PANEL_TAB_BASE =
-	"group/ptab inline-flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap " +
-	`border-0 px-3 py-[5px] ${PILL} text-label font-medium ` +
-	"transition-[background-color,color] " +
-	// Phone: a full-round pill with a real touch target. `rounded-[999px]`
-	// rather than `rounded-full`: base.css gives squircle corners to
-	// `[class*="rounded-"]:not([class*="rounded-full"])`, so the literal string
-	// "rounded-full" anywhere in this list would square off the DESKTOP corner
-	// too — measured, it did.
-	"phone:rounded-[999px] phone:px-[15px] phone:py-2 phone:text-body";
-
-/** Selected and unselected each carry their whole colour set: two background
- *  utilities in one variant bucket are resolved by Tailwind's output order, and
- *  a shared `bg-transparent` base won that race and erased the selected fill. */
-export const panelTabClass = (active: boolean) =>
-	`${PANEL_TAB_BASE} ` +
-	(active
-		? "bg-panel text-fg"
-		: "bg-transparent text-dim hover:bg-hover hover:text-fg");
-
-/** Count suffix on a tab ("Changes 10"): dimmer than the label, and tabular so
- *  the strip doesn't jitter as the number changes. */
-export const panelTabCountClass = (active: boolean) =>
-	`tabular-nums ${active ? "text-dim" : "text-faint group-hover/ptab:text-dim"}`;
-
-/** A status dot on a tab. The caller adds the tone's fill. */
-export const PANEL_TAB_DOT = "size-[7px] rounded-full";
-
 /** The panel's scrolling content. */
 export const PANEL_BODY = "min-h-0 flex-1 overflow-y-auto";
 
@@ -161,8 +112,3 @@ export const PANEL_BACK =
 	"inline-flex size-10 cursor-pointer items-center justify-center border-0 bg-transparent p-0 " +
 	"text-accent touch-manipulation [-webkit-tap-highlight-color:transparent] " +
 	"active:opacity-40 [&_svg]:-ml-px";
-
-/** One clean header row at the top of the sheet: back chevron on the left, the
- *  test-this-change actions (Preview / staging globe) on the right. */
-export const PANEL_SHEET_HEAD = "flex items-center gap-2 pt-2 pr-3.5 pb-0.5 pl-2";
-export const PANEL_SHEET_ACTIONS = "ml-auto flex min-w-0 items-center gap-2";

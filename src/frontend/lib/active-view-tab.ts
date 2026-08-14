@@ -11,6 +11,14 @@ const VIEW_TABS = [
 	"staging",
 	"assets",
 	"preview",
+	// The session's uncommitted worktree diff. Full width because a diff is a
+	// document: the sidebar showed it in a 350px column, and its live file
+	// count still sits in the Info panel beside this pane.
+	"changes",
+	// An interactive shell in the session's workspace. Never persisted
+	// (saveActiveViewTab drops it): restoring it on load would spawn a PTY for
+	// anyone who once opened one.
+	"terminal",
 	// A portal target only lives in memory, so this center-panel browser is
 	// transient for the same reason as a sub-agent drill-in.
 	"portal",
@@ -51,8 +59,9 @@ export function saveActiveViewTab(
 ): void {
 	if (!workspaceId) return;
 	// Sub-agent tabs are transient — leave the workspace's remembered pane
-	// alone rather than restoring a tab whose stack is gone.
-	if (tab === "subagent" || tab === "portal") return;
+	// alone rather than restoring a tab whose stack is gone. Terminal is
+	// dropped for a stronger reason: restoring it would spawn a PTY on load.
+	if (tab === "subagent" || tab === "portal" || tab === "terminal") return;
 	const map = read();
 	map[workspaceId] = tab;
 	try {

@@ -1083,6 +1083,8 @@ export function App(
 	const assetsActive = activeViewTab === "assets";
 	const previewLiveActive = activeViewTab === "preview";
 	const portalActive = activeViewTab === "portal";
+	const changesActive = activeViewTab === "changes";
+	const terminalActive = activeViewTab === "terminal";
 	const subagentSelected = activeViewTab === "subagent";
 	// Workspaces whose Review / Conversation / Preview environment view-tab is
 	// present in the strip; empty by default (a tab is added when its pane is
@@ -1120,6 +1122,17 @@ export function App(
 	>({});
 	const [assetsOpen, setAssetsOpen] = useState<Set<string>>(
 		() => new Set(getActiveViewTabKeys("assets")),
+	);
+	// Workspaces whose Changes (uncommitted worktree diff) view-tab is open —
+	// opened from the Info panel's Changes card, which keeps showing the live
+	// file count beside the pane.
+	const [changesOpen, setChangesOpen] = useState<Set<string>>(
+		() => new Set(getActiveViewTabKeys("changes")),
+	);
+	// Workspaces with a Terminal view-tab open. Starts empty every load: the
+	// tab owns live PTYs, so it is never restored (see active-view-tab.ts).
+	const [terminalOpen, setTerminalOpen] = useState<Set<string>>(
+		() => new Set(),
 	);
 	// Sub-agent drill-ins, keyed by the session they were opened from (a sub-agent
 	// belongs to one session's run). The value is a breadcrumb stack — a Task call
@@ -1819,6 +1832,33 @@ export function App(
 					},
 				]
 			: [];
+	// The Changes view-tab: this session's uncommitted worktree diff, full
+	// width — opened from the Info panel's Changes card. The file count stays
+	// in that card rather than riding the tab, so the strip has one label.
+	const changesViewTabs: ViewTab[] =
+		currentSession && wsKey && changesOpen.has(wsKey)
+			? [
+					{
+						id: `changes:${wsKey}`,
+						label: "Changes",
+						active: changesActive,
+						dotClass: null,
+					},
+				]
+			: [];
+	// The Terminal view-tab: an interactive shell in the session's workspace
+	// (inside its sandbox when sandboxed) — opened from the Info panel.
+	const terminalViewTabs: ViewTab[] =
+		currentSession && wsKey && terminalOpen.has(wsKey)
+			? [
+					{
+						id: `terminal:${wsKey}`,
+						label: "Terminal",
+						active: terminalActive,
+						dotClass: null,
+					},
+				]
+			: [];
 	// The local-dev Preview view-tab (live dev server iframe) — opened from
 	// the header Preview button. Present once opened for this session.
 	const previewViewTabs: ViewTab[] =
@@ -1865,18 +1905,22 @@ export function App(
 					},
 				]
 			: [];
-	// Review leftmost, then Conversation, Preview environment, Preview, Portal,
-	// Assets, and the sub-agent drill-in last (it comes and goes with the session).
+	// Review leftmost, then Changes beside it (the two ways of reading the same
+	// work), then Conversation, Preview environment, Preview, Portal, Assets,
+	// Terminal, and the sub-agent drill-in last (it comes and goes with the
+	// session).
 	// The workspace home joins these once the strip would otherwise be empty —
 	// see `homeViewTabs`, which needs the session tabs to know that.
 	const paneViewTabs: ViewTab[] = [
 		...reviewViewTabs,
+		...changesViewTabs,
 		...conversationViewTabs,
 		...videoViewTabs,
 		...stagingViewTabs,
 		...previewViewTabs,
 		...portalViewTabs,
 		...assetsViewTabs,
+		...terminalViewTabs,
 		...subagentViewTabs,
 	];
 	/**
@@ -1917,6 +1961,8 @@ export function App(
 		if (id.startsWith("subagent:")) return "subagent";
 		if (id.startsWith("staging:")) return "staging";
 		if (id.startsWith("assets:")) return "assets";
+		if (id.startsWith("changes:")) return "changes";
+		if (id.startsWith("terminal:")) return "terminal";
 		if (id.startsWith("preview:")) return "preview";
 		if (id.startsWith("portal:")) return "portal";
 		if (id.startsWith("conversation:")) return "conversation";
@@ -2098,6 +2144,46 @@ export function App(
 			});
 		}
 		if (assetsActive) setActiveViewTab(null);
+	}
+	// Open/foreground this workspace's Changes view-tab (the Info panel's
+	// Changes card, and the closed-panel peek card's Changes row).
+	function openChanges() {
+		if (!wsKey) return;
+		const key = wsKey;
+		setChangesOpen((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
+		setActiveViewTab("changes");
+	}
+	function closeChangesTab() {
+		if (wsKey) {
+			const key = wsKey;
+			setChangesOpen((prev) => {
+				if (!prev.has(key)) return prev;
+				const next = new Set(prev);
+				next.delete(key);
+				return next;
+			});
+		}
+		if (changesActive) setActiveViewTab(null);
+	}
+	// Open/foreground this workspace's Terminal view-tab (the Info panel's
+	// Terminal row). Closing it is what tears the shells down.
+	function openTerminal() {
+		if (!wsKey) return;
+		const key = wsKey;
+		setTerminalOpen((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
+		setActiveViewTab("terminal");
+	}
+	function closeTerminalTab() {
+		if (wsKey) {
+			const key = wsKey;
+			setTerminalOpen((prev) => {
+				if (!prev.has(key)) return prev;
+				const next = new Set(prev);
+				next.delete(key);
+				return next;
+			});
+		}
+		if (terminalActive) setActiveViewTab(null);
 	}
 	// Open (or foreground) a session's sub-agent tab — the transcript's "Watch"
 	// drill-in on a Task call. A Task call inside the sub-agent pushes onto the
@@ -2611,6 +2697,8 @@ export function App(
 						closeSubagentTab(id.slice("subagent:".length));
 					else if (id.startsWith("staging:")) closeStagingTab();
 					else if (id.startsWith("assets:")) closeAssetsTab();
+					else if (id.startsWith("changes:")) closeChangesTab();
+					else if (id.startsWith("terminal:")) closeTerminalTab();
 					else if (id.startsWith("preview:")) closePreviewTab();
 					else if (id.startsWith("portal:")) closePortalTab();
 					else {
@@ -3430,6 +3518,17 @@ export function App(
 				showAssets={
 					splitMode ? viewTabKind(surfaceId) === "assets" : focused && assetsActive
 				}
+				showChanges={
+					splitMode ? viewTabKind(surfaceId) === "changes" : focused && changesActive
+				}
+				showTerminal={
+					splitMode
+						? viewTabKind(surfaceId) === "terminal"
+						: focused && terminalActive
+				}
+				// Presence, not foreground: the shells stay mounted behind whatever
+				// else is in front, and only unmount when the tab is closed.
+				terminalTabOpen={!!wsKey && terminalOpen.has(wsKey)}
 				showPreviewTab={
 					splitMode
 						? viewTabKind(surfaceId) === "preview"
@@ -3457,6 +3556,10 @@ export function App(
 				onOpenPortal={openPortal}
 				onOpenAssets={openAssets}
 				onCloseAssets={closeAssetsTab}
+				onOpenChanges={openChanges}
+				onCloseChanges={closeChangesTab}
+				onOpenTerminal={openTerminal}
+				onCloseTerminal={closeTerminalTab}
 				onOpenWorkspace={() => setActiveViewTab(null)}
 				allSessions={sessions}
 				onNewSession={handleNewSession}

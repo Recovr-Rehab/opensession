@@ -242,20 +242,10 @@ import { sessionHasWorkspace } from "../lib/session-workspace";
 import { isApple, isChromium } from "../lib/platform";
 import { PulseDot } from "../ui/status";
 import {
-	getSessionPanelTab,
-	saveSessionPanelTab,
-} from "../lib/session-panel-tab";
-import {
 	PANEL_BACK,
 	PANEL_BODY,
 	PANEL_OVERLAY,
 	PANEL_SHELL,
-	PANEL_SHEET_ACTIONS,
-	PANEL_SHEET_HEAD,
-	PANEL_TABS,
-	PANEL_TAB_DOT,
-	panelTabClass,
-	panelTabCountClass,
 } from "../lib/session-panel-classes";
 import { TURN_SPACER } from "../lib/app-shell-classes";
 import {
@@ -440,6 +430,35 @@ interface Props {
 	/** Close this session's Assets view-tab (its last asset was deleted). */
 	onCloseAssets?: () => void;
 	/**
+	 * Whether the Changes pane (this session's uncommitted worktree diff,
+	 * full-width) is foregrounded — driven by the top tab strip's Changes
+	 * view-tab (App state). The Info panel's Changes card opens it and keeps
+	 * showing the live file count while it is up.
+	 */
+	showChanges?: boolean;
+	/** Open/foreground this session's Changes view-tab. */
+	onOpenChanges?: () => void;
+	/** Close this session's Changes view-tab. */
+	onCloseChanges?: () => void;
+	/**
+	 * Whether the Terminal pane (interactive shells in this session's
+	 * workspace) is foregrounded — driven by the top tab strip's Terminal
+	 * view-tab (App state).
+	 */
+	showTerminal?: boolean;
+	/** Open/foreground this session's Terminal view-tab (the Info panel's row). */
+	onOpenTerminal?: () => void;
+	/** Close this session's Terminal view-tab, tearing its shells down. */
+	onCloseTerminal?: () => void;
+	/**
+	 * Whether the Terminal tab is present in the strip at all — distinct from
+	 * `showTerminal`, which is only true while it is foregrounded. The shells
+	 * stay mounted (and their PTYs alive) whenever the tab exists, so that
+	 * switching away and back returns to the same session; closing the tab is
+	 * what tears them down.
+	 */
+	terminalTabOpen?: boolean;
+	/**
 	 * Whether the Conversation pane (the workspace's Plain support-ticket
 	 * thread, full-width) is foregrounded — driven by the top tab strip's
 	 * Conversation view-tab (App state).
@@ -523,16 +542,6 @@ function useLivePlan(
 		return NO_PLAN;
 	}, [entries, running]);
 }
-
-type PanelTab =
-	| "info"
-	| "changes"
-	| "shell"
-	| "pr"
-	| "workflows"
-	| "assets"
-	| "reports"
-	| "portals";
 
 const archiveShortcutLabel = isChromium
 	? isApple
@@ -760,6 +769,9 @@ export function SessionViewer({
 	onOpenStaging,
 	onCloseStaging,
 	showAssets = false,
+	showChanges = false,
+	showTerminal = false,
+	terminalTabOpen = false,
 	showConversation = false,
 	conversationThreadId = null,
 	showVideo = false,
@@ -774,6 +786,10 @@ export function SessionViewer({
 	onOpenPortal,
 	onOpenAssets,
 	onCloseAssets,
+	onOpenChanges,
+	onCloseChanges,
+	onOpenTerminal,
+	onCloseTerminal,
 	onOpenWorkspace,
 	showSubagent = false,
 	subagentStack = NO_SUBAGENTS,
@@ -924,6 +940,8 @@ export function SessionViewer({
 		showReview ||
 		showStaging ||
 		showAssets ||
+		showChanges ||
+		showTerminal ||
 		showPreviewTab ||
 		(showPortal && !!portalTarget) ||
 		subagentOpen ||
@@ -1190,44 +1208,6 @@ export function SessionViewer({
 	// `null` = not editing; a string = the working draft.
 	const [renameDraft, setRenameDraft] = useState<string | null>(null);
 	const [pinned, setPinned] = useState(() => isPinned(session.id));
-	// Restore this session's own last-picked tab first, so coming back to a
-	// session lands on the tab it was left on; a session never visited on this
-	// device falls back to the last tab picked anywhere (the legacy global
-	// key). Either way a tab only restores when this session actually has it.
-	// "shell" is deliberately never restorable (it would spawn a PTY on every
-	// load) and the global fallback stays info/changes-only.
-	const [panelTab, setPanelTab] = useState<PanelTab>(() => {
-		const workspace = sessionHasWorkspace(session);
-		const remembered = getSessionPanelTab(session.id);
-		if (remembered && (remembered === "info" || workspace)) return remembered;
-		const stored = localStorage.getItem("opensession-panel-tab");
-		const restorable: PanelTab[] = ["info", "changes"];
-		const tab: PanelTab | null = restorable.includes(stored as PanelTab)
-			? (stored as PanelTab)
-			: stored
-				? "info"
-				: null;
-		if (tab) {
-			const available = tab === "info" || workspace;
-			if (available) return tab;
-		}
-		return "info";
-	});
-	function selectPanelTab(tab: PanelTab) {
-		setPanelTab(tab);
-		localStorage.setItem("opensession-panel-tab", tab);
-		saveSessionPanelTab(session.id, tab);
-	}
-	// The Shell panel stays mounted (hidden) once opened so switching side-panel
-	// tabs doesn't kill its PTYs — this latches on first open, and resets per
-	// session so a new session never inherits another's shells.
-	const [shellOpened, setShellOpened] = useState(false);
-	useEffect(() => {
-		if (panelTab === "shell") setShellOpened(true);
-	}, [panelTab]);
-	useEffect(() => {
-		setShellOpened(false);
-	}, [session.id]);
 	// Main session-area view: the transcript+composer vs. the full-width PR review
 	// that takes over the whole session column. Which one shows is now owned by App
 	// (the top tab strip's Review view-tab) and passed in as `showReview`; the
@@ -1748,21 +1728,6 @@ export function SessionViewer({
 	// panel reports the git state of whatever encloses that dir, which is not
 	// this session's work and may not be anyone's.
 	const hasRepoWork = hasWorkspace && !session.repoLess;
-	// The Agents tab stays available on any session with a workspace (it shows
-	// an empty state that teaches the feature), so only fall back to Info when
-	// the tab itself is gone — a session that can't run workflows AND has no
-	// runs to show.
-	useEffect(() => {
-		if (
-			workflowsLoaded &&
-			panelTab === "workflows" &&
-			workflowRuns.length === 0 &&
-			subagents.length === 0 &&
-			!hasWorkspace
-		)
-			setPanelTab("info");
-	}, [workflowsLoaded, panelTab, workflowRuns.length, subagents.length, hasWorkspace]);
-
 	// Ask→code promotion: creates a worktree and flips the session to code mode.
 	// The 5s session poll picks up the mode change and re-renders with the full
 	// code affordances (diff/PR tabs, RepoBar).
@@ -1808,10 +1773,6 @@ export function SessionViewer({
 			workflowRuns.length > 0 ||
 			subagents.length > 0 ||
 			sessionReports.length > 0);
-	useEffect(() => {
-		if (panelTab === "reports" && sessionReports.length === 0)
-			setPanelTab("info");
-	}, [panelTab, sessionReports.length]);
 	const isBusy = isRunningLive || isStreaming;
 	// Sub-agent list: fetch on open, then re-poll while the session runs so
 	// live task-tool spawns appear/settle. Keyed on isBusy too: a run starting
@@ -4042,9 +4003,12 @@ export function SessionViewer({
 				runs={showAgents ? runningWorkflowRuns : NO_WORKFLOW_RUNS}
 				subagents={showAgents && anySubagentRunning ? subagents : undefined}
 				plan={livePlan}
+				// The Agents list is a section of the workspace panel now, so this
+				// just opens it — the phone's info page on a phone, the side panel
+				// on desktop (this flap rides the composer at every width).
 				onOpenPanel={() => {
-					selectPanelTab("workflows");
-					setInfoPageOpen(true);
+					if (isPhone) setInfoPageOpen(true);
+					else setPanelOpen(true);
 				}}
 			/>
 		) : null;
@@ -4323,12 +4287,13 @@ export function SessionViewer({
 	const [previewStatus, setPreviewStatus] = useState<PreviewStatus | null>(null);
 	useEffect(() => setPreviewStatus(null), [session.id]);
 	// The header preview control used to keep this status warm. Now that the
-	// launcher lives in the overflow menu. Keep status warm while Preview, the
-	// portal browser, or the Portals sidebar is visible; status requests also
+	// launcher lives in the overflow menu. Keep status warm while Preview or the
+	// portal browser is up, and while the workspace panel is open — the Portals
+	// list is a section of it, so its rows need live status. Status requests also
 	// renew the authenticated Caddy routes for remote sandbox services.
 	useEffect(() => {
 		if (
-			(!showPreviewTab && !showPortal && panelTab !== "portals") ||
+			(!showPreviewTab && !showPortal && !panelOpen && !infoPageOpen) ||
 			!session.worktreeDir
 		)
 			return;
@@ -4345,7 +4310,14 @@ export function SessionViewer({
 			alive = false;
 			stop();
 		};
-	}, [showPreviewTab, showPortal, panelTab, session.id, session.worktreeDir]);
+	}, [
+		showPreviewTab,
+		showPortal,
+		panelOpen,
+		infoPageOpen,
+		session.id,
+		session.worktreeDir,
+	]);
 
 	// ⌘O opens the PR's preview environment (the Vercel preview StagingLink's globe
 	// points at); ⌘G opens its GitHub PR. Chords without a target (no staging
@@ -5006,9 +4978,12 @@ export function SessionViewer({
 						<WorkspacePeek
 							session={session}
 							anchor={headerActionsRef}
+							// The peek card's Changes row goes straight to the full-width
+							// Changes tab; its other rows just open the panel, which is
+							// now a single overview rather than a set of tabs.
 							onOpenPanelTab={(tab) => {
-								selectPanelTab(tab);
-								setPanelOpen(true);
+								if (tab === "changes") onOpenChanges?.();
+								else setPanelOpen(true);
 							}}
 							onOpenPr={() => focusPrInReview()}
 							onOpenChecks={() => focusPrInReview(undefined, "checks")}
@@ -5021,11 +4996,7 @@ export function SessionViewer({
 					)}
 					{!isPhone && panelAvailable && (
 						<Tooltip
-							label={
-								hasWorkspace
-									? "Toggle side panel (changes, terminal, PR)"
-									: "Toggle side panel (agents)"
-							}
+							label="Toggle workspace panel"
 						>
 							<Button
 								variant="ghost"
@@ -5185,25 +5156,15 @@ export function SessionViewer({
 											setInfoPageOpen(false);
 											setOverlayAssetPath(path);
 										}}
+											// Changes now has a surface of its own, so it no longer
+											// has to borrow the Review tab the way it did when the
+											// only diff on a phone was the PR's.
 											onOpenTab={(tab) => {
-												if (tab === "changes" || tab === "pr") {
-													setInfoPageOpen(false);
-													onOpenReview?.();
-													return;
-												}
-												if (tab === "staging") {
-													setInfoPageOpen(false);
-													onOpenStaging?.();
-													return;
-												}
-												if (tab === "assets") {
-													setInfoPageOpen(false);
-													onOpenAssets?.();
-													return;
-												}
 												setInfoPageOpen(false);
-												selectPanelTab(tab);
-												setPanelOpen(true);
+												if (tab === "pr") onOpenReview?.();
+												else if (tab === "changes") onOpenChanges?.();
+												else if (tab === "staging") onOpenStaging?.();
+												else if (tab === "assets") onOpenAssets?.();
 											}}
 											onAddToInput={(text) => {
 												setInfoPageOpen(false);
@@ -5539,6 +5500,33 @@ export function SessionViewer({
 								/>
 							)}
 						</div>
+					) : showChanges && hasRepoWork ? (
+						// The session's uncommitted worktree diff, full-width. It used
+						// to live in the right sidebar, where a 350px column was a poor
+						// surface for reading a diff; the Info panel keeps the live file
+						// count beside this pane, which is what glancing needed.
+						<div className={VIEWER_REVIEW_MAIN}>
+							{waitingForWorkspace ? (
+								<WorkspaceWaiting detail="This takes a moment." />
+							) : (
+								<DiffPanel
+									sessionId={session.id}
+									isRunning={isBusy}
+									canSend={connected && !isBusy && !noEngine}
+									send={send}
+									diff={diffState}
+								/>
+							)}
+						</div>
+					) : showTerminal ? (
+						// Nothing here on purpose: the shells are mounted once below,
+						// outside this chain, so switching tabs doesn't kill their PTYs.
+						// This branch only stops the transcript rendering under them.
+						waitingForWorkspace ? (
+							<div className={VIEWER_REVIEW_MAIN}>
+								<WorkspaceWaiting detail="This takes a moment." />
+							</div>
+						) : null
 					) : showReview && hasWorkspace ? (
 						<div className={VIEWER_REVIEW_MAIN}>
 							<PrPanel
@@ -6043,6 +6031,20 @@ export function SessionViewer({
 					</div>
 					</>
 					)}
+					{/* Shells keep their PTYs alive across view-tab switches: mounted
+					    for as long as the Terminal tab exists, hidden while another
+					    surface is in front. Closing the tab unmounts them, which is what
+					    tears the PTYs down; they also die with the socket. */}
+					{hasWorkspace && !waitingForWorkspace && terminalTabOpen ? (
+						<div className={showTerminal ? VIEWER_REVIEW_MAIN : "hidden"}>
+							<ShellPanel
+								sessionId={session.id}
+								send={send}
+								addHandler={addHandler}
+								visible={showTerminal}
+							/>
+						</div>
+					) : null}
 				</div>
 
 				{/* Right region: the Workspace panel. Portaled to an app-level slot so
@@ -6057,41 +6059,6 @@ export function SessionViewer({
 				{!isPhone && panelAvailable && panelOpen ? (
 					<div className={PANEL_SHELL} style={panelStyle}>
 						{panelResizeHandle}
-						{/* Phones open this panel as a full-width bottom sheet, so it
-						    carries one clean header row: chevron-back to the session on the
-						    left (the desktop toggle button is hidden there) and the
-						    labelled Preview/Preview environment controls on the right — on desktop
-						    those live in the session header as state-colored icons. */}
-						{isPhone && (
-							<div className={PANEL_SHEET_HEAD}>
-								<button
-									className={PANEL_BACK}
-									onClick={() => setPanelOpen(false)}
-									aria-label="Back to session"
-								>
-									<svg width="11" height="18" viewBox="0 0 11 18" fill="none">
-										<path
-											d="M9 1.5L2 9l7 7.5"
-											stroke="currentColor"
-											strokeWidth="2.25"
-											strokeLinecap="round"
-											strokeLinejoin="round"
-										/>
-									</svg>
-								</button>
-								<div className={PANEL_SHEET_ACTIONS}>
-									<PreviewButton
-										session={session}
-										onAttachImage={(img) =>
-											setImages((prev) => [...prev, img])
-										}
-										onStatusChange={setPreviewStatus}
-										onOpenTab={onOpenPreviewTab}
-									/>
-									<StagingLink session={session} refreshTick={gitRefreshTick} />
-								</div>
-							</div>
-							)}
 						{hasRepoWork && (
 							<PrStatusBar
 								sessionId={session.id}
@@ -6118,210 +6085,125 @@ export function SessionViewer({
 								}
 							/>
 						)}
-						<div className={PANEL_TABS}>
-							<button
-								className={panelTabClass(panelTab === "info")}
-								onClick={() => selectPanelTab("info")}
-							>
-								Info
-							</button>
-							{hasWorkspace && (
-								<>
-									{/* Changes only: Terminal and Portals below still earn
-									    their place on a repo-less session, whose scratch dir
-									    is a real working directory. A diff of it is not. */}
-									{hasRepoWork && (
-									<button
-										className={panelTabClass(panelTab === "changes")}
-										onClick={() => selectPanelTab("changes")}
-									>
-										Changes
-										{changesFileCount ? (
-											<span className={panelTabCountClass(panelTab === "changes")}>
-												{changesFileCount}
-											</span>
-										) : null}
-									</button>
+						{/* No tab strip. This panel is the workspace overview, and
+						    everything it used to hide behind a tab now opens full-width
+						    from a row inside it — Changes and Terminal as view tabs (see
+						    App.tsx), Assets and the PR the same way. What stays here is
+						    what you read at a glance while your work runs beside it. */}
+						<div className={PANEL_BODY}>
+							<div className="px-1">
+								<WorkspaceInfo
+									sessionId={session.id}
+									workspaceId={session.workspaceId || null}
+									sessions={(workspaceSessions?.length ? workspaceSessions : [session]).map(
+										(s) => ({
+											id: s.id,
+											title: s.title,
+											createdAt: s.createdAt || "",
+											startedBy: s.startedBy,
+										}),
 									)}
-									<button
-										className={panelTabClass(panelTab === "shell")}
-										onClick={() => selectPanelTab("shell")}
-										title="Interactive terminal tabs in this session's workspace (inside its sandbox when sandboxed)"
-									>
-										Terminal
-									</button>
-									<button
-										className={panelTabClass(panelTab === "portals")}
-										onClick={() => selectPanelTab("portals")}
-										title="Services exposed by this session"
-									>
-										Portals
-										{previewStatus?.services.filter(
-											(service) => service.running && service.previewUrl,
-										).length ? (
-											<span className={panelTabCountClass(panelTab === "portals")}>
-												{
-													previewStatus.services.filter(
-														(service) => service.running && service.previewUrl,
-													).length
-												}
-											</span>
-										) : null}
-									</button>
-								</>
-							)}
-							{/* Shown whenever the session CAN run workflows (it needs a
-							    worktree for the agents' cwd), not only once a run exists —
-							    a tab that only appears after the fact is undiscoverable.
-							    The panel's empty state explains how to start one. */}
+									repo={
+										hasRepoWork ? session.repo || "repository" : undefined
+									}
+									prState={hasRepoWork ? session.prState : undefined}
+									refreshTick={gitRefreshTick}
+									sandbox={session.sandbox}
+									reviewRequest={effectiveReview?.req ?? null}
+									reviewRequestSessionId={effectiveReview?.ownerId}
+									prReviewRequested={effectiveReview?.prReviewRequested}
+									reviewAcceptedFromPr={effectiveReview?.acceptedFromPr}
+									onReviewChange={onReviewChange}
+									send={connected ? send : undefined}
+									assets={assetFiles}
+									onOpenAsset={(path) => setOverlayAssetPath(path)}
+									onOpenTab={(tab) => {
+										if (tab === "pr") onOpenReview?.();
+										else if (tab === "staging") onOpenStaging?.();
+										else if (tab === "assets") onOpenAssets?.();
+										else if (tab === "changes") onOpenChanges?.();
+									}}
+									onAddToInput={(text) =>
+										setComposerPrefill((p) => ({
+											seq: (p?.seq ?? 0) + 1,
+											text,
+										}))
+									}
+									onOpenSession={(id, created) => onOpenSession?.(id, created)}
+									liveMediaCount={liveMediaCount}
+									liveMedia={liveOverviewMedia}
+								/>
+							</div>
+							{/* Agents: the session's workflow runs and sub-agents. Rendered
+							    whenever the session CAN run them (it needs a worktree for
+							    their cwd), not only once one exists — the empty state is
+							    how you discover workflows at all. Same section the phone
+							    info page shows. */}
 							{(hasWorkspace ||
 								workflowRuns.length > 0 ||
 								subagents.length > 0) && (
-								<button
-									className={panelTabClass(panelTab === "workflows")}
-									onClick={() => selectPanelTab("workflows")}
-								>
-									Agents
-									{workflowRuns.some((r) => r.status === "running") ||
-									subagents.some((s) => s.status === "running") ? (
-										<span className={`${PANEL_TAB_DOT} animate-pulse bg-green`} />
-									) : workflowRuns.length + subagents.length > 0 ? (
-										<span className={panelTabCountClass(panelTab === "workflows")}>
-											{workflowRuns.length + subagents.length}
-										</span>
-									) : null}
-								</button>
+								<div className={INFO_SECTION}>
+									<WorkflowPanel
+										sessionId={session.id}
+										runs={workflowRuns}
+										onCancel={cancelWorkflowRun}
+										subagents={subagents}
+										onOpenSubagent={openSubagent}
+									/>
+								</div>
 							)}
-							{/* Assets are a full-width main-area view-tab now (opened
-							    from the Info panel's Assets button), so there's no
-							    sidebar assets tab — see the Assets view-tab in App.tsx. */}
 							{sessionReports.length > 0 && (
-								<button
-									className={panelTabClass(panelTab === "reports")}
-									onClick={() => selectPanelTab("reports")}
-								>
-									Reports
-									<span className={panelTabCountClass(panelTab === "reports")}>{sessionReports.length}</span>
-								</button>
+								<div className={INFO_SECTION}>
+									<SessionReportsPanel
+										reports={sessionReports}
+										onOpenNewSession={onOpenNewSession}
+									/>
+								</div>
 							)}
-						</div>
-						<div className={PANEL_BODY}>
-							{/* Plain-only sessions (no code workspace) show just the timeline. */}
-							{panelTab === "info" ? (
-								<div className="px-1">
-									<WorkspaceInfo
+							{/* Portals: the services this session exposes. Opening one
+							    still takes over the centre pane (the Portal view tab), so
+							    what lives here is the launcher and the status list. */}
+							{hasWorkspace && (
+								<div className={INFO_SECTION}>
+									<PortalsPanel
 										sessionId={session.id}
-										workspaceId={session.workspaceId || null}
-										sessions={(workspaceSessions?.length ? workspaceSessions : [session]).map(
-											(s) => ({
-												id: s.id,
-												title: s.title,
-												createdAt: s.createdAt || "",
-												startedBy: s.startedBy,
-											}),
-										)}
-										repo={
-											hasRepoWork ? session.repo || "repository" : undefined
+										status={previewStatus}
+										activePortal={portalTarget}
+										onOpenPortal={onOpenPortal}
+										onStartPortal={(recipe) =>
+											send({
+												type: "prompt",
+												sessionId: session.id,
+												user: getCurrentUser(),
+												content:
+													`Use the $${recipe.skill} skill to start the “${recipe.name}” portal for this session. ` +
+													(recipe.serviceKey
+														? `Make sure it listens on the ${recipe.serviceKey} port declared in .ports.conf, then report when it is ready.`
+														: "Expose its listening port in .ports.conf with a descriptive *_PORT key, then report when it is ready."),
+											})
 										}
-										prState={hasRepoWork ? session.prState : undefined}
-										refreshTick={gitRefreshTick}
-										sandbox={session.sandbox}
-										reviewRequest={effectiveReview?.req ?? null}
-										reviewRequestSessionId={effectiveReview?.ownerId}
-										prReviewRequested={effectiveReview?.prReviewRequested}
-										reviewAcceptedFromPr={effectiveReview?.acceptedFromPr}
-										onReviewChange={onReviewChange}
-										send={connected ? send : undefined}
-										assets={assetFiles}
-										onOpenAsset={(path) => setOverlayAssetPath(path)}
-										onOpenTab={(tab) =>
-											tab === "pr"
-												? onOpenReview?.()
-												: tab === "staging"
-													? onOpenStaging?.()
-													: tab === "assets"
-														? onOpenAssets?.()
-														: selectPanelTab(tab)
-										}
-										onAddToInput={(text) =>
-											setComposerPrefill((p) => ({
-												seq: (p?.seq ?? 0) + 1,
-												text,
-											}))
-										}
-										onOpenSession={(id, created) => onOpenSession?.(id, created)}
-										liveMediaCount={liveMediaCount}
-										liveMedia={liveOverviewMedia}
+										onPortalAction={async (name, action) => {
+											setPreviewStatus(await portalActionApi(session.id, name, action));
+										}}
 									/>
 								</div>
-							) : panelTab === "portals" ? (
-								<PortalsPanel
-									sessionId={session.id}
-									status={previewStatus}
-									activePortal={portalTarget}
-									onOpenPortal={onOpenPortal}
-									onStartPortal={(recipe) =>
-										send({
-											type: "prompt",
-											sessionId: session.id,
-											user: getCurrentUser(),
-											content:
-												`Use the $${recipe.skill} skill to start the “${recipe.name}” portal for this session. ` +
-												(recipe.serviceKey
-													? `Make sure it listens on the ${recipe.serviceKey} port declared in .ports.conf, then report when it is ready.`
-													: "Expose its listening port in .ports.conf with a descriptive *_PORT key, then report when it is ready."),
-										})
-									}
-									onPortalAction={async (name, action) => {
-										setPreviewStatus(await portalActionApi(session.id, name, action));
-									}}
-								/>
-							) : panelTab === "workflows" ? (
-								// Before the Plain fallthrough: a Plain-only session's
-								// Agents tab must win over its default timeline panel.
-								// Renders with zero runs too — the panel's empty state is
-								// how you discover workflows exist.
-								<WorkflowPanel
-									sessionId={session.id}
-									runs={workflowRuns}
-									onCancel={cancelWorkflowRun}
-									subagents={subagents}
-									onOpenSubagent={openSubagent}
-								/>
-							) : panelTab === "reports" ? (
-								<SessionReportsPanel
-									reports={sessionReports}
-									onOpenNewSession={onOpenNewSession}
-								/>
-							) : waitingForWorkspace &&
-							  (panelTab === "changes" || panelTab === "shell") ? (
-								// These tabs all read the worktree — hold them behind the
-								// waiting state until the create run finishes preparing it.
-								<WorkspaceWaiting detail="This takes a moment." />
-							) : panelTab === "changes" ? (
-								<DiffPanel
-									sessionId={session.id}
-									isRunning={isBusy}
-									canSend={connected && !isBusy && !noEngine}
-									send={send}
-									diff={diffState}
-								/>
-							) : null}
-							{/* Shell tabs keep their PTYs alive across side-panel tab
-							    switches: mounted once opened, hidden while another tab
-							    is active. They still die with the panel/socket. */}
-							{hasWorkspace && !waitingForWorkspace && shellOpened ? (
-								<div
-									className={panelTab === "shell" ? "h-full min-h-0" : "hidden"}
-								>
-									<ShellPanel
-										sessionId={session.id}
-										send={send}
-										addHandler={addHandler}
-										visible={panelTab === "shell"}
-									/>
+							)}
+							{/* Terminal sits last and quiet: a shell in this session's
+							    workspace (inside its sandbox when sandboxed), opened as a
+							    full-width view tab because a terminal wants the width. */}
+							{hasWorkspace && (
+								<div className={INFO_SECTION}>
+									<Button
+										variant="ghost"
+										size="md"
+										className="w-full justify-start gap-2 rounded-row px-2 text-dim hover:bg-hover hover:text-fg"
+										icon={<IconTerminal size={16} />}
+										onClick={() => onOpenTerminal?.()}
+									>
+										Terminal
+									</Button>
 								</div>
-							) : null}
+							)}
 						</div>
 					</div>
 				) : null}

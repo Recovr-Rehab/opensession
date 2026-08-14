@@ -21,8 +21,6 @@ import {
 	PANEL_BODY,
 	PANEL_OVERLAY,
 	PANEL_SHELL,
-	PANEL_TABS,
-	panelTabClass,
 } from "../lib/session-panel-classes";
 import {
 	VIEWER_BRANCH,
@@ -218,13 +216,6 @@ export function WorkspacePane({
 			<div className={PANEL_OVERLAY} onClick={() => sidePanel.setOpen(false)} />
 			<aside className={PANEL_SHELL} style={sidePanel.style}>
 				{sidePanel.resizeHandle}
-				{/* One tab, and it stays: the session panel's other tabs (Changes,
-				    Terminal, Portals, Agents) are all a session's worktree seen from
-				    a different angle, and there is no worktree here. Keeping the row
-				    means the panel's top edge lines up with the session's. */}
-				<div className={PANEL_TABS}>
-					<button className={panelTabClass(true)}>Info</button>
-				</div>
 				<div className={PANEL_BODY}>
 					<div className="px-1">
 						<WorkspaceInfo
