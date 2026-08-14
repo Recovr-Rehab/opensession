@@ -72,6 +72,12 @@
 	   composer's case at chip scale, so it takes the composer's answer; see the
 	   light block. */
 	--button-surface: var(--control-surface);
+	/* The flat grey chip that stands beside a button rather than under it (the
+	   PR strip's Archive next to Continue). It cannot be --control-surface
+	   here: in dark that IS --button-surface, so the pair would share one fill
+	   and read as a single slab. A step past the button instead, which is grey
+	   against it. Light needs no such step — the button there is paper. */
+	--button-quiet-surface: #3a3a3a;
 	/* Floating popups — hover cards, menus, context menus. Same L3 tier as the
 	   controls above, and in dark that is all it needs: lighter than the page,
 	   so the fill alone reads as lifted and the hairline is just an edge. Light
@@ -315,6 +321,9 @@ html[data-theme="light"] {
 	   which is the disabled signal again. So it goes paper and lets the shadow
 	   do the lifting, exactly as the composer and the popups below do. */
 	--button-surface: #ffffff;
+	/* The chip beside that paper button: the filled-chip grey the ramp already
+	   defines, which is grey against white without going a step further. */
+	--button-quiet-surface: var(--control-surface);
 	/* The composer is the exception to the ramp above, and it has to be. The
 	   ramp steps AWAY from the page — darker in light — which is right for a
 	   small chip read against its neighbours, but the composer is a big empty

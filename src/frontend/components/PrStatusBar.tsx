@@ -274,13 +274,13 @@ function PrBarButton({
 		white:
 			"bg-button text-fg border-line-strong hover:bg-hover hover:brightness-100",
 		// The filled chip beside it: flat grey, no edge, no lift, dim ink, so
-		// housekeeping reads quieter than the button it stands next to. It
-		// takes the ramp's top surface rather than --control-surface, which in
-		// dark IS the button surface — the two would have shared one fill and
-		// the pair would have read as one grey slab. This step is grey against
-		// paper in light and against the button in dark. Hover is the base
+		// housekeeping reads quieter than the button it stands next to. Its
+		// fill is the one token that has to differ per theme — grey against
+		// paper in light, a step past the button in dark, where the button is
+		// grey too (see --button-quiet-surface in base.css). Hover is the base
 		// brightness lift, like the other filled tones.
-		gray: "border-transparent bg-active text-dim shadow-none hover:text-fg",
+		gray:
+			"border-transparent bg-[var(--button-quiet-surface)] text-dim shadow-none hover:text-fg",
 	} as const;
 	return (
 		<button
