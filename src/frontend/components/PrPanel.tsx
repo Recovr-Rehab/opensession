@@ -1369,7 +1369,11 @@ export function PrPanel({
           {pr.staging?.url && (
             <Tooltip label="Open the preview environment">
               <a
-                className="ml-auto inline-flex size-8 shrink-0 items-center justify-center rounded-control text-dim no-underline hover:bg-hover hover:text-fg"
+                /* An icon-only control carries its glyph ~6px inside its box,
+                   so the last one in the row is outdented to put that glyph on
+                   the row's content edge — where the view control below it
+                   sits, since a bordered control is flush with its own box. */
+                className={`ml-auto inline-flex size-8 shrink-0 items-center justify-center rounded-control text-dim no-underline hover:bg-hover hover:text-fg ${pr.state === "OPEN" ? "" : "-mr-1.5"}`}
                 href={pr.staging.url}
                 target="_blank"
                 rel="noopener"
@@ -1400,6 +1404,7 @@ export function PrPanel({
                     <Button
                       variant="ghost"
                       size="sm"
+                      className="-mr-1.5"
                       aria-label="Pull request actions"
                       icon={<IconDotsHorizontal size={18} />}
                     />
@@ -1593,7 +1598,10 @@ export function PrPanel({
             </div>
           </SelectionToSession>
         ) : (
-          <div className="mx-auto max-w-[1500px] px-5 py-5 phone:px-2">
+          // The same 24px inset the chrome rows above use, so a file card's
+          // edges land under the tab strip's first tab and the view control's
+          // right edge rather than 4px inside them.
+          <div className="mx-auto max-w-[1500px] px-6 py-6 phone:px-2">
             {codeView === "flow" ? (
               <CodeFlow
                 data={codeFlow?.key === codeFlowKey ? codeFlow.data : null}
