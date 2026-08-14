@@ -156,6 +156,20 @@ interface Props {
 	liveMedia?: WorkspaceMediaItem[];
 }
 
+/** A Review row's own status band. The row says where a review stands in three
+    places at once — the face, the words, the colour — and the colour is the one
+    that reads without being read, so a green reading is a green row rather than
+    a green word on a neutral one. Muted keeps the plate's own surface: "nothing
+    has happened yet" is not a status worth a band. */
+type ReviewTone = "green" | "yellow" | "red" | "blue" | "muted";
+const REVIEW_ROW_BG: Record<ReviewTone, string> = {
+	green: "bg-green-soft",
+	yellow: "bg-yellow-soft",
+	red: "bg-red-soft",
+	blue: "bg-blue-soft",
+	muted: "",
+};
+
 /** The leading visual on a Review row: the box a `UserAvatar size={20}` fills,
     so a glyph and a face line up down the section. */
 const REVIEW_FACE =
@@ -587,6 +601,17 @@ function AgentReviewCard({
 				: score
 					? "text-red"
 					: "text-dim";
+	const rowTone: ReviewTone = active
+		? "blue"
+		: !score
+			? "muted"
+			: stale
+				? "yellow"
+				: score >= 4
+					? "green"
+					: score === 3
+						? "yellow"
+						: "red";
 	// One line in the panel's git-status grammar: the reading, then the single
 	// thing worth knowing about it. The reviewer's reasoning and the run time
 	// are a hover away in the summary popup, so the row never carries both.
@@ -705,7 +730,7 @@ function AgentReviewCard({
 				)}
 			</div>
 			<div className={INFO_LIST_CLASS}>
-				<div className={`${GIT_ROW} py-2`}>
+				<div className={cn(GIT_ROW, "rounded-control py-2", REVIEW_ROW_BG[rowTone])}>
 					<Popover.Root>
 						<Popover.Trigger
 							render={<div />}
@@ -969,6 +994,13 @@ function ReviewerChip({
 	// keeps the row's own ink and the state carries the tone, exactly as the
 	// score does. The one state addressed to the reader says so instead, and
 	// takes the red plate with it — hue alone is a weak signal at 13px.
+	const rowTone: ReviewTone = needsMyReview
+		? "red"
+		: accepted
+			? "green"
+			: req || githubTarget
+				? "yellow"
+				: "muted";
 	// The face is the person the review sits with — you, when it is waiting on
 	// you, even though the words say so rather than naming you.
 	const faceName = selectedTeam
@@ -1021,7 +1053,7 @@ function ReviewerChip({
 					// Background only: the row's own `text-fg` and a tone utility on
 					// the same element would resolve by Tailwind's output order, so
 					// the ink goes on the spans inside it instead.
-					needsMyReview && "bg-red-soft",
+					REVIEW_ROW_BG[rowTone],
 				)}
 			>
 				{/* The reviewer's own picture, beside the agent's face on the row
@@ -1132,58 +1164,30 @@ function ReviewerChip({
 }
 
 /**
- * The Git status section of the info panel: one row per outstanding local git
- * fact. PR state lives in the Pull requests section directly above it.
-*/
+ * The Git status section of the info panel: the work sitting in this session's
+ * tree that isn't committed yet.
+ *
+ * Only that. Where the branch stands against the remote and the base — ahead,
+ * behind, and their Push and Pull — is the status strip's subject at the top of
+ * the panel, and it said so in its own headline while this section repeated it
+ * three sections lower with a second button for the same action. One fact, one
+ * home: the strip owns the branch, this owns the tree.
+ */
 function GitStatusRows({
 	sessionId,
-	repo,
 	git,
-	prState,
 	send,
-	onReload,
 }: {
 	sessionId: string;
-	repo?: string;
 	git: GitStatusInfo | null;
-	prState?: string | null;
 	send?: (msg: any) => void;
-	onReload: () => void;
 }) {
-	const [busy, setBusy] = useState<string | null>(null);
-	const [error, setError] = useState<string | null>(null);
 	const [prompted, setPrompted] = useState<string | null>(null);
 
-	const ahead = git?.ahead ?? 0;
-	const behind = git?.behind ?? 0;
-	const behindBase = git?.behindBase ?? 0;
 	// On a shared checkout the server scopes this to the files this session
 	// wrote, so it means the same thing either way: your uncommitted work.
 	const dirty = git?.uncommittedFiles ?? 0;
-
-	// Behind counts fold together — a stale upstream reads "behind remote", a
-	// fresh branch behind its base reads "behind <base>". A merged branch is
-	// terminal, so stale checkout drift must not offer an Update action.
-	const behindCount =
-		prState === "MERGED" ? 0 : behind > 0 ? behind : behindBase;
-	const behindWhat = behind > 0 ? "remote" : git?.baseBranch || "main";
-
-	const hasRows = ahead > 0 || behindCount > 0 || dirty > 0;
-	if (!hasRows) return null;
-
-	async function run(name: string, fn: () => Promise<unknown>) {
-		if (busy) return;
-		setBusy(name);
-		setError(null);
-		try {
-			await fn();
-			onReload();
-		} catch (e: any) {
-			setError(e?.message || `${name} failed`);
-		} finally {
-			setBusy(null);
-		}
-	}
+	if (dirty === 0) return null;
 
 	function commit() {
 		if (!send) return;
@@ -1201,67 +1205,24 @@ function GitStatusRows({
 		<div className={INFO_SECTION_CLASS}>
 			<div className={INFO_LABEL_CLASS}>Git status</div>
 			<div className={INFO_LIST_CLASS}>
-				{ahead > 0 && (
-					<div className={`${GIT_ROW} py-2`}>
-						<span className={`${GIT_DOT} ${GIT_DOT_BG.blue}`} aria-hidden />
-						<span className={GIT_LABEL}>
-							{ahead} commit{ahead === 1 ? "" : "s"} ahead of remote
-						</span>
+				<div className={`${GIT_ROW} py-2`}>
+					<span className={`${GIT_DOT} ${GIT_DOT_BG.yellow}`} aria-hidden />
+					<span className={GIT_LABEL}>
+						{dirty} uncommitted file{dirty === 1 ? "" : "s"}
+					</span>
+					{send && (
 						<button
 							type="button"
 							className={GIT_ACTION}
-							disabled={!!busy}
-							onClick={() => run("push", () => gitPushApi(sessionId, repo))}
+							onClick={commit}
+							title={`Ask ${AGENT_NAME} to commit the uncommitted changes and push`}
 						>
-							{busy === "push" ? "Pushing…" : "Push"}
+							Commit
 						</button>
-					</div>
-				)}
-				{behindCount > 0 && (
-					<div className={`${GIT_ROW} py-2`}>
-						<span className={`${GIT_DOT} ${GIT_DOT_BG.yellow}`} aria-hidden />
-						<span className={GIT_LABEL}>
-							{behindCount} commit{behindCount === 1 ? "" : "s"} behind{" "}
-							{behindWhat}
-						</span>
-						<button
-							type="button"
-							className={GIT_ACTION}
-							disabled={!!busy}
-							title={
-								behindWhat === "remote"
-									? `Fast-forward to ${git?.branch || "the upstream"}`
-									: `Merge the latest origin/${behindWhat}`
-							}
-							onClick={() =>
-								run("pull", () => gitPullApi(sessionId, repo, behind === 0))
-							}
-						>
-							{busy === "pull" ? "Pulling…" : "Pull"}
-						</button>
-					</div>
-				)}
-				{dirty > 0 && (
-					<div className={`${GIT_ROW} py-2`}>
-						<span className={`${GIT_DOT} ${GIT_DOT_BG.yellow}`} aria-hidden />
-						<span className={GIT_LABEL}>
-							{dirty} uncommitted file{dirty === 1 ? "" : "s"}
-						</span>
-						{send && (
-							<button
-								type="button"
-								className={GIT_ACTION}
-								onClick={commit}
-								title={`Ask ${AGENT_NAME} to commit the uncommitted changes and push`}
-							>
-								Commit
-							</button>
-						)}
-					</div>
-				)}
+					)}
+				</div>
 			</div>
 			{prompted && <div className={`${GIT_NOTE} text-faint`}>Asked {AGENT_NAME} to {prompted} ✓</div>}
-			{error && <div className={`${GIT_NOTE} text-red`}>{error}</div>}
 		</div>
 	);
 }
