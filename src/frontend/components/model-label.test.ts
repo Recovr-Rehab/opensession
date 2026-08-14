@@ -41,6 +41,20 @@ describe("workspace preset labels", () => {
 		);
 	});
 
+	// The engine is routing, never part of a model's name.
+	it("names an engine-routed id after its base entry", () => {
+		expect(shortModelLabel("claude/workspace-preset/ws-1111/opus-fable", models)).toBe(
+			"Opus 5 + Fable oracle",
+		);
+		expect(shortModelLabel("claude/anthropic/claude-sonnet-5", models)).toBe("Sonnet 5");
+		expect(shortModelLabel("codex/openai/gpt-5.6-sol", models)).toBe("GPT-5.6 sol");
+		// An id with no catalog entry reads exactly as the unrouted one does —
+		// the prefix goes, nothing else changes.
+		expect(shortModelLabel("claude/dial/opus-fable", models)).toBe(
+			shortModelLabel("dial/opus-fable", models),
+		);
+	});
+
 	it("leaves plain model ids alone", () => {
 		expect(workspacePresetLabel("opencode/anthropic/claude-sonnet-5", models)).toBeNull();
 		expect(shortModelLabel("opencode/anthropic/claude-sonnet-5", models)).toBe("Sonnet 5");

@@ -87,6 +87,10 @@ export const LEGACY_GROUP_LABEL = "Legacy (direct SDK)";
 export function opencodeModelParts(
 	id: string,
 ): { provider: string; model: string } | null {
+	// The direct-SDK engines route the same entries, so they read as their
+	// base id here: the upstream provider groups them, not the engine.
+	const routed = modelEngine(id);
+	if (routed === "claude" || routed === "codex") return opencodeModelParts(baseModelId(id));
 	const engine = id.startsWith("opencode/")
 		? "opencode"
 		: id.startsWith("pi/")
@@ -162,15 +166,19 @@ export function workspacePresetLabel(
  * "Sonnet 5". The engine is an implementation detail — it never shows in a
  * model's name. */
 export function shortModelLabel(id: string, models: ModelOption[]): string {
-	// Pi-routed ids read as their base entry ("pi/dial/opus-fable" keeps the
-	// preset's label, not a slug).
-	if (id.startsWith("pi/") && models.some((m) => m.id === baseModelId(id)))
-		return shortModelLabel(baseModelId(id), models);
+	// An engine-routed id reads as its base entry ("pi/dial/opus-fable",
+	// "claude/dial/opus-fable" both keep the preset's label, not a slug) —
+	// the engine is routing, and it never shows in a model's name.
+	const routedBase = baseModelId(id);
+	if (routedBase !== id && models.some((m) => m.id === routedBase))
+		return shortModelLabel(routedBase, models);
 	const preset = workspacePresetLabel(baseModelId(id), models);
 	if (preset) return preset;
 	const oc = opencodeModelParts(id);
 	if (oc) return friendlyModelSlug(oc.model);
-	const raw = models.find((m) => m.id === id)?.label || id || "Default";
+	// Last resort is the id itself, minus its routing prefix — an id with no
+	// catalog entry is still a name, and the engine is not part of it.
+	const raw = models.find((m) => m.id === id)?.label || routedBase || "Default";
 	return raw.replace(/^Claude\s+/i, "").replace(/\s*\(Codex\)$/i, "");
 }
 
