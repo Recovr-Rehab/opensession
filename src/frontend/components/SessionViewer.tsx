@@ -10,7 +10,7 @@ import React, {
 } from "react";
 import { createPortal } from "react-dom";
 import { motion, Reorder } from "motion/react";
-import { duration, ease, suppressLayoutAnimations } from "../ui/motion";
+import { duration, ease } from "../ui/motion";
 import { TranscriptSkeleton } from "../ui/state";
 import { renderMarkdown } from "../lib/markdown";
 import { LiveTurnStore } from "../lib/live-turn-store";
@@ -237,6 +237,7 @@ import { isPinned, togglePin, onPinsChanged } from "../lib/pins";
 import { getLane, onLanesChanged, type Lane } from "../lib/lanes";
 import { ownedBy } from "../lib/sidebar-lanes";
 import { useSessionScroll } from "../hooks/useSessionScroll";
+import { useSidePanel } from "../hooks/useSidePanel";
 import { sessionHasWorkspace } from "../lib/session-workspace";
 import { isApple, isChromium } from "../lib/platform";
 import { PulseDot } from "../ui/status";
@@ -248,7 +249,6 @@ import {
 	PANEL_BACK,
 	PANEL_BODY,
 	PANEL_OVERLAY,
-	PANEL_RESIZE,
 	PANEL_SHELL,
 	PANEL_SHEET_ACTIONS,
 	PANEL_SHEET_HEAD,
@@ -1271,61 +1271,15 @@ export function SessionViewer({
 		() => session.walkthrough,
 		[walkthroughKey], // eslint-disable-line react-hooks/exhaustive-deps
 	);
-	// Remembered per browser; on phones the panel overlays the session, so default closed there
-	const [panelOpen, setPanelOpenState] = useState(() => {
-		const stored = localStorage.getItem("opensession-panel-open");
-		if (stored !== null) return stored === "true" && window.innerWidth > 920;
-		return window.innerWidth > 920;
-	});
-
-	function setPanelOpen(open: boolean) {
-		setPanelOpenState(open);
-		localStorage.setItem("opensession-panel-open", String(open));
-	}
-	// Right-panel width (px), drag-resizable from its left edge and persisted
-	// per browser; 0 = the CSS default (44%). Mirrors the left sidebar's resize.
-	// Shared by the Workspace and sub-agent panels via the --panel-w var.
-	const [panelW, setPanelW] = useState<number>(() => {
-		const v = Number(localStorage.getItem("opensession-panel-w"));
-		return v >= 320 && v <= 2400 ? v : 0;
-	});
-	const panelWRef = useRef(panelW);
-	panelWRef.current = panelW;
-	function startPanelResize(e: React.MouseEvent) {
-		e.preventDefault();
-		// The panel is the rightmost column, so its right edge tracks the pointer's
-		// distance from the container's right side.
-		const right =
-			(e.currentTarget.parentElement as HTMLElement | null)?.getBoundingClientRect()
-				.right ?? window.innerWidth;
-		document.body.classList.add("resizing-panel");
-		// Snap Motion layout morphs while dragging — the composer re-measures on
-		// every step, so springing it reads as funky text (mirrors the sidebar).
-		const restoreMotion = suppressLayoutAnimations();
-		const onMove = (ev: MouseEvent) => {
-			// Wide enough to review code side-by-side: only reserve room for the
-			// left sidebar + a readable session column instead of a fixed 900px cap.
-			const max = Math.max(480, Math.round(window.innerWidth - 620));
-			const w = Math.min(max, Math.max(320, Math.round(right - ev.clientX)));
-			panelWRef.current = w;
-			setPanelW(w);
-		};
-		const onUp = () => {
-			document.body.classList.remove("resizing-panel");
-			restoreMotion();
-			window.removeEventListener("mousemove", onMove);
-			window.removeEventListener("mouseup", onUp);
-			localStorage.setItem(
-				"opensession-panel-w",
-				String(Math.round(panelWRef.current)),
-			);
-		};
-		window.addEventListener("mousemove", onMove);
-		window.addEventListener("mouseup", onUp);
-	}
-	const panelStyle = panelW
-		? ({ "--panel-w": `${panelW}px` } as React.CSSProperties)
-		: undefined;
+	// Open state + width of the right panel. Browser-level, and shared with the
+	// session-less workspace route so the column keeps its place and size when
+	// a workspace has no session to show yet (hooks/useSidePanel).
+	const {
+		open: panelOpen,
+		setOpen: setPanelOpen,
+		style: panelStyle,
+		resizeHandle: panelResizeHandle,
+	} = useSidePanel();
 	// Session scratch assets (Assets tab): fetched once per session + on
 	// assets_changed broadcasts; the tab only appears once files exist.
 	const { files: assetFiles, refresh: refreshAssets } = useSessionAssets(
@@ -1420,13 +1374,6 @@ export function SessionViewer({
 		clearMention(session.id);
 		return onMentionsChanged(() => clearMention(session.id));
 	}, [session.id]);
-	const panelResizeHandle = (
-		<div
-			className={PANEL_RESIZE}
-			onMouseDown={startPanelResize}
-			aria-hidden="true"
-		/>
-	);
 	// Intent-aware scrolling: stick to the live edge only while the reader is there,
 	// pin new turns near the top, and surface a "Jump to latest" affordance.
 	const {

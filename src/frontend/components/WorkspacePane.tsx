@@ -1,18 +1,35 @@
 import { AGENT_NAME } from "../lib/brand";
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Workspace, UnifiedSession, WSServerMessage } from "../lib/types";
 import { fetchModels, type ModelOption } from "../lib/api";
 import { Composer } from "./Composer";
 import { ConversationPane } from "./ConversationPane";
 import { FeedWebPane, refWebPanel } from "./FeedWebPane";
 import { SlackChannelPane } from "./SlackChannelPane";
-import { plainThreadUrl } from "./PlainThreadPanel";
 import { MarkdownRepoProvider } from "./MarkdownBody";
 import { PrPanel } from "./PrPanel";
-import { repoLabel } from "./RepoTile";
+import { RepoTile, repoLabel } from "./RepoTile";
+import { WorkspaceInfo } from "./WorkspaceInfo";
 import { useCurrentUser } from "./UserPicker";
 import { useIsPhone } from "../hooks/useIsPhone";
-import { PANEL_SHELL } from "../lib/session-panel-classes";
+import { useSidePanel } from "../hooks/useSidePanel";
+import { IconSidebarRight } from "./icons";
+import { Button } from "../ui/button";
+import { Tooltip } from "../ui/tooltip";
+import {
+	PANEL_BODY,
+	PANEL_OVERLAY,
+	PANEL_SHELL,
+	PANEL_TABS,
+	panelTabClass,
+} from "../lib/session-panel-classes";
+import {
+	VIEWER_BRANCH,
+	VIEWER_HEADER,
+	VIEWER_HEADER_ACTIONS,
+	VIEWER_TITLE,
+} from "../lib/session-viewer-classes";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
 import { getDefaultModelPref } from "../lib/default-model-pref";
 import { InlineAlert } from "../ui/state";
@@ -33,6 +50,13 @@ interface Props {
 	onOpenSession: (id: string, created?: UnifiedSession | null) => void;
 	/** Open another PR in the review panel (stack map layer links). */
 	onOpenPr?: (repo: string, branch: string) => void;
+	/** The app's top-bar slot. The header row portals in here, the same slot and
+	    the same row a session's header uses, so the chrome doesn't change shape
+	    when a workspace has no session yet. */
+	topbarEl?: HTMLElement | null;
+	/** The app's right-column slot — see the header note; the info panel portals
+	    in here so it is a full-height column rather than a box below the tabs. */
+	rightPanelEl?: HTMLElement | null;
 }
 
 /**
@@ -67,6 +91,8 @@ export function WorkspacePane({
 	addHandler,
 	onOpenSession,
 	onOpenPr,
+	topbarEl,
+	rightPanelEl,
 }: Props) {
 	const draftKey = `workspace-home:${workspace.id}`;
 	const [prompt, setPrompt] = useState(() => loadDraft(draftKey).text);
@@ -82,9 +108,10 @@ export function WorkspacePane({
 	const [model, setModel] = useState(""); // "" = default
 	const currentUser = useCurrentUser();
 	const isPhone = useIsPhone();
+	const sidePanel = useSidePanel();
 
 	useEffect(() => {
-		const load = () => fetchModels(false, workspace.id)
+		const load = () => fetchModels(workspace.id)
 			.then((m) => {
 				setModels(m.models);
 				setDefaultModel(m.default);
@@ -177,91 +204,86 @@ export function WorkspacePane({
 		// App navigates into the session on session_created.
 	}
 
-	// The workspace's standing right sidebar: a workspace is a first-class
-	// surface, so it always shows one — even session-less.
-	// Compact info: identity, linkage (repo/branch/PR/ticket), and its sessions.
-	const infoPanel = !isPhone && (
-		<aside className={PANEL_SHELL}>
-			<div className="flex-1 min-h-0 overflow-y-auto p-4">
-				<div className="text-fg font-semibold text-item-title leading-snug">
-					{workspace.name}
+	// The session-scoped APIs the panel's PR / diff / git rows read through. A
+	// session-less workspace has none, and the panel simply shows what the
+	// workspace record and its overview already say.
+	const anchorSession = workspaceSessions[0] ?? reviewSession;
+
+	// The workspace's right column: the same panel a session shows, with the
+	// same Info block in it. A workspace is a first-class surface, so the chrome
+	// around it doesn't change when the last session goes — only what the pane
+	// beside it holds.
+	const infoPanel = !isPhone && sidePanel.open && (
+		<>
+			<div className={PANEL_OVERLAY} onClick={() => sidePanel.setOpen(false)} />
+			<aside className={PANEL_SHELL} style={sidePanel.style}>
+				{sidePanel.resizeHandle}
+				{/* One tab, and it stays: the session panel's other tabs (Changes,
+				    Terminal, Portals, Agents) are all a session's worktree seen from
+				    a different angle, and there is no worktree here. Keeping the row
+				    means the panel's top edge lines up with the session's. */}
+				<div className={PANEL_TABS}>
+					<button className={panelTabClass(true)}>Info</button>
 				</div>
-				<div className="text-dim text-supporting mt-2 flex flex-col gap-1.5">
-					{workspace.repo && (
-						<div className="flex items-center gap-2 min-w-0">
-							<span className="text-faint shrink-0">Repo</span>
-							<span className="truncate">{repoLabel(workspace.repo)}</span>
-						</div>
-					)}
-					{workspace.branch && (
-						<div className="flex items-center gap-2 min-w-0">
-							<span className="text-faint shrink-0">Branch</span>
-							<span className="text-label truncate">
-								{workspace.branch}
-							</span>
-						</div>
-					)}
-					{workspace.prNumber !== undefined && (
-						<div className="flex items-center gap-2 min-w-0">
-							<span className="text-faint shrink-0">Pull request</span>
-							<span>#{workspace.prNumber}</span>
-						</div>
-					)}
-					{workspace.plainThreadId && (
-						<div className="flex items-center gap-2 min-w-0">
-							<span className="text-faint shrink-0">Ticket</span>
-							<a
-								className="truncate text-dim hover:text-fg"
-								href={plainThreadUrl(workspace.plainThreadId)}
-								target="_blank"
-								rel="noreferrer"
-							>
-								Open in Plain ↗
-							</a>
-						</div>
-					)}
-					<div className="flex items-center gap-2 min-w-0">
-						<span className="text-faint shrink-0">Created</span>
-						<span className="truncate">
-							{new Date(workspace.createdAt).toLocaleDateString()} ·{" "}
-							{workspace.createdBy}
-						</span>
+				<div className={PANEL_BODY}>
+					<div className="px-1">
+						<WorkspaceInfo
+							sessionId={anchorSession?.id || ""}
+							workspaceId={workspace.id}
+							workspaceName={workspace.name}
+							workspaceCreatedBy={workspace.createdBy}
+							sessions={workspaceSessions.map((s) => ({
+								id: s.id,
+								title: s.title,
+								createdAt: s.createdAt || "",
+								startedBy: s.startedBy,
+							}))}
+							repo={workspace.repo || undefined}
+							prState={anchorSession?.prState}
+							send={connected ? send : undefined}
+							onOpenSession={onOpenSession}
+							liveMediaCount={0}
+						/>
 					</div>
 				</div>
-				<div className="mt-4">
-					<div className="text-meta font-semibold uppercase tracking-wide text-faint">
-						Sessions
-					</div>
-					{/* This panel sits beside the workspace home AND beside a pane
-					    (Review, Conversation, Video), and only the home has a composer,
-					    so the empty state can't point at one. The branch is a row
-					    above either way. */}
-					{workspaceSessions.length === 0 ? (
-						<div className="text-dim text-supporting mt-1.5">None yet.</div>
-					) : (
-						<div className="flex flex-col mt-1.5">
-							{workspaceSessions.map((c) => (
-								<button
-									key={c.id}
-									className="text-left text-[13px] text-dim hover:text-fg truncate py-1 cursor-pointer bg-transparent border-0 p-0"
-									onClick={() => onOpenSession(c.id)}
-								>
-									{c.title || "Untitled session"}
-								</button>
-							))}
-						</div>
-					)}
-				</div>
+			</aside>
+		</>
+	);
+
+	// The header row, in the app's own top-bar slot so it lands exactly where a
+	// session's header does — beside the pane, not across the panel.
+	const header = !isPhone && (
+		<div className={VIEWER_HEADER}>
+			<div className={VIEWER_TITLE}>
+				{workspace.repo && <RepoTile name={workspace.repo} />}
+				<span className={VIEWER_BRANCH}>{workspace.name}</span>
 			</div>
-		</aside>
+			<div className={VIEWER_HEADER_ACTIONS}>
+				<Tooltip label="Toggle side panel">
+					<Button
+						variant="ghost"
+						size="md"
+						className="rounded-control text-dim hover:bg-hover hover:text-fg"
+						onClick={() => sidePanel.setOpen(!sidePanel.open)}
+						aria-label="Toggle side panel"
+						icon={<IconSidebarRight size={22} />}
+					/>
+				</Tooltip>
+			</div>
+		</div>
 	);
 
 	// Everything on this pane — the PR body, review comments, the info panel —
 	// is about this workspace's repo, so a `#5528` written in any of it means a
-	// PR there (markdown.ts).
+	// PR there (markdown.ts). Both portals sit inside the provider: a React
+	// portal moves the DOM node, not the context.
 	const withPanel = (main: React.ReactNode) => (
 		<MarkdownRepoProvider repo={workspace.repo}>
-			<div className="flex h-full min-h-0"><div className="flex-1 min-w-0 min-h-0">{main}</div>{infoPanel}</div>
+			{topbarEl && header ? createPortal(header, topbarEl) : null}
+			<div className="flex h-full min-h-0">
+				<div className="flex-1 min-w-0 min-h-0">{main}</div>
+			</div>
+			{rightPanelEl && infoPanel ? createPortal(infoPanel, rightPanelEl) : null}
 		</MarkdownRepoProvider>
 	);
 
@@ -323,10 +345,10 @@ export function WorkspacePane({
 		<div className={`${VIEW_MAIN} flex flex-col h-full min-h-0`}>
 			<div className="flex-1 min-h-0 overflow-y-auto">
 				<div className="w-full max-w-[760px] mx-auto px-5 py-6">
-					<div className="text-section-title font-semibold text-fg">
-						<span>{workspace.name}</span>
-					</div>
-					<div className="text-dim text-supporting mt-1 flex items-center gap-2 flex-wrap">
+					{/* No heading here: the header row above names the workspace (and
+					    the info panel names it again). The branch is the one thing
+					    neither of them says, so this line carries it. */}
+					<div className="text-dim text-supporting flex items-center gap-2 flex-wrap">
 						{workspace.repo && <span>{repoLabel(workspace.repo)}</span>}
 						{workspace.branch && (
 							<span className="text-label">{workspace.branch}</span>

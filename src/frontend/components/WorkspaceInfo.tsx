@@ -1388,7 +1388,9 @@ export function WorkspaceInfo({
 	// Files changed — the primary repo's diff (Changes tab has the full view
 	// + repo switcher; here we show a capped preview).
 	useEffect(() => {
-		if (!repo) {
+		// No session to read through: a session-less workspace has no worktree,
+		// so there is no diff to ask for (and nothing to poll for one).
+		if (!repo || !sessionId) {
 			setFiles(null);
 			setRawPatch("");
 			return;
@@ -1416,7 +1418,8 @@ export function WorkspaceInfo({
 	// slow poll, refetched as live media bumps (a proxy for run activity) so the
 	// counts settle after a turn's auto-commit/push. Only when the session has a repo.
 	useEffect(() => {
-		if (!repo) {
+		// Same as the diff above: local git state is the session's worktree's.
+		if (!repo || !sessionId) {
 			setGit(null);
 			return;
 		}

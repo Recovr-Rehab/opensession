@@ -4068,6 +4068,9 @@ export function App(
 						<div className={DETAIL_TOPBAR} ref={setTopbarEl}>
 							{route.view !== "session" &&
 								route.view !== "archived" &&
+								// A workspace portals in the same header row a session
+								// does (WorkspacePane) rather than taking the plain title.
+								!(route.view === "workspace" && routeWorkspace) &&
 								topbarTitle && (
 								<span className={DETAIL_TOPBAR_TITLE}>{topbarTitle}</span>
 							)}
@@ -4114,6 +4117,8 @@ export function App(
 									send={send}
 									addHandler={addHandler}
 									onOpenSession={openSession}
+									topbarEl={topbarEl}
+									rightPanelEl={rightPanelEl}
 								/>
 							) : workspacesLoaded ? (
 								<EmptyState>Workspace not found.</EmptyState>
