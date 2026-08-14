@@ -18,6 +18,7 @@ import {
   shouldRetryTransientRun,
   emptyCompletionRepairPrompt,
   meridianRequiredModels,
+  buildTurnResultEvents,
 } from "./opencode-runner";
 import { buildRunInstructions } from "./run-instructions";
 import { __setIdentitiesForTest } from "./shared/user-mappings";
@@ -984,5 +985,82 @@ describe("anthropic-bridge jsonSchemaToZodShape", () => {
   test("degrades unknown constructs to permissive", () => {
     expect(jsonSchemaToZodShape(undefined)).toEqual({});
     expect(jsonSchemaToZodShape({ type: "string" })).toEqual({});
+  });
+});
+
+// ── Per-turn usage accounting ──
+//
+// opencode emits one assistant message per model request, so a turn that calls
+// tools is many messages. Reading only the last one under-reported cost 6.6x
+// and tokens 7.8x across the whole message store before this was fixed.
+describe("turn usage sums every step", () => {
+  const step = (input: number, output: number, read: number, write: number, cost: number) => ({
+    info: { role: "assistant", tokens: { input, output, cache: { read, write } }, cost },
+    parts: [],
+  });
+  const build = (list: any[]) => {
+    const audited: Record<string, unknown>[] = [];
+    const events = buildTurnResultEvents({
+      info: list.filter((m) => m.info?.role === "assistant").at(-1)?.info,
+      list,
+      textOut: "done",
+      ocSessionId: "ses_1",
+      model: "claude-opus-5",
+      providerID: "anthropic",
+      turnEvent: (fields) => audited.push(fields),
+    });
+    const done = events.find((e) => e.type === "done") as any;
+    return { audit: audited[0], usage: done?.usage };
+  };
+
+  test("tokens and cost accumulate across the turn's model requests", () => {
+    const { audit, usage } = build([
+      { info: { role: "user" }, parts: [] },
+      step(100, 20, 1_000, 500, 0.5),
+      step(200, 30, 2_000, 0, 0.75),
+      step(5, 40, 3_000, 0, 1.0),
+    ]);
+    expect(usage.inputTokens).toBe(305);
+    expect(usage.outputTokens).toBe(90);
+    expect(usage.cacheReadTokens).toBe(6_000);
+    expect(usage.cacheCreationTokens).toBe(500);
+    expect(usage.costUsd).toBeCloseTo(2.25);
+    expect(audit.input_tokens).toBe(305);
+    expect(audit.total_cost_usd).toBeCloseTo(2.25);
+    // Cache writes were never emitted at all before, so the audit's
+    // cache-write column read zero while the priciest tokens went unrecorded.
+    expect(audit.cache_creation_input_tokens).toBe(500);
+    expect(audit.steps).toBe(3);
+  });
+
+  test("context stays the final step's prompt size, not a sum of them", () => {
+    const { usage } = build([
+      { info: { role: "user" }, parts: [] },
+      step(100, 20, 90_000, 0, 0.5),
+      step(5, 40, 95_000, 0, 0.75),
+    ]);
+    // Summing prompt sizes would claim a 185k context window from two
+    // ordinary 95k steps.
+    expect(usage.contextTokens).toBe(95_005);
+    expect(usage.cacheReadTokens).toBe(185_000);
+  });
+
+  test("only the current turn counts, not the whole session", () => {
+    const { usage } = build([
+      { info: { role: "user" }, parts: [] },
+      step(999, 999, 999, 0, 9),
+      { info: { role: "user" }, parts: [] },
+      step(10, 20, 30, 0, 1),
+    ]);
+    expect(usage.inputTokens).toBe(10);
+    expect(usage.costUsd).toBeCloseTo(1);
+  });
+
+  test("a turn whose steps report no usage yields no usage", () => {
+    const { usage } = build([
+      { info: { role: "user" }, parts: [] },
+      { info: { role: "assistant" }, parts: [] },
+    ]);
+    expect(usage).toBeUndefined();
   });
 });

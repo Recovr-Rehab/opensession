@@ -595,12 +595,12 @@ export function Analytics() {
 								}`}
 							/>
 							<StatTile
-								label="Cost"
+								label="Cost at list price"
 								value={derived.hasCost ? fmtUsd(derived.costUsd) : "–"}
 								sub={
 									derived.hasCost
-										? `${fmtInt(derived.costedTurns)} of ${fmtInt(data.totals.turns)} turns billed by token`
-										: "no turns billed by token in range"
+										? `API-equivalent · ${pct(derived.costedTurns, data.totals.turns)} of turns priced`
+										: "no priced turns in range"
 								}
 							/>
 							<StatTile
@@ -655,7 +655,11 @@ export function Analytics() {
 								<BarChart labels={derived.labels} series={derived.tokenSeries} values={derived.tokenValues} mode="stacked" />
 							</ChartCard>
 							{derived.hasCost && (
-								<ChartCard title="Cost per day" subtitle="By model, top 5 in range" series={derived.costSeries}>
+								<ChartCard
+									title="Cost per day at list price"
+									subtitle="By model, top 5 in range"
+									series={derived.costSeries}
+								>
 									<BarChart
 										labels={derived.labels}
 										series={derived.costSeries}
@@ -665,7 +669,8 @@ export function Analytics() {
 										formatTick={fmtUsdTick}
 									/>
 									<p className="m-0 mt-2 text-meta text-faint">
-										Only models billed per token report a price. Turns on a subscription pool report $0, so this covers{" "}
+										What these turns would have cost at API list price, not what was paid: the models run on
+										subscription pools. Models the engine does not price report nothing at all, so this covers{" "}
 										{fmtInt(derived.costedTurns)} of {fmtInt(data.totals.turns)} turns in range.
 									</p>
 								</ChartCard>

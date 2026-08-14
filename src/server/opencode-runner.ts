@@ -472,6 +472,21 @@ export function latestTurnAssistant<T extends { info?: { role?: string } }>(mess
     .find((message) => message.info?.role === "assistant");
 }
 
+/**
+ * Every assistant message of the CURRENT turn, oldest first.
+ *
+ * opencode emits one assistant message per model request, so a turn that calls
+ * tools is many messages, each carrying its own `tokens` and `cost`. Anything
+ * measuring work DONE (tokens moved, money spent) has to sum them; only the
+ * context-window LEVEL comes from the final one. Reading just the last message
+ * is what made Analytics under-report cost 6.6x and tokens 7.8x. A turn
+ * averages 7.5 steps here, and runs to 123.
+ */
+export function currentTurnAssistants<T extends { info?: { role?: string } }>(messages: T[]): T[] {
+  const lastUser = messages.findLastIndex((message) => message.info?.role === "user");
+  return messages.slice(lastUser + 1).filter((message) => message.info?.role === "assistant");
+}
+
 /** Delete trailing assistant messages that carry no text and no tool call
  *  from the engine session. A reasoning-only tail (Sol empty completion,
  *  first seen 2026-08-04 in slack-C09BAFFK8F8-1785828070) is rejected
@@ -2914,7 +2929,7 @@ function collectFinalAssistantText(
  * final assistant info, audit the `result` turn event, and build the
  * usage_snapshot + done events for the caller to yield (in that order).
  */
-function buildTurnResultEvents(ctx: {
+export function buildTurnResultEvents(ctx: {
   info: any;
   list: Array<{ info: any; parts: any[] }>;
   textOut: string;
@@ -2925,15 +2940,44 @@ function buildTurnResultEvents(ctx: {
 }): StreamEvent[] {
   const { info, list, textOut } = ctx;
   const tokens = info?.tokens;
-  const usage: TurnUsage | undefined = tokens
+  // Flows (tokens moved, money spent) sum over every step of the turn; the
+  // context LEVEL is the final step's prompt size, not a sum of prompt sizes.
+  const steps = currentTurnAssistants(list);
+  let stepsWithUsage = 0;
+  const flow = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+  for (const step of steps) {
+    const t = step.info?.tokens;
+    if (!t) continue;
+    stepsWithUsage++;
+    flow.input += t.input || 0;
+    flow.output += t.output || 0;
+    flow.cacheRead += t.cache?.read || 0;
+    flow.cacheWrite += t.cache?.write || 0;
+    flow.cost += step.info?.cost || 0;
+  }
+  const contextTokens = tokens
+    ? (tokens.input || 0) + (tokens.cache?.read || 0) + (tokens.cache?.write || 0)
+    : 0;
+  const usage: TurnUsage | undefined = stepsWithUsage
+    ? {
+        costUsd: flow.cost,
+        inputTokens: flow.input,
+        outputTokens: flow.output,
+        cacheReadTokens: flow.cacheRead,
+        cacheCreationTokens: flow.cacheWrite,
+        contextTokens,
+      }
+    : undefined;
+  // The cache-miss detector asks "did the FINAL step reuse a prefix", so it
+  // reads that step alone: against summed reads it could never fire.
+  const finalStepUsage: TurnUsage | undefined = tokens
     ? {
         costUsd: info?.cost,
         inputTokens: tokens.input || 0,
         outputTokens: tokens.output || 0,
         cacheReadTokens: tokens.cache?.read || 0,
         cacheCreationTokens: tokens.cache?.write || 0,
-        contextTokens:
-          (tokens.input || 0) + (tokens.cache?.read || 0) + (tokens.cache?.write || 0),
+        contextTokens,
       }
     : undefined;
   const userTurns = list.filter((message) => message.info?.role === "user").length;
@@ -2942,10 +2986,16 @@ function buildTurnResultEvents(ctx: {
     kind: "result",
     result_subtype: "success",
     is_error: false,
-    input_tokens: tokens?.input,
-    output_tokens: tokens?.output,
-    cache_read_input_tokens: tokens?.cache?.read,
-    total_cost_usd: info?.cost,
+    input_tokens: flow.input,
+    output_tokens: flow.output,
+    cache_read_input_tokens: flow.cacheRead,
+    // Never emitted before, so every cache-write column read zero while the
+    // most expensive tokens in the run went unrecorded.
+    cache_creation_input_tokens: flow.cacheWrite,
+    total_cost_usd: flow.cost,
+    // Requests behind this turn: the multiplier that made the old
+    // last-message-only numbers look plausible.
+    steps: steps.length,
     ...summarizeText(textOut),
   });
   const events: StreamEvent[] = [];
@@ -2958,7 +3008,8 @@ function buildTurnResultEvents(ctx: {
     model: ctx.model,
     usage,
     cacheMissWarning:
-      (usage && isLikelyPromptCacheMiss(usage, userTurns, ctx.providerID)) || undefined,
+      (finalStepUsage && isLikelyPromptCacheMiss(finalStepUsage, userTurns, ctx.providerID)) ||
+      undefined,
   });
   return events;
 }
