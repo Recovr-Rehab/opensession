@@ -3,8 +3,11 @@
  * Almost everything executes on the opencode engine — native model ids
  * (claude-*, gpt-*) are mapped onto their opencode/<provider>/<model> form at
  * dispatch; explicit pi/<provider>/<model> ids dispatch to the in-process pi
- * runner instead (config-gated, see pi-runner.ts). Both emit the shared
- * StreamEvent shape, so everything downstream of runOnModel is engine-blind.
+ * runner instead (config-gated, see pi-runner.ts), and claude/… / codex/… ids
+ * to the direct-SDK adapters in src/server/engine/ (config-gated, see
+ * engine/engines-config.ts). All of them emit the shared StreamEvent shape, so
+ * everything downstream of runOnModel is engine-blind. routeModel (models.ts)
+ * owns which engine an id lands on; runOnModel just dispatches its answer.
  *
  * Note on session ids: `sessionId` is the engine session id (an opencode
  * session id, or a pi session uuid for pi runs; the field names
@@ -57,12 +60,17 @@ import {
   providerFor,
   nextFallbackModel,
   modelLabel,
+  explicitEngineFor,
+  routeModel,
   BEST_AVAILABLE_CODEX_MODEL,
   getDefaultModel,
   resolveConcreteModel,
   resolveModel,
   toOpencodeModel,
+  type DirectEngine,
 } from "./models";
+import { directEngineEnabled } from "./engine/engines-config";
+import { INTERACTIVE_KINDS, baseJournalKind } from "./opencode-policy";
 import { resolveWorkspaceModelPreset } from "./workspace-model-presets";
 import {
   isProviderOverloadError,
@@ -302,19 +310,163 @@ function recordPoolDryShortCircuit(opts: RunAgentOpts, model: string, reason: st
   });
 }
 
+// ── Direct-SDK engines (claude/…, codex/…) ──────────────────────────────────
+//
+// The two direct engines live in src/server/engine/ and load LAZILY, on the
+// first turn that routes to one: their SDKs are heavy, both are off by default
+// (engine/engines-config.ts), and a checkout need not carry both adapters. The
+// loaded module is cached on globalThis, so the SYNC control ops below
+// (busy/steer/cancel/count) keep working across a hot reload — and an engine
+// that has never been loaded has no runs, so answering false/0 for it is exact
+// rather than a guess.
+
+interface DirectEngineModule {
+  run: (opts: RunAgentOpts, model: string) => AsyncIterable<StreamEvent>;
+  isBusy?: (id: string) => boolean;
+  cancel?: (id: string) => boolean;
+  steer?: (id: string, text: string, images?: ImageInput[]) => boolean;
+  activeRunCount?: () => number;
+  gateReason?: (opts: RunAgentOpts) => string | null;
+}
+
+const DIRECT_ENGINE_ADAPTERS = {
+  claude: {
+    label: "Claude",
+    module: "./engine/claude-direct-adapter",
+    run: "runClaudeDirect",
+    isBusy: "isClaudeDirectBusy",
+    cancel: "cancelClaudeDirectRun",
+    steer: "steerClaudeDirectRun",
+    count: "activeClaudeDirectRunCount",
+    gate: "claudeDirectGateReason",
+  },
+  codex: {
+    label: "Codex",
+    module: "./engine/codex-direct-adapter",
+    run: "runCodexDirect",
+    isBusy: "isCodexDirectBusy",
+    cancel: "cancelCodexDirectRun",
+    steer: "steerCodexDirectRun",
+    count: "activeCodexDirectRunCount",
+    gate: "codexDirectGateReason",
+  },
+} as const satisfies Record<DirectEngine, { label: string; module: string } & Record<string, string>>;
+
+const directEngineModules: Map<DirectEngine, DirectEngineModule> = ((
+  globalThis as any
+).__osDirectEngineModules ??= new Map());
+
+async function loadDirectEngine(engine: DirectEngine): Promise<DirectEngineModule> {
+  const cached = directEngineModules.get(engine);
+  if (cached) return cached;
+  const names = DIRECT_ENGINE_ADAPTERS[engine];
+  // Computed specifier, not a literal: a missing adapter must fail as a clear
+  // runtime error on the one turn that asked for it, never at import time for
+  // the whole server.
+  const spec: string = names.module;
+  const mod = (await import(spec)) as Record<string, unknown>;
+  const fn = <T>(name: string): T | undefined =>
+    typeof mod[name] === "function" ? (mod[name] as T) : undefined;
+  const run = fn<DirectEngineModule["run"]>(names.run);
+  if (!run) throw new Error(`${names.module} does not export ${names.run}()`);
+  const entry: DirectEngineModule = {
+    run,
+    isBusy: fn(names.isBusy),
+    cancel: fn(names.cancel),
+    steer: fn(names.steer),
+    activeRunCount: fn(names.count),
+    gateReason: fn(names.gate),
+  };
+  directEngineModules.set(engine, entry);
+  return entry;
+}
+
+/** The direct engines this process has actually loaded — the only ones that
+ *  can be holding a live run (see the lazy-load note above). */
+function loadedDirectEngines(): DirectEngineModule[] {
+  return [...directEngineModules.values()];
+}
+
+/**
+ * One turn on a direct-SDK engine. A disabled engine, a missing adapter or a
+ * gate refusal surfaces as the turn's own terminal error — never a silent
+ * reroute onto another engine, which would run the person's prompt somewhere
+ * they didn't choose.
+ */
+async function* runDirectEngine(
+  opts: RunAgentOpts,
+  engine: DirectEngine,
+  model: string
+): AsyncGenerator<StreamEvent> {
+  const { label } = DIRECT_ENGINE_ADAPTERS[engine];
+  if (!directEngineEnabled(engine)) {
+    yield {
+      type: "error",
+      content:
+        `The ${label} engine is off. Turn it on in Settings (or in ` +
+        `~/.opensession-engines.json), or pick a model without the ${engine}/ prefix.`,
+      provider: engine,
+      model,
+    };
+    return;
+  }
+  let adapter: DirectEngineModule;
+  try {
+    adapter = await loadDirectEngine(engine);
+  } catch (e) {
+    yield {
+      type: "error",
+      content: `The ${label} engine could not start: ${e instanceof Error ? e.message : String(e)}`,
+      provider: engine,
+      model,
+    };
+    return;
+  }
+  const gate = adapter.gateReason?.(opts);
+  if (gate) {
+    yield { type: "error", content: gate, provider: engine, model };
+    return;
+  }
+  yield* adapter.run(opts, model);
+}
+
 function runOnModel(opts: RunAgentOpts, model: string | undefined): AsyncIterable<StreamEvent> {
-  // Engine dispatch: pi/<provider>/<model> ids run on the in-process pi
-  // runner; everything else maps onto the opencode engine — native ids
-  // (claude-*, gpt-*, codex-best-available) get their opencode form, explicit
-  // opencode/<provider>/<model> ids pass through. Anything that still doesn't
-  // parse as an engine id gets the runner's clear error (e.g. anthropic
-  // bridge disabled). The test seam stays FIRST, before the engine branch, so
-  // a fake engine intercepts both engines' turns (fake-engine.test.ts).
+  // Engine dispatch. routeModel (models.ts) owns the resolution order —
+  // explicit engine prefix > per-model default engine (interactive runs only)
+  // > opencode — and hands back the id to dispatch with: pi/<provider>/<model>
+  // runs on the in-process pi runner, claude/… and codex/… on the direct-SDK
+  // adapters, everything else on opencode (native ids get their opencode form,
+  // explicit opencode ids pass through). Anything that still doesn't parse as
+  // an engine id gets the runner's clear error (e.g. anthropic bridge
+  // disabled). The test seam stays FIRST, before the engine branch, so a fake
+  // engine intercepts every engine's turns (fake-engine.test.ts).
   const requested = model || getDefaultModel();
   const mapped = toOpencodeModel(requested) || requested;
   if (engineForTest) return engineForTest(opts, mapped);
-  if (requested.startsWith("pi/")) return runPi(opts, requested);
-  return runOpencode(opts, mapped);
+  const route = routeModel(requested, { interactive: isInteractiveRun(opts) });
+  if (route.engine === "pi") return runPi(opts, route.model);
+  if (route.engine === "claude" || route.engine === "codex") {
+    return runDirectEngine(opts, route.engine, route.model);
+  }
+  return runOpencode(opts, route.model);
+}
+
+/** Which engine's transcript store owns a routed model's session ids — the
+ *  read side of the same routing prefix runOnModel dispatches on. Anything
+ *  without an engine prefix (native ids, `<vendor>/<model>` paths) is served
+ *  by opencode. */
+export function transcriptProviderFor(
+  engineModel: string
+): "claude" | "codex" | "opencode" | "pi" {
+  const engine = explicitEngineFor(engineModel);
+  return engine === "pi" || engine === "claude" || engine === "codex" ? engine : "opencode";
+}
+
+/** Whether the per-model default engine applies to this run. Automations and
+ *  the other unattended kinds stay on their current routing for now — moving
+ *  their default is a separate, deliberate step. */
+export function isInteractiveRun(opts: { journal?: { kind?: string } }): boolean {
+  return INTERACTIVE_KINDS.has(baseJournalKind(opts.journal?.kind));
 }
 
 /**
@@ -423,10 +575,10 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
   const requestedModel = resolveModel(workspacePreset?.model || opts.model || getDefaultModel());
   const wantsBestCodex = requestedModel?.id === BEST_AVAILABLE_CODEX_MODEL;
   const primaryModel = workspacePreset?.model || resolveConcreteModel(opts.model);
-  // Pi is an explicit engine selection. Never cross its boundary into an
-  // OpenCode fallback when a provider/account fails: end the Pi turn and let
-  // the person retry or choose another engine deliberately.
-  const preferredFallback = primaryModel.startsWith("pi/")
+  // Pi and the direct-SDK engines are explicit engine selections. Never cross
+  // that boundary into an OpenCode fallback when a provider/account fails: end
+  // the turn and let the person retry or choose another engine deliberately.
+  const preferredFallback = /^(?:pi|claude|codex)\//.test(primaryModel)
     ? "none"
     : wantsBestCodex
     ? BEST_AVAILABLE_CODEX_MODEL
@@ -632,7 +784,7 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
         ? await readEngineTranscriptAsync(
             currentOpts.cwd,
             currentEngineId,
-            currentOc.startsWith("pi/") ? "pi" : "opencode"
+            transcriptProviderFor(currentOc)
           )
         : [];
       handoffEntries = entries;
@@ -686,6 +838,11 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
 export function engineFamily(model: string): string {
   const piFamily = model.match(/^pi\/([^/]+)\//)?.[1];
   if (piFamily) return `pi-${piFamily}`;
+  // Same rule for the direct-SDK engines: a direct↔opencode hop is always
+  // cross-family (fresh session + transcript handoff), direct→direct on the
+  // same vendor resumes its own session.
+  const direct = model.match(/^(claude|codex)\/([^/]+)\//);
+  if (direct) return `${direct[1]}-direct-${direct[2]}`;
   const oc = toOpencodeModel(model) || model;
   return oc.match(/^opencode\/([^/]+)\//)?.[1] || providerFor(model);
 }
@@ -693,6 +850,8 @@ export function engineFamily(model: string): string {
 /** Map an engine family to the handoff note's provider label. */
 function familyLabel(family: string): "claude" | "codex" | "opencode" | "pi" {
   if (family.startsWith("pi-")) return "pi";
+  if (family.startsWith("claude-direct-")) return "claude";
+  if (family.startsWith("codex-direct-")) return "codex";
   if (family === "anthropic") return "claude";
   if (family === "openai") return "codex";
   return "opencode";
@@ -839,6 +998,7 @@ export function isAgentLiveEngineBusy(...ids: Array<string | null | undefined>):
       activeSessionRunTokens.has(id) ||
       isOpencodeSessionBusy(id) ||
       isPiSessionBusy(id) ||
+      loadedDirectEngines().some((e) => e.isBusy?.(id) === true) ||
       hostRunBusy(id)
     )
       return true;
@@ -868,13 +1028,18 @@ export function isAgentSessionBusy(...ids: Array<string | null | undefined>): bo
  * not count external CLI/tmux runs — we can't drain those.)
  */
 export function activeAgentRunCount(): number {
-  return activeOpencodeRunCount() + activePiRunCount();
+  return (
+    activeOpencodeRunCount() +
+    activePiRunCount() +
+    loadedDirectEngines().reduce((n, e) => n + (e.activeRunCount?.() ?? 0), 0)
+  );
 }
 
 /** Of those, how many execute on a DETACHED engine server that survives a
  *  restart — the graceful-shutdown drain skips waiting on these (boot
- *  reattaches them via the journal instead). Pi runs are in-process and never
- *  detach, so they contribute 0 here and the drain always waits on them. */
+ *  reattaches them via the journal instead). Pi and the direct-SDK engines are
+ *  in-process and never detach, so they contribute 0 here and the drain always
+ *  waits on them. */
 export function activeDetachedAgentRunCount(): number {
   return activeDetachedOpencodeRunCount();
 }
@@ -896,6 +1061,9 @@ export function steerAgentRun(
     if (!id) continue;
     if (steerOpencodeRun(id, text, images)) return true;
     if (steerPiRun(id, text, images)) return true;
+    // A direct engine that has no mid-turn input channel simply exports no
+    // steer — the caller queues, which is the right fallback.
+    for (const e of loadedDirectEngines()) if (e.steer?.(id, text, images)) return true;
     // Host-forward RPC is text-only: a send with images falls through
     // (caller queues it — the queue drain delivers images).
     if (!images?.length && hostSteer(id, text)) return true;
@@ -948,6 +1116,7 @@ export function cancelAgentRun(...ids: Array<string | null | undefined>): boolea
     if (!id) continue;
     if (cancelOpencodeRun(id)) cancelled = true;
     if (cancelPiRun(id)) cancelled = true;
+    for (const e of loadedDirectEngines()) if (e.cancel?.(id)) cancelled = true;
     if (hostCancel(id)) cancelled = true;
   }
   const wanted = new Set(ids.filter((id): id is string => !!id));
@@ -1123,7 +1292,6 @@ export function resumeInterruptedRuns(
         untrackRecovery(run);
       }
     };
-  };
   const cancelRecoveredEngine = (run: ActiveRunRecord): void => {
     for (const id of [run.claudeSessionId, run.osSessionId, run.runKey]) {
       if (!id) continue;
