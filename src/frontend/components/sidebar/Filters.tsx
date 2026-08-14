@@ -1,10 +1,17 @@
 import type { FilterState, GroupBy, PrsFilter, SortBy } from "../../lib/sidebar-filter";
 import { SIDEBAR_HOVER_LAYER } from "../../lib/sidebar-classes";
+import {
+	getSidebarDensity,
+	onSidebarDensityChanged,
+	setSidebarDensity,
+	type SidebarDensity,
+} from "../../lib/sidebar-density";
 import type { Group } from "../../lib/sidebar-types";
+import { useIsPhone } from "../../hooks/useIsPhone";
 import { cn } from "../../ui/cn";
 import { RepoTile, repoLabel } from "../RepoTile";
 import { UserAvatar } from "../UserAvatar";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 // ── Filter popover ─────────────────────────────────────────────────────────
@@ -54,6 +61,19 @@ export function FilterPopover({
 	onChange: (patch: Partial<FilterState>) => void;
 	onClose: () => void;
 }) {
+	// Row density is a property of this list, so it sits with the other view
+	// controls rather than only in settings. It is a stored preference, not part
+	// of FilterState — hence its own state here, kept live by the pref's change
+	// event so the Appearance switch and this select never disagree.
+	// Both hooks run before the `anchor` early return: an unmounted anchor must
+	// not change how many hooks this component calls.
+	const isPhone = useIsPhone();
+	const [density, setDensity] = useState<SidebarDensity>(getSidebarDensity);
+	useEffect(
+		() => onSidebarDensityChanged(() => setDensity(getSidebarDensity())),
+		[],
+	);
+
 	if (!anchor) return null;
 	const r = anchor.getBoundingClientRect();
 	const width = 290;
@@ -145,6 +165,23 @@ export function FilterPopover({
 						onSelect={(v) => onChange({ sort: v as SortBy })}
 					/>
 				</div>
+				{/* Desktop only, because that is the whole of what the preference
+				    does: a phone row is a tap target and keeps its own padding at
+				    either setting (see SIDEBAR_DENSITY_VARS), so offering the
+				    control there would be a switch that changes nothing. */}
+				{!isPhone && (
+					<div className={FILTER_ROW}>
+						<span className={FILTER_ROW_LABEL}>Density</span>
+						<MiniSelect
+							value={density}
+							options={[
+								{ value: "default", label: "Default" },
+								{ value: "compact", label: "Compact" },
+							]}
+							onSelect={(v) => setSidebarDensity(v as SidebarDensity)}
+						/>
+					</div>
+				)}
 			</div>
 		</>,
 		document.body,

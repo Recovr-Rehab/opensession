@@ -60,7 +60,43 @@
  * below pins under. Two offsets are sums of these, so change a height here and
  * fix them in the same edit: a lane pins under one band at 32, and a lane
  * nested under a band plus a repo band at 32 + 36 = 68.
+ *
+ * Every one of those numbers is a custom property now, set once by
+ * {@link SIDEBAR_DENSITY_VARS} — which is what lets "Compact sidebar" retune
+ * the whole scale from one element, and what keeps the two sums above correct
+ * without anyone re-deriving them.
  */
+
+/**
+ * The rail's vertical scale, as one set of custom properties on the sidebar's
+ * scroll root. The default column is the scale described above; the compact
+ * column is the same rail with the air taken out of it, which is the whole of
+ * what the "Compact sidebar" preference does.
+ *
+ *              default   compact
+ *   full line     36px      30px   rows, and the headings that title rows
+ *   tool row      32px      30px   the tool strip
+ *   caption       28px      24px   band headings and status lanes
+ *   band slot     32px      28px   the tier-1 sticky slot
+ *   group gap     14px       8px   the air after a top-level group
+ *
+ * The 22px leading rail does NOT move. Its marks are 18px (a repo tile, a
+ * status mark), so a narrower slot would leave them 1px of margin, and the
+ * shared left edge every title sits on is the one thing a density change must
+ * not touch — a compact list that also re-rags the titles reads as a different
+ * sidebar rather than a tighter one. 30px around a 22px rail is 4px of margin,
+ * the tool row's own margin today.
+ *
+ * Two rules ride on this. Compact is gated on `desktop:`, because a phone row
+ * is a tap target and its `phone:` padding is deliberately off this scale.
+ * And the compact values sit on the SAME element as `data-density`, so they
+ * out-rank the defaults on specificity (0,2,0 against 0,1,0) rather than on
+ * Tailwind's output order, which two utilities setting one property would
+ * otherwise be settled by.
+ */
+export const SIDEBAR_DENSITY_VARS =
+	"[--sidebar-row-pad:7px] [--sidebar-tool-pad:5px] [--sidebar-line-h:36px] [--sidebar-cap-h:28px] [--sidebar-band-slot:32px] [--sidebar-group-gap:14px] " +
+	"desktop:data-[density=compact]:[--sidebar-row-pad:4px] desktop:data-[density=compact]:[--sidebar-tool-pad:4px] desktop:data-[density=compact]:[--sidebar-line-h:30px] desktop:data-[density=compact]:[--sidebar-cap-h:24px] desktop:data-[density=compact]:[--sidebar-band-slot:28px] desktop:data-[density=compact]:[--sidebar-group-gap:8px]";
 
 /**
  * The sidebar's leading column. Every row and group header opens with one of
@@ -150,7 +186,7 @@ export const SIDEBAR_HOVER_LAYER =
 export const SIDEBAR_ROW_CHIP = "hover:bg-[var(--row-chip)]";
 
 /** A top-level group in the workspace list, and the gap after it. */
-export const SIDEBAR_GROUP = "mb-[14px]";
+export const SIDEBAR_GROUP = "mb-[var(--sidebar-group-gap)]";
 
 /**
  * A status lane. Consecutive lanes open with 8px of their own, which was an
@@ -243,7 +279,8 @@ export const SIDEBAR_GROUP_HEADER =
  * Desktop only. On phones the heading keeps the taller tap box its own inset
  * gives it.
  */
-export const SIDEBAR_HEADER_ROW = "desktop:h-9 desktop:min-h-9";
+export const SIDEBAR_HEADER_ROW =
+	"desktop:h-[var(--sidebar-line-h)] desktop:min-h-[var(--sidebar-line-h)]";
 
 /** Left pad aligns the icon with a base row (list 6 + header 10 = 16). */
 export const SIDEBAR_GROUP_HEADER_INSET =
@@ -264,7 +301,7 @@ export const SIDEBAR_GROUP_HEADER_INSET =
  * rows that lead nowhere between the rows that do.
  */
 export const SIDEBAR_LANE_HEADER =
-	"gap-[5px] pt-[9px] pb-[5px] text-[13px] font-semibold desktop:h-7 desktop:min-h-7 desktop:pt-1 desktop:pb-1 desktop:text-[12px]";
+	"gap-[5px] pt-[9px] pb-[5px] text-[13px] font-semibold desktop:h-[var(--sidebar-cap-h)] desktop:min-h-[var(--sidebar-cap-h)] desktop:pt-1 desktop:pb-1 desktop:text-[12px]";
 
 /**
  * The heading's own name. `truncate` before any width utility: it is the pair
@@ -373,7 +410,7 @@ export const SIDEBAR_STICKY_BAND =
  * what every tier-2 header pins under, so the offsets below start from it.
  */
 export const SIDEBAR_STICKY_BAND_ROW =
-	"desktop:mt-0 desktop:flex desktop:h-8 desktop:min-h-8 desktop:items-center desktop:py-0";
+	"desktop:mt-0 desktop:flex desktop:h-[var(--sidebar-band-slot)] desktop:min-h-[var(--sidebar-band-slot)] desktop:items-center desktop:py-0";
 
 /**
  * Tier 2: a lane / repo / status header, pinned one band-row lower. Once
@@ -388,7 +425,7 @@ export const SIDEBAR_STICKY_BAND_ROW =
  * rows around them instead of with each other.
  */
 export const SIDEBAR_STICKY_LANE =
-	"desktop:sticky desktop:top-8 desktop:z-[15] " +
+	"desktop:sticky desktop:top-[var(--sidebar-band-slot)] desktop:z-[15] " +
 	"desktop:[&.is-stuck::after]:pointer-events-none desktop:[&.is-stuck::after]:absolute desktop:[&.is-stuck::after]:top-[calc(100%-8px)] desktop:[&.is-stuck::after]:left-[-400px] desktop:[&.is-stuck::after]:right-[-400px] desktop:[&.is-stuck::after]:z-[-1] desktop:[&.is-stuck::after]:h-5 desktop:[&.is-stuck::after]:content-[''] desktop:[&.is-stuck::after]:[background:linear-gradient(to_bottom,var(--sidebar-material),transparent),linear-gradient(to_bottom,var(--bg-raised),transparent)]";
 
 /**
@@ -397,12 +434,14 @@ export const SIDEBAR_STICKY_LANE =
  * header, hence the lower z-index. Pass it after {@link SIDEBAR_STICKY_LANE}
  * through `cn()`, which resolves the pair to this one.
  *
- * 68 = the band slot above it (32) + the repo header above it (36, an item). Both
- * of those heights are fixed by their own class rather than by padding, which
- * is what lets this be a sum instead of a measurement.
+ * The offset is the band slot above it plus the repo header above it (an item):
+ * 32 + 36 = 68 by default, 28 + 30 = 58 compact. Both of those heights are fixed
+ * by their own class rather than by padding, which is what lets this be a sum
+ * instead of a measurement; spelling it as the sum rather than as either
+ * number is what keeps it right at both densities.
  */
 export const SIDEBAR_STICKY_LANE_NESTED =
-	"desktop:top-[68px] desktop:z-[14]";
+	"desktop:top-[calc(var(--sidebar-band-slot)+var(--sidebar-line-h))] desktop:z-[14]";
 
 /**
  * ── Band headings ───────────────────────────────────────────────────────────
@@ -431,10 +470,11 @@ export const SIDEBAR_BAND_TOGGLE =
 	// this replaced computed to. Width resolves to 0 under either.
 	//
 	// A band heading is a LABEL, so it paints no hover fill — only the ink
-	// brightens. `min-h-7` is the 28px label height; it sits inside the 32px
-	// slot SIDEBAR_STICKY_BAND_ROW reserves, so the caption keeps a little air
-	// around it without the pinned slot growing.
-	"group/band m-0 flex min-h-7 w-full cursor-pointer items-center gap-[5px] rounded-[calc(8px*var(--rf))] border-none bg-transparent py-1 text-left text-inherit [font:inherit] hover:text-dim";
+	// brightens. `--sidebar-cap-h` is the 28px label height; it sits inside the
+	// 32px slot SIDEBAR_STICKY_BAND_ROW reserves, so the caption keeps a little
+	// air around it without the pinned slot growing. Compact takes the pair to
+	// 24 inside 28, which is the same 4px of air.
+	"group/band m-0 flex min-h-[var(--sidebar-cap-h)] w-full cursor-pointer items-center gap-[5px] rounded-[calc(8px*var(--rf))] border-none bg-transparent py-1 text-left text-inherit [font:inherit] hover:text-dim";
 
 /**
  * The inset the Automations and People headings take. The desktop value lands

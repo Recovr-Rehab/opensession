@@ -43,14 +43,17 @@ import React, { useEffect, useRef, useState } from "react";
  *  row content sits one 4px step inside the repo and lane headings, matching
  *  the native list hierarchy instead of flattening every label onto one rail.
  *
- *  7px of padding around the 22px rail is the sidebar's 36px ITEM height (see
- *  the height scale in lib/sidebar-classes.ts) — the same box the tool rows
- *  and the item headings take, so a repo band and its sessions run as one
- *  regular column. It was 9px, which made a session row the tallest thing in
- *  the rail and 12px taller than a tool row saying the same kind of thing.
- *  Phones keep `py-[13px]`: 36px is a reading height, not a tap target. */
+ *  `--sidebar-row-pad` around the 22px rail is the sidebar's ITEM height (see
+ *  the height scale in lib/sidebar-classes.ts): 7px for a 36px box, and 4px
+ *  for the 30px one the compact density asks for. It is the same box the tool
+ *  rows and the item headings take at either setting, so a repo band and its
+ *  sessions run as one regular column. It was a flat 9px, which made a session
+ *  row the tallest thing in the rail and 12px taller than a tool row saying the
+ *  same kind of thing.
+ *  Phones keep `py-[13px]` at both densities: 36px is a reading height, not a
+ *  tap target, so the compact values are gated to desktop where they are set. */
 export const SIDEBAR_ROW =
-	"group relative mt-0.5 w-full rounded-row border-0 bg-transparent py-[7px] pr-2 pl-2.5 text-left text-fg phone:px-2 phone:py-[13px]";
+	"group relative mt-0.5 w-full rounded-row border-0 bg-transparent py-[var(--sidebar-row-pad)] pr-2 pl-2.5 text-left text-fg phone:px-2 phone:py-[13px]";
 
 /** A row's title: one line that fades smoothly at the available edge instead
  *  of ending in an ellipsis. Read conversations stay quiet; unread ones
@@ -385,9 +388,11 @@ export function SidebarItem({
 						// a solid chip can't sit on a translucent row. `hover:`, not
 						// `group-hover:` — this element is the group itself.
 						"hover:pr-[68px]",
-						// Other people's sessions stack a meta line under the title, so
-						// the row is already two lines tall — trim its padding.
-						!mine && "py-[7px]",
+						// No trim here for other people's sessions, which stack a meta
+						// line under the title. That used to re-state `py-[7px]` against
+						// a 9px base; the base is now the shared `--sidebar-row-pad`, and
+						// a hard second `py-*` would out-rank it on Tailwind's output
+						// order alone and pin those rows at one density.
 						// No fill for "needs you" — the blue mark in the rail and the
 						// bold title carry it, and the row's one background slot stays
 						// with selection (see the workspace row, which matches).

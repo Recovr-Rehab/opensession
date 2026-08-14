@@ -47,6 +47,12 @@ import {
 	type WsTimePref,
 } from "../../lib/workspace-time";
 import {
+	getSidebarDensity,
+	onSidebarDensityChanged,
+	setSidebarDensity,
+	type SidebarDensity,
+} from "../../lib/sidebar-density";
+import {
 	SettingCard,
 	SettingRow as SettingsRow,
 	SettingRowDescription,
@@ -221,6 +227,11 @@ export function AppearancePanel() {
 	);
 	const [wsTime, setWsTime] = useState<WsTimePref>(getWsTimePref);
 	useEffect(() => onWsTimeChanged(() => setWsTime(getWsTimePref())), []);
+	const [density, setDensity] = useState<SidebarDensity>(getSidebarDensity);
+	useEffect(
+		() => onSidebarDensityChanged(() => setDensity(getSidebarDensity())),
+		[],
+	);
 	const [hiddenSidebarTools, setHiddenSidebarTools] = useState(
 		readHiddenSidebarTools,
 	);
@@ -351,6 +362,19 @@ export function AppearancePanel() {
 						))}
 					</Reorder.Group>
 				</SettingsRow>
+				<SettingRow
+					title="Compact rows"
+					desc="Tighten the sidebar so more workspaces fit on screen. Phone layouts keep their larger touch targets."
+					control={
+						<Switch
+							aria-label="Compact sidebar rows"
+							checked={density === "compact"}
+							onCheckedChange={(on) =>
+								setSidebarDensity(on ? "compact" : "default")
+							}
+						/>
+					}
+				/>
 				<SettingRow
 					title="Show last used time"
 					desc="Show when each workspace was last active in the sidebar. A live run always shows its running time regardless."

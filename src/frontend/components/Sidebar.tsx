@@ -26,6 +26,7 @@ import {
 	SIDEBAR_LANE_COUNT,
 	SIDEBAR_LANE_HEADER,
 	SIDEBAR_LANE_NAME,
+	SIDEBAR_DENSITY_VARS,
 	SIDEBAR_HEADER_BTN,
 	SIDEBAR_HEADER_BTN_DESKTOP,
 	SIDEBAR_HEADER_BTN_PHONE,
@@ -105,6 +106,10 @@ import { TeamLensMenu, useTeamPresence } from "./TeamPresence";
 import { sessionPath, absoluteLink, copyToClipboard } from "../lib/share-link";
 import { hasDraft, onDraftsChanged } from "../lib/drafts";
 import { getWsTimePref, onWsTimeChanged } from "../lib/workspace-time";
+import {
+	getSidebarDensity,
+	onSidebarDensityChanged,
+} from "../lib/sidebar-density";
 import { getSidebarOrder, onSidebarOrderChanged } from "../lib/sidebar-order";
 import {
 	getRepoOrder,
@@ -599,6 +604,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// Opt-in "last used" time badge on workspace rows (off / always / on hover).
 	const [wsTimePref, setWsTimePref] = useState(getWsTimePref);
 	useEffect(() => onWsTimeChanged(() => setWsTimePref(getWsTimePref())), []);
+	const [density, setDensity] = useState(getSidebarDensity);
+	useEffect(
+		() => onSidebarDensityChanged(() => setDensity(getSidebarDensity())),
+		[],
+	);
 
 	// Right-click menu on a workspace row (mark unread / pin / status / rename /
 	// copy link / delete), and inline rename (double-click the project name).
@@ -3905,8 +3915,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 
 	return (
 		<div
+			// One element sets the rail's whole vertical scale and carries the
+			// attribute the compact values key off, so density is a property the
+			// rows inherit rather than a flag every family has to be handed.
+			data-density={density}
 			className={cn(
 				"flex w-full min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+				SIDEBAR_DENSITY_VARS,
 				// The whole sidebar scrolls as one on phones, so the tool cards (and
 				// the Workspaces header) scroll away with the list instead of staying
 				// pinned above a separately-scrolling list. The top bar floats over
@@ -4037,16 +4052,18 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							!isPhone && "items-center",
 							!isPhone &&
 								// Compact rows use control-label type, with glyphs matching
-								// the sidebar's standard 22px leading rail. `py-[5px]` is a
-								// 32px box: the tools are a short utility strip above the
-								// work lists, and at the session rows' 36px the four of them
-								// took more of the rail than what they lead to. The glyph and
-								// the label's left rail are untouched, so they still line up
-								// with the rows below; only the air around them is tighter.
-								// Don't take it below 32. At 28 (`py-[3px]`, the pre-ffd11ffc
+								// the sidebar's standard 22px leading rail.
+								// `--sidebar-tool-pad` is 5px for a 32px box: the tools are a
+								// short utility strip above the work lists, and at the session
+								// rows' 36px the four of them took more of the rail than what
+								// they lead to. The glyph and the label's left rail are
+								// untouched, so they still line up with the rows below; only
+								// the air around them is tighter.
+								// Don't take it below 30. At 28 (`py-[3px]`, the pre-ffd11ffc
 								// value) the 22px glyph has 3px of margin and the hover pill
-								// stops reading as a row.
-								"w-full gap-[9px] rounded-row bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[5px] text-control-label font-medium text-dim hover:text-fg",
+								// stops reading as a row; the compact density's 4px stops at
+								// 30, level with the rows under it rather than below them.
+								"w-full gap-[9px] rounded-row bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[var(--sidebar-tool-pad)] text-control-label font-medium text-dim hover:text-fg",
 							!isPhone && SIDEBAR_HOVER_LAYER,
 							!isPhone && tool.active && "bg-pressed text-fg",
 						);
