@@ -337,10 +337,10 @@ function showWindow() {
   }
 }
 
-function showStatusPage(mode, detail = "", logFile = "") {
+function showStatusPage() {
   if (!win || win.isDestroyed()) return;
   win.loadFile(path.join(__dirname, "offline.html"), {
-    query: { detail, logFile, mode, url: APP_URL },
+    query: { url: APP_URL },
   });
 }
 
@@ -475,7 +475,7 @@ function createWindow() {
   // Show a themed recovery page instead of Chromium's network error.
   win.webContents.on("did-fail-load", (_e, code, _desc, _url, isMainFrame) => {
     if (!isMainFrame || code === -3 /* ERR_ABORTED */) return;
-    showStatusPage("offline");
+    showStatusPage();
   });
 
   // Belt-and-braces: if the renderer ever dies, come back instead of showing
