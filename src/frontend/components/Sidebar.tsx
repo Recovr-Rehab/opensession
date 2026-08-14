@@ -4349,11 +4349,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							<IconFilter size={22} />
 						</button>
 						</Tooltip>
+						{/* ⌘S, not the ⌘⌥N this used to advertise: that chord opens a
+						    sibling session inside the workspace you have open, while
+						    this button (onNewSession → the palette) starts one in a new
+						    workspace. */}
 						<Tooltip
 							label="New session"
-							shortcut={
-								isApple ? ["⌘", "⌥", "N"] : ["Ctrl", "Alt", "N"]
-							}
+							shortcut={isApple ? ["⌘", "S"] : ["Ctrl", "S"]}
 						>
 						<button
 							className={cn(

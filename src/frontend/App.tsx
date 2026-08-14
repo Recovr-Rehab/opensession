@@ -1257,7 +1257,8 @@ export function App(
 	// the current view has nothing linkable.
 	const copyLinkPathRef = useRef<string | null>(null);
 
-	// ⌘K toggles the command palette; ⌘⇧C copies a link to the open session/PR.
+	// ⌘K toggles the command palette; ⌘S starts a session in a new workspace;
+	// ⌘⇧C copies a link to the open session/PR.
 	// Esc closes whichever palette is open (search's
 	// own input also handles Esc, but this covers the case where focus has left
 	// it).
@@ -1278,9 +1279,19 @@ export function App(
 			}
 			if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && k === "b") {
 				// Toggle the desktop left sidebar. ⌘B is the panel-toggle
-				// convention (VS Code / Slack); ⌘S is left to the browser's Save.
+				// convention (VS Code / Slack).
 				e.preventDefault();
 				toggleSidebarCollapsed();
+				return;
+			}
+			if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && k === "s") {
+				// Start a session in a new workspace — the sidebar "+", by
+				// keyboard. ⌘⌥N is the neighbouring chord and deliberately does
+				// something else: it opens a sibling session in the workspace you
+				// are already in. ⌘S is free to take because there is no document
+				// here to save, so the browser's Save does nothing worth keeping.
+				e.preventDefault();
+				openPalette();
 				return;
 			}
 			if ((e.metaKey || e.ctrlKey) && e.shiftKey && k === "c") {
@@ -3103,6 +3114,7 @@ export function App(
 			description: "Start a new ask or code session",
 			category: "Actions",
 			keywords: ["create", "session", "workspace"],
+			shortcut: [mod, "S"],
 			icon: <IconPlus size={18} />,
 			run: () => openPalette(),
 		},
