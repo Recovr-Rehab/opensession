@@ -1421,19 +1421,17 @@ export function PrPanel({
                   change, how the diff is drawn and whether lines wrap are the
                   same kind of choice, so they share a menu rather than a
                   control each, and the trigger names the lens in effect —
-                  the one a reader actually moves between. Layout and wrapping
-                  drop out under the flow lens, which draws no diff. */}
+                  the one a reader actually moves between. It is the outlined
+                  plate rather than a ghost, and carries no leading glyph,
+                  because what it reports is a value: it should read as the
+                  page's one dropdown, not as a quiet piece of chrome. Layout
+                  and wrapping drop out under the flow lens, which draws no
+                  diff. */}
               <Menu.Root>
                 <Tooltip label="Change the view">
                   <Menu.Trigger
                     render={
-                      <Button
-                        variant="ghost"
-                        size="xs"
-                        className="phone:min-h-8"
-                        caret
-                        icon={React.createElement(CODE_VIEWS[codeView].Icon, { size: 17 })}
-                      >
+                      <Button variant="default" size="sm" className="text-fg" caret>
                         {CODE_VIEWS[codeView].label}
                       </Button>
                     }
