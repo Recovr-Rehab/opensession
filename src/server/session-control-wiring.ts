@@ -7,6 +7,7 @@
  * effects: re-run on every hot reload (cheap, and keeps closures current).
  */
 
+import { AUTO_CONTINUE_USER } from "./auto-continue";
 import { personaName } from "./config";
 import { cancelAgentRun, isAgentSessionBusy, steerAgentRun } from "./agent-runner";
 import { pendingAsks } from "./asks";
@@ -438,7 +439,17 @@ registerSessionControl({
 		}
 
 		const bksId = newSessionId();
-		const sessionCreatedBy = user || personaName();
+		// "auto-continue" is a turn's sender, not a person. A session spawned
+		// from a resumed turn belongs to whoever owns the session that spawned
+		// it, not to the sentinel that woke it: owned by the sentinel it has no
+		// person at all, so nothing it goes on to commit can be credited either
+		// (commitAuthorFor falls back to exactly this field).
+		const creator = user && user !== AUTO_CONTINUE_USER ? user : null;
+		const sessionCreatedBy =
+			creator ||
+			parentSession?.startedBy ||
+			parentSession?.createdBy ||
+			personaName();
 		const sessionCreatedAt = new Date().toISOString();
 		const title = prompt.trim().split("\n")[0].slice(0, 80);
 		// The Desk (desk.ts) is an orchestrator living in an overlay, not a piece
@@ -493,7 +504,8 @@ registerSessionControl({
 				const ws = createWorkspace({
 					name: wsName,
 					...(isScratch ? {} : { repo: wsParent?.repo || repo.id }),
-					createdBy: user || wsParent?.createdBy || wsParent?.startedBy || "Anonymous",
+					createdBy:
+						creator || wsParent?.createdBy || wsParent?.startedBy || "Anonymous",
 					...(branchForWs ? { branch: branchForWs } : {}),
 					...(dir ? { worktreeDir: dir } : {}),
 				});
