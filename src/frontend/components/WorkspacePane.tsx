@@ -9,7 +9,7 @@ import { FeedWebPane, refWebPanel } from "./FeedWebPane";
 import { SlackChannelPane } from "./SlackChannelPane";
 import { MarkdownRepoProvider } from "./MarkdownBody";
 import { PrPanel } from "./PrPanel";
-import { RepoTile, repoLabel } from "./RepoTile";
+import { RepoTile } from "./RepoTile";
 import { WorkspaceInfo } from "./WorkspaceInfo";
 import { useCurrentUser } from "./UserPicker";
 import { useIsPhone } from "../hooks/useIsPhone";
@@ -341,28 +341,14 @@ export function WorkspacePane({
 
 	// Workspace home: normally only reachable session-less (with sessions, App lands
 	// in the first session) — a composer that starts the workspace's first session.
+	//
+	// The canvas above the composer stays blank, the same way a fresh session's
+	// transcript does. This IS a session — it has its own tab in the strip — so
+	// it doesn't narrate that there are no sessions yet, and the header row and
+	// info panel already say which workspace it belongs to.
 	return withPanel(
 		<div className={`${VIEW_MAIN} flex flex-col h-full min-h-0`}>
-			<div className="flex-1 min-h-0 overflow-y-auto">
-				<div className="w-full max-w-[760px] mx-auto px-5 py-6">
-					{/* No heading here: the header row above names the workspace (and
-					    the info panel names it again). The branch is the one thing
-					    neither of them says, so this line carries it. */}
-					<div className="text-dim text-supporting flex items-center gap-2 flex-wrap">
-						{workspace.repo && <span>{repoLabel(workspace.repo)}</span>}
-						{workspace.branch && (
-							<span className="text-label">{workspace.branch}</span>
-						)}
-					</div>
-					{/* The repo and branch are the line directly above, so the empty
-					    state doesn't repeat them. */}
-					{workspaceSessions.length === 0 && (
-						<div className="text-dim text-[13px] mt-5">
-							No sessions yet. Start one below.
-						</div>
-					)}
-				</div>
-			</div>
+			<div className="flex-1 min-h-0 overflow-y-auto" />
 			<div className="w-full max-w-[760px] mx-auto px-5 pb-5 shrink-0">
 				<Composer
 					value={prompt}
