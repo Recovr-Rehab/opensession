@@ -102,17 +102,42 @@ function ScopeChip({
  * The owner of a row, in the same 24px slot whoever they are. A teammate wears
  * their face; an automation wears a glyph in the avatar's own shape, so the
  * column reads as one column of owners rather than faces and something else.
+ *
+ * The repo rides the owner's corner. Which repo shipped it is the second thing
+ * you scan a row for, and the name alone is a word to read further down the
+ * line, so the mark travels with the face instead: the column the eye is
+ * already in, at half its size, so the person stays the picture.
  */
-function FeedOwnerMark({ owner }: { owner: FeedOwner }) {
-	if (owner.person) {
-		return <UserAvatar name={owner.label} size={24} title={owner.label} />;
-	}
+function FeedOwnerMark({ owner, repo }: { owner: FeedOwner; repo: string }) {
 	return (
-		<span
-			className="flex size-[24px] shrink-0 items-center justify-center rounded-[32%] bg-active text-dim shadow-[var(--avatar-edge)]"
-			title={owner.label}
-		>
-			<IconRobot size={14} />
+		<span className="relative flex shrink-0">
+			{owner.person ? (
+				<UserAvatar name={owner.label} size={24} title={owner.label} />
+			) : (
+				<span
+					className="flex size-[24px] shrink-0 items-center justify-center rounded-[32%] bg-active text-dim shadow-[var(--avatar-edge)]"
+					title={owner.label}
+				>
+					<IconRobot size={14} />
+				</span>
+			)}
+			{repo && (
+				// Two rings, each doing a job the other can't. The outer one is
+				// the page's own surface, so the badge reads as sitting in front
+				// of the face rather than as a patch cut out of it. The hairline
+				// inside it keeps an icon drawn on transparency square against a
+				// surface its own colour, which in dark is most of them.
+				//
+				// They are spelled as a ring plus a shadow because those land in
+				// different slots of Tailwind's composed box-shadow. One
+				// arbitrary value holding both would put a comma inside the class
+				// name, and the browser drops that selector on the floor.
+				<RepoTile
+					name={repo}
+					size={12}
+					className="absolute -right-0.5 -bottom-0.5 ring-1 ring-line-strong shadow-[0_0_0_2px_var(--bg)]"
+				/>
+			)}
 		</span>
 	);
 }
@@ -385,12 +410,13 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 												}
 												title={`${repoLabel(row.repo)}${row.ref ? ` · ${row.ref}` : ""}`}
 											>
-												{/* Who shipped it. An automation is an owner too, so
-												    it gets the column rather than the repo standing in
-												    for a name. The repo tile is left for the older work
-												    that recorded no author at all. */}
+												{/* Who shipped it, wearing the repo they shipped it
+												    to. An automation is an owner too, so it gets the
+												    column rather than the repo standing in for a name.
+												    The bare tile is left for the older work that
+												    recorded no author at all. */}
 												{row.owner ? (
-													<FeedOwnerMark owner={row.owner} />
+													<FeedOwnerMark owner={row.owner} repo={row.repo} />
 												) : (
 													<RepoTile name={row.repo} size={24} />
 												)}
