@@ -63,6 +63,7 @@ import {
   IconFile,
   IconGlobe,
   IconListCircles,
+  IconMessages,
   IconReturn,
   IconX,
 } from "./icons";
@@ -1331,435 +1332,447 @@ export function PrPanel({
     >
       {switcher}
 
-      {/* The PR identity lives inside the scroll container, so it gets out of
-          the way once the reviewer reaches the code. Only the page row sticks. */}
-      <main
-        className={`min-h-0 flex-1 overflow-y-auto bg-surface [--review-file-header-top:44px] ${reviewing ? "pb-24 phone:pb-36" : "pb-4"}`}
-      >
-        <header className="flex h-10 shrink-0 items-center gap-2.5 px-6 phone:px-3">
-          {/* State, in the app's own PR language, filled rather than drawn: the
-              tone washes the whole chip and the glyph and word share its ink.
-              It is its own object, so it gets more air than the pieces of the
-              identity line it precedes. */}
-          <Tooltip label={statusMark.label}>
-            <span
-              className={`mr-1.5 flex h-6 shrink-0 items-center gap-1.5 rounded-control px-2 ${statusMark.bgClassName} ${statusMark.className}`}
+      <div className="flex min-h-0 flex-1">
+        {/* The two pages as a rail rather than a strip. A review is Overview
+            and Files changed, and a menu down the canvas edge keeps both a
+            click away without spending a row of chrome on them, in the same
+            shape as the app's own sidebar one level out. The items are
+            icon-only, so each carries its name in a tooltip and an
+            aria-label, with the count the strip showed sitting under the
+            glyph. */}
+        <nav
+          className="flex w-12 shrink-0 flex-col items-center gap-1 border-r border-line bg-surface py-2"
+          role="tablist"
+          aria-orientation="vertical"
+          aria-label="Pull request pages"
+        >
+          {([
+            ["overview", "Overview", IconMessages, comments.length || undefined],
+            ["files", "Files changed", IconFile, files.length || undefined],
+          ] as const).map(([key, label, Icon, count]) => (
+            <Tooltip
+              key={key}
+              side="right"
+              label={
+                count === undefined
+                  ? label
+                  : key === "overview"
+                    ? `Overview · ${count} comment${count === 1 ? "" : "s"}`
+                    : `${count} file${count === 1 ? "" : "s"} changed`
+              }
             >
-              <PrStateIcon state={pr.state} isDraft={pr.isDraft} />
-              {!headerCompact && (
-                <span className="text-label font-medium">{stateLabel}</span>
-              )}
-            </span>
-          </Tooltip>
-          {/* Author and title in the session header's own breadcrumb shape: a
-              tight picture-and-name pill, a chevron, then the name of the thing
-              you are looking at. Same spacing and weights as RepoBar's
-              `[icon] repo › title`, so the two headers read as one bar. */}
-          <span className="flex shrink-0 items-center gap-[7px] text-body font-medium text-fg">
-            <UserAvatar
-              name={pr.author}
-              login={provider.key === "github" ? pr.author : null}
-              size={18}
-              edge={false}
-              title={pr.author}
-            />
-            {!headerCompact && (
-              <span className="max-w-[180px] truncate">{pr.author}</span>
-            )}
-          </span>
-          {!headerCompact && (
-            <IconChevronRight size={18} className="shrink-0 text-faint" />
-          )}
-          {/* Title only. Counts, commits and the sessions on this PR are the
-              rail's job, so the bar stays one line of identity.
-
-              The title is the name of the page you are already on, so it is
-              inert. The outbound jump rides the number, which is the reference
-              everywhere else in the app. */}
-          <h1
-            className="flex min-w-0 flex-1 items-baseline gap-1 text-body font-medium leading-[1.2] text-fg"
-            title={`${pr.title} #${pr.number}`}
-          >
-            <span className="truncate">{pr.title}</span>
-            <Tooltip label={`Open on ${provider.name}`}>
-              <a
-                className="shrink-0 font-normal text-faint no-underline hover:text-link"
-                href={pr.url}
-                target="_blank"
-                rel="noopener"
-              >
-                #{pr.number}
-              </a>
-            </Tooltip>
-          </h1>
-          {pr.staging?.url && (
-            <Tooltip label="Open the preview environment">
-              <a
-                /* An icon-only control carries its glyph ~6px inside its box,
-                   so the last one in the row is outdented to put that glyph on
-                   the row's content edge — where the view control below it
-                   sits, since a bordered control is flush with its own box. */
-                className={`ml-auto inline-flex size-8 shrink-0 items-center justify-center rounded-control text-dim no-underline hover:bg-hover hover:text-fg ${pr.state === "OPEN" ? "" : "-mr-1.5"}`}
-                href={pr.staging.url}
-                target="_blank"
-                rel="noopener"
-                aria-label="Open the preview environment"
-              >
-                <IconGlobe size={19} />
-              </a>
-            </Tooltip>
-          )}
-          {pr.state === "OPEN" && !pr.isDraft && caps.reviewComments && !reviewing && (
-            /* The one call to action on this canvas, so it takes the accent
-               plate. Green is the app's affirmative tone (approve, merge) and
-               the state glyph beside it is already wearing it; a green Review
-               button next to a green Open glyph made two different things
-               claim the same colour. */
-            <Button
-              variant="primary"
-              size="sm"
-              className={pr.staging?.url ? undefined : "ml-auto"}
-              onClick={() => {
-                setReviewing(true);
-                setPage("files");
-              }}
-            >
-              Review
-            </Button>
-          )}
-          {pr.state === "OPEN" && (
-            <Menu.Root>
-              <Tooltip label="Pull request actions">
-                <Menu.Trigger
-                  render={
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="-mr-1.5"
-                      aria-label="Pull request actions"
-                      icon={<IconDotsHorizontal size={18} />}
-                    />
-                  }
-                />
-              </Tooltip>
-              <Menu.Popup align="end">
-                <Menu.Item
-                  className="text-red data-[highlighted]:bg-red-soft"
-                  onClick={handleClose}
-                  disabled={closing}
-                >
-                  {closing
-                    ? "Closing…"
-                    : confirmClose
-                      ? "Confirm close pull request"
-                      : "Close pull request"}
-                </Menu.Item>
-              </Menu.Popup>
-            </Menu.Root>
-          )}
-        </header>
-
-        {/* Where this PR sits in its chain of layers — above the pages, because
-            it reframes what everything under it means. */}
-        {caps.stacks && (
-          <StackSection pr={pr} sessionId={sessionId} repo={active?.repo} onOpenPr={onOpenPr} onLinked={load} />
-        )}
-
-        {/* One row of chrome, not two: the pages on the left, and whatever the
-            open page needs on the right. Horizontal scrollbars are hidden
-            because a 1px overflow here parks one (base.css opts Chrome out of
-            overlay scrollbars).
-
-            The row is bottom-weighted rather than centred: `pt-2` shrinks the
-            content box while the border box stays 44px, so everything in the
-            row sits 4px lower. A tab label belongs to the underline beneath it,
-            and centring parked it as far from that underline as from the title
-            row above, which read as two loose halves. The padding is on the row
-            so the tabs and the view control cannot drift apart, and it leaves
-            the tabs full-height (they self-stretch to the content box, whose
-            bottom is still the border box's) so each underline still paints
-            over the hairline. */}
-        <div className="sticky top-0 z-[8] flex h-11 shrink-0 items-center gap-2 overflow-x-auto overflow-y-hidden bg-surface px-6 pt-2 shadow-[inset_0_-1px_0_var(--border)] [scrollbar-width:none] phone:px-2 [&::-webkit-scrollbar]:hidden">
-          {/* Flat labels carrying a 2px underline, the same cue the session tab
-              strip and Reviews use. The strip's own hairline is an inset shadow
-              rather than a border so each tab's underline can paint over it —
-              the row clips its overflow, so a `-mb-px` border would be cut. */}
-          <div className="flex shrink-0 items-stretch gap-0.5 self-stretch" role="tablist">
-            {([
-              ["overview", "Overview", comments.length || undefined],
-              ["files", "Files changed", files.length || undefined],
-            ] as const).map(([key, label, count]) => (
               <button
-                key={key}
                 role="tab"
                 aria-selected={page === key}
-                className={`flex shrink-0 items-center gap-1.5 border-0 bg-transparent px-3 text-control-label font-medium transition-colors hover:bg-transparent ${
+                aria-label={label}
+                /* The selected plate has to name its own background. A
+                   `bg-transparent` in the shared half would win or lose the
+                   source-order tie against it on Tailwind's output order,
+                   not on which one is written last here. */
+                className={`flex h-11 w-10 shrink-0 flex-col items-center justify-center gap-0.5 rounded-control border-0 transition-colors ${
                   page === key
-                    ? "text-fg shadow-[inset_0_-2px_0_var(--accent)]"
-                    : "text-dim shadow-[inset_0_-2px_0_transparent] hover:text-fg"
+                    ? "bg-accent-soft text-accent"
+                    : "bg-transparent text-dim hover:bg-hover hover:text-fg"
                 }`}
                 onClick={() => setPage(key)}
               >
-                {label}
+                <Icon size={19} />
                 {count !== undefined && (
-                  /* The counter Reviews puts on its tabs, so the two PR
-                     surfaces count the same way. */
-                  <span
-                    className={`min-w-5 rounded-full px-[7px] py-px text-center text-meta font-semibold tabular-nums ${
-                      page === key ? "bg-accent-soft text-accent" : "bg-active text-dim"
-                    }`}
-                  >
+                  <span className="text-meta font-semibold leading-none tabular-nums">
                     {count}
                   </span>
                 )}
               </button>
-            ))}
-          </div>
+            </Tooltip>
+          ))}
+        </nav>
 
-          {page === "files" && (
-            <div className="ml-auto flex shrink-0 items-center gap-2">
-              {handEdited.length > 0 && send && (
-                <Button
-                  variant="default"
-                  size="xs"
-                  onClick={tellAgentAboutEdits}
-                  title="Sends a note listing your hand-edits so they get committed and pushed"
-                >
-                  Tell {AGENT_NAME} about {handEdited.length} edit
-                  {handEdited.length === 1 ? "" : "s"}
-                </Button>
-              )}
-              {/* How big the change is, beside the control that scopes it —
-                  the same pair the rail counts, so a reader who never opens
-                  the rail still knows what they are about to read. */}
-              <span className="flex shrink-0 items-center gap-1.5 text-label tabular-nums">
-                <span className="text-green">+{pr.additions}</span>
-                <span className="text-red">−{pr.deletions}</span>
+        {/* The PR identity lives inside the scroll container, so it gets out of
+            the way once the reviewer reaches the code. Only the page row sticks. */}
+        <main
+          className={`min-w-0 flex-1 overflow-y-auto bg-surface [--review-file-header-top:44px] ${reviewing ? "pb-24 phone:pb-36" : "pb-4"}`}
+        >
+          <header className="flex h-10 shrink-0 items-center gap-2.5 px-6 phone:px-3">
+            {/* State, in the app's own PR language, filled rather than drawn: the
+                tone washes the whole chip and the glyph and word share its ink.
+                It is its own object, so it gets more air than the pieces of the
+                identity line it precedes. */}
+            <Tooltip label={statusMark.label}>
+              <span
+                className={`mr-1.5 flex h-6 shrink-0 items-center gap-1.5 rounded-control px-2 ${statusMark.bgClassName} ${statusMark.className}`}
+              >
+                <PrStateIcon state={pr.state} isDraft={pr.isDraft} />
+                {!headerCompact && (
+                  <span className="text-label font-medium">{stateLabel}</span>
+                )}
               </span>
-              {/* Two axes, two controls. The named dropdown picks WHAT you are
-                  reading — a diff, a guided walk through it, a call graph —
-                  and reports it, so it takes the outlined plate with its value
-                  in normal ink. Unified vs split and wrapping are how the diff
-                  is DRAWN: settings a reader picks once, which is why they sit
-                  behind a glyph rather than under a trigger labelled "All
-                  changes", where nobody would look for them. The glyph is a
-                  ghost for the same reason the ⋯ menu beside it is: a flyout of
-                  settings is chrome, and two plates side by side read as a
-                  toolbar. They drop out under the flow lens, which draws no
-                  diff. */}
+            </Tooltip>
+            {/* Author and title in the session header's own breadcrumb shape: a
+                tight picture-and-name pill, a chevron, then the name of the thing
+                you are looking at. Same spacing and weights as RepoBar's
+                `[icon] repo › title`, so the two headers read as one bar. */}
+            <span className="flex shrink-0 items-center gap-[7px] text-body font-medium text-fg">
+              <UserAvatar
+                name={pr.author}
+                login={provider.key === "github" ? pr.author : null}
+                size={18}
+                edge={false}
+                title={pr.author}
+              />
+              {!headerCompact && (
+                <span className="max-w-[180px] truncate">{pr.author}</span>
+              )}
+            </span>
+            {!headerCompact && (
+              <IconChevronRight size={18} className="shrink-0 text-faint" />
+            )}
+            {/* Title only. Counts, commits and the sessions on this PR are the
+                rail's job, so the bar stays one line of identity.
+
+                The title is the name of the page you are already on, so it is
+                inert. The outbound jump rides the number, which is the reference
+                everywhere else in the app. */}
+            <h1
+              className="flex min-w-0 flex-1 items-baseline gap-1 text-body font-medium leading-[1.2] text-fg"
+              title={`${pr.title} #${pr.number}`}
+            >
+              <span className="truncate">{pr.title}</span>
+              <Tooltip label={`Open on ${provider.name}`}>
+                <a
+                  className="shrink-0 font-normal text-faint no-underline hover:text-link"
+                  href={pr.url}
+                  target="_blank"
+                  rel="noopener"
+                >
+                  #{pr.number}
+                </a>
+              </Tooltip>
+            </h1>
+            {pr.staging?.url && (
+              <Tooltip label="Open the preview environment">
+                <a
+                  /* An icon-only control carries its glyph ~6px inside its box,
+                     so the last one in the row is outdented to put that glyph on
+                     the row's content edge — where the view control below it
+                     sits, since a bordered control is flush with its own box. */
+                  className={`ml-auto inline-flex size-8 shrink-0 items-center justify-center rounded-control text-dim no-underline hover:bg-hover hover:text-fg ${pr.state === "OPEN" ? "" : "-mr-1.5"}`}
+                  href={pr.staging.url}
+                  target="_blank"
+                  rel="noopener"
+                  aria-label="Open the preview environment"
+                >
+                  <IconGlobe size={19} />
+                </a>
+              </Tooltip>
+            )}
+            {pr.state === "OPEN" && !pr.isDraft && caps.reviewComments && !reviewing && (
+              /* The one call to action on this canvas, so it takes the accent
+                 plate. Green is the app's affirmative tone (approve, merge) and
+                 the state glyph beside it is already wearing it; a green Review
+                 button next to a green Open glyph made two different things
+                 claim the same colour. */
+              <Button
+                variant="primary"
+                size="sm"
+                className={pr.staging?.url ? undefined : "ml-auto"}
+                onClick={() => {
+                  setReviewing(true);
+                  setPage("files");
+                }}
+              >
+                Review
+              </Button>
+            )}
+            {pr.state === "OPEN" && (
               <Menu.Root>
-                <Tooltip label="Change the view">
+                <Tooltip label="Pull request actions">
                   <Menu.Trigger
                     render={
-                      <Button variant="default" size="sm" className="text-fg" caret>
-                        {CODE_VIEWS[codeView].label}
-                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="-mr-1.5"
+                        aria-label="Pull request actions"
+                        icon={<IconDotsHorizontal size={18} />}
+                      />
                     }
                   />
                 </Tooltip>
-                <Menu.Popup align="end" className="min-w-[210px]">
-                  <Menu.RadioGroup
-                    value={codeView}
-                    onValueChange={(next) => {
-                      const key = String(next) as CodeView;
-                      if (key === "flow" && codeView !== "flow" && codeFlowError) {
-                        setCodeFlow(null);
-                        setCodeFlowError(null);
-                      }
-                      setCodeView(key);
-                    }}
+                <Menu.Popup align="end">
+                  <Menu.Item
+                    className="text-red data-[highlighted]:bg-red-soft"
+                    onClick={handleClose}
+                    disabled={closing}
                   >
-                    {(Object.keys(CODE_VIEWS) as CodeView[]).map((key) => {
-                      const { label, Icon } = CODE_VIEWS[key];
-                      return (
-                        <Menu.RadioItem
-                          key={key}
-                          value={key}
-                          closeOnClick
-                          disabled={
-                            key === "flow" &&
-                            ((!diff?.patch && !diff?.skippedFiles) || !prPatchVersion)
-                          }
-                        >
-                          <Icon size={18} className={MENU_ICON} />
-                          <span className="min-w-0 flex-1 truncate">{label}</span>
-                          {codeView === key && (
-                            <IconCheck className="shrink-0 text-accent" size={17} />
-                          )}
-                        </Menu.RadioItem>
-                      );
-                    })}
-                  </Menu.RadioGroup>
-                  {showDisplayMenu && headerCompact && (
-                    <>
-                      <Menu.Separator />
-                      {diffDisplayItems}
-                    </>
-                  )}
+                    {closing
+                      ? "Closing…"
+                      : confirmClose
+                        ? "Confirm close pull request"
+                        : "Close pull request"}
+                  </Menu.Item>
                 </Menu.Popup>
               </Menu.Root>
-              {/* `w-auto px-2` because an icon-only Button sizes to the glyph
-                  alone and the caret needs room beside it. */}
-              {showDisplayMenu && !headerCompact && (
+            )}
+          </header>
+
+          {/* Where this PR sits in its chain of layers — above the pages, because
+              it reframes what everything under it means. */}
+          {caps.stacks && (
+            <StackSection pr={pr} sessionId={sessionId} repo={active?.repo} onOpenPr={onOpenPr} onLinked={load} />
+          )}
+
+          {/* The page rail on the left says which page you are on, so this row is
+              only what the code page needs: how big the change is, and the two
+              controls that scope and draw the diff. Overview asks for none of
+              them, so it gets no chrome row at all rather than an empty bar.
+              Horizontal scrollbars are hidden because a 1px overflow here parks
+              one (base.css opts Chrome out of overlay scrollbars). */}
+          {page === "files" && (
+            <div className="sticky top-0 z-[8] flex h-11 shrink-0 items-center gap-2 overflow-x-auto overflow-y-hidden bg-surface px-6 shadow-[inset_0_-1px_0_var(--border)] [scrollbar-width:none] phone:px-2 [&::-webkit-scrollbar]:hidden">
+              <div className="ml-auto flex shrink-0 items-center gap-2">
+                {handEdited.length > 0 && send && (
+                  <Button
+                    variant="default"
+                    size="xs"
+                    onClick={tellAgentAboutEdits}
+                    title="Sends a note listing your hand-edits so they get committed and pushed"
+                  >
+                    Tell {AGENT_NAME} about {handEdited.length} edit
+                    {handEdited.length === 1 ? "" : "s"}
+                  </Button>
+                )}
+                {/* How big the change is, beside the control that scopes it —
+                    the same pair the rail counts, so a reader who never opens
+                    the rail still knows what they are about to read. */}
+                <span className="flex shrink-0 items-center gap-1.5 text-label tabular-nums">
+                  <span className="text-green">+{pr.additions}</span>
+                  <span className="text-red">−{pr.deletions}</span>
+                </span>
+                {/* Two axes, two controls. The named dropdown picks WHAT you are
+                    reading — a diff, a guided walk through it, a call graph —
+                    and reports it, so it takes the outlined plate with its value
+                    in normal ink. Unified vs split and wrapping are how the diff
+                    is DRAWN: settings a reader picks once, which is why they sit
+                    behind a glyph rather than under a trigger labelled "All
+                    changes", where nobody would look for them. The glyph is a
+                    ghost for the same reason the ⋯ menu beside it is: a flyout of
+                    settings is chrome, and two plates side by side read as a
+                    toolbar. They drop out under the flow lens, which draws no
+                    diff. */}
                 <Menu.Root>
-                  <Tooltip label="Diff display">
+                  <Tooltip label="Change the view">
                     <Menu.Trigger
                       render={
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="w-auto px-2"
-                          aria-label="Diff display"
-                          caret
-                          icon={
-                            diffStyle === "split" ? (
-                              <IconDiffSplit size={17} />
-                            ) : (
-                              <IconDiffUnified size={17} />
-                            )
-                          }
-                        />
+                        <Button variant="default" size="sm" className="text-fg" caret>
+                          {CODE_VIEWS[codeView].label}
+                        </Button>
                       }
                     />
                   </Tooltip>
-                  <Menu.Popup align="end" className="min-w-[190px]">
-                    {diffDisplayItems}
+                  <Menu.Popup align="end" className="min-w-[210px]">
+                    <Menu.RadioGroup
+                      value={codeView}
+                      onValueChange={(next) => {
+                        const key = String(next) as CodeView;
+                        if (key === "flow" && codeView !== "flow" && codeFlowError) {
+                          setCodeFlow(null);
+                          setCodeFlowError(null);
+                        }
+                        setCodeView(key);
+                      }}
+                    >
+                      {(Object.keys(CODE_VIEWS) as CodeView[]).map((key) => {
+                        const { label, Icon } = CODE_VIEWS[key];
+                        return (
+                          <Menu.RadioItem
+                            key={key}
+                            value={key}
+                            closeOnClick
+                            disabled={
+                              key === "flow" &&
+                              ((!diff?.patch && !diff?.skippedFiles) || !prPatchVersion)
+                            }
+                          >
+                            <Icon size={18} className={MENU_ICON} />
+                            <span className="min-w-0 flex-1 truncate">{label}</span>
+                            {codeView === key && (
+                              <IconCheck className="shrink-0 text-accent" size={17} />
+                            )}
+                          </Menu.RadioItem>
+                        );
+                      })}
+                    </Menu.RadioGroup>
+                    {showDisplayMenu && headerCompact && (
+                      <>
+                        <Menu.Separator />
+                        {diffDisplayItems}
+                      </>
+                    )}
                   </Menu.Popup>
                 </Menu.Root>
-              )}
+                {/* `w-auto px-2` because an icon-only Button sizes to the glyph
+                    alone and the caret needs room beside it. */}
+                {showDisplayMenu && !headerCompact && (
+                  <Menu.Root>
+                    <Tooltip label="Diff display">
+                      <Menu.Trigger
+                        render={
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="w-auto px-2"
+                            aria-label="Diff display"
+                            caret
+                            icon={
+                              diffStyle === "split" ? (
+                                <IconDiffSplit size={17} />
+                              ) : (
+                                <IconDiffUnified size={17} />
+                              )
+                            }
+                          />
+                        }
+                      />
+                    </Tooltip>
+                    <Menu.Popup align="end" className="min-w-[190px]">
+                      {diffDisplayItems}
+                    </Menu.Popup>
+                  </Menu.Root>
+                )}
+              </div>
             </div>
           )}
-        </div>
 
-        {page === "overview" ? (
-          <SelectionToSession
-            sessionId={sessionId}
-            label={`${provider.changeAbbr} #${pr.number}`}
-            send={send}
-          >
-            <div
-              className={`mx-auto w-full max-w-[1120px] px-6 py-6 phone:px-3 ${railStacked ? "flex flex-col gap-6" : "flex gap-8"}`}
+          {page === "overview" ? (
+            <SelectionToSession
+              sessionId={sessionId}
+              label={`${provider.changeAbbr} #${pr.number}`}
+              send={send}
             >
-              {railStacked && rail}
-              <div className="flex min-w-0 flex-1 flex-col gap-5">
-                {walkthrough && <WalkthroughCard walkthrough={walkthrough} />}
-                <ConversationView
-                  author={pr.author}
-                  descriptionHtml={bodyHtml}
-                  comments={comments}
-                  repo={markdownRepo}
-                  onAddToInput={onAddToInput}
-                  pr={pr}
-                />
+              <div
+                className={`mx-auto w-full max-w-[1120px] px-6 py-6 phone:px-3 ${railStacked ? "flex flex-col gap-6" : "flex gap-8"}`}
+              >
+                {railStacked && rail}
+                <div className="flex min-w-0 flex-1 flex-col gap-5">
+                  {walkthrough && <WalkthroughCard walkthrough={walkthrough} />}
+                  <ConversationView
+                    author={pr.author}
+                    descriptionHtml={bodyHtml}
+                    comments={comments}
+                    repo={markdownRepo}
+                    onAddToInput={onAddToInput}
+                    pr={pr}
+                  />
+                </div>
+                {!railStacked && rail}
               </div>
-              {!railStacked && rail}
-            </div>
-          </SelectionToSession>
-        ) : (
-          // The same 24px inset the chrome rows above use, so a file card's
-          // edges land under the tab strip's first tab and the view control's
-          // right edge rather than 4px inside them.
-          <div className="mx-auto max-w-[1500px] px-6 py-6 phone:px-2">
-            {codeView === "flow" ? (
-              <CodeFlow
-                data={codeFlow?.key === codeFlowKey ? codeFlow.data : null}
-                loading={codeFlowLoading || (codeFlow?.key !== codeFlowKey && !codeFlowError)}
-                error={codeFlowError}
-                onRetry={() => void refreshCodeFlow()}
-                onOpenLocation={scrollToFile}
-              />
-            ) : !diff?.patch || !diffProps ? (
-              <div className="py-12 text-center text-sm text-faint">
-                {diffError ? (
+            </SelectionToSession>
+          ) : (
+            // The same 24px inset the chrome rows above use, so a file card's
+            // edges land under the tab strip's first tab and the view control's
+            // right edge rather than 4px inside them.
+            <div className="mx-auto max-w-[1500px] px-6 py-6 phone:px-2">
+              {codeView === "flow" ? (
+                <CodeFlow
+                  data={codeFlow?.key === codeFlowKey ? codeFlow.data : null}
+                  loading={codeFlowLoading || (codeFlow?.key !== codeFlowKey && !codeFlowError)}
+                  error={codeFlowError}
+                  onRetry={() => void refreshCodeFlow()}
+                  onOpenLocation={scrollToFile}
+                />
+              ) : !diff?.patch || !diffProps ? (
+                <div className="py-12 text-center text-sm text-faint">
+                  {diffError ? (
+                    <>
+                      <span className="text-red">{diffError}</span>
+                      <button
+                        className="ml-2 border-0 bg-transparent text-link"
+                        onClick={() => {
+                          setDiffLoading(true);
+                          setDiffError(null);
+                          void load(true);
+                        }}
+                      >
+                        Retry
+                      </button>
+                    </>
+                  ) : diffLoading
+                    ? "Loading pull request changes…"
+                    : diffOutOfDate
+                      ? "The pull request changed while loading. It will refresh automatically."
+                      : "No text diff is available for this pull request."}
+                </div>
+              ) : codeView === "guide" ? (
+                guideLoading ? (
                   <>
-                    <span className="text-red">{diffError}</span>
+                    <div className="mb-4 rounded-sm border border-line bg-panel px-3 py-2 text-xs text-faint">
+                      Writing the review guide… You can review the file diff while it groups the change by intent.
+                    </div>
+                    <CommentableDiff patch={diff.patch} {...diffProps} />
+                  </>
+                ) : guideFailed ? (
+                  <div className="py-12 text-center text-sm text-faint">
+                    Couldn't generate a guide for this PR.
                     <button
                       className="ml-2 border-0 bg-transparent text-link"
-                      onClick={() => {
-                        setDiffLoading(true);
-                        setDiffError(null);
-                        void load(true);
-                      }}
+                      onClick={() => void loadGuide()}
                     >
                       Retry
                     </button>
-                  </>
-                ) : diffLoading
-                  ? "Loading pull request changes…"
-                  : diffOutOfDate
-                    ? "The pull request changed while loading. It will refresh automatically."
-                    : "No text diff is available for this pull request."}
-              </div>
-            ) : codeView === "guide" ? (
-              guideLoading ? (
-                <>
-                  <div className="mb-4 rounded-sm border border-line bg-panel px-3 py-2 text-xs text-faint">
-                    Writing the review guide… You can review the file diff while it groups the change by intent.
                   </div>
-                  <CommentableDiff patch={diff.patch} {...diffProps} />
-                </>
-              ) : guideFailed ? (
-                <div className="py-12 text-center text-sm text-faint">
-                  Couldn't generate a guide for this PR.
-                  <button
-                    className="ml-2 border-0 bg-transparent text-link"
-                    onClick={() => void loadGuide()}
-                  >
-                    Retry
-                  </button>
-                </div>
-              ) : guide ? (
-                <>
-                  <div className="mb-7 grid grid-cols-[54px_minmax(0,1fr)] gap-4 px-1">
-                    <div className="text-meta font-medium leading-relaxed text-faint">
-                      Review guide
+                ) : guide ? (
+                  <>
+                    <div className="mb-7 grid grid-cols-[54px_minmax(0,1fr)] gap-4 px-1">
+                      <div className="text-meta font-medium leading-relaxed text-faint">
+                        Review guide
+                      </div>
+                      <div>
+                        <h2 className="m-0 text-item-title font-semibold tracking-[-0.01em] text-fg">
+                          {guide.sections.length} focused review step{guide.sections.length === 1 ? "" : "s"}
+                        </h2>
+                        <p className="mt-1 max-w-[680px] text-xs leading-relaxed text-dim">
+                          {reviewing
+                            ? "Review the change by intent rather than alphabetically. Comments stay pending until you finish the review."
+                            : "Read the change by intent rather than alphabetically."}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <h2 className="m-0 text-item-title font-semibold tracking-[-0.01em] text-fg">
-                        {guide.sections.length} focused review step{guide.sections.length === 1 ? "" : "s"}
-                      </h2>
-                      <p className="mt-1 max-w-[680px] text-xs leading-relaxed text-dim">
-                        {reviewing
-                          ? "Review the change by intent rather than alphabetically. Comments stay pending until you finish the review."
-                          : "Read the change by intent rather than alphabetically."}
-                      </p>
-                    </div>
-                  </div>
-                  {guideSections.map((section, index, all) => (
-                    <section
-                      id={`review-guide-${index}`}
-                      className="mb-8 scroll-mt-[64px]"
-                      key={`${section.title}-${index}`}
-                    >
-                      <div className="mb-3 grid grid-cols-[54px_minmax(0,1fr)] gap-4 px-1">
-                        <div className="text-meta text-faint">
-                          {String(index + 1).padStart(2, "0")} / {String(all.length).padStart(2, "0")}
-                        </div>
-                        <div>
-                          <div className="text-body font-semibold text-fg">{section.title}</div>
-                          <div className="mt-1 text-meta leading-relaxed text-dim">
-                            {section.explanation}
+                    {guideSections.map((section, index, all) => (
+                      <section
+                        id={`review-guide-${index}`}
+                        className="mb-8 scroll-mt-[64px]"
+                        key={`${section.title}-${index}`}
+                      >
+                        <div className="mb-3 grid grid-cols-[54px_minmax(0,1fr)] gap-4 px-1">
+                          <div className="text-meta text-faint">
+                            {String(index + 1).padStart(2, "0")} / {String(all.length).padStart(2, "0")}
+                          </div>
+                          <div>
+                            <div className="text-body font-semibold text-fg">{section.title}</div>
+                            <div className="mt-1 text-meta leading-relaxed text-dim">
+                              {section.explanation}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      {section.patch && (
-                        <CommentableDiff patch={section.patch} {...diffProps} />
-                      )}
-                    </section>
-                  ))}
-                </>
-              ) : null
-            ) : (
-              <CommentableDiff
-                patch={diff.patch}
-                {...diffProps}
-                groups={diffGroups?.oid === diff.headRefOid ? diffGroups.groups || undefined : undefined}
-                groupsLoading={diffGroupsLoading}
-              />
-            )}
-          </div>
-        )}
-      </main>
+                        {section.patch && (
+                          <CommentableDiff patch={section.patch} {...diffProps} />
+                        )}
+                      </section>
+                    ))}
+                  </>
+                ) : null
+              ) : (
+                <CommentableDiff
+                  patch={diff.patch}
+                  {...diffProps}
+                  groups={diffGroups?.oid === diff.headRefOid ? diffGroups.groups || undefined : undefined}
+                  groupsLoading={diffGroupsLoading}
+                />
+              )}
+            </div>
+          )}
+        </main>
+      </div>
 
       {sessionsOpen && (
         <>
