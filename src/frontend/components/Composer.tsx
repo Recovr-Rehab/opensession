@@ -4,8 +4,10 @@ import { splitAttachments, imageFilesFromPaste, type FileAttachment } from "../l
 import { loadDraft, onDraftsChanged, saveDraft } from "../lib/drafts";
 import {
   composerHighlightHtml,
+  composerMentionRanges,
   needsComposerHighlight,
 } from "../lib/composer-highlight";
+import { usePeople } from "../lib/people";
 import { ImageThumbs } from "./ImageThumbs";
 import { FileChips } from "./FileChips";
 import { QuoteContext } from "./QuoteContext";
@@ -769,17 +771,80 @@ export function Composer({
   // mirror div paints `inline` / ```fence``` tints behind a transparent-text
   // textarea (native caret/selection/undo stay). Plain drafts skip the mirror
   // entirely — the stock opaque textarea has zero desync risk.
+  // The same mirror carries the @-mention pills, so it also mounts for a draft
+  // that only mentions somebody. The roster is reactive: it arrives from the
+  // server after first paint, and without the re-render an already-typed
+  // mention would only chip on the next keystroke.
+  const people = usePeople();
   const hlRef = useRef<HTMLDivElement>(null);
-  const hlActive = needsComposerHighlight(text);
+  const hlActive = needsComposerHighlight(text, people);
   const hlHtml = useMemo(
-    () => (hlActive ? composerHighlightHtml(text) : ""),
-    [hlActive, text],
+    () => (hlActive ? composerHighlightHtml(text, people) : ""),
+    [hlActive, text, people],
+  );
+  const mentionRanges = useMemo(
+    () => composerMentionRanges(text, people),
+    [text, people],
   );
   useEffect(() => {
     // The textarea scrolls internally at max-height; keep the mirror locked to it.
     const el = textareaRef.current;
     const hl = hlRef.current;
     if (el && hl) hl.scrollTop = el.scrollTop;
+  }, [hlHtml, textareaRef]);
+
+  // Pressing a mention pill removes it. The textarea covers the mirror, so the
+  // press lands on the field — but the browser has already placed the caret by
+  // the time click fires, and a caret strictly INSIDE a pill can only have come
+  // from pressing it (its edges still place a caret, which is the margin that
+  // keeps an ordinary click near a mention from eating one). Deleting through
+  // execCommand keeps the edit on the native undo stack; splicing the value in
+  // React state would quietly cost you ⌘Z.
+  function removeMentionAtCaret(el: HTMLTextAreaElement): boolean {
+    if (el.selectionStart !== el.selectionEnd) return false;
+    const caret = el.selectionStart;
+    const hit = mentionRanges.find((r) => caret > r.start && caret < r.end);
+    if (!hit) return false;
+    // The trailing space goes with it, so removing a mention mid-sentence
+    // doesn't leave a double space behind.
+    const end = text[hit.end] === " " ? hit.end + 1 : hit.end;
+    el.setSelectionRange(hit.start, end);
+    if (!document.execCommand("delete")) {
+      setText(text.slice(0, hit.start) + text.slice(end));
+      queueMicrotask(() =>
+        textareaRef.current?.setSelectionRange(hit.start, hit.start),
+      );
+    }
+    return true;
+  }
+
+  // A pill that can be pressed has to look it, and the field on top owns the
+  // cursor — so hover is hit-tested against the mirror's own spans and painted
+  // by a data attribute on the one under the pointer.
+  const hoveredMention = useRef<HTMLElement | null>(null);
+  function updateMentionHover(x: number, y: number) {
+    const hl = hlRef.current;
+    const el = textareaRef.current;
+    if (!hl || !el) return;
+    let hit: HTMLElement | null = null;
+    for (const span of hl.querySelectorAll<HTMLElement>(".cmp-mention")) {
+      // Per fragment, not per span: a mention that wraps has two boxes.
+      for (const r of span.getClientRects())
+        if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom)
+          hit = span;
+      if (hit) break;
+    }
+    if (hoveredMention.current === hit) return;
+    hoveredMention.current?.removeAttribute("data-hover");
+    hit?.setAttribute("data-hover", "");
+    hoveredMention.current = hit;
+    el.style.cursor = hit ? "pointer" : "";
+  }
+  // Every keystroke rewrites the mirror's innerHTML, so the hovered span is a
+  // dangling node from the render before it.
+  useEffect(() => {
+    hoveredMention.current = null;
+    if (textareaRef.current) textareaRef.current.style.cursor = "";
   }, [hlHtml, textareaRef]);
 
   // Dictated text lands at the end of the draft (with a joining space) and
@@ -1053,7 +1118,12 @@ export function Composer({
             }}
             onKeyDown={handleKeyDown}
             onKeyUp={mentions.sync}
-            onClick={mentions.sync}
+            onClick={(e) => {
+              if (removeMentionAtCaret(e.currentTarget)) return;
+              mentions.sync();
+            }}
+            onMouseMove={(e) => updateMentionHover(e.clientX, e.clientY)}
+            onMouseLeave={() => updateMentionHover(-1, -1)}
             onScroll={(e) => {
               if (hlRef.current)
                 hlRef.current.scrollTop = e.currentTarget.scrollTop;

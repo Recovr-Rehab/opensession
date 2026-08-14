@@ -1235,9 +1235,10 @@ html.wco .app-body.sidebar-collapsed
    There is no JSX to hang utilities on, so this cannot become a utility; it is
    renderer-emitted markup, which is what base.css keeps.
 
-   The tints are colour and background ONLY. Any font, padding or size change
-   here would desync the painted glyphs from the caret in the textarea behind
-   them — the mirror and the field have to agree on every metric. */
+   The tints paint only: colour, background, and the one outline below, all of
+   which leave the line box alone. Any font, padding or size change here would
+   desync the painted glyphs from the caret in the textarea behind them — the
+   mirror and the field have to agree on every metric. */
 .composer-hl .cmp-code {
 	background: rgba(255, 255, 255, 0.09);
 	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
@@ -1247,6 +1248,23 @@ html.wco .app-body.sidebar-collapsed
 	background: rgba(255, 255, 255, 0.06);
 	border-radius: calc(4px * var(--rf)); corner-shape: var(--cs);
 	color: #dde1f0;
+}
+/* A finished @-mention of a teammate, the draft's counterpart to the
+   `person-chip` a sent message renders. It reads as a pill without being one:
+   the mirror may not take padding, so the breathing room around the name is an
+   `outline`, which follows the radius and is drawn outside the box — so a
+   translucent accent stays one flat wash instead of doubling where a spread
+   shadow would have sat under the background. Hover is set by the composer,
+   which hit-tests these spans through the textarea covering them. */
+.composer-hl .cmp-mention {
+	background: color-mix(in srgb, var(--accent) 12%, transparent);
+	outline: 3px solid color-mix(in srgb, var(--accent) 12%, transparent);
+	border-radius: 999px;
+	color: var(--accent-ink);
+}
+.composer-hl .cmp-mention[data-hover] {
+	background: color-mix(in srgb, var(--accent) 22%, transparent);
+	outline-color: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 html[data-theme="light"] .composer-hl .cmp-code {
 	background: rgba(0, 0, 0, 0.07);

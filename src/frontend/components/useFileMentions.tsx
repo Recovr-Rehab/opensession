@@ -2,6 +2,7 @@ import { repoLabel } from "../lib/repo-label";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { FileMention } from "../lib/api";
+import { UserAvatar } from "./UserAvatar";
 import { cn } from "../ui/cn";
 
 /**
@@ -279,7 +280,10 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, sk
             onMouseEnter={() => setActiveIdx(i)}
           >
             {isSession && <span className="shrink-0 self-center rounded-md bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] px-[5px] py-px text-meta font-semibold text-accent">session</span>}
-            {isPerson && <span className="shrink-0 self-center rounded-md bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] px-[5px] py-px text-meta font-semibold text-accent">person</span>}
+            {/* A teammate is pictured rather than labelled: the face says
+                "person" faster than the word did, and it is the same picture
+                the mention itself carries once it lands in a message. */}
+            {isPerson && <UserAvatar name={item.display} size={18} className="self-center" />}
             {!isSession && !isSkill && !isPerson && item.repo && <span className="shrink-0 self-center rounded-md bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] px-[5px] py-px text-meta font-semibold text-accent">{repoLabel(item.repo)}</span>}
             <span className="shrink-0 font-medium text-fg">{isSkill ? `/${base}` : isDir ? `${base}/` : base}</span>
             {isSession || isSkill || isPerson
