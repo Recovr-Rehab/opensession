@@ -80,16 +80,17 @@
 	   the only thing that can say "raised" — and the knob's own track is
 	   already --bg-hover, so anything at or below that tier reads as a hole
 	   cut in the group rather than a plate lifted out of it. That is what
-	   --control-surface (#292929, BELOW the track) looked like. iOS solves it
-	   the same way: its selected segment is a light grey well clear of the
-	   track, with no outline at all.
+	   --control-surface (#292929, BELOW the track) looked like. The value is
+	   iOS's own: its selected segment sits around #636366 on a #2C2C2E track,
+	   which is a bigger step than an app this flat would arrive at on its own,
+	   and it is the step that actually reads as pressed.
 
 	   The edge is a hair LIGHTER than the fill, not darker — a dark line
 	   around a light plate is a drawn outline, while a light one reads as the
 	   top of the plate catching the light. Light mode wants neither; see the
 	   light block. */
-	--segmented-knob-surface: #454545;
-	--segmented-knob-edge: #525252;
+	--segmented-knob-surface: #5a5a5c;
+	--segmented-knob-edge: #6a6a6c;
 	/* Floating popups — hover cards, menus, context menus. Same L3 tier as the
 	   controls above, and in dark that is all it needs: lighter than the page,
 	   so the fill alone reads as lifted and the hairline is just an edge. Light
