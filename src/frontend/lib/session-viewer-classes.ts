@@ -426,7 +426,5 @@ export const INFO_LIST =
 	"[&>button]:bg-transparent [&>button]:px-2.5 [&>button]:py-2 [&>button]:text-label [&>button]:text-fg " +
 	"[&>button:hover]:bg-hover";
 
-/** The whole-workspace view embedded below the actions. Its own title repeats
- *  the page hero, so it goes; the meta line and PR chips still add detail. */
-export const INFO_OVERVIEW =
-	"pt-2 [&_.workspace-info-title]:hidden [&_.workspace-info-panel]:pt-0";
+/** The whole-workspace view embedded below the actions. */
+export const INFO_OVERVIEW = "pt-2 [&_.workspace-info-panel]:pt-0";

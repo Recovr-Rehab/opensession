@@ -230,8 +230,6 @@ export function WorkspacePane({
 						<WorkspaceInfo
 							sessionId={anchorSession?.id || ""}
 							workspaceId={workspace.id}
-							workspaceName={workspace.name}
-							workspaceCreatedBy={workspace.createdBy}
 							sessions={workspaceSessions.map((s) => ({
 								id: s.id,
 								title: s.title,

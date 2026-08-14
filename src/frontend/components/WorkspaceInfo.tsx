@@ -60,7 +60,6 @@ import {
 	GIT_ROW,
 } from "../lib/pr-tone-classes";
 import { openLightbox } from "./MediaLightbox";
-import { repoLabel } from "./RepoTile";
 import { SandboxBadge } from "./SandboxBadge";
 import {
 	IconBell,
@@ -75,9 +74,9 @@ import {
 
 /**
  * Workspace info block at the top of the right side panel (the "Info" tab): a
- * dense, at-a-glance catch-all - title + meta, workspace actions, local git
- * state, PR comments, changed files, and a compact filmstrip of every screenshot
- * / video from the workspace's sessions. PR state and local git deltas share one
+ * dense, at-a-glance catch-all - workspace actions, local git state, PR
+ * comments, changed files, and a compact filmstrip of every screenshot / video
+ * from the workspace's sessions. PR state and local git deltas share one
  * compact Git status section; the transcript remains the opening-prompt source.
  *
  * Loading/caching for the overview lives in lib/workspace-overview (shared with
@@ -100,9 +99,6 @@ interface Props {
 	sessionId: string;
 	/** The session's workspace (workspaceId); null = workspace-less (fallback only). */
 	workspaceId: string | null;
-	workspaceName?: string;
-	/** Who created the workspace (its own record). */
-	workspaceCreatedBy?: string;
 	/** Sibling sessions, oldest first (the tab strip's list). */
 	sessions: Array<OverviewSessionRef & { startedBy?: string | null }>;
 	/** Primary repo the workspace's sessions work in. */
@@ -1309,8 +1305,6 @@ function GitStatusRows({
 export function WorkspaceInfo({
 	sessionId,
 	workspaceId,
-	workspaceName,
-	workspaceCreatedBy,
 	sessions,
 	repo,
 	prState,
@@ -1458,28 +1452,6 @@ export function WorkspaceInfo({
 				.catch(() => {});
 	};
 
-	const oldest = sessions[0];
-	const started = oldest?.createdAt
-		? new Date(oldest.createdAt).toLocaleDateString(undefined, {
-				month: "short",
-				day: "numeric",
-			})
-		: null;
-	const meta = [
-		repo ? repoLabel(repo) : null,
-		`${sessions.length} session${sessions.length === 1 ? "" : "s"}`,
-		// The workspace's own creator, not the oldest session still on screen:
-		// archiving the session a workspace was started from used to hand the
-		// credit to whoever came next, which for a PR workspace is the review
-		// automation.
-		workspaceCreatedBy || oldest?.startedBy
-			? `by ${workspaceCreatedBy || oldest?.startedBy}`
-			: null,
-		started,
-	]
-		.filter(Boolean)
-		.join(" · ");
-
 	// This list is what the team said about the PR, so machines are dropped:
 	// deploy bots, preview tables, and the agent's own review, which the review
 	// card above already carries in full. Also drop anything that reduces to
@@ -1507,7 +1479,6 @@ export function WorkspaceInfo({
 		}
 		return m;
 	}, [rawPatch]);
-	const title = workspaceName || oldest?.title || "Untitled session";
 	const media = [...liveMedia, ...(data?.media || [])].filter(
 		(m, i, all) =>
 			all.findIndex(
@@ -1530,19 +1501,14 @@ export function WorkspaceInfo({
 		assets.length > 0,
 	);
 
-	// `workspace-info-panel` / `workspace-info-title` are DOM hooks, not
-	// styling: the phone session-info page reaches both from an ancestor —
-	// `[&_.workspace-info-panel]:pt-0` / `[&_.workspace-info-title]:hidden` in
+	// `workspace-info-panel` is a DOM hook, not styling: the phone session-info
+	// page reaches it from an ancestor — `[&_.workspace-info-panel]:pt-0` in
 	// INFO_OVERVIEW (lib/session-viewer-classes).
 	return (
 		<div className="workspace-info-panel flex flex-col gap-4 px-2 pb-[22px] pt-3">
-			{/* px-2 like INFO_LABEL_CLASS: the title, meta line and review chip
-			    share a left edge with the section headings below them. */}
+			{/* px-2 like INFO_LABEL_CLASS: the review chip shares a left edge
+			    with the section headings below it. */}
 			<div className="grid gap-1 px-2">
-				<div className="workspace-info-title selectable text-item-title font-semibold leading-[1.2] text-fg [overflow-wrap:anywhere]">
-					{title}
-				</div>
-				{meta && <div className="text-label leading-[1.35] text-faint">{meta}</div>}
 				<ReviewerChip
 					sessionId={sessionId}
 					reviewRequest={reviewRequest}
