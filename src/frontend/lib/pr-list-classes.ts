@@ -30,6 +30,23 @@ export const PR_GROUP_LABEL =
  * `:has(+ button:hover)` hides the one above it — so a lit row reads as a clean
  * slab instead of a strip with a line cutting its corner.
  */
+/**
+ * The same row, in the People page's shipped feed.
+ *
+ * One column narrower: everything in the feed has merged, so the state glyph
+ * would be the same mark on every line. The face takes its place, because who
+ * shipped it is the one thing the feed is sorted around.
+ */
+export const PR_FEED_ROW =
+	"group focus-ring relative grid w-full grid-cols-[24px_minmax(0,1fr)_130px_44px] " +
+	"cursor-pointer items-center gap-2 rounded-control border-0 bg-transparent px-3 py-2.5 " +
+	"text-left transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-hover " +
+	"after:pointer-events-none after:absolute after:right-3 after:bottom-0 after:left-[50px] " +
+	"after:h-px after:bg-line after:transition-opacity after:duration-[var(--dur-micro)] " +
+	"last:after:opacity-0 hover:after:opacity-0 " +
+	"[&:has(+button:hover)]:after:opacity-0 " +
+	"phone:grid-cols-[24px_minmax(0,1fr)_44px]";
+
 export const PR_ROW =
 	"group focus-ring relative grid w-full grid-cols-[22px_24px_minmax(0,1fr)_130px_44px] " +
 	"cursor-pointer items-center gap-2 rounded-control border-0 bg-transparent px-3 py-2.5 " +

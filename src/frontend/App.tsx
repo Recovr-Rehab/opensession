@@ -3936,7 +3936,11 @@ export function App(
 						) : route.view === "analytics" ? (
 							<Analytics />
 						) : route.view === "people" ? (
-							<People sessions={sessions} teamViewing={teamViewing} />
+							<People
+								sessions={sessions}
+								teamViewing={teamViewing}
+								onSelect={(s) => navigate({ view: "session", id: s.id })}
+							/>
 						) : route.view === "tasks" ? (
 							<Tasks
 								addHandler={addHandler}

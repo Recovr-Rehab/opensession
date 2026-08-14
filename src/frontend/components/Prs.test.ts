@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { RecentPr } from "../lib/api";
 import type { UnifiedSession } from "../lib/types";
-import { buildWorktreeRows } from "./Prs";
+import { buildWorktreeRows } from "../lib/pr-rows";
 
 test("keeps GitHub merged state authoritative over stale archived session data", () => {
   const url = "https://github.com/tellahq/backstage/pull/59";

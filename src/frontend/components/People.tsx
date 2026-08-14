@@ -1,5 +1,16 @@
+import { useEffect, useState } from "react";
 import type { UnifiedSession } from "../lib/types";
 import { useReviewTeams } from "../lib/people";
+import { fetchRecentPrs, type RecentPr } from "../lib/api";
+import {
+	buildWorktreeRows,
+	compactAge,
+	compactDiff,
+	dateGroup,
+	personLabel,
+} from "../lib/pr-rows";
+import { PR_FEED_ROW, PR_GROUP_LABEL, PR_LIST } from "../lib/pr-list-classes";
+import { RepoTile, repoLabel } from "./RepoTile";
 import { useCurrentUser } from "./UserPicker";
 import { UserAvatar } from "./UserAvatar";
 import {
@@ -23,6 +34,7 @@ import {
 	PEOPLE_CARD,
 	PEOPLE_CARD_SELECTED,
 	PEOPLE_GRID,
+	PEOPLE_INSET,
 	PEOPLE_ORG_CARD,
 	PEOPLE_ORG_MEMBER,
 	PEOPLE_SECTION_LABEL,
@@ -41,7 +53,13 @@ interface Props {
 	sessions: UnifiedSession[];
 	/** Who's viewing what right now (global presence), for the status lines. */
 	teamViewing?: Array<{ user: string; sessionId: string }>;
+	onSelect: (session: UnifiedSession) => void;
 }
+
+/** How much of the feed to keep on screen. Far enough back to cover a quiet
+ *  week; past that it stops being what's happening and starts being history,
+ *  which the Pull requests list holds properly. */
+const FEED_LIMIT = 40;
 
 function PersonCard({
 	member,
@@ -90,13 +108,55 @@ function PersonCard({
 	);
 }
 
-export function People({ sessions, teamViewing }: Props) {
+export function People({ sessions, teamViewing, onSelect }: Props) {
 	const currentUser = useCurrentUser();
 	const team = useTeamPresence({ sessions, teamViewing, currentUser });
 	const orgs = useReviewTeams();
 	const filter = useSidebarFilter();
 	const lens = personLensValue(filter.person, currentUser);
 	const pick = (next: string) => setFilter({ person: personLensFilter(next, currentUser) });
+
+	// What the team has been shipping. Unscoped once, plus that person's own
+	// merges when the lens is on someone, because the recent list is capped
+	// globally and a quiet week would otherwise drop them out of their own feed.
+	const [recentPrs, setRecentPrs] = useState<RecentPr[]>([]);
+	const [personPrs, setPersonPrs] = useState<RecentPr[]>([]);
+	useEffect(() => {
+		let active = true;
+		fetchRecentPrs()
+			.then((prs) => active && setRecentPrs(prs))
+			.catch(() => {});
+		return () => {
+			active = false;
+		};
+	}, []);
+	const lensPerson = lens === "everyone" || lens === "unassigned" ? null : lens;
+	useEffect(() => {
+		if (!lensPerson) {
+			setPersonPrs([]);
+			return;
+		}
+		let active = true;
+		fetchRecentPrs(lensPerson)
+			.then((prs) => active && setPersonPrs(prs))
+			.catch(() => {});
+		return () => {
+			active = false;
+		};
+	}, [lensPerson]);
+
+	const shipped = (() => {
+		const prs = new Map(recentPrs.map((pr) => [pr.url, pr]));
+		for (const pr of personPrs) prs.set(pr.url, pr);
+		const merged = buildWorktreeRows([...prs.values()], sessions).filter(
+			(row) => row.state === "MERGED" && (!lensPerson || row.person === lensPerson),
+		);
+		const groups = new Map<string, typeof merged>();
+		for (const row of merged.slice(0, FEED_LIMIT)) {
+			groups.set(dateGroup(row.updatedAt), [...(groups.get(dateGroup(row.updatedAt)) || []), row]);
+		}
+		return { count: merged.length, groups: [...groups.entries()] };
+	})();
 
 	// You first, then the team in the order `useTeamPresence` already sorted
 	// them: working, then online, then whoever moved most recently. Your own
@@ -109,7 +169,7 @@ export function People({ sessions, teamViewing }: Props) {
 		// column at the shared width and padding, a PageHeader on top.
 		<div className="min-h-0 w-full flex-1 overflow-y-auto bg-surface">
 			<div className="mx-auto w-full max-w-[920px] px-6 pb-15 pt-7 max-[560px]:px-4 max-[560px]:pb-12 max-[560px]:pt-[18px]">
-				<PageHeader>
+				<PageHeader className={PEOPLE_INSET}>
 					<div className="min-w-0">
 						<PageTitle>People</PageTitle>
 						<PageDescription>
@@ -215,6 +275,92 @@ export function People({ sessions, teamViewing }: Props) {
 								);
 							})}
 						</div>
+					</>
+				)}
+
+				{/* What the team has actually been shipping, newest first. The grid
+				    above says who is around; this says what came of it, and picking
+				    a face narrows both at once. Merged only: an open pull request
+				    is work in progress, and the Pull requests list is where you go
+				    to act on those. */}
+				{recentPrs.length > 0 && (
+					<>
+						<h3 className={PEOPLE_SECTION_LABEL}>
+							{lensPerson ? `${personLabel(lensPerson)} shipped` : "Shipped"}
+						</h3>
+						{shipped.groups.length === 0 ? (
+							// The section stays rather than disappearing: a picked teammate
+							// with nothing merged is an answer, and a heading that comes
+							// and goes as you click faces reads as a bug.
+							<EmptyState title="Nothing merged yet">
+								{lensPerson
+									? `${personLabel(lensPerson)} hasn't merged a pull request recently.`
+									: "Merged pull requests show up here."}
+							</EmptyState>
+						) : (
+						<div className={PR_LIST}>
+							{shipped.groups.map(([label, rows]) => (
+								<div key={label} className="mb-4">
+									<h4 className={PR_GROUP_LABEL}>
+										{label}
+										<span className="font-medium">{rows.length}</span>
+									</h4>
+									<div>
+										{rows.map((row) => (
+											<button
+												key={row.key}
+												className={PR_FEED_ROW}
+												onClick={() =>
+													row.session
+														? onSelect(row.session)
+														: row.url && window.open(row.url, "_blank", "noopener")
+												}
+												title={`${repoLabel(row.repo)} · ${row.branch}`}
+											>
+												{/* Who shipped it, or the repo when the author isn't a
+												    teammate: the column always says where it came from. */}
+												{row.person ? (
+													<UserAvatar
+														name={personLabel(row.person)}
+														size={24}
+														title={personLabel(row.person)}
+													/>
+												) : (
+													<RepoTile name={row.repo} size={24} />
+												)}
+												<span className="min-w-0">
+													<span className="flex min-w-0 items-baseline gap-2">
+														<span className="truncate text-body font-medium leading-[1.3] text-fg">
+															{row.title}
+														</span>
+														{row.number && (
+															<span className="shrink-0 text-meta tabular-nums text-faint">
+																#{row.number}
+															</span>
+														)}
+													</span>
+													<span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-meta text-faint">
+														<span className="truncate">{repoLabel(row.repo)}</span>
+													</span>
+												</span>
+												<span className="justify-self-end text-meta tabular-nums phone:hidden">
+													{row.additions !== undefined && (
+														<span className="text-green">+{compactDiff(row.additions)}</span>
+													)}
+													{row.deletions !== undefined && (
+														<span className="ml-2 text-red">−{compactDiff(row.deletions)}</span>
+													)}
+												</span>
+												<span className="justify-self-end text-meta tabular-nums text-faint">
+													{compactAge(row.updatedAt)}
+												</span>
+											</button>
+										))}
+									</div>
+								</div>
+							))}
+						</div>
+						)}
 					</>
 				)}
 			</div>
