@@ -4027,18 +4027,16 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							!isPhone && "items-center",
 							!isPhone &&
 								// Compact rows use control-label type, with glyphs matching
-								// the sidebar's standard 22px leading rail. `py-[7px]` is the
-								// sidebar's 36px item height (see the height scale in
-								// lib/sidebar-classes.ts): a tool row and a session row are
-								// the same kind of thing — one line you click to go
-								// somewhere — so they take the same box. It was `py-[3px]`,
-								// 28px, which put a fifth height on the rail purely to make
-								// the utility strip read lighter than the work lists.
-								// Landed in ffd11ffc (2026-07-24). That commit's comment
-								// credited a "wayyy too big" complaint, but no such
-								// request exists in the session record — don't treat the
-								// former numbers as a stated preference.
-								"w-full gap-[9px] rounded-row bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[7px] text-control-label font-medium text-dim hover:text-fg",
+								// the sidebar's standard 22px leading rail. `py-[5px]` is a
+								// 32px box: the tools are a short utility strip above the
+								// work lists, and at the session rows' 36px the four of them
+								// took more of the rail than what they lead to. The glyph and
+								// the label's left rail are untouched, so they still line up
+								// with the rows below; only the air around them is tighter.
+								// Don't take it below 32. At 28 (`py-[3px]`, the pre-ffd11ffc
+								// value) the 22px glyph has 3px of margin and the hover pill
+								// stops reading as a row.
+								"w-full gap-[9px] rounded-row bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[5px] text-control-label font-medium text-dim hover:text-fg",
 							!isPhone && SIDEBAR_HOVER_LAYER,
 							!isPhone && tool.active && "bg-pressed text-fg",
 						);

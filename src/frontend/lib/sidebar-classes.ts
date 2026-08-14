@@ -12,12 +12,18 @@
  * Two properties carry the whole rail, and they are INDEPENDENT. Read them as
  * separate questions, and do not bundle them into one "kind" again.
  *
- * HEIGHT says how prominent a line is. There are exactly two:
+ * HEIGHT says how prominent a line is. There are exactly three, and the middle
+ * one has a single tenant:
  *
- *   36px  a FULL LINE. Session/PR/support/archived rows, tool rows, and the
- *         headings that title a set of rows and lead with a mark: a repo or
- *         feed band, an automation group, Archived. See
- *         {@link SIDEBAR_HEADER_ROW}.
+ *   36px  a FULL LINE. Session/PR/support/archived rows, and the headings
+ *         that title a set of rows and lead with a mark: a repo or feed band,
+ *         an automation group, Archived. See {@link SIDEBAR_HEADER_ROW}.
+ *   32px  the tool rows, and only them. They lead with the same 22px glyph on
+ *         the same rail as a full line, so the column reads unbroken, but the
+ *         strip is a short list of places above the work rather than part of
+ *         it, and four full lines of it opened the sidebar with more chrome
+ *         than content. Nothing else takes this height: it is a tighter
+ *         version of the full line, not a third kind of row.
  *   28px  a CAPTION, leading with no mark at all. Band headings (Tools /
  *         Workspaces / Automations / People), the status lanes (Needs action /
  *         Recent / Yesterday / Urgent), and the top-level groupings that read
