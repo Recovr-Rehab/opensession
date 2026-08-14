@@ -25,6 +25,20 @@ struct PrDetails: Decodable, Equatable {
     var mergeable: String?
     /// CLEAN | BEHIND | BLOCKED | DIRTY | UNSTABLE | … — merge-box state.
     var mergeStateStatus: String?
+    /// The agent's last reading of this pull request, when one has run.
+    var osReview: OsReviewSummary?
+    /// A review pass is running on the PR right now.
+    var reviewActive: Bool?
+    /// The pull request's conversation. Only the agent's own review write-up
+    /// is read from it so far, which is why there is no comment list yet.
+    var comments: [PrComment]?
+}
+
+struct PrComment: Decodable, Equatable {
+    var author: String?
+    var body: String
+    var createdAt: String?
+    var url: String?
 }
 
 struct PrCheck: Decodable, Equatable {

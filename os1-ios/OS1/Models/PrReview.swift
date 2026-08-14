@@ -157,3 +157,135 @@ enum PrPatchParser {
         return value.flatMap { Int($0) }
     }
 }
+
+// MARK: - How the diff is drawn
+
+/// Unified or side by side, and whether long lines wrap. The same pair of
+/// settings the web review canvas keeps in local storage: a reader picks them
+/// once, so they persist across sessions rather than resetting per file.
+enum PrDiffStyle: String, CaseIterable, Sendable {
+    case unified, split
+
+    var label: String {
+        switch self {
+        case .unified: "Unified diff"
+        case .split: "Split diff"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .unified: "list.bullet.rectangle"
+        case .split: "rectangle.split.2x1"
+        }
+    }
+}
+
+/// One row of a side-by-side diff. A hunk header spans both columns; a
+/// changed run pairs its deletions against its additions and pads the shorter
+/// side, which is what keeps the two columns reading as one change.
+struct PrPatchRow: Identifiable, Hashable, Sendable {
+    let id: Int
+    let left: PrPatchLine?
+    let right: PrPatchLine?
+    /// Set when the row is a full-width hunk header rather than a pair.
+    let header: PrPatchLine?
+}
+
+extension PrPatchParser {
+    /// Pair a file's unified lines into side-by-side rows.
+    static func rows(_ lines: [PrPatchLine]) -> [PrPatchRow] {
+        var rows: [PrPatchRow] = []
+        var deletions: [PrPatchLine] = []
+        var additions: [PrPatchLine] = []
+
+        func flushRun() {
+            guard !deletions.isEmpty || !additions.isEmpty else { return }
+            for index in 0..<max(deletions.count, additions.count) {
+                rows.append(PrPatchRow(
+                    id: rows.count,
+                    left: index < deletions.count ? deletions[index] : nil,
+                    right: index < additions.count ? additions[index] : nil,
+                    header: nil
+                ))
+            }
+            deletions = []
+            additions = []
+        }
+
+        for line in lines {
+            switch line.kind {
+            case .deletion: deletions.append(line)
+            case .addition: additions.append(line)
+            case .metadata:
+                flushRun()
+                rows.append(PrPatchRow(id: rows.count, left: nil, right: nil, header: line))
+            case .context:
+                flushRun()
+                rows.append(PrPatchRow(id: rows.count, left: line, right: line, header: nil))
+            }
+        }
+        flushRun()
+        return rows
+    }
+}
+
+// MARK: - The other two lenses
+
+/// The generated review guide: the diff grouped into a handful of sections to
+/// read in order. The server answers `null` when there is no PR or generation
+/// failed, and the canvas falls back to the plain diff.
+struct PrReviewGuide: Decodable, Sendable, Equatable {
+    struct Section: Decodable, Sendable, Equatable, Identifiable {
+        let title: String
+        let explanation: String
+        let files: [String]
+
+        var id: String { "\(title)|\(files.joined(separator: ","))" }
+    }
+
+    let number: Int?
+    let headRefOid: String?
+    let sections: [Section]
+}
+
+/// The structural call/branch trees behind a change. `status` stays a plain
+/// string so a value this build has never heard of decodes rather than
+/// throwing away the whole tree.
+struct PrCodeFlow: Decodable, Sendable, Equatable {
+    struct Tree: Decodable, Sendable, Equatable, Identifiable {
+        let entry: String
+        let tree: PrCodeFlowNode
+
+        var id: String { entry }
+    }
+
+    let trees: [Tree]
+    let languages: [String]?
+    let skippedFiles: Int?
+    let truncated: Bool?
+}
+
+struct PrCodeFlowNode: Decodable, Sendable, Equatable, Hashable, Identifiable {
+    let key: String
+    let label: String
+    let kind: String?
+    let status: String
+    let file: String?
+    let line: Int?
+    let children: [PrCodeFlowNode]
+
+    var id: String { "\(key):\(status):\(file ?? ""):\(line ?? 0)" }
+
+    /// The one-character mark the web draws in front of a node.
+    var mark: String {
+        switch status {
+        case "added": "+"
+        case "removed": "−"
+        case "modified": "~"
+        default: "·"
+        }
+    }
+
+    var isUnchanged: Bool { status == "same" }
+}

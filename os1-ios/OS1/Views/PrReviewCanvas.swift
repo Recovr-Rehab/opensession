@@ -2,9 +2,40 @@ import SwiftUI
 
 /// A native committed-diff review surface. Inline notes remain local until the
 /// reviewer submits one GitHub review, matching GitHub's pending-review model.
+///
+/// The code page carries the same two option menus as the web review canvas.
+/// They answer different questions, which is why they stay separate: the lens
+/// picks WHAT you are reading (the diff, a guided walk through it, a call
+/// graph), and the display settings are how the diff is DRAWN (unified or side
+/// by side, long lines wrapped or scrolled). The lens resets per visit; the
+/// display settings persist, because a reader picks those once.
 struct PrReviewCanvas: View {
     let viewModel: SessionViewModel
 
+    /// The lenses the code page can be read through, in menu order.
+    enum Lens: String, CaseIterable, Identifiable {
+        case all, guide, flow
+
+        var id: String { rawValue }
+
+        var label: String {
+            switch self {
+            case .all: "All changes"
+            case .guide: "Review guide"
+            case .flow: "Code flow"
+            }
+        }
+
+        var symbol: String {
+            switch self {
+            case .all: "doc.plaintext"
+            case .guide: "list.bullet.rectangle"
+            case .flow: "arrow.triangle.branch"
+            }
+        }
+    }
+
+    @State private var lens: Lens = .all
     @State private var diff: PrDiff?
     @State private var files: [PrPatchFile] = []
     @State private var viewed = Set<String>()
@@ -15,6 +46,12 @@ struct PrReviewCanvas: View {
     @State private var commentTarget: PrLineTarget?
     @State private var submitting = false
     @State private var reviewing = false
+    @State private var guide: PrReviewGuide?
+    @State private var guideLoading = false
+    @State private var guideError: String?
+    @State private var flow: PrCodeFlow?
+    @State private var flowLoading = false
+    @State private var flowError: String?
 
     var body: some View {
         Group {
@@ -36,25 +73,42 @@ struct PrReviewCanvas: View {
                     message: "This pull request has no textual diff to review."
                 ) { EmptyView() }
             } else {
-                fileList
+                switch lens {
+                case .all: fileList
+                case .guide: guideList
+                case .flow: flowList
+                }
             }
         }
-        .navigationTitle("Files changed")
+        .navigationTitle(lens == .all ? "Files changed" : lens.label)
         .inlineTitleBarCompat()
+        .navigationDestination(for: PrPatchFile.self) { file in
+            PrReviewFileView(
+                file: file,
+                isViewed: viewed.contains(file.path),
+                commentCount: draftComments.filter { $0.path == file.path }.count,
+                toggleViewed: { toggleViewed(file.path) },
+                comment: { line in commentTarget = PrLineTarget(path: file.path, line: line) }
+            )
+        }
         .toolbar {
+            ToolbarItem(placement: .topTrailingCompat) {
+                PrViewOptionsMenu(lens: $lens, showsDiffDisplay: lens != .flow)
+            }
             ToolbarItem(placement: .topTrailingCompat) {
                 if submitting {
                     ProgressView().controlSize(.small)
                 } else if !draftComments.isEmpty {
                     Button("Review") { reviewing = true }
                 } else {
-                    Button { Task { await load() } } label: {
+                    Button { Task { await reload() } } label: {
                         Label("Refresh", systemImage: "arrow.clockwise")
                     }
                 }
             }
         }
         .task { await load() }
+        .task(id: lens) { await loadLens() }
         .sheet(item: $commentTarget) { target in
             PrInlineCommentSheet(target: target) { text in
                 upsertComment(path: target.path, line: target.line, text: text)
@@ -72,16 +126,11 @@ struct PrReviewCanvas: View {
         }
     }
 
+    // MARK: - All changes
+
     private var fileList: some View {
         List {
-            if !draftComments.isEmpty {
-                Section {
-                    Text("\(draftComments.count) pending inline comment\(draftComments.count == 1 ? "" : "s")")
-                        .foregroundStyle(.secondary)
-                } footer: {
-                    Text("Comments are saved locally until you submit one review.")
-                }
-            }
+            pendingCommentsSection
             Section {
                 ForEach(files) { file in
                     NavigationLink(value: file) {
@@ -89,7 +138,11 @@ struct PrReviewCanvas: View {
                     }
                 }
             } header: {
-                Text("\(files.count) file\(files.count == 1 ? "" : "s") changed")
+                HStack {
+                    Text("\(files.count) file\(files.count == 1 ? "" : "s") changed")
+                    Spacer(minLength: 8)
+                    changeCounts
+                }
             } footer: {
                 if let skipped = diff?.skippedFiles, skipped > 0 {
                     Text("\(skipped) file\(skipped == 1 ? " was" : "s were") omitted because the patch is too large.")
@@ -97,16 +150,32 @@ struct PrReviewCanvas: View {
             }
         }
         .insetGroupedListCompat()
-        .navigationDestination(for: PrPatchFile.self) { file in
-            PrReviewFileView(
-                file: file,
-                isViewed: viewed.contains(file.path),
-                commentCount: draftComments.filter { $0.path == file.path }.count,
-                toggleViewed: { toggleViewed(file.path) },
-                comment: { line in commentTarget = PrLineTarget(path: file.path, line: line) }
-            )
+        .refreshable { await reload() }
+    }
+
+    /// How big the change is, beside the count of files it touches — the same
+    /// pair the web puts in the code page's chrome row.
+    @ViewBuilder
+    private var changeCounts: some View {
+        if let pr = viewModel.prDetails {
+            HStack(spacing: 5) {
+                Text("+\(pr.additions ?? 0)").foregroundStyle(OS1VisualStyle.greenInk)
+                Text("−\(pr.deletions ?? 0)").foregroundStyle(OS1VisualStyle.redInk)
+            }
+            .font(.caption.monospacedDigit())
         }
-        .refreshable { await load() }
+    }
+
+    @ViewBuilder
+    private var pendingCommentsSection: some View {
+        if !draftComments.isEmpty {
+            Section {
+                Text("\(draftComments.count) pending inline comment\(draftComments.count == 1 ? "" : "s")")
+                    .foregroundStyle(.secondary)
+            } footer: {
+                Text("Comments are saved locally until you submit one review.")
+            }
+        }
     }
 
     private func fileRow(_ file: PrPatchFile) -> some View {
@@ -124,6 +193,140 @@ struct PrReviewCanvas: View {
             }
         }
     }
+
+    // MARK: - Review guide
+
+    @ViewBuilder
+    private var guideList: some View {
+        if guideLoading && guide == nil {
+            ProgressView("Reading the change")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let guide, !guide.sections.isEmpty {
+            List {
+                pendingCommentsSection
+                ForEach(guide.sections) { section in
+                    Section {
+                        Text(section.explanation)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .padding(.vertical, 2)
+                        ForEach(section.files, id: \.self) { path in
+                            guideFileRow(path)
+                        }
+                    } header: {
+                        Text(section.title)
+                    }
+                }
+            }
+            .insetGroupedListCompat()
+            .refreshable { await reload() }
+        } else {
+            ListPlaceholder(
+                symbol: "list.bullet.rectangle",
+                title: "No review guide yet",
+                message: guideError
+                    ?? "A guide is written once per commit. Try again in a moment, or read all changes."
+            ) {
+                Button("All changes") { lens = .all }
+                    .buttonStyle(PlaceholderActionStyle())
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func guideFileRow(_ path: String) -> some View {
+        if let file = files.first(where: { $0.path == path }) {
+            NavigationLink(value: file) { fileRow(file) }
+        } else {
+            HStack(spacing: 10) {
+                Image(systemName: "doc").foregroundStyle(.secondary)
+                Text(path).font(.subheadline.monospaced())
+                    .lineLimit(1).truncationMode(.middle)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    // MARK: - Code flow
+
+    @ViewBuilder
+    private var flowList: some View {
+        if flowLoading && flow == nil {
+            ProgressView("Tracing the change")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if let flow, !flow.trees.isEmpty {
+            List {
+                ForEach(flow.trees) { tree in
+                    Section {
+                        ForEach(PrCodeFlowRow.rows(of: tree.tree)) { row in
+                            flowRow(row)
+                        }
+                    } header: {
+                        Text(tree.entry).font(.caption.monospaced())
+                    }
+                }
+                if flow.truncated == true {
+                    Section {
+                        Text("The graph was cut short because the change is large.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .insetGroupedListCompat()
+            .refreshable { await reload() }
+        } else {
+            ListPlaceholder(
+                symbol: "arrow.triangle.branch",
+                title: "No code flow",
+                message: flowError
+                    ?? "This change has no traced call graph. Read it as a diff instead."
+            ) {
+                Button("All changes") { lens = .all }
+                    .buttonStyle(PlaceholderActionStyle())
+            }
+        }
+    }
+
+    private func flowRow(_ row: PrCodeFlowRow) -> some View {
+        HStack(spacing: 8) {
+            Color.clear.frame(width: CGFloat(row.depth) * 12, height: 1)
+            Text(row.node.mark)
+                .font(.caption.monospaced().bold())
+                .foregroundStyle(flowTone(row.node.status))
+                .frame(width: 10)
+            Text(row.node.label)
+                .font(.caption.monospaced())
+                .foregroundStyle(flowTone(row.node.status))
+                .lineLimit(1).truncationMode(.middle)
+            Spacer(minLength: 6)
+            if let path = row.node.file, let file = files.first(where: { $0.path == path }) {
+                NavigationLink(value: file) {
+                    Text(shortPath(path))
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1).truncationMode(.head)
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: 140, alignment: .trailing)
+            }
+        }
+    }
+
+    private func flowTone(_ status: String) -> Color {
+        switch status {
+        case "added": OS1VisualStyle.greenInk
+        case "removed": OS1VisualStyle.redInk
+        case "modified": .orange
+        default: .secondary
+        }
+    }
+
+    private func shortPath(_ path: String) -> String {
+        let parts = path.split(separator: "/")
+        return parts.count > 2 ? parts.suffix(2).joined(separator: "/") : path
+    }
+
+    // MARK: - Loading
 
     private func load() async {
         loading = true
@@ -154,6 +357,45 @@ struct PrReviewCanvas: View {
         loading = false
     }
 
+    /// Reload the diff and whatever lens is on screen, so pull-to-refresh means
+    /// the same thing on all three pages.
+    private func reload() async {
+        await load()
+        guide = lens == .guide ? nil : guide
+        flow = lens == .flow ? nil : flow
+        await loadLens()
+    }
+
+    /// Each lens loads on first use, not with the canvas: the guide is a
+    /// per-commit model call and the flow parses source, and a reader who only
+    /// wants the diff should pay for neither.
+    private func loadLens() async {
+        switch lens {
+        case .all:
+            return
+        case .guide:
+            guard guide == nil, !guideLoading else { return }
+            guideLoading = true
+            guideError = nil
+            do {
+                guide = try await OS1API.prReviewGuide(sessionId: viewModel.session.id)
+            } catch {
+                guideError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            }
+            guideLoading = false
+        case .flow:
+            guard flow == nil, !flowLoading else { return }
+            flowLoading = true
+            flowError = nil
+            do {
+                flow = try await OS1API.prCodeFlow(sessionId: viewModel.session.id)
+            } catch {
+                flowError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            }
+            flowLoading = false
+        }
+    }
+
     private func toggleViewed(_ path: String) {
         guard let viewedPrId else { return }
         let target = !viewed.contains(path)
@@ -177,6 +419,87 @@ struct PrReviewCanvas: View {
     }
 }
 
+/// One flattened node of a code-flow tree. The web draws the tree fully
+/// expanded, so this flattens rather than collapsing behind disclosure rows.
+struct PrCodeFlowRow: Identifiable {
+    let id: String
+    let node: PrCodeFlowNode
+    let depth: Int
+
+    static func rows(of root: PrCodeFlowNode) -> [PrCodeFlowRow] {
+        var rows: [PrCodeFlowRow] = []
+        func walk(_ node: PrCodeFlowNode, depth: Int, path: String) {
+            let id = "\(path)/\(node.key):\(node.status)"
+            rows.append(PrCodeFlowRow(id: id, node: node, depth: depth))
+            for (index, child) in node.children.enumerated() {
+                walk(child, depth: depth + 1, path: "\(id).\(index)")
+            }
+        }
+        walk(root, depth: 0, path: "")
+        return rows
+    }
+}
+
+/// The lens picker, and the display settings for the lenses that draw a diff.
+/// The settings live in app storage rather than view state so they survive
+/// leaving the canvas, and so the file view below reads the same values.
+private struct PrViewOptionsMenu: View {
+    @Binding var lens: PrReviewCanvas.Lens
+    var showsDiffDisplay = true
+
+    @AppStorage(PrDiffDisplay.styleKey) private var styleRaw = ""
+    @AppStorage(PrDiffDisplay.wrapKey) private var wrapLines = false
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    var body: some View {
+        Menu {
+            Picker("View", selection: $lens) {
+                ForEach(PrReviewCanvas.Lens.allCases) { option in
+                    Label(option.label, systemImage: option.symbol).tag(option)
+                }
+            }
+            .pickerStyle(.inline)
+
+            if showsDiffDisplay {
+                Section {
+                    Picker("Diff display", selection: styleBinding) {
+                        ForEach(PrDiffStyle.allCases, id: \.self) { style in
+                            Label(style.label, systemImage: style.symbol).tag(style)
+                        }
+                    }
+                    .pickerStyle(.inline)
+                    Toggle(isOn: $wrapLines) {
+                        Label("Wrap long lines", systemImage: "text.append")
+                    }
+                }
+            }
+        } label: {
+            Label("View options", systemImage: "slider.horizontal.3")
+        }
+    }
+
+    private var styleBinding: Binding<PrDiffStyle> {
+        Binding(
+            get: { PrDiffDisplay.style(styleRaw, sizeClass: sizeClass) },
+            set: { styleRaw = $0.rawValue }
+        )
+    }
+}
+
+/// Where the display settings are stored, and what an unset value means.
+enum PrDiffDisplay {
+    static let styleKey = "os1.pr.diffStyle"
+    static let wrapKey = "os1.pr.wrapLines"
+
+    /// Side-by-side columns don't fit a phone, so a reader who has never
+    /// picked gets unified there and split where there is room — the same
+    /// default the web applies at its phone breakpoint.
+    static func style(_ raw: String, sizeClass: UserInterfaceSizeClass?) -> PrDiffStyle {
+        if let stored = PrDiffStyle(rawValue: raw) { return stored }
+        return sizeClass == .regular ? .split : .unified
+    }
+}
+
 private struct PrReviewFileView: View {
     let file: PrPatchFile
     let isViewed: Bool
@@ -184,40 +507,111 @@ private struct PrReviewFileView: View {
     let toggleViewed: () -> Void
     let comment: (Int) -> Void
 
+    @AppStorage(PrDiffDisplay.styleKey) private var styleRaw = ""
+    @AppStorage(PrDiffDisplay.wrapKey) private var wrapLines = false
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    @State private var viewportHeight: CGFloat = 0
+
+    private var style: PrDiffStyle { PrDiffDisplay.style(styleRaw, sizeClass: sizeClass) }
+
     var body: some View {
-        ScrollView([.horizontal, .vertical]) {
-            LazyVStack(alignment: .leading, spacing: 0) {
+        diffBody
+            .background(OS1VisualStyle.background)
+            .navigationTitle(file.path.split(separator: "/").last.map(String.init) ?? file.path)
+            .inlineTitleBarCompat()
+            .toolbar {
+                ToolbarItem(placement: .topTrailingCompat) {
+                    PrDiffDisplayMenu()
+                }
+                ToolbarItem(placement: .topTrailingCompat) {
+                    Button(action: toggleViewed) {
+                        Label(isViewed ? "Mark unviewed" : "Mark viewed", systemImage: isViewed ? "eye.slash" : "eye")
+                    }
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                if commentCount > 0 {
+                    Text("\(commentCount) pending inline comment\(commentCount == 1 ? "" : "s")")
+                        .font(.caption.weight(.medium))
+                        .padding(.horizontal, 12).padding(.vertical, 7)
+                        .background(.thinMaterial, in: Capsule())
+                        .padding(.bottom, 8)
+                }
+            }
+    }
+
+    /// Wrapped lines have nowhere to scroll sideways, so wrapping drops the
+    /// horizontal axis entirely rather than leaving a scroll view that never
+    /// moves.
+    @ViewBuilder
+    private var diffBody: some View {
+        if wrapLines {
+            ScrollView(.vertical) { lines.padding(.vertical, 8) }
+        } else {
+            // A two-axis scroll view centres content smaller than itself, which
+            // parks a short file in the middle of the screen. The min height
+            // pins it to the top instead.
+            ScrollView([.horizontal, .vertical]) {
+                lines
+                    .frame(minWidth: style == .split ? 1040 : 680, alignment: .leading)
+                    .frame(minHeight: viewportHeight, alignment: .top)
+                    .padding(.vertical, 8)
+            }
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { viewportHeight = $0 }
+        }
+    }
+
+    @ViewBuilder
+    private var lines: some View {
+        LazyVStack(alignment: .leading, spacing: 0) {
+            if style == .split {
+                ForEach(PrPatchParser.rows(file.lines)) { row in
+                    PrReviewSplitRowView(row: row, wraps: wrapLines, comment: comment)
+                }
+            } else {
                 ForEach(file.lines) { line in
-                    PrReviewLineView(line: line, comment: comment)
+                    PrReviewLineView(line: line, wraps: wrapLines, comment: comment)
                 }
-            }
-            .frame(minWidth: 680, alignment: .leading)
-            .padding(.vertical, 8)
-        }
-        .background(OS1VisualStyle.background)
-        .navigationTitle(file.path.split(separator: "/").last.map(String.init) ?? file.path)
-        .inlineTitleBarCompat()
-        .toolbar {
-            ToolbarItem(placement: .topTrailingCompat) {
-                Button(action: toggleViewed) {
-                    Label(isViewed ? "Mark unviewed" : "Mark viewed", systemImage: isViewed ? "eye.slash" : "eye")
-                }
-            }
-        }
-        .safeAreaInset(edge: .bottom) {
-            if commentCount > 0 {
-                Text("\(commentCount) pending inline comment\(commentCount == 1 ? "" : "s")")
-                    .font(.caption.weight(.medium))
-                    .padding(.horizontal, 12).padding(.vertical, 7)
-                    .background(.thinMaterial, in: Capsule())
-                    .padding(.bottom, 8)
             }
         }
     }
 }
 
+/// The display half of the canvas' options, repeated on the file itself: a
+/// reader who decides mid-file that they want side by side shouldn't have to
+/// walk back out to say so.
+private struct PrDiffDisplayMenu: View {
+    @AppStorage(PrDiffDisplay.styleKey) private var styleRaw = ""
+    @AppStorage(PrDiffDisplay.wrapKey) private var wrapLines = false
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    var body: some View {
+        Menu {
+            Picker("Diff display", selection: styleBinding) {
+                ForEach(PrDiffStyle.allCases, id: \.self) { style in
+                    Label(style.label, systemImage: style.symbol).tag(style)
+                }
+            }
+            .pickerStyle(.inline)
+            Toggle(isOn: $wrapLines) {
+                Label("Wrap long lines", systemImage: "text.append")
+            }
+        } label: {
+            Label("Diff display", systemImage: "slider.horizontal.3")
+        }
+    }
+
+    private var styleBinding: Binding<PrDiffStyle> {
+        Binding(
+            get: { PrDiffDisplay.style(styleRaw, sizeClass: sizeClass) },
+            set: { styleRaw = $0.rawValue }
+        )
+    }
+}
+
 private struct PrReviewLineView: View {
     let line: PrPatchLine
+    var wraps = false
     let comment: (Int) -> Void
 
     var body: some View {
@@ -226,9 +620,15 @@ private struct PrReviewLineView: View {
                 .frame(width: 44, alignment: .trailing)
             Text(line.newLine.map(String.init) ?? "")
                 .frame(width: 44, alignment: .trailing)
+            // Wrapped: the line takes the width it is given and grows down.
+            // Unwrapped: it takes its own full width and the page scrolls
+            // sideways to it, which is what "wrap long lines" turns off.
             Text(line.text.isEmpty ? " " : line.text)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .lineLimit(wraps ? nil : 1)
+                .fixedSize(horizontal: !wraps, vertical: true)
+                .frame(maxWidth: wraps ? .infinity : nil, alignment: .leading)
                 .padding(.leading, 10)
+            if !wraps { Spacer(minLength: 0) }
             if let anchor = line.commentLine {
                 Button { comment(anchor) } label: {
                     Image(systemName: "plus.bubble")
@@ -241,13 +641,74 @@ private struct PrReviewLineView: View {
             }
         }
         .font(.system(.caption, design: .monospaced))
-        .foregroundStyle(foreground)
-        .background(background)
+        .foregroundStyle(PrDiffInk.foreground(line.kind))
+        .background(PrDiffInk.background(line.kind))
         .textSelection(.enabled)
     }
+}
 
-    private var foreground: Color {
-        switch line.kind {
+/// One row of the side-by-side diff: the old side and the new side of the same
+/// change, with the comment anchor on the right where GitHub accepts it.
+private struct PrReviewSplitRowView: View {
+    let row: PrPatchRow
+    var wraps = false
+    let comment: (Int) -> Void
+
+    var body: some View {
+        if let header = row.header {
+            Text(header.text)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(PrDiffInk.foreground(.metadata))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 10)
+                .background(PrDiffInk.background(.metadata))
+        } else {
+            HStack(spacing: 0) {
+                side(row.left, number: row.left?.oldLine)
+                Rectangle()
+                    .fill(OS1VisualStyle.border)
+                    .frame(width: 1)
+                side(row.right, number: row.right?.newLine, anchor: row.right?.commentLine)
+            }
+            .font(.system(.caption, design: .monospaced))
+            .textSelection(.enabled)
+        }
+    }
+
+    private func side(_ line: PrPatchLine?, number: Int?, anchor: Int? = nil) -> some View {
+        HStack(spacing: 0) {
+            Text(number.map(String.init) ?? "")
+                .frame(width: 40, alignment: .trailing)
+            // Both columns keep the same width so the two sides of a change
+            // stay on one line together; a line too long for its column is
+            // what "wrap long lines" is for.
+            Text((line?.text).flatMap { $0.isEmpty ? " " : $0 } ?? " ")
+                .lineLimit(wraps ? nil : 1)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 8)
+            if let anchor {
+                Button { comment(anchor) } label: {
+                    Image(systemName: "plus.bubble")
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 6)
+                .accessibilityLabel("Add inline comment on line \(anchor)")
+            } else {
+                Color.clear.frame(width: 26)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .foregroundStyle(PrDiffInk.foreground(line?.kind ?? .context))
+        .background(PrDiffInk.background(line?.kind ?? .context))
+    }
+}
+
+/// One definition of diff ink, shared by the unified and split renderers so
+/// the two can't drift.
+private enum PrDiffInk {
+    static func foreground(_ kind: PrPatchLine.Kind) -> Color {
+        switch kind {
         case .addition: OS1VisualStyle.greenInk
         case .deletion: OS1VisualStyle.redInk
         case .metadata: OS1VisualStyle.blueInk
@@ -255,8 +716,8 @@ private struct PrReviewLineView: View {
         }
     }
 
-    private var background: Color {
-        switch line.kind {
+    static func background(_ kind: PrPatchLine.Kind) -> Color {
+        switch kind {
         case .addition: OS1VisualStyle.green.opacity(0.10)
         case .deletion: OS1VisualStyle.red.opacity(0.10)
         default: .clear

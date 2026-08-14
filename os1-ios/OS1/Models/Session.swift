@@ -63,9 +63,20 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     /// GitHub login of whoever opened the PR — who is waiting when one of
     /// those requests is pointed at you (`ReviewRequests`).
     var prAuthor: String?
+    /// Person keys whose review has already LANDED on the PR. With
+    /// `prUpdatedAt` this is what turns an open request into a completed one
+    /// without anybody pressing anything (`WorkspaceReview.completion`).
+    var prReviewedBy: [String]?
+    var prUpdatedAt: String?
     /// The last automated review of this PR, when one has run. Feeds the
     /// transcript's review-loop verdict (`ReviewLoopResult`).
     var prOsReview: OsReviewSummary?
+    /// Open Session's own "please look at this" request, pointed at one
+    /// teammate or a review team (server: review-requests.ts). Separate from
+    /// GitHub's reviewer list in `prReviewRequested`: the picker writes this
+    /// one and mirrors it onto GitHub, a request made on GitHub writes only
+    /// that one, and both mean somebody is waiting.
+    var reviewRequest: SessionReviewRequest?
     var startedBy: String?
     var createdBy: String?
     var createdByLogin: String?

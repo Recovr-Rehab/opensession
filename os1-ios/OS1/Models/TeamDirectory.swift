@@ -15,6 +15,12 @@ final class TeamDirectory {
     static let shared = TeamDirectory()
 
     private(set) var githubLogins: [String: String] = [:]
+    /// Everyone on the roster, in the order the server lists them — what a
+    /// picker offers ("ask Kent to review this"). The maps below answer
+    /// questions about one name; this is the list itself.
+    private(set) var names: [String] = []
+    /// Teams a review can be handed to instead of a person.
+    private(set) var reviewTeams: [OS1API.ReviewTeam] = []
     /// First name → the roster's own spelling of it. This is what merges one
     /// person's spellings for a filter: chat integrations write a full name
     /// where the web writes a first name, so "Kent" and "Kent de Bruin" must
@@ -57,14 +63,17 @@ final class TeamDirectory {
     /// retry after a cooldown instead of hammering a server that is down —
     /// a missing directory only costs initials.
     func ensureLoaded() async {
-        guard githubLogins.isEmpty, !loading else { return }
+        guard names.isEmpty, !loading else { return }
         if let lastFailureAt, Date().timeIntervalSince(lastFailureAt) < 30 { return }
         loading = true
         defer { loading = false }
-        guard let people = try? await OS1API.people() else {
+        guard let roster = try? await OS1API.people() else {
             lastFailureAt = Date()
             return
         }
+        let people = roster.people ?? []
+        names = people.map(\.name)
+        reviewTeams = roster.reviewTeams ?? []
         for person in people {
             guard let key = Self.key(person.name) else { continue }
             displayNames[key] = person.name

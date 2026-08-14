@@ -8,6 +8,7 @@ struct WorktreeInfoView: View {
     let catalog: ModelCatalog?
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     /// A detail of this session opened one level deeper INSIDE this sheet —
     /// its assets, one of those files, its pull request. Pushed on the sheet's
     /// own stack rather than the session's: this page is where you are, so
@@ -36,6 +37,7 @@ struct WorktreeInfoView: View {
                 LazyVStack(alignment: .leading, spacing: 22) {
                     hero
                     overviewSection
+                    reviewSection
                     pullRequestSection
                     workSection
                     assetsSection
@@ -489,6 +491,28 @@ struct WorktreeInfoView: View {
                         .padding(12)
                 }
             }
+        }
+    }
+
+    /// Both reviewers of this change in one section, above the pull request
+    /// itself: whether anybody has looked at this is the question the sheet is
+    /// opened with, and the PR's own details are what you read afterwards.
+    private var reviewSection: some View {
+        InfoSection(title: "Review") {
+            WorkspaceReviewRows(
+                sessionId: currentSession.id,
+                sessions: sessions.isEmpty ? [currentSession] : sessions,
+                pr: viewModel.prDetails,
+                repo: currentSession.repo,
+                onOpenPr: { panel = .review(sessionId: currentSession.id) },
+                onOpenRun: { id in
+                    // The run is a session of its own, so it opens where every
+                    // other session link does: the list behind this sheet.
+                    guard let url = SessionLinks.url(for: id) else { return }
+                    dismiss()
+                    openURL(url)
+                }
+            )
         }
     }
 

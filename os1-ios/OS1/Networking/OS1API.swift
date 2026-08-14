@@ -459,6 +459,27 @@ enum OS1API {
         return try await decodeDetached(PrDiff.self, from: data)
     }
 
+    /// The generated review guide for the session's PR. `null` here is a real
+    /// answer (no PR, or generation failed), and the canvas falls back to the
+    /// plain diff rather than showing an error.
+    static func prReviewGuide(sessionId: String) async throws -> PrReviewGuide? {
+        let data = try await getData("/api/sessions/\(sessionId)/review-guide")
+        let body = String(decoding: data, as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if body.isEmpty || body == "null" { return nil }
+        return try await decodeDetached(PrReviewGuide.self, from: data)
+    }
+
+    /// The structural code-flow trees for the session's PR. Same `null`
+    /// contract as the guide.
+    static func prCodeFlow(sessionId: String) async throws -> PrCodeFlow? {
+        let data = try await getData("/api/sessions/\(sessionId)/pr-code-flow")
+        let body = String(decoding: data, as: UTF8.self)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if body.isEmpty || body == "null" { return nil }
+        return try await decodeDetached(PrCodeFlow.self, from: data)
+    }
+
     static func prViewedFiles(repo: String?, number: Int) async throws -> PrViewedFiles {
         var components = URLComponents()
         components.queryItems = [URLQueryItem(name: "number", value: String(number))]
@@ -526,6 +547,103 @@ enum OS1API {
         let _: CloseResponse = try await post(
             "/api/sessions/\(sessionId)/pr-close",
             body: [:]
+        )
+    }
+
+    /// What the agent can be asked to do with a pull request, from the
+    /// workspace's Review section — the same four the web panel offers, and
+    /// the same ones the `os-*` PR labels fire.
+    enum PrAgentAction: String, CaseIterable, Identifiable, Sendable {
+        case review, autofix, simplify, adversarial
+
+        var id: String { rawValue }
+
+        var label: String {
+            switch self {
+            case .review: "Review"
+            case .autofix: "Auto-fix"
+            case .simplify: "Simplify"
+            case .adversarial: "Adversarial"
+            }
+        }
+
+        /// One line for the menu row, in the same words as the web's hints.
+        var hint: String {
+            switch self {
+            case .review: "Read the change and post findings on the PR."
+            case .autofix: "Open a session that fixes every finding and failing check."
+            case .simplify: "Cleanup pass: reuse, simpler shapes, dead code."
+            case .adversarial: "Deeper two-pass adversarial review."
+            }
+        }
+
+        var symbol: String {
+            switch self {
+            case .review: "text.magnifyingglass"
+            case .autofix: "wrench.and.screwdriver"
+            case .simplify: "scissors"
+            case .adversarial: "shield.lefthalf.filled"
+            }
+        }
+    }
+
+    struct PrAgentRun: Decodable, Sendable {
+        var ok: Bool?
+        var message: String?
+        var error: String?
+        /// Auto-fix opens a live session in the workspace instead of a
+        /// headless run — this is the session to open.
+        var bksId: String?
+        var openSession: Bool?
+        var session: Session?
+    }
+
+    /// Ask the agent for one of its passes over the session's pull request.
+    /// The server answers a refusal in words (no PR yet, a repo the agent
+    /// doesn't know), so a failure is thrown with that sentence.
+    static func triggerPrAction(
+        sessionId: String,
+        kind: PrAgentAction,
+        repo: String? = nil
+    ) async throws -> PrAgentRun {
+        var body: [String: Any] = ["kind": kind.rawValue]
+        let user = ServerConfig.shared.userName
+        if !user.isEmpty { body["user"] = user }
+        if let repo, !repo.isEmpty { body["repo"] = repo }
+        let result: PrAgentRun = try await post(
+            "/api/sessions/\(sessionId)/pr-action",
+            body: body
+        )
+        if result.ok != true {
+            throw APIError.server(result.error ?? result.message ?? "Couldn't start")
+        }
+        return result
+    }
+
+    /// Ask a teammate (or a review team's GitHub spec) to review this session,
+    /// or clear the request with nil. Setting one mirrors onto GitHub's own
+    /// reviewer list and buzzes the reviewer's devices.
+    static func setSessionReviewer(sessionId: String, reviewer: String?) async throws {
+        struct ReviewResponse: Decodable { let ok: Bool? }
+        var body: [String: Any] = ["reviewer": reviewer ?? ""]
+        let user = ServerConfig.shared.userName
+        if !user.isEmpty { body["by"] = user }
+        let _: ReviewResponse = try await put(
+            "/api/sessions/\(sessionId)/review",
+            body: body
+        )
+    }
+
+    /// Sign off on the session's review request, or reopen it. Leaves the
+    /// reviewer assignment (and GitHub's list) alone either way.
+    static func setReviewAccepted(sessionId: String, accepted: Bool) async throws {
+        struct ReviewResponse: Decodable { let ok: Bool? }
+        var body: [String: Any] = ["accept": accepted]
+        let user = ServerConfig.shared.userName
+        if !user.isEmpty { body["by"] = user }
+        let _: ReviewResponse = try await put(
+            "/api/sessions/\(sessionId)/review",
+            body: body
         )
     }
 
@@ -959,11 +1077,39 @@ enum OS1API {
         let github: String?
     }
 
-    /// The team directory: who exists, and which GitHub account each is.
-    static func people() async throws -> [Person] {
-        struct PeopleResponse: Decodable, Sendable { let people: [Person]? }
-        let response: PeopleResponse = try await get("/api/people")
-        return response.people ?? []
+    /// A configured review team: one name you can hand a review to, and the
+    /// people it reaches (`reviewTeams` in the server's identity config).
+    struct ReviewTeam: Decodable, Sendable, Identifiable {
+        /// What it is called ("Super developers").
+        let name: String
+        /// Its GitHub spec (`org/team`) — what a review request is set to.
+        let github: String
+        /// The individual people the request covers.
+        let members: [String]?
+
+        var id: String { github }
+    }
+
+    struct Roster: Decodable, Sendable {
+        let people: [Person]?
+        let reviewTeams: [ReviewTeam]?
+    }
+
+    /// The team directory: who exists, which GitHub account each is, and the
+    /// teams a review can be handed to.
+    static func people() async throws -> Roster {
+        try await get("/api/people")
+    }
+
+    /// What this instance calls itself and its agent (Settings → General on
+    /// the web). Read-only here: the app shows the names, it doesn't set them.
+    struct Identity: Decodable, Sendable {
+        let personaName: String?
+        let productName: String?
+    }
+
+    static func identity() async throws -> Identity {
+        try await get("/api/settings/identity")
     }
 
     /// What's wired up on this instance, for Settings → Setup. Read-only

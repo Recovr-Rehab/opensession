@@ -33,6 +33,13 @@ enum SessionLinks {
 
     static func title(for id: String) -> String? { titles[id] }
 
+    /// The link that opens a session in this app, for code that has an id
+    /// rather than a chip — the sessions list resolves it the same way it
+    /// resolves a tapped transcript chip.
+    static func url(for id: String) -> URL? {
+        URL(string: "\(scheme):\(id)")
+    }
+
     /// The session id a transcript link points at, or nil for a normal URL.
     static func sessionId(from url: URL) -> String? {
         guard url.scheme == scheme else { return nil }
