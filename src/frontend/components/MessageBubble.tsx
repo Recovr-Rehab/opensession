@@ -171,12 +171,15 @@ export function ClampedBody({
 function NoticeRow({
 	entry,
 	sessionId,
+	onContinue,
 }: {
 	entry: TranscriptEntry;
 	sessionId?: string;
+	onContinue?: () => void;
 }) {
 	const notice = entry.notice!;
 	const [open, setOpen] = useState(false);
+	const [continued, setContinued] = useState(false);
 	const collapsible = notice.body === "collapsed";
 	const toned = notice.tone !== "info";
 	const isError = notice.tone === "error";
@@ -246,6 +249,21 @@ function NoticeRow({
 						</a>
 					)}
 				</div>
+			)}
+			{/* A failed run's only next step used to be retyping the prompt. The
+			    pill stays the message; this is the one thing to do about it. */}
+			{onContinue && (
+				<Button
+					size="sm"
+					disabled={continued}
+					onClick={() => {
+						setContinued(true);
+						onContinue();
+					}}
+					className="mt-2 self-center"
+				>
+					{continued ? "Continuing…" : "Continue"}
+				</Button>
 			)}
 		</div>
 	);
@@ -411,6 +429,10 @@ interface Props {
 	/** Offered on your own user turns: puts this message back in the composer.
 	 *  Omitted where there is no composer to put it in (no engine session). */
 	onEdit?: (entry: TranscriptEntry) => void;
+	/** Offered on a failed run's notice: starts a turn that picks the work back
+	 *  up. Passed only for the notice a person can still act on — the last one,
+	 *  on an idle session (see TranscriptBlocks). */
+	onContinue?: () => void;
 }
 
 /** Inline images carried on an entry (Read-of-image results, pasted images).
@@ -516,6 +538,7 @@ export const MessageBubble = React.memo(function MessageBubble({
 	owner,
 	sessionId,
 	onEdit,
+	onContinue,
 }: Props) {
 	const me = useCurrentUser();
 	// How this entry reads — an operational notice, someone else's words, or an
@@ -527,7 +550,16 @@ export const MessageBubble = React.memo(function MessageBubble({
 	const displayContent = e.content;
 
 	// Anything that isn't a message is a notice, whatever produced it.
-	if (e.notice) return <NoticeRow entry={e} sessionId={sessionId} />;
+	if (e.notice)
+		return (
+			<NoticeRow
+				entry={e}
+				sessionId={sessionId}
+				// Only a failure is something to continue from. Every other
+				// notice reports a state, not a stall.
+				onContinue={e.notice.tone === "error" ? onContinue : undefined}
+			/>
+		);
 
 	// A teammate's answer routed back into the session (human-in-the-loop):
 	// their words, so their own bubble — the "who" lives in the label.

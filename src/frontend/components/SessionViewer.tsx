@@ -87,6 +87,7 @@ import {
 } from "../lib/poll";
 import { sessionPrPresentation } from "../lib/session-prs";
 import { reviewLoopResult } from "../lib/review-loop";
+import { CONTINUE_AFTER_FAILURE_PROMPT } from "../lib/continue-run";
 import {
 	cancelSlackComposer,
 	fetchSlackChannels,
@@ -3179,6 +3180,18 @@ export function SessionViewer({
 		setForkFrom(messageId);
 	}, []);
 
+	// "Continue" under a failed run's notice. An ordinary prompt, so it steers,
+	// notices and broadcasts like anything else a person sends — the failure
+	// notice tells you to send the prompt again, and this is that press.
+	const continueAfterFailure = useCallback(() => {
+		send({
+			type: "prompt",
+			sessionId: session.id,
+			content: CONTINUE_AFTER_FAILURE_PROMPT,
+			user: getCurrentUser(),
+		});
+	}, [send, session.id]);
+
 	// Session and asset links navigate on a delegated click. markdown.ts renders
 	// them into dangerouslySetInnerHTML, where they cannot carry React handlers;
 	// data attributes identify which in-app surface should open.
@@ -5801,9 +5814,17 @@ export function SessionViewer({
 															entries={entries}
 															live={isBusy}
 															sessionId={session.id}
-															onEditMessage={editSentMessageInComposer}
 															reviewResult={reviewLoopResult(session)}
-																	walkthrough={sessionWalkthrough}
+															onEditMessage={editSentMessageInComposer}
+															// Same gate the composer sends under: a busy session
+															// is already continuing, and one you cannot type into
+															// must not offer a button that types for you.
+															onContinue={
+																connected && !isBusy && !noEngine
+																	? continueAfterFailure
+																	: undefined
+															}
+															walkthrough={sessionWalkthrough}
 															notes={notes}
 															slackShare={shippedChangeShare}
 															onFork={canForkSession ? handleFork : undefined}

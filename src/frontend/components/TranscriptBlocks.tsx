@@ -44,6 +44,10 @@ interface Props {
 	onFork?: (entryId: string) => void;
 	/** Your own sent messages can be reopened in the composer when provided. */
 	onEditMessage?: (entry: TranscriptEntry) => void;
+	/** Starts a turn that picks the work back up after a run failed. Offered on
+	 *  the last block only: an older failure has already been moved past, and a
+	 *  Continue button on it would restart work the session went on to do. */
+	onContinue?: () => void;
 	/** Called when a Task/Agent block's "Open sub-agent" affordance is clicked. */
 	onOpenSubagent?: (agentId: string, label: string) => void;
 	/** Session owner (startedBy) — credited on un-attributed user turns. */
@@ -137,6 +141,7 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 	live,
 	onFork,
 	onEditMessage,
+	onContinue,
 	onOpenSubagent,
 	owner,
 	sessionId,
@@ -370,6 +375,9 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 						owner={owner}
 						sessionId={sessionId}
 						onEdit={onEditMessage}
+						onContinue={
+							i === groupedBlocks.length - 1 ? onContinue : undefined
+						}
 					/>
 				);
 				const showShareAction =

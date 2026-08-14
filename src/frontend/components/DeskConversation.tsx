@@ -8,6 +8,7 @@ import { TranscriptBlocks } from "./TranscriptBlocks";
 import { useFileMentions } from "./useFileMentions";
 import { IconArrowUp } from "./icons";
 import { mergeTranscriptEntries } from "../lib/transcript-state";
+import { CONTINUE_AFTER_FAILURE_PROMPT } from "../lib/continue-run";
 import { fieldClasses } from "../ui/input";
 import { cn } from "../ui/cn";
 import {
@@ -269,6 +270,20 @@ export function DeskConversation({
 		followRef.current = true;
 	}
 
+	// "Continue" under a failed run's notice. An ordinary prompt, like anything
+	// else typed here — no optimistic bubble, because the press is the button's
+	// own feedback and the turn lands as a normal entry.
+	function continueAfterFailure() {
+		send({
+			type: "prompt",
+			sessionId,
+			content: CONTINUE_AFTER_FAILURE_PROMPT,
+			user: getCurrentUser(),
+			effort: effort || "high",
+		});
+		followRef.current = true;
+	}
+
 
 	return (
 		<div className="flex h-full min-h-0 flex-col">
@@ -307,6 +322,11 @@ export function DeskConversation({
 							live={isRunning}
 							sessionId={sessionId}
 							onOpenSubagent={onOpenSubagent}
+							// The Desk shows the same failure pill as a session, so it
+							// offers the same one press out of it. Gated like handleSend.
+							onContinue={
+								connected && !isRunning ? continueAfterFailure : undefined
+							}
 						/>
 						{streamText && (
 							<div className={cn(msgRow, msgStreamingRow)}>
