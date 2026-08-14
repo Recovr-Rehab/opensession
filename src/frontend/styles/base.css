@@ -1269,24 +1269,26 @@ html.wco .app-body.sidebar-collapsed
 }
 /* The face. It is painted rather than laid out, because the mirror cannot take
    a pixel of width — so the `@` goes transparent and lends the circle its slot,
-   and that slot is the entire budget. It measures 13.8px at the composer's 14px
-   type, and the gap between the face and the name has to come out of it: a 12px
-   face starting 2px into the pill's outline leaves 3.8px before the first
-   letter — the same air the sent message's `person-chip` puts between its own
-   face and name. The 2px is as far left as the face can go: the pill is a
-   capsule, so its left edge curves away above and below the middle, and a
-   circle pushed to the very edge meets that curve and reads as clipped.
-   Absolute, so it takes part in no layout at all. */
+   and that slot, plus the 3px the outline reaches past it, is the entire
+   budget: 16.8px at the composer's 14px type, from the wash's left edge to the
+   first letter. Both gaps come out of it, so the face is what gives. Sitting at
+   `left: 0` puts the outline's full 3px between the wash's edge and the circle,
+   and a 0.72em circle leaves 3.8px before the name — the same rhythm the sent
+   message's `person-chip` keeps at its own larger size. A bigger face has to
+   take that room from one side or the other, and pressed against either it
+   reads as cut rather than as generous. The size is in `em` because the slot
+   is: the phone composer sets 16px, where a fixed circle would sit small in a
+   wider gap. Absolute, so it takes part in no layout at all. */
 .composer-hl .cmp-at {
 	color: transparent;
 }
 .composer-hl .cmp-faced::before {
 	content: "";
 	position: absolute;
-	left: -2px;
+	left: 0;
 	top: 50%;
-	width: 12px;
-	height: 12px;
+	width: 0.72em;
+	height: 0.72em;
 	transform: translateY(-50%);
 	border-radius: 999px;
 	background: var(--cmp-face) center / cover no-repeat, var(--bg-active);
