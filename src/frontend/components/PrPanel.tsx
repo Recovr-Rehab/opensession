@@ -61,6 +61,7 @@ import {
   IconFile,
 } from "./icons";
 import { Menu, MENU_ICON } from "../ui/menu";
+import { Modal, useEnterOnMount } from "../ui/modal";
 import { Tooltip } from "../ui/tooltip";
 
 import { checkClass, deriveStatus, isDeployment, summarize } from "../lib/pr-status-derive";
@@ -408,7 +409,9 @@ export function PrPanel({
   const [closing, setClosing] = useState(false);
   const [confirmClose, setConfirmClose] = useState(false);
   const [closeError, setCloseError] = useState<string | null>(null);
-  const [mergeAfterReview, setMergeAfterReview] = useState(reviewCanvas === true);
+  // Merging is a separate decision from approving, so it starts off: the
+  // reviewer opts into it, and the primary action stays "Approve".
+  const [mergeAfterReview, setMergeAfterReview] = useState(false);
   const [checksOpen, setChecksOpen] = useState(false);
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [allFilesOpen, setAllFilesOpen] = useState(false);
@@ -831,6 +834,7 @@ export function PrPanel({
       setSummary("");
       setReviewOpen(false);
       setReviewEvent(reviewCanvas ? "APPROVE" : "COMMENT");
+      setMergeAfterReview(false);
       setReviewDone(merged ? "merged" : result.url || "submitted");
       setTimeout(() => setReviewDone(null), 6000);
       await load(true);
@@ -1211,7 +1215,7 @@ export function PrPanel({
     const reviewSubmitLabel =
       reviewEvent === "APPROVE"
         ? mergeAfterReview && canMergeAfterReview
-          ? "Approve & merge"
+          ? "Approve and merge"
           : "Approve"
         : reviewEvent === "REQUEST_CHANGES"
           ? "Request changes"
@@ -1706,74 +1710,22 @@ export function PrPanel({
         </div>
 
         {reviewOpen && (
-          <>
-            <button
-              className="absolute inset-0 z-20 cursor-default border-0 bg-black/25"
-              aria-label="Close review form"
-              onClick={() => setReviewOpen(false)}
-            />
-            <div className="absolute bottom-5 right-5 z-30 w-[430px] max-w-[calc(100%-40px)] rounded-md border border-line-strong bg-panel p-4 smooth-shadow-lg">
-              <div className="mb-3 flex items-center">
-                <span className="text-sm font-semibold text-fg">Finish review for #{pr.number}</span>
-                <button
-                  className="ml-auto border-0 bg-transparent text-item-title text-faint hover:text-fg"
-                  onClick={() => setReviewOpen(false)}
-                  aria-label="Close"
-                >
-                  ×
-                </button>
-              </div>
-              <Textarea
-                size="sm"
-                className="h-20 resize-none p-2.5"
-                placeholder="Review summary (optional for approval)…"
-                value={summary}
-                onChange={(event) => setSummary(event.target.value)}
-              />
-              <div className="my-2.5 grid grid-cols-3 gap-1.5">
-                {(
-                  [
-                    ["COMMENT", "Comment"],
-                    ["APPROVE", "Approve"],
-                    ["REQUEST_CHANGES", "Request changes"],
-                  ] as Array<[ReviewEvent, string]>
-                ).map(([event, label]) => (
-                  <Button
-                    key={event}
-                    size="sm"
-                    className={`rounded-sm px-2 py-2 text-meta shadow-none ${reviewEvent === event ? "border-green/50 bg-green-soft text-green hover:border-green/50 hover:text-green" : "bg-surface"}`}
-                    onClick={() => setReviewEvent(event)}
-                  >
-                    {label}
-                  </Button>
-                ))}
-              </div>
-              {reviewEvent === "APPROVE" && canMergeAfterReview && (
-                <label className="mb-3 flex cursor-pointer items-center gap-2 px-0.5 text-meta text-dim">
-                  <Checkbox checked={mergeAfterReview} onCheckedChange={setMergeAfterReview} />
-                  Squash and merge immediately after approval
-                </label>
-              )}
-              {reviewError && <div className="mb-2 text-xs text-red">{reviewError}</div>}
-              {mergeError && <div className="mb-2 text-xs text-red">{mergeError}</div>}
-              <div className="flex justify-end gap-2">
-                <Button
-                  size="sm"
-                  onClick={() => setReviewOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={handleSubmitReview}
-                  disabled={submitting}
-                >
-                  {submitting ? "Submitting…" : reviewSubmitLabel}
-                </Button>
-              </div>
-            </div>
-          </>
+          <FinishReviewDialog
+            prNumber={pr.number}
+            pendingCount={pending.length}
+            event={reviewEvent}
+            onEventChange={setReviewEvent}
+            summary={summary}
+            onSummaryChange={setSummary}
+            canMerge={canMergeAfterReview}
+            mergeAfterReview={mergeAfterReview}
+            onMergeAfterReviewChange={setMergeAfterReview}
+            error={reviewError || mergeError}
+            submitting={submitting}
+            submitLabel={reviewSubmitLabel}
+            onSubmit={handleSubmitReview}
+            onClose={() => setReviewOpen(false)}
+          />
         )}
       </div>
     );
@@ -2215,5 +2167,123 @@ export function PrPanel({
       )}
       </div>
     </div>
+  );
+}
+
+/**
+ * The review canvas' "Finish review" dialog: pick a verdict, add an optional
+ * summary, submit.
+ *
+ * Approving and merging are separate decisions, so they are separate controls.
+ * The verdict rows are the choice; merging is an opt-in that starts off, which
+ * keeps the primary action "Approve" until someone asks for more.
+ */
+function FinishReviewDialog({
+  prNumber,
+  pendingCount,
+  event,
+  onEventChange,
+  summary,
+  onSummaryChange,
+  canMerge,
+  mergeAfterReview,
+  onMergeAfterReviewChange,
+  error,
+  submitting,
+  submitLabel,
+  onSubmit,
+  onClose,
+}: {
+  prNumber: number;
+  pendingCount: number;
+  event: ReviewEvent;
+  onEventChange: (event: ReviewEvent) => void;
+  summary: string;
+  onSummaryChange: (summary: string) => void;
+  canMerge: boolean;
+  mergeAfterReview: boolean;
+  onMergeAfterReviewChange: (merge: boolean) => void;
+  error: string | null;
+  submitting: boolean;
+  submitLabel: string;
+  onSubmit: () => void;
+  onClose: () => void;
+}) {
+  const open = useEnterOnMount();
+  // Without this Base UI focuses the first tabbable, which is the header's
+  // close. A focus ring on the ✕ is the wrong first read for a dialog you
+  // opened in order to write in it.
+  const summaryRef = useRef<HTMLTextAreaElement>(null);
+  const verdicts: Array<{ event: ReviewEvent; label: string; hint: string }> = [
+    { event: "APPROVE", label: "Approve", hint: "Sign off on these changes" },
+    { event: "COMMENT", label: "Comment", hint: "Leave feedback without a verdict" },
+    {
+      event: "REQUEST_CHANGES",
+      label: "Request changes",
+      hint: "Ask for another pass before merging",
+    },
+  ];
+  return (
+    <Modal.Root open={open} onOpenChange={(next) => !next && onClose()}>
+      <Modal.Content widthClassName="max-w-[30rem]" initialFocus={summaryRef}>
+        <Modal.Header
+          title="Finish review"
+          description={
+            pendingCount > 0
+              ? `Your ${pendingCount} pending comment${pendingCount === 1 ? "" : "s"} on #${prNumber} are sent with this review.`
+              : `Leave a review on #${prNumber}.`
+          }
+        />
+        <div className="flex flex-col gap-1.5" role="radiogroup" aria-label="Review verdict">
+          {verdicts.map((verdict) => (
+            <button
+              key={verdict.event}
+              type="button"
+              role="radio"
+              aria-checked={event === verdict.event}
+              data-active={event === verdict.event || undefined}
+              className="group focus-ring flex cursor-pointer items-start gap-2.5 rounded-row border border-line bg-surface px-3 py-2.5 text-left transition-[background-color,border-color] hover:bg-hover data-active:border-accent data-active:bg-accent-soft"
+              onClick={() => onEventChange(verdict.event)}
+            >
+              <span className="mt-px flex size-4 shrink-0 items-center justify-center rounded-full border border-line-strong transition-colors group-data-active:border-accent group-data-active:bg-accent">
+                <span className="size-1.5 rounded-full bg-on-accent opacity-0 group-data-active:opacity-100" />
+              </span>
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <span className="text-label font-semibold text-fg">{verdict.label}</span>
+                <span className="text-meta text-dim">{verdict.hint}</span>
+              </span>
+            </button>
+          ))}
+        </div>
+        <Textarea
+          ref={summaryRef}
+          size="sm"
+          className="h-20 resize-none"
+          placeholder={
+            event === "APPROVE" || pendingCount > 0 ? "Summary (optional)" : "Summary"
+          }
+          value={summary}
+          onChange={(e) => onSummaryChange(e.target.value)}
+        />
+        {event === "APPROVE" && canMerge && (
+          // Quieter than the verdict rows on purpose: merging is an extra you
+          // opt into here, not a fourth thing to choose between.
+          <label className="flex cursor-pointer items-center gap-2.5 px-0.5">
+            <Checkbox
+              checked={mergeAfterReview}
+              onCheckedChange={onMergeAfterReviewChange}
+            />
+            <span className="text-supporting text-dim">Squash and merge as well</span>
+          </label>
+        )}
+        {error && <div className="text-supporting text-red">{error}</div>}
+        <Modal.Footer>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" onClick={onSubmit} disabled={submitting}>
+            {submitting ? "Submitting…" : submitLabel}
+          </Button>
+        </Modal.Footer>
+      </Modal.Content>
+    </Modal.Root>
   );
 }
