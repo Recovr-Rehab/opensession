@@ -98,17 +98,17 @@ describe("accent theme", () => {
 		expect(css).toContain("--on-accent-light: #ffffff");
 		expect(css).toContain("--on-accent-dark: #000000");
 		expect(css).toContain("--accent-ink-light: #8d7110");
-		// Both accents that borrow a blue switch track do so only in dark mode,
-		// and both hand the knob a white that the blue can carry.
-		for (const accent of ["lime", "mono"]) {
-			const block = css.match(
-				new RegExp(
-					`html\\[data-theme="dark"\\]\\[data-accent="${accent}"\\] \\{([\\s\\S]*?)\\}`,
-				),
-			)?.[1];
-			expect(block).toContain("--accent-control: #2495d6");
-			expect(block).toContain("--on-accent-control: #ffffff");
-		}
+		// Honey cannot carry a control in either appearance, so it borrows the
+		// blue outright; Black only needs it where its own fill turns white.
+		const honey = css.match(
+			/html\[data-accent="lime"\] \{([\s\S]*?)\}/,
+		)?.[1];
+		expect(honey).toContain("--accent-control: #2495d6");
+		expect(honey).toContain("--on-accent-control: #ffffff");
+		const blackDark = css.match(
+			/html\[data-theme="dark"\]\[data-accent="mono"\] \{([\s\S]*?)\}/,
+		)?.[1];
+		expect(blackDark).toContain("--accent-control: #2495d6");
 		// The pre-paint bootstrap has to retire the same selections the bundle
 		// does, or a migrated accent flashes its old id for one frame.
 		expect(html).toContain(

@@ -27,14 +27,14 @@ export function Checkbox({ className, ...props }: CheckboxProps) {
 				"flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-sm border border-line-strong bg-surface p-0 outline-none",
 				"transition-[background-color,border-color] duration-[var(--dur-micro)] ease-[var(--ease)]",
 				"hover:border-faint",
-				"data-[checked]:border-accent data-[checked]:bg-accent data-[checked]:hover:border-accent",
+				"data-[checked]:border-accent-control data-[checked]:bg-accent-control data-[checked]:hover:border-accent-control",
 				"focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
 				"data-[disabled]:cursor-default data-[disabled]:opacity-40",
 				className,
 			)}
 			{...props}
 		>
-			<BaseCheckbox.Indicator className="flex text-on-accent data-[unchecked]:hidden">
+			<BaseCheckbox.Indicator className="flex text-on-accent-control data-[unchecked]:hidden">
 				<svg
 					viewBox="0 0 12 12"
 					className="size-3"

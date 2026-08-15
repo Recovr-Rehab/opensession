@@ -613,23 +613,23 @@ html[data-accent="orange"] {
    it is only ever a glyph on a plate, never body text. The ink form is what
    carries a label, and that deepens until it clears text contrast instead.
 
-   The switch track is the one place the fill has to read as on/off rather than
-   as a colour, and a yellow track on a dark page does not. It borrows Sky. */
+   A switch or a checkbox has to read as on/off rather than as a colour, and
+   yellow does neither: it is 1.3:1 against a white page, and its white glyph is
+   the 1.62:1 that only works at the size of an arrow in a disc. Controls borrow
+   Sky in both appearances. */
 html[data-accent="lime"] {
 	--accent-light: #eec75c;
 	--accent-dark: #eec75c;
 	--accent-ink-light: #8d7110;
 	--accent-ink-dark: #eec75c;
-}
-
-html[data-theme="dark"][data-accent="lime"] {
 	--accent-control: #2495d6;
 	--on-accent-control: #ffffff;
 }
 
 /* Black is the accent with no hue: it inverts with the page, so its fill is
-   white in dark mode. That is unreadable as a switch's "on", and the ink ramp
-   has nowhere left to deepen into, so the track borrows Sky there too. */
+   white in dark mode. That is unreadable as a control's "on" state, and the ink
+   ramp has nowhere left to deepen into, so it borrows Sky there. In light mode
+   its own black plate reads perfectly well and is left alone. */
 html[data-accent="mono"] {
 	--accent-light: #000000;
 	--accent-dark: #ffffff;
