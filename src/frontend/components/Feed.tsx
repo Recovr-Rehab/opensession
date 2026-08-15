@@ -14,7 +14,11 @@ import {
 	personLabel,
 } from "../lib/pr-rows";
 import { buildFeedRows, type FeedOwner, type FeedRow } from "../lib/feed-rows";
-import { PR_FEED_ROW, PR_GROUP_LABEL, PR_LIST } from "../lib/pr-list-classes";
+import {
+	PR_FEED_GROUP_LABEL,
+	PR_FEED_ROW,
+	PR_LIST,
+} from "../lib/pr-list-classes";
 import { RepoTile, repoLabel } from "./RepoTile";
 import { useCurrentUser } from "./UserPicker";
 import { usePeople } from "../lib/people";
@@ -379,7 +383,7 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 						<div className={PR_LIST}>
 							{dayGroups.map(([label, rows]) => (
 								<div key={label} className="mb-4">
-									<h4 className={PR_GROUP_LABEL}>
+									<h4 className={PR_FEED_GROUP_LABEL}>
 										{label}
 										<span className="font-medium">{rows.length}</span>
 									</h4>

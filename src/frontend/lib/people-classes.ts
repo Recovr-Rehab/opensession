@@ -35,5 +35,7 @@ export const PEOPLE_CHIP_GLYPH =
 export const PEOPLE_CHIP_GLYPH_SELECTED =
 	"bg-[color-mix(in_srgb,var(--on-accent)_22%,transparent)] text-on-accent";
 
-/** "Shipped" and any other heading on the page. */
-export const PEOPLE_SECTION_LABEL = "m-0 mb-2 text-label font-semibold text-fg";
+/** "Shipped" and any other heading on the page. A step above the interface
+ *  label it started as: it heads the whole list under it, so it reads as a
+ *  heading rather than as the caption on a control. */
+export const PEOPLE_SECTION_LABEL = "m-0 mb-2 text-body font-semibold text-fg";

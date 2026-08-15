@@ -17,9 +17,18 @@ export const PR_SECTION_LABEL =
 	"m-0 mb-1.5 flex items-baseline gap-2 px-3 text-label font-semibold text-fg";
 
 /** A date group inside a state — the same quiet label the archived list gives
- *  its own date groups. */
-export const PR_GROUP_LABEL =
-	"m-0 flex items-baseline gap-2 px-3 pb-1.5 text-meta font-semibold text-faint";
+ *  its own date groups. The `px-3` pays back the list's outdent, so the label
+ *  starts on the same x as the row content under it. */
+const GROUP_LABEL =
+	"m-0 flex items-baseline gap-2 px-3 pb-1.5 font-semibold text-faint";
+
+export const PR_GROUP_LABEL = `${GROUP_LABEL} text-meta`;
+
+/** The same label in the feed, one step up the scale. The feed is grouped by
+ *  day and nothing else, so the day is the heading a reader navigates by; on
+ *  the pull request list a date sits under Open or Merged, which is the heading
+ *  there, and stays the quieter of the two. */
+export const PR_FEED_GROUP_LABEL = `${GROUP_LABEL} text-label`;
 
 /**
  * A pull request row.

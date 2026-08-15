@@ -4203,7 +4203,12 @@ export function App(
 						    strip so the session identity reads first, tabs below it. */}
 						<div className={DETAIL_TOPBAR} ref={setTopbarEl}>
 							{route.view !== "session" &&
+								// A page that heads itself (Archived, Feed) does not take the
+								// bar as well: it would print the same word twice, an inch
+								// apart. The phone keeps the title, where the bar is the
+								// nav bar and the only thing naming the page you pushed.
 								route.view !== "archived" &&
+								route.view !== "feed" &&
 								// A workspace portals in the same header row a session
 								// does (WorkspacePane) rather than taking the plain title.
 								!(route.view === "workspace" && routeWorkspace) &&
