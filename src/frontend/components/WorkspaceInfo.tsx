@@ -172,7 +172,7 @@ const reviewBand = (tone: ReviewTone): string =>
 const REVIEW_FACE =
 	"inline-flex size-5 shrink-0 items-center justify-center [&_svg]:block";
 const INFO_MORE_BUTTON_CLASS =
-	"cursor-pointer bg-panel px-[9px] py-[7px] text-left text-label font-semibold text-faint transition-colors hover:bg-hover hover:text-fg";
+	"cursor-pointer bg-panel px-2 py-[7px] text-left text-label font-semibold text-faint transition-colors hover:bg-hover hover:text-fg";
 
 function initial(name: string): string {
 	return (name.trim()[0] || "?").toUpperCase();
@@ -370,7 +370,7 @@ function CommentCard({
 				openOnHover
 				delay={200}
 				closeDelay={90}
-				className="group relative flex min-w-0 items-center gap-2 rounded-md px-[7px] py-[5px] text-left transition-colors hover:bg-hover"
+				className="group relative flex min-w-0 items-center gap-2 rounded-md px-2 py-[5px] text-left transition-colors hover:bg-hover"
 				role="button"
 				tabIndex={0}
 				onClick={() => onOpenTab?.("pr")}
@@ -483,7 +483,7 @@ function FileRow({
 				delay={200}
 				closeDelay={90}
 				type="button"
-				className="flex min-w-0 items-center gap-2 rounded-md px-[7px] py-[5px] text-left transition-colors hover:bg-hover"
+				className="flex min-w-0 items-center gap-2 rounded-md px-2 py-[5px] text-left transition-colors hover:bg-hover"
 				onClick={() => onOpenTab?.("changes")}
 				aria-label={`${file.path} · ${mark.label.toLowerCase()} · open in Changes`}
 			>
@@ -815,7 +815,7 @@ function AgentReviewCard({
 				{children}
 			</div>
 			{done && (
-				<div className="px-1 text-[11px] font-medium text-dim">
+				<div className="px-3 text-[11px] font-medium text-dim">
 					Started {done.label.toLowerCase()}. {AGENT_NAME} will post results on{" "}
 					{pr.url ? (
 						<a
@@ -851,7 +851,7 @@ function AgentReviewCard({
 				</div>
 			)}
 			{error && (
-				<div className="px-1 text-[11px] font-medium text-red">
+				<div className="px-3 text-[11px] font-medium text-red">
 					{error}
 				</div>
 			)}
@@ -1453,7 +1453,7 @@ export function WorkspaceInfo({
 				<div className="grid gap-4">
 					{comments.length > 0 && (
 						<div className={INFO_SECTION_CLASS}>
-							<div className="flex items-center justify-between gap-2 px-2 text-label font-semibold tracking-[-0.01em] text-faint">
+							<div className={cn(INFO_LABEL_CLASS, "flex items-center justify-between gap-2")}>
 								<span>
 									{comments.length} PR comment{comments.length === 1 ? "" : "s"}
 								</span>
@@ -1499,7 +1499,7 @@ export function WorkspaceInfo({
 					)}
 					{changed.length > 0 && (
 						<div className={INFO_SECTION_CLASS}>
-							<div className="flex items-center justify-between gap-2 px-2 text-label font-semibold tracking-[-0.01em] text-faint">
+							<div className={cn(INFO_LABEL_CLASS, "flex items-center justify-between gap-2")}>
 								<span>
 									{changed.length} file{changed.length === 1 ? "" : "s"} changed
 								</span>
@@ -1547,11 +1547,12 @@ export function WorkspaceInfo({
 								// scroll *inside* the card, so the panel's padding is
 								// there on both sides at rest; a sliver of the next
 								// frame at the trailing edge is what says it scrolls.
-								// `p-2` rather than the lists' `p-1`: their rows carry
-								// their own inner padding, so their content still sits
-								// ~11px off the card edge. A frame is its own content,
-								// so the card has to hold that inset itself.
-								className="flex snap-x snap-mandatory gap-2 overflow-x-auto overflow-y-hidden rounded-lg bg-panel p-2 [scroll-padding-left:8px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+								// `p-3` rather than the lists' `p-1`: their rows carry
+								// their own `px-2`, which puts row content 12px off the
+								// card edge. A frame is its own content, so the card
+								// holds all 12 itself and the frames line up with the
+								// rows and the label above them.
+								className="flex snap-x snap-mandatory gap-2 overflow-x-auto overflow-y-hidden rounded-lg bg-panel p-3 [scroll-padding-left:12px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
 							>
 								{media.map((m, i) => (
 									<button
@@ -1562,7 +1563,7 @@ export function WorkspaceInfo({
 										}
 										className={cn(
 											// Concentric with the card: inner = outer − padding,
-											// i.e. rounded-lg (14·rf) minus the card's 8px. No
+											// i.e. rounded-lg (14·rf) minus the card's 12px. No
 											// token lands there — the neighbouring lists' rows
 											// get away with rounded-control because they only
 											// sit 4px in — so it's spelled out, and it follows
@@ -1576,7 +1577,7 @@ export function WorkspaceInfo({
 											// (NoteBubble, the Slack composer's thumbnails).
 											// Hover is the fill alone: there is no line above
 											// strong to escalate to.
-											"relative aspect-video shrink-0 snap-start overflow-hidden rounded-[calc(14px*var(--rf)-8px)] border border-line-strong bg-surface transition-colors hover:bg-hover",
+											"relative aspect-video shrink-0 snap-start overflow-hidden rounded-[calc(14px*var(--rf)-12px)] border border-line-strong bg-surface transition-colors hover:bg-hover",
 											media.length === 1
 												? "w-full"
 												: media.length === 2
@@ -1640,7 +1641,7 @@ export function WorkspaceInfo({
 										onClick={() => onOpenAsset?.(a.path)}
 										title={`Open ${a.path}`}
 										className={cn(
-											"flex w-full min-w-0 gap-2 rounded-control px-[7px] py-[5px] text-left text-label text-fg transition-colors hover:bg-hover",
+											"flex w-full min-w-0 gap-2 rounded-control px-2 py-[5px] text-left text-label text-fg transition-colors hover:bg-hover",
 											// With a description the row is two lines and the icon
 											// and size ride the first one; a bare filename is a
 											// single line, so centre everything on it instead.

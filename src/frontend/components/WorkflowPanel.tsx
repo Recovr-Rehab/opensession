@@ -73,7 +73,7 @@ const RUN_TONE: Record<
 /** The card's plate and the rows inside it: the Info panel's list grammar
  *  (INFO_LIST_CLASS), so an agent row lines up with a portal or a changed
  *  file rather than inventing a third row shape. */
-const CARD_CLASS = "overflow-hidden rounded-lg bg-panel p-2";
+const CARD_CLASS = "overflow-hidden rounded-lg bg-panel p-1";
 const ROW_CLASS =
 	"flex w-full items-center gap-2 rounded-control px-2 py-1.5 text-left transition-colors";
 /** A toggle under the agent rows (tool calls, the result): the same row, in

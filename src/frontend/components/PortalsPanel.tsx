@@ -109,7 +109,7 @@ export function PortalsPage({
 													setRequestedSkill(recipe.skill);
 												}
 											}}
-											className="flex w-full min-w-0 items-center gap-2 rounded-control px-[7px] py-[5px] text-left transition-colors hover:bg-hover disabled:cursor-default disabled:opacity-45"
+											className="flex w-full min-w-0 items-center gap-2 rounded-control px-2 py-[5px] text-left transition-colors hover:bg-hover disabled:cursor-default disabled:opacity-45"
 										>
 											<span className="min-w-0 flex-1 truncate text-label text-fg">
 												{recipe.name}
@@ -151,7 +151,7 @@ export function PortalsPage({
 												type="button"
 												disabled={!target}
 												onClick={() => target && onOpenPortal?.(target)}
-												className="flex min-w-0 flex-1 items-center gap-2 rounded-control px-[7px] py-[5px] text-left disabled:cursor-default"
+												className="flex min-w-0 flex-1 items-center gap-2 rounded-control px-2 py-[5px] text-left disabled:cursor-default"
 											>
 												<span
 													className={cn(
@@ -203,7 +203,7 @@ export function PortalsPage({
 									);
 								})
 							) : (
-								<div className="px-[9px] py-[7px] text-label text-dim">
+								<div className="px-2 py-[7px] text-label text-dim">
 									{status.starting
 										? "Starting services…"
 										: "No services exposed yet. Start Preview to expose the ones this repository declares."}

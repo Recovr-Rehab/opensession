@@ -426,8 +426,17 @@ export const INFO_SECTION = "mt-2 border-t border-line p-3";
  * form. Rows go straight into the plate and are divided by `gap-px`.
  */
 export const INFO_SECTION_CLASS = "grid gap-[5px]";
+/**
+ * One inset for the whole panel: content sits 12px from the plate's edge, and
+ * the label sits over it rather than over the plate. A list gets there as 4 of
+ * plate padding plus 8 on the row (INFO_LIST_CLASS + a `px-2` row), a label by
+ * paying the 12 itself, and anything that is its own content — a screenshot
+ * frame — by taking all 12 as padding. The panel used to run five different
+ * insets (8, 11, 12, 13, 16) with the label aligned to none of them, which is
+ * the kind of thing nobody can name and everybody can feel.
+ */
 export const INFO_LABEL_CLASS =
-	"px-2 text-label font-semibold tracking-[-0.01em] text-faint";
+	"px-3 text-label font-semibold tracking-[-0.01em] text-faint";
 export const INFO_LIST_CLASS = "grid gap-px overflow-hidden rounded-lg bg-panel p-1";
 
 /**
