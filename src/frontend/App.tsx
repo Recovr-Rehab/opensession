@@ -661,7 +661,7 @@ export function App(
 	const [topbarEl, setTopbarEl] = useState<HTMLDivElement | null>(null);
 	// The phone's own top bar, held for the same reason the pane's is: its title
 	// pill waits for the page's heading to scroll under it, and where that edge
-	// falls is this row's own bottom — which on the routes whose header floats
+	// falls is this row's own bottom, which on the routes whose header floats
 	// over the content is not where the pane starts.
 	const [appHeaderEl, setAppHeaderEl] = useState<HTMLElement | null>(null);
 	// The sidebar's chrome strip, held for the same reason: the hairline it grows
@@ -3241,9 +3241,9 @@ export function App(
 
 	// Whether the bar is holding that name yet. It stays quiet while the page
 	// below heads itself with the same word, and picks the name up once that
-	// heading has scrolled under it. A route whose page does not name itself —
-	// a workspace, or the New session dialog over whatever page was already
-	// open — reads true from the start and is labelled as it always was.
+	// heading has scrolled under it. A route whose page does not name itself
+	// (a workspace, or the New session dialog over whatever page was already
+	// open) reads true from the start and is labelled as it always was.
 	const titleHandedOver = useLargeTitleHandoff(topbarEl, topbarTitle);
 	const phoneTitleHandedOver = useLargeTitleHandoff(appHeaderEl, topbarTitle);
 
@@ -4292,7 +4292,7 @@ export function App(
 								// Where you are, not the page's heading: these routes are
 								// pages, and a page keeps its name in its body. The bar picks
 								// that name up once it has scrolled out of sight, the way the
-								// chat header names the session — see hooks/useLargeTitle.ts.
+								// chat header names the session. See hooks/useLargeTitle.ts.
 								<span className={DETAIL_TOPBAR_TITLE}>
 									<span
 										className={DETAIL_TOPBAR_TITLE_TEXT}

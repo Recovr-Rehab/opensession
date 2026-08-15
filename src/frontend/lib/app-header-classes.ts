@@ -227,7 +227,7 @@ export const HEADER_TITLE_PILL =
 /**
  * The pill on a page that names itself, which is every page but a session: it
  * is not there until that name has scrolled up under the bar, and then it is.
- * The iOS large title, on the surface the pattern comes from — `data-shown` is
+ * The iOS large title, on the surface the pattern comes from. `data-shown` is
  * set by hooks/useLargeTitle.ts.
  *
  * The whole lozenge fades, not just the word inside it. This one is a floating

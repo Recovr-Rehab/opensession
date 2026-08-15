@@ -356,7 +356,7 @@ export function Analytics() {
 	const [barEl, setBarEl] = useState<HTMLElement | null>(null);
 	useScrollEdge(barEl, ".analytics-scroll");
 	// The bar carries the page's name only once the heading below has gone
-	// under it — the same handoff the app's own top bar makes on every other
+	// under it. The same handoff the app's own top bar makes on every other
 	// page. See hooks/useLargeTitle.ts.
 	const titleHandedOver = useLargeTitleHandoff(barEl, "Analytics");
 
@@ -570,8 +570,8 @@ export function Analytics() {
 				    the column the cards below are centred in. Same box as the content
 				    container down there, padding included, so the name sits on the
 				    cards' left edge and the range control on their right.
-				    The name is only here once the page's own heading — directly under
-				    this row, in this same column — has scrolled away. Held at rest it
+				    The name is only here once the page's own heading, directly under
+				    this row in this same column, has scrolled away. Held at rest it
 				    was a small copy of the word stacked 60px above the real one, which
 				    read as a mistake rather than as chrome. */}
 				<div className="mx-auto flex w-full max-w-[1080px] flex-wrap items-center justify-between gap-3 px-4 md:px-6">

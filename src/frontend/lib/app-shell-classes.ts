@@ -210,7 +210,7 @@ export const DETAIL_TOPBAR_TITLE =
  * curve are the app's `--dur-micro` / `--ease`, which is the step for an
  * in-place state change and needs no value of its own here.
  *
- * Only the word fades. The row keeps its fill and its hairline throughout —
+ * Only the word fades. The row keeps its fill and its hairline throughout:
  * they belong to the bar, not to the title, and fading the box would take the
  * top of the window with it.
  */

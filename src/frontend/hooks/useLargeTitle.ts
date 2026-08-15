@@ -11,7 +11,7 @@ export const LARGE_TITLE_SELECTOR = "[data-large-title]";
  * Has the bar taken the page's name over?
  *
  * The iOS large-title move. A page opens with its name set large in the body,
- * where a page's name belongs, and the bar above it stays quiet — printing the
+ * where a page's name belongs, and the bar above it stays quiet. Printing the
  * same word twice, an inch apart, is what made the bar read as a mistake. Once
  * that heading has travelled up under the bar the name has to go somewhere, so
  * the bar picks it up and holds it for as long as the page is scrolled. It is
@@ -19,15 +19,15 @@ export const LARGE_TITLE_SELECTOR = "[data-large-title]";
  * only needs to once nothing else on screen does.
  *
  * `false` while the page's own heading is visible, `true` once it has passed
- * under the bar — and `true` when nothing under the bar is heading itself with
- * that name, since then the bar is the only place the name can appear.
+ * under the bar. `true` as well when nothing under the bar is heading itself
+ * with that name, since then the bar is the only place the name can appear.
  *
  * It defers to a heading that reads the SAME WORD, not merely to a heading. The
  * rule being kept is "do not print the same name twice, an inch apart", so a
  * bar naming something the page below is not naming has nothing to defer to.
  * That is not a detail: `/new` is a dialog over whichever page was already
  * open, so the bar says "New session" while a perfectly valid `PageTitle`
- * behind it says "Pull requests" — matched by name, the bar keeps its label,
+ * behind it says "Pull requests". Matched by name, the bar keeps its label,
  * which is the behaviour that route has always had.
  *
  * An IntersectionObserver rather than a scroll listener: the question is only
@@ -77,9 +77,9 @@ export function useLargeTitleHandoff(
 					) ?? null)
 				: null;
 			// A streaming transcript mutates this subtree many times a second, so
-			// the common case has to cost one lookup and stop. Only a heading that
-			// has actually changed — or a resize, which moves the edge the margin
-			// below is measured from — rebuilds the observer.
+			// the common case has to cost one lookup and stop. Two things rebuild
+			// the observer: a heading that has actually changed, and a resize,
+			// which moves the edge the margin below is measured from.
 			if (next === watched && !remeasure) return;
 			observer?.disconnect();
 			watched = next;
