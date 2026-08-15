@@ -144,7 +144,7 @@ export function bridgeDesignationError(): string | null {
   if (ocIds.length || hasAccounts()) return null;
   return (
     "The Anthropic bridge has no accounts to serve on: add a Claude account in " +
-    "Settings → Models (or designate bridgeAccountIds in ~/.opensession-opencode.json)."
+    "Settings → Usage (or designate bridgeAccountIds in ~/.opensession-opencode.json)."
   );
 }
 
@@ -233,7 +233,7 @@ export function pickBridgeAccount(
     if (!hasAccounts()) {
       // Deliberately NOT usage-limit-shaped: an empty pool is a config
       // problem, and hopping models would not fix it.
-      return { error: "no Claude accounts configured (add one in Settings → Models)" };
+      return { error: "no Claude accounts configured (add one in Settings → Usage)" };
     }
     return { error: "no usable Claude account in the pool (all exhausted or sidelined)" };
   }

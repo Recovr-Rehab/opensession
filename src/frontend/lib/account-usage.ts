@@ -46,7 +46,7 @@ export function liveUtilization(w: LimitWindow, now = Date.now()): number | null
 
 /**
  * The fullest window: the one an account is up against. Windows it reports no
- * number for are skipped rather than read as empty — "unknown" and "nothing
+ * number for are skipped rather than read as empty. "Unknown" and "nothing
  * used" are different states, and a token that can't see usage at all has no
  * binding limit to show.
  */

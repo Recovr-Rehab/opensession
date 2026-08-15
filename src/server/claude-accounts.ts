@@ -495,7 +495,7 @@ async function usageToken(
       }
       return {
         error:
-          "OAuth credentials expired and refresh failed. Reconnect usage from Settings → Models (account menu → Sign in with Claude), or re-login on the VPS and update the credentials path.",
+          "OAuth credentials expired and refresh failed. Reconnect usage from Settings → Usage (account menu → Sign in with Claude), or re-login on the VPS and update the credentials path.",
       };
     }
     return { error: `Couldn't read OAuth credentials at ${account.credentialsPath}` };

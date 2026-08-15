@@ -1,12 +1,13 @@
 import { SettingsHeader, SettingsPanel } from "../../ui/settings";
-import { AccountsPanel, ModelEngineDefaultsSection } from "../Models";
+import { ModelDefaultsSection, ModelEngineDefaultsSection } from "../Models";
 import { ModelProvidersPanel } from "../ModelProviders";
 import { WorkspaceModelPresetSettings } from "../WorkspaceModelPresets";
 import type { Workspace } from "../../lib/types";
 
-/** Models: everywhere a model a session can run on comes from — the Anthropic
- * and OpenAI subscription pools, and any provider you brought a key for. These
- * were two sections whose descriptions each ended by pointing at the other. */
+/** Models: which model a session starts on, which engine carries it, and any
+ * provider you brought a key for. The subscription accounts behind the
+ * Anthropic and OpenAI models live in Settings → Usage: their meters move
+ * hourly and get read far more often than any of this gets changed. */
 export function ModelsPanel({ workspace }: { workspace?: Workspace }) {
 	return (
 		<SettingsPanel>
@@ -14,7 +15,7 @@ export function ModelsPanel({ workspace }: { workspace?: Workspace }) {
 				title="Models"
 				description="Choose the models and execution environments available to new sessions."
 			/>
-			<AccountsPanel />
+			<ModelDefaultsSection />
 			<WorkspaceModelPresetSettings workspace={workspace} />
 			<ModelProvidersPanel />
 			{/* Last: one row per model, Auto on all of them until someone pins

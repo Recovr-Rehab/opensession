@@ -41,6 +41,7 @@ import { KeychainPanel } from "./settings/KeychainPanel";
 import { MembersPanel } from "./settings/MembersPanel";
 import { MemoryPanel } from "./settings/MemoryPanel";
 import { ModelsPanel } from "./settings/ModelsPanel";
+import { UsagePanel } from "./settings/UsagePanel";
 import { NotificationsPanel } from "./settings/NotificationsPanel";
 import { PapercutsPanel } from "./settings/PapercutsPanel";
 import { PreferencesPanel } from "./settings/PreferencesPanel";
@@ -85,6 +86,7 @@ export type SettingsSectionKey =
 	| "repos"
 	| "members"
 	| "models"
+	| "usage"
 	| "sandboxes"
 	| "runners"
 	| "library"
@@ -332,6 +334,24 @@ const SECTIONS: {
 				<rect x="8.75" y="8.75" width="5" height="5" rx="1" />
 				<circle cx="11.25" cy="4.75" r="2.5" />
 				<path d="M4.75 9.5v1.75a1 1 0 0 0 1 1h1.75" strokeLinecap="round" />
+			</svg>
+		),
+	},
+	{
+		key: "usage",
+		label: "Usage",
+		group: "Workspace",
+		icon: (
+			<svg
+				width="20"
+				height="20"
+				viewBox="0 0 16 16"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.4"
+			>
+				<path d="M2.6 11.6a5.7 5.7 0 1 1 10.8 0" strokeLinecap="round" />
+				<path d="M8 11.6l2.7-3.9" strokeLinecap="round" />
 			</svg>
 		),
 	},
@@ -717,6 +737,7 @@ function SectionPanel({
 			{section === "integrations" && <IntegrationsPanel />}
 			{section === "audit" && <AuditPanel />}
 			{section === "models" && <ModelsPanel workspace={workspace} />}
+			{section === "usage" && <UsagePanel />}
 			{section === "sandboxes" && <SandboxesPanel />}
 			{section === "runners" && <RunnersPanel />}
 			{section === "connections" && <Connections />}

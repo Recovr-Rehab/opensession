@@ -236,7 +236,7 @@ export async function handleConnectionsRoutes(
 		if (BRIDGE_PROVIDER_IDS.has(id)) {
 			return Response.json(
 				{
-					error: `"${id}" runs on the subscription bridges (Settings → Models), not a raw API key`,
+					error: `"${id}" runs on the subscription bridges (Settings → Usage), not a raw API key`,
 				},
 				{ status: 400 },
 			);
