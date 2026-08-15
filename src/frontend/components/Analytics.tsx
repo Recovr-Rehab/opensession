@@ -530,15 +530,21 @@ export function Analytics() {
 	return (
 		<div className="analytics-viz flex min-h-0 flex-1 flex-col overflow-y-auto bg-bg">
 			<style>{VIZ_STYLE}</style>
-			<div className="mx-auto w-full max-w-[1080px] px-4 pb-10 pt-5 md:px-6">
-				<header className="flex flex-wrap items-end justify-between gap-3">
-					<div>
-						<h1 className="m-0 text-section-title font-title tracking-[-0.02em] text-fg">Analytics</h1>
-						<p className="m-0 mt-1 text-supporting text-dim">
-							What happened on {PRODUCT_NAME}: sessions, tokens, models, PRs.
-						</p>
-					</div>
-					<div className="flex flex-wrap items-center gap-2">
+			<div className="mx-auto w-full max-w-[1080px] px-4 pb-10 md:px-6">
+				{/* The range is the one control on this page, and the page is long,
+				    so the bar stays put and the charts pass under it. It carries the
+				    page's own top padding rather than the container, so the stuck
+				    state looks like the resting one. z-20 clears the chart tooltips
+				    (z-10), and the bar spans the content width: nothing is ever
+				    painted in the container's gutters, so it needs no full bleed. */}
+				<header className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 bg-bg pt-5 pb-3">
+					<h1 className="m-0 text-section-title font-title tracking-[-0.02em] text-fg">Analytics</h1>
+					{/* On a phone the two controls can't sit beside the title as one
+					    block, and stacking all three costs a third of the sticky bar.
+					    `contents` hands them to the header's own wrap instead, so the
+					    presets ride up next to the title and only the dates take a
+					    second row. */}
+					<div className="flex flex-wrap items-center gap-2 phone:contents">
 						{/* A custom range matches no preset, so the control can sit with
 						    nothing pressed — the dates beside it are the value then. */}
 						<Segmented
