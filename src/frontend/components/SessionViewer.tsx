@@ -3839,10 +3839,10 @@ export function SessionViewer({
 								<span className="min-w-0 flex-1 text-meta text-red" role="alert">
 									{item.error || "This message could not be delivered."}
 								</span>
-								<Button size="sm" onClick={() => promptOutbox.retry(item.clientId)}>
+								<Button variant="outline" size="sm" onClick={() => promptOutbox.retry(item.clientId)}>
 									Retry
 								</Button>
-								<Button size="sm" onClick={() => editOutboxInComposer(item)}>
+								<Button variant="outline" size="sm" onClick={() => editOutboxInComposer(item)}>
 									Edit
 								</Button>
 								<Button

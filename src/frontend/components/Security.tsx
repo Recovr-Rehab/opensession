@@ -541,7 +541,7 @@ function NewScanModal({
         {error && <InlineAlert className="text-label">{error}</InlineAlert>}
 
         <div className={FORM_ACTIONS}>
-          <Button size="sm" onClick={onClose} disabled={starting}>
+          <Button variant="outline" size="sm" onClick={onClose} disabled={starting}>
             Cancel
           </Button>
           <Button
@@ -637,7 +637,7 @@ function ProfileModal({
         {error && <InlineAlert className="text-label">{error}</InlineAlert>}
 
         <div className={FORM_ACTIONS}>
-          <Button size="sm" onClick={onClose} disabled={saving}>
+          <Button variant="outline" size="sm" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
           <Button

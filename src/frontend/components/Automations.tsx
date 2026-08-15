@@ -1116,7 +1116,7 @@ function TypeChooser({
       )}
 
       <div className={FORM_ACTIONS}>
-        <Button size="sm" className="px-3 text-label" onClick={onClose}>
+        <Button variant="outline" size="sm" className="px-3 text-label" onClick={onClose}>
           Cancel
         </Button>
       </div>
@@ -2042,7 +2042,7 @@ function AutomationForm({
       {error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
 
       <div className={FORM_ACTIONS}>
-        <Button size="sm" className="px-3 text-label" onClick={onClose} disabled={saving}>
+        <Button variant="outline" size="sm" className="px-3 text-label" onClick={onClose} disabled={saving}>
           Cancel
         </Button>
         <Button

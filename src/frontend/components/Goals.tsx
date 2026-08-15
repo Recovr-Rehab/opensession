@@ -729,7 +729,7 @@ function GoalForm({
       {error && <InlineAlert>{error}</InlineAlert>}
 
       <div className={FORM_ACTIONS}>
-        <Button size="md" onClick={onClose} disabled={saving}>
+        <Button variant="outline" size="md" onClick={onClose} disabled={saving}>
           Cancel
         </Button>
         <Button

@@ -301,7 +301,7 @@ function AddProviderForm({
 			{error && <InlineAlert>{error}</InlineAlert>}
 
 			<SettingsFormActions>
-				<Button onClick={onClose} disabled={saving}>
+				<Button variant="outline" onClick={onClose} disabled={saving}>
 					Cancel
 				</Button>
 				<Button

@@ -137,9 +137,10 @@ const INK =
  * - `default` — a control standing alone on the page: a header action, a
  *   toolbar, a card's single button. Raised, so it reads as a thing to press
  *   against a surface that is otherwise flat.
- * - `outline` — two or more peers, none of them the answer, or any neutral
- *   button sitting ON a panel or card. Raised plates in a row read as cards
- *   inside a card; the edge alone keeps the row quiet and even.
+ * - `outline` — everything in a row that is not the answer: the Cancel beside
+ *   a form's primary, two or more peers with no answer among them, or any
+ *   neutral button sitting ON a panel or card. Raised plates in a row read as
+ *   cards inside a card; the edge alone keeps the row quiet and even.
  * - `ghost` — a control that is mostly reporting state (a filter, an icon in
  *   a row). Quiet until you reach for it.
  * - `soft` — a filled chip, for the few places where an edge would fight the
