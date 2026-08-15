@@ -127,37 +127,59 @@ struct PrPanelView: View {
         #endif
     }
 
+    /// The pull request names itself in the bar the platform already gives
+    /// us: its title on the title line, and who and what state on the
+    /// subtitle under it. A row of our own below the bar said the same things
+    /// twice and cost a band of the screen on every page.
+    ///
+    /// `Text(verbatim:)`, not a bare interpolation: inferred as a
+    /// LocalizedStringKey, "#\(number)" runs the number through the device's
+    /// locale — #5555 renders "#5.555" anywhere that groups thousands.
     private func titled(_ view: some View) -> some View {
-        // `Text(verbatim:)`, not a bare interpolation: inferred as a
-        // LocalizedStringKey, "PR #\(number)" runs the number through the
-        // device's locale — #5555 renders "PR #5.555" anywhere that groups
-        // thousands with a dot. Same reason the overflow menu spells its PR
-        // row verbatim.
         view
-            .navigationTitle(Text(verbatim: navigationTitle))
+            .navigationTitle(Text(verbatim: viewModel.prDetails?.title ?? "Pull request"))
+            .navigationSubtitle(subtitle)
             .inlineTitleBarCompat()
     }
 
-    /// The repo, so the bar and the identity row below it read as one
-    /// breadcrumb rather than saying the PR's number twice.
-    private var navigationTitle: String {
-        viewModel.session.repo ?? "Pull request"
+    /// `#5755 · Open · tella-butler`. Plain ink: a navigation subtitle styles
+    /// itself, and a per-run colour on it is ignored — the state wears its
+    /// colour on the Info page, where it has a row of its own.
+    private var subtitle: Text {
+        guard let pr = viewModel.prDetails else {
+            return Text(verbatim: viewModel.session.repo ?? "")
+        }
+        var parts = ["#\(pr.number)", stateLabel(pr)]
+        if let author = pr.author, !author.isEmpty { parts.append(author) }
+        return Text(verbatim: parts.joined(separator: " · "))
     }
 
     @ViewBuilder
     private var content: some View {
         if let pr = viewModel.prDetails {
-            VStack(spacing: 0) {
-                identity(pr)
-                pageTabs(pr)
-                Divider()
-                switch page {
-                case .overview: overviewPage(pr)
-                case .files: PrReviewCanvas(viewModel: viewModel, lens: $lens)
-                case .info: infoPage(pr)
+            // The platform's own tab bar, at the bottom where a thumb is,
+            // rather than a strip we draw under the header.
+            TabView(selection: $page) {
+                Tab("Overview", systemImage: "text.bubble", value: Page.overview) {
+                    overviewPage(pr)
+                }
+
+                Tab("Files", systemImage: "doc.plaintext", value: Page.files) {
+                    PrReviewCanvas(viewModel: viewModel, lens: $lens)
+                }
+
+                Tab("Info", systemImage: "info.circle", value: Page.info) {
+                    infoPage(pr)
                 }
             }
             .toolbar {
+                // The code page's own controls, only where they apply.
+                if page == .files {
+                    ToolbarItem(placement: .topTrailingCompat) {
+                        PrViewOptionsMenu(lens: $lens, showsDiffDisplay: lens != .flow)
+                            .labelStyle(.iconOnly)
+                    }
+                }
                 ToolbarItem(placement: .topTrailingCompat) { actionsMenu(pr) }
             }
             .sheet(isPresented: $reviewing) {
@@ -211,73 +233,6 @@ struct PrPanelView: View {
 
     // MARK: - Identity
 
-    /// One line of identity, edge to edge above the pages: what state it is
-    /// in, whose it is, and what it is called. Everything countable belongs to
-    /// the overview below, so this never grows a second row of stats.
-    private func identity(_ pr: PrDetails) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                statePlate(pr)
-                if let author = pr.author, !author.isEmpty {
-                    UserAvatar(person: author, size: 20)
-                    Text(author)
-                        .font(.footnote.weight(.medium))
-                        .foregroundStyle(OS1VisualStyle.textDim)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 4)
-                if let preview = pr.staging?.url.flatMap(URL.init) {
-                    Link(destination: preview) {
-                        Image(systemName: "globe")
-                            .font(.system(size: 15))
-                            .foregroundStyle(OS1VisualStyle.textDim)
-                    }
-                    .accessibilityLabel("Open the preview environment")
-                }
-            }
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(pr.title ?? "Untitled")
-                    .font(.headline)
-                    .foregroundStyle(OS1VisualStyle.text)
-                    .lineLimit(2)
-                // The number is the reference the rest of the app uses, and
-                // it is the way out to GitHub. The title is the page you are
-                // already on, so it stays inert.
-                if let url = pr.url.flatMap(URL.init) {
-                    Link(destination: url) {
-                        Text(verbatim: "#\(pr.number)")
-                            .font(.subheadline)
-                            .foregroundStyle(OS1VisualStyle.textDim)
-                    }
-                } else {
-                    Text(verbatim: "#\(pr.number)")
-                        .font(.subheadline)
-                        .foregroundStyle(OS1VisualStyle.textDim)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
-        .padding(.top, 4)
-        .padding(.bottom, 10)
-    }
-
-    /// The state, filled rather than outlined: the tone washes the plate and
-    /// the glyph and the word share its ink.
-    private func statePlate(_ pr: PrDetails) -> some View {
-        let tone = pr.summary.color
-        return HStack(spacing: 4) {
-            Image(systemName: stateSymbol(pr))
-                .font(.system(size: 11, weight: .semibold))
-            Text(stateLabel(pr))
-                .font(.caption.weight(.semibold))
-        }
-        .foregroundStyle(tone)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
-        .background(tone.opacity(0.14), in: Capsule())
-    }
-
     private func stateSymbol(_ pr: PrDetails) -> String {
         switch pr.state ?? "" {
         case "MERGED": "arrow.triangle.merge"
@@ -294,70 +249,15 @@ struct PrPanelView: View {
         }
     }
 
-    // MARK: - The two pages
-
-    /// The pages, and the code page's own controls beside them. A tab is
-    /// marked with a line on the edge it shares with the content below, not a
-    /// filled plate: a plate there reads as a pressed button.
-    private func pageTabs(_ pr: PrDetails) -> some View {
-        HStack(spacing: 0) {
-            tab(.overview, count: conversation(pr).count)
-            tab(.files, count: pr.changedFiles ?? pr.files?.count)
-            tab(.info, count: nil)
-            Spacer(minLength: 8)
-            if page == .files {
-                // Icon only: the row belongs to the pages, and the control is
-                // a glyph beside them rather than a second label competing
-                // with the tab names.
-                PrViewOptionsMenu(lens: $lens, showsDiffDisplay: lens != .flow)
-                    .labelStyle(.iconOnly)
-                    .padding(.trailing, 16)
-            }
-        }
-        .padding(.leading, 8)
-    }
-
-    private func tab(_ target: Page, count: Int?) -> some View {
-        let selected = page == target
-        return Button {
-            guard page != target else { return }
-            page = target
-            Haptics.play(.selection)
-        } label: {
-            HStack(spacing: 5) {
-                Text(target.label)
-                    .font(.subheadline.weight(selected ? .semibold : .regular))
-                if let count, count > 0 {
-                    Text("\(count)")
-                        .font(.caption2.weight(.semibold))
-                        .monospacedDigit()
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(
-                            selected
-                                ? Color.accentColor.opacity(0.16)
-                                : OS1VisualStyle.border.opacity(0.35),
-                            in: Capsule()
-                        )
-                }
-            }
-            .foregroundStyle(selected ? Color.accentColor : OS1VisualStyle.textDim)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 10)
-            .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(selected ? Color.accentColor : .clear)
-                    .frame(height: 2)
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
-    }
+    // MARK: - Info
 
     /// How the pull request stands: who is on it, what ran, what landed, what
     /// changed. On the web this is the rail beside the conversation; a phone
-    /// has no beside, so it is the page you go to for the numbers.
+    /// has no beside, so it is a page you go to for the numbers.
+    ///
+    /// Every group reads the same way — a label, the one-line answer on the
+    /// right of that label, then the first few rows and a way to see the rest.
+    /// Nothing here opens a chevron inside a chevron.
     private func infoPage(_ pr: PrDetails) -> some View {
         List {
             statusSection(pr)
@@ -374,47 +274,140 @@ struct PrPanelView: View {
         .refreshable { await viewModel.refreshPr() }
     }
 
+    /// A group's label, and the one thing worth knowing about it beside it.
+    private func infoHeader(_ title: String, detail: Text? = nil) -> some View {
+        HStack(spacing: 8) {
+            Text(title)
+            Spacer(minLength: 8)
+            detail
+        }
+    }
+
+    private func infoRow(_ label: String, value: String, tint: Color? = nil) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(label)
+                .font(.subheadline)
+                .foregroundStyle(OS1VisualStyle.textDim)
+            Spacer(minLength: 8)
+            Text(value)
+                .font(.subheadline)
+                .foregroundStyle(tint ?? OS1VisualStyle.text)
+                .multilineTextAlignment(.trailing)
+                .lineLimit(2)
+        }
+    }
+
+    /// Where it lands, whether it can, and what the reviewers decided.
     @ViewBuilder
     private func statusSection(_ pr: PrDetails) -> some View {
-        Section("Status") {
+        Section {
             if let head = pr.headRefName, let base = pr.baseRefName {
-                LabeledContent {
-                    Text("\(head) → \(base)")
-                        .font(.footnote)
-                        .foregroundStyle(OS1VisualStyle.textDim)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.trailing)
-                } label: {
-                    Label("Branch", systemImage: "arrow.triangle.branch")
-                }
-            }
-            if let decision = reviewBadge(pr.reviewDecision) {
-                Label(decision.label, systemImage: "checkmark.bubble")
-                    .foregroundStyle(decision.color)
-                    .font(.subheadline)
+                infoRow("Branch", value: head)
+                infoRow("Into", value: base)
             }
             if pr.mergeable == "CONFLICTING" {
-                Label(
-                    "Has conflicts with \(pr.baseRefName ?? "the base branch")",
-                    systemImage: "exclamationmark.triangle.fill"
+                infoRow(
+                    "Merge",
+                    value: "Conflicts with \(pr.baseRefName ?? "the base")",
+                    tint: OS1VisualStyle.yellowInk
                 )
-                .font(.subheadline)
-                .foregroundStyle(OS1VisualStyle.yellowInk)
+            } else if pr.isOpen {
+                infoRow("Merge", value: "No conflicts", tint: OS1VisualStyle.greenInk)
+            }
+            if let decision = reviewBadge(pr.reviewDecision) {
+                infoRow("Review", value: decision.label, tint: decision.color)
             }
             if let error = actionError {
                 Text(error)
                     .font(.footnote)
                     .foregroundStyle(OS1VisualStyle.redInk)
             }
+        } header: {
+            infoHeader("Status", detail: Text(stateLabel(pr)).foregroundColor(pr.summary.color))
         }
+    }
+
+    /// Checks, worst first: a page of green rows tells you nothing, and the
+    /// one that failed is the reason you opened this.
+    @ViewBuilder
+    private func checksSection(_ pr: PrDetails) -> some View {
+        let checks = (pr.checks ?? []).sorted { rank($0) < rank($1) }
+        if !checks.isEmpty {
+            let shown = checksExpanded ? checks : Array(checks.prefix(4))
+            Section {
+                ForEach(Array(shown.enumerated()), id: \.offset) { _, check in
+                    Group {
+                        if let url = check.url.flatMap(URL.init) {
+                            Link(destination: url) { checkRow(check) }
+                                .foregroundStyle(.primary)
+                        } else {
+                            checkRow(check)
+                        }
+                    }
+                    .listRowBackground(checkRowTint(check.rank))
+                }
+                if checks.count > shown.count || checksExpanded {
+                    Button(checksExpanded ? "Show fewer" : "Show all \(checks.count)") {
+                        checksExpanded.toggle()
+                    }
+                    .font(.subheadline)
+                }
+            } header: {
+                infoHeader(
+                    "Checks",
+                    detail: Text(checksHeader(checks))
+                        .foregroundColor(checkTone(checksRank(checks)))
+                )
+            }
+        }
+    }
+
+    /// What to show first: what went wrong, then what is still going, then
+    /// what passed. Skipped checks sort last — four grey rows are the least
+    /// informative thing a run can say about itself.
+    private func rank(_ check: PrCheck) -> Int {
+        switch check.rank {
+        case .failure: 0
+        case .pending: 1
+        case .success: 2
+        case .neutral: 3
+        }
+    }
+
+    private func checkTone(_ rank: PrCheck.Rank) -> Color {
+        switch rank {
+        case .failure: OS1VisualStyle.redInk
+        case .pending: OS1VisualStyle.yellowInk
+        case .success: OS1VisualStyle.greenInk
+        case .neutral: OS1VisualStyle.textDim
+        }
+    }
+
+    private func checksRank(_ checks: [PrCheck]) -> PrCheck.Rank {
+        let ranks = checks.map(\.rank)
+        if ranks.contains(.failure) { return .failure }
+        if ranks.contains(.pending) { return .pending }
+        return .success
+    }
+
+    private func checksHeader(_ checks: [PrCheck]) -> String {
+        let passed = checks.filter { $0.rank == .success }.count
+        if checks.contains(where: { $0.rank == .failure }) {
+            let failed = checks.filter { $0.rank == .failure }.count
+            return "\(failed) failed"
+        }
+        if checks.contains(where: { $0.rank == .pending }) { return "Running" }
+        // Not "all \(passed) passed": the rest are skipped or neutral, so a
+        // count here would disagree with the list under it.
+        return passed == checks.count ? "All \(passed) passed" : "All passed"
     }
 
     @ViewBuilder
     private func commitsSection(_ pr: PrDetails) -> some View {
         if let commits = pr.commits, !commits.isEmpty {
+            let shown = commitsExpanded ? commits : Array(commits.prefix(3))
             Section {
-                DisclosureGroup(isExpanded: $commitsExpanded) {
-                ForEach(commits) { commit in
+                ForEach(shown) { commit in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         VStack(alignment: .leading, spacing: 1) {
                             Text(commit.messageHeadline ?? commit.shortOid)
@@ -432,25 +425,29 @@ struct PrPanelView: View {
                             .foregroundStyle(OS1VisualStyle.textDim)
                     }
                 }
-                } label: {
-                    Label(
-                        "\(commits.count) commit\(commits.count == 1 ? "" : "s")",
-                        systemImage: "point.3.filled.connected.trianglepath.dotted"
-                    )
+                if commits.count > shown.count || commitsExpanded {
+                    Button(commitsExpanded ? "Show fewer" : "Show all \(commits.count)") {
+                        commitsExpanded.toggle()
+                    }
                     .font(.subheadline)
                 }
+            } header: {
+                infoHeader(
+                    "Commits",
+                    detail: Text("\(commits.count)").foregroundColor(OS1VisualStyle.textDim)
+                )
             }
         }
     }
 
     /// What changed, by size. Tapping one crosses to the code page, where the
-    /// same list opens the diff — the overview never loads a patch of its own.
+    /// same file folds open — the info page never loads a patch of its own.
     @ViewBuilder
     private func filesSection(_ pr: PrDetails) -> some View {
         if let files = pr.files, !files.isEmpty {
+            let shown = filesExpanded ? files : Array(files.prefix(5))
             Section {
-                DisclosureGroup(isExpanded: $filesExpanded) {
-                ForEach(files) { file in
+                ForEach(shown) { file in
                     Button {
                         page = .files
                         Haptics.play(.selection)
@@ -473,29 +470,25 @@ struct PrPanelView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                } label: {
-                    HStack(spacing: 8) {
-                        Label(
-                            "\(files.count) file\(files.count == 1 ? "" : "s")",
-                            systemImage: "doc.on.doc"
-                        )
-                        .font(.subheadline)
-                        Spacer(minLength: 8)
-                        Text("+\(pr.additions ?? 0)")
-                            .font(.caption2.monospaced())
-                            .foregroundStyle(OS1VisualStyle.greenInk)
-                        Text("−\(pr.deletions ?? 0)")
-                            .font(.caption2.monospaced())
-                            .foregroundStyle(OS1VisualStyle.redInk)
+                if files.count > shown.count || filesExpanded {
+                    Button(filesExpanded ? "Show fewer" : "Show all \(files.count)") {
+                        filesExpanded.toggle()
                     }
+                    .font(.subheadline)
                 }
+            } header: {
+                infoHeader(
+                    "Files",
+                    detail: Text("+\(pr.additions ?? 0) −\(pr.deletions ?? 0)")
+                        .foregroundColor(OS1VisualStyle.textDim)
+                )
             }
         }
     }
 
     /// The description, then the discussion. Machine bookkeeping (a comment
     /// that is only a hidden marker, a superseded automated review) is not
-    /// discussion, so it never reaches the list.
+    /// discussion, so it never reaches the feed.
     private func conversation(_ pr: PrDetails) -> [PrComment] {
         (pr.comments ?? []).filter(\.isDiscussion)
     }
@@ -615,8 +608,13 @@ struct PrPanelView: View {
                     Label("Merge", systemImage: "arrow.triangle.merge")
                 }
             }
-            if let url = pr.url.flatMap(URL.init) {
-                Section {
+            Section {
+                if let preview = pr.staging?.url.flatMap(URL.init) {
+                    Link(destination: preview) {
+                        Label("Open the preview", systemImage: "globe")
+                    }
+                }
+                if let url = pr.url.flatMap(URL.init) {
                     Link(destination: url) {
                         Label("Open on GitHub", systemImage: "arrow.up.right")
                     }
@@ -713,59 +711,6 @@ struct PrPanelView: View {
         return "This merges into \(base) even though \(warnings.joined(separator: ", "))."
     }
 
-    /// Checks roll up rather than filling the page: they answer "is it
-    /// green?", which is one line, and the run-by-run list is what you open
-    /// when the answer is no. Fifty rows of CI is not an overview.
-    @ViewBuilder
-    private func checksSection(_ pr: PrDetails) -> some View {
-        let checks = pr.checks ?? []
-        if !checks.isEmpty {
-            Section {
-                DisclosureGroup(isExpanded: $checksExpanded) {
-                    ForEach(Array(checks.enumerated()), id: \.offset) { _, check in
-                        Group {
-                            if let url = check.url.flatMap(URL.init) {
-                                Link(destination: url) { checkRow(check) }
-                                    .foregroundStyle(.primary)
-                            } else {
-                                checkRow(check)
-                            }
-                        }
-                        .listRowBackground(checkRowTint(check.rank))
-                    }
-                } label: {
-                    HStack(spacing: 10) {
-                        checkIcon(checksRank(checks))
-                        Text(checksHeader(checks))
-                            .font(.subheadline)
-                            .foregroundStyle(OS1VisualStyle.text)
-                        Spacer(minLength: 8)
-                    }
-                }
-            }
-        }
-    }
-
-    private func checksRank(_ checks: [PrCheck]) -> PrCheck.Rank {
-        let ranks = checks.map(\.rank)
-        if ranks.contains(.failure) { return .failure }
-        if ranks.contains(.pending) { return .pending }
-        return .success
-    }
-
-    private func checksHeader(_ checks: [PrCheck]) -> String {
-        guard !checks.isEmpty else { return "Checks" }
-        let passed = checks.filter { $0.rank == .success }.count
-        if checks.contains(where: { $0.rank == .failure }) {
-            let failed = checks.filter { $0.rank == .failure }.count
-            return "\(failed) check\(failed == 1 ? "" : "s") failed"
-        }
-        if checks.contains(where: { $0.rank == .pending }) { return "Checks running" }
-        // Not "all \(passed) passed": the rest are skipped or neutral, so a
-        // count here would disagree with the list it opens.
-        return passed == checks.count ? "All \(passed) checks passed" : "All checks passed"
-    }
-
     private func checkRow(_ check: PrCheck) -> some View {
         HStack(spacing: 10) {
             checkIcon(check.rank)
@@ -788,7 +733,6 @@ struct PrPanelView: View {
             }
         }
     }
-
     /// Nil for a check that is fine. See `OS1VisualStyle.checkRowFailure` for
     /// why only the rows that want something are painted.
     private func checkRowTint(_ rank: PrCheck.Rank) -> Color? {
@@ -798,7 +742,6 @@ struct PrPanelView: View {
         case .success, .neutral: nil
         }
     }
-
     @ViewBuilder
     private func checkIcon(_ rank: PrCheck.Rank) -> some View {
         // The app's own status palette, not SwiftUI's stock green/red/orange:
