@@ -41,11 +41,14 @@
         var h = document.documentElement;
         h.setAttribute("data-theme", eff);
         var accent = localStorage.getItem("opensession-accent");
-        if (accent === "gold") {
-          accent = "lime";
+        // Accents whose colour was retired; keep in sync with RETIRED_THEMES in
+        // lib/accent-theme.ts, which is what runs once the bundle is up.
+        var retired = { gold: "lime", indigo: "sky" };
+        if (retired[accent]) {
+          accent = retired[accent];
           localStorage.setItem("opensession-accent", accent);
         }
-        var accents = ["teal", "sky", "indigo", "purple", "pink", "coral", "orange", "lime", "green", "mono"];
+        var accents = ["teal", "sky", "purple", "pink", "coral", "orange", "brown", "lime", "green", "mono"];
         h.setAttribute("data-accent", accents.indexOf(accent) >= 0 ? accent : "teal");
         h.style.colorScheme = eff;
         var m = document.querySelector('meta[name="theme-color"]');

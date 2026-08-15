@@ -87,9 +87,10 @@ describe("accent theme", () => {
 		);
 		expect(css).toContain("--on-accent-light: #000000");
 		expect(css).toContain("--on-accent-dark: #000000");
-		expect(css).toContain("--accent-ink-light: #607400");
-		expect(html).toContain('if (accent === "gold")');
-		expect(html).toContain('accent = "lime"');
+		expect(css).toContain("--accent-ink-light: #8d7110");
+		// The pre-paint bootstrap has to retire the same selections the bundle
+		// does, or a migrated accent flashes its old id for one frame.
+		expect(html).toContain('var retired = { gold: "lime", indigo: "sky" }');
 	});
 
 	test("every fill carries a legible glyph", () => {
@@ -111,6 +112,12 @@ describe("accent theme", () => {
 		storage.setItem("opensession-accent", "gold");
 		expect(getAccentTheme()).toBe("lime");
 		expect(storage.getItem("opensession-accent")).toBe("lime");
+	});
+
+	test("migrates the removed Indigo accent to its nearest surviving hue", () => {
+		storage.setItem("opensession-accent", "indigo");
+		expect(getAccentTheme()).toBe("sky");
+		expect(storage.getItem("opensession-accent")).toBe("sky");
 	});
 
 	test("defaults to teal for missing or unknown values", () => {

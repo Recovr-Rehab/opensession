@@ -583,43 +583,49 @@ html[data-accent="sky"] {
 	--accent-dark: #2595d5;
 }
 
-html[data-accent="indigo"] {
-	--accent-light: #6361f5;
-	--accent-dark: #767bf6;
-}
-
 html[data-accent="purple"] {
-	--accent-light: #ad26e8;
-	--accent-dark: #bd4bf6;
+	--accent-light: #825dbc;
+	--accent-dark: #885fc5;
 }
 
 html[data-accent="pink"] {
-	--accent-light: #d1238c;
-	--accent-dark: #ee29a1;
+	--accent-light: #9f52a1;
+	--accent-dark: #a653a9;
 }
 
 html[data-accent="coral"] {
-	--accent-light: #dd243b;
-	--accent-dark: #f73648;
+	--accent-light: #c44b4d;
+	--accent-dark: #cc5354;
 }
 
 html[data-accent="orange"] {
-	--accent-light: #e84f00;
-	--accent-dark: #ff5a00;
+	--accent-light: #d26232;
+	--accent-dark: #db6634;
 }
 
+html[data-accent="brown"] {
+	--accent-light: #724727;
+	--accent-dark: #7e502f;
+}
+
+/* Honey is the one accent whose two fills are genuinely different colours.
+   Yellow only exists at high lightness, so the cream that reads beautifully on
+   the dark plate is 1.3:1 against a white page. A button in it dissolves into
+   the page. The light fill is deepened until it reads as a control, as far
+   as it can go before it turns to mustard. Both take a black glyph, and the
+   ink form (a label or icon rather than a plate) deepens further still. */
 html[data-accent="lime"] {
-	--accent-light: #e4f222;
-	--accent-dark: #e4f222;
-	--accent-ink-light: #607400;
-	--accent-ink-dark: #e4f222;
+	--accent-light: #efc53f;
+	--accent-dark: #f4e78f;
+	--accent-ink-light: #8d7110;
+	--accent-ink-dark: #f4e78f;
 	--on-accent-light: #000000;
 	--on-accent-dark: #000000;
 }
 
 html[data-accent="green"] {
-	--accent-light: #209148;
-	--accent-dark: #26a653;
+	--accent-light: #2b8948;
+	--accent-dark: #238f48;
 }
 
 html[data-accent="mono"] {

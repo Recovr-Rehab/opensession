@@ -1,13 +1,32 @@
+/**
+ * Ten accents, ordered as a walk around the hue wheel starting at the default.
+ *
+ * Every fill sits at lightness 0.56 to 0.63 and carries chroma 0.13, or 80% of
+ * what its hue can physically reach in sRGB, whichever is lower. That ceiling
+ * is why the warm and teal hues read quieter than the purples without looking
+ * underpowered: at a shared lightness, orange tops out around chroma 0.17
+ * while violet reaches 0.29, so a single flat chroma would run one at its limit
+ * and the other at a third of its range.
+ *
+ * Two entries sit outside the rule on purpose. `lime` (Honey) is a yellow, and
+ * yellow only exists at high lightness, so no value both reads as yellow and
+ * separates from a white page. It takes a genuinely different fill per
+ * appearance and a black glyph. `mono` has no hue to place.
+ *
+ * The `value` is persisted per person, so these ids outlive their colours:
+ * changing a hex re-themes everyone who chose that slot, while renaming one
+ * drops them back to the default. Migrate instead: see `getAccentTheme`.
+ */
 export const ACCENT_THEME_OPTIONS = [
 	{ value: "teal", label: "Teal", light: "#208a94", dark: "#269da9" },
 	{ value: "sky", label: "Sky", light: "#1f82bb", dark: "#2595d5" },
-	{ value: "indigo", label: "Indigo", light: "#6361f5", dark: "#767bf6" },
-	{ value: "purple", label: "Violet", light: "#ad26e8", dark: "#bd4bf6" },
-	{ value: "pink", label: "Rose", light: "#d1238c", dark: "#ee29a1" },
-	{ value: "coral", label: "Coral", light: "#dd243b", dark: "#f73648" },
-	{ value: "orange", label: "Tangerine", light: "#e84f00", dark: "#ff5a00" },
-	{ value: "lime", label: "Lime", light: "#e4f222", dark: "#e4f222" },
-	{ value: "green", label: "Clover", light: "#209148", dark: "#26a653" },
+	{ value: "purple", label: "Violet", light: "#825dbc", dark: "#885fc5" },
+	{ value: "pink", label: "Orchid", light: "#9f52a1", dark: "#a653a9" },
+	{ value: "coral", label: "Coral", light: "#c44b4d", dark: "#cc5354" },
+	{ value: "orange", label: "Tangerine", light: "#d26232", dark: "#db6634" },
+	{ value: "brown", label: "Walnut", light: "#724727", dark: "#7e502f" },
+	{ value: "lime", label: "Honey", light: "#efc53f", dark: "#f4e78f" },
+	{ value: "green", label: "Clover", light: "#2b8948", dark: "#238f48" },
 	{ value: "mono", label: "Mono", light: "#000000", dark: "#ffffff" },
 ] as const;
 
@@ -25,11 +44,22 @@ export function isAccentTheme(value: string | null): value is AccentTheme {
 	return value !== null && VALID_THEMES.has(value as AccentTheme);
 }
 
+/**
+ * Selections that outlived their colour. Each maps to the nearest hue still in
+ * the palette, so someone who chose a removed accent lands somewhere close
+ * rather than back on the default.
+ */
+const RETIRED_THEMES: Record<string, AccentTheme> = {
+	gold: "lime",
+	indigo: "sky",
+};
+
 export function getAccentTheme(): AccentTheme {
 	const stored = localStorage.getItem(KEY);
-	if (stored === "gold") {
-		localStorage.setItem(KEY, "lime");
-		return "lime";
+	const retired = stored === null ? undefined : RETIRED_THEMES[stored];
+	if (retired) {
+		localStorage.setItem(KEY, retired);
+		return retired;
 	}
 	return isAccentTheme(stored) ? stored : DEFAULT_ACCENT_THEME;
 }

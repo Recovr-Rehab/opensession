@@ -15,17 +15,22 @@ import UIKit
 /// the two hexes it wears in light and dark.
 ///
 /// What sits ON the accent is deliberately NOT part of that table. Jewel tones
-/// take white ink, bright lime takes black, and `mono` inverts with its fill.
-/// The contrast test guards that rule, so replacing either hex cannot ship an
+/// take white ink, honey takes black, and `mono` inverts with its fill. The
+/// contrast test guards that rule, so replacing either hex cannot ship an
 /// illegible glyph.
+///
+/// The cases are a walk around the hue wheel from the default. `lime` is the id
+/// Honey is stored under and `pink` the one Orchid is stored under: the raw
+/// value is persisted per device, so it outlives the colour it was named for.
+/// Renaming a case resets everyone who chose it, so migrate in `AccentStore`.
 enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
     case teal
     case sky
-    case indigo
     case purple
     case pink
     case coral
     case orange
+    case brown
     case lime
     case green
     case mono
@@ -38,32 +43,40 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .teal: "Teal"
         case .sky: "Sky"
-        case .indigo: "Indigo"
         case .purple: "Violet"
-        case .pink: "Rose"
+        case .pink: "Orchid"
         case .coral: "Coral"
         case .orange: "Tangerine"
-        case .lime: "Lime"
+        case .brown: "Walnut"
+        case .lime: "Honey"
         case .green: "Clover"
         case .mono: "Mono"
         }
     }
 
-    /// Most appearances use 92% of each hue's maximum sRGB chroma. Orange is
-    /// deliberately brighter and more saturated, like a signal colour, while
-    /// still carrying the palette's white glyph at 3:1. `mono` preserves the
+    /// Every fill sits at lightness 0.56 to 0.63 with chroma 0.13, or 80% of
+    /// what its hue can physically reach in sRGB, whichever is lower. That
+    /// ceiling is what keeps the set coherent: at a shared lightness, orange
+    /// tops out around chroma 0.17 while violet reaches 0.29, so one flat
+    /// chroma would run violet at a third of its range and orange at its limit.
+    ///
+    /// Honey is the exception, and its two values are different colours rather
+    /// than two steps of one. Yellow only exists at high lightness, so the
+    /// cream that reads beautifully on the dark plate is 1.3:1 against a white
+    /// page; the light fill is deepened until it reads as a control, which is
+    /// as far as it can go before it turns to mustard. `mono` preserves the
     /// app's original monochrome accent.
     var fills: (light: UInt32, dark: UInt32) {
         switch self {
         case .teal: (0x20_8A_94, 0x26_9D_A9)
         case .sky: (0x1F_82_BB, 0x25_95_D5)
-        case .indigo: (0x63_61_F5, 0x76_7B_F6)
-        case .purple: (0xAD_26_E8, 0xBD_4B_F6)
-        case .pink: (0xD1_23_8C, 0xEE_29_A1)
-        case .coral: (0xDD_24_3B, 0xF7_36_48)
-        case .orange: (0xE8_4F_00, 0xFF_5A_00)
-        case .lime: (0xE4_F2_22, 0xE4_F2_22)
-        case .green: (0x20_91_48, 0x26_A6_53)
+        case .purple: (0x82_5D_BC, 0x88_5F_C5)
+        case .pink: (0x9F_52_A1, 0xA6_53_A9)
+        case .coral: (0xC4_4B_4D, 0xCC_53_54)
+        case .orange: (0xD2_62_32, 0xDB_66_34)
+        case .brown: (0x72_47_27, 0x7E_50_2F)
+        case .lime: (0xEF_C5_3F, 0xF4_E7_8F)
+        case .green: (0x2B_89_48, 0x23_8F_48)
         case .mono: (0x00_00_00, 0xFF_FF_FF)
         }
     }
@@ -76,13 +89,14 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
         ))
     }
 
-    /// The accent as foreground ink on the page. Ramp-style Lime keeps its
-    /// neon fill in both appearances, but needs a deeper lime on light surfaces
-    /// when it is used for an icon or label rather than as a plate or ring.
+    /// The accent as foreground ink on the page. Honey's light fill already
+    /// gives up saturation to separate from a white page, and as a label or
+    /// icon rather than a plate it has to clear text contrast too, so it
+    /// deepens once more.
     var accentInk: Color {
         guard self == .lime else { return accent }
         return Color(platformColor: AccentTheme.dynamic(
-            light: AccentTheme.platformColor(0x60_74_00),
+            light: AccentTheme.platformColor(0x8D_71_10),
             dark: AccentTheme.platformColor(fills.dark)
         ))
     }
@@ -115,8 +129,8 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
     }
 
     /// What sits on top of the fill — the glyph in the send disc and every
-    /// other prominent accent control. Jewel tones use white, bright lime uses
-    /// black, and monochrome keeps the app's original black/white inversion.
+    /// other prominent accent control. Jewel tones use white, honey uses black,
+    /// and monochrome keeps the app's original black/white inversion.
     var onAccent: Color {
         if self == .lime { return .black }
         guard self == .mono else { return .white }
@@ -242,6 +256,7 @@ final class AccentStore {
         let normalized = switch stored {
         case "blue": AccentTheme.sky.rawValue
         case "gold": AccentTheme.lime.rawValue
+        case "indigo": AccentTheme.sky.rawValue
         default: stored
         }
         theme = AccentTheme(rawValue: normalized) ?? .default
