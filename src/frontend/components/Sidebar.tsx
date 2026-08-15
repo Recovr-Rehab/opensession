@@ -2437,7 +2437,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		{
 			id: "feed",
 			label: SIDEBAR_TOOL_LABELS.feed,
-			icon: <IconFeed />,
+			icon: <IconFeed className="-translate-y-px" />,
 			active: feedActive,
 			onClick: onOpenFeed,
 			title: "What the team has been shipping",
@@ -2445,7 +2445,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		{
 			id: "prs",
 			label: SIDEBAR_TOOL_LABELS.prs,
-			icon: <IconPullRequest />,
+			icon: <IconPullRequest className="translate-x-px -translate-y-px" />,
 			active: prsActive,
 			onClick: onOpenPrs,
 			title: "Pull request worktrees",
