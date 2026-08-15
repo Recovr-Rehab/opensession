@@ -1488,7 +1488,7 @@ html.wco .app-body.sidebar-collapsed
    as well as the mirror so the two still agree glyph for glyph; a margin on
    this span alone would slide the painted text off the caret behind it), and
    wears it only while a mention is in the draft, so an ordinary sentence keeps
-   the type's own spacing. See `composerMentionSpacing` in
+   the type's own spacing. See `composerPillSpacing` in
    lib/composer-classes.ts.
 
    That sets a space at 7.2px, and the wash takes 5px of it on each side. What
@@ -1558,15 +1558,13 @@ html.wco .app-body.sidebar-collapsed
    destination rather than an alert (see `.session-link[data-session-id]`).
    Accent on both would spend the one distinction the two pills exist to draw.
 
-   It reaches 4px rather than the mention's 5, and that one pixel is what buys
-   it out of the word-spacing tax. A 14px draft sets words 3.7px apart, so a
-   5px wash overruns the space and the field has to widen every space in the
-   draft to make room (`composerMentionSpacing` in lib/composer-classes.ts) —
-   which, measured side by side, costs a whole sentence its spacing to gain the
-   pill nothing the eye can find. At 4px the wash lands inside the space the
-   type already gives it, under the next word's own side bearing. A mention is
-   usually one word in a sentence of prose; a pasted link is often the whole
-   sentence, which is why the two pills answer this differently.
+   It reaches the same 5px the mention does, and buys the room the same way:
+   the draft widens its word space while a pill is in it (`composerPillSpacing`
+   in lib/composer-classes.ts), which takes a 3.7px space to 7.2px and leaves
+   2.2px of gap outside the wash. A pill has to sit apart from the words around
+   it, and the space beside it is the only place that room can come from — a
+   wash that reaches to the edge of the next word reads as text with a
+   highlighter through it rather than as an object in the sentence.
 
    Where the mention paints its wash on a pseudo-element, this one paints on
    the span, and that is the difference between the two that is NOT taste. A
@@ -1576,11 +1574,11 @@ html.wco .app-body.sidebar-collapsed
    pill around the id. `box-decoration-break: clone` gives each line fragment
    its own capsule.
 
-   The 4px then has to come from somewhere that is not padding, because
+   The 5px then has to come from somewhere that is not padding, because
    horizontal padding on an inline box moves every glyph after it and the
    mirror may not move a glyph. Two offset copies of the box do it instead: an
    outer box-shadow is clipped to OUTSIDE the border box, so each copy shows
-   only as a 4px sliver at one end, the two never overlap, and the wash stays
+   only as a 5px sliver at one end, the two never overlap, and the wash stays
    one flat translucent value rather than doubling where they meet. Vertical
    padding is safe (it does not affect line layout) and is what gives the
    capsule its height. */
@@ -1589,8 +1587,8 @@ html.wco .app-body.sidebar-collapsed
 	border-radius: 999px;
 	background: var(--hover);
 	box-shadow:
-		4px 0 0 var(--hover),
-		-4px 0 0 var(--hover);
+		5px 0 0 var(--hover),
+		-5px 0 0 var(--hover);
 	-webkit-box-decoration-break: clone;
 	box-decoration-break: clone;
 }

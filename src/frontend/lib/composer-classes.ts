@@ -74,13 +74,14 @@ export const composerTextarea =
  *  permanent 3.5px did. Scoped, the cost lands on the draft that wanted the
  *  chip and ordinary prose keeps the type's own spacing.
  *
- *  The session pill declines it, and that is a deliberate difference rather
- *  than an oversight: measured side by side, a sentence around a session id
- *  reads worse set this way than the pill does one pixel tighter, so that
- *  wash takes 4px instead of 5 and lives inside the space the type already
- *  gives it (base.css). A mention is usually one word in a sentence of prose;
- *  a pasted link is often the sentence. */
-export const composerMentionSpacing = "[word-spacing:3.5px]";
+ *  Both pills wear it, the mention and the session id, because both are
+ *  objects in a sentence rather than words in it: a wash that runs up to the
+ *  edge of the next word reads as a highlighter stroke through the text. The
+ *  session pill was briefly built to go without, on the grounds that the
+ *  sentence around it looked better unwidened — it does, and it is still the
+ *  wrong trade, because what the reader loses is the pill's separation from
+ *  the words it sits between. */
+export const composerPillSpacing = "[word-spacing:3.5px]";
 export const composerTextareaPadding = "px-0 pt-0.5 pb-1";
 /** In the resting pill the field is one row inside a 4px-inset box, so it
  *  carries the horizontal breathing room and no vertical padding at all. */

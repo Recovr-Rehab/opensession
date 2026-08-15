@@ -6,6 +6,7 @@ import { loadDraft, onDraftsChanged, saveDraft } from "../lib/drafts";
 import {
   composerHighlightHtml,
   composerMentionRanges,
+  composerSessionRanges,
   needsComposerHighlight,
 } from "../lib/composer-highlight";
 import { insertPastedSessionId } from "../lib/session-url";
@@ -43,7 +44,7 @@ import {
   composerSendQueue,
   composerSendSteer,
   composerSendStop,
-  composerMentionSpacing,
+  composerPillSpacing,
   composerTextarea,
   composerTextareaPadding,
   composerTextareaPaddingMinimized,
@@ -795,12 +796,13 @@ export function Composer({
     () => composerMentionRanges(text, people),
     [text, people],
   );
-  // A mention pill's padding is bought out of the space beside it, so the draft
-  // pays a wider word space only while it holds one. Both the field and the
-  // mirror wear it, or the painted text slides off the caret behind it. The
-  // session pill buys nothing here — it takes a narrower wash instead, so an
-  // ordinary sentence around a pasted link keeps the type's own spacing.
-  const hasMention = mentionRanges.length > 0;
+  // A pill's padding is bought out of the space beside it, so the draft pays a
+  // wider word space only while it holds one. Both the field and the mirror
+  // wear it, or the painted text slides off the caret behind it. Both KINDS of
+  // pill ask for it: a session id sits between words exactly as a mention does,
+  // and without the room its wash runs up against them.
+  const hasPill =
+    mentionRanges.length > 0 || composerSessionRanges(text).length > 0;
   useEffect(() => {
     // The textarea scrolls internally at max-height; keep the mirror locked to it.
     const el = textareaRef.current;
@@ -1123,7 +1125,7 @@ export function Composer({
                 composerTextarea,
                 composerTextareaPadding,
                 "pointer-events-none absolute inset-0 z-0 overflow-hidden text-fg break-words whitespace-pre-wrap select-none",
-                hasMention && composerMentionSpacing,
+                hasPill && composerPillSpacing,
                 // A pill's wash reaches past its own box (base.css), so one at
                 // either end of a line would be cut off by this box. The
                 // padding pushes the clip edge out; the matching negative
@@ -1153,7 +1155,7 @@ export function Composer({
             className={cn(
               "composer-textarea",
               composerTextarea,
-              hasMention && composerMentionSpacing,
+              hasPill && composerPillSpacing,
               minimized
                 ? composerTextareaPaddingMinimized
                 : composerTextareaPadding,
