@@ -96,6 +96,11 @@ export function StagingLink({
 	// comment yet — enough to show a loading placeholder, not enough to link.
 	const [deployPending, setDeployPending] = useState(false);
 	const { copied, copy } = useCopy();
+	// Read up here with the other hooks, not beside the tooltip it feeds. Every
+	// state below this line returns early, so a call further down runs on some
+	// renders and not others: the render where the URL lands would add a hook the
+	// previous render didn't have, and React tears the whole tree down over it.
+	const openChord = useShortcutLabel("open-preview");
 
 	// A merged/closed PR's alias no longer points at this change — the link is a
 	// pre-merge testing affordance. Repos without deployment metadata simply
@@ -247,7 +252,6 @@ export function StagingLink({
 		: rebuilding
 			? ICON_REBUILDING
 			: ICON_READY;
-	const openChord = useShortcutLabel("open-preview");
 	const chordHint = openChord ? `${openChord}; ` : "";
 	const tooltip = (copyHint: string) =>
 		copied
