@@ -441,15 +441,18 @@ export function IconHome(p: IconProps) {
   );
 }
 
+/**
+ * Broadcast arcs, for the Feed: what the team has been shipping, as it lands.
+ * It used to be three dots beside three lines, which is the picture Tasks
+ * wears (IconListCircles) one row below it in the sidebar, so the two tools
+ * were telling you the same thing about themselves.
+ */
 export function IconFeed(p: IconProps) {
   return (
     <Svg {...p}>
-      <circle {...stroke} cx="6" cy="6.75" r="1.75" />
-      <path {...stroke} d="M10.75 6.75H19.25" />
-      <circle {...stroke} cx="6" cy="12" r="1.75" />
-      <path {...stroke} d="M10.75 12H19.25" />
-      <circle {...stroke} cx="6" cy="17.25" r="1.75" />
-      <path {...stroke} d="M10.75 17.25H19.25" />
+      <path {...stroke} d="M5.75 11.25A7.5 7.5 0 0 1 13.25 18.75" />
+      <path {...stroke} d="M5.75 5.75A13 13 0 0 1 18.75 18.75" />
+      <circle cx="6.6" cy="17.9" r="1.6" fill="currentColor" />
     </Svg>
   );
 }

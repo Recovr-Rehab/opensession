@@ -150,7 +150,7 @@ import {
 } from "./icons";
 import { Button } from "../ui/button";
 import { Tooltip } from "../ui/tooltip";
-import { ContextMenu, Menu } from "../ui/menu";
+import { ContextMenu, MENU_ICON, Menu } from "../ui/menu";
 import { Popover } from "../ui/popover";
 import { cn } from "../ui/cn";
 import { RowCardPopup } from "./SidebarRowCards";
@@ -4358,31 +4358,56 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									<ContextMenu.Item
 										onClick={() => setToolVisible(tool.id, false)}
 									>
-										Remove from toolbar
+										<IconEyeOff size={20} className={MENU_ICON} />
+										<span className="min-w-0 flex-1 truncate">
+											Remove from toolbar
+										</span>
 									</ContextMenu.Item>
 									<ContextMenu.Separator />
 									<ContextMenu.Group>
 										<ContextMenu.GroupLabel>
 											Show in toolbar
 										</ContextMenu.GroupLabel>
-										{fittingTools.map((t) => (
-											<ContextMenu.CheckboxItem
-												key={t.id}
-												checked={!hiddenTools.has(t.id)}
-												onCheckedChange={(checked) =>
-													setToolVisible(t.id, checked)
-												}
-											>
-												<span className="flex size-4 shrink-0 items-center justify-center rounded-xs border border-line-strong text-fg">
-													{!hiddenTools.has(t.id) && <IconCheck size={12} />}
-												</span>
-												<span className="text-fg">{t.label}</span>
-											</ContextMenu.CheckboxItem>
-										))}
+										{/* Each row wears the mark it wears in the sidebar, the
+										    way the sidebar's own right-click menu lists them, so
+										    the menu reads as the strip it edits rather than as a
+										    form. That spends the leading slot, so the tick moves
+										    to the trailing edge. The glyphs are drawn at the
+										    rail's 22px; the menu's icon column is 20. */}
+										{fittingTools.map((t) => {
+											const shown = !hiddenTools.has(t.id);
+											return (
+												<ContextMenu.CheckboxItem
+													key={t.id}
+													checked={shown}
+													onCheckedChange={(checked) =>
+														setToolVisible(t.id, checked)
+													}
+												>
+													<span
+														className={cn(
+															"inline-flex shrink-0 [&_svg]:size-[20px]",
+															MENU_ICON,
+														)}
+													>
+														{t.icon}
+													</span>
+													<span className="min-w-0 flex-1 truncate">
+														{t.label}
+													</span>
+													{shown && (
+														<IconCheck size={20} className="shrink-0 text-dim" />
+													)}
+												</ContextMenu.CheckboxItem>
+											);
+										})}
 									</ContextMenu.Group>
 									<ContextMenu.Separator />
 									<ContextMenu.Item onClick={hideAllSidebarTools}>
-										Hide tools from sidebar
+										<IconEyeOff size={20} className={MENU_ICON} />
+										<span className="min-w-0 flex-1 truncate">
+											Hide tools from sidebar
+										</span>
 									</ContextMenu.Item>
 								</ContextMenu.Popup>
 							</ContextMenu.Root>
