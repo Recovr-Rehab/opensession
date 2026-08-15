@@ -1928,8 +1928,40 @@ a.pr-ref::before {
 	width: 0;
 	margin-inline-end: -4px;
 }
-a.pr-ref::before {
-	margin-inline-end: -3px;
+
+/* One set of numbers for the four of them, in one place, because four copies
+   of "about 6 and about 8" drifted into 5/6 on one side and 8/9 on the other
+   and a sentence holding two chips showed it. What the eye compares is the air
+   at the two ENDS of the pill, so the label side is the larger number: the
+   glyph carries ~3px of its own inside its box, and a letter ends on a stem
+   with almost none. That lands every chip within a pixel of even.
+
+   The one shape this cannot make even is a chip whose leading item is a
+   PHOTO, which is dense to the edge of its box with no air of its own, so the
+   face sits closer to the pill than a glyph does. Growing the number to match
+   would leave the face floating in a hole rather than reading as the head of
+   the chip. */
+a.asset-ref,
+.session-link[data-session-id],
+.automation-link[data-automation-id],
+a.person-chip,
+a.pr-ref {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	/* Never wider than the bubble it sits in; the label ellipsizes instead of
+	   pushing the chip past the edge. */
+	max-width: 100%;
+	/* Its own line box. Without this the paragraph's 24px lands inside the pill
+	   and pads it out, half of that under the baseline. */
+	line-height: 1.15;
+	/* Top and bottom are unequal on purpose, and that is what makes them LOOK
+	   equal: descenders fill the room under the baseline while nothing fills
+	   the room over the caps, so a balanced pill reads tight up there. */
+	padding: 2.5px 8px 1px 5.5px;
+	cursor: pointer;
+	text-decoration: none;
+	white-space: nowrap;
 }
 
 /* Every chip below is as tall as the words inside it and no taller: the label's
@@ -1944,22 +1976,10 @@ a.pr-ref::before {
    distinguish it from an ordinary web link without turning a sentence into a
    row of large cards; the full path remains in the link's title. */
 a.asset-ref {
-	display: inline-flex;
-	max-width: 100%;
-	align-items: center;
-	gap: 4px;
-	/* Its own line box, like the three chips below. Without this the
-	   paragraph's 24px lands inside the pill and pads it out, half of that
-	   under the baseline. */
-	line-height: 1.15;
-	padding: 2.5px 9px 1px 6px;
 	border: 0;
 	border-radius: calc(9px * var(--rf)); corner-shape: var(--cs);
 	background: var(--accent-soft);
 	color: var(--text);
-	cursor: pointer;
-	text-decoration: none;
-	white-space: nowrap;
 	transition: background var(--dur-micro) var(--ease);
 }
 a.asset-ref:hover {
@@ -2019,12 +2039,6 @@ a.asset-ref:focus-visible {
    arrow. */
 .session-link[data-session-id],
 .automation-link[data-automation-id] {
-	display: inline-flex;
-	align-items: center;
-	gap: 4px;
-	/* Never wider than the bubble it sits in; the label ellipsizes instead of
-	   pushing the chip past the edge. */
-	max-width: 100%;
 	font-size: 0.95em;
 	background: var(--hover);
 	border: 0;
@@ -2033,15 +2047,6 @@ a.asset-ref:focus-visible {
 	   --rf scales it) takes the full box, so the chip reads as a capsule
 	   around its label rather than a rounded rectangle sitting in prose. */
 	border-radius: calc(9px * var(--rf)); corner-shape: var(--cs);
-	/* Top and bottom are unequal on purpose, and that is what makes them LOOK
-	   equal: descenders fill the room under the baseline while nothing fills
-	   the room over the caps, so a balanced pill reads tight up there. Same
-	   split as the three chips around it. */
-	padding: 2.5px 8px 1px 6px;
-	line-height: 1.15;
-	cursor: pointer;
-	text-decoration: none;
-	white-space: nowrap;
 	transition:
 		background var(--dur-micro) var(--ease),
 		scale var(--dur-micro) var(--ease);
@@ -2127,10 +2132,13 @@ a.asset-ref:focus-visible {
    fill is deliberate — a mention is addressed at somebody, so it should carry
    more weight in a paragraph than a session or a PR does. */
 a.person-chip {
-	display: inline-flex;
-	align-items: center;
-	gap: 4px;
-	max-width: 100%;
+	/* The one number the family cannot share. Every other chip leads with a
+	   glyph, which carries about 3px of its own air inside its box, so its
+	   label side needs that much more to read even. A face is a picture, dense
+	   to the edge of its box, so the same 8px after the name left the pill
+	   lopsided: 5.5px of air before the face against 8.4px after the last
+	   letter. */
+	padding-right: 6px;
 	font-size: 0.95em;
 	font-weight: 560;
 	background: color-mix(in srgb, var(--accent) 12%, transparent);
@@ -2140,16 +2148,6 @@ a.person-chip {
 	   which at this height reads as a different object in the same sentence:
 	   a squircle capsule is what every other pill in the app is. */
 	border-radius: calc(9px * var(--rf)); corner-shape: var(--cs);
-	/* The sides need the room the corners take away; the 2/1 split
-	   top-to-bottom is the same reading correction as its neighbours. The 4px
-	   on the face's side is what keeps the pill reading as a pill AROUND the
-	   picture: a photo fills its whole box where a stroke glyph carries its
-	   own air, so it needs the room the session chip's glyph does not. */
-	padding: 2px 9px 1px 4px;
-	line-height: 1.15;
-	cursor: pointer;
-	text-decoration: none;
-	white-space: nowrap;
 	transition: background var(--dur-micro) var(--ease);
 }
 a.person-chip:hover {
@@ -2204,23 +2202,13 @@ a.person-chip:focus-visible {
    scoped under .markdown: the chip turns up in every surface that renders
    session markdown, and a few of those containers don't carry that class. */
 a.pr-ref {
-	display: inline-flex;
-	align-items: center;
-	gap: 3px;
 	background: var(--hover);
 	color: var(--text);
 	border: 0;
 	/* Capsule corner, same as the session chip above. */
 	border-radius: calc(9px * var(--rf)); corner-shape: var(--cs);
-	/* Unequal to read as equal, the same split as the session chip above and
-	   for the same reason: descenders fill the room under the baseline, so it
-	   is the TOP that needs the padding. */
-	padding: 2.5px 8px 1px 5px;
-	line-height: 1.15;
 	font-weight: 600;
 	font-variant-numeric: tabular-nums;
-	text-decoration: none;
-	white-space: nowrap;
 	transition:
 		background var(--dur-micro) var(--ease),
 		scale var(--dur-micro) var(--ease);
