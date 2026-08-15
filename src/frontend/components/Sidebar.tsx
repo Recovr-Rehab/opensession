@@ -128,7 +128,7 @@ import {
 	IconArchive,
 	IconFilter,
 	IconX,
-	IconGear,
+	IconSliders,
 	IconCheck,
 	IconInbox,
 	IconPencil,
@@ -5462,15 +5462,18 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 												className={cn(
 													SIDEBAR_GROUP_COUNT,
 													// The one heading that still wants the old rule's
-													// right-hand pin: its cog takes this slot on hover.
+													// right-hand pin: its settings glyph takes this
+													// slot on hover.
 													"ml-auto pr-1 group-hover/gh:hidden",
 												)}
 											>
 												{group.items.length}
 											</span>
-											{/* Hover swaps the count for a cog that jumps to this
-											    automation in Settings (span, not button — we're
-											    inside the header button). */}
+											{/* Hover swaps the count for the sliders glyph that
+											    jumps to this automation in Settings (span, not
+											    button, since we're inside the header button). Its
+											    target is the row's full height, so the click can
+											    land anywhere along the end of the row. */}
 											<span
 												role="button"
 												className={SIDEBAR_AUTO_COG}
@@ -5480,7 +5483,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 													onOpenAutomation(group.label);
 												}}
 											>
-												<IconGear size={17} />
+												<IconSliders size={20} />
 											</span>
 										</button>
 										{/* What the automation last concluded, above the runs
