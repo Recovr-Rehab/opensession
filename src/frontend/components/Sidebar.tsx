@@ -165,6 +165,7 @@ import {
 	reviewAskerFor,
 	reviewRequestTargetsPerson,
 	reviewRowMatchesPersonFilter,
+	rowIsOwnWork,
 	wsPrRequestsReviewFrom,
 } from "../lib/review-queue";
 import { ReviewAskerFace } from "./ReviewAskerFace";
@@ -1404,6 +1405,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// and reviewed-by lists are keyed by, unlike the display name the info panel's
 	// own review requests carry.
 	const mePersonKey = personKey(currentUser);
+	// GitHub listing you as a reviewer on a row that is NOT your own work. The
+	// reviewer team a PR requests expands to its members server-side, and the
+	// author that expansion drops is the bot that opened the PR — so a PR your
+	// own workspace produced asks you to review it, and the row would leave
+	// your status lanes for Needs review the moment it opens (rowIsOwnWork).
+	const githubAsksMeToReview = (r: WsRow) =>
+		wsPrRequestsReviewFrom(r, mePersonKey) && !rowIsOwnWork(r, mePersonKey);
 	const reviewScopeRows = useMemo(() => {
 		return wsRows.filter(
 			(r) =>
@@ -1413,7 +1421,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					r.sessions.map((session) => session.reviewRequest),
 					filter.person,
 					currentUser,
-					wsPrRequestsReviewFrom(r, mePersonKey),
+					githubAsksMeToReview(r),
 				),
 		);
 	}, [wsRows, activeSnoozeKeys, filter.person, currentUser, mePersonKey]);
@@ -1428,7 +1436,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			// keeps the row here after you click it: opening a PR mints its
 			// workspace row, which would otherwise cover the PR row and drop the
 			// whole thing out of the band before you had reviewed anything.
-			if (wsPrRequestsReviewFrom(r, mePersonKey)) return true;
+			if (githubAsksMeToReview(r)) return true;
 			if (wsPrApproved(r)) return false;
 			// You already reviewed the PR on GitHub (approve/changes/comment,
 			// no re-request since) → your part is done, so hide the row.

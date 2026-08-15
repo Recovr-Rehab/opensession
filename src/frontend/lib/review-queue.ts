@@ -85,6 +85,38 @@ export function wsPrRequestsReviewFrom(
 	);
 }
 
+/**
+ * Is this row `person`'s own work, rather than work waiting on their review?
+ *
+ * A pull request opened from a workspace asks the reviewer team, and the
+ * server expands a team ask to its members (`reviewRequestPersonKeys`) minus
+ * the PR's GitHub author — which is the bot that opened it, never the person
+ * whose session wrote the code. GitHub therefore asks the author of the work
+ * to review it, and without this test their live workspace leaves their own
+ * status lanes for Needs review the moment their PR opens.
+ *
+ * The test is the sidebar's own "in the room" rule: the row is yours if you
+ * own it or if one of its sessions is a conversation of yours. A PR someone
+ * asked you to review mints a session-less workspace row, so it keeps its
+ * claim on you until you open a session and work in it.
+ */
+export function rowIsOwnWork(
+	row: {
+		owner: string;
+		sessions: Pick<UnifiedSession, "automation" | "startedBy">[];
+	},
+	person: string,
+): boolean {
+	const key = personKey(person);
+	if (row.owner && personKey(row.owner) === key) return true;
+	return row.sessions.some(
+		(session) =>
+			!session.automation &&
+			!!session.startedBy &&
+			personKey(session.startedBy) === key,
+	);
+}
+
 export interface ReviewAsker {
 	/** Display name, or the GitHub login when the asker isn't a teammate. */
 	name: string;

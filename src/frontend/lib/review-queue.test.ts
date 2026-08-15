@@ -5,6 +5,7 @@ import {
 	prReviewCompletion,
 	reviewAskerFor,
 	reviewRowMatchesPersonFilter,
+	rowIsOwnWork,
 	wsPrRequestsReviewFrom,
 	type ReviewQueuePr,
 } from "./review-queue";
@@ -139,6 +140,63 @@ describe("wsPrRequestsReviewFrom", () => {
 						session({ id: "a", branch: "a", prReviewRequested: [] }),
 						session({ id: "b", branch: "b", prReviewRequested: ["kent"] }),
 					],
+				},
+				"kent",
+			),
+		).toBe(true);
+	});
+});
+
+describe("rowIsOwnWork", () => {
+	test("a session-less PR row is never your own work", () => {
+		expect(rowIsOwnWork({ owner: "kent", sessions: [] }, "michiel")).toBe(false);
+	});
+
+	test("the row you own is yours", () => {
+		expect(rowIsOwnWork({ owner: "michiel", sessions: [] }, "michiel")).toBe(
+			true,
+		);
+	});
+
+	test("a conversation of yours makes a bot-owned row yours", () => {
+		// The workspace a PR opened from can be minted by an automation, so its
+		// owner is a bot even when every session in it is a person's.
+		const row = {
+			owner: "automation",
+			sessions: [
+				session({ id: "a", branch: "a", startedBy: "Automation" }),
+				session({ id: "b", branch: "a", startedBy: "Michiel" }),
+			],
+		};
+		expect(rowIsOwnWork(row, "michiel")).toBe(true);
+		expect(rowIsOwnWork(row, "kent")).toBe(false);
+	});
+
+	test("an automation run in your workspace is not a conversation of yours", () => {
+		expect(
+			rowIsOwnWork(
+				{
+					owner: "automation",
+					sessions: [
+						session({
+							id: "review",
+							branch: "a",
+							startedBy: "Michiel",
+							automation: "github-pr-review",
+						}),
+					],
+				},
+				"michiel",
+			),
+		).toBe(false);
+	});
+
+	test("matches on the person key, so a full name still counts", () => {
+		expect(
+			rowIsOwnWork(
+				{
+					owner: "",
+					sessions: [session({ id: "a", branch: "a", startedBy: "Kent de Bruin" })],
 				},
 				"kent",
 			),
