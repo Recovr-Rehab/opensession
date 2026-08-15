@@ -939,8 +939,8 @@ export function PrPanel({
 
   const bodyHtml = useMemo(() => {
     if (!pr?.body) return "";
-    // The mirrored walkthrough section is link-only (GitHub can't reach the
-    // tailnet media) — drop it here, where WalkthroughCard renders the real thing.
+    // The mirrored walkthrough section is for GitHub readers; here
+    // WalkthroughCard renders the real thing, so drop the mirror.
     const stripped = pr.body
       .replace(
         /<!-- opensession:walkthrough -->[\s\S]*?<!-- \/opensession:walkthrough -->/,
