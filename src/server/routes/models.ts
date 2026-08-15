@@ -75,8 +75,13 @@ export async function handleModelsRoutes(
 		// full registry so the picker is never empty.
 		const engineModels = KNOWN_MODELS.filter((m) => m.provider === "opencode");
 		const engineConfigured = engineModels.length > 0;
+		// The global Dial/Orchestrator entries yield to a workspace's editable
+		// presets, but a no-workspace request (the /new composer) has nothing to
+		// replace them with — hiding them there left the instance default
+		// (`dial/…`) naming a model the picker couldn't show.
 		const visibleModels = (engineConfigured ? engineModels : KNOWN_MODELS)
-			.filter((model) => model.group !== "dial" && model.group !== "orchestrator");
+			.filter((model) =>
+				!workspace || (model.group !== "dial" && model.group !== "orchestrator"));
 		const presetModels = workspace ? (settings.presets || [])
 			.filter((preset) =>
 				/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(preset.id) &&
