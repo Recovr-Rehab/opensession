@@ -4,8 +4,9 @@ import { useEngines } from "../hooks/useEngines";
 import { baseModelId, engineModelId, modelEngine, type EngineId } from "../lib/model-engine";
 import { Menu } from "../ui/menu";
 import { cn } from "../ui/cn";
+import { Switch } from "../ui/switch";
 import { Tooltip } from "../ui/tooltip";
-import { IconBolt, IconCheck, IconChevronRight, IconUndo } from "./icons";
+import { IconBolt, IconCheck, IconChevronRight } from "./icons";
 import type { SessionUsage } from "../lib/types";
 import { UsageCost, UsageDetails } from "./UsageMeter";
 
@@ -269,15 +270,10 @@ type ModelMenuOption = {
 
 /**
  * Combined model + reasoning-effort pill (Claude-app-style): one trigger on the
- * composer's right edge opening a short menu of settings rows — Model, Engine,
- * Effort, Speed, Account — each showing its current value and opening a
- * submenu, over a "Reset to default" row. The model list used to sit at the top
- * level, which made the menu as tall as the registry and buried the four
- * settings under it; a row per setting keeps the menu one screenful whatever
- * the catalog does, at the cost of one extra hop to change model.
- *
- * Unlike PaletteSelect there is no native-select phone fallback: the nested
- * submenus don't map to a <select>, and Base UI menus handle touch fine.
+ * composer's right edge opening the model list, with the effort level behind an
+ * "Effort ›" submenu at the bottom. Unlike PaletteSelect there is no
+ * native-select phone fallback: the nested effort submenu doesn't map to a
+ * <select>, and Base UI menus handle touch fine.
  */
 export function ModelEffortSelect({
 	models,
@@ -344,25 +340,6 @@ export function ModelEffortSelect({
 		const next = engineModelId(engine, effectiveModel);
 		if (!next) return;
 		onModelChange(next === defaultModel ? "" : next);
-	};
-
-	// "Reset to default" puts every row in this menu back where a fresh session
-	// starts: following the default model (not pinning it), that model's own
-	// default effort, fast mode off, account on auto. Effort resolves against
-	// the DEFAULT model rather than the current one — reset changes both, and
-	// the effort the current model happens to support may not exist there.
-	const defaultEffortIds = models.find((m) => m.id === baseModelId(defaultModel))?.efforts ?? [];
-	const defaultEffort = defaultEffortIds.includes("high") ? "high" : defaultEffortIds[0];
-	const atDefault =
-		(modelDisabled || model === "" || model === defaultModel) &&
-		(!hasEffort || !defaultEffort || effectiveEffort === defaultEffort) &&
-		(!hasFastMode || !fastMode) &&
-		(!hasAccount || !accountId);
-	const resetToDefault = () => {
-		if (!modelDisabled) onModelChange("");
-		if (onEffortChange && defaultEffort) onEffortChange(defaultEffort);
-		if (onFastModeChange) onFastModeChange(false);
-		if (onAccountChange) onAccountChange("");
 	};
 
 	const optionFor = (id: string): ModelMenuOption => {
@@ -537,16 +514,15 @@ export function ModelEffortSelect({
 				{/* `data-effort` is a styling hook for the caller, not state: the
 				    new-session footer hides the suffix on ultra-narrow screens so the
 				    model name keeps the room, and the composer toolbar does not. */}
-				{hasFastMode && fastMode && (
-					<>
-						<IconBolt className="flex-none text-faint" size={20} />
-						<span className="sr-only">Fast mode</span>
-					</>
-				)}
 				<span className="truncate">{modelLabel}</span>
 				{hasEffort && (
 					<span data-effort className="flex-none text-faint">
 						{effortLabel}
+					</span>
+				)}
+				{hasFastMode && fastMode && (
+					<span data-effort className="flex-none text-faint">
+						Fast
 					</span>
 				)}
 			</Menu.Trigger>
@@ -568,58 +544,50 @@ export function ModelEffortSelect({
 						<Menu.Separator className="my-1" />
 					</>
 				)}
-				<Menu.SubmenuRoot>
-					<Menu.SubmenuTrigger className="justify-between gap-3">
-						<span className="min-w-0 truncate">Model</span>
-						<span className="flex min-w-0 flex-none items-center gap-1 text-dim">
-							<span className="truncate">{modelLabel}</span>
-							<IconChevronRight className="shrink-0" size={17} />
-						</span>
-					</Menu.SubmenuTrigger>
-					<Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
-						{groupedPrimary
-							? providerGroups.map((g, i) => (
-									<React.Fragment key={g.provider}>
-										{i > 0 && <Menu.Separator className="my-1" />}
-										<Menu.Group>
-											<Menu.GroupLabel>{g.label}</Menu.GroupLabel>
-											{g.options.map(renderModelOption)}
-										</Menu.Group>
-									</React.Fragment>
-								))
-							: primaryOptions.map(renderModelOption)}
-						{otherOptions.length > 0 && (
-							<Menu.SubmenuRoot>
-								<Menu.SubmenuTrigger
-									className={cn("justify-between gap-3", opencodeFirst && "text-dim")}
-								>
-									<span className="min-w-0 truncate">
-										{opencodeFirst ? LEGACY_GROUP_LABEL : "Other models"}
-									</span>
-									<span className="flex flex-none items-center gap-1 text-dim">
-										{selectedLegacyLabel && (
-											<span className="text-faint">{selectedLegacyLabel}</span>
-										)}
-										<IconChevronRight className="shrink-0" size={17} />
-									</span>
-								</Menu.SubmenuTrigger>
-								<Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
-									{!opencodeFirst && otherGroups.length > 1
-										? otherGroups.map((g, i) => (
-												<React.Fragment key={g.engine}>
-													{i > 0 && <Menu.Separator className="my-1" />}
-													<Menu.Group>
-														<Menu.GroupLabel>{g.label}</Menu.GroupLabel>
-														{g.options.map(renderModelOption)}
-													</Menu.Group>
-												</React.Fragment>
-											))
-										: otherOptions.map(renderModelOption)}
-								</Menu.Popup>
-							</Menu.SubmenuRoot>
-						)}
-					</Menu.Popup>
-				</Menu.SubmenuRoot>
+				{groupedPrimary
+					? providerGroups.map((g, i) => (
+							<React.Fragment key={g.provider}>
+								{i > 0 && <Menu.Separator className="my-1" />}
+								<Menu.Group>
+									<Menu.GroupLabel>{g.label}</Menu.GroupLabel>
+									{g.options.map(renderModelOption)}
+								</Menu.Group>
+							</React.Fragment>
+						))
+					: primaryOptions.map(renderModelOption)}
+				{otherOptions.length > 0 && (
+					<Menu.SubmenuRoot>
+						<Menu.SubmenuTrigger
+							className={cn("justify-between gap-3", opencodeFirst && "text-dim")}
+						>
+							<span className="min-w-0 truncate">
+								{opencodeFirst ? LEGACY_GROUP_LABEL : "Other models"}
+							</span>
+							<span className="flex flex-none items-center gap-1 text-dim">
+								{selectedLegacyLabel && (
+									<span className="text-faint">{selectedLegacyLabel}</span>
+								)}
+								<IconChevronRight className="shrink-0" size={17} />
+							</span>
+						</Menu.SubmenuTrigger>
+						<Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
+							{!opencodeFirst && otherGroups.length > 1
+								? otherGroups.map((g, i) => (
+										<React.Fragment key={g.engine}>
+											{i > 0 && <Menu.Separator className="my-1" />}
+											<Menu.Group>
+												<Menu.GroupLabel>{g.label}</Menu.GroupLabel>
+												{g.options.map(renderModelOption)}
+											</Menu.Group>
+										</React.Fragment>
+									))
+								: otherOptions.map(renderModelOption)}
+						</Menu.Popup>
+					</Menu.SubmenuRoot>
+				)}
+				{(hasEngine || hasEffort || hasAccount || hasFastMode) && (
+					<Menu.Separator className="my-1" />
+				)}
 				{hasEngine && (
 					<Menu.SubmenuRoot>
 						<Menu.SubmenuTrigger className="justify-between gap-3">
@@ -659,6 +627,31 @@ export function ModelEffortSelect({
 						</Menu.Popup>
 					</Menu.SubmenuRoot>
 				)}
+				{hasFastMode && (
+					<Menu.CheckboxItem
+						checked={!!fastMode}
+						closeOnClick={false}
+						onCheckedChange={(checked) => {
+							if (checked && !currentAccount && subscriptionAccount) {
+								onAccountChange?.(subscriptionAccount.id);
+							}
+							onFastModeChange!(checked);
+						}}
+						className="justify-between gap-3"
+					>
+						<span className="flex min-w-0 items-center gap-2">
+							<IconBolt className="shrink-0 text-dim" size={20} />
+							<span className="truncate">Fast mode</span>
+						</span>
+						<Switch
+							render={<span />}
+							checked={!!fastMode}
+							tabIndex={-1}
+							aria-hidden="true"
+							className="pointer-events-none"
+						/>
+					</Menu.CheckboxItem>
+				)}
 				{hasEffort && (
 					<Menu.SubmenuRoot>
 						<Menu.SubmenuTrigger className="justify-between gap-3">
@@ -681,42 +674,6 @@ export function ModelEffortSelect({
 										{selected && (
 											<IconCheck className="shrink-0 text-dim" size={17} />
 										)}
-									</Menu.Item>
-								);
-							})}
-						</Menu.Popup>
-					</Menu.SubmenuRoot>
-				)}
-				{hasFastMode && (
-					<Menu.SubmenuRoot>
-						<Menu.SubmenuTrigger className="justify-between gap-3">
-							<span className="min-w-0 truncate">Speed</span>
-							<span className="flex flex-none items-center gap-1 text-dim">
-								{fastMode ? "Fast" : "Standard"}
-								<IconChevronRight className="shrink-0 text-dim" size={17} />
-							</span>
-						</Menu.SubmenuTrigger>
-						<Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
-							{[
-								{ fast: false, label: "Standard" },
-								{ fast: true, label: "Fast" },
-							].map((o) => {
-								const selected = !!fastMode === o.fast;
-								return (
-									<Menu.Item
-										key={o.label}
-										onClick={() => {
-											// Fast mode runs on a subscription account, so picking it
-											// while on auto pins the one it will actually use.
-											if (o.fast && !currentAccount && subscriptionAccount) {
-												onAccountChange?.(subscriptionAccount.id);
-											}
-											onFastModeChange!(o.fast);
-										}}
-										className={cn("justify-between gap-3", selected && "bg-hover")}
-									>
-										<span className="min-w-0 truncate">{o.label}</span>
-										{selected && <IconCheck className="shrink-0 text-dim" size={17} />}
 									</Menu.Item>
 								);
 							})}
@@ -764,15 +721,6 @@ export function ModelEffortSelect({
 						</Menu.Popup>
 					</Menu.SubmenuRoot>
 				)}
-				<Menu.Separator className="my-1" />
-				<Menu.Item
-					onClick={resetToDefault}
-					disabled={atDefault}
-					className={cn("justify-between gap-3", atDefault && "opacity-55")}
-				>
-					<span className="min-w-0 truncate">Reset to default</span>
-					<IconUndo className="shrink-0 text-dim" size={17} />
-				</Menu.Item>
 			</Menu.Popup>
 		</Menu.Root>
 	);

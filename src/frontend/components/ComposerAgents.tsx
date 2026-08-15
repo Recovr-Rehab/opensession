@@ -159,7 +159,7 @@ export function ComposerAgents({ runs, subagents, plan, onOpenPanel }: Props) {
 									Plan · {planDone}/{planTotal}
 								</div>
 							)}
-							<PlanChecklist items={planItems} max={6} />
+							<PlanChecklist items={planItems} max={6} live />
 						</div>
 					)}
 
@@ -297,16 +297,16 @@ export function ComposerAgents({ runs, subagents, plan, onOpenPanel }: Props) {
 							) : null}
 						</>
 					) : (
-						<>
-							<strong className="font-semibold">
-								Plan · {planDone}/{planTotal}
-							</strong>
-							{!open && planStep ? (
-								<span className="font-medium text-faint"> · {planStep}</span>
-							) : null}
-						</>
+						<strong className="font-semibold">
+							{!open && planStep ? planStep : "Plan"}
+						</strong>
 					)}
 				</span>
+				{total === 0 && (
+					<span className="flex-none font-medium text-faint tabular-nums">
+						{planDone}/{planTotal}
+					</span>
+				)}
 				<IconChevronDown
 					size={16}
 					className={cn(

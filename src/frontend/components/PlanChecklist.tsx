@@ -11,10 +11,12 @@ interface Props {
 	items: readonly PlanItem[];
 	/** Cap the rendered rows; the remainder folds into a "+N more" line. */
 	max?: number;
+	/** Pulse the current step when this checklist represents a live run. */
+	live?: boolean;
 	className?: string;
 }
 
-export function PlanChecklist({ items, max, className }: Props) {
+export function PlanChecklist({ items, max, live = false, className }: Props) {
 	const shown = max && items.length > max ? items.slice(0, max) : items;
 	const hidden = items.length - shown.length;
 	return (
@@ -34,7 +36,7 @@ export function PlanChecklist({ items, max, className }: Props) {
 						item.status === "pending" && "text-faint",
 					)}
 				>
-					<PlanMark status={item.status} />
+					<PlanMark status={item.status} live={live} />
 					<span className="min-w-0 flex-1">{item.content}</span>
 				</li>
 			))}
@@ -45,13 +47,16 @@ export function PlanChecklist({ items, max, className }: Props) {
 
 /** One quiet marker language: green when done, amber while active, and an
  *  empty ring for what's still ahead. */
-function PlanMark({ status }: { status: PlanItem["status"] }) {
+function PlanMark({ status, live }: { status: PlanItem["status"]; live: boolean }) {
 	return (
 		<span
 			className={cn(
 				"mt-1 size-2 flex-none rounded-full",
 				status === "completed" && "bg-green",
-				status === "in_progress" && "bg-yellow",
+				status === "in_progress" && [
+					"bg-yellow",
+					live && "animate-[composer-agents-pulse_1.4s_ease-in-out_infinite]",
+				],
 				status === "pending" && "border border-line",
 			)}
 		/>
