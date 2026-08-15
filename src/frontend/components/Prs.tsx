@@ -79,73 +79,17 @@ function fmtAgentTime(ms: number): string {
   return `${hours >= 10 ? Math.round(hours) : hours.toFixed(1)}h`;
 }
 
-function StatCell({
-  value,
-  label,
-  sub,
-  title,
-  dot,
-  loading,
-  divider,
-  rowDivider,
-}: {
-  value: string;
-  label: string;
-  sub?: string;
-  title?: string;
-  dot?: "live" | "idle";
-  loading?: boolean;
-  divider?: string;
-  rowDivider?: string;
-}) {
-  return (
-    <div
-      className="relative min-w-0 px-5 py-3 phone:px-4 phone:py-2.5"
-      title={title}
-    >
-      <span
-        aria-hidden="true"
-        className={`absolute inset-y-3 left-0 w-px bg-line ${divider ?? "hidden"}`}
-      />
-      <span
-        aria-hidden="true"
-        className={`absolute inset-x-4 top-0 h-px bg-line ${rowDivider ?? "hidden"}`}
-      />
-      <div className="flex items-center gap-1.5">
-        {loading ? (
-          <span className="my-1 h-4 w-10 rounded-sm bg-line motion-safe:animate-pulse" />
-        ) : (
-          dot && (
-            <span
-              className={
-                dot === "live"
-                  ? "h-2 w-2 shrink-0 animate-pulse rounded-full bg-green"
-                  : "h-2 w-2 shrink-0 rounded-full bg-line"
-              }
-            />
-          )
-        )}
-        {!loading && (
-          <span
-            className="truncate text-section-title font-semibold leading-6 tabular-nums text-fg"
-          >
-            {value}
-          </span>
-        )}
-      </div>
-      <div className="truncate text-meta leading-4 text-dim">{label}</div>
-      {loading ? (
-        <div className="flex h-4 items-center">
-          <span className="h-2.5 w-14 rounded-sm bg-line motion-safe:animate-pulse" />
-        </div>
-      ) : (
-        sub && <div className="truncate text-meta leading-4 text-faint">{sub}</div>
-      )}
-    </div>
-  );
+function runningLabel(running: number): string {
+  if (running === 0) return "No agents running";
+  return running === 1 ? "1 agent running" : `${running} agents running`;
 }
 
-function OverviewStrip({
+// The page is about its list, so the day rides under the title as one line
+// instead of a slab of five figures with a second week-long tier under each.
+// The three kept are the ones you act on: what is live now, and how much
+// happened today. Turns, tokens, errors and the week are a click away in
+// Analytics, which this line opens and the sidebar also lists.
+function OverviewLine({
   running,
   stats,
   onOpenAnalytics,
@@ -155,60 +99,39 @@ function OverviewStrip({
   onOpenAnalytics?: () => void;
 }) {
   const today = stats?.today;
-  const week = stats?.week;
   return (
     <button
       type="button"
       onClick={onOpenAnalytics}
-      title={stats ? "Open Analytics" : "Analytics are loading"}
+      title={
+        today
+          ? `Open Analytics · ${today.turns.toLocaleString()} turns and ${fmtCompact(today.outputTokens)} tokens out today`
+          : "Analytics are loading"
+      }
       aria-busy={!stats}
-      // One slab, one wash: the hover lights the whole strip rather than each
-      // cell, so the empty grid cells left by the wrapped layouts don't read as
-      // a hole punched in it.
-      className="focus-ring grid w-full cursor-pointer grid-cols-5 overflow-hidden rounded-lg bg-raised p-0 text-left transition-colors hover:bg-hover max-[860px]:grid-cols-3 max-[560px]:grid-cols-2"
+      className="focus-ring -mx-1 mt-1 flex max-w-full cursor-pointer items-center gap-2 rounded-sm px-1 text-left text-supporting tabular-nums text-dim transition-colors hover:text-fg"
     >
-      <StatCell
-        value={fmtCompact(running)}
-        label={running === 1 ? "agent running now" : "agents running now"}
-        dot={running > 0 ? "live" : "idle"}
-      />
-      <StatCell
-        value={today ? fmtCompact(today.sessions) : ""}
-        label="sessions today"
-        sub={week ? `${fmtCompact(week.sessions)} · 7d` : undefined}
-        loading={!stats}
-        divider="block"
-      />
-      <StatCell
-        value={today ? fmtCompact(today.turns) : ""}
-        label="turns today"
-        sub={week ? `${fmtCompact(week.turns)} · 7d` : undefined}
-        title={today ? `${today.errors.toLocaleString()} errors today` : undefined}
-        loading={!stats}
-        divider="block max-[560px]:hidden"
-        rowDivider="hidden max-[560px]:block"
-      />
-      <StatCell
-        value={today ? fmtAgentTime(today.durationMs) : ""}
-        label="agent time today"
-        sub={week ? `${fmtAgentTime(week.durationMs)} · 7d` : undefined}
-        loading={!stats}
-        divider="hidden min-[861px]:block max-[560px]:block"
-        rowDivider="hidden max-[860px]:block"
-      />
-      <StatCell
-        value={today ? fmtCompact(today.outputTokens) : ""}
-        label="tokens out today"
-        sub={week ? `${fmtCompact(week.outputTokens)} · 7d` : undefined}
-        title={
-          today
-            ? `${today.inputTokens.toLocaleString()} input · ${today.cacheReadTokens.toLocaleString()} cache read today`
-            : undefined
+      <span
+        aria-hidden="true"
+        className={
+          running > 0
+            ? "h-1.5 w-1.5 shrink-0 rounded-full bg-green motion-safe:animate-pulse"
+            : "h-1.5 w-1.5 shrink-0 rounded-full bg-line"
         }
-        loading={!stats}
-        divider="block max-[560px]:hidden"
-        rowDivider="hidden max-[860px]:block"
       />
+      <span className="truncate">
+        {runningLabel(running)}
+        {today ? (
+          <>
+            {" · "}
+            {fmtCompact(today.sessions)} sessions and{" "}
+            {fmtAgentTime(today.durationMs)} of agent time today
+          </>
+        ) : null}
+      </span>
+      {!stats && (
+        <span className="h-2.5 w-40 shrink rounded-sm bg-line motion-safe:animate-pulse" />
+      )}
     </button>
   );
 }
@@ -354,8 +277,15 @@ export function Prs({
     <div className="min-h-0 w-full flex-1 overflow-y-auto bg-surface">
       <div className="mx-auto w-full max-w-[920px] px-6 pb-15 pt-7 max-[560px]:px-4 max-[560px]:pb-12 max-[560px]:pt-[18px]">
         <PageHeader className="items-center max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-3.5">
-          <PageTitle>Pull requests</PageTitle>
-          <div className="flex min-w-0 items-center gap-3 max-[560px]:w-full max-[560px]:justify-end">
+          <div className="min-w-0 flex-1">
+            <PageTitle>Pull requests</PageTitle>
+            <OverviewLine
+              running={running}
+              stats={stats}
+              onOpenAnalytics={onOpenAnalytics}
+            />
+          </div>
+          <div className="flex min-w-0 shrink-0 items-center gap-3 max-[560px]:w-full max-[560px]:justify-end">
             {/* The page's one CTA carries its verb as a glyph as well as a
                 word: at this size a label alone is a coloured rectangle you
                 read, and the plus is what makes it scan as the button that
@@ -371,12 +301,10 @@ export function Prs({
             </Button>
           </div>
         </PageHeader>
-        <OverviewStrip running={running} stats={stats} onOpenAnalytics={onOpenAnalytics} />
-
         {/* Search and the two scopes, in the app's field-and-button vocabulary:
             a filter here is the same control it is on the archived page, not a
             line of bare text that only looks like one. */}
-        <div className="mb-4 mt-[18px] flex flex-wrap items-center gap-2">
+        <div className="mb-4 flex flex-wrap items-center gap-2">
           <Input
             className="w-[260px] phone:min-w-0 phone:flex-1"
             type="search"
