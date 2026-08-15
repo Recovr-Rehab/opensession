@@ -39,6 +39,7 @@ export const BRANDS: Record<string, { bg: string; fg?: string }> = {
   claude: { bg: "#d97757" },
   codex: { bg: "#000000" },
   opencode: { bg: "#000000" },
+  pi: { bg: "#000000" },
 };
 
 /** Pretty display names for the handful that don't title-case cleanly. */
@@ -160,6 +161,12 @@ export const BRAND_LOGOS: Record<string, BrandLogo> = {
     "viewBox": "0 0 24 24",
     "paths": [
       "M22 24H2V0h20zM17 4.8H7v14.4h10z"
+    ]
+  },
+  "pi": {
+    "viewBox": "0 0 24 24",
+    "paths": [
+      "M0 0v24h6v-6h6v-6H6V6h6v6h6V0Zm18 12v12h6V12Z"
     ]
   },
 };
