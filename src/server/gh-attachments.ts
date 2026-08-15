@@ -104,7 +104,15 @@ export async function uploadUserAttachment(
       `https://uploads.github.com/user-attachments/assets?name=${encodeURIComponent(name)}&content_type=${encodeURIComponent(mime)}&repository_id=${repoId}`,
       {
         method: "POST",
-        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+          // The endpoint 400s ("Invalid Content-Type") when the request has
+          // no Content-Type header at all, which is what fetch sends for a
+          // raw ArrayBuffer body. The value itself is loose (the query param
+          // is what names the asset's type), but send the real one.
+          "Content-Type": mime,
+        },
         body: await Bun.file(filePath).arrayBuffer(),
         signal: AbortSignal.timeout(60_000),
       },
