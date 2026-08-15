@@ -1292,6 +1292,7 @@ export function resumeInterruptedRuns(
         untrackRecovery(run);
       }
     };
+  };
   const cancelRecoveredEngine = (run: ActiveRunRecord): void => {
     for (const id of [run.claudeSessionId, run.osSessionId, run.runKey]) {
       if (!id) continue;
