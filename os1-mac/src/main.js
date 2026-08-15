@@ -13,6 +13,7 @@ const {
   Menu,
   clipboard,
   dialog,
+  screen,
 } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
@@ -40,6 +41,11 @@ let APP_ORIGIN = new URL(APP_URL).origin;
 let IN_WINDOW_ORIGINS = [APP_ORIGIN, "https://github.com"];
 
 const stateFile = () => path.join(app.getPath("userData"), "window-state.json");
+// The user-data folder is named after the app, so renaming the app to Open
+// Session left every existing install's saved window behind in the old folder.
+// Read that one when the current one has nothing yet.
+const legacyStateFile = () =>
+  path.join(path.dirname(app.getPath("userData")), "OS\u00b9", "window-state.json");
 let win = null;
 let quitting = false;
 let appReady = false;
@@ -198,12 +204,64 @@ if (!app.requestSingleInstanceLock()) {
 
 app.setAsDefaultProtocolClient("os1");
 
+const MIN_WIDTH = 700;
+const MIN_HEIGHT = 480;
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+// With nothing saved yet, take most of the display. This is a working surface
+// people keep open all day, and a fixed size small enough for a laptop is a
+// third of the screen on anything bigger.
+function defaultBounds() {
+  const { workArea } = screen.getPrimaryDisplay();
+  const width = clamp(Math.round(workArea.width * 0.9), MIN_WIDTH, 1760);
+  const height = clamp(Math.round(workArea.height * 0.92), MIN_HEIGHT, 1160);
+  return {
+    width,
+    height,
+    x: Math.round(workArea.x + (workArea.width - width) / 2),
+    y: Math.round(workArea.y + (workArea.height - height) / 2),
+  };
+}
+
+// Displays come and go. Bounds saved on a monitor that is now unplugged would
+// open the window off screen, or bigger than the screen that is left, and both
+// read as the app failing to open.
+function onScreenBounds(saved) {
+  const bounds = {
+    x: Math.round(Number(saved?.x)),
+    y: Math.round(Number(saved?.y)),
+    width: Math.round(Number(saved?.width)),
+    height: Math.round(Number(saved?.height)),
+  };
+  if (Object.values(bounds).some((n) => !Number.isFinite(n))) return null;
+  const area = screen.getDisplayMatching(bounds).workArea;
+  const shownWidth =
+    Math.min(bounds.x + bounds.width, area.x + area.width) - Math.max(bounds.x, area.x);
+  const shownHeight =
+    Math.min(bounds.y + bounds.height, area.y + area.height) - Math.max(bounds.y, area.y);
+  if (shownWidth < 200 || shownHeight < 100) return null;
+  bounds.width = clamp(bounds.width, MIN_WIDTH, area.width);
+  bounds.height = clamp(bounds.height, MIN_HEIGHT, area.height);
+  return bounds;
+}
+
 function loadWindowState() {
-  try {
-    return JSON.parse(fs.readFileSync(stateFile(), "utf8"));
-  } catch {
-    return { width: 1360, height: 900 };
+  let saved = null;
+  for (const file of [stateFile(), legacyStateFile()]) {
+    try {
+      saved = JSON.parse(fs.readFileSync(file, "utf8"));
+      break;
+    } catch {}
   }
+  return {
+    bounds: onScreenBounds(saved) || defaultBounds(),
+    maximized: saved?.maximized === true,
+    fullScreen: saved?.fullScreen === true,
+    zoomLevel: clampZoom(saved?.zoomLevel),
+  };
 }
 
 // A corrupt or hand-edited state file must not be able to leave the app at a
@@ -220,9 +278,24 @@ function saveWindowState() {
     }
   } catch {}
   try {
-    const state = { ...win.getNormalBounds(), zoomLevel: clampZoom(zoomLevel) };
+    const state = {
+      ...win.getNormalBounds(),
+      maximized: win.isMaximized(),
+      fullScreen: win.isFullScreen(),
+      zoomLevel: clampZoom(zoomLevel),
+    };
     fs.writeFileSync(stateFile(), JSON.stringify(state));
   } catch {}
+}
+
+// Written whenever the window settles, not only at quit: a force quit, a crash
+// or an update restart would otherwise throw away the size you just set, and
+// opening where you left off is the whole point of saving it.
+let saveTimer = null;
+
+function scheduleSaveWindowState() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveWindowState, 400);
 }
 
 function inWindow(url) {
@@ -385,13 +458,14 @@ function loadApp(url) {
 }
 
 function createWindow() {
-  const { zoomLevel: savedZoom, ...state } = loadWindowState();
-  zoomLevel = clampZoom(savedZoom);
+  const state = loadWindowState();
+  zoomLevel = state.zoomLevel;
   windowReady = false;
   win = new BrowserWindow({
-    ...state,
-    minWidth: 700,
-    minHeight: 480,
+    ...state.bounds,
+    minWidth: MIN_WIDTH,
+    minHeight: MIN_HEIGHT,
+    fullscreen: state.fullScreen,
     // The web app keeps its workspace opaque and reveals this native material
     // only through the sidebar and narrow outer gutter. Unlike the original
     // vibrancy pass, the renderer does not add CSS backdrop filters on top.
@@ -417,6 +491,19 @@ function createWindow() {
       spellcheck: false,
     },
   });
+
+  if (state.maximized && !state.fullScreen) win.maximize();
+
+  for (const settled of [
+    "resize",
+    "move",
+    "maximize",
+    "unmaximize",
+    "enter-full-screen",
+    "leave-full-screen",
+  ]) {
+    win.on(settled, scheduleSaveWindowState);
+  }
 
   const createdWindow = win;
   createdWindow.once("ready-to-show", () => {
