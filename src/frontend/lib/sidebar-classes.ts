@@ -495,18 +495,21 @@ export const SIDEBAR_STICKY_LANE_NESTED =
 
 /**
  * ── Band headings ───────────────────────────────────────────────────────────
- * The top-level bands (Tools / Automations / People) — small quiet labels that
- * read like section kickers but behave like Notion's: the whole heading is a
- * full-width hover row that toggles the band, the collapse chevron sits by the
- * label (revealed on hover), and the count / any actions live on the right.
+ * The top-level bands (Workspaces / Automations / People) behave like Notion's:
+ * the whole heading is a full-width hover row that toggles the band, the
+ * collapse chevron sits by the label (revealed on hover), and the count or any
+ * actions live on the right.
  *
- * Written phone-first with a `desktop:` desktop override, which is the
- * exact complement of the `max-width: 720px` these rules came from —
- * `phone:` would be `< 720` and leave a one-pixel viewport wearing
- * neither value.
+ * The type is the CAPTION: the same 13px semibold ink a status lane wears (see
+ * {@link SIDEBAR_LANE_HEADER}), at both widths. A band and a lane are the same
+ * kind of thing on this rail, a glyphless word naming the rows under it, so the
+ * sidebar carries ONE label rather than one per nesting level. This used to
+ * step down to 11px faint on desktop and up to 15px on phones, which left a
+ * top-level heading smaller and quieter than the lanes nested inside it, and
+ * made Automations and Earlier read as two different kinds of thing in the same
+ * column.
  */
-export const SIDEBAR_BAND_LABEL =
-	"text-body font-semibold tracking-[-0.01em] text-faint desktop:text-meta";
+export const SIDEBAR_BAND_LABEL = "text-label font-semibold text-dim";
 
 /**
  * The heading's toggle button. Horizontal padding is NOT here: each band sits
@@ -519,12 +522,13 @@ export const SIDEBAR_BAND_TOGGLE =
 	// style at Tailwind's `solid` default, which is not what the `border: none`
 	// this replaced computed to. Width resolves to 0 under either.
 	//
-	// A band heading is a LABEL, so it paints no hover fill — only the ink
-	// brightens. `--sidebar-cap-h` is the 28px label height; it sits inside the
-	// 32px slot SIDEBAR_STICKY_BAND_ROW reserves, so the caption keeps a little
-	// air around it without the pinned slot growing. Compact takes the pair to
-	// 24 inside 28, which is the same 4px of air.
-	"group/band m-0 flex min-h-[var(--sidebar-cap-h)] w-full cursor-pointer items-center gap-[5px] rounded-[calc(8px*var(--rf))] border-none bg-transparent py-1 text-left text-inherit [font:inherit] hover:text-dim";
+	// A band heading is a LABEL, so it paints no hover fill: only the ink
+	// brightens, to `text-fg`, which is the same step a lane caption takes (see
+	// SIDEBAR_GROUP_HEADER). `--sidebar-cap-h` is the 28px label height; it sits
+	// inside the 32px slot SIDEBAR_STICKY_BAND_ROW reserves, so the caption keeps
+	// a little air around it without the pinned slot growing. Compact takes the
+	// pair to 24 inside 28, which is the same 4px of air.
+	"group/band m-0 flex min-h-[var(--sidebar-cap-h)] w-full cursor-pointer items-center gap-[5px] rounded-[calc(8px*var(--rf))] border-none bg-transparent py-1 text-left text-inherit [font:inherit] hover:text-fg";
 
 /**
  * The inset the Automations and People headings take. The desktop value lands

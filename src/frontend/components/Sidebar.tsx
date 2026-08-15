@@ -4483,14 +4483,17 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						    there. */}
 						<span
 							className={cn(
-								"shrink-0 text-label font-semibold tracking-[-0.01em] group-hover/wshead:text-dim",
+								// The band caption, same as SIDEBAR_BAND_LABEL wears one
+								// section down: this heading is written inline rather than
+								// composed from it only because of the lens ink below.
+								"shrink-0 text-label font-semibold group-hover/wshead:text-fg",
 								// Full-strength ink when the lanes aren't yours: this is
 								// the one row that stays pinned while the list scrolls,
 								// so it's what stops a borrowed sidebar reading as your
-								// own from halfway down. (No face here — the row is
+								// own from halfway down. (No face here: the row is
 								// narrow, and adding one truncates the name that does
 								// the actual telling; the strip at the top has it.)
-								filter.person === "me" ? "text-faint" : "text-fg",
+								filter.person === "me" ? "text-dim" : "text-fg",
 								isPhone && "hidden",
 							)}
 							ref={titleRef}
