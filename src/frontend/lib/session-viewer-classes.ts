@@ -422,7 +422,7 @@ export const INFO_HERO =
 	"[&_.repo-tile]:smooth-shadow-ring-sm";
 
 /** 20px in the old sheet — the page's one heading, so it snaps to
- *  `text-page-title` (19px). */
+ *  `text-page-title` (22px). */
 export const INFO_NAME =
 	"max-w-full text-page-title font-semibold leading-[1.2] tracking-[-0.02em] break-words text-fg";
 export const INFO_SUB = "text-label font-medium text-dim";

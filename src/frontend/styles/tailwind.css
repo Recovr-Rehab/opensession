@@ -233,25 +233,32 @@
 	   behind it becomes a second, smaller body that nobody chose. */
 	--text-base: 15px;
 
-	/* THE SCALE. Six steps, and text is set from one of them:
+	/* THE SCALE. Seven steps, and text is set from one of them:
 
 	     11 -> text-meta          timestamps, counts, status, badges
 	     13 -> text-label / text-supporting / text-control-label / xs / sm
 	     15 -> text-body / text-item-title / base   prose, and the title of a row
 	     17 -> text-dialog-title  a modal heading
-	     19 -> text-section-title / text-page-title
+	     19 -> text-section-title a heading inside a page
+	     22 -> text-page-title    the page's own name, at the top of it
 	     28 -> text-stat          the figure on a metric tile
 
 	   Pick by purpose, not by nearest number. Never write an arbitrary
-	   text-[Npx] for type: if none of the six fits, the answer is one of the
-	   six anyway, or the design is asking for a weight and not a size.
+	   text-[Npx] for type: if none of the seven fits, the answer is one of the
+	   seven anyway, or the design is asking for a weight and not a size.
 
 	   It ran 8 / 10 / 11 / 12 / 13 / 14 / 15 / 16 / 17 / 19 / 22 / 28 until
 	   2026-08. Half those steps were within a pixel or two of a neighbour, so
 	   they drew no distinction a reader could see while giving each new surface
-	   a different answer to the same question. The six that survive are spaced
-	   1.18x / 1.15x / 1.13x / 1.12x / 1.47x, which is the smallest gap that
-	   still reads as a step.
+	   a different answer to the same question. The seven that survive are spaced
+	   1.18x / 1.15x / 1.13x / 1.12x / 1.16x / 1.27x, which is the smallest gap
+	   that still reads as a step.
+
+	   22 came back in 2026-08: page title and section title had been the same
+	   19px, so a page's own name carried no more weight than a heading inside
+	   it, and the only way to tell them apart was the bold the page title wore.
+	   Size is the better signal, and it let the title drop to semibold with the
+	   rest of the app's headings.
 
 	   Two families deliberately sit OUTSIDE the scale, and neither is a step:
 
@@ -271,7 +278,7 @@
 	--text-item-title: 15px;
 	--text-dialog-title: 17px;
 	--text-section-title: 19px;
-	--text-page-title: 19px;
+	--text-page-title: 22px;
 	/* Not a step: iOS Safari zooms the page in when a focused input is under
 	   16px, so every text input a phone can reach has to be at least this. It
 	   is a size the platform picks, so it is spelled once here rather than as
