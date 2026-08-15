@@ -233,7 +233,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             .array(z.string())
             .optional()
             .describe(
-              "Who this reports to — the people whose sidebar it appears in under Automations. Omit for whoever created it."
+              "Who this reports to — the people whose sidebar it appears in under Automations. Omit to keep it in everyone's."
             ),
           workspaceId: z
             .string()
@@ -329,7 +329,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             .array(z.string())
             .optional()
             .describe(
-              "Who this reports to — the people whose sidebar it appears in under Automations. An empty array means nobody in particular, which files it under Unassigned."
+              "Who this reports to — the people whose sidebar it appears in under Automations. An empty array means nobody in particular, which keeps it in everyone's."
             ),
           workspaceId: z
             .string()

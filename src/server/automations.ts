@@ -154,11 +154,9 @@ export interface Automation {
    * sidebar's person lens can ask "is this one mine?" the same way it asks it
    * of a session.
    *
-   * Absent means the creator, which is what almost every automation here
-   * means and what keeps the field optional: nothing had to be backfilled.
-   * An explicitly empty list is the other answer — nobody in particular, a
-   * house automation — and those file under "Unassigned". Read it through
-   * {@link automationRecipients}, never directly, or the default is lost.
+   * Absent or empty means nobody in particular: a house routine that stays
+   * in everyone's band. Naming people narrows it to them, which is the whole
+   * point of the field. Read it through {@link automationRecipients}.
    */
   recipients?: string[];
   /**
@@ -493,16 +491,18 @@ function sanitizePrReviewer(
 }
 
 /**
- * Who an automation reports to, with the default applied: an unset
- * `recipients` means its creator. Callers must go through this rather than
- * reading the field, or an automation nobody edited reads as belonging to
- * nobody. An explicit `[]` survives as `[]` — that is the deliberate "house
- * automation" answer, not an absent one.
+ * Who an automation reports to. Unset means nobody in particular — a house
+ * routine everyone sees — rather than its creator: `createdBy` records who
+ * typed it, which for most of these is a previous agent run ("Michael
+ * (loops)", "Michael (plain agent)"), so reading it as an audience would
+ * address thirty automations to people who don't exist and hide them from
+ * every real one.
+ *
+ * Naming an audience is therefore a deliberate act, and until someone
+ * performs it the band reads exactly as it did before audiences existed.
  */
 export function automationRecipients(a: Automation): string[] {
-  if (a.recipients) return a.recipients;
-  const creator = (a.createdBy || "").trim();
-  return creator ? [creator] : [];
+  return a.recipients || [];
 }
 
 /** Normalize an audience list; `null` clears it back to the creator default. */

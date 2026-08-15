@@ -51,17 +51,16 @@ const FIELD_LABEL = "flex flex-1 flex-col gap-1.5 text-label font-medium text-di
 
 /**
  * The "Reports to" field, from what a person typed to what the API takes.
- * Blank returns null, which clears the stored list so the server's default —
- * the automation's creator — applies again. The form has no way to say
- * "nobody", and shouldn't: an automation reporting to no one is a house
- * routine, set through the API.
+ * Blank returns an empty list, which is the real answer rather than a missing
+ * one: an automation nobody is named on is a house routine, and it stays in
+ * everyone's Automations section.
  */
-function parseRecipients(value: string): string[] | null {
+function parseRecipients(value: string): string[] {
   const names = value
     .split(",")
     .map((n) => n.trim())
     .filter(Boolean);
-  return names.length ? names : null;
+  return names.length ? names : [];
 }
 /** .automation-form-title */
 const FORM_TITLE = "text-body font-semibold";
@@ -1762,7 +1761,7 @@ function AutomationForm({
           webhookEnabled: isWatch ? false : webhookEnabled,
           inputs: isWatch ? undefined : inputs,
           outputs: isWatch ? undefined : outputs,
-          recipients: parseRecipients(recipients) ?? undefined,
+          recipients: parseRecipients(recipients),
           workspaceId: workspaceId || undefined,
           createdBy: getCurrentUser(),
         });
@@ -1811,7 +1810,7 @@ function AutomationForm({
             placeholder={getCurrentUser() || "Kent, Michiel"}
           />
           <span className="mt-1 text-meta leading-snug text-faint">
-            Whose sidebar it appears in. Leave empty for whoever created it.
+            Whose sidebar it appears in. Leave empty to keep it in everyone's.
           </span>
         </label>
         <label className={FIELD_LABEL}>

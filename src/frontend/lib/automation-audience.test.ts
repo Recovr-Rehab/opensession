@@ -32,15 +32,24 @@ describe("automationInPersonLens", () => {
 			expect(automationInPersonLens(a, "everyone", "Kent")).toBe(true);
 	});
 
-	test("me keeps only what reports to you", () => {
+	test("me keeps yours and the ones addressed to nobody", () => {
 		expect(automationInPersonLens(mine, "me", "Kent")).toBe(true);
+		expect(automationInPersonLens(house, "me", "Kent")).toBe(true);
 		expect(automationInPersonLens(theirs, "me", "Kent")).toBe(false);
-		expect(automationInPersonLens(house, "me", "Kent")).toBe(false);
 	});
 
-	test("a teammate lens keeps only theirs", () => {
+	test("an automation with no audience set behaves as it always did", () => {
+		// The migration promise: until someone names people, every lens that
+		// isn't a specific teammate still shows the whole band.
+		const untouched = {};
+		expect(automationInPersonLens(untouched, "me", "Kent")).toBe(true);
+		expect(automationInPersonLens(untouched, "everyone", "Kent")).toBe(true);
+	});
+
+	test("a teammate lens keeps only theirs, not the house ones", () => {
 		expect(automationInPersonLens(theirs, "michiel", "Kent")).toBe(true);
 		expect(automationInPersonLens(mine, "michiel", "Kent")).toBe(false);
+		expect(automationInPersonLens(house, "michiel", "Kent")).toBe(false);
 	});
 
 	test("unassigned is only the ones naming nobody", () => {
@@ -53,6 +62,11 @@ describe("automationInPersonLens", () => {
 			expect(automationInPersonLens(a, "me", "")).toBe(true);
 			expect(automationInPersonLens(a, "me", "anonymous")).toBe(true);
 		}
+	});
+
+	test("recipients is optional on the wire", () => {
+		expect(automationInPersonLens({}, "unassigned", "Kent")).toBe(true);
+		expect(automationInPersonLens({}, "michiel", "Kent")).toBe(false);
 	});
 });
 
