@@ -2009,6 +2009,65 @@ a.pr-ref[data-pr-tone="yellow"] .pr-ref-icon {
 	color: var(--yellow);
 }
 
+/* A commit sha, which markdown.ts leaves in the monospace capsule it was
+   written in rather than making a pill of it. A sha IS a code identifier, and
+   the sentences these turn up in name two or three at a time ("reverting
+   `4ed1ef09` + `437cba77`"), which as pills reads as a row of boxes.
+
+   So the capsule below repeats `.markdown code` on purpose (it is an <a>, not
+   a <code>, and it also has to hold up on the surfaces that render session
+   markdown without the `.markdown` class), and the only thing added is the
+   affordance: the dotted underline a term with a definition has always had,
+   solid on hover. `data-commit-unknown` is set by the hover card when no
+   checkout has the sha, which takes the promise back off a reference we
+   cannot answer.
+
+   Both element names are spelled out for the same reason `a.pr-ref` is: at
+   (0,1,0) a bare `.commit-ref` loses the underline to `.markdown a`'s
+   `text-decoration: none`, and only ties it at (0,1,1). */
+a.commit-ref,
+span.commit-ref {
+	font-family: var(--mono);
+	font-size: 0.9em;
+	padding: 1.5px 6px;
+	border-radius: calc(7px * var(--rf)); corner-shape: var(--cs);
+	background: rgba(221, 225, 240, 0.07);
+	color: #dde1f0;
+	cursor: pointer;
+	text-decoration-line: underline;
+	text-decoration-style: dotted;
+	/* Its own ink, held back so the line reads as a hint under the word
+	   rather than a second stroke through it. */
+	text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
+	text-underline-offset: 2px;
+	transition: background var(--dur-micro) var(--ease);
+}
+a.commit-ref:hover,
+span.commit-ref:hover {
+	background: rgba(221, 225, 240, 0.13);
+	text-decoration-style: solid;
+	text-decoration-color: color-mix(in srgb, currentColor 55%, transparent);
+}
+a.commit-ref:focus-visible,
+span.commit-ref:focus-visible {
+	outline: 2px solid var(--accent-ink);
+	outline-offset: 2px;
+}
+a.commit-ref[data-commit-unknown],
+span.commit-ref[data-commit-unknown] {
+	cursor: text;
+	text-decoration-line: none;
+}
+html[data-theme="light"] a.commit-ref,
+html[data-theme="light"] span.commit-ref {
+	background: rgba(149, 59, 57, 0.09);
+	color: #953b39;
+}
+html[data-theme="light"] a.commit-ref:hover,
+html[data-theme="light"] span.commit-ref:hover {
+	background: rgba(149, 59, 57, 0.16);
+}
+
 /* The line-number gutter shiki writes into highlighted output
    (lib/shiki-engine.ts). Renderer-emitted, same as the chips above. The code
    well overrides the colour for its own darker surface, from the markup. */

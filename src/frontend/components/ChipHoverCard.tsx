@@ -2,16 +2,21 @@ import React, { useEffect, useRef, useState } from "react";
 import { relativeTime } from "../lib/api";
 import {
 	CHIP_SELECTOR,
+	applyChipCommit,
+	cachedChipCommit,
 	cachedChipSession,
 	cachedOpenPrs,
+	chipCommitResolved,
 	chipPr,
 	chipPrIsWorthShowing,
 	chipTarget,
+	loadChipCommit,
 	loadChipSession,
 	loadOpenPrs,
 	type ChipPr,
 	type ChipTarget,
 } from "../lib/chip-hover";
+import type { CommitDetails } from "../lib/api";
 import { refState, refTone } from "../lib/pr-refs";
 import { PR_STATE_TEXT } from "../lib/pr-tone-classes";
 import { providerFromUrl } from "../lib/provider";
@@ -29,11 +34,12 @@ import {
 } from "./SidebarRowCards";
 import { pointerCanHover } from "../lib/pointer";
 import { SessionCardBody } from "./sidebar/HoverCards";
-import { IconGitMerge, IconPullRequest } from "./icons";
+import { IconGitCommit, IconGitMerge, IconPullRequest } from "./icons";
 
 /**
  * Hover cards for the chips inside rendered markdown: a session reference
- * (`os-019f…`) and a PR mention (`opensession#128`).
+ * (`os-019f…`), a PR mention (`opensession#128`) and a commit sha
+ * (`4ed1ef09`).
  *
  * Same card a sidebar row raises, driven the same way the workspace list
  * drives its one: markdown.ts renders these chips into an HTML string, so they
@@ -62,7 +68,8 @@ const CARD_ATTR = "data-chip-card";
 
 type ChipCard =
 	| { key: string; kind: "session"; session: UnifiedSession }
-	| { key: string; kind: "pr"; pr: ChipPr };
+	| { key: string; kind: "pr"; pr: ChipPr }
+	| { key: string; kind: "commit"; commit: CommitDetails };
 
 export function ChipHoverCards({ sessions }: { sessions: UnifiedSession[] }) {
 	const [hover, setHover] = useState<{
@@ -131,6 +138,29 @@ export function ChipHoverCards({ sessions }: { sessions: UnifiedSession[] }) {
 			void loadChipSession(target.id).then((session) => {
 				if (alive && session)
 					setCard({ key: target.key, kind: "session", session });
+			});
+			return () => {
+				alive = false;
+			};
+		}
+		if (target.kind === "commit") {
+			const el = hover.el;
+			const known = cachedChipCommit(target.sha, target.repo);
+			if (known) {
+				setCard({ key: target.key, kind: "commit", commit: known });
+				return;
+			}
+			// Already asked and no checkout had it: the reference keeps its own
+			// tooltip and stops looking like one that leads anywhere.
+			if (chipCommitResolved(target.sha, target.repo)) {
+				applyChipCommit(el, null);
+				return;
+			}
+			void loadChipCommit(target.sha, target.repo).then((commit) => {
+				// The correction lands either way: the pointer having moved on
+				// does not make the answer less true for the next hover.
+				applyChipCommit(el, commit);
+				if (alive && commit) setCard({ key: target.key, kind: "commit", commit });
 			});
 			return () => {
 				alive = false;
@@ -242,6 +272,8 @@ export function ChipHoverCards({ sessions }: { sessions: UnifiedSession[] }) {
 					>
 						{card.kind === "session" ? (
 							<SessionCardBody session={card.session} />
+						) : card.kind === "commit" ? (
+							<CommitChipCardBody commit={card.commit} />
 						) : (
 							<PrChipCardBody pr={card.pr} />
 						)}
@@ -249,6 +281,77 @@ export function ChipHoverCards({ sessions }: { sessions: UnifiedSession[] }) {
 				</RowCardPopup>
 			)}
 		</Popover.Root>
+	);
+}
+
+/**
+ * The card body for a commit reference. Built from the same parts as the PR
+ * card below, because the question is the same one: what is this, who wrote
+ * it, and did it land. The subject line is what the transcript's sha was
+ * standing in for all along, so it gets the weight; the message body follows
+ * it, clamped, because a commit's real explanation is usually in there.
+ */
+function CommitChipCardBody({ commit }: { commit: CommitDetails }) {
+	const rows: Array<[string, React.ReactNode]> = [];
+	if (commit.author) rows.push(["Author", commit.author]);
+	rows.push(["Repo", repoLabel(commit.repo)]);
+	// The lede, unwrapped. A message body is hard-wrapped at 72 columns and
+	// carries whole sections under it, and a clamp over that spends one of its
+	// three lines on a blank line and the third on an ellipsis alone.
+	const lede = commit.body?.split(/\n\s*\n/, 1)[0]?.replace(/\s+/g, " ").trim();
+
+	return (
+		<>
+			<div className="flex min-w-0 items-center gap-[7px]">
+				<span className="min-w-0 flex-1 truncate text-meta text-dim">
+					<span className="text-green">+{compactNum(commit.additions)}</span>{" "}
+					<span className="text-red">-{compactNum(commit.deletions)}</span>
+					{commit.filesChanged > 0 && (
+						<span className="text-faint">
+							{" "}
+							· {commit.filesChanged} {commit.filesChanged === 1 ? "file" : "files"}
+						</span>
+					)}
+				</span>
+				<span className="flex shrink-0 items-center">
+					<IconGitCommit className="text-dim" size={20} />
+				</span>
+			</div>
+
+			<div className="mt-[5px] text-label font-semibold leading-[1.3]">
+				{commit.title}
+			</div>
+
+			{lede && (
+				<div className="mt-[3px] line-clamp-3 text-meta leading-[1.4] text-dim">
+					{lede}
+				</div>
+			)}
+
+			{/* Whether it shipped, in the same slot the PR card puts its state. */}
+			<div
+				className={`mt-[3px] text-meta font-medium ${
+					commit.onDefaultBranch ? "text-green" : "text-faint"
+				}`}
+			>
+				{commit.onDefaultBranch
+					? `On ${commit.defaultBranch}`
+					: `Not on ${commit.defaultBranch} yet`}
+			</div>
+
+			<CardRows rows={rows} />
+
+			<CardFooter
+				time={`Committed ${relativeTime(commit.committedAt)}`}
+				timeTitle={new Date(commit.committedAt).toLocaleString()}
+			>
+				{commit.url && (
+					<CardLink href={commit.url} title="Open on GitHub">
+						<span className="font-mono text-[0.95em]">{commit.shortSha}</span>
+					</CardLink>
+				)}
+			</CardFooter>
+		</>
 	);
 }
 

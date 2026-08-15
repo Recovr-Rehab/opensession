@@ -895,6 +895,18 @@ export function IconGitMerge(p: IconProps) {
   );
 }
 
+// Octicon-style git-commit: one node on the line of history. Same 24-grid and
+// node radius as the PR and merge glyphs above, so a commit reads as a sibling
+// of those rather than a different family.
+export function IconGitCommit(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <circle {...stroke} cx="12" cy="12" r="3.5" />
+      <path {...stroke} d="M12 4.75V8.5M12 15.5V19.25" />
+    </Svg>
+  );
+}
+
 // An eye — "needs your eyes" / review. Distinct from the git-node PR glyphs.
 export function IconEye(p: IconProps) {
   return (

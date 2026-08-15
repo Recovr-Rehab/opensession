@@ -597,6 +597,10 @@ let renderRepo: string | undefined;
 /** What the renderer does with raw HTML for the duration of one `md.parse()`. */
 let renderRawHtml: "escape" | "sanitize" = "escape";
 
+/** Whether the renderer is inside an explicit link's own text, where a chip
+ *  would nest one anchor in another. Scoped to that link, not to the parse. */
+let renderInLink = false;
+
 // GitHub user-attachment media (the canonical assets URL, or an already
 // expired signed private-user-images URL copied out of rendered HTML). The
 // canonical URL answers only to GitHub cookie auth, which an <img>/<video>
@@ -683,6 +687,87 @@ function githubPrTarget(
   return null;
 }
 
+// Commit shas are the other reference agents write constantly ("this reverts
+// `4ed1ef09`"), and they were dead text: to see what one was you left for
+// GitHub and searched. They become references you can hover instead, answered
+// from the checkout (server/commit-lookup.ts) so an unpushed commit on some
+// other session's branch resolves too.
+//
+// Which hex runs are shas was measured over 130,715 transcript entries,
+// resolved against every checkout: a CODESPAN of 7-12 or 40 hex characters is
+// a real commit 98% of the time once all-digit runs are excluded (those are
+// GitHub run ids and epoch milliseconds, and a real sha is almost never all
+// digits). Bare hex in prose is the opposite at 18%, so it stays plain text
+// unless a cue word introduces it (`commit 4ed1ef09`), which measured 100%
+// across 2,427 mentions. Length is capped at 12 for the abbreviated form
+// because the 13-39 range held no commits at all, only md5s and 16-hex ids.
+const COMMIT_SHA_SRC = "(?:[0-9a-f]{7,12}|[0-9a-f]{40})";
+const COMMIT_CUE_SRC = "(?:commits?|sha)";
+const COMMIT_REF_SRC =
+  `(?:\`(${COMMIT_SHA_SRC})\`|(${COMMIT_CUE_SRC} +)(${COMMIT_SHA_SRC})(?![\\w-]))`;
+const COMMIT_REF_EXACT = new RegExp(`^${COMMIT_REF_SRC}`, "i");
+// The leading guard, which only a `start` can express (a tokenizer is handed
+// the source from its own match position on): a backtick in front means this
+// is the inside of a longer code span, and a word character in front of the
+// cue means another word ends in it (`precommit 4ed…`).
+const COMMIT_REF_START = new RegExp(`(?:^|[^\\w\`-])(?=${COMMIT_REF_SRC})`, "i");
+
+/** Whether an abbreviation is shaped like a sha rather than a number. */
+function shaIsCommitShaped(sha: string): boolean {
+  return sha.length === 40 || /[a-f]/i.test(sha);
+}
+
+/**
+ * A commit reference. Deliberately not a pill like the chips above: a sha IS a
+ * code identifier, it stays in the monospace capsule it was written in, and a
+ * sentence naming two or three commits would otherwise become a row of boxes.
+ * The dotted underline base.css gives it is the whole affordance, and it is
+ * the one a term with a definition has always had.
+ */
+function commitRefChip(repo: string, sha: string): string {
+  const ghRepo = knownRepos.get(repo);
+  const href = ghRepo ? `https://github.com/${ghRepo}/commit/${sha}` : "";
+  const short = sha.slice(0, 8);
+  const data =
+    `class="commit-ref" data-commit-repo="${attr(repo)}" data-commit-sha="${attr(sha)}"`;
+  // Without a GitHub page there is nothing to open, so it is a term you can
+  // read rather than a link that goes nowhere. It stays focusable: the hover
+  // card is what it has to say, and the keyboard has to reach it.
+  return href
+    ? `<a href="${attr(href)}" ${data}` +
+        ` title="${attr(`Open ${repoLabel(repo)} commit ${short} on GitHub`)}"` +
+        ` target="_blank" rel="noopener noreferrer">${attr(sha)}</a>`
+    : `<span ${data} tabindex="0"` +
+        ` title="${attr(`Commit ${short} · ${repoLabel(repo)}`)}">${attr(sha)}</span>`;
+}
+
+/** A GitHub commit page in a repo this instance serves. */
+function githubCommitTarget(
+  href: string | null | undefined,
+): { repo: string; sha: string } | null {
+  if (!href) return null;
+  let url: URL;
+  try {
+    url = new URL(String(href));
+  } catch {
+    return null;
+  }
+  if (
+    !["github.com", "www.github.com"].includes(url.hostname.toLowerCase()) ||
+    url.search ||
+    url.hash
+  )
+    return null;
+  const match = /^\/([^/]+)\/([^/]+)\/commit\/([0-9a-f]{7,40})\/?$/i.exec(url.pathname);
+  if (!match) return null;
+  const githubRepo = `${match[1]}/${match[2]}`.toLowerCase();
+  for (const [repo, configuredGithubRepo] of knownRepos) {
+    if (configuredGithubRepo?.toLowerCase() === githubRepo)
+      return { repo, sha: match[3].toLowerCase() };
+  }
+  return null;
+}
+
 // Links into OS1 itself must not open a new window — it's the same app. Known
 // public hosts cover links pasted as absolute URLs viewed from another origin
 // (e.g. the ts.net entry); same-origin covers everything else, prefix included
@@ -712,6 +797,12 @@ function flattenChips(tokens: any[] | undefined): void {
       token.type = token.coded ? "codespan" : "text";
       token.text = token.label;
       token.raw = token.coded ? `\`${token.label}\`` : token.label;
+      token.tokens = undefined;
+    } else if (token.type === "commitRef") {
+      // The codespan form goes back to being a codespan, not to text: it was
+      // written in backticks and must still read as code inside the link.
+      token.type = token.coded ? "codespan" : "text";
+      token.text = token.coded ? token.sha : token.raw;
       token.tokens = undefined;
     } else if (
       token.type === "prMention" ||
@@ -811,6 +902,12 @@ md.use({
           : String(token.text || `PR #${githubPr.number}`);
         return prMentionLink(githubPr.repo, githubPr.number, label);
       }
+      // A pasted commit URL is the same reference written the long way, so it
+      // renders as the same thing. Only a bare URL: a link someone LABELLED is
+      // their prose, and prose does not belong in a monospace capsule.
+      const githubCommit = githubCommitTarget(token.href);
+      if (githubCommit && isBareUrlLink(token))
+        return commitRefChip(githubCommit.repo, githubCommit.sha.slice(0, 8));
       const ghAsset = ghAttachmentProxyHref(token.href);
       // A bare user-attachment URL is how GitHub prose embeds a video (that
       // is also what our own PR instructions and the walkthrough mirror
@@ -820,7 +917,17 @@ md.use({
       if (ghAsset && renderRawHtml === "sanitize" && isBareUrlLink(token)) {
         return `<video class="md-video" src="${attr(ghAsset)}" controls playsinline preload="metadata"></video>`;
       }
-      const text = this.parser.parseInline(token.tokens);
+      // `flattenChips` already neutralised the chip TOKENS, but the codespan
+      // renderer below makes chips of its own, and an <a> inside an <a> is
+      // markup the HTML parser tears apart. Inside a link, a codespan is code.
+      const wasInLink = renderInLink;
+      renderInLink = true;
+      let text: string;
+      try {
+        text = this.parser.parseInline(token.tokens);
+      } finally {
+        renderInLink = wasInLink;
+      }
       if (ghAsset) {
         return `<a href="${attr(ghAsset)}" target="_blank" rel="noopener noreferrer">${text}</a>`;
       }
@@ -859,8 +966,8 @@ md.use({
     codespan(token: any) {
       const t = token.text ?? "";
       // A codespan that is exactly a session id becomes a link into that session.
-      if (SESSION_ID_EXACT.test(t)) return sessionLink(t);
-      if (AUTOMATION_ID_EXACT.test(t)) return automationChip(t);
+      if (!renderInLink && SESSION_ID_EXACT.test(t)) return sessionLink(t);
+      if (!renderInLink && AUTOMATION_ID_EXACT.test(t)) return automationChip(t);
       return `<code>${attr(t)}</code>`;
     },
     image(token: any) {
@@ -957,6 +1064,44 @@ md.use({
       },
       renderer(token: any) {
         return sessionLink(token.id);
+      },
+    },
+    {
+      name: "commitRef",
+      level: "inline",
+      start(src: string) {
+        const m = COMMIT_REF_START.exec(src);
+        // Past the guard character, which belongs to the text before it.
+        return m ? m.index + m[0].length : undefined;
+      },
+      tokenizer(src: string) {
+        const m = COMMIT_REF_EXACT.exec(src);
+        if (!m) return undefined;
+        const [raw, coded, cue, cued] = m;
+        const sha = (coded ?? cued)!;
+        // Declining has to hand back a token, not undefined: the text
+        // tokenizer would otherwise walk into the middle of this match and
+        // re-read its tail as something else. The codespan form goes back to
+        // being a codespan so it still renders as the code it was written as.
+        const asWritten = coded
+          ? { type: "codespan", raw, text: sha }
+          : { type: "text", raw, text: raw };
+        // Nowhere to resolve it against: a sha alone doesn't say which repo,
+        // the same rule a bare `#123` follows.
+        if (!renderRepo || !shaIsCommitShaped(sha)) return asWritten;
+        return {
+          type: "commitRef",
+          raw,
+          sha: sha.toLowerCase(),
+          cue: cue ?? "",
+          coded: coded !== undefined,
+          repo: renderRepo,
+        };
+      },
+      renderer(token: any) {
+        // The cue stays prose, like the PR chip's: it reads as `commit` plus
+        // the sha, not as a capsule that has swallowed the word.
+        return attr(token.cue) + commitRefChip(token.repo, token.sha);
       },
     },
     {

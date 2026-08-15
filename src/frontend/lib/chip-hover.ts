@@ -1,4 +1,10 @@
-import { fetchOpenPrs, fetchSession, type OpenPr } from "./api";
+import {
+	fetchCommit,
+	fetchOpenPrs,
+	fetchSession,
+	type CommitDetails,
+	type OpenPr,
+} from "./api";
 import type { OsReview, UnifiedSession } from "./types";
 
 /**
@@ -13,21 +19,31 @@ import type { OsReview, UnifiedSession } from "./types";
  * Everything comes from data the app already holds, since the polled session
  * list covers most chips. One lazy, cached fetch behind each kind answers for
  * the rest: a session that has been archived out of the list, and a PR that no
- * loaded session owns.
+ * loaded session owns. A commit reference is the one kind nothing here already
+ * knows, so it is always the fetch (server/commit-lookup.ts reads it off the
+ * checkout).
  */
 
 export type ChipTarget =
 	| { kind: "session"; key: string; id: string }
-	| { kind: "pr"; key: string; repo: string; number: number };
+	| { kind: "pr"; key: string; repo: string; number: number }
+	| { kind: "commit"; key: string; repo?: string; sha: string };
 
-/** The chips a card can be raised on. Both carry the ids the card needs. */
+/** The chips a card can be raised on. Each carries the ids the card needs.
+ *  A commit reference is not always an anchor: with no GitHub page to open it
+ *  renders as a focusable term instead, and the card is all it has to say. */
 export const CHIP_SELECTOR =
-	"a.session-link[data-session-id], a.pr-ref[data-pr-number]";
+	"a.session-link[data-session-id], a.pr-ref[data-pr-number], .commit-ref[data-commit-sha]";
 
 /** What the hovered anchor points at, or null when it says too little. */
 export function chipTarget(el: HTMLElement): ChipTarget | null {
 	const id = el.dataset.sessionId;
 	if (id) return { kind: "session", key: `session:${id}`, id };
+	const sha = el.dataset.commitSha;
+	if (sha) {
+		const repo = el.dataset.commitRepo || undefined;
+		return { kind: "commit", key: `commit:${repo ?? ""}@${sha}`, repo, sha };
+	}
 	const repo = el.dataset.prRepo;
 	const number = Number(el.dataset.prNumber);
 	if (repo && Number.isInteger(number))
@@ -193,6 +209,71 @@ const sessionsInFlight = new Map<string, Promise<UnifiedSession | null>>();
 
 export function cachedChipSession(id: string): UnifiedSession | null {
 	return fetchedSessions.get(id) ?? null;
+}
+
+// Commits. Nothing the app polls carries these, so every reference is a
+// lookup, cached hard: a sha is immutable, and a pointer crossing a
+// paragraph of them must not become a burst of requests. A miss is cached too:
+// 2% of sha-shaped codespans name a commit no checkout here has, and those
+// must not retry on every hover.
+const fetchedCommits = new Map<string, CommitDetails | null>();
+const commitsInFlight = new Map<string, Promise<CommitDetails | null>>();
+
+function commitKey(sha: string, repo?: string): string {
+	return `${repo ?? ""}@${sha}`;
+}
+
+export function cachedChipCommit(sha: string, repo?: string): CommitDetails | null {
+	return fetchedCommits.get(commitKey(sha, repo)) ?? null;
+}
+
+/** Whether this sha has already been answered, either way. Distinguishes "not
+ *  fetched yet" from "fetched, and no checkout has it". */
+export function chipCommitResolved(sha: string, repo?: string): boolean {
+	return fetchedCommits.has(commitKey(sha, repo));
+}
+
+/**
+ * Fold what the lookup learned back into the reference in the page.
+ *
+ * Two corrections, both of which only the answer can make. The reference was
+ * rendered with the repo it was WRITTEN in, which is the right guess almost
+ * every time but not always, so a cross-repo sha stops pointing at a 404. And
+ * a sha no checkout has drops the affordance markdown.ts gave it: the dotted
+ * underline promises a definition, and this one has none.
+ */
+export function applyChipCommit(
+	el: HTMLElement,
+	commit: CommitDetails | null,
+): void {
+	if (!commit) {
+		el.dataset.commitUnknown = "";
+		return;
+	}
+	delete el.dataset.commitUnknown;
+	if (commit.url && el instanceof HTMLAnchorElement && el.href !== commit.url)
+		el.href = commit.url;
+}
+
+export function loadChipCommit(
+	sha: string,
+	repo?: string,
+): Promise<CommitDetails | null> {
+	const key = commitKey(sha, repo);
+	if (fetchedCommits.has(key)) return Promise.resolve(fetchedCommits.get(key) ?? null);
+	const pending = commitsInFlight.get(key);
+	if (pending) return pending;
+	const request = fetchCommit(sha, repo)
+		.catch(() => null)
+		.then((commit) => {
+			fetchedCommits.set(key, commit);
+			return commit;
+		})
+		.finally(() => {
+			commitsInFlight.delete(key);
+		});
+	commitsInFlight.set(key, request);
+	return request;
 }
 
 export function loadChipSession(id: string): Promise<UnifiedSession | null> {

@@ -92,6 +92,38 @@ export async function fetchRecentCommits(days?: number): Promise<RecentCommitPag
 	};
 }
 
+/** The commit a transcript's sha names, read off the checkout. */
+export interface CommitDetails extends RecentCommit {
+	/** What git abbreviates to in that repo; `sha` is always the full 40. */
+	shortSha: string;
+	body?: string;
+	filesChanged: number;
+	/** Whether it is on the repo's default branch, i.e. whether it shipped. */
+	onDefaultBranch: boolean;
+	/** That branch's name, so the card can say "on main". */
+	defaultBranch: string;
+}
+
+/**
+ * One commit by sha. `repo` is where the sha was written and is searched
+ * first, but the answer names the repo it was found in: prose crosses repos,
+ * and the reference should point at the one that actually holds it. Null when
+ * no checkout has it, which is a reference we cannot answer rather than an
+ * error worth showing.
+ */
+export async function fetchCommit(
+	sha: string,
+	repo?: string,
+): Promise<CommitDetails | null> {
+	const query = new URLSearchParams({ sha });
+	if (repo) query.set("repo", repo);
+	return (
+		(await request<CommitDetails | null>(`/commit?${query}`, {
+			label: "Failed to fetch commit",
+		})) ?? null
+	);
+}
+
 export async function fetchDiff(
 	sessionId: string,
 ): Promise<import("../types").SessionDiffResponse> {

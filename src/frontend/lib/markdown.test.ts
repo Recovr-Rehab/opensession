@@ -619,6 +619,126 @@ describe("renderMarkdown PR mentions", () => {
   });
 });
 
+describe("renderMarkdown commit references", () => {
+  const os = { repo: "opensession" };
+  const withGithub = () =>
+    setKnownRepos([{ id: "opensession", ghRepo: "tellahq/opensession" }]);
+
+  it("turns a sha codespan into a hoverable reference", () => {
+    withGithub();
+    const html = renderMarkdown("This is reverting `4ed1ef09` + `437cba77`.", os);
+    expect(html).toContain('class="commit-ref"');
+    expect(html).toContain('data-commit-sha="4ed1ef09"');
+    expect(html).toContain('data-commit-sha="437cba77"');
+    expect(html).toContain('data-commit-repo="opensession"');
+    expect(html).toContain(
+      'href="https://github.com/tellahq/opensession/commit/4ed1ef09"',
+    );
+    expect(html).toContain(">4ed1ef09</a>");
+    // Not a chip: the sha keeps the shape it was written in.
+    expect(html).not.toContain("commit-ref-icon");
+  });
+
+  it("reads a full sha and an upper-case one", () => {
+    withGithub();
+    const full = "a".repeat(39) + "1";
+    expect(renderMarkdown(`Pinned at \`${full}\`.`, os)).toContain(
+      `data-commit-sha="${full}"`,
+    );
+    expect(renderMarkdown("Pinned at `4ED1EF09`.", os)).toContain(
+      'data-commit-sha="4ed1ef09"',
+    );
+  });
+
+  it("links a bare sha a cue word vouches for, keeping the cue as prose", () => {
+    withGithub();
+    const html = renderMarkdown("Fixed in commit 4ed1ef09 last night.", os);
+    expect(html).toContain("commit <a");
+    expect(html).toContain('data-commit-sha="4ed1ef09"');
+    for (const src of ["commits 4ed1ef09 and 437cba77", "sha 4ed1ef09"]) {
+      expect(renderMarkdown(src, os)).toContain('data-commit-sha="4ed1ef09"');
+    }
+  });
+
+  it("leaves bare hex in prose alone", () => {
+    withGithub();
+    // Measured at 18% real commits, against 98% for the codespan form: prose
+    // is full of ids, hashes and timestamps that are hex by accident.
+    const html = renderMarkdown("The id 4ed1ef09 came back from the API.", os);
+    expect(html).not.toContain("commit-ref");
+    expect(html).toContain("4ed1ef09");
+    expect(renderMarkdown("precommit 4ed1ef09 hook", os)).not.toContain("commit-ref");
+  });
+
+  it("does not fire on the things that merely look like a sha", () => {
+    withGithub();
+    for (const src of [
+      "`1786042878` is epoch milliseconds", // all digits: a number, not a sha
+      "`3625732127` names the CI run",
+      "`f6f8fa` is the code well fill", // 6 hex: a colour
+      "`120a8d94363c2d90b7b92710f58cf9ce` is an md5", // 32 hex: never a commit
+      "`b43e9281b96037e3` is a 16-hex id",
+      "`4ed1ef09g` is not hex at all",
+    ]) {
+      const html = renderMarkdown(src, os);
+      expect(html).not.toContain("commit-ref");
+      // and it still renders as the code it was written as
+      expect(html).toContain("<code>");
+    }
+  });
+
+  it("stays plain when the caller renders without a repo", () => {
+    withGithub();
+    const html = renderMarkdown("This is reverting `4ed1ef09`.");
+    expect(html).not.toContain("commit-ref");
+    expect(html).toContain("<code>4ed1ef09</code>");
+  });
+
+  it("is a focusable term, not a dead link, without a GitHub name", () => {
+    setKnownRepos([{ id: "opensession" }]);
+    const html = renderMarkdown("Reverting `4ed1ef09`.", os);
+    expect(html).toContain('<span class="commit-ref"');
+    expect(html).toContain('tabindex="0"');
+    expect(html).not.toContain("href=");
+  });
+
+  it("turns a pasted GitHub commit URL into the same reference", () => {
+    withGithub();
+    const url = "https://github.com/tellahq/opensession/commit/4ed1ef09aa11bb22cc33dd44ee55ff6600778899";
+    const html = renderMarkdown(url, os);
+    expect(html).toContain('class="commit-ref"');
+    expect(html).toContain(">4ed1ef09</a>");
+    // A labelled link is the author's prose and keeps its words.
+    const labelled = renderMarkdown(`[the revert](${url})`, os);
+    expect(labelled).not.toContain("commit-ref");
+    expect(labelled).toContain("the revert");
+    // Another org's commit is not ours to resolve.
+    expect(
+      renderMarkdown("https://github.com/vercel/next.js/commit/4ed1ef09", os),
+    ).not.toContain("commit-ref");
+  });
+
+  it("degrades inside an explicit link instead of nesting anchors", () => {
+    withGithub();
+    const html = renderMarkdown("[see `4ed1ef09`](https://example.com/x)", os);
+    expect(html).not.toContain("commit-ref");
+    expect(html).toContain("<code>4ed1ef09</code>");
+    expect(html).toContain('href="https://example.com/x"');
+    // The same guard covers the chips the codespan renderer makes.
+    const session = renderMarkdown(
+      "[the worker](https://example.com/x) and `bks-019f24b5-f31d-7000-a48f-31a9e829c4ae`",
+      os,
+    );
+    expect(session).toContain("session-link");
+    expect(
+      renderMarkdown(
+        "[worker `bks-019f24b5-f31d-7000-a48f-31a9e829c4ae`](https://example.com/x)",
+        os,
+      ),
+    ).not.toContain("session-link");
+  });
+});
+
 describe("renderMarkdown strikethrough (double-tilde only)", () => {
   it("does not strike through single tildes in code-ish content", () => {
     // ReScript labeled args, approximate numbers, home paths — all bare tildes.
