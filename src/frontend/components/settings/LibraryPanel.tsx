@@ -1,12 +1,27 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ComponentType } from "react";
 import {
 	fetchLibrary,
 	type LibraryEntry,
 	type LibraryEntryType,
 } from "../../lib/api/library";
 import { BASE_PATH } from "../../lib/base";
-import { displayName } from "../../brand-logos";
+import { BRANDS, displayName } from "../../brand-logos";
 import { IconTile } from "../BrandTile";
+import {
+	IconBolt,
+	IconChart,
+	IconCheckCircle,
+	IconInbox,
+	IconListCircles,
+	IconMessages,
+	IconMoon,
+	IconNote,
+	IconPlug,
+	IconPullRequest,
+	IconStack,
+	IconStatusRing,
+	IconWrench,
+} from "../icons";
 import { useIsPhone } from "../../hooks/useIsPhone";
 import {
 	onSidebarToolsChanged,
@@ -16,18 +31,15 @@ import {
 	type SidebarToolId,
 } from "../../lib/sidebar-tools";
 import {
-	SettingCard,
-	SettingRow,
-	SettingRowControl,
-	SettingRowDescription,
-	SettingRowText,
-	SettingRowTitle,
 	SettingsGroupLabel,
 	SettingsHeader,
 	SettingsHint,
 	SettingsPanel,
 	settingsInputClass,
 } from "../../ui/settings";
+import { Badge } from "../../ui/badge";
+import { cn } from "../../ui/cn";
+import { Segmented, SegmentedOption } from "../../ui/segmented";
 import { EmptyState, InlineAlert, LoadingState } from "../../ui/state";
 import { Switch } from "../../ui/switch";
 
@@ -35,6 +47,11 @@ import { Switch } from "../../ui/switch";
 // extended with. The server derives it (src/server/library.ts) from the
 // recipes directory, the automation templates and the integration registry,
 // so a new recipe file shows up here without an edit in this file.
+//
+// It reads as a gallery rather than a settings form: a grid of cards, each
+// led by the mark of the thing it installs. A catalog is browsed before it is
+// read, and a column of identical text rows gives a person nothing to aim at
+// — the tile is what makes "the GitHub one" findable without reading.
 //
 // Installing deliberately does NOT happen here — each type keeps the install
 // path it already has (a config seed, a pre-filled create form, credentials in
@@ -62,19 +79,110 @@ const FILTERS: { key: "all" | LibraryEntryType; label: string }[] = [
 	{ key: "integration", label: "Integrations" },
 ];
 
-function StatusChip({ children, tone }: { children: string; tone: "on" | "off" }) {
+/**
+ * The tile for an entry that has no brand of its own — a solid plate carrying
+ * the tone's ink, because these sit in a grid beside real brand marks and a
+ * pale tint next to GitHub's black square reads as a placeholder waiting for
+ * a logo. Yellow is deliberately absent: nothing in the palette reads on it.
+ */
+const TONES = {
+	blue: "bg-blue text-white",
+	green: "bg-green text-white",
+	red: "bg-red text-white",
+	purple: "bg-purple text-white",
+	accent: "bg-accent text-on-accent",
+} as const;
+
+type Glyph = { icon: ComponentType<{ size?: number }>; tone: keyof typeof TONES };
+
+/** Per tool, because a tool is a place in the app and its glyph is how the
+ *  sidebar already names it. */
+const TOOL_GLYPHS: Record<string, Glyph> = {
+	tasks: { icon: IconListCircles, tone: "blue" },
+	catchup: { icon: IconInbox, tone: "green" },
+	supporttinder: { icon: IconMessages, tone: "accent" },
+	reports: { icon: IconStack, tone: "purple" },
+	analytics: { icon: IconChart, tone: "accent" },
+};
+
+/**
+ * An automation's glyph, read off what the job is about. Every automation is
+ * a prompt on a trigger, so typed strictly they would all draw one bolt — and
+ * a column of seventeen identical bolts is a column with nothing to aim at.
+ * The word that names the job is the best signal available: a catalog is
+ * scanned, and "the error one" is how someone looks for it.
+ *
+ * Order matters. "Production error sweep" contains both "production" and
+ * "error"; the failure it watches is what it is about, so that rule comes
+ * first.
+ */
+const JOB_GLYPHS: { match: RegExp; glyph: Glyph }[] = [
+	{ match: /error|health|monitor|uptime|incident|alarm/, glyph: { icon: IconStatusRing, tone: "red" } },
+	{ match: /doc|changelog|spell|release note/, glyph: { icon: IconNote, tone: "purple" } },
+	{ match: /test|flaky/, glyph: { icon: IconCheckCircle, tone: "green" } },
+	{ match: /support|ticket|recap|digest|rollup/, glyph: { icon: IconMessages, tone: "green" } },
+	{ match: /dream|reflect|retro|nightly/, glyph: { icon: IconMoon, tone: "purple" } },
+	{ match: /depend|cleanup|refactor|code/, glyph: { icon: IconWrench, tone: "blue" } },
+	{ match: /\bpr\b|pull request|review|merge|branch/, glyph: { icon: IconPullRequest, tone: "blue" } },
+];
+
+const TYPE_GLYPHS: Record<LibraryEntryType, Glyph> = {
+	tool: { icon: IconStack, tone: "blue" },
+	automation: { icon: IconBolt, tone: "accent" },
+	integration: { icon: IconPlug, tone: "green" },
+};
+
+/** A service named in the entry's own name, for the entries that carry no
+ *  `requires` — every automation TEMPLATE, which is most of the catalog. Only
+ *  the name is searched: a description mentioning a repo called tella-fusion
+ *  is not a Tella automation. */
+const BRAND_IN_NAME = new RegExp(`\\b(${Object.keys(BRANDS).join("|")})\\b`);
+
+function brandFor(entry: LibraryEntry): string | undefined {
+	if (entry.type === "integration") return entry.slug;
+	const required = entry.requires?.find((id) => BRANDS[id]);
+	if (required) return required;
+	return BRAND_IN_NAME.exec(entry.name.toLowerCase())?.[1];
+}
+
+function glyphFor(entry: LibraryEntry): Glyph {
+	const perTool = TOOL_GLYPHS[entry.slug];
+	if (perTool) return perTool;
+	if (entry.type === "automation") {
+		const name = `${entry.slug} ${entry.name}`.toLowerCase();
+		const job = JOB_GLYPHS.find((rule) => rule.match.test(name));
+		if (job) return job.glyph;
+	}
+	return TYPE_GLYPHS[entry.type];
+}
+
+function EntryIcon({ entry, size = 34 }: { entry: LibraryEntry; size?: number }) {
+	// An integration IS the service. An automation or tool that works in one is
+	// best recognised by it too: "Stale PR monitor" under GitHub's mark says
+	// what it touches faster than any wording of its description does.
+	const brand = brandFor(entry);
+	if (brand) return <IconTile name={brand} size={size} />;
+
+	const glyph = glyphFor(entry);
+	const Icon = glyph.icon;
 	return (
 		<span
-			className={
-				tone === "on"
-					? "whitespace-nowrap rounded-full bg-green-soft px-2 py-0.5 text-label font-medium text-green"
-					: "whitespace-nowrap rounded-full bg-hover px-2 py-0.5 text-label font-medium text-dim"
-			}
+			className={cn(
+				"flex shrink-0 items-center justify-center rounded-md",
+				TONES[glyph.tone],
+			)}
+			style={{ width: size, height: size }}
 		>
-			{children}
+			<Icon size={Math.round(size * 0.56)} />
 		</span>
 	);
 }
+
+/** A card's action: a raised pill, the Button primitive's `default` recipe at
+ *  `sm`. It is an anchor rather than a button because every install path is a
+ *  place — the automation form, Setup — and a link is what a place takes. */
+const installLinkClass =
+	"inline-flex min-h-[26px] shrink-0 items-center rounded-control border border-line bg-button px-2.5 text-xs font-medium text-dim no-underline smooth-shadow-xs transition-colors hover:border-line-strong hover:text-fg";
 
 function EntryControl({
 	entry,
@@ -95,19 +203,58 @@ function EntryControl({
 		);
 
 	if (entry.installed)
-		return <StatusChip tone="on">{entry.type === "integration" ? "Enabled" : "Installed"}</StatusChip>;
+		return (
+			<Badge tone="success">
+				{entry.type === "integration" ? "Enabled" : "Installed"}
+			</Badge>
+		);
 
 	return (
-		<a
-			className="whitespace-nowrap rounded-md border border-line px-2.5 py-1 text-xs font-medium text-fg no-underline hover:bg-hover"
-			href={`${BASE_PATH}${entry.href}`}
-		>
+		<a className={installLinkClass} href={`${BASE_PATH}${entry.href}`}>
 			{entry.install === "guided"
 				? "Set up"
 				: entry.install === "draft"
 					? "Use"
 					: "Add"}
 		</a>
+	);
+}
+
+function EntryCard({
+	entry,
+	toolVisible,
+	onToggleTool,
+}: {
+	entry: LibraryEntry;
+	toolVisible: boolean;
+	onToggleTool: (visible: boolean) => void;
+}) {
+	return (
+		<div className="flex items-center gap-3 rounded-xl bg-raised p-3">
+			<EntryIcon entry={entry} />
+			<div className="min-w-0 flex-1">
+				<div className="flex items-center gap-1.5">
+					<span className="truncate text-item-title font-medium text-fg">
+						{entry.name}
+					</span>
+					{/* A template is the odd one out: it opens a pre-filled form to
+					    edit rather than installing on the click, which its "Use"
+					    already says and this confirms before the click. */}
+					{entry.install === "draft" && <Badge>Template</Badge>}
+				</div>
+				<div className="truncate text-supporting text-dim">
+					{entry.description}
+					{entry.requires?.length
+						? ` Needs ${entry.requires.map(displayName).join(" and ")}.`
+						: ""}
+				</div>
+			</div>
+			<EntryControl
+				entry={entry}
+				toolVisible={toolVisible}
+				onToggleTool={onToggleTool}
+			/>
+		</div>
 	);
 }
 
@@ -135,15 +282,20 @@ export function LibraryPanel() {
 	// switches, so mirror rather than own the state.
 	useEffect(() => onSidebarToolsChanged(() => setHiddenTools(readHiddenSidebarTools())), []);
 
+	const visible = useMemo(
+		() =>
+			(entries || []).filter(
+				// A tool this width never shows can't be switched on here either.
+				(entry) =>
+					entry.type !== "tool" ||
+					toolFitsViewport(entry.slug as SidebarToolId, isPhone),
+			),
+		[entries, isPhone],
+	);
+
 	const groups = useMemo(() => {
 		const needle = query.trim().toLowerCase();
-		const matched = (entries || []).filter((entry) => {
-			// A tool this width never shows can't be switched on here either.
-			if (
-				entry.type === "tool" &&
-				!toolFitsViewport(entry.slug as SidebarToolId, isPhone)
-			)
-				return false;
+		const matched = visible.filter((entry) => {
 			if (filter !== "all" && entry.type !== filter) return false;
 			if (!needle) return true;
 			return (
@@ -156,7 +308,27 @@ export function LibraryPanel() {
 			type,
 			entries: matched.filter((entry) => entry.type === type),
 		})).filter((group) => group.entries.length > 0);
-	}, [entries, query, filter, isPhone]);
+	}, [visible, query, filter]);
+
+	// What this instance already runs, led by its own mark. The catalog below
+	// says the same thing card by card; this is the one glance that answers
+	// "what is on here" before you start reading.
+	//
+	// One tile per MARK, integrations first: an automation borrows the mark of
+	// the service it works in, so the GitHub integration and the GitHub review
+	// automation both draw GitHub's square and a strip carrying both reads as
+	// a rendering bug rather than as two things being on.
+	const byMark = new Map<string | Glyph, LibraryEntry>();
+	for (const entry of [...visible].sort(
+		(a, b) => Number(b.type === "integration") - Number(a.type === "integration"),
+	)) {
+		if (entry.installed !== true) continue;
+		// A glyph rule is a singleton, so the object itself is the mark's
+		// identity — no key to keep in sync with the table above.
+		const mark = brandFor(entry) ?? glyphFor(entry);
+		if (!byMark.has(mark)) byMark.set(mark, entry);
+	}
+	const installed = [...byMark.values()];
 
 	const header = (
 		<SettingsHeader
@@ -167,7 +339,7 @@ export function LibraryPanel() {
 
 	if (error)
 		return (
-			<SettingsPanel>
+			<SettingsPanel className="max-w-none">
 				{header}
 				<InlineAlert>{error}</InlineAlert>
 			</SettingsPanel>
@@ -175,38 +347,59 @@ export function LibraryPanel() {
 
 	if (!entries)
 		return (
-			<SettingsPanel>
+			<SettingsPanel className="max-w-none">
 				{header}
 				<LoadingState>Loading the library…</LoadingState>
 			</SettingsPanel>
 		);
 
 	return (
-		<SettingsPanel>
+		<SettingsPanel className="max-w-none">
 			{header}
 
-			<div className="flex flex-wrap items-center gap-2">
+			{installed.length > 0 && (
+				<div className="mb-6 px-5">
+					<div className="mb-2 text-label font-semibold text-faint">Installed</div>
+					<div className="flex flex-wrap gap-1.5">
+						{installed.map((entry) => (
+							<a
+								key={entry.id}
+								href={`${BASE_PATH}${entry.href}`}
+								title={entry.name}
+								aria-label={entry.name}
+								className="rounded-md transition-opacity hover:opacity-80"
+							>
+								<EntryIcon entry={entry} size={30} />
+							</a>
+						))}
+					</div>
+				</div>
+			)}
+
+			<div className="flex flex-wrap items-center gap-2 px-2">
 				<input
-					className={`${settingsInputClass} min-w-0 flex-1`}
-					placeholder="Search"
+					className={`${settingsInputClass} min-w-[180px] flex-1`}
+					placeholder="Search the library"
 					value={query}
 					onChange={(e) => setQuery(e.target.value)}
 				/>
-				<div className="flex shrink-0 items-center gap-1">
-					{FILTERS.map((option) => (
-						<button
-							key={option.key}
-							type="button"
-							onClick={() => setFilter(option.key)}
-							className={
-								filter === option.key
-									? "rounded-md bg-active px-2.5 py-1.5 text-xs font-medium text-fg"
-									: "rounded-md px-2.5 py-1.5 text-xs font-medium text-dim hover:bg-hover hover:text-fg"
-							}
-						>
-							{option.label}
-						</button>
-					))}
+				{/* The four options fit the desktop row. On a phone they are wider
+				    than the sheet and the segmented control's own tap sizing makes
+				    them wider still, so the strip scrolls rather than wrapping into
+				    a second row of chrome above the catalog. */}
+				<div className="max-w-full overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+					<Segmented
+						label="Filter the library"
+						size="sm"
+						value={filter}
+						onValueChange={(next) => setFilter(next as "all" | LibraryEntryType)}
+					>
+						{FILTERS.map((option) => (
+							<SegmentedOption key={option.key} value={option.key}>
+								{option.label}
+							</SegmentedOption>
+						))}
+					</Segmented>
 				</div>
 			</div>
 
@@ -216,55 +409,33 @@ export function LibraryPanel() {
 
 			{groups.map((group) => (
 				<div key={group.type}>
-					<SettingsGroupLabel>{TYPE_LABELS[group.type]}</SettingsGroupLabel>
-					<SettingCard>
-						{group.entries.map((entry) => {
-							const visible =
-								entry.type === "tool" &&
-								!hiddenTools.has(entry.slug as SidebarToolId);
-							return (
-								<SettingRow key={entry.id}>
-									{/* Only integrations have a brand to show; a letter tile next to
-									    "Tasks" would be noise rather than recognition. */}
-									{entry.type === "integration" && (
-										<IconTile name={entry.slug} size={30} />
-									)}
-									<SettingRowText>
-										<SettingRowTitle>
-											<span className="flex flex-wrap items-center gap-2">
-												{entry.name}
-												{entry.source === "repo" && (
-													<span className="rounded-full bg-hover px-2 py-0.5 text-label font-medium text-dim">
-														Recipe
-													</span>
-												)}
-												{entry.install === "draft" && (
-													<span className="rounded-full bg-hover px-2 py-0.5 text-label font-medium text-dim">
-														Template
-													</span>
-												)}
-											</span>
-										</SettingRowTitle>
-										<SettingRowDescription>
-											{entry.description}
-											{entry.requires?.length
-												? ` Needs ${entry.requires.map(displayName).join(" and ")}.`
-												: ""}
-										</SettingRowDescription>
-									</SettingRowText>
-									<SettingRowControl>
-										<EntryControl
-											entry={entry}
-											toolVisible={visible}
-											onToggleTool={(next) =>
-												setSidebarToolVisible(entry.slug as SidebarToolId, next)
-											}
-										/>
-									</SettingRowControl>
-								</SettingRow>
-							);
-						})}
-					</SettingCard>
+					<SettingsGroupLabel
+						actions={<span className="tabular-nums">{group.entries.length}</span>}
+					>
+						{TYPE_LABELS[group.type]}
+					</SettingsGroupLabel>
+					{/* Two up where the column is wide enough for a card to hold a
+					    readable description, one up otherwise. The measure is the
+					    CONTAINER's, not the window's: this panel sits beside the
+					    settings nav, so a viewport query would say "wide" for a
+					    column that isn't. */}
+					<div className="@container px-2">
+						<div className="grid grid-cols-1 gap-2 @[560px]:grid-cols-2">
+							{group.entries.map((entry) => (
+								<EntryCard
+									key={entry.id}
+									entry={entry}
+									toolVisible={
+										entry.type === "tool" &&
+										!hiddenTools.has(entry.slug as SidebarToolId)
+									}
+									onToggleTool={(next) =>
+										setSidebarToolVisible(entry.slug as SidebarToolId, next)
+									}
+								/>
+							))}
+						</div>
+					</div>
 					<SettingsHint>
 						{group.type === "tool" ? (
 							<>
