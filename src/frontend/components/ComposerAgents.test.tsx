@@ -60,6 +60,9 @@ describe("ComposerAgents plan summary", () => {
 			html.split("animate-[composer-agents-pulse_1.4s_ease-in-out_infinite]").length - 1,
 		).toBe(1);
 		expect(html.indexOf("1/3")).toBeLessThan(html.lastIndexOf(">Plan<"));
+		expect(html.lastIndexOf(">Plan<")).toBeLessThan(
+			html.indexOf("Inspect the current behavior"),
+		);
 		expect(html.match(/Simplify the plan markers/g)).toHaveLength(1);
 	});
 });

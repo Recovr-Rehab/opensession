@@ -132,13 +132,63 @@ export function ComposerAgents({ runs, subagents, plan, onOpenPanel }: Props) {
 	const planTotal = planItems.length;
 	const planDone = planDoneCount(planItems);
 	const planStep = currentPlanItem(planItems);
+	const summary = (
+		<button
+			type="button"
+			className="flex w-full items-center gap-2 text-left text-label font-medium text-fg"
+			aria-expanded={open}
+			aria-label={open ? "Collapse run status" : "Show run status"}
+			onClick={toggle}
+		>
+			{!open && <span className={cn(liveDot, "size-2")} />}
+			{total === 0 && (
+				<span className="flex-none font-medium text-faint tabular-nums">
+					{planDone}/{planTotal}
+				</span>
+			)}
+			{/* flex-auto, not flex-1: with a zero basis the label would only ever
+			    take the free space left over, so a long phase name stopped pushing
+			    the caret and started truncating a step early. */}
+			<span className="min-w-0 flex-auto truncate">
+				{total > 0 ? (
+					<>
+						<strong className="font-semibold">{runningCount} running</strong>
+						{total > runningCount ? (
+							<span className="font-medium text-faint">
+								{" "}
+								· {done}/{total} done
+							</span>
+						) : null}
+						{planTotal > 0 ? (
+							<span className="font-medium text-faint">
+								{" "}
+								· Plan {planDone}/{planTotal}
+							</span>
+						) : !open && phase ? (
+							<span className="font-medium text-faint"> · {phase}</span>
+						) : null}
+					</>
+				) : (
+					<strong className="font-semibold">
+						{!open && planStep ? planStep : "Plan"}
+					</strong>
+				)}
+			</span>
+			<IconChevronDown
+				size={16}
+				className={cn(
+					"flex-none text-faint transition-transform duration-[var(--dur)]",
+					open && "rotate-180",
+				)}
+			/>
+		</button>
+	);
 
 	return (
 		// A flap that folds out from behind the composer: inset from its edges,
 		// rounded only on top, bottom tucked under the composer box (negative
 		// margin — the composer is a later positioned sibling, so it paints on
-		// top). The summary row sits at the bottom, nearest the composer, and the
-		// detail card grows upward so the composer stays anchored.
+		// top). The summary stays first and the detail folds out beneath it.
 		<div
 			className={cn(
 				"relative -mb-3.5 flex w-full flex-col gap-2.5 rounded-t-[var(--composer-radius)] border-x border-t bg-[color-mix(in_srgb,var(--bg-panel)_80%,var(--composer-surface))] px-3.5 pt-2.5 pb-[22px] text-label font-medium text-fg",
@@ -146,6 +196,7 @@ export function ComposerAgents({ runs, subagents, plan, onOpenPanel }: Props) {
 			)}
 			data-open={open ? "" : undefined}
 		>
+			{summary}
 			{open && (
 				<div className="flex flex-col gap-2.5">
 					{planTotal > 0 && (
@@ -265,56 +316,6 @@ export function ComposerAgents({ runs, subagents, plan, onOpenPanel }: Props) {
 					)}
 				</div>
 			)}
-
-			<button
-				type="button"
-				className="flex w-full items-center gap-2 text-left text-label font-medium text-fg"
-				aria-expanded={open}
-				aria-label={open ? "Collapse run status" : "Show run status"}
-				onClick={toggle}
-			>
-				{!open && <span className={cn(liveDot, "size-2")} />}
-				{total === 0 && (
-					<span className="flex-none font-medium text-faint tabular-nums">
-						{planDone}/{planTotal}
-					</span>
-				)}
-				{/* flex-auto, not flex-1: with a zero basis the label would only ever
-				    take the free space left over, so a long phase name stopped pushing
-				    the caret and started truncating a step early. */}
-				<span className="min-w-0 flex-auto truncate">
-					{total > 0 ? (
-						<>
-							<strong className="font-semibold">{runningCount} running</strong>
-							{total > runningCount ? (
-								<span className="font-medium text-faint">
-									{" "}
-									· {done}/{total} done
-								</span>
-							) : null}
-							{planTotal > 0 ? (
-								<span className="font-medium text-faint">
-									{" "}
-									· Plan {planDone}/{planTotal}
-								</span>
-							) : !open && phase ? (
-								<span className="font-medium text-faint"> · {phase}</span>
-							) : null}
-						</>
-					) : (
-						<strong className="font-semibold">
-							{!open && planStep ? planStep : "Plan"}
-						</strong>
-					)}
-				</span>
-				<IconChevronDown
-					size={16}
-					className={cn(
-						"flex-none text-faint transition-transform duration-[var(--dur)]",
-						open && "rotate-180",
-					)}
-				/>
-			</button>
 		</div>
 	);
 }
