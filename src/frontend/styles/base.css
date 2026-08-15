@@ -1958,7 +1958,7 @@ a.pr-ref {
 	/* Top and bottom are unequal on purpose, and that is what makes them LOOK
 	   equal: descenders fill the room under the baseline while nothing fills
 	   the room over the caps, so a balanced pill reads tight up there. */
-	padding: 2.5px 8px 1px 5.5px;
+	padding: 2.5px 7px 1px 4.5px;
 	cursor: pointer;
 	text-decoration: none;
 	white-space: nowrap;
@@ -2132,13 +2132,14 @@ a.asset-ref:focus-visible {
    fill is deliberate — a mention is addressed at somebody, so it should carry
    more weight in a paragraph than a session or a PR does. */
 a.person-chip {
-	/* The one number the family cannot share. Every other chip leads with a
-	   glyph, which carries about 3px of its own air inside its box, so its
-	   label side needs that much more to read even. A face is a picture, dense
-	   to the edge of its box, so the same 8px after the name left the pill
-	   lopsided: 5.5px of air before the face against 8.4px after the last
-	   letter. */
+	/* The two numbers the family cannot share. Every other chip leads with a
+	   glyph, which carries about 3px of its own air inside its box; a face is a
+	   picture, dense to the edge of its box, so it needs that room from the
+	   padding instead and gives it back on the label side. Sharing the family's
+	   pair left the pill lopsided: 4.5px of air before the face against 7.4px
+	   after the last letter. At 5.5 and 6 it measures even. */
 	padding-right: 6px;
+	padding-left: 5.5px;
 	font-size: 0.95em;
 	font-weight: 560;
 	background: color-mix(in srgb, var(--accent) 12%, transparent);
