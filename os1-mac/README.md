@@ -51,7 +51,9 @@ empty local state, optionally rsync'd from prod.
 - `src/preload.js` — exposes `window.os1` (`desktop`, `setBadge`, `clearBadge`)
   for the frontend to feature-detect and mirror its app badge to the dock.
 - `src/offline.html` — retry screen for when the configured server is
-  unreachable.
+  unreachable. It carries a copy of the web app's tokens and splash, since it
+  loads from `file://` with the server gone and can fetch nothing; `src/mark.png`
+  is that splash's mark.
 - **The web app's service worker is deliberately blocked** (request to `sw.js`
   cancelled + registrations cleared at boot). Its jobs — Web Push, app-shell
   cache, PWA badge — don't function in Electron anyway, and its Cache Storage
