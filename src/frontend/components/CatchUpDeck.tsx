@@ -219,15 +219,23 @@ export function CatchUpDeck({
 	const next = cards[index + 1];
 
 	return (
-		<div className="flex min-h-0 flex-1 flex-col items-center bg-surface">
+		// `isolate` scopes the z-indexes the two bars use to hold the card stack
+		// under them, so they cannot climb over the app's own chrome.
+		<div className="isolate flex min-h-0 flex-1 flex-col items-center bg-surface">
 			{/* Header: back + "N Left" counter + new-workspace (Slack-style). This is
 			    the deck's only top bar — the app's mobile back bar is suppressed for
 			    the catch-up view — so it carries the safe-area top inset itself.
 			    The chevron is that suppressed bar's stand-in and stays phone-only:
 			    on desktop the sidebar (and its ‹ caret) is always there, no other
 			    view offers a back control, and the pane's left edge belongs to the
-			    collapsed-sidebar controls. Esc still leaves the deck. */}
-			<div className="relative flex w-full items-center justify-between px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))]">
+			    collapsed-sidebar controls. Esc still leaves the deck.
+
+			    It owns a fill and sits above the card stack: a dragged card tilts
+			    up to 9°, which lifts its top corner well past its own box (65px on
+			    a desktop-width card), and the up-fling of Keep Unread crosses the
+			    whole row. Cards pass UNDER the bar instead of over it, so the
+			    counter stays readable through every swipe. */}
+			<div className="relative z-10 flex w-full shrink-0 items-center justify-between bg-surface px-4 pb-3 pt-[max(12px,env(safe-area-inset-top))]">
 				<button
 					className="hidden h-10 w-10 items-center justify-center rounded-control bg-transparent text-dim hover:bg-panel hover:text-fg phone:flex"
 					onClick={onExit}
@@ -317,9 +325,11 @@ export function CatchUpDeck({
 				</div>
 			)}
 
-			{/* Action bar (works without gestures; mirrors the screenshot). */}
+			{/* Action bar (works without gestures; mirrors the screenshot). Above
+			    the card stack for the same reason the header is: a tilted card
+			    reaches past its own box at both ends. */}
 			{!done && (
-				<div className="flex w-full max-w-[860px] items-stretch gap-2.5 px-4 pb-[max(16px,env(safe-area-inset-bottom))]">
+				<div className="relative z-10 flex w-full max-w-[860px] shrink-0 items-stretch gap-2.5 bg-surface px-4 pb-[max(16px,env(safe-area-inset-bottom))]">
 					<Button
 						size="lg"
 						className="flex-1 py-3 text-sm"
@@ -386,11 +396,16 @@ function CardBody({
 }) {
 	const target = replyTarget(card);
 	const [entries, setEntries] = useState<TranscriptEntry[] | null>(null);
-	const scrollRef = useRef<HTMLDivElement>(null);
+	// Held in state, not a ref, so the pinning effect below runs once the nodes
+	// actually exist rather than on a null ref.
+	const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
+	const [contentEl, setContentEl] = useState<HTMLDivElement | null>(null);
+	const pinned = useRef(true);
 
 	useEffect(() => {
 		let alive = true;
 		setEntries(null);
+		pinned.current = true;
 		fetchTranscript(target.id)
 			.then((e) => {
 				if (alive) setEntries(e);
@@ -404,11 +419,42 @@ function CardBody({
 	}, [target.id]);
 
 	// Open on the newest message (the unread part), like Slack lands you at the
-	// bottom of the thread.
+	// bottom of the thread — and STAY there. One scroll-to-bottom when the
+	// entries land is not enough: markdown, syntax highlighting, images and the
+	// live ticker all resolve after that paint, and each one grows the
+	// transcript under a scroll position that was correct when it was set,
+	// leaving the last message below the fold. Follow the content until the
+	// reader scrolls away from the bottom themselves.
 	useEffect(() => {
-		if (entries && scrollRef.current)
-			scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-	}, [entries, target.isRunning]);
+		if (!scrollEl || !contentEl) return;
+		let last = scrollEl.scrollTop;
+		const toBottom = () => {
+			scrollEl.scrollTop = scrollEl.scrollHeight;
+			last = scrollEl.scrollTop;
+		};
+		toBottom();
+		// Unpin on the reader moving UP, never on distance alone. A running
+		// session grows between our scroll and the event it fires, so measuring
+		// "am I at the bottom" in the handler reads our own catch-up as the
+		// reader walking away, and the card stops following after one tick.
+		const onScroll = () => {
+			const top = scrollEl.scrollTop;
+			if (top < last - 1) pinned.current = false;
+			else if (scrollEl.scrollHeight - scrollEl.clientHeight - top <= 24)
+				pinned.current = true;
+			last = top;
+		};
+		scrollEl.addEventListener("scroll", onScroll, { passive: true });
+		const observer = new ResizeObserver(() => {
+			if (pinned.current) toBottom();
+		});
+		observer.observe(contentEl);
+		observer.observe(scrollEl);
+		return () => {
+			observer.disconnect();
+			scrollEl.removeEventListener("scroll", onScroll);
+		};
+	}, [scrollEl, contentEl]);
 
 	const meta = [
 		card.repo,
@@ -435,24 +481,29 @@ function CardBody({
 			    ones bubble up to the card's drag handler (otherwise the scroll
 			    container eats the swipe on touch devices). */}
 			<div
-				ref={scrollRef}
+				ref={setScrollEl}
 				className="catchup-scroll min-h-0 flex-1 touch-pan-y overflow-y-auto px-4 py-3"
 			>
-				{entries === null ? (
-					<div className="space-y-2">
-						<div className="h-3 w-1/3 animate-pulse rounded bg-surface" />
-						<div className="h-3 w-full animate-pulse rounded bg-surface" />
-						<div className="h-3 w-4/5 animate-pulse rounded bg-surface" />
-					</div>
-				) : entries.length === 0 ? (
-					<div className="text-sm text-faint">No messages yet.</div>
-				) : (
-					<TranscriptBlocks entries={entries} owner={card.owner} />
-				)}
-				{/* Live "still working" ticker: while the session we're reading is mid-run,
-				    show a pulsing dot + elapsed clock at the bottom of the transcript so
-				    the card reads as in-progress (mirrors SessionViewer's busy row). */}
-				{target.isRunning && <CatchupWorking target={target} />}
+				{/* One wrapper so the bottom-pin has a single box to measure: a
+				    ResizeObserver on the scroll container itself never sees its
+				    content grow. */}
+				<div ref={setContentEl}>
+					{entries === null ? (
+						<div className="space-y-2">
+							<div className="h-3 w-1/3 animate-pulse rounded bg-surface" />
+							<div className="h-3 w-full animate-pulse rounded bg-surface" />
+							<div className="h-3 w-4/5 animate-pulse rounded bg-surface" />
+						</div>
+					) : entries.length === 0 ? (
+						<div className="text-sm text-faint">No messages yet.</div>
+					) : (
+						<TranscriptBlocks entries={entries} owner={card.owner} />
+					)}
+					{/* Live "still working" ticker: while the session we're reading is mid-run,
+					    show a pulsing dot + elapsed clock at the bottom of the transcript so
+					    the card reads as in-progress (mirrors SessionViewer's busy row). */}
+					{target.isRunning && <CatchupWorking target={target} />}
+				</div>
 			</div>
 
 			<CatchUpComposer
