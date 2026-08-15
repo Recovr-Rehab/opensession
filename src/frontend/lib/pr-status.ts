@@ -37,11 +37,20 @@ export function prStatusMark(pr: PrStatusInput): {
 	className: string;
 	bgClassName: string;
 	label: string;
+	/**
+	 * The resting state: open, healthy, and waiting on nobody in particular.
+	 *
+	 * A list of open pull requests is almost entirely this, so a surface that
+	 * paints hundreds of rows can render the mark as structure rather than as
+	 * signal and keep hue for the rows that have something to say. On a surface
+	 * showing one PR the green is welcome, so this is a hint, not a colour.
+	 */
+	quiet: boolean;
 } {
 	if (pr.state === "MERGED")
-		return { className: "text-purple", bgClassName: MARK_BG.purple, label: "PR merged" };
+		return { className: "text-purple", bgClassName: MARK_BG.purple, label: "PR merged", quiet: false };
 	if (pr.state === "CLOSED")
-		return { className: "text-faint", bgClassName: MARK_BG.muted, label: "PR closed" };
+		return { className: "text-faint", bgClassName: MARK_BG.muted, label: "PR closed", quiet: false };
 
 	const conflicting = pr.mergeable === "CONFLICTING";
 	const failed = (pr.checks?.failed || 0) > 0;
@@ -50,16 +59,16 @@ export function prStatusMark(pr: PrStatusInput): {
 	const changesRequested = decision === "CHANGES_REQUESTED";
 
 	if (conflicting)
-		return { className: "text-red", bgClassName: MARK_BG.red, label: "PR has conflicts" };
+		return { className: "text-red", bgClassName: MARK_BG.red, label: "PR has conflicts", quiet: false };
 	if (changesRequested)
-		return { className: "text-red", bgClassName: MARK_BG.red, label: "PR changes requested" };
+		return { className: "text-red", bgClassName: MARK_BG.red, label: "PR changes requested", quiet: false };
 	if (failed)
-		return { className: "text-red", bgClassName: MARK_BG.red, label: "PR checks failing" };
+		return { className: "text-red", bgClassName: MARK_BG.red, label: "PR checks failing", quiet: false };
 	if (pending)
-		return { className: "text-yellow", bgClassName: MARK_BG.yellow, label: "PR checks running" };
+		return { className: "text-yellow", bgClassName: MARK_BG.yellow, label: "PR checks running", quiet: false };
 	if (pr.isDraft)
-		return { className: "text-faint", bgClassName: MARK_BG.muted, label: "Draft PR" };
+		return { className: "text-faint", bgClassName: MARK_BG.muted, label: "Draft PR", quiet: false };
 	if (decision === "APPROVED")
-		return { className: "text-green", bgClassName: MARK_BG.green, label: "PR approved" };
-	return { className: "text-green", bgClassName: MARK_BG.green, label: "PR open" };
+		return { className: "text-green", bgClassName: MARK_BG.green, label: "PR approved", quiet: false };
+	return { className: "text-green", bgClassName: MARK_BG.green, label: "PR open", quiet: true };
 }

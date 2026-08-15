@@ -579,7 +579,14 @@ export function Prs({
                             }
                             title={`${repoLabel(row.repo)} · ${row.branch}`}
                           >
-                            <span className={`${status.className} flex items-center`} title={status.label}>
+                            {/* Hue is for the rows with something to say. A
+                                section of open pull requests is almost all
+                                healthy, so the resting mark is drawn as
+                                structure and green now means approved. */}
+                            <span
+                              className={`${status.quiet ? "text-dim" : status.className} flex items-center`}
+                              title={status.label}
+                            >
                               <StateIcon state={row.state} />
                             </span>
                             {person === "all" && row.person ? (
@@ -587,27 +594,28 @@ export function Prs({
                             ) : (
                               <RepoTile name={row.repo} size={20} />
                             )}
-                            <span className="min-w-0">
-                              <span className="flex min-w-0 items-baseline gap-2">
-                                <span className="truncate text-item-title font-medium leading-[1.3] text-fg">
-                                  {row.title}
+                            {/* One line. The branch under the title restated it
+                                in kebab case on most rows and cost the list
+                                half its height; it stays in the row's tooltip,
+                                in search, and in the panel the row opens. */}
+                            <span className="flex min-w-0 items-baseline gap-2">
+                              <span className="truncate text-item-title font-medium leading-[1.3] text-fg">
+                                {row.title}
+                              </span>
+                              {row.number && (
+                                <span className="shrink-0 text-meta tabular-nums text-faint">
+                                  #{row.number}
                                 </span>
-                                {row.number && (
-                                  <span className="shrink-0 text-meta tabular-nums text-faint">
-                                    #{row.number}
-                                  </span>
-                                )}
-                              </span>
-                              <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-meta text-faint">
-                                <span className="truncate">{row.branch}</span>
-                              </span>
-                            </span>
-                            <span className="justify-self-end text-meta tabular-nums phone:hidden">
-                              {row.additions !== undefined && (
-                                <span className="text-green">+{compactDiff(row.additions)}</span>
                               )}
+                            </span>
+                            {/* The sign already says which way each number
+                                went, so the diff joins the age in one quiet
+                                right-hand tier rather than adding a second
+                                green and red to every row. */}
+                            <span className="justify-self-end text-meta tabular-nums text-faint phone:hidden">
+                              {row.additions !== undefined && <span>+{compactDiff(row.additions)}</span>}
                               {row.deletions !== undefined && (
-                                <span className="ml-2 text-red">−{compactDiff(row.deletions)}</span>
+                                <span className="ml-2">−{compactDiff(row.deletions)}</span>
                               )}
                             </span>
                             <span className="justify-self-end text-meta tabular-nums text-faint">
