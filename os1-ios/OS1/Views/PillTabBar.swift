@@ -26,7 +26,10 @@ struct PillTabBar<Value: Hashable>: View {
     let items: [Item]
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Namespace private var activeIndicator
 
+    /// Every pill wears this shape — its glass, its material and the active
+    /// fill — so the three layers share one silhouette.
     private var shape: Capsule { Capsule(style: .continuous) }
 
     var body: some View {
@@ -37,11 +40,7 @@ struct PillTabBar<Value: Hashable>: View {
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 12)
-        .padding(.bottom, 8)
-        .background(OS1VisualStyle.background)
-        .overlay(alignment: .bottom) {
-            Divider()
-        }
+        .padding(.bottom, 6)
     }
 
     private func pill(_ item: Item) -> some View {
@@ -69,23 +68,38 @@ struct PillTabBar<Value: Hashable>: View {
                         .foregroundStyle(OS1VisualStyle.textDim)
                 }
             }
-            .foregroundStyle(active ? Color.accentColor : OS1VisualStyle.textDim)
+            .foregroundStyle(active ? OS1VisualStyle.text : OS1VisualStyle.textFaint)
             .padding(.horizontal, 12)
-            .frame(minHeight: 36)
+            .frame(minHeight: 44)
             .contentShape(shape)
         }
         .buttonStyle(.plain)
-        // Only the selected pill wears a surface. The session strip gives its
-        // idle pills one too, but that strip sits on a busy transcript and
-        // needs each pill separated from it; here the row sits on a plain
-        // page, and a fill on every pill made the one you are ON the flattest
-        // thing in the row. The tint is the accent rather than a grey step:
-        // these pages have different backgrounds (the feed is light, the code
-        // and the numbers sit on the tinted one), and a neutral fill would
-        // disappear into one of them.
+        // The session strip's own three layers, in its order. The active
+        // fill sits INSIDE the pill's glass, above the material: with every
+        // pill carrying its own surface there is no shared band for an
+        // indicator to slide along, so "selected" is the pill's own surface,
+        // opaque and lighter than the canvas rather than tinted.
         .background {
-            if active { shape.fill(Color.accentColor.opacity(0.14)) }
+            if active {
+                let indicator = shape.fill(OS1VisualStyle.tabActive)
+                if reduceMotion {
+                    indicator
+                } else {
+                    indicator.matchedGeometryEffect(id: "active-pill", in: activeIndicator)
+                }
+            }
         }
+        // Near-solid, exactly like the strip in chat: page content passes
+        // behind this row, and bare glass took on the luminance of whatever
+        // scrolled under it. The page colour over a thick material holds each
+        // pill at a stable brightness; idle pills keep less of that paint, so
+        // the row reads lit-one and dimmed-rest.
+        .background(
+            OS1VisualStyle.background.opacity(active ? 0.7 : 0.3),
+            in: shape
+        )
+        .background(.thickMaterial, in: shape)
+        .glassSurface(in: shape, interactive: true)
         .accessibilityAddTraits(active ? [.isSelected, .isButton] : .isButton)
     }
 }

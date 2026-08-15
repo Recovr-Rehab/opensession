@@ -623,7 +623,7 @@ struct PrPanelView: View {
             }
             .padding(16)
         }
-        .background(OS1VisualStyle.background)
+        .background(OS1VisualStyle.raised)
         .refreshable { await viewModel.refreshPr() }
     }
 
@@ -691,7 +691,7 @@ struct PrPanelView: View {
                 .padding(14)
         }
         .background(
-            OS1VisualStyle.raised,
+            OS1VisualStyle.background,
             in: RoundedRectangle(cornerRadius: 14, style: .continuous)
         )
     }
