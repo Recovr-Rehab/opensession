@@ -146,7 +146,7 @@ export function SettingsAccountCard() {
 			<div className="mb-2 mt-5 px-1 text-control-label font-semibold text-faint">
 				Account
 			</div>
-			<div className="overflow-hidden rounded-2xl bg-settings-plate">
+			<div className="overflow-hidden rounded-2xl border border-line bg-settings-plate">
 				{githubAuth ? (
 					<div className={rowClass}>
 						<AccountIdentity name={currentUser} subtitle={subtitle} />

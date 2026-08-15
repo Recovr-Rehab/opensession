@@ -33,7 +33,7 @@ export function SettingsHeader({
 			{...props}
 		>
 			<div className="min-w-0">
-				<h1 className="m-0 text-page-title font-bold tracking-[-0.02em] text-fg [.settings-sheet_&]:hidden">
+				<h1 className="m-0 text-page-title font-semibold tracking-[-0.02em] text-fg [.settings-sheet_&]:hidden">
 					{title}
 				</h1>
 				{description && (
@@ -86,8 +86,17 @@ export function SettingsGroupLabel({
  *
  * The fill is `settings-plate`, not `raised`: a page of these is a column of
  * blocks, and at the full L1 grey the column reads as the page's material
- * rather than as a few quiet groups on paper. See base.css. */
-const settingsSurface = "rounded-2xl bg-settings-plate";
+ * rather than as a few quiet groups on paper. See base.css.
+ *
+ * That fill is deliberately below where a fill alone holds a shape, which is
+ * why this surface carries a hairline where the house rule says a card should
+ * not (see src/frontend/AGENTS.md). The edge REPLACES the weight the fill gave
+ * up rather than adding to it: the two together are quieter than the L1 grey
+ * was on its own. It is the same `line` the rows inside take, so the block
+ * reads as one drawn object instead of an outline round a set of rules. Do not
+ * restore the heavier fill and keep the edge, and do not add the edge back to
+ * `Card`, which is borderless for the reason the rule gives. */
+const settingsSurface = "rounded-2xl border border-line bg-settings-plate";
 
 export function SettingCard({
 	className,

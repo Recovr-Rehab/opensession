@@ -59,7 +59,13 @@ language instead of introducing a new local style for each feature.
   a hairline around it adds a second edge that makes a page of them read as a
   form. Separate by surface, spacing, and radius instead. Borders stay for the
   things that are genuinely a line: a divider between rows, the edge of an
-  input or a control, a table rule.
+  input or a control, a table rule. The one carve-out is a surface whose fill
+  has deliberately been taken below where a fill alone holds its shape, which
+  today is the settings plate (`--settings-plate`, `ui/settings.tsx`): there
+  the hairline replaces the weight the fill gave up rather than adding to it,
+  and the pair is quieter than the full L1 grey was on its own. That is a
+  trade, not a licence. It does not extend to `Card`, which stays borderless,
+  and a card that still carries a normal fill has nothing to trade.
 - Round generously, and scale the radius with the box. The scale in
   `styles/tailwind.css` runs `rounded-sm` 4, `rounded-md` 7, `rounded-lg` 14,
   `rounded-xl` 18, `rounded-2xl` 22, plus the named chrome corners
