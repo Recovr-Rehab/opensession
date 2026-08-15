@@ -6,6 +6,7 @@
   "private": true,
   "license": "MIT",
   "main": "src/main.js",
+  "workspaces": [],
   "opensession": {
     "defaultServer": "http://127.0.0.1:3850/"
   },

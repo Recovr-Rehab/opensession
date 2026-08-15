@@ -129,6 +129,13 @@ Electron helpers claiming an entitlement they cannot support. The package keeps
 only Electron's English locale resources because Open Session is currently English-only;
 Chromium's unused locale set otherwise adds roughly 49 MB to the installed app.
 
+The shell has no production dependencies, and `package.json` declares an empty
+`workspaces` list to say so structurally. Without it, electron-builder finds no
+node modules here, walks up to the repository's own workspace root and tries to
+resolve *that* package's production dependencies, which the release runner never
+installs: the build then fails with "Production dependency ... not found for
+package opensession". The empty list stops the search at this directory.
+
 ## Auto-update
 
 The packaged app keeps itself current via Electron's built-in Squirrel.Mac
