@@ -584,6 +584,13 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
 
   if (!data) return null;
   const active = data.enabled && data.clientIdConfigured;
+  // The only account this card can hold is your own. GitHub's device flow is
+  // rejected unless the login that authorizes matches the signed-in user, so
+  // once you are connected there is nothing left to connect. A button that
+  // stays put reads as "add another account", which is not on offer.
+  const own = data.team.find((m) => m.canManage);
+  const needsReconnect = !!own?.needsReconnect;
+  const showConnect = !own?.connected || needsReconnect;
 
   return (
     <>
@@ -615,13 +622,17 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
               label={active ? "Enabled" : data.enabled ? "Missing client id" : "Disabled"}
               dot={active ? "var(--green)" : "var(--yellow)"}
             />
-            {active && flowState !== "waiting" && (
+            {active && showConnect && flowState !== "waiting" && (
               <Button
                 size="sm"
                 onClick={startConnect}
                 disabled={flowState === "starting"}
               >
-                {flowState === "starting" ? "Starting…" : "Connect account"}
+                {flowState === "starting"
+                  ? "Starting…"
+                  : needsReconnect
+                    ? "Reconnect"
+                    : "Connect account"}
               </Button>
             )}
           </SettingRowControl>
