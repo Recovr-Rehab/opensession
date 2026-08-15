@@ -42,6 +42,8 @@ struct PrReviewCanvas: View {
     @State private var diff: PrDiff?
     @State private var files: [PrPatchFile] = []
     @State private var viewed = Set<String>()
+    /// Which files are showing their diff in place.
+    @State private var unfolded = Set<String>()
     @State private var viewedPrId: String?
     @State private var loading = true
     @State private var errorText: String?
@@ -132,30 +134,111 @@ struct PrReviewCanvas: View {
     // MARK: - All changes
 
     private var fileList: some View {
-        List {
-            pendingCommentsSection
-            Section {
-                ForEach(files) { file in
-                    NavigationLink {
-                        fileView(file)
-                    } label: {
-                        fileRow(file)
-                    }
-                }
-            } header: {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
                 HStack {
                     Text("\(files.count) file\(files.count == 1 ? "" : "s") changed")
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(OS1VisualStyle.textDim)
                     Spacer(minLength: 8)
                     changeCounts
                 }
-            } footer: {
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+
+                if !draftComments.isEmpty {
+                    Text("\(draftComments.count) pending inline comment\(draftComments.count == 1 ? "" : "s") · saved locally until you submit one review")
+                        .font(.caption)
+                        .foregroundStyle(OS1VisualStyle.yellowInk)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 8)
+                }
+
+                ForEach(files) { file in
+                    fileFold(file)
+                }
+
                 if let skipped = diff?.skippedFiles, skipped > 0 {
                     Text("\(skipped) file\(skipped == 1 ? " was" : "s were") omitted because the patch is too large.")
+                        .font(.caption)
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                        .padding(16)
                 }
             }
         }
-        .insetGroupedListCompat()
+        .background(OS1VisualStyle.background)
         .refreshable { await reload() }
+    }
+
+    /// One file: its name, and its diff under it once unfolded. Stacked, the
+    /// way the web's Files changed page reads — every file's diff below the
+    /// last, rather than a list you have to leave to see any code. The whole
+    /// file is still one push away, where it gets the screen to itself.
+    @ViewBuilder
+    private func fileFold(_ file: PrPatchFile) -> some View {
+        let isOpen = unfolded.contains(file.path)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 10) {
+                // Marking a file read is its own target, so folding it open
+                // never claims to have read it.
+                Button {
+                    toggleViewed(file.path)
+                } label: {
+                    Image(systemName: viewed.contains(file.path) ? "checkmark.circle.fill" : "circle")
+                        .foregroundStyle(viewed.contains(file.path) ? OS1VisualStyle.green : OS1VisualStyle.textDim)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(viewed.contains(file.path) ? "Mark unviewed" : "Mark viewed")
+
+                Button {
+                    if isOpen { unfolded.remove(file.path) } else { unfolded.insert(file.path) }
+                } label: {
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(file.path)
+                                .font(.subheadline.monospaced())
+                                .foregroundStyle(OS1VisualStyle.text)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            let notes = draftComments.filter { $0.path == file.path }.count
+                            if notes > 0 {
+                                Text("\(notes) pending comment\(notes == 1 ? "" : "s")")
+                                    .font(.caption)
+                                    .foregroundStyle(OS1VisualStyle.yellowInk)
+                            }
+                        }
+                        Spacer(minLength: 8)
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(OS1VisualStyle.textDim)
+                            .rotationEffect(.degrees(isOpen ? 90 : 0))
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                NavigationLink { fileView(file) } label: {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.caption)
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Open \(file.path) on its own")
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+
+            if isOpen {
+                PrFileDiffBody(
+                    file: file,
+                    comment: { line in
+                        commentTarget = PrLineTarget(path: file.path, line: line)
+                    }
+                )
+                .padding(.bottom, 8)
+            }
+            Divider().padding(.leading, 16)
+        }
     }
 
     /// How big the change is, beside the count of files it touches — the same
@@ -168,18 +251,6 @@ struct PrReviewCanvas: View {
                 Text("−\(pr.deletions ?? 0)").foregroundStyle(OS1VisualStyle.redInk)
             }
             .font(.caption.monospacedDigit())
-        }
-    }
-
-    @ViewBuilder
-    private var pendingCommentsSection: some View {
-        if !draftComments.isEmpty {
-            Section {
-                Text("\(draftComments.count) pending inline comment\(draftComments.count == 1 ? "" : "s")")
-                    .foregroundStyle(.secondary)
-            } footer: {
-                Text("Comments are saved locally until you submit one review.")
-            }
         }
     }
 
@@ -208,7 +279,6 @@ struct PrReviewCanvas: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let guide, !guide.sections.isEmpty {
             List {
-                pendingCommentsSection
                 ForEach(guide.sections) { section in
                     Section {
                         Text(section.explanation)
@@ -507,12 +577,18 @@ enum PrDiffDisplay {
     }
 }
 
-private struct PrReviewFileView: View {
+/// A file's diff. The same body whether it is folded open inside the list or
+/// filling a pushed screen, so the two can never drift apart.
+///
+/// Wrapped lines have nowhere to scroll sideways, so wrapping drops the
+/// horizontal axis entirely rather than leaving a scroll view that never
+/// moves. Unwrapped, each file gets its own horizontal scroll: inline, the
+/// vertical axis belongs to the list of files.
+struct PrFileDiffBody: View {
     let file: PrPatchFile
-    let isViewed: Bool
-    let commentCount: Int
-    let toggleViewed: () -> Void
     let comment: (Int) -> Void
+    /// Inline, the enclosing list scrolls vertically and this must not.
+    var inline = true
 
     @AppStorage(PrDiffDisplay.styleKey) private var styleRaw = ""
     @AppStorage(PrDiffDisplay.wrapKey) private var wrapLines = false
@@ -522,37 +598,15 @@ private struct PrReviewFileView: View {
     private var style: PrDiffStyle { PrDiffDisplay.style(styleRaw, sizeClass: sizeClass) }
 
     var body: some View {
-        diffBody
-            .background(OS1VisualStyle.background)
-            .navigationTitle(file.path.split(separator: "/").last.map(String.init) ?? file.path)
-            .inlineTitleBarCompat()
-            .toolbar {
-                ToolbarItem(placement: .topTrailingCompat) {
-                    PrDiffDisplayMenu()
-                }
-                ToolbarItem(placement: .topTrailingCompat) {
-                    Button(action: toggleViewed) {
-                        Label(isViewed ? "Mark unviewed" : "Mark viewed", systemImage: isViewed ? "eye.slash" : "eye")
-                    }
+        if inline {
+            if wrapLines {
+                lines
+            } else {
+                ScrollView(.horizontal) {
+                    lines.frame(minWidth: style == .split ? 1040 : 680, alignment: .leading)
                 }
             }
-            .safeAreaInset(edge: .bottom) {
-                if commentCount > 0 {
-                    Text("\(commentCount) pending inline comment\(commentCount == 1 ? "" : "s")")
-                        .font(.caption.weight(.medium))
-                        .padding(.horizontal, 12).padding(.vertical, 7)
-                        .background(.thinMaterial, in: Capsule())
-                        .padding(.bottom, 8)
-                }
-            }
-    }
-
-    /// Wrapped lines have nowhere to scroll sideways, so wrapping drops the
-    /// horizontal axis entirely rather than leaving a scroll view that never
-    /// moves.
-    @ViewBuilder
-    private var diffBody: some View {
-        if wrapLines {
+        } else if wrapLines {
             ScrollView(.vertical) { lines.padding(.vertical, 8) }
         } else {
             // A two-axis scroll view centres content smaller than itself, which
@@ -582,6 +636,41 @@ private struct PrReviewFileView: View {
             }
         }
     }
+}
+
+private struct PrReviewFileView: View {
+    let file: PrPatchFile
+    let isViewed: Bool
+    let commentCount: Int
+    let toggleViewed: () -> Void
+    let comment: (Int) -> Void
+
+    var body: some View {
+        PrFileDiffBody(file: file, comment: comment, inline: false)
+            .background(OS1VisualStyle.background)
+            .navigationTitle(file.path.split(separator: "/").last.map(String.init) ?? file.path)
+            .inlineTitleBarCompat()
+            .toolbar {
+                ToolbarItem(placement: .topTrailingCompat) {
+                    PrDiffDisplayMenu()
+                }
+                ToolbarItem(placement: .topTrailingCompat) {
+                    Button(action: toggleViewed) {
+                        Label(isViewed ? "Mark unviewed" : "Mark viewed", systemImage: isViewed ? "eye.slash" : "eye")
+                    }
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                if commentCount > 0 {
+                    Text("\(commentCount) pending inline comment\(commentCount == 1 ? "" : "s")")
+                        .font(.caption.weight(.medium))
+                        .padding(.horizontal, 12).padding(.vertical, 7)
+                        .background(.thinMaterial, in: Capsule())
+                        .padding(.bottom, 8)
+                }
+            }
+    }
+
 }
 
 /// The display half of the canvas' options, repeated on the file itself: a

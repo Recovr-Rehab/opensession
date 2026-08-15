@@ -86,20 +86,17 @@ struct PrPanelView: View {
 
     enum PrAction { case merge, close }
 
-    enum Page: Hashable {
-        case overview, files
+    /// Overview is the conversation, the way the web's is: the description
+    /// and every comment under each other. What the web keeps in the rail
+    /// beside it has a page of its own here, because a phone has no beside.
+    enum Page: Hashable, CaseIterable {
+        case overview, files, info
 
         var label: String {
             switch self {
             case .overview: "Overview"
             case .files: "Files"
-            }
-        }
-
-        var symbol: String {
-            switch self {
-            case .overview: "bubble.left.and.text.bubble.right"
-            case .files: "doc.text.magnifyingglass"
+            case .info: "Info"
             }
         }
     }
@@ -157,6 +154,7 @@ struct PrPanelView: View {
                 switch page {
                 case .overview: overviewPage(pr)
                 case .files: PrReviewCanvas(viewModel: viewModel, lens: $lens)
+                case .info: infoPage(pr)
                 }
             }
             .toolbar {
@@ -305,6 +303,7 @@ struct PrPanelView: View {
         HStack(spacing: 0) {
             tab(.overview, count: conversation(pr).count)
             tab(.files, count: pr.changedFiles ?? pr.files?.count)
+            tab(.info, count: nil)
             Spacer(minLength: 8)
             if page == .files {
                 // Icon only: the row belongs to the pages, and the control is
@@ -356,16 +355,16 @@ struct PrPanelView: View {
         .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
     }
 
-    /// Everything about the pull request that is not its code: how it stands,
-    /// who is on it, what ran, what landed, and the conversation.
-    private func overviewPage(_ pr: PrDetails) -> some View {
+    /// How the pull request stands: who is on it, what ran, what landed, what
+    /// changed. On the web this is the rail beside the conversation; a phone
+    /// has no beside, so it is the page you go to for the numbers.
+    private func infoPage(_ pr: PrDetails) -> some View {
         List {
             statusSection(pr)
             reviewersSection(pr)
             checksSection(pr)
             commitsSection(pr)
             filesSection(pr)
-            conversationSection(pr)
         }
         .insetGroupedListCompat()
         #if os(iOS)
@@ -501,45 +500,99 @@ struct PrPanelView: View {
         (pr.comments ?? []).filter(\.isDiscussion)
     }
 
-    @ViewBuilder
-    private func conversationSection(_ pr: PrDetails) -> some View {
-        let body = (pr.body ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        if !body.isEmpty {
-            Section("Description") {
-                MarkdownBody(body)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 2)
-            }
-        }
-        let comments = conversation(pr)
-        if comments.isEmpty {
-            Section("Conversation") {
-                Text("No comments yet.")
-                    .font(.footnote)
-                    .foregroundStyle(OS1VisualStyle.textDim)
-            }
-        } else {
-            Section("Conversation") {
-                ForEach(Array(comments.enumerated()), id: \.offset) { _, comment in
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 8) {
-                            UserAvatar(person: comment.author ?? "?", size: 22)
-                            Text(comment.author ?? "Unknown")
-                                .font(.subheadline.weight(.medium))
-                            Spacer(minLength: 8)
-                            if let when = Session.parseISO(comment.createdAt) {
-                                Text(when.formatted(.relative(presentation: .numeric)))
-                                    .font(.caption2)
-                                    .foregroundStyle(OS1VisualStyle.textDim)
-                            }
-                        }
-                        MarkdownBody(comment.discussionBody)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+    /// The conversation, and nothing else: the description, then every comment
+    /// under it. This is the page the web's Overview is — a feed you read from
+    /// the top — rather than a summary of counts, which is what Info holds.
+    private func overviewPage(_ pr: PrDetails) -> some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 12) {
+                descriptionCard(pr)
+                let comments = conversation(pr)
+                if comments.isEmpty {
+                    Text("No comments yet.")
+                        .font(.footnote)
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.vertical, 24)
+                } else {
+                    ForEach(Array(comments.enumerated()), id: \.offset) { _, comment in
+                        commentCard(comment)
                     }
-                    .padding(.vertical, 2)
                 }
             }
+            .padding(16)
         }
+        .background(OS1VisualStyle.background)
+        .refreshable { await viewModel.refreshPr() }
+    }
+
+    @ViewBuilder
+    private func descriptionCard(_ pr: PrDetails) -> some View {
+        let body = (pr.body ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        conversationCard(
+            author: pr.author,
+            subtitle: "Opened this pull request",
+            when: nil
+        ) {
+            if body.isEmpty {
+                Text("This pull request has no description.")
+                    .font(.footnote)
+                    .foregroundStyle(OS1VisualStyle.textDim)
+            } else {
+                MarkdownBody(body)
+            }
+        }
+    }
+
+    private func commentCard(_ comment: PrComment) -> some View {
+        conversationCard(
+            author: comment.author,
+            subtitle: nil,
+            when: Session.parseISO(comment.createdAt)
+        ) {
+            MarkdownBody(comment.discussionBody)
+        }
+    }
+
+    /// One card in the feed: who wrote it, when, and what they said.
+    private func conversationCard(
+        author: String?,
+        subtitle: String?,
+        when: Date?,
+        @ViewBuilder content: () -> some View
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                UserAvatar(person: author ?? "?", size: 24)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(author ?? "Unknown")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(OS1VisualStyle.text)
+                        .lineLimit(1)
+                    if let subtitle {
+                        Text(subtitle)
+                            .font(.caption2)
+                            .foregroundStyle(OS1VisualStyle.textDim)
+                    }
+                }
+                Spacer(minLength: 8)
+                if let when {
+                    Text(when.formatted(.relative(presentation: .numeric)))
+                        .font(.caption2)
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            Divider()
+            content()
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+        }
+        .background(
+            OS1VisualStyle.raised,
+            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+        )
     }
 
     /// Review, merge, close and the ways out, on one control. The web keeps
