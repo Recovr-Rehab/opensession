@@ -1127,6 +1127,23 @@ html.wco .app {
 		background: transparent;
 	}
 
+	/* Until the app has something to draw, keep the window opaque. An app with
+	   no data yet paints almost nothing (measured: three elements on the whole
+	   page), and through a transparent window that does not read as an app
+	   waiting for its data, it reads as no app at all: the desktop shows
+	   through where the window should be. `app-ready` is set alongside the
+	   launch splash coming down (App.tsx), so this covers the load and any
+	   later state where the app has nothing to show. Same declaration as the
+	   reduced-transparency block below, for the same reason. */
+	html.material-backdrop:not(.app-ready),
+	html.material-backdrop:not(.app-ready) body,
+	html.material-backdrop:not(.app-ready) #root,
+	html.material-backdrop:not(.app-ready) .app,
+	html.material-backdrop:not(.app-ready) .app-body,
+	html.material-backdrop:not(.app-ready) .sidebar-container {
+		background: var(--sidebar-bg);
+	}
+
 	/* --row-chip is deliberately NOT re-derived here, and the vibrancy sidebar
 	   is the surface where the chip cannot have everything. Measured, in light,
 	   against a mid-green wallpaper: sidebar L222, hovered row L209. A chip

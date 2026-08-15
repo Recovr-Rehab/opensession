@@ -23,6 +23,7 @@ import {
 	DETAIL_TOPBAR,
 	DETAIL_TOPBAR_TITLE,
 	RIGHT_PANEL_SLOT,
+	SCROLL_EDGE_DIVIDER,
 	tabSplitDropPreviewClass,
 	WORKSPACE_SHELL,
 } from "./lib/app-shell-classes";
@@ -115,6 +116,7 @@ import { useBackSwipe } from "./hooks/useBackSwipe";
 import { useIsPhone } from "./hooks/useIsPhone";
 import { useShortcutKeys } from "./hooks/useShortcutBindings";
 import { useInputAlerts } from "./hooks/useInputAlerts";
+import { useScrollEdge } from "./hooks/useScrollEdge";
 import { initAlerts } from "./lib/notify";
 import { registerServiceWorker } from "./lib/push";
 import {
@@ -653,6 +655,16 @@ export function App(
 	// (session name + actions, incl. the workspace-panel toggle) into this slot so
 	// the layout reads name-on-top / tabs-below; other views render a plain title.
 	const [topbarEl, setTopbarEl] = useState<HTMLDivElement | null>(null);
+	// The sidebar's chrome strip, held for the same reason: the hairline it grows
+	// once its list has scrolled under it is driven from here (useScrollEdge).
+	const [sidebarBrandEl, setSidebarBrandEl] = useState<HTMLDivElement | null>(
+		null,
+	);
+	// Each half of the top row answers its own scroller: the pane's bar to the
+	// transcript beneath it, the sidebar's strip to the list. Both scrollers
+	// belong to other components, so they are found by their own hooks.
+	useScrollEdge(topbarEl, ".viewer-messages");
+	useScrollEdge(sidebarBrandEl, "[data-sidebar-scroll]");
 	// Centered under the mobile top-bar title: the composer's model pill is hidden
 	// on phones, so the session viewer portals a compact tap-to-switch model
 	// selector into this slot — the only place a session's model surfaces there.
@@ -1387,9 +1399,14 @@ export function App(
 	// server that never answers from parking anyone behind a splash for good.
 	useEffect(() => {
 		const splash = document.getElementById("splash");
-		if (!splash) return;
 		let removal: ReturnType<typeof setTimeout> | undefined;
 		const hide = () => {
+			// Hands the window over: the desktop shell's vibrancy is gated on this
+			// too, so the window stays opaque for as long as the splash is up. It
+			// is set whether or not a splash is on the page, since a window that
+			// never gets it stays opaque for good.
+			document.documentElement.classList.add("app-ready");
+			if (!splash) return;
 			splash.classList.add("splash-hide");
 			removal = setTimeout(() => splash.remove(), 400);
 		};
@@ -3922,8 +3939,12 @@ export function App(
 						    row pulls its own in to keep the logo on the list icons'
 						    --sidebar-icon-left column. */}
 						<div
+							ref={setSidebarBrandEl}
 							className={cn(
 								"sidebar-brand h-[var(--desktop-header-h)] min-w-0 shrink-0 items-center justify-start gap-2 py-0 pr-3 pl-[calc(var(--sidebar-icon-left)-8px)]",
+								// Closes the strip off while the list runs underneath it,
+								// alongside the pane's bar doing the same on its own scroller.
+								SCROLL_EDGE_DIVIDER,
 								// The brand row (and its account menu) is a desktop
 								// affordance; on phones the top bar carries the brand
 								// instead. Gated in JS rather than at `phone:` because
