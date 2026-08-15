@@ -391,7 +391,7 @@ function ConnectDialog({
 								<Button variant="ghost" onClick={() => setConfirmingDisconnect(false)} disabled={saving}>
 									Keep connection
 								</Button>
-								<Button variant="destructive" onClick={() => void disconnect()} disabled={saving}>
+								<Button variant="danger-strong" onClick={() => void disconnect()} disabled={saving}>
 									Disconnect now
 								</Button>
 							</>

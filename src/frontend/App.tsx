@@ -3672,7 +3672,7 @@ export function App(
 					<Modal.Footer className="mt-3 justify-end gap-3">
 						<Modal.Close render={<Button size="lg">Cancel</Button>} />
 						<Button
-							variant="destructive"
+							variant="danger-strong"
 							size="lg"
 							onClick={() => {
 								const confirmation = runningCloseConfirmation;

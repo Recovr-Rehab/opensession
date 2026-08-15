@@ -446,7 +446,7 @@ export function SupportTinder({ onExit, onOpenSession }: Props) {
 						Plain
 					</Button>
 					<Button
-						variant="positive"
+						variant="success-strong"
 						size="lg"
 						className={cn(DECK_ACTION, "flex-1")}
 						onClick={skip}

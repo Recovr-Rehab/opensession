@@ -346,12 +346,10 @@ export function CatchUpDeck({
 						</svg>
 					</Button>
 					<Button
-						/* `positive` (not `primary`) — this is the affirmative half of
-						   the pair, not the app's accent CTA, and it takes the solid
-						   fill rather than `success`'s outline because it's the deck's
-						   dominant action. It used to ask for `success` and paint the
-						   fill back on by hand, which is what `positive` is. */
-						variant="positive"
+						/* Strong green, not `primary` — this is the affirmative half of
+						   the pair, not the app's accent CTA, and it commits rather
+						   than proposes, because it's the deck's dominant action. */
+						variant="success-strong"
 						size="lg"
 						className="flex-1 py-3 text-sm"
 						onClick={() => act("read")}

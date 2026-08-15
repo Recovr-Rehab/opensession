@@ -212,7 +212,7 @@ function RemoveMemberButton({
 		);
 	}
 	return (
-		<Button variant="destructive" size="sm" onClick={remove} disabled={busy}>
+		<Button variant="danger-strong" size="sm" onClick={remove} disabled={busy}>
 			{busy ? "Removing…" : "Really remove?"}
 		</Button>
 	);

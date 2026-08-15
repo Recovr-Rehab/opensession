@@ -49,9 +49,9 @@ type Variant =
 	| "ghost"
 	| "success"
 	| "danger"
-	| "destructive"
-	| "positive"
-	| "warning";
+	| "warning"
+	| "danger-strong"
+	| "success-strong";
 type Size = "sm" | "md" | "lg";
 
 const sizes: Record<Size, string> = {
@@ -143,8 +143,10 @@ const INK =
  *   one draws a box about a label nobody is being asked to read.
  * - `ghost` — a control that is mostly reporting state (a filter, an icon in
  *   a row). Quiet until you reach for it.
- * - the tones (`danger`/`destructive`, `success`/`positive`, `warning`) —
- *   outline proposes, solid commits.
+ * - the tones — `danger`, `success` and `warning` are tinted plates that
+ *   propose; `danger-strong` and `success-strong` are solid ones that commit.
+ *   Two weights, no outline, so a Delete beside a Cancel is a red plate in a
+ *   row of plates rather than a boxed label shouting over the quiet half.
  */
 const variants: Record<Variant, string> = {
 	// The raised control look of the newest chrome (viewer Share button).
@@ -178,27 +180,34 @@ const variants: Record<Variant, string> = {
 	// the thing you just clicked disappears out from under the popup.
 	ghost:
 		"border-transparent text-dim hover:bg-hover hover:text-fg data-[popup-open]:bg-hover data-[popup-open]:text-fg",
-	// Outline green, mirroring `danger` — the affirmative half of the pair
-	// (approve a review, merge, confirm). Green is the second-most reached-for
-	// button color in the app after the accent, so it earns a variant rather
-	// than a bespoke class each time.
-	success: "border-green text-green hover:bg-green-soft",
-	// Outline red, like the delete-worktree confirm buttons.
-	danger: "border-red text-red hover:bg-red-soft",
-	// Solid red plate — the *committed* half of the destructive pair, for the
-	// button that actually does the irreversible thing (a modal's confirm, the
-	// second click of a two-click close). `danger` proposes, `destructive`
-	// commits, so a surface can show both without them reading as the same
-	// weight. Shares `primary`'s shape so the two swap cleanly in a footer.
-	destructive:
+	// The tones come in two weights and no third: a tinted plate that PROPOSES
+	// the action, and a solid one that COMMITS it. Both are fills, like every
+	// variant above — a tone used to be an outline, which put a red box around
+	// a Delete sitting next to a grey Cancel and made the quiet half of a
+	// confirm the loudest thing in the row.
+	//
+	// The tint is the `-soft` token, a 10-14% wash of the tone itself, so it
+	// layers over a panel, a card or the page without knowing which it is —
+	// the same relative step `soft` takes. The hover doubles it rather than
+	// adding an edge.
+	//
+	// Green is the second-most reached-for colour in the app after the accent
+	// (approve a review, merge, mark read), so it earns a pair of its own.
+	success: "bg-green-soft border-transparent text-green hover:bg-[color-mix(in_srgb,var(--green)_22%,transparent)]",
+	danger: "bg-red-soft border-transparent text-red hover:bg-[color-mix(in_srgb,var(--red)_22%,transparent)]",
+	// Yellow has no strong half: it qualifies an action ("delete the session,
+	// keep the worktree"), and nothing in the app commits in yellow.
+	warning: "bg-yellow-soft border-transparent text-yellow hover:bg-[color-mix(in_srgb,var(--yellow)_22%,transparent)]",
+	// Solid red plate — the button that actually does the irreversible thing
+	// (a modal's confirm, the second click of a two-click close). Shares
+	// `primary`'s shape, so the two swap cleanly in a footer.
+	"danger-strong":
 		"bg-red border-transparent text-white plate-sheen smooth-shadow-xs hover:brightness-110",
-	// Solid green plate, the same pairing one step over: `success` proposes,
-	// `positive` commits. For the affirmative action a surface wants read
-	// first — the deck's Skip, a workspace's Approve — where an outline would
-	// let the destructive neighbour dominate the row.
-	positive:
+	// Solid green plate, for the affirmative action a surface wants read first
+	// — the deck's Skip, a workspace's Approve — where the tint would let a
+	// destructive neighbour dominate the row.
+	"success-strong":
 		"bg-green border-transparent text-white plate-sheen smooth-shadow-xs hover:brightness-110",
-	warning: "border-yellow text-yellow hover:bg-[color-mix(in_srgb,var(--yellow)_12%,transparent)]",
 };
 
 // Leading-icon dimming per variant (icon-only stays full strength).
@@ -209,9 +218,9 @@ const iconDim: Record<Variant, string> = {
 	ghost: "opacity-60",
 	success: "opacity-80",
 	danger: "opacity-80",
-	destructive: "opacity-80",
-	positive: "opacity-80",
 	warning: "opacity-80",
+	"danger-strong": "opacity-80",
+	"success-strong": "opacity-80",
 };
 
 export type ButtonProps = React.ComponentPropsWithoutRef<"button"> & {
