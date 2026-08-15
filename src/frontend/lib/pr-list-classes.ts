@@ -32,13 +32,13 @@ const GROUP_LABEL = "m-0 flex items-baseline gap-2 px-3 font-semibold text-faint
  *  stays on the content edge with them and sits tight to them: the air goes
  *  above it, under the state heading. Size is what separates the two, not an
  *  indent. */
-export const PR_GROUP_LABEL = `${GROUP_LABEL} pb-1 text-meta`;
+export const PR_GROUP_LABEL = `${GROUP_LABEL} pb-1.5 text-meta`;
 
 /** The same label in the feed, one step up the scale. The feed is grouped by
  *  day and nothing else, so the day is the heading a reader navigates by; on
  *  the pull request list a date sits under Open or Merged, which is the heading
  *  there, and stays the quieter of the two. */
-export const PR_FEED_GROUP_LABEL = `${GROUP_LABEL} pb-1.5 text-label`;
+export const PR_FEED_GROUP_LABEL = `${GROUP_LABEL} pb-2 text-label`;
 
 /**
  * A pull request row.
@@ -56,11 +56,19 @@ export const PR_FEED_GROUP_LABEL = `${GROUP_LABEL} pb-1.5 text-label`;
  * would be the same mark on every line. The face takes its place, because who
  * shipped it is the one thing the feed is sorted around.
  */
+/**
+ * Both rows are one line now, and a one-line row wants more padding than a
+ * two-line one did: `py-2.5` was set when a branch or a repo name sat under
+ * every title, and once that went the rows read as a tighter list than the
+ * rest of the app. `py-3` puts a row at the 44px the sidebar and the settings
+ * rows already stand at. The column gap goes up with it, so the separator
+ * offsets below are `px-3` plus the leading columns plus `gap-2.5`.
+ */
 export const PR_FEED_ROW =
 	"group focus-ring relative grid w-full grid-cols-[24px_minmax(0,1fr)_130px_44px] " +
-	"cursor-pointer items-center gap-2 rounded-control border-0 bg-transparent px-3 py-2.5 " +
+	"cursor-pointer items-center gap-2.5 rounded-control border-0 bg-transparent px-3 py-3 " +
 	"text-left transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-hover " +
-	"after:pointer-events-none after:absolute after:right-3 after:bottom-0 after:left-[50px] " +
+	"after:pointer-events-none after:absolute after:right-3 after:bottom-0 after:left-[46px] " +
 	"after:h-px after:bg-line after:transition-opacity after:duration-[var(--dur-micro)] " +
 	"last:after:opacity-0 hover:after:opacity-0 " +
 	"[&:has(+button:hover)]:after:opacity-0 " +
@@ -68,9 +76,9 @@ export const PR_FEED_ROW =
 
 export const PR_ROW =
 	"group focus-ring relative grid w-full grid-cols-[22px_24px_minmax(0,1fr)_130px_44px] " +
-	"cursor-pointer items-center gap-2 rounded-control border-0 bg-transparent px-3 py-2.5 " +
+	"cursor-pointer items-center gap-2.5 rounded-control border-0 bg-transparent px-3 py-3 " +
 	"text-left transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] hover:bg-hover " +
-	"after:pointer-events-none after:absolute after:right-3 after:bottom-0 after:left-[74px] " +
+	"after:pointer-events-none after:absolute after:right-3 after:bottom-0 after:left-[78px] " +
 	"after:h-px after:bg-line after:transition-opacity after:duration-[var(--dur-micro)] " +
 	"last:after:opacity-0 hover:after:opacity-0 " +
 	"[&:has(+button:hover)]:after:opacity-0 " +

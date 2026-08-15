@@ -556,13 +556,13 @@ export function Prs({
         ) : (
           <div className={PR_LIST}>
             {sections.map((section) => (
-              <section key={section.state} className="mb-7">
+              <section key={section.state} className="mb-8">
                 <h2 className={PR_SECTION_LABEL}>
                   {section.label}
                   <span className="text-label font-medium text-faint">{section.rows.length}</span>
                 </h2>
                 {section.groups.map(([label, rows]) => (
-                  <div key={label} className="mb-4">
+                  <div key={label} className="mb-5">
                     <h3 className={PR_GROUP_LABEL}>
                       {label}
                       <span className="font-medium">{rows.length}</span>

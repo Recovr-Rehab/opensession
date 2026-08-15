@@ -390,7 +390,7 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 						)}
 						<div className={PR_LIST}>
 							{dayGroups.map(([label, rows]) => (
-								<div key={label} className="mb-4">
+								<div key={label} className="mb-5">
 									<h4 className={PR_FEED_GROUP_LABEL}>
 										{label}
 										<span className="font-medium">{rows.length}</span>
@@ -416,34 +416,30 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 												) : (
 													<RepoTile name={row.repo} size={24} />
 												)}
-												<span className="min-w-0">
-													<span className="flex min-w-0 items-baseline gap-2">
-														<span className="truncate text-item-title font-medium leading-[1.3] text-fg">
-															{row.title}
+												{/* One line. The repo rides in front of the title as
+												    its mark alone: it used to be a tile and its own name
+												    on a second line, which spent a whole row restating
+												    what the picture already said and made the feed twice
+												    as tall as it needed to be. The name is in the row's
+												    tooltip and in the repo filter above. */}
+												<span className="flex min-w-0 items-baseline gap-2">
+													<RepoTile name={row.repo} size={16} className="self-center" />
+													<span className="truncate text-item-title font-medium leading-[1.3] text-fg">
+														{row.title}
+													</span>
+													{row.ref && (
+														<span className="shrink-0 text-meta tabular-nums text-faint">
+															{row.ref}
 														</span>
-														{row.ref && (
-															<span className="shrink-0 text-meta tabular-nums text-faint">
-																{row.ref}
-															</span>
-														)}
-													</span>
-													<span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-meta text-faint">
-														{/* The repo, as a mark beside its own name: one
-														    place on the row where the picture and the word
-														    say the same thing, rather than a badge on the
-														    face and a word down here. */}
-														<RepoTile name={row.repo} size={14} />
-														<span className="truncate">{repoLabel(row.repo)}</span>
-														{/* Name an owner the picture can't: a glyph says
-														    "not a person", not which automation it was.
-														    A teammate's face is already their name. */}
-														{row.owner && !row.owner.person && (
-															<>
-																<span aria-hidden>·</span>
-																<span className="truncate">{row.owner.label}</span>
-															</>
-														)}
-													</span>
+													)}
+													{/* Name an owner the picture can't: a glyph says
+													    "not a person", not which automation it was.
+													    A teammate's face is already their name. */}
+													{row.owner && !row.owner.person && (
+														<span className="max-w-[160px] shrink-0 truncate text-meta text-faint">
+															{row.owner.label}
+														</span>
+													)}
 												</span>
 												{/* A side that moved no lines is left off rather than
 												    written as a zero: every commit carries both counts. */}
