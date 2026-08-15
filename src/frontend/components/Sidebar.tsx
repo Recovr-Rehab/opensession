@@ -202,6 +202,7 @@ import {
 import {
 	automationInPersonLens,
 	automationInRepoLens,
+	HOUSE_AUTOMATION,
 } from "../lib/automation-audience";
 import { useAutomationOverview } from "../lib/automation-overview";
 import {
@@ -1330,12 +1331,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			a.localeCompare(b, undefined, { sensitivity: "base" }),
 		);
 		for (const name of byName) {
-			// An automation the overview hasn't described yet (the fetch is still
-			// out, or it was deleted while its runs remain) stays visible: the
-			// lens can only narrow what it can answer for.
-			const overview = automationOverview.get(name);
+			// An automation the overview doesn't describe is a deleted one whose
+			// runs outlived it, and there are a dozen of those here. It reads as
+			// a house routine: still in your band, out of a teammate's, which is
+			// what "show me Kent's" should mean. Before the overview lands there
+			// is nothing to narrow by, so the band stays whole.
+			const overview = automationOverview.get(name) ?? HOUSE_AUTOMATION;
 			if (
-				overview &&
+				automationOverview.size > 0 &&
 				(!automationInPersonLens(overview, filter.person, currentUser) ||
 					!automationInRepoLens(overview, filter.repo))
 			)

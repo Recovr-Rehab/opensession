@@ -4,12 +4,11 @@
  * An automation reports to people, the same way a session is started by one,
  * so the sidebar's person lens should narrow both. The audience itself is
  * resolved server-side (`automationRecipients`, src/server/automations.ts) and
- * arrives on {@link AutomationOverview} as a plain list of names — everything
- * here is the matching, which is a pure function of that list plus the lens.
+ * arrives on the automation overview as a plain list of names. Everything here
+ * is the matching, which is a pure function of that list plus the lens.
  */
 
 import { DEFAULT_REPO_ID } from "./brand";
-import type { AutomationOverview } from "./api/automations";
 
 /**
  * Does this recipient name the person the lens is on? One teammate reaches us
@@ -17,6 +16,17 @@ import type { AutomationOverview } from "./api/automations";
  * came from a config roster, a display name or a GitHub login, so the compare
  * is the app's usual loose one: equal, or either a prefix of the other.
  */
+/**
+ * What an automation the overview can't describe counts as: a house routine.
+ * The runs of a deleted automation stay in the band long after the automation
+ * is gone, and they belong to nobody in particular.
+ */
+export const HOUSE_AUTOMATION: {
+	recipients: string[];
+	repo?: string;
+	workspaceRepo?: string;
+} = { recipients: [] };
+
 export function recipientMatchesPerson(
 	recipient: string,
 	personKey: string,
@@ -64,7 +74,7 @@ export function automationInPersonLens(
  * workspaces.
  */
 export function automationInRepoLens(
-	automation: Pick<AutomationOverview, "repo" | "workspaceRepo">,
+	automation: { repo?: string; workspaceRepo?: string },
 	repo: string,
 ): boolean {
 	if (repo === "all") return true;
