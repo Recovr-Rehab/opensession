@@ -690,6 +690,7 @@ struct SessionView: View {
                     viewModel: viewModel,
                     tabs: tabs,
                     workspaceNames: workspaceNames,
+                    catalog: catalog,
                     onNewSession: onNewSession,
                     onRenameWorkspace: onRenameWorkspace,
                     onArchiveWorkspace: onArchiveWorkspace,
@@ -949,12 +950,12 @@ struct SessionView: View {
     }
 
     /// Model / reasoning-effort / fast-mode controls, mirroring the web
-    /// composer's pill: effort levels and fast toggle up top, the model list
-    /// behind a submenu. Model switches route through `/model` (persisted +
-    /// noticed); effort/fast ride the next send.
+    /// composer's pill. Model switches route through `/model` (persisted +
+    /// noticed); effort/fast ride the next send. The rows themselves live in
+    /// `ModelSettingsMenu`, which the iOS overflow menu mounts as well.
     private var modelMenu: some View {
         Menu {
-            modelMenuContents
+            ModelSettingsMenu(viewModel: viewModel, catalog: catalog)
         } label: {
             Image(systemName: "slider.horizontal.3")
         }
@@ -1068,60 +1069,6 @@ struct SessionView: View {
         return [RepoTile.label(for: viewModel.session.effectiveRepo), label]
             .filter { !$0.isEmpty }
             .joined(separator: " · ")
-    }
-
-    @ViewBuilder
-    private var modelMenuContents: some View {
-        // What the conversation has cost, at the top of the menu that decides
-        // what the next turn will cost — the web composer's arrangement.
-        UsageMenuSection(usage: viewModel.usage)
-        if let option = catalog?.option(for: currentModel),
-           let efforts = option.efforts, !efforts.isEmpty {
-            Section("Reasoning") {
-                ForEach(efforts, id: \.self) { level in
-                    Button {
-                        viewModel.effort = level
-                    } label: {
-                        if viewModel.effort == level {
-                            Label(EffortLevel.label(level), systemImage: "checkmark")
-                        } else {
-                            Text(EffortLevel.label(level))
-                        }
-                    }
-                }
-            }
-        }
-        if catalog?.option(for: currentModel)?.fastModeSupported == true {
-            Button {
-                viewModel.fastMode.toggle()
-            } label: {
-                if viewModel.fastMode {
-                    Label("Fast mode", systemImage: "checkmark")
-                } else {
-                    Text("Fast mode")
-                }
-            }
-        }
-        if let catalog {
-            Menu {
-                ForEach(catalog.presets + catalog.regular) { option in
-                    Button {
-                        viewModel.changeModel(to: option.id)
-                    } label: {
-                        if option.id == currentModel {
-                            Label(option.displayLabel, systemImage: "checkmark")
-                        } else {
-                            Text(option.displayLabel)
-                        }
-                    }
-                }
-            } label: {
-                Label(
-                    "Model — \(catalog.label(for: currentModel))",
-                    systemImage: "cpu"
-                )
-            }
-        }
     }
 
     /// Re-pin to the latest for a beat while the transcript settles.
@@ -1242,6 +1189,9 @@ private struct SessionActionsMenu: View {
     let tabs: [Session]
     /// Workspace names for that regrouping; see `SessionView.workspaceNames`.
     let workspaceNames: [String: String]
+    /// Model/effort catalog for the nested settings rows; nil until the first
+    /// `/api/models` fetch lands, which only costs the Model row.
+    let catalog: ModelCatalog?
     let onNewSession: (() -> Void)?
     let onRenameWorkspace: ((String) -> Void)?
     let onArchiveWorkspace: (() -> Void)?
@@ -1282,6 +1232,14 @@ private struct SessionActionsMenu: View {
                 showWorktreeInfo = true
             } label: {
                 Label("Worktree details", systemImage: "info.circle")
+            }
+            // What the next turn runs on. It was only reachable through the
+            // worktree details sheet, which is a long way to go for a setting
+            // the web changes from the composer.
+            Menu {
+                ModelSettingsMenu(viewModel: viewModel, catalog: catalog, showsUsage: false)
+            } label: {
+                Label("Model settings", systemImage: "slider.horizontal.3")
             }
             // Everything the worktree has changed, for the edits no visible
             // tool row names — the ones made before the transcript you're
