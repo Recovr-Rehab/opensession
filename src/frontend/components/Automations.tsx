@@ -49,19 +49,7 @@ const FORM_CARD = `${FORM_INLINE} rounded-panel bg-panel p-4.5`;
 /** .automation-form label */
 const FIELD_LABEL = "flex flex-1 flex-col gap-1.5 text-label font-medium text-dim";
 
-/**
- * The "Reports to" field, from what a person typed to what the API takes.
- * Blank returns an empty list, which is the real answer rather than a missing
- * one: an automation nobody is named on is a house routine, and it stays in
- * everyone's Automations section.
- */
-function parseRecipients(value: string): string[] {
-  const names = value
-    .split(",")
-    .map((n) => n.trim())
-    .filter(Boolean);
-  return names.length ? names : [];
-}
+
 /** .automation-form-title */
 const FORM_TITLE = "text-body font-semibold";
 /** .automation-form-actions */
@@ -131,8 +119,8 @@ interface Automation {
   slackWatch?: { channel: string };
   inputs?: AutomationInput[];
   outputs?: AutomationOutput[];
-  /** Whose sidebar it reports into; absent means its creator. */
-  recipients?: string[];
+  /** Who is accountable for it; absent means nobody has taken it. */
+  owner?: string;
   /** Workspace it files under. */
   workspaceId?: string;
   model?: string;
@@ -1666,12 +1654,10 @@ function AutomationForm({
   const [mcpServers, setMcpServers] = useState<string[] | undefined>(
     initial ? initial.mcpServers : (prefill?.mcpServers ?? (kind === "watch" ? ["slack"] : undefined)),
   );
-  // Who the automation reports to, as the comma-separated list the field
-  // shows. Empty means the creator, which is what the server assumes for
-  // every automation written before an audience existed.
-  const [recipients, setRecipients] = useState(
-    (initial?.recipients || []).join(", "),
-  );
+  // Who is accountable for what this automation does to the codebase. Empty
+  // means nobody has taken it, which is what every automation written before
+  // owners existed still says.
+  const [owner, setOwner] = useState(initial?.owner || "");
   const [workspaceId, setWorkspaceId] = useState(initial?.workspaceId || "");
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -1740,7 +1726,7 @@ function AutomationForm({
           webhookEnabled: isWatch ? false : webhookEnabled,
           inputs: isWatch ? [] : inputs,
           outputs: isWatch ? [] : outputs,
-          recipients: parseRecipients(recipients),
+          owner: owner.trim(),
           workspaceId,
         });
       } else {
@@ -1761,7 +1747,7 @@ function AutomationForm({
           webhookEnabled: isWatch ? false : webhookEnabled,
           inputs: isWatch ? undefined : inputs,
           outputs: isWatch ? undefined : outputs,
-          recipients: parseRecipients(recipients),
+          owner: owner.trim() || undefined,
           workspaceId: workspaceId || undefined,
           createdBy: getCurrentUser(),
         });
@@ -1803,14 +1789,14 @@ function AutomationForm({
 
       <div className="flex gap-3">
         <label className={FIELD_LABEL}>
-          Reports to
+          Owner
           <Input
-            value={recipients}
-            onChange={(e) => setRecipients(e.target.value)}
-            placeholder={getCurrentUser() || "Kent, Michiel"}
+            value={owner}
+            onChange={(e) => setOwner(e.target.value)}
+            placeholder={getCurrentUser() || "Kent"}
           />
           <span className="mt-1 text-meta leading-snug text-faint">
-            Whose sidebar it appears in. Leave empty to keep it in everyone's.
+            Who reviews what it does. It appears in their sidebar.
           </span>
         </label>
         <label className={FIELD_LABEL}>

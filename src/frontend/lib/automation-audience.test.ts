@@ -2,57 +2,57 @@ import { describe, expect, test } from "bun:test";
 import {
 	automationInPersonLens,
 	automationInRepoLens,
-	recipientMatchesPerson,
+	ownerMatchesPerson,
 } from "./automation-audience";
 
-describe("recipientMatchesPerson", () => {
+describe("ownerMatchesPerson", () => {
 	test("matches the same person written three ways", () => {
 		for (const written of ["Kent", "Kent de Bruin", "kentdebruin"])
-			expect(recipientMatchesPerson(written, "kent")).toBe(true);
+			expect(ownerMatchesPerson(written, "kent")).toBe(true);
 	});
 
 	test("does not match a different teammate", () => {
-		expect(recipientMatchesPerson("Michiel", "kent")).toBe(false);
-		expect(recipientMatchesPerson("Kent", "michiel")).toBe(false);
+		expect(ownerMatchesPerson("Michiel", "kent")).toBe(false);
+		expect(ownerMatchesPerson("Kent", "michiel")).toBe(false);
 	});
 
 	test("empty on either side never matches", () => {
-		expect(recipientMatchesPerson("", "kent")).toBe(false);
-		expect(recipientMatchesPerson("Kent", "  ")).toBe(false);
+		expect(ownerMatchesPerson("", "kent")).toBe(false);
+		expect(ownerMatchesPerson("Kent", "  ")).toBe(false);
 	});
 });
 
 describe("automationInPersonLens", () => {
-	const mine = { recipients: ["Kent"] };
-	const theirs = { recipients: ["Michiel"] };
-	const house = { recipients: [] };
+	const mine = { owner: "Kent" };
+	const theirs = { owner: "Michiel" };
+	const house = { owner: "" };
 
 	test("everyone keeps the whole band", () => {
 		for (const a of [mine, theirs, house])
 			expect(automationInPersonLens(a, "everyone", "Kent")).toBe(true);
 	});
 
-	test("me keeps yours and the ones addressed to nobody", () => {
+	test("me keeps yours and the ones nobody has taken", () => {
 		expect(automationInPersonLens(mine, "me", "Kent")).toBe(true);
 		expect(automationInPersonLens(house, "me", "Kent")).toBe(true);
 		expect(automationInPersonLens(theirs, "me", "Kent")).toBe(false);
 	});
 
-	test("an automation with no audience set behaves as it always did", () => {
-		// The migration promise: until someone names people, every lens that
-		// isn't a specific teammate still shows the whole band.
+	test("an automation with no owner set behaves as it always did", () => {
+		// The migration promise: until someone takes ownership, every lens that
+		// is not a specific teammate still shows the whole band.
 		const untouched = {};
 		expect(automationInPersonLens(untouched, "me", "Kent")).toBe(true);
 		expect(automationInPersonLens(untouched, "everyone", "Kent")).toBe(true);
 	});
 
-	test("a teammate lens keeps only theirs, not the house ones", () => {
+	test("a teammate lens keeps only theirs, not the unowned ones", () => {
 		expect(automationInPersonLens(theirs, "michiel", "Kent")).toBe(true);
 		expect(automationInPersonLens(mine, "michiel", "Kent")).toBe(false);
 		expect(automationInPersonLens(house, "michiel", "Kent")).toBe(false);
 	});
 
-	test("unassigned is only the ones naming nobody", () => {
+	test("unassigned is only the ones nobody owns", () => {
 		expect(automationInPersonLens(house, "unassigned", "Kent")).toBe(true);
 		expect(automationInPersonLens(mine, "unassigned", "Kent")).toBe(false);
 	});
@@ -64,7 +64,7 @@ describe("automationInPersonLens", () => {
 		}
 	});
 
-	test("recipients is optional on the wire", () => {
+	test("owner is optional on the wire", () => {
 		expect(automationInPersonLens({}, "unassigned", "Kent")).toBe(true);
 		expect(automationInPersonLens({}, "michiel", "Kent")).toBe(false);
 	});

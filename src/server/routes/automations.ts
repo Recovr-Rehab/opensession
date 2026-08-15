@@ -8,7 +8,7 @@
 
 import type { RouteContext } from "./context";
 import { AUTOMATION_TEMPLATES } from "../automation-templates";
-import { automationRecipients, createAutomation, deleteAutomation, getAutomation, isAutomationRunning, listAutomations, retriggerAutomationSession, runAutomation, updateAutomation } from "../automations";
+import { automationOwner, createAutomation, deleteAutomation, getAutomation, isAutomationRunning, listAutomations, retriggerAutomationSession, runAutomation, updateAutomation } from "../automations";
 import { draftAutomation } from "../draft-automation";
 import { listReportGroups } from "../reports";
 import { invalidateSessionsCache } from "../session-cache";
@@ -68,9 +68,7 @@ export async function handleAutomationsRoutes(
 					workspaceId: workspace?.id,
 					workspaceName: workspace?.name,
 					workspaceRepo: workspace?.repo,
-					// Resolved, not raw: the "unset means the creator" default lives
-					// on the server so no client has to reimplement it.
-					recipients: automationRecipients(a),
+					owner: automationOwner(a),
 					lastRunAt: a.lastRunAt,
 					lastRunStatus: a.lastRunStatus,
 					lastRunSessionId: a.lastRunSessionId,

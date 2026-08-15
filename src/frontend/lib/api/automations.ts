@@ -144,10 +144,8 @@ export async function fetchAutomations() {
 }
 
 /**
- * One automation as the sidebar's Automations band needs it: its audience,
- * where it files, and the outcome of its latest run. `recipients` arrives
- * resolved — the server has already applied "unset means the creator" — so a
- * client never reimplements that default.
+ * One automation as the sidebar's Automations band needs it: who owns it,
+ * where it files, and the outcome of its latest run.
  */
 export interface AutomationOverview {
 	id: string;
@@ -158,7 +156,7 @@ export interface AutomationOverview {
 	workspaceName?: string;
 	/** The workspace's own repo, so the repo lens can match through it. */
 	workspaceRepo?: string;
-	recipients: string[];
+	owner?: string;
 	lastRunAt?: string;
 	lastRunStatus?: "running" | "ok" | "error";
 	lastRunSessionId?: string;
@@ -368,7 +366,7 @@ export async function createAutomationApi(input: {
 	webhookEnabled?: boolean;
 	inputs?: unknown[];
 	outputs?: unknown[];
-	recipients?: string[];
+	owner?: string;
 	workspaceId?: string;
 }) {
 	return request<any>("/automations", { method: "POST", body: input });

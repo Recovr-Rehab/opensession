@@ -229,11 +229,11 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             .describe(
               "Reviewer to request on PRs this automation opens — a GitHub login, an 'org/team' slug, or a comma-separated list. Without one the PR reaches nobody's review queue. The target must be a collaborator on the repo."
             ),
-          recipients: z
-            .array(z.string())
+          owner: z
+            .string()
             .optional()
             .describe(
-              "Who this reports to — the people whose sidebar it appears in under Automations. Omit to keep it in everyone's."
+              "Who is accountable for what this automation does. It appears in their sidebar under Automations. Omit to leave it unowned."
             ),
           workspaceId: z
             .string()
@@ -254,7 +254,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           accountStrict?: boolean;
           usageCredits?: boolean;
           prReviewer?: string;
-          recipients?: string[];
+          owner?: string;
           workspaceId?: string;
         }) => {
           const res = createAutomation({
@@ -270,7 +270,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             accountStrict: args.accountStrict,
             usageCredits: args.usageCredits,
             prReviewer: args.prReviewer,
-            recipients: args.recipients,
+            owner: args.owner,
             workspaceId: args.workspaceId,
           });
           if ("error" in res) return text(`Couldn't create it: ${res.error}`);
@@ -325,11 +325,11 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             .describe(
               "Reviewer to request on PRs this automation opens — a GitHub login, an 'org/team' slug, or a comma-separated list; '' clears it."
             ),
-          recipients: z
-            .array(z.string())
+          owner: z
+            .string()
             .optional()
             .describe(
-              "Who this reports to — the people whose sidebar it appears in under Automations. An empty array means nobody in particular, which keeps it in everyone's."
+              "Who is accountable for what this automation does. It appears in their sidebar under Automations; '' leaves it unowned."
             ),
           workspaceId: z
             .string()
@@ -350,7 +350,7 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           accountStrict?: boolean;
           usageCredits?: boolean;
           prReviewer?: string;
-          recipients?: string[];
+          owner?: string;
           workspaceId?: string;
         }) => {
           const { id, ...patch } = args;

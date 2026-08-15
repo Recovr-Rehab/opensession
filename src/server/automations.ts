@@ -149,16 +149,17 @@ export interface Automation {
    */
   prReviewer?: string;
   /**
-   * Who this automation reports to. Person keys in the same space as a
-   * session's `startedBy` (a display name or a verified login), so the
-   * sidebar's person lens can ask "is this one mine?" the same way it asks it
-   * of a session.
+   * The person accountable for this automation. A person key in the same
+   * space as a session's `startedBy` (a display name or a verified login), so
+   * the sidebar's person lens can ask "is this one mine?" the same way it asks
+   * it of a session.
    *
-   * Absent or empty means nobody in particular: a house routine that stays
-   * in everyone's band. Naming people narrows it to them, which is the whole
-   * point of the field. Read it through {@link automationRecipients}.
+   * An automation edits the codebase on a schedule nobody is watching, so
+   * someone has to be the one who reviews what it did. Absent means nobody
+   * has taken it: a house routine that stays in everyone's band until a
+   * person claims it. Read it through {@link automationOwner}.
    */
-  recipients?: string[];
+  owner?: string;
   /**
    * Workspace this automation files under. The automation belongs to the
    * workspace; its RUNS stay in the Automations band rather than becoming
@@ -491,36 +492,27 @@ function sanitizePrReviewer(
 }
 
 /**
- * Who an automation reports to. Unset means nobody in particular — a house
- * routine everyone sees — rather than its creator: `createdBy` records who
- * typed it, which for most of these is a previous agent run ("Michael
- * (loops)", "Michael (plain agent)"), so reading it as an audience would
- * address thirty automations to people who don't exist and hide them from
- * every real one.
+ * Who owns an automation. Unset means nobody has taken it, rather than its
+ * creator: `createdBy` records who typed it, which for most of these is a
+ * previous agent run ("Michael (loops)", "Michael (plain agent)"), so reading
+ * it as ownership would assign thirty automations to people who don't exist
+ * and hide them from every real one.
  *
- * Naming an audience is therefore a deliberate act, and until someone
- * performs it the band reads exactly as it did before audiences existed.
+ * Taking ownership is therefore a deliberate act, and until someone performs
+ * it the band reads exactly as it did before owners existed.
  */
-export function automationRecipients(a: Automation): string[] {
-  return a.recipients || [];
+export function automationOwner(a: Automation): string {
+  return a.owner || "";
 }
 
-/** Normalize an audience list; `null` clears it back to the creator default. */
-function sanitizeRecipients(
-  v?: unknown,
-): string[] | { error: string } | undefined {
-  if (v === undefined || v === null) return undefined;
-  if (!Array.isArray(v)) return { error: "recipients must be an array of names" };
-  if (v.length > 16) return { error: "recipients supports at most 16 people" };
-  const out: string[] = [];
-  for (const raw of v) {
-    if (typeof raw !== "string") return { error: "recipients must be strings" };
-    const name = raw.trim();
-    if (!name) continue;
-    if (name.length > 64) return { error: `Recipient "${name}" is too long` };
-    if (!out.some((e) => e.toLowerCase() === name.toLowerCase())) out.push(name);
-  }
-  return out;
+/** Normalize an owner; ""/nullish leaves the automation unowned. */
+function sanitizeOwner(v?: unknown): string | { error: string } | undefined {
+  if (v === undefined || v === null || v === "") return undefined;
+  if (typeof v !== "string") return { error: "owner must be a name" };
+  const name = v.trim();
+  if (!name) return undefined;
+  if (name.length > 64) return { error: `Owner "${name}" is too long` };
+  return name;
 }
 
 /** Validate the workspace an automation files under; ""/nullish clears it. */
@@ -549,7 +541,7 @@ export function createAutomation(input: {
   mcpServers?: string[];
   repo?: string;
   prReviewer?: string;
-  recipients?: string[];
+  owner?: string;
   workspaceId?: string;
   selfImprove?: boolean;
   workflows?: boolean;
@@ -580,8 +572,8 @@ export function createAutomation(input: {
   if (repo && typeof repo === "object") return repo;
   const prReviewer = sanitizePrReviewer(input.prReviewer);
   if (prReviewer && typeof prReviewer === "object") return prReviewer;
-  const recipients = sanitizeRecipients(input.recipients);
-  if (recipients && !Array.isArray(recipients)) return recipients;
+  const owner = sanitizeOwner(input.owner);
+  if (owner && typeof owner === "object") return owner;
   const workspaceId = sanitizeAutomationWorkspace(input.workspaceId);
   if (workspaceId && typeof workspaceId === "object") return workspaceId;
   const model = sanitizeModel(input.model);
@@ -629,7 +621,7 @@ export function createAutomation(input: {
     mcpServers: sanitizeMcpList(input.mcpServers),
     repo,
     prReviewer,
-    recipients,
+    owner,
     workspaceId,
     selfImprove: input.selfImprove === true || undefined,
     workflows: input.workflows === true || undefined,
@@ -693,7 +685,7 @@ export function ensureConfiguredAutomations(): void {
 
 export function updateAutomation(
   id: string,
-  patch: Partial<Pick<Automation, "name" | "prompt" | "schedule" | "runOnceAt" | "mode" | "enabled" | "eventKey" | "mcpServers" | "repo" | "prReviewer" | "recipients" | "workspaceId" | "selfImprove" | "workflows" | "claudeCliEnv" | "codexCliEnv" | "model" | "fallbackModel" | "accountId" | "accountStrict" | "usageCredits" | "sandbox" | "grafanaPoll" | "slackWatch" | "inputs" | "outputs" | "webhookEnabled">>
+  patch: Partial<Pick<Automation, "name" | "prompt" | "schedule" | "runOnceAt" | "mode" | "enabled" | "eventKey" | "mcpServers" | "repo" | "prReviewer" | "owner" | "workspaceId" | "selfImprove" | "workflows" | "claudeCliEnv" | "codexCliEnv" | "model" | "fallbackModel" | "accountId" | "accountStrict" | "usageCredits" | "sandbox" | "grafanaPoll" | "slackWatch" | "inputs" | "outputs" | "webhookEnabled">>
 ): Automation | { error: string } {
   const a = getAutomation(id);
   if (!a) return { error: "Automation not found" };
@@ -718,10 +710,10 @@ export function updateAutomation(
     if (prReviewer && typeof prReviewer === "object") return prReviewer;
     next.prReviewer = prReviewer;
   }
-  if ("recipients" in patch) {
-    const recipients = sanitizeRecipients(patch.recipients);
-    if (recipients && !Array.isArray(recipients)) return recipients;
-    next.recipients = recipients;
+  if ("owner" in patch) {
+    const owner = sanitizeOwner(patch.owner);
+    if (owner && typeof owner === "object") return owner;
+    next.owner = owner;
   }
   if ("workspaceId" in patch) {
     const workspaceId = sanitizeAutomationWorkspace(patch.workspaceId);

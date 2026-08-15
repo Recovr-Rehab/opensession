@@ -1267,9 +1267,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	const latestReportFor = (name: string) =>
 		automationOverview.get(name)?.latestReport;
 
-	/** Someone is named on it, rather than it being a house routine. */
+	/** Someone owns it, rather than it being a house routine nobody has taken. */
 	const reportsToSomeone = (name: string) =>
-		(automationOverview.get(name)?.recipients?.length || 0) > 0;
+		!!automationOverview.get(name)?.owner;
 
 	// ── Hidden rows ─────────────────────────────────────────────────────────
 	// "Hide from my sidebar" is the personal counterpart to Archive: archiving

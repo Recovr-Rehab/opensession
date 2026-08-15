@@ -1,37 +1,36 @@
 /**
  * Which automations belong in the sidebar you are looking at.
  *
- * An automation reports to people, the same way a session is started by one,
- * so the sidebar's person lens should narrow both. The audience itself is
- * resolved server-side (`automationRecipients`, src/server/automations.ts) and
- * arrives on the automation overview as a plain list of names. Everything here
- * is the matching, which is a pure function of that list plus the lens.
+ * An automation is owned by a person, the same way a session is started by
+ * one, so the sidebar's person lens should narrow both. An automation edits
+ * the codebase unattended, so the owner is who reviews what it did; an
+ * unowned one is a house routine nobody has taken.
  */
 
 import { DEFAULT_REPO_ID } from "./brand";
 
 /**
- * Does this recipient name the person the lens is on? One teammate reaches us
- * as "Kent", "Kent de Bruin" and "kentdebruin" depending on whether the name
- * came from a config roster, a display name or a GitHub login, so the compare
- * is the app's usual loose one: equal, or either a prefix of the other.
- */
-/**
- * What an automation the overview can't describe counts as: a house routine.
- * The runs of a deleted automation stay in the band long after the automation
- * is gone, and they belong to nobody in particular.
+ * What an automation the overview can't describe counts as: unowned. The runs
+ * of a deleted automation stay in the band long after the automation is gone,
+ * and nobody is accountable for them.
  */
 export const HOUSE_AUTOMATION: {
-	recipients: string[];
+	owner?: string;
 	repo?: string;
 	workspaceRepo?: string;
-} = { recipients: [] };
+} = {};
 
-export function recipientMatchesPerson(
-	recipient: string,
+/**
+ * Does this owner name the person the lens is on? One teammate reaches us as
+ * "Kent", "Kent de Bruin" and "kentdebruin" depending on whether the name came
+ * from a config roster, a display name or a GitHub login, so the compare is
+ * the app's usual loose one: equal, or either a prefix of the other.
+ */
+export function ownerMatchesPerson(
+	owner: string,
 	personKey: string,
 ): boolean {
-	const a = recipient.trim().toLowerCase();
+	const a = owner.trim().toLowerCase();
 	const b = personKey.trim().toLowerCase();
 	if (!a || !b) return false;
 	return a === b || a.startsWith(b) || b.startsWith(a);
@@ -51,19 +50,19 @@ export function recipientMatchesPerson(
  *   not theirs in particular, so they stay out: you asked for one person.
  */
 export function automationInPersonLens(
-	automation: { recipients?: string[] },
+	automation: { owner?: string },
 	person: string,
 	currentUser: string,
 ): boolean {
-	const recipients = automation.recipients || [];
+	const owner = (automation.owner || "").trim();
 	if (person === "everyone") return true;
-	if (recipients.length === 0) return person === "me" || person === "unassigned";
+	if (!owner) return person === "me" || person === "unassigned";
 	if (person === "unassigned") return false;
 	const key =
 		person === "me" ? currentUser.trim().toLowerCase() : person.trim();
-	// Signed out, "mine" can't be answered — show the band rather than empty it.
+	// Signed out, "mine" can't be answered: show the band rather than empty it.
 	if (!key || key === "anonymous") return person === "me";
-	return recipients.some((r) => recipientMatchesPerson(r, key));
+	return ownerMatchesPerson(owner, key);
 }
 
 /**
