@@ -1,5 +1,5 @@
 /**
- * One-command OS¹ desktop development:
+ * One-command Open Session desktop development:
  *   1. serve this worktree's frontend against the production API
  *   2. wait until that proxy is accepting requests
  *   3. launch the vendored Electron shell against it
@@ -14,7 +14,7 @@ const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const MAC_APP_ROOT = join(ROOT, "os1-mac");
 const MAC_APP_EXECUTABLE = join(
 	MAC_APP_ROOT,
-	"dist/mac-arm64/OS¹.app/Contents/MacOS/OS¹",
+	"dist/mac-arm64/Open Session.app/Contents/MacOS/Open Session",
 );
 const PORT = Number(process.env.PORT || 3851);
 const APP_URL = `http://127.0.0.1:${PORT}`;
@@ -72,37 +72,37 @@ try {
 		throw new Error("app:dev currently requires macOS");
 	}
 	if (!existsSync(join(MAC_APP_ROOT, "node_modules/electron/package.json"))) {
-		console.log("Installing OS¹ shell dependencies ...");
+		console.log("Installing Open Session shell dependencies ...");
 		const install = spawn(
 			["bun", "install", "--frozen-lockfile"],
 			MAC_APP_ROOT,
 		);
 		if ((await install.exited) !== 0) {
-			throw new Error("OS¹ shell dependency installation failed");
+			throw new Error("Open Session shell dependency installation failed");
 		}
 	}
 
 	// Running `electron .` always presents Electron.app's own bundle identity to
 	// macOS, so the Dock label remains "Electron" regardless of app.setName().
-	// A directory build is fast and gives the dev process the real OS¹ name,
+	// A directory build is fast and gives the dev process the real Open Session name,
 	// icon, identifier, and native vibrancy while the loaded frontend still HMRs.
-	console.log("Preparing OS¹ development app ...");
+	console.log("Preparing Open Session development app ...");
 	const packager = spawn(
 		["bunx", "electron-builder", "--mac", "--dir", "--publish", "never"],
 		MAC_APP_ROOT,
 		{ ...process.env, CSC_IDENTITY_AUTO_DISCOVERY: "false" },
 	);
 	if ((await packager.exited) !== 0) {
-		throw new Error("OS¹ development app packaging failed");
+		throw new Error("Open Session development app packaging failed");
 	}
 	if (frontend.exitCode !== null) {
 		throw new Error(`frontend dev proxy exited with code ${frontend.exitCode}`);
 	}
 	if (!existsSync(MAC_APP_EXECUTABLE)) {
-		throw new Error(`packaged OS¹ executable not found at ${MAC_APP_EXECUTABLE}`);
+		throw new Error(`packaged Open Session executable not found at ${MAC_APP_EXECUTABLE}`);
 	}
 
-	console.log("Launching OS¹ ...");
+	console.log("Launching Open Session ...");
 	const electron = spawn([MAC_APP_EXECUTABLE], MAC_APP_ROOT, {
 		...process.env,
 		OS1_URL: APP_URL,

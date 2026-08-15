@@ -171,7 +171,7 @@ final class DeskVoiceEngine {
         state = .connecting
 
         guard await requestMicPermission() else {
-            fail("Microphone access is off. Enable it for OS1 in Settings to start a voice call.")
+            fail("Microphone access is off. Enable it for \(AppBrand.productName) in Settings to start a voice call.")
             return
         }
         guard generation == self.generation else { return }

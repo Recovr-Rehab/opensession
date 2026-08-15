@@ -1,5 +1,6 @@
 import React from "react";
 import type { UnifiedSession } from "../lib/types";
+import { PRODUCT_NAME } from "../lib/brand";
 import { usePeople, type Person } from "../lib/people";
 import { cn } from "../ui/cn";
 import { Menu } from "../ui/menu";
@@ -30,7 +31,7 @@ export interface TeamMember {
 	/** Lowercased first name — the key every person filter in the app uses. */
 	key: string;
 	person: Person;
-	/** Has OS¹ open right now (global presence). */
+	/** Has Open Session open right now (global presence). */
 	online: boolean;
 	/** One of their sessions has a turn in flight. */
 	working: boolean;
@@ -61,7 +62,7 @@ function firstName(name?: string | null): string {
 export function presenceLabel(m: TeamMember): string {
 	const title = m.session?.title?.trim();
 	if (m.working) return title ? `Working on ${title}` : "Working";
-	if (m.online) return title ? `Viewing ${title}` : "In OS¹";
+	if (m.online) return title ? `Viewing ${title}` : `In ${PRODUCT_NAME}`;
 	if (title) return `Last: ${title}`;
 	return m.localTime ? `${m.localTime} their time` : "Away";
 }

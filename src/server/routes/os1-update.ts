@@ -1,5 +1,5 @@
 /**
- * OS¹ for Mac auto-update feed + release artifact proxy.
+ * Open Session for Mac auto-update feed + release artifact proxy.
  *
  * The Electron shell (os1-mac/) auto-updates via Electron's built-in
  * Squirrel.Mac updater pointed at `GET /api/os1-mac/update?version=<installed>`
@@ -51,7 +51,7 @@ interface LatestRelease {
 	version: [number, number, number];
 	notes: string;
 	publishedAt: string;
-	/** Release asset name, e.g. "OS1-0.2.0-arm64.zip". */
+	/** Release asset name, e.g. "OpenSession-0.2.0-arm64.zip". */
 	asset: string;
 	/** REST asset URL (api.github.com/…/releases/assets/<id>). */
 	assetApiUrl: string;
@@ -62,6 +62,20 @@ const g = globalThis as {
 	__os1ChromeLatest?: { at: number; value: LatestRelease | null };
 	__os1UpdateDownloads?: Map<string, Promise<string | null>>;
 };
+
+/**
+ * Is this release asset the signed arm64 app zip Squirrel installs from?
+ *
+ * `OpenSession-` is what os1-mac's electron-builder `artifactName` produces
+ * since the app was renamed to Open Session. `OS1-` is what every release
+ * before it produced, and it is still accepted: the feed reads whatever the
+ * LATEST release happens to carry, so dropping the old spelling would stop
+ * updates dead between this deploy and the next release. Nothing warns when
+ * no asset matches, which is why this has a test.
+ */
+export function isMacReleaseAsset(name: string | undefined): boolean {
+	return /^(OpenSession|OS1)-.*-arm64\.zip$/.test(name || "");
+}
 
 function parseVersion(v: string): [number, number, number] | null {
 	const m = String(v)
@@ -92,9 +106,7 @@ async function latestRelease(): Promise<LatestRelease | null> {
 			assets?: { name?: string; url?: string }[];
 		};
 		const version = parseVersion(rel.tag_name || "");
-		const asset = (rel.assets || []).find((a) =>
-			/^OS1-.*-arm64\.zip$/.test(a?.name || ""),
-		);
+		const asset = (rel.assets || []).find((a) => isMacReleaseAsset(a?.name));
 		if (version && rel.tag_name && asset?.name && asset?.url) {
 			value = {
 				tag: rel.tag_name,

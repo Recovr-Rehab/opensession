@@ -1,6 +1,6 @@
-# OS1 for iOS
+# Open Session for iOS
 
-A native SwiftUI client for an Open Session (OS1) server, on your phone. The
+A native SwiftUI client for an Open Session server, on your phone. The
 deployment default is the `OS1DefaultServerURL` Info.plist value generated from
 `project.yml`; users can override it in Settings. Not feature complete; this is
 the v0.1 base: sign in with a token, see your sessions live, open one, watch
@@ -217,8 +217,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   sheet's footer — it only auto-starts when speech + mic permission already
   exist, so a first press isn't two system prompts stacked over the composer.
   `AgentShortcuts` registers it with no setup: Siri phrases ("Start an agent
-  in OS1"), Spotlight, and the Action Button's shortcut picker (iPhone
-  Settings > Action Button > Shortcut > OS1 > Start an Agent). Settings >
+  in Open Session"), Spotlight, and the Action Button's shortcut picker
+  (iPhone Settings > Action Button > Shortcut > Open Session > Start an
+  Agent). Settings >
   Shortcuts inside the app signposts all of it.
 - **Widgets** (`OS1Widgets/`, its own iOS app-extension target) — the same
   press from three more places: a Home Screen widget (systemSmall), a Lock

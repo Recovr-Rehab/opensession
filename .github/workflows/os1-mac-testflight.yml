@@ -228,7 +228,12 @@ jobs:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: |
-          xcrun altool --upload-app -f "$RUNNER_TEMP/export/OS1.pkg" -t macos \
+          # Named from OS1Mac's PRODUCT_NAME ("Open Session.pkg"), so glob for
+          # it: a rename should not be able to break the upload silently.
+          shopt -s nullglob
+          PKGS=("$RUNNER_TEMP"/export/*.pkg)
+          test ${#PKGS[@]} -eq 1 || { echo "::error::expected exactly one exported .pkg, found ${#PKGS[@]}"; exit 1; }
+          xcrun altool --upload-app -f "${PKGS[0]}" -t macos \
             --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
 
   cooldown:

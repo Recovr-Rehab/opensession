@@ -123,7 +123,7 @@ extension View {
         #endif
     }
 
-    /// OS1's split settings surface is resizable and minimizable. Tahoe's
+    /// Open Session's split settings surface is resizable and minimizable. Tahoe's
     /// `Settings` scene still does not support window zoom/full-screen, so do
     /// not leave a dead grey traffic-light control in the titlebar.
     @ViewBuilder
@@ -162,7 +162,7 @@ private struct MacSettingsWindowConfigurator: NSViewRepresentable {
     private func configureWhenAttached(_ view: NSView) {
         DispatchQueue.main.async {
             guard let window = view.window else { return }
-            window.title = "OS1 Settings"
+            window.title = "\(AppBrand.productName) Settings"
             window.styleMask.formUnion([.resizable, .miniaturizable])
             window.standardWindowButton(.miniaturizeButton)?.isEnabled = true
             window.standardWindowButton(.zoomButton)?.isHidden = true

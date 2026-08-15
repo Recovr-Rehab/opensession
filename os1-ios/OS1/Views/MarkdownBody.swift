@@ -148,7 +148,7 @@ struct MarkdownBody: View {
     }
 }
 
-/// Bridges OS1's coalesced full-text snapshots to the library's streaming API.
+/// Bridges Open Session's coalesced full-text snapshots to the library's streaming API.
 /// Buffering only the newest value avoids parsing stale snapshots when parsing
 /// briefly falls behind incoming text.
 final class MarkdownStreamSource: ObservableObject, StreamedMarkdownSource {
@@ -202,7 +202,7 @@ struct StreamingMarkdownBody: View {
 
 #if os(iOS)
 private extension TextFonts {
-    /// Heading font set at OS1 metrics. The library's bundled `Typography`
+    /// Heading font set at Open Session metrics. The library's bundled `Typography`
     /// ramp renders headings at 28/24/20/20/20/20pt in REGULAR weight (the
     /// heading block applies `TextFonts.normal`), which against the 17pt body
     /// reads as oversized unemphasised text with h3–h6 indistinguishable from

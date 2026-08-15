@@ -1,4 +1,4 @@
-// OS¹ desktop — a thin shell around an Open Session server. The frontend ships
+// Open Session desktop — a thin shell around an Open Session server. The frontend ships
 // from the server, so this app only owns the window, navigation policy,
 // notifications, badge and links.
 const {
@@ -21,7 +21,7 @@ const packageConfig = require("../package.json").opensession || {};
 
 // AppKit can show its persistent-window crash-recovery prompt before Electron
 // finishes launching. On macOS 26 that modal can trap the browser process and
-// leave the app in a startup crash loop. OS¹ restores its own window bounds, so
+// leave the app in a startup crash loop. Open Session restores its own window bounds, so
 // native persistent UI state is both redundant and unsafe here.
 if (process.platform === "darwin") {
   systemPreferences.setUserDefault("ApplePersistenceIgnoreState", "boolean", true);
@@ -80,7 +80,7 @@ async function promptRestartToUpdate() {
     type: "info",
     message: "Update ready",
     detail: updateState.version
-      ? `OS¹ ${updateState.version} has been downloaded. Restart to install it.`
+      ? `Open Session ${updateState.version} has been downloaded. Restart to install it.`
       : "An update has been downloaded. Restart to install it.",
     buttons: ["Restart Now", "Later"],
     defaultId: 0,
@@ -150,7 +150,7 @@ function initAutoUpdate() {
       dialog.showMessageBox(win, {
         type: "info",
         message: "You're up to date",
-        detail: `OS¹ ${app.getVersion()} is the latest version.`,
+        detail: `Open Session ${app.getVersion()} is the latest version.`,
       });
     }
   });
@@ -276,9 +276,9 @@ async function explainMicDenied() {
       type: "info",
       message: "macOS is blocking the microphone",
       detail:
-        "Dictation needs microphone access, and macOS has it turned off for OS¹.\n\n" +
-        "Open System Settings → Privacy & Security → Microphone, switch OS¹ on, " +
-        "then quit and reopen OS¹.",
+        "Dictation needs microphone access, and macOS has it turned off for Open Session.\n\n" +
+        "Open System Settings → Privacy & Security → Microphone, switch Open Session on, " +
+        "then quit and reopen Open Session.",
       buttons: ["Open System Settings", "Not now"],
       defaultId: 0,
       cancelId: 1,

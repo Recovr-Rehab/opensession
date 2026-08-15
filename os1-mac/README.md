@@ -1,4 +1,4 @@
-# OS¹ for Mac
+# Open Session for Mac
 
 A thin Electron shell around a configured Open Session server. The app owns
 the window, navigation policy, notifications, dock badge and deep links.
@@ -28,10 +28,10 @@ bun app:dev
 ```
 
 This starts the local SPA on `:3851`, waits for it to become ready, prepares a
-lightweight unsigned development `.app`, launches it with the proper OS¹ Dock
-name/icon, and stops both processes together on `Ctrl+C`. Fully quit an
-already-running OS¹ first (`⌘Q`); closing its window only hides it and the
-single-instance lock would otherwise reuse that older process.
+lightweight unsigned development `.app`, launches it with the proper Open
+Session Dock name/icon, and stops both processes together on `Ctrl+C`. Fully
+quit an already-running Open Session first (`⌘Q`); closing its window only
+hides it and the single-instance lock would otherwise reuse that older process.
 
 Edits hot-reload in place (React Fast Refresh + CSS hot-swap; Tailwind output
 refreshes within ~3s). ⚠️ Writes are real — prompts/steers/archives hit
@@ -126,7 +126,7 @@ absent. Release builds package the Electron shell and its icon resources. The
 pipeline embeds the Developer ID provisioning profile and signs only the outer
 app with the associated-domains entitlement, so Universal Links work without
 Electron helpers claiming an entitlement they cannot support. The package keeps
-only Electron's English locale resources because OS¹ is currently English-only;
+only Electron's English locale resources because Open Session is currently English-only;
 Chromium's unused locale set otherwise adds roughly 49 MB to the installed app.
 
 ## Auto-update

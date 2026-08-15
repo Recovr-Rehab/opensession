@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import type { WSServerMessage } from "../lib/types";
+import { PRODUCT_NAME } from "../lib/brand";
 import { subscribeFrontendVersion } from "../lib/frontend-version";
 import { SIDEBAR_TOAST_CARD } from "../lib/sidebar-toast-classes";
 import { Tooltip } from "../ui/tooltip";
@@ -177,7 +178,7 @@ export function UpdatePill({ addHandler, variant = "toast" }: Props) {
           forced
             ? `Updating in ${secondsLeft}s. Tap to refresh now.`
             : restart
-              ? `OS¹ ${shellVersion ?? "update"} is ready. Tap to restart and install it.`
+              ? `${PRODUCT_NAME} ${shellVersion ?? "update"} is ready. Tap to restart and install it.`
               : `A new update is available${by ? ` (${by})` : ""}. Tap to refresh.`
         }
       >

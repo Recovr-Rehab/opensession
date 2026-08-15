@@ -280,7 +280,7 @@ const server: import("bun").Server<WSClientData> = hotServe({
 					path === "/api/keypad" &&
 					req.method === "GET" &&
 					keypadBearerAuthorized(req);
-				// The OS¹ mac shell's Squirrel updater and Chrome's extension
+				// The Open Session mac shell's Squirrel updater and Chrome's extension
 				// updater (os1-chrome) fetch their update feeds and artifacts
 				// with plain clients (no cookies); tailnet-only exposure makes
 				// these safe to leave open, like /api/health.

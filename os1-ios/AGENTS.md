@@ -1,7 +1,10 @@
-# OS1 native app (iOS + macOS, SwiftUI) — agent guide
+# Open Session native app (iOS + macOS, SwiftUI): agent guide
 
-This directory is the NATIVE Swift client for OS1: one SwiftUI codebase, two
-targets — `OS1` (iOS 26+) and `OS1Mac` (macOS). It is not the web UI
+This directory is the NATIVE Swift client for Open Session: one SwiftUI
+codebase, two targets, `OS1` (iOS 26+) and `OS1Mac` (macOS). The target,
+scheme, bundle and directory names keep the older `OS1` spelling on purpose:
+they are identifiers, and the app's own name lives in the Info.plist keys
+below. It is not the web UI
 (`src/frontend/`) and not the Electron desktop shell (`os1-mac/`); see the
 "client apps" section of the root AGENTS.md for how to disambiguate requests.
 `README.md` here is the human-facing overview (features, architecture map,
@@ -13,6 +16,15 @@ WS protocol notes) — keep it updated alongside changes.
   truth — `OS1.xcodeproj` is not checked in and must never be hand-edited.
   New/removed Swift files under `OS1/` are picked up by `xcodegen generate`.
 - Deployment targets live in `project.yml` (iOS 26.0; don't trust stale docs).
+- The app is called **Open Session**. Three places carry that name and have to
+  move together: `INFOPLIST_KEY_CFBundleDisplayName` (Home Screen, Dock,
+  Finder, Siri, the Shortcuts picker) and `INFOPLIST_KEY_CFBundleName` (the
+  macOS app menu) in `project.yml`, `CFBundleDisplayName` in
+  `OS1Widgets/Info.plist`, and `AppBrand.productName` for the name in prose the
+  app shows a person. Never hardcode the product name in a view. Siri phrases
+  interpolate `\(.applicationName)` and follow the display name for free.
+  `AppBrand` is the product; `Brand` in `Views/BrandLogos.swift` is the
+  third-party service marks on the Connections screen. They are not the same.
 - Pure SwiftUI. SwiftStreamingMarkdown is the deliberate exception to the
   no-third-party-dependencies default; discuss any additional dependency first.
 - Both targets share one bundle id (one App Store Connect record, universal
@@ -60,7 +72,8 @@ a task needs real Apple hardware, not just for compiles:
   Mac (a private/VPN-only instance), reverse-tunnel it:
   `ssh -R 13850:127.0.0.1:3850 <mac-node> '…'` and launch with
   `OS1_SERVER=http://127.0.0.1:13850 OS1_TOKEN=<token>
-  <build>/OS1.app/Contents/MacOS/OS1` (tokens:
+  "<build>/Open Session.app/Contents/MacOS/Open Session"` (quote it: the Mac
+  target's `PRODUCT_NAME` is the product name, spaces and all; tokens:
   `~/.opensession-web-sessions.json` on the server host). On the iOS simulator the
   same overrides inject via `SIMCTL_CHILD_*`.
 - **Profile it.** `sample <pid> 15 -file out.txt` gives per-thread call

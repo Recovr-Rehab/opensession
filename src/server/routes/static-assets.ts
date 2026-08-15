@@ -246,7 +246,7 @@ export async function handleStaticAssetsRoutes(
 		);
 	}
 
-	// Universal links for the OS¹ desktop app (tellahq/os1-mac): lets plain
+	// Universal links for the Open Session desktop app (tellahq/os1-mac): lets plain
 	// https://os.tella.dev/… links open the app once it's signed with the
 	// associated-domains entitlement. Both spec locations, since Apple has
 	// probed the bare path historically. Caveat: os.tella.dev resolves to a

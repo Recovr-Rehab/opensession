@@ -1,12 +1,17 @@
-# NOT dev.tella.os1 — that id belongs to the App Store pair (the iOS app and
+# NOT dev.tella.os1. That id belongs to the App Store pair (the iOS app and
 # the native OS1Mac target in os1-ios, one universal-purchase record). Two
 # different Mac apps must never share a bundle id, so the Electron shell has
-# its own. Heads-up for the release after this change: macOS treats the
-# re-identified app as a new signer, so the keychain may re-prompt for the
-# "OS¹ Safe Storage" item (saved sessions survive one "Always Allow").
+# its own.
+#
+# Chromium names its keychain item after productName, so the release that
+# renames the app to Open Session prompts once for a new "Open Session Safe
+# Storage" item. Saved sessions survive one "Always Allow".
 appId: dev.tella.os1.shell
-productName: OS¹
-artifactName: OS1-${version}-${arch}.${ext}
+productName: Open Session
+# Space-free on purpose: this is a URL path segment in the update feed. The
+# matching pattern in src/server/routes/os1-update.ts still accepts the old
+# OS1-* assets, so the feed keeps serving across the renaming release.
+artifactName: OpenSession-${version}-${arch}.${ext}
 directories:
   buildResources: build
   output: dist
@@ -25,8 +30,8 @@ extraResources:
 mac:
   category: public.app-category.developer-tools
   icon: build/icon.icns
-  # OS¹ is currently English-only. Electron otherwise ships every Chromium
-  # localization, which adds roughly 49 MB to the installed app.
+  # Open Session is currently English-only. Electron otherwise ships every
+  # Chromium localization, which adds roughly 49 MB to the installed app.
   electronLanguages: [en]
   hardenedRuntime: true
   gatekeeperAssess: false
@@ -51,9 +56,9 @@ mac:
     # dictation fails as "denied" on the first try. This string is what the
     # system prompt shows. Pairs with com.apple.security.device.audio-input in
     # the entitlements.
-    NSMicrophoneUsageDescription: OS¹ uses the microphone to dictate prompts into the composer.
+    NSMicrophoneUsageDescription: Open Session uses the microphone to dictate prompts into the composer.
     CFBundleURLTypes:
-      - CFBundleURLName: OS¹ deep link
+      - CFBundleURLName: Open Session deep link
         CFBundleURLSchemes: [os1]
   # Reads APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID from the env in
   # CI; skipped (with a warning) when they're absent, e.g. local unsigned builds.

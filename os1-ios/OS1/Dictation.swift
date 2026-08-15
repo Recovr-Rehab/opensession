@@ -51,11 +51,11 @@ final class Dictation {
         self.onTranscript = onTranscript
 
         guard await requestSpeechAuthorization() else {
-            state = .denied("Speech recognition is off. Turn it on for OS1 in Settings to dictate.")
+            state = .denied("Speech recognition is off. Turn it on for \(AppBrand.productName) in Settings to dictate.")
             return
         }
         guard await requestMicPermission() else {
-            state = .denied("Microphone access is off. Turn it on for OS1 in Settings to dictate.")
+            state = .denied("Microphone access is off. Turn it on for \(AppBrand.productName) in Settings to dictate.")
             return
         }
 

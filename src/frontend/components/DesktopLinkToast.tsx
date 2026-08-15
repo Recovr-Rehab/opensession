@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { IconX } from "./icons";
+import { PRODUCT_NAME } from "../lib/brand";
 import { desktopProtocolUrlFromBrowser } from "../lib/desktop-link";
 import { SIDEBAR_TOAST_CARD } from "../lib/sidebar-toast-classes";
 import { Button } from "../ui/button";
@@ -16,8 +17,13 @@ export function DesktopLinkToast() {
 			role="region"
 			aria-label="Open in desktop app"
 		>
-			<span className="min-w-0 flex-1 truncate text-label font-medium leading-[1.3] text-fg">
-				Open in OS¹
+			{/* Wraps rather than truncates: the product name is instance
+			    configurable, and at the card's width a two-word one already
+			    clipped to "Open in Open S…". Two lines match the update
+			    toast's height; the clamp keeps a long name from growing the
+			    card without bound. */}
+			<span className="min-w-0 flex-1 text-balance line-clamp-2 text-label font-medium leading-[1.3] text-fg">
+				Open in {PRODUCT_NAME}
 			</span>
 			<div className="flex shrink-0 items-center gap-1">
 				<Button

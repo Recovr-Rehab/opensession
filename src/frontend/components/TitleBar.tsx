@@ -5,7 +5,7 @@ import { useShortcutKeys } from "../hooks/useShortcutBindings";
 /**
  * Back/forward cluster for Window Controls Overlay mode.
  *
- * When the app runs as the OS¹ desktop shell or an installed desktop PWA with
+ * When the app runs as the Open Session desktop shell or an installed desktop PWA with
  * `display_override: window-controls-overlay`, the OS titlebar collapses to
  * just the window-control buttons overlaid on our own content — which also
  * takes the browser's back/forward buttons with it. There is no dedicated

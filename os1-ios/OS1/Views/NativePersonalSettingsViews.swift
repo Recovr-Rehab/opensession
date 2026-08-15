@@ -24,13 +24,13 @@ struct NotificationsSettingsView: View {
                 }
                 Picker("When to notify", selection: $whenToNotify) {
                     Text("Always").tag("always")
-                    Text("When OS1 is in the background").tag("background")
+                    Text("When \(AppBrand.productName) is in the background").tag("background")
                     Text("Never").tag("never")
                 }
             } header: {
                 Text("Alerts")
             } footer: {
-                Text("These alert preferences apply only to this native OS1 app and device.")
+                Text("These alert preferences apply only to this native \(AppBrand.productName) app and device.")
             }
 
             Section("Events") {
@@ -74,7 +74,7 @@ struct NotificationsSettingsView: View {
     private var liveActivityFooter: String {
         LiveActivityCoordinator.shared.areActivitiesAvailable
             ? "Shows your running sessions on the Lock Screen and Dynamic Island. Session titles follow your Lock Screen privacy settings."
-            : "Live Activities are disabled for OS1 in iPhone Settings."
+            : "Live Activities are disabled for \(AppBrand.productName) in iPhone Settings."
     }
     #endif
 }
@@ -999,7 +999,7 @@ struct PersonalPromptSection: View {
 /// app is installed (see `AgentShortcuts`), and the widgets ship with it — but
 /// nothing in the app ever SAYS that, and the steps that are a person's to
 /// take (placing a widget, binding the Action Button, which only iOS Settings
-/// can do) happen outside OS1 entirely. So this page is mostly signposting:
+/// can do) happen outside Open Session entirely. So this page is mostly signposting:
 /// what the shortcut does, where its widgets live, a `ShortcutsLink` into the
 /// Shortcuts app, and the paths Apple gives no deep link for.
 struct ShortcutsSettingsView: View {
@@ -1017,7 +1017,7 @@ struct ShortcutsSettingsView: View {
             } footer: {
                 // No section header: the navigation title above already says
                 // "Shortcuts", and repeating it just pushed the first row down.
-                Text("Installed with the app. Ask Siri for it by name, or find it under OS1 in Shortcuts.")
+                Text("Installed with the app. Ask Siri for it by name, or find it under \(AppBrand.productName) in Shortcuts.")
             }
 
             #if os(iOS)
@@ -1026,16 +1026,16 @@ struct ShortcutsSettingsView: View {
                     icon: "square.grid.2x2",
                     title: "Home Screen and Lock Screen",
                     detail: """
-                    Add the OS1 widget and the whole tile becomes the same \
-                    press.
+                    Add the \(AppBrand.productName) widget and the whole tile \
+                    becomes the same press.
                     """
                 )
                 shortcut(
                     icon: "switch.2",
                     title: "Control Centre",
                     detail: """
-                    Swipe down, +, Add a Control, then OS1 — and the Action \
-                    Button's picker lists it under Controls too.
+                    Swipe down, +, Add a Control, then \(AppBrand.productName). \
+                    The Action Button's picker lists it under Controls too.
                     """
                 )
             } header: {
@@ -1063,7 +1063,7 @@ struct ShortcutsSettingsView: View {
                 #endif
             } footer: {
                 #if os(iOS)
-                Text("To put it on the Action Button: iPhone Settings → Action Button → swipe to Shortcut → Choose a Shortcut → OS1 → Start an Agent.")
+                Text("To put it on the Action Button: iPhone Settings → Action Button → swipe to Shortcut → Choose a Shortcut → \(AppBrand.productName) → Start an Agent.")
                 #else
                 Text("Run it from Spotlight, or say it to Siri.")
                 #endif

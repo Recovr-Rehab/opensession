@@ -2,7 +2,7 @@ import Foundation
 
 /// Why a request never reached the server, in words that name the fix.
 ///
-/// An OS1 server usually sits on a tailnet, and a device that has dropped off
+/// An Open Session server usually sits on a tailnet, and a device that has dropped off
 /// it gets no refusal: packets addressed to a 100.x node go nowhere, so
 /// URLSession waits out its full timeout and reports "The request timed out."
 /// That reads as a broken server when the truth is a switched-off VPN — so
@@ -86,7 +86,7 @@ enum Reachability {
             case .notConfigured:
                 return Diagnosis(
                     title: "No server yet",
-                    fix: "Add your OS1 server and token in Settings.",
+                    fix: "Add your \(AppBrand.productName) server and token in Settings.",
                     detail: api.localizedDescription,
                     isConnection: false,
                     remedy: .settings

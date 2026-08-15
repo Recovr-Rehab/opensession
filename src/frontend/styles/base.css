@@ -1068,7 +1068,7 @@ body:is(.resizing-sidebar, .resizing-panel, .resizing-tab-split) {
 	display: none;
 }
 
-/* Window Controls Overlay (desktop PWA + the OS¹ desktop app): the OS titlebar
+/* Window Controls Overlay (desktop PWA + the Open Session desktop app): the OS titlebar
    is replaced by just the window-control buttons overlaid on our own chrome —
    no OS bar, no centered title text, and NO dedicated titlebar band of our
    own. The window's whole first content row IS the titlebar: on the sidebar
@@ -1079,7 +1079,7 @@ body:is(.resizing-sidebar, .resizing-panel, .resizing-tab-split) {
    so grabbing anywhere along the top moves the window.
 
    Keyed off `html.wco` (set by the detection script in index.html), NOT the
-   `(display-mode: window-controls-overlay)` media query: Electron (the OS¹
+   `(display-mode: window-controls-overlay)` media query: Electron (the Open Session
    desktop shell, tellahq/os1-mac) exposes the WCO geometry and env() vars but
    keeps display-mode at "browser", so the media query never matches there. */
 html.wco .app {

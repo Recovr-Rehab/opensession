@@ -1,6 +1,6 @@
 {
   "name": "os1-mac",
-  "productName": "OS¹",
+  "productName": "Open Session",
   "version": "0.3.13",
   "description": "macOS desktop shell for an Open Session server",
   "private": true,
