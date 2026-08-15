@@ -280,11 +280,8 @@ export function AppearancePanel() {
 
 	return (
 		<SettingsPanel>
-			<SettingsHeader
-				title="Appearance"
-				description="Choose how the app looks and what appears in your sidebar."
-			/>
-			<SettingsGroupLabel>Theme</SettingsGroupLabel>
+			<SettingsHeader title="Appearance" />
+			<SettingsGroupLabel className="mt-0">Theme</SettingsGroupLabel>
 			<SettingsSection>
 				<div
 					className="grid grid-cols-3 gap-3.5"

@@ -362,10 +362,7 @@ export function PreferencesPanel() {
 
 	return (
 		<SettingsPanel>
-			<SettingsHeader
-				title="Preferences"
-				description="Choose how sessions send messages, show their work, use voice, and follow your standing instructions."
-			/>
+			<SettingsHeader title="Preferences" />
 			<SettingsGroupLabel className="mt-0">Messages</SettingsGroupLabel>
 			<SettingCard>
 				<SettingRow

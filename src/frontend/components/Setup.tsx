@@ -189,10 +189,7 @@ export function SetupPanel({ onDone }: { onDone?: () => void }) {
 
 	return (
 		<SettingsPanel className="relative">
-			<SettingsHeader
-				title="Workspace setup"
-				description="Administrator settings for model capacity, repositories, members, and integrations."
-			/>
+			<SettingsHeader title="Workspace setup" />
 			{!status ? (
 				<LoadingState>
 					{failed ? "Couldn't load setup status." : "Loading…"}

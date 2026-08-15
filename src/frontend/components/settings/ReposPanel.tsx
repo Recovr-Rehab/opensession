@@ -14,7 +14,7 @@ export function ReposPanel() {
 		<SettingsPanel>
 			<SettingsHeader
 				title="Repositories"
-				description="Register the repositories sessions can work in. Each session uses an isolated worktree."
+				description="Each session works in an isolated worktree of the repositories you register here."
 			/>
 			{!status ? (
 				<LoadingState>

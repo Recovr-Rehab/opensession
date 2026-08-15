@@ -134,7 +134,7 @@ export function MyAccountsPanel() {
 		<SettingsPanel>
 			<SettingsHeader
 				title="My accounts"
-				description="Your personal sign-ins. Sessions act as you where you're connected; otherwise they fall back to the workspace account."
+				description="Sessions act as you where you're connected, and fall back to the workspace account everywhere else."
 			/>
 			{error && (
 				<InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>

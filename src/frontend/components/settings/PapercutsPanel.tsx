@@ -41,7 +41,7 @@ export function PapercutsPanel() {
 	const header = (
 		<SettingsHeader
 			title="Papercuts"
-			description="Small frictions agents log while working: retried tool calls, flaky commands, misleading errors. Together they show where a repo needs sanding down."
+			description="Small frictions agents log while working: retried tool calls, flaky commands, misleading errors."
 		/>
 	);
 

@@ -21,7 +21,7 @@ export function IntegrationsPanel() {
 		<SettingsPanel className="relative">
 			<SettingsHeader
 				title="Integrations"
-				description="Connect agent tools and event sources. Each setup includes the provider steps, required permissions, and credentials."
+				description="Connect agent tools and event sources."
 			/>
 			{!status ? (
 				<LoadingState>
