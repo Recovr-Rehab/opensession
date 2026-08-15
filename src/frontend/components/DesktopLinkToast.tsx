@@ -14,14 +14,15 @@ export function DesktopLinkToast() {
 		<div
 			className={SIDEBAR_TOAST_CARD}
 			role="region"
-			aria-label="Open in Mac app"
+			aria-label="Open in app"
 		>
-			{/* Names the destination rather than the product: you are already
-			    in the product, and the toast only ever renders on a Mac
-			    (desktop-link.ts gates on the platform). Saying the product
-			    name here just repeated the button. */}
+			{/* Names the destination, not the product: you are already in the
+			    product, so repeating its name here just said the button twice.
+			    "Open in app" is what the web reaches for when it hands off to
+			    a native client, and the platform is implied because the toast
+			    only renders on a Mac (desktop-link.ts gates on it). */}
 			<span className="min-w-0 flex-1 truncate text-label font-medium leading-[1.3] text-fg">
-				Open in Mac app
+				Open in app
 			</span>
 			<div className="flex shrink-0 items-center gap-1">
 				<Button
