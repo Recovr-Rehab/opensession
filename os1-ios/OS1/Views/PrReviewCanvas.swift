@@ -166,7 +166,7 @@ struct PrReviewCanvas: View {
             }
             .padding(16)
         }
-        .background(OS1VisualStyle.raised)
+        .background(OS1VisualStyle.background)
         .refreshable { await reload() }
     }
 
@@ -253,7 +253,7 @@ struct PrReviewCanvas: View {
                 .padding(.vertical, 8)
             }
         }
-        .background(OS1VisualStyle.background)
+        .background(OS1VisualStyle.raised)
         // Clipped, not just filled: the diff's own washes run the full width
         // of the line, and unclipped they square off the card's corners.
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))

@@ -299,7 +299,7 @@ struct PrPanelView: View {
             }
             .padding(16)
         }
-        .background(OS1VisualStyle.raised)
+        .background(OS1VisualStyle.background)
         .refreshable { await viewModel.refreshPr() }
     }
 
@@ -320,7 +320,7 @@ struct PrPanelView: View {
             .padding(.horizontal, 4)
             VStack(spacing: 0) { rows() }
                 .background(
-                    OS1VisualStyle.background,
+                    OS1VisualStyle.raised,
                     in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                 )
         }
@@ -623,7 +623,7 @@ struct PrPanelView: View {
             }
             .padding(16)
         }
-        .background(OS1VisualStyle.raised)
+        .background(OS1VisualStyle.background)
         .refreshable { await viewModel.refreshPr() }
     }
 
@@ -691,7 +691,7 @@ struct PrPanelView: View {
                 .padding(14)
         }
         .background(
-            OS1VisualStyle.background,
+            OS1VisualStyle.raised,
             in: RoundedRectangle(cornerRadius: 14, style: .continuous)
         )
     }
