@@ -85,26 +85,42 @@ const PALETTE = {
  * its own. It is injected FIRST, so anything the document authored still wins,
  * and it is what the publish tool points agents at so new reports can be plain
  * semantic HTML and be correct in both schemes for free.
+ *
+ * `plain` withholds the page itself — the measure, the margins, the vertical
+ * rhythm — from a document that wrote its own CSS. Those are the properties a
+ * document sets somewhere OTHER than on `body` (a `.wrap` with its own
+ * max-width is the usual shape), so they are the ones a baseline can quietly
+ * win by default and reflow a report that was laid out to be wide. Colours and
+ * element styling stay in both cases: those a document either states, and
+ * wins, or never had.
  */
-export function reportBaselineCss(theme: ReportTheme): string {
+export function reportBaselineCss(theme: ReportTheme, plain = true): string {
 	const c = PALETTE[theme];
-	return `:root{color-scheme:${theme};--report-bg:${c.bg};--report-text:${c.text};--report-dim:${c.dim};--report-line:${c.border};--report-panel:${c.panel};--report-green:${c.green};--report-yellow:${c.yellow};--report-red:${c.red}}
-html{background:${c.bg}}
-body{margin:0 auto;padding:2rem 1.25rem 4rem;max-width:72ch;background:${c.bg};color:${c.text};font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
+	const page = plain
+		? `body{margin:0 auto;padding:2rem 1.25rem 4rem;max-width:72ch}
 h1,h2,h3,h4{line-height:1.25;font-weight:600;margin:2rem 0 .5rem}
 h1{font-size:1.5rem;margin-top:0}
 h2{font-size:1.2rem}
 h3{font-size:1rem}
 p,ul,ol,table,pre,blockquote{margin:0 0 1rem}
 li{margin-bottom:.35rem}
-a{color:${c.text};text-underline-offset:2px}
+table{width:100%}
+`
+		: "";
+	// Nothing here paints `html`. A background on the root element stops the
+	// body's own from propagating to the canvas, which would leave any document
+	// with a paper of its own — a dark report, a warm off-white one — painting
+	// only as far as its measure and showing a seam past the last line.
+	return `:root{color-scheme:${theme};--report-bg:${c.bg};--report-text:${c.text};--report-dim:${c.dim};--report-line:${c.border};--report-panel:${c.panel};--report-green:${c.green};--report-yellow:${c.yellow};--report-red:${c.red}}
+body{background:${c.bg};color:${c.text};font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
+${page}a{color:${c.text};text-underline-offset:2px}
 small,.meta,.quiet-text{color:${c.dim};font-size:.85em}
 hr{border:0;border-top:1px solid ${c.border};margin:2rem 0}
 code,kbd{background:${c.well};color:${c.text};border-radius:4px;padding:.1em .3em;font-size:.9em}
 pre{background:${c.well};border:1px solid ${c.wellLine};border-radius:8px;padding:.75rem 1rem;overflow:auto}
 pre code{background:none;padding:0}
 blockquote{border-left:3px solid ${c.border};margin-left:0;padding:.1rem 0 .1rem 1rem;color:${c.dim}}
-table{border-collapse:collapse;width:100%}
+table{border-collapse:collapse}
 th,td{border-bottom:1px solid ${c.border};padding:.4rem .6rem;text-align:left;vertical-align:top}
 th{font-weight:600;color:${c.dim};font-size:.85em}
 img,video{max-width:100%;height:auto;border-radius:8px}
@@ -407,9 +423,16 @@ function parseColor(token: string): Rgb | null {
  * Walking the CSS.
  * ------------------------------------------------------------------ */
 
-/** Colour-bearing tokens, matched only outside strings, comments and url(). */
+/**
+ * Colour-bearing tokens, matched only outside strings, comments and url().
+ *
+ * The boundaries exclude `-`, which `\b` does not. A CSS identifier is full of
+ * colour words — `--red`, `--gray-bg`, `--green` — and rewriting one turns a
+ * live reference into `var(--#fa0000)`, so the chip that named it silently
+ * loses its fill. A word before `(` is a function name, never a colour.
+ */
 const COLOR_TOKEN =
-	/#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?)\([^()]*\)|\b[a-zA-Z]+\b/g;
+	/(?<![\w-])#[0-9a-fA-F]{3,8}(?![\w-])|(?<![\w-])(?:rgba?|hsla?)\([^()]*\)|(?<![\w-])[a-zA-Z]+(?![\w-(])/g;
 
 /**
  * Rewrite every colour in a declaration value. Shadows are left alone: an
@@ -606,7 +629,8 @@ function forceColorSchemeQueries(html: string, target: ReportTheme): string {
 }
 
 function injectBaseline(html: string, theme: ReportTheme): string {
-	const style = `<style data-opensession-report-baseline>\n${reportBaselineCss(theme)}\n</style>`;
+	const plain = styleBlocks(html).length === 0;
+	const style = `<style data-opensession-report-baseline>\n${reportBaselineCss(theme, plain)}\n</style>`;
 	// First in <head> so the document's own rules still win at equal
 	// specificity. A document with no <head> gets it up front, which is where
 	// the parser would have put one anyway.
