@@ -4410,7 +4410,11 @@ export function App(
 									)}
 								</div>
 							</div>
-						) : (
+						) : !isPhone ? (
+							/* Phones never see this pane: the fullscreen sidebar is the
+							   root page and sits over the detail shell. Mounting Prs
+							   beneath it built a ~50k-element tree on every return to
+							   the root, freezing the back-swipe for seconds. */
 							<Prs
 								sessions={sessions}
 								workspaces={workspaces}
@@ -4419,7 +4423,7 @@ export function App(
 								onShowArchived={refreshArchived}
 								onOpenAnalytics={() => navigate({ view: "analytics" })}
 							/>
-						)}
+						) : null}
 						</main>
 
 						{/* Full-height right column inside the same rounded workspace shell as
