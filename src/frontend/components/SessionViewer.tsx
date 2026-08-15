@@ -1386,6 +1386,7 @@ export function SessionViewer({
 		following,
 		newBelow,
 		showScrollToBottom,
+		atTop,
 		scrollToLatest,
 		leaveLatest,
 		endTurn,
@@ -5918,7 +5919,13 @@ export function SessionViewer({
 								/>
 							)}
 
-							{historyTruncated && (
+							{/* The pill belongs to the head of the transcript, so it only
+							    shows while the reader is in reach of it. Over the live tail
+							    it was an offer for something far above, floating across
+							    whatever was being read. The loading state ignores the gate:
+							    the prepend it reports pushes the reader away from the top,
+							    and hiding the pill mid-load takes the feedback with it. */}
+							{historyTruncated && (atTop || loadingHistory) && (
 								<div className={TRANSCRIPT_PILL_TOP}>
 									{loadingHistory ? (
 										<div className={TRANSCRIPT_PILL_LOADING}>

@@ -26,6 +26,11 @@ import { recordSessionPerf } from "../lib/session-performance";
 const STICK_THRESHOLD = 90;
 // Gap left above a pinned turn so a little previous context stays visible.
 const TOP_GAP = 20;
+// How close to the head of the loaded transcript still counts as being at the
+// top. The "Load all" pill belongs to that head, so it only shows within reach
+// of it: one screenful, capped so a tall window never leaves it floating
+// halfway down a long transcript.
+const TOP_THRESHOLD = 600;
 // Touch devices get instant pin scrolls: iOS Safari drops smooth programmatic
 // scrolls during keyboard/visual-viewport animation, leaving the pin stranded
 // at an intermediate position.
@@ -45,6 +50,8 @@ export interface SessionScroll {
   newBelow: boolean;
   /** True when the latest message is out of view and the return control should show. */
   showScrollToBottom: boolean;
+  /** True while the reader is within reach of the head of the loaded transcript. */
+  atTop: boolean;
   /** Bring the reader back to the latest reply and resume following. */
   scrollToLatest: (behavior?: ScrollBehavior) => void;
   /** Stop following because the reader is intentionally moving into history. */
@@ -105,6 +112,10 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
   const [following, setFollowingState] = useState(initialFollowing);
   const [newBelow, setNewBelow] = useState(false);
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  // Starts false and is established before the first paint by relayout(): a
+  // session usually opens at the live edge, and a pill flashed over the newest
+  // reply is exactly what this gate exists to prevent.
+  const [atTop, setAtTop] = useState(false);
   // Whether the latest turn is currently pinned to the top (spacer active).
   const pinnedRef = useRef(false);
   // Set on send; consumed once to perform the one-time scroll-to-top.
@@ -167,9 +178,16 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
     }
   }, [clearSpacer]);
 
-  const updateScrollToBottomVisibility = useCallback((isFollowing = followingRef.current) => {
+  // Both floating controls read the same scroll position, so they are recomputed
+  // together: the "Load all" pill at the head of the transcript and the return
+  // control at its foot. Each one belongs to an end the reader can't see, and
+  // showing either from anywhere else leaves it floating over live content.
+  const updateEdges = useCallback((isFollowing = followingRef.current) => {
     const el = containerRef.current;
     setShowScrollToBottom(Boolean(el && !isFollowing && !latestMessageVisible(el)));
+    setAtTop(
+      Boolean(el && el.scrollTop <= Math.min(el.clientHeight, TOP_THRESHOLD))
+    );
   }, []);
 
   const leaveLatest = useCallback(() => {
@@ -178,8 +196,8 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
     lastTouchRef.current = 0;
     scrollbarDragRef.current = false;
     setFollowing(false);
-    updateScrollToBottomVisibility(false);
-  }, [setFollowing, updateScrollToBottomVisibility]);
+    updateEdges(false);
+  }, [setFollowing, updateEdges]);
 
   const scrollToLatest = useCallback(
     (behavior: ScrollBehavior = "smooth") => {
@@ -225,8 +243,8 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
     // Leaving the live edge to read from the top is intent: stop following so the
     // streaming reply fills the space below instead of yanking us back down.
     setFollowing(false);
-    updateScrollToBottomVisibility(false);
-  }, [setFollowing, updateScrollToBottomVisibility]);
+    updateEdges(false);
+  }, [setFollowing, updateEdges]);
 
   // Size the bottom spacer to exactly the room the pinned turn needs to sit near the
   // top. Resizing a spacer that's below the fold doesn't move what the reader sees.
@@ -301,7 +319,7 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
           pinTopRef.current = el.scrollTop;
         }
       }
-      updateScrollToBottomVisibility(false);
+      updateEdges(false);
       return;
     }
     // Stick to the bottom only while following — and never mid-selection, since a
@@ -315,8 +333,8 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
     ) {
       setNewBelow(true); // content arrived out of view, let the UI announce it
     }
-    updateScrollToBottomVisibility();
-  }, [sizeSpacer, anchorToTop, distanceFromBottom, updateScrollToBottomVisibility]);
+    updateEdges();
+  }, [sizeSpacer, anchorToTop, distanceFromBottom, updateEdges]);
 
   // The reader's scroll is the source of truth for following. Reaching the live
   // edge re-engages it; scrolling away disengages it.
@@ -343,7 +361,7 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
       } else if (atEdge) {
         autoFlightRef.current = 0; // arrived
         if (!followingRef.current) setFollowing(true);
-        updateScrollToBottomVisibility(true);
+        updateEdges(true);
         return;
       } else {
         return; // mid-flight positions carry no reader intent
@@ -359,8 +377,8 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
       now - lastTouchRef.current < 6000;
     if (!atEdge && followingRef.current) setFollowing(false);
     else if (atEdge && !followingRef.current && gestured) setFollowing(true);
-    updateScrollToBottomVisibility(followingRef.current);
-  }, [distanceFromBottom, setFollowing, updateScrollToBottomVisibility]);
+    updateEdges(followingRef.current);
+  }, [distanceFromBottom, setFollowing, updateEdges]);
 
   // Two container-level listeners: a real gesture cancels a programmatic
   // flight immediately (so the reader can grab the transcript mid-animation),
@@ -459,6 +477,7 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
     followingLive: followingRef,
     newBelow,
     showScrollToBottom,
+    atTop,
     scrollToLatest,
     leaveLatest,
     anchorToTop,

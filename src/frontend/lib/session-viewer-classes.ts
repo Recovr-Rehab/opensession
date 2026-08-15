@@ -346,13 +346,22 @@ export const TRANSCRIPT_PILL_SPINNER =
  * `z-40` overlay across the top of the pane, with the docked tab strip under
  * it on a multi-session workspace. 12px therefore put the pill behind both,
  * rendered and covered and untappable at every scroll position. It clears the
- * same chrome the transcript clears. No collapsed-chrome variant is needed:
- * SessionViewer forces the bar back whenever the transcript is within 48px of
- * the top, which is the only place this pill is reached from.
+ * same chrome the transcript clears.
+ *
+ * SessionViewer shows it only within a screenful of the head of the
+ * transcript, and scrolling down through that screenful is what collapses the
+ * phone chrome, so the pill follows the bar off screen on the header's own
+ * transform and timing. Without that it hangs in the space the bar just
+ * vacated, which is the floating-over-the-transcript look this pill is
+ * supposed to avoid. A transform rather than a moved `top`: it composes with
+ * the `translate` property doing the centring, and costs no layout.
  */
 export const TRANSCRIPT_PILL_TOP =
 	"pointer-events-none absolute top-3 left-1/2 z-[5] -translate-x-1/2 " +
-	"phone:top-[calc(var(--pane-header-h)+var(--strip-clearance,0px)+8px)]";
+	"phone:top-[calc(var(--pane-header-h)+var(--strip-clearance,0px)+8px)] " +
+	"phone:[transition-property:transform] phone:duration-[var(--dur-lg)] " +
+	"phone:ease-[var(--ease)] " +
+	"phone:[body.chrome-collapsed_&]:[transform:translateY(calc(4px-var(--pane-header-h)-var(--strip-clearance,0px)))]";
 
 /* ── Session info page (phone) ──────────────────────────────────────────────
  *
