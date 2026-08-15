@@ -37,7 +37,14 @@ import type { AttachedRepo, ExternalRef } from "./types";
 import type { SessionEffort } from "./models";
 import { stateDir } from "./paths";
 
-const WORKSPACES_DIR = stateDir("workspaces");
+/** Resolved per call, not pinned at module load: statePath reads
+ *  OPENSESSION_STATE_DIR at call time so tests can repoint it, and bun runs
+ *  every test file in one process, so a module-load pin here would belong to
+ *  whichever file imported workspaces first; test fixtures then leak into
+ *  the live store (they did, 2026-08-15). */
+function workspacesDir(): string {
+  return stateDir("workspaces");
+}
 
 /** A workspace-owned model combination. The lead owns the conversation; the
  * supporting models are available to it as focused worker sessions. */
@@ -142,11 +149,11 @@ export interface Workspace {
 }
 
 function ensureDir(): void {
-  if (!existsSync(WORKSPACES_DIR)) mkdirSync(WORKSPACES_DIR, { recursive: true });
+  if (!existsSync(workspacesDir())) mkdirSync(workspacesDir(), { recursive: true });
 }
 
 function fileFor(id: string): string {
-  return `${WORKSPACES_DIR}/${id}.json`;
+  return `${workspacesDir()}/${id}.json`;
 }
 
 /** Reject ids that could escape the directory; workspace ids are server-minted. */
@@ -171,12 +178,12 @@ function fromDisk(p: Workspace): Workspace {
 }
 
 export function listWorkspaces(): Workspace[] {
-  if (!existsSync(WORKSPACES_DIR)) return [];
+  if (!existsSync(workspacesDir())) return [];
   const out: Workspace[] = [];
-  for (const file of readdirSync(WORKSPACES_DIR)) {
+  for (const file of readdirSync(workspacesDir())) {
     if (!file.endsWith(".json")) continue;
     try {
-      const p = JSON.parse(readFileSync(`${WORKSPACES_DIR}/${file}`, "utf8"));
+      const p = JSON.parse(readFileSync(`${workspacesDir()}/${file}`, "utf8"));
       // No defaults backfill here: stamping the ~3KB default modelSettings on
       // every row multiplied the list payload by the workspace count (13 MB on
       // this instance). Absent modelSettings means "inherit the defaults":
@@ -208,11 +215,11 @@ let workspaceNameCache: Map<string, string> | null = null;
 function workspaceNameMap(): Map<string, string> {
   if (workspaceNameCache) return workspaceNameCache;
   const names = new Map<string, string>();
-  if (existsSync(WORKSPACES_DIR))
-    for (const file of readdirSync(WORKSPACES_DIR)) {
+  if (existsSync(workspacesDir()))
+    for (const file of readdirSync(workspacesDir())) {
       if (!file.endsWith(".json")) continue;
       try {
-        const p = JSON.parse(readFileSync(`${WORKSPACES_DIR}/${file}`, "utf8"));
+        const p = JSON.parse(readFileSync(`${workspacesDir()}/${file}`, "utf8"));
         if (typeof p?.id === "string" && typeof p?.name === "string")
           names.set(p.id, p.name);
       } catch {}

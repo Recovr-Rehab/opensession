@@ -1,15 +1,21 @@
-import { afterAll, describe, expect, test } from "bun:test";
+import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
-// workspaces.ts resolves its directory at module load, so the state dir has to
-// be redirected before the import.
+// workspaces.ts resolves its directory per call (statePath reads the env at
+// call time), so pointing OPENSESSION_STATE_DIR at a scratch dir isolates
+// every write. Re-pin it before each test too: bun runs all test files in one
+// process, and another file's afterAll restoring the env mid-suite would
+// otherwise send this file's fixtures into the live store.
 let scratch = "";
 let previous: string | undefined;
 scratch = mkdtempSync(join(tmpdir(), "opensession-workspaces-"));
 previous = process.env.OPENSESSION_STATE_DIR;
 process.env.OPENSESSION_STATE_DIR = scratch;
+beforeEach(() => {
+	process.env.OPENSESSION_STATE_DIR = scratch;
+});
 
 const {
 	createWorkspace,
