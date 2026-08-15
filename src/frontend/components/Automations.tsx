@@ -721,7 +721,7 @@ function TriggerIcon({ automation }: { automation: Automation }) {
         ? { Icon: IconBolt, scale: "scale-[1.15]" }
         : automation.webhookEnabled === false
           ? { Icon: IconPlayOutline, scale: "scale-110" }
-          : { Icon: IconPlug, scale: "scale-[1.45]" };
+          : { Icon: IconPlug, scale: "scale-[1.15]" };
   return (
     <span
       className={cn(

@@ -553,16 +553,20 @@ export function IconLogOut(p: IconProps) {
   );
 }
 
+// Drawn 10.5 x 14.5 on the grid, centred on (12, 12): a narrow object at the
+// set's full height, the same proportions as IconBolt. It used to be 8.5 x 11.5
+// sitting 1.5 units low, which is why it read a size smaller than the glyph
+// beside it in a menu and why call sites kept scaling it up by hand.
 export function IconPlug(p: IconProps) {
   return (
     <Svg {...p}>
       <path
         {...stroke}
-        d="M7.75 10.75H16.25V12.25C16.25 14.5972 14.3472 16.5 12 16.5C9.65279 16.5 7.75 14.5972 7.75 12.25V10.75Z"
+        d="M6.75 8.5H17.25V10.5C17.25 13.3995 14.8995 15.75 12 15.75C9.10051 15.75 6.75 13.3995 6.75 10.5V8.5Z"
       />
-      <path {...stroke} d="M9.75 10.5V7.75" />
-      <path {...stroke} d="M14.25 10.5V7.75" />
-      <path {...stroke} d="M12 16.5V19.25" />
+      <path {...stroke} d="M9.25 8.25V4.75" />
+      <path {...stroke} d="M14.75 8.25V4.75" />
+      <path {...stroke} d="M12 15.75V19.25" />
     </Svg>
   );
 }
