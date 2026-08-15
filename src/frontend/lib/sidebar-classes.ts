@@ -388,17 +388,21 @@ export const SIDEBAR_GROUP_DOT = "size-[7px] shrink-0 rounded-full opacity-85";
  * that automation's settings. Hover-device only, like the row action clusters:
  * on touch the count stays, because there is no hover to reveal it with.
  *
- * The target is the FULL height of the row (`self-stretch` plus the negative
- * margins that eat the heading's own padding), because the thing being aimed
- * at is 20px of glyph at the end of a 36px row and the cursor arrives along
- * the row rather than at its centre line. The wash stays a 28px box on a
- * pseudo-element: filling the target would paint a slab the height of the row
- * for a control that is not the row, which is the same reason
- * `paletteIconBtn` insets its own.
+ * The target is the full height of the row (`self-stretch` plus the negative
+ * margins that eat the heading's own padding) and 4px wider than the box on
+ * each side, because the thing being aimed at is 20px of glyph at the end of a
+ * 36px row and the cursor arrives along the row rather than at its centre
+ * line. The width comes from `::after` rather than from the box: a pseudo is
+ * hit-tested as part of its element, so the target grows while the LAYOUT
+ * still reserves 24px, and the heading's name truncates at the same
+ * character it did before. The wash is its own 28px pseudo, because filling
+ * the target would paint a slab the height of the row for a control that is
+ * not the row (`paletteIconBtn` insets its own for the same reason).
  */
 export const SIDEBAR_AUTO_COG =
-	"relative -my-1 -mr-1 ml-auto hidden w-8 shrink-0 cursor-pointer items-center justify-center self-stretch text-dim group-hover/gh:inline-flex hover:text-fg " +
+	"relative -my-1 ml-auto hidden w-6 shrink-0 cursor-pointer items-center justify-center self-stretch text-dim group-hover/gh:inline-flex hover:text-fg " +
 	"before:absolute before:top-1/2 before:left-1/2 before:z-0 before:size-7 before:-translate-x-1/2 before:-translate-y-1/2 before:rounded-[calc(6px*var(--rf))] before:[corner-shape:var(--cs)] before:transition-[background] before:content-[''] hover:before:bg-pressed " +
+	"after:absolute after:-inset-x-1 after:inset-y-0 after:content-[''] " +
 	"[&>svg]:relative [&>svg]:z-[1]";
 
 /**
