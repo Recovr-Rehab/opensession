@@ -5351,9 +5351,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							]}
 				</div>
 
-				{(!isPhone || !productEmpty || hasWorkspaceFilter) && (
-					<div className={SIDEBAR_GROUP}>{archivedLink}</div>
-				)}
 				</div>
 			)}
 			</div>
@@ -5524,6 +5521,16 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						)}
 					</div>
 				)}
+			{/* Archived closes the sidebar, below every section rather than inside
+			    the workspace list. It is the end of the list, so anything ordered
+			    after the workspaces (the Automations band) used to render past it,
+			    which read as "the sidebar ended, and then there was more". */}
+			{(!isPhone || !productEmpty || hasWorkspaceFilter) && (
+				<div className={cn(SIDEBAR_GROUP, "mt-1")} style={{ order: 99 }}>
+					{archivedLink}
+				</div>
+			)}
+
 			{/* One card for the whole workspace list: the rows come out of a plain
 			    render function, not a component, so they can't each own a popover.
 			    The hovered row is the anchor instead — same shell, same card. */}
