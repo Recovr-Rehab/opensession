@@ -9,7 +9,7 @@
 
 import { realpathSync } from "fs";
 import { join } from "path";
-import { configuredServer, githubWriteOwners, personaName, productName } from "./config";
+import { configuredServer, githubBotLogins, githubWriteOwners, personaName, productName } from "./config";
 import { githubLoginFor, type GitIdentity } from "./shared/user-mappings";
 
 const UI_BASE =
@@ -401,6 +401,31 @@ export function buildRunInstructions(input: {
           "so in your final summary and continue — never drop the PR over it."
       );
     }
+    const botLogin = githubBotLogins()[0];
+    const attachTokenNote = botLogin
+      ? `Use the bot PAT for the upload: \`TOKEN=$(gh auth token --user ${botLogin})\`. ` +
+        "GitHub App user tokens (`ghu_`, the active token on user-authenticated runs) are " +
+        "rejected with 404 on this endpoint; a rendered attachment does not name its " +
+        "uploader, so the bot PAT is fine even on a PR you author as a user. "
+      : "Use `TOKEN=$(gh auth token)`; a 404 means that token type is rejected (GitHub App " +
+        "user tokens are), so retry with a PAT that can read the repo. ";
+    parts.push(
+      "## Embedding images and videos in PRs\nGitHub renders media inline only when it is " +
+        "uploaded as a GitHub user attachment; a URL on any other host renders as a bare " +
+        "link. When a PR body or comment needs a screenshot or a demo video, upload the " +
+        "file first (undocumented endpoint, verified working 2026-08-15):\n\n" +
+        "```sh\n" +
+        'curl -fsS "https://uploads.github.com/user-attachments/assets?name=<file>&content_type=<mime>&repository_id=$(gh api repos/<owner>/<repo> --jq .id)" \\\n' +
+        '  -X POST -H "Authorization: Bearer $TOKEN" -H "Accept: application/json" --data-binary "@<file>"\n' +
+        "```\n\n" +
+        'It returns `{"url":"https://github.com/user-attachments/assets/<id>"}`. Put that URL ' +
+        "in the PR markdown: `![alt](url)` for an image, or the bare URL on its own line for " +
+        "a video, which GitHub renders as an inline player. " +
+        attachTokenNote +
+        "Attachments are tied to the repo and follow its visibility, so a private repo's " +
+        "media stays private. Limits: 10MB per image, 100MB per video. Prefer this over " +
+        "linking media on external hosts or committing it to the branch."
+    );
   }
   const inproc = (input.inProcessMcp || {}) as Record<string, unknown>;
   // Gated on the sessions server specifically (not any in-process server):
