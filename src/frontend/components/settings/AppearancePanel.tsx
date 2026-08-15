@@ -171,7 +171,7 @@ function AccentSwatch({
 }) {
 	const option = getAccentThemeOption(theme);
 	const swatch = option[tone];
-	const ink = getOnAccentInk(theme, tone);
+	const ink = getOnAccentInk(theme);
 	const style = {
 		"--swatch": swatch,
 		"--swatch-ink": ink,
@@ -313,7 +313,7 @@ export function AppearancePanel() {
 					// One row per breakpoint, so the column count tracks
 					// ACCENT_THEME_OPTIONS.length. A single swatch wrapping onto its
 					// own line reads as a mistake; accent-theme.test.ts guards it.
-					className="grid grid-cols-5 gap-2 desktop:grid-cols-10"
+					className="grid grid-cols-4 gap-2 desktop:grid-cols-7"
 					role="radiogroup"
 					aria-label="Accent colour"
 				>

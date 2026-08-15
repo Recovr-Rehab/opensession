@@ -15,9 +15,8 @@ import UIKit
 /// the two hexes it wears in light and dark.
 ///
 /// What sits ON the accent is deliberately NOT part of that table. Jewel tones
-/// take white ink, honey takes black, and `mono` inverts with its fill. The
-/// contrast test guards that rule, so replacing either hex cannot ship an
-/// illegible glyph.
+/// take white ink and honey takes black. The contrast test guards that rule,
+/// so replacing either hex cannot ship an illegible glyph.
 ///
 /// The cases are a walk around the hue wheel from the blues. `lime` is the id
 /// Honey is stored under and `pink` the one Orchid is stored under: the raw
@@ -26,14 +25,11 @@ import UIKit
 enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
     case sky
     case indigo
-    case pink
     case coral
     case orange
-    case brown
     case lime
     case green
     case teal
-    case mono
 
     static let `default` = AccentTheme.teal
 
@@ -43,14 +39,11 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .sky: "Sky"
         case .indigo: "Indigo"
-        case .pink: "Pink"
         case .coral: "Coral"
         case .orange: "Tangerine"
-        case .brown: "Walnut"
         case .lime: "Honey"
         case .green: "Clover"
         case .teal: "Teal"
-        case .mono: "Mono"
         }
     }
 
@@ -64,21 +57,16 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
     /// Honey keeps one value in both appearances: yellow only exists at high
     /// lightness, so a cream that reads on the dark plate is 1.3:1 against a
     /// white page, and a value deep enough for the light page still reads as
-    /// gold on the dark one. Walnut is held near neutral on purpose, the one
-    /// accent that is a dark surface rather than a hue, and `mono` preserves
-    /// the app's original monochrome accent.
+    /// gold on the dark one.
     var fills: (light: UInt32, dark: UInt32) {
         switch self {
         case .sky: (0x1D_82_BC, 0x24_95_D6)
         case .indigo: (0x63_61_F5, 0x76_7B_F6)
-        case .pink: (0xD1_22_8C, 0xEF_28_A1)
         case .coral: (0xDD_23_3A, 0xF7_36_48)
         case .orange: (0xD3_57_1C, 0xEB_62_21)
-        case .brown: (0x76_45_1F, 0x82_50_2A)
         case .lime: (0xF2_C5_27, 0xF2_C5_27)
         case .green: (0x1E_8E_45, 0x24_A3_51)
         case .teal: (0x1F_8A_94, 0x25_9E_A9)
-        case .mono: (0x00_00_00, 0xFF_FF_FF)
         }
     }
 
@@ -129,17 +117,9 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
         )
     }
 
-    /// What sits on top of the fill — the glyph in the send disc and every
-    /// other prominent accent control. Jewel tones use white, honey uses black,
-    /// and monochrome keeps the app's original black/white inversion.
-    var onAccent: Color {
-        if self == .lime { return .black }
-        guard self == .mono else { return .white }
-        return Color(platformColor: AccentTheme.dynamic(
-            light: .white,
-            dark: .black
-        ))
-    }
+    /// What sits on top of the fill: the glyph in the send disc and every other
+    /// prominent accent control. Jewel tones use white, honey uses black.
+    var onAccent: Color { self == .lime ? .black : .white }
 
     /// A flat, appearance-independent swatch — for anywhere the two values have
     /// to be shown side by side rather than resolved.
@@ -150,13 +130,7 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
     /// Whether this accent's fixed glyph is white. Together with
     /// `glyphContrast` this lets the test suite reject replacement colours too
     /// pale to carry the palette's chosen ink.
-    func glyphIsWhite(dark: Bool) -> Bool {
-        switch self {
-        case .lime: false
-        case .mono: !dark
-        default: true
-        }
-    }
+    func glyphIsWhite(dark _: Bool) -> Bool { self != .lime }
 
     /// How much contrast the derived glyph gets on this fill.
     func glyphContrast(dark: Bool) -> Double {
@@ -257,7 +231,10 @@ final class AccentStore {
         let normalized = switch stored {
         case "blue": AccentTheme.sky.rawValue
         case "gold": AccentTheme.lime.rawValue
-        case "purple": AccentTheme.pink.rawValue
+        case "purple": AccentTheme.coral.rawValue
+        case "pink": AccentTheme.coral.rawValue
+        case "brown": AccentTheme.orange.rawValue
+        case "mono": AccentTheme.teal.rawValue
         default: stored
         }
         theme = AccentTheme(rawValue: normalized) ?? .default

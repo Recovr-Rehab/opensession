@@ -43,12 +43,12 @@
         var accent = localStorage.getItem("opensession-accent");
         // Accents whose colour was retired; keep in sync with RETIRED_THEMES in
         // lib/accent-theme.ts, which is what runs once the bundle is up.
-        var retired = { gold: "lime", purple: "pink" };
+        var retired = { gold: "lime", purple: "coral", pink: "coral", brown: "orange", mono: "teal" };
         if (retired[accent]) {
           accent = retired[accent];
           localStorage.setItem("opensession-accent", accent);
         }
-        var accents = ["sky", "indigo", "pink", "coral", "orange", "brown", "lime", "green", "teal", "mono"];
+        var accents = ["sky", "indigo", "coral", "orange", "lime", "green", "teal"];
         h.setAttribute("data-accent", accents.indexOf(accent) >= 0 ? accent : "teal");
         h.style.colorScheme = eff;
         var m = document.querySelector('meta[name="theme-color"]');

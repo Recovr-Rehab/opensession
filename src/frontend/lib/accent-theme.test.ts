@@ -58,13 +58,13 @@ function luminance(hex: string) {
 }
 
 describe("accent theme", () => {
-	test("matches the native ten-colour palette", () => {
-		expect(ACCENT_THEME_OPTIONS).toHaveLength(10);
+	test("matches the native seven-colour palette", () => {
+		expect(ACCENT_THEME_OPTIONS).toHaveLength(7);
 		expect(
 			new Set(
 				ACCENT_THEME_OPTIONS.map(({ light, dark }) => `${light}-${dark}`),
 			).size,
-		).toBe(10);
+		).toBe(7);
 	});
 
 	test("the CSS tokens and pre-paint bootstrap contain the same palette", async () => {
@@ -90,7 +90,9 @@ describe("accent theme", () => {
 		expect(css).toContain("--accent-ink-light: #8d7110");
 		// The pre-paint bootstrap has to retire the same selections the bundle
 		// does, or a migrated accent flashes its old id for one frame.
-		expect(html).toContain('var retired = { gold: "lime", purple: "pink" }');
+		expect(html).toContain(
+			'var retired = { gold: "lime", purple: "coral", pink: "coral", brown: "orange", mono: "teal" }',
+		);
 	});
 
 	test("the picker gives every accent a column", async () => {
@@ -105,7 +107,7 @@ describe("accent theme", () => {
 		for (const option of ACCENT_THEME_OPTIONS) {
 			for (const tone of ["light", "dark"] as const) {
 				const fill = option[tone];
-				const ink = getOnAccentInk(option.value, tone);
+				const ink = getOnAccentInk(option.value);
 				const fillLuminance = luminance(fill);
 				const inkLuminance = luminance(ink);
 				const contrast =
@@ -122,10 +124,21 @@ describe("accent theme", () => {
 		expect(storage.getItem("opensession-accent")).toBe("lime");
 	});
 
-	test("migrates the removed Violet accent to Pink", () => {
-		storage.setItem("opensession-accent", "purple");
-		expect(getAccentTheme()).toBe("pink");
-		expect(storage.getItem("opensession-accent")).toBe("pink");
+	// A retired accent must never point at another retired one: the lookup runs
+	// once, so a chain would leave the caller on a dead id and fall back to the
+	// default, which is the reset the migration exists to prevent.
+	test("migrates every retired accent to a hue still in the palette", () => {
+		for (const [retired, expected] of [
+			["purple", "coral"],
+			["pink", "coral"],
+			["brown", "orange"],
+			["mono", "teal"],
+			["gold", "lime"],
+		]) {
+			storage.setItem("opensession-accent", retired);
+			expect(getAccentTheme()).toBe(expected);
+			expect(isAccentTheme(expected)).toBe(true);
+		}
 	});
 
 	test("defaults to teal for missing or unknown values", () => {
@@ -149,7 +162,8 @@ describe("accent theme", () => {
 	test("rejects values outside the palette", () => {
 		expect(isAccentTheme("lime")).toBe(true);
 		expect(isAccentTheme("gold")).toBe(false);
+		expect(isAccentTheme("mono")).toBe(false);
 		expect(isAccentTheme("chartreuse")).toBe(false);
-		expect(getAccentThemeOption("mono").dark).toBe("#ffffff");
+		expect(getAccentThemeOption("teal").dark).toBe("#259ea9");
 	});
 });

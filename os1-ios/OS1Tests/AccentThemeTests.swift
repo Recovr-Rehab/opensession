@@ -2,8 +2,8 @@ import XCTest
 @testable import OS1
 
 final class AccentThemeTests: XCTestCase {
-    func testPaletteHasTenDistinctOptions() {
-        XCTAssertEqual(AccentTheme.allCases.count, 10)
+    func testPaletteHasSevenDistinctOptions() {
+        XCTAssertEqual(AccentTheme.allCases.count, 7)
         XCTAssertEqual(
             Set(AccentTheme.allCases.map { "\($0.fills.light)-\($0.fills.dark)" }).count,
             AccentTheme.allCases.count
@@ -27,22 +27,11 @@ final class AccentThemeTests: XCTestCase {
 
     /// Most jewel tones carry white; bright lime deliberately carries black.
     func testChromaticFillsUseTheirExpectedGlyphInk() {
-        for theme in AccentTheme.allCases where theme != .mono {
+        for theme in AccentTheme.allCases {
             let expectsWhite = theme != .lime
             XCTAssertEqual(theme.glyphIsWhite(dark: false), expectsWhite, "\(theme.rawValue) light fill")
             XCTAssertEqual(theme.glyphIsWhite(dark: true), expectsWhite, "\(theme.rawValue) dark fill")
         }
-    }
-
-    /// `mono` is the accent the app had before it had a setting — black on
-    /// light, white on dark. Keeping it expressible in the same table is how we
-    /// know the abstraction didn't lose anything.
-    func testMonoReproducesTheOriginalMonochromeAccent() {
-        XCTAssertEqual(AccentTheme.mono.fills.light, 0x00_00_00)
-        XCTAssertEqual(AccentTheme.mono.fills.dark, 0xFF_FF_FF)
-        // Black fill takes a white glyph, white fill a black one.
-        XCTAssertEqual(AccentTheme.mono.glyphContrast(dark: false), 21, accuracy: 0.01)
-        XCTAssertEqual(AccentTheme.mono.glyphContrast(dark: true), 21, accuracy: 0.01)
     }
 
     func testDefaultsToTealWhenNothingIsStored() {
@@ -54,20 +43,6 @@ final class AccentThemeTests: XCTestCase {
         let defaults = scratchDefaults()
         defaults.set("chartreuse", forKey: AccentStore.defaultsKey)
         XCTAssertEqual(AccentStore(defaults: defaults).theme, .default)
-    }
-
-    func testLegacyBlueSelectionMigratesToSky() {
-        let defaults = scratchDefaults()
-        defaults.set("blue", forKey: AccentStore.defaultsKey)
-        XCTAssertEqual(AccentStore(defaults: defaults).theme, .sky)
-        XCTAssertEqual(defaults.string(forKey: AccentStore.defaultsKey), "sky")
-    }
-
-    func testRemovedGoldSelectionMigratesToLime() {
-        let defaults = scratchDefaults()
-        defaults.set("gold", forKey: AccentStore.defaultsKey)
-        XCTAssertEqual(AccentStore(defaults: defaults).theme, .lime)
-        XCTAssertEqual(defaults.string(forKey: AccentStore.defaultsKey), "lime")
     }
 
     /// Honey carries one value in both appearances, so it has to separate from
@@ -85,11 +60,25 @@ final class AccentThemeTests: XCTestCase {
         )
     }
 
-    func testRemovedVioletSelectionMigratesToPink() {
-        let defaults = scratchDefaults()
-        defaults.set("purple", forKey: AccentStore.defaultsKey)
-        XCTAssertEqual(AccentStore(defaults: defaults).theme, .pink)
-        XCTAssertEqual(defaults.string(forKey: AccentStore.defaultsKey), "pink")
+    /// A retired accent must never point at another retired one: the switch
+    /// runs once, so a chain would leave the store on a dead raw value and fall
+    /// back to the default, which is the reset the migration exists to prevent.
+    func testEveryRetiredSelectionMigratesToASurvivingAccent() {
+        for (retired, expected) in [
+            ("purple", AccentTheme.coral),
+            ("pink", .coral),
+            ("brown", .orange),
+            ("mono", .teal),
+            ("gold", .lime),
+            ("blue", .sky),
+        ] {
+            let defaults = scratchDefaults()
+            defaults.set(retired, forKey: AccentStore.defaultsKey)
+            XCTAssertEqual(AccentStore(defaults: defaults).theme, expected, retired)
+            XCTAssertEqual(
+                defaults.string(forKey: AccentStore.defaultsKey), expected.rawValue, retired
+            )
+        }
     }
 
     func testSelectionPersists() {

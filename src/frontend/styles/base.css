@@ -598,11 +598,6 @@ html[data-accent="teal"] {
 	--accent-dark: #259ea9;
 }
 
-html[data-accent="pink"] {
-	--accent-light: #d1228c;
-	--accent-dark: #ef28a1;
-}
-
 html[data-accent="coral"] {
 	--accent-light: #dd233a;
 	--accent-dark: #f73648;
@@ -611,11 +606,6 @@ html[data-accent="coral"] {
 html[data-accent="orange"] {
 	--accent-light: #d3571c;
 	--accent-dark: #eb6221;
-}
-
-html[data-accent="brown"] {
-	--accent-light: #76451f;
-	--accent-dark: #82502a;
 }
 
 /* Honey keeps one fill in both appearances. Yellow only exists at high
@@ -637,16 +627,6 @@ html[data-accent="lime"] {
 html[data-accent="green"] {
 	--accent-light: #1e8e45;
 	--accent-dark: #24a351;
-}
-
-html[data-accent="mono"] {
-	--accent-light: #000000;
-	--accent-dark: #ffffff;
-	--on-accent-light: #ffffff;
-	--on-accent-dark: #000000;
-	/* The one accent with no hue to deepen: it already sits past the end of the
-	   ink ramp, so mixing it into --text moves nothing. Back to the page. */
-	--accent-hover: color-mix(in srgb, var(--accent) 86%, var(--bg));
 }
 
 /* ── Motion ──────────────────────────────────────────────────
@@ -2417,11 +2397,11 @@ html[data-theme="light"] span.commit-ref:hover {
    `[animation-name:page-loader-bar]` in lib/page-loader-classes.
 
    It restates index.html's `splash-bar` on purpose. The launch splash has to
-   paint before the bundle has parsed, so the shell carries its own copy of the
-   keyframe; this is the same wave, at the size a region inside the app wants
-   rather than the size that sits under a 76px logo. If the CADENCE moves, move
-   both — a launch screen and a loading page breathing at different rates is
-   exactly the kind of drift nobody sees in review and everybody feels. */
+   paint before the bundle has parsed, so the shell carries its own copy of both
+   the keyframe and the bar geometry; this is the same wave, for regions inside
+   the app that are still empty. If one moves, move the other — a launch screen
+   and a loading page that breathe at different rates is exactly the kind of
+   drift nobody sees in review and everybody feels. */
 @keyframes page-loader-bar {
 	0%, 100% { transform: scaleY(0.6); }
 	50% { transform: scaleY(1); }
