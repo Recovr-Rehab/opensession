@@ -6,6 +6,12 @@ import { UserAvatar } from "./UserAvatar";
 import { shortModelLabel, splitModelOptions } from "./ModelEffortSelect";
 import { fetchEngines, setModelEngineDefault } from "../lib/api/engines";
 import {
+	bindingLimit,
+	claudeLimits,
+	type LimitWindow,
+	type UsageWindow,
+} from "../lib/account-usage";
+import {
 	engineModelId,
 	modelEngineKey,
 	type EngineId,
@@ -56,11 +62,6 @@ interface ModelInfo {
 	label: string;
 	aliases: string[];
 	efforts: string[];
-}
-
-interface UsageWindow {
-	utilization: number | null;
-	resetsAt: string | null;
 }
 
 interface ClaudeAccountInfo {
@@ -465,8 +466,6 @@ function EnginesSection() {
 			<SettingsHint>
 				Choose a model or preset once, then choose which engine runs it. Changes apply to new runs.
 			</SettingsHint>
-
-			<ModelEngineDefaultsSection />
 		</>
 	);
 }
@@ -479,8 +478,12 @@ function EnginesSection() {
  *
  * Hidden unless the server offers more than one engine — with one engine there
  * is nothing to choose, and an older server sends no engine list at all.
+ *
+ * Lives at the foot of the page: it is a row per model and reads Auto on all
+ * of them until someone deliberately pins one, so it was a wall between the
+ * page's two settings and the account usage people came to read.
  */
-function ModelEngineDefaultsSection() {
+export function ModelEngineDefaultsSection() {
 	const [models, setModels] = useState<ModelInfo[] | null>(null);
 	const [engines, setEngines] = useState<EngineOption[]>([]);
 	const [defaults, setDefaults] = useState<Record<string, EngineId>>({});
@@ -805,11 +808,10 @@ function absoluteReset(resetsAt: string | null): string | undefined {
 
 /**
  * The meters under an account share one grid, so bars and values line up down
- * their columns however many windows the account reports. Each row is two
- * things, not four: what the limit is and when it frees up on the left, how
- * full it is on the right. The label column used to be a fixed 46px, which
- * truncated every Codex bucket to "Codex…" / "GPT-5…", losing the one word
- * that said which limit you were looking at.
+ * their columns. Each row is two things, not four: what the limit is and when
+ * it frees up on the left, how full it is on the right. The label column used
+ * to be a fixed 46px, which truncated every Codex bucket to "Codex…" /
+ * "GPT-5…", losing the one word that said which limit you were looking at.
  */
 function MeterGroup({ children }: { children: React.ReactNode }) {
 	return (
@@ -867,15 +869,37 @@ function Meter({
 	);
 }
 
-function UsageBar({ label, window: w }: { label: string; window: UsageWindow | null }) {
-	const pct = w?.utilization ?? null;
+/**
+ * An account's usage, as the one limit it is closest to. Accounts report three
+ * or four windows and only the fullest of them decides anything, so a bar each
+ * was three-quarters noise down a page of fourteen accounts — and the
+ * per-model rows ("Fable", "GPT-5.3-Codex-Spark", the latter at 0% on every
+ * account) read as separate budgets when they are the same subscription seen
+ * from another angle. The rest stay one hover away.
+ */
+function UsageMeter({ windows }: { windows: LimitWindow[] }) {
+	const binding = bindingLimit(windows);
+	if (!binding) return null;
+	const pct = binding.utilization;
 	return (
 		<Meter
-			label={label}
+			label={binding.label}
+			labelTitle={
+				windows.length > 1
+					? windows
+							.map(
+								(w) =>
+									`${w.label}: ${w.utilization === null ? "unknown" : `${Math.round(w.utilization)}%`}${
+										w.resetsAt ? `, ${formatReset(w.resetsAt)}` : ""
+									}`,
+							)
+							.join("\n")
+					: undefined
+			}
 			pct={pct}
 			value={pct === null ? "–" : `${Math.round(pct)}%`}
-			note={formatReset(w?.resetsAt ?? null)}
-			noteTitle={absoluteReset(w?.resetsAt ?? null)}
+			note={formatReset(binding.resetsAt)}
+			noteTitle={absoluteReset(binding.resetsAt)}
 		/>
 	);
 }
@@ -883,15 +907,16 @@ function UsageBar({ label, window: w }: { label: string; window: UsageWindow | n
 /**
  * Usage-credits (extra usage) spend for one account: what's been billed past
  * the subscription's included limits this month, against the account's monthly
- * credit cap. Values from the OAuth usage endpoint are cents. Hidden when the
- * account has extra usage off and nothing spent — most accounts, most months.
+ * credit cap. Values from the OAuth usage endpoint are cents. Hidden until
+ * something has actually been spent: an account with extra usage merely
+ * switched on drew a "$0.00" bar every month, which is a cap, not a cost.
  */
 function ExtraUsageRow({
 	extra,
 }: {
 	extra: { enabled: boolean; usedCredits: number; monthlyLimit: number } | null | undefined;
 }) {
-	if (!extra || (!extra.enabled && extra.usedCredits <= 0)) return null;
+	if (!extra || extra.usedCredits <= 0) return null;
 	const usd = (cents: number) =>
 		`$${(cents / 100).toLocaleString([], { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 	const pct = extra.monthlyLimit > 0 ? (extra.usedCredits / extra.monthlyLimit) * 100 : null;
@@ -1098,11 +1123,7 @@ function ClaudeAccountsSection() {
 								) : (
 									<>
 										<MeterGroup>
-											<UsageBar label="5h" window={a.usage?.fiveHour ?? null} />
-											<UsageBar label="7d" window={a.usage?.sevenDay ?? null} />
-											{(a.usage?.scopedLimits ?? []).map((s) => (
-												<UsageBar key={s.label} label={s.label} window={s} />
-											))}
+											<UsageMeter windows={claudeLimits(a.usage)} />
 											<ExtraUsageRow extra={a.usage?.extraUsage} />
 										</MeterGroup>
 										{a.usage?.source === "meridian" && (
@@ -1208,24 +1229,8 @@ function CodexUsageMeters({ account }: { account: CodexAccountInfo }) {
 	if (account.usage.error)
 		return <div className="mt-1.5 text-meta text-red">{account.usage.error}</div>;
 
-	// Shortest window first, then by bucket name, so the same limits sit in the
-	// same order under every account. The API returns buckets in whatever order
-	// the account reports them, which had one row reading Codex then Spark and
-	// the next the other way round.
 	const bucketName = (bucket: CodexUsageBucket) =>
 		bucket.label || (bucket.id === "codex" ? "Codex" : bucket.id);
-	const windows = account.usage.buckets
-		.flatMap((bucket) =>
-			[bucket.primary, bucket.secondary].flatMap((window) =>
-				window ? [{ bucket, window }] : [],
-			),
-		)
-		.sort(
-			(a, b) =>
-				(a.window.windowDurationMins ?? Infinity) -
-					(b.window.windowDurationMins ?? Infinity) ||
-				bucketName(a.bucket).localeCompare(bucketName(b.bucket)),
-		);
 	const windowLabel = (minutes: number | null) => {
 		if (!minutes) return "Usage";
 		if (minutes % 10_080 === 0) return `${minutes / 10_080}w`;
@@ -1233,21 +1238,29 @@ function CodexUsageMeters({ account }: { account: CodexAccountInfo }) {
 		if (minutes % 60 === 0) return `${minutes / 60}h`;
 		return `${minutes}m`;
 	};
+	// A bucket the account names is a per-model budget (GPT-5.3-Codex-Spark)
+	// rather than the plan's own window, so it only surfaces when it is the
+	// limit actually being hit.
 	const multipleBuckets = account.usage.buckets.length > 1;
+	const windows: LimitWindow[] = account.usage.buckets.flatMap((bucket) =>
+		[bucket.primary, bucket.secondary].flatMap((window) => {
+			if (!window) return [];
+			const duration = windowLabel(window.windowDurationMins);
+			return [
+				{
+					label: multipleBuckets ? `${bucketName(bucket)} ${duration}` : duration,
+					utilization: window.utilization,
+					resetsAt: window.resetsAt,
+					scoped: !!bucket.label,
+				},
+			];
+		}),
+	);
 	return (
 		<>
 			{windows.length > 0 && (
 				<MeterGroup>
-					{windows.map(({ bucket, window }, index) => {
-						const duration = windowLabel(window.windowDurationMins);
-						return (
-							<UsageBar
-								key={`${bucket.id}-${window.windowDurationMins ?? index}`}
-								label={multipleBuckets ? `${bucketName(bucket)} ${duration}` : duration}
-								window={window}
-							/>
-						);
-					})}
+					<UsageMeter windows={windows} />
 				</MeterGroup>
 			)}
 			{account.usage.resetCreditsAvailable !== null &&

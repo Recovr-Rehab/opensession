@@ -1,5 +1,5 @@
 import { SettingsHeader, SettingsPanel } from "../../ui/settings";
-import { AccountsPanel } from "../Models";
+import { AccountsPanel, ModelEngineDefaultsSection } from "../Models";
 import { ModelProvidersPanel } from "../ModelProviders";
 import { WorkspaceModelPresetSettings } from "../WorkspaceModelPresets";
 import type { Workspace } from "../../lib/types";
@@ -17,6 +17,9 @@ export function ModelsPanel({ workspace }: { workspace?: Workspace }) {
 			<AccountsPanel />
 			<WorkspaceModelPresetSettings workspace={workspace} />
 			<ModelProvidersPanel />
+			{/* Last: one row per model, Auto on all of them until someone pins
+			    one, so it sits below everything people came here to read. */}
+			<ModelEngineDefaultsSection />
 		</SettingsPanel>
 	);
 }
