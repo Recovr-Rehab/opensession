@@ -368,17 +368,21 @@ export const SIDEBAR_GROUP_CHEVRON_COLLAPSED = "opacity-100";
  * turned both back off. A count belongs to the name it counts: every heading
  * now reads "Docs Spell-Check, 5" with the number against the label, and the
  * right end of the row is left to whatever acts on the row.
+ *
+ * Nor is a size. A count is part of the heading it belongs to, so it inherits
+ * that heading's step and is set apart by colour alone. Given a step of its
+ * own it read as dropped out of the phrase rather than as part of it: a
+ * numeral has no ascender, so the same nominal gap costs it more than it costs
+ * a word.
  */
-export const SIDEBAR_GROUP_COUNT =
-	"text-label font-medium text-faint desktop:text-meta";
+export const SIDEBAR_GROUP_COUNT = "font-medium text-faint";
 
 /**
- * The same count on a status-lane heading, which takes the meta step at both
- * widths rather than the phone bump its neighbours get. Spelled as its own
- * constant rather than reproduced by stacking a second `text-*` on
- * {@link SIDEBAR_GROUP_COUNT}, where the winner would be Tailwind's ordering.
+ * The same count on a status-lane heading. Identical to
+ * {@link SIDEBAR_GROUP_COUNT} today and kept as its own name because the two
+ * headings are free to diverge; neither sets a size.
  */
-export const SIDEBAR_LANE_COUNT = "text-meta font-medium text-faint";
+export const SIDEBAR_LANE_COUNT = "font-medium text-faint";
 
 /** The 7px liveness dot a lane or automation heading leads with. */
 export const SIDEBAR_GROUP_DOT = "size-[7px] shrink-0 rounded-full opacity-85";
