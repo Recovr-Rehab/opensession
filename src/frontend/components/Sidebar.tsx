@@ -5447,6 +5447,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 												)}
 											</span>
 											<span className={SIDEBAR_GROUP_NAME}>{group.label}</span>
+											{/* The count belongs to the name, not to the end of
+											    the row: an automation heading titles the runs
+											    under it, so it reads "iOS parity check, 5" the
+											    way every band above it does. Pinned right it read
+											    as a column of its own, and it had to disappear on
+											    hover to hand the slot to the settings glyph. */}
+											<span className={cn(SIDEBAR_GROUP_COUNT, "shrink-0")}>
+												{group.items.length}
+											</span>
 											<IconChevronDown
 												className={SIDEBAR_GROUP_CHEVRON}
 												size={22}
@@ -5454,19 +5463,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 													transform: open ? "none" : "rotate(-90deg)",
 												}}
 											/>
-											<span
-												className={cn(
-													SIDEBAR_GROUP_COUNT,
-													// The one heading that still wants the old rule's
-													// right-hand pin: its settings glyph takes this
-													// slot on hover.
-													"ml-auto pr-1 group-hover/gh:hidden",
-												)}
-											>
-												{group.items.length}
-											</span>
-											{/* Hover swaps the count for the sliders glyph that
-											    jumps to this automation in Settings (span, not
+											{/* The sliders glyph that jumps to this automation in
+											    Settings, alone at the end of the row (span, not
 											    button, since we're inside the header button). Its
 											    target is the row's full height, so the click can
 											    land anywhere along the end of the row. */}

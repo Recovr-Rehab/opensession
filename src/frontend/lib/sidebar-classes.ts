@@ -363,9 +363,10 @@ export const SIDEBAR_GROUP_CHEVRON_COLLAPSED = "opacity-100";
  * `max-width: 720px`, and `phone:` compiles to `< 720`.
  *
  * Horizontal spacing is deliberately NOT here. The old rule pinned every count
- * to the right with `margin-left: auto` and a 4px inset, and then all but one
- * call site turned both back off — so the pin belongs to the one heading that
- * actually wants it, not to the shared string.
+ * to the right with `margin-left: auto` and a 4px inset, and every call site
+ * turned both back off. A count belongs to the name it counts: every heading
+ * now reads "Docs Spell-Check, 5" with the number against the label, and the
+ * right end of the row is left to whatever acts on the row.
  */
 export const SIDEBAR_GROUP_COUNT =
 	"text-label font-medium text-faint desktop:text-meta";
@@ -389,9 +390,12 @@ export const SIDEBAR_GROUP_DOT = "size-[7px] shrink-0 rounded-full opacity-85";
    you can open. */
 
 /**
- * Automation headings swap their run count for a sliders glyph that jumps to
- * that automation's settings. Hover-device only, like the row action clusters:
- * on touch the count stays, because there is no hover to reveal it with.
+ * The sliders glyph at the end of an automation heading, jumping to that
+ * automation's settings. `ml-auto` puts it at the right end, which is now its
+ * own: the run count sits with the name, so nothing has to be swapped out to
+ * make room for this. Hover-device only, like the row action clusters — on
+ * touch there is no hover to reveal it with, and the heading falls back to
+ * Settings for reaching an automation.
  *
  * The target is the full height of the row (`self-stretch` plus the negative
  * margins that eat the heading's own padding) and 4px wider than the box on
