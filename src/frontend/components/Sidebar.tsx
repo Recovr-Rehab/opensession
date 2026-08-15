@@ -1266,6 +1266,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	const latestReportFor = (name: string) =>
 		automationOverview.get(name)?.latestReport;
 
+	/** Someone is named on it, rather than it being a house routine. */
+	const reportsToSomeone = (name: string) =>
+		(automationOverview.get(name)?.recipients?.length || 0) > 0;
+
 	// ── Hidden rows ─────────────────────────────────────────────────────────
 	// "Hide from my sidebar" is the personal counterpart to Archive: archiving
 	// is global (archive.ts), so it's the wrong tool when a teammate is still
@@ -1319,7 +1323,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			list.push(s);
 			byAutomation.set(s.automation, list);
 		}
-		for (const name of Array.from(byAutomation.keys()).sort()) {
+		// Case-insensitive, or ASCII order files every lowercase name after
+		// every capitalised one: "iOS parity check" and "deepsec daily scan"
+		// landed past "Weekly changelog", at the bottom of a band of thirty.
+		const byName = Array.from(byAutomation.keys()).sort((a, b) =>
+			a.localeCompare(b, undefined, { sensitivity: "base" }),
+		);
+		for (const name of byName) {
 			// An automation the overview hasn't described yet (the fetch is still
 			// out, or it was deleted while its runs remain) stays visible: the
 			// lens can only narrow what it can answer for.
@@ -5451,8 +5461,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 										{/* What the automation last concluded, above the runs
 										    that produced it: the runs are named by their
 										    timestamp, so without this the band says an
-										    automation ran and never what it found. */}
-										{open && latestReportFor(group.label) && (
+										    automation ran and never what it found.
+										    An automation someone is named on shows this even
+										    collapsed: you asked to hear from it, so it
+										    answers without being opened. The house routines
+										    stay quiet, or thirty of them would each add a
+										    line to a band you scroll past. */}
+										{(open || reportsToSomeone(group.label)) &&
+											latestReportFor(group.label) && (
 											<AutomationReportRow
 												report={latestReportFor(group.label)!}
 												onOpen={() => {
