@@ -31,6 +31,7 @@ import {
 import {
   IconArrowUpRight,
   IconDotsHorizontal,
+  IconPlug,
   IconTrash,
   IconSliders,
   IconHistory,
@@ -591,6 +592,14 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
   const own = data.team.find((m) => m.canManage);
   const needsReconnect = !!own?.needsReconnect;
   const showConnect = !own?.connected || needsReconnect;
+  const ownAccount = own
+    ? data.accounts.find((a) => a.login.toLowerCase() === own.github.toLowerCase())
+    : undefined;
+  // Personal view is one row, not a brand row plus a roster of one: with a
+  // single possible account the second row only ever repeated the first.
+  // Unconnected it is the tool ("GitHub", using the bot); connected it is the
+  // account, so the thing you check at a glance is whose name is on your PRs.
+  const signedIn = personal && !!own && active && own.connected;
 
   return (
     <>
@@ -606,9 +615,22 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
             description runs several lines; the compact personal row stays
             centered with its button. */}
         <SettingRow className={cn("gap-x-3", !personal && "items-start")}>
-          <IconTile name="github" size={30} />
+          {signedIn ? (
+            // Same 30px slot as the brand tile, so the row's text column does
+            // not shift when the tile gives way to the avatar.
+            <span className="flex size-[30px] shrink-0 items-center justify-center">
+              <UserAvatar name={own!.name} login={own!.github} size={28} />
+            </span>
+          ) : (
+            <IconTile name="github" size={30} />
+          )}
           <SettingRowText>
-            <SettingRowTitle>{personal ? "GitHub sign-in" : "Per-user GitHub auth"}</SettingRowTitle>
+            <SettingRowTitle className={cn(personal && "truncate")}>
+              {signedIn ? own!.name : personal ? "GitHub" : "Per-user GitHub auth"}
+              {signedIn && (
+                <span className="ml-2 text-label font-normal text-faint">@{own!.github}</span>
+              )}
+            </SettingRowTitle>
             {!personal && (
               <SettingRowDescription className="leading-snug">
                 {active
@@ -616,12 +638,47 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
                   : "Off. Sessions open PRs as the bot account. Opt in via config: integrations.github { userPrAuth: true, oauthClientId } in ~/.opensession/config.json."}
               </SettingRowDescription>
             )}
+            {personal && active && (
+              <SettingRowDescription className="text-meta text-faint">
+                {signedIn && ownAccount
+                  ? `since ${new Date(ownAccount.connectedAt).toLocaleDateString()}`
+                  : signedIn
+                    ? "Sessions open PRs as you"
+                    : "Using the workspace bot"}
+              </SettingRowDescription>
+            )}
           </SettingRowText>
           <SettingRowControl className="flex items-center gap-3">
-            <StatusChip
-              label={active ? "Enabled" : data.enabled ? "Missing client id" : "Disabled"}
-              dot={active ? "var(--green)" : "var(--yellow)"}
-            />
+            {/* Personal: the chip reports YOUR connection, and an unconnected
+                row says so with its Connect button alone, the way every tool
+                row above it does. The admin row reports the workspace switch. */}
+            {personal ? (
+              (signedIn || !active) && (
+                <StatusChip
+                  label={
+                    !active
+                      ? data.enabled
+                        ? "Missing client id"
+                        : "Disabled"
+                      : needsReconnect
+                        ? "Reconnect needed"
+                        : "Connected"
+                  }
+                  dot={
+                    !active
+                      ? "var(--yellow)"
+                      : needsReconnect
+                        ? "var(--red)"
+                        : "var(--green)"
+                  }
+                />
+              )
+            ) : (
+              <StatusChip
+                label={active ? "Enabled" : data.enabled ? "Missing client id" : "Disabled"}
+                dot={active ? "var(--green)" : "var(--yellow)"}
+              />
+            )}
             {active && showConnect && flowState !== "waiting" && (
               <Button
                 size="sm"
@@ -632,8 +689,37 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
                   ? "Starting…"
                   : needsReconnect
                     ? "Reconnect"
-                    : "Connect account"}
+                    : personal
+                      ? "Connect"
+                      : "Connect account"}
               </Button>
+            )}
+            {signedIn && (
+              // Reconnect lives here rather than as a second button: a healthy
+              // row has nothing to press, but re-authorizing has to stay
+              // reachable for the day the token misbehaves without GitHub
+              // having told us yet.
+              <Menu.Root>
+                <Menu.Trigger
+                  className={rowMenuTriggerClasses}
+                  aria-label={`Manage @${own!.github}`}
+                >
+                  <IconDotsHorizontal size={18} />
+                </Menu.Trigger>
+                <Menu.Popup align="end" sideOffset={4}>
+                  <Menu.Item onClick={startConnect} disabled={flowState !== "idle"}>
+                    <IconPlug size={16} className="text-faint" />
+                    Reconnect
+                  </Menu.Item>
+                  <Menu.Item
+                    onClick={() => disconnect(own!.github)}
+                    className="text-red data-[highlighted]:bg-red-soft"
+                  >
+                    <IconTrash size={16} />
+                    Disconnect
+                  </Menu.Item>
+                </Menu.Popup>
+              </Menu.Root>
             )}
           </SettingRowControl>
         </SettingRow>
@@ -692,9 +778,8 @@ export function GithubAccounts({ personal = false }: { personal?: boolean } = {}
         )}
 
         {active &&
-          data.team
-            .filter((m) => !personal || m.canManage)
-            .map((m) => {
+          !personal &&
+          data.team.map((m) => {
             const account = data.accounts.find(
               (a) => a.login.toLowerCase() === m.github.toLowerCase(),
             );
