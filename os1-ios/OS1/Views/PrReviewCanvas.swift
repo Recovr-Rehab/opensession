@@ -35,7 +35,10 @@ struct PrReviewCanvas: View {
         }
     }
 
-    @State private var lens: Lens = .all
+    /// The lens lives with the review canvas that frames this page: the tab
+    /// row above the diff carries the control, the way the web puts it there
+    /// rather than in the header.
+    @Binding var lens: Lens
     @State private var diff: PrDiff?
     @State private var files: [PrPatchFile] = []
     @State private var viewed = Set<String>()
@@ -80,30 +83,15 @@ struct PrReviewCanvas: View {
                 }
             }
         }
-        .navigationTitle(lens == .all ? "Files changed" : lens.label)
-        .inlineTitleBarCompat()
-        .navigationDestination(for: PrPatchFile.self) { file in
-            PrReviewFileView(
-                file: file,
-                isViewed: viewed.contains(file.path),
-                commentCount: draftComments.filter { $0.path == file.path }.count,
-                toggleViewed: { toggleViewed(file.path) },
-                comment: { line in commentTarget = PrLineTarget(path: file.path, line: line) }
-            )
-        }
         .toolbar {
-            ToolbarItem(placement: .topTrailingCompat) {
-                PrViewOptionsMenu(lens: $lens, showsDiffDisplay: lens != .flow)
-            }
+            // Only what belongs to the pending review itself. The lens and
+            // the display settings ride the tab row, and refreshing is the
+            // pull the list already answers.
             ToolbarItem(placement: .topTrailingCompat) {
                 if submitting {
                     ProgressView().controlSize(.small)
                 } else if !draftComments.isEmpty {
-                    Button("Review") { reviewing = true }
-                } else {
-                    Button { Task { await reload() } } label: {
-                        Label("Refresh", systemImage: "arrow.clockwise")
-                    }
+                    Button("Finish review") { reviewing = true }
                 }
             }
         }
@@ -126,6 +114,21 @@ struct PrReviewCanvas: View {
         }
     }
 
+    /// One file's diff. Built here rather than through a
+    /// `navigationDestination(for:)`: this canvas is a PAGE of the review
+    /// panel now, not a pushed view of its own, and a value-based link needs
+    /// its destination registered on the stack that owns it — which left a
+    /// tapped file merely selected. A view-based link needs no registration.
+    private func fileView(_ file: PrPatchFile) -> some View {
+        PrReviewFileView(
+            file: file,
+            isViewed: viewed.contains(file.path),
+            commentCount: draftComments.filter { $0.path == file.path }.count,
+            toggleViewed: { toggleViewed(file.path) },
+            comment: { line in commentTarget = PrLineTarget(path: file.path, line: line) }
+        )
+    }
+
     // MARK: - All changes
 
     private var fileList: some View {
@@ -133,7 +136,9 @@ struct PrReviewCanvas: View {
             pendingCommentsSection
             Section {
                 ForEach(files) { file in
-                    NavigationLink(value: file) {
+                    NavigationLink {
+                        fileView(file)
+                    } label: {
                         fileRow(file)
                     }
                 }
@@ -236,7 +241,7 @@ struct PrReviewCanvas: View {
     @ViewBuilder
     private func guideFileRow(_ path: String) -> some View {
         if let file = files.first(where: { $0.path == path }) {
-            NavigationLink(value: file) { fileRow(file) }
+            NavigationLink { fileView(file) } label: { fileRow(file) }
         } else {
             HStack(spacing: 10) {
                 Image(systemName: "doc").foregroundStyle(.secondary)
@@ -300,7 +305,9 @@ struct PrReviewCanvas: View {
                 .lineLimit(1).truncationMode(.middle)
             Spacer(minLength: 6)
             if let path = row.node.file, let file = files.first(where: { $0.path == path }) {
-                NavigationLink(value: file) {
+                NavigationLink {
+                    fileView(file)
+                } label: {
                     Text(shortPath(path))
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
@@ -443,7 +450,7 @@ struct PrCodeFlowRow: Identifiable {
 /// The lens picker, and the display settings for the lenses that draw a diff.
 /// The settings live in app storage rather than view state so they survive
 /// leaving the canvas, and so the file view below reads the same values.
-private struct PrViewOptionsMenu: View {
+struct PrViewOptionsMenu: View {
     @Binding var lens: PrReviewCanvas.Lens
     var showsDiffDisplay = true
 

@@ -29,9 +29,37 @@ struct PrDetails: Decodable, Equatable {
     var osReview: OsReviewSummary?
     /// A review pass is running on the PR right now.
     var reviewActive: Bool?
-    /// The pull request's conversation. Only the agent's own review write-up
-    /// is read from it so far, which is why there is no comment list yet.
+    /// The pull request's conversation, oldest first.
     var comments: [PrComment]?
+    /// The description, as the author wrote it (markdown).
+    var body: String?
+    var commits: [PrCommit]?
+    /// Per-file line counts, biggest churn first. The patch itself comes from
+    /// the diff route; this is what the overview lists without loading it.
+    var files: [PrFile]?
+    var staging: PrStaging?
+}
+
+struct PrCommit: Decodable, Equatable, Identifiable {
+    var oid: String
+    var messageHeadline: String?
+    var author: String?
+
+    var id: String { oid }
+    var shortOid: String { String(oid.prefix(7)) }
+}
+
+struct PrFile: Decodable, Equatable, Identifiable {
+    var path: String
+    var additions: Int?
+    var deletions: Int?
+
+    var id: String { path }
+}
+
+/// The PR's preview environment, when the repo builds one.
+struct PrStaging: Decodable, Equatable {
+    var url: String?
 }
 
 struct PrComment: Decodable, Equatable {
@@ -39,6 +67,33 @@ struct PrComment: Decodable, Equatable {
     var body: String
     var createdAt: String?
     var url: String?
+
+    /// The comment without the hidden markers bots use to find their own
+    /// comments again. Mirrors the web's `stripHtmlComments`.
+    var discussionBody: String {
+        body
+            .replacingOccurrences(
+                of: "<!--[\\s\\S]*?-->",
+                with: "",
+                options: .regularExpression
+            )
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// A superseded automated review stays on GitHub for history, not as
+    /// something to read (`isOutdatedReviewComment` on the web).
+    var isOutdatedReview: Bool {
+        body.range(
+            of: "<!--\\s*(?:os|michael)-review-outdated\\s*-->",
+            options: .regularExpression
+        ) != nil
+    }
+
+    /// Worth showing in the conversation: it says something once its markers
+    /// are stripped, and it has not been superseded.
+    var isDiscussion: Bool {
+        !discussionBody.isEmpty && !isOutdatedReview
+    }
 }
 
 struct PrCheck: Decodable, Equatable {
