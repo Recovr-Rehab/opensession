@@ -20,6 +20,7 @@ import { reportUrgencyDot, reportUrgencyLabel } from "../lib/report-urgency";
 import { shortTime } from "../lib/time";
 import {
 	REPORTS_COLUMN,
+	REPORTS_COLUMN_COUNT,
 	REPORTS_COLUMN_HEADER,
 	REPORTS_COLUMN_TITLE,
 	REPORTS_LIST,
@@ -193,10 +194,17 @@ export function Reports({
 		<div className="flex min-h-0 flex-1">
 			{showList && (
 				<aside className={REPORTS_COLUMN}>
-					<div className={REPORTS_COLUMN_HEADER}>
-						<h1 className={REPORTS_COLUMN_TITLE}>Reports</h1>
-					</div>
+					{/* The heading sits INSIDE the scroller so the rows pass under
+					    it rather than starting below it. */}
 					<div className={REPORTS_LIST}>
+						<div className={REPORTS_COLUMN_HEADER}>
+							<h1 className={REPORTS_COLUMN_TITLE}>Reports</h1>
+							{/* The right of the heading is the column's action slot.
+							    Today it holds the one thing the column can say about
+							    itself: how many automations are reporting. A control
+							    that acts on the whole list belongs beside it. */}
+							<span className={REPORTS_COLUMN_COUNT}>{groups.length}</span>
+						</div>
 						{groups.map((group) => {
 							const urgency = reportUrgencyLabel(group.latest.urgency);
 							return (

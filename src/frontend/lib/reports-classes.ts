@@ -42,17 +42,42 @@ export const REPORTS_COLUMN =
 	"desktop:w-[300px] desktop:shrink-0 desktop:border-r desktop:border-divider";
 
 /**
- * The column's heading, on phones only.
+ * The column's heading, at both widths. It names the page, which nothing else
+ * does on this route (App.tsx leaves the top bar empty here), and it gives the
+ * column a right-hand slot for what acts on the whole list.
  *
- * On desktop the app's own sidebar sits directly to the left with its Reports
- * row lit, so a heading here printed the same word twice an inch apart, over a
- * second rule that did not line up with the report's. App.tsx makes the same
- * call for Archived and Feed: a page that heads itself is excluded from the
- * top bar, and the phone keeps the title because there the sidebar is a page
- * you navigated away from and nothing else names where you are.
+ * It lives inside the scroller rather than above it, and sticks, so the rows
+ * travel under the title instead of stopping short of it. That is the only
+ * reason the fill is named here: `bg-surface` is the paper the column already
+ * sits on (WORKSPACE_SHELL paints it), and a sticky band has to carry its own
+ * copy or the rows show through.
+ *
+ * The hairline is a scroll fact, not a decoration: it fades in over the first
+ * 12px of travel, so a column at rest is a title on paper and a scrolled one
+ * says there is more above. That needs a keyframe set, which has no class to
+ * hang on, so `reports-head-rule` lives in base.css with the others. Written
+ * as longhands because several animation properties are set at once and a
+ * shorthand would reset the ones beside it. A browser without scroll
+ * timelines keeps the rule its base state gives it: always on, which is the
+ * honest fallback rather than a missing edge.
  */
 export const REPORTS_COLUMN_HEADER =
-	"flex shrink-0 items-center border-b border-divider px-4 py-3 desktop:hidden";
+	"sticky top-0 z-1 flex items-center gap-2 bg-surface px-2.5 pt-3 pb-2 " +
+	"after:pointer-events-none after:absolute after:inset-x-0 after:bottom-0 " +
+	"after:h-px after:bg-divider after:content-[''] " +
+	"supports-[animation-timeline:scroll()]:after:[animation-name:reports-head-rule] " +
+	"supports-[animation-timeline:scroll()]:after:[animation-duration:1ms] " +
+	"supports-[animation-timeline:scroll()]:after:[animation-fill-mode:both] " +
+	"supports-[animation-timeline:scroll()]:after:[animation-timeline:scroll(nearest_block)] " +
+	"supports-[animation-timeline:scroll()]:after:[animation-range:0_12px]";
+
+/**
+ * What the column can say about itself, on the heading's right. `text-meta` is
+ * the step the scale reserves for a count, and `tabular-nums` keeps it from
+ * shifting width as reports land.
+ */
+export const REPORTS_COLUMN_COUNT =
+	"ml-auto shrink-0 text-meta font-medium tabular-nums text-faint";
 
 /**
  * The heading itself. `text-page-title` because that is what it is: the type
@@ -74,9 +99,14 @@ export const REPORTS_COLUMN_TITLE =
  * nav hide theirs: a track down the middle of the window cuts the list off
  * from the report it indexes. Overlay scrollbars make this invisible on a Mac
  * either way; it is the classic-scrollbar platforms this is for.
+ *
+ * No top padding: the heading is the first thing in here and carries its own,
+ * so the band is the same height resting and stuck. Padding above a sticky
+ * child scrolls away, which would shrink the title's air the moment the list
+ * moved.
  */
 export const REPORTS_LIST =
-	"min-h-0 flex-1 overflow-y-auto px-1.5 pt-3 pb-3 " +
+	"min-h-0 flex-1 overflow-y-auto px-1.5 pb-3 " +
 	"[scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
 
 /**
