@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useState, type ComponentType, type ReactNode } from "react";
 import {
 	fetchLibrary,
 	type LibraryEntry,
@@ -31,7 +31,6 @@ import {
 	type SidebarToolId,
 } from "../../lib/sidebar-tools";
 import {
-	SettingsGroupLabel,
 	SettingsHeader,
 	SettingsHint,
 	SettingsPanel,
@@ -220,6 +219,34 @@ function EntryControl({
 	);
 }
 
+/**
+ * A section's heading, over a rule that runs the width of what it names.
+ *
+ * This panel does not use `SettingsGroupLabel`. That label is a caption over a
+ * filled card, and it is the card's own edge that says where the group starts
+ * and ends. These rows carry no fill, so nothing else here divides the page,
+ * and a 13px faint caption over 17 unfenced rows is not a division. It takes
+ * the in-page heading the PR list and Setup already use.
+ */
+function SectionHeading({
+	children,
+	count,
+}: {
+	children: ReactNode;
+	count?: number;
+}) {
+	return (
+		<div className="mb-1 flex items-baseline justify-between gap-3 border-b border-divider pb-3">
+			<h2 className="m-0 text-section-title font-semibold tracking-[-0.01em] text-fg">
+				{children}
+			</h2>
+			{count != null && (
+				<span className="text-supporting tabular-nums text-faint">{count}</span>
+			)}
+		</div>
+	);
+}
+
 function EntryCard({
 	entry,
 	toolVisible,
@@ -230,8 +257,12 @@ function EntryCard({
 	onToggleTool: (visible: boolean) => void;
 }) {
 	return (
-		<div className="flex items-center gap-3 rounded-xl bg-raised p-3">
-			<EntryIcon entry={entry} />
+		// No fill. A card per entry stacks a plate on a plate on the page, and at
+		// two dozen entries the page reads as boxes rather than as things you can
+		// add. The mark carries the row, and the gutter between the columns is
+		// what separates one from the next.
+		<div className="flex items-center gap-3.5 py-3.5">
+			<EntryIcon entry={entry} size={36} />
 			<div className="min-w-0 flex-1">
 				<div className="flex items-center gap-1.5">
 					<span className="truncate text-item-title font-medium text-fg">
@@ -358,9 +389,9 @@ export function LibraryPanel() {
 			{header}
 
 			{installed.length > 0 && (
-				<div className="mb-6 px-5">
-					<div className="mb-2 text-label font-semibold text-faint">Installed</div>
-					<div className="flex flex-wrap gap-1.5">
+				<section className="mb-11 px-5">
+					<SectionHeading>Installed</SectionHeading>
+					<div className="flex flex-wrap gap-2.5 pt-4">
 						{installed.map((entry) => (
 							<a
 								key={entry.id}
@@ -369,14 +400,14 @@ export function LibraryPanel() {
 								aria-label={entry.name}
 								className="rounded-md transition-opacity hover:opacity-80"
 							>
-								<EntryIcon entry={entry} size={30} />
+								<EntryIcon entry={entry} size={36} />
 							</a>
 						))}
 					</div>
-				</div>
+				</section>
 			)}
 
-			<div className="flex flex-wrap items-center gap-2 px-2">
+			<div className="flex flex-wrap items-center gap-2 px-5">
 				<input
 					className={`${settingsInputClass} min-w-[180px] flex-1`}
 					placeholder="Search the library"
@@ -408,19 +439,19 @@ export function LibraryPanel() {
 			)}
 
 			{groups.map((group) => (
-				<div key={group.type}>
-					<SettingsGroupLabel
-						actions={<span className="tabular-nums">{group.entries.length}</span>}
-					>
+				<section key={group.type} className="mt-11 px-5">
+					<SectionHeading count={group.entries.length}>
 						{TYPE_LABELS[group.type]}
-					</SettingsGroupLabel>
-					{/* Two up where the column is wide enough for a card to hold a
+					</SectionHeading>
+					{/* Two up where the column is wide enough for a row to hold a
 					    readable description, one up otherwise. The measure is the
 					    CONTAINER's, not the window's: this panel sits beside the
 					    settings nav, so a viewport query would say "wide" for a
-					    column that isn't. */}
-					<div className="@container px-2">
-						<div className="grid grid-cols-1 gap-2 @[560px]:grid-cols-2">
+					    column that isn't. The gutter is wide on purpose — with no
+					    fill under a row, the air is what tells the two columns
+					    apart. */}
+					<div className="@container">
+						<div className="grid grid-cols-1 gap-x-12 @[560px]:grid-cols-2">
 							{group.entries.map((entry) => (
 								<EntryCard
 									key={entry.id}
@@ -436,7 +467,7 @@ export function LibraryPanel() {
 							))}
 						</div>
 					</div>
-					<SettingsHint>
+					<SettingsHint className="mt-4 px-0">
 						{group.type === "tool" ? (
 							<>
 								{TYPE_BLURB.tool} These switches are saved in this browser only,
@@ -447,7 +478,7 @@ export function LibraryPanel() {
 							TYPE_BLURB[group.type]
 						)}
 					</SettingsHint>
-				</div>
+				</section>
 			))}
 		</SettingsPanel>
 	);
