@@ -13,7 +13,7 @@ import { parseNewSessionLink, type NewSessionPrefill } from "../lib/new-session-
 import { Button } from "../ui/button";
 import { CopyCheck, useCopy } from "../ui/copy";
 import { IconChevronLeft, IconChevronRight, IconFile, IconLink } from "./icons";
-import { Select } from "../ui/input";
+import { OptionSelect } from "../ui/select";
 import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
 import { SIDEBAR_RAIL } from "../lib/sidebar-classes";
 import { reportUrgencyDot, reportUrgencyLabel } from "../lib/report-urgency";
@@ -156,6 +156,13 @@ export function Reports({
 	}, [selectedAutomationId]);
 
 	const selected = history.find((report) => report.id === selectedReportId) || history[0];
+	// Both headers offer the same list, so it is built once. The labels also
+	// size the trigger, so a closed picker does not resize when an older
+	// report is chosen.
+	const historyOptions = history.map((report) => ({
+		value: report.id,
+		label: formatDate(report.createdAt, true),
+	}));
 	const { copied, share } = useCopy();
 	const shareSelected = () => {
 		if (!selected) return;
@@ -281,17 +288,15 @@ export function Reports({
 									<p className="m-0 mt-1 px-1 text-xs leading-5 text-faint line-clamp-2">{formatDate(selected.createdAt, true)}{selected.summary ? ` · ${selected.summary}` : ""}</p>
 									<div className="mt-1.5 px-1"><ReportSignal report={selected} /></div>
 									<div className="mt-2.5 flex items-center gap-2 px-1">
-										<Select
-											size="sm"
-											aria-label="Report history"
-											className="min-h-[30px] min-w-0 flex-1"
+										<OptionSelect
+											label="Report history"
+											className="min-w-0 flex-1"
 											value={selected.id}
-											onChange={(event) => onSelect(selected.automationId, event.target.value)}
-										>
-											{history.map((report) => <option key={report.id} value={report.id}>{formatDate(report.createdAt, true)}</option>)}
-										</Select>
-										{selected.sessionId && <Button size="sm" className="min-h-[30px] shrink-0" onClick={() => onOpenSession(selected.sessionId!)}>Open run</Button>}
-										<Button size="sm" className="min-h-[30px] w-[30px] shrink-0" icon={<CopyCheck copied={copied} size={15} idle={<IconLink size={15} />} />} aria-label="Share report" onClick={shareSelected} />
+											options={historyOptions}
+											onChange={(id) => onSelect(selected.automationId, id)}
+										/>
+										{selected.sessionId && <Button size="md" className="shrink-0" onClick={() => onOpenSession(selected.sessionId!)}>Open run</Button>}
+										<Button size="md" className="shrink-0" icon={<CopyCheck copied={copied} size={20} idle={<IconLink size={20} />} />} aria-label="Share report" onClick={shareSelected} />
 									</div>
 								</>
 							)}
@@ -311,17 +316,20 @@ export function Reports({
 										<ReportSignal report={selected} />
 									</div>
 								</div>
-								<Button size="sm" className="min-h-[30px] w-[30px] shrink-0" icon={<CopyCheck copied={copied} size={15} idle={<IconLink size={15} />} />} aria-label="Share report" title="Share report" onClick={shareSelected} />
-								{selected.sessionId && <Button size="sm" className="min-h-[30px] shrink-0" onClick={() => onOpenSession(selected.sessionId!)}>Open run</Button>}
-								<Select
-									size="sm"
-									aria-label="Report history"
-									className="min-h-[30px] w-auto max-w-[190px] shrink-0"
+								{/* No hand-set box on any of the three. They were pinned to
+								    30px, which is off the control scale in both directions:
+								    the buttons kept `size="sm"`'s 26px padding inside a 30px
+								    square, and the icon-only one fought the primitive's own
+								    square. One size for the row, from the scale. */}
+								<Button size="md" className="shrink-0" icon={<CopyCheck copied={copied} size={20} idle={<IconLink size={20} />} />} aria-label="Share report" title="Share report" onClick={shareSelected} />
+								{selected.sessionId && <Button size="md" className="shrink-0" onClick={() => onOpenSession(selected.sessionId!)}>Open run</Button>}
+								<OptionSelect
+									label="Report history"
+									className="max-w-[190px] shrink-0"
 									value={selected.id}
-									onChange={(event) => onSelect(selected.automationId, event.target.value)}
-								>
-									{history.map((report) => <option key={report.id} value={report.id}>{formatDate(report.createdAt, true)}</option>)}
-								</Select>
+									options={historyOptions}
+									onChange={(id) => onSelect(selected.automationId, id)}
+								/>
 							</header>
 						)
 					)}

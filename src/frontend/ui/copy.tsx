@@ -12,6 +12,7 @@
 
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { MIN_ICON_SIZE } from "../components/icons";
 import { copyToClipboard, shareOrCopyLink } from "../lib/share-link";
 import { cn } from "./cn";
 import { toast as fireToast } from "./toast";
@@ -62,7 +63,7 @@ export function AnimatedCheck({
 export function CopyCheck({
 	copied,
 	idle,
-	size = 18,
+	size = MIN_ICON_SIZE,
 	className,
 	checkClassName,
 }: {
@@ -74,10 +75,16 @@ export function CopyCheck({
 	/** Extra classes for the check state (default tints it green). */
 	checkClassName?: string;
 }) {
+	// The same floor components/icons.tsx clamps every glyph to. This box is
+	// drawn around one of them, so a caller asking for 14 or 15 used to get a
+	// box smaller than the icon it holds: the glyph overflowed to the right and
+	// bottom, and a button centring the box put the ink visibly off-centre.
+	// Sizing the box below the icon is not a smaller icon, it is a broken one.
+	const box = Math.max(size, MIN_ICON_SIZE);
 	return (
 		<span
 			className={cn("relative inline-grid place-items-center", className)}
-			style={{ width: size, height: size }}
+			style={{ width: box, height: box }}
 		>
 			<AnimatePresence initial={false} mode="popLayout">
 				{copied ? (
@@ -89,7 +96,7 @@ export function CopyCheck({
 						exit={{ opacity: 0, scale: 0.6 }}
 						transition={{ type: "spring", duration: 0.32, bounce: 0.4 }}
 					>
-						<AnimatedCheck size={size} />
+						<AnimatedCheck size={box} />
 					</motion.span>
 				) : (
 					<motion.span

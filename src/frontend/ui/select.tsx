@@ -226,6 +226,7 @@ export function OptionSelect<T extends string>({
 	label,
 	disabled,
 	className,
+	size,
 }: {
 	value: T;
 	options: { value: T; label: string; disabled?: boolean }[];
@@ -233,6 +234,8 @@ export function OptionSelect<T extends string>({
 	label: string;
 	disabled?: boolean;
 	className?: string;
+	/** The control step, as on `Button` and the fields. Defaults to `md`. */
+	size?: Size;
 }) {
 	return (
 		<Select.Root
@@ -246,6 +249,7 @@ export function OptionSelect<T extends string>({
 			<Select.Trigger
 				aria-label={label}
 				className={className}
+				size={size}
 				sizeTo={options.map((option) => option.label)}
 			/>
 			<Select.Popup align="end">

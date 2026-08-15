@@ -6,7 +6,7 @@ import {
 } from "../lib/api";
 import type { ReportMeta, WSServerMessage } from "../lib/types";
 import { parseNewSessionLink, type NewSessionPrefill } from "../lib/new-session-link";
-import { Select } from "../ui/input";
+import { OptionSelect } from "../ui/select";
 
 export function useSessionReports(
 	sessionId: string,
@@ -96,19 +96,17 @@ export function SessionReportsPanel({
 					</a>
 				</div>
 				{reports.length > 1 && (
-					<Select
+					<OptionSelect
 						size="sm"
-						aria-label="Report from this session"
+						label="Report from this session"
 						className="mt-2"
 						value={reportKey(selected)}
-						onChange={(event) => setSelectedKey(event.target.value)}
-					>
-						{reports.map((report) => (
-							<option key={reportKey(report)} value={reportKey(report)}>
-								{report.title} · {formatDate(report.createdAt)}
-							</option>
-						))}
-					</Select>
+						options={reports.map((report) => ({
+							value: reportKey(report),
+							label: `${report.title} · ${formatDate(report.createdAt)}`,
+						}))}
+						onChange={setSelectedKey}
+					/>
 				)}
 				{selected.summary && (
 					<p className="m-0 mt-2 text-label leading-5 text-dim">

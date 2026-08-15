@@ -2,12 +2,12 @@ import React, { useEffect, useRef, useState } from "react";
 import { fetchShippedChangeChannels } from "../lib/api/shipped-changes";
 import { imageFilesFromPaste, uploadFile } from "../lib/images";
 import { Button } from "../ui/button";
-import { Select } from "../ui/input";
+import { OptionSelect } from "../ui/select";
 import { toast } from "../ui/toast";
 import { Tooltip } from "../ui/tooltip";
 import { BrandMark } from "./BrandMark";
 import { openLightbox } from "./MediaLightbox";
-import { IconChevronDown, IconPlus, IconX } from "./icons";
+import { IconPlus, IconX } from "./icons";
 import { Spinner } from "../ui/spinner";
 
 const MAX_SLACK_IMAGE_BYTES = 20 * 1024 * 1024;
@@ -266,16 +266,25 @@ export function ShippedChangeComposer({
 						{uploading ? <Spinner size="md" /> : <IconPlus size={20} />}
 					</button>
 					<div className="flex-1" />
-					<label className="relative flex items-center">
-						<span className="sr-only">Send to</span>
-						<Select size="md" className="w-28 appearance-none pr-8 phone:w-32" aria-label="Slack channel" value={channel} disabled={status !== "idle" || channels.length === 0} onChange={(event) => setChannel(event.target.value)}>
-							{channels.length === 0 && <option value="">No channels available</option>}
-							{channels.map((candidate) => (
-								<option key={candidate.id} value={candidate.id}>#{candidate.name}</option>
-							))}
-						</Select>
-						<IconChevronDown className="pointer-events-none absolute right-2 text-dim" size={16} />
-					</label>
+					{/* The app's own select. This was the native one with
+					    `appearance-none`, a hand-placed chevron and a wrapper to
+					    position it, which is the primitive rebuilt by hand around a
+					    control it exists to replace. */}
+					<OptionSelect
+						label="Slack channel"
+						className="w-28 phone:w-32"
+						value={channel}
+						options={
+							channels.length === 0
+								? [{ value: "", label: "No channels available" }]
+								: channels.map((candidate) => ({
+										value: candidate.id,
+										label: `#${candidate.name}`,
+									}))
+						}
+						onChange={setChannel}
+						disabled={status !== "idle" || channels.length === 0}
+					/>
 					<Button variant="primary" size="md" icon={<BrandMark name="slack" size={12} />} disabled={status !== "idle" || awaitingSlack || (!(reconnectRequired || (!canUploadImages && screenshots.length > 0)) && ((!message.trim() && screenshots.length === 0) || !channel || uploading))} onClick={() => reconnectRequired || (!canUploadImages && screenshots.length > 0) ? void reconnect() : onShare(message.trim(), channel, screenshots)}>
 						{awaitingSlack ? "Waiting…" : reconnectRequired || (!canUploadImages && screenshots.length > 0) ? "Reconnect" : status === "sharing" ? "Sending…" : "Send"}
 					</Button>

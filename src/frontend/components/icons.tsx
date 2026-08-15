@@ -23,7 +23,15 @@ type IconProps = React.SVGProps<SVGSVGElement> & { size?: number };
 // ~60% of their box, so anything below 20px renders as a speck. Sub-20 sizes
 // kept sneaking in (11–17px) — clamp them here; if a spot can't fit a 20px
 // icon, rework the container, don't shrink the icon.
-const MIN_SIZE = 20;
+//
+// Exported because the clamp is silent, and a container that sizes ITSELF from
+// the same number a caller passed the icon will be too small for what actually
+// renders. `ui/copy`'s CopyCheck is the one that bit: it drew a 15px box for a
+// glyph the clamp had already made 20, so the icon overflowed down and right
+// and read as badly centred. Anything sizing a box around one of these glyphs
+// takes this floor too.
+export const MIN_ICON_SIZE = 20;
+const MIN_SIZE = MIN_ICON_SIZE;
 
 function Svg({ size = 22, children, ...rest }: IconProps & { children: React.ReactNode }) {
   const px = Math.max(size, MIN_SIZE);
