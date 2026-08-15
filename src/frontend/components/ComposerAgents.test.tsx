@@ -45,6 +45,8 @@ describe("ComposerAgents plan summary", () => {
 		expect(html).toContain("Simplify the plan markers");
 		expect(html.indexOf("1/3")).toBeLessThan(html.indexOf("Simplify the plan markers"));
 		expect(html).not.toContain("Inspect the current behavior");
+		// Caret points up: the card opens upward, away from the composer.
+		expect(html).toContain("rotate-180");
 	});
 
 	test("uses the checklist marker instead of a duplicate footer dot while open", () => {
@@ -59,10 +61,15 @@ describe("ComposerAgents plan summary", () => {
 		expect(
 			html.split("animate-[composer-agents-pulse_1.4s_ease-in-out_infinite]").length - 1,
 		).toBe(1);
-		expect(html.indexOf("1/3")).toBeLessThan(html.lastIndexOf(">Plan<"));
-		expect(html.lastIndexOf(">Plan<")).toBeLessThan(
-			html.indexOf("Inspect the current behavior"),
+		// The toggle row comes last, under the checklist. The flap's bottom edge
+		// is pinned to the composer, so a summary above the plan would travel the
+		// plan's full height on every fold and you'd have to chase it with the
+		// mouse to close what you just opened. Source order is the guard.
+		expect(html.indexOf("Inspect the current behavior")).toBeLessThan(
+			html.indexOf("1/3"),
 		);
+		expect(html.indexOf("1/3")).toBeLessThan(html.lastIndexOf(">Plan<"));
+		expect(html).not.toContain("rotate-180");
 		expect(html.match(/Simplify the plan markers/g)).toHaveLength(1);
 	});
 });

@@ -135,7 +135,13 @@ export function ComposerAgents({ runs, subagents, plan, onOpenPanel }: Props) {
 	const summary = (
 		<button
 			type="button"
-			className="flex w-full items-center gap-2 text-left text-label font-medium text-fg"
+			className={cn(
+				"flex w-full items-center gap-2 text-left text-label font-medium text-fg",
+				// Open, this row is a control bar under a list that scrolls: without
+				// a rule its last clipped item runs straight into it. Same gap + rule
+				// + padding the agents section takes from the plan above it.
+				open && "border-t border-line pt-2.5",
+			)}
 			aria-expanded={open}
 			aria-label={open ? "Collapse run status" : "Show run status"}
 			onClick={toggle}
@@ -174,11 +180,13 @@ export function ComposerAgents({ runs, subagents, plan, onOpenPanel }: Props) {
 					</strong>
 				)}
 			</span>
+			{/* Points the way the card moves, not at the content: closed it opens
+			    upward, open it folds back down into this row. */}
 			<IconChevronDown
 				size={16}
 				className={cn(
 					"flex-none text-faint transition-transform duration-[var(--dur)]",
-					open && "rotate-180",
+					!open && "rotate-180",
 				)}
 			/>
 		</button>
@@ -188,7 +196,14 @@ export function ComposerAgents({ runs, subagents, plan, onOpenPanel }: Props) {
 		// A flap that folds out from behind the composer: inset from its edges,
 		// rounded only on top, bottom tucked under the composer box (negative
 		// margin — the composer is a later positioned sibling, so it paints on
-		// top). The summary stays first and the detail folds out beneath it.
+		// top).
+		//
+		// The summary comes LAST, so the detail unfurls above it. Only the flap's
+		// top edge moves when it opens (the bottom is pinned to the composer), so
+		// a summary rendered first travels the whole height of the plan on every
+		// toggle and you have to chase the caret with the mouse to fold back in.
+		// Rendered last it sits the same distance above the composer in both
+		// states: open and close are the same click, in the same place.
 		<div
 			className={cn(
 				"relative -mb-3.5 flex w-full flex-col gap-2.5 rounded-t-[var(--composer-radius)] border-x border-t bg-[color-mix(in_srgb,var(--bg-panel)_80%,var(--composer-surface))] px-3.5 pt-2.5 pb-[22px] text-label font-medium text-fg",
@@ -196,7 +211,6 @@ export function ComposerAgents({ runs, subagents, plan, onOpenPanel }: Props) {
 			)}
 			data-open={open ? "" : undefined}
 		>
-			{summary}
 			{open && (
 				<div className="flex flex-col gap-2.5">
 					{planTotal > 0 && (
@@ -316,6 +330,7 @@ export function ComposerAgents({ runs, subagents, plan, onOpenPanel }: Props) {
 					)}
 				</div>
 			)}
+			{summary}
 		</div>
 	);
 }
