@@ -9,14 +9,24 @@ import SwiftUI
 /// image: it draws iconic-pro, because that is ITS platform convention.
 /// Neither set should follow the other across.
 ///
-/// What is left here is the case that rule cannot serve: a metaphor SF Symbols
-/// has no glyph for at all. Adding a kind means having looked and found
-/// nothing, not having preferred the web's drawing. It is stroked at 1.5 on a
-/// 24-point grid to sit at a symbol's weight beside one.
+/// What is left here is the case that rule cannot serve: a metaphor the
+/// platform set does not carry. That is a higher bar than preferring the web's
+/// drawing, and it is met two ways — SF Symbols has no glyph at all, or it has
+/// one that does not read as the thing. Stroked at 1.5 on a 24-point grid, so
+/// it sits at a symbol's weight beside one.
 enum WebIconKind {
     /// Machine-owned session (an automation run). SF Symbols has no robot:
     /// the nearest thing is `robotic.vacuum`, which is a floor cleaner.
     case robot
+    /// A pull request, and a merged one. `arrow.trianglehead.pull` and
+    /// `.merge` exist, but they are generic arrows: the branch-and-node graph
+    /// is what GitHub and every other dev tool uses, and it is what people
+    /// recognise a PR by. Menus and panels still take the SF Symbol, where the
+    /// glyph sits in system chrome beside other symbols and is labelled by the
+    /// text next to it; these two are the unlabelled STATE MARK on a row,
+    /// which has to carry the meaning alone.
+    case pullRequest
+    case gitMerge
 }
 
 struct WebIcon: View {
@@ -49,6 +59,36 @@ struct WebIcon: View {
             )
 
             switch kind {
+            case .pullRequest, .gitMerge:
+                var path = Path()
+                if kind == .pullRequest {
+                    addCircle(to: &path, center: point(7, 6.5), radius: 1.75 * scale)
+                    addCircle(to: &path, center: point(7, 17.5), radius: 1.75 * scale)
+                    addCircle(to: &path, center: point(17, 17.5), radius: 1.75 * scale)
+                    path.move(to: point(7, 8.25))
+                    path.addLine(to: point(7, 15.75))
+                    path.move(to: point(12.25, 6.5))
+                    path.addLine(to: point(15, 6.5))
+                    path.addCurve(
+                        to: point(17, 8.5),
+                        control1: point(16.105, 6.5),
+                        control2: point(17, 7.395)
+                    )
+                    path.addLine(to: point(17, 15.75))
+                } else {
+                    addCircle(to: &path, center: point(7, 6.5), radius: 1.75 * scale)
+                    addCircle(to: &path, center: point(7, 17.5), radius: 1.75 * scale)
+                    addCircle(to: &path, center: point(17, 13), radius: 1.75 * scale)
+                    path.move(to: point(7, 8.25))
+                    path.addLine(to: point(7, 15.75))
+                    path.move(to: point(7, 9))
+                    path.addCurve(
+                        to: point(15.25, 13),
+                        control1: point(7, 11.5),
+                        control2: point(10, 13)
+                    )
+                }
+                context.stroke(path, with: .color(color), style: stroke)
             case .robot:
                 // Head, antenna, side ears, mouth — stroked; eyes filled. Same
                 // 24-point geometry as the web's IconRobot, so a run marked as

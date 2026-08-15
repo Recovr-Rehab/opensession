@@ -3195,18 +3195,6 @@ struct SessionRow: View {
         #endif
     }
 
-    /// A PR state mark. The size goes on the FONT, not on a `resizable()`
-    /// image: SF Symbols carry their own weight per size, and resizing scales
-    /// the stroke with the box, which would leave the mark heavier than the
-    /// dot it stands in for. 0.8 of the box because a symbol is drawn to sit
-    /// on a text line. 0.95 rather than a round 1.0 leaves it a hair of air
-    /// inside the box, at the ink mass the mark had before.
-    private func prMark(_ symbol: String, _ color: Color) -> some View {
-        Image(systemName: symbol)
-            .font(.system(size: markSize * 0.95))
-            .foregroundStyle(color)
-    }
-
     /// A step under the repo tile: a face on a row is "who else is here", not
     /// something to read the row by.
     private var faceSize: CGFloat {
@@ -3283,11 +3271,11 @@ struct SessionRow: View {
         } else if session.lane == .inProgress {
             PulsingDot(color: OS1VisualStyle.yellow, active: animatesStatus)
         } else if session.prState == "MERGED" {
-            prMark("arrow.trianglehead.merge", OS1VisualStyle.purple)
+            WebIcon(kind: .gitMerge, size: markSize, color: OS1VisualStyle.purple)
         } else if session.prState == "OPEN" {
-            prMark("arrow.trianglehead.pull", OS1VisualStyle.green)
+            WebIcon(kind: .pullRequest, size: markSize, color: OS1VisualStyle.green)
         } else if session.prState == "CLOSED" {
-            prMark("arrow.trianglehead.pull", OS1VisualStyle.red)
+            WebIcon(kind: .pullRequest, size: markSize, color: OS1VisualStyle.red)
         } else {
             PulsingDot(color: OS1VisualStyle.textFaint, active: false)
         }

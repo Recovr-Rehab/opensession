@@ -111,11 +111,19 @@ to look different in each, and that is not a bug to file.
 - **Never port a web glyph** to get visual parity with the browser. If SF
   Symbols has the metaphor, use it, even when the drawing differs from the
   web's.
-- **`WebIcon.swift` is the one escape hatch**, for a metaphor SF Symbols has no
-  glyph for at all. It holds exactly one kind today, `robot` (the nearest
-  symbol is `robotic.vacuum`, a floor cleaner). Adding a kind means you looked
-  and found nothing, not that you preferred the web's drawing. Its paths are
+- **`WebIcon.swift` is the one escape hatch**, for a metaphor the platform set
+  does not carry. That is a higher bar than preferring the web's drawing, and
+  it is met two ways: SF Symbols has no glyph at all (`robot` — the nearest is
+  `robotic.vacuum`, a floor cleaner), or it has one that does not read as the
+  thing (`pullRequest`, `gitMerge` — `arrow.trianglehead.pull` and `.merge` are
+  generic arrows, while the branch-and-node graph is what GitHub and every
+  other dev tool uses, so it is what people recognise a PR by). Its paths are
   stroked at 1.5 on a 24-point grid so they sit at a symbol's weight beside one.
+- **Context decides which of the two a git mark takes.** The unlabelled STATE
+  MARK on a session row carries the meaning alone, so it takes the graph. A
+  menu row or a panel header sits in system chrome beside other symbols and has
+  a text label doing the work, so it takes `arrow.trianglehead.pull`. Both are
+  in the app on purpose; do not unify them.
 - **Weight comes from the font, not from the box.** Size a symbol with
   `.font(.callout)` or `.font(.system(size:))` and give it a fixed `.frame`;
   never `.resizable()`, which scales the stroke with the box and leaves a large
