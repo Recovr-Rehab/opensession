@@ -15,9 +15,13 @@ export const PR_LIST = "-mx-3";
 /** The state a block of rows is in: Open, Merged, Closed. Sized as the heading
  *  it is. A state owns hundreds of rows across several date groups, and at the
  *  13px interface step it read as one more label in a stack of labels rather
- *  than as the thing they all hang under. */
+ *  than as the thing they all hang under.
+ *
+ *  Weight is the page title's, not a step above it. This label and `PageTitle`
+ *  sit at the same 19px, so a heavier state heading reads as the page's real
+ *  title and pushes "Pull requests" into looking like a caption over it. */
 export const PR_SECTION_LABEL =
-	"m-0 mb-3.5 flex items-baseline gap-2 px-3 text-section-title font-semibold tracking-[-0.01em] text-fg";
+	"m-0 mb-3.5 flex items-baseline gap-2 px-3 text-section-title font-medium tracking-[-0.01em] text-fg";
 
 /** A date group: the same quiet label the archived list gives its own. The
  *  `px-3` pays back the list's outdent, so every label on the page and the row
