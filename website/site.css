@@ -31,14 +31,14 @@
 	--card: #fafafb;
 	--line: rgba(0, 0, 0, 0.09);
 	--muted: #787878;
-	/* The product's accent, taken up a step in light and chroma so the one
-	   filled control on the page carries some voltage: the app's own #1f82bb
-	   reads muted at this size on white. The foot is where the fill shades to,
-	   and it is the darker of the pair on purpose — white measures 3.9:1 on
-	   the top stop and 4.8:1 at the foot, so the label gains contrast as the
-	   fill deepens rather than losing it. */
-	--accent-blue: #1385d8;
-	--accent-blue-deep: #0f76c0;
+	/* The product's accent with more chroma, so the one filled control on the
+	   page carries some voltage: the app's own #1f82bb reads muted at this size
+	   on white. The life comes from saturation rather than lightness, which is
+	   what keeps the label readable. The foot is the darker of the pair on
+	   purpose, so white gains contrast as the fill deepens: 4.2:1 on the top
+	   stop, 5.1:1 at the foot. */
+	--accent-blue: #1280cf;
+	--accent-blue-deep: #0f72b9;
 }
 
 * {
