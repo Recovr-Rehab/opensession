@@ -53,7 +53,7 @@ enum CatchUpMotion {
     /// Room kept above the stack for that peek to live in.
     ///
     /// The peek goes UP, and it is the difference between `depthOffset` and
-    /// the ~half-height the scale already walks a card down — about 15pt per
+    /// the ~half-height the scale already walks a card down, about 15pt per
     /// level, so ~30pt for the two cards behind. Without this reserve the
     /// stack simply grows past the top of the deck and into the header, which
     /// is what covered the counter.

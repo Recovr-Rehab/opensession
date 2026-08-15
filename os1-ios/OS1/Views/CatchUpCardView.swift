@@ -18,7 +18,7 @@ struct CatchUpCardView: View {
 
     @State private var folds = FoldStateStore()
     @State private var reply = ""
-    /// The card's own visible height, measured rather than assumed — it is the
+    /// The card's own visible height, measured rather than assumed. It is the
     /// floor a short conversation fills so it starts at the top.
     @State private var viewportHeight: CGFloat = 0
     /// Set the moment the reader scrolls the card themselves, which ends the
@@ -154,7 +154,7 @@ struct CatchUpCardView: View {
     /// The normal transcript inside the card, opened on its LAST message.
     ///
     /// What is unread is the end of the conversation, so a card that lands at
-    /// the beginning asks you to scroll before you can decide anything — and
+    /// the beginning asks you to scroll before you can decide anything, and
     /// the whole point of the deck is deciding without opening.
     ///
     /// The second anchor is what keeps it there. One scroll to the bottom when
@@ -186,7 +186,7 @@ struct CatchUpCardView: View {
             // keeps it there while the rows SETTLE. Markdown, images and lazy
             // realisation all resolve over the next few frames, and a row that
             // measured short when the anchor was applied leaves the end of the
-            // conversation below the fold — which is the whole complaint.
+            // conversation below the fold, which is the whole complaint.
             // Aimed at the last real row rather than the 1pt sentinel, for the
             // blank-card reason above, so its own tail padding is what keeps
             // it off the composer.
@@ -235,7 +235,7 @@ struct CatchUpCardView: View {
             // A 1pt child at the very end, for the reason SessionView keeps
             // its `transcript-end`: a LazyVStack only realizes the children
             // that intersect the visible window, and a conversation that
-            // groups into one long turn is a SINGLE child — landing on the
+            // groups into one long turn is a SINGLE child. Landing on the
             // bottom anchor leaves it unrealized and the card comes up blank
             // (measured: the whole body empty, 0.1% ink). Something small down
             // here always intersects, which keeps its neighbour realized.

@@ -40,7 +40,33 @@ struct CatchUpView: View {
     // MARK: - Chrome
 
     private var header: some View {
-        ZStack(alignment: .bottom) {
+        // The count is this screen's title, and the chevron is what the eye
+        // lines it up against. It rides ON the control row as an overlay
+        // rather than sitting beside it in a bottom-aligned stack, where it
+        // was pinned to the row's lower edge and read 13pt low against a
+        // chevron centred in its own 44pt tap box. As an overlay it takes that
+        // same box's centre, and "Undo" appearing on the right cannot push it
+        // off centre the way a third item in a row would.
+        HStack {
+            Button { dismiss() } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundStyle(OS1VisualStyle.textDim)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Close catch up")
+            Spacer()
+            Button("Undo") { undoTrigger += 1 }
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(OS1VisualStyle.text)
+                .frame(minWidth: 52, minHeight: 44, alignment: .trailing)
+                .opacity(model.undoable == nil ? 0 : 1)
+                .disabled(model.undoable == nil)
+                .buttonStyle(.plain)
+        }
+        .overlay {
             Text(counterLabel)
                 .font(.headline)
                 .foregroundStyle(OS1VisualStyle.text)
@@ -48,34 +74,21 @@ struct CatchUpView: View {
                 // work, so it rolls rather than cutting.
                 .contentTransition(.numericText(countsDown: true))
                 .animation(.snappy(duration: 0.3), value: model.remaining)
-            HStack {
-                Button { dismiss() } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 19, weight: .semibold))
-                        .foregroundStyle(OS1VisualStyle.textDim)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Close catch up")
-                Spacer()
-                Button("Undo") { undoTrigger += 1 }
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(OS1VisualStyle.text)
-                    .frame(minWidth: 52, minHeight: 44, alignment: .trailing)
-                    .opacity(model.undoable == nil ? 0 : 1)
-                    .disabled(model.undoable == nil)
-                    .buttonStyle(.plain)
-            }
-            progressBar
+                // Inert: a title laid over the row must not swallow a press
+                // meant for a control beneath it.
+                .allowsHitTesting(false)
         }
+        // The row is 44pt (the buttons' tap target); the 45th is the progress
+        // bar's own line, which stays on the header's bottom edge.
         .frame(height: 45)
+        .overlay(alignment: .bottom) { progressBar }
         .padding(.horizontal, 8)
         // The deck passes UNDER the chrome. A card is not confined to its own
         // box: the stack peeks upward behind the top card, and a dragged card
         // tilts, which lifts its top corner well past that. Without a fill and
-        // a raised z, the count and the back control are simply covered — the
-        // one part of the screen that has to stay readable while you swipe.
+        // a raised z, the count and the back control are simply covered, and
+        // they are the one part of the screen that has to stay readable while
+        // you swipe.
         .background(CatchUpBackdrop())
         .zIndex(1)
     }
@@ -137,7 +150,7 @@ struct CatchUpView: View {
 }
 
 /// The screen behind the deck: the app's own surface under a wash of accent.
-/// A view rather than a colour because the chrome paints it too — a bar that
+/// A view rather than a colour because the chrome paints it too: a bar that
 /// has to hide the cards passing under it must be the same fill as the page,
 /// or it reads as a band laid over the screen.
 struct CatchUpBackdrop: View {
