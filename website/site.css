@@ -31,12 +31,14 @@
 	--card: #fafafb;
 	--line: rgba(0, 0, 0, 0.09);
 	--muted: #787878;
-	/* The product's own accent, not a marketing blue: base.css's "sky" pair,
-	   which is what the app's filled controls and its send disc are painted in
-	   (#1f82bb in light). The foot is one step down so the fill has somewhere
-	   to shade to. */
-	--accent-blue: #1f82bb;
-	--accent-blue-deep: #1a6f9f;
+	/* The product's accent, taken up a step in light and chroma so the one
+	   filled control on the page carries some voltage: the app's own #1f82bb
+	   reads muted at this size on white. The foot is where the fill shades to,
+	   and it is the darker of the pair on purpose — white measures 3.9:1 on
+	   the top stop and 4.8:1 at the foot, so the label gains contrast as the
+	   fill deepens rather than losing it. */
+	--accent-blue: #1385d8;
+	--accent-blue-deep: #0f76c0;
 }
 
 * {
