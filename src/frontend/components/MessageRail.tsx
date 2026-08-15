@@ -452,11 +452,15 @@ export function MessageRail({ messages, containerRef, leaveLatest }: Props) {
 					// and the transcript underneath stays selectable.
 					className="pointer-events-none w-[320px] p-4"
 				>
-					<p className="line-clamp-2 text-body font-semibold leading-snug text-fg">
+					{/* `m-0` on both: no Preflight ships (styles/tailwind.css), so a
+					    bare `<p>` keeps the UA's `margin-block: 1em`. That put a
+					    second 15px above the title on top of the card's own
+					    padding, and widened both gaps under it. */}
+					<p className="m-0 line-clamp-2 text-body font-semibold leading-snug text-fg">
 						{shown.preview}
 					</p>
 					{shown.reply && (
-						<p className="mt-2 line-clamp-3 text-label leading-normal text-dim">
+						<p className="m-0 mt-2 line-clamp-3 text-label leading-normal text-dim">
 							{shown.reply}
 						</p>
 					)}
