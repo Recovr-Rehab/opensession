@@ -7,7 +7,18 @@
  *  own ink and centres against a label without a correction. */
 export const PAGE_LOADER_ROW = "flex h-4 items-center gap-1.5";
 
-/** One bar. The animation is spelled as LONGHANDS rather than an `animate-[…]`
+/** One bar, capped as a pill.
+ *
+ *  `rounded-full` is deliberate and is the one radius spelling that opts OUT of
+ *  base.css's squircle rule. That rule is right almost everywhere, but a
+ *  squircle takes far less off a corner than a circular arc at the same radius,
+ *  and on a 4px-wide bar the difference is the whole shape: `rounded-xs` (or
+ *  `rounded-[999px]`, which keeps the squircle) renders these as five little
+ *  rectangles with the corners barely touched. The launch splash caps its own
+ *  bars with a plain circular 2px radius, so a true pill is also the closer
+ *  match to the thing this is echoing.
+ *
+ *  The animation is spelled as LONGHANDS rather than an `animate-[…]`
  *  shorthand: the shorthand resets `animation-delay`, so which of the two won
  *  would depend on Tailwind's output order rather than on the order they are
  *  written, and every bar would breathe in unison the moment the delay utility
@@ -21,7 +32,7 @@ export const PAGE_LOADER_ROW = "flex h-4 items-center gap-1.5";
  *  the five bars breathe together, in place, at a slower rate. Gentler, not
  *  zero, and put on the element the way base.css asks new exceptions to be. */
 export const PAGE_LOADER_BAR =
-	"w-1 rounded-xs bg-current " +
+	"w-1 rounded-full bg-current " +
 	"[animation-name:page-loader-bar] [animation-timing-function:ease-in-out] " +
 	"[animation-iteration-count:infinite] [animation-duration:1s] " +
 	"motion-reduce:[animation-delay:0ms]! motion-reduce:[animation-duration:1.8s]! " +

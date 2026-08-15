@@ -26,6 +26,16 @@ describe("page loader classes", () => {
 		expect(PAGE_LOADER_ROW).toContain("h-4");
 	});
 
+	test("the bars are capped with a true pill, not a squircle", () => {
+		// base.css squircles every `rounded-*` class except `rounded-full`, and a
+		// squircle at this radius leaves a 4px bar looking like a rectangle. This
+		// is the one place in the app where opting out is the point, so it is
+		// asserted rather than left to the next person to "fix" back.
+		expect(PAGE_LOADER_BAR).toContain("rounded-full");
+		expect(PAGE_LOADER_BAR).not.toContain("rounded-[999px]");
+		expect(PAGE_LOADER_BAR).not.toContain("rounded-xs");
+	});
+
 	test("the animation is spelled as longhands, never the shorthand", () => {
 		// `animate-[name_dur_…]` resets animation-delay, and whether it or the
 		// per-bar delay wins depends on Tailwind's output order — which is how
