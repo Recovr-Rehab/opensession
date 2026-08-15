@@ -176,14 +176,15 @@ const TAB_BASE =
 	// …and the underline, which every state paints by naming a colour in
 	// `--tab-line` (see `tabClass`) rather than by writing a rule of its own.
 	// It is a pseudo-element and not the inset box-shadow it used to be
-	// because a shadow can only trace the whole box: the line marks the tab's
-	// LABEL, so it stops at the padding, and again before the close × when the
-	// tab carries one — a rule running under the × read as a rule under the
-	// next tab too, since the gap between two tabs is 3px.
-	"desktop:after:absolute desktop:after:inset-x-2.5 desktop:after:bottom-0 " +
+	// because a shadow can only trace the whole box, and this line is 6px
+	// shorter than that at each end: full width, it ran within 3px of the next
+	// tab's, which is what made two tabs read as one rule. 6px and not the
+	// 10px padding, so the line still overhangs the content it marks — cut to
+	// the content box it looked like a text decoration, and stopping it before
+	// the close × (which it did briefly) left it visibly short of the tab.
+	"desktop:after:absolute desktop:after:inset-x-1.5 desktop:after:bottom-0 " +
 	"desktop:after:h-0.5 desktop:after:rounded-[1px] desktop:after:content-[''] " +
-	"desktop:after:bg-[var(--tab-line,transparent)] " +
-	"desktop:has-[button]:after:right-8";
+	"desktop:after:bg-[var(--tab-line,transparent)]";
 
 export type TabState = {
 	active: boolean;
