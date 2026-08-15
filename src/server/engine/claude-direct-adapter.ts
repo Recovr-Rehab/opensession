@@ -85,7 +85,7 @@
 
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
-import { mkdirSync } from "fs";
+import { existsSync, mkdirSync, readdirSync } from "fs";
 import { stateDir } from "../paths";
 import { audit, summarizeText } from "../audit";
 import {
@@ -287,12 +287,39 @@ function toolResultText(content: unknown): string {
   return parts.join("\n");
 }
 
+/** Whether `resumeId`'s SDK conversation exists in one account's isolated
+ *  config dir (cfg/<account>/projects/<cwd-slug>/<resumeId>.jsonl). */
+function conversationOnAccount(accountId: string, resumeId: string): boolean {
+  try {
+    const projects = `${CLAUDE_DIRECT_STATE_DIR}/cfg/${accountId}/projects`;
+    for (const slug of readdirSync(projects)) {
+      if (existsSync(`${projects}/${slug}/${resumeId}.jsonl`)) return true;
+    }
+  } catch {}
+  return false;
+}
+
+/** The account whose config dir holds `resumeId`'s conversation, or null. The
+ *  scan is tiny (accounts x project slugs) and restart-proof: the disk is the
+ *  only durable record of which account minted an SDK session. */
+function accountOwningConversation(resumeId: string): string | null {
+  try {
+    for (const accountId of readdirSync(`${CLAUDE_DIRECT_STATE_DIR}/cfg`)) {
+      if (conversationOnAccount(accountId, resumeId)) return accountId;
+    }
+  } catch {}
+  return null;
+}
+
 /** Account for this run: honor a pinned accountId first (strict pins never
- *  widen to the pool — automation cost-cap semantics), else the normal
- *  personal-first pool pick. */
+ *  widen to the pool — automation cost-cap semantics), then the account that
+ *  OWNS the conversation being resumed (each account's config dir is
+ *  isolated, so any other account resumes into "No conversation found"),
+ *  else the normal personal-first pool pick. */
 function pickDirectAccount(
   opts: RunAgentOpts,
-  model: string
+  model: string,
+  resumeId?: string
 ): { account: ClaudeAccount } | { error: string } {
   if (opts.accountId) {
     const pinned = getUsableAccountById(opts.accountId, model, opts.usageCredits);
@@ -303,6 +330,14 @@ function pickDirectAccount(
         error: `pinned account "${name}" is not usable right now (strict pin — not widening to the pool)`,
       };
     }
+  }
+  if (resumeId) {
+    const owner = accountOwningConversation(resumeId);
+    const usable = owner ? getUsableAccountById(owner, model, opts.usageCredits) : null;
+    // An unusable owner falls through to the pool: the resume pre-flight in
+    // runClaudeDirect then starts fresh with a handoff note instead of
+    // letting the SDK fail the turn.
+    if (usable) return { account: usable };
   }
   const picked = pickAccount(undefined, opts.user, model, opts.usageCredits);
   if (picked) return { account: picked };
@@ -487,7 +522,7 @@ export async function* runClaudeDirect(
     // must fail FLAGGED — this engine has no host-auth fallthrough, so "no
     // account can serve this model" is always exhaustion-shaped, which is what
     // agent-runner's fallback walk keys on.
-    const picked = pickDirectAccount(opts, nativeModel);
+    const picked = pickDirectAccount(opts, nativeModel, opts.sessionId);
     if ("error" in picked) {
       const err = new Error(`claude-direct: ${picked.error}`) as Error & {
         usageLimitExhausted?: boolean;
@@ -513,6 +548,21 @@ export async function* runClaudeDirect(
     try {
       mkdirSync(configDir, { recursive: true });
     } catch {}
+
+    // Resume pre-flight: when the chosen account's config dir has no such
+    // conversation (rotation before the affinity pick existed, a pin to a
+    // different account, pruned state), start FRESH with a handoff note
+    // instead of letting the SDK kill the turn with "No conversation found".
+    let resumeId = opts.sessionId;
+    let resumeMissNote: string | null = null;
+    if (resumeId && !conversationOnAccount(account.id, resumeId)) {
+      audit({ ...auditBase, direction: "in", kind: "resume_miss", account: account.name });
+      resumeMissNote =
+        "Note: your previous engine session for this conversation could not be resumed, " +
+        "so this turn starts fresh. Earlier messages are not in your context; the person " +
+        "can still see them in the transcript. Ask for anything essential you are missing.";
+      resumeId = undefined;
+    }
 
     // Minimal subprocess env. The server env is NEVER inherited; every entry
     // is explicit.
@@ -638,7 +688,7 @@ export async function* runClaudeDirect(
       audit({ ...auditBase, direction: "in", kind: "steer_queued", ...summarizeText(text) });
     };
     const inputStream = (async function* (): AsyncGenerator<SDKUserMessage> {
-      yield userMessage(prompt, opts.images);
+      yield userMessage(resumeMissNote ? `${resumeMissNote}\n\n${prompt}` : prompt, opts.images);
       for (;;) {
         if (inputDone) return;
         if (steerReleases > 0) {
@@ -662,7 +712,7 @@ export async function* runClaudeDirect(
       options: {
         cwd,
         model: nativeModel,
-        resume: opts.sessionId,
+        resume: resumeId,
         forkSession: opts.forkSession,
         ...(opts.resumeSessionAt ? { resumeSessionAt: opts.resumeSessionAt } : {}),
         abortController: abort,
@@ -801,6 +851,15 @@ export async function* runClaudeDirect(
             appendOpencodeTranscript(engineSessionId, [userLine]);
           } catch (e) {
             console.warn("[claude-direct] user-line append failed:", e);
+          }
+          if (resumeMissNote) {
+            try {
+              appendOpencodeTranscript(engineSessionId, [
+                transcriptLineRunnerNotice(
+                  "Previous engine session could not be resumed; this turn started fresh without in-engine context.",
+                ),
+              ]);
+            } catch {}
           }
         }
         yield {
