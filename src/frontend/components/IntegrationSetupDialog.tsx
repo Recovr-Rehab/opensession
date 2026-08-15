@@ -1,75 +1,31 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "../ui/button";
-import { cn } from "../ui/cn";
+import { Disclosure } from "../ui/disclosure";
 import { Modal } from "../ui/modal";
-import { SettingsSection, settingsInputClass } from "../ui/settings";
+import { SettingsSection } from "../ui/settings";
 import { InlineAlert } from "../ui/state";
 import { Switch } from "../ui/switch";
 import { toast } from "../ui/toast";
+import { IconTile } from "./BrandTile";
 import {
 	Code,
 	CopyableCode,
+	GuideBlock,
 	LinkChips,
+	ScopeGroups,
+	SecretField,
+	SetupSteps,
 	setupRequest,
 	type SetupIntegration,
+	type SetupScopeGroup,
 } from "./setup-shared";
 
-function EnvVarField({
-	envVar,
-	value,
-	cleared,
-	onChange,
-	onToggleClear,
-}: {
-	envVar: SetupIntegration["env"][number];
-	value: string;
-	cleared: boolean;
-	onChange: (value: string) => void;
-	onToggleClear: () => void;
-}) {
-	return (
-		<div className="flex min-w-0 flex-col gap-1">
-			<div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-				<Code>{envVar.name}</Code>
-				{envVar.required && <span className="text-meta font-medium text-yellow">required</span>}
-				{envVar.present && !cleared && <span className="text-meta text-green">set</span>}
-				{cleared && <span className="text-meta font-medium text-red">cleared on save</span>}
-				<span className="min-w-0 flex-1 text-meta text-faint">{envVar.description}</span>
-				{envVar.present && (
-					<button
-						type="button"
-						className="focus-ring shrink-0 rounded-control text-meta font-medium text-faint underline underline-offset-2 transition-colors hover:text-fg"
-						onClick={onToggleClear}
-					>
-						{cleared ? "Keep" : "Clear"}
-					</button>
-				)}
-			</div>
-			<input
-				type="password"
-				className={cn(settingsInputClass, "font-mono")}
-				value={value}
-				onChange={(event) => onChange(event.target.value)}
-				placeholder={cleared ? "will be unset" : envVar.present ? "••• set" : "not set"}
-				aria-label={envVar.name}
-				autoComplete="new-password"
-				autoCapitalize="none"
-				spellCheck={false}
-			/>
-		</div>
-	);
-}
-
-function Step({ number, children }: { number: number; children: ReactNode }) {
-	return (
-		<li className="flex items-start gap-3 text-supporting leading-relaxed text-dim">
-			<span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-surface text-[10px] font-semibold tabular-nums text-faint">
-				{number}
-			</span>
-			<span className="min-w-0 flex-1">{children}</span>
-		</li>
-	);
-}
+// One integration's whole configuration, in the order you work through it:
+// the switch and the credential fields first, the provider's recipe behind a
+// disclosure under them. It used to run the other way — five numbered steps
+// and four paragraphs of scopes ahead of the form — so anyone opening the
+// dialog a second time scrolled past a page of documentation to reach the two
+// fields they came for, and on a laptop the first field was below the fold.
 
 function Value({ value }: { value: string }) {
 	return (
@@ -79,18 +35,15 @@ function Value({ value }: { value: string }) {
 	);
 }
 
-function GuideSection({ title, children }: { title: string; children: ReactNode }) {
-	return (
-		<section>
-			<h3 className="m-0 text-label font-semibold text-fg">{title}</h3>
-			<div className="mt-2">{children}</div>
-		</section>
-	);
-}
-
 type Guide = {
 	description: string;
 	steps: ReactNode[];
+	/** Permission tokens you transcribe into the provider's own form. Data,
+	 *  rather than bold runs inside a sentence — see ScopeGroups. */
+	scopes?: SetupScopeGroup[];
+	/** One line that finishes the scope list, for the thing a person looking at
+	 *  it wonders next ("do I need file access?"). */
+	scopesNote?: ReactNode;
 	permissions?: ReactNode[];
 	note?: ReactNode;
 };
@@ -112,7 +65,7 @@ function guideFor(integration: SetupIntegration, publicBaseUrl: string): Guide {
 						Create a webhook for <strong>thread created</strong>, <strong>thread status transitioned</strong>, and <strong>thread note created</strong>. Use this endpoint:
 						<Value value={url("/plain/webhook")} />
 					</>,
-					<>Paste the API key and webhook signing secret into the fields on this card.</>,
+					<>Paste the API key and webhook signing secret into the fields above.</>,
 					<>Enable Plain, save, and restart Open Session. Then send a test webhook from Plain.</>,
 				],
 				permissions: [
@@ -134,11 +87,11 @@ function guideFor(integration: SetupIntegration, publicBaseUrl: string): Guide {
 						Create a Linear webhook for agent-session and issue events. Use this endpoint:
 						<Value value={url("/webhook")} />
 					</>,
-					<>Paste the client id, client secret, webhook secret, and API key into the fields on this card.</>,
+					<>Paste the client id, client secret, webhook secret, and API key into the fields above.</>,
 					<>Enable Linear, save, restart Open Session, then install and authorize the app in your workspace.</>,
 				],
+				scopes: [{ label: "OAuth scopes", items: ["app:assignable", "read", "write"] }],
 				permissions: [
-					<>OAuth scopes: <strong>app:assignable</strong>, <strong>read</strong>, and <strong>write</strong>.</>,
 					<>The optional API key is used for direct issue reads and writes when no stored OAuth grant is available.</>,
 				],
 			};
@@ -156,15 +109,33 @@ function guideFor(integration: SetupIntegration, publicBaseUrl: string): Guide {
 						Enable Interactivity and set its request URL to:
 						<Value value={url("/slack/actions")} />
 					</>,
-					<>Paste the bot token and signing secret below. Set an allowed Slack user id so admin tools are not open to every workspace member.</>,
+					<>Paste the bot token and signing secret into the fields above. Set an allowed Slack user id so admin tools are not open to every workspace member.</>,
 					<>Enable Slack, save, restart Open Session, and invite the bot to every existing channel it should read.</>,
 				],
-				permissions: [
-					<>Writing permissions: <strong>chat:write</strong>, <strong>chat:write.customize</strong>, <strong>reactions:write</strong>, <strong>assistant:write</strong>.</>,
-					<>History: <strong>channels:history</strong>, <strong>groups:history</strong>, <strong>im:history</strong>, <strong>mpim:history</strong>.</>,
-					<>Channels and people: <strong>channels:read</strong>, <strong>groups:read</strong>, <strong>im:read</strong>, <strong>channels:manage</strong>, <strong>groups:write</strong>, <strong>channels:join</strong>, <strong>im:write</strong>, <strong>users:read</strong>.</>,
-					<>No file scopes are needed.</>,
+				scopes: [
+					{
+						label: "Writing",
+						items: ["chat:write", "chat:write.customize", "reactions:write", "assistant:write"],
+					},
+					{
+						label: "History",
+						items: ["channels:history", "groups:history", "im:history", "mpim:history"],
+					},
+					{
+						label: "Channels and people",
+						items: [
+							"channels:read",
+							"groups:read",
+							"im:read",
+							"channels:manage",
+							"groups:write",
+							"channels:join",
+							"im:write",
+							"users:read",
+						],
+					},
 				],
+				scopesNote: <>No file scopes are needed.</>,
 			};
 
 		case "stripe":
@@ -176,7 +147,7 @@ function guideFor(integration: SetupIntegration, publicBaseUrl: string): Guide {
 						<Value value={url("/stripe/webhook")} />
 					</>,
 					<>Subscribe it only to <strong>charge.dispute.created</strong>.</>,
-					<>Reveal the endpoint signing secret and paste it into the field on this card.</>,
+					<>Reveal the endpoint signing secret and paste it into the field above.</>,
 					<>Enable Stripe, save, restart Open Session, then send a test dispute event.</>,
 				],
 				permissions: [
@@ -192,7 +163,7 @@ function guideFor(integration: SetupIntegration, publicBaseUrl: string): Guide {
 				steps: [
 					<>Create a Grafana service account dedicated to Open Session.</>,
 					<>Generate a service-account token and copy your Grafana base URL.</>,
-					<>Paste both values below. If your Loki datasource is not named <strong>loki</strong>, also enter its datasource UID.</>,
+					<>Paste both values above. If your Loki datasource is not named <strong>loki</strong>, also enter its datasource UID.</>,
 					<>Enable the poller, save, restart Open Session, then configure a Grafana poll on the automation that should investigate matches.</>,
 				],
 				permissions: [
@@ -206,13 +177,13 @@ function guideFor(integration: SetupIntegration, publicBaseUrl: string): Guide {
 				description: "Connect the machine user that handles PR comments, reviews, webhooks, and fallback PR authorship.",
 				steps: [
 					<>Create a dedicated GitHub machine user and give it access to the repositories Open Session works in.</>,
-					<>Create a fine-grained personal access token for that user and paste it below.</>,
-					<>On the Open Session host, sign the GitHub CLI into the same machine user with <strong>gh auth login</strong>. CLI authentication is separate from the token below.</>,
+					<>Create a fine-grained personal access token for that user and paste it into the fields above.</>,
+					<>On the Open Session host, sign the GitHub CLI into the same machine user with <strong>gh auth login</strong>. CLI authentication is separate from the token above.</>,
 					<>
 						Add a repository or organization webhook with content type <strong>application/json</strong> and this payload URL:
 						<Value value={url("/github/webhook")} />
 					</>,
-					<>Create a webhook secret, paste it both into GitHub and below, then enter the bot login and any @handles that should wake the PR agent.</>,
+					<>Create a webhook secret, paste it both into GitHub and into the fields above, then enter the bot login and any @handles that should wake the PR agent.</>,
 					<>Enable GitHub, save, restart Open Session, and send a webhook test delivery.</>,
 				],
 				permissions: [
@@ -242,7 +213,7 @@ function guideFor(integration: SetupIntegration, publicBaseUrl: string): Guide {
 				description: `Connect ${integration.label} to Open Session.`,
 				steps: [
 					<>Create the provider credentials linked below.</>,
-					<>Paste each value into its matching field on the integration card.</>,
+					<>Paste each value into its matching field above.</>,
 					<>Enable the integration, save, and restart Open Session.</>,
 				],
 			};
@@ -285,6 +256,12 @@ export function IntegrationSetupDialog({
 	const dirty =
 		enabled !== integration.enabled || typedKeys.length > 0 || clearedKeys.length > 0;
 
+	// Code Storage is configured under Workspace → Connections, so this dialog
+	// documents it rather than switching it on — the same carve-out the
+	// integration card makes.
+	const canToggle = integration.id !== "codestorage";
+	const configured = integration.env.some((envVar) => envVar.present);
+
 	async function save() {
 		if (!dirty || saving) return;
 		setSaving(true);
@@ -317,89 +294,129 @@ export function IntegrationSetupDialog({
 
 	return (
 		<Modal.Root open={open} onOpenChange={onOpenChange}>
-			<Modal.Content widthClassName="max-w-[38rem]">
-				<Modal.Header title={`Set up ${integration.label}`} description={guide.description} />
+			<Modal.Content widthClassName="max-w-[34rem]">
+				<Modal.Header
+					title={
+						<span className="flex items-center gap-2.5">
+							<IconTile name={integration.id} size={28} />
+							{integration.label}
+						</span>
+					}
+					description={guide.description}
+				/>
 
-				<GuideSection title="Setup">
-					<ol className="m-0 flex list-none flex-col gap-2.5 p-0">
-						{guide.steps.map((step, index) => (
-							<Step key={index} number={index + 1}>{step}</Step>
-						))}
-					</ol>
-				</GuideSection>
-
-				{guide.permissions && (
-					<GuideSection title="Permissions">
-						<ul className="m-0 flex flex-col gap-1.5 pl-5 text-supporting leading-relaxed text-dim">
-							{guide.permissions.map((permission, index) => <li key={index}>{permission}</li>)}
-						</ul>
-					</GuideSection>
-				)}
-
-				{guide.note && (
-					<div className="rounded-lg bg-surface p-3 text-supporting leading-relaxed text-dim">
-						{guide.note}
-					</div>
-				)}
-
-				{integration.links.length > 0 && (
-					<GuideSection title="Provider links">
-						<LinkChips links={integration.links} className="mt-0" />
-					</GuideSection>
-				)}
-
-				{integration.env.length > 0 && (
-					<SettingsSection>
-						<div className="flex items-center gap-3">
-							<div className="min-w-0 flex-1">
-								<div className="text-label font-semibold text-fg">Configuration</div>
-								<div className="mt-0.5 text-meta text-dim">Credentials stay on this server and are never shown back.</div>
-							</div>
-							<Switch
-								checked={enabled}
-								onCheckedChange={setEnabled}
-								disabled={saving}
-								aria-label={`Enable ${integration.label}`}
-							/>
-						</div>
-						<div className="mt-3 flex flex-col gap-2.5">
-							{integration.env.map((envVar) => (
-								<EnvVarField
-									key={envVar.name}
-									envVar={envVar}
-									value={typed[envVar.name] ?? ""}
-									cleared={Boolean(
-										envVar.present &&
-											cleared[envVar.name] &&
-											!(typed[envVar.name] ?? "").trim(),
-									)}
-									onChange={(value) => {
-										setTyped((current) => ({ ...current, [envVar.name]: value }));
-										if (value.trim() && cleared[envVar.name]) {
-											setCleared((current) => ({ ...current, [envVar.name]: false }));
-										}
-									}}
-									onToggleClear={() => {
-										setCleared((current) => ({
-											...current,
-											[envVar.name]: !current[envVar.name],
-										}));
-										setTyped((current) => ({ ...current, [envVar.name]: "" }));
-									}}
+				{(canToggle || integration.env.length > 0) && (
+					<SettingsSection className="p-4">
+						{canToggle && (
+							<div className="flex items-center gap-4">
+								<div className="min-w-0 flex-1">
+									<div className="text-item-title font-medium text-fg">
+										Enable {integration.label}
+									</div>
+									<div className="mt-0.5 text-meta text-dim">
+										Takes effect after you restart Open Session.
+									</div>
+								</div>
+								<Switch
+									checked={enabled}
+									onCheckedChange={setEnabled}
+									disabled={saving}
+									aria-label={`Enable ${integration.label}`}
 								/>
-							))}
-						</div>
+							</div>
+						)}
+						{integration.env.length > 0 && (
+							<div
+								className={
+									canToggle
+										? "mt-4 flex flex-col gap-4 border-t border-line pt-4"
+										: "flex flex-col gap-4"
+								}
+							>
+								{integration.env.map((envVar) => (
+									<SecretField
+										key={envVar.name}
+										name={envVar.name}
+										label={<Code>{envVar.name}</Code>}
+										description={envVar.description}
+										present={envVar.present}
+										required={envVar.required}
+										disabled={saving}
+										cleared={Boolean(
+											envVar.present &&
+												cleared[envVar.name] &&
+												!(typed[envVar.name] ?? "").trim(),
+										)}
+										value={typed[envVar.name] ?? ""}
+										onChange={(value) => {
+											setTyped((current) => ({ ...current, [envVar.name]: value }));
+											if (value.trim() && cleared[envVar.name]) {
+												setCleared((current) => ({ ...current, [envVar.name]: false }));
+											}
+										}}
+										onToggleClear={() => {
+											setCleared((current) => ({
+												...current,
+												[envVar.name]: !current[envVar.name],
+											}));
+											setTyped((current) => ({ ...current, [envVar.name]: "" }));
+										}}
+									/>
+								))}
+								<p className="m-0 text-meta text-faint">
+									Credentials stay on this server and are never shown back.
+								</p>
+							</div>
+						)}
 					</SettingsSection>
 				)}
 
+				{/* Open on a first setup, closed once there are credentials to keep:
+				    the recipe is a one-time read, the fields are not. */}
+				<Disclosure
+					title="Setup guide"
+					defaultOpen={!configured}
+					actions={<LinkChips links={integration.links} className="mt-0" />}
+				>
+					<div className="flex flex-col gap-4">
+						<SetupSteps steps={guide.steps} />
+						{guide.scopes && (
+							<GuideBlock title="Bot scopes">
+								<ScopeGroups groups={guide.scopes} />
+								{guide.scopesNote && (
+									<p className="m-0 mt-2.5 text-supporting text-dim">{guide.scopesNote}</p>
+								)}
+							</GuideBlock>
+						)}
+						{guide.permissions && (
+							<GuideBlock title="Permissions">
+								<ul className="m-0 flex flex-col gap-1.5 pl-5 text-supporting leading-relaxed text-dim">
+									{guide.permissions.map((permission, index) => (
+										<li key={index}>{permission}</li>
+									))}
+								</ul>
+							</GuideBlock>
+						)}
+						{guide.note && (
+							<div className="rounded-lg bg-surface p-3 text-supporting leading-relaxed text-dim">
+								{guide.note}
+							</div>
+						)}
+					</div>
+				</Disclosure>
+
 				{error && <InlineAlert>{error}</InlineAlert>}
 
+				{/* Nothing to change here means nothing to abandon, so the dialog
+				    closes on one button rather than offering Cancel beside Done. */}
 				<Modal.Footer>
-					<Modal.Close render={<Button variant="ghost" disabled={saving}>Cancel</Button>} />
-					{integration.env.length > 0 ? (
-						<Button variant="primary" disabled={!dirty || saving} onClick={() => void save()}>
-							{saving ? "Saving…" : "Save configuration"}
-						</Button>
+					{canToggle || integration.env.length > 0 ? (
+						<>
+							<Modal.Close render={<Button variant="ghost" disabled={saving}>Cancel</Button>} />
+							<Button variant="primary" disabled={!dirty || saving} onClick={() => void save()}>
+								{saving ? "Saving…" : "Save"}
+							</Button>
+						</>
 					) : (
 						<Modal.Close render={<Button variant="primary">Done</Button>} />
 					)}

@@ -1,18 +1,17 @@
 import React, { useEffect, useState } from "react";
 import { Button } from "../ui/button";
-import { cn } from "../ui/cn";
+import { Disclosure } from "../ui/disclosure";
 import { Modal } from "../ui/modal";
-import {
-	SettingCard,
-	SettingsHint,
-	SettingsSection,
-	settingsInputClass,
-} from "../ui/settings";
+import { SettingCard, SettingsHint, SettingsSection } from "../ui/settings";
 import { InlineAlert } from "../ui/state";
 import { Switch } from "../ui/switch";
 import { toast } from "../ui/toast";
 import {
 	CopyableCode,
+	GuideBlock,
+	LinkChips,
+	SecretField,
+	SetupSteps,
 	StateChip,
 	githubAuthState,
 	integrationState,
@@ -156,17 +155,6 @@ export function IntegrationsList({
 	);
 }
 
-function RecipeStep({ n, children }: { n: number; children: React.ReactNode }) {
-	return (
-		<li className="flex items-start gap-2.5 text-supporting leading-relaxed text-dim">
-			<span className="mt-0.5 flex size-[18px] shrink-0 items-center justify-center rounded-full bg-surface text-[10px] font-semibold tabular-nums text-faint">
-				{n}
-			</span>
-			<span className="min-w-0 flex-1">{children}</span>
-		</li>
-	);
-}
-
 function GithubAuthSetupDialog({
 	github,
 	open,
@@ -188,61 +176,66 @@ function GithubAuthSetupDialog({
 }) {
 	return (
 		<Modal.Root open={open} onOpenChange={onOpenChange}>
-			<Modal.Content widthClassName="max-w-[38rem]">
+			<Modal.Content widthClassName="max-w-[34rem]">
 				<Modal.Header
-					title="Set up GitHub sign-in"
+					title={
+						<span className="flex items-center gap-2.5">
+							<IconTile name="github" size={28} />
+							GitHub sign-in
+						</span>
+					}
 					description="Let teammates connect GitHub so interactive sessions open PRs as them."
 				/>
-				<section>
-					<h3 className="m-0 text-label font-semibold text-fg">Setup</h3>
-					<ol className="m-0 mt-2 flex list-none flex-col gap-2.5 p-0">
-						<RecipeStep n={1}>
-							Create an organization-owned GitHub App. {" "}
-							<a
-								href={github.appCreateUrl}
-								target="_blank"
-								rel="noreferrer"
-								className="text-fg underline decoration-line underline-offset-2 transition-colors hover:decoration-fg"
-							>
-								open the New GitHub App form ↗
-							</a>
-							.
-						</RecipeStep>
-						<RecipeStep n={2}>Enable Device Flow on the app.</RecipeStep>
-						<RecipeStep n={3}>
-							Under Repository permissions, grant <strong>Contents: read and write</strong>, <strong>Pull requests: read and write</strong>, and <strong>Issues: read and write</strong>. Metadata remains read-only.
-						</RecipeStep>
-						<RecipeStep n={4}>
-							Set the callback URL to exactly:
-							<span className="mt-1.5 block">
-								<CopyableCode value={github.callbackUrl} />
-							</span>
-						</RecipeStep>
-						<RecipeStep n={5}>
-							Install the app only on your organization. Choose all repositories, or select only the repositories Open Session should work in.
-						</RecipeStep>
-						<RecipeStep n={6}>
-							Paste the client id below. Add the client secret to enable browser redirect sign-in; device-code sign-in works without it.
-						</RecipeStep>
-						<RecipeStep n={7}>
-							Enable GitHub sign-in, save, restart Open Session, then have each teammate connect under Personal → My accounts.
-						</RecipeStep>
-					</ol>
-				</section>
-				<section>
-					<h3 className="m-0 text-label font-semibold text-fg">Permissions</h3>
-					<ul className="m-0 mt-2 flex flex-col gap-1.5 pl-5 text-supporting leading-relaxed text-dim">
-						<li>Contents write lets a connected teammate&rsquo;s interactive session push commits; pull-request and issue write cover PR creation, reviews, and conversation comments.</li>
-						<li>A connected user can reach only repositories allowed by both their own GitHub access and the app installation.</li>
-						<li>Personal tokens are injected only into interactive runs owned by that teammate. Automations continue to use the bot account.</li>
-					</ul>
-				</section>
-				<SettingsSection>{configuration}</SettingsSection>
+				<SettingsSection className="p-4">{configuration}</SettingsSection>
+				<Disclosure
+					title="Setup guide"
+					defaultOpen={!github.clientIdConfigured}
+					actions={
+						<LinkChips
+							className="mt-0"
+							links={[{ label: "Create GitHub App", url: github.appCreateUrl }]}
+						/>
+					}
+				>
+					<div className="flex flex-col gap-4">
+						<SetupSteps
+							steps={[
+								<>Create an organization-owned GitHub App.</>,
+								<>Enable Device Flow on the app.</>,
+								<>
+									Under Repository permissions, grant <strong>Contents: read and write</strong>, <strong>Pull requests: read and write</strong>, and <strong>Issues: read and write</strong>. Metadata remains read-only.
+								</>,
+								<>
+									Set the callback URL to exactly:
+									<span className="mt-1.5 block">
+										<CopyableCode value={github.callbackUrl} />
+									</span>
+								</>,
+								<>
+									Install the app only on your organization. Choose all repositories, or select only the repositories Open Session should work in.
+								</>,
+								<>
+									Paste the client id above. Add the client secret to enable browser redirect sign-in; device-code sign-in works without it.
+								</>,
+								<>
+									Enable GitHub sign-in, save, restart Open Session, then have each teammate connect under Personal → My accounts.
+								</>,
+							]}
+						/>
+						<GuideBlock title="Permissions">
+							<ul className="m-0 flex flex-col gap-1.5 pl-5 text-supporting leading-relaxed text-dim">
+								<li>Contents write lets a connected teammate&rsquo;s interactive session push commits; pull-request and issue write cover PR creation, reviews, and conversation comments.</li>
+								<li>A connected user can reach only repositories allowed by both their own GitHub access and the app installation.</li>
+								<li>Personal tokens are injected only into interactive runs owned by that teammate. Automations continue to use the bot account.</li>
+							</ul>
+						</GuideBlock>
+					</div>
+				</Disclosure>
 				{error && <InlineAlert>{error}</InlineAlert>}
 				<Modal.Footer>
 					<Modal.Close render={<Button variant="ghost" disabled={saving}>Cancel</Button>} />
 					<Button variant="primary" disabled={!dirty || saving} onClick={onSave}>
-						{saving ? "Saving…" : "Save configuration"}
+						{saving ? "Saving…" : "Save"}
 					</Button>
 				</Modal.Footer>
 			</Modal.Content>
@@ -345,10 +338,6 @@ export function GithubAuthCard({
 		}
 	}
 
-	const fieldLabelClass = "flex min-w-0 flex-col gap-1.5 text-label font-medium text-dim";
-	const clearButtonClass =
-		"focus-ring self-start rounded-sm text-meta font-medium text-faint underline underline-offset-2 transition-colors hover:text-fg";
-
 	return (
 		<>
 			<div className="grid px-4">
@@ -402,10 +391,12 @@ export function GithubAuthCard({
 				onSave={() => void handleSave()}
 				configuration={
 					<>
-						<div className="flex items-center gap-3">
+						<div className="flex items-center gap-4">
 							<div className="min-w-0 flex-1">
-								<div className="text-label font-semibold text-fg">Configuration</div>
-								<div className="mt-0.5 text-meta text-dim">The client secret is optional and is never shown back.</div>
+								<div className="text-item-title font-medium text-fg">Enable GitHub sign-in</div>
+								<div className="mt-0.5 text-meta text-dim">
+									Takes effect after you restart Open Session.
+								</div>
 							</div>
 							<Switch
 								checked={userPrAuth}
@@ -414,65 +405,44 @@ export function GithubAuthCard({
 								aria-label="Enable GitHub sign-in"
 							/>
 						</div>
-						<div className="mt-3 grid grid-cols-2 gap-3 max-sm:grid-cols-1">
-							<label className={fieldLabelClass}>
-								<span className="flex items-baseline justify-between gap-2">
-									Client id
-									{github.clientIdConfigured && (
-										<button
-											type="button"
-											className={clearButtonClass}
-											onClick={() => {
-												setClearId((current) => !current);
-												setClientId("");
-											}}
-										>
-											{idCleared ? "Keep" : "Clear"}
-										</button>
-									)}
-								</span>
-								<input
-									className={cn(settingsInputClass, "font-mono")}
-									value={clientId}
-									onChange={(event) => {
-										setClientId(event.target.value);
-										if (event.target.value.trim()) setClearId(false);
-									}}
-									placeholder={idCleared ? "Will be unset" : github.clientIdConfigured ? "Set, leave blank to keep" : "Iv23li…"}
-									autoCapitalize="none"
-									spellCheck={false}
-								/>
-							</label>
-							<label className={fieldLabelClass}>
-								<span className="flex items-baseline justify-between gap-2">
-									Client secret
-									{secretConfigured && (
-										<button
-											type="button"
-											className={clearButtonClass}
-											onClick={() => {
-												setClearSecret((current) => !current);
-												setClientSecret("");
-											}}
-										>
-											{secretCleared ? "Keep" : "Clear"}
-										</button>
-									)}
-								</span>
-								<input
-									type="password"
-									className={cn(settingsInputClass, "font-mono")}
-									value={clientSecret}
-									onChange={(event) => {
-										setClientSecret(event.target.value);
-										if (event.target.value.trim()) setClearSecret(false);
-									}}
-									placeholder={secretCleared ? "Will be unset" : secretConfigured ? "••• set" : "Optional, enables browser redirect"}
-									autoComplete="new-password"
-									autoCapitalize="none"
-									spellCheck={false}
-								/>
-							</label>
+						<div className="mt-4 flex flex-col gap-4 border-t border-line pt-4">
+							<SecretField
+								name="Client id"
+								type="text"
+								required
+								placeholder="Iv23li…"
+								present={github.clientIdConfigured}
+								cleared={idCleared}
+								value={clientId}
+								disabled={saving}
+								onChange={(value) => {
+									setClientId(value);
+									if (value.trim()) setClearId(false);
+								}}
+								onToggleClear={() => {
+									setClearId((current) => !current);
+									setClientId("");
+								}}
+							/>
+							<SecretField
+								name="Client secret"
+								description="Enables browser redirect sign-in. Device-code sign-in works without it."
+								present={secretConfigured}
+								cleared={secretCleared}
+								value={clientSecret}
+								disabled={saving}
+								onChange={(value) => {
+									setClientSecret(value);
+									if (value.trim()) setClearSecret(false);
+								}}
+								onToggleClear={() => {
+									setClearSecret((current) => !current);
+									setClientSecret("");
+								}}
+							/>
+							<p className="m-0 text-meta text-faint">
+								Credentials stay on this server and are never shown back.
+							</p>
 						</div>
 					</>
 				}
