@@ -3,7 +3,25 @@
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
-		<meta name="color-scheme" content="light" />
+		<meta name="color-scheme" content="light dark" />
+		<script>
+			/* The preview follows the visitor's system theme, the same signal the
+			   page around it uses, so a dark landing page never frames a white
+			   app. Set before the stylesheets so there is no flash. */
+			(function () {
+				var media = window.matchMedia("(prefers-color-scheme: dark)");
+				var apply = function (dark) {
+					document.documentElement.setAttribute(
+						"data-theme",
+						dark ? "dark" : "light",
+					);
+				};
+				apply(media.matches);
+				media.addEventListener("change", function (event) {
+					apply(event.matches);
+				});
+			})();
+		</script>
 		<link rel="stylesheet" href="../src/frontend/styles/base.css" />
 		<link rel="stylesheet" href="../src/frontend/styles/legacy.css" />
 		<link rel="stylesheet" href="./.demo-tailwind.css" />

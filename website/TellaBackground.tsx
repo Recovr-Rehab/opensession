@@ -1,21 +1,51 @@
+import { useEffect, useState } from "react";
 import heroPosterUrl from "./hero-poster.webp";
+import heroPosterDarkUrl from "./hero-poster-dark.webp";
 
-/** Tella's "Silver Silk" background loop. */
+/**
+ * Tella's own backgrounds behind the hero: "Silver Silk" in light, "Midnight
+ * Dust" in dark. A <source media> attribute would be the declarative way to
+ * pick one, but browsers dropped support for it on <video>, so the choice is
+ * made here and the element is keyed on it to force a reload rather than
+ * leaving the old frame on screen.
+ */
+const CLIPS = {
+	light: {
+		src: "https://ucarecdn.com/b8c1a712-87c2-4884-8034-77e71fa4d7ac/",
+		poster: heroPosterUrl,
+	},
+	dark: {
+		src: "https://ucarecdn.com/3edf6853-d7d6-49d5-a67d-b8bcc2b2d571/",
+		poster: heroPosterDarkUrl,
+	},
+};
+
+const query = "(prefers-color-scheme: dark)";
+
 export function TellaBackground() {
+	const [dark, setDark] = useState(() => window.matchMedia(query).matches);
+
+	useEffect(() => {
+		const media = window.matchMedia(query);
+		const onChange = (event: MediaQueryListEvent) => setDark(event.matches);
+		media.addEventListener("change", onChange);
+		return () => media.removeEventListener("change", onChange);
+	}, []);
+
+	const clip = dark ? CLIPS.dark : CLIPS.light;
+
 	return (
 		<video
+			key={dark ? "dark" : "light"}
 			className="hero-video"
 			autoPlay
 			loop
 			muted
 			playsInline
-			poster={heroPosterUrl}
+			poster={clip.poster}
 			aria-hidden="true"
 		>
-			<source
-				src="https://ucarecdn.com/b8c1a712-87c2-4884-8034-77e71fa4d7ac/"
-				type="video/mp4"
-			/>
+			<source src={clip.src} type="video/mp4" />
 		</video>
 	);
 }

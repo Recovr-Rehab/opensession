@@ -29,7 +29,7 @@
 	   The page is white and the cards are a step off it, so a section reads as
 	   a panel without a shadow or a second colour doing the work. */
 	--card: #fafafb;
-	--line: rgba(0, 0, 0, 0.09);
+	--line: rgba(var(--ink-rgb), 0.09);
 	--muted: #787878;
 	/* The product's accent with more chroma, so the one filled control on the
 	   page carries some voltage: the app's own #1f82bb reads muted at this size
@@ -50,6 +50,20 @@
 	   the app's base.css. */
 	--rf: 1;
 	--cs: round;
+	/* The ink channel behind every hairline, wash and dimmed glyph. Flipping
+	   this one token is most of what dark mode is. */
+	--ink-rgb: 0, 0, 0;
+	/* Surfaces that are not the page or a card: the demo window, the modal, the
+	   email field, and the two states the form can end in. */
+	--stage-bg: #cfcdc8;
+	--window: #f6f6f4;
+	--window-shadow: rgba(28, 34, 40, 0.24);
+	--surface: #fff;
+	--surface-shadow: rgba(16, 18, 22, 0.22);
+	--scrim: rgba(16, 18, 22, 0.32);
+	--field: #fbfbfa;
+	--ok: #0b7a4b;
+	--err: #b42318;
 }
 
 * {
@@ -212,7 +226,7 @@ summary:focus-visible {
 	border: 1px solid var(--line);
 	border-radius: calc(24px * var(--rf));
 	corner-shape: var(--cs);
-	background: #cfcdc8;
+	background: var(--stage-bg);
 }
 
 .gradient-fallback,
@@ -250,13 +264,13 @@ summary:focus-visible {
 	/* It is a <figure>, and a figure's UA margin offsets an absolutely
 	   positioned box even with all four insets set. */
 	margin: 0;
-	border: 1px solid rgba(0, 0, 0, 0.1);
+	border: 1px solid rgba(var(--ink-rgb), 0.1);
 	/* A macOS 26 window corner, measured off Finder and Safari at 2x: a 26.7pt
 	   radius that fits a plain circle to within half a pixel. */
 	border-radius: calc(15px * var(--rf));
 	corner-shape: var(--cs);
-	background: #f6f6f4;
-	box-shadow: 0 22px 54px rgba(28, 34, 40, 0.24);
+	background: var(--window);
+	box-shadow: 0 22px 54px var(--window-shadow);
 }
 
 .product-demo-loading {
@@ -266,8 +280,8 @@ summary:focus-visible {
 	grid-template-columns: min(22%, 210px) 1fr;
 	background:
 		radial-gradient(circle at 72% 42%, rgba(119, 161, 147, 0.09), transparent 34%),
-		#f0f1ef;
-	color: rgba(0, 0, 0, 0.54);
+		var(--window);
+	color: rgba(var(--ink-rgb), 0.54);
 	opacity: 1;
 	transition: opacity 180ms ease;
 }
@@ -278,14 +292,14 @@ summary:focus-visible {
 	right: 0;
 	left: min(22%, 210px);
 	height: 1px;
-	background: rgba(0, 0, 0, 0.08);
+	background: rgba(var(--ink-rgb), 0.08);
 	content: "";
 }
 
 .product-demo-loading-sidebar {
 	display: flex;
 	padding: 76px 22px;
-	border-right: 1px solid rgba(0, 0, 0, 0.08);
+	border-right: 1px solid rgba(var(--ink-rgb), 0.08);
 	background: rgba(255, 255, 255, 0.42);
 	flex-direction: column;
 	gap: 16px;
@@ -295,7 +309,7 @@ summary:focus-visible {
 	width: 72%;
 	height: 8px;
 	border-radius: 999px;
-	background: rgba(0, 0, 0, 0.08);
+	background: rgba(var(--ink-rgb), 0.08);
 }
 
 .product-demo-loading-sidebar span:nth-child(2) {
@@ -328,7 +342,7 @@ summary:focus-visible {
 	width: calc(100% / var(--demo-scale));
 	height: calc(100% / var(--demo-scale));
 	border: 0;
-	background: #f6f6f4;
+	background: var(--window);
 	opacity: 0;
 	pointer-events: none;
 	transform: scale(var(--demo-scale));
@@ -357,7 +371,7 @@ summary:focus-visible {
 .feature-icon {
 	display: block;
 	margin-bottom: 16px;
-	color: rgba(0, 0, 0, 0.62);
+	color: rgba(var(--ink-rgb), 0.62);
 }
 
 /* A name on its own line, then what it means: the capability is the thing you
@@ -401,7 +415,7 @@ summary:focus-visible {
 }
 
 .step-n {
-	color: rgba(0, 0, 0, 0.32);
+	color: rgba(var(--ink-rgb), 0.32);
 	font-size: 14px;
 	font-variant-numeric: tabular-nums;
 	font-weight: 600;
@@ -456,7 +470,7 @@ summary:focus-visible {
 	width: 13px;
 	height: 13px;
 	flex: none;
-	color: rgba(0, 0, 0, 0.45);
+	color: rgba(var(--ink-rgb), 0.45);
 }
 
 .faq-sign::before,
@@ -495,7 +509,7 @@ summary:focus-visible {
 	justify-content: flex-end;
 	gap: 8px;
 	padding: 2px 6px;
-	color: rgba(0, 0, 0, 0.38);
+	color: rgba(var(--ink-rgb), 0.38);
 	font-size: 13px;
 }
 
@@ -560,10 +574,10 @@ summary:focus-visible {
 	gap: 8px;
 	margin-top: 20px;
 	padding: 7px 7px 7px 14px;
-	border: 1px solid rgba(0, 0, 0, 0.14);
+	border: 1px solid rgba(var(--ink-rgb), 0.14);
 	border-radius: calc(14px * var(--rf));
 	corner-shape: var(--cs);
-	background: #fbfbfa;
+	background: var(--field);
 }
 
 .waitlist-form:focus-within {
@@ -583,7 +597,7 @@ summary:focus-visible {
 }
 
 .waitlist-form input::placeholder {
-	color: rgba(0, 0, 0, 0.4);
+	color: rgba(var(--ink-rgb), 0.4);
 }
 
 .waitlist-form button {
@@ -614,7 +628,7 @@ summary:focus-visible {
 	top: calc(100% + 10px);
 	left: 2px;
 	margin: 0;
-	color: #b42318;
+	color: var(--err);
 	font-size: 13px;
 }
 
@@ -624,7 +638,7 @@ summary:focus-visible {
 	align-items: center;
 	gap: 8px;
 	margin: 20px 0 0;
-	color: #0b7a4b;
+	color: var(--ok);
 	font-size: 16px;
 	font-weight: 600;
 }
@@ -635,13 +649,13 @@ summary:focus-visible {
 	border: 0;
 	border-radius: calc(22px * var(--rf));
 	corner-shape: var(--cs);
-	background: #fff;
-	box-shadow: 0 24px 60px rgba(16, 18, 22, 0.22);
+	background: var(--surface);
+	box-shadow: 0 24px 60px var(--surface-shadow);
 	color: var(--ink);
 }
 
 .waitlist-dialog::backdrop {
-	background: rgba(16, 18, 22, 0.32);
+	background: var(--scrim);
 	backdrop-filter: blur(4px);
 }
 
@@ -655,7 +669,7 @@ summary:focus-visible {
 
 .waitlist-dialog-body {
 	margin: 8px 0 0;
-	color: rgba(0, 0, 0, 0.6);
+	color: rgba(var(--ink-rgb), 0.6);
 	font-size: 15px;
 	line-height: 1.42;
 }
@@ -678,7 +692,7 @@ summary:focus-visible {
 	border: 0;
 	border-radius: 50%;
 	background: none;
-	color: rgba(0, 0, 0, 0.45);
+	color: rgba(var(--ink-rgb), 0.45);
 	cursor: pointer;
 	font-size: 22px;
 	line-height: 1;
@@ -687,7 +701,7 @@ summary:focus-visible {
 }
 
 .waitlist-dialog-close:hover {
-	background: rgba(0, 0, 0, 0.06);
+	background: rgba(var(--ink-rgb), 0.06);
 	color: var(--ink);
 }
 
@@ -844,3 +858,36 @@ summary:focus-visible {
 		transition: none;
 	}
 }
+
+/* Dark mode follows the system rather than offering a switch: the page has one
+   screen of content and no settings, so a preference the visitor already set
+   is the whole answer. The product preview reads the same signal from inside
+   its iframe, and the hero swaps Tella's Silver Silk loop for Midnight Dust.
+   The blue is deliberately unchanged: it is the product's accent, it already
+   clears its contrast on white, and it only gains presence on a dark page. */
+@media (prefers-color-scheme: dark) {
+	:root {
+		color-scheme: dark;
+		--ink: #f4f4f5;
+		--page: #0c0c0d;
+		--card: #141416;
+		--line: rgba(255, 255, 255, 0.1);
+		--muted: #939397;
+		--ink-rgb: 255, 255, 255;
+		--stage-bg: #17171a;
+		--window: #0d0d0f;
+		--window-shadow: rgba(0, 0, 0, 0.5);
+		--surface: #151517;
+		--surface-shadow: rgba(0, 0, 0, 0.55);
+		--scrim: rgba(0, 0, 0, 0.55);
+		--field: #1a1a1d;
+		--ok: #3fb950;
+		--err: #f87171;
+	}
+
+	.gradient-fallback {
+		background:
+			radial-gradient(circle at 26% 16%, #262629 0, transparent 40%),
+			radial-gradient(circle at 74% 34%, #1c1c20 0, transparent 44%),
+			linear-gradient(145deg, #17171a 0%, #131316 52%, #09090b 100%);
+	}
