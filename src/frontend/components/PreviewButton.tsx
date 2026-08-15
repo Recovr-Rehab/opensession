@@ -125,22 +125,52 @@ export function PreviewButton({
   // portalled, so a hand-rolled "outside click" test against wrapRef would
   // read every press inside the popup as outside and close it.
 
-  if (!previewable || !status) return null;
+  if (!previewable) return null;
 
   // The webapp is only openable once Caddy has fronted it with an HTTPS origin
   // (previewUrl). A secure origin is required for the app to load fully.
-  const running = status.running && status.previewUrl != null;
+  const running = !!status?.running && status.previewUrl != null;
   // Deep-link to the route the agent flagged (set_preview_path), so the human
   // lands on the feature under test instead of the app root.
-  const url = status.previewUrl
+  const url = status?.previewUrl
     ? withPreviewPath(status.previewUrl, session.previewPath)
     : "#";
-  const anyRunning = status.services.some((s) => s.running);
+  const anyRunning = status?.services.some((s) => s.running) ?? false;
   const isStarting = busy && !running;
   // Absent on pre-field servers — treat as bootable so the button still works
   // against a not-yet-restarted backend.
-  const bootable = status.bootable !== false;
+  const bootable = status?.bootable !== false;
   const notBootableHint = `No preview boot mechanism for this repo. Commit an .agents/start.sh to the repo, or set previewCommand on its repos config entry.`;
+
+  // The menu row renders before the status lands, unlike every other variant.
+  // A control in a toolbar can afford to not exist until there is something to
+  // preview; a row in a menu cannot, because it appears under a cursor that is
+  // already moving down the list and pushes everything below it. `previewable`
+  // is a synchronous read of the session, so the row is decided the moment the
+  // menu opens and only its label and colour fill in afterwards.
+  if (variant === "menu") {
+    return (
+      <Menu.Item
+        disabled={!bootable && !isStarting}
+        onClick={() => {
+          if (isStarting) void stop();
+          else void start();
+        }}
+        title={bootable ? "Open or start the local preview" : notBootableHint}
+      >
+        {isStarting ? (
+          <span className={spinnerClass} />
+        ) : (
+          <IconPlayOutline size={20} className={running ? "text-green" : MENU_ICON} />
+        )}
+        <span className="grow">
+          {isStarting ? "Cancel preview startup" : running ? "Open preview" : "Preview"}
+        </span>
+      </Menu.Item>
+    );
+  }
+
+  if (!status) return null;
 
   // Same-origin interstitial that waits for the boot and then redirects itself
   // to the preview (PreviewWait.tsx). The agent-flagged deep link rides along
@@ -378,28 +408,6 @@ export function PreviewButton({
     e?.preventDefault();
     setOpen(true);
   };
-
-  if (variant === "menu") {
-    return (
-      <Menu.Item
-        disabled={!bootable && !isStarting}
-        onClick={() => {
-          if (isStarting) void stop();
-          else void start();
-        }}
-        title={bootable ? "Open or start the local preview" : notBootableHint}
-      >
-        {isStarting ? (
-          <span className={spinnerClass} />
-        ) : (
-          <IconPlayOutline size={20} className={running ? "text-green" : MENU_ICON} />
-        )}
-        <span className="grow">
-          {isStarting ? "Cancel preview startup" : running ? "Open preview" : "Preview"}
-        </span>
-      </Menu.Item>
-    );
-  }
 
   if (variant === "action") {
     const mainClass =

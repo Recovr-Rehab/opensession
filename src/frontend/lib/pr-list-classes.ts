@@ -12,29 +12,23 @@
  *  12px past it so a hovered row's wash has room to breathe. */
 export const PR_LIST = "-mx-3";
 
-/** The state a block of rows is in: Open, Merged, Closed. Sized as the heading
- *  it is. A state owns hundreds of rows across several date groups, and at the
- *  13px interface step it read as one more label in a stack of labels rather
- *  than as the thing they all hang under. */
+/** The state a block of rows is in: Open, Merged, Closed. */
 export const PR_SECTION_LABEL =
-	"m-0 mb-3.5 flex items-baseline gap-2 px-3 text-section-title font-semibold tracking-[-0.01em] text-fg";
+	"m-0 mb-1.5 flex items-baseline gap-2 px-3 text-label font-semibold text-fg";
 
-/** A date group: the same quiet label the archived list gives its own. */
-const GROUP_LABEL = "m-0 flex items-baseline gap-2 pr-3 font-semibold text-faint";
+/** A date group inside a state — the same quiet label the archived list gives
+ *  its own date groups. The `px-3` pays back the list's outdent, so the label
+ *  starts on the same x as the row content under it. */
+const GROUP_LABEL =
+	"m-0 flex items-baseline gap-2 px-3 pb-1.5 font-semibold text-faint";
 
-/** A date belongs to the rows under it rather than to the state above it, so it
- *  sits tight to them and starts where their titles do: past the state glyph
- *  and the face, on the same x as the separator between rows. Flush left it
- *  stacked directly under Open as a second heading of the same shape, which is
- *  the one thing it must not read as. */
-export const PR_GROUP_LABEL = `${GROUP_LABEL} pb-1 pl-[74px] text-meta`;
+export const PR_GROUP_LABEL = `${GROUP_LABEL} text-meta`;
 
-/** The same label in the feed, one step up the scale and back on the content
- *  edge (the `pl-3` pays back the list's outdent). The feed is grouped by day
- *  and nothing else, so the day is the heading a reader navigates by; on the
- *  pull request list a date sits under Open or Merged, which is the heading
+/** The same label in the feed, one step up the scale. The feed is grouped by
+ *  day and nothing else, so the day is the heading a reader navigates by; on
+ *  the pull request list a date sits under Open or Merged, which is the heading
  *  there, and stays the quieter of the two. */
-export const PR_FEED_GROUP_LABEL = `${GROUP_LABEL} pb-1.5 pl-3 text-label`;
+export const PR_FEED_GROUP_LABEL = `${GROUP_LABEL} text-label`;
 
 /**
  * A pull request row.

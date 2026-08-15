@@ -180,7 +180,7 @@ import {
 	IconDotsHorizontal,
 	IconEye,
 	IconInbox,
-	IconPin,
+	IconBranches,
 	IconPullRequest,
 	IconLink,
 	IconSparkle,
@@ -4540,50 +4540,73 @@ export function SessionViewer({
 						</Menu.Popup>
 					</Menu.SubmenuRoot>
 				);
-				// Where this workspace sits for you: pinned as a tab, kept in your own
-				// sidebar lanes. These lead the menu: they are what people reopen it
-				// for, and they say what the session IS to you rather than doing
-				// something with it.
+				// What this workspace is to you: its name, and whether it sits in your
+				// sidebar. These lead the menu because they describe the session rather
+				// than doing something with it. Pin used to lead here too and no longer
+				// does: the sidebar row already offers it, and ⌘P still works from the
+				// keyboard whether or not a menu spells it out.
 				const placementActions = (
 					<>
-						<Menu.Item
-							className={pinned ? "text-yellow" : undefined}
-							onClick={() => {
-								setOverflowOpen(false);
-								togglePin(session.id);
-							}}
-							aria-pressed={pinned}
-						>
-							<IconPin size={20} fill={pinned ? "currentColor" : "none"} className={pinned ? undefined : MENU_ICON} />
-							<span className="grow">{pinned ? "Unpin tab" : "Pin as tab"}</span>
-							<Menu.Shortcut>{isApple ? "⌘P" : "Ctrl+P"}</Menu.Shortcut>
-						</Menu.Item>
-						{/* Claim this workspace into your own sidebar lanes — the twin of
-						    the sidebar row's right-click action, for when you're already
-						    reading the session (an automation run, a teammate's workspace)
-						    and want it in your own list. Per-user: it moves nothing for
-						    anyone else. */}
-						{onSetStatus && !canAddToSidebar && (
+						{/* Rename. The title has always been double-clickable, which
+						    nobody finds; this is the same inline editor, reachable. It
+						    edits the workspace name when the header is titled by one,
+						    exactly as the double-click does. */}
+						{onRename && (
 							<Menu.Item
-								onClick={() => {
-									setOverflowOpen(false);
-									onSetStatus(claimSessions, claimed ? null : "mine");
-								}}
+								onClick={() => setRenameDraft(workspaceName || session.title)}
 								title={
-									claimed
-										? "Drop this workspace from your sidebar lanes"
-										: "Keep this workspace in your own sidebar lanes"
+									workspaceName
+										? "Rename this workspace"
+										: "Rename this session"
 								}
 							>
-								<IconInbox size={20} className={MENU_ICON} />
+								<IconPencil size={20} className={MENU_ICON} />
 								<span className="grow">
-									{claimed
-										? "Remove from my workspaces"
-										: "Add to my workspaces"}
+									{workspaceName ? "Rename workspace" : "Rename session"}
 								</span>
 							</Menu.Item>
 						)}
+						{/* Claim this workspace into your own sidebar lanes: the twin of
+						    the sidebar row's right-click action, for when you're already
+						    reading the session (an automation run, a teammate's workspace)
+						    and want it in your own list. Per-user: it moves nothing for
+						    anyone else. Offered only while it is NOT in your sidebar, so
+						    the row states a fact you can act on rather than toggling
+						    under the same name. Dropping one again stays on the sidebar
+						    row itself, next to the list it would leave. */}
+						{onSetStatus && !canAddToSidebar && !claimed && (
+							<Menu.Item
+								onClick={() => {
+									setOverflowOpen(false);
+									onSetStatus(claimSessions, "mine");
+								}}
+								title="Keep this workspace in your own sidebar lanes"
+							>
+								<IconInbox size={20} className={MENU_ICON} />
+								<span className="grow">Add to my sidebar</span>
+							</Menu.Item>
+						)}
 					</>
+				);
+				// Fork: a new session carrying this one's history up to its last
+				// answer, so you can take the same context somewhere else without
+				// disturbing this transcript. Forking from a specific message stays on
+				// that message's own menu; this is the "from here" case, which is what
+				// people mean from the header. Both land in the same composer mode.
+				const lastAssistantId = [...entries]
+					.reverse()
+					.find((e) => e.type === "assistant")?.id;
+				const forkAction = canForkSession && lastAssistantId && (
+					<Menu.Item
+						onClick={() => {
+							setOverflowOpen(false);
+							handleFork(lastAssistantId);
+						}}
+						title="Start a new session from this one's history"
+					>
+						<IconBranches size={20} className={MENU_ICON} />
+						<span className="grow">Fork session</span>
+					</Menu.Item>
 				);
 				// Start something from this session. Renders nothing until the session
 				// has an assistant turn to spin off.
@@ -4626,11 +4649,14 @@ export function SessionViewer({
 				const deleteAction = !showDeleteConfirm ? (
 					<Menu.Item
 						closeOnClick={false}
-						className="data-[highlighted]:bg-red-soft data-[highlighted]:text-red data-[highlighted]:[&>svg]:text-red"
+						// Red at rest, not only under the cursor. This is the one row in
+						// the menu that cannot be undone, and a row that looks ordinary
+						// until you are already on it announces that too late.
+						className="text-red data-[highlighted]:bg-red-soft data-[highlighted]:text-red"
 						onClick={() => setShowDeleteConfirm(true)}
 						title="Delete session"
 					>
-						<IconTrash size={20} className={MENU_ICON} />
+						<IconTrash size={20} />
 						<span className="grow">Delete session</span>
 					</Menu.Item>
 				) : (
@@ -4788,6 +4814,7 @@ export function SessionViewer({
 								{(compactHeader || isPhone) && shareAction(true)}
 								<Menu.Separator className={VIEWER_MENU_SEP} />
 								{newSessionAction}
+								{forkAction}
 								{spinOffAction}
 								{transcriptActions}
 								{/* Preview waits for its status before rendering, so it used to
@@ -4922,38 +4949,6 @@ export function SessionViewer({
 					    container (docker/daytona/e2b). Renders nothing for host sessions
 					    — purely from session fields, no container polling. */}
 					<SandboxBadge sessionId={session.id} sandbox={session.sandbox} runner={session.runner} />
-					{/* Lone-session "+ New tab": with no tab strip on screen the affordance
-					    to spawn a sibling session lives here beside the title (⌘⌥N does the
-					    same). The moment the strip appears — a second session, an open view
-					    tab like Review, or a split — its own + takes over and this
-					    disappears, so the two never stack. Phone uses the ⋯
-					    menu's newSessionAction instead. Rendered AS the Button primitive,
-					    like the ⋯ and side-panel controls at the other end of the bar, so
-					    the 32px square, radius, hover wash and press scale match by
-					    construction rather than by hand-matching a chip. */}
-					{!isPhone &&
-						onNewSession &&
-						!tabStripVisible &&
-						workspaceSessions?.length === 1 && (
-							<Tooltip
-								label="New tab in this workspace"
-								shortcut={
-									isApple ? ["⌘", "⌥", "N"] : ["Ctrl", "Alt", "N"]
-								}
-							>
-								<Button
-									variant="ghost"
-									size="md"
-									className="flex-none rounded-control text-dim hover:bg-hover hover:text-fg"
-									onClick={() => onNewSession("share")}
-									aria-label="New tab"
-									// 22, the standard standalone step the ⋯ and side-panel
-									// glyphs use. IconPlus now draws the set's 14.5 span, so it
-									// lands at their size and weight without a bump.
-									icon={<IconPlus size={22} />}
-								/>
-							</Tooltip>
-						)}
 					{onOpenSession && (parentSession || (workerSessions && workerSessions.length > 0)) && (
 						<SessionRelations
 							parent={parentSession}
@@ -4977,14 +4972,52 @@ export function SessionViewer({
 							Archived
 						</button>
 					)}
-					{/* This workspace's own menu, at the end of its own cluster. It used
-					    to sit at the far right of the bar, a whole header away from the
-					    thing it acts on and mixed in with the status controls; here it
-					    reads as belonging to the name, and the right end is left to say
-					    what the workspace is doing. Pulled in a little because the
-					    button pads its own glyph, so the row's 10px gap would read as
-					    closer to 15. */}
-					{!isPhone && <div className="-ml-1 flex-none">{overflowMenu}</div>}
+					{/* This workspace's own controls, at the end of its own cluster: the
+					    ⋯ menu, then the lone-session "+ New tab". The menu used to sit at
+					    the far right of the bar, a whole header away from the thing it
+					    acts on and mixed in with the status controls; here it reads as
+					    belonging to the name, and the right end is left to say what the
+					    workspace is doing. The two are 32px ghost squares, so they take
+					    the icon cluster's own 2px gap rather than the row's 10px and read
+					    as one pair, and the pair is pulled in a little because each
+					    button already pads its own glyph. */}
+					{!isPhone && (
+						<div className="-ml-1 flex flex-none items-center gap-0.5">
+							{overflowMenu}
+							{/* With no tab strip on screen the affordance to spawn a sibling
+							    session lives here beside the title (⌘⌥N does the same). The
+							    moment the strip appears, whether from a second session, an
+							    open view tab like Review, or a split, its own + takes over
+							    and this disappears, so the two never stack. Phone uses the ⋯
+							    menu's newSessionAction instead. Rendered AS the Button
+							    primitive, like the ⋯ beside it and the side-panel control at
+							    the other end of the bar, so the 32px square, radius, hover
+							    wash and press scale match by construction rather than by
+							    hand-matching a chip. */}
+							{onNewSession &&
+								!tabStripVisible &&
+								workspaceSessions?.length === 1 && (
+									<Tooltip
+										label="New tab in this workspace"
+										shortcut={
+											isApple ? ["⌘", "⌥", "N"] : ["Ctrl", "Alt", "N"]
+										}
+									>
+										<Button
+											variant="ghost"
+											size="md"
+											className="flex-none rounded-control"
+											onClick={() => onNewSession("share")}
+											aria-label="New tab"
+											// 22, the standard standalone step the ⋯ and side-panel
+											// glyphs use. IconPlus now draws the set's 14.5 span, so
+											// it lands at their size and weight without a bump.
+											icon={<IconPlus size={22} />}
+										/>
+									</Tooltip>
+								)}
+						</div>
+					)}
 				</div>
 				<div className={VIEWER_HEADER_ACTIONS} ref={headerActionsRef}>
 					{!isPhone && secondaryActions(false)}

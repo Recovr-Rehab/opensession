@@ -3,7 +3,7 @@ import React, { useRef, useState } from "react";
 import { Button } from "../ui/button";
 import { Menu, MENU_ICON } from "../ui/menu";
 import { Modal } from "../ui/modal";
-import { IconBranches, IconChevronRight } from "./icons";
+import { IconChevronRight, IconSparkle } from "./icons";
 import type { UnifiedSession, TranscriptEntry } from "../lib/types";
 import { getCurrentUser } from "./UserPicker";
 import { Field, fieldClasses } from "../ui/input";
@@ -142,7 +142,10 @@ export function SpinOffMenu({ session, entries, send, connected }: Props) {
     <>
       <Menu.SubmenuRoot open={menuOpen} onOpenChange={setMenuOpen}>
         <Menu.SubmenuTrigger title="Spin off a new session from this one">
-          <IconBranches size={20} className={MENU_ICON} />
+          {/* Not the branch glyph: Fork sits directly above this row in
+              the session menu and owns it. Spin off hands the transcript to
+              a fresh agent run rather than branching this one. */}
+          <IconSparkle size={20} className={MENU_ICON} />
           <span className="grow">Spin off</span>
           <IconChevronRight size={16} className="text-faint" />
         </Menu.SubmenuTrigger>
