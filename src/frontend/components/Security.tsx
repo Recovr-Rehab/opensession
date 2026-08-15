@@ -212,7 +212,7 @@ export function Security({ onOpenSession }: Props) {
                 <div className={CARD_TOP}>
                   <span className={CARD_NAME}>{p.name}</span>
                   <div className={CARD_ACTIONS}>
-                    <Button size="sm" onClick={() => setEditProfile(p)}>
+                    <Button size="sm" variant="outline" onClick={() => setEditProfile(p)}>
                       Edit
                     </Button>
                     <Button

@@ -1902,11 +1902,15 @@ export function PrPanel({
           </div>
           <div className="pointer-events-auto flex shrink-0 flex-wrap justify-end gap-2">
             {onOpenSession && (
-              <Button className="text-xs" onClick={onOpenSession}>
+              <Button variant="outline" className="text-xs" onClick={onOpenSession}>
                 Open workspace
               </Button>
             )}
-            <Button className="text-xs" onClick={() => setReviewing(false)}>
+            <Button
+              variant="outline"
+              className="text-xs"
+              onClick={() => setReviewing(false)}
+            >
               Exit review
             </Button>
             {pr.state === "OPEN" && !pr.isDraft && caps.reviewComments && (

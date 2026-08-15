@@ -70,6 +70,7 @@ export function PreviewPane({
 				</div>
 				<Button
 					size="sm"
+					variant="outline"
 					disabled={!url}
 					onClick={() => setReloadNonce((n) => n + 1)}
 				>
@@ -77,20 +78,23 @@ export function PreviewPane({
 				</Button>
 				<Button
 					size="sm"
+					variant="outline"
 					disabled={!url}
 					onClick={() => url && window.open(url, `preview-${session.id}`, "noopener")}
 					title="Open in a separate browser window"
 				>
 					Open in browser
 				</Button>
-				<button
-					className="rounded-control border border-line-strong px-2.5 py-1 text-label font-medium text-dim transition-colors hover:border-red-400 hover:text-red-500 disabled:opacity-40"
+				<Button
+					size="sm"
+					variant="outline"
+					className="hover:border-red hover:text-red"
 					disabled={stopping || (!status?.running && !status?.starting)}
 					onClick={stop}
 					title="Stop the dev server and release its container"
 				>
 					{stopping ? "Stopping…" : "Stop"}
-				</button>
+				</Button>
 			</div>
 			{url ? (
 				<iframe
