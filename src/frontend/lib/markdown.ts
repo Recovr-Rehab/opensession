@@ -331,7 +331,19 @@ function syncRenderedSessionRuns(): void {
   }
 }
 
-function shortSessionId(id: string): string {
+/**
+ * The title we know for a session id, and the abbreviated id to fall back on.
+ * Exported for the composer, which has to NAME a session somewhere a chip
+ * cannot go: the draft is plain text, so a reference in it is the id and only
+ * the id, and the name has to be shown beside the field instead. Same registry
+ * the rendered chips label themselves from, so the draft and the sent message
+ * call a session the same thing.
+ */
+export function sessionTitleFor(id: string): string | undefined {
+  return sessionTitles.get(id);
+}
+
+export function shortSessionId(id: string): string {
   // Legacy `bks-<slug>` ids are already short and cutting them mid-word reads
   // worse than showing the whole thing; only uuid-shaped ids get abbreviated.
   // The trailing-dash trim keeps the cut off a segment boundary — the two

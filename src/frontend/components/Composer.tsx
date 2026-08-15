@@ -10,6 +10,7 @@ import {
   needsComposerHighlight,
 } from "../lib/composer-highlight";
 import { insertPastedSessionId } from "../lib/session-url";
+import { sessionTitleFor, shortSessionId } from "../lib/markdown";
 import { usePeople } from "../lib/people";
 import { ImageThumbs } from "./ImageThumbs";
 import { FileChips } from "./FileChips";
@@ -26,6 +27,7 @@ import {
   IconCrosshair,
   IconCheck,
   IconEye,
+  IconMessage,
   IconNote,
   IconStopSquare,
 } from "./icons";
@@ -796,13 +798,68 @@ export function Composer({
     () => composerMentionRanges(text, people),
     [text, people],
   );
+  const sessionRanges = useMemo(() => composerSessionRanges(text), [text]);
   // A pill's padding is bought out of the space beside it, so the draft pays a
   // wider word space only while it holds one. Both the field and the mirror
   // wear it, or the painted text slides off the caret behind it. Both KINDS of
   // pill ask for it: a session id sits between words exactly as a mention does,
   // and without the room its wash runs up against them.
-  const hasPill =
-    mentionRanges.length > 0 || composerSessionRanges(text).length > 0;
+  const hasPill = mentionRanges.length > 0 || sessionRanges.length > 0;
+
+  // A session in the draft is an id, because the draft is plain text and the id
+  // is what the message has to carry — it is what the agent resolves and what
+  // every client chips. But an id is not what the session is CALLED, and the
+  // mirror cannot show a name in its place: it may only recolour the glyphs the
+  // field lays out, never swap them, or the caret stops landing where the words
+  // are. So the name goes where there is room for it, in the context row above
+  // the field, next to the quote and note chips — the row that already means
+  // "this is attached to the next send, and here is how to take it off".
+  //
+  // Derived from the text rather than stored beside it, which is the whole
+  // reason this is safe: a saved draft, a draft synced from the phone and a
+  // draft you edited by hand all describe themselves. Nothing to fall out of
+  // step, and nothing to lose when a reference is typed rather than pasted.
+  const sessionRefs = useMemo(() => {
+    const seen = new Map<string, { id: string; label: string }>();
+    for (const range of sessionRanges) {
+      if (seen.has(range.id)) continue;
+      seen.set(range.id, {
+        id: range.id,
+        label: sessionTitleFor(range.id) ?? shortSessionId(range.id),
+      });
+    }
+    return [...seen.values()];
+  }, [sessionRanges]);
+
+  // Taking the chip off takes the reference out of the sentence — the chip
+  // names what is in the draft, so leaving the id behind would make it lie. One
+  // space beside it goes too, so removing a reference mid-sentence does not
+  // leave a double space; and the delete runs through execCommand for the same
+  // reason the mention's does, to stay on the field's native undo stack.
+  function removeSessionRef(id: string) {
+    const hits = sessionRanges.filter((r) => r.id === id);
+    if (!hits.length) return;
+    const el = textareaRef.current;
+    const bounds = hits.map((r) => {
+      const end = text[r.end] === " " ? r.end + 1 : r.end;
+      const start =
+        end === r.end && r.start > 0 && text[r.start - 1] === " "
+          ? r.start - 1
+          : r.start;
+      return { start, end };
+    });
+    if (el && bounds.length === 1) {
+      const [only] = bounds;
+      el.focus({ preventScroll: true });
+      el.setSelectionRange(only!.start, only!.end);
+      if (document.execCommand("delete")) return;
+    }
+    let next = text;
+    for (const b of [...bounds].reverse())
+      next = next.slice(0, b.start) + next.slice(b.end);
+    setText(next);
+    el?.focus({ preventScroll: true });
+  }
   useEffect(() => {
     // The textarea scrolls internally at max-height; keep the mirror locked to it.
     const el = textareaRef.current;
@@ -1094,6 +1151,17 @@ export function Composer({
               disabled={disabled}
             />
           )}
+          {sessionRefs.map((ref) => (
+            <ComposerContextChip
+              key={`session:${ref.id}`}
+              icon={<IconMessage size={15} />}
+              label={ref.label}
+              title={`Referencing ${ref.label} (${ref.id})`}
+              onRemove={() => removeSessionRef(ref.id)}
+              removeLabel={`Remove the reference to ${ref.label}`}
+              disabled={disabled}
+            />
+          ))}
         </AnimatePresence>
         <ImageThumbs images={imgs} onRemove={removeImage} disabled={disabled} />
         <FileChips files={fls} onRemove={removeFile} disabled={disabled} />
