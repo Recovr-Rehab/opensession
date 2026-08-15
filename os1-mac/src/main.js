@@ -41,11 +41,47 @@ let APP_ORIGIN = new URL(APP_URL).origin;
 let IN_WINDOW_ORIGINS = [APP_ORIGIN, "https://github.com"];
 
 const stateFile = () => path.join(app.getPath("userData"), "window-state.json");
-// The user-data folder is named after the app, so renaming the app to Open
-// Session left every existing install's saved window behind in the old folder.
-// Read that one when the current one has nothing yet.
-const legacyStateFile = () =>
-  path.join(path.dirname(app.getPath("userData")), "OS\u00b9", "window-state.json");
+
+// Electron names the user-data folder after the app, so renaming the app to
+// Open Session in 0.3.13 pointed every install at an empty folder and left its
+// window bounds and local preferences behind in the old one. Carry those across
+// on the first launch that finds nothing in their place. Caches stay behind:
+// they rebuild themselves, and copying them would only slow the launch.
+//
+// The sign-in cookie cannot come along. macOS encrypts the cookie jar with a
+// Keychain key named after the app ("<name> Safe Storage"), which Electron
+// derives from the bundle name before this file is loaded, so the renamed app
+// has no way to read what the old one wrote. Signing in once is the cost of the
+// rename.
+const LEGACY_APP_NAME = "OS\u00b9";
+// The entries that are state rather than cache: this shell's bounds and zoom,
+// the web app's per-user preferences and unsent drafts, and Chromium's own
+// preferences, which hold the notification grant.
+const MIGRATED_STATE = ["window-state.json", "Local Storage", "Preferences"];
+
+function adoptLegacyUserData() {
+  const current = app.getPath("userData");
+  const legacy = path.join(path.dirname(current), LEGACY_APP_NAME);
+  if (legacy === current) return;
+  for (const entry of MIGRATED_STATE) {
+    const from = path.join(legacy, entry);
+    const to = path.join(current, entry);
+    // Whole entries only, and never over one that is already there. "Local
+    // Storage" is a LevelDB directory, so merging one into another file by file
+    // would corrupt it, and anyone already using the renamed app keeps what
+    // they have.
+    if (!fs.existsSync(from) || fs.existsSync(to)) continue;
+    try {
+      fs.mkdirSync(current, { recursive: true });
+      fs.cpSync(from, to, { recursive: true });
+    } catch {}
+  }
+}
+
+// Before the profile is created, which is why it runs at load rather than on
+// ready: Chromium reads these files as it opens the session.
+adoptLegacyUserData();
+
 let win = null;
 let quitting = false;
 let appReady = false;
@@ -250,12 +286,9 @@ function onScreenBounds(saved) {
 
 function loadWindowState() {
   let saved = null;
-  for (const file of [stateFile(), legacyStateFile()]) {
-    try {
-      saved = JSON.parse(fs.readFileSync(file, "utf8"));
-      break;
-    } catch {}
-  }
+  try {
+    saved = JSON.parse(fs.readFileSync(stateFile(), "utf8"));
+  } catch {}
   return {
     bounds: onScreenBounds(saved) || defaultBounds(),
     maximized: saved?.maximized === true,
