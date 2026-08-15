@@ -274,6 +274,11 @@ export function ComposerAgents({ runs, subagents, plan, onOpenPanel }: Props) {
 				onClick={toggle}
 			>
 				{!open && <span className={cn(liveDot, "size-2")} />}
+				{total === 0 && (
+					<span className="flex-none font-medium text-faint tabular-nums">
+						{planDone}/{planTotal}
+					</span>
+				)}
 				{/* flex-auto, not flex-1: with a zero basis the label would only ever
 				    take the free space left over, so a long phase name stopped pushing
 				    the caret and started truncating a step early. */}
@@ -302,11 +307,6 @@ export function ComposerAgents({ runs, subagents, plan, onOpenPanel }: Props) {
 						</strong>
 					)}
 				</span>
-				{total === 0 && (
-					<span className="flex-none font-medium text-faint tabular-nums">
-						{planDone}/{planTotal}
-					</span>
-				)}
 				<IconChevronDown
 					size={16}
 					className={cn(

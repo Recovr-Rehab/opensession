@@ -43,6 +43,7 @@ describe("ComposerAgents plan summary", () => {
 			html.split("animate-[composer-agents-pulse_1.4s_ease-in-out_infinite]").length - 1,
 		).toBe(1);
 		expect(html).toContain("Simplify the plan markers");
+		expect(html.indexOf("1/3")).toBeLessThan(html.indexOf("Simplify the plan markers"));
 		expect(html).not.toContain("Inspect the current behavior");
 	});
 
@@ -58,6 +59,7 @@ describe("ComposerAgents plan summary", () => {
 		expect(
 			html.split("animate-[composer-agents-pulse_1.4s_ease-in-out_infinite]").length - 1,
 		).toBe(1);
+		expect(html.indexOf("1/3")).toBeLessThan(html.lastIndexOf(">Plan<"));
 		expect(html.match(/Simplify the plan markers/g)).toHaveLength(1);
 	});
 });
