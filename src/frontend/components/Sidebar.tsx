@@ -3108,6 +3108,16 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// default project (lib/session-repo).
 	const rowIsAsk = (row: WsRow) => isAskWorkspace(row.sessions);
 
+	// A repo band only holds rows that file under a project: renderRepoGroups
+	// drops feed-only and scratch rows from every per-repo bucket, and the loose
+	// scratch list it renders instead is drawn from the status lanes, which no
+	// review row reaches. So under a repo grouping those rows keep the top-level
+	// review band. A review being asked of you must not be what vanishes.
+	const rowNestsInRepoBand = (row: WsRow) =>
+		!rowIsFeedOnly(row) && !rowIsScratch(row);
+	const topBandRows = (rows: WsRow[]) =>
+		groupsByRepo ? rows.filter((row) => !rowNestsInRepoBand(row)) : rows;
+
 	// The Snoozed group — the quiet zone, shared by the status lanes (slotted
 	// just above Backlog) and the inbox bands (appended last, after Earlier).
 	// `ns` keeps each repo's copy collapsible on its own.
@@ -3147,18 +3157,32 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		);
 	}
 
-	// The Conductor-style status lanes (Needs input / In progress / …) over a set
-	// of workspace rows. `ns` keeps each repo's lane collapse state independent.
-	// `snoozedRows` (when given) render as a Snoozed group slotted just above
-	// the final Backlog lane — the quiet zone, per the T3-style snooze design.
-	// The Approved lane: reviews you asked for that came back approved, with
-	// the PR still open. It rides inside its repo band beside that project's
-	// status lanes rather than above the bands, so an approval comes back where
-	// the rest of that project's work already is. The repo-less groupings have
-	// no band to nest in, so there it renders at the top of the list.
-	function renderApprovedLane(rows: WsRow[], ns = "") {
-		if (rows.length === 0) return null;
-		const gkey = `${ns}approvedreview`;
+	// A review lane: Needs review, Approved, Awaiting review. Under a repo
+	// grouping each one rides inside its project's band, beside that project's
+	// status lanes, rather than stacked above every band, so a review sits with
+	// the rest of the work it belongs to. The repo-less groupings have no band
+	// to nest in, so there the same lane stands on its own (renderReviewBand).
+	// `ns` keeps each repo's copy collapsible on its own. Needs review draws its
+	// rows with renderReviewWsRow, whose click opens the Review tab, and is the
+	// only lane that also carries session-less PR rows: the GitHub review
+	// requests pointed at you.
+	function renderReviewLane({
+		label,
+		name,
+		rows,
+		prs = [],
+		ns = "",
+		renderRow = renderWsRow,
+	}: {
+		label: string;
+		name: string;
+		rows: WsRow[];
+		prs?: ReviewQueueItem[];
+		ns?: string;
+		renderRow?: (row: WsRow) => React.ReactNode;
+	}) {
+		if (rows.length === 0 && prs.length === 0) return null;
+		const gkey = `${ns}${name}`;
 		const open = isOpen(gkey);
 		return (
 			<div className={SIDEBAR_STATUS_GROUP} data-status-group key={gkey}>
@@ -3176,9 +3200,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					onClick={() => toggleGroup(gkey)}
 				>
 					<span className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_LANE_NAME)}>
-						Approved
+						{label}
 					</span>
-					<span className={SIDEBAR_LANE_COUNT}>{rows.length}</span>
+					<span className={SIDEBAR_LANE_COUNT}>{rows.length + prs.length}</span>
 					<IconChevronDown
 						className={cn(
 							SIDEBAR_GROUP_CHEVRON,
@@ -3188,11 +3212,26 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						style={{ transform: open ? "none" : "rotate(-90deg)" }}
 					/>
 				</button>
-				{rows.filter((r) => open || rowOwnsSelection(r)).map(renderReviewWsRow)}
+				{rows
+					.filter((r) => open || rowOwnsSelection(r))
+					.map((r) => renderRow(r))}
+				{prs.filter((i) => open || prRowSelected(i)).map(renderPrRow)}
 			</div>
 		);
 	}
 
+	// The same lane standing on its own above the project bands: the shape the
+	// repo-less groupings use, and what holds the rows no band can (topBandRows).
+	// Renders nothing when empty, so a group's gap never opens on an absent band.
+	function renderReviewBand(params: Parameters<typeof renderReviewLane>[0]) {
+		const lane = renderReviewLane(params);
+		return lane && <div className={SIDEBAR_GROUP}>{lane}</div>;
+	}
+
+	// The Conductor-style status lanes (Needs input / In progress / …) over a set
+	// of workspace rows. `ns` keeps each repo's lane collapse state independent.
+	// `snoozedRows` (when given) render as a Snoozed group slotted just above
+	// the final Backlog lane: the quiet zone, per the T3-style snooze design.
 	function renderStatusLanes(
 		rows: WsRow[],
 		ns = "",
@@ -3470,18 +3509,35 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			list.push(item);
 			prByRepo.set(item.pr.repo, list);
 		}
-		// Approved rows sit in their repo's band as a lane of their own. They're
+		// The review rows sit in their repo's band as lanes of their own. They're
 		// absent from focusWsRows (every review-band key is), so they're bucketed
-		// separately, and a repo whose only work is an approval still earns a band.
-		const approvedByRepo = new Map<string, WsRow[]>();
-		for (const r of approvedReviewRows)
-			if (!rowIsFeedOnly(r) && !rowIsScratch(r))
-				bucket(approvedByRepo, bandOf(r)).push(r);
+		// separately, and a repo whose only work is a review still earns a band.
+		const reviewByRepo = (source: WsRow[]) => {
+			const map = new Map<string, WsRow[]>();
+			for (const r of source)
+				if (rowNestsInRepoBand(r)) bucket(map, bandOf(r)).push(r);
+			return map;
+		};
+		const needsReviewByRepo = reviewByRepo(needsReviewRows);
+		const approvedByRepo = reviewByRepo(approvedReviewRows);
+		const awaitingReviewByRepo = reviewByRepo(awaitingReviewRows);
+		// The GitHub requests pointed at you ride the Needs review lane, keyed by
+		// the PR's own repo. They stay out of prByRepo, which files its rows into
+		// the status lanes by prItemLane.
+		const requestedPrByRepo = new Map<string, ReviewQueueItem[]>();
+		for (const item of requestedPrItems) {
+			const list = requestedPrByRepo.get(item.pr.repo) || [];
+			list.push(item);
+			requestedPrByRepo.set(item.pr.repo, list);
+		}
 		const present = new Set([
 			...byRepo.keys(),
 			...snoozedByRepo.keys(),
+			...needsReviewByRepo.keys(),
 			...approvedByRepo.keys(),
+			...awaitingReviewByRepo.keys(),
 			...prByRepo.keys(),
+			...requestedPrByRepo.keys(),
 		]);
 		const order = [
 			...repos.filter((r) => present.has(r)),
@@ -3571,9 +3627,18 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				{order.map((repo) => {
 				const rows = byRepo.get(repo) || [];
 				const snoozedRows = snoozedByRepo.get(repo) || [];
+				const needsReviewRepoRows = needsReviewByRepo.get(repo) || [];
 				const approvedRows = approvedByRepo.get(repo) || [];
+				const awaitingRepoRows = awaitingReviewByRepo.get(repo) || [];
 				const prs = prByRepo.get(repo) || [];
-				const urgent = rows.filter((r) => r.status === "needsinput");
+				const requestedPrs = requestedPrByRepo.get(repo) || [];
+				// What a collapsed band must not swallow. A row waiting for input
+				// and a review being asked of you are both blocked on you, and
+				// neither is visible once the band is shut.
+				const urgent =
+					rows.filter((r) => r.status === "needsinput").length +
+					needsReviewRepoRows.length +
+					requestedPrs.length;
 				// Flat mode: rows keep the status-lane ordering (needs input, then
 				// in progress, review, done, backlog) so a live run never sinks
 				// below idle rows; the sort is stable, so activity order holds
@@ -3584,12 +3649,21 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				const gkey = `repo:${repo}`;
 				const open = isOpen(gkey);
 				// A collapsed band still surfaces the selected row(s) so the
-				// open session never hides — without force-opening the band
-				// (which made its chevron a frustrating no-op).
+				// open session never hides, without force-opening the band
+				// (which made its chevron a frustrating no-op). Review rows keep
+				// their own renderer here too, so a click still opens the Review
+				// tab rather than the session.
 				const selectedRows = open
 					? []
-					: [...rows, ...snoozedRows, ...approvedRows].filter(rowOwnsSelection);
-				const selectedPrs = open ? [] : prs.filter(prRowSelected);
+					: [...rows, ...snoozedRows, ...awaitingRepoRows].filter(
+							rowOwnsSelection,
+						);
+				const selectedReviewRows = open
+					? []
+					: [...needsReviewRepoRows, ...approvedRows].filter(rowOwnsSelection);
+				const selectedPrs = open
+					? []
+					: [...prs, ...requestedPrs].filter(prRowSelected);
 				return (
 					<div
 						className={cn(
@@ -3661,18 +3735,22 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								<span className={cn(SIDEBAR_GROUP_COUNT, "shrink-0")}>
 									{rows.length +
 										snoozedRows.length +
+										needsReviewRepoRows.length +
 										approvedRows.length +
-										prs.length}
+										awaitingRepoRows.length +
+										prs.length +
+										requestedPrs.length}
 								</span>
 							</span>
-							{/* Urgent rows must not vanish into a closed band — a collapsed
-							    header wears the count of rows waiting for input. */}
-							{!open && urgent.length > 0 && (
+							{/* Work blocked on you must not vanish into a closed band: a
+							    collapsed header wears the count of rows waiting for input
+							    and of reviews being asked of you. */}
+							{!open && urgent > 0 && (
 								<span
 									className={cn(SIDEBAR_ATTN_COUNT, "bg-blue")}
-									aria-label={`${urgent.length} waiting for input`}
+									aria-label={`${urgent} waiting on you`}
 								>
-									{urgent.length}
+									{urgent}
 								</span>
 							)}
 							<IconChevronDown
@@ -3717,7 +3795,27 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						</button>
 						{open ? (
 							<div className="mt-0.5">
-								{renderApprovedLane(approvedRows, `repo:${repo}::`)}
+								{renderReviewLane({
+									label: "Needs review",
+									name: "needsreview",
+									rows: needsReviewRepoRows,
+									prs: requestedPrs,
+									ns: `repo:${repo}::`,
+									renderRow: renderReviewWsRow,
+								})}
+								{renderReviewLane({
+									label: "Approved",
+									name: "approvedreview",
+									rows: approvedRows,
+									ns: `repo:${repo}::`,
+									renderRow: renderReviewWsRow,
+								})}
+								{renderReviewLane({
+									label: "Awaiting review",
+									name: "awaitingreview",
+									rows: awaitingRepoRows,
+									ns: `repo:${repo}::`,
+								})}
 								{mode === "status"
 									? renderStatusLanes(
 											rows,
@@ -3742,8 +3840,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 										]}
 							</div>
 						) : (
-							(selectedRows.length > 0 || selectedPrs.length > 0) && (
+							(selectedReviewRows.length > 0 ||
+								selectedRows.length > 0 ||
+								selectedPrs.length > 0) && (
 								<div className="mt-0.5">
+									{selectedReviewRows.map(renderReviewWsRow)}
 									{selectedRows.map(renderWsRow)}
 									{selectedPrs.map(renderPrRow)}
 								</div>
@@ -4792,109 +4893,42 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					</div>
 				)}
 
-				{/* ── Needs review: everything waiting on YOUR review — sessions a
-				    teammate asked you to look at (the info panel's Reviewer picker)
-				    and GitHub PRs that requested you. Both are the same ask, so they
-				    share one band; it rides above everything, like a blocked
-				    question. PRs already covered by a workspace row in view are
-				    filtered out of prRowItems, so nothing appears twice. ── */}
-				{(needsReviewRows.length > 0 || requestedPrItems.length > 0) &&
-					(() => {
-						const open = isOpen("needsreview");
-						return (
-							<div className={SIDEBAR_GROUP}>
-								<button
-									className={cn(
-										SIDEBAR_GROUP_HEADER,
-										SIDEBAR_GROUP_HEADER_INSET,
-										SIDEBAR_LANE_HEADER,
-										SIDEBAR_STICKY_LANE,
-										SIDEBAR_STUCK_BACKING,
-									)}
-									data-sticky-head
-									onClick={() => toggleGroup("needsreview")}
-								>
-									<span className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_LANE_NAME)}>
-										Needs review
-									</span>
-									<span className={SIDEBAR_LANE_COUNT}>
-										{needsReviewRows.length + requestedPrItems.length}
-									</span>
-									<IconChevronDown
-										className={cn(
-											SIDEBAR_GROUP_CHEVRON,
-											!open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
-										)}
-										size={12}
-										style={{ transform: open ? "none" : "rotate(-90deg)" }}
-									/>
-								</button>
-								{needsReviewRows
-									.filter(
-										(r) => open || rowOwnsSelection(r),
-									)
-									.map(renderReviewWsRow)}
-								{requestedPrItems
-									.filter((item) => open || prRowSelected(item))
-									.map(renderPrRow)}
-							</div>
-						);
-					})()}
+				{/* ── Needs review: everything waiting on YOUR review, both the
+				    sessions a teammate asked you to look at (the info panel's
+				    Reviewer picker) and the GitHub PRs that requested you. Both are
+				    the same ask, so they share one band, and it rides above
+				    everything like a blocked question. Under a repo grouping each
+				    project's reviews ride that project's own band instead
+				    (renderRepoGroups); what stays here is the rows no band can hold.
+				    PRs already covered by a workspace row in view are filtered out
+				    of prRowItems, so nothing appears twice. ── */}
+				{renderReviewBand({
+					label: "Needs review",
+					name: "needsreview",
+					rows: topBandRows(needsReviewRows),
+					prs: groupsByRepo ? [] : requestedPrItems,
+					renderRow: renderReviewWsRow,
+				})}
 
 				{/* ── Approved: reviews you asked for that came back with a yes and
-				    are still open. Under a repo grouping each one rides its own repo
-				    band as a lane (renderApprovedLane, called from renderRepoGroups).
-				    An approval belongs with the rest of that project's work, not
-				    stacked above every band. The repo-less groupings have no band to
-				    nest in, so there the lane stands on its own here. ── */}
-				{!groupsByRepo && approvedReviewRows.length > 0 && (
-					<div className={SIDEBAR_GROUP}>
-						{renderApprovedLane(approvedReviewRows)}
-					</div>
-				)}
+				    are still open. An approval belongs with the rest of that
+				    project's work rather than stacked above every band, so under a
+				    repo grouping it rides its repo's band as a lane. ── */}
+				{renderReviewBand({
+					label: "Approved",
+					name: "approvedreview",
+					rows: topBandRows(approvedReviewRows),
+					renderRow: renderReviewWsRow,
+				})}
 
 				{/* ── Awaiting review: sessions YOU asked a teammate to review (the
-				    mirror of Needs review). Grouped here so a session you've sent out
-				    for review moves out of the status lanes into one place. ── */}
-				{awaitingReviewRows.length > 0 &&
-					(() => {
-						const open = isOpen("awaitingreview");
-						return (
-							<div className={SIDEBAR_GROUP}>
-								<button
-									className={cn(
-										SIDEBAR_GROUP_HEADER,
-										SIDEBAR_GROUP_HEADER_INSET,
-										SIDEBAR_LANE_HEADER,
-										SIDEBAR_STICKY_LANE,
-										SIDEBAR_STUCK_BACKING,
-									)}
-									data-sticky-head
-									onClick={() => toggleGroup("awaitingreview")}
-								>
-									<span className={cn(SIDEBAR_GROUP_NAME, SIDEBAR_LANE_NAME)}>
-										Awaiting review
-									</span>
-									<span className={SIDEBAR_LANE_COUNT}>
-										{awaitingReviewRows.length}
-									</span>
-									<IconChevronDown
-										className={cn(
-											SIDEBAR_GROUP_CHEVRON,
-											!open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
-										)}
-										size={12}
-										style={{ transform: open ? "none" : "rotate(-90deg)" }}
-									/>
-								</button>
-								{awaitingReviewRows
-									.filter(
-										(r) => open || rowOwnsSelection(r),
-									)
-									.map(renderWsRow)}
-							</div>
-						);
-					})()}
+				    mirror of Needs review). Grouped so a session you've sent out for
+				    review moves out of the status lanes into one place. ── */}
+				{renderReviewBand({
+					label: "Awaiting review",
+					name: "awaitingreview",
+					rows: topBandRows(awaitingReviewRows),
+				})}
 
 				{/* ── Pinned (workspaces, sessions, tickets, PRs, feed items) ── */}
 				{(() => {
