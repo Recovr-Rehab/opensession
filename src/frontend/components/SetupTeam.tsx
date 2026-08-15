@@ -30,8 +30,7 @@ export function TeamSection({
 	title,
 }: {
 	onChanged: () => void | Promise<void>;
-	/** Group label above the roster. Omitted when the page or wizard step is
-	 *  already titled — then the row carries only the button. */
+	/** Optional label above the roster. Defaults to the roster name and count. */
 	title?: React.ReactNode;
 }) {
 	const [members, setMembers] = useState<TeamMember[] | null>(null);
@@ -75,7 +74,7 @@ export function TeamSection({
 					</Button>
 				}
 			>
-				{title}
+				{title ?? `Team members${members ? ` · ${members.length}` : ""}`}
 			</SettingsGroupLabel>
 			<SettingCard>
 				{!members ? (
