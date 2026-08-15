@@ -31,10 +31,11 @@
  *   · `detail-pane` — the same base.css rule, and lib/session-tab-classes.ts
  *     reads `--strip-clearance` off `.detail-pane:has(.session-tab-reorder ~
  *     .session-tab-reorder)`;
- *   · `detail-topbar` / `detail-topbar-title` — base.css makes the row a
- *     native titlebar drag region in the desktop shell (`html.wco
- *     .detail-topbar-title`), which is a rule about an element in a platform
- *     state and cannot be a utility.
+ *   · `detail-topbar` / `detail-topbar-title` — base.css insets the title past
+ *     the traffic lights and the floating nav cluster when the desktop sidebar
+ *     is collapsed, a rule about an element in a platform state that cannot be
+ *     a utility. The title row also wears `wco-chrome`, the one name that makes
+ *     a top-of-pane row draggable in the desktop shell.
  *
  * `workspace-shell`, `right-panel-slot`, `turn-spacer` and `reviews` named
  * nothing outside their own rules, so those names are gone from the markup
@@ -183,7 +184,9 @@ export const DETAIL_TOPBAR =
  * own bottom inset as the single divider above the content.
  */
 export const DETAIL_TOPBAR_TITLE =
-	"detail-topbar-title flex h-[var(--desktop-header-h)] items-center px-4 " +
+	// `m-0`: it is an `h1`, and the app ships no preflight, so the UA margin is
+	// still there to clear.
+	"detail-topbar-title wco-chrome m-0 flex h-[var(--desktop-header-h)] items-center px-4 " +
 	"border-b border-b-divider bg-[var(--topbar-bg)] " +
 	"text-item-title font-semibold text-fg " +
 	"[.detail-topbar:has(+_.session-tabs)_&]:border-b-0 " +

@@ -266,7 +266,7 @@ export function Reports({
 						</header>
 					) : (
 						selected && (
-							<header className="flex h-[var(--desktop-header-h)] shrink-0 items-center gap-4 border-b border-divider px-5">
+							<header className="wco-chrome flex h-[var(--desktop-header-h)] shrink-0 items-center gap-4 border-b border-divider px-5">
 								{/* The name, and nothing else. Quiet on purpose: the report
 								    below opens with these same words as its own first
 								    heading, so a bold black copy of them an inch above was

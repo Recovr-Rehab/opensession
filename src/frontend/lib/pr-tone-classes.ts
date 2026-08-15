@@ -135,15 +135,14 @@ export const CHECK_TEXT: Record<CheckRank, string> = {
  *  info card, where consecutive strips are rows of one card.
  *
  *  The markup also keeps the bare `pr-bar` class, and the checking line keeps
- *  `pr-bar-checking`. Neither styles anything any more — they are hooks for two
- *  rules in base.css that only base.css can express: the Electron/WCO titlebar
- *  drag region (`html.wco .pr-bar`, plus its no-drag carve-outs for anything
- *  interactive) and the reduced-motion block, which kills every animation with
+ *  `pr-bar-checking`. Neither styles anything any more — they are hooks for the
+ *  reduced-motion block in base.css, which kills every animation with
  *  !important and then hands a few liveness signals back. A utility cannot win
  *  against !important, so dropping the hook would silently freeze the
- *  "Checking status…" pulse for anyone on reduced motion and make the strip
- *  undraggable in the desktop shell. Same reason `.markdown` stays on the
- *  description. */
+ *  "Checking status…" pulse for anyone on reduced motion. Same reason
+ *  `.markdown` stays on the description. Where the strip tops a pane it also
+ *  wears `wco-chrome`, which is what makes a row draggable in the desktop
+ *  shell. */
 export const PR_BAR =
 	// A container, so the actions can drop their labels when the panel is
 	// dragged narrow. The panel is resizable, so its width is not a function of

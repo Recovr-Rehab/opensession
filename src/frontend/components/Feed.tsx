@@ -263,7 +263,9 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 			<div className="mx-auto w-full max-w-[920px] px-6 pb-15 pt-7 max-[560px]:px-4 max-[560px]:pb-12 max-[560px]:pt-[18px]">
 				<PageHeader>
 					<div className="min-w-0">
-						<PageTitle>Feed</PageTitle>
+						{/* Phones only. On desktop the app's top bar names the page,
+						    and that row is also what the window is dragged by. */}
+						<PageTitle className="desktop:hidden">Feed</PageTitle>
 						<PageDescription>
 							What the team has been shipping. Pick someone to narrow it, and to
 							put their workspaces in the sidebar.

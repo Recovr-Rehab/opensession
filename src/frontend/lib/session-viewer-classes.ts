@@ -11,10 +11,12 @@
  * Three class names stay on the markup as bare hooks with no styling of their
  * own, because things outside this family name them:
  *
- *   · `viewer-header` — base.css makes the row a native titlebar drag region
- *     in the desktop shell (`html.wco .viewer-header`), with no-drag carve-outs
- *     for everything interactive inside it. That is a rule about descendants of
- *     an element in a platform state; it cannot be a utility;
+ *   · `viewer-header` — base.css insets the row past the traffic lights and the
+ *     floating nav cluster when the desktop sidebar is collapsed
+ *     (`html.wco .app-body.sidebar-collapsed .viewer-header`), a rule about an
+ *     element in a platform state that cannot be a utility. Dragging the window
+ *     by the row comes from `wco-chrome` beside it, the one name every
+ *     top-of-pane row wears;
  *   · `viewer-header-actions` — lib/pr-tone-classes.ts spaces the PR chip off
  *     the row with `[.viewer-header-actions_&]:mx-1.5`;
  *   · `viewer-messages` — base.css's selection policy opts the whole transcript
@@ -55,7 +57,7 @@ import { RAIL_GUTTER_CLASS } from "./message-rail";
  * rests on.
  */
 export const VIEWER_HEADER =
-	"viewer-header flex h-[var(--desktop-header-h)] min-w-0 shrink-0 items-center justify-between gap-3 " +
+	"viewer-header wco-chrome flex h-[var(--desktop-header-h)] min-w-0 shrink-0 items-center justify-between gap-3 " +
 	"bg-surface px-4 " +
 	// Collapsed desktop sidebar: the floating re-open + nav cluster overlays the
 	// pane's left edge, so the row's text starts past it.

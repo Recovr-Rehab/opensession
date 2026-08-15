@@ -244,6 +244,7 @@ export function Archived({ sessions, loaded, onSelect, onChanged }: Props) {
 	return (
 		<PageLayout
 			title="Archived"
+			titleInTopBar
 			description={
 				loaded
 					? archived.length === allArchived.length

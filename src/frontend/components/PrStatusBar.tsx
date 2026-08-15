@@ -744,7 +744,7 @@ export function PrStatusBar({
 			return null;
 		return (
 			<div
-				className={`pr-bar ${PR_BAR} ${PR_BAR_BG.muted} ${PR_BAR_IN_CARD}`}
+				className={`pr-bar wco-chrome ${PR_BAR} ${PR_BAR_BG.muted} ${PR_BAR_IN_CARD}`}
 			>
 				{leading}
 				<span className={`pr-bar-checking ${PR_BAR_CHECKING}`}>Checking status…</span>
@@ -1027,7 +1027,7 @@ export function PrStatusBar({
 	// push, pull and merge. Its other PRs stack underneath, one row each.
 	const primaryRow = (
 		<div
-			className={`pr-bar ${PR_BAR} ${PR_BAR_BG[headlineTone]} ${PR_BAR_IN_CARD}`}
+			className={`pr-bar wco-chrome ${PR_BAR} ${PR_BAR_BG[headlineTone]} ${PR_BAR_IN_CARD}`}
 		>
 			{leading}
 			{pr && (

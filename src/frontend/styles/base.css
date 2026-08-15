@@ -1266,15 +1266,20 @@ html.wco {
 	--desktop-header-h: 52px;
 }
 /* The whole first row doubles as the titlebar — everything interactive in it
-   opts back out so it stays clickable. */
-html.wco .sidebar-brand,
-html.wco .viewer-header,
-html.wco .detail-topbar-title,
-html.wco .pr-bar {
+   opts back out so it stays clickable.
+
+   `wco-chrome` is the opt-in: any row that spans the top of a pane at
+   `--desktop-header-h` carries it, and gets the drag region plus every
+   carve-out below. It is one name rather than a list of them because a row
+   left out of the list is a dead stretch of the window's top edge — the
+   report pages had two such rows, and the window could only be dragged by the
+   sidebar. Rows: the sidebar brand row, the session header, the plain pane
+   title, the PR bar, and both report headers. */
+html.wco .wco-chrome {
 	-webkit-app-region: drag;
 	app-region: drag;
 }
-html.wco :is(.sidebar-brand, .viewer-header, .detail-topbar-title, .pr-bar)
+html.wco .wco-chrome
 	:is(button, a, input, select, textarea, [role="button"], [tabindex]) {
 	-webkit-app-region: no-drag;
 	app-region: no-drag;
@@ -1282,16 +1287,14 @@ html.wco :is(.sidebar-brand, .viewer-header, .detail-topbar-title, .pr-bar)
 /* Chromium withholds pointer events from native drag regions. While a menu is
    mounted, temporarily return the chrome to the page so its outside press can
    dismiss the menu; native dragging resumes as soon as the popup unmounts. */
-html.wco:has(.app-menu-popup)
-	:is(.sidebar-brand, .viewer-header, .detail-topbar-title, .pr-bar) {
+html.wco:has(.app-menu-popup) .wco-chrome {
 	-webkit-app-region: no-drag;
 	app-region: no-drag;
 }
 /* The media lightbox floats over the draggable first row. Electron does not
    reliably let an overlapping sibling carve clickable links out of that row,
    so suspend the underlying drag region while the lightbox is mounted. */
-html.wco:has([data-media-lightbox])
-	:is(.sidebar-brand, .viewer-header, .detail-topbar-title, .pr-bar) {
+html.wco:has([data-media-lightbox]) .wco-chrome {
 	-webkit-app-region: no-drag;
 	app-region: no-drag;
 }
@@ -1346,8 +1349,7 @@ html.wco .app-body.sidebar-collapsed .detail-topbar-title {
    overlapping sibling of the draggable header. The collapsed controls float
    above that header, so make the underlying row non-draggable in this state;
    otherwise it intercepts sidebar/back/forward clicks before they reach DOM. */
-html.wco .app-body.sidebar-collapsed
-	:is(.viewer-header, .detail-topbar-title, .pr-bar) {
+html.wco .app-body.sidebar-collapsed .wco-chrome {
 	-webkit-app-region: no-drag;
 	app-region: no-drag;
 }

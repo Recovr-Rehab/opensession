@@ -61,7 +61,9 @@ export const REPORTS_COLUMN =
  * an edge.
  */
 export const REPORTS_COLUMN_HEADER =
-	"flex h-[var(--desktop-header-h)] shrink-0 items-center gap-2 " +
+	// `wco-chrome`: a row across the top of a pane is where the desktop shell
+	// expects to drag the window from, and base.css hangs that off this one name.
+	"wco-chrome flex h-[var(--desktop-header-h)] shrink-0 items-center gap-2 " +
 	"border-b border-divider bg-surface px-4";
 
 /**

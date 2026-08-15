@@ -17,6 +17,12 @@ interface PageLayoutProps extends Omit<React.ComponentPropsWithoutRef<"div">, "t
 	actions?: React.ReactNode;
 	filters?: React.ReactNode;
 	contentWidth?: PageContentWidth;
+	/**
+	 * Set when the app's top bar already carries this page's name. The title
+	 * then shows on phones only, where that bar is hidden. Two copies of one
+	 * word an inch apart is the alternative.
+	 */
+	titleInTopBar?: boolean;
 }
 
 export function PageLayout({
@@ -25,6 +31,7 @@ export function PageLayout({
 	actions,
 	filters,
 	contentWidth = "default",
+	titleInTopBar,
 	className,
 	children,
 	...props
@@ -45,7 +52,9 @@ export function PageLayout({
 			>
 				<PageHeader>
 					<div>
-						<PageTitle>{title}</PageTitle>
+						<PageTitle className={titleInTopBar ? "desktop:hidden" : undefined}>
+							{title}
+						</PageTitle>
 						{description !== undefined && (
 							<PageDescription>{description}</PageDescription>
 						)}

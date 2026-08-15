@@ -3209,8 +3209,12 @@ export function App(
 	};
 
 	// Plain title shown in the top bar for non-session views (session routes let
-	// the SessionViewer portal its own header in instead). Home stays blank so the
-	// bar collapses (`.detail-topbar:empty`).
+	// the SessionViewer portal its own header in instead). A route left blank
+	// here collapses the bar (`.detail-topbar:empty`), which is right only for a
+	// page that brings a bar of its own: Reports heads both of its columns. Every
+	// other page names itself here rather than in its own body, because in the
+	// desktop shell this row is also the window's titlebar, and a page without
+	// one leaves that stretch of the top edge dead.
 	const topbarTitle: string =
 		route.view === "archived"
 				? "Archived"
@@ -3218,6 +3222,8 @@ export function App(
 					? "Tasks"
 				: route.view === "feed"
 					? "Feed"
+				: route.view === "prs"
+					? "Pull requests"
 				: route.view === "new"
 					? "New session"
 					: route.view === "workspace"
@@ -3935,14 +3941,15 @@ export function App(
 						    bar carries the brand instead. */}
 						{/* `sidebar-brand` / `sidebar-brand-actions` stay as hooks: base.css
 						    drives the WCO/desktop-shell chrome off them (traffic-light
-						    inset, drag regions).
+						    inset). `wco-chrome` is what makes the row a window drag
+						    region there.
 						    The brand trigger carries its own 8px of left padding, so the
 						    row pulls its own in to keep the logo on the list icons'
 						    --sidebar-icon-left column. */}
 						<div
 							ref={setSidebarBrandEl}
 							className={cn(
-								"sidebar-brand h-[var(--desktop-header-h)] min-w-0 shrink-0 items-center justify-start gap-2 py-0 pr-3 pl-[calc(var(--sidebar-icon-left)-8px)]",
+								"sidebar-brand wco-chrome h-[var(--desktop-header-h)] min-w-0 shrink-0 items-center justify-start gap-2 py-0 pr-3 pl-[calc(var(--sidebar-icon-left)-8px)]",
 								// Closes the strip off while the list runs underneath it,
 								// alongside the pane's bar doing the same on its own scroller.
 								SCROLL_EDGE_DIVIDER,
@@ -4247,17 +4254,15 @@ export function App(
 						    strip so the session identity reads first, tabs below it. */}
 						<div className={DETAIL_TOPBAR} ref={setTopbarEl}>
 							{route.view !== "session" &&
-								// A page that heads itself (Archived, Feed) does not take the
-								// bar as well: it would print the same word twice, an inch
-								// apart. The phone keeps the title, where the bar is the
-								// nav bar and the only thing naming the page you pushed.
-								route.view !== "archived" &&
-								route.view !== "feed" &&
 								// A workspace portals in the same header row a session
 								// does (WorkspacePane) rather than taking the plain title.
 								!(route.view === "workspace" && routeWorkspace) &&
 								topbarTitle && (
-								<span className={DETAIL_TOPBAR_TITLE}>{topbarTitle}</span>
+								// The page's heading, not a second copy of one: the pages
+								// that used to print their name here as well now show that
+								// title on phones only, where this bar is hidden and the
+								// nav bar names the page you pushed instead.
+								<h1 className={DETAIL_TOPBAR_TITLE}>{topbarTitle}</h1>
 							)}
 						</div>
 						{!activeTabSplit && renderTabBar(null)}
