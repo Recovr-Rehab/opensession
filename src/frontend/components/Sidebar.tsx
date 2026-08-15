@@ -4153,6 +4153,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			// attribute the compact values key off, so density is a property the
 			// rows inherit rather than a flag every family has to be handed.
 			data-density={density}
+			// The chrome strip above this list is App's, not the sidebar's, and it
+			// draws a hairline while the list runs under it — this is what its
+			// hook (useScrollEdge) finds the scrollport by.
+			data-sidebar-scroll
 			className={cn(
 				"flex w-full min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
 				SIDEBAR_DENSITY_VARS,

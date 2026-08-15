@@ -133,10 +133,44 @@ export const tabSplitDropPreviewClass = (side: "left" | "right") =>
 	"shadow-[inset_0_0_0_1px_color-mix(in_srgb,white_16%,transparent)] " +
 	(side === "left" ? "left-2" : "right-2");
 
+/**
+ * The hairline a chrome row grows once content has scrolled underneath it.
+ *
+ * At rest a bar and the content below it share one fill, so there is no seam
+ * to mark and no line is drawn — that is the resting top row the app settled
+ * on. Content that has scrolled up under the row IS a seam, and this closes it
+ * off for as long as it lasts. The sidebar's chrome strip and the pane's title
+ * bar both take it, so the two halves of the top row answer their own scroller
+ * on the same terms.
+ *
+ * `data-scrolled` is set by `hooks/useScrollEdge.ts`; the module doc there
+ * says why it is an attribute rather than a scroll timeline.
+ *
+ * A pseudo-element rather than a border: a border that appears would jog
+ * everything below it down a pixel, and a permanently-present transparent one
+ * would grow `.detail-topbar` — which has no fixed height — past the 48px the
+ * bars align on. It also keeps `empty:hidden` working, which a real child
+ * would defeat. The flip is `desktop:` only; on phones the bar floats over the
+ * content and dissolves it with a mask instead (see `appHeader`).
+ */
+export const SCROLL_EDGE_DIVIDER =
+	"relative after:pointer-events-none after:absolute after:inset-x-0 " +
+	"after:bottom-0 after:h-px after:bg-divider after:opacity-0 " +
+	"after:transition-opacity after:content-[''] " +
+	"desktop:data-[scrolled]:after:opacity-100";
+
 /** Top bar above the tab strip: the session's header portals in here on
  *  session routes, other views render a plain title. `empty:hidden` collapses
- *  it where there is neither (Home), so it costs no vertical space. */
-export const DETAIL_TOPBAR = "detail-topbar flex min-w-0 shrink-0 flex-col empty:hidden";
+ *  it where there is neither (Home), so it costs no vertical space.
+ *
+ *  A tab strip below the bar already draws the one rule the active tab's
+ *  underline rests on, so the scroll hairline stands down rather than putting
+ *  a second line across the same top block. Written against the pane rather
+ *  than as `:has(+ .session-tabs)`: a split gives each column its own strip,
+ *  nested a level down from this row. */
+export const DETAIL_TOPBAR =
+	`detail-topbar flex min-w-0 shrink-0 flex-col empty:hidden ${SCROLL_EDGE_DIVIDER} ` +
+	"[.detail-pane:has(.session-tabs)_&]:after:content-none";
 
 /**
  * The plain title. Matches `.viewer-header` and the sidebar brand row's height
