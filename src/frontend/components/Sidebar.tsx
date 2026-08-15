@@ -561,7 +561,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// where the real chip lands).
 	const [repoInline, setRepoInline] = useState(true);
 	const headRef = useRef<HTMLDivElement>(null);
-	const titleRef = useRef<HTMLSpanElement>(null);
+	// The heading's own width, whatever is standing in for it: the caption in
+	// your own sidebar, the whole person strip in someone else's.
+	const titleRef = useRef<HTMLElement | null>(null);
 	const actionsRef = useRef<HTMLDivElement>(null);
 	const probeRef = useRef<HTMLSpanElement>(null);
 	// Client-observed run starts, keyed by workspace-row key — the fallback when
@@ -950,6 +952,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			.sort((a, b) => b[1].count - a[1].count || a[1].label.localeCompare(b[1].label))
 			.map(([key, { label }]) => ({ key, label }));
 	}, [sessions, openPrs]);
+
+	// A borrowed sidebar: someone else's lanes, everyone's, or the unassigned
+	// pile. It looks exactly like your own, so the rail changes shape while you
+	// are in one — the tools go, and the person strip becomes the heading.
+	const borrowedLens = filter.person !== "me";
 
 	// Whose lanes these are, for the header title and its reset button. The
 	// facepile's roster is asked first, so a teammate picked on Home is named
@@ -2374,7 +2381,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// hides every group within that band. Searching forces them open.
 	const bandOpen = (band: GroupBand | "workspaces") =>
 		search.trim().length > 0 ? true : !expanded.has(`collapsed:band:${band}`);
-	const workspacesOpen = bandOpen("workspaces");
+	// A borrowed sidebar is its workspaces list: the tools are gone and the
+	// heading is the strip that gets you back out, so there is no caption left
+	// to click and nothing to leave behind if the band stayed collapsed. Your
+	// own collapse comes back with your own sidebar.
+	const workspacesOpen = bandOpen("workspaces") || borrowedLens;
 	// Assignee/label/session filter over the Plain queue; free text rides the
 	// sidebar-wide search box (title/customer/preview).
 	// Generic feed filtering: sidebar search (title/preview + descriptor
@@ -2513,9 +2524,18 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// Tools this width offers at all — the switches below only choose among
 	// these, so a tool that doesn't fit the viewport is never listed as off.
 	const fittingTools = tools.filter((tool) => toolFitsViewport(tool.id, isPhone));
-	const visibleTools = fittingTools.filter(
-		(tool) => !hiddenTools.has(tool.id) && !(productEmpty && tool.id === "prs"),
-	);
+	// None of the tools belong to the person whose sidebar you are borrowing:
+	// Tasks and Catch up are yours, and Feed, Pull requests and Analytics are
+	// the whole team's. Under a heading with someone else's name on it they
+	// read as theirs, so a borrowed sidebar is their workspaces and nothing
+	// else. Another teammate, or your own sidebar back, is a click away in
+	// "Group, filter & sort" — and the strip at the top is the way out.
+	const visibleTools = borrowedLens
+		? []
+		: fittingTools.filter(
+				(tool) =>
+					!hiddenTools.has(tool.id) && !(productEmpty && tool.id === "prs"),
+			);
 
 	const setToolVisible = setSidebarToolVisible;
 
@@ -4200,37 +4220,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				setSidebarMenu({ x: event.clientX, y: event.clientY });
 			}}
 		>
-			{/* Someone else's lens is easy to forget you're in — the lanes look
-			    exactly like yours, just with unfamiliar work in them. So when the
-			    sidebar isn't yours it says so at the very top, and stays there
-			    while the list scrolls under it. The whole strip is the way back. */}
-			{filter.person !== "me" && (
-				<Tooltip label="Back to your workspaces">
-					<button
-						// Not sticky on purpose: the workspaces heading below is
-						// already pinned and carries the same name once this scrolls
-						// away, and a second sticky layer would land on top of it.
-						className="mx-2 mt-2 flex items-center gap-2 rounded-md border-0 bg-blue-soft px-2.5 py-2 text-left text-label text-fg"
-						onClick={() => setFilter({ person: "me" })}
-					>
-						{filter.person !== "everyone" && filter.person !== "unassigned" && (
-							<UserAvatar name={personLensName} size={18} className="shrink-0" />
-						)}
-						{/* Says whose sidebar you're in, which is the thing the pinned
-						    "…'s workspaces" heading below can't say twice without
-						    stuttering — and it's short enough to survive a narrow
-						    sidebar, where the face and the colour carry the rest. */}
-						<span className="min-w-0 flex-1 truncate">
-							{filter.person === "everyone"
-								? "Everyone's sidebar"
-								: filter.person === "unassigned"
-									? "Unassigned work"
-									: `${personLensName}'s sidebar`}
-						</span>
-						<IconX size={15} className="shrink-0 text-dim" aria-hidden="true" />
-					</button>
-				</Tooltip>
-			)}
+			{/* The strip that says whose sidebar this is used to sit here, above
+			    the tools, with the workspaces heading repeating the name a row
+			    lower. It is the heading now — see the Workspaces band below. */}
 			<div
 				className="block max-w-full min-w-0 flex-none"
 				style={{ order: 0 }}
@@ -4473,7 +4465,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			>
 			<div
 				className={cn(
-					"mt-1 px-[16px] pb-0.5 pr-[7px] pt-3",
+					"mt-1 pb-0.5 pt-3",
+					// A caption starts on the rail's 16px text column; the borrowed
+					// lens's strip is a filled bar, so it takes the rows' own 8px
+					// inset instead and lines up with the workspace pills under it.
+					borrowedLens ? "px-2" : "px-[16px] pr-[7px]",
 					SIDEBAR_STICKY_BAND,
 					SIDEBAR_STICKY_BAND_ROW,
 					SIDEBAR_STUCK_BACKING,
@@ -4481,9 +4477,71 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				data-sticky-head
 			>
 				<div
-					className="group/wshead flex min-w-0 items-center gap-1.5 desktop:w-full"
+					className={cn(
+						"group/wshead flex min-w-0 items-center gap-1.5 desktop:w-full",
+						// In someone else's sidebar this row IS the strip: one bar that
+						// names whose lanes these are, takes you back out, and carries
+						// the header's own actions. The name was being said twice —
+						// once by a strip above the tools, once by this heading — and
+						// each said it with its own ✕.
+						borrowedLens &&
+							"w-full rounded-md bg-blue-soft py-1 pl-2 pr-[3px] desktop:h-full desktop:py-0",
+					)}
 					ref={headRef}
 				>
+					{borrowedLens ? (
+						/* Whose lanes these are, and the way out of them. Someone
+						   else's lens is easy to forget you're in — the rail looks
+						   exactly like yours, just with unfamiliar work in it — so it
+						   says so on the one row that stays pinned while the list
+						   scrolls under it. The face and the colour carry it when the
+						   sidebar is too narrow for the name. */
+						<Tooltip label="Back to your workspaces">
+							<button
+								className="group/lens flex min-w-0 items-center gap-2 border-0 bg-transparent p-0 text-left text-label text-fg [font:inherit]"
+								onClick={() => setFilter({ person: "me" })}
+								// The visible label is a name; the button is the way out
+								// of that person's lens, so say both here.
+								aria-label={
+									filter.person === "everyone"
+										? "Everyone's sidebar. Back to your workspaces"
+										: filter.person === "unassigned"
+											? "Unassigned work. Back to your workspaces"
+											: `${personLensName}'s sidebar. Back to your workspaces`
+								}
+								ref={(node) => {
+									titleRef.current = node;
+								}}
+							>
+								{filter.person !== "everyone" &&
+									filter.person !== "unassigned" && (
+										<UserAvatar
+											name={personLensName}
+											size={18}
+											className="shrink-0"
+										/>
+									)}
+								{/* The name alone, not "…'s sidebar": this row is the
+								    sidebar's own heading now, and the sentence version
+								    truncated at the rail's default width for anything
+								    longer than a short first name. The face, the wash and
+								    the ✕ say the rest — it reads as the person filter it
+								    is, the way the repo chip beside it reads. */}
+								<span className="min-w-0 truncate font-semibold">
+									{filter.person === "everyone"
+										? "Everyone"
+										: filter.person === "unassigned"
+											? "Unassigned"
+											: personLensName}
+								</span>
+								<IconX
+									size={15}
+									className="shrink-0 text-dim group-hover/lens:text-fg"
+									aria-hidden="true"
+								/>
+							</button>
+						</Tooltip>
+					) : (
 					<button
 						className="group/wstoggle flex min-w-0 items-center gap-[5px] [font:inherit]"
 						onClick={() => toggleBand("workspaces")}
@@ -4500,26 +4558,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							className={cn(
 								// The band caption, same as SIDEBAR_BAND_LABEL wears one
 								// section down: this heading is written inline rather than
-								// composed from it only because of the lens ink below.
-								"shrink-0 text-label font-semibold group-hover/wshead:text-fg",
-								// Full-strength ink when the lanes aren't yours: this is
-								// the one row that stays pinned while the list scrolls,
-								// so it's what stops a borrowed sidebar reading as your
-								// own from halfway down. (No face here: the row is
-								// narrow, and adding one truncates the name that does
-								// the actual telling; the strip at the top has it.)
-								filter.person === "me" ? "text-dim" : "text-fg",
+								// composed from it only because of the strip above.
+								"shrink-0 text-label font-semibold text-dim group-hover/wshead:text-fg",
 								isPhone && "hidden",
 							)}
-							ref={titleRef}
+							ref={(node) => {
+								titleRef.current = node;
+							}}
 						>
-							{filter.person === "me"
-								? "Workspaces"
-								: filter.person === "unassigned"
-									? "Unassigned workspaces"
-									: filter.person === "everyone"
-										? "All workspaces"
-										: `${personLensName}'s workspaces`}
+							Workspaces
 						</span>
 						<IconChevronDown
 							className={cn(
@@ -4533,25 +4580,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							}}
 						/>
 					</button>
-					{/* Someone else's lens — usually picked from Home's facepile, and
-					    on a phone the sidebar isn't even on screen when that happens.
-					    So the way back to your own lives next to the title that says
-					    whose these are; on phones, where that title is hidden, the
-					    button carries the name itself. */}
-					{filter.person !== "me" && (
-						<Tooltip label="Back to your workspaces">
-							<button
-								className={cn(
-									"ml-1 flex shrink-0 items-center gap-1 rounded-full border-0 bg-transparent text-label text-faint hover:bg-hover hover:text-fg",
-									isPhone ? "px-1.5 py-0.5" : "size-[19px] justify-center",
-								)}
-								onClick={() => setFilter({ person: "me" })}
-								aria-label="Back to your workspaces"
-							>
-								{isPhone && <span className="truncate">{personLensName}</span>}
-								<IconX size={14} />
-							</button>
-						</Tooltip>
 					)}
 					{/* Repo filter chip, inline behind the title when it fits. */}
 					{filter.repo !== "all" && repoInline && (
