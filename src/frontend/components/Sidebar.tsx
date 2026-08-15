@@ -4287,7 +4287,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								// value) the 22px glyph has 3px of margin and the hover pill
 								// stops reading as a row; the compact density's 4px stops at
 								// 30, level with the rows under it rather than below them.
-								`w-full ${SIDEBAR_RAIL_GAP} rounded-row bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[var(--sidebar-tool-pad)] text-control-label font-medium text-dim hover:text-fg`,
+								`w-full ${SIDEBAR_RAIL_GAP} rounded-row bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[var(--sidebar-tool-pad)] text-body font-medium text-dim desktop:text-item-title hover:text-fg`,
 							!isPhone && SIDEBAR_HOVER_LAYER,
 							!isPhone && tool.active && "bg-selected text-fg",
 						);

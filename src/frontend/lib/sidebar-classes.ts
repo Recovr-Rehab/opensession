@@ -281,7 +281,7 @@ export const SIDEBAR_REPO_TILE = "size-[18px] shrink-0 text-meta";
    it stopped reading as the same app as the transcript. On a phone the sidebar
    IS the page, so its rows are the thing being read and stay at body. */
 export const SIDEBAR_GROUP_HEADER =
-	`group/gh flex w-full items-center ${SIDEBAR_RAIL_GAP} rounded-[calc(10px*var(--rf))] border-none bg-transparent text-body font-medium tracking-[0px] text-dim desktop:text-item-title hover:text-fg`;
+	`group/gh flex w-full items-center ${SIDEBAR_RAIL_GAP} rounded-[calc(10px*var(--rf))] border-none bg-transparent font-medium tracking-[0px] text-dim hover:text-fg`;
 
 /**
  * A FULL-LINE heading — a repo or feed band, an automation group, Archived.
@@ -289,7 +289,7 @@ export const SIDEBAR_GROUP_HEADER =
  * the row's 36px box and sits in one regular column with them rather than as a
  * third size between them and the captions.
  *
- * The height only. The hover fill is NOT here, because it answers a different
+ * The height and the row size. The hover fill is NOT here, because it answers a different
  * question — see the height scale at the top of this file: a repo band is a
  * full line but it is a collapse toggle, so it takes no fill, while Archived
  * looks identical and navigates, so it adds {@link SIDEBAR_HOVER_LAYER} at its
@@ -300,7 +300,7 @@ export const SIDEBAR_GROUP_HEADER =
  * gives it.
  */
 export const SIDEBAR_HEADER_ROW =
-	"desktop:h-[var(--sidebar-line-h)] desktop:min-h-[var(--sidebar-line-h)]";
+	"text-body desktop:h-[var(--sidebar-line-h)] desktop:min-h-[var(--sidebar-line-h)] desktop:text-item-title";
 
 /** Left pad aligns the icon with a base row (list 6 + header 10 = 16). */
 export const SIDEBAR_GROUP_HEADER_INSET =
@@ -312,8 +312,9 @@ export const SIDEBAR_GROUP_HEADER_INSET =
  * captions: a size down from the rows, semibold to hold their own at that size,
  * and no leading glyph at all (the rows under them already carry the status
  * marks, and the lane's own name says what it is). Size and weight are what
- * separate a caption from a title, not a third left edge. The phone size is one
- * step up from the desktop caption so it survives arm's-length reading.
+ * separate a caption from a title, not a third left edge. One size at both
+ * widths: a caption a step under the rows it heads still reads as a caption,
+ * and at the meta step it fell in with the count beside it instead.
  *
  * It takes the 28px LABEL height and — pointedly — no hover fill, which is the
  * pairing that makes it read as a caption at all. Given the pill it looked
@@ -321,7 +322,7 @@ export const SIDEBAR_GROUP_HEADER_INSET =
  * rows that lead nowhere between the rows that do.
  */
 export const SIDEBAR_LANE_HEADER =
-	"gap-[5px] pt-[9px] pb-[5px] text-label font-semibold desktop:h-[var(--sidebar-cap-h)] desktop:min-h-[var(--sidebar-cap-h)] desktop:pt-1 desktop:pb-1 desktop:text-meta";
+	"gap-[5px] pt-[9px] pb-[5px] text-label font-semibold desktop:h-[var(--sidebar-cap-h)] desktop:min-h-[var(--sidebar-cap-h)] desktop:pt-1 desktop:pb-1";
 
 /**
  * The heading's own name. `truncate` before any width utility: it is the pair
