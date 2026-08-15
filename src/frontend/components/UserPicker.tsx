@@ -202,9 +202,13 @@ function AuthCard({
 	children?: React.ReactNode;
 }) {
 	return (
-		<div className="relative flex h-screen items-center justify-center overflow-hidden p-6">
+		// Before sign-in there is no sidebar or header, so the desktop shell has
+		// none of the rows it normally makes draggable (base.css, `html.wco`) and
+		// the window cannot be moved at all. The backdrop is the handle here; the
+		// card opts back out so its controls stay clickable.
+		<div className="relative flex h-screen items-center justify-center overflow-hidden p-6 [html.wco_&]:[-webkit-app-region:drag] [html.wco_&]:[app-region:drag]">
 			<AuthBackdrop />
-			<div className="relative w-[400px] max-w-full rounded-2xl bg-surface p-8 text-center shadow-(--auth-card-edge) phone:p-6">
+			<div className="relative w-[400px] max-w-full rounded-2xl bg-surface p-8 text-center shadow-(--auth-card-edge) phone:p-6 [html.wco_&]:[-webkit-app-region:no-drag] [html.wco_&]:[app-region:no-drag]">
 				<img
 					src={`${BASE_PATH}/mac-app-icon.png`}
 					alt=""
@@ -212,7 +216,9 @@ function AuthCard({
 					height={56}
 					className="mx-auto mb-5 block size-14"
 				/>
-				<h1 className="m-0 text-section-title font-semibold text-fg">{title}</h1>
+				{/* Medium, not semibold: at 19px on the card's own paper the heavier
+				    step read as a slab rather than a heading. */}
+				<h1 className="m-0 text-section-title font-medium text-fg">{title}</h1>
 				{children}
 			</div>
 		</div>
@@ -295,7 +301,7 @@ export function UserGate({ children }: { children: React.ReactNode }) {
 		// The same backdrop, so the wait and the card it resolves into are one
 		// screen rather than a white flash and then a picture.
 		return (
-			<div className="relative flex h-screen items-center justify-center overflow-hidden">
+			<div className="relative flex h-screen items-center justify-center overflow-hidden [html.wco_&]:[-webkit-app-region:drag] [html.wco_&]:[app-region:drag]">
 				<AuthBackdrop />
 				{showAuthWait ? (
 					<div role="status" aria-live="polite" className="relative text-supporting text-dim">
