@@ -3,6 +3,7 @@ import { BrandMark } from "./BrandMark";
 import { UserAvatar } from "./UserAvatar";
 import { IconArrowUpRight } from "./icons";
 import { BASE_PATH } from "../lib/base";
+import { PRODUCT_NAME } from "../lib/brand";
 import { usePeople } from "../lib/people";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
@@ -129,34 +130,36 @@ const REDIRECT_ERROR: string | null = (() => {
  *
  * One card, one corner, one width. The corner is the container step of the
  * radius scale (`rounded-2xl`) rather than the card step: nothing is stacked
- * around it, so it is the whole page's shape, and it wants to read as round as
- * the mark above it. No hairline: a block on its own fill is already
- * separated from the page (see src/frontend/AGENTS.md), and the shadow is what
- * says the card arrived over it.
+ * around it, so it is the whole page's shape.
+ *
+ * It carries a hairline, which a card normally does not (see
+ * src/frontend/AGENTS.md). This one sits alone on an empty white page, where a
+ * cast shadow is the only thing drawing its edge and a soft one reads as haze
+ * rather than as lift. The pair is the documented trade: the hairline draws the
+ * shape, so the shadow can pull in to `md` and say only how far off the page
+ * the card is.
+ *
+ * Every screen opens on the product's own icon, the same one the loading
+ * splash shows (index.html), so the app you are signing in to is what you land
+ * on. GitHub is the method, and it is named on the button.
  */
 function AuthCard({
-	mark,
 	title,
 	children,
 }: {
-	/** A 28px brand mark, drawn in the page's own ink on a true circle. */
-	mark?: React.ReactNode;
 	title: string;
 	children?: React.ReactNode;
 }) {
 	return (
 		<div className="flex h-screen items-center justify-center bg-surface p-6">
-			<div className="w-[400px] max-w-full rounded-2xl bg-panel p-8 text-center smooth-shadow-soft phone:p-6">
-				{mark && (
-					// `bg-fg`, not `bg-accent`: this circle is GitHub's mark, and it
-					// should stay ink-on-page in both themes the way GitHub's own
-					// mark does, rather than turning lime with the workspace accent.
-					// `rounded-full` is the one radius that opts out of the app's
-					// squircle, which is exactly right here: the logo is a circle.
-					<span className="mx-auto mb-5 flex size-14 items-center justify-center rounded-full bg-fg text-surface">
-						{mark}
-					</span>
-				)}
+			<div className="w-[400px] max-w-full rounded-2xl border border-line bg-panel p-8 text-center smooth-shadow-md phone:p-6">
+				<img
+					src={`${BASE_PATH}/mac-app-icon.png`}
+					alt=""
+					width={56}
+					height={56}
+					className="mx-auto mb-5 block size-14"
+				/>
 				<h1 className="m-0 text-section-title font-semibold text-fg">{title}</h1>
 				{children}
 			</div>
@@ -304,7 +307,7 @@ export function UserGate({ children }: { children: React.ReactNode }) {
 
 function LocalSessionExpired() {
   return (
-    <AuthCard title="GitHub sign-in expired" mark={<BrandMark name="github" size={28} />}>
+    <AuthCard title="GitHub sign-in expired">
       <AuthCopy>
         Switch to cloud mode, sign in with GitHub, then restart local mode.
       </AuthCopy>
@@ -379,10 +382,7 @@ function GithubSignIn({
   }
 
   return (
-    <AuthCard
-      title={flow ? "Enter this code" : "Sign in"}
-      mark={<BrandMark name="github" size={28} />}
-    >
+    <AuthCard title={flow ? "Enter this code" : `Sign in to ${PRODUCT_NAME}`}>
       {!flow ? (
         <>
           <AuthCopy>
