@@ -1,7 +1,8 @@
 import { BASE_PATH } from "../lib/base";
 import React, { useEffect, useState, useCallback } from "react";
-import { TEAM } from "./UserPicker";
+import { usePeople } from "../lib/people";
 import { BrandMark } from "./BrandTile";
+import { UserAvatar } from "./UserAvatar";
 import { shortModelLabel, splitModelOptions } from "./ModelEffortSelect";
 import { fetchEngines, setModelEngineDefault } from "../lib/api/engines";
 import {
@@ -34,7 +35,15 @@ import {
 import { Switch } from "../ui/switch";
 import { cn } from "../ui/cn";
 import { toast } from "../ui/toast";
-import { IconDotsHorizontal, IconHistory, IconPlug, IconPlus, IconSliders, IconTrash } from "./icons";
+import {
+	IconDotsHorizontal,
+	IconHistory,
+	IconPeople,
+	IconPlug,
+	IconPlus,
+	IconSliders,
+	IconTrash,
+} from "./icons";
 
 // The Settings → Accounts panel: the Claude / Codex subscription accounts
 // session runs draw from, plus the default model new runs start on. Everything
@@ -678,12 +687,19 @@ function OwnerSelect({
 	title?: string;
 	disabled?: boolean;
 }) {
+	// The roster reactively, so the list and the pictures both fill in when
+	// GET /api/people lands rather than only on the next render.
+	const roster = usePeople().map((p) => p.name);
+	// Keep a non-team owner (e.g. set via the API) selectable.
+	const owners = value && !roster.includes(value) ? [value, ...roster] : roster;
 	const items = [
 		{ value: "", label: "Shared pool" },
-		// Keep a non-team owner (e.g. set via the API) selectable.
-		...(value && !TEAM.includes(value) ? [{ value, label: `👤 ${value}` }] : []),
-		...TEAM.map((name) => ({ value: name, label: `👤 ${name}` })),
+		...owners.map((name) => ({ value: name, label: name })),
 	];
+	// The person's own picture, the way every other people picker in the app
+	// draws them. The pool is everyone, so it takes the group glyph.
+	const ownerIcon = (owner: string) =>
+		owner ? <UserAvatar name={owner} size={16} /> : <IconPeople size={16} />;
 	return (
 		<Select.Root
 			items={items}
@@ -691,10 +707,15 @@ function OwnerSelect({
 			disabled={disabled}
 			onValueChange={(next) => onChange(String(next))}
 		>
-			<Select.Trigger aria-label={label} title={title} sizeTo={items.map((i) => i.label)} />
+			<Select.Trigger
+				aria-label={label}
+				title={title}
+				icon={ownerIcon(value)}
+				sizeTo={items.map((i) => i.label)}
+			/>
 			<Select.Popup align="end">
 				{items.map((i) => (
-					<Select.Item key={i.value} value={i.value}>
+					<Select.Item key={i.value} value={i.value} icon={ownerIcon(i.value)}>
 						{i.label}
 					</Select.Item>
 				))}
