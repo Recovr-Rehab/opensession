@@ -200,6 +200,11 @@ import {
 	type FeedFilterValues,
 } from "../lib/sidebar-filter";
 import {
+	automationInPersonLens,
+	automationInRepoLens,
+} from "../lib/automation-audience";
+import { useAutomationOverview } from "../lib/automation-overview";
+import {
 	isClaimed,
 	mineStatus,
 	ownedBy,
@@ -249,6 +254,7 @@ import {
 	WsPrStatusMark,
 	WsStatusMark,
 } from "./sidebar/HoverCards";
+import { AutomationReportRow } from "./sidebar/AutomationReportRow";
 import { DraftRow } from "./sidebar/DraftRow";
 import { SidebarCtxMenu } from "./sidebar/SidebarCtxMenu";
 import { EmptyState, ListSkeleton } from "../ui/state";
@@ -958,6 +964,22 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						people.find((p) => p.key === filter.person)?.label ||
 						filter.person;
 
+	// Who each automation reports to, where it files, and what its last run
+	// concluded. Re-read when automation activity moves rather than on a timer:
+	// a report is published by a run, so a run landing in the list is the only
+	// thing that can have produced a new one.
+	const automationActivityKey = useMemo(() => {
+		let newest = "";
+		let count = 0;
+		for (const s of sessions) {
+			if (!s.automation || s.archived) continue;
+			count++;
+			if (s.lastActivity > newest) newest = s.lastActivity;
+		}
+		return `${count}:${newest}`;
+	}, [sessions]);
+	const automationOverview = useAutomationOverview(automationActivityKey);
+
 	// Every non-archived session, narrowed by the repo/person filters and search.
 	// Rows are built per-workspace below; a session matching the filter surfaces its
 	// whole workspace row.
@@ -987,11 +1009,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			filter.person !== "everyone" &&
 			filter.person !== "unassigned"
 		)
-			visible = visible.filter(
-				(s) =>
-					!s.automation &&
-					!!s.startedBy &&
-					s.startedBy.toLowerCase() === filter.person,
+			visible = visible.filter((s) =>
+				// An automation run has no teammate to compare: it belongs to
+				// whoever the automation reports to, which the Automations band
+				// answers for itself below. Excluding them here instead is what
+				// used to empty that band the moment you looked at a colleague.
+				s.automation
+					? true
+					: !!s.startedBy && s.startedBy.toLowerCase() === filter.person,
 			);
 		if (!search) return visible;
 		const q = search.toLowerCase();
@@ -1237,6 +1262,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	const automationRowSelected = (session: UnifiedSession) =>
 		session.id === selectedId && !selectionBelongsToWorkspaceRow;
 
+	/** An automation group is keyed by name; its report comes from the overview. */
+	const latestReportFor = (name: string) =>
+		automationOverview.get(name)?.latestReport;
+
 	// ── Hidden rows ─────────────────────────────────────────────────────────
 	// "Hide from my sidebar" is the personal counterpart to Archive: archiving
 	// is global (archive.ts), so it's the wrong tool when a teammate is still
@@ -1275,6 +1304,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 
 	// Automations keep their own collapsible band, one group per automation —
 	// hundreds of one-shot runs would drown the Workspaces list otherwise.
+	// The band narrows with the same person and repo lenses the rest of the
+	// sidebar uses, read off the automation rather than off its runs: a run is
+	// started by nobody, so the audience is the automation's own.
 	const groups = useMemo(() => {
 		const out: Group[] = [];
 		const byAutomation = new Map<string, UnifiedSession[]>();
@@ -1288,6 +1320,16 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			byAutomation.set(s.automation, list);
 		}
 		for (const name of Array.from(byAutomation.keys()).sort()) {
+			// An automation the overview hasn't described yet (the fetch is still
+			// out, or it was deleted while its runs remain) stays visible: the
+			// lens can only narrow what it can answer for.
+			const overview = automationOverview.get(name);
+			if (
+				overview &&
+				(!automationInPersonLens(overview, filter.person, currentUser) ||
+					!automationInRepoLens(overview, filter.repo))
+			)
+				continue;
 			out.push({
 				key: `auto:${name}`,
 				label: name,
@@ -1298,7 +1340,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		}
 		return out;
 		// `lanes` feeds pinnedLane (read via the lib cache).
-	}, [sorted, lanes]);
+	}, [
+		sorted,
+		lanes,
+		automationOverview,
+		filter.person,
+		filter.repo,
+		currentUser,
+	]);
 
 	// Sessions in sidebar order (pinned rows first, then each group's items) —
 	// used to hand onArchive the row that should become active when the open
@@ -5365,6 +5414,23 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 												<IconGear size={17} />
 											</span>
 										</button>
+										{/* What the automation last concluded, above the runs
+										    that produced it: the runs are named by their
+										    timestamp, so without this the band says an
+										    automation ran and never what it found. */}
+										{open && latestReportFor(group.label) && (
+											<AutomationReportRow
+												report={latestReportFor(group.label)!}
+												onOpen={() => {
+													const overview = automationOverview.get(group.label);
+													if (overview?.latestReport)
+														onOpenReports({
+															automationId: overview.id,
+															reportId: overview.latestReport.id,
+														});
+												}}
+											/>
+										)}
 										{group.items
 											.filter(() => open)
 											.map((s) => {

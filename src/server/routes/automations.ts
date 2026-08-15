@@ -8,9 +8,11 @@
 
 import type { RouteContext } from "./context";
 import { AUTOMATION_TEMPLATES } from "../automation-templates";
-import { createAutomation, deleteAutomation, getAutomation, isAutomationRunning, listAutomations, retriggerAutomationSession, runAutomation, updateAutomation } from "../automations";
+import { automationRecipients, createAutomation, deleteAutomation, getAutomation, isAutomationRunning, listAutomations, retriggerAutomationSession, runAutomation, updateAutomation } from "../automations";
 import { draftAutomation } from "../draft-automation";
+import { listReportGroups } from "../reports";
 import { invalidateSessionsCache } from "../session-cache";
+import { getWorkspace } from "../workspaces";
 
 export async function handleAutomationsRoutes(
 	ctx: RouteContext,
@@ -43,6 +45,49 @@ export async function handleAutomationsRoutes(
 			isRunning: isAutomationRunning(a.id),
 		}));
 		return Response.json(list);
+	}
+
+	// The lean shape the sidebar's Automations band needs: who each automation
+	// reports to, where it files, and its latest published report — the run's
+	// outcome, which is the thing worth reading in a list of runs. Separate
+	// from the full list above because that one carries every prompt, and the
+	// sidebar loads on every page.
+	if (path === "/api/automations/overview" && req.method === "GET") {
+		const latestByAutomation = new Map(
+			listReportGroups().map((g) => [g.automationId, g.latest]),
+		);
+		return Response.json({
+			automations: listAutomations().map((a) => {
+				const report = latestByAutomation.get(a.id);
+				const workspace = a.workspaceId ? getWorkspace(a.workspaceId) : null;
+				return {
+					id: a.id,
+					name: a.name,
+					enabled: a.enabled,
+					repo: a.repo,
+					workspaceId: workspace?.id,
+					workspaceName: workspace?.name,
+					workspaceRepo: workspace?.repo,
+					// Resolved, not raw: the "unset means the creator" default lives
+					// on the server so no client has to reimplement it.
+					recipients: automationRecipients(a),
+					lastRunAt: a.lastRunAt,
+					lastRunStatus: a.lastRunStatus,
+					lastRunSessionId: a.lastRunSessionId,
+					latestReport: report
+						? {
+								id: report.id,
+								title: report.title,
+								summary: report.summary,
+								urgency: report.urgency,
+								confidence: report.confidence,
+								createdAt: report.createdAt,
+								sessionId: report.sessionId,
+							}
+						: undefined,
+				};
+			}),
+		});
 	}
 
 	if (path === "/api/automations" && req.method === "POST") {

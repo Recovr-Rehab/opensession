@@ -23,6 +23,7 @@ import { createWorktree, ensureAskCheckout, getRepo, listWorktrees, REPOS, workt
 import { engineSessionPatch } from "./sessions";
 import { updateSessionFile } from "./session-cache";
 import { resolvePlainWorkspace } from "./workspace-resolve";
+import { getWorkspace } from "./workspaces";
 import type { NativeSessionFile } from "./types";
 import { stateDir } from "./paths";
 import { linkThreadInIndex, createSlackPostScanner } from "./slack-links";
@@ -147,6 +148,28 @@ export interface Automation {
    * request (422), so a team needs repo access before it works here.
    */
   prReviewer?: string;
+  /**
+   * Who this automation reports to. Person keys in the same space as a
+   * session's `startedBy` (a display name or a verified login), so the
+   * sidebar's person lens can ask "is this one mine?" the same way it asks it
+   * of a session.
+   *
+   * Absent means the creator, which is what almost every automation here
+   * means and what keeps the field optional: nothing had to be backfilled.
+   * An explicitly empty list is the other answer — nobody in particular, a
+   * house automation — and those file under "Unassigned". Read it through
+   * {@link automationRecipients}, never directly, or the default is lost.
+   */
+  recipients?: string[];
+  /**
+   * Workspace this automation files under. The automation belongs to the
+   * workspace; its RUNS stay in the Automations band rather than becoming
+   * workspace rows, because a daily cron would otherwise add a row a day to a
+   * folder meant for work you are doing (see the band's note in Sidebar.tsx).
+   * Promoting one run into the workspace lanes is already a per-user action
+   * (claiming it).
+   */
+  workspaceId?: string;
   enabled: boolean;
   createdBy: string;
   createdAt: string;
@@ -469,6 +492,48 @@ function sanitizePrReviewer(
   return entries.length ? entries.join(",") : undefined;
 }
 
+/**
+ * Who an automation reports to, with the default applied: an unset
+ * `recipients` means its creator. Callers must go through this rather than
+ * reading the field, or an automation nobody edited reads as belonging to
+ * nobody. An explicit `[]` survives as `[]` — that is the deliberate "house
+ * automation" answer, not an absent one.
+ */
+export function automationRecipients(a: Automation): string[] {
+  if (a.recipients) return a.recipients;
+  const creator = (a.createdBy || "").trim();
+  return creator ? [creator] : [];
+}
+
+/** Normalize an audience list; `null` clears it back to the creator default. */
+function sanitizeRecipients(
+  v?: unknown,
+): string[] | { error: string } | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (!Array.isArray(v)) return { error: "recipients must be an array of names" };
+  if (v.length > 16) return { error: "recipients supports at most 16 people" };
+  const out: string[] = [];
+  for (const raw of v) {
+    if (typeof raw !== "string") return { error: "recipients must be strings" };
+    const name = raw.trim();
+    if (!name) continue;
+    if (name.length > 64) return { error: `Recipient "${name}" is too long` };
+    if (!out.some((e) => e.toLowerCase() === name.toLowerCase())) out.push(name);
+  }
+  return out;
+}
+
+/** Validate the workspace an automation files under; ""/nullish clears it. */
+function sanitizeAutomationWorkspace(
+  v?: unknown,
+): string | { error: string } | undefined {
+  if (v === undefined || v === null || v === "") return undefined;
+  if (typeof v !== "string") return { error: "workspaceId must be a string" };
+  const id = v.trim();
+  if (!getWorkspace(id)) return { error: `Unknown workspace "${id}"` };
+  return id;
+}
+
 export function createAutomation(input: {
   name: string;
   prompt: string;
@@ -484,6 +549,8 @@ export function createAutomation(input: {
   mcpServers?: string[];
   repo?: string;
   prReviewer?: string;
+  recipients?: string[];
+  workspaceId?: string;
   selfImprove?: boolean;
   workflows?: boolean;
   claudeCliEnv?: boolean;
@@ -513,6 +580,10 @@ export function createAutomation(input: {
   if (repo && typeof repo === "object") return repo;
   const prReviewer = sanitizePrReviewer(input.prReviewer);
   if (prReviewer && typeof prReviewer === "object") return prReviewer;
+  const recipients = sanitizeRecipients(input.recipients);
+  if (recipients && !Array.isArray(recipients)) return recipients;
+  const workspaceId = sanitizeAutomationWorkspace(input.workspaceId);
+  if (workspaceId && typeof workspaceId === "object") return workspaceId;
   const model = sanitizeModel(input.model);
   if (model && typeof model === "object") return model;
   const fallbackModel = sanitizeModel(input.fallbackModel, true);
@@ -558,6 +629,8 @@ export function createAutomation(input: {
     mcpServers: sanitizeMcpList(input.mcpServers),
     repo,
     prReviewer,
+    recipients,
+    workspaceId,
     selfImprove: input.selfImprove === true || undefined,
     workflows: input.workflows === true || undefined,
     claudeCliEnv: input.claudeCliEnv === true || undefined,
@@ -620,7 +693,7 @@ export function ensureConfiguredAutomations(): void {
 
 export function updateAutomation(
   id: string,
-  patch: Partial<Pick<Automation, "name" | "prompt" | "schedule" | "runOnceAt" | "mode" | "enabled" | "eventKey" | "mcpServers" | "repo" | "prReviewer" | "selfImprove" | "workflows" | "claudeCliEnv" | "codexCliEnv" | "model" | "fallbackModel" | "accountId" | "accountStrict" | "usageCredits" | "sandbox" | "grafanaPoll" | "slackWatch" | "inputs" | "outputs" | "webhookEnabled">>
+  patch: Partial<Pick<Automation, "name" | "prompt" | "schedule" | "runOnceAt" | "mode" | "enabled" | "eventKey" | "mcpServers" | "repo" | "prReviewer" | "recipients" | "workspaceId" | "selfImprove" | "workflows" | "claudeCliEnv" | "codexCliEnv" | "model" | "fallbackModel" | "accountId" | "accountStrict" | "usageCredits" | "sandbox" | "grafanaPoll" | "slackWatch" | "inputs" | "outputs" | "webhookEnabled">>
 ): Automation | { error: string } {
   const a = getAutomation(id);
   if (!a) return { error: "Automation not found" };
@@ -644,6 +717,16 @@ export function updateAutomation(
     const prReviewer = sanitizePrReviewer(patch.prReviewer);
     if (prReviewer && typeof prReviewer === "object") return prReviewer;
     next.prReviewer = prReviewer;
+  }
+  if ("recipients" in patch) {
+    const recipients = sanitizeRecipients(patch.recipients);
+    if (recipients && !Array.isArray(recipients)) return recipients;
+    next.recipients = recipients;
+  }
+  if ("workspaceId" in patch) {
+    const workspaceId = sanitizeAutomationWorkspace(patch.workspaceId);
+    if (workspaceId && typeof workspaceId === "object") return workspaceId;
+    next.workspaceId = workspaceId;
   }
   if ("selfImprove" in patch) next.selfImprove = patch.selfImprove === true || undefined;
   if ("workflows" in patch) next.workflows = patch.workflows === true || undefined;

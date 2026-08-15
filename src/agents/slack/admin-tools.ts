@@ -229,6 +229,18 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             .describe(
               "Reviewer to request on PRs this automation opens — a GitHub login, an 'org/team' slug, or a comma-separated list. Without one the PR reaches nobody's review queue. The target must be a collaborator on the repo."
             ),
+          recipients: z
+            .array(z.string())
+            .optional()
+            .describe(
+              "Who this reports to — the people whose sidebar it appears in under Automations. Omit for whoever created it."
+            ),
+          workspaceId: z
+            .string()
+            .optional()
+            .describe(
+              "Optional workspace id to file this automation under. Its runs stay in the Automations section either way."
+            ),
         },
         async (args: {
           name: string;
@@ -242,6 +254,8 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           accountStrict?: boolean;
           usageCredits?: boolean;
           prReviewer?: string;
+          recipients?: string[];
+          workspaceId?: string;
         }) => {
           const res = createAutomation({
             name: args.name,
@@ -256,6 +270,8 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             accountStrict: args.accountStrict,
             usageCredits: args.usageCredits,
             prReviewer: args.prReviewer,
+            recipients: args.recipients,
+            workspaceId: args.workspaceId,
           });
           if ("error" in res) return text(`Couldn't create it: ${res.error}`);
           // Name the repo back, including when it was defaulted: a routine
@@ -309,6 +325,16 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
             .describe(
               "Reviewer to request on PRs this automation opens — a GitHub login, an 'org/team' slug, or a comma-separated list; '' clears it."
             ),
+          recipients: z
+            .array(z.string())
+            .optional()
+            .describe(
+              "Who this reports to — the people whose sidebar it appears in under Automations. An empty array means nobody in particular, which files it under Unassigned."
+            ),
+          workspaceId: z
+            .string()
+            .optional()
+            .describe("Workspace id to file this automation under; '' clears it."),
         },
         async (args: {
           id: string;
@@ -324,6 +350,8 @@ export function createAdminMcpServer(ctx: AdminToolContext) {
           accountStrict?: boolean;
           usageCredits?: boolean;
           prReviewer?: string;
+          recipients?: string[];
+          workspaceId?: string;
         }) => {
           const { id, ...patch } = args;
           const res = updateAutomation(id, patch);

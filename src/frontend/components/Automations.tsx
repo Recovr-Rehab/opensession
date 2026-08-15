@@ -18,6 +18,8 @@ import {
   type AutomationTemplate,
   type AutomationDraft,
 } from "../lib/api";
+import { fetchWorkspaces } from "../lib/api/workspaces";
+import type { Workspace } from "../lib/types";
 import { getCurrentUser } from "./UserPicker";
 import { CheckStatusIcon } from "./CheckStatusIcon";
 import { IconBolt, IconClock, IconHash, IconPlayOutline, IconPlug, IconPlus } from "./icons";
@@ -46,6 +48,21 @@ const FORM_INLINE = `flex flex-col gap-3.5 ${FORM_FIELDS}`;
 const FORM_CARD = `${FORM_INLINE} rounded-panel bg-panel p-4.5`;
 /** .automation-form label */
 const FIELD_LABEL = "flex flex-1 flex-col gap-1.5 text-label font-medium text-dim";
+
+/**
+ * The "Reports to" field, from what a person typed to what the API takes.
+ * Blank returns null, which clears the stored list so the server's default —
+ * the automation's creator — applies again. The form has no way to say
+ * "nobody", and shouldn't: an automation reporting to no one is a house
+ * routine, set through the API.
+ */
+function parseRecipients(value: string): string[] | null {
+  const names = value
+    .split(",")
+    .map((n) => n.trim())
+    .filter(Boolean);
+  return names.length ? names : null;
+}
 /** .automation-form-title */
 const FORM_TITLE = "text-body font-semibold";
 /** .automation-form-actions */
@@ -115,6 +132,10 @@ interface Automation {
   slackWatch?: { channel: string };
   inputs?: AutomationInput[];
   outputs?: AutomationOutput[];
+  /** Whose sidebar it reports into; absent means its creator. */
+  recipients?: string[];
+  /** Workspace it files under. */
+  workspaceId?: string;
   model?: string;
   fallbackModel?: string;
   accountId?: string;
@@ -1646,6 +1667,14 @@ function AutomationForm({
   const [mcpServers, setMcpServers] = useState<string[] | undefined>(
     initial ? initial.mcpServers : (prefill?.mcpServers ?? (kind === "watch" ? ["slack"] : undefined)),
   );
+  // Who the automation reports to, as the comma-separated list the field
+  // shows. Empty means the creator, which is what the server assumes for
+  // every automation written before an audience existed.
+  const [recipients, setRecipients] = useState(
+    (initial?.recipients || []).join(", "),
+  );
+  const [workspaceId, setWorkspaceId] = useState(initial?.workspaceId || "");
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [model, setModel] = useState(initial?.model || "");
   const [fallbackModel, setFallbackModel] = useState(initial?.fallbackModel || "");
@@ -1663,6 +1692,11 @@ function AutomationForm({
         setModels(m.models);
         setDefaultModel(m.default);
       })
+      .catch(() => {});
+    // Only to name the workspace an automation files under; a failure leaves
+    // the picker on "No workspace" rather than blocking the form.
+    fetchWorkspaces()
+      .then(setWorkspaces)
       .catch(() => {});
   }, []);
   const effectiveModel = model || defaultModel;
@@ -1707,6 +1741,8 @@ function AutomationForm({
           webhookEnabled: isWatch ? false : webhookEnabled,
           inputs: isWatch ? [] : inputs,
           outputs: isWatch ? [] : outputs,
+          recipients: parseRecipients(recipients),
+          workspaceId,
         });
       } else {
         await createAutomationApi({
@@ -1726,6 +1762,8 @@ function AutomationForm({
           webhookEnabled: isWatch ? false : webhookEnabled,
           inputs: isWatch ? undefined : inputs,
           outputs: isWatch ? undefined : outputs,
+          recipients: parseRecipients(recipients) ?? undefined,
+          workspaceId: workspaceId || undefined,
           createdBy: getCurrentUser(),
         });
       }
@@ -1763,6 +1801,38 @@ function AutomationForm({
           placeholder={isWatch ? "Support channel triage" : "Daily PR review sweep"}
         />
       </label>
+
+      <div className="flex gap-3">
+        <label className={FIELD_LABEL}>
+          Reports to
+          <Input
+            value={recipients}
+            onChange={(e) => setRecipients(e.target.value)}
+            placeholder={getCurrentUser() || "Kent, Michiel"}
+          />
+          <span className="mt-1 text-meta leading-snug text-faint">
+            Whose sidebar it appears in. Leave empty for whoever created it.
+          </span>
+        </label>
+        <label className={FIELD_LABEL}>
+          Workspace
+          <Select
+            value={workspaceId}
+            onChange={(e) => setWorkspaceId(e.target.value)}
+          >
+            <option value="">No workspace</option>
+            {workspaces.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name}
+              </option>
+            ))}
+          </Select>
+          <span className="mt-1 text-meta leading-snug text-faint">
+            Files the automation under a workspace. Its runs stay in the
+            Automations section.
+          </span>
+        </label>
+      </div>
 
       {isWatch ? (
         <label className={FIELD_LABEL}>

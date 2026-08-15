@@ -3957,7 +3957,9 @@ export function App(
 							supportTinderActive={route.view === "supporttinder"}
 							onOpenSupportTinder={() => navigate({ view: "supporttinder" })}
 							reportsActive={route.view === "reports"}
-							onOpenReports={() => navigate({ view: "reports" })}
+							onOpenReports={(target) =>
+								navigate({ view: "reports", ...target })
+							}
 							analyticsActive={route.view === "analytics"}
 							onOpenAnalytics={() => navigate({ view: "analytics" })}
 							onSelect={(s) => navigate({ view: "session", id: s.id })}

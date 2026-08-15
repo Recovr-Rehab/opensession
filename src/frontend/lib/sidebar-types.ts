@@ -58,8 +58,14 @@ export interface Props {
 	onOpenSupportTinder: () => void;
 	/** True while the recurring Reports surface is open. */
 	reportsActive: boolean;
-	/** Open automation-produced recurring reports. */
-	onOpenReports: () => void;
+	/**
+	 * Open automation-produced recurring reports. With a target, open that one
+	 * report — what an automation's latest-report row in the sidebar hands over.
+	 */
+	onOpenReports: (target?: {
+		automationId: string;
+		reportId: string;
+	}) => void;
 	/** True while the Analytics surface is open. */
 	analyticsActive: boolean;
 	/** Open the Analytics view (sessions/tokens/models/PRs over time). */

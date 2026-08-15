@@ -143,6 +143,44 @@ export async function fetchAutomations() {
 	});
 }
 
+/**
+ * One automation as the sidebar's Automations band needs it: its audience,
+ * where it files, and the outcome of its latest run. `recipients` arrives
+ * resolved — the server has already applied "unset means the creator" — so a
+ * client never reimplements that default.
+ */
+export interface AutomationOverview {
+	id: string;
+	name: string;
+	enabled: boolean;
+	repo?: string;
+	workspaceId?: string;
+	workspaceName?: string;
+	/** The workspace's own repo, so the repo lens can match through it. */
+	workspaceRepo?: string;
+	recipients: string[];
+	lastRunAt?: string;
+	lastRunStatus?: "running" | "ok" | "error";
+	lastRunSessionId?: string;
+	latestReport?: {
+		id: string;
+		title: string;
+		summary?: string;
+		urgency?: "low" | "medium" | "high" | "critical";
+		confidence?: "low" | "medium" | "high";
+		createdAt: string;
+		sessionId?: string;
+	};
+}
+
+export async function fetchAutomationOverview(): Promise<AutomationOverview[]> {
+	const result = await request<{ automations: AutomationOverview[] }>(
+		"/automations/overview",
+		{ label: "Failed to load automations" },
+	);
+	return result.automations;
+}
+
 export interface AutomationTemplate {
 	id: string;
 	name: string;
@@ -330,6 +368,8 @@ export async function createAutomationApi(input: {
 	webhookEnabled?: boolean;
 	inputs?: unknown[];
 	outputs?: unknown[];
+	recipients?: string[];
+	workspaceId?: string;
 }) {
 	return request<any>("/automations", { method: "POST", body: input });
 }
