@@ -6,6 +6,9 @@ import type { AnalyticsSummary } from "../lib/types";
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
 import { Segmented, SegmentedOption } from "../ui/segmented";
+import { cn } from "../ui/cn";
+import { SCROLL_EDGE_DIVIDER } from "../lib/app-shell-classes";
+import { useScrollEdge } from "../hooks/useScrollEdge";
 
 /**
  * Analytics: what happened on/because of Open Session over a date range —
@@ -342,6 +345,11 @@ export function Analytics() {
 	const [error, setError] = useState("");
 	const [loading, setLoading] = useState(true);
 	const [showAllPrs, setShowAllPrs] = useState(false);
+	// The bar is a sibling above the scroller, so it can't know on its own when
+	// the charts have started travelling under it. The app's own chrome rows ask
+	// the same question the same way.
+	const [barEl, setBarEl] = useState<HTMLElement | null>(null);
+	useScrollEdge(barEl, ".analytics-scroll");
 
 	useEffect(() => {
 		document.title = docTitle("Analytics");
@@ -528,22 +536,37 @@ export function Analytics() {
 		"rounded-control border border-line bg-control px-2.5 py-1.5 text-control-label text-fg [color-scheme:inherit]";
 
 	return (
-		<div className="analytics-viz flex min-h-0 flex-1 flex-col overflow-y-auto bg-bg">
+		<div className="analytics-viz flex min-h-0 flex-1 flex-col bg-bg">
 			<style>{VIZ_STYLE}</style>
-			<div className="mx-auto w-full max-w-[1080px] px-4 pb-10 md:px-6">
-				{/* The range is the one control on this page, and the page is long,
-				    so the bar stays put and the charts pass under it. It carries the
-				    page's own top padding rather than the container, so the stuck
-				    state looks like the resting one. z-20 clears the chart tooltips
-				    (z-10), and the bar spans the content width: nothing is ever
-				    painted in the container's gutters, so it needs no full bleed. */}
-				<header className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-3 bg-bg pt-5 pb-3">
-					<h1 className="m-0 text-section-title font-title tracking-[-0.02em] text-fg">Analytics</h1>
+			{/* The page's own title bar, built the way REPORTS_COLUMN_HEADER is: a
+			    sibling ABOVE the scroller rather than a sticky box inside it, so it
+			    is fixed by construction, spans the pane edge to edge, and the charts
+			    travel out of sight under it. `--desktop-header-h` is the height the
+			    chat header, the sidebar's brand row and the plain pane title all
+			    take, so this lines up with them across the top of the window, and
+			    `wco-chrome` makes that stretch a window drag region in the desktop
+			    shell (base.css exempts the controls in it).
+			    The fill is the page's own, so there is no seam to draw at rest;
+			    SCROLL_EDGE_DIVIDER grows the hairline once something is actually
+			    passing underneath. */}
+			<header
+				ref={setBarEl}
+				className={cn(
+					"wco-chrome flex h-[var(--desktop-header-h)] shrink-0 items-center",
+					"phone:h-auto phone:py-2.5",
+					SCROLL_EDGE_DIVIDER,
+				)}
+			>
+				{/* The bar's fill and hairline run the full pane; its contents keep to
+				    the column the cards below are centred in. Same box as the content
+				    container down there, padding included, so the title sits on the
+				    cards' left edge and the range control on their right. */}
+				<div className="mx-auto flex w-full max-w-[1080px] flex-wrap items-center justify-between gap-3 px-4 md:px-6">
+					<h1 className="m-0 text-item-title font-semibold text-fg">Analytics</h1>
 					{/* On a phone the two controls can't sit beside the title as one
-					    block, and stacking all three costs a third of the sticky bar.
-					    `contents` hands them to the header's own wrap instead, so the
-					    presets ride up next to the title and only the dates take a
-					    second row. */}
+					    block, and stacking all three would treble the bar. `contents`
+					    hands them to the row's own wrap instead, so the presets ride up
+					    next to the title and only the dates take a second row. */}
 					<div className="flex flex-wrap items-center gap-2 phone:contents">
 						{/* A custom range matches no preset, so the control can sit with
 						    nothing pressed — the dates beside it are the value then. */}
@@ -582,459 +605,465 @@ export function Analytics() {
 							/>
 						</div>
 					</div>
-				</header>
+				</div>
+			</header>
 
-				{error && <p className="mt-4 text-body text-red">{error}</p>}
-				{!data && !error && (
-					<div className="flex h-60 items-center justify-center text-body text-dim">Loading analytics…</div>
-				)}
+			<div className="analytics-scroll min-h-0 flex-1 overflow-y-auto">
+				{/* No top padding: every block in here opens with its own `mt-4`,
+				    which is the gap under the bar. */}
+				<div className="mx-auto w-full max-w-[1080px] px-4 pb-10 md:px-6">
+					{error && <p className="mt-4 text-body text-red">{error}</p>}
+					{!data && !error && (
+						<div className="flex h-60 items-center justify-center text-body text-dim">Loading analytics…</div>
+					)}
 
-				{data && derived && (
-					<div className={loading ? "opacity-60 transition-opacity" : "transition-opacity"}>
-						<div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-							<StatTile
-								label="Active sessions"
-								value={fmtInt(data.totals.sessions)}
-								sub={`${fmtInt(data.totals.sessionsCreated)} created in range`}
-							/>
-							<StatTile
-								label="Turns"
-								value={fmtInt(data.totals.turns)}
-								sub={`${fmtInt(data.totals.errors)} errors · ${fmtInt(data.totals.cancelled)} cancelled`}
-							/>
-							<StatTile
-								label="Tokens"
-								value={fmt(derived.totalTokens)}
-								sub={`${fmt(data.totals.inputTokens)} in · ${fmt(data.totals.outputTokens)} out${
-									data.totals.cacheWriteTokens ? ` · ${fmt(data.totals.cacheWriteTokens)} cache write` : ""
-								}`}
-							/>
-							<StatTile
-								label="Cost at list price"
-								value={derived.hasCost ? fmtUsd(derived.costUsd) : "–"}
-								sub={
-									derived.hasCost
-										? `at list price · ${fmt(derived.requests)} model requests`
-										: "no priced requests in range"
-								}
-							/>
-							<StatTile
-								label="Cache reads"
-								value={fmt(data.totals.cacheReadTokens)}
-								sub={`${pct(data.totals.cacheReadTokens, derived.totalTokens)} of all tokens`}
-							/>
-							<StatTile
-								label="Agent time"
-								value={fmt(Math.round(data.totals.durationMs / 3_600_000))}
-								unit="h"
-								sub="wall-clock across turns"
-							/>
-							<StatTile
-								label="PRs opened"
-								value={fmtInt(data.totals.prsOpened)}
-								sub={`of ${fmtInt(data.totals.allPrsOpened)} across repos`}
-							/>
-							<StatTile
-								label="PRs merged"
-								value={fmtInt(data.totals.prsMerged)}
-								sub={
-									data.totals.allPrsMerged
-										? `${Math.round((100 * data.totals.prsMerged) / data.totals.allPrsMerged)}% of all merges`
-										: "no merges in range"
-								}
-							/>
-							<StatTile
-								label="People active"
-								value={fmtInt(data.totals.activePeople)}
-								sub="humans with sessions"
-							/>
-							<StatTile
-								label="Automation runs"
-								value={fmtInt(data.automations.reduce((sum, a) => sum + a.runs, 0))}
-								sub={`across ${fmtInt(data.automations.filter((a) => a.runs > 0).length)} automations`}
-							/>
-						</div>
+					{data && derived && (
+						<div className={loading ? "opacity-60 transition-opacity" : "transition-opacity"}>
+							<div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+								<StatTile
+									label="Active sessions"
+									value={fmtInt(data.totals.sessions)}
+									sub={`${fmtInt(data.totals.sessionsCreated)} created in range`}
+								/>
+								<StatTile
+									label="Turns"
+									value={fmtInt(data.totals.turns)}
+									sub={`${fmtInt(data.totals.errors)} errors · ${fmtInt(data.totals.cancelled)} cancelled`}
+								/>
+								<StatTile
+									label="Tokens"
+									value={fmt(derived.totalTokens)}
+									sub={`${fmt(data.totals.inputTokens)} in · ${fmt(data.totals.outputTokens)} out${
+										data.totals.cacheWriteTokens ? ` · ${fmt(data.totals.cacheWriteTokens)} cache write` : ""
+									}`}
+								/>
+								<StatTile
+									label="Cost at list price"
+									value={derived.hasCost ? fmtUsd(derived.costUsd) : "–"}
+									sub={
+										derived.hasCost
+											? `at list price · ${fmt(derived.requests)} model requests`
+											: "no priced requests in range"
+									}
+								/>
+								<StatTile
+									label="Cache reads"
+									value={fmt(data.totals.cacheReadTokens)}
+									sub={`${pct(data.totals.cacheReadTokens, derived.totalTokens)} of all tokens`}
+								/>
+								<StatTile
+									label="Agent time"
+									value={fmt(Math.round(data.totals.durationMs / 3_600_000))}
+									unit="h"
+									sub="wall-clock across turns"
+								/>
+								<StatTile
+									label="PRs opened"
+									value={fmtInt(data.totals.prsOpened)}
+									sub={`of ${fmtInt(data.totals.allPrsOpened)} across repos`}
+								/>
+								<StatTile
+									label="PRs merged"
+									value={fmtInt(data.totals.prsMerged)}
+									sub={
+										data.totals.allPrsMerged
+											? `${Math.round((100 * data.totals.prsMerged) / data.totals.allPrsMerged)}% of all merges`
+											: "no merges in range"
+									}
+								/>
+								<StatTile
+									label="People active"
+									value={fmtInt(data.totals.activePeople)}
+									sub="humans with sessions"
+								/>
+								<StatTile
+									label="Automation runs"
+									value={fmtInt(data.automations.reduce((sum, a) => sum + a.runs, 0))}
+									sub={`across ${fmtInt(data.automations.filter((a) => a.runs > 0).length)} automations`}
+								/>
+							</div>
 
-						{derived.unmeasuredDays > 0 && (
-							<p className="m-0 mt-2 text-meta text-faint">
-								Tokens and cost cover {shortDate(derived.engineLabels[0])} onwards. The engine keeps about a month of message
-								history, so the earlier {derived.unmeasuredDays === 1 ? "day" : `${derived.unmeasuredDays} days`} of
-								this range have no data left to read. Everything else on this page covers the full range.
-							</p>
-						)}
-
-						<div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
-							<ChartCard title="Sessions per day" subtitle="Distinct sessions with agent activity" series={derived.kindSeries}>
-								<BarChart labels={derived.labels} series={derived.kindSeries} values={derived.kindValues} mode="stacked" />
-							</ChartCard>
-							<ChartCard title="Output tokens per day" subtitle="By model, top 5 in range" series={derived.modelSeries}>
-								<BarChart labels={derived.engineLabels} series={derived.modelSeries} values={derived.modelValues} mode="stacked" />
-							</ChartCard>
-							<ChartCard
-								title="Tokens per day"
-								subtitle="Every token the engines read and wrote, by kind"
-								series={derived.tokenSeries}
-							>
-								<BarChart labels={derived.engineLabels} series={derived.tokenSeries} values={derived.tokenValues} mode="stacked" />
-							</ChartCard>
-							{derived.hasCost && (
-								<ChartCard
-									title="Cost per day at list price"
-									subtitle="By model, top 5 in range"
-									series={derived.costSeries}
-								>
-									<BarChart
-										labels={derived.engineLabels}
-										series={derived.costSeries}
-										values={derived.costValues}
-										mode="stacked"
-										formatValue={fmtUsd}
-										formatTick={fmtUsdTick}
-									/>
-									<p className="m-0 mt-2 text-meta text-faint">
-										What this traffic would have cost on the API, not what was paid: every model runs on a
-										subscription pool. Counted per model request, so tool calls and sub-agents are included.
-									</p>
-								</ChartCard>
+							{derived.unmeasuredDays > 0 && (
+								<p className="m-0 mt-2 text-meta text-faint">
+									Tokens and cost cover {shortDate(derived.engineLabels[0])} onwards. The engine keeps about a month of message
+									history, so the earlier {derived.unmeasuredDays === 1 ? "day" : `${derived.unmeasuredDays} days`} of
+									this range have no data left to read. Everything else on this page covers the full range.
+								</p>
 							)}
-							<ChartCard title="Pull requests per day" subtitle={`Opened & merged from ${PRODUCT_NAME} sessions`} series={derived.prSeries}>
-								<BarChart labels={derived.labels} series={derived.prSeries} values={derived.prValues} mode="grouped" formatValue={fmtInt} />
-							</ChartCard>
-							<ChartCard title="Turns per day" subtitle="Completed turns and errored events" series={derived.turnSeries}>
-								<BarChart labels={derived.labels} series={derived.turnSeries} values={derived.turnValues} mode="grouped" />
-							</ChartCard>
-							<ChartCard
-								title="Review coverage on merges"
-								subtitle="Merged PRs per day, split by whether a human reviewed or commented"
-								series={derived.factorySeries}
-							>
-								<BarChart labels={derived.labels} series={derived.factorySeries} values={derived.factoryValues} mode="stacked" formatValue={fmtInt} />
-							</ChartCard>
-							<ChartCard
-								title="Factory health"
-								subtitle={`Merged PRs in range: agent (${PRODUCT_NAME} sessions) vs everything else`}
-							>
-								<table className="w-full border-collapse text-label">
-									<thead>
-										<tr className="text-left text-meta text-faint">
-											<th className="pb-1.5 font-medium">Metric</th>
-											<th className="pb-1.5 text-right font-medium">Agent PRs</th>
-											<th className="pb-1.5 text-right font-medium">Other PRs</th>
-										</tr>
-									</thead>
-									<tbody>
-										{(() => {
-											const { agent, other } = data.factory;
-											const pct = (c: typeof agent) =>
-												c.merged ? `${Math.round((100 * c.humanReviewed) / c.merged)}%` : "–";
-											const rows: Array<[string, string, string]> = [
-												["Merged", fmtInt(agent.merged), fmtInt(other.merged)],
-												["Human-reviewed", pct(agent), pct(other)],
-												["Rework commits after review (avg)", String(agent.avgReworkCommits), String(other.avgReworkCommits)],
-												["Reverts", fmtInt(agent.reverts), fmtInt(other.reverts)],
-												["Median hours to merge", String(agent.medianHoursToMerge), String(other.medianHoursToMerge)],
-												["Avg lines changed", fmtInt(agent.avgLinesChanged), fmtInt(other.avgLinesChanged)],
-											];
-											return rows.map(([label, a, b]) => (
-												<tr key={label} className="border-t border-line">
-													<td className="py-1.5 text-fg">{label}</td>
-													<td className="py-1.5 text-right tabular-nums text-dim">{a}</td>
-													<td className="py-1.5 text-right tabular-nums text-dim">{b}</td>
-												</tr>
-											));
-										})()}
-									</tbody>
-								</table>
-							</ChartCard>
-							{derived.rq && (
-								<>
+
+							<div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+								<ChartCard title="Sessions per day" subtitle="Distinct sessions with agent activity" series={derived.kindSeries}>
+									<BarChart labels={derived.labels} series={derived.kindSeries} values={derived.kindValues} mode="stacked" />
+								</ChartCard>
+								<ChartCard title="Output tokens per day" subtitle="By model, top 5 in range" series={derived.modelSeries}>
+									<BarChart labels={derived.engineLabels} series={derived.modelSeries} values={derived.modelValues} mode="stacked" />
+								</ChartCard>
+								<ChartCard
+									title="Tokens per day"
+									subtitle="Every token the engines read and wrote, by kind"
+									series={derived.tokenSeries}
+								>
+									<BarChart labels={derived.engineLabels} series={derived.tokenSeries} values={derived.tokenValues} mode="stacked" />
+								</ChartCard>
+								{derived.hasCost && (
 									<ChartCard
-										title="Review finding outcomes"
-										subtitle="Bot findings by day posted; outcomes settle as PRs progress, so recent days show pending"
-										series={derived.reviewSeries}
+										title="Cost per day at list price"
+										subtitle="By model, top 5 in range"
+										series={derived.costSeries}
 									>
 										<BarChart
-											labels={derived.labels}
-											series={derived.reviewSeries}
-											values={derived.reviewValues}
+											labels={derived.engineLabels}
+											series={derived.costSeries}
+											values={derived.costValues}
 											mode="stacked"
-											formatValue={fmtInt}
+											formatValue={fmtUsd}
+											formatTick={fmtUsdTick}
 										/>
+										<p className="m-0 mt-2 text-meta text-faint">
+											What this traffic would have cost on the API, not what was paid: every model runs on a
+											subscription pool. Counted per model request, so tool calls and sub-agents are included.
+										</p>
 									</ChartCard>
-									<ChartCard
-										title="Review quality trend"
-										subtitle={`Earlier vs recent half of the range (split at ${shortDate(derived.splitDate)}). Is the reviewer getting better?`}
-									>
+								)}
+								<ChartCard title="Pull requests per day" subtitle={`Opened & merged from ${PRODUCT_NAME} sessions`} series={derived.prSeries}>
+									<BarChart labels={derived.labels} series={derived.prSeries} values={derived.prValues} mode="grouped" formatValue={fmtInt} />
+								</ChartCard>
+								<ChartCard title="Turns per day" subtitle="Completed turns and errored events" series={derived.turnSeries}>
+									<BarChart labels={derived.labels} series={derived.turnSeries} values={derived.turnValues} mode="grouped" />
+								</ChartCard>
+								<ChartCard
+									title="Review coverage on merges"
+									subtitle="Merged PRs per day, split by whether a human reviewed or commented"
+									series={derived.factorySeries}
+								>
+									<BarChart labels={derived.labels} series={derived.factorySeries} values={derived.factoryValues} mode="stacked" formatValue={fmtInt} />
+								</ChartCard>
+								<ChartCard
+									title="Factory health"
+									subtitle={`Merged PRs in range: agent (${PRODUCT_NAME} sessions) vs everything else`}
+								>
+									<table className="w-full border-collapse text-label">
+										<thead>
+											<tr className="text-left text-meta text-faint">
+												<th className="pb-1.5 font-medium">Metric</th>
+												<th className="pb-1.5 text-right font-medium">Agent PRs</th>
+												<th className="pb-1.5 text-right font-medium">Other PRs</th>
+											</tr>
+										</thead>
+										<tbody>
+											{(() => {
+												const { agent, other } = data.factory;
+												const pct = (c: typeof agent) =>
+													c.merged ? `${Math.round((100 * c.humanReviewed) / c.merged)}%` : "–";
+												const rows: Array<[string, string, string]> = [
+													["Merged", fmtInt(agent.merged), fmtInt(other.merged)],
+													["Human-reviewed", pct(agent), pct(other)],
+													["Rework commits after review (avg)", String(agent.avgReworkCommits), String(other.avgReworkCommits)],
+													["Reverts", fmtInt(agent.reverts), fmtInt(other.reverts)],
+													["Median hours to merge", String(agent.medianHoursToMerge), String(other.medianHoursToMerge)],
+													["Avg lines changed", fmtInt(agent.avgLinesChanged), fmtInt(other.avgLinesChanged)],
+												];
+												return rows.map(([label, a, b]) => (
+													<tr key={label} className="border-t border-line">
+														<td className="py-1.5 text-fg">{label}</td>
+														<td className="py-1.5 text-right tabular-nums text-dim">{a}</td>
+														<td className="py-1.5 text-right tabular-nums text-dim">{b}</td>
+													</tr>
+												));
+											})()}
+										</tbody>
+									</table>
+								</ChartCard>
+								{derived.rq && (
+									<>
+										<ChartCard
+											title="Review finding outcomes"
+											subtitle="Bot findings by day posted; outcomes settle as PRs progress, so recent days show pending"
+											series={derived.reviewSeries}
+										>
+											<BarChart
+												labels={derived.labels}
+												series={derived.reviewSeries}
+												values={derived.reviewValues}
+												mode="stacked"
+												formatValue={fmtInt}
+											/>
+										</ChartCard>
+										<ChartCard
+											title="Review quality trend"
+											subtitle={`Earlier vs recent half of the range (split at ${shortDate(derived.splitDate)}). Is the reviewer getting better?`}
+										>
+											<table className="w-full border-collapse text-label">
+												<thead>
+													<tr className="text-left text-meta text-faint">
+														<th className="pb-1.5 font-medium">Metric</th>
+														<th className="pb-1.5 text-right font-medium">Earlier</th>
+														<th className="pb-1.5 text-right font-medium">Recent</th>
+													</tr>
+												</thead>
+												<tbody>
+													{(() => {
+														const { earlier, recent } = derived.rq;
+														const pct = (v: number | null) => (v === null ? "–" : `${v}%`);
+														const num = (v: number | null) => (v === null ? "–" : String(v));
+														const rows: Array<[string, string, string]> = [
+															["Findings posted", fmtInt(earlier.posted), fmtInt(recent.posted)],
+															["Addressed rate (of settled)", pct(earlier.addressedRate), pct(recent.addressedRate)],
+															["Author pushback", fmtInt(earlier.dismissed), fmtInt(recent.dismissed)],
+															["Ignored at close", fmtInt(earlier.ignored), fmtInt(recent.ignored)],
+															["Missed bugs detected", fmtInt(earlier.missedBugs), fmtInt(recent.missedBugs)],
+															["Reviews run", fmtInt(earlier.reviews), fmtInt(recent.reviews)],
+															["Findings per review", num(earlier.avgFindingsPerReview), num(recent.avgFindingsPerReview)],
+															["Avg merge-confidence", num(earlier.avgConfidence), num(recent.avgConfidence)],
+															["Withheld by noise filter", fmtInt(earlier.withheld), fmtInt(recent.withheld)],
+														];
+														return rows.map(([label, a, b]) => (
+															<tr key={label} className="border-t border-line">
+																<td className="py-1.5 text-fg">{label}</td>
+																<td className="py-1.5 text-right tabular-nums text-dim">{a}</td>
+																<td className="py-1.5 text-right tabular-nums text-dim">{b}</td>
+															</tr>
+														));
+													})()}
+												</tbody>
+											</table>
+											<p className="m-0 mt-2 text-meta text-faint">
+												Addressed = author acted on the finding · pushback = author explicitly rejected it · reviews-run
+												metrics collect from Jul 28 on. High addressed rate + low pushback/missed bugs = healthier reviews.
+											</p>
+										</ChartCard>
+									</>
+								)}
+							</div>
+
+							<div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+								<ChartCard title="Models" subtitle="Tokens and cost per model">
+									<div className="overflow-x-auto">
 										<table className="w-full border-collapse text-label">
 											<thead>
 												<tr className="text-left text-meta text-faint">
-													<th className="pb-1.5 font-medium">Metric</th>
-													<th className="pb-1.5 text-right font-medium">Earlier</th>
-													<th className="pb-1.5 text-right font-medium">Recent</th>
+													{/* Headline numbers first, breakdown after: at phone width the
+													    table scrolls, and Tokens/Cost are what must survive the cut. */}
+													<th className="pb-1.5 font-medium">Model</th>
+													<th className="pb-1.5 text-right font-medium">Requests</th>
+													<th className="pb-1.5 text-right font-medium">Tokens</th>
+													<th className="pb-1.5 text-right font-medium">Cost</th>
+													<th className="pb-1.5 text-right font-medium">In</th>
+													<th className="pb-1.5 text-right font-medium">Out</th>
+													<th className="pb-1.5 text-right font-medium">Cache read</th>
 												</tr>
 											</thead>
 											<tbody>
-												{(() => {
-													const { earlier, recent } = derived.rq;
-													const pct = (v: number | null) => (v === null ? "–" : `${v}%`);
-													const num = (v: number | null) => (v === null ? "–" : String(v));
-													const rows: Array<[string, string, string]> = [
-														["Findings posted", fmtInt(earlier.posted), fmtInt(recent.posted)],
-														["Addressed rate (of settled)", pct(earlier.addressedRate), pct(recent.addressedRate)],
-														["Author pushback", fmtInt(earlier.dismissed), fmtInt(recent.dismissed)],
-														["Ignored at close", fmtInt(earlier.ignored), fmtInt(recent.ignored)],
-														["Missed bugs detected", fmtInt(earlier.missedBugs), fmtInt(recent.missedBugs)],
-														["Reviews run", fmtInt(earlier.reviews), fmtInt(recent.reviews)],
-														["Findings per review", num(earlier.avgFindingsPerReview), num(recent.avgFindingsPerReview)],
-														["Avg merge-confidence", num(earlier.avgConfidence), num(recent.avgConfidence)],
-														["Withheld by noise filter", fmtInt(earlier.withheld), fmtInt(recent.withheld)],
-													];
-													return rows.map(([label, a, b]) => (
-														<tr key={label} className="border-t border-line">
-															<td className="py-1.5 text-fg">{label}</td>
-															<td className="py-1.5 text-right tabular-nums text-dim">{a}</td>
-															<td className="py-1.5 text-right tabular-nums text-dim">{b}</td>
-														</tr>
-													));
-												})()}
+												{data.models.slice(0, 10).map((m) => (
+													<tr key={m.model} className="border-t border-line">
+														<td className="max-w-32 truncate py-1.5 text-fg" title={m.model}>
+															{m.model}
+														</td>
+														<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(m.requests ?? m.turns)}</td>
+														<td className="py-1.5 text-right tabular-nums text-fg">
+															{fmt(
+																m.totalTokens ??
+																	m.inputTokens + m.outputTokens + m.cacheReadTokens + m.cacheWriteTokens,
+															)}
+														</td>
+														<td className="py-1.5 text-right tabular-nums text-dim">{fmtUsdCell(m.costUsd ?? 0)}</td>
+														<td className="py-1.5 text-right tabular-nums text-dim">{fmt(m.inputTokens)}</td>
+														<td className="py-1.5 text-right tabular-nums text-dim">{fmt(m.outputTokens)}</td>
+														<td className="py-1.5 text-right tabular-nums text-dim">{fmt(m.cacheReadTokens)}</td>
+													</tr>
+												))}
 											</tbody>
 										</table>
+									</div>
+									{(data.totals.unpricedRequests ?? 0) > 0 && (
 										<p className="m-0 mt-2 text-meta text-faint">
-											Addressed = author acted on the finding · pushback = author explicitly rejected it · reviews-run
-											metrics collect from Jul 28 on. High addressed rate + low pushback/missed bugs = healthier reviews.
+											A dash means the model carries no catalog price, so its requests are left out of the total.
 										</p>
-									</ChartCard>
-								</>
-							)}
-						</div>
-
-						<div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
-							<ChartCard title="Models" subtitle="Tokens and cost per model">
-								<div className="overflow-x-auto">
-									<table className="w-full border-collapse text-label">
-										<thead>
-											<tr className="text-left text-meta text-faint">
-												{/* Headline numbers first, breakdown after: at phone width the
-												    table scrolls, and Tokens/Cost are what must survive the cut. */}
-												<th className="pb-1.5 font-medium">Model</th>
-												<th className="pb-1.5 text-right font-medium">Requests</th>
-												<th className="pb-1.5 text-right font-medium">Tokens</th>
-												<th className="pb-1.5 text-right font-medium">Cost</th>
-												<th className="pb-1.5 text-right font-medium">In</th>
-												<th className="pb-1.5 text-right font-medium">Out</th>
-												<th className="pb-1.5 text-right font-medium">Cache read</th>
-											</tr>
-										</thead>
-										<tbody>
-											{data.models.slice(0, 10).map((m) => (
-												<tr key={m.model} className="border-t border-line">
-													<td className="max-w-32 truncate py-1.5 text-fg" title={m.model}>
-														{m.model}
-													</td>
-													<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(m.requests ?? m.turns)}</td>
-													<td className="py-1.5 text-right tabular-nums text-fg">
-														{fmt(
-															m.totalTokens ??
-																m.inputTokens + m.outputTokens + m.cacheReadTokens + m.cacheWriteTokens,
-														)}
-													</td>
-													<td className="py-1.5 text-right tabular-nums text-dim">{fmtUsdCell(m.costUsd ?? 0)}</td>
-													<td className="py-1.5 text-right tabular-nums text-dim">{fmt(m.inputTokens)}</td>
-													<td className="py-1.5 text-right tabular-nums text-dim">{fmt(m.outputTokens)}</td>
-													<td className="py-1.5 text-right tabular-nums text-dim">{fmt(m.cacheReadTokens)}</td>
-												</tr>
-											))}
-										</tbody>
-									</table>
-								</div>
-								{(data.totals.unpricedRequests ?? 0) > 0 && (
-									<p className="m-0 mt-2 text-meta text-faint">
-										A dash means the model carries no catalog price, so its requests are left out of the total.
-									</p>
-								)}
-							</ChartCard>
-							<ChartCard title="Repos" subtitle="Sessions, turns and PRs per repo">
-								<div className="overflow-x-auto">
-									<table className="w-full border-collapse text-label">
-										<thead>
-											<tr className="text-left text-meta text-faint">
-												<th className="pb-1.5 font-medium">Repo</th>
-												<th className="pb-1.5 text-right font-medium">Sessions</th>
-												<th className="pb-1.5 text-right font-medium">Turns</th>
-												<th className="pb-1.5 text-right font-medium">Opened</th>
-												<th className="pb-1.5 text-right font-medium">Merged</th>
-												<th className="pb-1.5 text-right font-medium">Share</th>
-											</tr>
-										</thead>
-										<tbody>
-											{data.repos.map((r) => (
-												<tr key={r.repo || "(none)"} className="border-t border-line">
-													<td className={`max-w-32 truncate py-1.5 ${r.repo ? "text-fg" : "text-faint"}`}>
-														{r.repo ? repoLabel(r.repo) : "No repo"}
-													</td>
-													<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(r.sessions || 0)}</td>
-													<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(r.turns || 0)}</td>
-													<td className="py-1.5 text-right tabular-nums text-dim">
-														{fmtInt(r.prsOpened)} <span className="text-faint">/ {fmtInt(r.allOpened)}</span>
-													</td>
-													<td className="py-1.5 text-right tabular-nums text-dim">
-														{fmtInt(r.prsMerged)} <span className="text-faint">/ {fmtInt(r.allMerged)}</span>
-													</td>
-													<td className="py-1.5 text-right tabular-nums text-fg">
-														{r.allMerged ? `${Math.round((100 * r.prsMerged) / r.allMerged)}%` : "–"}
-													</td>
-												</tr>
-											))}
-										</tbody>
-									</table>
-								</div>
-								<p className="m-0 mt-2 text-meta text-faint">
-									Opened/Merged = {PRODUCT_NAME} PRs / all PRs in range · share = {PRODUCT_NAME}'s cut of merges.
-								</p>
-							</ChartCard>
-						</div>
-
-						<div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
-							<ChartCard title="People" subtitle="Sessions and turns per person">
-								<div className="overflow-x-auto">
-									<table className="w-full border-collapse text-label">
-										<thead>
-											<tr className="text-left text-meta text-faint">
-												<th className="pb-1.5 font-medium">Person</th>
-												<th className="pb-1.5 text-right font-medium">Created</th>
-												<th className="pb-1.5 text-right font-medium">Active</th>
-												<th className="pb-1.5 text-right font-medium">Turns</th>
-											</tr>
-										</thead>
-										<tbody>
-											{data.people.slice(0, 12).map((p) => (
-												<tr key={p.name} className="border-t border-line">
-													<td className="max-w-40 truncate py-1.5 text-fg">{p.name}</td>
-													<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(p.sessionsCreated)}</td>
-													<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(p.sessionsActive)}</td>
-													<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(p.turns)}</td>
-												</tr>
-											))}
-										</tbody>
-									</table>
-								</div>
-							</ChartCard>
-							<ChartCard title="Automations" subtitle="Runs, turns and errors per automation">
-								<div className="overflow-x-auto">
-									<table className="w-full border-collapse text-label">
-										<thead>
-											<tr className="text-left text-meta text-faint">
-												<th className="pb-1.5 font-medium">Automation</th>
-												<th className="pb-1.5 text-right font-medium">Runs</th>
-												<th className="pb-1.5 text-right font-medium">Turns</th>
-												<th className="pb-1.5 text-right font-medium">Errors</th>
-											</tr>
-										</thead>
-										<tbody>
-											{data.automations.slice(0, 12).map((a) => (
-												<tr key={a.name} className="border-t border-line">
-													<td className="max-w-44 truncate py-1.5 text-fg" title={a.name}>
-														{a.name}
-													</td>
-													<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(a.runs)}</td>
-													<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(a.turns)}</td>
-													<td className={`py-1.5 text-right tabular-nums ${a.errors ? "text-red" : "text-faint"}`}>
-														{fmtInt(a.errors)}
-													</td>
-												</tr>
-											))}
-										</tbody>
-									</table>
-								</div>
-							</ChartCard>
-						</div>
-
-						{derived.personRepoRows.length > 0 && (
-							<div className="mt-4">
-								<ChartCard
-									title="Repo activity per person"
-									subtitle="Output tokens by repo. Hover a segment for sessions and turns."
-									series={derived.personRepoSeries}
-								>
-									<div className="flex flex-col gap-2">
-										{derived.personRepoRows.map((p) => (
-											<div key={p.name} className="flex items-center gap-3 text-label">
-												<span className="w-[18%] min-w-24 truncate text-fg" title={p.name}>
-													{p.name}
-												</span>
-												<span className="h-3 min-w-0 flex-1">
-													<span
-														className="flex h-3 min-w-3 overflow-hidden rounded-[999px]"
-														style={{ width: `${Math.max(1.5, (100 * p.outputTokens) / derived.maxPersonOutput)}%` }}
-													>
-														{p.segments.map((s) => (
-															<span
-																key={s.repo || "(none)"}
-																className="block h-3"
-																style={{
-																	width: `${(100 * s.outputTokens) / p.outputTokens}%`,
-																	background: derived.repoColor(s.repo),
-																}}
-																title={`${s.repo ? repoLabel(s.repo) : "No repo"}: ${fmtInt(s.sessions)} sessions · ${fmtInt(s.turns)} turns · ${fmt(s.outputTokens)} output`}
-															/>
-														))}
-													</span>
-												</span>
-												<span className="w-14 shrink-0 text-right tabular-nums text-dim">{fmt(p.outputTokens)}</span>
-											</div>
-										))}
-									</div>
-								</ChartCard>
-							</div>
-						)}
-
-						{data.prs.length > 0 && (
-							<div className="mt-4">
-								<ChartCard
-									title={`Pull requests from ${PRODUCT_NAME}`}
-									subtitle={`${fmtInt(data.prs.length)} PRs opened or merged in range`}
-								>
-									<div className="flex flex-col">
-										{(showAllPrs ? data.prs : data.prs.slice(0, 12)).map((pr) => {
-											const state = PR_STATE[pr.state] || PR_STATE.OPEN;
-											return (
-												<a
-													key={`${pr.repo}#${pr.number}`}
-													href={pr.url}
-													target="_blank"
-													rel="noopener noreferrer"
-													className="-mx-2 flex items-center gap-2.5 rounded-row px-2 py-1.5 text-label no-underline hover:bg-hover"
-												>
-													<span
-														className="size-2 shrink-0 rounded-full"
-														style={{ background: state.color }}
-													/>
-													<span className="shrink-0 tabular-nums text-faint">
-														{repoLabel(pr.repo)}#{pr.number}
-													</span>
-													<span className="min-w-0 flex-1 truncate text-fg">{pr.title}</span>
-													<span className="hidden shrink-0 text-faint sm:inline">{state.label}</span>
-													<span className="shrink-0 tabular-nums text-faint">
-														{shortDate(pr.mergedAt || pr.createdAt)}
-													</span>
-												</a>
-											);
-										})}
-									</div>
-									{data.prs.length > 12 && (
-										<Button
-											size="sm"
-											className="mt-2 text-control-label"
-											onClick={() => setShowAllPrs((v) => !v)}
-										>
-											{showAllPrs ? "Show fewer" : `Show all ${fmtInt(data.prs.length)}`}
-										</Button>
 									)}
 								</ChartCard>
+								<ChartCard title="Repos" subtitle="Sessions, turns and PRs per repo">
+									<div className="overflow-x-auto">
+										<table className="w-full border-collapse text-label">
+											<thead>
+												<tr className="text-left text-meta text-faint">
+													<th className="pb-1.5 font-medium">Repo</th>
+													<th className="pb-1.5 text-right font-medium">Sessions</th>
+													<th className="pb-1.5 text-right font-medium">Turns</th>
+													<th className="pb-1.5 text-right font-medium">Opened</th>
+													<th className="pb-1.5 text-right font-medium">Merged</th>
+													<th className="pb-1.5 text-right font-medium">Share</th>
+												</tr>
+											</thead>
+											<tbody>
+												{data.repos.map((r) => (
+													<tr key={r.repo || "(none)"} className="border-t border-line">
+														<td className={`max-w-32 truncate py-1.5 ${r.repo ? "text-fg" : "text-faint"}`}>
+															{r.repo ? repoLabel(r.repo) : "No repo"}
+														</td>
+														<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(r.sessions || 0)}</td>
+														<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(r.turns || 0)}</td>
+														<td className="py-1.5 text-right tabular-nums text-dim">
+															{fmtInt(r.prsOpened)} <span className="text-faint">/ {fmtInt(r.allOpened)}</span>
+														</td>
+														<td className="py-1.5 text-right tabular-nums text-dim">
+															{fmtInt(r.prsMerged)} <span className="text-faint">/ {fmtInt(r.allMerged)}</span>
+														</td>
+														<td className="py-1.5 text-right tabular-nums text-fg">
+															{r.allMerged ? `${Math.round((100 * r.prsMerged) / r.allMerged)}%` : "–"}
+														</td>
+													</tr>
+												))}
+											</tbody>
+										</table>
+									</div>
+									<p className="m-0 mt-2 text-meta text-faint">
+										Opened/Merged = {PRODUCT_NAME} PRs / all PRs in range · share = {PRODUCT_NAME}'s cut of merges.
+									</p>
+								</ChartCard>
 							</div>
-						)}
-					</div>
-				)}
+
+							<div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
+								<ChartCard title="People" subtitle="Sessions and turns per person">
+									<div className="overflow-x-auto">
+										<table className="w-full border-collapse text-label">
+											<thead>
+												<tr className="text-left text-meta text-faint">
+													<th className="pb-1.5 font-medium">Person</th>
+													<th className="pb-1.5 text-right font-medium">Created</th>
+													<th className="pb-1.5 text-right font-medium">Active</th>
+													<th className="pb-1.5 text-right font-medium">Turns</th>
+												</tr>
+											</thead>
+											<tbody>
+												{data.people.slice(0, 12).map((p) => (
+													<tr key={p.name} className="border-t border-line">
+														<td className="max-w-40 truncate py-1.5 text-fg">{p.name}</td>
+														<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(p.sessionsCreated)}</td>
+														<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(p.sessionsActive)}</td>
+														<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(p.turns)}</td>
+													</tr>
+												))}
+											</tbody>
+										</table>
+									</div>
+								</ChartCard>
+								<ChartCard title="Automations" subtitle="Runs, turns and errors per automation">
+									<div className="overflow-x-auto">
+										<table className="w-full border-collapse text-label">
+											<thead>
+												<tr className="text-left text-meta text-faint">
+													<th className="pb-1.5 font-medium">Automation</th>
+													<th className="pb-1.5 text-right font-medium">Runs</th>
+													<th className="pb-1.5 text-right font-medium">Turns</th>
+													<th className="pb-1.5 text-right font-medium">Errors</th>
+												</tr>
+											</thead>
+											<tbody>
+												{data.automations.slice(0, 12).map((a) => (
+													<tr key={a.name} className="border-t border-line">
+														<td className="max-w-44 truncate py-1.5 text-fg" title={a.name}>
+															{a.name}
+														</td>
+														<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(a.runs)}</td>
+														<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(a.turns)}</td>
+														<td className={`py-1.5 text-right tabular-nums ${a.errors ? "text-red" : "text-faint"}`}>
+															{fmtInt(a.errors)}
+														</td>
+													</tr>
+												))}
+											</tbody>
+										</table>
+									</div>
+								</ChartCard>
+							</div>
+
+							{derived.personRepoRows.length > 0 && (
+								<div className="mt-4">
+									<ChartCard
+										title="Repo activity per person"
+										subtitle="Output tokens by repo. Hover a segment for sessions and turns."
+										series={derived.personRepoSeries}
+									>
+										<div className="flex flex-col gap-2">
+											{derived.personRepoRows.map((p) => (
+												<div key={p.name} className="flex items-center gap-3 text-label">
+													<span className="w-[18%] min-w-24 truncate text-fg" title={p.name}>
+														{p.name}
+													</span>
+													<span className="h-3 min-w-0 flex-1">
+														<span
+															className="flex h-3 min-w-3 overflow-hidden rounded-[999px]"
+															style={{ width: `${Math.max(1.5, (100 * p.outputTokens) / derived.maxPersonOutput)}%` }}
+														>
+															{p.segments.map((s) => (
+																<span
+																	key={s.repo || "(none)"}
+																	className="block h-3"
+																	style={{
+																		width: `${(100 * s.outputTokens) / p.outputTokens}%`,
+																		background: derived.repoColor(s.repo),
+																	}}
+																	title={`${s.repo ? repoLabel(s.repo) : "No repo"}: ${fmtInt(s.sessions)} sessions · ${fmtInt(s.turns)} turns · ${fmt(s.outputTokens)} output`}
+																/>
+															))}
+														</span>
+													</span>
+													<span className="w-14 shrink-0 text-right tabular-nums text-dim">{fmt(p.outputTokens)}</span>
+												</div>
+											))}
+										</div>
+									</ChartCard>
+								</div>
+							)}
+
+							{data.prs.length > 0 && (
+								<div className="mt-4">
+									<ChartCard
+										title={`Pull requests from ${PRODUCT_NAME}`}
+										subtitle={`${fmtInt(data.prs.length)} PRs opened or merged in range`}
+									>
+										<div className="flex flex-col">
+											{(showAllPrs ? data.prs : data.prs.slice(0, 12)).map((pr) => {
+												const state = PR_STATE[pr.state] || PR_STATE.OPEN;
+												return (
+													<a
+														key={`${pr.repo}#${pr.number}`}
+														href={pr.url}
+														target="_blank"
+														rel="noopener noreferrer"
+														className="-mx-2 flex items-center gap-2.5 rounded-row px-2 py-1.5 text-label no-underline hover:bg-hover"
+													>
+														<span
+															className="size-2 shrink-0 rounded-full"
+															style={{ background: state.color }}
+														/>
+														<span className="shrink-0 tabular-nums text-faint">
+															{repoLabel(pr.repo)}#{pr.number}
+														</span>
+														<span className="min-w-0 flex-1 truncate text-fg">{pr.title}</span>
+														<span className="hidden shrink-0 text-faint sm:inline">{state.label}</span>
+														<span className="shrink-0 tabular-nums text-faint">
+															{shortDate(pr.mergedAt || pr.createdAt)}
+														</span>
+													</a>
+												);
+											})}
+										</div>
+										{data.prs.length > 12 && (
+											<Button
+												size="sm"
+												className="mt-2 text-control-label"
+												onClick={() => setShowAllPrs((v) => !v)}
+											>
+												{showAllPrs ? "Show fewer" : `Show all ${fmtInt(data.prs.length)}`}
+											</Button>
+										)}
+									</ChartCard>
+								</div>
+							)}
+						</div>
+					)}
+				</div>
 			</div>
 		</div>
 	);
