@@ -282,11 +282,10 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, sk
             {isSession && <span className="shrink-0 self-center rounded-md bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] px-[5px] py-px text-meta font-semibold text-accent">session</span>}
             {/* A teammate is pictured rather than labelled: the face says
                 "person" faster than the word did, and it is the same picture
-                the mention itself carries once it lands in a message. Round
-                here, against the app's usual squircle avatar, because that is
-                what the mention becomes: a circle in the draft, and a circle
-                again in the sent message. */}
-            {isPerson && <UserAvatar name={item.display} size={18} className="self-center rounded-full" />}
+                the mention itself carries once it lands in a message. Plain
+                UserAvatar, so it keeps the app's squircle: the face is the
+                same shape here, in the draft, and in the sent chip. */}
+            {isPerson && <UserAvatar name={item.display} size={18} className="self-center" />}
             {!isSession && !isSkill && !isPerson && item.repo && <span className="shrink-0 self-center rounded-md bg-[color-mix(in_srgb,var(--accent)_14%,transparent)] px-[5px] py-px text-meta font-semibold text-accent">{repoLabel(item.repo)}</span>}
             <span className="shrink-0 font-medium text-fg">{isSkill ? `/${base}` : isDir ? `${base}/` : base}</span>
             {isSession || isSkill || isPerson

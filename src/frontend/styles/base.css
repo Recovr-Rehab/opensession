@@ -1515,7 +1515,7 @@ html.wco .app-body.sidebar-collapsed
    That sets a space at 7.2px, and the wash takes 5px of it on each side. What
    is left, 2.2px, is the gap a neighbouring word sees. The two ends look even
    at the same number even though they are not the same shape, because the
-   circle at one end and the name's flat stem at the other are each 1px inside
+   face at one end and the name's flat stem at the other are each 1px inside
    their own edge of the box.
 
    The mirror carries 6px of padding against a matching negative margin
@@ -1534,21 +1534,22 @@ html.wco .app-body.sidebar-collapsed
 	position: absolute;
 	inset: -2px -5px;
 	z-index: -1;
-	border-radius: 999px;
+	/* Squircle capsule, the shape the sent `person-chip` takes. */
+	border-radius: 999px; corner-shape: var(--cs);
 	background: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 .composer-hl .cmp-mention[data-hover]::before {
 	background: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 /* The face. It is painted rather than laid out, for the same reason: there is
-   nowhere to put a picture, so the `@` goes transparent and lends the circle
-   its slot. The circle hangs off THAT span rather than off the pill, so it
+   nowhere to put a picture, so the `@` goes transparent and lends the face
+   its slot. The face hangs off THAT span rather than off the pill, so it
    stays fixed to the slot whatever the wash around it does, and the gap either
    side of it is the slot's own arithmetic: 13.8px at the composer's 14px type,
-   plus the 5px the wash reaches to its left, less a 0.8em circle set 1px past
+   plus the 5px the wash reaches to its left, less a 0.8em face set 1px past
    the box, leaves 4px of wash before the face and 3.6px between it and the
    first letter. The size is in `em` because the slot is: the phone composer
-   sets 16px, where a fixed circle would sit small in a wider gap. Absolute, so
+   sets 16px, where a fixed size would sit small in a wider gap. Absolute, so
    it takes no part in layout. */
 .composer-hl .cmp-at {
 	position: relative;
@@ -1562,7 +1563,9 @@ html.wco .app-body.sidebar-collapsed
 	width: 0.8em;
 	height: 0.8em;
 	transform: translateY(-50%);
-	border-radius: 999px;
+	/* UserAvatar's squircle, the same shape the picture takes in the mention
+	   picker and in the sent chip. */
+	border-radius: 32%; corner-shape: var(--cs);
 	background: var(--cmp-face) center / cover no-repeat, var(--bg-active);
 	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 14%, transparent);
 }
@@ -2131,10 +2134,16 @@ a.person-chip {
 	background: color-mix(in srgb, var(--accent) 12%, transparent);
 	color: var(--accent-ink);
 	border: 0;
-	border-radius: 999px;
-	/* Round, so the sides need the room the corners take away; the 2/1 split
-	   top-to-bottom is the same reading correction as its neighbours. */
-	padding: 2px 9px 1px 3px;
+	/* The same corner as the three chips around it. It was a true capsule,
+	   which at this height reads as a different object in the same sentence:
+	   a squircle capsule is what every other pill in the app is. */
+	border-radius: calc(9px * var(--rf)); corner-shape: var(--cs);
+	/* The sides need the room the corners take away; the 2/1 split
+	   top-to-bottom is the same reading correction as its neighbours. The 4px
+	   on the face's side is what keeps the pill reading as a pill AROUND the
+	   picture: a photo fills its whole box where a stroke glyph carries its
+	   own air, so it needs the room the session chip's glyph does not. */
+	padding: 2px 9px 1px 4px;
 	line-height: 1.15;
 	cursor: pointer;
 	text-decoration: none;
@@ -2150,14 +2159,32 @@ a.person-chip:focus-visible {
 	outline-offset: 2px;
 }
 .person-chip-face {
-	width: 16px;
-	height: 16px;
+	/* Two smaller than the session chip's glyph box: a picture is dense to the
+	   edge of its box, so at the glyph's 16px it filled the pill and the two
+	   sets of corners collided. */
+	width: 14px;
+	height: 14px;
 	flex: none;
-	border-radius: 999px;
+	/* The same picture the app draws everywhere else: UserAvatar's squircle
+	   tile at 32%, not a circle. A round face here was the one person-shaped
+	   thing in the product that was not the product's own avatar. */
+	border-radius: 32%; corner-shape: var(--cs);
 	object-fit: cover;
 	/* Same 1px lift as the session chip's glyph: flex centres on the line box,
 	   which sits below the cap band the eye reads the name by. */
 	transform: translateY(-1px);
+}
+/* `.markdown img` ties this on class count and wins by being later, so inside
+   a transcript it dragged the styling of a POSTED PICTURE onto the face: 6px
+   of vertical margin, which stood a chip carrying a photo at 31px against the
+   initial fallback's 19px, plus a hairline and the 8px image corner. Reset
+   what that rule sets; same case as `.markdown img.md-inline-image`. */
+.markdown img.person-chip-face {
+	height: 14px;
+	max-height: none;
+	margin: 0;
+	border: 0;
+	border-radius: 32%; corner-shape: var(--cs);
 }
 .person-chip-initial {
 	display: inline-grid;
