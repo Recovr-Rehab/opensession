@@ -66,14 +66,13 @@ export type RowActionTone = "green" | "yellow" | "red" | "blue" | "muted";
 /** The row's action, in the row's own colour. The action a Review row offers
  *  is that row's next step — "Fix" belongs to the red reading, "Change" to the
  *  yellow request — so it takes the band's hue rather than sitting on it as a
- *  neutral plate and reading as unrelated chrome.
+ *  neutral plate and reading as unrelated chrome. The same soft fill the PR
+ *  chips use (the tone mixed into the control surface at 24%), which keeps it
+ *  one weight over the band it sits on.
  *
- *  The hue is carried by the ink and a hairline ring rather than by a heavy
- *  fill: the label is 12px, and mixing the tone into the plate under it costs
- *  contrast fast (24% of the tone, what the PR chips use, drops a red label to
- *  3.1:1 against its own fill). At 14% the plate still reads as tinted, the
- *  ring says which colour without sitting behind any text, and the label keeps
- *  ~3.6:1. Hover deepens the fill, where it is transient and pointer-only.
+ *  That fill puts the 12px label at ~3.1:1 against its own plate, the same
+ *  place the toned PR chips already sit. The row does not lean on it: the
+ *  state is spelled out in words beside it, and the label is only the verb.
  *
  *  Each entry carries its whole colour set, resting and hover, because two
  *  colour utilities on one element resolve by Tailwind's output order rather
@@ -84,13 +83,13 @@ export type RowActionTone = "green" | "yellow" | "red" | "blue" | "muted";
 const GIT_ACTION_TONE: Record<RowActionTone, string> = {
 	muted: GIT_ACTION_NEUTRAL,
 	green:
-		"bg-[color-mix(in_srgb,var(--green)_14%,var(--control-surface))] text-green shadow-[inset_0_0_0_1px_color-mix(in_srgb,currentColor_32%,transparent)] enabled:hover:bg-[color-mix(in_srgb,currentColor_24%,var(--control-surface))] data-[popup-open]:bg-[color-mix(in_srgb,currentColor_24%,var(--control-surface))]",
+		"bg-[color-mix(in_srgb,var(--green)_24%,var(--control-surface))] text-green enabled:hover:bg-[color-mix(in_srgb,currentColor_34%,var(--control-surface))] data-[popup-open]:bg-[color-mix(in_srgb,currentColor_34%,var(--control-surface))]",
 	yellow:
-		"bg-[color-mix(in_srgb,var(--yellow)_14%,var(--control-surface))] text-yellow shadow-[inset_0_0_0_1px_color-mix(in_srgb,currentColor_32%,transparent)] enabled:hover:bg-[color-mix(in_srgb,currentColor_24%,var(--control-surface))] data-[popup-open]:bg-[color-mix(in_srgb,currentColor_24%,var(--control-surface))]",
+		"bg-[color-mix(in_srgb,var(--yellow)_24%,var(--control-surface))] text-yellow enabled:hover:bg-[color-mix(in_srgb,currentColor_34%,var(--control-surface))] data-[popup-open]:bg-[color-mix(in_srgb,currentColor_34%,var(--control-surface))]",
 	red:
-		"bg-[color-mix(in_srgb,var(--red)_14%,var(--control-surface))] text-red shadow-[inset_0_0_0_1px_color-mix(in_srgb,currentColor_32%,transparent)] enabled:hover:bg-[color-mix(in_srgb,currentColor_24%,var(--control-surface))] data-[popup-open]:bg-[color-mix(in_srgb,currentColor_24%,var(--control-surface))]",
+		"bg-[color-mix(in_srgb,var(--red)_24%,var(--control-surface))] text-red enabled:hover:bg-[color-mix(in_srgb,currentColor_34%,var(--control-surface))] data-[popup-open]:bg-[color-mix(in_srgb,currentColor_34%,var(--control-surface))]",
 	blue:
-		"bg-[color-mix(in_srgb,var(--blue)_14%,var(--control-surface))] text-blue shadow-[inset_0_0_0_1px_color-mix(in_srgb,currentColor_32%,transparent)] enabled:hover:bg-[color-mix(in_srgb,currentColor_24%,var(--control-surface))] data-[popup-open]:bg-[color-mix(in_srgb,currentColor_24%,var(--control-surface))]",
+		"bg-[color-mix(in_srgb,var(--blue)_24%,var(--control-surface))] text-blue enabled:hover:bg-[color-mix(in_srgb,currentColor_34%,var(--control-surface))] data-[popup-open]:bg-[color-mix(in_srgb,currentColor_34%,var(--control-surface))]",
 };
 
 export function gitActionClass(tone: RowActionTone, menu = false): string {
