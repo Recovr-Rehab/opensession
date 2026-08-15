@@ -79,9 +79,13 @@
 	   strength over any surface) — that's what `hover:bg-hover` wants at all of
 	   its call sites. bg-active stays an opaque surface: it's used as one (switch
 	   tracks, meter tracks, avatar fallbacks that put white text on it), not as a
-	   pressed state. Pressed/selected washes are `bg-pressed`. */
+	   pressed state. A press paints `bg-pressed`. */
 	--color-hover: var(--hover);
 	--color-pressed: var(--hover-strong);
+	/* What is open, not what is being pressed: the selected sidebar row, the
+	   active tool. Quieter than a press, because it stays on the screen and the
+	   title's ink says it too (see base.css). */
+	--color-selected: var(--selected);
 	--color-active: var(--bg-active);
 
 	/* Borders (border-border reads terribly, so: line) */

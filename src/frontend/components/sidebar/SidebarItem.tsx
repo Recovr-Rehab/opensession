@@ -395,7 +395,7 @@ export function SidebarItem({
 						// No fill for "needs you" — the blue mark in the rail and the
 						// bold title carry it, and the row's one background slot stays
 						// with selection (see the workspace row, which matches).
-						selected && "bg-pressed",
+						selected && "bg-selected",
 						dragging
 							? "transition-none"
 							: swipeOpen

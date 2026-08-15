@@ -156,6 +156,15 @@
 	   opaque colour to hide what slides under them. */
 	--hover: rgba(255, 255, 255, 0.07);
 	--hover-strong: rgba(255, 255, 255, 0.11);
+	/* A SELECTED row: the session being viewed, the active tool, the open PR.
+	   Quieter than the pressed wash on purpose. A press is momentary and has to
+	   be felt under the pointer, while a selection persists and only has to be
+	   findable, and it never carries the row alone: a selected row also takes
+	   full-strength ink in a title its neighbours write dim. At pressed
+	   strength a column of open rows read as grey plates dropped on the list.
+	   The sidebar's hover is a layer over this, so pointing at the selected row
+	   still lifts it. */
+	--selected: rgba(255, 255, 255, 0.08);
 	/* The one interaction fill that is NOT a wash: an action chip floating over
 	   a row (the pin/archive cluster). A chip is a LID, not a tint — what is
 	   behind it is the row it covers, so a translucent one shows that row's own
@@ -202,13 +211,16 @@
 	   direction with anywhere to go is toward the page: brightness-110 on a
 	   near-white or near-black plate is invisible. */
 	--accent-hover: color-mix(in srgb, var(--accent) 86%, var(--bg));
-	/* Achromatic wash for a SELECTED or ACTIVE surface, pitched above
-	   --hover-strong (0.11). Once the accent went ink this and the hover wash
-	   became the same ink, so the two were told apart only by opacity. The split
-	   is by meaning instead: a hover paints --hover (0.07) and selected paints
-	   this. "Needs you" is deliberately not in that list — it takes no fill at
-	   all, so it can sit on a selected row without either state losing. Don't
-	   spell a hover with this token — that is what the collision was. */
+	/* Achromatic wash for a surface that is TINTED by the accent: a badge, an
+	   "on" toggle, a focus ring. Pitched above --hover-strong (0.11) so it reads
+	   as a tint of its own and not as a heavier hover. Once the accent went ink
+	   this and the interaction washes became the same ink, so they were told
+	   apart only by opacity; the split is by meaning instead. The three
+	   achromatic ones each say a different thing: --hover is the pointer,
+	   --hover-strong the press, --selected what is open. "Needs you" is
+	   deliberately in none of them — it takes no fill at all, so it can sit on a
+	   selected row without either state losing. Don't spell a hover with this
+	   token — that is what the collision was. */
 	--accent-soft: rgba(255, 255, 255, 0.16);
 	/* Inline affordances: a link in an agent answer, a PR title that opens. The
 	   accent cannot do this job once it is ink, and red never should have. */
@@ -401,6 +413,7 @@ html[data-theme="light"] {
 	   reads heavier than the same alpha of white on charcoal. */
 	--hover: rgba(0, 0, 0, 0.055);
 	--hover-strong: rgba(0, 0, 0, 0.095);
+	--selected: rgba(0, 0, 0, 0.065);
 	--row-chip: color-mix(in srgb, #000000 9.5%, var(--sidebar-bg));
 	--row-chip-hover: color-mix(in srgb, #000000 5.5%, var(--row-chip));
 	--border: #e2e2e2;

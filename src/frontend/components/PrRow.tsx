@@ -101,7 +101,7 @@ export function PrRow({
 									SIDEBAR_ROW,
 									SIDEBAR_WS_ROW,
 									SIDEBAR_HOVER_LAYER,
-									selected && "bg-pressed",
+									selected && "bg-selected",
 								)}
 								data-sidebar-row=""
 								data-ws-row=""

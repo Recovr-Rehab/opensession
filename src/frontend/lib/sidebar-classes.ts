@@ -165,13 +165,13 @@ export const SIDEBAR_INDEPENDENT_SCROLL = "min-w-0 overflow-y-visible pb-1.5";
  * A hover painted as a background LAYER rather than a background colour — the
  * sidebar's hover, for anything that also carries a state fill of its own.
  *
- * Every state in here is translucent ink: selected is `bg-pressed`, a pinned
+ * Every state in here is translucent ink: selected is `bg-selected`, a pinned
  * action is `bg-pressed` ("needs you" carries no fill at all — it is a mark in
  * the rail and a bold title, so it composites with any of these). That
  * is what lets each of them pick up the sidebar material (and, on the desktop
  * shell, the wallpaper) underneath instead of cutting an opaque patch out of
  * it — but it also means a colour-based hover REPLACES that fill instead of
- * adding to it. Pointing at a selected row would then swap 0.095 of ink for
+ * adding to it. Pointing at a selected row would then swap 0.065 of ink for
  * 0.055 and the row would go QUIETER under the pointer, which reads as
  * deselecting; on an element whose two states are the same token (a pinned
  * pin) it does nothing at all. Both were worked around by withholding the

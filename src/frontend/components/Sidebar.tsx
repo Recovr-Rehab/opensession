@@ -2562,7 +2562,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				// deliberately take none. See the two signals in sidebar-classes.ts.
 				SIDEBAR_HOVER_LAYER,
 				"transition-colors",
-				archivedActive && "bg-pressed text-fg",
+				archivedActive && "bg-selected text-fg",
 			)}
 			data-selected={archivedActive || undefined}
 			onClick={onOpenArchived}
@@ -2726,7 +2726,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						// waiting, not a failure, and the row's one background slot
 						// belongs to selection. The blue mark in the rail and the bold
 						// title carry it — same as the native app.
-						active && "bg-pressed",
+						active && "bg-selected",
 						draggingRow
 							? "transition-none"
 							: swipeSide
@@ -4285,7 +4285,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								// 30, level with the rows under it rather than below them.
 								`w-full ${SIDEBAR_RAIL_GAP} rounded-row bg-transparent px-[calc(var(--sidebar-icon-left)-var(--sidebar-nav-x))] py-[var(--sidebar-tool-pad)] text-control-label font-medium text-dim hover:text-fg`,
 							!isPhone && SIDEBAR_HOVER_LAYER,
-							!isPhone && tool.active && "bg-pressed text-fg",
+							!isPhone && tool.active && "bg-selected text-fg",
 						);
 						const rowBody = (
 							<>

@@ -49,7 +49,7 @@ export function DraftRow({
 				SIDEBAR_ROW,
 				SIDEBAR_WS_ROW,
 				SIDEBAR_HOVER_LAYER,
-				active && "bg-pressed",
+				active && "bg-selected",
 			)}
 			data-sidebar-row=""
 			data-selected={active || undefined}
