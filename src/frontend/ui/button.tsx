@@ -129,6 +129,24 @@ const iconOnlyPad: Record<Size, string> = {
 const INK =
 	"bg-accent border-transparent text-on-accent plate-sheen smooth-shadow-xs hover:bg-accent-hover";
 
+/**
+ * Which one, in one line each. The question a variant answers is what the
+ * button is FOR on its surface, not how loud you want it:
+ *
+ * - `primary` — the answer. One per surface, and only where there is one.
+ * - `default` — a control standing alone on the page: a header action, a
+ *   toolbar, a card's single button. Raised, so it reads as a thing to press
+ *   against a surface that is otherwise flat.
+ * - `outline` — two or more peers, none of them the answer, or any neutral
+ *   button sitting ON a panel or card. Raised plates in a row read as cards
+ *   inside a card; the edge alone keeps the row quiet and even.
+ * - `ghost` — a control that is mostly reporting state (a filter, an icon in
+ *   a row). Quiet until you reach for it.
+ * - `soft` — a filled chip, for the few places where an edge would fight the
+ *   surface it sits on.
+ * - the tones (`danger`/`destructive`, `success`/`positive`, `warning`) —
+ *   outline proposes, solid commits.
+ */
 const variants: Record<Variant, string> = {
 	// The raised control look of the newest chrome (viewer Share button).
 	// Paper in light (`bg-button`), graphite in dark: the hairline and the cast
