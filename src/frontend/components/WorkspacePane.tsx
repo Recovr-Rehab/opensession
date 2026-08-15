@@ -9,6 +9,7 @@ import { FeedWebPane, refWebPanel } from "./FeedWebPane";
 import { SlackChannelPane } from "./SlackChannelPane";
 import { MarkdownRepoProvider } from "./MarkdownBody";
 import { PrPanel } from "./PrPanel";
+import type { PrFocus } from "../lib/pr-focus";
 import { RepoTile } from "./RepoTile";
 import { WorkspaceInfo } from "./WorkspaceInfo";
 import { useCurrentUser } from "./UserPicker";
@@ -48,6 +49,13 @@ interface Props {
 	onOpenSession: (id: string, created?: UnifiedSession | null) => void;
 	/** Open another PR in the review panel (stack map layer links). */
 	onOpenPr?: (repo: string, branch: string) => void;
+	/**
+	 * The PR this workspace was opened for, when something named one (a sidebar
+	 * PR row, a `repo#123` chip). Carries the workspace it was resolved
+	 * against, so an older request can't retarget a workspace opened by other
+	 * means. See lib/pr-focus.ts.
+	 */
+	focusPr?: PrFocus & { workspaceId?: string };
 	/** The app's top-bar slot. The header row portals in here, the same slot and
 	    the same row a session's header uses, so the chrome doesn't change shape
 	    when a workspace has no session yet. */
@@ -89,6 +97,7 @@ export function WorkspacePane({
 	addHandler,
 	onOpenSession,
 	onOpenPr,
+	focusPr,
 	topbarEl,
 	rightPanelEl,
 }: Props) {
@@ -145,9 +154,21 @@ export function WorkspacePane({
 	// The Review pane's target: the workspace's own PR branch, rendered through
 	// the newest session that carries it (session PR APIs) or the repo+branch
 	// preview APIs when none does — the PrQueuePreview pattern, workspace-scoped.
-	const reviewTarget = workspace.branch
-		? { repo: workspace.repo || "repository", branch: workspace.branch }
-		: null;
+	//
+	// A named PR wins over the workspace's own branch. This pane is what a
+	// workspace shows before its sessions have loaded, which is most of the
+	// time a PR link is followed cold — and the workspace's branch is the
+	// first PR filed here, not the one the link was for.
+	const focusedBranch =
+		focusPr?.workspaceId === workspace.id ? focusPr?.branch : undefined;
+	const reviewTarget = focusedBranch
+		? {
+				repo: focusPr?.repo || workspace.repo || "repository",
+				branch: focusedBranch,
+			}
+		: workspace.branch
+			? { repo: workspace.repo || "repository", branch: workspace.branch }
+			: null;
 	const reviewSession = useMemo(() => {
 		if (!reviewTarget) return null;
 		return (

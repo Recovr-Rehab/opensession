@@ -1169,6 +1169,9 @@ export function App(
 		repo: string;
 		branch?: string;
 		number?: number;
+		/** The workspace it was resolved against, so a later visit to another
+		 *  workspace can't be retargeted by an older request. */
+		workspaceId?: string;
 		seq: number;
 	} | null>(null);
 	const reviewFocusPrRef = useRef(reviewFocusPr);
@@ -1178,13 +1181,13 @@ export function App(
 	// visit to this workspace's Review.
 	const landedFocusSeq = useRef<number | null>(null);
 	const focusReviewPr = React.useCallback(
-		(repo: string, branch?: string, number?: number) => {
-			setReviewFocusPr((prev) => ({
-				repo,
-				branch,
-				number,
-				seq: (prev?.seq ?? 0) + 1,
-			}));
+		(pr: {
+			repo: string;
+			branch?: string;
+			number?: number;
+			workspaceId?: string;
+		}) => {
+			setReviewFocusPr((prev) => ({ ...pr, seq: (prev?.seq ?? 0) + 1 }));
 		},
 		[],
 	);
@@ -1713,11 +1716,12 @@ export function App(
 					// The workspace is the PR's home, not the PR itself: it holds
 					// every PR its sessions opened. Say which one this link meant,
 					// or the review opens on whichever came first.
-					focusReviewPr(
-						pr?.repo ?? route.repo,
-						pr?.branch ?? route.branch,
-						pr?.number ?? route.number,
-					);
+					focusReviewPr({
+						repo: pr?.repo ?? route.repo,
+						branch: pr?.branch ?? route.branch,
+						number: pr?.number ?? route.number,
+						workspaceId,
+					});
 					toWorkspace(workspaceId, "review");
 				})
 				.catch(() => {
@@ -2250,7 +2254,12 @@ export function App(
 					},
 				});
 				refreshWorkspaces();
-				focusReviewPr(item.pr.repo, item.pr.branch, item.pr.number);
+				focusReviewPr({
+					repo: item.pr.repo,
+					branch: item.pr.branch,
+					number: item.pr.number,
+					workspaceId,
+				});
 				navigate({ view: "workspace", id: workspaceId, tab: "review" });
 			} catch {
 				if (item.sessionId) navigate({ view: "reviews", id: item.sessionId });
@@ -2272,7 +2281,12 @@ export function App(
 					},
 				});
 				refreshWorkspaces();
-				focusReviewPr(pr.repo, pr.branch, pr.number);
+				focusReviewPr({
+					repo: pr.repo,
+					branch: pr.branch,
+					number: pr.number,
+					workspaceId,
+				});
 				navigate({ view: "workspace", id: workspaceId, tab: "review" });
 			} catch {
 				navigate({ view: "pr", repo: pr.repo, branch: pr.branch });
@@ -4204,6 +4218,7 @@ export function App(
 								<WorkspacePane
 									key={route.id}
 									onOpenPr={(repo, branch) => navigate({ view: "pr", repo, branch })}
+									focusPr={reviewFocusPr ?? undefined}
 									workspace={routeWorkspace}
 									workspaceSessions={workspaceSessions}
 									sessions={sessions}
