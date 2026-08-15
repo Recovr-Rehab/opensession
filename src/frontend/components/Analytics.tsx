@@ -533,7 +533,7 @@ export function Analytics() {
 			<div className="mx-auto w-full max-w-[1080px] px-4 pb-10 pt-5 md:px-6">
 				<header className="flex flex-wrap items-end justify-between gap-3">
 					<div>
-						<h1 className="m-0 text-section-title font-semibold tracking-[-0.02em] text-fg">Analytics</h1>
+						<h1 className="m-0 text-section-title font-medium tracking-[-0.02em] text-fg">Analytics</h1>
 						<p className="m-0 mt-1 text-supporting text-dim">
 							What happened on {PRODUCT_NAME}: sessions, tokens, models, PRs.
 						</p>
