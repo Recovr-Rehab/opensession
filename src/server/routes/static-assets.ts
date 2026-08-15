@@ -122,13 +122,17 @@ export async function handleStaticAssetsRoutes(
 	// audio track, 435KB) and vendored rather than pulled from the site's CDN.
 	// A login screen is the one surface that has to render before anything is
 	// trusted, on a server that is usually private, so it cannot depend on a
-	// third-party fetch — and nobody should have to talk to a CDN to look at
-	// our sign-in box. The webp is the video's own first frame, so the swap
-	// when the loop starts is invisible, and it is what a reduced-motion
-	// visitor gets instead.
+	// third-party fetch, and nobody should have to talk to a CDN to look at our
+	// sign-in box. The `-dark` pair is the same footage graded to charcoal for
+	// the dark palette; the browser fetches one cut, not both. Each webp is its
+	// own video's first frame, so the swap when the loop starts is invisible,
+	// and it is the whole picture for a reduced-motion visitor.
+	// scripts/signin-bg.sh regenerates all four from the master.
 	const mediaFiles: Record<string, string> = {
 		"/signin-bg.mp4": `${FRONTEND_SRC}/signin-bg.mp4`,
 		"/signin-bg.webp": `${FRONTEND_SRC}/signin-bg.webp`,
+		"/signin-bg-dark.mp4": `${FRONTEND_SRC}/signin-bg-dark.mp4`,
+		"/signin-bg-dark.webp": `${FRONTEND_SRC}/signin-bg-dark.webp`,
 	};
 	if (mediaFiles[path] && req.method === "GET") {
 		return new Response(Bun.file(mediaFiles[path]), {

@@ -5,6 +5,7 @@ import { IconArrowUpRight } from "./icons";
 import { BASE_PATH } from "../lib/base";
 import { PRODUCT_NAME } from "../lib/brand";
 import { usePeople } from "../lib/people";
+import { effectiveTheme, onThemeChanged } from "../lib/theme";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
 import { DeviceCode } from "../ui/device-code";
@@ -131,29 +132,39 @@ const REDIRECT_ERROR: string | null = (() => {
  * visitor all get the same picture, just not moving. `aria-hidden` and
  * `pointer-events-none` because it is wallpaper.
  *
- * The scrim is the one theme-aware part: it mixes the page's own background
- * into the silk, which lightens it a touch in light mode and takes the glare
- * off it in dark, where a full-brightness silver screen would be the only
- * bright thing on the display.
+ * Dark gets its OWN cut of the loop rather than the silver one behind a scrim.
+ * A dimmed light background is still a light background: it stays the
+ * brightest thing on the display and the whole screen glows in a dark room.
+ * The dark cut is the same footage graded to charcoal (`scripts/signin-bg.sh`),
+ * so it is the same material and the same motion in a different finish, and
+ * its darkest point still sits clear of the card's own fill.
+ *
+ * `key` on the video: swapping a <source> child does not make an already-live
+ * <video> reload, so a theme flip would keep playing the old cut. Keying it to
+ * the theme replaces the element instead.
  */
 function AuthBackdrop() {
+	const [theme, setTheme] = useState(effectiveTheme);
+	useEffect(() => onThemeChanged(() => setTheme(effectiveTheme())), []);
+	const name = theme === "dark" ? "signin-bg-dark" : "signin-bg";
+	const poster = `${BASE_PATH}/${name}.webp`;
 	return (
 		<div
 			aria-hidden="true"
-			className="pointer-events-none absolute inset-0 select-none bg-[#d9d7d1] bg-cover bg-center"
-			style={{ backgroundImage: `url(${BASE_PATH}/signin-bg.webp)` }}
+			className="pointer-events-none absolute inset-0 select-none bg-surface bg-cover bg-center"
+			style={{ backgroundImage: `url(${poster})` }}
 		>
 			<video
+				key={name}
 				className="size-full object-cover motion-reduce:hidden"
 				autoPlay
 				loop
 				muted
 				playsInline
-				poster={`${BASE_PATH}/signin-bg.webp`}
+				poster={poster}
 			>
-				<source src={`${BASE_PATH}/signin-bg.mp4`} type="video/mp4" />
+				<source src={`${BASE_PATH}/${name}.mp4`} type="video/mp4" />
 			</video>
-			<div className="absolute inset-0 bg-[color-mix(in_srgb,var(--bg)_22%,transparent)]" />
 		</div>
 	);
 }
