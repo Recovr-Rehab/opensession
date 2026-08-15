@@ -26,6 +26,28 @@
 		<link rel="stylesheet" href="../src/frontend/styles/legacy.css" />
 		<link rel="stylesheet" href="./.demo-tailwind.css" />
 		<style>
+			/* Overlay scrollbars, the way a Mac draws them. A track running down
+			   the side of the one screenshot on the page is noise, and it is not
+			   what the app looks like on the machine most visitors are on.
+
+			   `html *` rather than `*`, because base.css sets `scrollbar-width:
+			   thin` on the universal selector and the build emits the bundled
+			   stylesheet AFTER this block: anything here that ties on
+			   specificity loses. One element in the selector is enough to win
+			   without reaching for !important. */
+			html,
+			html * {
+				scrollbar-width: none;
+			}
+
+			/* For WebKit before Safari 18.2, which has no scrollbar-width. Hidden
+			   rather than zero-width: a custom scrollbar with a width carves a
+			   permanent gutter out of the Macs that draw overlays, while a hidden
+			   one reserves nothing. */
+			html ::-webkit-scrollbar {
+				display: none;
+			}
+
 			.sidebar-independent-section:has(.sidebar-people-row) {
 				display: none;
 			}

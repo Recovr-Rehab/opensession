@@ -222,6 +222,12 @@ summary:focus-visible {
 .stage {
 	position: relative;
 	overflow: hidden;
+	/* A size container, so the window inside can be inset by one value that
+	   means the same number of pixels on all four sides. A percentage cannot:
+	   top and bottom resolve against the height, left and right against the
+	   width, so equal percentages draw unequal margins on anything that is not
+	   square. */
+	container-type: size;
 	aspect-ratio: 3 / 2;
 	border: 1px solid var(--line);
 	border-radius: calc(24px * var(--rf));
@@ -254,12 +260,10 @@ summary:focus-visible {
 	position: absolute;
 	/* Sat on the background rather than bleeding off it: the app's composer is
 	   14px above its own bottom edge, so any overshoot cuts the one control a
-	   visitor is meant to recognise. More room above than below, so the window
-	   sits low in the frame the way a window sits on a desktop. */
-	top: 12%;
-	right: 5.6%;
-	bottom: 7%;
-	left: 5.6%;
+	   visitor is meant to recognise. One value, in container-width units, so
+	   the frame reads as an even margin rather than a window pushed off
+	   centre. */
+	inset: 5.6cqw;
 	overflow: hidden;
 	/* It is a <figure>, and a figure's UA margin offsets an absolutely
 	   positioned box even with all four insets set. */
