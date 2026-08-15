@@ -38,6 +38,11 @@ import {
 } from "./opencode-config";
 import { stateDir } from "./paths";
 import { directEngineEnabled, modelEngineDefault } from "./engine/engines-config";
+// Workspace ("Custom") presets live in the workspace store, so the one thing
+// this module needs from them — a preset's lead model — has to be read there.
+// The import cycle back into this module is inert: workspace-model-presets
+// touches these bindings only inside function bodies, never at load time.
+import { resolveWorkspaceModelPreset } from "./workspace-model-presets";
 
 export type Provider = "claude" | "codex" | "opencode" | "pi";
 
@@ -901,22 +906,53 @@ function toDirectEngineModel(
   if (ENGINE_PREFIX_RE.test(pickerId) && !pickerId.startsWith("opencode/")) {
     return undefined;
   }
-  const concrete = toOpencodeModel(modelPreset(pickerId)?.model || pickerId);
+  const concrete = directEngineTarget(pickerId);
   const vendorPrefix = `opencode/${DIRECT_ENGINE_VENDOR[engine]}/`;
   return concrete?.startsWith(vendorPrefix)
     ? `${prefix}${concrete.slice("opencode/".length)}`
     : undefined;
 }
 
+/** Guards the workspace-preset lookup below against a preset whose lead names
+ *  another preset: resolveWorkspaceModelPreset resolves its lead through
+ *  resolveModel, which lands back here. One level is all any real preset
+ *  needs; a cycle answers "not servable" instead of overflowing the stack. */
+let resolvingWorkspacePreset = false;
+
+/**
+ * The concrete `opencode/<vendor>/<model>` an id points at, for the vendor
+ * scoping the direct engines apply — resolving the three preset families the
+ * picker can hand them:
+ *
+ *  - dial/… and orchestrator/… through their built-in tables;
+ *  - workspace-preset/…/… through the workspace store, which is where a
+ *    "Custom" preset's lead model lives.
+ *
+ * Kept in one place because `toDirectEngineModel` (what the picker routes to)
+ * and `directEngineServes` (what `resolveModel` accepts) must answer the same
+ * question — an engine offered in the picker and refused by the adapter is
+ * exactly the mismatch this shape exists to prevent.
+ */
+function directEngineTarget(id: string): string | undefined {
+  if (id.toLowerCase().startsWith("workspace-preset/")) {
+    if (resolvingWorkspacePreset) return undefined;
+    resolvingWorkspacePreset = true;
+    try {
+      const ws = resolveWorkspaceModelPreset(id);
+      return ws ? toOpencodeModel(ws.model) : undefined;
+    } finally {
+      resolvingWorkspacePreset = false;
+    }
+  }
+  return toOpencodeModel(modelPreset(id)?.model || id);
+}
+
 /** Whether a direct engine can serve `rest` (an id with its engine prefix
- *  already stripped): its own vendor's models, or a dial/orchestrator preset
- *  whose MAIN model is that vendor's. */
+ *  already stripped): its own vendor's models, or a dial / orchestrator /
+ *  workspace preset whose MAIN model is that vendor's. */
 function directEngineServes(engine: DirectEngine, rest: string): boolean {
   if (!rest.includes("/")) return false;
-  const preset = modelPreset(rest);
-  const target = preset
-    ? toOpencodeModel(preset.model)
-    : `opencode/${rest}`;
+  const target = directEngineTarget(rest);
   return !!target?.startsWith(`opencode/${DIRECT_ENGINE_VENDOR[engine]}/`);
 }
 

@@ -36,14 +36,12 @@ import {
   resolveConcreteModel,
   resolveModel,
   toOpencodeModel,
+  toPiModel,
 } from "./models";
 
-const savedProfile = process.env.OPENSESSION_PROFILE;
 const savedModel = process.env.OPENSESSION_MODEL;
 const savedHome = process.env.HOME;
 afterEach(() => {
-  if (savedProfile === undefined) delete process.env.OPENSESSION_PROFILE;
-  else process.env.OPENSESSION_PROFILE = savedProfile;
   if (savedModel === undefined) delete process.env.OPENSESSION_MODEL;
   else process.env.OPENSESSION_MODEL = savedModel;
   if (savedHome === undefined) delete process.env.HOME;
@@ -234,6 +232,13 @@ describe("pi engine model routing", () => {
     const orch = ORCHESTRATOR_PRESETS[0];
     expect(orchestratorPreset(`pi/${orch.id}`)?.id).toBe(orch.id);
     expect(piModelLabel("pi/dial/opus-fable")).toBe("Pi · Opus 5 + Fable oracle");
+    expect(toPiModel("opencode/anthropic/claude-opus-5")).toBe(
+      "pi/anthropic/claude-opus-5",
+    );
+    expect(toPiModel("dial/opus-fable")).toBe("pi/anthropic/claude-opus-5");
+    expect(toPiModel(ORCHESTRATOR_PRESETS[0].id)).toBe(
+      "pi/anthropic/claude-fable-5",
+    );
   });
 });
 
@@ -299,6 +304,27 @@ describe("direct-SDK engine model routing (claude/ and codex/)", () => {
     // Another engine's explicit choice is never re-routed.
     expect(toClaudeModel("pi/anthropic/claude-opus-5")).toBeUndefined();
     expect(toCodexModel("pi/openai/gpt-5.6-sol")).toBeUndefined();
+  });
+
+  it("accepts an orchestrator preset on the engine that can lead it", () => {
+    // The picker offering an engine the adapter then refuses is the mismatch
+    // this pair guards: routing and resolution answer the same question.
+    expect(resolveModel("claude/orchestrator/fable")?.id).toBe("claude/orchestrator/fable");
+    expect(resolveModel("claude/orchestrator/fable")?.provider).toBe("claude");
+    expect(resolveModel("codex/orchestrator/sol")?.id).toBe("codex/orchestrator/sol");
+    expect(resolveModel("claude/orchestrator/sol")).toBeNull();
+    expect(resolveModel("codex/orchestrator/fable")).toBeNull();
+    expect(resolveModel("claude/orchestrator/not-real")).toBeNull();
+  });
+
+  it("resolves a workspace preset through its store instead of a bogus passthrough", () => {
+    // No such workspace, so this is the not-found arm — it must answer "no",
+    // not mint opencode/workspace-preset/… the way the generic slash
+    // passthrough would. The found arm needs the workspace store, so it is
+    // covered where the store is available rather than here.
+    expect(resolveModel("claude/workspace-preset/ws-not-a-workspace/nope")).toBeNull();
+    expect(toClaudeModel("workspace-preset/ws-not-a-workspace/nope")).toBeUndefined();
+    expect(toCodexModel("workspace-preset/ws-not-a-workspace/nope")).toBeUndefined();
   });
 
   it("never maps direct ids onto the opencode engine", () => {

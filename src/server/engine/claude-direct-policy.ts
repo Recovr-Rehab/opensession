@@ -19,8 +19,17 @@
 import type { McpServerConfig } from "@anthropic-ai/claude-agent-sdk";
 import { buildOpencodeMcpConfig } from "../opencode-policy";
 import { ASK_BASH_PERMISSIONS, type McpScope } from "../runner-shared";
-import { DIAL_ORACLE_AGENTS, sameBridgeDialOracle, dialPreset } from "../models";
-import type { SessionEffort } from "../models";
+import {
+  DIAL_ORACLE_AGENTS,
+  ORCHESTRATOR_WORKER_AGENTS,
+  dialPreset,
+  orchestratorPreset,
+  orchestratorWorkerForBridge,
+  sameBridgeDialOracle,
+} from "../models";
+import type { DialPreset, OrchestratorPreset, SessionEffort } from "../models";
+import { resolveWorkspaceModelPreset } from "../workspace-model-presets";
+import type { ResolvedWorkspaceModelPreset } from "../workspace-model-presets";
 import type { TurnUsage } from "./adapter-types";
 
 /** Engine-prefixed model ids this engine answers to. */
@@ -37,14 +46,92 @@ export interface ResolvedClaudeDirectModel {
   /** The bare SDK model slug, e.g. "claude-opus-5". */
   model: string;
   /** The Dial preset this id resolved through, when it was a preset id. */
-  dial?: NonNullable<ReturnType<typeof dialPreset>>;
+  dial?: DialPreset;
+  /** The Orchestrator preset this id resolved through. */
+  orchestrator?: OrchestratorPreset;
+  /** The workspace ("Custom") preset this id resolved through. */
+  workspacePreset?: ResolvedWorkspaceModelPreset;
+  /** Reasoning effort the preset pins for its main model — overrides the
+   *  session's own effort, exactly as the opencode runner's preset hook does. */
+  effort?: SessionEffort;
+}
+
+/** The preset families a model id can name, in resolution order. Each head
+ *  carries no upstream provider segment, so it must be recognized before the
+ *  `<provider>/<model>` parse below. */
+const PRESET_HEADS: Array<{ head: string; label: string }> = [
+  { head: "dial/", label: "Dial" },
+  { head: "orchestrator/", label: "Orchestrator" },
+  { head: "workspace-preset/", label: "workspace" },
+];
+
+/** How a preset id wires this run: its main model plus whichever preset
+ *  objects the adapter needs to build instructions from. */
+export interface ClaudeDirectPresetWiring {
+  /** The id of the preset's MAIN model (a picker id, resolved recursively). */
+  model: string;
+  /** Name for error copy — the preset id, or a workspace preset's label. */
+  label: string;
+  dial?: DialPreset;
+  orchestrator?: OrchestratorPreset;
+  workspacePreset?: ResolvedWorkspaceModelPreset;
+  effort?: SessionEffort;
+}
+
+/**
+ * What a workspace ("Custom") preset contributes to a run: its lead model, its
+ * pinned effort, and — when the combo is an exact restatement of a built-in
+ * preset — that preset's own oracle/worker wiring through `enginePresetId`.
+ * Following the indirection is what keeps a custom combo from degrading to a
+ * plain model run; it mirrors the opencode runner's
+ * `dialPreset(opts.model) ?? dialPreset(workspacePreset?.enginePresetId)`.
+ *
+ * Split out from the id lookup because the lookup reads the workspace store
+ * (the one impure step in this module) while this half is pure.
+ */
+export function claudeDirectWorkspacePresetWiring(
+  ws: ResolvedWorkspaceModelPreset
+): ClaudeDirectPresetWiring {
+  const engineDial = dialPreset(ws.enginePresetId);
+  const engineOrch = orchestratorPreset(ws.enginePresetId);
+  const effort =
+    (ws.effort as SessionEffort | undefined) ?? engineDial?.effort ?? engineOrch?.effort;
+  return {
+    model: ws.model,
+    label: ws.label || ws.id,
+    workspacePreset: ws,
+    ...(engineDial ? { dial: engineDial } : {}),
+    ...(engineOrch ? { orchestrator: engineOrch } : {}),
+    ...(effort ? { effort } : {}),
+  };
+}
+
+/**
+ * Resolve a preset id (engine prefix already stripped) to its wiring, or
+ * undefined when the head names no live preset. Dial and Orchestrator presets
+ * come from the built-in tables; a workspace preset is read from the workspace
+ * store it belongs to.
+ */
+function presetWiring(id: string): ClaudeDirectPresetWiring | undefined {
+  const dial = dialPreset(id);
+  if (dial) return { model: dial.model, label: dial.id, dial, effort: dial.effort };
+  const orch = orchestratorPreset(id);
+  if (orch) {
+    return { model: orch.model, label: orch.id, orchestrator: orch, effort: orch.effort };
+  }
+  if (!id.toLowerCase().startsWith("workspace-preset/")) return undefined;
+  const ws = resolveWorkspaceModelPreset(id);
+  return ws ? claudeDirectWorkspacePresetWiring(ws) : undefined;
 }
 
 /**
  * Normalize any id this engine accepts to its SDK model slug:
  *
  *  - `claude/anthropic/<model>` — the canonical engine-prefixed form
- *  - `claude/dial/<preset>`     — a Dial preset routed to this engine
+ *  - `claude/dial/<preset>`, `claude/orchestrator/<preset>`,
+ *    `claude/workspace-preset/<workspace>/<preset>` — a preset routed to this
+ *    engine (bare, unprefixed preset ids resolve identically, so the engine
+ *    accepts exactly what `directEngineServes` advertises)
  *  - `opencode/anthropic/<model>` / `pi/anthropic/<model>` — another engine's
  *    id for the same model (a session migrating engines keeps its stored id
  *    until the next save, so accepting these avoids a dead first turn)
@@ -58,24 +145,31 @@ export function resolveClaudeDirectModel(
 ): ResolvedClaudeDirectModel | { error: string } {
   const raw = (model || "").trim();
   if (!raw) return { error: "no model id" };
+  const prefixed = raw.toLowerCase().startsWith(CLAUDE_DIRECT_MODEL_PREFIX);
+  const rest = prefixed ? raw.slice(CLAUDE_DIRECT_MODEL_PREFIX.length) : raw;
 
-  if (raw.toLowerCase().startsWith(CLAUDE_DIRECT_MODEL_PREFIX)) {
-    const rest = raw.slice(CLAUDE_DIRECT_MODEL_PREFIX.length);
-    const preset = dialPreset(rest);
-    if (preset) {
-      const inner = resolveClaudeDirectModel(preset.model);
-      if ("error" in inner) {
-        return {
-          error:
-            `Dial preset "${preset.id}" runs ${preset.model}, which the claude engine cannot serve ` +
-            "(Anthropic models only).",
-        };
-      }
-      return { model: inner.model, dial: preset };
+  const head = PRESET_HEADS.find((h) => rest.toLowerCase().startsWith(h.head));
+  if (head) {
+    const wiring = presetWiring(rest);
+    if (!wiring) return { error: `Unknown ${head.label} preset: "${raw}"` };
+    const inner = resolveClaudeDirectModel(wiring.model);
+    if ("error" in inner) {
+      return {
+        error:
+          `${head.label} preset "${wiring.label}" runs ${wiring.model}, which the claude engine ` +
+          "cannot serve (Anthropic models only).",
+      };
     }
-    if (rest.toLowerCase().startsWith("dial/")) {
-      return { error: `Unknown Dial preset: "${raw}"` };
-    }
+    return {
+      model: inner.model,
+      ...(wiring.dial ? { dial: wiring.dial } : {}),
+      ...(wiring.orchestrator ? { orchestrator: wiring.orchestrator } : {}),
+      ...(wiring.workspacePreset ? { workspacePreset: wiring.workspacePreset } : {}),
+      ...(wiring.effort ? { effort: wiring.effort } : {}),
+    };
+  }
+
+  if (prefixed) {
     const sep = rest.indexOf("/");
     if (sep <= 0 || sep === rest.length - 1) {
       return { error: `Not a claude engine model id: "${raw}" (expected claude/<provider>/<model>)` };
@@ -504,6 +598,19 @@ export function claudeDirectInProcessServers(
 /** Read-only tool surface for an oracle subagent: it advises, never executes. */
 const ORACLE_TOOLS = ["Read", "Grep", "Glob", "WebFetch", "WebSearch"];
 
+/** Every built-in that reaches the local filesystem or shell. A subagent
+ *  carries its OWN tool list, so `disableLocalWorkspaceTools` — the run whose
+ *  real workspace is only reachable over MCP — has to be applied here too, or
+ *  a worker keeps a shell in the server's own cwd after the main agent lost
+ *  one. */
+const LOCAL_WORKSPACE_TOOL_NAMES = new Set(
+  Object.values(LOCAL_WORKSPACE_SDK_TOOLS).flat()
+);
+
+function withoutLocalWorkspaceTools(tools: string[], disabled?: boolean): string[] {
+  return disabled ? tools.filter((t) => !LOCAL_WORKSPACE_TOOL_NAMES.has(t)) : tools;
+}
+
 /**
  * The Dial's oracle subagents as SDK agent definitions, resolved onto THIS
  * engine's bridge. A claude-direct server can only run Anthropic models, so a
@@ -511,7 +618,9 @@ const ORACLE_TOOLS = ["Read", "Grep", "Glob", "WebFetch", "WebSearch"];
  * while its body resolves to the same-bridge substitute — naming a model the
  * bridge can't serve is how a task call dies on "Model not found".
  */
-export function claudeDirectOracleAgents(): Record<
+export function claudeDirectOracleAgents(input?: {
+  disableLocalWorkspaceTools?: boolean;
+}): Record<
   string,
   {
     description: string;
@@ -534,7 +643,7 @@ export function claudeDirectOracleAgents(): Record<
         "opinion: state assumptions, tradeoffs, and recommended next steps. You may read " +
         "and search the workspace, but you never edit files or run commands.",
       model: slug,
-      tools: ORACLE_TOOLS,
+      tools: withoutLocalWorkspaceTools(ORACLE_TOOLS, input?.disableLocalWorkspaceTools),
       ...(effort ? { effort } : {}),
     };
   }
@@ -546,6 +655,139 @@ export function claudeDirectOracleAgents(): Record<
 export function claudeDirectOracleLabel(agentName: string): string {
   const oracle = DIAL_ORACLE_AGENTS[sameBridgeDialOracle(agentName, SUPPORTED_UPSTREAM)];
   return oracle?.label || agentName;
+}
+
+// ── Orchestrator workers ─────────────────────────────────────────────────────
+
+/** Read-only surface a worker shares with the oracles, plus notebook reads. */
+const WORKER_READ_TOOLS = [
+  "Read",
+  "Grep",
+  "Glob",
+  "NotebookRead",
+  "WebFetch",
+  "WebSearch",
+];
+
+/** A code-mode worker executes: it gets the shell and the writers, because
+ *  "workers do the typing" is the whole point of the preset. */
+const WORKER_CODE_TOOLS = [
+  ...WORKER_READ_TOOLS,
+  "Bash",
+  "BashOutput",
+  "Write",
+  "Edit",
+  "MultiEdit",
+  "NotebookEdit",
+  "TodoWrite",
+];
+
+const WORKER_CODE_PROMPT =
+  "You are an implementation worker. Execute the one subtask you were given, end to end, in " +
+  "the workspace you were handed: read what you need, make the change, and verify it (build " +
+  "or tests) before reporting. Stay inside the brief — no adjacent refactors, no design " +
+  "changes, no commits or pushes unless the brief asks for them. Report what you changed, " +
+  "with file paths, and anything you could not do.";
+
+const WORKER_ASK_PROMPT =
+  "You are a read-only investigator. Answer the one question you were given from the " +
+  "workspace: read and search the code, then report concrete findings with file paths and " +
+  "line numbers. You cannot edit files or run commands — say so plainly if the task needs " +
+  "them, rather than describing an edit as if you made it.";
+
+/**
+ * The Orchestrator's worker subagents as SDK agent definitions.
+ *
+ * Two deliberate differences from the oracles:
+ *
+ *  - Workers get WRITE tools in code mode. An oracle advises and never
+ *    executes; a worker exists to execute. In ask mode they collapse to the
+ *    read-only surface — not "Bash, screened", because the ask-mode bash
+ *    allowlist is enforced in `canUseTool` and a subagent's shell is not a
+ *    surface to bet a read-only session on.
+ *  - The backing model is forced onto this engine's bridge with an EMPTY
+ *    provider set, so `worker-fast`'s Cerebras preference (a real option on
+ *    opencode) can't name a model this SDK cannot run. Worker NAMES stay
+ *    stable across engines; only the body changes.
+ *
+ * Registered on every run like the oracles — a stable agent set — while only
+ * orchestrator-preset runs are told the workers exist.
+ */
+export function claudeDirectWorkerAgents(input: {
+  mode?: "ask" | "code" | "scratch";
+  disableLocalWorkspaceTools?: boolean;
+}): Record<
+  string,
+  {
+    description: string;
+    prompt: string;
+    model: string;
+    tools: string[];
+    effort?: "low" | "medium" | "high" | "max";
+  }
+> {
+  const out: Record<string, any> = {};
+  const isAsk = input.mode === "ask";
+  for (const [name, worker] of Object.entries(ORCHESTRATOR_WORKER_AGENTS)) {
+    const backing = claudeDirectWorkerBacking(name);
+    if (!backing) continue;
+    const { effort } = claudeDirectEffortConfig(backing.variant);
+    out[name] = {
+      description: worker.description,
+      prompt: isAsk ? WORKER_ASK_PROMPT : WORKER_CODE_PROMPT,
+      model: backing.slug,
+      tools: withoutLocalWorkspaceTools(
+        isAsk ? WORKER_READ_TOOLS : WORKER_CODE_TOOLS,
+        input.disableLocalWorkspaceTools
+      ),
+      ...(effort ? { effort } : {}),
+    };
+  }
+  return out;
+}
+
+/** The Anthropic model backing a worker name on this engine, or undefined
+ *  when no bridge entry resolves to a model the SDK can run. */
+function claudeDirectWorkerBacking(
+  name: string
+): { slug: string; label: string; variant: SessionEffort } | undefined {
+  const backing = orchestratorWorkerForBridge(name, SUPPORTED_UPSTREAM, new Set());
+  if (!backing) return undefined;
+  const slug = backing.model.replace(/^[^/]+\//, "");
+  if (!isNativeClaudeSlug(slug)) return undefined;
+  return { slug, label: backing.label, variant: backing.variant };
+}
+
+/** The worker roster for an orchestrator preset's instructions block: the
+ *  preset's workers that this engine actually registered, with the label of
+ *  the model each one runs here. */
+export function claudeDirectOrchestratorWorkers(
+  preset: OrchestratorPreset
+): Array<{ agent: string; label: string; modelLabel: string }> {
+  return preset.workerAgents.flatMap((name) => {
+    const backing = claudeDirectWorkerBacking(name);
+    if (!backing) return [];
+    return [
+      {
+        agent: name,
+        label: ORCHESTRATOR_WORKER_AGENTS[name]?.label || name,
+        modelLabel: backing.label,
+      },
+    ];
+  });
+}
+
+/** Every subagent this engine registers: the Dial's oracles and the
+ *  Orchestrator's workers. One static set per mode, so a session that switches
+ *  preset mid-run never finds an agent missing. */
+export function claudeDirectAgents(input: {
+  mode?: "ask" | "code" | "scratch";
+  disableLocalWorkspaceTools?: boolean;
+}): Record<string, unknown> {
+  return {
+    ...claudeDirectOracleAgents(input),
+    ...claudeDirectWorkerAgents(input),
+  };
 }
 
 // ── Usage ────────────────────────────────────────────────────────────────────

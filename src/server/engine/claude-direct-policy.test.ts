@@ -9,22 +9,64 @@
 import { describe, expect, test } from "bun:test";
 import { opencodeRunPolicy } from "../opencode-policy";
 import { STRIPE_CONFIRM_TOOLS } from "../runner-shared";
+import { ORCHESTRATOR_PRESETS, resolveModel, toClaudeModel } from "../models";
+import type { ResolvedWorkspaceModelPreset } from "../workspace-model-presets";
 import {
   addResultUsage,
   askBashDecision,
+  claudeDirectAgents,
   claudeDirectBuiltinTools,
   claudeDirectDisallowedTools,
   claudeDirectEffortConfig,
   claudeDirectInProcessServers,
   claudeDirectOracleAgents,
   claudeDirectOracleLabel,
+  claudeDirectOrchestratorWorkers,
   claudeDirectToolDecision,
+  claudeDirectWorkerAgents,
+  claudeDirectWorkspacePresetWiring,
   emptyTurnUsage,
   isStrippedToolName,
   parseMcpToolName,
   resolveClaudeDirectModel,
   splitBashSubCommands,
 } from "./claude-direct-policy";
+
+// Workspace ("Custom") preset fixtures. The id → preset lookup reads the
+// workspace store on disk, which these tests deliberately don't touch (the
+// state dir resolves at module load, so a scratch redirect either misses or
+// risks writing a phantom workspace into the live store). The store read is
+// the only impure step; everything the engine DOES with a resolved preset is
+// pure, and that half is what these exercise.
+const WORKSPACE_PRESETS: Record<string, ResolvedWorkspaceModelPreset> = {
+  // A plain custom combo: an Anthropic lead with its own effort.
+  opus: {
+    id: "workspace-preset/ws-test/opus",
+    label: "Opus, my way",
+    model: "claude-opus-5",
+    effort: "xhigh",
+    note: "## Workspace model preset · Opus, my way",
+  },
+  // The same combo a built-in Dial preset already describes, so the workspace
+  // preset points at it and inherits the real oracle wiring.
+  opusFable: {
+    id: "workspace-preset/ws-test/opus-fable",
+    label: "Opus + Fable oracle",
+    model: "claude-opus-5",
+    effort: "xhigh",
+    enginePresetId: "dial/opus-fable",
+    note: "## Workspace model preset · Opus + Fable oracle",
+  },
+  // Same indirection, orchestrator side (the opencode runner follows both).
+  lead: {
+    id: "workspace-preset/ws-test/lead",
+    label: "Fable leads",
+    model: "claude-fable-5",
+    effort: "high",
+    enginePresetId: "orchestrator/fable",
+    note: "## Workspace model preset · Fable leads",
+  },
+};
 
 describe("resolveClaudeDirectModel", () => {
   test("accepts the canonical engine-prefixed id", () => {
@@ -73,6 +115,132 @@ describe("resolveClaudeDirectModel", () => {
     const out = resolveClaudeDirectModel("claude/dial/not-real");
     expect(out).toHaveProperty("error");
     expect((out as { error: string }).error).toContain("Dial preset");
+  });
+
+  test("routes an Orchestrator preset to its lead and keeps the preset attached", () => {
+    const out = resolveClaudeDirectModel("claude/orchestrator/fable");
+    expect(out).toMatchObject({
+      model: "claude-fable-5",
+      orchestrator: { id: "orchestrator/fable" },
+      effort: "high",
+    });
+    expect(out).not.toHaveProperty("dial");
+  });
+
+  test("refuses an Orchestrator preset whose lead is another vendor's model", () => {
+    const out = resolveClaudeDirectModel("claude/orchestrator/sol");
+    expect(out).toHaveProperty("error");
+    expect((out as { error: string }).error).toContain("Anthropic models only");
+  });
+
+  test("refuses an unknown Orchestrator preset", () => {
+    const out = resolveClaudeDirectModel("claude/orchestrator/not-real");
+    expect(out).toHaveProperty("error");
+    expect((out as { error: string }).error).toContain("Orchestrator preset");
+  });
+
+  test("a preset id resolves the same with or without the engine prefix", () => {
+    // directEngineServes asks about prefix-stripped ids, so the two spellings
+    // have to agree or the picker offers an engine the adapter refuses.
+    for (const id of ["dial/opus-fable", "orchestrator/fable", "dial/high"]) {
+      expect(resolveClaudeDirectModel(id)).toEqual(resolveClaudeDirectModel(`claude/${id}`));
+    }
+  });
+
+  test("the preset's effort overrides nothing else — a plain model carries none", () => {
+    expect(resolveClaudeDirectModel("claude/anthropic/claude-opus-5")).toEqual({
+      model: "claude-opus-5",
+    });
+  });
+});
+
+describe("workspace (Custom) presets", () => {
+  test("a plain custom combo contributes its lead model and pinned effort", () => {
+    const wiring = claudeDirectWorkspacePresetWiring(WORKSPACE_PRESETS.opus);
+    expect(wiring).toMatchObject({
+      model: "claude-opus-5",
+      effort: "xhigh",
+      label: "Opus, my way",
+      workspacePreset: { id: WORKSPACE_PRESETS.opus.id },
+    });
+    // Nothing built-in behind it, so no oracle and no workers.
+    expect(wiring).not.toHaveProperty("dial");
+    expect(wiring).not.toHaveProperty("orchestrator");
+  });
+
+  test("follows enginePresetId so a restated built-in keeps its oracle", () => {
+    expect(claudeDirectWorkspacePresetWiring(WORKSPACE_PRESETS.opusFable)).toMatchObject({
+      model: "claude-opus-5",
+      dial: { id: "dial/opus-fable", oracleAgent: "oracle-fable" },
+      workspacePreset: { id: WORKSPACE_PRESETS.opusFable.id },
+    });
+  });
+
+  test("follows enginePresetId on the orchestrator side too", () => {
+    expect(claudeDirectWorkspacePresetWiring(WORKSPACE_PRESETS.lead)).toMatchObject({
+      model: "claude-fable-5",
+      orchestrator: { id: "orchestrator/fable" },
+    });
+  });
+
+  test("a preset with no effort of its own inherits the built-in's", () => {
+    const { effort: _drop, ...noEffort } = WORKSPACE_PRESETS.opusFable;
+    expect(claudeDirectWorkspacePresetWiring(noEffort).effort).toBe("xhigh");
+  });
+
+  test("an unknown enginePresetId is ignored rather than faked", () => {
+    const wiring = claudeDirectWorkspacePresetWiring({
+      ...WORKSPACE_PRESETS.opus,
+      enginePresetId: "dial/not-real",
+    });
+    expect(wiring).not.toHaveProperty("dial");
+    expect(wiring).not.toHaveProperty("orchestrator");
+    expect(wiring.model).toBe("claude-opus-5");
+  });
+
+  test("the id head routes to the workspace store instead of a model parse", () => {
+    // The store has no such workspace, so this is the "no live preset" arm —
+    // what matters is that it is named as a workspace preset rather than
+    // falling through to "not a model the claude engine can run".
+    const out = resolveClaudeDirectModel("claude/workspace-preset/ws-not-a-workspace/nope");
+    expect(out).toHaveProperty("error");
+    expect((out as { error: string }).error).toContain("workspace preset");
+  });
+});
+
+describe("preset routing stays in lockstep with the picker", () => {
+  // The failure this guards: the picker offers the claude engine for a preset
+  // the adapter then refuses (or the reverse — a preset the engine can run
+  // that no picker id routes to).
+  const servable = ["dial/opus-fable", "orchestrator/fable"];
+  const refused = [
+    "dial/high",
+    "orchestrator/sol",
+    "workspace-preset/ws-not-a-workspace/nope",
+  ];
+
+  test("every preset the picker routes here, the engine resolves", () => {
+    for (const id of servable) {
+      expect(toClaudeModel(id)).toBeTruthy();
+      expect(resolveModel(`claude/${id}`)?.id).toBe(`claude/${id}`);
+      expect(resolveClaudeDirectModel(`claude/${id}`)).not.toHaveProperty("error");
+    }
+  });
+
+  test("every preset the engine refuses, the picker never routes here", () => {
+    for (const id of refused) {
+      expect(toClaudeModel(id)).toBeUndefined();
+      expect(resolveModel(`claude/${id}`)).toBeNull();
+      expect(resolveClaudeDirectModel(`claude/${id}`)).toHaveProperty("error");
+    }
+  });
+
+  test("the orchestrator presets that route here are exactly the Anthropic-led ones", () => {
+    for (const preset of ORCHESTRATOR_PRESETS) {
+      const routes = !!toClaudeModel(preset.id);
+      const resolves = !("error" in resolveClaudeDirectModel(`claude/${preset.id}`));
+      expect(routes).toBe(resolves);
+    }
   });
 });
 
@@ -336,6 +504,76 @@ describe("dial oracles", () => {
       expect(def.tools).not.toContain("Write");
       expect(def.tools).not.toContain("Edit");
       expect(def.tools).not.toContain("Bash");
+    }
+  });
+});
+
+describe("orchestrator workers", () => {
+  const code = claudeDirectWorkerAgents({ mode: "code" });
+  const ask = claudeDirectWorkerAgents({ mode: "ask" });
+
+  test("every worker resolves to a model this engine's bridge can serve", () => {
+    expect(Object.keys(code).length).toBeGreaterThan(0);
+    for (const [name, def] of Object.entries(code)) {
+      expect(def.model.startsWith("claude-")).toBe(true);
+      expect(def.model.includes("/")).toBe(false);
+      expect(def.description.length).toBeGreaterThan(0);
+      expect(name.startsWith("worker")).toBe(true);
+    }
+  });
+
+  test("worker-fast stays on the bridge instead of taking the Cerebras backing", () => {
+    // opencode prefers cerebras/gpt-oss-120b when that key is configured; this
+    // SDK cannot run it, and naming it would kill the task call.
+    expect(code["worker-fast"]).toBeDefined();
+    expect(code["worker-fast"].model.startsWith("claude-")).toBe(true);
+  });
+
+  test("code-mode workers execute; ask-mode workers cannot", () => {
+    for (const def of Object.values(code)) {
+      expect(def.tools).toContain("Write");
+      expect(def.tools).toContain("Edit");
+      expect(def.tools).toContain("Bash");
+    }
+    for (const def of Object.values(ask)) {
+      expect(def.tools).not.toContain("Write");
+      expect(def.tools).not.toContain("Edit");
+      // Not "Bash, screened": the ask-mode allowlist runs in canUseTool, which
+      // is not a surface to bet a read-only session's shell on.
+      expect(def.tools).not.toContain("Bash");
+    }
+  });
+
+  test("the roster for a preset names the models the workers actually run here", () => {
+    const preset = ORCHESTRATOR_PRESETS.find((p) => p.id === "orchestrator/fable")!;
+    const workers = claudeDirectOrchestratorWorkers(preset);
+    expect(workers.map((w) => w.agent)).toEqual(preset.workerAgents);
+    for (const w of workers) {
+      expect(w.modelLabel.length).toBeGreaterThan(0);
+      expect(w.modelLabel).not.toContain("/");
+      // Every agent the instructions name must be registered on the query.
+      expect(code[w.agent]).toBeDefined();
+    }
+  });
+
+  test("a run with no local workspace loses the subagents' shell and files too", () => {
+    // A subagent carries its own tool list, so the main agent's strip has to
+    // be mirrored here or a worker keeps a shell in the server's own cwd.
+    const stripped = claudeDirectAgents({ mode: "code", disableLocalWorkspaceTools: true });
+    for (const def of Object.values(stripped) as Array<{ tools: string[] }>) {
+      for (const tool of ["Bash", "Read", "Write", "Edit", "Glob", "Grep"]) {
+        expect(def.tools).not.toContain(tool);
+      }
+    }
+  });
+
+  test("both families are registered on every run, in both modes", () => {
+    for (const mode of ["ask", "code", "scratch"] as const) {
+      const all = claudeDirectAgents({ mode });
+      for (const name of Object.keys(claudeDirectOracleAgents())) {
+        expect(all[name]).toBeDefined();
+      }
+      for (const name of Object.keys(code)) expect(all[name]).toBeDefined();
     }
   });
 });

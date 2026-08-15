@@ -188,6 +188,27 @@ describe("model-id refusal", () => {
     );
     expect(events.map((e) => e.type)).toEqual(["error"]);
   });
+
+  test("an orchestrator preset led by another vendor is refused by name", async () => {
+    // The preset resolves (it exists), so the refusal has to name the lead
+    // model rather than reading as "unknown preset".
+    const events = await collect(
+      { journal: { osSessionId: "os-test-orch", kind: "prompt" } },
+      "claude/orchestrator/sol"
+    );
+    expect(events.map((e) => e.type)).toEqual(["error"]);
+    expect(events[0].content).toContain("Orchestrator preset");
+    expect(events[0].content).toContain("Anthropic models only");
+  });
+
+  test("a workspace preset id that names no live preset is refused as one", async () => {
+    const events = await collect(
+      { journal: { osSessionId: "os-test-wsp", kind: "prompt" } },
+      "claude/workspace-preset/ws-not-a-workspace/nope"
+    );
+    expect(events.map((e) => e.type)).toEqual(["error"]);
+    expect(events[0].content).toContain("workspace preset");
+  });
 });
 
 describe("the terminal contract", () => {

@@ -127,12 +127,13 @@ import { directEngineEnabled } from "./engines-config";
 import {
   addResultUsage,
   buildClaudeDirectMcpServers,
+  claudeDirectAgents,
   claudeDirectBuiltinTools,
   claudeDirectDisallowedTools,
   claudeDirectEffortConfig,
   claudeDirectInProcessServers,
-  claudeDirectOracleAgents,
   claudeDirectOracleLabel,
+  claudeDirectOrchestratorWorkers,
   claudeDirectToolDecision,
   emptyTurnUsage,
   resolveClaudeDirectModel,
@@ -371,7 +372,12 @@ export async function* runClaudeDirect(
     return;
   }
   const nativeModel = resolvedModel.model;
+  // The Dial / The Orchestrator / a workspace ("Custom") preset: the id
+  // resolved to a concrete Anthropic model above, and these are the wiring
+  // that rides with it — the oracle or worker instructions below, and the
+  // preset's own reasoning effort, which overrides the session's.
   const dial = resolvedModel.dial;
+  const orch = resolvedModel.orchestrator;
 
   const {
     prompt,
@@ -556,6 +562,18 @@ export async function* runClaudeDirect(
             },
           }
         : {}),
+      // Worker names are stable across engines; only the backing model label
+      // varies (claudeDirectOrchestratorWorkers keeps this in step with the
+      // agents actually registered on the query below).
+      ...(orch
+        ? {
+            orchestrator: {
+              presetLabel: orch.label,
+              mainLabel: nativeModel,
+              workers: claudeDirectOrchestratorWorkers(orch),
+            },
+          }
+        : {}),
     });
 
     // MCP: external servers through the shared resolver (per-run allowlist,
@@ -576,7 +594,7 @@ export async function* runClaudeDirect(
       for (const name of group.tools) denyMessages[name] = group.message;
     }
 
-    const effortConfig = claudeDirectEffortConfig(dial?.effort ?? opts.effort);
+    const effortConfig = claudeDirectEffortConfig(resolvedModel.effort ?? opts.effort);
     const disallowedTools = claudeDirectDisallowedTools({
       deniedTools: opts.deniedTools,
       confirmTools,
@@ -659,9 +677,14 @@ export async function* runClaudeDirect(
           disableLocalWorkspaceTools: opts.disableLocalWorkspaceTools,
         }),
         ...(disallowedTools.length ? { disallowedTools } : {}),
-        // The Dial's read-only oracle subagents; native Task/subagents keep
-        // working either way.
-        agents: claudeDirectOracleAgents() as any,
+        // The Dial's read-only oracle subagents and the Orchestrator's
+        // workers; native Task/subagents keep working either way. Registered
+        // on every run (a stable set), while only a preset run is told they
+        // exist through the instructions above.
+        agents: claudeDirectAgents({
+          mode,
+          disableLocalWorkspaceTools: opts.disableLocalWorkspaceTools,
+        }) as any,
         mcpServers: mcpConfig,
         strictMcpConfig: true,
         pathToClaudeCodeExecutable: CLAUDE_CODE_BIN,
