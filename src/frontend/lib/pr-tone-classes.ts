@@ -47,13 +47,55 @@ export const GIT_LABEL = "flex-1 overflow-hidden text-ellipsis";
  *  weight the row can carry — the Button primitive's `soft`, at chip size.
  *  `data-popup-open` keeps the menu triggers ("Request", "Change") lit while
  *  their own menu is open. */
-export const GIT_ACTION =
-	"inline-flex min-h-[22px] shrink-0 items-center whitespace-nowrap rounded-md bg-control px-2 text-label font-semibold text-dim transition-[color,background-color] enabled:hover:bg-active enabled:hover:text-fg data-[popup-open]:bg-active data-[popup-open]:text-fg disabled:cursor-default disabled:opacity-60";
-/** The same weak plate when the action opens a menu rather than doing the
+const GIT_ACTION_BOX =
+	"inline-flex min-h-[22px] shrink-0 items-center whitespace-nowrap rounded-md px-2 text-label font-semibold transition-[color,background-color] disabled:cursor-default disabled:opacity-60";
+const GIT_ACTION_NEUTRAL =
+	"bg-control text-dim enabled:hover:bg-active enabled:hover:text-fg data-[popup-open]:bg-active data-[popup-open]:text-fg";
+export const GIT_ACTION = `${GIT_ACTION_BOX} ${GIT_ACTION_NEUTRAL}`;
+/** What the plate adds when the action opens a menu rather than doing the
  *  thing: one trailing chevron, on the Button primitive's caret terms. That is
  *  14px beside a 12px label, `gap-1`, and 4px shaved off the caret's side so
  *  the glyph's own whitespace doesn't push the pair off balance. */
-export const GIT_ACTION_MENU = `${GIT_ACTION} gap-1 pr-1`;
+const GIT_ACTION_MENU_BOX = "gap-1 pr-1";
+
+/** The tone names a Review row's status band uses (WorkspaceInfo's
+ *  `REVIEW_ROW_BG`). A structurally identical union, so a row can pass its own
+ *  tone straight in. */
+export type RowActionTone = "green" | "yellow" | "red" | "blue" | "muted";
+
+/** The row's action, in the row's own colour. The action a Review row offers
+ *  is that row's next step — "Fix" belongs to the red reading, "Change" to the
+ *  yellow request — so it takes the band's hue rather than sitting on it as a
+ *  neutral plate and reading as unrelated chrome.
+ *
+ *  The hue is carried by the ink and a hairline ring rather than by a heavy
+ *  fill: the label is 12px, and mixing the tone into the plate under it costs
+ *  contrast fast (24% of the tone, what the PR chips use, drops a red label to
+ *  3.1:1 against its own fill). At 14% the plate still reads as tinted, the
+ *  ring says which colour without sitting behind any text, and the label keeps
+ *  ~3.6:1. Hover deepens the fill, where it is transient and pointer-only.
+ *
+ *  Each entry carries its whole colour set, resting and hover, because two
+ *  colour utilities on one element resolve by Tailwind's output order rather
+ *  than the order they are written — and each is spelled out rather than built
+ *  from the token name, because Tailwind only compiles class names it can find
+ *  in the source. `muted` keeps the neutral plate: a row with nothing to
+ *  report has no colour to lend. */
+const GIT_ACTION_TONE: Record<RowActionTone, string> = {
+	muted: GIT_ACTION_NEUTRAL,
+	green:
+		"bg-[color-mix(in_srgb,var(--green)_14%,var(--control-surface))] text-green shadow-[inset_0_0_0_1px_color-mix(in_srgb,currentColor_32%,transparent)] enabled:hover:bg-[color-mix(in_srgb,currentColor_24%,var(--control-surface))] data-[popup-open]:bg-[color-mix(in_srgb,currentColor_24%,var(--control-surface))]",
+	yellow:
+		"bg-[color-mix(in_srgb,var(--yellow)_14%,var(--control-surface))] text-yellow shadow-[inset_0_0_0_1px_color-mix(in_srgb,currentColor_32%,transparent)] enabled:hover:bg-[color-mix(in_srgb,currentColor_24%,var(--control-surface))] data-[popup-open]:bg-[color-mix(in_srgb,currentColor_24%,var(--control-surface))]",
+	red:
+		"bg-[color-mix(in_srgb,var(--red)_14%,var(--control-surface))] text-red shadow-[inset_0_0_0_1px_color-mix(in_srgb,currentColor_32%,transparent)] enabled:hover:bg-[color-mix(in_srgb,currentColor_24%,var(--control-surface))] data-[popup-open]:bg-[color-mix(in_srgb,currentColor_24%,var(--control-surface))]",
+	blue:
+		"bg-[color-mix(in_srgb,var(--blue)_14%,var(--control-surface))] text-blue shadow-[inset_0_0_0_1px_color-mix(in_srgb,currentColor_32%,transparent)] enabled:hover:bg-[color-mix(in_srgb,currentColor_24%,var(--control-surface))] data-[popup-open]:bg-[color-mix(in_srgb,currentColor_24%,var(--control-surface))]",
+};
+
+export function gitActionClass(tone: RowActionTone, menu = false): string {
+	return `${GIT_ACTION_BOX} ${GIT_ACTION_TONE[tone]}${menu ? ` ${GIT_ACTION_MENU_BOX}` : ""}`;
+}
 export const GIT_ACTION_CARET = "shrink-0 opacity-55";
 /** Follow-up line under the rows. Carries no colour: the caller adds
  *  `text-faint` ("Asked … ✓") or `text-red` (an error), because two colour

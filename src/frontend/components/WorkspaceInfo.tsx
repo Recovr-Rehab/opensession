@@ -51,7 +51,7 @@ import {
 import {
 	GIT_ACTION,
 	GIT_ACTION_CARET,
-	GIT_ACTION_MENU,
+	gitActionClass,
 	GIT_DOT,
 	GIT_DOT_BG,
 	GIT_LABEL,
@@ -808,7 +808,7 @@ function AgentReviewCard({
 					{actionable && (
 						<button
 							type="button"
-							className={GIT_ACTION}
+							className={gitActionClass(rowTone)}
 							disabled={busy !== null || active}
 							onClick={() => run(primary)}
 							title={primary.hint}
@@ -1082,7 +1082,7 @@ function ReviewerChip({
 				{reviewNow && (
 					<button
 						type="button"
-						className={GIT_ACTION}
+						className={gitActionClass(rowTone)}
 						title={rowTitle}
 						onClick={onReviewPr}
 					>
@@ -1094,7 +1094,7 @@ function ReviewerChip({
 					className={
 						reviewNow
 							? "-mr-1 ml-1 grid size-6 shrink-0 place-items-center rounded-md text-faint transition-[color,background-color] hover:bg-hover hover:text-fg"
-							: GIT_ACTION_MENU
+							: gitActionClass(rowTone, true)
 					}
 					aria-label="Review options"
 					title={rowTitle}
