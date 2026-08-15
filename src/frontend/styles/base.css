@@ -199,6 +199,11 @@
 	   quietly. Keep --border itself for the edge of a control, where the line
 	   IS the shape. */
 	--divider: color-mix(in srgb, var(--border) 55%, transparent);
+	/* The scrollbar thumb, on the platforms that draw a permanent one (see the
+	   scrollbar block further down). Translucent rather than a picked grey: the
+	   scrollers sit on four different fills, and an alpha keeps the thumb in the
+	   same relationship to each of them. */
+	--scrollbar-thumb: rgba(255, 255, 255, 0.2);
 	--text: #e9e9e9;
 	--text-dim: #a2a2a2;
 	--text-faint: #767676;
@@ -465,6 +470,10 @@ html[data-theme="light"] {
 	--row-chip-hover: color-mix(in srgb, #000000 5.5%, var(--row-chip));
 	--border: #e2e2e2;
 	--border-strong: #d0d0d0;
+	/* See the note on the dark token. A touch more ink for the same reason the
+	   greys above carry it: black on white reads lighter than the same alpha of
+	   white on charcoal. */
+	--scrollbar-thumb: rgba(0, 0, 0, 0.22);
 	--text: #1a1a1a;
 	--text-dim: #646464;
 	--text-faint: #949494;
@@ -815,6 +824,35 @@ html {
 }
 html[data-theme="light"] {
 	color-scheme: light;
+}
+
+/* ── Scrollbars ──────────────────────────────────────────────
+   A Mac on a trackpad draws an OVERLAY scrollbar: it fades in while you
+   scroll, sits over the content, and reserves no width at all. Connect a
+   mouse, or set Show scroll bars to Always, and the same window gets a
+   permanent 15px bar with a filled track down the side of every panel.
+   Measured against the transcript: a #272727 band on a #1a1a1a page carrying
+   a #606060 thumb, full height, right against the info panel's edge, where it
+   reads as a third column. Windows and Linux draw the same bar.
+
+   Thin with the track dropped keeps what the bar is for, which is where you
+   are in a long session and something to drag when a wheel is too slow, at a
+   fraction of the ink. 15px becomes 11px, and the band becomes the page.
+
+   Deliberately the standard properties, and NOT ::-webkit-scrollbar. That
+   pseudo-element replaces the platform scrollbar with a custom one, and a
+   custom scrollbar is never an overlay: giving it a width carves a permanent
+   gutter out of every Mac that draws overlays (measured in Chrome on macOS:
+   0px becomes 8px). The standard pair is inert wherever the platform draws
+   overlays, so it only reaches the bar that is really there. The app's own
+   `[&::-webkit-scrollbar]:hidden` utilities are safe for the same reason
+   nothing here sets a width — they hide, and a hidden bar reserves nothing.
+
+   scrollbar-width does not inherit, so it takes the universal selector. Zero
+   specificity, so the scrollers that hide their bar outright still win. */
+* {
+	scrollbar-width: thin;
+	scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 html,
