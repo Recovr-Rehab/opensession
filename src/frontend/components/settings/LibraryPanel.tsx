@@ -24,6 +24,13 @@ import {
 } from "../icons";
 import { useIsPhone } from "../../hooks/useIsPhone";
 import {
+	markTileClass,
+	markTileGradient,
+	markTileShadow,
+	MARK_TONES,
+	type MarkTone,
+} from "../../lib/mark-tile";
+import {
 	onSidebarToolsChanged,
 	readHiddenSidebarTools,
 	setSidebarToolVisible,
@@ -37,7 +44,6 @@ import {
 	settingsInputClass,
 } from "../../ui/settings";
 import { Badge } from "../../ui/badge";
-import { cn } from "../../ui/cn";
 import { Segmented, SegmentedOption } from "../../ui/segmented";
 import { EmptyState, InlineAlert, LoadingState } from "../../ui/state";
 import { Switch } from "../../ui/switch";
@@ -78,30 +84,16 @@ const FILTERS: { key: "all" | LibraryEntryType; label: string }[] = [
 	{ key: "integration", label: "Integrations" },
 ];
 
-/**
- * The tile for an entry that has no brand of its own — a solid plate carrying
- * the tone's ink, because these sit in a grid beside real brand marks and a
- * pale tint next to GitHub's black square reads as a placeholder waiting for
- * a logo. Yellow is deliberately absent: nothing in the palette reads on it.
- */
-const TONES = {
-	blue: "bg-blue text-white",
-	green: "bg-green text-white",
-	red: "bg-red text-white",
-	purple: "bg-purple text-white",
-	accent: "bg-accent text-on-accent",
-} as const;
-
-type Glyph = { icon: ComponentType<{ size?: number }>; tone: keyof typeof TONES };
+type Glyph = { icon: ComponentType<{ size?: number }>; tone: MarkTone };
 
 /** Per tool, because a tool is a place in the app and its glyph is how the
  *  sidebar already names it. */
 const TOOL_GLYPHS: Record<string, Glyph> = {
 	tasks: { icon: IconListCircles, tone: "blue" },
-	catchup: { icon: IconInbox, tone: "green" },
-	supporttinder: { icon: IconMessages, tone: "accent" },
+	catchup: { icon: IconInbox, tone: "indigo" },
+	supporttinder: { icon: IconMessages, tone: "pink" },
 	reports: { icon: IconStack, tone: "purple" },
-	analytics: { icon: IconChart, tone: "accent" },
+	analytics: { icon: IconChart, tone: "teal" },
 };
 
 /**
@@ -119,16 +111,16 @@ const JOB_GLYPHS: { match: RegExp; glyph: Glyph }[] = [
 	{ match: /error|health|monitor|uptime|incident|alarm/, glyph: { icon: IconStatusRing, tone: "red" } },
 	{ match: /doc|changelog|spell|release note/, glyph: { icon: IconNote, tone: "purple" } },
 	{ match: /test|flaky/, glyph: { icon: IconCheckCircle, tone: "green" } },
-	{ match: /support|ticket|recap|digest|rollup/, glyph: { icon: IconMessages, tone: "green" } },
-	{ match: /dream|reflect|retro|nightly/, glyph: { icon: IconMoon, tone: "purple" } },
-	{ match: /depend|cleanup|refactor|code/, glyph: { icon: IconWrench, tone: "blue" } },
+	{ match: /support|ticket|recap|digest|rollup/, glyph: { icon: IconMessages, tone: "orange" } },
+	{ match: /dream|reflect|retro|nightly/, glyph: { icon: IconMoon, tone: "indigo" } },
+	{ match: /depend|cleanup|refactor|code/, glyph: { icon: IconWrench, tone: "teal" } },
 	{ match: /\bpr\b|pull request|review|merge|branch/, glyph: { icon: IconPullRequest, tone: "blue" } },
 ];
 
 const TYPE_GLYPHS: Record<LibraryEntryType, Glyph> = {
 	tool: { icon: IconStack, tone: "blue" },
-	automation: { icon: IconBolt, tone: "accent" },
-	integration: { icon: IconPlug, tone: "green" },
+	automation: { icon: IconBolt, tone: "indigo" },
+	integration: { icon: IconPlug, tone: "teal" },
 };
 
 /** A service named in the entry's own name, for the entries that carry no
@@ -166,13 +158,18 @@ function EntryIcon({ entry, size = 34 }: { entry: LibraryEntry; size?: number })
 	const Icon = glyph.icon;
 	return (
 		<span
-			className={cn(
-				"flex shrink-0 items-center justify-center rounded-md",
-				TONES[glyph.tone],
-			)}
-			style={{ width: size, height: size }}
+			className={markTileClass(size)}
+			style={{
+				width: size,
+				height: size,
+				backgroundImage: markTileGradient(glyph.tone),
+				// White, in both themes. The plate is a saturated colour either
+				// way, so the ink on it does not answer to the page.
+				color: "#fff",
+				boxShadow: markTileShadow(MARK_TONES[glyph.tone][1]),
+			}}
 		>
-			<Icon size={Math.round(size * 0.56)} />
+			<Icon size={Math.round(size * 0.54)} />
 		</span>
 	);
 }
@@ -398,7 +395,9 @@ export function LibraryPanel() {
 								href={`${BASE_PATH}${entry.href}`}
 								title={entry.name}
 								aria-label={entry.name}
-								className="rounded-md transition-opacity hover:opacity-80"
+								// The tile's own corner, so the focus ring traces the mark
+								// rather than a squarer box behind it.
+								className="rounded-control transition-opacity hover:opacity-80"
 							>
 								<EntryIcon entry={entry} size={36} />
 							</a>
