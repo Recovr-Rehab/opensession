@@ -28,8 +28,28 @@ import { cn } from "../ui/cn";
 
 /** Below this there is nothing to navigate. */
 const MIN_MESSAGES = 2;
-/** Tick length. */
-const TICK_W = 15;
+/**
+ * Tick sizes. Resting ticks are short and quiet, so the rail reads as texture
+ * in the gutter rather than as a second scrollbar. Pointing at the rail grows
+ * them all, and the one under the pointer grows furthest, which is what makes
+ * the target legible at a 2px pitch without ever moving it.
+ *
+ * Each tick is LAID OUT at its largest and scaled down from its right edge, so
+ * the growth is a transform: no layout on a rail of sixty ticks, and the right
+ * edge stays put while the left one travels.
+ */
+const TICK_MAX_W = 20;
+const TICK_MAX_H = 3;
+/** At rest: an ordinary tick, and the message the reader is on. */
+const TICK_REST_W = 8;
+const TICK_CURRENT_W = 12;
+const TICK_REST_H = 2;
+/** Under the pointer: its neighbours, and the tick a click would take. */
+const TICK_HOT_W = 16;
+/** Per-tick delay away from the pointer, so the row opens as a ripple rather
+ *  than a slab. Capped, or the far end of a long rail lags visibly behind. */
+const STAGGER_MS = 14;
+const STAGGER_MAX = 6;
 /** Ideal gap between ticks, compressed when the session is long. */
 const PITCH = 10;
 /** Grab room above the first tick and below the last. */
@@ -69,11 +89,19 @@ export function MessageRail({ messages, containerRef, leaveLatest }: Props) {
 	const [active, setActive] = useState(0);
 	/** The message the reader is currently below. */
 	const [current, setCurrent] = useState(0);
+	/** Pointing at the rail, or on it from the keyboard: the state the ticks
+	 *  grow in. Held here rather than left to `group-hover`, because the
+	 *  stagger is measured from `active`, which only React knows. */
+	const [hovered, setHovered] = useState(false);
+	const [keyboard, setKeyboard] = useState(false);
 	const [box, setBox] = useState<RailBox | null>(null);
 	const [scrollable, setScrollable] = useState(false);
 
 	const count = messages.length;
 	const enabled = count >= MIN_MESSAGES;
+	/** The rail has the reader's attention: pointer on it, keyboard on it, or
+	 *  the list still up while the pointer crosses the gap into it. */
+	const hot = hovered || keyboard || open;
 
 	// The effects below outlive any one transcript frame, and a streaming
 	// session rebuilds `messages` on every append, so they read the list
@@ -278,9 +306,18 @@ export function MessageRail({ messages, containerRef, leaveLatest }: Props) {
 					// Both conditions on one stacked variant, so neither can
 					// out-order the other. It matches the gutter the transcript
 					// reserves (lib/message-rail.ts).
-					"group desktop:[@media(hover:hover)]:block",
+					"desktop:[@media(hover:hover)]:block",
 				)}
 				style={{ right: box.inset, width: RAIL_W, height: boxH }}
+				onPointerEnter={(event) => {
+					if (event.pointerType === "touch") return;
+					// Name the tick in the same event that opens the rail, so the
+					// ripple starts from where the pointer landed rather than from
+					// whichever tick was last pointed at.
+					setActive(indexAt(event.clientY));
+					setHovered(true);
+				}}
+				onPointerLeave={() => setHovered(false)}
 				onPointerMove={(event) => {
 					if (event.pointerType === "touch") return;
 					setActive(indexAt(event.clientY));
@@ -289,7 +326,16 @@ export function MessageRail({ messages, containerRef, leaveLatest }: Props) {
 					// Only a keyboard arrival resets the target. On a click the
 					// pointer has already named the tick it wants, and focus lands
 					// between that and the click.
-					if (event.currentTarget.matches(":focus-visible")) setActive(current);
+					if (!event.currentTarget.matches(":focus-visible")) return;
+					setActive(current);
+					setKeyboard(true);
+				}}
+				onBlur={() => {
+					// Tabbing away from a list you opened with the keyboard takes
+					// it with you. Only then: a click on a row also blurs the rail
+					// (the rows are not tab stops), and that must leave it up.
+					if (keyboard) setOpen(false);
+					setKeyboard(false);
 				}}
 				onKeyDown={onKeyDown}
 				onClick={(event) => {
@@ -301,20 +347,43 @@ export function MessageRail({ messages, containerRef, leaveLatest }: Props) {
 				}}
 			>
 				{messages.map((message, index) => {
-					const lit = index === current || (open && index === active);
-					const height = lit ? 3 : 2;
+					// While the rail is being pointed at, the tick a click would
+					// take over from the one the reader is parked on: the target
+					// is what the growth is answering.
+					const target = hot && index === active;
+					const here = index === current;
+					const width = hot
+						? target
+							? TICK_MAX_W
+							: TICK_HOT_W
+						: here
+							? TICK_CURRENT_W
+							: TICK_REST_W;
+					const tall = hot ? target : here;
 					return (
 						<span
 							key={message.id}
 							aria-hidden
 							className={cn(
-								"absolute right-0 block rounded-[999px] transition-colors duration-150",
-								lit ? "bg-fg" : "bg-line-strong group-hover:bg-faint",
+								"absolute right-0 block origin-right rounded-[999px]",
+								"transition-[transform,background-color] duration-200 ease-[var(--ease)]",
+								"motion-reduce:transition-none",
+								target || (here && !hot)
+									? "bg-fg"
+									: here
+										? "bg-dim"
+										: hot
+											? "bg-faint"
+											: "bg-line-strong",
 							)}
 							style={{
-								top: tickY(index) - height / 2,
-								width: TICK_W,
-								height,
+								top: tickY(index) - TICK_MAX_H / 2,
+								width: TICK_MAX_W,
+								height: TICK_MAX_H,
+								transform: `scale(${width / TICK_MAX_W},${(tall ? TICK_MAX_H : TICK_REST_H) / TICK_MAX_H})`,
+								transitionDelay: hot
+									? `${Math.min(Math.abs(index - active), STAGGER_MAX) * STAGGER_MS}ms`
+									: "0ms",
 							}}
 						/>
 					);
