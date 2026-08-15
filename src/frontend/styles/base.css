@@ -2349,20 +2349,6 @@ html[data-theme="light"] span.commit-ref:hover {
 	}
 }
 
-/* The hairline under the Reports column's heading, driven by that column's own
-   scroll rather than by time (see lib/reports-classes.ts, which sets the
-   timeline and the 12px range). A rule that only appears once something has
-   gone under the title is the difference between a heading and a form section.
-   Keyframes have no element to hang a utility on, so this sits here. */
-@keyframes reports-head-rule {
-	from {
-		opacity: 0;
-	}
-	to {
-		opacity: 1;
-	}
-}
-
 /* Entrance for the sidebar's filter popover and the mini-menus it opens (see
    components/sidebar/Filters.tsx, which spells it as `animate-[hovercard-in_…]`).
    A keyframe set has no class to hang on, so it can't be a utility; it sits here

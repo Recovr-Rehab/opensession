@@ -194,17 +194,18 @@ export function Reports({
 		<div className="flex min-h-0 flex-1">
 			{showList && (
 				<aside className={REPORTS_COLUMN}>
-					{/* The heading sits INSIDE the scroller so the rows pass under
-					    it rather than starting below it. */}
+					{/* The bar sits above the scroller, not in it, so it holds its
+					    place edge to edge while the rows travel out of sight
+					    beneath it. */}
+					<div className={REPORTS_COLUMN_HEADER}>
+						<h1 className={REPORTS_COLUMN_TITLE}>Reports</h1>
+						{/* The right of the bar is the column's action slot. Today it
+						    holds the one thing the column can say about itself: how
+						    many automations are reporting. A control that acts on the
+						    whole list belongs beside it. */}
+						<span className={REPORTS_COLUMN_COUNT}>{groups.length}</span>
+					</div>
 					<div className={REPORTS_LIST}>
-						<div className={REPORTS_COLUMN_HEADER}>
-							<h1 className={REPORTS_COLUMN_TITLE}>Reports</h1>
-							{/* The right of the heading is the column's action slot.
-							    Today it holds the one thing the column can say about
-							    itself: how many automations are reporting. A control
-							    that acts on the whole list belongs beside it. */}
-							<span className={REPORTS_COLUMN_COUNT}>{groups.length}</span>
-						</div>
 						{groups.map((group) => {
 							const urgency = reportUrgencyLabel(group.latest.urgency);
 							return (
@@ -274,8 +275,10 @@ export function Reports({
 							</button>
 							{selected && (
 								<>
-									<h2 className="m-0 mt-1 px-1 text-base font-semibold leading-snug text-fg">{selected.title}</h2>
-									<p className="m-0 mt-1 px-1 text-xs leading-5 text-dim line-clamp-2">{formatDate(selected.createdAt, true)}{selected.summary ? ` · ${selected.summary}` : ""}</p>
+									{/* Same argument as the desktop header below: the report
+									    repeats this line as its own first heading. */}
+									<h2 className="m-0 mt-1 px-1 text-item-title font-medium leading-snug text-dim">{selected.title}</h2>
+									<p className="m-0 mt-1 px-1 text-xs leading-5 text-faint line-clamp-2">{formatDate(selected.createdAt, true)}{selected.summary ? ` · ${selected.summary}` : ""}</p>
 									<div className="mt-1.5 px-1"><ReportSignal report={selected} /></div>
 									<div className="mt-2.5 flex items-center gap-2 px-1">
 										<Select
@@ -296,10 +299,15 @@ export function Reports({
 					) : (
 						selected && (
 							<header className="flex shrink-0 items-start gap-4 border-b border-divider px-5 py-3">
+								{/* Quiet on purpose. The report below opens with these same
+								    words as its own first heading, so a bold black copy of
+								    them an inch above was the page saying its name twice.
+								    This one is here to say WHICH report is open once the
+								    document has scrolled, which is a label's job. */}
 								<div className="min-w-0 flex-1">
-									<h2 className="m-0 truncate text-base font-semibold text-fg">{selected.title}</h2>
+									<h2 className="m-0 truncate text-item-title font-medium text-dim">{selected.title}</h2>
 									<div className="mt-1 flex min-w-0 items-center gap-2">
-										<p className="m-0 min-w-0 truncate text-xs text-dim">{formatDate(selected.createdAt, true)}{selected.summary ? ` · ${selected.summary}` : ""}</p>
+										<p className="m-0 min-w-0 truncate text-xs text-faint">{formatDate(selected.createdAt, true)}{selected.summary ? ` · ${selected.summary}` : ""}</p>
 										<ReportSignal report={selected} />
 									</div>
 								</div>
