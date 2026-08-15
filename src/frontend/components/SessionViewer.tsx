@@ -253,6 +253,7 @@ import {
 	PANEL_BODY,
 	PANEL_FOOTER,
 	PANEL_FOOTER_ITEM,
+	PANEL_INFO_TOP,
 	PANEL_OVERLAY,
 	PANEL_PR_PLATE,
 	PANEL_SHELL,
@@ -6265,7 +6266,7 @@ export function SessionViewer({
 								/>
 							) : (
 							<>
-							<div className="px-1">
+							<div className={`px-1 ${PANEL_INFO_TOP}`}>
 								<WorkspaceInfo
 									sessionId={session.id}
 									workspaceId={session.workspaceId || null}

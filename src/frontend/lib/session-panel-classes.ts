@@ -110,10 +110,25 @@ export const PANEL_RESIZE =
  * plate, not a plate followed by loose rows.
  */
 export const PANEL_PR_PLATE =
+	// `panel-pr-plate` is a hook, not styling: PANEL_INFO_TOP below reads it to
+	// tell a column that opens under this plate from one that opens alone.
+	"panel-pr-plate " +
 	// `empty:hidden` because the strip renders nothing on a session with no pull
 	// request to report (see PrStatusBar): the plate is a wrapper, so without it
 	// the column would still pay this margin for a row that isn't there.
 	"mx-3 mt-3 overflow-hidden rounded-lg empty:hidden";
+
+/**
+ * The info column's own top padding, on top of WorkspaceInfo's 12px.
+ *
+ * With the plate above it the column opens 12px under a filled surface, the
+ * same padding it takes on every other side. On a session with no pull request
+ * the strip collapses, and the column's first element is then a bare "Review"
+ * label sitting that same 12px off the panel's top edge. A small label needs
+ * more air above it than a plate does, so the column opens lower when it stands
+ * alone and keeps the matched 12px when it doesn't.
+ */
+export const PANEL_INFO_TOP = "pt-2 [.panel-pr-plate:not(:empty)~*_&]:pt-0";
 
 /** The panel's scrolling content. */
 export const PANEL_BODY = "min-h-0 flex-1 overflow-y-auto";
