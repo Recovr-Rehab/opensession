@@ -3856,6 +3856,7 @@ export function App(
 				{settingsActive && (
 					<Settings
 						onBack={goBack}
+						railWidth={sidebarCollapsed ? 0 : sidebarWidth}
 						workspace={settingsWorkspaceId ? workspaces.find((workspace) => workspace.id === settingsWorkspaceId) : undefined}
 						section={
 							route.view === "settings"

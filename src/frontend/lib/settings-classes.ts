@@ -30,6 +30,8 @@
  * two navs genuinely differ on, and says why.
  */
 
+import type { CSSProperties } from "react";
+
 import {
 	SIDEBAR_DENSITY_VARS,
 	SIDEBAR_GROUP,
@@ -47,14 +49,47 @@ import {
  * and the shadow on the content's left edge (see SETTINGS_CONTENT), so the
  * column itself needs no fill and no border of its own.
  *
- * It clips, because the content column enters from 18px right of where it
- * rests (`settings-paper-in`). Without the clip that overhang gives the window
- * a horizontal scrollbar for the length of the entrance, and a scrollbar
- * appearing and vanishing is louder than the motion it belongs to. Nothing
- * here needs to escape the page: both columns scroll themselves, and the
- * menus in the nav footer portal to the body.
+ * It clips, because the content column enters from wherever the app's seam was
+ * (`settingsSeamStyle`, `settings-paper-in`). Without the clip that overhang
+ * gives the window a horizontal scrollbar for the length of the entrance, and
+ * a scrollbar appearing and vanishing is louder than the motion it belongs to.
+ * Nothing here needs to escape the page: both columns scroll themselves, and
+ * the menus in the nav footer portal to the body.
  */
 export const SETTINGS_PAGE = "flex min-h-0 flex-1 overflow-hidden bg-sidebar";
+
+/**
+ * The nav's width in px, mirroring `w-58` on SETTINGS_NAV below. It is written
+ * out because the entrance measures against it and Tailwind only compiles
+ * class names it can read in the source, so the utility cannot be built from
+ * this constant. Change one, change the other.
+ */
+export const SETTINGS_NAV_WIDTH = 232;
+
+/**
+ * The one number the entrance needs: how far the seam between chrome and
+ * content has to travel to become the settings seam.
+ *
+ * The app's rail is resizable and can be collapsed, so this is measured rather
+ * than assumed. At the default 280px rail it is 48px, and the content column
+ * starts 48px right of where it rests, which is exactly where its edge already
+ * was a frame earlier. That is what makes the page arrive instead of appear:
+ * the rail you clicked in narrows into the settings nav, and nothing on screen
+ * jumps to a new position.
+ *
+ * Clamped, because past about 96px a settling seam starts reading as a panel
+ * flying in, and the truthful distance then costs more than it buys. The rail
+ * drags between 200px and 480px, so the clamp is idle across most of that
+ * range and only engages at the two ends: a rail dragged past ~330px, and a
+ * collapsed rail (0px), where the paper starts over the nav and retreats right
+ * to uncover it.
+ */
+export function settingsSeamStyle(railWidth: number): CSSProperties {
+	const seam = Math.round(railWidth - SETTINGS_NAV_WIDTH);
+	return {
+		"--settings-seam": `${Math.max(-96, Math.min(96, seam))}px`,
+	} as CSSProperties;
+}
 
 /**
  * The nav column. No fill, no edge: the page under it is already the sidebar
@@ -70,7 +105,8 @@ export const SETTINGS_PAGE = "flex min-h-0 flex-1 overflow-hidden bg-sidebar";
  * `settings-paper-in` in base.css). The column it replaces was the app's own
  * sidebar, on this same surface at this same edge, so it is the half of the
  * page that did not change, and it is what the content column arrives over.
- * Fading it in as well only empties the window for a frame.
+ * Fading it in as well only empties the window for a frame. Its width is the
+ * one number the entrance needs; see SETTINGS_NAV_WIDTH above.
  */
 export const SETTINGS_NAV =
 	`flex w-58 shrink-0 flex-col px-3 py-4 [html.wco_&]:pt-(--desktop-header-h) ${SIDEBAR_DENSITY_VARS}`;
@@ -121,14 +157,15 @@ export const SETTINGS_BACK =
  * thing between them is that hairline plus, in light, a little depth. The
  * shadow rides `--content-edge-shadow`, which is `none` in dark.
  *
- * It is also the only thing that moves when Settings opens, sliding in from the
- * right over the chrome (`settings-paper-in`). That is the paper being laid
- * down, seam and shadow first, and it is the direction a pushed panel arrives
- * from on phones. It takes the spatial duration because it crosses the page,
- * and it animates alone: the nav is already there to receive it.
+ * It is also the only thing that moves when Settings opens, starting at the
+ * app seam's old position and gliding to this one (`settingsSeamStyle`,
+ * `settings-paper-in`). It travels a short, anchored distance rather than
+ * crossing the page, so it takes the default duration, not the spatial one,
+ * and it animates alone: the nav is already there to receive it. Nothing
+ * fades, so the page you asked for is legible in the first frame.
  */
 export const SETTINGS_CONTENT =
-	"flex min-w-0 flex-1 justify-center overflow-y-auto border-l border-divider bg-surface px-8 pt-11 desktop:[box-shadow:var(--content-edge-shadow)] animate-[settings-paper-in_var(--dur-lg)_var(--ease)] motion-reduce:animate-none";
+	"flex min-w-0 flex-1 justify-center overflow-y-auto border-l border-divider bg-surface px-8 pt-11 desktop:[box-shadow:var(--content-edge-shadow)] animate-[settings-paper-in_var(--dur)_var(--ease)] motion-reduce:animate-none";
 export const SETTINGS_CONTENT_TOOL = "min-h-0 p-0";
 
 /** Same column inside the phone sheet — a phone gutter instead of the desktop one. */
