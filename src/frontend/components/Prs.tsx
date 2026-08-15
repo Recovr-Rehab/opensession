@@ -608,14 +608,17 @@ export function Prs({
                                 </span>
                               )}
                             </span>
-                            {/* The sign already says which way each number
-                                went, so the diff joins the age in one quiet
-                                right-hand tier rather than adding a second
-                                green and red to every row. */}
-                            <span className="justify-self-end text-meta tabular-nums text-faint phone:hidden">
-                              {row.additions !== undefined && <span>+{compactDiff(row.additions)}</span>}
+                            {/* Added and removed keep diff's own green and red.
+                                It is the one place on the row where the colour
+                                is the convention rather than a status, and it
+                                reads at a glance in a way a neutral pair of
+                                numbers does not. */}
+                            <span className="justify-self-end text-meta tabular-nums phone:hidden">
+                              {row.additions !== undefined && (
+                                <span className="text-green">+{compactDiff(row.additions)}</span>
+                              )}
                               {row.deletions !== undefined && (
-                                <span className="ml-2">−{compactDiff(row.deletions)}</span>
+                                <span className="ml-2 text-red">−{compactDiff(row.deletions)}</span>
                               )}
                             </span>
                             <span className="justify-self-end text-meta tabular-nums text-faint">
