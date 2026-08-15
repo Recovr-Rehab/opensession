@@ -31,6 +31,10 @@ export function PageLayout({
 }: PageLayoutProps) {
 	return (
 		<div
+			// The scroller the app's top bar watches, so it can close itself off
+			// with a hairline once this page has travelled under it. Read by
+			// App.tsx through hooks/useScrollEdge.ts; it styles nothing.
+			data-page-scroll
 			className={cn(
 				"min-h-0 w-full flex-1 overflow-y-auto",
 				className,

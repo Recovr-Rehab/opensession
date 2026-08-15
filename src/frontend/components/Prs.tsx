@@ -317,7 +317,7 @@ export function Prs({
   return (
     // The page frame every other list page in the app uses: one centred
     // column at the shared width and padding, a PageHeader on top.
-    <div className="min-h-0 w-full flex-1 overflow-y-auto bg-surface">
+    <div data-page-scroll className="min-h-0 w-full flex-1 overflow-y-auto bg-surface">
       <div className="mx-auto w-full max-w-[920px] px-6 pb-15 pt-7 max-[560px]:px-4 max-[560px]:pb-12 max-[560px]:pt-[18px]">
         <PageHeader className="items-center max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-3.5">
           <div className="min-w-0 flex-1">

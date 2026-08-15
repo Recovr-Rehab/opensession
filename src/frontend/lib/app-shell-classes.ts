@@ -177,11 +177,18 @@ export const DETAIL_TOPBAR =
 
 /**
  * The plain title. Matches `.viewer-header` and the sidebar brand row's height
- * so the three line up across the top of the app — at every width, including
+ * so the three line up across the top of the app at every width, including
  * under a tab strip.
  *
- * The bottom hairline drops when the tab strip follows, leaving the strip's
- * own bottom inset as the single divider above the content.
+ * It takes the page's own fill rather than the lifted `--topbar-bg` chrome
+ * tint, and draws no line under itself. That is the answer `.viewer-header`
+ * settled on for the chat, and the reason is the same here: a bar and the
+ * content below it sharing one fill means the top of a page reads as one
+ * surface, and at the top of a list there is no seam to mark. It was a step of
+ * grey with a hairline under it, which drew a boundary across a place nothing
+ * was crossing. Once something IS passing underneath, `.detail-topbar` grows
+ * the hairline back (SCROLL_EDGE_DIVIDER), which is why the line belongs to
+ * that wrapper and not to this row.
  *
  * The row is always drawn on a route that has a name, whether or not the name
  * is showing in it (DETAIL_TOPBAR_TITLE_TEXT below decides that). Two things
@@ -192,9 +199,8 @@ export const DETAIL_TOPBAR =
  */
 export const DETAIL_TOPBAR_TITLE =
 	"detail-topbar-title wco-chrome flex h-[var(--desktop-header-h)] items-center px-4 " +
-	"border-b border-b-divider bg-[var(--topbar-bg)] " +
+	"bg-surface " +
 	"text-item-title font-semibold text-fg " +
-	"[.detail-topbar:has(+_.session-tabs)_&]:border-b-0 " +
 	// Collapsed desktop sidebar: clear the floating re-open control and the
 	// fallback nav/search cluster beside it.
 	"desktop:[.app-body.sidebar-collapsed_&]:pl-[148px] " +

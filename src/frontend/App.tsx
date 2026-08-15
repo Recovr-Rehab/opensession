@@ -672,7 +672,11 @@ export function App(
 	// Each half of the top row answers its own scroller: the pane's bar to the
 	// transcript beneath it, the sidebar's strip to the list. Both scrollers
 	// belong to other components, so they are found by their own hooks.
-	useScrollEdge(topbarEl, ".viewer-messages");
+	// Either scroller can be the one under the bar: a session's transcript, or
+	// a page's own list. Only one of the two is ever in the pane, and the bar
+	// no longer carries a line of its own, so a page that failed to answer here
+	// would leave content vanishing at an unmarked edge.
+	useScrollEdge(topbarEl, ".viewer-messages, [data-page-scroll]");
 	useScrollEdge(sidebarBrandEl, "[data-sidebar-scroll]");
 	// Centered under the mobile top-bar title: the composer's model pill is hidden
 	// on phones, so the session viewer portals a compact tap-to-switch model

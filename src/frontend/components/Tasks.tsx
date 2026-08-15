@@ -205,7 +205,7 @@ export function Tasks({ addHandler, onOpenSession }: TasksProps) {
 	const done = (tasks || []).filter((task) => task.status === "done");
 
 	return (
-		<div className="h-full overflow-y-auto px-4 py-5 sm:px-7 sm:py-7">
+		<div data-page-scroll className="h-full overflow-y-auto px-4 py-5 sm:px-7 sm:py-7">
 			<div className="mx-auto max-w-[760px]">
 				<PageHeader>
 					<div>
