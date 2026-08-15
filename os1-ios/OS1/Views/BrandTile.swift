@@ -211,6 +211,11 @@ enum SVGPath {
                 current = subpathStart
                 lastCubicControl = nil
                 lastQuadControl = nil
+                // Closepath takes no coordinates, so it cannot repeat. Left
+                // as the pending command, a stray number after it would loop
+                // here forever without consuming a byte; " " ends the parse
+                // on the next pass instead.
+                command = " "
             default:
                 return path
             }

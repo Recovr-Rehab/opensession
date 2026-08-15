@@ -103,6 +103,20 @@ enum OS1VisualStyle {
             ? UIColor(white: 1, alpha: 0.06)
             : UIColor(white: 0, alpha: 0.06)
     })
+    /// A turn footer's chips, and the same wash the web paints under its own.
+    /// Ink rather than a surface for the reason above: `panel` is WHITE in
+    /// light appearance, so a chip on the transcript canvas read as a pale
+    /// box punched OUT of the page instead of a tint laid on it.
+    ///
+    /// The web's 3% is not the step here. On this canvas it lands ~8/255
+    /// below the page, which `userMessage` below already found to be close to
+    /// invisible on a phone in daylight; 5% lands at 12, and stays a hair
+    /// lighter than inline code so the two surfaces keep the web's order.
+    static let chipFill = Color(uiColor: UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(white: 1, alpha: 0.05)
+            : UIColor(white: 0, alpha: 0.05)
+    })
     /// Body prose that is subordinate but still meant to be READ — the
     /// narration inside a work fold. Not `textDim`: `.secondaryLabel` is built
     /// for short labels, and at 17pt over the canvas it measures 3.4:1, under
@@ -226,6 +240,14 @@ enum OS1VisualStyle {
         appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
             ? NSColor(white: 1, alpha: 0.06)
             : NSColor(white: 0, alpha: 0.06)
+    })
+    /// A turn footer's chips — see the iOS note for why this is ink rather
+    /// than a surface. The same alpha holds here: the Mac canvas is already a
+    /// grey around #ECECEC, and 5% ink still reads on it.
+    static let chipFill = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(white: 1, alpha: 0.05)
+            : NSColor(white: 0, alpha: 0.05)
     })
     /// Subordinate body prose — see the iOS note for why this is its own
     /// neutral rather than `textDim`.

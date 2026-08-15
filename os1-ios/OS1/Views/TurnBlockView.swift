@@ -697,6 +697,9 @@ private struct EditRunView: View {
 /// claim that nothing changed, which is different from "no counts known".
 struct LineStatsView: View {
     let stats: ToolLineStats
+    /// The footer's chips run a step above the tool rows, and the counts
+    /// belong to the name they sit beside rather than to a fixed size.
+    var font: Font = .caption2.weight(.medium)
 
     var body: some View {
         // `verbatim`, because the interpolating initializer takes a
@@ -713,7 +716,7 @@ struct LineStatsView: View {
                     .foregroundStyle(OS1VisualStyle.redInk)
             }
         }
-        .font(.caption2.weight(.medium))
+        .font(font)
         .monospacedDigit()
         .fixedSize()
     }
@@ -806,6 +809,23 @@ struct TurnFooterView: View {
     }
 }
 
+/// The one shell the footer's three chips share, so a change to the surface
+/// can never leave a footer wearing two generations of chip at once. The web
+/// keeps the same promise with a single `CHIP` class string.
+///
+/// A capsule, like the web's: `rounded-control` is 12px, and on a chip that
+/// tall it clamps to half the height, so the authored radius has always drawn
+/// a pill there.
+private extension View {
+    func footerChip(leading: CGFloat, trailing: CGFloat) -> some View {
+        self
+            .padding(.leading, leading)
+            .padding(.trailing, trailing)
+            .padding(.vertical, 4)
+            .background(OS1VisualStyle.chipFill, in: Capsule(style: .continuous))
+    }
+}
+
 /// The files the footer didn't have room to name, as one chip that opens all
 /// of them. A cut that admits how much it cut and where the rest went.
 struct MoreFilesChipView: View {
@@ -819,14 +839,9 @@ struct MoreFilesChipView: View {
             openPanel(.changes(sessionId: sessionId))
         } label: {
             Text("+\(count) more")
-                .font(.caption2)
+                .font(.caption)
                 .foregroundStyle(OS1VisualStyle.textDim)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
-                .background(
-                    OS1VisualStyle.panel,
-                    in: RoundedRectangle(cornerRadius: 6, style: .continuous)
-                )
+                .footerChip(leading: 9, trailing: 9)
         }
         .buttonStyle(.plain)
         // The Mac app installs no handler; a chip that does nothing when
@@ -837,8 +852,9 @@ struct MoreFilesChipView: View {
     }
 }
 
-/// One touched file: a colored extension badge, the basename, and its ±.
-/// Tapping opens what actually changed — on a phone the chips are the only
+/// One touched file: its language mark, the basename, and its ±.
+///
+/// Tapping opens what actually changed. On a phone the chips are the only
 /// place a turn's edits are named, and a name without a diff is a dead end.
 struct FileChipView: View {
     let file: TouchedFile
@@ -859,18 +875,10 @@ struct FileChipView: View {
     }
 
     private var chip: some View {
-        HStack(spacing: 5) {
-            Text(file.extensionBadge)
-                .font(.system(size: 8, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 3)
-                .frame(minWidth: 18, minHeight: 14)
-                .background(
-                    Self.color(for: file.extensionBadge),
-                    in: RoundedRectangle(cornerRadius: 3, style: .continuous)
-                )
+        HStack(spacing: 6) {
+            ExtBadge(name: file.basename)
             Text(file.basename)
-                .font(.caption2)
+                .font(.caption)
                 .foregroundStyle(OS1VisualStyle.textDim)
                 .lineLimit(1)
             if file.additions > 0 || file.deletions > 0 {
@@ -878,38 +886,24 @@ struct FileChipView: View {
                     stats: ToolLineStats(
                         additions: file.additions,
                         deletions: file.deletions
-                    )
+                    ),
+                    font: .caption.weight(.medium)
                 )
             }
         }
-        .padding(.leading, 3)
-        .padding(.trailing, 7)
-        .padding(.vertical, 3)
-        .background(
-            OS1VisualStyle.panel,
-            in: RoundedRectangle(cornerRadius: 6, style: .continuous)
-        )
+        .footerChip(leading: 4, trailing: 8)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text(verbatim: file.path))
+        .accessibilityValue(Text(changeSummary))
     }
 
-    /// Linguist-ish hues, darkened so the white badge label clears contrast.
-    static func color(for ext: String) -> Color {
-        switch ext {
-        case "TS", "TSX": Color(red: 0.13, green: 0.34, blue: 0.66)
-        case "JS", "JSX", "MJS": Color(red: 0.62, green: 0.53, blue: 0.05)
-        case "SWIF": Color(red: 0.78, green: 0.29, blue: 0.13)
-        case "RES", "RESI": Color(red: 0.78, green: 0.18, blue: 0.29)
-        case "CSS", "SCSS": Color(red: 0.37, green: 0.24, blue: 0.60)
-        case "HTML": Color(red: 0.79, green: 0.32, blue: 0.13)
-        case "JSON", "YAML", "YML", "TOML": Color(red: 0.35, green: 0.40, blue: 0.45)
-        case "MD", "MDX": Color(red: 0.24, green: 0.40, blue: 0.55)
-        case "PY": Color(red: 0.19, green: 0.35, blue: 0.53)
-        case "RS": Color(red: 0.51, green: 0.29, blue: 0.16)
-        case "GO": Color(red: 0.0, green: 0.42, blue: 0.53)
-        case "SH", "BASH": Color(red: 0.24, green: 0.44, blue: 0.24)
-        default: Color(red: 0.36, green: 0.38, blue: 0.42)
-        }
+    /// The counts as words. `.combine` would otherwise read the ± glyphs, and
+    /// the label above replaces them with the path to say WHICH file this is.
+    private var changeSummary: String {
+        var parts: [String] = []
+        if file.additions > 0 { parts.append("\(file.additions) added") }
+        if file.deletions > 0 { parts.append("\(file.deletions) removed") }
+        return parts.joined(separator: ", ")
     }
 }
 
@@ -953,23 +947,17 @@ struct AssetChipView: View {
     }
 
     private var chip: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 6) {
             Image(systemName: AssetKind.of(asset).symbol)
-                .font(.system(size: 9))
+                .font(.system(size: 10))
                 .foregroundStyle(OS1VisualStyle.textFaint)
-                .frame(minWidth: 12)
+                .frame(minWidth: 13)
             Text(asset.name)
-                .font(.caption2)
+                .font(.caption)
                 .foregroundStyle(OS1VisualStyle.textDim)
                 .lineLimit(1)
         }
-        .padding(.leading, 6)
-        .padding(.trailing, 7)
-        .padding(.vertical, 3)
-        .background(
-            OS1VisualStyle.panel,
-            in: RoundedRectangle(cornerRadius: 6, style: .continuous)
-        )
+        .footerChip(leading: 8, trailing: 8)
         .accessibilityElement(children: .combine)
     }
 }

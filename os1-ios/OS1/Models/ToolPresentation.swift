@@ -87,17 +87,14 @@ struct TouchedFile: Equatable, Sendable, Identifiable {
         path.split(separator: "/").last.map(String.init) ?? path
     }
 
-    /// Uppercase file extension for the chip badge, capped like the web's
-    /// `extLabel`: four characters before cutting to three, because a blind
-    /// 3-cut spells "JSO", "YAM", "SCS".
-    var extensionBadge: String {
-        guard let dot = basename.lastIndex(of: "."), dot != basename.startIndex else {
-            return "FILE"
-        }
-        let raw = basename[basename.index(after: dot)...].uppercased()
-        if raw.isEmpty { return "FILE" }
-        return raw.count <= 4 ? raw : String(raw.prefix(3))
-    }
+    /// The name's extension, lowercased, or "" when it has none. This is what
+    /// the badge keys its mark and its hue on, NOT the display label below: a
+    /// label is capped at four characters, so keying colour on it meant
+    /// `.swift` arrived as "SWI" and Swift files wore the fallback grey.
+    var ext: String { LangMark.ext(of: basename) }
+
+    /// The badge's letters, for a file whose language has no brand mark.
+    var extensionBadge: String { LangMark.label(for: ext) }
 }
 
 extension ToolPresentation {
