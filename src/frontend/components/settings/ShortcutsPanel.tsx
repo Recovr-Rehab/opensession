@@ -35,6 +35,7 @@ import {
 	SettingsPanel,
 	settingsInputClass,
 } from "../../ui/settings";
+import { Tooltip } from "../../ui/tooltip";
 import { IconPencil, IconPlus, IconSearch, IconTrash } from "../icons";
 
 /** How many chords one command may answer to. Two covers every default; the
@@ -237,7 +238,7 @@ export function ShortcutsPanel() {
 		const conflicted = conflict?.id === id ? conflict : null;
 
 		return (
-			<SettingRow key={id} className="items-start">
+			<SettingRow key={id} className="group/row items-start">
 				<SettingRowText>
 					<SettingRowTitle>{command.title}</SettingRowTitle>
 					<SettingRowDescription>{command.description}</SettingRowDescription>
@@ -264,26 +265,39 @@ export function ShortcutsPanel() {
 						</div>
 					)}
 				</SettingRowText>
-				<SettingRowControl className="group/row flex flex-col items-end gap-1.5">
+				<SettingRowControl className="flex flex-col items-end gap-1.5">
 					{keys.length === 0 && recording?.id !== id && (
 						<div className="flex items-center gap-1">
+							{customized && (
+								<RowExtras>
+									<ResetButton onClick={() => resetShortcutBindings(id)} />
+								</RowExtras>
+							)}
 							<span className="text-supporting text-faint">Unassigned</span>
-							<Button
-								size="sm"
-								variant="ghost"
-								aria-label={`Set a shortcut for ${command.title}`}
-								icon={<IconPencil size={20} />}
-								onClick={(e) => beginRecording(id, 0, e.currentTarget)}
-							/>
-							{customized && <ResetButton onClick={() => resetShortcutBindings(id)} />}
+							<Tooltip label="Set a shortcut">
+								<Button
+									size="sm"
+									variant="ghost"
+									aria-label={`Set a shortcut for ${command.title}`}
+									icon={<IconPencil size={20} />}
+									onClick={(e) => beginRecording(id, 0, e.currentTarget)}
+								/>
+							</Tooltip>
 						</div>
 					)}
 					{keys.map((chordKeys, i) => {
-						// The row's own actions ride on the LAST binding's line rather
-						// than a line of their own, so a one-chord command stays one line
-						// tall. They stay hidden until the row is hovered or holds focus:
-						// adding a second chord is rare, and a page of 22 rows each
-						// wearing four controls reads as a form.
+						// The row's own extras ride on the LAST binding's line rather than
+						// a line of their own, so a one-chord command stays one line tall.
+						// They stay hidden until the row is hovered or holds focus: adding
+						// a second chord is rare, and a page of 22 rows each wearing four
+						// controls reads as a form.
+						//
+						// They sit BEFORE the chord, so the cluster grows leftward. Every
+						// line in this column is right-aligned, so the chord, its pencil
+						// and its trash keep the same right edge as any other settings
+						// control whether the row is hovered or not — a trailing reveal
+						// either shifts the whole line on hover or, reserving its space,
+						// parks the trash 30px inside the card's content edge.
 						const last = i === keys.length - 1;
 						return recording?.id === id && recording.index === i ? (
 							<RecordingPill key={`rec-${i}`} held={recording.held} />
@@ -292,45 +306,51 @@ export function ShortcutsPanel() {
 								key={`${chordKeys.join("+")}-${i}`}
 								className="flex items-center gap-1"
 							>
-								<ChordKeys keys={chordKeys} />
-								<Button
-									size="sm"
-									variant="ghost"
-									aria-label={`Change ${command.title} shortcut`}
-									icon={<IconPencil size={20} />}
-									onClick={(e) => beginRecording(id, i, e.currentTarget)}
-								/>
-								<Button
-									size="sm"
-									variant="ghost"
-									className="hover:text-red"
-									aria-label={`Remove this ${command.title} shortcut`}
-									icon={<IconTrash size={20} />}
-									onClick={() =>
-										setShortcutBindings(
-											id,
-											bindings.filter((_, j) => j !== i),
-										)
-									}
-								/>
 								{last && recording?.id !== id && (
-									<span className="flex items-center gap-1.5 opacity-0 transition-opacity group-hover/row:opacity-100 group-focus-within/row:opacity-100">
-										{keys.length < MAX_BINDINGS && (
-											<Button
-												size="sm"
-												variant="ghost"
-												aria-label={`Add another ${command.title} shortcut`}
-												icon={<IconPlus size={20} />}
-												onClick={(e) =>
-													beginRecording(id, bindings.length, e.currentTarget)
-												}
-											/>
-										)}
+									<RowExtras>
 										{customized && (
 											<ResetButton onClick={() => resetShortcutBindings(id)} />
 										)}
-									</span>
+										{keys.length < MAX_BINDINGS && (
+											<Tooltip label="Add another shortcut">
+												<Button
+													size="sm"
+													variant="ghost"
+													aria-label={`Add another ${command.title} shortcut`}
+													icon={<IconPlus size={20} />}
+													onClick={(e) =>
+														beginRecording(id, bindings.length, e.currentTarget)
+													}
+												/>
+											</Tooltip>
+										)}
+									</RowExtras>
 								)}
+								<ChordKeys keys={chordKeys} />
+								<Tooltip label="Change shortcut">
+									<Button
+										size="sm"
+										variant="ghost"
+										aria-label={`Change ${command.title} shortcut`}
+										icon={<IconPencil size={20} />}
+										onClick={(e) => beginRecording(id, i, e.currentTarget)}
+									/>
+								</Tooltip>
+								<Tooltip label="Remove shortcut">
+									<Button
+										size="sm"
+										variant="ghost"
+										className="hover:text-red"
+										aria-label={`Remove this ${command.title} shortcut`}
+										icon={<IconTrash size={20} />}
+										onClick={() =>
+											setShortcutBindings(
+												id,
+												bindings.filter((_, j) => j !== i),
+											)
+										}
+									/>
+								</Tooltip>
 							</div>
 						);
 					})}
@@ -414,17 +434,34 @@ export function ShortcutsPanel() {
 	);
 }
 
+/** The extras a row only offers once you reach for it: add another chord, and
+ *  put the defaults back. Their space is held at rest, so revealing them moves
+ *  nothing — they grow into the gap left of the chord rather than pushing the
+ *  chord and its actions off the column's right edge.
+ *
+ *  They stay visible on a phone, where there is no hover to reveal them with
+ *  and the reserved gap would otherwise sit empty for good. */
+function RowExtras({ children }: { children: React.ReactNode }) {
+	return (
+		<span className="mr-0.5 flex items-center gap-1 opacity-0 transition-opacity phone:opacity-100 group-hover/row:opacity-100 group-focus-within/row:opacity-100">
+			{children}
+		</span>
+	);
+}
+
 /** Restores a row's default chords. Quiet: it only matters once you've
  *  changed something, and it should never compete with the chord itself. */
 function ResetButton({ onClick }: { onClick: () => void }) {
 	return (
-		<button
-			type="button"
-			className="rounded-sm px-1 text-label text-faint transition-colors hover:text-dim focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-			onClick={onClick}
-		>
-			Reset
-		</button>
+		<Tooltip label="Restore the default shortcut">
+			<button
+				type="button"
+				className="rounded-sm px-1 text-label text-faint transition-colors hover:text-dim focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+				onClick={onClick}
+			>
+				Reset
+			</button>
+		</Tooltip>
 	);
 }
 
