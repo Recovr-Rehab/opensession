@@ -33,6 +33,13 @@
  * sidebar plus a readable session column rather than a fixed pixel width:
  * reviewing code wants real width on a wide display.
  *
+ * The fallback is 32% of the pane, which at 1440 gives the transcript a little
+ * over twice the panel's width. It was 40%, and at that share the panel read as
+ * a second content column rather than a companion to one: most of what it holds
+ * is a short Info list, so the extra width came out of the transcript and was
+ * spent on empty surface. Anyone who wants the old share drags the handle once
+ * and their own width is stored.
+ *
  * It paints `bg-panel-surface`, four units off white rather than the tier below
  * it that `bg-raised` gave (#f6f6f6 against a white page): at column height
  * that was a wall of grey next to the content, and the largest flat area in the
@@ -59,7 +66,7 @@
  * decoration.
  */
 export const PANEL_SHELL =
-	"viewer-panel relative flex min-h-0 w-[var(--panel-w,40%)] min-w-[320px] shrink-0 flex-col " +
+	"viewer-panel relative flex min-h-0 w-[var(--panel-w,32%)] min-w-[320px] shrink-0 flex-col " +
 	"max-w-[max(480px,calc(100vw-620px))] border-l border-divider bg-panel-surface [--bg-panel:var(--panel-plate)] " +
 	// From 920px down it stops being a column in the layout and becomes an
 	// overlay over the session, anchored under the top bar (--header-h is 0 on

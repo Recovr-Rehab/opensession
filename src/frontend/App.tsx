@@ -668,7 +668,7 @@ export function App(
 	// this only takes effect on the static desktop column.
 	const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
 		const v = Number(localStorage.getItem("opensession-sidebar-w"));
-		return v >= 200 && v <= 480 ? v : 252;
+		return v >= 200 && v <= 480 ? v : 280;
 	});
 	const sidebarWidthRef = useRef(sidebarWidth);
 	sidebarWidthRef.current = sidebarWidth;
@@ -3885,7 +3885,7 @@ export function App(
 							// a fixed-width column.
 							isPhone
 								? "absolute inset-0 z-[1] w-full"
-								: "relative w-[var(--sidebar-w,252px)]",
+								: "relative w-[var(--sidebar-w,280px)]",
 							// Collapsed hides the whole left column; on phones the page
 							// stack owns the sidebar and the class is inert.
 							sidebarCollapsed && "desktop:hidden",
