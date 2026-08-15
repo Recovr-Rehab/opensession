@@ -61,9 +61,10 @@ const PILL = "rounded-[calc(8px*var(--rf))]";
  */
 export const TAB_STRIP =
 	"session-tabs group/strip flex min-w-0 shrink-0 items-center gap-[3px] bg-surface px-2 " +
-	// Desktop: a compact flat band with one divider between its tabs and the
-	// content. The header above deliberately drops its own border when this strip
-	// follows, so adding a top inset here would recreate the unwanted middle line.
+	// Desktop: a compact flat band, closed off by the one rule the active tab's
+	// underline rests on. Only the bottom edge is drawn. The session header
+	// above carries no border of its own, and a top inset here would put a
+	// second line across a top region meant to read as one surface.
 	//
 	// The band is pulled 8px up into the header. The tabs name the session the
 	// header just named, so they should read as part of that title block rather

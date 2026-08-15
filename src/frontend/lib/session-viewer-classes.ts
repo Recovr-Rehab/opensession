@@ -44,25 +44,24 @@
  * body's colour rather than the lifted topbar tint keeps the whole top region
  * reading as one surface — the PR strip sharing the row takes the same one.
  *
- * One drawn hairline divides the bar from the content, in the same ink and at
- * the same height as the PR strip's beside it, so the line runs unbroken across
- * the whole top row. A scroll-driven wash used to do the separating instead,
- * which dimmed the rows passing under the bar rather than dividing anything.
- * The hairline drops when the tab strip follows the bar, leaving the strip's
- * own bottom inset as the single divider above the content.
+ * Nothing divides the bar from the content. The two share one fill, so the
+ * transcript simply runs up under the row as it scrolls instead of meeting a
+ * line, and the top of the session reads as one surface. A drawn hairline used
+ * to close the bar off, and a scroll-driven wash before that. Both marked a
+ * seam that did not need marking. The tab strip, when it follows the bar, still
+ * carries its own baseline rule: that line is what the active tab's underline
+ * rests on.
  */
 export const VIEWER_HEADER =
 	"viewer-header flex h-[var(--desktop-header-h)] min-w-0 shrink-0 items-center justify-between gap-3 " +
 	"bg-surface px-4 " +
-	"border-b border-b-divider " +
-	"[.detail-topbar:has(+_.session-tabs)_&]:border-b-0 " +
 	// Collapsed desktop sidebar: the floating re-open + nav cluster overlays the
 	// pane's left edge, so the row's text starts past it.
 	"desktop:[.app-body.sidebar-collapsed_&]:pl-[148px] " +
 	// On phones the bar is a set of floating pills inside the app header, not a
 	// row of its own.
 	"phone:[.app-header-actions_&]:h-auto phone:[.app-header-actions_&]:gap-1.5 " +
-	"phone:[.app-header-actions_&]:border-0 phone:[.app-header-actions_&]:bg-transparent " +
+	"phone:[.app-header-actions_&]:bg-transparent " +
 	"phone:[.app-header-actions_&]:p-0";
 
 /** Workspace name + origin chip + status. Hidden on phones, where the ⋯ menu
@@ -171,12 +170,14 @@ export const VIEWER_REVIEW_MAIN =
 /**
  * Holds the scroll area plus the floating "Jump to latest" pill.
  *
- * Desktop used to paint a scroll-edge wash across the top here, driven by a CSS
- * scroll timeline, so rows dissolved into the header as they passed under it.
- * A drawn hairline on the bar divides the two surfaces instead: the wash dimmed
- * the first legible rows to say what one line says outright. Phones still fade
- * the transcript under their floating pills with a mask (see VIEWER_MESSAGES),
- * where the chrome overlays the content rather than sitting above it.
+ * Nothing is drawn between this and the bar above it on desktop. The transcript
+ * runs up under the row and stops there, on the same fill, which is what makes
+ * the top of the session read as one surface. Two earlier answers to the same
+ * seam are gone: a scroll-edge wash driven by a CSS scroll timeline, which
+ * dimmed the first legible rows, and the hairline that replaced it. Phones
+ * still fade the transcript under their floating pills with a mask (see
+ * VIEWER_MESSAGES), where the chrome overlays the content instead of sitting
+ * above it.
  */
 export const VIEWER_MESSAGES_REGION = "relative flex min-h-0 flex-1 flex-col";
 
@@ -200,10 +201,10 @@ export const VIEWER_MESSAGES =
 	// Keep the reader's place when content loads or expands above them.
 	"[overflow-anchor:auto] px-5 pt-0 pb-[calc(var(--session-under)_+_16px)] " +
 	"[&>*]:w-full [&>*]:shrink-0 " +
-	// Whatever sits above — the bar's hairline, or the tab strip's when a split
-	// gives every column one — the first row would otherwise rest directly on
-	// that line. 12px of clear space instead. Only at rest: scrolled content
-	// still runs right up under the chrome.
+	// 12px of clear space under the bar so the first row starts below it rather
+	// than against it, and so a tab strip's baseline rule (the only line that
+	// still sits above the transcript) has nothing resting on it. Only at rest:
+	// scrolled content still runs right up under the chrome.
 	"desktop:pt-3 " +
 	// Phone: clear the floating pills at rest, then scroll under them.
 	// --strip-clearance is 0 by default and the docked tab bar's height on a
