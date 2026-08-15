@@ -117,6 +117,18 @@ enum NativePreferences {
             resetMissing: true,
             in: defaults
         )
+        // Tools the person hid, here or in the browser. Same list shape as the
+        // sources above, but a missing value means the shared defaults rather
+        // than "nothing hidden": a tool nobody has switched on has never been
+        // in the web sidebar either, and the phone showing it anyway is what
+        // this pref exists to stop.
+        set(
+            validatedIdList(prefs[SidebarTools.prefKey]),
+            default: SidebarTools.defaultHiddenJSON,
+            key: SidebarTools.storageKey,
+            resetMissing: true,
+            in: defaults
+        )
         set(
             validated(prefs["desk-voice"], allowed: ["on", "off"]),
             default: "off",

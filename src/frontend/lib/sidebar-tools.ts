@@ -1,3 +1,13 @@
+// Per-user visibility for the sidebar's tools. The local copy keeps startup
+// synchronous; the ui-prefs value makes the choice follow the person across
+// devices and into the native app, which reads the same key and the same
+// defaults (os1-ios/OS1/SidebarTools.swift). Before that pref existed this was
+// one browser-wide localStorage key, so a tool switched off at a desk was
+// still on the phone.
+
+import { getCurrentUser } from "../components/UserPicker";
+import { fetchUiPrefs, saveUiPrefsApi } from "./api";
+
 // Feed leads. The tools below it are places you go to act on one kind of
 // thing; Feed is what the team has actually been doing, which is the page you
 // want in front of you when you have not decided what to work on yet.
@@ -49,53 +59,206 @@ export function toolFitsViewport(id: SidebarToolId, isPhone: boolean): boolean {
 	return isPhone ? id !== "prs" : !PHONE_ONLY_TOOLS.includes(id);
 }
 
-const HIDDEN_TOOLS_KEY = "opensession-sidebar-hidden-tools";
+const LOCAL_KEY_PREFIX = "opensession-sidebar-hidden-tools:";
+// The browser-wide key this pref used to live in. Read once per person, then
+// retired, so a sidebar someone had already arranged survives the move.
+const LEGACY_LOCAL_KEY = "opensession-sidebar-hidden-tools";
+const PREF_KEY = "sidebar-hidden-tools";
 const TOOLS_CHANGED_EVENT = "opensession-sidebar-tools-changed";
-// A new account starts with the two tools that need nothing set up: Feed and
-// Pull requests. Every other tool is either empty until something else
-// exists (Tasks needs todos, Reports needs automations) or needs an
-// integration (Support Tinder, Analytics), so shipping them on makes the
-// sidebar look busy and broken at once. They're one click away in the Tools
-// band's ••• menu and in Settings. Derived from the visible list so a tool
-// added later defaults to hidden rather than silently showing up for everyone.
-const DEFAULT_VISIBLE_TOOLS: SidebarToolId[] = ["feed", "prs"];
+const USER_CHANGE_EVENT = "opensession-user-changed";
+
+// A new account starts with the tools that need nothing set up: Feed, Pull
+// requests, and Catch up, which is built from unread work every account
+// already has. The rest are either empty until something else exists (Tasks
+// needs todos, Reports needs automations) or need an integration (Support
+// Tinder, Analytics), so shipping them on makes the sidebar look busy and
+// broken at once. They are one click away in the Tools band's ••• menu and in
+// Settings.
+//
+// This list is the whole agreement between clients when nobody has chosen:
+// absent means these defaults, on the web and in the native app alike. Keep it
+// in step with DEFAULT_VISIBLE in os1-ios/OS1/SidebarTools.swift.
+const DEFAULT_VISIBLE_TOOLS: SidebarToolId[] = ["feed", "prs", "catchup"];
+// Derived from the visible list so a tool added later defaults to hidden
+// rather than silently showing up for everyone.
 const DEFAULT_HIDDEN_TOOLS: SidebarToolId[] = SIDEBAR_TOOL_IDS.filter(
 	(id) => !DEFAULT_VISIBLE_TOOLS.includes(id),
 );
 
-export function readHiddenSidebarTools(): Set<SidebarToolId> {
+function localKey(user: string): string {
+	return `${LOCAL_KEY_PREFIX}${user.trim().toLowerCase() || "anonymous"}`;
+}
+
+/** Stored ids as tool ids: renames applied, unknown ids and duplicates dropped. */
+export function normalizeHiddenSidebarTools(value: unknown): SidebarToolId[] {
+	if (!Array.isArray(value)) return [];
+	return [
+		...new Set(
+			value
+				.map((id) => RENAMED_TOOL_IDS[id as string] ?? id)
+				.filter((id): id is SidebarToolId =>
+					SIDEBAR_TOOL_IDS.includes(id as SidebarToolId),
+				),
+		),
+	];
+}
+
+/**
+ * What this person chose, or null when they never have.
+ *
+ * The difference matters: an empty list means "show everything", which is a
+ * choice, while nothing stored means the defaults. Collapsing the two would
+ * make a person who deliberately switched every tool on indistinguishable
+ * from a fresh account, and hand them the four hidden ones back.
+ */
+function readStored(user: string): Set<SidebarToolId> | null {
+	let raw: string | null = null;
 	try {
-		const value = localStorage.getItem(HIDDEN_TOOLS_KEY);
-		if (value === null) return new Set(DEFAULT_HIDDEN_TOOLS);
-		const stored = JSON.parse(value);
-		if (!Array.isArray(stored)) return new Set();
-		return new Set(
-			stored
-				.map((id) => RENAMED_TOOL_IDS[id] ?? id)
-				.filter((id): id is SidebarToolId => SIDEBAR_TOOL_IDS.includes(id)),
-		);
+		raw = localStorage.getItem(localKey(user));
 	} catch {
-		return new Set(DEFAULT_HIDDEN_TOOLS);
+		return null;
+	}
+	if (raw === null) return adoptLegacy(user);
+	try {
+		return new Set(normalizeHiddenSidebarTools(JSON.parse(raw)));
+	} catch {
+		return null;
 	}
 }
 
-function writeHiddenSidebarTools(hidden: Set<SidebarToolId>) {
-	localStorage.setItem(HIDDEN_TOOLS_KEY, JSON.stringify([...hidden]));
+/** Move the pre-2026-08-15 browser-wide value onto this person, once. */
+function adoptLegacy(user: string): Set<SidebarToolId> | null {
+	let legacy: string | null = null;
+	try {
+		legacy = localStorage.getItem(LEGACY_LOCAL_KEY);
+	} catch {
+		return null;
+	}
+	if (legacy === null) return null;
+	let hidden: Set<SidebarToolId>;
+	try {
+		hidden = new Set(normalizeHiddenSidebarTools(JSON.parse(legacy)));
+	} catch {
+		// Unreadable, and nothing to carry over. Drop it so the next read is
+		// the ordinary "never chosen" case rather than this one again.
+		try {
+			localStorage.removeItem?.(LEGACY_LOCAL_KEY);
+		} catch {}
+		return null;
+	}
+	writeLocal(user, hidden);
+	try {
+		localStorage.removeItem?.(LEGACY_LOCAL_KEY);
+	} catch {}
+	return hidden;
+}
+
+function writeLocal(user: string, hidden: Set<SidebarToolId>) {
+	try {
+		localStorage.setItem(
+			localKey(user),
+			JSON.stringify(normalizeHiddenSidebarTools([...hidden])),
+		);
+	} catch {}
+}
+
+export function readHiddenSidebarTools(): Set<SidebarToolId> {
+	return readStored(getCurrentUser()) ?? new Set(DEFAULT_HIDDEN_TOOLS);
+}
+
+function announce() {
+	if (typeof window === "undefined") return;
 	window.dispatchEvent(new Event(TOOLS_CHANGED_EVENT));
 }
 
+let writeStamp = 0;
+let saveChain: Promise<unknown> = Promise.resolve();
+
+function commit(user: string, hidden: Set<SidebarToolId>) {
+	writeStamp++;
+	writeLocal(user, hidden);
+	announce();
+	saveChain = saveChain
+		.catch(() => {})
+		.then(() =>
+			saveUiPrefsApi(user, {
+				[PREF_KEY]: JSON.stringify(normalizeHiddenSidebarTools([...hidden])),
+			}),
+		)
+		.catch(() => {});
+}
+
 export function setSidebarToolVisible(id: SidebarToolId, visible: boolean) {
-	const hidden = readHiddenSidebarTools();
+	const user = getCurrentUser();
+	const hidden = readStored(user) ?? new Set(DEFAULT_HIDDEN_TOOLS);
 	if (visible) hidden.delete(id);
 	else hidden.add(id);
-	writeHiddenSidebarTools(hidden);
+	commit(user, hidden);
 }
 
 export function hideAllSidebarTools() {
-	writeHiddenSidebarTools(new Set(SIDEBAR_TOOL_IDS));
+	commit(getCurrentUser(), new Set(SIDEBAR_TOOL_IDS));
+}
+
+async function hydrate(user: string) {
+	const stampAtStart = writeStamp;
+	let prefs: Record<string, string>;
+	try {
+		prefs = await fetchUiPrefs(user);
+	} catch {
+		return;
+	}
+	if (writeStamp !== stampAtStart) return;
+	const serverValue = prefs[PREF_KEY];
+	if (typeof serverValue === "string") {
+		try {
+			const serverHidden = new Set(
+				normalizeHiddenSidebarTools(JSON.parse(serverValue)),
+			);
+			const local = readStored(user);
+			if (
+				!local ||
+				JSON.stringify([...serverHidden].sort()) !==
+					JSON.stringify([...local].sort())
+			) {
+				writeLocal(user, serverHidden);
+				announce();
+			}
+		} catch {}
+		return;
+	}
+	// No server value yet. Push this browser's choice up so the phone stops
+	// showing what was switched off here, but only when there IS a choice:
+	// writing the defaults would turn an untouched account into a decision
+	// nobody made.
+	const local = readStored(user);
+	if (local) {
+		void saveUiPrefsApi(user, {
+			[PREF_KEY]: JSON.stringify(normalizeHiddenSidebarTools([...local])),
+		}).catch(() => {});
+	}
 }
 
 export function onSidebarToolsChanged(listener: () => void) {
 	window.addEventListener(TOOLS_CHANGED_EVENT, listener);
 	return () => window.removeEventListener(TOOLS_CHANGED_EVENT, listener);
+}
+
+if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+	void hydrate(getCurrentUser());
+	window.addEventListener(USER_CHANGE_EVENT, () => {
+		writeStamp++;
+		announce();
+		void hydrate(getCurrentUser());
+	});
+	window.addEventListener("storage", (event) => {
+		if (event.key?.startsWith(LOCAL_KEY_PREFIX)) {
+			writeStamp++;
+			announce();
+		} else if (event.key === "opensession-user" || event.key === "backstage-user") {
+			writeStamp++;
+			announce();
+			void hydrate(getCurrentUser());
+		}
+	});
 }

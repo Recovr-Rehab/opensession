@@ -158,6 +158,11 @@ struct SessionsListView: View {
     /// Source rows the person has hidden — the account's, shared with the web
     /// sidebar's own band menu. See `SidebarFeeds`.
     @AppStorage(SidebarFeeds.storageKey) private var hiddenFeedsRaw = "[]"
+    /// Tools the person has hidden, likewise the account's and shared with the
+    /// web sidebar's Tools band. See `SidebarTools`. The default stands in
+    /// until the first `NativePreferences.hydrate`, so a fresh install offers
+    /// the same tools the browser would.
+    @AppStorage(SidebarTools.storageKey) private var hiddenToolsRaw = SidebarTools.defaultHiddenJSON
 
     private var groupBy: GroupBy {
         GroupBy(rawValue: groupByRaw) ?? Self.defaultGroupBy(repoCount: knownRepoCount)
@@ -886,22 +891,28 @@ struct SessionsListView: View {
                     }
                     DefaultToolbarItem(kind: .search, placement: .bottomBar)
                     ToolbarSpacer(.fixed, placement: .bottomBar)
-                    ToolbarItem(placement: .bottomBar) {
-                        Button {
-                            showCatchUp = true
-                        } label: {
-                            Image(systemName: catchUpCount > 0
-                                ? "rectangle.stack.fill"
-                                : "rectangle.stack")
-                                .foregroundStyle(catchUpCount > 0
-                                    ? OS1VisualStyle.accent
-                                    : OS1VisualStyle.text)
+                    // Catch up is a tool, so it answers to the account's tool
+                    // visibility the same way Reports does. It ships on, since
+                    // the deck is built from unread work every account already
+                    // has and needs nothing set up.
+                    if !isCatchUpHidden {
+                        ToolbarItem(placement: .bottomBar) {
+                            Button {
+                                showCatchUp = true
+                            } label: {
+                                Image(systemName: catchUpCount > 0
+                                    ? "rectangle.stack.fill"
+                                    : "rectangle.stack")
+                                    .foregroundStyle(catchUpCount > 0
+                                        ? OS1VisualStyle.accent
+                                        : OS1VisualStyle.text)
+                            }
+                            .accessibilityLabel(
+                                catchUpCount > 0
+                                    ? "Catch up on \(catchUpCount) unread workspaces"
+                                    : "Open Catch Up"
+                            )
                         }
-                        .accessibilityLabel(
-                            catchUpCount > 0
-                                ? "Catch up on \(catchUpCount) unread workspaces"
-                                : "Open Catch Up"
-                        )
                     }
                     ToolbarItem(placement: .bottomBar) {
                         Button {
@@ -2202,7 +2213,7 @@ struct SessionsListView: View {
 
             #if os(iOS)
             if !isPlainHidden { mobilePlainRow }
-            if reportGroupCount > 0 { mobileReportsRow }
+            if !isReportsHidden && reportGroupCount > 0 { mobileReportsRow }
             #endif
 
             // The archived entry is a destination, not a proof that its index
@@ -2380,6 +2391,18 @@ struct SessionsListView: View {
                     ? "Open Reports, 1 automation"
                     : "Open Reports, \(reportGroupCount) automations"
             )
+            // Same one-item menu as the Plain row above, for the same reason:
+            // the row leads somewhere rather than holding state, and Settings
+            // → Appearance brings it back.
+            .contextMenu {
+                Button {
+                    withAnimation(.snappy(duration: 0.28)) {
+                        SidebarTools.setVisible(SidebarTools.reports, false)
+                    }
+                } label: {
+                    Label("Hide from sidebar", systemImage: "eye.slash")
+                }
+            }
         }
         .listRowInsets(EdgeInsets(
             top: 2, leading: sidebarMargin, bottom: 2, trailing: sidebarMargin
@@ -2396,6 +2419,14 @@ struct SessionsListView: View {
     /// redraws the list — the same value either way.
     private var isPlainHidden: Bool {
         SidebarFeeds.isHidden(SidebarFeeds.plain, in: hiddenFeedsRaw)
+    }
+
+    private var isReportsHidden: Bool {
+        SidebarTools.isHidden(SidebarTools.reports, in: hiddenToolsRaw)
+    }
+
+    private var isCatchUpHidden: Bool {
+        SidebarTools.isHidden(SidebarTools.catchUp, in: hiddenToolsRaw)
     }
     #endif
 

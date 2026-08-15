@@ -52,6 +52,16 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   spring. Every decision is undoable for six seconds from the top bar. The queue is frozen
   once built, and `settle` waits for both the sessions list and the read marks
   before it is willing to say "All caught up".
+- **Reports** (`ReportsView.swift`, `Report.swift`) — the recurring documents
+  automations publish, as a row above Archived when there are any. One row per
+  automation, opening its newest document with the older ones in that
+  document's own bar.
+- **Tool visibility** (`SidebarTools.swift`) — Catch up and Reports are the two
+  TOOLS this app draws, and both answer to the account's `sidebar-hidden-tools`
+  ui-pref, which the web sidebar's Tools band writes as well. A missing value
+  means the shared defaults, so a tool nobody has switched on is off here too
+  rather than appearing only on the phone. Long-press Reports to hide it;
+  Appearance → Tools switches either back on.
 - **Session view** — live transcript over the `/ws` WebSocket, grouped into
   turns the way the web viewer groups them: **question → folded work → answer →
   footer**. A turn's tool calls and the narration between them collapse behind

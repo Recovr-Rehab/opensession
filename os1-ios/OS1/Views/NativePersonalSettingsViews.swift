@@ -413,6 +413,7 @@ struct AppearanceSettingsView: View {
     @AppStorage("os1.list.lastUsed") private var lastUsed = "off"
     @AppStorage("os1.sidebar.repoOrder") private var repoOrderJSON = "[]"
     @AppStorage(SidebarFeeds.storageKey) private var hiddenFeeds = "[]"
+    @AppStorage(SidebarTools.storageKey) private var hiddenTools = SidebarTools.defaultHiddenJSON
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var repos: [OS1API.RepoInfo] = SettingsCache.value("repos") ?? []
@@ -514,6 +515,27 @@ struct AppearanceSettingsView: View {
             } footer: {
                 Text(
                     "Repo order is your account's — the web sidebar follows it too. The last-used time is this device's, and a running session always shows its own clock."
+                )
+            }
+
+            // Only the tools this app can open, unlike Sources below: the tool
+            // ids are a fixed list the web owns, so one it does not draw is
+            // never stranded here, and a switch for a screen the phone does
+            // not have would be a preference with nothing behind it.
+            Section {
+                ForEach(SidebarTools.surfaced) { tool in
+                    Toggle(isOn: Binding(
+                        get: { !SidebarTools.isHidden(tool.id, in: hiddenTools) },
+                        set: { SidebarTools.setVisible(tool.id, $0) }
+                    )) {
+                        Text(tool.title)
+                    }
+                }
+            } header: {
+                Text("Tools")
+            } footer: {
+                Text(
+                    "Where you go that is not a session. The setting is your account's, so the web sidebar follows it too."
                 )
             }
 
