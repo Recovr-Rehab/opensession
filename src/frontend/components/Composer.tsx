@@ -280,6 +280,7 @@ function GoalModal({
           className="min-h-[120px] w-full resize-y rounded-lg border border-line-strong bg-surface px-4 py-3.5 text-body leading-relaxed text-fg outline-none"
           value={text}
           rows={3}
+          {...noAutofill}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             // Plain / ⌘/Ctrl+Enter submits; Shift+Enter newlines.

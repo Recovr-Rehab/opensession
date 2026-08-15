@@ -7,6 +7,7 @@ import { IconChevronRight, IconSparkle } from "./icons";
 import type { UnifiedSession, TranscriptEntry } from "../lib/types";
 import { getCurrentUser } from "./UserPicker";
 import { Field, fieldClasses } from "../ui/input";
+import { noAutofill } from "../lib/composer-autofill";
 
 type Flavor = "build" | "learnings" | "analyze";
 
@@ -208,6 +209,7 @@ export function SpinOffMenu({ session, entries, send, connected }: Props) {
                 value={task}
                 onChange={(e) => setTask(e.target.value)}
                 rows={3}
+                {...noAutofill}
                 disabled={starting}
                 placeholder={flavor === "learnings" ? "e.g. focus on the deploy gotchas we hit" : ""}
               />
