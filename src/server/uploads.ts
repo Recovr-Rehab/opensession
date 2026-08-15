@@ -37,8 +37,8 @@ export function asDataUrlList(urls?: unknown): string[] | undefined {
  * Two forms arrive here. Native clients and small pastes send
  * `data:<mediatype>;base64,<data>` inline. The web composer stages an image to
  * disk at attach time and sends a `/media?path=` ref instead, because its
- * durable outbox keeps every unsent message in localStorage and one screenshot
- * of base64 fills the whole origin's quota.
+ * durable outbox keeps every unsent message in localStorage, where the whole
+ * origin gets about 5MB and a couple of base64 screenshots fill it.
  *
  * Resolution happens at DELIVERY, not intake, so a queued or retried send reads
  * the same staged file. A ref that no longer resolves drops out of the list;

@@ -72,9 +72,13 @@ function imageUploadName(file: File): string {
  *
  * Images used to ride entirely as base64. That still works and is what the
  * native clients send, but the web composer persists every unsent message in
- * localStorage (the durable outbox), and one retina screenshot as base64 is
- * past the whole origin's ~5MB quota: it would fail its own send AND block
- * plain-text sends in every other session until it was discarded.
+ * localStorage (the durable outbox), and the whole origin gets 5,240,320 UTF-16
+ * code units there (measured, Chrome 146). Base64 inflates a file by 4/3, so a
+ * screenshot spends a megabyte or two of that budget, and a couple of unsent
+ * ones fill it. The failure is worse than losing the send: the key is shared by
+ * every session in the tab and failed items are never evicted, so one fat
+ * message parked in the outbox blocks plain-text sends everywhere until it is
+ * discarded.
  */
 async function stageImage(file: File, rejected: string[]): Promise<string | null> {
   const inline = () => readFileAsDataUrl(file);
