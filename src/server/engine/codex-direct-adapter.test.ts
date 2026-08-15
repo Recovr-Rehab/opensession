@@ -16,10 +16,22 @@ import { afterAll, afterEach, beforeAll, describe, expect, test } from "bun:test
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { __setCodexAccountsPathForTest } from "../codex-accounts";
 import { OPENCODE_OPENAI_PLACEHOLDER_REFRESH } from "../opencode-openai-auth";
 import { codexConfigArgs, tomlValue } from "./codex-direct-protocol";
-import { bearerEnvVarFor, disabledToolsByServer } from "./codex-direct-mcp";
+import { bearerEnvVarFor, buildCodexMcpConfig, disabledToolsByServer } from "./codex-direct-mcp";
+import {
+  CODEX_DIRECT_ORACLE_SERVER,
+  CODEX_DIRECT_ORACLE_TOOL_ID,
+  createCodexDirectOracleServer,
+} from "./codex-direct-oracle";
+import {
+  codexDirectPresetId,
+  codexDirectPresetInstructions,
+  resolveCodexDirectPreset,
+} from "./codex-direct-presets";
 import { seedCodexDirectHome, codexDirectHomeFor } from "./codex-direct-auth";
 import {
   CODEX_DIRECT_SMOKE_KIND,
@@ -373,14 +385,39 @@ function setFakeMode(mode: string): void {
   writeFileSync(join(dir, "fake-mode"), mode);
 }
 
+/** Everything the fake received, so a test can assert what the adapter SENT:
+ *  the `-c` config overrides on argv and the turn/start params. */
+function fakeRecord(): { argv: string[]; messages: any[] } {
+  const read = (p: string, fallback: string) => {
+    try {
+      return JSON.parse(readFileSync(p, "utf8") || fallback);
+    } catch {
+      return JSON.parse(fallback);
+    }
+  };
+  return {
+    argv: read(join(dir, "fake-argv.json"), "[]"),
+    messages: readFileSync(join(dir, "fake-msgs.jsonl"), "utf8")
+      .split("\n")
+      .filter(Boolean)
+      .map((l) => JSON.parse(l)),
+  };
+}
+
+function resetFakeRecord(): void {
+  writeFileSync(join(dir, "fake-argv.json"), "[]");
+  writeFileSync(join(dir, "fake-msgs.jsonl"), "");
+}
+
 function installFakeCodex(): string {
   const script = join(dir, "fake-codex.mjs");
   writeFileSync(
     script,
     `
-import { readFileSync } from "fs";
+import { readFileSync, writeFileSync, appendFileSync } from "fs";
 let mode = "ok";
 try { mode = readFileSync(${JSON.stringify(join(dir, "fake-mode"))}, "utf8").trim() || "ok"; } catch {}
+try { writeFileSync(${JSON.stringify(join(dir, "fake-argv.json"))}, JSON.stringify(process.argv.slice(2))); } catch {}
 const send = (o) => process.stdout.write(JSON.stringify(o) + "\\n");
 let buf = "";
 process.stdin.on("data", (chunk) => {
@@ -391,6 +428,7 @@ process.stdin.on("data", (chunk) => {
     buf = buf.slice(i + 1);
     if (!line) continue;
     const msg = JSON.parse(line);
+    try { appendFileSync(${JSON.stringify(join(dir, "fake-msgs.jsonl"))}, JSON.stringify(msg) + "\\n"); } catch {}
     if (msg.method === "initialize") { send({ id: msg.id, result: { userAgent: "fake" } }); continue; }
     if (msg.method === "thread/start") {
       send({ id: msg.id, result: { thread: { id: "thr_fake_1" } } });
@@ -524,6 +562,233 @@ describe("turn invariants", () => {
     expect(events.some((e) => e.type === "init")).toBe(true);
     expect(events.filter((e) => e.type === "done" || e.type === "error")).toHaveLength(0);
   }, 20_000);
+});
+
+// ── Presets: the Dial, the Orchestrator, workspace presets ───────────────────
+
+describe("preset resolution", () => {
+  test("parseCodexDirectModel resolves preset ids to their main model", () => {
+    expect(parseCodexDirectModel("codex/dial/medium")).toBe("gpt-5.6-sol");
+    expect(parseCodexDirectModel("dial/high")).toBe("gpt-5.6-sol");
+    expect(parseCodexDirectModel("codex/orchestrator/sol")).toBe("gpt-5.6-sol");
+    // A preset whose MAIN model is Anthropic must fail loudly, not reach codex.
+    expect(parseCodexDirectModel("dial/ultra")).toBeNull();
+    expect(parseCodexDirectModel("codex/orchestrator/fable")).toBeNull();
+    // Non-preset ids are untouched.
+    expect(parseCodexDirectModel("codex/openai/gpt-5.6-sol")).toBe("gpt-5.6-sol");
+  });
+
+  test("a dial preset carries its effort, main model and same-bridge oracle", () => {
+    const preset = resolveCodexDirectPreset("codex/dial/medium");
+    expect(preset.dial?.id).toBe("dial/medium");
+    expect(preset.effort).toBe("high");
+    expect(preset.model).toBe("gpt-5.6-sol");
+    // dial/medium's oracle is already OpenAI, so it survives unchanged.
+    expect(preset.oracleAgent).toBe("oracle-sol");
+    expect(preset.orchestrator).toBeUndefined();
+  });
+
+  test("a cross-vendor oracle is substituted for the same-bridge one", () => {
+    // dial/high pairs Sol with a Fable oracle; codex only runs OpenAI, so the
+    // run consults Terra — the same substitution the opencode runner makes for
+    // an openai-provider dial run.
+    const preset = resolveCodexDirectPreset("dial/high");
+    expect(preset.dial?.oracleAgent).toBe("oracle-fable");
+    expect(preset.oracleAgent).toBe("oracle-terra");
+    expect(preset.effort).toBe("xhigh");
+  });
+
+  test("the stored session model is consulted too, not just the routed one", () => {
+    // agent-runner routes the preset's concrete model while the SESSION keeps
+    // the preset id — the resolver has to see both.
+    const preset = resolveCodexDirectPreset("codex/openai/gpt-5.6-sol", "dial/medium");
+    expect(preset.dial?.id).toBe("dial/medium");
+    expect(codexDirectPresetId(preset)).toBe("dial/medium");
+  });
+
+  test("an orchestrator preset carries effort and no oracle", () => {
+    const preset = resolveCodexDirectPreset("codex/orchestrator/sol");
+    expect(preset.orchestrator?.id).toBe("orchestrator/sol");
+    expect(preset.effort).toBe("xhigh");
+    expect(preset.oracleAgent).toBeUndefined();
+    expect(preset.dial).toBeUndefined();
+  });
+
+  test("a plain model resolves to no preset at all", () => {
+    expect(resolveCodexDirectPreset("codex/openai/gpt-5.5", "gpt-5.5")).toEqual({});
+    expect(resolveCodexDirectPreset(undefined, null)).toEqual({});
+    // An unknown workspace preset must not invent wiring.
+    expect(resolveCodexDirectPreset("workspace-preset/nope/none")).toEqual({});
+  });
+});
+
+describe("preset instructions", () => {
+  const dial = resolveCodexDirectPreset("codex/dial/medium");
+  const orch = resolveCodexDirectPreset("codex/orchestrator/sol");
+  const base = {
+    modelLabel: "gpt-5.6-sol",
+    oracleToolName: CODEX_DIRECT_ORACLE_TOOL_ID,
+    hasOracle: true,
+    hasSessionsMcp: true,
+  };
+
+  test("the dial block names the MCP tool the run actually carries", () => {
+    const out = codexDirectPresetInstructions({ ...base, preset: dial });
+    expect(out.dialOracle).toMatchObject({
+      agent: "mcp__opensession-oracle__oracle",
+      presetLabel: "Dial · Medium",
+      oracleLabel: "GPT-5.6 Sol",
+      tool: true,
+    });
+    expect(out.orchestrator).toBeUndefined();
+  });
+
+  test("no oracle block when the oracle was not mounted", () => {
+    // Naming a tool the run does not have reads as a broken tool.
+    const out = codexDirectPresetInstructions({ ...base, preset: dial, hasOracle: false });
+    expect(out.dialOracle).toBeUndefined();
+  });
+
+  test("the orchestrator block delegates through opensession-sessions", () => {
+    const out = codexDirectPresetInstructions({ ...base, preset: orch });
+    expect(out.orchestrator?.tool).toBe("sessions");
+    expect(out.orchestrator?.workers.map((w) => w.agent)).toEqual(["worker", "worker-fast"]);
+    // Same-bridge worker models, like the oracle.
+    for (const worker of out.orchestrator!.workers) expect(worker.modelLabel).toBeTruthy();
+  });
+
+  test("no orchestrator block without the sessions worker tools", () => {
+    // This engine invents no delegation surface of its own.
+    const out = codexDirectPresetInstructions({ ...base, preset: orch, hasSessionsMcp: false });
+    expect(out.orchestrator).toBeUndefined();
+  });
+});
+
+describe("the dial oracle server", () => {
+  test("exposes exactly one read-only advisory tool", async () => {
+    const server = createCodexDirectOracleServer({ oracleAgent: "oracle-sol" });
+    expect(server.type).toBe("sdk");
+    expect(server.name).toBe(CODEX_DIRECT_ORACLE_SERVER);
+
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "codex-direct-test", version: "1.0.0" });
+    await server.instance.connect(serverTransport);
+    await client.connect(clientTransport);
+    try {
+      const listed = await client.listTools();
+      expect(listed.tools.map((t) => t.name)).toEqual(["oracle"]);
+      expect(String(listed.tools[0].description)).toContain("GPT-5.6 Sol");
+
+      // Fails SOFT: one-shots are disabled under NODE_ENV=test, which is the
+      // same null a dry pool or a disabled bridge produces — the tool must
+      // still answer rather than fail the turn.
+      const answered: any = await client.callTool({
+        name: "oracle",
+        arguments: { prompt: "Is this plan sound?" },
+      });
+      expect(answered.isError).toBeFalsy();
+      expect(String(answered.content[0].text)).toContain("your own judgment");
+
+      const empty: any = await client.callTool({ name: "oracle", arguments: { prompt: "  " } });
+      expect(String(empty.content[0].text)).toContain("needs a question");
+    } finally {
+      await client.close();
+      await server.instance.close();
+    }
+  });
+
+  test("an unconfigured oracle agent degrades instead of throwing", async () => {
+    const server = createCodexDirectOracleServer({ oracleAgent: "oracle-nope" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: "codex-direct-test", version: "1.0.0" });
+    await server.instance.connect(serverTransport);
+    await client.connect(clientTransport);
+    try {
+      const answered: any = await client.callTool({
+        name: "oracle",
+        arguments: { prompt: "anything" },
+      });
+      expect(String(answered.content[0].text)).toContain("not configured");
+    } finally {
+      await client.close();
+      await server.instance.close();
+    }
+  });
+
+  test("mounts through the same stdio proxy as the opensession-* servers", () => {
+    const built = buildCodexMcpConfig({
+      scope: [],
+      inProcessMcp: { [CODEX_DIRECT_ORACLE_SERVER]: createCodexDirectOracleServer({ oracleAgent: "oracle-sol" }) },
+      rpcToken: "test-token",
+    });
+    const entry = built.servers[CODEX_DIRECT_ORACLE_SERVER];
+    expect(entry?.env?.OPENSESSION_MCP_SERVER).toBe(CODEX_DIRECT_ORACLE_SERVER);
+    expect(entry?.env?.OPENSESSION_RPC_TOKEN).toBe("test-token");
+    expect(built.skipped).toEqual([]);
+  });
+
+  test("without a run-rpc token the oracle is reported skipped, never mounted mute", () => {
+    const built = buildCodexMcpConfig({
+      scope: [],
+      inProcessMcp: { [CODEX_DIRECT_ORACLE_SERVER]: createCodexDirectOracleServer({ oracleAgent: "oracle-sol" }) },
+    });
+    expect(built.servers[CODEX_DIRECT_ORACLE_SERVER]).toBeUndefined();
+    expect(built.skipped[0]?.name).toBe(CODEX_DIRECT_ORACLE_SERVER);
+  });
+});
+
+describe("a dial-preset turn, end to end", () => {
+  const presetAccountId = "acct-turn-preset";
+
+  beforeAll(() => {
+    setAccounts([
+      {
+        id: presetAccountId,
+        name: "preset-account",
+        kind: "home",
+        value: writeAccountHome("preset-account"),
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+    setFakeMode("ok");
+    process.env.OPENSESSION_CODEX_BIN = installFakeCodex();
+  });
+
+  afterEach(() => setEngineEnabled(false));
+
+  test("runs the preset's model at the preset's effort, overriding the session's", async () => {
+    setEngineEnabled(true);
+    resetFakeRecord();
+    const events = await collect("codex/dial/medium", {
+      accountId: presetAccountId,
+      accountStrict: true,
+      // dial/medium is "high"; the session's own effort must lose.
+      effort: "low",
+      model: "codex/dial/medium",
+    });
+    expect(events.filter((e) => e.type === "done" || e.type === "error")).toHaveLength(1);
+    expect(events.find((e) => e.type === "done")?.model).toBe("gpt-5.6-sol");
+
+    const { argv, messages } = fakeRecord();
+    expect(argv).toContain('model="gpt-5.6-sol"');
+    expect(argv).toContain('model_reasoning_effort="high"');
+    const turnStart = messages.find((m) => m.method === "turn/start");
+    expect(turnStart?.params?.model).toBe("gpt-5.6-sol");
+    expect(turnStart?.params?.effort).toBe("high");
+  });
+
+  test("a non-preset run still honours the session's own effort", async () => {
+    setEngineEnabled(true);
+    resetFakeRecord();
+    await collect("codex/openai/gpt-5.6-sol", {
+      accountId: presetAccountId,
+      accountStrict: true,
+      effort: "low",
+    });
+    const { argv, messages } = fakeRecord();
+    expect(argv).toContain('model_reasoning_effort="low"');
+    expect(messages.find((m) => m.method === "turn/start")?.params?.effort).toBe("low");
+  });
 });
 
 // ── Smoke harness ────────────────────────────────────────────────────────────

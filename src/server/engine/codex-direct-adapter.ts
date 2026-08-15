@@ -63,13 +63,21 @@
  *    field names matching `pi_turn`. Never raw prompt or reply text —
  *    `summarizeText` only.
  *
+ *  - Presets: Dial, Orchestrator and workspace presets resolve at dispatch
+ *    (codex-direct-presets.ts) — the session keeps storing the preset id, the
+ *    turn runs the preset's main model at the preset's effort. The Dial's
+ *    oracle is a one-tool in-process MCP server (codex-direct-oracle.ts)
+ *    mounted through the SAME stdio proxy as the opensession-* servers,
+ *    because codex 0.144.5 has no client-side dynamic-tool registration; it is
+ *    read-only by construction (opencodeOneShot is tool-less) and wired in
+ *    only on dial presets. The Orchestrator gets an instructions block naming
+ *    the opensession-sessions worker tools when the caller passed them in
+ *    `inProcessMcp` — this engine adds no delegation surface of its own, and
+ *    without those tools an orchestrator preset is just its effort override.
+ *
  * Documented v0 gaps:
- *  - No dial-oracle tool. codex 0.144.5's app-server has no client-side
- *    dynamic-tool registration (the `initialize` capabilities carry none, and
- *    `item/tool/call` dynamic tools come from plugin/app config), so an oracle
- *    would need either a codex plugin or a small stdio MCP entry point outside
- *    this module. Delegation still works through the opensession-sessions
- *    worker tools when the caller passes them in `inProcessMcp`.
+ *  - No worker SUBAGENTS. Same dynamic-tool-registration gap: an orchestrator
+ *    run delegates through the opensession-sessions MCP tools or not at all.
  *  - `seedTranscriptEntries` is ignored (the handoff rides the prompt), same
  *    as pi and claude-direct.
  *  - Prompt images are passed as data-URL image inputs; codex accepts an image
@@ -116,6 +124,17 @@ import {
   seedCodexDirectHome,
 } from "./codex-direct-auth";
 import { buildCodexMcpConfig } from "./codex-direct-mcp";
+import {
+  CODEX_DIRECT_ORACLE_SERVER,
+  CODEX_DIRECT_ORACLE_TOOL_ID,
+  createCodexDirectOracleServer,
+} from "./codex-direct-oracle";
+import {
+  codexDirectPresetId,
+  codexDirectPresetInstructions,
+  codexDirectPresetModel,
+  resolveCodexDirectPreset,
+} from "./codex-direct-presets";
 import { CodexAppServerClient, codexConfigArgs } from "./codex-direct-protocol";
 import type {
   ActiveRunRecord,
@@ -181,10 +200,15 @@ export function codexDirectGateReason(opts: { journal?: { kind?: string } }): st
  * `opencode/openai/<model>`, `openai/<model>` and a bare `gpt-*`/`o*`/
  * `codex-*` id. Returns null for anything that is not an OpenAI model, so a
  * misrouted Anthropic id fails loudly instead of being handed to codex.
+ *
+ * Dial and Orchestrator preset ids (`codex/dial/medium`, `orchestrator/sol`)
+ * resolve to the preset's MAIN model — the session keeps storing the preset id
+ * and only dispatch sees a concrete model. A preset whose main model is not an
+ * OpenAI one (dial/ultra) still returns null.
  */
 export function parseCodexDirectModel(model: string): string | null {
   if (!model) return null;
-  let id = model.trim();
+  let id = (codexDirectPresetModel(model) || model).trim();
   id = id.replace(/^codex\//i, "").replace(/^opencode\//i, "").replace(/^pi\//i, "");
   id = id.replace(/^openai\//i, "");
   if (!id || id.includes("/")) return null;
@@ -359,6 +383,11 @@ export async function* runCodexDirect(
   opts: RunAgentOpts,
   model: string
 ): AsyncGenerator<StreamEvent> {
+  // The Dial / The Orchestrator / workspace presets. The routed `model` may be
+  // the preset id itself (`codex/dial/medium`) and `opts.model` carries what
+  // the session stored, which is where a workspace preset shows up — both are
+  // offered to the resolver. Non-preset runs get an empty resolution.
+  const preset = resolveCodexDirectPreset(model, opts.model);
   const modelId = parseCodexDirectModel(model) || model;
   const fail = (content: string, extra: Partial<StreamEvent> = {}): StreamEvent => ({
     type: "error",
@@ -417,6 +446,7 @@ export async function* runCodexDirect(
     resume: opts.sessionId,
     model: modelId,
     mode,
+    ...(codexDirectPresetId(preset) ? { preset: codexDirectPresetId(preset) } : {}),
   };
   let turnClosed = false;
   const endTurn = (fields: Record<string, unknown>) => {
@@ -573,14 +603,49 @@ export async function* runCodexDirect(
     // deniedTools but must not trip it), matching opencode and pi.
     const bashGated = isUnattendedKind(baseJournalKind(runKind)) && !isAsk;
 
-    const rpcToken = opts.inProcessMcp && Object.keys(opts.inProcessMcp).length
+    // The Dial's oracle: a one-tool in-process MCP server, mounted through the
+    // same stdio proxy the opensession-* servers ride (codex has no
+    // client-side dynamic tool registration, so it cannot be a native tool the
+    // way pi's is). It needs a unified session id, because the run-rpc proxy
+    // resolves servers per session.
+    const oracleServer =
+      preset.oracleAgent && unifiedSessionId
+        ? createCodexDirectOracleServer({
+            oracleAgent: preset.oracleAgent,
+            user: opts.user,
+          })
+        : undefined;
+    const inProcessMcp = oracleServer
+      ? { ...(opts.inProcessMcp || {}), [CODEX_DIRECT_ORACLE_SERVER]: oracleServer }
+      : opts.inProcessMcp;
+
+    const rpcToken = inProcessMcp && Object.keys(inProcessMcp).length
       ? crypto.randomUUID()
       : undefined;
     if (rpcToken && unifiedSessionId) {
-      const { registerRunToken, unregisterRunToken } = await import("../run-rpc");
+      const {
+        registerRunToken,
+        unregisterRunToken,
+        registerSessionMcpServers,
+        unregisterSessionMcpServers,
+      } = await import("../run-rpc");
       registerRunToken(rpcToken, { sessionId: unifiedSessionId, user: opts.user });
+      if (oracleServer) {
+        // run-rpc resolves a server name against the per-session overrides
+        // first and the interactive builder second, and the oracle exists in
+        // neither — so it is registered here for the turn. The map registered
+        // is a SUPERSET of what the caller would have registered itself
+        // (automations and the Slack loop register exactly the map they pass
+        // as inProcessMcp), so nothing is lost while the turn runs; the
+        // cleanup drops the override again, and those callers re-register per
+        // run.
+        registerSessionMcpServers(unifiedSessionId, inProcessMcp as Record<string, unknown>);
+      }
       // Deregistration rides the finally below via this closure.
-      cleanupRpc = async () => unregisterRunToken(rpcToken);
+      cleanupRpc = async () => {
+        unregisterRunToken(rpcToken);
+        if (oracleServer) unregisterSessionMcpServers(unifiedSessionId);
+      };
     }
 
     const mcp = buildCodexMcpConfig({
@@ -588,7 +653,7 @@ export async function* runCodexDirect(
       user: opts.user,
       grantUsers: [opts.mcpGrantUser, opts.user],
       deniedToolNames: [...Object.keys(opts.deniedTools || {}), ...Object.keys(confirmTools)],
-      inProcessMcp: opts.inProcessMcp,
+      inProcessMcp: rpcToken ? inProcessMcp : opts.inProcessMcp,
       rpcToken,
     });
 
@@ -604,6 +669,17 @@ export async function* runCodexDirect(
       localInstructions: readLocalInstructions(cwd),
       deniedToolNotes: policy.noteGroups,
       commandPolicyGated: bashGated,
+      ...codexDirectPresetInstructions({
+        preset,
+        modelLabel: modelId,
+        oracleToolName: CODEX_DIRECT_ORACLE_TOOL_ID,
+        // Only claim the oracle exists when it was actually mounted, and only
+        // name the delegation path when the caller handed this run the
+        // opensession-sessions worker tools — this engine invents no write
+        // surface of its own for either.
+        hasOracle: !!(oracleServer && rpcToken),
+        hasSessionsMcp: !!(opts.inProcessMcp || {})["opensession-sessions"],
+      }),
     });
 
     // ── Spawn ───────────────────────────────────────────────────────────────
@@ -616,7 +692,9 @@ export async function* runCodexDirect(
       // this codex prompts for trust on first use in a directory.
       [`projects.${JSON.stringify(cwd)}.trust_level`]: "trusted",
     };
-    const effort = codexReasoningEffort(opts.effort);
+    // A preset's effort OVERRIDES the session's, exactly as the opencode
+    // runner does (`dial?.effort ?? orch?.effort ?? opts.effort`).
+    const effort = codexReasoningEffort(preset.effort ?? opts.effort);
     if (effort) configOverrides.model_reasoning_effort = effort;
     for (const [name, entry] of Object.entries(mcp.servers)) {
       configOverrides[`mcp_servers.${JSON.stringify(name)}`] = entry;
