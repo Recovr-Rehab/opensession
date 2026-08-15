@@ -435,12 +435,10 @@ export function WalkthroughCard({
 						}
 						className={session ? "overflow-hidden" : undefined}
 					>
-						<div
-							className={cn(
-								"space-y-5",
-								session ? "mt-3 border-t border-line/60 pt-4" : "mt-3",
-							)}
-						>
+						{/* No rule under the header: the card is already one surface,
+						    and open, the header and the writeup read as parts of it.
+						    The gap does the separating. */}
+						<div className={cn("space-y-5", session ? "mt-4" : "mt-3")}>
 							<section className="px-0.5">
 								<h3 className="m-0 mb-1.5 text-[11px] font-semibold leading-4 text-faint">
 									Summary
