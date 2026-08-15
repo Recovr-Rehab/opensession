@@ -31,7 +31,7 @@ import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
    phones, so iOS doesn't zoom a focused field, and paragraph leading in a
    textarea. */
 const FORM_FIELDS =
-  "[&_textarea]:leading-normal phone:[&_input]:text-[16px] phone:[&_select]:text-[16px] phone:[&_textarea]:text-[16px]";
+  "[&_textarea]:leading-normal phone:[&_input]:text-input-phone phone:[&_select]:text-input-phone phone:[&_textarea]:text-input-phone";
 /** .automation-form */
 const FORM_CARD = `flex flex-col gap-3.5 rounded-panel border border-line-strong bg-panel p-4.5 ${FORM_FIELDS}`;
 /** .automation-form label */

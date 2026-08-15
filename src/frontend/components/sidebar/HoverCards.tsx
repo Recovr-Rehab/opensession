@@ -539,7 +539,7 @@ export function WsCardBody({
 					</CardLink>
 				)}
 				{prStatusBits.length > 0 && (
-					<span className="min-w-0 truncate text-[11px] text-faint">
+					<span className="min-w-0 truncate text-meta text-faint">
 						{prStatusBits.join(" · ")}
 					</span>
 				)}
@@ -631,7 +631,7 @@ export function WsMobileSheet({
 				<div className="px-2 pb-2.5 pt-1">
 					<WsOverviewInfo row={row} ov={ov} />
 					{(prStatusBits.length > 0 || row.lastActivity) && (
-						<div className="mt-2 flex min-w-0 items-center gap-2 text-[11px] text-faint">
+						<div className="mt-2 flex min-w-0 items-center gap-2 text-meta text-faint">
 							{prSession?.prNumber != null && (
 								<span
 									className={`shrink-0 text-[0.95em] font-semibold ${prTone(prSession)}`}
@@ -752,7 +752,7 @@ export function WsMobileSheet({
 								: null;
 						return (
 							<div className="px-4 py-2">
-								<div className="mb-1.5 text-[11px] font-semibold text-faint">
+								<div className="mb-1.5 text-meta font-semibold text-faint">
 									Move to lane
 								</div>
 								<div className="flex flex-wrap gap-1.5">
@@ -813,7 +813,7 @@ export function WsMobileSheet({
 				    until the resolved time. */}
 				{row.sessions.length > 0 && (
 					<div className="px-4 py-2">
-						<div className="mb-1.5 text-[11px] font-semibold text-faint">
+						<div className="mb-1.5 text-meta font-semibold text-faint">
 							{snoozeUntil
 								? `Snoozed · wakes in ${formatRemaining(snoozeUntil)}`
 								: "Snooze"}

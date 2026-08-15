@@ -2839,7 +2839,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				)}
 				{editing ? (
 					<input
-						className="min-w-0 flex-1 rounded-md border border-[var(--accent,#6b8afd)] bg-bg px-[3px] text-[14px] font-medium text-inherit outline-none"
+						className="min-w-0 flex-1 rounded-md border border-[var(--accent,#6b8afd)] bg-bg px-[3px] text-item-title font-medium text-inherit outline-none"
 						value={row.workspace ? workspaceDraft : sessionDraft}
 						autoFocus
 						onChange={(e) =>
@@ -4268,7 +4268,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							// desktop gets a compact full-width row.
 							"group flex text-left transition-colors",
 							isPhone &&
-								"relative w-[132px] min-h-[84px] flex-[0_0_auto] flex-col items-start justify-between gap-2.5 rounded-xl bg-panel p-3 text-[13px] leading-[1.25] font-semibold text-fg",
+								"relative w-[132px] min-h-[84px] flex-[0_0_auto] flex-col items-start justify-between gap-2.5 rounded-xl bg-panel p-3 text-label leading-[1.25] font-semibold text-fg",
 							// The card owns a real surface (--bg-panel), so its states
 							// ride ON that as layers rather than replacing it — the same
 							// translucent ink the rows use, just stacked over a fill
@@ -4876,7 +4876,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					</EmptyState>
 				)}
 				{workspaceListEmpty && !sessionsLoading && !sessionsError && hasWorkspaceFilter && (
-					<div className="mx-4 my-7 text-center text-[13px] leading-[1.4] text-faint">
+					<div className="mx-4 my-7 text-center text-label leading-[1.4] text-faint">
 						No matching workspaces
 					</div>
 				)}
@@ -4898,7 +4898,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					!hasWorkspaceFilter &&
 					!draftRow &&
 					(!isPhone || !productEmpty) && (
-					<div className="mx-4 my-7 text-center text-[13px] leading-[1.4] text-faint">
+					<div className="mx-4 my-7 text-center text-label leading-[1.4] text-faint">
 						No workspaces yet
 					</div>
 				)}
@@ -4909,10 +4909,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					isPhone && (
 					<div className="flex min-h-[360px] flex-col items-center justify-center px-7 py-12 text-center">
 						<IconMessages size={30} className="mb-3 text-dim" />
-						<div className="text-[19px] leading-[1.15] font-semibold tracking-[-0.02em] text-fg">
+						<div className="text-section-title leading-[1.15] font-semibold tracking-[-0.02em] text-fg">
 							No sessions
 						</div>
-						<p className="m-0 mt-1 max-w-[26ch] text-[14px] leading-[1.45] text-dim text-pretty">
+						<p className="m-0 mt-1 max-w-[26ch] text-body leading-[1.45] text-dim text-pretty">
 							Start one and it shows up here.
 						</p>
 						<div className="mt-4 flex flex-col items-center gap-1">

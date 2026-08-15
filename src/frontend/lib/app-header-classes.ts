@@ -268,7 +268,7 @@ export const HEADER_TITLE_TEXT =
  * events are re-enabled here because the bar turns them off wholesale.
  */
 export const HEADER_TITLE_MODEL =
-	"phone:max-w-full phone:truncate phone:text-[10px] phone:font-medium " +
+	"phone:max-w-full phone:truncate phone:text-meta phone:font-medium " +
 	"phone:leading-[1.1] phone:text-faint phone:pointer-events-auto";
 
 /**
@@ -291,11 +291,14 @@ export const HEADER_SESSIONBAR =
  * was the tallest thing on the line and set the row height by itself, opening
  * a gap under the title that nothing visible filled.
  */
+/* The 16px is glyph geometry, not a step of the scale: it sizes the middle dot
+   between two runs of metadata so the dot lands optically centred against
+   11px text. See the scale note in styles/tailwind.css. */
 export const HEADER_SESSIONBAR_SEP =
 	"phone:shrink-0 phone:text-[16px] phone:leading-4 phone:text-dim";
 
 export const HEADER_SESSIONBAR_MODEL =
-	"truncate phone:min-w-0 phone:max-w-[45vw] phone:text-[12px] " +
+	"truncate phone:min-w-0 phone:max-w-[45vw] phone:text-meta " +
 	"phone:font-medium phone:text-dim";
 
 /**
@@ -310,7 +313,7 @@ export const HEADER_SESSIONBAR_MODEL =
  * `showCacheRate` prop instead of being hidden after the fact.
  */
 export const HEADER_SESSIONBAR_USAGE =
-	"min-h-0 gap-1 p-0 text-[12px] [&_span]:text-dim [&_svg]:size-2.5";
+	"min-h-0 gap-1 p-0 text-meta [&_span]:text-dim [&_svg]:size-2.5";
 
 /**
  * The trailing slot. On the root page it carries Search and the portaled

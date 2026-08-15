@@ -53,7 +53,7 @@ function FlowNode({
 				<span className={cn("w-3 shrink-0 text-center font-mono text-xs font-bold", TONE[node.status])} aria-hidden="true">
 					{MARK[node.status]}
 				</span>
-				<code className={cn("min-w-0 truncate bg-transparent p-0 text-[12px] leading-5", TONE[node.status])} title={node.label}>
+				<code className={cn("min-w-0 truncate bg-transparent p-0 text-label leading-5", TONE[node.status])} title={node.label}>
 					<span className="sr-only">{node.status}: </span>
 					{node.label}
 				</code>

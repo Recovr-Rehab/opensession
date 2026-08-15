@@ -40,7 +40,7 @@ import { formatDuration } from "../lib/time";
    and a multi-line brief keeps paragraph leading, which the type scale
    doesn't set. */
 const FORM_FIELDS =
-  "[&_textarea]:leading-normal phone:[&_input]:text-[16px] phone:[&_select]:text-[16px] phone:[&_textarea]:text-[16px]";
+  "[&_textarea]:leading-normal phone:[&_input]:text-input-phone phone:[&_select]:text-input-phone phone:[&_textarea]:text-input-phone";
 /** .automation-form.automation-form-inline — no card chrome; the drawer body
  *  already provides the surface and the padding. */
 const FORM_INLINE = `flex flex-col gap-3.5 ${FORM_FIELDS}`;

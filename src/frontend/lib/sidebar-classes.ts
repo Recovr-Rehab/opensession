@@ -276,7 +276,7 @@ export const SIDEBAR_REPO_TILE = "size-[18px] shrink-0 text-meta";
  * a caption is still a toggle once the pill is gone.
  */
 export const SIDEBAR_GROUP_HEADER =
-	`group/gh flex w-full items-center ${SIDEBAR_RAIL_GAP} rounded-[calc(10px*var(--rf))] border-none bg-transparent text-[16px] font-medium tracking-[0px] text-dim desktop:text-item-title hover:text-fg`;
+	`group/gh flex w-full items-center ${SIDEBAR_RAIL_GAP} rounded-[calc(10px*var(--rf))] border-none bg-transparent text-item-title font-medium tracking-[0px] text-dim hover:text-fg`;
 
 /**
  * A FULL-LINE heading — a repo or feed band, an automation group, Archived.
@@ -316,7 +316,7 @@ export const SIDEBAR_GROUP_HEADER_INSET =
  * rows that lead nowhere between the rows that do.
  */
 export const SIDEBAR_LANE_HEADER =
-	"gap-[5px] pt-[9px] pb-[5px] text-label font-semibold desktop:h-[var(--sidebar-cap-h)] desktop:min-h-[var(--sidebar-cap-h)] desktop:pt-1 desktop:pb-1 desktop:text-[12px]";
+	"gap-[5px] pt-[9px] pb-[5px] text-label font-semibold desktop:h-[var(--sidebar-cap-h)] desktop:min-h-[var(--sidebar-cap-h)] desktop:pt-1 desktop:pb-1 desktop:text-meta";
 
 /**
  * The heading's own name. `truncate` before any width utility: it is the pair
@@ -363,17 +363,15 @@ export const SIDEBAR_GROUP_CHEVRON_COLLAPSED = "opacity-100";
  * actually wants it, not to the shared string.
  */
 export const SIDEBAR_GROUP_COUNT =
-	"text-label font-medium text-faint desktop:text-[12px]";
+	"text-label font-medium text-faint desktop:text-meta";
 
 /**
- * The same count on a status-lane heading, which pins 12px at both widths.
- * That is what the shipped build renders: the lane headings already carried a
- * `text-[12px]` utility, and a utility out-ranks the phone rule in legacy.css,
- * so their counts never took the bump their neighbours' did. Spelled as its
- * own constant rather than reproduced by stacking a second `text-*` on
+ * The same count on a status-lane heading, which takes the meta step at both
+ * widths rather than the phone bump its neighbours get. Spelled as its own
+ * constant rather than reproduced by stacking a second `text-*` on
  * {@link SIDEBAR_GROUP_COUNT}, where the winner would be Tailwind's ordering.
  */
-export const SIDEBAR_LANE_COUNT = "text-[12px] font-medium text-faint";
+export const SIDEBAR_LANE_COUNT = "text-meta font-medium text-faint";
 
 /** The 7px liveness dot a lane or automation heading leads with. */
 export const SIDEBAR_GROUP_DOT = "size-[7px] shrink-0 rounded-full opacity-85";
@@ -471,7 +469,7 @@ export const SIDEBAR_STICKY_LANE_NESTED =
  * neither value.
  */
 export const SIDEBAR_BAND_LABEL =
-	"text-[15px] font-semibold tracking-[-0.01em] text-faint desktop:text-[12px]";
+	"text-body font-semibold tracking-[-0.01em] text-faint desktop:text-meta";
 
 /**
  * The heading's toggle button. Horizontal padding is NOT here: each band sits

@@ -315,7 +315,7 @@ function CommentAvatar({ author }: { author: string }) {
 	}
 	return (
 		<span
-			className="grid size-6 shrink-0 place-items-center rounded-full border border-line bg-active text-[11px] font-semibold text-white"
+			className="grid size-6 shrink-0 place-items-center rounded-full border border-line bg-active text-meta font-semibold text-white"
 			style={{ background: `hsl(${hueFor(login || "?")} 52% 42%)` }}
 			aria-hidden
 		>
@@ -350,7 +350,7 @@ function CommentCard({
 	const addBtn = onAddToInput && (
 		<button
 			type="button"
-			className="absolute right-1.5 top-1/2 z-[1] -translate-y-1/2 rounded-control border border-line-strong bg-panel px-2 py-0.5 text-[11px] font-semibold text-dim opacity-0 transition-opacity duration-150 group-hover:opacity-100 hover:border-faint hover:bg-hover hover:text-fg"
+			className="absolute right-1.5 top-1/2 z-[1] -translate-y-1/2 rounded-control border border-line-strong bg-panel px-2 py-0.5 text-meta font-semibold text-dim opacity-0 transition-opacity duration-150 group-hover:opacity-100 hover:border-faint hover:bg-hover hover:text-fg"
 			onClick={(e) => {
 				e.stopPropagation();
 				onAddToInput(formatPrCommentPrompt(comment, pr));
@@ -457,7 +457,7 @@ function FileRow({
 		[theme],
 	);
 	const stats = (
-		<span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold tabular-nums">
+		<span className="inline-flex shrink-0 items-center gap-1 text-meta font-semibold tabular-nums">
 			{file.additions > 0 && (
 				<span className="text-green">+{file.additions}</span>
 			)}
@@ -492,7 +492,7 @@ function FileRow({
 						// An even box around an even dot: 15px left half-pixels on
 						// both axes, which at Retina reads as a dot sitting off
 						// its own tile.
-						"inline-flex size-4 shrink-0 items-center justify-center rounded-md text-[11px] font-bold leading-none",
+						"inline-flex size-4 shrink-0 items-center justify-center rounded-md text-meta font-bold leading-none",
 						mark.className,
 					)}
 					title={mark.label}
@@ -782,14 +782,14 @@ function AgentReviewCard({
 									<div className="flex items-center gap-2.5 border-b border-divider px-4 py-3">
 										<CommentAvatar author={reviewComment?.author || GITHUB_BOT_NAME || AGENT_NAME} />
 										<div className="min-w-0 flex-1">
-											<div className="truncate text-[13px] font-semibold text-fg">
+											<div className="truncate text-label font-semibold text-fg">
 												{reviewComment?.author || GITHUB_BOT_NAME || AGENT_NAME}
 											</div>
 											<div className="text-meta text-faint">
 												Automated review{reviewedAgo ? ` · reviewed ${reviewedAgo} ago` : ""}
 											</div>
 										</div>
-										<span className={cn("shrink-0 text-[13px] font-semibold", scoreTone)}>
+										<span className={cn("shrink-0 text-label font-semibold", scoreTone)}>
 											{score ?? "–"}/5
 										</span>
 									</div>
@@ -815,7 +815,7 @@ function AgentReviewCard({
 				{children}
 			</div>
 			{done && (
-				<div className="px-3 text-[11px] font-medium text-dim">
+				<div className="px-3 text-meta font-medium text-dim">
 					Started {done.label.toLowerCase()}. {AGENT_NAME} will post results on{" "}
 					{pr.url ? (
 						<a
@@ -851,7 +851,7 @@ function AgentReviewCard({
 				</div>
 			)}
 			{error && (
-				<div className="px-3 text-[11px] font-medium text-red">
+				<div className="px-3 text-meta font-medium text-red">
 					{error}
 				</div>
 			)}
@@ -1152,7 +1152,7 @@ function ReviewerChip({
 			</Menu.Root>
 			</div>
 			{error && (
-				<div className="px-2 pb-1 text-[11px] font-medium text-red">{error}</div>
+				<div className="px-2 pb-1 text-meta font-medium text-red">{error}</div>
 			)}
 		</>
 	);
@@ -1460,7 +1460,7 @@ export function WorkspaceInfo({
 								{onAddToInput && (
 									<button
 										type="button"
-										className="rounded-control border border-line bg-surface px-2 py-0.5 text-[11px] font-semibold text-dim transition-colors hover:border-line-strong hover:bg-hover hover:text-fg"
+										className="rounded-control border border-line bg-surface px-2 py-0.5 text-meta font-semibold text-dim transition-colors hover:border-line-strong hover:bg-hover hover:text-fg"
 										onClick={() =>
 											onAddToInput(formatFixCommentsPrompt(comments, pr!))
 										}
@@ -1503,7 +1503,7 @@ export function WorkspaceInfo({
 								<span>
 									{changed.length} file{changed.length === 1 ? "" : "s"} changed
 								</span>
-								<span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold tabular-nums">
+								<span className="inline-flex shrink-0 items-center gap-1 text-meta font-semibold tabular-nums">
 									{totalAdd > 0 && (
 										<span className="text-green">+{totalAdd}</span>
 									)}
@@ -1658,12 +1658,12 @@ export function WorkspaceInfo({
 										<span className="min-w-0 flex-1">
 											<span className="block truncate">{a.path}</span>
 											{a.description && (
-												<span className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-dim">
+												<span className="mt-0.5 line-clamp-2 text-meta leading-snug text-dim">
 													{a.description}
 												</span>
 											)}
 										</span>
-										<span className="shrink-0 text-[11px] text-faint">
+										<span className="shrink-0 text-meta text-faint">
 											{fmtBytes(a.size)}
 										</span>
 									</button>

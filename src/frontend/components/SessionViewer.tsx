@@ -4639,7 +4639,7 @@ export function SessionViewer({
 							<Button
 								variant="danger"
 								size="sm"
-								className="min-h-0 px-3 py-[5px] text-[13px]"
+								className="min-h-0 px-3 py-[5px] text-label"
 								onClick={() => handleDelete(true)}
 								disabled={deleting}
 							>
@@ -4649,7 +4649,7 @@ export function SessionViewer({
 						<Button
 							variant="warning"
 							size="sm"
-							className="min-h-0 px-3 py-[5px] text-[13px]"
+							className="min-h-0 px-3 py-[5px] text-label"
 							onClick={() => handleDelete(false)}
 							disabled={deleting}
 						>
@@ -4658,7 +4658,7 @@ export function SessionViewer({
 						<Button
 							variant="soft"
 							size="sm"
-							className="min-h-0 px-3 py-[5px] text-[13px]"
+							className="min-h-0 px-3 py-[5px] text-label"
 							onClick={() => setShowDeleteConfirm(false)}
 							disabled={deleting}
 						>
@@ -4838,7 +4838,7 @@ export function SessionViewer({
 						(session.repoLess ? (
 							<span className="flex min-w-0 items-center gap-1.5">
 								<span
-									className="flex min-w-0 items-center gap-1.5 text-[13px] font-medium text-dim"
+									className="flex min-w-0 items-center gap-1.5 text-label font-medium text-dim"
 									title={
 										session.mode === "scratch"
 											? "Scratch session · no repo"
@@ -5982,7 +5982,7 @@ export function SessionViewer({
 								)}
 							>
 								{noEngine ? (
-									<div className="mx-auto max-w-[var(--session-col)] text-[13px] text-faint">
+									<div className="mx-auto max-w-[var(--session-col)] text-label text-faint">
 										No engine session to resume
 									</div>
 								) : (
@@ -6432,10 +6432,10 @@ function WorkspaceWaiting({ detail }: { detail: string }) {
 	return (
 		<div className="flex h-full min-h-[240px] flex-col items-center justify-center gap-1 px-6 text-center">
 			<Spinner size="md" className="mb-2 text-dim" />
-			<div className="text-[14px] font-semibold text-fg">
+			<div className="text-item-title font-semibold text-fg">
 				Setting up your workspace
 			</div>
-			<div className="max-w-[340px] text-[13px] font-medium leading-relaxed text-dim">
+			<div className="max-w-[340px] text-label font-medium leading-relaxed text-dim">
 				{detail}
 			</div>
 		</div>
@@ -6480,7 +6480,7 @@ function BusyElapsed({ since }: { since: number }) {
 		label = `${Math.floor(s / 60)}m, ${(s % 60).toFixed(1)}s`;
 	else label = `${Math.floor(s / 3600)}h, ${Math.floor((s % 3600) / 60)}m`;
 	// Tabular figures so a 10Hz counter doesn't jitter its own width.
-	return <span className="text-[12px] text-faint tabular-nums">{label}</span>;
+	return <span className="text-meta text-faint tabular-nums">{label}</span>;
 }
 
 function BusyInline({

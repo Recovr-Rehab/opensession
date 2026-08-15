@@ -87,4 +87,4 @@ export const paletteIconBtnOn =
    and as a utility it outranked the stylesheet's `var(--border)` on source
    order. Written out here so the constant describes what actually paints. */
 export const palettePill =
-	"relative inline-flex min-h-8 max-w-[180px] items-center gap-1.5 rounded-full border border-transparent px-[11px] py-[5px] text-[12px] font-medium text-dim transition-[background,border-color,color] hover:bg-hover hover:text-fg disabled:cursor-default disabled:opacity-55";
+	"relative inline-flex min-h-8 max-w-[180px] items-center gap-1.5 rounded-full border border-transparent px-[11px] py-[5px] text-label font-medium text-dim transition-[background,border-color,color] hover:bg-hover hover:text-fg disabled:cursor-default disabled:opacity-55";

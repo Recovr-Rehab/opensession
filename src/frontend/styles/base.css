@@ -1310,7 +1310,10 @@ html.wco .app-body.sidebar-collapsed
 	margin: 2px 0 8px;
 	overflow-x: auto;
 	font-family: var(--mono);
-	font-size: 12px;
+	/* The same ratio the inline chip below uses, so a block and an inline run
+	   of code are one size, and both scale with the prose they sit in rather
+	   than pinning a second absolute size into the scale. */
+	font-size: 0.9em;
 	line-height: 1.55;
 }
 
@@ -1332,7 +1335,6 @@ html.wco .app-body.sidebar-collapsed
 .markdown pre code {
 	background: none;
 	padding: 0;
-	font-size: 12px;
 	color: inherit;
 }
 
@@ -1483,9 +1485,10 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	font-size: 17px;
 	letter-spacing: -0.016em;
 }
-.markdown h3 {
-	font-size: 16px;
-}
+/* The deepest two levels share the body size and are told apart by weight and
+   the space above them, which is what the scale has: 19 / 17 / body. A step of
+   its own for h4 only bought a size nobody could see. */
+.markdown h3,
 .markdown h4 {
 	font-size: 15px;
 }
@@ -2125,7 +2128,7 @@ html[data-theme="light"] span.commit-ref:hover {
 	line-height: 1.65;
 }
 .wiki-doc h1 {
-	font-size: 22px;
+	font-size: 19px;
 	margin: 0 0 14px;
 }
 .wiki-doc h2 {
@@ -2133,10 +2136,9 @@ html[data-theme="light"] span.commit-ref:hover {
 	margin: 22px 0 10px;
 }
 .wiki-doc h3 {
-	/* One step over the 15px body, the same as `.markdown h3`. It only differs
-	   from that rule in its margins now; the size is restated so the tie with
-	   body is visibly ruled out here rather than inherited by luck. */
-	font-size: 16px;
+	/* Body size, the same as `.markdown h3`: weight and the space above carry
+	   it. Restated here only because this block re-declares its own margins. */
+	font-size: 15px;
 	margin: 18px 0 8px;
 }
 .wiki-doc img {

@@ -233,35 +233,51 @@
 	   behind it becomes a second, smaller body that nobody chose. */
 	--text-base: 15px;
 
-	/* Semantic type roles. Migrate by purpose rather than by nearest number:
-	   11px -> text-meta (timestamps, status, secondary metadata)
-	   13px -> text-label / text-supporting / text-control-label (interface copy)
-	   14px -> text-item-title (the title of a row you scan)
-	   15px -> text-body (prose you read: a transcript answer, a description)
-	   17px -> text-dialog-title (modal headings)
-	   19px -> text-section-title / text-page-title (all headings)
-	   28px -> text-stat (the figure on a metric tile)
+	/* THE SCALE. Six steps, and text is set from one of them:
 
-	   Body and item title were one 14px step until 2026-08. A pixel is below
-	   what anyone perceives, so the scale's most meaningful boundary (copy you
-	   read against chrome you scan) was the one boundary it did not draw, and
-	   the ramp ran 11 / 13 / 14 / 17 / 19 at 1.18x, 1.08x, 1.21x, 1.12x. Moving
-	   prose to 15 both draws that line and evens the ramp to 1.18x, 1.15x,
-	   1.13x, 1.12x.
+	     11 -> text-meta          timestamps, counts, status, badges
+	     13 -> text-label / text-supporting / text-control-label / xs / sm
+	     15 -> text-body / text-item-title / base   prose, and the title of a row
+	     17 -> text-dialog-title  a modal heading
+	     19 -> text-section-title / text-page-title
+	     28 -> text-stat          the figure on a metric tile
 
-	   They are two tokens now rather than one because they answer to different
-	   things: body wants to grow with the reading column, an item title wants to
-	   stay level with the 13px metadata beside it in a row. Do not collapse them
-	   back on the grounds that they were once the same number. */
+	   Pick by purpose, not by nearest number. Never write an arbitrary
+	   text-[Npx] for type: if none of the six fits, the answer is one of the
+	   six anyway, or the design is asking for a weight and not a size.
+
+	   It ran 8 / 10 / 11 / 12 / 13 / 14 / 15 / 16 / 17 / 19 / 22 / 28 until
+	   2026-08. Half those steps were within a pixel or two of a neighbour, so
+	   they drew no distinction a reader could see while giving each new surface
+	   a different answer to the same question. The six that survive are spaced
+	   1.18x / 1.15x / 1.13x / 1.12x / 1.47x, which is the smallest gap that
+	   still reads as a step.
+
+	   Two families deliberately sit OUTSIDE the scale, and neither is a step:
+
+	   · Glyph metrics. A font-size that sizes a character used as an icon --
+	     the close x, the + on the tab strip, the @ on an avatar, a caret --
+	     is icon geometry, and it answers to the box it centres in.
+	   · text-input-phone, below.
+
+	   Chips inside running text (inline code, a session link, a commit ref)
+	   take a RATIO of their sentence in base.css, not a step, so they ride the
+	   prose they interrupt. */
 	--text-meta: 11px;
 	--text-label: 13px;
 	--text-supporting: 13px;
 	--text-control-label: 13px;
 	--text-body: 15px;
-	--text-item-title: 14px;
+	--text-item-title: 15px;
 	--text-dialog-title: 17px;
 	--text-section-title: 19px;
 	--text-page-title: 19px;
+	/* Not a step: iOS Safari zooms the page in when a focused input is under
+	   16px, so every text input a phone can reach has to be at least this. It
+	   is a size the platform picks, so it is spelled once here rather than as
+	   an arbitrary value at each field. */
+	--text-input-phone: 16px;
+
 	/* The display step, above every heading: the number on a stat tile, whose
 	   whole job is to be read before the label above it. A heading token is the
 	   wrong size for it, since 19px is an item title rather than a figure, and

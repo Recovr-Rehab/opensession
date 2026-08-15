@@ -3694,7 +3694,7 @@ export function App(
 							}}
 						>
 							<span>Close anyway</span>
-							<span className="ml-5 text-[14px] font-medium opacity-70">⌘↵</span>
+							<span className="ml-5 text-label font-medium opacity-70">⌘↵</span>
 						</Button>
 					</Modal.Footer>
 				</Modal.Content>

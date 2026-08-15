@@ -47,13 +47,13 @@ export const ARCHIVED_ROW_OPEN =
 	"text-left after:absolute after:inset-0 after:content-['']";
 
 export const ARCHIVED_ROW_TITLE =
-	"block truncate text-label text-fg phone:text-[15px]";
+	"block truncate text-label text-fg phone:text-body";
 
 /** The line under the title, and only when it has something to say — see the
  *  meta rules in the component: a field the current filter already fixes is
  *  the same word on every row. */
 export const ARCHIVED_ROW_META =
-	"mt-1 flex min-w-0 items-center gap-2.5 text-meta text-faint phone:text-[12px]";
+	"mt-1 flex min-w-0 items-center gap-2.5 text-meta text-faint";
 
 /** The timestamp and disclosure affordance step aside for Restore on hover. */
 export const ARCHIVED_ROW_TRAIL =

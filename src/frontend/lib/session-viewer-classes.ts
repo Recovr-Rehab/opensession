@@ -105,7 +105,7 @@ export const VIEWER_HEADER_ACTIONS =
 	// legacy rule did. `inline-flex`/`items-center` are not carried — the
 	// primitive is already both, on every viewport.
 	"phone:[&_button]:min-h-[38px] phone:[&_button]:px-[11px] phone:[&_button]:py-[7px] " +
-	"phone:[&_button]:text-[12px]";
+	"phone:[&_button]:text-label";
 
 /** The presence facepile (Figma/Notion-style), just before Share. Labelled
  *  items in the row space themselves off the icon cluster; the icons keep the
@@ -145,7 +145,7 @@ export const SESSION_LINK =
 	// written: the 11px sides are already the resting value. A `phone:` variant
 	// beats the unprefixed `py-[5px]`/`text-label` on the same element because
 	// Tailwind emits every breakpoint variant after the unprefixed utilities.
-	"phone:inline-flex phone:min-h-[38px] phone:items-center phone:py-[7px] phone:text-[12px]";
+	"phone:inline-flex phone:min-h-[38px] phone:items-center phone:py-[7px] phone:text-label";
 export const SESSION_LINK_LINEAR = "border-[rgba(94,106,210,0.5)] text-[#7b86e8]";
 export const SESSION_LINK_PLAIN = "border-[rgba(13,148,136,0.5)] text-[#5eead4]";
 

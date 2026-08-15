@@ -232,7 +232,7 @@ export function ShippedChangeComposer({
 				}}
 			>
 				<textarea
-					className="block min-h-14 max-h-32 w-full resize-none border-0 bg-transparent p-0 text-body leading-[1.55] text-fg outline-none [field-sizing:content] placeholder:text-faint phone:text-[16px]"
+					className="block min-h-14 max-h-32 w-full resize-none border-0 bg-transparent p-0 text-body leading-[1.55] text-fg outline-none [field-sizing:content] placeholder:text-faint phone:text-input-phone"
 					aria-label="Slack message"
 					value={message}
 					maxLength={500}

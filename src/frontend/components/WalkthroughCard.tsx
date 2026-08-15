@@ -216,7 +216,7 @@ export function WalkthroughCard({
 						// and lighting a slab the size of the card. The chevron takes
 						// the rest of it, at its own scale — the whole row folds, but
 						// the chevron is what a reader is aiming at.
-						className="group -m-1 flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-control border-0 bg-transparent p-1 text-left font-sans text-[14px] leading-5 text-dim outline-none transition-colors hover:bg-hover/40 focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
+						className="group -m-1 flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-control border-0 bg-transparent p-1 text-left font-sans text-item-title leading-5 text-dim outline-none transition-colors hover:bg-hover/40 focus-visible:shadow-[0_0_0_3px_var(--accent-soft)]"
 					>
 						{/* The walkthrough's own icon leads the line, so the row is
 					    named before it is operated; the chevron trails at the far
@@ -257,7 +257,7 @@ export function WalkthroughCard({
 				// transcript. Three lines is what the paragraph usually is; the
 				// rest of the writeup stays behind the fold, which is what the
 				// fold is for.
-				<p className="m-0 mt-2 line-clamp-3 text-[13px] leading-5 text-dim [overflow-wrap:anywhere] [text-wrap:pretty]">
+				<p className="m-0 mt-2 line-clamp-3 text-label leading-5 text-dim [overflow-wrap:anywhere] [text-wrap:pretty]">
 					{lede}
 				</p>
 			)}
@@ -440,12 +440,12 @@ export function WalkthroughCard({
 						    The gap does the separating. */}
 						<div className={cn("space-y-5", session ? "mt-4" : "mt-3")}>
 							<section className="px-0.5">
-								<h3 className="m-0 mb-1.5 text-[11px] font-semibold leading-4 text-faint">
+								<h3 className="m-0 mb-1.5 text-meta font-semibold leading-4 text-faint">
 									Summary
 								</h3>
 								<MarkdownBody
 									html={summaryHtml}
-									className="markdown max-w-[68ch] text-[13px] leading-5 text-dim [overflow-wrap:anywhere] [text-wrap:pretty]"
+									className="markdown max-w-[68ch] text-label leading-5 text-dim [overflow-wrap:anywhere] [text-wrap:pretty]"
 								/>
 							</section>
 

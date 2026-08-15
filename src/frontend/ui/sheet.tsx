@@ -356,7 +356,7 @@ export function SheetItem({
 		<button
 			type="button"
 			className={cn(
-				"flex w-full items-center gap-[13px] rounded-control px-3.5 py-[15px] text-left text-[16px] active:bg-pressed [&_svg]:shrink-0",
+				"flex w-full items-center gap-[13px] rounded-control px-3.5 py-[15px] text-left text-body active:bg-pressed [&_svg]:shrink-0",
 				SHEET_ITEM_TONE[tone],
 				className,
 			)}

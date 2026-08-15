@@ -1030,7 +1030,7 @@ const CommentForm = React.memo(function CommentForm({
             <Button
               variant="soft"
               size="sm"
-              className="min-h-0 px-3 py-[5px] text-[13px] font-normal"
+              className="min-h-0 px-3 py-[5px] text-label font-normal"
               onClick={onCancel}
               disabled={sending}
             >

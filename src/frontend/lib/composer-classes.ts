@@ -60,7 +60,7 @@ export const composerBoxMinimized =
 /** The draft field and the code/mention mirror behind it both take this, which
  *  is what keeps them glyph-identical. */
 export const composerTextarea =
-	"block max-h-[320px] min-h-0 w-full resize-none border-none bg-transparent text-body leading-[1.55] outline-none phone:max-h-[240px] phone:text-[16px]";
+	"block max-h-[320px] min-h-0 w-full resize-none border-none bg-transparent text-body leading-[1.55] outline-none phone:max-h-[240px] phone:text-input-phone";
 /** The only room a mention pill can take is the space character beside it: its
  *  wash is painted rather than laid out, and 3.7px of natural space has to
  *  cover both the pill's own padding and the gap to the next word. Widening
@@ -232,7 +232,7 @@ export const composerQueue =
 	"relative -mb-3.5 flex flex-col gap-2 rounded-t-[var(--composer-radius)] border-x border-t " +
 	composerFlapBorder +
 	" bg-[color-mix(in_srgb,var(--bg-panel)_80%,var(--composer-surface))] px-3.5 pt-2.5 pb-[26px]";
-export const composerQueueTitle = "text-[12px] font-semibold text-faint";
+export const composerQueueTitle = "text-meta font-semibold text-faint";
 export const composerQueueList = "flex flex-col gap-2";
 /** One queued/steered row. The floor is one line of body text, so a row whose
  *  point is a single message does not inherit the 40px action cluster's

@@ -32,7 +32,7 @@ import { WorkingPill } from "../ui/status";
    two rules that reached in from the form to its fields: 16px on phones, so
    iOS doesn't zoom a focused field, and paragraph leading in a textarea. */
 const FORM_FIELDS =
-  "[&_textarea]:leading-normal phone:[&_input]:text-[16px] phone:[&_select]:text-[16px] phone:[&_textarea]:text-[16px]";
+  "[&_textarea]:leading-normal phone:[&_input]:text-input-phone phone:[&_select]:text-input-phone phone:[&_textarea]:text-input-phone";
 /** .automation-form.automation-form-inline — the drawer body is the surface. */
 const FORM_INLINE = `flex flex-col gap-3.5 ${FORM_FIELDS}`;
 /** .automation-form */

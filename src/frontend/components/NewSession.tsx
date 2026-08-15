@@ -157,7 +157,7 @@ const CHEVRON = "-ml-0.5 shrink-0 text-faint";
 const BODY =
 	"relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pt-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
 const TEXTAREA =
-	"block min-h-[132px] w-full resize-none overflow-hidden border-none bg-transparent font-sans text-[15px] leading-[1.55] text-fg outline-none placeholder:text-faint disabled:opacity-60";
+	"block min-h-[132px] w-full resize-none overflow-hidden border-none bg-transparent font-sans text-body leading-[1.55] text-fg outline-none placeholder:text-faint disabled:opacity-60";
 const ERROR = "mx-4 mb-2 rounded-md bg-red-soft px-2.5 py-[7px] text-supporting text-red";
 
 /* Single-line footer: the model pill is the only flexible item — it gives way
@@ -184,7 +184,7 @@ const FOOTER_ICON_BTN = cn(paletteIconBtn, "shrink-0 max-[560px]:w-9");
  *  icon button would crush the labelled chip on phones. 32px tall, the size
  *  the icon buttons' hover wash paints, so the row keeps one rhythm. */
 const ASK_BTN_ON =
-	"inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-control px-2.5 text-[12px] font-medium transition-colors bg-[color-mix(in_srgb,var(--green)_18%,transparent)] text-green hover:bg-[color-mix(in_srgb,var(--green)_26%,transparent)] disabled:cursor-default disabled:opacity-50";
+	"inline-flex min-h-8 shrink-0 items-center gap-1.5 rounded-control px-2.5 text-label font-medium transition-colors bg-[color-mix(in_srgb,var(--green)_18%,transparent)] text-green hover:bg-[color-mix(in_srgb,var(--green)_26%,transparent)] disabled:cursor-default disabled:opacity-50";
 /** Ask mode paints the whole card, not just its toggle — the same thing the
  *  session composer does for ask and for note mode, because the mode governs
  *  everything you are about to type rather than one control in the corner.
@@ -1187,7 +1187,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                                   {sandboxLabel(opt.id)}
                                 </span>
                                 {opt.note && (
-                                  <span className="whitespace-normal text-[11px] font-medium leading-snug text-faint">
+                                  <span className="whitespace-normal text-meta font-medium leading-snug text-faint">
                                     {opt.note}
                                   </span>
                                 )}

@@ -297,7 +297,7 @@ export function DeskConversation({
 						{earlierCount > 0 && (
 							<button
 								type="button"
-								className="mx-auto mb-1 block rounded-control px-2 py-1 text-[12px] font-medium text-faint hover:bg-hover hover:text-dim"
+								className="mx-auto mb-1 block rounded-control px-2 py-1 text-label font-medium text-faint hover:bg-hover hover:text-dim"
 								onClick={() => setShowEarlier(true)}
 							>
 								Show earlier conversation
@@ -364,7 +364,7 @@ export function DeskConversation({
 							   pressed. Without the border the old bg-surface fill was
 							   white on a white panel — invisible — so the fill carries
 							   the shape on its own. */
-							className="shrink-0 whitespace-nowrap rounded-full bg-hover px-3 py-1.5 text-[12px] font-medium text-dim hover:bg-active hover:text-fg"
+							className="shrink-0 whitespace-nowrap rounded-full bg-hover px-3 py-1.5 text-label font-medium text-dim hover:bg-active hover:text-fg"
 							onClick={() => {
 								setDraft(s);
 								textareaRef.current?.focus();

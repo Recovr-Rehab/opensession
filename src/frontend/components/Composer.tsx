@@ -1424,7 +1424,7 @@ export function Composer({
                       // 12px copy against a 14px glyph, matching the model pill
                       // beside it: at 11px-against-15px the label read as a
                       // caption hung off an icon rather than the mode's name.
-                      "inline-flex min-h-8 items-center gap-1.5 rounded-control px-2.5 text-[12px] font-medium transition-colors",
+                      "inline-flex min-h-8 items-center gap-1.5 rounded-control px-2.5 text-label font-medium transition-colors",
                       "bg-[color-mix(in_srgb,var(--green)_18%,transparent)] text-green hover:bg-[color-mix(in_srgb,var(--green)_26%,transparent)]",
                     )}
                     // Ask mode has no one-click exit — leaving it cuts a
