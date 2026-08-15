@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { fetchShippedChangeChannels } from "../lib/api/shipped-changes";
 import { imageFilesFromPaste, uploadFile } from "../lib/images";
+import { noAutofill } from "../lib/composer-autofill";
 import { Button } from "../ui/button";
 import { OptionSelect } from "../ui/select";
 import { toast } from "../ui/toast";
@@ -234,6 +235,7 @@ export function ShippedChangeComposer({
 				<textarea
 					className="block min-h-14 max-h-32 w-full resize-none border-0 bg-transparent p-0 text-body leading-[1.55] text-fg outline-none [field-sizing:content] placeholder:text-faint phone:text-input-phone"
 					aria-label="Slack message"
+					{...noAutofill}
 					value={message}
 					maxLength={500}
 					disabled={status !== "idle"}

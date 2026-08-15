@@ -12,6 +12,7 @@ import type { Editor, EditorOptions } from "@pierre/diffs/edit";
 import type { DiffFileGroup } from "../lib/types";
 import { IconCheck, IconChevronRight, IconCopy, IconPencil, IconUndo } from "./icons";
 import { copyToClipboard } from "../lib/share-link";
+import { noAutofill } from "../lib/composer-autofill";
 import { Tooltip } from "../ui/tooltip";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
@@ -1012,6 +1013,7 @@ const CommentForm = React.memo(function CommentForm({
             className={CARD_INPUT}
             autoFocus
             rows={3}
+            {...noAutofill}
             placeholder={placeholder}
             value={text}
             onChange={(e) => {

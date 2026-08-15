@@ -51,6 +51,7 @@ import {
   composerToolbarPill,
   composerToolbarSelect,
 } from "../lib/composer-classes";
+import { noAutofill } from "../lib/composer-autofill";
 import {
   paletteIconBtn,
   paletteIconBtnRound,
@@ -1201,6 +1202,7 @@ export function Composer({
             onPaste={handlePaste}
             disabled={disabled}
             rows={1}
+            {...noAutofill}
             autoFocus={autoFocus}
           />
         </motion.div>

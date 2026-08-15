@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { getCurrentUser } from "./UserPicker";
 import { Button } from "../ui/button";
+import { noAutofill } from "../lib/composer-autofill";
 
 interface Props {
   sessionId: string;
@@ -115,6 +116,7 @@ export function SelectionToSession({ sessionId, label, send, children }: Props) 
               </div>
               <textarea
                 autoFocus
+                {...noAutofill}
                 className="resize-y rounded-md border border-line-strong bg-raised px-2.5 py-2 font-sans text-label leading-[1.45] text-fg outline-none focus:border-accent"
                 rows={2}
                 placeholder="Message to the session (optional)… ⌘↵ to send"

@@ -41,6 +41,7 @@ import {
 	composerTextareaPadding,
 	composerToolbar,
 } from "../lib/composer-classes";
+import { noAutofill } from "../lib/composer-autofill";
 import { paletteIconBtn, palettePill } from "../lib/palette-classes";
 import { Tooltip } from "../ui/tooltip";
 import { IconArrowUp, IconPencil, IconPlus } from "./icons";
@@ -644,6 +645,7 @@ export function PlainReplyBox({
 			<textarea
 				ref={textareaRef}
 				rows={1}
+				{...noAutofill}
 				className={cn(
 					"composer-textarea min-h-12 text-fg placeholder:text-faint",
 					composerTextarea,

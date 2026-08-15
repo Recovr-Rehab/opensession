@@ -38,6 +38,7 @@ import { IconTile } from "./BrandTile";
 import { Tooltip } from "../ui/tooltip";
 import { Modal, useEnterOnMount } from "../ui/modal";
 import { composerBox } from "../lib/composer-classes";
+import { noAutofill } from "../lib/composer-autofill";
 import { tintedSurfaceParts } from "../lib/tinted-surface";
 import { cn } from "../ui/cn";
 import {
@@ -1063,6 +1064,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
               mode === "ask" ? "What do you want to find out?" : "What do you want to work on?"
             }
             disabled={creating}
+            {...noAutofill}
           />
           <ImageThumbs images={images} onRemove={(i) => setImages((p) => p.filter((_, idx) => idx !== i))} disabled={creating} />
           <FileChips files={files} onRemove={(i) => setFiles((p) => p.filter((_, idx) => idx !== i))} disabled={creating} />

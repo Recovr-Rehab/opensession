@@ -11,6 +11,7 @@ import {
 	composerTextareaPadding,
 	composerToolbar,
 } from "../lib/composer-classes";
+import { noAutofill } from "../lib/composer-autofill";
 import { IconArrowUp } from "./icons";
 
 interface MessageReaction {
@@ -424,6 +425,7 @@ export function SlackChannelPane({
 							}
 						}}
 						rows={1}
+						{...noAutofill}
 					/>
 					<div className={composerToolbar}>
 						<div className="shrink-0 grow basis-0" />

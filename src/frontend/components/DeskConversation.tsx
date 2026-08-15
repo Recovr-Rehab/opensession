@@ -10,6 +10,7 @@ import { IconArrowUp } from "./icons";
 import { mergeTranscriptEntries } from "../lib/transcript-state";
 import { CONTINUE_AFTER_FAILURE_PROMPT } from "../lib/continue-run";
 import { fieldClasses } from "../ui/input";
+import { noAutofill } from "../lib/composer-autofill";
 import { cn } from "../ui/cn";
 import {
 	msgBodyStreaming,
@@ -390,6 +391,7 @@ export function DeskConversation({
 						"max-h-40 min-h-[36px] flex-1 resize-none py-1.5 font-medium placeholder:text-dim",
 					)}
 					rows={1}
+					{...noAutofill}
 					value={draft}
 					placeholder={
 						connected ? placeholder || "Ask your Desk…" : "Not connected"

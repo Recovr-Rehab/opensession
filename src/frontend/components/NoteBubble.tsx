@@ -9,6 +9,7 @@ import { MentionText } from "./MentionText";
 import { UserAvatar } from "./UserAvatar";
 import { getCurrentUser } from "./UserPicker";
 import { openLightbox } from "./MediaLightbox";
+import { noAutofill } from "../lib/composer-autofill";
 
 /**
  * A team note interleaved into the session transcript — a human-to-human
@@ -152,6 +153,7 @@ export function NoteBubble({
 						ref={textareaRef}
 						value={draft}
 						disabled={busy}
+						{...noAutofill}
 						onChange={(e) => {
 							setDraft(e.target.value);
 							e.target.style.height = "";
