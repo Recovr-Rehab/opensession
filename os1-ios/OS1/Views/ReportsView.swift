@@ -64,7 +64,7 @@ struct ReportsListView: View {
 
     private var emptyPlaceholder: some View {
         ListPlaceholder(
-            symbol: "doc.text",
+            symbol: "text.document",
             title: "No reports",
             message: "Recurring documents your automations publish collect here."
         ) {
@@ -111,8 +111,10 @@ private struct ReportGroupRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "doc.text")
-                .symbolRenderingMode(.hierarchical)
+            // Monochrome, like every other row glyph in the app: hierarchical
+            // renders the symbol in two opacities, which reads as a lighter
+            // weight than the rows around it.
+            Image(systemName: "text.document")
                 .font(.callout)
                 .foregroundStyle(OS1VisualStyle.textDim)
                 .padding(.top, 2)

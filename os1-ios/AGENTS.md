@@ -98,6 +98,43 @@ workflow's ExportOptions.plist, or the export fails after a green archive —
 verify both steps on a Mac node (`xcodebuild archive -configuration Release`
 then `-exportArchive`) before pushing, since a push IS the release.
 
+## Icons: SF Symbols
+
+Icons in this app are SF Symbols. That is the platform's own set, it carries
+weight, scale and Dynamic Type sizing for free, and it is what every other iOS
+app draws, so a symbol reads as the system rather than as the web client
+transplanted onto a phone. The web UI is the mirror image: it draws iconic-pro,
+because that is ITS platform convention (see `src/frontend/AGENTS.md`). Neither
+set follows the other across. A glyph that exists in both clients is expected
+to look different in each, and that is not a bug to file.
+
+- **Never port a web glyph** to get visual parity with the browser. If SF
+  Symbols has the metaphor, use it, even when the drawing differs from the
+  web's.
+- **`WebIcon.swift` is the one escape hatch**, for a metaphor SF Symbols has no
+  glyph for at all. It holds exactly one kind today, `robot` (the nearest
+  symbol is `robotic.vacuum`, a floor cleaner). Adding a kind means you looked
+  and found nothing, not that you preferred the web's drawing. Its paths are
+  stroked at 1.5 on a 24-point grid so they sit at a symbol's weight beside one.
+- **Weight comes from the font, not from the box.** Size a symbol with
+  `.font(.callout)` or `.font(.system(size:))` and give it a fixed `.frame`;
+  never `.resizable()`, which scales the stroke with the box and leaves a large
+  glyph heavier than its neighbours.
+- **Default to monochrome rendering.** `.symbolRenderingMode(.hierarchical)`
+  draws in two opacities and reads as a lighter weight than the rows around it.
+  It is right for a large empty-state mark (`ListPlaceholder`), not for a row.
+- **Icons that sit next to each other must be built the same way** — same font,
+  same frame, same rendering mode. The Reports and Archived rows are the
+  worked example.
+- **Use current symbol names.** Many were renamed in SF Symbols 7 and the old
+  names survive only as aliases: `doc.text` is now `text.document`,
+  `arrow.triangle.pull` is `arrow.trianglehead.pull`, `doc.on.doc` is
+  `document.on.document`, `clock.arrow.circlepath` is
+  `clock.arrow.trianglehead.counterclockwise.rotate.90`. Parts of this app are
+  still on the old names; they render, so it is not urgent, but do not add
+  more. Check a name against the deployment target before using it — an
+  unknown name is not a compile error, it renders blank.
+
 ## Performance invariants (learned the hard way — don't regress)
 
 - **Observation granularity is per view `body`.** `SessionViewModel` is

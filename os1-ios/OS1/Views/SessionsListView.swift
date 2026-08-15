@@ -1513,13 +1513,16 @@ struct SessionsListView: View {
             .frame(width: 26, height: 24)
             .contentShape(Rectangle())
             #else
-            WebIcon(
-                kind: .filter,
-                size: 24,
-                color: repoFilter == "all"
-                    ? OS1VisualStyle.textDim
-                    : OS1VisualStyle.accentInk
+            // The same symbol pair the Mac branch above uses, at the phone's
+            // touch size: one control should not be drawn from two sets.
+            Image(
+                systemName: repoFilter == "all"
+                    ? "line.3.horizontal.decrease"
+                    : "line.3.horizontal.decrease.circle.fill"
             )
+            .font(.system(size: 17, weight: .medium))
+            .foregroundStyle(repoFilter == "all" ? OS1VisualStyle.textDim : OS1VisualStyle.accentInk)
+            .frame(width: 24, height: 24)
             #endif
         }
         .accessibilityLabel("Filter sessions")
@@ -2225,19 +2228,23 @@ struct SessionsListView: View {
                     } label: {
                         HStack(spacing: 9) {
                             #if os(iOS)
-                            WebIcon(kind: .archive, size: 22, color: OS1VisualStyle.textDim)
+                            Image(systemName: "archivebox")
+                                .font(.callout)
+                                .foregroundStyle(OS1VisualStyle.textDim)
                                 .frame(width: 22, height: 22)
                                 // Centred on the repo tiles above it, not
                                 // flush with their left edge: the glyph's ink
-                                // is ~16pt wide against a tile's 22, so
-                                // sharing a left edge would leave it looking
-                                // shifted. Its own box lands 1pt shy of their
-                                // centre line, hence the nudge. An offset,
-                                // not padding: the label keeps the 47pt
-                                // column the row titles use.
+                                // is narrower than a tile's 22, so sharing a
+                                // left edge would leave it looking shifted.
+                                // Its own box lands 1pt shy of their centre
+                                // line, hence the nudge. An offset, not
+                                // padding: the label keeps the 47pt column
+                                // the row titles use.
                                 .offset(x: 1)
                             #else
-                            WebIcon(kind: .archive, size: 16, color: OS1VisualStyle.textDim)
+                            Image(systemName: "archivebox")
+                                .font(.body)
+                                .foregroundStyle(OS1VisualStyle.textDim)
                                 .frame(width: 16, height: 16)
                             #endif
                             Text("Archived")
@@ -2369,16 +2376,13 @@ struct SessionsListView: View {
                 showReports = true
             } label: {
                 HStack(spacing: 9) {
-                    // The web's own Reports glyph rather than an SF Symbol:
-                    // this row and the Archived row under it are the same
-                    // kind of row, and every icon in the set is stroked at
-                    // 1.5 on a 24-point grid. `doc.text` came from a
-                    // different family and read heavier than its neighbour.
-                    WebIcon(kind: .file, size: 22, color: OS1VisualStyle.textDim)
+                    // Built exactly like the Archived row under it: same
+                    // symbol font, same box, same optical nudge, so the two
+                    // rows that lead somewhere read as one pair.
+                    Image(systemName: "text.document")
+                        .font(.callout)
+                        .foregroundStyle(OS1VisualStyle.textDim)
                         .frame(width: 22, height: 22)
-                        // Same optical nudge the Archived row pays: the ink
-                        // is narrower than the repo tiles above, so its box
-                        // lands 1pt shy of their centre line.
                         .offset(x: 1)
                     Text("Reports")
                         .font(.callout.weight(.medium))
@@ -2840,7 +2844,8 @@ private struct ArchivedSessionsView: View {
                                 Button {
                                     onRestore(session)
                                 } label: {
-                                    WebIcon(kind: .unarchive, size: 18)
+                                    Image(systemName: "tray.and.arrow.up")
+                                        .font(.body)
                                         .frame(width: 44, height: 44)
                                 }
                                 .buttonStyle(.borderless)
@@ -3034,7 +3039,9 @@ struct SessionRow: View {
             .overlay(alignment: .trailing) {
                 if hovering, let onArchive {
                     Button(action: onArchive) {
-                        WebIcon(kind: .archive, size: 20, color: .secondary)
+                        Image(systemName: "archivebox")
+                            .font(.body)
+                            .foregroundStyle(.secondary)
                     }
                     .buttonStyle(.borderless)
                     .help("Archive")
@@ -3188,6 +3195,18 @@ struct SessionRow: View {
         #endif
     }
 
+    /// A PR state mark. The size goes on the FONT, not on a `resizable()`
+    /// image: SF Symbols carry their own weight per size, and resizing scales
+    /// the stroke with the box, which would leave the mark heavier than the
+    /// dot it stands in for. 0.8 of the box because a symbol is drawn to sit
+    /// on a text line. 0.95 rather than a round 1.0 leaves it a hair of air
+    /// inside the box, at the ink mass the mark had before.
+    private func prMark(_ symbol: String, _ color: Color) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: markSize * 0.95))
+            .foregroundStyle(color)
+    }
+
     /// A step under the repo tile: a face on a row is "who else is here", not
     /// something to read the row by.
     private var faceSize: CGFloat {
@@ -3264,11 +3283,11 @@ struct SessionRow: View {
         } else if session.lane == .inProgress {
             PulsingDot(color: OS1VisualStyle.yellow, active: animatesStatus)
         } else if session.prState == "MERGED" {
-            WebIcon(kind: .gitMerge, size: markSize, color: OS1VisualStyle.purple)
+            prMark("arrow.trianglehead.merge", OS1VisualStyle.purple)
         } else if session.prState == "OPEN" {
-            WebIcon(kind: .pullRequest, size: markSize, color: OS1VisualStyle.green)
+            prMark("arrow.trianglehead.pull", OS1VisualStyle.green)
         } else if session.prState == "CLOSED" {
-            WebIcon(kind: .pullRequest, size: markSize, color: OS1VisualStyle.red)
+            prMark("arrow.trianglehead.pull", OS1VisualStyle.red)
         } else {
             PulsingDot(color: OS1VisualStyle.textFaint, active: false)
         }

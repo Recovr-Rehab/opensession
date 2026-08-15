@@ -93,13 +93,22 @@ struct SessionRowPreview: View {
 
     @ViewBuilder
     private var mark: some View {
+        // Same construction as the list row's mark: the size rides the font,
+        // because an SF Symbol carries its own weight per size.
         if session.prState == "MERGED" {
-            WebIcon(kind: .gitMerge, size: 18, color: OS1VisualStyle.purple)
+            mark("arrow.trianglehead.merge", OS1VisualStyle.purple)
         } else if session.prState == "CLOSED" {
-            WebIcon(kind: .pullRequest, size: 18, color: OS1VisualStyle.red)
+            mark("arrow.trianglehead.pull", OS1VisualStyle.red)
         } else {
-            WebIcon(kind: .pullRequest, size: 18, color: OS1VisualStyle.green)
+            mark("arrow.trianglehead.pull", OS1VisualStyle.green)
         }
+    }
+
+    private func mark(_ symbol: String, _ color: Color) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: 17))
+            .foregroundStyle(color)
+            .frame(width: 18, height: 18)
     }
 
     /// The facts, wrapped rather than truncated: at accessibility type sizes a

@@ -25,6 +25,15 @@ language instead of introducing a new local style for each feature.
   loading states, empty states, and alerts should use the existing primitive.
 - Use `Button` for actions and glyphs from `components/icons.tsx` for interface
   icons. Icon-only controls need an accessible name and usually a tooltip.
+- Icons are iconic-pro, drawn on a 24-unit grid and stroked through the shared
+  `stroke` object in `components/icons.tsx` (1.5, round caps and joins). Spread
+  it rather than writing a `strokeWidth`, so every glyph carries one weight. A
+  new icon is a new export in that file, traced to the same grid; do not inline
+  an SVG at a call site or pull one from another set.
+- This is the web's convention, not the product's. The native app draws SF
+  Symbols for the same reasons in reverse (see `os1-ios/AGENTS.md`), so a glyph
+  that exists in both clients is expected to look different in each. Do not
+  port one set across to make them match.
 - Build new interactive primitives on Base UI and wrap them in `ui/`. Keep the
   composable Base UI parts API; do not replace it with a large prop-driven
   component or bypass its focus and keyboard behavior.
