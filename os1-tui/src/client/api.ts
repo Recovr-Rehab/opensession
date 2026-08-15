@@ -32,8 +32,20 @@ export class Api {
 		private readonly fetcher: Fetcher = fetch,
 	) {}
 
+	/**
+	 * The last ETag and body of a path this client asks about again and again.
+	 * The sessions list is the biggest thing here by far and it is asked for
+	 * every 2.5 seconds; the server answers a conditional request for it with
+	 * a 304 (`sessionsListResponse`, src/server/routes/sessions.ts), which
+	 * fetch never asks for on its own. Only `sessions()` opts in, so this
+	 * holds one entry.
+	 */
+	private readonly revalidated = new Map<string, { etag: string; body: unknown }>();
+
 	setToken(token: string | undefined): void {
 		this.token = token;
+		// A different account is a different answer to the same question.
+		this.revalidated.clear();
 	}
 
 	headers(extra?: Record<string, string>): Record<string, string> {
@@ -45,14 +57,16 @@ export class Api {
 
 	private async request<T>(
 		path: string,
-		init?: RequestInit & { raw?: boolean },
+		init?: RequestInit & { raw?: boolean; revalidate?: boolean },
 	): Promise<T> {
+		const remembered = init?.revalidate ? this.revalidated.get(path) : undefined;
 		let response: Response;
 		try {
 			response = await this.fetcher(`${this.host}${path}`, {
 				...init,
 				headers: this.headers({
 					...(init?.body ? { "content-type": "application/json" } : {}),
+					...(remembered ? { "if-none-match": remembered.etag } : {}),
 					...((init?.headers as Record<string, string>) ?? {}),
 				}),
 			});
@@ -61,6 +75,9 @@ export class Api {
 			// can tell "unreachable" from "server said no".
 			throw new ApiError(0, `${this.host} unreachable: ${(e as Error).message}`);
 		}
+		// Nothing changed, so the body we already have is the answer. Only ever
+		// reached for a request that carried our own validator.
+		if (remembered && response.status === 304) return remembered.body as T;
 		if (!response.ok) {
 			const body = await response.text().catch(() => "");
 			let message = body.slice(0, 300);
@@ -73,7 +90,15 @@ export class Api {
 				message || `${response.status} ${response.statusText}`,
 			);
 		}
-		return (await response.json()) as T;
+		const body = (await response.json()) as T;
+		if (init?.revalidate) {
+			const etag = response.headers.get("etag");
+			// A server that answers this path without one must not be asked
+			// conditionally on a validator it never gave.
+			if (etag) this.revalidated.set(path, { etag, body });
+			else this.revalidated.delete(path);
+		}
+		return body;
 	}
 
 	/**
@@ -83,7 +108,9 @@ export class Api {
 	 * ignores the parameter and answers with the whole list.
 	 */
 	sessions(): Promise<Session[]> {
-		return this.request<Session[]>("/api/sessions?archived=exclude");
+		return this.request<Session[]>("/api/sessions?archived=exclude", {
+			revalidate: true,
+		});
 	}
 
 	async workspaces(): Promise<{ id: string; name: string }[]> {
