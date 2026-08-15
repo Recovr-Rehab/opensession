@@ -148,7 +148,7 @@
 	/* The plate a settings group sits on. In dark it is L1, like any other card:
 	   six units up from the page is already a whisper, and taking any less off
 	   would leave a group with no edge at all. Light is the case this token
-	   exists for — see the light block. */
+	   exists for. See the light block. */
 	--settings-plate: var(--bg-raised);
 	/* Interaction washes. --bg-hover/--bg-active above are absolute *surfaces*:
 	   used as a hover they land as a ~9% step on --bg but barely 2% on
@@ -414,13 +414,15 @@ html[data-theme="light"] {
 	   repeated six times down a 480px column. */
 	--panel-surface: #fbfbfb;
 	--panel-plate: #f4f4f4;
-	/* See :root. The half-step --sidebar-bg takes, for the same reason at a
-	   different scale: a settings page is a COLUMN of these blocks, not one card
-	   on the page, and at the full L1 grey (#f6f6f6) five of them stacked down
-	   720px read as a page made of grey slabs rather than white paper with a few
-	   quiet groups on it. The rows inside each block are already separated by
-	   their own hairlines, so the fill only has to say where a group starts. */
-	--settings-plate: #fafafa;
+	/* See :root. Between the L1 plate and the sidebar's half-step, and it has to
+	   be: a settings page is a COLUMN of these blocks, not one card on the page,
+	   and at the full L1 grey (#f6f6f6) five of them stacked down 720px read as
+	   a page made of grey slabs rather than paper with a few quiet groups on it.
+	   The sidebar's own #fafafa is a step too far the other way: that value is
+	   sized for a full-height column, and a block that only has to hold a group
+	   of rows loses its edge at it. Seven units, so a group still reads as a
+	   surface while the page around it stays white. */
+	--settings-plate: #f8f8f8;
 	/* Neutral black ink; a touch lighter than dark's wash because ink on white
 	   reads heavier than the same alpha of white on charcoal. */
 	--hover: rgba(0, 0, 0, 0.055);

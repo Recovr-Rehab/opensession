@@ -78,7 +78,7 @@ export const SETTINGS_NAV_LIST =
 export const SETTINGS_NAV_GROUP = `flex flex-col ${SIDEBAR_GROUP}`;
 
 /**
- * A group's caption — Personal, Workspace. The app's band headings in every
+ * A group's caption: Personal, Workspace. The app's band headings in every
  * respect that shows: the caption height, 13px semibold, and dim ink rather
  * than faint. It was 11px bold with letterspacing, which is a different
  * typographic idea (a small-caps label) from the one the sidebar uses.
@@ -87,7 +87,7 @@ export const SETTINGS_NAV_CAPTION =
 	"flex h-[var(--sidebar-cap-h)] shrink-0 items-center px-2.5 text-label font-semibold text-dim";
 
 /**
- * "Back to app" — the first row of the nav, and now a member of the row family
+ * "Back to app" is the first row of the nav, and now a member of the row family
  * below rather than a smaller control above it: same box, same rail, so its
  * chevron and the section glyphs share a centre line.
  *
@@ -157,7 +157,7 @@ export const SETTINGS_SHEET_SEARCH_BAR =
 	"before:[mask-image:linear-gradient(to_top,#000_0%,#000_62%,transparent_100%)]";
 
 /**
- * A row in the settings navigation — the section list and the account block
+ * A row in the settings navigation: the section list and the account block
  * under it, which are one list visually and were two copies of this string.
  *
  * This is SIDEBAR_ROW: the same 2px gap between rows, the same
@@ -165,7 +165,7 @@ export const SETTINGS_SHEET_SEARCH_BAR =
  * same asymmetric 10/8 gutters.
  *
  * The two fills are the point of the exercise. Selected was `bg-active`
- * (#e0e0e0 in light) — an opaque surface from the top of the elevation ramp,
+ * (#e0e0e0 in light), an opaque surface from the top of the elevation ramp,
  * which put a grey plate on the one row you are already reading. It takes
  * `--selected` now, the translucent ink the app marks an open session with,
  * and hover is the sidebar's LAYER rather than a colour, so pointing at the
@@ -177,7 +177,7 @@ export const SETTINGS_NAV_ROW =
 
 /**
  * The row's glyph well: the sidebar's 22px rail, not an 18px box. The glyphs
- * themselves are still 18px — the rail is what puts every settings label on
+ * themselves are still 18px. The rail is what puts every settings label on
  * the same left edge as every sidebar title, and it centres a mark of any size
  * on that column.
  */
