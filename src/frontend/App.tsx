@@ -248,6 +248,10 @@ type Route =
 // identity down every render (the transcript memo compares props by identity).
 const NO_SUBAGENTS: SubagentRef[] = [];
 
+// How long the launch splash may hold the screen while the first session list
+// is still in flight. Past this the app takes over and reports for itself.
+const SPLASH_MAX_MS = 8000;
+
 // Route views that render as a tool section inside the Settings surface.
 const TOOL_VIEWS = ["automations", "security", "goals"] as const;
 type ToolView = (typeof TOOL_VIEWS)[number];
@@ -1372,14 +1376,33 @@ export function App(
 		}
 	}, [route]);
 
-	// Tear down the launch splash (rendered in index.html) once the app has mounted.
+	// Tear down the launch splash (rendered in index.html) once there is
+	// something to draw. Mounting is not that moment: React mounts as soon as the
+	// bundle parses, which needs no data, and the app is transparent all the way
+	// down (html, body and #root under the desktop shell's window material), so
+	// handing the screen over then leaves an empty window rather than a bare one.
+	// The desktop shell feels this most, having no service worker to serve the
+	// shell or the list from cache, and it shows the window material through the
+	// gap: measured at 1.5s on loopback and 9s on a slow poll. The cap keeps a
+	// server that never answers from parking anyone behind a splash for good.
 	useEffect(() => {
 		const splash = document.getElementById("splash");
 		if (!splash) return;
-		splash.classList.add("splash-hide");
-		const t = setTimeout(() => splash.remove(), 400);
-		return () => clearTimeout(t);
-	}, []);
+		let removal: ReturnType<typeof setTimeout> | undefined;
+		const hide = () => {
+			splash.classList.add("splash-hide");
+			removal = setTimeout(() => splash.remove(), 400);
+		};
+		if (!loading) {
+			hide();
+			return () => clearTimeout(removal);
+		}
+		const cap = setTimeout(hide, SPLASH_MAX_MS);
+		return () => {
+			clearTimeout(cap);
+			clearTimeout(removal);
+		};
+	}, [loading]);
 
 	// When a session is created from the New Session form or Ask box, jump straight into it
 	useEffect(() => {
