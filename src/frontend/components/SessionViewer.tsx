@@ -42,6 +42,8 @@ import {
 	queueAttribution,
 } from "../lib/transcript-state";
 import { TranscriptBlocks } from "./TranscriptBlocks";
+import { MessageRail } from "./MessageRail";
+import { collectSentMessages } from "../lib/sent-messages";
 import {
 	canonicalToolName,
 	LiveSubagentsProvider,
@@ -986,6 +988,10 @@ export function SessionViewer({
 		) => transcriptViewStore.update(update),
 		[transcriptViewStore],
 	);
+	// The message rail's index. useMemo on purpose (against the house rule):
+	// this is a full scan of a transcript that runs to several thousand
+	// entries, not the routine allocation the rule is about.
+	const sentMessages = useMemo(() => collectSentMessages(entries), [entries]);
 	const liveTurnStore = useMemo(() => new LiveTurnStore(), [session.id]);
 	const transcriptCommitCount = useRef(0);
 	const onTranscriptRender = useCallback(
@@ -5909,6 +5915,17 @@ export function SessionViewer({
                 reply streams into the space below; sized by the scroll hook. */}
 							<div ref={spacerRef} className={TURN_SPACER} aria-hidden="true" />
 						</div>
+
+							{/* Sibling of the scroller, not a child: a press on the rail
+							    must never reach the transcript container, whose scroll hook
+							    reads one in the scrollbar strip as "the reader took over". */}
+							{!loading && (
+								<MessageRail
+									messages={sentMessages}
+									containerRef={messagesRef}
+									leaveLatest={leaveLatest}
+								/>
+							)}
 
 							{historyTruncated && (
 								<div className={TRANSCRIPT_PILL_TOP}>

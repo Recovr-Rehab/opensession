@@ -35,6 +35,8 @@
  * nothing.
  */
 
+import { RAIL_GUTTER_CLASS } from "./message-rail";
+
 /* ── Top bar ────────────────────────────────────────────────────────────── */
 
 /**
@@ -200,6 +202,9 @@ export const VIEWER_MESSAGES =
 	"viewer-messages flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-contain " +
 	// Keep the reader's place when content loads or expands above them.
 	"[overflow-anchor:auto] px-5 pt-0 pb-[calc(var(--session-under)_+_16px)] " +
+	// Wider side padding where the message rail lives, so its ticks have a
+	// gutter of their own instead of sitting on the bubbles (lib/message-rail.ts).
+	`${RAIL_GUTTER_CLASS} ` +
 	"[&>*]:w-full [&>*]:shrink-0 " +
 	// 12px of clear space under the bar so the first row starts below it rather
 	// than against it, and so a tab strip's baseline rule (the only line that
@@ -234,6 +239,9 @@ export const VIEWER_MESSAGES =
  */
 export const VIEWER_INPUT =
 	"relative z-[1] mt-[calc(-1*var(--session-under))] shrink-0 px-5 pt-1 pb-3.5 " +
+	// The same gutter the transcript keeps, so the input stays on the column's
+	// edges rather than reaching past them.
+	`${RAIL_GUTTER_CLASS} ` +
 	// The fade is a later sibling of the native scroller, so painting it edge to
 	// edge also fades an overlay scrollbar. Leave its narrow gutter unpainted;
 	// raising the scroller would incorrectly lift transcript content too.
