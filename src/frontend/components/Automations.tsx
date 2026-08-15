@@ -438,19 +438,19 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
               <div className="ml-auto flex shrink-0 gap-1.5">
                 <Button
                   size="sm"
-                  variant="outline"
+                  variant="soft"
                   onClick={() => handleRunNow(sel)}
                   disabled={sel.isRunning}
                 >
                   Run now
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => setEditMode(true)}>
+                <Button size="sm" variant="soft" onClick={() => setEditMode(true)}>
                   Edit
                 </Button>
                 <Button
                   size="sm"
-                  variant="outline"
-                  className="hover:border-red hover:bg-transparent hover:text-red"
+                  variant="soft"
+                  className="hover:bg-red-soft hover:text-red"
                   onClick={() => handleDelete(sel)}
                 >
                   Delete
@@ -910,7 +910,7 @@ function WebhookUrl({ id, secret }: { id: string; secret: string }) {
       </span>
       <Button
         size="sm"
-        variant="outline"
+        variant="soft"
         className="shrink-0"
         onClick={() => {
           navigator.clipboard.writeText(url).then(() => {
@@ -1104,7 +1104,7 @@ function TypeChooser({
       )}
 
       <div className={FORM_ACTIONS}>
-        <Button variant="outline" size="sm" className="px-3 text-label" onClick={onClose}>
+        <Button variant="soft" size="sm" className="px-3 text-label" onClick={onClose}>
           Cancel
         </Button>
       </div>
@@ -1764,7 +1764,7 @@ function AutomationForm({
       {!inline && (
         <div className="flex items-center gap-2">
           {onBack && (
-            <Button size="sm" variant="outline" onClick={onBack} title="Back to type chooser">
+            <Button size="sm" variant="soft" onClick={onBack} title="Back to type chooser">
               ←
             </Button>
           )}
@@ -1917,7 +1917,7 @@ function AutomationForm({
       <div>
         <Button
           size="sm"
-          variant="outline"
+          variant="soft"
           onClick={() => setShowAdvanced(!showAdvanced)}
         >
           {showAdvanced ? "Hide advanced" : "Advanced"}
@@ -2028,7 +2028,7 @@ function AutomationForm({
       {error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
 
       <div className={FORM_ACTIONS}>
-        <Button variant="outline" size="sm" className="px-3 text-label" onClick={onClose} disabled={saving}>
+        <Button variant="soft" size="sm" className="px-3 text-label" onClick={onClose} disabled={saving}>
           Cancel
         </Button>
         <Button

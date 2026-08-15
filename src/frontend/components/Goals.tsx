@@ -311,7 +311,7 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
                 {sel.status === "active" && (
                   <Button
                     size="sm"
-                    variant="outline"
+                    variant="soft"
                     onClick={() => act(() => runGoalApi(sel.id))}
                     disabled={sel.isRunning}
                   >
@@ -319,15 +319,15 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
                   </Button>
                 )}
                 {sel.status === "active" ? (
-                  <Button size="sm" variant="outline" onClick={() => act(() => pauseGoalApi(sel.id))}>
+                  <Button size="sm" variant="soft" onClick={() => act(() => pauseGoalApi(sel.id))}>
                     Pause
                   </Button>
                 ) : (
-                  <Button size="sm" variant="outline" onClick={() => act(() => resumeGoalApi(sel.id))}>
+                  <Button size="sm" variant="soft" onClick={() => act(() => resumeGoalApi(sel.id))}>
                     Resume
                   </Button>
                 )}
-                <Button size="sm" variant="outline" onClick={() => setEditMode(true)}>
+                <Button size="sm" variant="soft" onClick={() => setEditMode(true)}>
                   Edit
                 </Button>
                 <Button size="sm" variant="danger" onClick={() => handleDelete(sel)}>
@@ -729,7 +729,7 @@ function GoalForm({
       {error && <InlineAlert>{error}</InlineAlert>}
 
       <div className={FORM_ACTIONS}>
-        <Button variant="outline" size="md" onClick={onClose} disabled={saving}>
+        <Button variant="soft" size="md" onClick={onClose} disabled={saving}>
           Cancel
         </Button>
         <Button

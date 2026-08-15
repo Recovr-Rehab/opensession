@@ -366,7 +366,7 @@ export function SchedulePromptButton({
               <div className="px-[9px] pt-1 pb-0.5 text-meta text-red">{error}</div>
             )}
             <div className="mt-5 flex justify-end gap-2">
-              <Button variant="outline" size="lg" onClick={() => setCustomOpen(false)}>
+              <Button variant="soft" size="lg" onClick={() => setCustomOpen(false)}>
                 Cancel
               </Button>
               <Button

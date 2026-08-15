@@ -687,7 +687,7 @@ export function CommentableDiff({
                 </span>
               )}
               <Button
-                variant="outline"
+                variant="soft"
                 size="sm"
                 className="min-h-0 px-2.5 py-[3px] text-xs font-normal"
                 onClick={cancelEdit}
@@ -1026,7 +1026,7 @@ const CommentForm = React.memo(function CommentForm({
           {error && <div className="text-label text-red">{error}</div>}
           <div className="flex justify-end gap-2">
             <Button
-              variant="outline"
+              variant="soft"
               size="sm"
               className="min-h-0 px-3 py-[5px] text-[13px] font-normal"
               onClick={onCancel}

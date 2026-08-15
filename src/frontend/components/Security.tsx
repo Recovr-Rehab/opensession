@@ -212,7 +212,7 @@ export function Security({ onOpenSession }: Props) {
                 <div className={CARD_TOP}>
                   <span className={CARD_NAME}>{p.name}</span>
                   <div className={CARD_ACTIONS}>
-                    <Button size="sm" variant="outline" onClick={() => setEditProfile(p)}>
+                    <Button size="sm" variant="soft" onClick={() => setEditProfile(p)}>
                       Edit
                     </Button>
                     <Button
@@ -541,7 +541,7 @@ function NewScanModal({
         {error && <InlineAlert className="text-label">{error}</InlineAlert>}
 
         <div className={FORM_ACTIONS}>
-          <Button variant="outline" size="sm" onClick={onClose} disabled={starting}>
+          <Button variant="soft" size="sm" onClick={onClose} disabled={starting}>
             Cancel
           </Button>
           <Button
@@ -637,7 +637,7 @@ function ProfileModal({
         {error && <InlineAlert className="text-label">{error}</InlineAlert>}
 
         <div className={FORM_ACTIONS}>
-          <Button variant="outline" size="sm" onClick={onClose} disabled={saving}>
+          <Button variant="soft" size="sm" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
           <Button

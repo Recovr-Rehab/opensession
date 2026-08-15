@@ -100,7 +100,7 @@ function MemoryEntryRow({
 						Save
 					</Button>
 					<Button
-						variant="outline"
+						variant="soft"
 						size="sm"
 						onClick={() => {
 							setDraft(entry.text);
@@ -230,7 +230,7 @@ function MemoryScopeCard({
 							Save
 						</Button>
 						<Button
-							variant="outline"
+							variant="soft"
 							size="sm"
 							onClick={() => setAdding(false)}
 						>

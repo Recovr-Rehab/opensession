@@ -91,6 +91,12 @@ interface ShellTabSpec {
 /** The server caps PTYs per socket at 8 (terminals.ts) — mirror it here. */
 const MAX_SHELL_TABS = 8;
 
+/** The selected tab, one step past `soft`'s own fill. Both are ink over
+ * whatever is behind them, so the selected tab is darker than its neighbours
+ * on every surface — a fixed value (`bg-active`) is lighter than a soft plate
+ * once the strip sits on a panel, which reads as the wrong tab selected. */
+const TAB_SELECTED = "!bg-[color-mix(in_srgb,var(--text)_16%,transparent)]";
+
 export function ShellPanel({
   sessionId,
   send,
@@ -130,9 +136,9 @@ export function ShellPanel({
           <div key={t.id} className="inline-flex items-stretch">
             <Button
               size="sm"
-              variant="outline"
-              className={`rounded-r-none border-r-0 pr-1.5 ${
-                t.id === activeId ? "!bg-active !text-fg" : ""
+              variant="soft"
+              className={`rounded-r-none pr-1.5 ${
+                t.id === activeId ? `${TAB_SELECTED} !text-fg` : ""
               }`}
               onClick={() => setActiveId(t.id)}
             >
@@ -142,9 +148,9 @@ export function ShellPanel({
               size="sm"
               aria-label={`Close terminal ${t.n}`}
               title="Close terminal (kills its PTY)"
-              variant="outline"
+              variant="soft"
               className={`w-6 rounded-l-none px-0 text-faint ${
-                t.id === activeId ? "!bg-active" : ""
+                t.id === activeId ? TAB_SELECTED : ""
               }`}
               onClick={() => closeTab(t.id)}
             >
@@ -155,7 +161,7 @@ export function ShellPanel({
         {tabs.length < MAX_SHELL_TABS && (
           <Button
             size="sm"
-            variant="outline"
+            variant="soft"
             onClick={addTab}
             title="New terminal tab"
             aria-label="New terminal tab"
@@ -167,7 +173,7 @@ export function ShellPanel({
       {tabs.length === 0 ? (
         <EmptyState
           action={
-            <Button size="sm" variant="outline" onClick={addTab}>
+            <Button size="sm" variant="soft" onClick={addTab}>
               Open a terminal
             </Button>
           }

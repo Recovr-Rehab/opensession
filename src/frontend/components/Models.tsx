@@ -1391,7 +1391,7 @@ function AddClaudeAccountForm({ onClose, onAdded }: { onClose: () => void; onAdd
 			{error && <InlineAlert>{error}</InlineAlert>}
 
 			<SettingsFormActions className="mt-0 gap-2.5">
-				<Button variant="outline" onClick={onClose} disabled={saving}>
+				<Button variant="soft" onClick={onClose} disabled={saving}>
 					Cancel
 				</Button>
 				<Button
@@ -1516,7 +1516,7 @@ function ClaudeSignInForm({
 			{error && <InlineAlert>{error}</InlineAlert>}
 
 			<div className="flex justify-end gap-2.5">
-				<Button variant="outline" onClick={handleClose} disabled={busy}>
+				<Button variant="soft" onClick={handleClose} disabled={busy}>
 					Cancel
 				</Button>
 				<Button
@@ -1828,7 +1828,7 @@ function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdde
 			{error && <InlineAlert>{error}</InlineAlert>}
 
 			<SettingsFormActions className="mt-0 gap-2.5">
-				<Button variant="outline" onClick={handleCancel} disabled={saving}>
+				<Button variant="soft" onClick={handleCancel} disabled={saving}>
 					{loginPending || oauth ? "Cancel sign-in" : "Cancel"}
 				</Button>
 				{kind === "device" ? (

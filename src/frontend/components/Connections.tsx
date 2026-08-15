@@ -262,7 +262,7 @@ export function Connections() {
         actions={
           <>
             <Button
-              variant="outline"
+              variant="soft"
               icon={<IconHistory size={16} className={refreshing ? "animate-spin" : ""} />}
               onClick={() => load(true)}
               disabled={refreshing}
@@ -1111,7 +1111,7 @@ function PlainRouter() {
             {saving ? "Saving…" : "Save prompt"}
           </Button>
           <Button
-            variant="outline"
+            variant="soft"
             disabled={saving || (!cfg.isCustom && !dirty)}
             onClick={() => save({ prompt: "" })}
           >
@@ -1259,7 +1259,7 @@ function AddMcpForm({ onClose, onAdded }: { onClose: () => void; onAdded: () => 
       {error && <InlineAlert>{error}</InlineAlert>}
 
       <SettingsFormActions>
-        <Button variant="outline" onClick={onClose} disabled={saving}>
+        <Button variant="soft" onClick={onClose} disabled={saving}>
           Cancel
         </Button>
         <Button

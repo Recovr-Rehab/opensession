@@ -3839,10 +3839,10 @@ export function SessionViewer({
 								<span className="min-w-0 flex-1 text-meta text-red" role="alert">
 									{item.error || "This message could not be delivered."}
 								</span>
-								<Button variant="outline" size="sm" onClick={() => promptOutbox.retry(item.clientId)}>
+								<Button variant="soft" size="sm" onClick={() => promptOutbox.retry(item.clientId)}>
 									Retry
 								</Button>
-								<Button variant="outline" size="sm" onClick={() => editOutboxInComposer(item)}>
+								<Button variant="soft" size="sm" onClick={() => editOutboxInComposer(item)}>
 									Edit
 								</Button>
 								<Button
@@ -4690,7 +4690,7 @@ export function SessionViewer({
 							{deleting ? "…" : "Session"}
 						</Button>
 						<Button
-							variant="outline"
+							variant="soft"
 							size="sm"
 							className="min-h-0 px-3 py-[5px] text-[13px]"
 							onClick={() => setShowDeleteConfirm(false)}

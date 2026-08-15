@@ -1902,12 +1902,12 @@ export function PrPanel({
           </div>
           <div className="pointer-events-auto flex shrink-0 flex-wrap justify-end gap-2">
             {onOpenSession && (
-              <Button variant="outline" className="text-xs" onClick={onOpenSession}>
+              <Button variant="soft" className="text-xs" onClick={onOpenSession}>
                 Open workspace
               </Button>
             )}
             <Button
-              variant="outline"
+              variant="soft"
               className="text-xs"
               onClick={() => setReviewing(false)}
             >

@@ -45,7 +45,6 @@ import { cn } from "./cn";
 type Variant =
 	| "default"
 	| "primary"
-	| "outline"
 	| "soft"
 	| "ghost"
 	| "success"
@@ -137,14 +136,13 @@ const INK =
  * - `default` — a control standing alone on the page: a header action, a
  *   toolbar, a card's single button. Raised, so it reads as a thing to press
  *   against a surface that is otherwise flat.
- * - `outline` — everything in a row that is not the answer: the Cancel beside
- *   a form's primary, two or more peers with no answer among them, or any
- *   neutral button sitting ON a panel or card. Raised plates in a row read as
- *   cards inside a card; the edge alone keeps the row quiet and even.
+ * - `soft` — everything in a row that is not the answer: the Cancel beside a
+ *   form's primary, two or more peers with no answer among them, or any
+ *   neutral button sitting ON a panel or card. A grey plate, no edge. Raised
+ *   plates in a row read as cards inside a card, and a hairline around each
+ *   one draws a box about a label nobody is being asked to read.
  * - `ghost` — a control that is mostly reporting state (a filter, an icon in
  *   a row). Quiet until you reach for it.
- * - `soft` — a filled chip, for the few places where an edge would fight the
- *   surface it sits on.
  * - the tones (`danger`/`destructive`, `success`/`positive`, `warning`) —
  *   outline proposes, solid commits.
  */
@@ -156,26 +154,22 @@ const variants: Record<Variant, string> = {
 	default:
 		"bg-button border-line text-dim smooth-shadow-xs hover:text-fg hover:border-line-strong",
 	primary: INK,
-	// An edge and nothing else: the quiet neutral button for a row of choices
-	// where none of them is the answer (a confirm's Cancel, a form's secondary
-	// actions). `default` is the raised control, so it carries a fill and a
-	// cast shadow that make a row of four read as four plates; this drops both
-	// and keeps the edge, at the stronger hairline so it still holds its shape
-	// on a panel. Sixteen buttons across eight files were writing this by hand
-	// as `border-line-strong bg-transparent shadow-none`, and disagreeing with
-	// each other about the hover.
+	// A plate with no hairline: the quiet neutral button, and the one to reach
+	// for whenever a row holds more than one action (Cancel beside Save, a
+	// card's Run now · Edit · Delete). `default` cannot simply drop its border,
+	// because its fill is paper in light and the border plus shadow are what
+	// say raised — a row of them reads as plates inside a plate. `soft` steps
+	// the fill instead, so it still reads as a pressable thing at a quieter
+	// weight, and the hover goes one more step rather than adding an edge.
 	//
-	// The hover is a wash, per the house rule: the hand-rolls mostly cancelled
-	// it (`hover:bg-transparent`), which left the whole feedback of pressing
-	// something as the label going one step darker.
-	outline: "border-line-strong text-dim hover:bg-hover hover:text-fg",
-	// A plate with no hairline: the filled-chip surface base.css describes as
-	// having "nothing but its fill to read against the page". `default` cannot
-	// simply drop its border, because its fill is paper in light and the border
-	// plus shadow are what say raised; `soft` steps the fill instead, so it
-	// still reads as a pressable thing at a quieter weight, and the hover goes
-	// one more step down the ramp rather than adding an edge.
-	soft: "bg-control border-transparent text-dim hover:bg-active hover:text-fg data-[popup-open]:bg-active data-[popup-open]:text-fg",
+	// The step is RELATIVE — ink over whatever is behind it, the same trick as
+	// --hover — not a fixed surface value. It used to be `bg-control`, which is
+	// tuned against the page: on a panel, where most of these rows actually
+	// live, #ebebeb on #f0f0f0 all but disappeared in light. 8% ink lands on
+	// that same #ebebeb over the white page, so nothing moved where the old
+	// value was right, and it holds its shape on a panel, a card, or the
+	// sidebar's translucent material.
+	soft: "bg-[color-mix(in_srgb,var(--text)_8%,transparent)] border-transparent text-dim hover:bg-[color-mix(in_srgb,var(--text)_13%,transparent)] hover:text-fg data-[popup-open]:bg-[color-mix(in_srgb,var(--text)_13%,transparent)] data-[popup-open]:text-fg",
 	// No plate at all until you reach for it. A ghost is the right weight for a
 	// control that is *reporting state* as much as inviting a press — a filter
 	// that says "In all workspaces" is mostly a label — so the row stays quiet
@@ -210,7 +204,6 @@ const variants: Record<Variant, string> = {
 // Leading-icon dimming per variant (icon-only stays full strength).
 const iconDim: Record<Variant, string> = {
 	default: "opacity-60",
-	outline: "opacity-60",
 	primary: "opacity-80",
 	soft: "opacity-60",
 	ghost: "opacity-60",
