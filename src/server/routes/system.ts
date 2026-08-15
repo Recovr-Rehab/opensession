@@ -429,16 +429,18 @@ export async function handleSystemRoutes(
 		path === "/api/admin/claude-direct-smoke" &&
 		req.method === "POST"
 	) {
-		let body: { dryRun?: unknown } = {};
+		let body: { dryRun?: unknown; model?: unknown } = {};
 		try {
 			body = ((await req.json()) ?? {}) as typeof body;
 		} catch {
 			// empty/non-JSON body → defaults
 		}
 		const dryRun = body.dryRun === true;
+		const model =
+			typeof body.model === "string" && body.model.trim() ? body.model.trim() : undefined;
 		const by = requestUser(ctx);
 		console.log(
-			`[claude-direct-smoke] admin trigger${by ? ` by ${by}` : ""}${dryRun ? " (dry-run)" : ""}`,
+			`[claude-direct-smoke] admin trigger${by ? ` by ${by}` : ""}${dryRun ? " (dry-run)" : ""}${model ? ` model=${model}` : ""}`,
 		);
 		try {
 			// Dynamic import keeps the experimental adapter (and the Agent SDK it
@@ -449,6 +451,7 @@ export async function handleSystemRoutes(
 			);
 			const result = await runClaudeDirectSmokeTurn({
 				dryRun,
+				model,
 				timeoutMs: 120_000,
 			});
 			// Snippet, not the full turn output — this is a wiring probe.
@@ -469,16 +472,18 @@ export async function handleSystemRoutes(
 	// it never picks an account or spawns the SDK — ok:false + reason (200),
 	// never a 500.
 	if (path === "/api/admin/codex-direct-smoke" && req.method === "POST") {
-		let body: { dryRun?: unknown } = {};
+		let body: { dryRun?: unknown; model?: unknown } = {};
 		try {
 			body = ((await req.json()) ?? {}) as typeof body;
 		} catch {
 			// empty/non-JSON body → defaults
 		}
 		const dryRun = body.dryRun === true;
+		const model =
+			typeof body.model === "string" && body.model.trim() ? body.model.trim() : undefined;
 		const by = requestUser(ctx);
 		console.log(
-			`[codex-direct-smoke] admin trigger${by ? ` by ${by}` : ""}${dryRun ? " (dry-run)" : ""}`,
+			`[codex-direct-smoke] admin trigger${by ? ` by ${by}` : ""}${dryRun ? " (dry-run)" : ""}${model ? ` model=${model}` : ""}`,
 		);
 		try {
 			const { runCodexDirectSmokeTurn } = await import(
@@ -486,6 +491,7 @@ export async function handleSystemRoutes(
 			);
 			const result = await runCodexDirectSmokeTurn({
 				dryRun,
+				model,
 				timeoutMs: 120_000,
 			});
 			return Response.json({ ...result, text: result.text.slice(0, 400) });

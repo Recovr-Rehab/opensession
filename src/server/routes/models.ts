@@ -7,10 +7,11 @@
  */
 
 import { requestUser, type RouteContext } from "./context";
-import { KNOWN_MODELS, accountProviderForModel, getDefaultModel, getModelFallbackAuto, interactiveDefaultModel, modelEfforts, modelEngineKey, refreshOpencodePickerModels, setDefaultModel, setInteractiveDefaultModel, setModelFallbackAuto, toOpencodeModel } from "../models";
+import { DIAL_PRESETS, KNOWN_MODELS, ORCHESTRATOR_PRESETS, accountProviderForModel, getDefaultModel, getModelFallbackAuto, interactiveDefaultModel, modelEfforts, modelEngineKey, refreshOpencodePickerModels, setDefaultModel, setInteractiveDefaultModel, setModelFallbackAuto, toOpencodeModel } from "../models";
 import { ENGINE_IDS, directEngineEnabled, modelEngineDefaults, setModelEngineDefault, type EngineId } from "../engine/engines-config";
 import { listAccountsPublic } from "../claude-accounts";
 import { listCodexAccountsPublic } from "../codex-accounts";
+import { opencodeOrchestratorEnabled } from "../opencode-config";
 import { piEngineEnabled } from "../pi-config";
 import { type Sandbox } from "../sandbox";
 import { suggestBranchName } from "../suggest-branch";
@@ -75,13 +76,23 @@ export async function handleModelsRoutes(
 		// full registry so the picker is never empty.
 		const engineModels = KNOWN_MODELS.filter((m) => m.provider === "opencode");
 		const engineConfigured = engineModels.length > 0;
-		// The global Dial/Orchestrator entries yield to a workspace's editable
-		// presets, but a no-workspace request (the /new composer) has nothing to
-		// replace them with — hiding them there left the instance default
-		// (`dial/…`) naming a model the picker couldn't show.
 		const visibleModels = (engineConfigured ? engineModels : KNOWN_MODELS)
-			.filter((model) =>
-				!workspace || (model.group !== "dial" && model.group !== "orchestrator"));
+			.filter((model) => model.group !== "dial" && model.group !== "orchestrator");
+		// A workspace's editable presets replace the global ones. A request with
+		// no workspace (the /new composer) gets the global Dial and, when opted
+		// in, Orchestrator presets instead — the entries resolveModel already
+		// serves — so the instance default (`dial/…`) always has a picker row.
+		const globalPresetEntry = (
+			p: { id: string; label: string; description: string },
+			group: "dial" | "orchestrator",
+		) => ({
+			id: p.id,
+			provider: "opencode" as const,
+			label: p.label,
+			aliases: [] as string[],
+			group,
+			description: p.description,
+		});
 		const presetModels = workspace ? (settings.presets || [])
 			.filter((preset) =>
 				/^[a-z0-9][a-z0-9_-]{0,63}$/i.test(preset.id) &&
@@ -97,7 +108,14 @@ export async function handleModelsRoutes(
 					preset.instructions?.trim() || "Workspace model combination",
 					`${preset.lead.model}${preset.supporting?.length ? ` + ${preset.supporting.length} supporting model${preset.supporting.length === 1 ? "" : "s"}` : ""}`,
 				].join(" · "),
-			})) : [];
+			})) : engineConfigured
+				? [
+						...DIAL_PRESETS.map((p) => globalPresetEntry(p, "dial")),
+						...(opencodeOrchestratorEnabled()
+							? ORCHESTRATOR_PRESETS.map((p) => globalPresetEntry(p, "orchestrator"))
+							: []),
+					]
+				: [];
 		const interactiveDefault = engineConfigured ? interactiveDefaultModel() : getDefaultModel();
 		// Older installations may still have a Dial/Orchestrator id as their
 		// interactive default. In a workspace that id now means the matching
