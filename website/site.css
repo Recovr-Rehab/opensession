@@ -777,6 +777,10 @@ summary:focus-visible {
 		right: -2px;
 		bottom: -2px;
 		left: 5%;
+		/* Only the corner that is still inside the frame stays round. A rounded
+		   corner on an edge that runs off the frame reads as a window that
+		   stops there; square ones read as one that carries on. */
+		border-radius: calc(15px * var(--rf)) 0 0 0;
 	}
 
 	.button {
