@@ -1,13 +1,15 @@
-import React, { useCallback, useEffect, useId, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SentMessage } from "../lib/sent-messages";
 import { RAIL_GUTTER, RAIL_W, SCROLLBAR_RESERVE } from "../lib/message-rail";
+import { relativeTime } from "../lib/api";
+import { IconGitCommit, IconPencil, IconPullRequest } from "./icons";
 import { Popover } from "../ui/popover";
 import { cn } from "../ui/cn";
 
 /**
  * Your own messages, as a rail of ticks down the right edge of the transcript.
- * One tick per message, newest at the bottom. Hovering the rail previews them
- * as a list, and clicking a tick or a row scrolls that message to the top.
+ * One tick per message, newest at the bottom. Running the pointer down the rail
+ * previews them one at a time, and clicking jumps to the one under the pointer.
  *
  * Deliberately an index of what YOU said, not a map of the document. A turn
  * here runs from one line to several thousand, so a proportional map would
@@ -16,9 +18,16 @@ import { cn } from "../ui/cn";
  * anyway. Indexing only the messages also keeps the rail short enough to sit
  * in the gutter: a few ticks around the middle, not a second scrollbar.
  *
- * The rail is one hit target rather than N. At 60 messages a tick is a few
- * pixels tall, too small to hover, so pointer Y maps to the nearest index and
- * the ticks stay pure decoration.
+ * The rail is one hit target rather than N. At 60 messages a tick is a couple
+ * of pixels tall, too small to hover, so pointer Y maps to the nearest index
+ * and the ticks stay pure decoration. That is also why the ticks fan out as a
+ * LENS around the pointer rather than lighting up one by one: the reader is
+ * scrubbing a continuous strip, and the taper shows where in it they are.
+ *
+ * The preview is one card, not a list of every message. A list asks the reader
+ * to find their place in a second column of text before they can act; a card
+ * anchored to the tick under the pointer answers the only question being asked
+ * ("what is here?") in the place they are already looking.
  *
  * It is a shortcut, not the only way to reach anything, so it stays out of the
  * way: hidden on touch and at phone widths, and hidden while the transcript
@@ -29,24 +38,29 @@ import { cn } from "../ui/cn";
 /** Below this there is nothing to navigate. */
 const MIN_MESSAGES = 2;
 /**
- * Tick sizes. Resting ticks are short and quiet, so the rail reads as texture
- * in the gutter rather than as a second scrollbar. Pointing at the rail grows
- * them all, and the one under the pointer grows furthest, which is what makes
- * the target legible at a 2px pitch without ever moving it.
+ * Tick sizes. A resting tick is short and pale, so the rail reads as texture
+ * in the gutter rather than as a second scrollbar. Pointing at it raises the
+ * tick under the pointer to full size and ink, and its neighbours part way, so
+ * the target is legible at a 2px pitch without anything ever moving.
  *
  * Each tick is LAID OUT at its largest and scaled down from its right edge, so
- * the growth is a transform: no layout on a rail of sixty ticks, and the right
- * edge stays put while the left one travels.
+ * every size here is a transform: no layout on a rail of sixty ticks, and the
+ * right edge stays put while the left one travels.
  */
 const TICK_MAX_W = 20;
 const TICK_MAX_H = 3;
-/** At rest: an ordinary tick, and the message the reader is on. */
 const TICK_REST_W = 8;
-const TICK_CURRENT_W = 12;
 const TICK_REST_H = 2;
-/** Under the pointer: its neighbours, and the tick a click would take. */
-const TICK_HOT_W = 16;
-/** Per-tick delay away from the pointer, so the row opens as a ripple rather
+const TICK_REST_INK = 0.22;
+/** The message the reader is parked on, at rest: a touch longer, full ink. */
+const TICK_CURRENT_W = 12;
+/**
+ * The lens, as each tick's share of the growth by its distance from the
+ * pointer. It falls off fast and then trails, which is what reads as a curve
+ * rather than a wedge; past the end of it a tick is simply at rest.
+ */
+const LENS = [1, 0.62, 0.38, 0.22, 0.1];
+/** Per-tick delay away from the pointer, so the rail wakes as a ripple rather
  *  than a slab. Capped, or the far end of a long rail lags visibly behind. */
 const STAGGER_MS = 14;
 const STAGGER_MAX = 6;
@@ -80,27 +94,33 @@ interface RailBox {
 	height: number;
 }
 
+function OutcomeIcon({ kind }: { kind: NonNullable<SentMessage["outcome"]>["kind"] }) {
+	if (kind === "pr") return <IconPullRequest size={20} />;
+	if (kind === "commit") return <IconGitCommit size={20} />;
+	return <IconPencil size={20} />;
+}
+
 export function MessageRail({ messages, containerRef, leaveLatest }: Props) {
 	const railRef = useRef<HTMLButtonElement>(null);
-	const listRef = useRef<HTMLDivElement>(null);
-	const listId = useId();
 	const [open, setOpen] = useState(false);
 	/** The tick being pointed at (or arrowed to): what a jump goes to. */
 	const [active, setActive] = useState(0);
 	/** The message the reader is currently below. */
 	const [current, setCurrent] = useState(0);
 	/** Pointing at the rail, or on it from the keyboard: the state the ticks
-	 *  grow in. Held here rather than left to `group-hover`, because the
-	 *  stagger is measured from `active`, which only React knows. */
+	 *  grow in. Held here rather than left to `group-hover`, because the lens
+	 *  is measured from `active`, which only React knows. */
 	const [hovered, setHovered] = useState(false);
 	const [keyboard, setKeyboard] = useState(false);
+	/** True for the length of the wake-up ripple, and only then. */
+	const [entering, setEntering] = useState(false);
 	const [box, setBox] = useState<RailBox | null>(null);
 	const [scrollable, setScrollable] = useState(false);
 
 	const count = messages.length;
 	const enabled = count >= MIN_MESSAGES;
 	/** The rail has the reader's attention: pointer on it, keyboard on it, or
-	 *  the list still up while the pointer crosses the gap into it. */
+	 *  the card still up while the pointer leaves. */
 	const hot = hovered || keyboard || open;
 
 	// The effects below outlive any one transcript frame, and a streaming
@@ -110,6 +130,17 @@ export function MessageRail({ messages, containerRef, leaveLatest }: Props) {
 	useEffect(() => {
 		latest.current = messages;
 	});
+
+	// The ripple runs on arrival and never again: while the pointer scrubs, a
+	// per-tick delay would leave the lens trailing the pointer it sits under.
+	useEffect(() => {
+		if (!entering) return;
+		const timer = window.setTimeout(
+			() => setEntering(false),
+			STAGGER_MAX * STAGGER_MS + 60,
+		);
+		return () => window.clearTimeout(timer);
+	}, [entering]);
 
 	/* -- where the rail can sit ---------------------------------------- */
 
@@ -175,6 +206,31 @@ export function MessageRail({ messages, containerRef, leaveLatest }: Props) {
 		return Math.max(0, Math.min(count - 1, Math.round(y / pitch)));
 	};
 
+	// The card hangs off the tick under the pointer, not off the rail, so it
+	// tracks the scrub. A fresh object per position is what re-registers it
+	// with the positioner; a stable function would be memoized and never move.
+	const tickAnchor = useMemo(
+		() => ({
+			getBoundingClientRect: () => {
+				const rail = railRef.current?.getBoundingClientRect();
+				const right = rail?.right ?? 0;
+				const top = (rail?.top ?? 0) + tickY(active) - TICK_MAX_H / 2;
+				return {
+					x: right - TICK_MAX_W,
+					y: top,
+					left: right - TICK_MAX_W,
+					right,
+					top,
+					bottom: top + TICK_MAX_H,
+					width: TICK_MAX_W,
+					height: TICK_MAX_H,
+				};
+			},
+		}),
+		// `tickY` is this render's, and reads nothing but `pitch`.
+		[active, pitch],
+	);
+
 	/* -- which message the reader is on -------------------------------- */
 
 	const trackCurrent = useCallback(() => {
@@ -217,13 +273,6 @@ export function MessageRail({ messages, containerRef, leaveLatest }: Props) {
 			if (timer !== null) window.clearTimeout(timer);
 		};
 	}, [containerRef, enabled, count, trackCurrent]);
-
-	/* -- the list follows the rail ------------------------------------- */
-
-	useEffect(() => {
-		if (!open) return;
-		listRef.current?.children[active]?.scrollIntoView({ block: "nearest" });
-	}, [open, active]);
 
 	/* -- jumping ------------------------------------------------------- */
 
@@ -287,6 +336,8 @@ export function MessageRail({ messages, containerRef, leaveLatest }: Props) {
 
 	if (!enabled || !box || !scrollable) return null;
 
+	const shown = messages[Math.min(active, count - 1)];
+
 	return (
 		<Popover.Root open={open} onOpenChange={setOpen}>
 			<Popover.Trigger
@@ -295,11 +346,6 @@ export function MessageRail({ messages, containerRef, leaveLatest }: Props) {
 				delay={220}
 				closeDelay={140}
 				aria-label="Jump to a message"
-				aria-controls={listId}
-				// The list is portalled, so it is nobody's descendant. Owning it
-				// is what makes the active option point at something.
-				{...(open ? { "aria-owns": listId } : {})}
-				aria-activedescendant={open ? `${listId}-${active}` : undefined}
 				className={cn(
 					"absolute top-1/2 z-[4] hidden -translate-y-1/2 cursor-pointer",
 					"rounded-md border-0 bg-transparent p-0 focus-ring",
@@ -311,11 +357,12 @@ export function MessageRail({ messages, containerRef, leaveLatest }: Props) {
 				style={{ right: box.inset, width: RAIL_W, height: boxH }}
 				onPointerEnter={(event) => {
 					if (event.pointerType === "touch") return;
-					// Name the tick in the same event that opens the rail, so the
+					// Name the tick in the same event that wakes the rail, so the
 					// ripple starts from where the pointer landed rather than from
 					// whichever tick was last pointed at.
 					setActive(indexAt(event.clientY));
 					setHovered(true);
+					setEntering(true);
 				}}
 				onPointerLeave={() => setHovered(false)}
 				onPointerMove={(event) => {
@@ -329,104 +376,105 @@ export function MessageRail({ messages, containerRef, leaveLatest }: Props) {
 					if (!event.currentTarget.matches(":focus-visible")) return;
 					setActive(current);
 					setKeyboard(true);
+					setEntering(true);
 				}}
 				onBlur={() => {
-					// Tabbing away from a list you opened with the keyboard takes
-					// it with you. Only then: a click on a row also blurs the rail
-					// (the rows are not tab stops), and that must leave it up.
+					// Tabbing away from a card you opened with the keyboard takes
+					// it with you. Only then: a click also blurs the rail, and
+					// that must leave the card up.
 					if (keyboard) setOpen(false);
 					setKeyboard(false);
 				}}
 				onKeyDown={onKeyDown}
 				onClick={(event) => {
 					// A click on the rail is a jump, not a dismissal. Base UI's
-					// own handler would toggle the list shut on the same click,
+					// own handler would toggle the card shut on the same click,
 					// and hover would then reopen it a moment later.
 					event.preventBaseUIHandler();
 					jump(indexAt(event.clientY));
 				}}
 			>
 				{messages.map((message, index) => {
-					// While the rail is being pointed at, the tick a click would
-					// take over from the one the reader is parked on: the target
-					// is what the growth is answering.
-					const target = hot && index === active;
+					// Distance from the pointer decides everything about a tick,
+					// with its resting size as the floor — so the message the
+					// reader is parked on stays visible through the lens.
+					const lift = hot ? (LENS[Math.abs(index - active)] ?? 0) : 0;
 					const here = index === current;
-					const width = hot
-						? target
-							? TICK_MAX_W
-							: TICK_HOT_W
-						: here
-							? TICK_CURRENT_W
-							: TICK_REST_W;
-					const tall = hot ? target : here;
+					const width = Math.max(
+						here ? TICK_CURRENT_W : TICK_REST_W,
+						TICK_REST_W + (TICK_MAX_W - TICK_REST_W) * lift,
+					);
+					const height = Math.max(
+						here ? TICK_MAX_H : TICK_REST_H,
+						TICK_REST_H + (TICK_MAX_H - TICK_REST_H) * lift,
+					);
 					return (
 						<span
 							key={message.id}
 							aria-hidden
 							className={cn(
-								"absolute right-0 block origin-right rounded-[999px]",
-								"transition-[transform,background-color] duration-200 ease-[var(--ease)]",
+								"absolute right-0 block origin-right rounded-[999px] bg-fg",
+								"transition-[transform,opacity] duration-200 ease-[var(--ease)]",
 								"motion-reduce:transition-none",
-								target || (here && !hot)
-									? "bg-fg"
-									: here
-										? "bg-dim"
-										: hot
-											? "bg-faint"
-											: "bg-line-strong",
 							)}
 							style={{
 								top: tickY(index) - TICK_MAX_H / 2,
 								width: TICK_MAX_W,
 								height: TICK_MAX_H,
-								transform: `scale(${width / TICK_MAX_W},${(tall ? TICK_MAX_H : TICK_REST_H) / TICK_MAX_H})`,
-								transitionDelay: hot
+								transform: `scale(${width / TICK_MAX_W},${height / TICK_MAX_H})`,
+								opacity: Math.max(
+									here ? 1 : TICK_REST_INK,
+									TICK_REST_INK + (1 - TICK_REST_INK) * lift,
+								),
+								transitionDelay: entering
 									? `${Math.min(Math.abs(index - active), STAGGER_MAX) * STAGGER_MS}ms`
 									: "0ms",
 							}}
 						/>
 					);
 				})}
+				{/* A scrubber has nothing to announce until someone arrives on the
+				    keyboard, and then it has to announce every step. */}
+				{keyboard && shown && (
+					<span aria-live="polite" className="sr-only">
+						{`Message ${active + 1} of ${count}: ${shown.preview}`}
+					</span>
+				)}
 			</Popover.Trigger>
 
-			<Popover.Popup side="left" align="center" sideOffset={8} className="w-[320px]">
-				<div
-					ref={listRef}
-					id={listId}
-					role="listbox"
-					aria-label="Messages you sent"
-					className="max-h-[min(60vh,380px)] overflow-y-auto overscroll-contain p-1.5"
+			{shown && (
+				<Popover.Popup
+					side="left"
+					align="center"
+					sideOffset={10}
+					anchor={tickAnchor}
+					// The card answers a question, it does not take one: every
+					// target is on the rail, so the pointer never has to reach it
+					// and the transcript underneath stays selectable.
+					className="pointer-events-none w-[320px] p-4"
 				>
-					{messages.map((message, index) => (
-						<button
-							key={message.id}
-							id={`${listId}-${index}`}
-							type="button"
-							role="option"
-							aria-selected={index === active}
-							// The rail is the one tab stop: a hover list of sixty
-							// messages must not be sixty of them.
-							tabIndex={-1}
-							onClick={() => jump(index)}
-							onPointerEnter={() => setActive(index)}
-							className={cn(
-								"flex w-full cursor-pointer items-center gap-2 rounded-md border-0 bg-transparent",
-								"px-2 py-1.5 text-left text-control-label",
-								index === current ? "text-fg" : "text-dim",
-								index === active && "bg-hover",
-							)}
-						>
-							{message.sender && (
-								<span className="shrink-0 text-meta font-semibold text-faint">
-									{message.sender}
-								</span>
-							)}
-							<span className="truncate">{message.preview}</span>
-						</button>
-					))}
-				</div>
-			</Popover.Popup>
+					<p className="line-clamp-2 text-body font-semibold leading-snug text-fg">
+						{shown.preview}
+					</p>
+					{shown.reply && (
+						<p className="mt-2 line-clamp-3 text-label leading-normal text-dim">
+							{shown.reply}
+						</p>
+					)}
+					<div className="mt-3 flex items-center gap-3 text-label text-faint">
+						{shown.outcome && (
+							<span className="inline-flex min-w-0 items-center gap-1.5 text-dim">
+								<OutcomeIcon kind={shown.outcome.kind} />
+								<span className="truncate">{shown.outcome.label}</span>
+							</span>
+						)}
+						<span className="ml-auto shrink-0">
+							{shown.sender ? `${shown.sender} · ` : ""}
+							{relativeTime(shown.timestamp)}
+						</span>
+					</div>
+				</Popover.Popup>
+			)}
 		</Popover.Root>
 	);
 }

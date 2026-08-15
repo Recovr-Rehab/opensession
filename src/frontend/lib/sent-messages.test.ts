@@ -11,6 +11,22 @@ function entry(patch: Partial<TranscriptEntry> & Pick<TranscriptEntry, "id">): T
 	};
 }
 
+type Presentation = NonNullable<TranscriptEntry["presentation"]>;
+
+function tool(
+	id: string,
+	family: Presentation["family"],
+	detail: Presentation["detail"],
+	toolInput?: unknown,
+): TranscriptEntry {
+	return entry({
+		id,
+		type: "tool_use",
+		presentation: { canonical: "Tool", name: "Tool", family, detail },
+		...(toolInput ? { toolInput } : {}),
+	});
+}
+
 describe("collectSentMessages", () => {
 	test("indexes user messages in order and nothing else", () => {
 		const sent = collectSentMessages([
@@ -81,6 +97,62 @@ describe("collectSentMessages", () => {
 			entry({ id: "c", files: [{ name: "notes.pdf", path: "/tmp/notes.pdf" }] }),
 		]);
 		expect(sent.map((m) => m.preview)).toEqual(["Image", "2 images", "notes.pdf"]);
+	});
+
+	test("carries the agent's closing words for that turn", () => {
+		const sent = collectSentMessages([
+			entry({ id: "a", content: "Fix the rail" }),
+			entry({ id: "a1", type: "assistant", content: "Let me look at it." }),
+			entry({ id: "a2", type: "assistant", content: "**Fixed** the gutter." }),
+			entry({ id: "b", content: "Now make it quieter" }),
+			entry({ id: "b1", type: "assistant", content: "Done." }),
+		]);
+		expect(sent.map((m) => m.reply)).toEqual(["Fixed the gutter.", "Done."]);
+	});
+
+	test("names what the turn produced, biggest thing first", () => {
+		const sent = collectSentMessages([
+			entry({ id: "a", content: "Commit it" }),
+			tool("a1", "edit", { kind: "path", path: "src/one.ts" }),
+			tool("a2", "run", { kind: "command", command: "git commit -m x" }),
+			entry({ id: "b", content: "Open a PR too" }),
+			tool("b1", "run", { kind: "command", command: "git commit -m y" }),
+			tool("b2", "run", { kind: "command", command: "gh pr create --fill" }),
+			entry({ id: "c", content: "Just edits" }),
+			tool("c1", "edit", { kind: "path", path: "src/one.ts" }),
+			tool("c2", "edit", { kind: "path", path: "src/two.ts" }),
+			tool("c3", "edit", { kind: "path", path: "src/one.ts" }),
+			entry({ id: "d", content: "What does this do?" }),
+			tool("d1", "file", { kind: "path", path: "src/one.ts" }),
+		]);
+		expect(sent.map((m) => m.outcome?.label)).toEqual([
+			"Commit",
+			"Pull request",
+			"Edited 2 files",
+			undefined,
+		]);
+	});
+
+	test("reads the whole command, not the truncated one its row shows", () => {
+		const [message] = collectSentMessages([
+			entry({ id: "a", content: "Land it" }),
+			tool(
+				"a1",
+				"run",
+				{ kind: "command", command: "cd repo && set -e ⏎ BASE=$(git rev-parse HEAD)…" },
+				{ command: "cd repo\nBASE=$(git rev-parse HEAD)\ngit commit-tree $T -p $BASE -m x" },
+			),
+		]);
+		expect(message.outcome?.label).toBe("Commit");
+	});
+
+	test("a mid-turn notice does not take the answer away from the question", () => {
+		const sent = collectSentMessages([
+			entry({ id: "a", content: "Keep going" }),
+			entry({ id: "a1", content: "[GitHub] PR #12 merged by kent" }),
+			entry({ id: "a2", type: "assistant", content: "Kept going." }),
+		]);
+		expect(sent.map((m) => m.reply)).toEqual(["Kept going."]);
 	});
 
 	test("skips an entry the transcript draws nothing for", () => {
