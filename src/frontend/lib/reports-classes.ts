@@ -80,14 +80,18 @@ export const REPORTS_COLUMN_COUNT =
 	"ml-auto shrink-0 text-meta font-medium tabular-nums text-faint";
 
 /**
- * The heading itself. `text-page-title` because that is what it is: the type
- * scale calls that step "the page's own name, at the top of it", and on a
- * phone this is the only thing naming the page. It was `text-section-title`
- * with a hand-written `tracking-[-0.02em]`, which is a third heading style
- * next to the two the scale already defines.
+ * The heading itself, set the way the app sets every other title in a bar:
+ * `text-item-title` semibold, which is what DETAIL_TOPBAR_TITLE gives a page
+ * and what VIEWER_BRANCH gives the chat beside it. It was the 22px page-title
+ * step, the right name for what this is and the wrong size for where it sits.
+ * A whole workspace is named at 14px in the bar above a chat, so a 300px
+ * column announcing itself half again as large read as a poster.
+ *
+ * One value at both widths, because the app's own bar has one: a phone page
+ * title is that same step. No tracking override either. The scale sets it,
+ * and a third heading style is what this was trying to stop being.
  */
-export const REPORTS_COLUMN_TITLE =
-	"m-0 text-page-title font-semibold tracking-[-0.01em] text-fg";
+export const REPORTS_COLUMN_TITLE = "m-0 text-item-title font-semibold text-fg";
 
 /**
  * The scrolling list, outdented past the column's gutter so a row's pill
