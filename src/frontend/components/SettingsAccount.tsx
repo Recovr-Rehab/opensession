@@ -28,8 +28,7 @@ function useAccount() {
 	return {
 		currentUser,
 		githubAuth,
-		// A local-mode session has no web cookie to drop.
-		canSignOut: !!githubAuth && !githubAuth.local,
+		canSignOut: !!githubAuth,
 		subtitle: githubAuth
 			? githubAuth.login
 				? `Signed in with GitHub · @${githubAuth.login}`

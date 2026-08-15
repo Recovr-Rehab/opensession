@@ -59,7 +59,6 @@ export interface AuthStatus {
   required: boolean;
   authenticated: boolean;
   admin?: boolean;
-  local?: boolean;
   /** Server supports the redirect (authorization-code) sign-in. */
   redirect?: boolean;
   login?: string;
@@ -206,7 +205,7 @@ export function UserGate({ children }: { children: React.ReactNode }) {
 				if (!body) throw new Error("Authentication status was empty");
 				setAuth(body);
 				setAuthStatusCache(body);
-				if ((body.local || body.required) && body.authenticated && body.name) {
+				if (body.required && body.authenticated && body.name) {
 					const user = body.name.split(" ")[0];
 					setStoredUser(user);
 				}
@@ -251,9 +250,12 @@ export function UserGate({ children }: { children: React.ReactNode }) {
 		);
 	}
 
+  // GitHub sign-in is configured: it is the only way in, and the name picker
+  // below is unreachable. The two are alternatives, never steps of one flow
+  // (web-auth.ts: "Off (default): the UI keeps today's localStorage name
+  // picker"), so nobody signing in with GitHub is ever asked to pick a name.
   if (auth?.required) {
     if (auth.authenticated) return <>{children}</>;
-    if (auth.local) return <LocalSessionExpired />;
     return (
       <GithubSignIn
         redirect={auth.redirect === true}
@@ -265,24 +267,24 @@ export function UserGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (auth?.local && auth.authenticated) return <>{children}</>;
-
   if (user !== "Anonymous") return <>{children}</>;
 
+  // No sign-in configured, which is the default for a fresh instance: the
+  // server cannot verify anyone, so this name is a label rather than an
+  // identity. It is also the bootstrap path, since an admin has to get in
+  // here before there is a GitHub app to sign in with.
   return (
     <AuthCard title="Who are you?">
-      {roster.length > 0 && (
-        <AuthCopy>Pick your name. You can switch later.</AuthCopy>
-      )}
+      <AuthCopy>
+        Sign-in isn't set up here, so your name is only a label on your
+        sessions.
+      </AuthCopy>
       <div
         className={cn(
           "grid gap-2",
           // One tile has no column to pair with: a half-width button floating
           // in a card reads as a layout that lost its other half.
           roster.length > 1 ? "grid-cols-2 phone:grid-cols-1" : "grid-cols-1",
-          // Without a roster there is no sentence above to hold the title off
-          // the tiles, so the grid carries that air itself.
-          roster.length === 0 && "mt-6",
         )}
       >
         {(roster.length ? roster.map(({ name }) => name) : ["Local User"]).map(
@@ -301,16 +303,6 @@ export function UserGate({ children }: { children: React.ReactNode }) {
           ),
         )}
       </div>
-    </AuthCard>
-  );
-}
-
-function LocalSessionExpired() {
-  return (
-    <AuthCard title="GitHub sign-in expired">
-      <AuthCopy>
-        Switch to cloud mode, sign in with GitHub, then restart local mode.
-      </AuthCopy>
     </AuthCard>
   );
 }
