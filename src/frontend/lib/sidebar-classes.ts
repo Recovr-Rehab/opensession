@@ -275,12 +275,13 @@ export const SIDEBAR_REPO_TILE = "size-[18px] shrink-0 text-meta";
  * takes neither. The ink brightening on hover stays on both — it is what says
  * a caption is still a toggle once the pill is gone.
  */
-/* Desktop drops to the label step, phone keeps the body step. Beside the work
-   the sidebar is chrome, and a row title a size above the tool rows above it
-   read as two columns rather than one list. On a phone the sidebar IS the page,
-   so its rows are the thing being read and stay at body. */
+/* Desktop sits one step under the transcript, phone keeps the body step.
+   Beside the work the sidebar is a denser column than the reading one, and the
+   pixel between them is what says so; taken all the way down to the label step
+   it stopped reading as the same app as the transcript. On a phone the sidebar
+   IS the page, so its rows are the thing being read and stay at body. */
 export const SIDEBAR_GROUP_HEADER =
-	`group/gh flex w-full items-center ${SIDEBAR_RAIL_GAP} rounded-[calc(10px*var(--rf))] border-none bg-transparent text-body font-medium tracking-[0px] text-dim desktop:text-label hover:text-fg`;
+	`group/gh flex w-full items-center ${SIDEBAR_RAIL_GAP} rounded-[calc(10px*var(--rf))] border-none bg-transparent text-body font-medium tracking-[0px] text-dim desktop:text-item-title hover:text-fg`;
 
 /**
  * A FULL-LINE heading — a repo or feed band, an automation group, Archived.

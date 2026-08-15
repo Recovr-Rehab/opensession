@@ -237,7 +237,8 @@
 
 	     11 -> text-meta          timestamps, counts, status, badges
 	     13 -> text-label / text-supporting / text-control-label / xs / sm
-	     15 -> text-body / text-item-title / base   prose, and the title of a row
+	     14 -> text-item-title    the title of a row you scan
+	     15 -> text-body / base   prose you read
 	     17 -> text-dialog-title  a modal heading
 	     19 -> text-section-title a heading inside a page
 	     22 -> text-page-title    the page's own name, at the top of it
@@ -275,7 +276,7 @@
 	--text-supporting: 13px;
 	--text-control-label: 13px;
 	--text-body: 15px;
-	--text-item-title: 15px;
+	--text-item-title: 14px;
 	--text-dialog-title: 17px;
 	--text-section-title: 19px;
 	--text-page-title: 22px;
