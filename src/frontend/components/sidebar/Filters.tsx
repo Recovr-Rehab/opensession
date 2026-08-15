@@ -45,7 +45,7 @@ const FILTER_POPOVER =
 /** One labelled control per row: the label holds its width, the select takes
  *  the rest. */
 const FILTER_ROW = "flex items-center justify-between gap-3.5";
-const FILTER_ROW_LABEL = "shrink-0 text-item-title text-dim";
+const FILTER_ROW_LABEL = "shrink-0 text-label text-dim";
 
 export function FilterPopover({
 	anchor,
@@ -219,7 +219,7 @@ const MINI_MENU =
  *  adds to the selected row's wash instead of replacing it — which is what the
  *  old `hover:bg-pressed` on the selected branch was standing in for. */
 const MINI_MENU_ITEM =
-	"flex w-full items-center gap-[9px] rounded-md px-[9px] py-2 text-left text-item-title text-fg";
+	"flex w-full items-center gap-[9px] rounded-md px-[9px] py-2 text-left text-label text-fg";
 
 function miniMenuItem(selected: boolean) {
 	return cn(MINI_MENU_ITEM, SIDEBAR_HOVER_LAYER, selected && "bg-pressed");
@@ -295,7 +295,7 @@ function MiniSelect({
 		<div className="relative">
 			<button
 				ref={btnRef}
-				className="flex min-w-[148px] cursor-pointer items-center gap-2 rounded-md border border-line-strong bg-panel py-2 pl-3 pr-2.5 text-item-title text-fg hover:bg-hover"
+				className="flex min-w-[148px] cursor-pointer items-center gap-2 rounded-md border border-line-strong bg-panel py-2 pl-3 pr-2.5 text-label text-fg hover:bg-hover"
 				onClick={() => setOpen((o) => !o)}
 			>
 				<span className="flex min-w-0 flex-1 items-center gap-[7px]">
@@ -425,7 +425,7 @@ export const RepoFilterChip = React.forwardRef<
 			</button>
 			<button
 				type="button"
-				className="inline-flex size-[19px] shrink-0 items-center justify-center rounded-full text-item-title leading-none text-faint hover:bg-hover hover:text-fg"
+				className="inline-flex size-[19px] shrink-0 items-center justify-center rounded-full text-label leading-none text-faint hover:bg-hover hover:text-fg"
 				title="Clear repo filter"
 				tabIndex={probe ? -1 : undefined}
 				onClick={probe ? undefined : onClear}
