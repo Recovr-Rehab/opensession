@@ -58,13 +58,13 @@ function luminance(hex: string) {
 }
 
 describe("accent theme", () => {
-	test("matches the native ten-colour palette", () => {
-		expect(ACCENT_THEME_OPTIONS).toHaveLength(10);
+	test("matches the native eleven-colour palette", () => {
+		expect(ACCENT_THEME_OPTIONS).toHaveLength(11);
 		expect(
 			new Set(
 				ACCENT_THEME_OPTIONS.map(({ light, dark }) => `${light}-${dark}`),
 			).size,
-		).toBe(10);
+		).toBe(11);
 	});
 
 	test("the CSS tokens and pre-paint bootstrap contain the same palette", async () => {
@@ -90,7 +90,15 @@ describe("accent theme", () => {
 		expect(css).toContain("--accent-ink-light: #8d7110");
 		// The pre-paint bootstrap has to retire the same selections the bundle
 		// does, or a migrated accent flashes its old id for one frame.
-		expect(html).toContain('var retired = { gold: "lime", indigo: "sky" }');
+		expect(html).toContain('var retired = { gold: "lime" }');
+	});
+
+	test("the picker gives every accent a column", async () => {
+		const panel = await Bun.file(
+			new URL("../components/settings/AppearancePanel.tsx", import.meta.url),
+		).text();
+		const columns = panel.match(/desktop:grid-cols-(\d+)"/)?.[1];
+		expect(Number(columns)).toBe(ACCENT_THEME_OPTIONS.length);
 	});
 
 	test("every fill carries a legible glyph", () => {
@@ -112,12 +120,6 @@ describe("accent theme", () => {
 		storage.setItem("opensession-accent", "gold");
 		expect(getAccentTheme()).toBe("lime");
 		expect(storage.getItem("opensession-accent")).toBe("lime");
-	});
-
-	test("migrates the removed Indigo accent to its nearest surviving hue", () => {
-		storage.setItem("opensession-accent", "indigo");
-		expect(getAccentTheme()).toBe("sky");
-		expect(storage.getItem("opensession-accent")).toBe("sky");
 	});
 
 	test("defaults to teal for missing or unknown values", () => {

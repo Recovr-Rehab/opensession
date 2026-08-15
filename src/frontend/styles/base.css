@@ -583,59 +583,65 @@ html[data-theme="light"][data-accent] {
 	--accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
-html[data-accent="teal"] {
-	--accent-light: #208a94;
-	--accent-dark: #269da9;
+html[data-accent="sky"] {
+	--accent-light: #1d82bc;
+	--accent-dark: #2495d6;
 }
 
-html[data-accent="sky"] {
-	--accent-light: #1f82bb;
-	--accent-dark: #2595d5;
+html[data-accent="indigo"] {
+	--accent-light: #6361f5;
+	--accent-dark: #767bf6;
+}
+
+html[data-accent="teal"] {
+	--accent-light: #1f8a94;
+	--accent-dark: #259ea9;
 }
 
 html[data-accent="purple"] {
-	--accent-light: #825dbc;
-	--accent-dark: #885fc5;
+	--accent-light: #9338f5;
+	--accent-dark: #9f5ff6;
 }
 
 html[data-accent="pink"] {
-	--accent-light: #9f52a1;
-	--accent-dark: #a653a9;
+	--accent-light: #b03bb6;
+	--accent-dark: #c44bcb;
 }
 
 html[data-accent="coral"] {
-	--accent-light: #c44b4d;
-	--accent-dark: #cc5354;
+	--accent-light: #dd233a;
+	--accent-dark: #f73648;
 }
 
 html[data-accent="orange"] {
-	--accent-light: #d26232;
-	--accent-dark: #db6634;
+	--accent-light: #d3571c;
+	--accent-dark: #eb6221;
 }
 
 html[data-accent="brown"] {
-	--accent-light: #724727;
-	--accent-dark: #7e502f;
+	--accent-light: #76451f;
+	--accent-dark: #82502a;
 }
 
-/* Honey is the one accent whose two fills are genuinely different colours.
-   Yellow only exists at high lightness, so the cream that reads beautifully on
-   the dark plate is 1.3:1 against a white page. A button in it dissolves into
-   the page. The light fill is deepened until it reads as a control, as far
-   as it can go before it turns to mustard. Both take a black glyph, and the
-   ink form (a label or icon rather than a plate) deepens further still. */
+/* Honey keeps one fill in both appearances. Yellow only exists at high
+   lightness, so the cream that reads on a dark plate is 1.3:1 against a white
+   page and a button in it dissolves; a value deep enough for the light page
+   still reads as gold on the dark one, and one colour spares the picker a
+   swatch that changes identity with the theme. The glyph on it is black, and
+   the ink form (a label or icon rather than a plate) deepens instead, because
+   text needs contrast a plate does not. */
 html[data-accent="lime"] {
-	--accent-light: #efc53f;
-	--accent-dark: #f4e78f;
+	--accent-light: #f2c527;
+	--accent-dark: #f2c527;
 	--accent-ink-light: #8d7110;
-	--accent-ink-dark: #f4e78f;
+	--accent-ink-dark: #f2c527;
 	--on-accent-light: #000000;
 	--on-accent-dark: #000000;
 }
 
 html[data-accent="green"] {
-	--accent-light: #2b8948;
-	--accent-dark: #238f48;
+	--accent-light: #1e8e45;
+	--accent-dark: #24a351;
 }
 
 html[data-accent="mono"] {

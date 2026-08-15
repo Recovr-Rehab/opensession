@@ -2,8 +2,8 @@ import XCTest
 @testable import OS1
 
 final class AccentThemeTests: XCTestCase {
-    func testPaletteHasTenDistinctOptions() {
-        XCTAssertEqual(AccentTheme.allCases.count, 10)
+    func testPaletteHasElevenDistinctOptions() {
+        XCTAssertEqual(AccentTheme.allCases.count, 11)
         XCTAssertEqual(
             Set(AccentTheme.allCases.map { "\($0.fills.light)-\($0.fills.dark)" }).count,
             AccentTheme.allCases.count
@@ -70,23 +70,19 @@ final class AccentThemeTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: AccentStore.defaultsKey), "lime")
     }
 
-    func testRemovedIndigoSelectionMigratesToSky() {
-        let defaults = scratchDefaults()
-        defaults.set("indigo", forKey: AccentStore.defaultsKey)
-        XCTAssertEqual(AccentStore(defaults: defaults).theme, .sky)
-        XCTAssertEqual(defaults.string(forKey: AccentStore.defaultsKey), "sky")
-    }
-
-    /// Honey is the only accent whose two fills are different colours rather
-    /// than two steps of one: a cream that reads on the dark plate is 1.3:1
-    /// against a white page, so the light fill is deepened until it separates.
-    /// 3:1 is WCAG's contrast for a control against its background.
+    /// Honey carries one value in both appearances, so it has to separate from
+    /// a white page and a near-black one with the same colour. That is the
+    /// constraint that decides how deep the gold goes.
     func testHoneySeparatesFromBothPages() {
-        let onWhite = contrast(AccentTheme.lime.fills.light, 0xFF_FF_FF)
-        let onPlate = contrast(AccentTheme.lime.fills.dark, 0x1C_1C_1C)
-        XCTAssertGreaterThan(onWhite, 1.5, "honey light fill against a white page")
-        XCTAssertGreaterThan(onPlate, 3.0, "honey dark fill against the dark plate")
-        XCTAssertNotEqual(AccentTheme.lime.fills.light, AccentTheme.lime.fills.dark)
+        XCTAssertEqual(AccentTheme.lime.fills.light, AccentTheme.lime.fills.dark)
+        XCTAssertGreaterThan(
+            contrast(AccentTheme.lime.fills.light, 0xFF_FF_FF), 1.5,
+            "honey against a white page"
+        )
+        XCTAssertGreaterThan(
+            contrast(AccentTheme.lime.fills.dark, 0x1C_1C_1C), 3.0,
+            "honey against the dark plate"
+        )
     }
 
     func testSelectionPersists() {

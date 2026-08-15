@@ -310,7 +310,10 @@ export function AppearancePanel() {
 			<SettingsGroupLabel>Accent</SettingsGroupLabel>
 			<SettingsSection>
 				<div
-					className="grid grid-cols-5 gap-2 desktop:grid-cols-10"
+					// One row per breakpoint, so the column count tracks
+					// ACCENT_THEME_OPTIONS.length. A single swatch wrapping onto its
+					// own line reads as a mistake; accent-theme.test.ts guards it.
+					className="grid grid-cols-6 gap-2 desktop:grid-cols-11"
 					role="radiogroup"
 					aria-label="Accent colour"
 				>
