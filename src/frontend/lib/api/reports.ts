@@ -30,8 +30,19 @@ export async function fetchSessionReports(
 	return result.reports;
 }
 
-export function reportRawUrl(automationId: string, reportId: string): string {
-	return `${BASE}/reports/${encodeURIComponent(automationId)}/${encodeURIComponent(reportId)}/raw`;
+/**
+ * The report document itself. A report is a standalone HTML file with its own
+ * palette, so the theme travels in the URL and the server adapts the bytes —
+ * the sandbox forbids scripts inside the frame, so nothing there could adapt
+ * itself, and correcting it after load would paint the wrong scheme first.
+ */
+export function reportRawUrl(
+	automationId: string,
+	reportId: string,
+	theme?: "light" | "dark",
+): string {
+	const base = `${BASE}/reports/${encodeURIComponent(automationId)}/${encodeURIComponent(reportId)}/raw`;
+	return theme === "dark" ? `${base}?theme=dark` : base;
 }
 
 export async function fetchAnalytics(

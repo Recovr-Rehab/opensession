@@ -1,12 +1,10 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { BASE_PATH } from "../lib/base";
-import {
-	fetchSessionReports,
-	reportRawUrl,
-} from "../lib/api";
+import { fetchSessionReports } from "../lib/api";
 import type { ReportMeta, WSServerMessage } from "../lib/types";
-import { parseNewSessionLink, type NewSessionPrefill } from "../lib/new-session-link";
+import { type NewSessionPrefill } from "../lib/new-session-link";
 import { OptionSelect } from "../ui/select";
+import { ReportFrame } from "./ReportFrame";
 
 export function useSessionReports(
 	sessionId: string,
@@ -114,31 +112,11 @@ export function SessionReportsPanel({
 					</p>
 				)}
 			</div>
-			<iframe
-				key={reportKey(selected)}
+			<ReportFrame
+				automationId={selected.automationId}
+				reportId={selected.id}
 				title={selected.title}
-				sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-				src={reportRawUrl(selected.automationId, selected.id)}
-				onLoad={(event) => {
-					const document = event.currentTarget.contentDocument;
-					if (!document) return;
-					for (const link of document.querySelectorAll("a")) {
-						if (parseNewSessionLink(link.href)) {
-							link.removeAttribute("target");
-							continue;
-						}
-						link.target = "_blank";
-						link.rel = "noopener noreferrer";
-					}
-					document.addEventListener("click", (clickEvent) => {
-						const link = (clickEvent.target as Element | null)?.closest?.("a");
-						const prefill = link ? parseNewSessionLink(link.href) : null;
-						if (!prefill) return;
-						clickEvent.preventDefault();
-						onOpenNewSession(prefill);
-					});
-				}}
-				className="min-h-0 flex-1 border-0 bg-white"
+				onOpenNewSession={onOpenNewSession}
 			/>
 		</div>
 	);

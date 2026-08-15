@@ -37,7 +37,7 @@ export function createReportMcpServer(ctx: {
 	const tools = [
 		tool(
 			"publish_report",
-			"Publish this run's HTML report with optional durable assets shown in the Reports view — latest per automation, with history. Keep CSS inline, but store image/media evidence as assets instead of base64 data URLs. Use it when the task's outcome is a recurring readable report; each publish adds a new entry, so publish once per run with the final document.",
+			"Publish this run's HTML report with optional durable assets shown in the Reports view — latest per automation, with history. Store image/media evidence as assets instead of base64 data URLs. Use it when the task's outcome is a recurring readable report; each publish adds a new entry, so publish once per run with the final document.",
 			{
 				title: z
 					.string()
@@ -47,7 +47,9 @@ export function createReportMcpServer(ctx: {
 				html: z
 					.string()
 					.describe(
-						`The full HTML document (max ${Math.floor(MAX_REPORT_BYTES / 1024 / 1024)} MB). Keep CSS inline. Reference staged files as assets/<path> and list those paths in assets.`,
+						`The full HTML document (max ${Math.floor(MAX_REPORT_BYTES / 1024 / 1024)} MB). Reference staged files as assets/<path> and list those paths in assets.
+
+Write plain semantic HTML and set no colours. Readers view reports in a light or a dark app, and a house stylesheet is applied for whichever one they are in: it styles headings, paragraphs, lists, tables, code, pre, blockquote, images and links, plus .card / .panel for a grouped block, .meta for a byline, and .chip with .positive / .warning / .negative for a status pill. Reuse those instead of inventing a palette. If a document really needs its own CSS, keep it to layout, or answer both schemes with prefers-color-scheme — a hardcoded light palette has to be converted before it can be shown in a dark window.`,
 					),
 				assets: z
 					.array(z.string())

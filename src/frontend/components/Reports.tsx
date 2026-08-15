@@ -1,15 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import { docTitle } from "../lib/brand";
-import {
-	fetchReportGroups,
-	fetchReports,
-	reportRawUrl,
-} from "../lib/api";
+import { fetchReportGroups, fetchReports } from "../lib/api";
 import type { ReportGroup, ReportMeta } from "../lib/types";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { BASE_PATH } from "../lib/base";
 import { absoluteLink } from "../lib/share-link";
-import { parseNewSessionLink, type NewSessionPrefill } from "../lib/new-session-link";
+import { type NewSessionPrefill } from "../lib/new-session-link";
+import { ReportFrame } from "./ReportFrame";
 import { Button } from "../ui/button";
 import { CopyCheck, useCopy } from "../ui/copy";
 import { IconChevronLeft, IconChevronRight, IconFile, IconLink } from "./icons";
@@ -52,18 +49,6 @@ function formatDate(value: string): string {
 		hour: "numeric",
 		minute: "2-digit",
 	}).format(new Date(value));
-}
-
-function supportIdFromHref(href: string | undefined): string | null {
-	if (!href) return null;
-	try {
-		const url = new URL(href, location.href);
-		if (url.origin !== location.origin) return null;
-		const match = url.pathname.match(/^\/(?:opensession\/|backstage\/)?support\/([^/?#]+)/);
-		return match ? decodeURIComponent(match[1]) : null;
-	} catch {
-		return null;
-	}
 }
 
 export function Reports({
@@ -319,38 +304,12 @@ export function Reports({
 						)
 					)}
 					{selected && (
-						<iframe
-							key={selected.id}
+						<ReportFrame
+							automationId={selected.automationId}
+							reportId={selected.id}
 							title={selected.title}
-							sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-							src={reportRawUrl(selected.automationId, selected.id)}
-							onLoad={(event) => {
-								const document = event.currentTarget.contentDocument;
-								if (!document) return;
-								for (const link of document.querySelectorAll("a")) {
-									if (parseNewSessionLink(link.href)) {
-										link.removeAttribute("target");
-										continue;
-									}
-									link.target = "_blank";
-									link.rel = "noopener noreferrer";
-									if (supportIdFromHref(link.href)) link.removeAttribute("target");
-								}
-								document.addEventListener("click", (clickEvent) => {
-									const link = (clickEvent.target as Element | null)?.closest?.("a");
-									const prefill = link ? parseNewSessionLink(link.href) : null;
-									if (prefill) {
-										clickEvent.preventDefault();
-										onOpenNewSession(prefill);
-										return;
-									}
-									const supportId = supportIdFromHref(link?.href);
-									if (!supportId) return;
-									clickEvent.preventDefault();
-									onOpenSupport(supportId);
-								});
-							}}
-							className="min-h-0 flex-1 border-0 bg-white"
+							onOpenNewSession={onOpenNewSession}
+							onOpenSupport={onOpenSupport}
 						/>
 					)}
 				</section>

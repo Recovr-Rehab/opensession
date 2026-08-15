@@ -12,6 +12,7 @@ import {
 	readReportAsset,
 	readReportHtml,
 } from "../reports";
+import { adaptReportHtml } from "../report-theme";
 import { assetMime } from "../session-assets";
 
 export async function handleReportsRoutes(
@@ -38,16 +39,26 @@ export async function handleReportsRoutes(
 	// The rendered report itself — served as a document for the detail iframe.
 	// `sandbox` keeps agent-authored HTML inert (no scripts, no top navigation)
 	// while allow-same-origin lets it be styled/read normally.
+	//
+	// `?theme=dark` asks for the document in the app's dark scheme. Because the
+	// report cannot run scripts, that has to happen here: adaptReportHtml
+	// (src/server/report-theme.ts) serves it already dark rather than letting a
+	// white page paint first and be corrected afterwards. Without the parameter
+	// the response is the document as the agent published it.
 	const rawMatch = path.match(
 		/^\/api\/reports\/([^/]+)\/([^/]+)\/raw$/,
 	);
 	if (rawMatch) {
-		const html = readReportHtml(
+		const stored = readReportHtml(
 			decodeURIComponent(rawMatch[1]),
 			decodeURIComponent(rawMatch[2]),
 		);
-		if (html === null)
+		if (stored === null)
 			return new Response("Report not found", { status: 404 });
+		const html = adaptReportHtml(
+			stored,
+			ctx.url.searchParams.get("theme") === "dark" ? "dark" : "light",
+		);
 		return new Response(html, {
 			headers: {
 				"Content-Type": "text/html; charset=utf-8",
