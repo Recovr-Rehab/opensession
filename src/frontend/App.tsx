@@ -1044,6 +1044,9 @@ export function App(
 		// When starting a session inside a workspace, prefill it + its shared repo
 		// and worktree so the new session lands next to its siblings by default.
 		workspaceId?: string;
+		/** Workspace whose model combinations the picker displays. This does not
+		 * join the created session to that workspace. */
+		modelWorkspaceId?: string;
 		repo?: string;
 		branch?: string;
 		mode?: "ask" | "code" | "scratch";
@@ -1059,9 +1062,19 @@ export function App(
 	const openPalette = React.useCallback((prompt?: string) => {
 		// This is the global new-session action. It must not inherit the workspace
 		// behind it: without workspaceId, NewSession creates a workspace with its
-		// first session. Explicit workspace controls use handleNewSession instead.
-		setPalette({ open: true, prompt });
-	}, []);
+		// first session. Its model combinations are safe to use as a picker source,
+		// but remain separate from the destination workspace.
+		const modelWorkspaceId = route.view === "workspace"
+			? route.id
+			: route.view === "session"
+				? sessions.find((session) => session.id === route.id)?.workspaceId
+				: undefined;
+		setPalette({
+			open: true,
+			prompt,
+			...(modelWorkspaceId ? { modelWorkspaceId } : {}),
+		});
+	}, [route, sessions]);
 	const openPrefilledSession = React.useCallback((prefill: NewSessionPrefill) => {
 		setPalette({ open: true, ...prefill });
 	}, []);
@@ -4573,6 +4586,7 @@ export function App(
 						connected={connected}
 						prefillPrompt={palette.prompt}
 						workspaceId={palette.workspaceId}
+						modelWorkspaceId={palette.modelWorkspaceId}
 						forceRepo={palette.repo}
 						forceBranch={palette.branch}
 						forceMode={palette.mode}
