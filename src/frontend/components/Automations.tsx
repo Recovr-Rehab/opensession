@@ -820,8 +820,11 @@ function TriggerGraph({ runs, compact }: { runs: AutomationRun[]; compact?: bool
             b.error ? `${b.error} failed` : "",
             b.running ? `${b.running} running` : "",
           ].filter(Boolean);
+          // rx 3 of a 7px bar rounds the cap without closing it into a
+          // capsule, so a tall bar still shows a straight side to read a
+          // height off. Short ones pill anyway: ry clamps to half the height.
           return (
-            <rect key={i} x={i * SLOT} y={PLOT_H - h} width={SLOT - 2} height={h} rx={1.5} fill={fill}>
+            <rect key={i} x={i * SLOT} y={PLOT_H - h} width={SLOT - 2} height={h} rx={3} fill={fill}>
               <title>{`${label} · ${count} run${count === 1 ? "" : "s"} (${parts.join(", ")})`}</title>
             </rect>
           );
