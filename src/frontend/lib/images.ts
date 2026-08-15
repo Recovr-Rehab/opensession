@@ -44,11 +44,63 @@ export async function uploadFile(file: File): Promise<{ name: string; path: stri
   return { name: body.name || file.name, path: body.path };
 }
 
+// Extensions the server can read a staged image back from (mirrors
+// STAGED_IMAGE_MEDIA_TYPES in src/server/uploads.ts). A pasted screenshot often
+// arrives unnamed, so the upload has to carry one of these itself.
+const STAGEABLE_IMAGE_TYPES: Record<string, string> = {
+  "image/png": ".png",
+  "image/jpeg": ".jpg",
+  "image/gif": ".gif",
+  "image/webp": ".webp",
+};
+// An image small enough to keep inline when staging isn't available. Pasting
+// while the server is unreachable still works below this; above it the send
+// would only fail again at delivery, so it is reported at attach time instead.
+const MAX_INLINE_IMAGE_BYTES = 512 * 1024;
+
+/** Filename for a staged image. A pasted file is usually named `image.png` or
+ *  nothing at all, and the staged path's extension is the only record of its
+ *  type, so supply one when the file doesn't. */
+function imageUploadName(file: File): string {
+  if (/\.[a-z0-9]{1,5}$/i.test(file.name)) return file.name;
+  return `pasted-${Date.now()}${STAGEABLE_IMAGE_TYPES[file.type] ?? ".png"}`;
+}
+
 /**
- * Split a picked/dropped file list into images (for the vision path, returned as
- * `data:` URLs) and other files (streamed to disk via the HTTP upload endpoint and
- * returned as name+path refs). Images stay on the vision path because Claude can
- * actually see them; everything else is handed to the agent by file path.
+ * Stage one image and return the `/media?path=` ref the composer carries, or a
+ * `data:` URL when staging isn't possible.
+ *
+ * Images used to ride entirely as base64. That still works and is what the
+ * native clients send, but the web composer persists every unsent message in
+ * localStorage (the durable outbox), and one retina screenshot as base64 is
+ * past the whole origin's ~5MB quota: it would fail its own send AND block
+ * plain-text sends in every other session until it was discarded.
+ */
+async function stageImage(file: File, rejected: string[]): Promise<string | null> {
+  const inline = () => readFileAsDataUrl(file);
+  if (!STAGEABLE_IMAGE_TYPES[file.type]) return inline();
+  if (file.size > MAX_UPLOAD_BYTES) {
+    rejected.push(`${file.name || "image"} (too large, max ${Math.floor(MAX_UPLOAD_BYTES / (1024 * 1024))} MB)`);
+    return null;
+  }
+  try {
+    const { path } = await uploadFile(
+      new File([file], imageUploadName(file), { type: file.type }),
+    );
+    return `/media?path=${encodeURIComponent(path)}`;
+  } catch (e) {
+    if (file.size <= MAX_INLINE_IMAGE_BYTES) return inline();
+    rejected.push(`${file.name || "image"} (${(e as Error)?.message || "upload failed"})`);
+    return null;
+  }
+}
+
+/**
+ * Split a picked/dropped file list into images (for the vision path) and other
+ * files. Both are streamed to disk via the HTTP upload endpoint; an image comes
+ * back as a `/media?path=` ref, another file as a name+path ref. Images stay on
+ * the vision path because the model can actually see them; everything else is
+ * handed to the agent by file path.
  * `rejected` lists files that were too big or failed to upload, so the caller can
  * surface them instead of dropping them silently.
  */
@@ -58,9 +110,12 @@ export async function splitAttachments(
   const all = Array.from(files);
   const imageFiles = all.filter((f) => f.type.startsWith("image/"));
   const otherFiles = all.filter((f) => !f.type.startsWith("image/"));
-  const images = await Promise.all(imageFiles.map(readFileAsDataUrl));
 
   const rejected: string[] = [];
+  const images = (
+    await Promise.all(imageFiles.map((f) => stageImage(f, rejected)))
+  ).filter((u): u is string => u !== null);
+
   const uploaded = await Promise.all(
     otherFiles.map(async (f): Promise<FileAttachment | null> => {
       if (f.size > MAX_UPLOAD_BYTES) {

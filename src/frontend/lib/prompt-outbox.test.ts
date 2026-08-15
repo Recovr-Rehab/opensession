@@ -124,3 +124,62 @@ test("does not retain an item in memory when durable storage rejects it", () => 
 	expect(outbox.list()).toEqual([]);
 	outbox.dispose();
 });
+
+// The browser's own DOMException names setItem and a storage key, which reads
+// like a cap on attachments and tells nobody what to do about it.
+test("says what a full store means, in place of the browser's message", () => {
+	const outbox = new PromptOutbox({
+		storage: {
+			getItem: () => null,
+			setItem: () => {
+				throw Object.assign(new Error("Failed to execute 'setItem' on 'Storage'"), {
+					name: "QuotaExceededError",
+				});
+			},
+		},
+		scope: "quota-copy",
+	});
+	expect(() => outbox.enqueue({ sessionId: "s1", content: "hi" })).toThrow(
+		"No room left to save this message for delivery. Discard a failed message to make space.",
+	);
+	outbox.dispose();
+});
+
+test("keeps memory in step with storage when a state change cannot be written", async () => {
+	const stored = JSON.stringify({
+		version: 1,
+		items: [
+			{
+				clientId: "c1",
+				sessionId: "s1",
+				content: "unsent",
+				state: "pending",
+				attempts: 0,
+				createdAt: 1,
+				nextAttemptAt: 1,
+			},
+		],
+	});
+	let delivered = 0;
+	const outbox = new PromptOutbox({
+		storage: {
+			getItem: () => stored,
+			setItem: () => {
+				throw Object.assign(new Error("full"), { name: "QuotaExceededError" });
+			},
+		},
+		scope: "rollback",
+		deliver: async () => {
+			delivered++;
+			return { status: "started", message: "ok" };
+		},
+	});
+	// The pending → sending transition can't be persisted. The flush must not
+	// reject, and the item must stay pending rather than sit in a "sending"
+	// state no reload can see. Nothing is sent it couldn't record having sent.
+	await outbox.flush();
+	expect(delivered).toBe(0);
+	expect(outbox.list()[0]?.state).toBe("pending");
+	expect(JSON.parse(stored).items[0].state).toBe("pending");
+	outbox.dispose();
+});

@@ -12,6 +12,7 @@
 import {
 	existsSync,
 	mkdirSync,
+	readFileSync,
 	realpathSync,
 	statSync,
 	unlinkSync,
@@ -20,25 +21,92 @@ import {
 import type { ImageInput } from "./run-events";
 import { SESSIONS_DIR } from "./session-cache";
 
-/** Keep only the string `data:` URLs from a composer `images` payload — the
- *  display/queue form (parsed to ImageInput at delivery via parseImageDataUrls). */
+/** Keep only the string image references from a composer `images` payload: the
+ *  display/queue form (parsed to ImageInput at delivery via parseImageDataUrls).
+ *  An entry is either a `data:` URL or a `/media?path=` ref; both render as an
+ *  `<img src>` in a transcript, a queue flap and a note. */
 export function asDataUrlList(urls?: unknown): string[] | undefined {
 	if (!Array.isArray(urls)) return undefined;
 	const out = urls.filter((u): u is string => typeof u === "string");
 	return out.length ? out : undefined;
 }
 
-/** Decode composer `data:<mediatype>;base64,<data>` URLs into runner ImageInputs. */
+/**
+ * Resolve composer image references into runner ImageInputs.
+ *
+ * Two forms arrive here. Native clients and small pastes send
+ * `data:<mediatype>;base64,<data>` inline. The web composer stages an image to
+ * disk at attach time and sends a `/media?path=` ref instead, because its
+ * durable outbox keeps every unsent message in localStorage and one screenshot
+ * of base64 fills the whole origin's quota.
+ *
+ * Resolution happens at DELIVERY, not intake, so a queued or retried send reads
+ * the same staged file. A ref that no longer resolves drops out of the list;
+ * callers that must not silently lose an attachment compare the counts.
+ */
 export function parseImageDataUrls(urls?: unknown): ImageInput[] | undefined {
 	if (!Array.isArray(urls)) return undefined;
 	const out: ImageInput[] = [];
 	for (const u of urls) {
 		if (typeof u !== "string") continue;
 		const m = u.match(/^data:([^;]+);base64,(.+)$/s);
-		if (m && m[1].startsWith("image/"))
+		if (m && m[1].startsWith("image/")) {
 			out.push({ mediaType: m[1], data: m[2] });
+			continue;
+		}
+		const staged = readStagedImage(u);
+		if (staged) out.push(staged);
 	}
 	return out.length ? out : undefined;
+}
+
+/** How many entries of a composer `images` payload name an image at all, so a
+ *  caller can tell "no images" from "the images stopped resolving". */
+export function countImageRefs(urls?: unknown): number {
+	if (!Array.isArray(urls)) return 0;
+	return urls.filter(
+		(u) =>
+			typeof u === "string" &&
+			(/^data:image\/[^;]+;base64,./s.test(u) || u.startsWith("/media?")),
+	).length;
+}
+
+/** Resolve a `/media?path=` image ref to the file it names. Returns undefined
+ *  for anything that isn't an existing image of a supported type inside the
+ *  uploads dir, so a stale or forged ref never reaches a run. */
+export function stagedImageRef(
+	url: string,
+): { path: string; mediaType: string; size: number } | undefined {
+	if (!url.startsWith("/media?")) return undefined;
+	let path: string | null = null;
+	try {
+		path = new URL(url, "http://local").searchParams.get("path");
+	} catch {
+		return undefined;
+	}
+	if (!path || !isWithinUploads(path)) return undefined;
+	const dot = path.lastIndexOf(".");
+	const mediaType =
+		dot > 0 ? STAGED_IMAGE_MEDIA_TYPES[path.slice(dot).toLowerCase()] : undefined;
+	if (!mediaType) return undefined;
+	try {
+		const { size } = statSync(path);
+		if (!size || size > MAX_UPLOAD_BYTES) return undefined;
+		return { path, mediaType, size };
+	} catch {
+		return undefined;
+	}
+}
+
+/** Read a staged image ref back into vision-channel bytes. */
+function readStagedImage(url: string): ImageInput | undefined {
+	const ref = stagedImageRef(url);
+	if (!ref) return undefined;
+	try {
+		return { mediaType: ref.mediaType, data: readFileSync(ref.path).toString("base64") };
+	} catch {
+		return undefined;
+	}
 }
 
 export const UPLOADS_DIR = `${SESSIONS_DIR}/uploads`;
@@ -54,6 +122,16 @@ const INLINE_IMAGE_EXTENSIONS: Record<string, string> = {
 	"image/jpeg": ".jpg",
 	"image/gif": ".gif",
 	"image/webp": ".webp",
+};
+// The reverse of INLINE_IMAGE_EXTENSIONS, for reading a staged image back off
+// disk. Deliberately the same four types: a staged ref carries no media type of
+// its own, so only extensions we can name a type for are stageable at all.
+const STAGED_IMAGE_MEDIA_TYPES: Record<string, string> = {
+	".png": "image/png",
+	".jpg": "image/jpeg",
+	".jpeg": "image/jpeg",
+	".gif": "image/gif",
+	".webp": "image/webp",
 };
 // Images still ride the WebSocket frame base64-encoded (~+33%) inside the JSON
 // envelope, and Bun's default WS `maxPayloadLength` is only 16 MB — below the
@@ -107,8 +185,15 @@ export function stageInlineImages(
 	if (!Array.isArray(urls)) throw new Error("images must be an array");
 	if (urls.length > MAX_INLINE_IMAGES)
 		throw new Error(`too many images (max ${MAX_INLINE_IMAGES})`);
-	const images = urls.map((url) => {
+	const images = urls.map((url): { data: string; extension: string } | { url: string } => {
 		if (typeof url !== "string") throw new Error("invalid image");
+		// The web composer stages an image at attach time and sends the ref. It
+		// already lives under the uploads dir and /media already serves it, so a
+		// note keeps the ref instead of rewriting the same bytes to a second file.
+		if (url.startsWith("/media?")) {
+			if (!stagedImageRef(url)) throw new Error("unsupported image type");
+			return { url };
+		}
 		const match = url.match(/^data:([^;]+);base64,(.+)$/s);
 		const extension = match && INLINE_IMAGE_EXTENSIONS[match[1]];
 		if (!match || !extension) throw new Error("unsupported image type");
@@ -117,7 +202,10 @@ export function stageInlineImages(
 	if (!images.length) return [];
 	let totalBytes = 0;
 	for (const image of images) {
-		totalBytes += Buffer.byteLength(image.data, "base64");
+		totalBytes +=
+			"url" in image
+				? (stagedImageRef(image.url)?.size ?? 0)
+				: Buffer.byteLength(image.data, "base64");
 		if (totalBytes > MAX_UPLOAD_BYTES)
 			throw new Error(`images too large (max ${MAX_UPLOAD_BYTES} bytes total)`);
 	}
@@ -126,6 +214,12 @@ export function stageInlineImages(
 	const staged: string[] = [];
 	try {
 		for (const [index, image] of images.entries()) {
+			// Already on disk under uploads: reference it where it lies. removeStaged
+			// Images unlinks it the same way, so the note still owns its cleanup.
+			if ("url" in image) {
+				staged.push(image.url);
+				continue;
+			}
 			const data = Buffer.from(image.data, "base64");
 			if (!data.length) throw new Error("empty image");
 			const path = uniqueUploadPath(

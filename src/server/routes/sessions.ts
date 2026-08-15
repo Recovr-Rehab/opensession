@@ -40,7 +40,7 @@ import {
 	maybePersistFastMode,
 	runErrors,
 } from "../session-cache";
-import { asDataUrlList, parseImageDataUrls } from "../uploads";
+import { asDataUrlList, countImageRefs, parseImageDataUrls } from "../uploads";
 import { notifyMentions } from "../mentions";
 import { reviewTeamFor } from "../people";
 import { sendPushToUser } from "../push";
@@ -476,10 +476,21 @@ export async function handleSessionsRoutes(
 			const content = raw.trim();
 			const images = parseImageDataUrls(body?.images);
 			const imageUrls = asDataUrlList(body?.images);
-			// An image-only send is a real message — only reject an empty one.
+			// An image-only send is a real message, so only reject an empty one.
 			const files = Array.isArray(body?.files) ? body.files : undefined;
 			if (!content && !images?.length && !files?.length) {
 				return Response.json({ error: "content required" }, { status: 400 });
+			}
+			// The web composer stages images to disk and sends refs, so a retry can
+			// outlive the staged file. Deliver the whole message or none of it: half
+			// a message reads as an answered request, and the sender meant to attach
+			// the picture. 400 is terminal for the outbox, which parks the item as
+			// failed with Edit and Retry rather than looping.
+			if ((images?.length ?? 0) < countImageRefs(body?.images)) {
+				return Response.json(
+					{ error: "An attached image is no longer available. Attach it again." },
+					{ status: 400 },
+				);
 			}
 			const clientId =
 				typeof body?.clientId === "string" && body.clientId.trim()

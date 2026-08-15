@@ -180,7 +180,13 @@ export class PromptOutbox {
 			while (true) {
 				const item = this.items.find((candidate) => candidate.sessionId === sessionId && candidate.state === "pending" && candidate.nextAttemptAt <= this.now());
 				if (!item) return;
-				this.replace(item.clientId, { ...item, state: "sending" });
+				try {
+					this.replace(item.clientId, { ...item, state: "sending" });
+				} catch {
+					// Storage is full. Leave the item pending rather than rejecting the
+					// flush; a later attempt runs once something has been discarded.
+					return;
+				}
 				try {
 					const result = await (this.opts.deliver ?? ((id, body) => deliverSessionPrompt(id, body)))(sessionId, this.body(item));
 					this.items = this.items.filter((candidate) => candidate.clientId !== item.clientId);
@@ -191,13 +197,19 @@ export class PromptOutbox {
 					const attempts = item.attempts + 1;
 					const message = error instanceof Error ? error.message : "Prompt delivery failed";
 					const failed = !isRetryable(error);
-					this.replace(item.clientId, {
-						...item,
-						attempts,
-						state: failed ? "failed" : "pending",
-						error: message,
-						nextAttemptAt: failed ? Number.POSITIVE_INFINITY : this.now() + retryDelay(attempts),
-					});
+					try {
+						this.replace(item.clientId, {
+							...item,
+							attempts,
+							state: failed ? "failed" : "pending",
+							error: message,
+							nextAttemptAt: failed ? Number.POSITIVE_INFINITY : this.now() + retryDelay(attempts),
+						});
+					} catch {
+						// A full store can't record the failure either. `replace` rolled the
+						// item back to pending, which is the safe reading of an unknown
+						// outcome: the stable client id makes a replay idempotent.
+					}
 					return; // Preserve ordering within this session after a failed head item.
 				}
 			}
@@ -219,8 +231,17 @@ export class PromptOutbox {
 	}
 
 	private replace(clientId: string, next: PromptOutboxItem): void {
+		const previous = this.items;
 		this.items = this.items.map((item) => item.clientId === clientId ? next : item);
-		this.persist();
+		try {
+			this.persist();
+		} catch (error) {
+			// A failed write must not leave memory ahead of storage, or a reload
+			// silently rewinds a state change the UI already showed. Same discipline
+			// as enqueue's pop-on-throw.
+			this.items = previous;
+			throw error;
+		}
 		this.emit();
 	}
 
@@ -254,7 +275,17 @@ export class PromptOutbox {
 	private persist(): void {
 		const storage = this.opts.storage ?? (typeof localStorage === "undefined" ? undefined : localStorage);
 		if (!storage) throw new Error("Prompt outbox storage is unavailable.");
-		storage.setItem(this.key, JSON.stringify({ version: 1, items: this.items } satisfies StoredOutbox));
+		try {
+			storage.setItem(this.key, JSON.stringify({ version: 1, items: this.items } satisfies StoredOutbox));
+		} catch (error) {
+			// The browser's own text here is a DOMException naming setItem and a
+			// storage key, which reads like an attachment limit and names nothing
+			// anyone can act on. Say what happened and what frees the space.
+			if (!isQuotaError(error)) throw error;
+			throw new Error(
+				"No room left to save this message for delivery. Discard a failed message to make space.",
+			);
+		}
 	}
 
 	private emit(): void {
@@ -280,6 +311,20 @@ export const promptOutbox = new PromptOutbox();
 
 function retryDelay(attempt: number): number {
 	return Math.min(PROMPT_OUTBOX_RETRY_MAX_MS, PROMPT_OUTBOX_RETRY_BASE_MS * 2 ** (attempt - 1));
+}
+
+/** A storage write refused for want of space. Chrome throws a DOMException named
+ *  QuotaExceededError; Firefox and Safari have historically used other codes and
+ *  names for the same condition, so match on any of them. */
+function isQuotaError(error: unknown): boolean {
+	if (!error || typeof error !== "object") return false;
+	const { name, code } = error as { name?: unknown; code?: unknown };
+	return (
+		name === "QuotaExceededError" ||
+		name === "NS_ERROR_DOM_QUOTA_REACHED" ||
+		code === 22 ||
+		code === 1014
+	);
 }
 
 function isRetryable(error: unknown): boolean {
