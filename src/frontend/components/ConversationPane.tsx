@@ -167,7 +167,7 @@ export function ConversationPane({
 							{!hideTriage && (
 								<div className="flex items-center gap-3 flex-wrap mt-4 p-3 rounded-lg border border-line bg-panel">
 									<div className="min-w-0 flex-1">
-										<div className="text-body font-semibold text-fg">
+										<div className="text-item-title font-semibold text-fg">
 											Triage this ticket?
 										</div>
 										<div className="text-dim text-label mt-0.5">

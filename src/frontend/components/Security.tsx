@@ -37,7 +37,7 @@ const FORM_CARD = `flex flex-col gap-3.5 rounded-panel border border-line-strong
 /** .automation-form label */
 const FIELD_LABEL = "flex flex-1 flex-col gap-1.5 text-label font-medium text-dim";
 /** .automation-form-title */
-const FORM_TITLE = "text-body font-semibold";
+const FORM_TITLE = "text-item-title font-semibold";
 /** .automation-form-actions */
 const FORM_ACTIONS = "flex justify-end gap-2.5";
 /** .automation-card */
@@ -47,7 +47,7 @@ const CARD = "rounded-panel border border-line bg-panel px-4 py-3.5";
 const CARD_TOP = "flex min-w-0 items-center gap-2.5 phone:flex-wrap phone:gap-y-2";
 /** .automation-name */
 const CARD_NAME =
-  "truncate text-body font-semibold phone:min-w-0 phone:flex-[1_1_60%] phone:whitespace-normal phone:[overflow-wrap:anywhere]";
+  "truncate text-item-title font-semibold phone:min-w-0 phone:flex-[1_1_60%] phone:whitespace-normal phone:[overflow-wrap:anywhere]";
 /** .automation-actions */
 const CARD_ACTIONS = "ml-auto flex shrink-0 gap-1.5 phone:ml-0 phone:w-full";
 /** .automation-prompt */

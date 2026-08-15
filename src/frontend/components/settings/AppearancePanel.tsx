@@ -465,7 +465,7 @@ function SidebarOrderRow({
 			<span className="w-5 text-meta tabular-nums text-faint">
 				{index + 1}
 			</span>
-			<span className="min-w-0 flex-1 text-body font-medium text-fg">
+			<span className="min-w-0 flex-1 text-item-title font-medium text-fg">
 				{SIDEBAR_SECTION_LABELS[section]}
 			</span>
 			<span

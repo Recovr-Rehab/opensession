@@ -27,7 +27,7 @@ export function CheckRow({ check }: { check: PrCheck }) {
         <span className="flex-1 truncate">{check.name}</span>
         {duration && <span className="text-meta tabular-nums text-faint">{duration}</span>}
         {check.url && (
-          <span className="text-body text-faint group-hover:text-fg">↗</span>
+          <span className="text-item-title text-faint group-hover:text-fg">↗</span>
         )}
       </a>
     </div>

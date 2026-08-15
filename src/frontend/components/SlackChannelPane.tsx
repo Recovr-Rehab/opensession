@@ -166,7 +166,7 @@ function MessageRow({
 			)}
 			<div className="min-w-0 flex-1">
 				<div className="flex items-baseline gap-2">
-					<span className="select-text text-body font-semibold text-fg">
+					<span className="select-text text-item-title font-semibold text-fg">
 						{m.userName}
 					</span>
 					<span className="text-meta text-faint">{timeOf(m.ts)}</span>

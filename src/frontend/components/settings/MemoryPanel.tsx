@@ -116,7 +116,7 @@ function MemoryEntryRow({
 	return (
 		<div className="group flex items-start gap-2 border-b border-line px-5 py-3 last:border-b-0">
 			<div className="min-w-0 flex-1">
-				<div className="text-body font-medium leading-snug text-fg">
+				<div className="text-item-title font-medium leading-snug text-fg">
 					{entry.text}
 				</div>
 				<div className="mt-0.5 text-meta font-medium text-faint">
@@ -194,7 +194,7 @@ function MemoryScopeCard({
 				</Button>
 			</div>
 			{scoped.entries.length === 0 && !adding && (
-				<div className="px-5 py-3 text-body font-medium text-faint">
+				<div className="px-5 py-3 text-item-title font-medium text-faint">
 					No memories yet.
 				</div>
 			)}

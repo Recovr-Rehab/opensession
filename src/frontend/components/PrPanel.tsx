@@ -1432,7 +1432,7 @@ export function PrPanel({
             tight picture-and-name pill, a chevron, then the name of the thing
             you are looking at. Same spacing and weights as RepoBar's
             `[icon] repo › title`, so the two headers read as one bar. */}
-        <span className="flex shrink-0 items-center gap-[7px] text-body font-medium text-fg">
+        <span className="flex shrink-0 items-center gap-[7px] text-item-title font-medium text-fg">
           <UserAvatar
             name={pr.author}
             login={provider.key === "github" ? pr.author : null}
@@ -1454,7 +1454,7 @@ export function PrPanel({
             inert. The outbound jump rides the number, which is the reference
             everywhere else in the app. */}
         <h1
-          className="flex min-w-0 flex-1 items-baseline gap-1 text-body font-medium leading-[1.2] text-fg"
+          className="flex min-w-0 flex-1 items-baseline gap-1 text-item-title font-medium leading-[1.2] text-fg"
           title={`${pr.title} #${pr.number}`}
         >
           <span className="truncate">{pr.title}</span>
@@ -1808,7 +1808,7 @@ export function PrPanel({
                             {String(index + 1).padStart(2, "0")} / {String(all.length).padStart(2, "0")}
                           </div>
                           <div>
-                            <div className="text-body font-semibold text-fg">{section.title}</div>
+                            <div className="text-item-title font-semibold text-fg">{section.title}</div>
                             <div className="mt-1 text-meta leading-relaxed text-dim">
                               {section.explanation}
                             </div>

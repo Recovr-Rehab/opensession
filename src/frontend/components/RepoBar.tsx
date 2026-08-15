@@ -171,7 +171,7 @@ export function RepoBar({
       </Menu.Trigger>
     ) : (
       <Menu.Trigger
-        className="-mx-1.5 -my-1 flex min-w-0 shrink-0 cursor-pointer items-center gap-[7px] rounded-md border-0 bg-transparent px-1.5 py-1 text-body font-medium text-fg hover:bg-hover data-[popup-open]:bg-hover"
+        className="-mx-1.5 -my-1 flex min-w-0 shrink-0 cursor-pointer items-center gap-[7px] rounded-md border-0 bg-transparent px-1.5 py-1 text-item-title font-medium text-fg hover:bg-hover data-[popup-open]:bg-hover"
         title="Click to switch or attach another repo"
       >
         <RepoTile name={primary} />

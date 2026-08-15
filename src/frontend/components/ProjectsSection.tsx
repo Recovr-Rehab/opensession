@@ -129,7 +129,7 @@ export function ProjectsSection() {
 						<div key={p.key} className="flex items-center gap-3 px-5 py-3">
 							<IconTile name={p.id} size={30} />
 							<div className="min-w-0 flex-1">
-								<div className="text-body font-medium text-fg">{p.label}</div>
+								<div className="text-item-title font-medium text-fg">{p.label}</div>
 								<div className="truncate text-label text-dim">
 									Repository · {p.repo?.ghRepo}
 									{p.repo?.defaultBranch ? ` · ${p.repo.defaultBranch}` : ""}
@@ -149,7 +149,7 @@ export function ProjectsSection() {
 					>
 						<IconTile name={f.id} size={30} />
 						<div className="min-w-0 flex-1">
-							<div className="text-body font-medium text-fg">{f.title}</div>
+							<div className="text-item-title font-medium text-fg">{f.title}</div>
 							<div className="truncate text-label text-dim">
 								{f.fromConfig ? "Config project" : "Built-in"} · ref {f.refKind}
 								{f.mcpServers?.length ? ` · MCP: ${f.mcpServers.join(", ")}` : ""}

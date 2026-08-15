@@ -276,7 +276,7 @@ export const SIDEBAR_REPO_TILE = "size-[18px] shrink-0 text-meta";
  * a caption is still a toggle once the pill is gone.
  */
 export const SIDEBAR_GROUP_HEADER =
-	`group/gh flex w-full items-center ${SIDEBAR_RAIL_GAP} rounded-[calc(10px*var(--rf))] border-none bg-transparent text-[16px] font-medium tracking-[0px] text-dim desktop:text-body hover:text-fg`;
+	`group/gh flex w-full items-center ${SIDEBAR_RAIL_GAP} rounded-[calc(10px*var(--rf))] border-none bg-transparent text-[16px] font-medium tracking-[0px] text-dim desktop:text-item-title hover:text-fg`;
 
 /**
  * A FULL-LINE heading — a repo or feed band, an automation group, Archived.

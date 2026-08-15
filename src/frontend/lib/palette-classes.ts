@@ -46,7 +46,7 @@
      `background`, `padding` and `border: none`, so only the deviations are
      written here. */
 export const paletteIconBtn =
-	"relative inline-flex size-10 items-center justify-center rounded-control border border-transparent text-body text-dim transition-[color] hover:text-fg disabled:cursor-default disabled:opacity-50 " +
+	"relative inline-flex size-10 items-center justify-center rounded-control border border-transparent text-item-title text-dim transition-[color] hover:text-fg disabled:cursor-default disabled:opacity-50 " +
 	"before:absolute before:inset-1 before:z-0 before:rounded-control before:[corner-shape:var(--cs)] before:transition-[background,box-shadow] before:content-[''] hover:before:bg-hover " +
 	"[&>*]:relative [&>*]:z-[1] phone:[&_svg]:size-5";
 

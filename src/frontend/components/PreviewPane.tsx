@@ -111,7 +111,7 @@ export function PreviewPane({
 						className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-accent"
 						aria-hidden="true"
 					/>
-					<div className="text-body font-semibold text-fg">
+					<div className="text-item-title font-semibold text-fg">
 						{status?.starting || !status ? "Starting the dev server…" : "Preview is not running"}
 					</div>
 					<div className="max-w-sm text-supporting font-medium leading-relaxed text-dim">

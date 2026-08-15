@@ -76,7 +76,7 @@ const ROW_ACTION = cn(
 );
 
 export const SIDEBAR_ROW_TITLE =
-	"min-w-0 flex-1 overflow-hidden whitespace-nowrap [-webkit-mask-image:linear-gradient(to_right,#000_calc(100%_-_24px),transparent)] [mask-image:linear-gradient(to_right,#000_calc(100%_-_24px),transparent)] text-body font-medium leading-[1.35] text-dim group-data-[selected]:text-fg group-data-[waiting]:font-semibold group-data-[unread]:font-semibold group-data-[unread]:text-fg phone:text-[16px]";
+	"min-w-0 flex-1 overflow-hidden whitespace-nowrap [-webkit-mask-image:linear-gradient(to_right,#000_calc(100%_-_24px),transparent)] [mask-image:linear-gradient(to_right,#000_calc(100%_-_24px),transparent)] text-item-title font-medium leading-[1.35] text-dim group-data-[selected]:text-fg group-data-[waiting]:font-semibold group-data-[unread]:font-semibold group-data-[unread]:text-fg phone:text-[16px]";
 
 export function SidebarItem({
 	session,
@@ -475,7 +475,7 @@ export function SidebarItem({
 				</span>
 				{editing ? (
 					<input
-						className="min-w-0 flex-1 rounded-md border border-accent bg-bg px-[3px] py-0 text-body font-medium text-inherit outline-none phone:text-[16px]"
+						className="min-w-0 flex-1 rounded-md border border-accent bg-bg px-[3px] py-0 text-item-title font-medium text-inherit outline-none phone:text-[16px]"
 						value={draft}
 						autoFocus
 						onChange={(e) => setDraft(e.target.value)}

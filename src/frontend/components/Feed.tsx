@@ -406,7 +406,7 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 												)}
 												<span className="min-w-0">
 													<span className="flex min-w-0 items-baseline gap-2">
-														<span className="truncate text-body font-medium leading-[1.3] text-fg">
+														<span className="truncate text-item-title font-medium leading-[1.3] text-fg">
 															{row.title}
 														</span>
 														{row.ref && (

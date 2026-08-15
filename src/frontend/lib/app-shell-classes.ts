@@ -149,7 +149,7 @@ export const DETAIL_TOPBAR = "detail-topbar flex min-w-0 shrink-0 flex-col empty
 export const DETAIL_TOPBAR_TITLE =
 	"detail-topbar-title flex h-[var(--desktop-header-h)] items-center px-4 " +
 	"border-b border-b-divider bg-[var(--topbar-bg)] " +
-	"text-body font-semibold text-fg " +
+	"text-item-title font-semibold text-fg " +
 	"[.detail-topbar:has(+_.session-tabs)_&]:border-b-0 " +
 	// Collapsed desktop sidebar: clear the floating re-open control and the
 	// fallback nav/search cluster beside it.

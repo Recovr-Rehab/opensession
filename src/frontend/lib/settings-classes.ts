@@ -88,7 +88,7 @@ export const SETTINGS_SHEET_SEARCH_BAR =
  * half again as loose.
  */
 export const SETTINGS_NAV_ROW =
-	"group flex w-full cursor-pointer items-center gap-2 rounded-row border-none bg-transparent px-2.5 py-2 text-left text-body font-medium text-dim hover:bg-hover hover:text-fg data-active:bg-active data-active:text-fg";
+	"group flex w-full cursor-pointer items-center gap-2 rounded-row border-none bg-transparent px-2.5 py-2 text-left text-item-title font-medium text-dim hover:bg-hover hover:text-fg data-active:bg-active data-active:text-fg";
 
 /** The row's glyph well: fixed 18px so labels align whatever the icon draws. */
 export const SETTINGS_NAV_ICON =

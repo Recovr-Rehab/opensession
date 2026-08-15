@@ -41,7 +41,7 @@ export function ReviewLoopBlock({
 				aria-expanded={open}
 				aria-label={label}
 				onClick={() => setOpen((value) => !value)}
-				className="-mx-2 flex w-[calc(100%+16px)] min-w-0 cursor-pointer items-baseline gap-2 rounded-control border-0 bg-transparent px-3 py-1 text-left font-sans text-body leading-5 text-dim transition-colors hover:bg-hover/40 hover:text-fg phone:min-h-10"
+				className="-mx-2 flex w-[calc(100%+16px)] min-w-0 cursor-pointer items-baseline gap-2 rounded-control border-0 bg-transparent px-3 py-1 text-left font-sans text-item-title leading-5 text-dim transition-colors hover:bg-hover/40 hover:text-fg phone:min-h-10"
 			>
 				<span
 					className={cn(
@@ -117,7 +117,7 @@ function ReviewLoopResultRow({
 			>
 				{passed ? <IconCheckCircle size={20} /> : <IconX size={20} />}
 			</span>
-			<span className="shrink-0 text-body font-medium leading-5 text-dim">
+			<span className="shrink-0 text-item-title font-medium leading-5 text-dim">
 				{passed ? "Ready to merge" : "Needs changes"}
 			</span>
 			<span className="min-w-0 truncate text-label leading-4 text-faint">{facts}</span>

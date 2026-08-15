@@ -307,7 +307,7 @@ export function Connections() {
                 <SettingsSection key={name} className="flex flex-col gap-2 p-3.5">
                   <div className="flex items-center gap-2.5">
                     <IconTile name={name} size={30} />
-                    <span className="min-w-0 flex-1 truncate text-body font-medium text-fg">
+                    <span className="min-w-0 flex-1 truncate text-item-title font-medium text-fg">
                       {displayName(name)}
                     </span>
                     <StatusChip
@@ -341,7 +341,7 @@ export function Connections() {
                   <IconTile name={s.name} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <span className="truncate text-body font-medium text-fg">
+                      <span className="truncate text-item-title font-medium text-fg">
                         {displayName(s.name)}
                       </span>
                       {restricted && (
@@ -853,7 +853,7 @@ function CodeStorageCard() {
         <div className="flex items-center gap-3 px-5 py-3">
           <IconTile name="codestorage" size={30} />
           <div className="min-w-0 flex-1">
-            <div className="text-body font-medium text-fg">code.storage (Pierre)</div>
+            <div className="text-item-title font-medium text-fg">code.storage (Pierre)</div>
             <div className="text-label leading-snug text-dim">
               {!connected
                 ? "Host repos on code.storage, where sessions review branch diffs instead of PRs. Paste the org's signing key to connect; nothing else to configure."

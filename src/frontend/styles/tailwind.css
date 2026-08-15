@@ -223,20 +223,36 @@
 	--radius-2xl: calc(22px * var(--rf));
 	--text-xs: 13px;
 	--text-sm: 13px;
-	--text-base: 14px;
+	/* Tailwind's stock body alias, kept level with --text-body on purpose: it is
+	   the size `lg` controls and a few headings ask for, and if it lags a step
+	   behind it becomes a second, smaller body that nobody chose. */
+	--text-base: 15px;
 
 	/* Semantic type roles. Migrate by purpose rather than by nearest number:
 	   11px -> text-meta (timestamps, status, secondary metadata)
 	   13px -> text-label / text-supporting / text-control-label (interface copy)
-	   14px -> text-body / text-item-title (content and item titles)
+	   14px -> text-item-title (the title of a row you scan)
+	   15px -> text-body (prose you read: a transcript answer, a description)
 	   17px -> text-dialog-title (modal headings)
 	   19px -> text-section-title / text-page-title (all headings)
-	   28px -> text-stat (the figure on a metric tile) */
+	   28px -> text-stat (the figure on a metric tile)
+
+	   Body and item title were one 14px step until 2026-08. A pixel is below
+	   what anyone perceives, so the scale's most meaningful boundary (copy you
+	   read against chrome you scan) was the one boundary it did not draw, and
+	   the ramp ran 11 / 13 / 14 / 17 / 19 at 1.18x, 1.08x, 1.21x, 1.12x. Moving
+	   prose to 15 both draws that line and evens the ramp to 1.18x, 1.15x,
+	   1.13x, 1.12x.
+
+	   They are two tokens now rather than one because they answer to different
+	   things: body wants to grow with the reading column, an item title wants to
+	   stay level with the 13px metadata beside it in a row. Do not collapse them
+	   back on the grounds that they were once the same number. */
 	--text-meta: 11px;
 	--text-label: 13px;
 	--text-supporting: 13px;
 	--text-control-label: 13px;
-	--text-body: 14px;
+	--text-body: 15px;
 	--text-item-title: 14px;
 	--text-dialog-title: 17px;
 	--text-section-title: 19px;

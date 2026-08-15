@@ -1233,13 +1233,13 @@ html.wco .app-body.sidebar-collapsed
 /* Full automated-review preview: a readable long-form scale, bounded by the
    popover rather than the viewport, with the same theme tokens as markdown. */
 .review-preview-markdown.markdown {
-	font-size: 14px;
+	font-size: 15px;
 	line-height: 1.5;
 	color: var(--text-dim);
 }
 .review-preview-markdown.markdown > h3:first-child {
 	margin: 0 0 12px;
-	font-size: 18px;
+	font-size: 19px;
 	font-weight: 600;
 	line-height: 1.25;
 	letter-spacing: -0.015em;
@@ -1263,8 +1263,11 @@ html.wco .app-body.sidebar-collapsed
 }
 
 .markdown p {
-	/* 8px on a 14px/24px body ≈ the 0.47em block rhythm the native app uses
-	   (blockSpacing 8 against 17pt). 6px left paragraphs reading as one slab. */
+	/* 8px on a 15px/24px body ≈ the 0.47em block rhythm the native app uses
+	   (blockSpacing 8 against 17pt). 6px left paragraphs reading as one slab.
+	   Both this and the 24px leading are absolute, so the gap between two
+	   paragraphs stayed 32px when the body moved 14 -> 15; the words just fill
+	   more of the line box (1.6 leading now, was 1.71). */
 	margin: 0 0 8px;
 }
 
@@ -1455,18 +1458,18 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	color: var(--text);
 }
 .markdown h1 {
-	font-size: 18px;
+	font-size: 19px;
 	letter-spacing: -0.018em;
 }
 .markdown h2 {
-	font-size: 16px;
+	font-size: 17px;
 	letter-spacing: -0.016em;
 }
 .markdown h3 {
-	font-size: 15px;
+	font-size: 16px;
 }
 .markdown h4 {
-	font-size: 14px;
+	font-size: 15px;
 }
 
 .markdown > :first-child {
@@ -2100,7 +2103,7 @@ html[data-theme="light"] span.commit-ref:hover {
    sitting later — keep them below that block. */
 .wiki-doc {
 	max-width: 780px;
-	font-size: 14px;
+	font-size: 15px;
 	line-height: 1.65;
 }
 .wiki-doc h1 {
@@ -2112,7 +2115,10 @@ html[data-theme="light"] span.commit-ref:hover {
 	margin: 22px 0 10px;
 }
 .wiki-doc h3 {
-	font-size: 15px;
+	/* One step over the 15px body, the same as `.markdown h3`. It only differs
+	   from that rule in its margins now; the size is restated so the tie with
+	   body is visibly ruled out here rather than inherited by luck. */
+	font-size: 16px;
 	margin: 18px 0 8px;
 }
 .wiki-doc img {

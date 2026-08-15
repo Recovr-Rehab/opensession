@@ -40,7 +40,7 @@ const FORM_CARD = `${FORM_INLINE} mb-4.5 rounded-panel border border-line-strong
 /** .automation-form label */
 const FIELD_LABEL = "flex flex-1 flex-col gap-1.5 text-label font-medium text-dim";
 /** .automation-form-title */
-const FORM_TITLE = "text-body font-semibold";
+const FORM_TITLE = "text-item-title font-semibold";
 /** .automation-form-actions */
 const FORM_ACTIONS = "flex justify-end gap-2.5";
 /** .automation-form-row */
@@ -233,7 +233,7 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
               <button
                 key={g.id}
                 className={cn(
-                  "flex w-full min-w-0 items-center gap-3 border-b border-line px-2.5 py-2.75 text-left text-body text-fg",
+                  "flex w-full min-w-0 items-center gap-3 border-b border-line px-2.5 py-2.75 text-left text-item-title text-fg",
                   "max-[560px]:gap-2.5 max-[560px]:px-1 max-[560px]:py-3",
                   sel?.id === g.id ? "bg-active" : "hover:bg-hover",
                 )}
@@ -250,7 +250,7 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
                     g.status !== "active" && "opacity-55",
                   )}
                 >
-                  <span className="truncate text-body font-semibold">{g.name}</span>
+                  <span className="truncate text-item-title font-semibold">{g.name}</span>
                   <span className="truncate text-meta text-faint">
                     {g.status}
                     {g.phase ? ` · ${g.phase}` : ""}
@@ -294,7 +294,7 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
           <div className="flex shrink-0 items-center gap-2.5 border-b border-divider px-4 py-3">
             {/* Phones get Back instead of Close: there the drawer is the page. */}
             <button
-              className="-my-1 -ml-0.5 hidden shrink-0 items-center gap-1.75 px-1.5 py-1 text-body font-medium text-fg max-[900px]:inline-flex"
+              className="-my-1 -ml-0.5 hidden shrink-0 items-center gap-1.75 px-1.5 py-1 text-item-title font-medium text-fg max-[900px]:inline-flex"
               onClick={() => onSelect("")}
               title="Back to goals"
             >

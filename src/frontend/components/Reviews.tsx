@@ -374,7 +374,7 @@ export function Reviews({
               return (
                 <button
                   key={t.key}
-                  className={`-mb-px flex items-center gap-[7px] border-b-2 px-[13px] pt-2 pb-[11px] text-label font-medium transition-colors phone:shrink-0 phone:px-3.5 phone:pt-[11px] phone:pb-[13px] phone:text-body phone:whitespace-nowrap ${
+                  className={`-mb-px flex items-center gap-[7px] border-b-2 px-[13px] pt-2 pb-[11px] text-label font-medium transition-colors phone:shrink-0 phone:px-3.5 phone:pt-[11px] phone:pb-[13px] phone:text-item-title phone:whitespace-nowrap ${
                     on ? "border-b-accent text-fg" : "border-b-transparent text-dim hover:text-fg"
                   }`}
                   onClick={() => setFilter(t.key)}
@@ -429,7 +429,7 @@ export function Reviews({
               return (
                 <button
                   key={s.prUrl}
-                  className={`${ROW} group cursor-pointer py-[11px] text-body text-fg hover:bg-hover phone:flex phone:flex-wrap phone:items-center phone:gap-x-3 phone:gap-y-[9px] phone:px-4 phone:py-3.5`}
+                  className={`${ROW} group cursor-pointer py-[11px] text-item-title text-fg hover:bg-hover phone:flex phone:flex-wrap phone:items-center phone:gap-x-3 phone:gap-y-[9px] phone:px-4 phone:py-3.5`}
                   onClick={() => onSelect(s.id)}
                   role="row"
                 >
@@ -439,7 +439,7 @@ export function Reviews({
                   </span>
                   <span className={C_TITLE} role="cell">
                     <span className="flex min-w-0 items-baseline gap-2">
-                      <span className="truncate text-body leading-[1.3] font-medium">
+                      <span className="truncate text-item-title leading-[1.3] font-medium">
                         {cleanTitle(s)}
                       </span>
                       {prNum(s) && (

@@ -51,7 +51,7 @@ const FIELD_LABEL = "flex flex-1 flex-col gap-1.5 text-label font-medium text-di
 
 
 /** .automation-form-title */
-const FORM_TITLE = "text-body font-semibold";
+const FORM_TITLE = "text-item-title font-semibold";
 /** .automation-form-actions */
 const FORM_ACTIONS = "flex justify-end gap-2.5";
 /** .automation-form-row */
@@ -330,7 +330,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
               <div
                 key={a.id}
                 className={cn(
-                  "relative flex w-full min-w-0 items-center gap-3 border-b border-line px-2.5 py-2.75 text-left text-body text-fg",
+                  "relative flex w-full min-w-0 items-center gap-3 border-b border-line px-2.5 py-2.75 text-left text-item-title text-fg",
                   "max-[560px]:gap-2.5 max-[560px]:px-1 max-[560px]:py-3",
                   sel?.id === a.id ? "bg-active" : "hover:bg-hover",
                 )}
@@ -354,7 +354,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                     !a.enabled && "opacity-55",
                   )}
                 >
-                  <span className="truncate text-body font-semibold leading-5">{a.name}</span>
+                  <span className="truncate text-item-title font-semibold leading-5">{a.name}</span>
                   <span className="truncate text-meta text-faint">{triggerSummary(a)}</span>
                 </span>
                 {running ? (
@@ -422,7 +422,7 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
           <div className="flex shrink-0 items-center gap-2.5 border-b border-divider px-4 py-3">
             {/* Phones get Back instead of Close: there the drawer is the page. */}
             <button
-              className="-my-1 -ml-0.5 hidden shrink-0 items-center gap-1.75 px-1.5 py-1 text-body font-medium text-fg max-[900px]:inline-flex"
+              className="-my-1 -ml-0.5 hidden shrink-0 items-center gap-1.75 px-1.5 py-1 text-item-title font-medium text-fg max-[900px]:inline-flex"
               onClick={() => onSelect("")}
               title="Back to automations"
             >
@@ -1038,7 +1038,7 @@ function TypeChooser({
           className="text-left bg-surface rounded-panel px-4 py-3.5 cursor-pointer hover:bg-hover transition-colors"
           onClick={() => onPick(null, "classic")}
         >
-          <div className="text-fg text-body font-medium mb-1">Classical automation</div>
+          <div className="text-fg text-item-title font-medium mb-1">Classical automation</div>
           <div className="text-dim text-supporting leading-snug">
             Trigger {AGENT_NAME} sessions based on schedules, internal events, and webhooks.
           </div>
@@ -1047,7 +1047,7 @@ function TypeChooser({
           className="text-left bg-surface rounded-panel px-4 py-3.5 cursor-pointer hover:bg-hover transition-colors"
           onClick={() => onPick(null, "watch")}
         >
-          <div className="text-fg text-body font-medium mb-1">Watch a channel</div>
+          <div className="text-fg text-item-title font-medium mb-1">Watch a channel</div>
           <div className="text-dim text-supporting leading-snug">
             {AGENT_NAME} triages every incoming message in a Slack channel, using the
             channel's memory as standing context.

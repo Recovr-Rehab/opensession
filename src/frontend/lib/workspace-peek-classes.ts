@@ -40,7 +40,7 @@ export const PEEK_SECTION =
  */
 export const PEEK_ROW =
 	"group/peek mx-2 flex h-[31px] w-[calc(100%_-_16px)] min-w-0 cursor-pointer items-center gap-3.5 " +
-	"rounded-md border-none bg-transparent px-2 text-left text-body text-fg " +
+	"rounded-md border-none bg-transparent px-2 text-left text-item-title text-fg " +
 	"hover:bg-hover focus-ring";
 
 /** The leading glyph column. Faint: the label is the content, the icon only

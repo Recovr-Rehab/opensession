@@ -167,7 +167,7 @@ export function PrSessionsList({
 						e.preventDefault();
 						onOpenSession?.(s.id);
 					}}
-					className="-mx-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-body text-fg no-underline hover:bg-surface"
+					className="-mx-2 flex items-center gap-2 rounded-md px-2 py-1.5 text-item-title text-fg no-underline hover:bg-surface"
 				>
 					<span
 						className={`w-1.5 h-1.5 rounded-full shrink-0 ${

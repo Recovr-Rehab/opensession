@@ -119,7 +119,7 @@ export function SegmentedOption({
 				optionSizes[size],
 				"whitespace-nowrap transition-colors duration-[var(--dur-micro)] ease-[var(--ease)]",
 				// Phones get the tap box; the desktop control is a reading size.
-				"phone:px-3 phone:py-2 phone:text-body",
+				"phone:px-3 phone:py-2 phone:text-item-title",
 				selected ? "text-fg" : "text-dim hover:text-fg",
 				// An option the data can't offer yet stays in place, greyed: taking
 				// it out would shift the ones beside it as the page loads.

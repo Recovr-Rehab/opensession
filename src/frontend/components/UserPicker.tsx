@@ -187,7 +187,7 @@ export function UserGate({ children }: { children: React.ReactNode }) {
             roster.map(({ name }) => (
               <button
                 key={name}
-                className="flex flex-col items-center gap-2 rounded-md border border-line-strong bg-panel p-3 text-body text-fg hover:border-accent hover:bg-hover"
+                className="flex flex-col items-center gap-2 rounded-md border border-line-strong bg-panel p-3 text-item-title text-fg hover:border-accent hover:bg-hover"
                 onClick={() => setStoredUser(name)}
               >
                 <UserAvatar name={name} size={36} />
@@ -196,7 +196,7 @@ export function UserGate({ children }: { children: React.ReactNode }) {
             ))
           ) : (
             <button
-              className="flex flex-col items-center gap-2 rounded-md border border-line-strong bg-panel p-3 text-body text-fg hover:border-accent hover:bg-hover"
+              className="flex flex-col items-center gap-2 rounded-md border border-line-strong bg-panel p-3 text-item-title text-fg hover:border-accent hover:bg-hover"
               onClick={() => setStoredUser("Local User")}
             >
               <UserAvatar name="Local User" size={36} />
@@ -317,7 +317,7 @@ function GithubSignIn({
             {redirect ? (
               <>
                 <button
-                  className="flex flex-col items-center gap-2 rounded-md border border-line-strong bg-panel p-3 text-body text-fg hover:border-accent hover:bg-hover"
+                  className="flex flex-col items-center gap-2 rounded-md border border-line-strong bg-panel p-3 text-item-title text-fg hover:border-accent hover:bg-hover"
                   onClick={() => {
                     window.location.href = `${BASE_PATH}/api/auth/login`;
                   }}
@@ -343,7 +343,7 @@ function GithubSignIn({
                 </button>
               </>
             ) : (
-              <button className="flex flex-col items-center gap-2 rounded-md border border-line-strong bg-panel p-3 text-body text-fg hover:border-accent hover:bg-hover" onClick={start} disabled={starting} style={{ width: "100%" }}>
+              <button className="flex flex-col items-center gap-2 rounded-md border border-line-strong bg-panel p-3 text-item-title text-fg hover:border-accent hover:bg-hover" onClick={start} disabled={starting} style={{ width: "100%" }}>
                 {starting ? "Starting…" : "Sign in with GitHub"}
               </button>
             )}

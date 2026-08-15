@@ -78,7 +78,7 @@ export const VIEWER_TITLE =
  * out — its text stays selectable and copyable.
  */
 export const VIEWER_BRANCH =
-	"min-w-0 max-w-[420px] select-text overflow-hidden text-ellipsis whitespace-nowrap text-body " +
+	"min-w-0 max-w-[420px] select-text overflow-hidden text-ellipsis whitespace-nowrap text-item-title " +
 	"[-webkit-touch-callout:default] " +
 	"[html.wco_&]:[-webkit-app-region:no-drag] [html.wco_&]:[app-region:no-drag]";
 
@@ -89,7 +89,7 @@ export const VIEWER_BRANCH_EDITABLE =
 /** Inline rename input, sized to sit in place of the name. */
 export const VIEWER_BRANCH_RENAME =
 	"my-[-2px] min-w-0 max-w-[280px] rounded-[calc(8px*var(--rf))] border border-accent bg-surface " +
-	"px-1 py-px font-[inherit] text-body text-[inherit] outline-none";
+	"px-1 py-px font-[inherit] text-item-title text-[inherit] outline-none";
 
 /**
  * The trailing controls. Icon buttons sit in a tight cluster so they read as

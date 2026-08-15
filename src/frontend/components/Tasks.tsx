@@ -60,7 +60,7 @@ function TaskRow({
 			<div className="min-w-0 flex-1">
 				<div
 					className={cn(
-						"text-body font-medium text-fg",
+						"text-item-title font-medium text-fg",
 						done && "text-dim line-through",
 					)}
 				>

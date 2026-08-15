@@ -257,7 +257,7 @@ export function RestartOverlay({ connected, addHandler }: Props) {
         />
         {/* Deliberately not "is restarting": that's the calm pill's copy, and
             this state is the one that reloads your page. */}
-        <div className="text-body font-semibold text-fg">
+        <div className="text-item-title font-semibold text-fg">
           {backOnline ? "Back online" : `${PRODUCT_NAME} isn't responding`}
         </div>
         <div className="text-label leading-[1.5] text-dim">

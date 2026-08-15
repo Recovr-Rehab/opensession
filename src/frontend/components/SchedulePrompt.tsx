@@ -38,7 +38,7 @@ const caretButton =
  *  fell back to `transparent` — these fields have always shown the dialog's own
  *  surface. Without it they would pick up the UA's opaque field colour. */
 const scheduleField =
-	"min-w-0 rounded-control border border-line bg-transparent px-3 py-[9px] text-body font-medium text-fg outline-none focus:border-line-strong";
+	"min-w-0 rounded-control border border-line bg-transparent px-3 py-[9px] text-item-title font-medium text-fg outline-none focus:border-line-strong";
 
 const pad = (n: number) => String(n).padStart(2, "0");
 const fmtTime = (d: Date) =>
