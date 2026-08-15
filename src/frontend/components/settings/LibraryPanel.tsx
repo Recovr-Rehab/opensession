@@ -89,8 +89,8 @@ type Glyph = { icon: ComponentType<{ size?: number }>; tone: MarkTone };
 /** Per tool, because a tool is a place in the app and its glyph is how the
  *  sidebar already names it. */
 const TOOL_GLYPHS: Record<string, Glyph> = {
-	tasks: { icon: IconListCircles, tone: "blue" },
-	catchup: { icon: IconInbox, tone: "amber" },
+	tasks: { icon: IconListCircles, tone: "sky" },
+	catchup: { icon: IconInbox, tone: "green" },
 	supporttinder: { icon: IconMessages, tone: "pink" },
 	reports: { icon: IconStack, tone: "purple" },
 	analytics: { icon: IconChart, tone: "teal" },
@@ -108,18 +108,18 @@ const TOOL_GLYPHS: Record<string, Glyph> = {
  * first.
  */
 const JOB_GLYPHS: { match: RegExp; glyph: Glyph }[] = [
-	{ match: /error|health|monitor|uptime|incident|alarm/, glyph: { icon: IconStatusRing, tone: "red" } },
-	{ match: /doc|changelog|spell|release note/, glyph: { icon: IconNote, tone: "purple" } },
+	{ match: /error|health|monitor|uptime|incident|alarm/, glyph: { icon: IconStatusRing, tone: "coral" } },
+	{ match: /doc|changelog|spell|release note/, glyph: { icon: IconNote, tone: "pink" } },
 	{ match: /test|flaky/, glyph: { icon: IconCheckCircle, tone: "green" } },
 	{ match: /support|ticket|recap|digest|rollup/, glyph: { icon: IconMessages, tone: "orange" } },
-	{ match: /dream|reflect|retro|nightly/, glyph: { icon: IconMoon, tone: "amber" } },
+	{ match: /dream|reflect|retro|nightly/, glyph: { icon: IconMoon, tone: "purple" } },
 	{ match: /depend|cleanup|refactor|code/, glyph: { icon: IconWrench, tone: "teal" } },
-	{ match: /\bpr\b|pull request|review|merge|branch/, glyph: { icon: IconPullRequest, tone: "blue" } },
+	{ match: /\bpr\b|pull request|review|merge|branch/, glyph: { icon: IconPullRequest, tone: "sky" } },
 ];
 
 const TYPE_GLYPHS: Record<LibraryEntryType, Glyph> = {
-	tool: { icon: IconStack, tone: "blue" },
-	automation: { icon: IconBolt, tone: "pink" },
+	tool: { icon: IconStack, tone: "sky" },
+	automation: { icon: IconBolt, tone: "orange" },
 	integration: { icon: IconPlug, tone: "teal" },
 };
 

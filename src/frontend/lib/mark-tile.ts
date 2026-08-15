@@ -1,3 +1,5 @@
+import { getAccentThemeOption, type AccentTheme } from "./accent-theme";
+
 /**
  * The mark a thing is led by: the small tile at the head of a library entry, a
  * connection row, a setup card. It carries either a service's real logo or, for
@@ -16,19 +18,23 @@
  * carrying a `rounded-*` CLASS, so a computed radius would quietly opt the tile
  * out of the app's corner.
  *
- * **The house palette.** Eight hues, and every one of them is a hue the app
- * already owns: each entry names the two values base.css gives that colour, its
- * light-theme ink and its dark-theme ink. A tile is painted with the DEEP one,
- * which is the value picked to carry white text, and lifted toward the lighter
- * one across the diagonal. So the gradient never leaves the hue, and the set as
- * a whole is the same palette the transcript's tool icons and the app's status
- * colours are drawn from rather than a second, brighter one sitting beside it.
+ * **The palette is the accent palette.** The tones are not a colour set of
+ * their own: each one names an entry in `ACCENT_THEME_OPTIONS` and reads its
+ * value at render. That table is tuned as a family, every fill at one lightness
+ * band and at 80% of the chroma its hue can physically reach, which is exactly
+ * what a categorical palette needs and what a hand-picked set does not give
+ * you: seven tiles in a grid then carry equal weight instead of one shouting.
  *
- * They are raw values in a table rather than `var(--blue)` because a mark does
- * not answer to the theme: the plate is a saturated colour on both, exactly as
- * `BRANDS` in brand-logos.ts holds GitHub's black and Slack's aubergine, and a
- * tile that re-toned per theme would go pale on the dark canvas where white
- * ink needs it not to.
+ * Reading it also means these follow when it is retuned. This file held copied
+ * hex for about an hour, and the app's green and red moved underneath it in
+ * that time.
+ *
+ * Every tone takes the accent's LIGHT value in both appearances. That is the
+ * one picked to carry white text (measured 3.8:1 to 5.0:1 against white across
+ * the seven), and a mark does not answer to the theme in any case: the plate
+ * stays a saturated colour on both, exactly as `BRANDS` in brand-logos.ts holds
+ * GitHub's black and Slack's aubergine. Re-toning per appearance would take the
+ * dark side pale, where white ink needs it not to be.
  */
 
 /** Sizes are px, and the boundaries are where a step stops being a corner and
@@ -54,41 +60,42 @@ export function markTileShadow(color: string): string {
 
 /**
  * Lit from the top left, along the same diagonal the sheen on every other
- * plate in the app runs. A third of the lighter ink, no more: the tile has to
- * read as one colour with a light on it, and a full ramp between the two
- * values would read as two colours and pull the hue apart.
+ * plate in the app runs. The light is a sixth of white, mixed in oklab so it
+ * raises lightness without dragging the hue toward grey: the tile has to read
+ * as one colour with a light on it, and a wider ramp reads as two colours and
+ * pulls the hue apart. The accent's own light/dark pair cannot supply this,
+ * since the two sit a few percent apart by design.
  */
 export function markTileGradient(tone: MarkTone): string {
-	const [deep, lift] = MARK_TONES[tone];
-	return `linear-gradient(155deg, color-mix(in srgb, ${lift} 32%, ${deep}), ${deep})`;
+	const deep = markTileInk(tone);
+	return `linear-gradient(155deg, color-mix(in oklab, #ffffff 15%, ${deep}), ${deep})`;
 }
 
-/** The colour a tone is painted and lit by. Pass the deep one to
- *  `markTileShadow`: the glow belongs under the weight, not under the light. */
+/** The colour a tone is painted and lit by. It is also what `markTileShadow`
+ *  wants: the glow belongs under the weight, not under the light. */
 export function markTileInk(tone: MarkTone): string {
-	return MARK_TONES[tone][0];
+	return getAccentThemeOption(tone).light;
 }
 
-export type MarkTone = keyof typeof MARK_TONES;
+export type MarkTone = (typeof MARK_TONES)[number];
 
 /**
- * Eight hues, because the thing they distinguish is a grid of otherwise
+ * Seven hues, because the thing they distinguish is a grid of otherwise
  * identical rows. Two tones would put the same plate on half the catalog and
- * give a person nothing to aim at, and eight is what the app's own palette
- * offers before it starts repeating itself.
+ * give a person nothing to aim at.
  *
- * Each is [deep, lift], and both are base.css values for that hue: the deep one
- * is its light-theme ink (the value chosen to carry white text), the lift its
- * dark-theme ink. Named beside each is the token they belong to, so a palette
- * change there has a visible list of what follows.
+ * Every id here is an accent, so `satisfies` is the guard: retire one from the
+ * palette and this stops compiling rather than falling back to a colour nobody
+ * chose. Three accents are deliberately left out. `mono` is not a hue, `lime`
+ * is a yellow that only exists above the lightness where white ink works, and
+ * an id that is not in the palette yet cannot be named here.
  */
-export const MARK_TONES = {
-	blue: ["#0969da", "#58a6ff"], // --blue, --tool-file
-	teal: ["#1b7c83", "#39c5cf"], // --tool-web
-	green: ["#1a7f37", "#3fb950"], // --green, --tool-run
-	amber: ["#9a6700", "#e3b341"], // --yellow, --tool-edit
-	orange: ["#bc4c00", "#f0883e"], // --tool-find
-	red: ["#cf222e", "#f85149"], // --red
-	pink: ["#bf3989", "#f778ba"], // --tool-agent
-	purple: ["#8250df", "#a371f7"], // --purple, --tool-mcp
-} as const satisfies Record<string, readonly [string, string]>;
+export const MARK_TONES = [
+	"sky",
+	"teal",
+	"green",
+	"orange",
+	"coral",
+	"pink",
+	"purple",
+] as const satisfies readonly AccentTheme[];
