@@ -43,36 +43,15 @@ interface Props {
 	addHandler: (handler: (message: any) => void) => () => void;
 }
 
-function formatDate(value: string, detailed = false): string {
-	const date = new Date(value);
+/** When a report landed, spelled out. Only the history picker says this now. */
+function formatDate(value: string): string {
 	return new Intl.DateTimeFormat(undefined, {
 		month: "short",
 		day: "numeric",
-		...(detailed ? { year: "numeric", hour: "numeric", minute: "2-digit" } : {}),
-	}).format(date);
-}
-
-function ReportSignal({ report }: { report: ReportMeta }) {
-	if (!report.urgency && !report.confidence) return null;
-	const tone =
-		report.urgency === "critical"
-			? "bg-red-soft text-red"
-			: report.urgency === "high"
-				? "bg-yellow-soft text-yellow"
-				: report.urgency === "medium"
-					? "bg-active text-accent"
-					: "bg-surface text-dim";
-	const label = [
-		report.urgency ? `${report.urgency} urgency` : "",
-		report.confidence ? `${report.confidence} confidence` : "",
-	]
-		.filter(Boolean)
-		.join(" · ");
-	return (
-		<span className={`inline-flex shrink-0 rounded-sm px-1.5 py-0.5 text-meta font-medium ${tone}`}>
-			{label}
-		</span>
-	);
+		year: "numeric",
+		hour: "numeric",
+		minute: "2-digit",
+	}).format(new Date(value));
 }
 
 function supportIdFromHref(href: string | undefined): string | null {
@@ -161,7 +140,7 @@ export function Reports({
 	// report is chosen.
 	const historyOptions = history.map((report) => ({
 		value: report.id,
-		label: formatDate(report.createdAt, true),
+		label: formatDate(report.createdAt),
 	}));
 	const { copied, share } = useCopy();
 	const shareSelected = () => {
@@ -282,11 +261,10 @@ export function Reports({
 							</button>
 							{selected && (
 								<>
-									{/* Same argument as the desktop header below: the report
-									    repeats this line as its own first heading. */}
+									{/* Same argument as the desktop header below: the name,
+									    and nothing the row in the list or the picker under
+									    it already says. */}
 									<h2 className="m-0 mt-1 px-1 text-item-title font-medium leading-snug text-dim">{selected.title}</h2>
-									<p className="m-0 mt-1 px-1 text-xs leading-5 text-faint line-clamp-2">{formatDate(selected.createdAt, true)}{selected.summary ? ` · ${selected.summary}` : ""}</p>
-									<div className="mt-1.5 px-1"><ReportSignal report={selected} /></div>
 									<div className="mt-2.5 flex items-center gap-2 px-1">
 										<OptionSelect
 											label="Report history"
@@ -303,19 +281,26 @@ export function Reports({
 						</header>
 					) : (
 						selected && (
-							<header className="flex shrink-0 items-start gap-4 border-b border-divider px-5 py-3">
-								{/* Quiet on purpose. The report below opens with these same
-								    words as its own first heading, so a bold black copy of
-								    them an inch above was the page saying its name twice.
-								    This one is here to say WHICH report is open once the
-								    document has scrolled, which is a label's job. */}
-								<div className="min-w-0 flex-1">
-									<h2 className="m-0 truncate text-item-title font-medium text-dim">{selected.title}</h2>
-									<div className="mt-1 flex min-w-0 items-center gap-2">
-										<p className="m-0 min-w-0 truncate text-xs text-faint">{formatDate(selected.createdAt, true)}{selected.summary ? ` · ${selected.summary}` : ""}</p>
-										<ReportSignal report={selected} />
-									</div>
-								</div>
+							<header className="flex h-[var(--desktop-header-h)] shrink-0 items-center gap-4 border-b border-divider px-5">
+								{/* The name, and nothing else. Quiet on purpose: the report
+								    below opens with these same words as its own first
+								    heading, so a bold black copy of them an inch above was
+								    the page saying its name twice. This one is here to say
+								    WHICH report is open once the document has scrolled,
+								    which is a label's job.
+								    It carried a second line too: the date, the summary and
+								    an urgency pill. That is three more answers than the
+								    question "which report is this" has. The date is on the
+								    picker at the other end of this bar and on the row in
+								    the list, the urgency is that row's dot (the single
+								    mark language report-urgency.ts exists to hold), and
+								    the summary was a truncated copy of a document that is
+								    open directly underneath it.
+								    The height is `--desktop-header-h`, what the list
+								    column's header takes and the chat header beside it, so
+								    the two seams meet across the window instead of stepping
+								    down by the height of a line this no longer draws. */}
+								<h2 className="m-0 min-w-0 flex-1 truncate text-item-title font-medium text-dim">{selected.title}</h2>
 								{/* No hand-set box on any of the three. They were pinned to
 								    30px, which is off the control scale in both directions:
 								    the buttons kept `size="sm"`'s 26px padding inside a 30px
