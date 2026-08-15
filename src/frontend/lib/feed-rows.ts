@@ -73,11 +73,19 @@ export function feedOwner(
 	return label ? { person: null, label } : null;
 }
 
-/** Merged PRs and commits in one list, newest first. */
+/**
+ * Merged PRs and commits in one list, newest first.
+ *
+ * `sessionById` is what lets a commit row open the session that wrote it. A
+ * merge carries its session already; a commit only carries an id, because the
+ * server named it by reading transcripts (commit-sessions.ts) rather than by
+ * knowing the session.
+ */
 export function buildFeedRows(
 	prRows: WorktreeRow[],
 	commits: RecentCommit[],
 	isTeammate?: (key: string) => boolean,
+	sessionById?: Map<string, UnifiedSession>,
 ): FeedRow[] {
 	const rows: FeedRow[] = [
 		...prRows.map((row) => ({
@@ -106,6 +114,9 @@ export function buildFeedRows(
 			additions: commit.additions,
 			deletions: commit.deletions,
 			shippedAt: commit.committedAt,
+			...(commit.sessionId && sessionById?.get(commit.sessionId)
+				? { session: sessionById.get(commit.sessionId) }
+				: {}),
 		})),
 	];
 	return rows.sort(

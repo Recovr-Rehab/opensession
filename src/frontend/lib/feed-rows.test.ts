@@ -72,6 +72,21 @@ describe("buildFeedRows", () => {
 		expect(unsigned.owner).toBeNull();
 	});
 
+	it("keeps the session that wrote a commit, so the row can open it", () => {
+		const session = { id: "os-1" } as any;
+		const byId = new Map([["os-1", session]]);
+		const [row] = buildFeedRows([], [commit({ sessionId: "os-1" })], undefined, byId);
+		expect(row.session).toBe(session);
+	});
+
+	it("leaves a commit without a session when its own is gone", () => {
+		// Sessions age out of the list long before commits age out of the feed,
+		// and a row with nowhere to go still has GitHub.
+		const [row] = buildFeedRows([], [commit({ sessionId: "os-gone" })], undefined, new Map());
+		expect(row.session).toBeUndefined();
+		expect(row.url).toContain("/commit/");
+	});
+
 	it("keys a commit by repo and sha, so two repos can't collide", () => {
 		const rows = buildFeedRows([], [commit(), commit({ repo: "other" })]);
 		expect(new Set(rows.map((row) => row.key)).size).toBe(2);

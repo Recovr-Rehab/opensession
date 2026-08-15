@@ -29,6 +29,8 @@ export interface RecentCommit {
 	committedAt: string;
 	additions: number;
 	deletions: number;
+	/** The session that wrote it, when one can be named (commit-sessions.ts). */
+	sessionId?: string;
 }
 
 /** How far back to read per repo. A flat commit count was the wrong unit: a
@@ -131,10 +133,27 @@ export interface RecentCommitPage {
  */
 export async function getRecentCommits(days = DEFAULT_DAYS): Promise<RecentCommitPage> {
 	const all = await readAllCommits();
+	// Name the session behind each one. Every commit read is offered, not just
+	// the window asked for: a transcript is read once, so a sha the sweep walks
+	// past without looking for is a link lost for good.
+	await linkSessions(all);
 	const window = clampDays(days);
 	const cutoff = Date.now() - window * 86_400_000;
 	const commits = all.filter((commit) => new Date(commit.committedAt).getTime() >= cutoff);
 	return { commits, days: window, hasMore: commits.length < all.length };
+}
+
+async function linkSessions(commits: RecentCommit[]): Promise<void> {
+	try {
+		const { commitSessions } = await import("./commit-sessions");
+		const sessions = await commitSessions(commits);
+		for (const commit of commits) {
+			const session = sessions.get(commit.sha);
+			if (session) commit.sessionId = session;
+		}
+	} catch {
+		// A feed without session links is still a feed.
+	}
 }
 
 /** Windows outside the read range can't be honoured, so they aren't offered. */

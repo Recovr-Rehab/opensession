@@ -64,6 +64,8 @@ export interface RecentCommit {
 	committedAt: string;
 	additions: number;
 	deletions: number;
+	/** The session that wrote it, when the server can name one. */
+	sessionId?: string;
 }
 
 /** One page of the commit feed: the window served, and whether older history

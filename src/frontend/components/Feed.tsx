@@ -219,7 +219,15 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 	// automation as often as a teammate. The roster decides which, so an
 	// automation is named rather than given a face.
 	const teammates = new Set(people.map((p) => p.name.toLowerCase()));
-	const allShipped = buildFeedRows(merged, commits, (key) => teammates.has(key));
+	// A commit arrives with the id of the session that wrote it; this is what
+	// turns that id into the session a row can open.
+	const sessionById = new Map(sessions.map((session) => [session.id, session]));
+	const allShipped = buildFeedRows(
+		merged,
+		commits,
+		(key) => teammates.has(key),
+		sessionById,
+	);
 	const repoOptions = [...new Set(allShipped.map((row) => row.repo).filter(Boolean))].sort();
 	const scoped = allShipped.filter(
 		(row) => inScope(row.person) && (repo === "all" || row.repo === repo),
