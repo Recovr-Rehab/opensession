@@ -44,6 +44,7 @@ struct NewSessionView: View {
     @State private var repo = ""
     @State private var catalog: ModelCatalog?
     @State private var model = ""
+    @State private var engines = ["opencode"]
     @State private var effort = ""
     @State private var fastMode = false
     @State private var images: [AttachedImage] = []
@@ -393,6 +394,10 @@ struct NewSessionView: View {
         catalog?.option(for: model)
     }
 
+    private var currentEngine: String {
+        model.hasPrefix("pi/") ? "pi" : "opencode"
+    }
+
     private var availableEfforts: [String] {
         selectedModelOption?.efforts ?? []
     }
@@ -505,6 +510,12 @@ struct NewSessionView: View {
                 }
             }
             #endif
+            if engines.contains("pi") {
+                Section("Engine") {
+                    engineButton("opencode", label: "OpenCode")
+                    engineButton("pi", label: "Pi")
+                }
+            }
             if let catalog {
                 if !catalog.presets.isEmpty {
                     Section("Presets") {
@@ -533,7 +544,7 @@ struct NewSessionView: View {
         Button {
             selectModel(option)
         } label: {
-            let selected = option.id == model
+            let selected = option.id == ModelCatalog.baseID(model)
             if let subtitle = option.description, !subtitle.isEmpty {
                 Label {
                     Text(option.displayLabel)
@@ -545,6 +556,19 @@ struct NewSessionView: View {
                 Label(option.displayLabel, systemImage: "checkmark")
             } else {
                 Text(option.displayLabel)
+            }
+        }
+    }
+
+    private func engineButton(_ engine: String, label: String) -> some View {
+        Button {
+            guard let routed = ModelCatalog.routedID(model, engine: engine) else { return }
+            model = routed
+        } label: {
+            if currentEngine == engine {
+                Label(label, systemImage: "checkmark")
+            } else {
+                Text(label)
             }
         }
     }
@@ -654,6 +678,7 @@ struct NewSessionView: View {
         repo = initialRepo ?? lastRepo
         async let reposFetch = OS1API.repos()
         async let modelsFetch = OS1API.models()
+        async let connectionsFetch = SettingsAPI.connections()
         // A server without sandboxes, or one too old to answer, simply leaves
         // the chip off. It must never keep the composer from opening.
         async let sandboxFetch = OS1API.sandboxStatus()
@@ -665,6 +690,7 @@ struct NewSessionView: View {
         // fetch them here rather than when the menu opens.
         for repoInfo in repos { RepoTile.prefetchIcon(for: repoInfo.id) }
         sandboxStatus = try? await sandboxFetch
+        engines = (try? await connectionsFetch)?.engines ?? ["opencode"]
         if let fetched = try? await modelsFetch {
             catalog = fetched
             let livePreferred = (try? await SettingsAPI.uiPrefs(
@@ -681,7 +707,7 @@ struct NewSessionView: View {
     }
 
     private func selectModel(_ option: ModelOption) {
-        model = option.id
+        model = ModelCatalog.routedID(option.id, engine: currentEngine) ?? option.id
         defaultEffortForCurrentModel()
         if !(option.fastModeSupported == true) { fastMode = false }
     }

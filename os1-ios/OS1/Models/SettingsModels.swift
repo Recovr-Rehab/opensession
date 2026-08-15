@@ -223,6 +223,8 @@ struct MCPConnection: Codable, Sendable, Identifiable {
 struct ConnectionsResponse: Codable, Sendable {
     var mcpServers: [MCPConnection]?
     var agents: [String: SettingsAgentHealth]?
+    /// Execution engines enabled for new sessions. Models are shared by all.
+    var engines: [String]?
 }
 
 struct SettingsAgentHealth: Codable, Sendable {

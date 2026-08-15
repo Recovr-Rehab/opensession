@@ -165,7 +165,7 @@ import { audit, summarizeText } from "./audit";
 import { journalSet, buildRunJournalRecord, journalClear, registerActiveRunProbe } from "./run-journal";
 import { isClaudeUsageLimitError, isCodexUsageLimitError } from "./runner-shared";
 import { ensureAnthropicBridge } from "./anthropic-bridge";
-import { readOpencodeBridgeConfig } from "./opencode-config";
+import { opencodeProviders, readOpencodeBridgeConfig } from "./opencode-config";
 import { markCodexExhausted, type CodexAccount } from "./codex-accounts";
 import {
   pickOpenaiAccount,
@@ -200,7 +200,15 @@ import { piAnthropicTransport, piEngineEnabled } from "./pi-config";
 import { buildPiAnthropicProvider } from "./pi-anthropic-provider";
 import { createPiMcpBridge, type PiMcpBridge } from "./pi-mcp-bridge";
 import { opencodeOneShot } from "./opencode-oneshot";
-import { DIAL_ORACLE_AGENTS, dialPreset, toOpencodeModel } from "./models";
+import {
+  DIAL_ORACLE_AGENTS,
+  ORCHESTRATOR_WORKER_AGENTS,
+  dialPreset,
+  opencodeModelLabel,
+  orchestratorPreset,
+  orchestratorWorkerForBridge,
+  toPiModel,
+} from "./models";
 import type { TranscriptEntry } from "./types";
 import type { RunAgentOpts } from "./agent-runner";
 import type { StreamEvent, ImageInput, TurnUsage } from "./run-events";
@@ -225,20 +233,34 @@ export function parsePiModel(
   return { providerID: rest.slice(0, sep), modelID: rest.slice(sep + 1) };
 }
 
-/** Resolve a Pi Dial id to the concrete Pi model that executes its main turn.
- * The stored id stays `pi/dial/*`, so the preset's effort and oracle stay
- * attached across continuation turns. */
-export function resolvePiDialModel(model: string): {
+/** Resolve a Pi model or preset to the concrete model that executes its main
+ * turn. The stored preset id stays intact so its effort and companion tools
+ * remain attached across continuation turns. */
+export function resolvePiRoutedModel(model: string): {
   providerID: string;
   modelID: string;
   dial?: NonNullable<ReturnType<typeof dialPreset>>;
+  orchestrator?: NonNullable<ReturnType<typeof orchestratorPreset>>;
 } | null {
   const dial = dialPreset(model);
-  if (model.toLowerCase().startsWith("pi/dial/") && !dial) return null;
-  const concrete = dial ? toOpencodeModel(dial.model) : model;
-  const parsed = concrete ? parsePiModel(concrete.replace(/^opencode\//, "pi/")) : null;
-  return parsed ? { ...parsed, ...(dial ? { dial } : {}) } : null;
+  const orchestrator = orchestratorPreset(model);
+  const lower = model.toLowerCase();
+  if (lower.startsWith("pi/dial/") && !dial) return null;
+  if (lower.startsWith("pi/orchestrator/") && !orchestrator) return null;
+  const concrete = toPiModel(model);
+  const parsed = concrete ? parsePiModel(concrete) : null;
+  return parsed
+    ? {
+        ...parsed,
+        ...(dial ? { dial } : {}),
+        ...(orchestrator ? { orchestrator } : {}),
+      }
+    : null;
 }
+
+/** @deprecated Dial was generalized to routed presets. Keep the focused name
+ * for callers/tests that only exercise the Dial family. */
+export const resolvePiDialModel = resolvePiRoutedModel;
 
 function makePiDialOracleTool(dial: NonNullable<ReturnType<typeof dialPreset>>, user?: string): ToolDefinition<any, any, any> {
   const oracle = DIAL_ORACLE_AGENTS[dial.oracleAgent];
@@ -1051,25 +1073,32 @@ export async function* runPi(
     yield { type: "error", content: gateReason, provider: PROVIDER, model };
     return;
   }
-  const resolved = resolvePiDialModel(model);
+  const resolved = resolvePiRoutedModel(model);
   const parsed = resolved
     ? { providerID: resolved.providerID, modelID: resolved.modelID }
     : null;
   if (!parsed) {
     yield {
       type: "error",
-      content: `Not a pi model id: "${model}" (expected pi/<provider>/<model> or pi/dial/<preset>)`,
+      content:
+        `Not a pi model id: "${model}" ` +
+        "(expected pi/<provider>/<model>, pi/dial/<preset>, or pi/orchestrator/<preset>)",
       provider: PROVIDER,
       model,
     };
     return;
   }
-  if (parsed.providerID !== "anthropic" && parsed.providerID !== "openai") {
+  const configuredProvider = opencodeProviders()[parsed.providerID];
+  if (
+    parsed.providerID !== "anthropic" &&
+    parsed.providerID !== "openai" &&
+    !configuredProvider?.apiKey
+  ) {
     yield {
       type: "error",
       content:
-        `The pi engine currently supports only pi/anthropic/* and pi/openai/* models ` +
-        `(got "${model}"). Other pi providers are not wired to an account pool yet.`,
+        `The pi engine has no credentials for provider "${parsed.providerID}" ` +
+        `(got "${model}"). Configure that model provider first.`,
       provider: PROVIDER,
       model,
     };
@@ -1360,7 +1389,10 @@ export async function* runPi(
           `Unknown OpenAI model "${parsed.modelID}" (could not register it with pi)`
         );
       }
-    } else if (piAnthropicTransport() === "inprocess") {
+    } else if (
+      parsed.providerID === "anthropic" &&
+      piAnthropicTransport() === "inprocess"
+    ) {
       // In-process native provider (the default): drives the Claude Agent
       // SDK directly inside this process — token-level streaming, no
       // loopback HTTP hop, no per-boot bridge key. Designated-account pick,
@@ -1386,7 +1418,7 @@ export async function* runPi(
       if (!piModel) {
         throw new Error(`Unknown Anthropic model "${parsed.modelID}" (could not register it with pi)`);
       }
-    } else {
+    } else if (parsed.providerID === "anthropic") {
       // Rollback transport (anthropicTransport: "bridge"): the loopback HTTP
       // bridge owns account selection and audits every request itself; we
       // only route to it legitimately. ensure* throws a clear config error
@@ -1422,6 +1454,28 @@ export async function* runPi(
       }
       if (!piModel) {
         throw new Error(`Unknown Anthropic model "${parsed.modelID}" (could not register it with pi)`);
+      }
+    } else {
+      // Third-party picker providers share OpenCode's configured API key and
+      // optional base URL. Pi's built-in provider catalog supplies the API
+      // dialect and model metadata; a provider absent from that catalog fails
+      // clearly instead of guessing a protocol.
+      runtime.registerProvider(parsed.providerID, {
+        apiKey: configuredProvider!.apiKey,
+        ...(configuredProvider!.baseURL
+          ? { baseUrl: configuredProvider!.baseURL }
+          : {}),
+      });
+      await runtime.setRuntimeApiKey(
+        parsed.providerID,
+        configuredProvider!.apiKey!,
+      );
+      piModel = runtime.getModel(parsed.providerID, parsed.modelID);
+      if (!piModel) {
+        throw new Error(
+          `Model "${parsed.providerID}/${parsed.modelID}" is not in Pi's provider catalog. ` +
+            "Use a model supported by that provider's Pi integration.",
+        );
       }
     }
 
@@ -1575,6 +1629,19 @@ export async function* runPi(
             tool: true,
           }
         : undefined,
+      orchestrator: resolved?.orchestrator
+        ? {
+            presetLabel: resolved.orchestrator.label,
+            mainLabel: opencodeModelLabel(resolved.orchestrator.model),
+            workers: resolved.orchestrator.workerAgents.map((name) => ({
+              agent: name,
+              label: ORCHESTRATOR_WORKER_AGENTS[name]?.label || name,
+              modelLabel:
+                orchestratorWorkerForBridge(name, parsed.providerID)?.label || name,
+            })),
+            tool: "sessions",
+          }
+        : undefined,
     });
 
     const agentDir = `${PI_STATE_DIR}/agent`;
@@ -1648,7 +1715,8 @@ export async function* runPi(
       ? sdk.SessionManager.open(resumePath, sessionDir)
       : sdk.SessionManager.create(cwd, sessionDir);
 
-    const selectedEffort = resolved?.dial?.effort ?? opts.effort;
+    const selectedEffort =
+      resolved?.dial?.effort ?? resolved?.orchestrator?.effort ?? opts.effort;
     const thinkingLevel =
       selectedEffort && THINKING_LEVELS.has(selectedEffort)
         ? (selectedEffort as "low" | "medium" | "high" | "xhigh" | "max")

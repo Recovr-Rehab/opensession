@@ -294,15 +294,12 @@ function AutoFallbackRow() {
 
 interface PiEngineConfig {
 	enabled: boolean;
-	pickerModels: string[];
+	pickerModels?: string[];
 }
 
 /**
  * Engine switches: OpenCode (the default engine) and pi, plus which engine
- * new sessions default to. Which models each engine advertises in the picker
- * is config-owned (`pickerModels` in ~/.opensession-opencode.json /
- * ~/.opensession-pi.json) — no per-engine model curation UI, same as it has
- * always been for opencode.
+ * new sessions default to. Models and presets are shared by both engines.
  */
 function EnginesSection() {
 	const [ocEnabled, setOcEnabled] = useState<boolean | null>(null);
@@ -419,8 +416,7 @@ function EnginesSection() {
 					<SettingRowText>
 						<SettingRowTitle>Pi engine</SettingRowTitle>
 						<SettingRowDescription>
-							pi.dev's coding agent as an alternative engine, on the same account pools.
-							its models join the picker as pi/&lt;provider&gt;/&lt;model&gt; while enabled.
+							pi.dev's coding agent as an alternative engine on the same models and account pools.
 						</SettingRowDescription>
 					</SettingRowText>
 					<SettingRowControl className="flex items-center gap-2.5">
@@ -439,9 +435,7 @@ function EnginesSection() {
 				<DefaultEngineRow piEnabled={pi?.enabled ?? false} />
 			</SettingCard>
 			<SettingsHint>
-				Both engines draw on the same account pools. Each engine advertises the models in
-				its config file's <code>pickerModels</code>, and any well-formed engine id still
-				resolves when typed. Changes apply to new runs.
+				Choose a model or preset once, then choose which engine runs it. Changes apply to new runs.
 			</SettingsHint>
 
 			<ModelEngineDefaultsSection />
@@ -562,8 +556,7 @@ function DefaultEngineRow({ piEnabled }: { piEnabled: boolean }) {
 		: current.startsWith("opencode/")
 			? current.slice("opencode/".length)
 			: null;
-	// Pi only serves the subscription-bridge providers.
-	const piCanServe = !!tail && (tail.startsWith("anthropic/") || tail.startsWith("openai/"));
+	const piCanServe = !!tail;
 
 	async function handleChange(next: string) {
 		if (next === engine || !tail) return;

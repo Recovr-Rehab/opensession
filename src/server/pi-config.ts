@@ -2,10 +2,9 @@
  * Config for the pi engine (pi.dev's coding agent, served by pi-runner.ts).
  *
  * File: ~/.opensession-pi.json — missing or `enabled: false` means the pi
- * engine is OFF everywhere at once: `pi/<provider>/<model>` ids are absent
- * from the UI picker (refreshPiPickerModels in models.ts folds pickerModels
- * only while enabled) AND the runner refuses to start a turn with a clear
- * config error. Deliberately config-driven, never an env flag; the
+ * engine is OFF everywhere at once: the Engine choice is hidden and the
+ * runner refuses to start a turn with a clear config error. Deliberately
+ * config-driven, never an env flag; the
  * OPENSESSION_PI_CONFIG override is a TEST SEAM (like
  * OPENSESSION_OPENCODE_CONFIG — verify scripts point it at a temp file), not
  * the feature switch.
@@ -13,14 +12,9 @@
  * Shape:
  *   {
  *     "enabled": true,
- *     "pickerModels": ["pi/anthropic/claude-opus-5"],
- *         // Full pi/<provider>/<model> ids to surface in the UI model
- *         // picker; malformed entries are dropped. Any other well-formed
- *         // pi/ id still resolves (resolveModel's pi/ branch) — it's just
- *         // not advertised. Served providers: anthropic (the claude-accounts
- *         // pool, picked exactly like opencode/meridian — see
- *         // pickBridgeAccount in anthropic-bridge.ts) and openai (the
- *         // codex-accounts pool); anything else errors clearly at run time.
+ *     "pickerModels": []
+ *         // Retired compatibility field. The picker has one shared model
+ *         // catalog and the chosen engine is encoded only in the session id.
  *     "anthropicTransport": "inprocess"
  *         // Optional: how pi/anthropic/* turns reach the Claude Agent SDK.
  *         // "inprocess" (the default; absent normalizes to it) registers
@@ -53,7 +47,7 @@ export type PiAnthropicTransport = "inprocess" | "bridge";
 
 export interface PiEngineConfig {
   enabled: boolean;
-  /** Model ids (pi/<provider>/<model>) to show in the UI picker. */
+  /** Retired compatibility field. Model selection is engine-neutral. */
   pickerModels: string[];
   /** Present only as the non-default "bridge" (absent = "inprocess"). Read it
    *  through piAnthropicTransport(), which resolves the default. */
@@ -205,4 +199,3 @@ export function setPiPickerModels(ids: string[]): string[] {
   writeRawPiConfig(raw);
   return raw.pickerModels as string[];
 }
-

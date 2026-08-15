@@ -27,6 +27,7 @@ import {
   makePiBashTool,
   parsePiModel,
   piGateReason,
+  resolvePiRoutedModel,
   resolvePiDialModel,
   runPi,
   runPiSmokeTurn,
@@ -54,6 +55,30 @@ describe("parsePiModel", () => {
     expect(parsePiModel("pi/anthropic")).toBeNull();
     expect(parsePiModel("pi/anthropic/")).toBeNull();
     expect(parsePiModel("pi//claude-opus-5")).toBeNull();
+  });
+});
+
+describe("resolvePiRoutedModel", () => {
+  test("routes plain models and both preset families to their concrete Pi model", () => {
+    expect(resolvePiRoutedModel("pi/anthropic/claude-opus-5")).toMatchObject({
+      providerID: "anthropic",
+      modelID: "claude-opus-5",
+    });
+    expect(resolvePiRoutedModel("pi/dial/opus-fable")).toMatchObject({
+      providerID: "anthropic",
+      modelID: "claude-opus-5",
+      dial: { id: "dial/opus-fable" },
+    });
+    expect(resolvePiRoutedModel("pi/orchestrator/sol")).toMatchObject({
+      providerID: "openai",
+      modelID: "gpt-5.6-sol",
+      orchestrator: { id: "orchestrator/sol" },
+    });
+  });
+
+  test("rejects unknown preset ids", () => {
+    expect(resolvePiRoutedModel("pi/dial/nope")).toBeNull();
+    expect(resolvePiRoutedModel("pi/orchestrator/nope")).toBeNull();
   });
 });
 
@@ -175,12 +200,12 @@ describe("runPi pi/openai account wiring (no engine, no network)", () => {
     return events;
   };
 
-  test("unwired pi providers get the clear both-pools error", async () => {
+  test("a provider with no credentials gets a clear configuration error", async () => {
     const events = await collect("pi/mistral/large");
     expect(events).toHaveLength(1);
     expect(events[0].type).toBe("error");
-    expect(String(events[0].content)).toContain("pi/anthropic/*");
-    expect(String(events[0].content)).toContain("pi/openai/*");
+    expect(String(events[0].content)).toContain('no credentials for provider "mistral"');
+    expect(String(events[0].content)).toContain("Configure that model provider first");
   });
 
   test("dry codex pool → flagged terminal so the model-fallback walk engages", async () => {

@@ -31,9 +31,31 @@ struct ModelCatalog: Decodable {
     var presets: [ModelOption] { models.filter(\.isPreset) }
     var regular: [ModelOption] { models.filter { !$0.isPreset } }
 
+    static func baseID(_ id: String) -> String {
+        guard id.hasPrefix("pi/") else { return id }
+        let tail = String(id.dropFirst(3))
+        if tail.hasPrefix("dial/") || tail.hasPrefix("orchestrator/") {
+            return tail
+        }
+        return "opencode/\(tail)"
+    }
+
+    static func routedID(_ id: String, engine: String) -> String? {
+        let base = baseID(id)
+        guard engine == "pi" else { return base }
+        if base.hasPrefix("opencode/") {
+            return "pi/\(base.dropFirst("opencode/".count))"
+        }
+        if base.hasPrefix("dial/") || base.hasPrefix("orchestrator/") {
+            return "pi/\(base)"
+        }
+        return nil
+    }
+
     func option(for id: String?) -> ModelOption? {
         guard let id, !id.isEmpty else { return nil }
-        return models.first { $0.id == id }
+        let base = Self.baseID(id)
+        return models.first { $0.id == base }
     }
 
     /// Short human label for a model id ("Sonnet 5", "Medium"), falling back
