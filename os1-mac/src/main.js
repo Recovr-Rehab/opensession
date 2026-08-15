@@ -9,6 +9,7 @@ const {
   ipcMain,
   autoUpdater,
   systemPreferences,
+  powerMonitor,
   Menu,
   clipboard,
   dialog,
@@ -325,7 +326,7 @@ function openDeepLink(raw) {
     return;
   }
   showWindow();
-  win?.loadURL(url);
+  loadApp(url);
 }
 
 function showWindow() {
@@ -339,9 +340,48 @@ function showWindow() {
 
 function showStatusPage() {
   if (!win || win.isDestroyed()) return;
+  clearStallGuard();
   win.loadFile(path.join(__dirname, "offline.html"), {
     query: { url: APP_URL },
   });
+}
+
+// A navigation that neither commits nor fails leaves an empty window with no
+// way back. The shell is transparent, so an unpainted renderer shows the raw
+// window material and nothing else: no splash, and no status page either,
+// because `did-fail-load` only reports an error and Chromium waits out a
+// black-holed connection for a minute or more before it calls one. That is the
+// ordinary way an instance behind a VPN goes away rather than a rare one, since
+// its DNS record keeps resolving after the network behind it is gone. The web
+// app rides its service worker's cached shell through exactly this stall; this
+// shell blocks that worker (Electron 43's renderer crashes on Cache Storage
+// writes), so it needs a deadline of its own.
+const LOAD_STALL_MS = 8000;
+let stallTimer = null;
+
+function clearStallGuard() {
+  if (!stallTimer) return;
+  clearTimeout(stallTimer);
+  stallTimer = null;
+}
+
+// The deadline is on the main frame committing, not on the page finishing to
+// load: once the document arrives its splash paints, and a big bundle on a slow
+// but working connection must not be swapped out for the status page.
+function armStallGuard() {
+  clearStallGuard();
+  stallTimer = setTimeout(() => {
+    stallTimer = null;
+    showStatusPage();
+  }, LOAD_STALL_MS);
+}
+
+// Every main-frame load the shell starts goes through here, so a hung
+// navigation always has a way back.
+function loadApp(url) {
+  if (!win || win.isDestroyed()) return;
+  armStallGuard();
+  win.loadURL(url);
 }
 
 function createWindow() {
@@ -392,6 +432,9 @@ function createWindow() {
     if (createdWindow.isDestroyed() || win !== createdWindow) return;
     createdWindow.webContents.setZoomLevel(clampZoom(zoomLevel));
   });
+  // A commit means the server answered, so the stall guard's job is done —
+  // whatever the page does from here is the app's own to report.
+  win.webContents.on("did-navigate", clearStallGuard);
   // Pinch and wheel zoom land in the renderer, so the level has to be read back
   // a tick later; the View menu's roles are picked up by saveWindowState.
   win.webContents.on("zoom-changed", () => {
@@ -419,7 +462,11 @@ function createWindow() {
     if (!inWindow(url)) {
       e.preventDefault();
       openExternal(url);
+      return;
     }
+    // The status page navigates back to the app on its own, and that retry can
+    // stall the same way the first load did.
+    armStallGuard();
   });
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (new URL(url).origin === APP_ORIGIN) return { action: "allow" };
@@ -474,7 +521,11 @@ function createWindow() {
 
   // Show a themed recovery page instead of Chromium's network error.
   win.webContents.on("did-fail-load", (_e, code, _desc, _url, isMainFrame) => {
-    if (!isMainFrame || code === -3 /* ERR_ABORTED */) return;
+    if (!isMainFrame) return;
+    // A superseded navigation aborts as a matter of course, so ERR_ABORTED is
+    // not a failure to report. It must not call off the stall guard either: an
+    // abort that commits nothing is the empty window this guards against.
+    if (code === -3 /* ERR_ABORTED */) return;
     showStatusPage();
   });
 
@@ -482,10 +533,10 @@ function createWindow() {
   // a dead window.
   win.webContents.on("render-process-gone", (_e, details) => {
     if (details.reason === "clean-exit") return;
-    win.loadURL(APP_URL);
+    loadApp(APP_URL);
   });
 
-  win.loadURL(APP_URL);
+  loadApp(APP_URL);
 }
 
 // Electron's default menu, plus "Check for Updates…" in the app menu — the
@@ -587,6 +638,15 @@ app.whenReady().then(async () => {
   initAutoUpdate();
 
   app.on("activate", showWindow);
+
+  // Waking with the network still down is how the shell lands on the status
+  // page in the first place, and that page can only retry while it is the page
+  // on screen. A loaded app reconnects on its own and would lose drafts and
+  // scroll position on a reload, so only the status page is retried here.
+  powerMonitor.on("resume", () => {
+    if (!win || win.isDestroyed()) return;
+    if (win.webContents.getURL().startsWith("file://")) loadApp(APP_URL);
+  });
 });
 
 app.on("open-url", (e, url) => {
