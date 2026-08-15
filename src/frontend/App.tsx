@@ -84,7 +84,7 @@ import { RestartOverlay } from "./components/RestartOverlay";
 import { MediaLightboxHost } from "./components/MediaLightbox";
 import { ChipHoverCards } from "./components/ChipHoverCard";
 import { UpdatePill } from "./components/UpdatePill";
-import { DesktopLinkButton } from "./components/DesktopLinkButton";
+import { DesktopLinkToast } from "./components/DesktopLinkToast";
 import {
 	IconArchive,
 	IconUnarchive,
@@ -3916,7 +3916,6 @@ export function App(
 								onOpenSettings={() => navigate({ view: "settings" })}
 								connected={connected}
 							/>
-							<DesktopLinkButton />
 							<TitleBar onSearch={() => setSearchOpen(true)} />
 						</div>
 						<Sidebar
@@ -4140,6 +4139,7 @@ export function App(
 
 					<div className={WORKSPACE_SHELL}>
 						<main className={DETAIL_PANE} ref={detailPaneRef}>
+							{route.view !== "session" && <DesktopLinkToast placement="page" />}
 						{/* WCO back/forward fallback: the primary cluster lives in the
 						    sidebar's top chrome row, which vanishes when the sidebar is
 						    collapsed — this floating copy shows only then (CSS-gated). */}
