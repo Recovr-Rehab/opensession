@@ -53,3 +53,41 @@ export function IconTile({ name, size = 34 }: { name: string; size?: number }) {
     </span>
   );
 }
+
+/**
+ * The bare brand mark, monochrome at the current text color.
+ *
+ * A menu or a select row draws a brand this way rather than as a tile: a
+ * column of colored squares down a settings page reads as decoration, while a
+ * mark at the icon step sits beside its label like every other row glyph. The
+ * shape is what identifies the brand here, not the color.
+ *
+ * Renders nothing for a name with no mark, so a list mixing branded and
+ * unbranded rows should reserve the slot itself (see `ui/select`'s `icon`).
+ */
+export function BrandMark({
+  name,
+  size = 16,
+  className,
+}: {
+  name: string;
+  size?: number;
+  className?: string;
+}) {
+  const logo = brandLogo(name);
+  if (!logo) return null;
+  return (
+    <svg
+      viewBox={logo.viewBox}
+      width={size}
+      height={size}
+      fill="currentColor"
+      aria-hidden="true"
+      className={className}
+    >
+      {logo.paths.map((d, i) => (
+        <path key={i} d={d} />
+      ))}
+    </svg>
+  );
+}

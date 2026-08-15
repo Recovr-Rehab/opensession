@@ -6,6 +6,7 @@ import { Menu } from "../ui/menu";
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
 import { IconBolt, IconCheck, IconChevronRight, IconUndo } from "./icons";
+import { BrandMark } from "./BrandTile";
 import type { SessionUsage } from "../lib/types";
 import { UsageCost, UsageDetails } from "./UsageMeter";
 
@@ -651,7 +652,12 @@ export function ModelEffortSelect({
 											unavailable && "opacity-55",
 										)}
 									>
-										<span className="min-w-0 truncate">{e.label}</span>
+	<span className="flex min-w-0 items-center gap-2">
+											<span className="flex size-4 shrink-0 items-center justify-center text-dim">
+												<BrandMark name={e.id} />
+											</span>
+											<span className="min-w-0 truncate">{e.label}</span>
+										</span>
 										{selected && <IconCheck className="shrink-0 text-dim" size={17} />}
 									</Menu.Item>
 								);

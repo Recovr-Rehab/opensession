@@ -41,6 +41,12 @@ type TriggerProps = Omit<React.ComponentProps<typeof BaseSelect.Trigger>, "class
 	/** Shown when nothing is selected. */
 	placeholder?: React.ReactNode;
 	/**
+	 * A glyph before the value, in its own column so `sizeTo` still governs
+	 * the label's width. Pass it (even as `null`) to keep the slot reserved,
+	 * so a value with no glyph doesn't shift the text.
+	 */
+	icon?: React.ReactNode;
+	/**
 	 * Every label the select can show. The trigger reserves the width of the
 	 * widest one, so choosing a longer option doesn't resize the control and
 	 * shuffle the row around it. A native select does this for free; a custom
@@ -52,14 +58,12 @@ type TriggerProps = Omit<React.ComponentProps<typeof BaseSelect.Trigger>, "class
 	sizeTo?: React.ReactNode[];
 };
 
-function Trigger({
-	className,
-	size = "md",
-	placeholder,
-	sizeTo,
-	children,
-	...props
-}: TriggerProps) {
+function Trigger(triggerProps: TriggerProps) {
+	const { className, size = "md", placeholder, sizeTo, icon, children, ...props } = triggerProps;
+	// Presence, not truthiness: an icon-bearing list keeps the slot for the
+	// values that have no glyph, so the labels stay on one x.
+	const iconSlot = "icon" in triggerProps;
+	const label = iconSlot ? "col-start-2" : "col-start-1";
 	return (
 		<BaseSelect.Trigger
 			{...props}
@@ -68,7 +72,12 @@ function Trigger({
 					size,
 					// The chevron sits in flow in its own grid column, so the
 					// field's own padding is what separates it from the edge.
-					"inline-grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-2 pr-2 text-left",
+					cn(
+						"inline-grid cursor-pointer items-center gap-2 pr-2 text-left",
+						iconSlot
+							? "grid-cols-[auto_minmax(0,1fr)_auto]"
+							: "grid-cols-[minmax(0,1fr)_auto]",
+					),
 				),
 				// Open reads like focus: the border carries the state, as it does
 				// on every other field.
@@ -76,15 +85,27 @@ function Trigger({
 				className,
 			)}
 		>
-			<span className="col-start-1 row-start-1 truncate">
+			{iconSlot && (
+				<span className="col-start-1 row-start-1 flex size-4 shrink-0 items-center justify-center text-dim">
+					{icon}
+				</span>
+			)}
+			<span className={cn("row-start-1 truncate", label)}>
 				{children ?? <BaseSelect.Value placeholder={placeholder} />}
 			</span>
-			{sizeTo?.map((label, index) => (
-				<span key={index} aria-hidden className="invisible col-start-1 row-start-1 truncate">
-					{label}
+			{sizeTo?.map((text, index) => (
+				<span
+					key={index}
+					aria-hidden
+					className={cn("invisible row-start-1 truncate", label)}
+				>
+					{text}
 				</span>
 			))}
-			<IconChevronDown size={16} className="col-start-2 row-start-1 shrink-0 text-faint" />
+			<IconChevronDown
+				size={16}
+				className={cn("row-start-1 shrink-0 text-faint", iconSlot ? "col-start-3" : "col-start-2")}
+			/>
 		</BaseSelect.Trigger>
 	);
 }
@@ -127,13 +148,16 @@ function Popup({
 	);
 }
 
-function Item({
-	className,
-	children,
-	...props
-}: Omit<React.ComponentProps<typeof BaseSelect.Item>, "className"> & {
+type ItemProps = Omit<React.ComponentProps<typeof BaseSelect.Item>, "className"> & {
 	className?: string;
-}) {
+	/** A glyph before the label. Pass it (even as `null`) on every row of a
+	 * list where only some rows have one, so the labels stay aligned. */
+	icon?: React.ReactNode;
+};
+
+function Item(itemProps: ItemProps) {
+	const { className, icon, children, ...props } = itemProps;
+	const iconSlot = "icon" in itemProps;
 	return (
 		<BaseSelect.Item
 			{...props}
@@ -143,7 +167,14 @@ function Item({
 				className,
 			)}
 		>
-			<BaseSelect.ItemText className="min-w-0 truncate">{children}</BaseSelect.ItemText>
+			<span className="flex min-w-0 items-center gap-2">
+				{iconSlot && (
+					<span className="flex size-4 shrink-0 items-center justify-center text-dim">
+						{icon}
+					</span>
+				)}
+				<BaseSelect.ItemText className="min-w-0 truncate">{children}</BaseSelect.ItemText>
+			</span>
 			<BaseSelect.ItemIndicator className="shrink-0 text-accent">
 				<IconCheck size={17} />
 			</BaseSelect.ItemIndicator>

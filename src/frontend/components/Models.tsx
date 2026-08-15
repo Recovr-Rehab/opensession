@@ -1,6 +1,7 @@
 import { BASE_PATH } from "../lib/base";
 import React, { useEffect, useState, useCallback } from "react";
 import { TEAM } from "./UserPicker";
+import { BrandMark } from "./BrandTile";
 import { shortModelLabel, splitModelOptions } from "./ModelEffortSelect";
 import { fetchEngines, setModelEngineDefault } from "../lib/api/engines";
 import {
@@ -538,6 +539,7 @@ function ModelEngineDefaultsSection() {
 								>
 									<Select.Trigger
 										aria-label={`Default engine for ${shortModelLabel(m.id, models || [])}`}
+										icon={<BrandMark name={value} />}
 										sizeTo={engineItems.map((e) => e.label)}
 									/>
 									<Select.Popup align="end">
@@ -546,6 +548,7 @@ function ModelEngineDefaultsSection() {
 												key={e.value}
 												value={e.value}
 												disabled={!!e.value && !engineModelId(e.value as EngineId, m.id)}
+												icon={<BrandMark name={e.value} />}
 											>
 												{e.label}
 											</Select.Item>
@@ -635,13 +638,18 @@ function DefaultEngineRow({ piEnabled }: { piEnabled: boolean }) {
 					disabled={!current || saving || !tail}
 					onValueChange={(next) => handleChange(String(next))}
 				>
-					<Select.Trigger aria-label="Default engine" sizeTo={engineItems.map((e) => e.label)} />
+					<Select.Trigger
+						aria-label="Default engine"
+						icon={<BrandMark name={engine} />}
+						sizeTo={engineItems.map((e) => e.label)}
+					/>
 					<Select.Popup align="end">
 						{engineItems.map((e) => (
 							<Select.Item
 								key={e.value}
 								value={e.value}
 								disabled={e.value === "pi" && (!piCanServe || !piEnabled)}
+								icon={<BrandMark name={e.value} />}
 							>
 								{e.label}
 							</Select.Item>
