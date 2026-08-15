@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useShortcutsVersion } from "../../hooks/useShortcutBindings";
 import { isApple } from "../../lib/platform";
 import {
@@ -33,10 +33,18 @@ import {
 	SettingsHeader,
 	SettingsHint,
 	SettingsPanel,
+	rowMenuTriggerClasses,
 	settingsInputClass,
 } from "../../ui/settings";
-import { Tooltip } from "../../ui/tooltip";
-import { IconPencil, IconPlus, IconSearch, IconTrash } from "../icons";
+import { Menu, MENU_ICON } from "../../ui/menu";
+import {
+	IconDotsHorizontal,
+	IconPencil,
+	IconPlus,
+	IconRestore,
+	IconSearch,
+	IconTrash,
+} from "../icons";
 
 /** How many chords one command may answer to. Two covers every default; the
  *  third is headroom for someone whose browser eats one of them. */
@@ -94,19 +102,15 @@ export function ShortcutsPanel() {
 		id: ShortcutId;
 		message: string;
 	} | null>(null);
-	// Where to put focus back when a capture ends, so the keyboard never lands
-	// on the document after editing a row.
-	const returnFocus = useRef<HTMLElement | null>(null);
-
 	function stopRecording() {
 		setRecording(null);
-		const el = returnFocus.current;
-		returnFocus.current = null;
-		if (el?.isConnected) el.focus();
 	}
 
-	function beginRecording(id: ShortcutId, index: number, from: HTMLElement) {
-		returnFocus.current = from;
+	// Recording always starts from a menu item, and the menu hands focus back to
+	// its own trigger as it closes — which is still mounted, because a capture
+	// only replaces the chord beside it. So there is nothing to restore here:
+	// the keyboard is already on the row it was working in.
+	function beginRecording(id: ShortcutId, index: number) {
 		setConflict(null);
 		setProblem(null);
 		setRecording({ id, index, held: [] });
@@ -238,7 +242,7 @@ export function ShortcutsPanel() {
 		const conflicted = conflict?.id === id ? conflict : null;
 
 		return (
-			<SettingRow key={id} className="group/row items-start">
+			<SettingRow key={id} className="items-start">
 				<SettingRowText>
 					<SettingRowTitle>{command.title}</SettingRowTitle>
 					<SettingRowDescription>{command.description}</SettingRowDescription>
@@ -267,95 +271,88 @@ export function ShortcutsPanel() {
 				</SettingRowText>
 				<SettingRowControl className="flex flex-col items-end gap-1.5">
 					{keys.length === 0 && recording?.id !== id && (
-						<div className="flex items-center gap-1">
-							{customized && (
-								<RowExtras>
-									<ResetButton onClick={() => resetShortcutBindings(id)} />
-								</RowExtras>
-							)}
+						<div className="flex items-center gap-1.5">
 							<span className="text-supporting text-faint">Unassigned</span>
-							<Tooltip label="Set a shortcut">
-								<Button
-									size="sm"
-									variant="ghost"
-									aria-label={`Set a shortcut for ${command.title}`}
-									icon={<IconPencil size={20} />}
-									onClick={(e) => beginRecording(id, 0, e.currentTarget)}
-								/>
-							</Tooltip>
+							<RowMenu label={`Manage the shortcut for ${command.title}`}>
+								<Menu.Item onClick={() => beginRecording(id, 0)}>
+									<IconPencil size={16} className={MENU_ICON} />
+									Set a shortcut…
+								</Menu.Item>
+								{customized && (
+									<Menu.Item onClick={() => resetShortcutBindings(id)}>
+										<IconRestore size={16} className={MENU_ICON} />
+										Reset to default
+									</Menu.Item>
+								)}
+							</RowMenu>
 						</div>
 					)}
 					{keys.map((chordKeys, i) => {
-						// The row's own extras ride on the LAST binding's line rather than
-						// a line of their own, so a one-chord command stays one line tall.
-						// They stay hidden until the row is hovered or holds focus: adding
-						// a second chord is rare, and a page of 22 rows each wearing four
-						// controls reads as a form.
+						// One menu per chord, so its actions belong to the chord beside
+						// them rather than to whichever of a row's chords you meant. The
+						// row-wide ones (add another, reset) ride on the LAST chord's
+						// menu, which is where a reader who has finished the list is.
 						//
-						// They sit BEFORE the chord, so the cluster grows leftward. Every
-						// line in this column is right-aligned, so the chord, its pencil
-						// and its trash keep the same right edge as any other settings
-						// control whether the row is hovered or not — a trailing reveal
-						// either shifts the whole line on hover or, reserving its space,
-						// parks the trash 30px inside the card's content edge.
+						// The trigger stays mounted while this line records, so the chord
+						// is the only thing the pill replaces and Base UI still has its
+						// trigger to hand focus back to when the menu closes.
 						const last = i === keys.length - 1;
-						return recording?.id === id && recording.index === i ? (
-							<RecordingPill key={`rec-${i}`} held={recording.held} />
-						) : (
+						const capturing = recording?.id === id && recording.index === i;
+						return (
 							<div
 								key={`${chordKeys.join("+")}-${i}`}
-								className="flex items-center gap-1"
+								className="flex items-center gap-1.5"
 							>
-								{last && recording?.id !== id && (
-									<RowExtras>
-										{customized && (
-											<ResetButton onClick={() => resetShortcutBindings(id)} />
-										)}
-										{keys.length < MAX_BINDINGS && (
-											<Tooltip label="Add another shortcut">
-												<Button
-													size="sm"
-													variant="ghost"
-													aria-label={`Add another ${command.title} shortcut`}
-													icon={<IconPlus size={20} />}
-													onClick={(e) =>
-														beginRecording(id, bindings.length, e.currentTarget)
-													}
-												/>
-											</Tooltip>
-										)}
-									</RowExtras>
+								{capturing ? (
+									<RecordingPill held={recording.held} />
+								) : (
+									<ChordKeys keys={chordKeys} />
 								)}
-								<ChordKeys keys={chordKeys} />
-								<Tooltip label="Change shortcut">
-									<Button
-										size="sm"
-										variant="ghost"
-										aria-label={`Change ${command.title} shortcut`}
-										icon={<IconPencil size={20} />}
-										onClick={(e) => beginRecording(id, i, e.currentTarget)}
-									/>
-								</Tooltip>
-								<Tooltip label="Remove shortcut">
-									<Button
-										size="sm"
-										variant="ghost"
-										className="hover:text-red"
-										aria-label={`Remove this ${command.title} shortcut`}
-										icon={<IconTrash size={20} />}
+								<RowMenu
+									label={`Manage the ${chordKeys.join(" ")} shortcut for ${command.title}`}
+								>
+									<Menu.Item onClick={() => beginRecording(id, i)}>
+										<IconPencil size={16} className={MENU_ICON} />
+										Change shortcut…
+									</Menu.Item>
+									{last && keys.length < MAX_BINDINGS && (
+										<Menu.Item
+											onClick={() => beginRecording(id, bindings.length)}
+										>
+											<IconPlus size={16} className={MENU_ICON} />
+											Add another shortcut…
+										</Menu.Item>
+									)}
+									<Menu.Separator />
+									{last && customized && (
+										<Menu.Item onClick={() => resetShortcutBindings(id)}>
+											<IconRestore size={16} className={MENU_ICON} />
+											Reset to default
+										</Menu.Item>
+									)}
+									<Menu.Item
+										className="text-red data-[highlighted]:bg-red-soft"
 										onClick={() =>
 											setShortcutBindings(
 												id,
 												bindings.filter((_, j) => j !== i),
 											)
 										}
-									/>
-								</Tooltip>
+									>
+										<IconTrash size={16} />
+										Remove shortcut
+									</Menu.Item>
+								</RowMenu>
 							</div>
 						);
 					})}
 					{recording?.id === id && recording.index >= keys.length && (
-						<RecordingPill held={recording.held} />
+						<div className="flex items-center gap-1.5">
+							<RecordingPill held={recording.held} />
+							{/* The chord being added has no menu yet. Hold its place so
+							    the pill lines up with the ones on the chords above. */}
+							<span className="size-7" aria-hidden />
+						</div>
 					)}
 				</SettingRowControl>
 			</SettingRow>
@@ -434,34 +431,28 @@ export function ShortcutsPanel() {
 	);
 }
 
-/** The extras a row only offers once you reach for it: add another chord, and
- *  put the defaults back. Their space is held at rest, so revealing them moves
- *  nothing — they grow into the gap left of the chord rather than pushing the
- *  chord and its actions off the column's right edge.
- *
- *  They stay visible on a phone, where there is no hover to reveal them with
- *  and the reserved gap would otherwise sit empty for good. */
-function RowExtras({ children }: { children: React.ReactNode }) {
+/**
+ * A chord's overflow menu, in the shape every other settings row uses. The
+ * actions live here rather than as a row of glyphs because a page of 22 rows
+ * each wearing three or four icon buttons reads as a form, and because a named
+ * row says what it does: nothing explains a bare + to the person meeting it.
+ */
+function RowMenu({
+	label,
+	children,
+}: {
+	label: string;
+	children: React.ReactNode;
+}) {
 	return (
-		<span className="mr-0.5 flex items-center gap-1 opacity-0 transition-opacity phone:opacity-100 group-hover/row:opacity-100 group-focus-within/row:opacity-100">
-			{children}
-		</span>
-	);
-}
-
-/** Restores a row's default chords. Quiet: it only matters once you've
- *  changed something, and it should never compete with the chord itself. */
-function ResetButton({ onClick }: { onClick: () => void }) {
-	return (
-		<Tooltip label="Restore the default shortcut">
-			<button
-				type="button"
-				className="rounded-sm px-1 text-label text-faint transition-colors hover:text-dim focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-				onClick={onClick}
-			>
-				Reset
-			</button>
-		</Tooltip>
+		<Menu.Root>
+			<Menu.Trigger className={rowMenuTriggerClasses} aria-label={label}>
+				<IconDotsHorizontal size={18} />
+			</Menu.Trigger>
+			<Menu.Popup align="end" sideOffset={4}>
+				{children}
+			</Menu.Popup>
+		</Menu.Root>
 	);
 }
 
