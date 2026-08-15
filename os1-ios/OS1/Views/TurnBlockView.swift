@@ -635,10 +635,13 @@ private struct EditRunView: View {
                 )
                 .frame(width: 15)
 
+            // Ranked above the path beside it, but not rigid — see the note
+            // on the same line in `ToolCallRow`.
             Text(presentation.name)
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(OS1VisualStyle.textDim)
-                .fixedSize()
+                .lineLimit(1)
+                .layoutPriority(1)
 
             ToolSummaryText(
                 summary: presentation.summary,

@@ -109,9 +109,23 @@ struct ToolCallRow: View {
             // wear a filled pill, but `panel` is `.tertiarySystemBackground` —
             // pure white in light appearance — so it read as a white box
             // punched into the row rather than as part of the call's name.
+            //
+            // Priority rather than `fixedSize`: the name outranks the summary
+            // and takes its width first, but it still has to yield to the row.
+            // An MCP call carries its server too — "opensession-walkthrough ·
+            // publish_walkthrough" measures 340pt against a 344pt row on a
+            // phone — and rigid at that width it made the row wider than the
+            // transcript. A vertical `ScrollView` does not clamp content it
+            // can't fit, it CENTERS it, so that one row dragged every
+            // paragraph in the turn off both edges and took the margin with
+            // it.
             nameText
                 .font(.subheadline.weight(.medium))
-                .fixedSize()
+                .lineLimit(1)
+                // The tool is the half worth keeping; the server prefix
+                // repeats down the fold.
+                .truncationMode(.middle)
+                .layoutPriority(1)
 
             if !presentation.summary.isEmpty {
                 summaryText
