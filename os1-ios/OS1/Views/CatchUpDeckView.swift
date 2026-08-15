@@ -50,6 +50,15 @@ enum CatchUpMotion {
     static let depthScale = 0.04
     static let depthOffset: CGFloat = -28
 
+    /// Room kept above the stack for that peek to live in.
+    ///
+    /// The peek goes UP, and it is the difference between `depthOffset` and
+    /// the ~half-height the scale already walks a card down — about 15pt per
+    /// level, so ~30pt for the two cards behind. Without this reserve the
+    /// stack simply grows past the top of the deck and into the header, which
+    /// is what covered the counter.
+    static let peekReserve: CGFloat = 34
+
     /// How far the top card tips at a full swipe. A card pivots about a point
     /// well below itself, the way one does when you push it across a table.
     static let tiltDegrees = 13.0
@@ -121,6 +130,10 @@ struct CatchUpDeckView: View {
                     .onAppear { deckSize = geo.size }
                     .onChange(of: geo.size) { _, size in deckSize = size }
             }
+            // Taken from the deck's own height rather than from the card's, so
+            // the cards behind peek into space the stack owns instead of into
+            // the header above it.
+            .padding(.top, CatchUpMotion.peekReserve)
             actionBar
         }
         // Arming is a state change you can feel before you commit to it — one
@@ -408,6 +421,11 @@ struct CatchUpDeckView: View {
         .padding(.horizontal, 12)
         .padding(.top, 10)
         .padding(.bottom, 10)
+        // Above the cards for the same reason the header is: a tilted card
+        // dips past its own bottom edge, and the three decisions must stay
+        // legible while one is being made.
+        .background(CatchUpBackdrop())
+        .zIndex(1)
     }
 
     private enum DecisionStyle: Equatable {

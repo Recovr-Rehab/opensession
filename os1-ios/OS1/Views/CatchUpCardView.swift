@@ -18,6 +18,13 @@ struct CatchUpCardView: View {
 
     @State private var folds = FoldStateStore()
     @State private var reply = ""
+    /// The card's own visible height, measured rather than assumed — it is the
+    /// floor a short conversation fills so it starts at the top.
+    @State private var viewportHeight: CGFloat = 0
+    /// Set the moment the reader scrolls the card themselves, which ends the
+    /// settling pass below: following the tail is a courtesy on arrival, not a
+    /// claim on the scroll position afterwards.
+    @State private var readerTookOver = false
     @Environment(\.colorScheme) private var colorScheme
 
     private let shape = RoundedRectangle(cornerRadius: 26, style: .continuous)
@@ -144,15 +151,55 @@ struct CatchUpCardView: View {
 
     // MARK: - Body
 
-    /// The normal transcript inside the card. It starts at the conversation's
-    /// beginning so Catch Up can be read top to bottom without opening it.
+    /// The normal transcript inside the card, opened on its LAST message.
+    ///
+    /// What is unread is the end of the conversation, so a card that lands at
+    /// the beginning asks you to scroll before you can decide anything — and
+    /// the whole point of the deck is deciding without opening.
+    ///
+    /// The second anchor is what keeps it there. One scroll to the bottom when
+    /// the blocks arrive is not enough: markdown, images and lazily realised
+    /// rows all resolve after that first layout, and each one grows the
+    /// transcript under a scroll position that was correct when it was set,
+    /// leaving the last message below the fold.
     private var bodyColumn: some View {
-        ScrollView(.vertical) {
-            bodyContent
+        ScrollViewReader { proxy in
+            ScrollView(.vertical) {
+                bodyContent
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .scrollIndicators(.visible)
+            .defaultScrollAnchor(.bottom)
+            .defaultScrollAnchor(.bottom, for: .sizeChanges)
+            // One viewport, for the content floor above. `containerSize` is the
+            // unobstructed visible region, which is exactly the height a short
+            // conversation should fill.
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                geometry.containerSize.height
+            } action: { _, height in
+                viewportHeight = height
+            }
+            .onScrollPhaseChange { _, phase in
+                if phase == .interacting { readerTookOver = true }
+            }
+            // The anchors decide where the first layout lands; this is what
+            // keeps it there while the rows SETTLE. Markdown, images and lazy
+            // realisation all resolve over the next few frames, and a row that
+            // measured short when the anchor was applied leaves the end of the
+            // conversation below the fold — which is the whole complaint.
+            // Aimed at the last real row rather than the 1pt sentinel, for the
+            // blank-card reason above, so its own tail padding is what keeps
+            // it off the composer.
+            .task(id: conversation?.blocks.last?.id) {
+                guard let last = conversation?.blocks.last?.id else { return }
+                for _ in 0..<4 {
+                    guard !readerTookOver else { return }
+                    proxy.scrollTo(last, anchor: .bottom)
+                    try? await Task.sleep(for: .milliseconds(200))
+                    if Task.isCancelled { return }
+                }
+            }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .scrollIndicators(.visible)
-        .defaultScrollAnchor(.top)
     }
 
     private var bodyContent: some View {
@@ -175,15 +222,32 @@ struct CatchUpCardView: View {
                             owner: card.target.isAutomation ? nil : card.target.startedBy
                         )
                         .id(block.id)
+                        // The last row carries its own clearance: the stack's
+                        // trailing padding does not travel with a scroll that
+                        // aims at a row, so without it the newest message
+                        // lands flush against the composer.
+                        .padding(.bottom, block.id == conversation.blocks.last?.id ? 12 : 0)
                     }
                 }
             } else {
                 CatchUpConversationPlaceholder()
             }
+            // A 1pt child at the very end, for the reason SessionView keeps
+            // its `transcript-end`: a LazyVStack only realizes the children
+            // that intersect the visible window, and a conversation that
+            // groups into one long turn is a SINGLE child — landing on the
+            // bottom anchor leaves it unrealized and the card comes up blank
+            // (measured: the whole body empty, 0.1% ink). Something small down
+            // here always intersects, which keeps its neighbour realized.
+            Color.clear.frame(height: 1)
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 16)
-        .frame(maxWidth: .infinity, alignment: .topLeading)
+        // A floor of one card, filled from the top. A scroll anchor also
+        // decides where content SHORTER than the viewport sits, so without
+        // this a two-line conversation hangs off the composer with the rest of
+        // the card empty above it.
+        .frame(maxWidth: .infinity, minHeight: viewportHeight, alignment: .topLeading)
     }
 
     private func caption(_ text: String) -> some View {

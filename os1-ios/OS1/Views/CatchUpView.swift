@@ -28,7 +28,7 @@ struct CatchUpView: View {
             header
             content
         }
-        .background(OS1VisualStyle.accent.opacity(0.06))
+        .background(CatchUpBackdrop())
         .task { await model.settle(from: list) }
         // Not `.success` on every finish: the chime belongs to the moment the
         // last card leaves, and only when there was something to clear.
@@ -71,6 +71,13 @@ struct CatchUpView: View {
         }
         .frame(height: 45)
         .padding(.horizontal, 8)
+        // The deck passes UNDER the chrome. A card is not confined to its own
+        // box: the stack peeks upward behind the top card, and a dragged card
+        // tilts, which lifts its top corner well past that. Without a fill and
+        // a raised z, the count and the back control are simply covered — the
+        // one part of the screen that has to stay readable while you swipe.
+        .background(CatchUpBackdrop())
+        .zIndex(1)
     }
 
     /// How far through the deck you are. A finish line is most of what makes a
@@ -126,6 +133,17 @@ struct CatchUpView: View {
                 undoTrigger: undoTrigger
             )
         }
+    }
+}
+
+/// The screen behind the deck: the app's own surface under a wash of accent.
+/// A view rather than a colour because the chrome paints it too — a bar that
+/// has to hide the cards passing under it must be the same fill as the page,
+/// or it reads as a band laid over the screen.
+struct CatchUpBackdrop: View {
+    var body: some View {
+        OS1VisualStyle.background
+            .overlay(OS1VisualStyle.accent.opacity(0.06))
     }
 }
 
