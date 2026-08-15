@@ -1,7 +1,7 @@
 import React from "react";
 import type { ModelOption, ProviderAccountOption } from "../lib/api";
 import { useEngines } from "../hooks/useEngines";
-import { baseModelId, engineModelId, modelEngine, type EngineId } from "../lib/model-engine";
+import { baseModelId, engineModelId, isAnthropicModel, modelEngine, type EngineId } from "../lib/model-engine";
 import { Menu } from "../ui/menu";
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
@@ -256,6 +256,16 @@ export function splitModelOptions(models: ModelOption[]): {
 	return { opencode, legacy: models.filter((m) => !ENGINE_PROVIDERS.has(m.provider)) };
 }
 
+/**
+ * A quiet line inside a submenu popup, in the shape of a group label: it names
+ * a consequence of the rows under it, and is never a row itself.
+ */
+function MenuHint({ children }: { children: React.ReactNode }) {
+	return (
+		<p className="px-2 pt-0.5 pb-1.5 text-meta text-faint">{children}</p>
+	);
+}
+
 type ModelMenuOption = {
 	value: string;
 	label: string;
@@ -347,6 +357,23 @@ export function ModelEffortSelect({
 		onModelChange(next === defaultModel ? "" : next);
 	};
 
+	// Changing model or engine mid-conversation invalidates the prompt cache,
+	// so the next turn re-sends every token of the conversation: roughly
+	// twenty times a cached turn's input. Worth saying once the conversation is
+	// big enough for that to cost something, and only where it is true: an
+	// Anthropic prompt cache is keyed on the whole prefix, so the reasoning
+	// effort is inside it, while OpenAI's reasoning effort rides outside.
+	// A hint, not a gate: no confirmation, nothing disabled.
+	const contextTokens = usage?.contextTokens ?? 0;
+	const reuploadHint =
+		contextTokens >= 20_000
+			? `Switching re-uploads ~${Math.round(contextTokens / 1000)}k tokens`
+			: null;
+	const effortReuploadHint =
+		reuploadHint && isAnthropicModel(effectiveModel, accountProvider)
+			? reuploadHint
+			: null;
+
 	// "Reset to default" puts every row in this menu back where a fresh session
 	// starts: following the default model (not pinning it), that model's own
 	// default effort, fast mode off, account on auto. Effort resolves against
@@ -399,13 +426,13 @@ export function ModelEffortSelect({
 	// a de-emphasized "Legacy (direct SDK)" submenu at the bottom.
 	const opencodeFirst = opencodeModels.length > 0;
 	const availableModelIds = new Set(models.map((m) => m.id));
-	const primaryOptions = opencodeFirst
+	const allPrimaryOptions = opencodeFirst
 		? [
 				...(availableModelIds.has(defaultModel) ? [] : [optionFor(defaultModel)]),
 				...opencodeModels.map((m) => optionFor(m.id)),
 			]
 		: PRIMARY_MODEL_IDS.filter((id) => availableModelIds.has(id)).map((id) => optionFor(id));
-	const otherOptions = opencodeFirst
+	const allOtherOptions = opencodeFirst
 		? legacyModels.map(legacyOptionFor)
 		: [
 				...(PRIMARY_MODEL_ID_SET.has(defaultModel) ? [] : [optionFor(defaultModel)]),
@@ -413,6 +440,23 @@ export function ModelEffortSelect({
 					.filter((m) => m.id !== defaultModel && !PRIMARY_MODEL_ID_SET.has(m.id))
 					.map((m) => optionFor(m.id)),
 			];
+	// The engine narrows the list rather than greying half of it out: the
+	// direct-SDK engines each speak to one vendor, so on those a model they
+	// can't run is noise, not a choice. Same predicate the Engine submenu uses
+	// for its own disabled rows (a null recomposition is "can't route there"),
+	// and it leaves presets visible, since a preset names its own models.
+	// opencode and pi serve everything, so they filter nothing (pi still meets
+	// the odd unroutable legacy slug, which stays a disabled row below).
+	const filterToEngine = activeEngine === "claude" || activeEngine === "codex";
+	const servableHere = (o: ModelMenuOption) =>
+		!filterToEngine || engineModelId(activeEngine, o.id) !== null;
+	const primaryOptions = allPrimaryOptions.filter(servableHere);
+	const otherOptions = allOtherOptions.filter(servableHere);
+	const hiddenOnEngine =
+		allPrimaryOptions.length +
+		allOtherOptions.length -
+		primaryOptions.length -
+		otherOptions.length;
 	// No-opencode fallback only: "Other models" grouped by engine. With
 	// opencode present the submenu is the flat legacy list instead.
 	const engineOrder = ["claude", "codex", "opencode"];
@@ -578,6 +622,7 @@ export function ModelEffortSelect({
 						</span>
 					</Menu.SubmenuTrigger>
 					<Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
+						{reuploadHint && <MenuHint>{reuploadHint}</MenuHint>}
 						{groupedPrimary
 							? providerGroups.map((g, i) => (
 									<React.Fragment key={g.provider}>
@@ -619,6 +664,12 @@ export function ModelEffortSelect({
 								</Menu.Popup>
 							</Menu.SubmenuRoot>
 						)}
+						{hiddenOnEngine > 0 && (
+							<MenuHint>
+								Hidden on this engine: {hiddenOnEngine}{" "}
+								{hiddenOnEngine === 1 ? "model" : "models"}
+							</MenuHint>
+						)}
 					</Menu.Popup>
 				</Menu.SubmenuRoot>
 				{hasEngine && (
@@ -631,6 +682,7 @@ export function ModelEffortSelect({
 							</span>
 						</Menu.SubmenuTrigger>
 						<Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
+							{reuploadHint && <MenuHint>{reuploadHint}</MenuHint>}
 							{engineOptions.map((e) => {
 								const selected = e.id === activeEngine;
 								// An engine that can't run the current model stays visible
@@ -675,6 +727,7 @@ export function ModelEffortSelect({
 							</span>
 						</Menu.SubmenuTrigger>
 						<Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
+							{effortReuploadHint && <MenuHint>{effortReuploadHint}</MenuHint>}
 							{supportedEfforts.map((e) => {
 								const selected = effectiveEffort === e.id;
 								return (

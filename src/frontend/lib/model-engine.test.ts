@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
 	baseModelId,
 	engineModelId,
+	isAnthropicModel,
 	modelEngine,
 	modelEngineKey,
 	modelVendor,
@@ -129,6 +130,23 @@ describe("modelVendor", () => {
 		expect(modelVendor("dial/opus-fable")).toBeNull();
 		expect(modelVendor("workspace-preset/ws-1/opus-fable")).toBeNull();
 		expect(modelVendor("claude-opus-5")).toBeNull();
+	});
+});
+
+describe("isAnthropicModel", () => {
+	it("answers from the vendor segment when the id has one", () => {
+		expect(isAnthropicModel("opencode/anthropic/claude-opus-5")).toBe(true);
+		expect(isAnthropicModel("pi/anthropic/claude-opus-5")).toBe(true);
+		expect(isAnthropicModel("opencode/openai/gpt-5.6-sol")).toBe(false);
+		// The segment wins over a stale/mismatched catalog pool.
+		expect(isAnthropicModel("opencode/openai/gpt-5.6-sol", "claude")).toBe(false);
+	});
+
+	it("falls back to the catalog's account pool for presets and native slugs", () => {
+		expect(isAnthropicModel("dial/opus-fable", "claude")).toBe(true);
+		expect(isAnthropicModel("claude-opus-5", "claude")).toBe(true);
+		expect(isAnthropicModel("dial/sol-workers", "codex")).toBe(false);
+		expect(isAnthropicModel("workspace-preset/ws-1/opus-fable")).toBe(false);
 	});
 });
 

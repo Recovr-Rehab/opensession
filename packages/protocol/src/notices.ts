@@ -351,6 +351,26 @@ export function parseSessionNotice(content?: string): { body: string } | null {
   return { body };
 }
 
+/**
+ * A turn that re-uploaded the whole conversation instead of reading it back
+ * from the prompt cache (isLikelyPromptCacheMiss in events.ts).
+ *
+ * Worth a line in the transcript because it is the one cost event a reader can
+ * act on: a miss re-sends every token of the conversation, so a turn that
+ * should have cost cache reads costs roughly twenty times that. Written as an
+ * ordinary runner notice, which classifies as a neutral (info) system line.
+ * Nothing broke, and the run continued.
+ *
+ * The token count is the turn's `cacheCreationTokens`: what was actually
+ * re-cached. Dropped below 1k, where "~0k" would say less than nothing.
+ */
+export function cacheMissNotice(cacheCreationTokens?: number): string {
+  const head = "This turn re-uploaded the conversation";
+  const tokens = cacheCreationTokens ?? 0;
+  if (tokens < 1000) return head;
+  return `${head} · ~${Math.round(tokens / 1000)}k tokens re-cached`;
+}
+
 // ---------------------------------------------------------------------------
 // Classification
 // ---------------------------------------------------------------------------

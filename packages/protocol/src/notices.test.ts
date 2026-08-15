@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+	cacheMissNotice,
 	isGitHubAttribution,
 	parseAttribution,
 	parseRecoveryNotice,
@@ -172,6 +173,38 @@ describe("cross-session notice detection", () => {
 				`<!--os:session-notice-->\n${headsUp}\n\n[Kent] Please also run the tests.`,
 			),
 		).toBeNull();
+	});
+});
+
+describe("cacheMissNotice", () => {
+	it("names the cost in thousands of tokens", () => {
+		expect(cacheMissNotice(123_400)).toBe(
+			"This turn re-uploaded the conversation · ~123k tokens re-cached",
+		);
+		expect(cacheMissNotice(20_500)).toBe(
+			"This turn re-uploaded the conversation · ~21k tokens re-cached",
+		);
+	});
+
+	it("drops a count that would round to nothing", () => {
+		const bare = "This turn re-uploaded the conversation";
+		expect(cacheMissNotice(0)).toBe(bare);
+		expect(cacheMissNotice(999)).toBe(bare);
+		expect(cacheMissNotice(undefined)).toBe(bare);
+	});
+
+	it("reads as a neutral system notice once persisted", () => {
+		const classified = classifyEntry({
+			id: "e1",
+			type: "system",
+			content: cacheMissNotice(123_400),
+			timestamp: "2026-08-08T10:00:00.000Z",
+		});
+		expect(classified.notice).toEqual({
+			kind: "system",
+			title: "This turn re-uploaded the conversation · ~123k tokens re-cached",
+			tone: "info",
+		});
 	});
 });
 

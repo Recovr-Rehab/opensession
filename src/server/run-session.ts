@@ -51,10 +51,13 @@ import {
 	routeModel,
 } from "./models";
 import {
+	appendOpencodeTranscript,
 	isOpencodeSessionId,
 	storeAppendUserLineEarly,
+	transcriptLineRunnerNotice,
 	transcriptLineUser,
 } from "./opencode-transcript";
+import { cacheMissNotice } from "@tellahq/opensession-protocol/notices";
 import { wrapContext, stripContext, isContextOnly } from "./prompt-context";
 import { takeVoiceHandoff } from "./desk-voice";
 import { activeRunRecords, type ActiveRunRecord } from "./run-journal";
@@ -2238,11 +2241,23 @@ async function runSessionPromptInner(
 						usage: latestUsage,
 					});
 				}
+				// A cache miss is the one cost event worth keeping: it re-sent the
+				// whole conversation, at roughly twenty times a cached turn. It used
+				// to be a toast, which the person who paid for it usually never saw
+				// (the turn often finishes with nobody watching), so it lands in the
+				// transcript instead, on the turn it happened to, where the token
+				// count still means something a week later.
 				if (event.cacheMissWarning) {
-					broadcastToSession(sessionId, {
-						type: "cache_warning",
-						sessionId,
-					});
+					const ocId = finalSessionId || session.claudeSessionId;
+					if (ocId) {
+						try {
+							appendOpencodeTranscript(ocId, [
+								transcriptLineRunnerNotice(
+									cacheMissNotice(event.usage?.cacheCreationTokens),
+								),
+							]);
+						} catch {}
+					}
 				}
 				invalidateSessionsCache();
 				break;

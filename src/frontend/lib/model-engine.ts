@@ -80,6 +80,26 @@ export function modelVendor(id: string): string | null {
 }
 
 /**
+ * Does this id end up talking to Anthropic? The vendor segment answers it for
+ * an ordinary picker id; a preset or a legacy native slug carries no segment,
+ * so the catalog entry's account pool answers instead ("claude" is the
+ * Anthropic pool; accountProviderForModel in the server's models.ts resolves
+ * presets down to their main model before naming it).
+ *
+ * Only prompt-cache economics ask this question today: an Anthropic prompt
+ * cache is keyed on the whole prefix, so changing what sits in it re-uploads
+ * the conversation. OpenAI's caching does not work that way.
+ */
+export function isAnthropicModel(
+	id: string,
+	accountProvider?: string | null,
+): boolean {
+	const vendor = modelVendor(id);
+	if (vendor !== null) return vendor === "anthropic";
+	return accountProvider === "claude";
+}
+
+/**
  * Compose a picker id onto an engine, or null when the entry cannot route
  * there. Two reasons it cannot:
  *
