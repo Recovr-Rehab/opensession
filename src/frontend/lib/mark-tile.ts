@@ -170,22 +170,26 @@ export function markTileInk(tone: MarkTone): string {
 export type MarkTone = (typeof MARK_TONES)[number];
 
 /**
- * Seven hues, because the thing they distinguish is a grid of otherwise
- * identical rows. Two tones would put the same plate on half the catalog and
- * give a person nothing to aim at.
+ * Every hue the accent palette has, because the thing these distinguish is a
+ * grid of otherwise identical rows. Two tones would put the same plate on half
+ * the catalog and give a person nothing to aim at.
  *
  * Every id here is an accent, so `satisfies` is the guard: retire one from the
  * palette and this stops compiling rather than falling back to a colour nobody
- * chose. Three accents are deliberately left out. `mono` is not a hue, `lime`
- * is a yellow that only exists above the lightness where white ink works, and
- * an id that is not in the palette yet cannot be named here.
+ * chose. It has already done that job once. The palette was curated down from
+ * ten to seven and Teal, Pink and Violet went with it, which is why this list
+ * is five rather than the seven it opened with. The two accents left out are
+ * left out on their own terms: `mono` is not a hue, and `lime` is a yellow that
+ * only exists above the lightness where white ink works.
+ *
+ * Five is the floor for this to still be a set. If the palette loses another
+ * hue, this stops borrowing and gets its own table, because a mark's colour is
+ * an identity for a row rather than a preference someone chose.
  */
 export const MARK_TONES = [
 	"sky",
-	"teal",
+	"indigo",
 	"green",
 	"orange",
 	"coral",
-	"pink",
-	"purple",
 ] as const satisfies readonly AccentTheme[];

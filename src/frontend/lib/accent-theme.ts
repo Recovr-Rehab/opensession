@@ -8,9 +8,9 @@
  * the cool end reads calmer than the warm one no matter what is asked of it.
  *
  * Two entries sit outside the rule. `lime` (Honey) is a yellow, and yellow only
- * exists at high lightness, so it keeps one value in both appearances and takes
- * a black glyph; its ink form deepens instead, since a label has to clear text
- * contrast that a plate does not.
+ * exists at high lightness, so it keeps one value in both appearances; its ink
+ * form deepens instead, since a label has to clear text contrast that a plate
+ * does not. `mono` (Black) has no hue at all and inverts with the page.
  *
  * The `value` is persisted per person, so these ids outlive their colours:
  * changing a hex re-themes everyone who chose that slot, while renaming one
@@ -21,14 +21,14 @@ export const ACCENT_THEME_OPTIONS = [
 	{ value: "indigo", label: "Indigo", light: "#6361f5", dark: "#767bf6" },
 	{ value: "coral", label: "Coral", light: "#dd233a", dark: "#f73648" },
 	{ value: "orange", label: "Tangerine", light: "#d3571c", dark: "#eb6221" },
-	{ value: "lime", label: "Honey", light: "#f2c527", dark: "#f2c527" },
+	{ value: "lime", label: "Honey", light: "#eec75c", dark: "#eec75c" },
 	{ value: "green", label: "Clover", light: "#1e8e45", dark: "#24a351" },
-	{ value: "teal", label: "Teal", light: "#1f8a94", dark: "#259ea9" },
+	{ value: "mono", label: "Black", light: "#000000", dark: "#ffffff" },
 ] as const;
 
 export type AccentTheme = (typeof ACCENT_THEME_OPTIONS)[number]["value"];
 
-export const DEFAULT_ACCENT_THEME: AccentTheme = "teal";
+export const DEFAULT_ACCENT_THEME: AccentTheme = "sky";
 
 const KEY = "opensession-accent";
 const CHANGE_EVENT = "opensession-accent-changed";
@@ -50,7 +50,7 @@ const RETIRED_THEMES: Record<string, AccentTheme> = {
 	purple: "coral",
 	pink: "coral",
 	brown: "orange",
-	mono: "teal",
+	teal: "sky",
 };
 
 export function getAccentTheme(): AccentTheme {
@@ -67,8 +67,14 @@ export function getAccentThemeOption(theme: AccentTheme) {
 	return ACCENT_THEME_OPTIONS.find((option) => option.value === theme)!;
 }
 
-export function getOnAccentInk(theme: AccentTheme): "#000000" | "#ffffff" {
-	return theme === "lime" ? "#000000" : "#ffffff";
+/** Black's fill inverts with the page, so it is the only accent whose glyph
+ *  changes with the appearance. Honey's white glyph is the palette's one
+ *  deliberate low-contrast pairing; see its block in base.css. */
+export function getOnAccentInk(
+	theme: AccentTheme,
+	tone: "light" | "dark",
+): "#000000" | "#ffffff" {
+	return theme === "mono" && tone === "dark" ? "#000000" : "#ffffff";
 }
 
 export function applyAccentTheme(theme: AccentTheme = getAccentTheme()) {

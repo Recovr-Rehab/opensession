@@ -117,6 +117,12 @@
 	   ink-toward-page mix inline, which turned a themed accent black on hover;
 	   base.css picks the right direction per accent. */
 	--color-accent-hover: var(--accent-hover);
+	/* A switch track is the one accent surface that is read as on/off rather
+	   than as a colour, so two accents swap it for a blue: white and yellow
+	   tracks are unreadable as "on" against a dark page. Everything else
+	   resolves straight through to the accent. */
+	--color-accent-control: var(--accent-control, var(--accent));
+	--color-on-accent-control: var(--on-accent-control, var(--on-accent));
 	/* Inline affordances (a link, a PR title that opens). The accent is ink
 	   now, so it cannot mark a link inside running text; this can. */
 	--color-link: var(--link);

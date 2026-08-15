@@ -91,9 +91,9 @@ type Glyph = { icon: ComponentType<{ size?: number }>; tone: MarkTone };
 const TOOL_GLYPHS: Record<string, Glyph> = {
 	tasks: { icon: IconListCircles, tone: "sky" },
 	catchup: { icon: IconInbox, tone: "green" },
-	supporttinder: { icon: IconMessages, tone: "pink" },
-	reports: { icon: IconStack, tone: "purple" },
-	analytics: { icon: IconChart, tone: "teal" },
+	supporttinder: { icon: IconMessages, tone: "coral" },
+	reports: { icon: IconStack, tone: "indigo" },
+	analytics: { icon: IconChart, tone: "sky" },
 };
 
 /**
@@ -109,18 +109,18 @@ const TOOL_GLYPHS: Record<string, Glyph> = {
  */
 const JOB_GLYPHS: { match: RegExp; glyph: Glyph }[] = [
 	{ match: /error|health|monitor|uptime|incident|alarm/, glyph: { icon: IconStatusRing, tone: "coral" } },
-	{ match: /doc|changelog|spell|release note/, glyph: { icon: IconNote, tone: "pink" } },
+	{ match: /doc|changelog|spell|release note/, glyph: { icon: IconNote, tone: "indigo" } },
 	{ match: /test|flaky/, glyph: { icon: IconCheckCircle, tone: "green" } },
 	{ match: /support|ticket|recap|digest|rollup/, glyph: { icon: IconMessages, tone: "orange" } },
-	{ match: /dream|reflect|retro|nightly/, glyph: { icon: IconMoon, tone: "purple" } },
-	{ match: /depend|cleanup|refactor|code/, glyph: { icon: IconWrench, tone: "teal" } },
+	{ match: /dream|reflect|retro|nightly/, glyph: { icon: IconMoon, tone: "indigo" } },
+	{ match: /depend|cleanup|refactor|code/, glyph: { icon: IconWrench, tone: "green" } },
 	{ match: /\bpr\b|pull request|review|merge|branch/, glyph: { icon: IconPullRequest, tone: "sky" } },
 ];
 
 const TYPE_GLYPHS: Record<LibraryEntryType, Glyph> = {
 	tool: { icon: IconStack, tone: "sky" },
 	automation: { icon: IconBolt, tone: "orange" },
-	integration: { icon: IconPlug, tone: "teal" },
+	integration: { icon: IconPlug, tone: "green" },
 };
 
 /** A service named in the entry's own name, for the entries that carry no

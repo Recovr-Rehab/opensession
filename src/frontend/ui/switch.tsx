@@ -22,9 +22,10 @@ export function Switch({ className, size = "md", ...props }: SwitchProps) {
 				"relative inline-flex shrink-0 cursor-pointer rounded-full bg-active outline-none",
 				sm ? "h-5 w-11" : "h-6 w-[54px]",
 				// The checked track is the selected app accent, matching native
-				// controls. Its knob takes --on-accent so Mono still has internal
-				// contrast when the accent becomes white in dark mode.
-				"transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] data-[checked]:bg-accent",
+				// controls, through --accent-control: Black and Honey swap it for
+				// a blue in dark mode, where a white or yellow track stops reading
+				// as "on". Every other accent resolves straight through.
+				"transition-colors duration-[var(--dur-micro)] ease-[var(--ease)] data-[checked]:bg-accent-control",
 				"focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
 				"data-[disabled]:cursor-default data-[disabled]:opacity-40",
 				className,
@@ -36,7 +37,7 @@ export function Switch({ className, size = "md", ...props }: SwitchProps) {
 			    keeps the 2px inset and the capsule, at 26×16. */}
 			<BaseSwitch.Thumb
 				className={cn(
-					"absolute left-0.5 top-0.5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.22),0_0_0_1px_rgba(0,0,0,0.07)] transition-[transform,background-color] duration-[var(--dur-micro)] ease-[var(--ease)] data-[checked]:bg-on-accent",
+					"absolute left-0.5 top-0.5 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.22),0_0_0_1px_rgba(0,0,0,0.07)] transition-[transform,background-color] duration-[var(--dur-micro)] ease-[var(--ease)] data-[checked]:bg-on-accent-control",
 					sm
 						? "h-4 w-[26px] data-[checked]:translate-x-[14px]"
 						: "h-5 w-8 data-[checked]:translate-x-[18px]",

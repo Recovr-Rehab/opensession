@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import {
 	ACCENT_THEME_OPTIONS,
+	type AccentTheme,
 	DEFAULT_ACCENT_THEME,
 	getAccentTheme,
 	getAccentThemeOption,
@@ -47,6 +48,13 @@ beforeEach(() => {
 	delete dataset.accent;
 });
 
+function contrast(a: string, b: string) {
+	const [first, second] = [luminance(a), luminance(b)];
+	return (
+		(Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05)
+	);
+}
+
 function luminance(hex: string) {
 	const channels = [1, 3, 5].map((offset) => {
 		const channel = Number.parseInt(hex.slice(offset, offset + 2), 16) / 255;
@@ -85,13 +93,26 @@ describe("accent theme", () => {
 		expect(JSON.parse(serializedValues ?? "[]")).toEqual(
 			ACCENT_THEME_OPTIONS.map((option) => option.value),
 		);
-		expect(css).toContain("--on-accent-light: #000000");
+		// Black is the only accent that overrides the glyph, and the only one
+		// whose fill inverts with the page.
+		expect(css).toContain("--on-accent-light: #ffffff");
 		expect(css).toContain("--on-accent-dark: #000000");
 		expect(css).toContain("--accent-ink-light: #8d7110");
+		// Both accents that borrow a blue switch track do so only in dark mode,
+		// and both hand the knob a white that the blue can carry.
+		for (const accent of ["lime", "mono"]) {
+			const block = css.match(
+				new RegExp(
+					`html\\[data-theme="dark"\\]\\[data-accent="${accent}"\\] \\{([\\s\\S]*?)\\}`,
+				),
+			)?.[1];
+			expect(block).toContain("--accent-control: #2495d6");
+			expect(block).toContain("--on-accent-control: #ffffff");
+		}
 		// The pre-paint bootstrap has to retire the same selections the bundle
 		// does, or a migrated accent flashes its old id for one frame.
 		expect(html).toContain(
-			'var retired = { gold: "lime", purple: "coral", pink: "coral", brown: "orange", mono: "teal" }',
+			'var retired = { gold: "lime", purple: "coral", pink: "coral", brown: "orange", teal: "sky" }',
 		);
 	});
 
@@ -103,17 +124,23 @@ describe("accent theme", () => {
 		expect(Number(columns)).toBe(ACCENT_THEME_OPTIONS.length);
 	});
 
-	test("every fill carries a legible glyph", () => {
+	// Honey is the one deliberate exception, at 1.62:1. It is the pairing the
+	// palette was drawn from, and it is only ever a glyph on a plate; a label
+	// takes --accent-ink, which deepens until it clears text contrast. Asserting
+	// the number rather than skipping the case keeps the exception visible.
+	test("honey's white glyph is the one low-contrast pairing", () => {
+		const honey = getAccentThemeOption("lime");
+		expect(getOnAccentInk("lime", "light")).toBe("#ffffff");
+		expect(contrast(honey.light, "#ffffff")).toBeCloseTo(1.62, 1);
+	});
+
+	test("every other fill carries a legible glyph", () => {
 		for (const option of ACCENT_THEME_OPTIONS) {
+			if (option.value === "lime") continue;
 			for (const tone of ["light", "dark"] as const) {
 				const fill = option[tone];
-				const ink = getOnAccentInk(option.value);
-				const fillLuminance = luminance(fill);
-				const inkLuminance = luminance(ink);
-				const contrast =
-					(Math.max(fillLuminance, inkLuminance) + 0.05) /
-					(Math.min(fillLuminance, inkLuminance) + 0.05);
-				expect(contrast).toBeGreaterThan(3);
+				const ink = getOnAccentInk(option.value, tone);
+				expect(contrast(fill, ink)).toBeGreaterThan(3);
 			}
 		}
 	});
@@ -128,20 +155,21 @@ describe("accent theme", () => {
 	// once, so a chain would leave the caller on a dead id and fall back to the
 	// default, which is the reset the migration exists to prevent.
 	test("migrates every retired accent to a hue still in the palette", () => {
-		for (const [retired, expected] of [
+		const retirements: [string, AccentTheme][] = [
 			["purple", "coral"],
 			["pink", "coral"],
 			["brown", "orange"],
-			["mono", "teal"],
+			["teal", "sky"],
 			["gold", "lime"],
-		]) {
+		];
+		for (const [retired, expected] of retirements) {
 			storage.setItem("opensession-accent", retired);
 			expect(getAccentTheme()).toBe(expected);
 			expect(isAccentTheme(expected)).toBe(true);
 		}
 	});
 
-	test("defaults to teal for missing or unknown values", () => {
+	test("defaults to sky for missing or unknown values", () => {
 		expect(getAccentTheme()).toBe(DEFAULT_ACCENT_THEME);
 		storage.setItem("opensession-accent", "chartreuse");
 		expect(getAccentTheme()).toBe(DEFAULT_ACCENT_THEME);
@@ -162,8 +190,8 @@ describe("accent theme", () => {
 	test("rejects values outside the palette", () => {
 		expect(isAccentTheme("lime")).toBe(true);
 		expect(isAccentTheme("gold")).toBe(false);
-		expect(isAccentTheme("mono")).toBe(false);
+		expect(isAccentTheme("teal")).toBe(false);
 		expect(isAccentTheme("chartreuse")).toBe(false);
-		expect(getAccentThemeOption("teal").dark).toBe("#259ea9");
+		expect(getAccentThemeOption("mono").dark).toBe("#ffffff");
 	});
 });

@@ -29,9 +29,9 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
     case orange
     case lime
     case green
-    case teal
+    case mono
 
-    static let `default` = AccentTheme.teal
+    static let `default` = AccentTheme.sky
 
     var id: String { rawValue }
 
@@ -43,30 +43,30 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
         case .orange: "Tangerine"
         case .lime: "Honey"
         case .green: "Clover"
-        case .teal: "Teal"
+        case .mono: "Black"
         }
     }
 
     /// Each fill runs at 92% of the chroma its hue can physically reach in sRGB
     /// at its lightness, which is as saturated as the colour gets before it
     /// leaves the gamut. The share is flat across the wheel; the results are
-    /// not. Teal and Sky top out near chroma 0.10 and 0.13 where Pink and
-    /// Coral reach 0.22, so the cool end reads calmer than the warm one no
-    /// matter what is asked of it.
+    /// not. Sky tops out near chroma 0.13 where Indigo and Coral reach 0.22,
+    /// so the cool end reads calmer than the warm one no matter what is asked
+    /// of it.
     ///
     /// Honey keeps one value in both appearances: yellow only exists at high
-    /// lightness, so a cream that reads on the dark plate is 1.3:1 against a
-    /// white page, and a value deep enough for the light page still reads as
-    /// gold on the dark one.
+    /// lightness, so a value deep enough to separate from a white page still
+    /// reads as gold on a dark one. Black has no hue at all and inverts with
+    /// the page, which is why it is the only fill whose glyph changes.
     var fills: (light: UInt32, dark: UInt32) {
         switch self {
         case .sky: (0x1D_82_BC, 0x24_95_D6)
         case .indigo: (0x63_61_F5, 0x76_7B_F6)
         case .coral: (0xDD_23_3A, 0xF7_36_48)
         case .orange: (0xD3_57_1C, 0xEB_62_21)
-        case .lime: (0xF2_C5_27, 0xF2_C5_27)
+        case .lime: (0xEE_C7_5C, 0xEE_C7_5C)
         case .green: (0x1E_8E_45, 0x24_A3_51)
-        case .teal: (0x1F_8A_94, 0x25_9E_A9)
+        case .mono: (0x00_00_00, 0xFF_FF_FF)
         }
     }
 
@@ -78,10 +78,9 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
         ))
     }
 
-    /// The accent as foreground ink on the page. Honey's light fill already
-    /// gives up saturation to separate from a white page, and as a label or
-    /// icon rather than a plate it has to clear text contrast too, so it
-    /// deepens once more.
+    /// The accent as foreground ink on the page. Honey's fill is a plate
+    /// colour, and as a label or icon it has to clear text contrast, so it
+    /// deepens on light surfaces.
     var accentInk: Color {
         guard self == .lime else { return accent }
         return Color(platformColor: AccentTheme.dynamic(
@@ -118,8 +117,13 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
     }
 
     /// What sits on top of the fill: the glyph in the send disc and every other
-    /// prominent accent control. Jewel tones use white, honey uses black.
-    var onAccent: Color { self == .lime ? .black : .white }
+    /// prominent accent control. Every accent takes white, including Honey,
+    /// whose 1.62:1 is the palette's one deliberate low-contrast pairing and
+    /// only ever carries a glyph. Black inverts with the page instead.
+    var onAccent: Color {
+        guard self == .mono else { return .white }
+        return Color(platformColor: AccentTheme.dynamic(light: .white, dark: .black))
+    }
 
     /// A flat, appearance-independent swatch — for anywhere the two values have
     /// to be shown side by side rather than resolved.
@@ -130,7 +134,7 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
     /// Whether this accent's fixed glyph is white. Together with
     /// `glyphContrast` this lets the test suite reject replacement colours too
     /// pale to carry the palette's chosen ink.
-    func glyphIsWhite(dark _: Bool) -> Bool { self != .lime }
+    func glyphIsWhite(dark: Bool) -> Bool { self != .mono || !dark }
 
     /// How much contrast the derived glyph gets on this fill.
     func glyphContrast(dark: Bool) -> Double {
@@ -234,7 +238,7 @@ final class AccentStore {
         case "purple": AccentTheme.coral.rawValue
         case "pink": AccentTheme.coral.rawValue
         case "brown": AccentTheme.orange.rawValue
-        case "mono": AccentTheme.teal.rawValue
+        case "teal": AccentTheme.sky.rawValue
         default: stored
         }
         theme = AccentTheme(rawValue: normalized) ?? .default

@@ -43,13 +43,13 @@
         var accent = localStorage.getItem("opensession-accent");
         // Accents whose colour was retired; keep in sync with RETIRED_THEMES in
         // lib/accent-theme.ts, which is what runs once the bundle is up.
-        var retired = { gold: "lime", purple: "coral", pink: "coral", brown: "orange", mono: "teal" };
+        var retired = { gold: "lime", purple: "coral", pink: "coral", brown: "orange", teal: "sky" };
         if (retired[accent]) {
           accent = retired[accent];
           localStorage.setItem("opensession-accent", accent);
         }
-        var accents = ["sky", "indigo", "coral", "orange", "lime", "green", "teal"];
-        h.setAttribute("data-accent", accents.indexOf(accent) >= 0 ? accent : "teal");
+        var accents = ["sky", "indigo", "coral", "orange", "lime", "green", "mono"];
+        h.setAttribute("data-accent", accents.indexOf(accent) >= 0 ? accent : "sky");
         h.style.colorScheme = eff;
         var m = document.querySelector('meta[name="theme-color"]');
         // --bg-raised (sidebar + WCO titlebar surface): the desktop PWA paints

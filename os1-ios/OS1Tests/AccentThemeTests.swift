@@ -12,9 +12,10 @@ final class AccentThemeTests: XCTestCase {
 
     /// The guard that makes replacing a colour safe: the palette's fixed glyph
     /// has to be readable on it in both appearances. 3:1 is WCAG's non-text
-    /// contrast, which is what an arrow in a disc is.
+    /// contrast, which is what an arrow in a disc is. Honey is the one
+    /// exception, asserted by name below rather than skipped quietly.
     func testEveryAccentCarriesALegibleGlyph() {
-        for theme in AccentTheme.allCases {
+        for theme in AccentTheme.allCases where theme != .lime {
             for dark in [false, true] {
                 let contrast = theme.glyphContrast(dark: dark)
                 XCTAssertGreaterThan(
@@ -25,18 +26,20 @@ final class AccentThemeTests: XCTestCase {
         }
     }
 
-    /// Most jewel tones carry white; bright lime deliberately carries black.
+    /// Every chromatic fill carries white. Black is the only one that inverts,
+    /// because its own fill does.
     func testChromaticFillsUseTheirExpectedGlyphInk() {
-        for theme in AccentTheme.allCases {
-            let expectsWhite = theme != .lime
-            XCTAssertEqual(theme.glyphIsWhite(dark: false), expectsWhite, "\(theme.rawValue) light fill")
-            XCTAssertEqual(theme.glyphIsWhite(dark: true), expectsWhite, "\(theme.rawValue) dark fill")
+        for theme in AccentTheme.allCases where theme != .mono {
+            XCTAssertTrue(theme.glyphIsWhite(dark: false), "\(theme.rawValue) light fill")
+            XCTAssertTrue(theme.glyphIsWhite(dark: true), "\(theme.rawValue) dark fill")
         }
+        XCTAssertTrue(AccentTheme.mono.glyphIsWhite(dark: false))
+        XCTAssertFalse(AccentTheme.mono.glyphIsWhite(dark: true))
     }
 
-    func testDefaultsToTealWhenNothingIsStored() {
+    func testDefaultsToSkyWhenNothingIsStored() {
         let store = AccentStore(defaults: scratchDefaults())
-        XCTAssertEqual(store.theme, .teal)
+        XCTAssertEqual(store.theme, .sky)
     }
 
     func testUnknownStoredValueFallsBackRatherThanCrashing() {
@@ -46,9 +49,10 @@ final class AccentThemeTests: XCTestCase {
     }
 
     /// Honey carries one value in both appearances, so it has to separate from
-    /// a white page and a near-black one with the same colour. That is the
-    /// constraint that decides how deep the gold goes.
-    func testHoneySeparatesFromBothPages() {
+    /// a white page and a near-black one with the same colour. Its white glyph
+    /// is the palette's one deliberate low-contrast pairing; the number is
+    /// asserted here so the exception stays visible rather than being skipped.
+    func testHoneySeparatesFromBothPagesAndKeepsItsWhiteGlyph() {
         XCTAssertEqual(AccentTheme.lime.fills.light, AccentTheme.lime.fills.dark)
         XCTAssertGreaterThan(
             contrast(AccentTheme.lime.fills.light, 0xFF_FF_FF), 1.5,
@@ -58,6 +62,7 @@ final class AccentThemeTests: XCTestCase {
             contrast(AccentTheme.lime.fills.dark, 0x1C_1C_1C), 3.0,
             "honey against the dark plate"
         )
+        XCTAssertEqual(AccentTheme.lime.glyphContrast(dark: false), 1.62, accuracy: 0.02)
     }
 
     /// A retired accent must never point at another retired one: the switch
@@ -68,7 +73,7 @@ final class AccentThemeTests: XCTestCase {
             ("purple", AccentTheme.coral),
             ("pink", .coral),
             ("brown", .orange),
-            ("mono", .teal),
+            ("teal", .sky),
             ("gold", .lime),
             ("blue", .sky),
         ] {

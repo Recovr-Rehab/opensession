@@ -171,7 +171,7 @@ function AccentSwatch({
 }) {
 	const option = getAccentThemeOption(theme);
 	const swatch = option[tone];
-	const ink = getOnAccentInk(theme);
+	const ink = getOnAccentInk(theme, tone);
 	const style = {
 		"--swatch": swatch,
 		"--swatch-ink": ink,
