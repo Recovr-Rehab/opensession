@@ -8,7 +8,6 @@
 import { existsSync, readFileSync } from "fs";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import { configuredPaths, defaultRepo } from "../../server/config";
-import { isLocalProfile } from "../../server/profile";
 import { statePath } from "../../server/paths";
 
 // ---------------------------------------------------------------------------
@@ -58,9 +57,9 @@ export const CANCELLED_ANSWER = "__CANCELLED__";
 export const SESSION_DIR = statePath(".slack-sessions");
 // Config-driven (repos registry / paths in ~/.backstage/config.json); the
 // zero-config values are the historical tella-fusion literals.
-export const DEFAULT_CWD = isLocalProfile() ? "" : defaultRepo().repo;
+export const DEFAULT_CWD = defaultRepo().repo;
 export const MCP_CONFIG_PATH = configuredPaths().mcpConfig;
-export const GITHUB_REPO = isLocalProfile() ? "" : defaultRepo().ghRepo;
+export const GITHUB_REPO = defaultRepo().ghRepo;
 
 // ---------------------------------------------------------------------------
 // Runtime state

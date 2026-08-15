@@ -195,7 +195,6 @@ import { transcriptStore } from "./transcript-store";
 import { gitIdentityEnv } from "./shared/user-mappings";
 import { githubAuthEnv, githubUserLoginForRun } from "./github-auth";
 import { ensureAgentAwsCredsFile } from "./aws-creds";
-import { isLocalProfile } from "./profile";
 import { buildEngineSwitchHandoffNote } from "./fork-handoff";
 import { piAnthropicTransport, piEngineEnabled } from "./pi-config";
 import { buildPiAnthropicProvider } from "./pi-anthropic-provider";
@@ -1170,7 +1169,6 @@ export async function* runPi(
     // the trusted-human loops carry deniedTools but shouldn't trip the gate.
     const bashGated = isUnattendedKind(baseJournalKind(journal?.kind)) && !isAsk;
     const githubUserLogin =
-      !isLocalProfile() &&
       !policy.unattended &&
       INTERACTIVE_KINDS.has(baseJournalKind(journal?.kind))
         ? githubUserLoginForRun(user || author?.name)
@@ -1430,7 +1428,7 @@ export async function* runPi(
     // Minimal bash env — the security invariant this engine hangs on. The
     // server env is NEVER inherited; every entry is explicit.
     const awsEnv =
-      !isLocalProfile() && opts.aws ? await ensureAgentAwsCredsFile() : {};
+      opts.aws ? await ensureAgentAwsCredsFile() : {};
     const bashEnv: Record<string, string> = {
       ...(process.env.PATH ? { PATH: process.env.PATH } : {}),
       ...(process.env.HOME ? { HOME: process.env.HOME } : {}),
