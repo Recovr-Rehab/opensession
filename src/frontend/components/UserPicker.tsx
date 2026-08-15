@@ -181,13 +181,14 @@ function AuthBackdrop() {
  * around it, so it is the whole page's shape.
  *
  * It is paper (`bg-surface`, the page's own base) rather than the panel grey
- * every other card takes, and it has no hairline. Both follow from what is
- * behind it: on the silk it is the only opaque thing on screen, so its own
- * edge is drawn by the contrast with a moving backdrop rather than by a
- * border, and it can take the `lg` cast a card genuinely floating over
- * something has earned. It read differently on the flat white page it used to
- * sit on, where a soft cast alone was haze and a hairline had to draw the
- * shape.
+ * every other card takes: on the silk it is the only opaque thing on screen,
+ * so it reads against the backdrop rather than against a page.
+ *
+ * Its edge is the one thing that changes with the theme, and `--auth-card-edge`
+ * (base.css) holds both answers. Over the silver loop the card is white in
+ * front of a picture and takes the `lg` cast a genuinely floating card has
+ * earned. Over the charcoal cut there is nothing for a cast to fall on, so it
+ * takes a hairline instead.
  *
  * Every screen opens on the product's own icon, the same one the loading
  * splash shows (index.html), so the app you are signing in to is what you land
@@ -203,7 +204,7 @@ function AuthCard({
 	return (
 		<div className="relative flex h-screen items-center justify-center overflow-hidden p-6">
 			<AuthBackdrop />
-			<div className="relative w-[400px] max-w-full rounded-2xl bg-surface p-8 text-center smooth-shadow-lg phone:p-6">
+			<div className="relative w-[400px] max-w-full rounded-2xl bg-surface p-8 text-center shadow-(--auth-card-edge) phone:p-6">
 				<img
 					src={`${BASE_PATH}/mac-app-icon.png`}
 					alt=""
