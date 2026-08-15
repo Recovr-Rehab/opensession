@@ -6,6 +6,7 @@ import type { AnalyticsSummary } from "../lib/types";
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
 import { Segmented, SegmentedOption } from "../ui/segmented";
+import { PageTitle } from "../ui/page-header";
 import { cn } from "../ui/cn";
 import { SCROLL_EDGE_DIVIDER } from "../lib/app-shell-classes";
 import { useScrollEdge } from "../hooks/useScrollEdge";
@@ -559,14 +560,17 @@ export function Analytics() {
 			>
 				{/* The bar's fill and hairline run the full pane; its contents keep to
 				    the column the cards below are centred in. Same box as the content
-				    container down there, padding included, so the title sits on the
-				    cards' left edge and the range control on their right. */}
-				<div className="mx-auto flex w-full max-w-[1080px] flex-wrap items-center justify-between gap-3 px-4 md:px-6">
-					<h1 className="m-0 text-item-title font-semibold text-fg">Analytics</h1>
-					{/* On a phone the two controls can't sit beside the title as one
-					    block, and stacking all three would treble the bar. `contents`
-					    hands them to the row's own wrap instead, so the presets ride up
-					    next to the title and only the dates take a second row. */}
+				    container down there, padding included, so the range control lands
+				    on the cards' right edge.
+				    The page's name is not in here. It sits directly under this row in
+				    this same column, so a small copy of the word stacked 60px above
+				    the real title read as a mistake rather than as chrome. The bar is
+				    the range bar; the page names itself. */}
+				<div className="mx-auto flex w-full max-w-[1080px] flex-wrap items-center justify-end gap-3 px-4 md:px-6">
+					{/* On a phone the two controls can't sit beside each other as one
+					    block, and stacking them would double the bar. `contents` hands
+					    them to the row's own wrap instead, so only the dates take a
+					    second row. */}
 					<div className="flex flex-wrap items-center gap-2 phone:contents">
 						{/* A custom range matches no preset, so the control can sit with
 						    nothing pressed — the dates beside it are the value then. */}
@@ -612,6 +616,10 @@ export function Analytics() {
 				{/* No top padding: every block in here opens with its own `mt-4`,
 				    which is the gap under the bar. */}
 				<div className="mx-auto w-full max-w-[1080px] px-4 pb-10 md:px-6">
+					{/* The page's own heading, at the step every other page opens on.
+					    It scrolls away under the range bar, which is why that bar is
+					    fixed and this is not. */}
+					<PageTitle className="mt-7">Analytics</PageTitle>
 					{error && <p className="mt-4 text-body text-red">{error}</p>}
 					{!data && !error && (
 						<div className="flex h-60 items-center justify-center text-body text-dim">Loading analytics…</div>

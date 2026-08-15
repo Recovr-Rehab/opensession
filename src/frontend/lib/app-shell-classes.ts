@@ -184,9 +184,7 @@ export const DETAIL_TOPBAR =
  * own bottom inset as the single divider above the content.
  */
 export const DETAIL_TOPBAR_TITLE =
-	// `m-0`: it is an `h1`, and the app ships no preflight, so the UA margin is
-	// still there to clear.
-	"detail-topbar-title wco-chrome m-0 flex h-[var(--desktop-header-h)] items-center px-4 " +
+	"detail-topbar-title wco-chrome flex h-[var(--desktop-header-h)] items-center px-4 " +
 	"border-b border-b-divider bg-[var(--topbar-bg)] " +
 	"text-item-title font-semibold text-fg " +
 	"[.detail-topbar:has(+_.session-tabs)_&]:border-b-0 " +

@@ -209,9 +209,7 @@ export function Tasks({ addHandler, onOpenSession }: TasksProps) {
 			<div className="mx-auto max-w-[760px]">
 				<PageHeader>
 					<div>
-						{/* Phones only. On desktop the app's top bar names the page,
-						    and that row is also what the window is dragged by. */}
-						<PageTitle className="desktop:hidden">Tasks</PageTitle>
+						<PageTitle>Tasks</PageTitle>
 						<PageDescription>
 							{open.length} open task{open.length === 1 ? "" : "s"}
 						</PageDescription>

@@ -3209,12 +3209,12 @@ export function App(
 	};
 
 	// Plain title shown in the top bar for non-session views (session routes let
-	// the SessionViewer portal its own header in instead). A route left blank
-	// here collapses the bar (`.detail-topbar:empty`), which is right only for a
-	// page that brings a bar of its own: Reports heads both of its columns. Every
-	// other page names itself here rather than in its own body, because in the
-	// desktop shell this row is also the window's titlebar, and a page without
-	// one leaves that stretch of the top edge dead.
+	// the SessionViewer portal its own header in instead). It names the route,
+	// and the page under it still carries its own title: these are pages, not
+	// chats. A route left blank here collapses the bar (`.detail-topbar:empty`),
+	// which is right only for a page that brings a bar of its own: Reports heads
+	// both of its columns, Analytics its charts. Anywhere else a blank leaves the
+	// window with no titlebar to drag in the desktop shell.
 	const topbarTitle: string =
 		route.view === "archived"
 				? "Archived"
@@ -3781,8 +3781,11 @@ export function App(
 					{/* Centered page title on pushed pages, iOS-sheet style. Sessions
 					    show the workspace name (per-session titles live on the tabs) plus a
 					    working dot while the engine runs; other views show their plain
-					    title. Desktop hides the whole bar. */}
-					{mobileDetail && (
+					    title. Desktop hides the whole bar.
+					    A page that heads itself and leaves `topbarTitle` blank (Analytics,
+					    Reports) gets no pill at all: an empty one is a white lozenge with
+					    nothing in it. */}
+					{mobileDetail && (route.view === "session" || topbarTitle) && (
 						<span
 							className={
 								route.view === "session" && currentSession
@@ -4258,11 +4261,11 @@ export function App(
 								// does (WorkspacePane) rather than taking the plain title.
 								!(route.view === "workspace" && routeWorkspace) &&
 								topbarTitle && (
-								// The page's heading, not a second copy of one: the pages
-								// that used to print their name here as well now show that
-								// title on phones only, where this bar is hidden and the
-								// nav bar names the page you pushed instead.
-								<h1 className={DETAIL_TOPBAR_TITLE}>{topbarTitle}</h1>
+								// Where you are, not the page's heading: these routes are
+								// pages, and a page keeps its own title in its body. This
+								// says which one is open once that title has scrolled away,
+								// the way the chat header names the session.
+								<span className={DETAIL_TOPBAR_TITLE}>{topbarTitle}</span>
 							)}
 						</div>
 						{!activeTabSplit && renderTabBar(null)}

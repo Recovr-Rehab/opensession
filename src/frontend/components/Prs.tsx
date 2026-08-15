@@ -321,9 +321,7 @@ export function Prs({
       <div className="mx-auto w-full max-w-[920px] px-6 pb-15 pt-7 max-[560px]:px-4 max-[560px]:pb-12 max-[560px]:pt-[18px]">
         <PageHeader className="items-center max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-3.5">
           <div className="min-w-0 flex-1">
-            {/* Phones only. On desktop the app's top bar names the page,
-                and that row is also what the window is dragged by. */}
-            <PageTitle className="desktop:hidden">Pull requests</PageTitle>
+            <PageTitle>Pull requests</PageTitle>
             <OverviewLine
               running={running}
               stats={stats}
