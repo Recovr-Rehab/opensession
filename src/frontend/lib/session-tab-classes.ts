@@ -170,9 +170,20 @@ const TAB_BASE =
 	// never shows through it. (`--tab-stroke`, the ring's colour in the old
 	// sheet, was never set anywhere — it always resolved to transparent.)
 	`border ${PILL} smooth-shadow-sm ` +
-	// Desktop: no fill, ring or rounding — just the label, with a transparent
-	// underline reserved so the active/inactive swap never shifts the row.
-	"desktop:rounded-none desktop:border-0 desktop:bg-transparent desktop:hover:bg-transparent";
+	// Desktop: no fill, ring, lift or rounding — just the label.
+	"desktop:relative desktop:rounded-none desktop:border-0 desktop:bg-transparent " +
+	"desktop:shadow-none desktop:hover:bg-transparent " +
+	// …and the underline, which every state paints by naming a colour in
+	// `--tab-line` (see `tabClass`) rather than by writing a rule of its own.
+	// It is a pseudo-element and not the inset box-shadow it used to be
+	// because a shadow can only trace the whole box: the line marks the tab's
+	// LABEL, so it stops at the padding, and again before the close × when the
+	// tab carries one — a rule running under the × read as a rule under the
+	// next tab too, since the gap between two tabs is 3px.
+	"desktop:after:absolute desktop:after:inset-x-2.5 desktop:after:bottom-0 " +
+	"desktop:after:h-0.5 desktop:after:rounded-[1px] desktop:after:content-[''] " +
+	"desktop:after:bg-[var(--tab-line,transparent)] " +
+	"desktop:has-[button]:after:right-8";
 
 export type TabState = {
 	active: boolean;
@@ -193,19 +204,27 @@ export function tabClass(state: TabState): string {
 	const { active, waiting, colored } = state;
 	const ink = active || waiting ? "text-fg" : "text-dim hover:text-fg";
 
-	// Desktop: one — and only one — inset underline. 2px, which is the weight
-	// every other tab strip in the app selects with (Reviews writes the same
-	// cue as `border-b-2 border-b-accent`); at 3px the bar was a slab of
-	// full-strength ink next to a hairline band. That leaves active and waiting
-	// on the same weight, so waiting carries the colour instead: blue, the same
-	// "needs you" the tab's own dot and the sidebar row already speak.
+	// Desktop: one — and only one — underline, drawn by TAB_BASE from the colour
+	// named here. 2px, which is the weight every other tab strip in the app
+	// selects with (Reviews writes the same cue as `border-b-2 border-b-accent`);
+	// at 3px the bar was a slab of full-strength ink next to a hairline band.
+	// That leaves active and waiting on the same weight, so waiting carries the
+	// colour instead: blue, the same "needs you" the tab's own dot and the
+	// sidebar row already speak.
+	//
+	// Ink rather than --accent for the plain active tab. The accent is a chosen
+	// hue, and a strip of tabs is the app's own chrome: which tab you are on is
+	// structure, not a status worth spending the one saturated colour on, and
+	// at full strength beside a hairline band it was the loudest thing in the
+	// header. --text also inverts with the theme for free, which is what keeps
+	// the mark reading as "this one" on paper as well as on ink.
 	const underline = active
-		? "desktop:shadow-[inset_0_-2px_0_var(--accent)]"
+		? "[--tab-line:var(--text)]"
 		: waiting
-			? "desktop:shadow-[inset_0_-2px_0_var(--blue)]"
+			? "[--tab-line:var(--blue)]"
 			: colored
-				? "desktop:shadow-[inset_0_-2px_0_color-mix(in_srgb,var(--tab-color)_70%,transparent)]"
-				: "desktop:shadow-[inset_0_-2px_0_transparent]";
+				? "[--tab-line:color-mix(in_srgb,var(--tab-color)_70%,transparent)]"
+				: "";
 
 	// One fill + one ring per state, hover included: a second background
 	// utility in the same variant bucket would be resolved by Tailwind's output
