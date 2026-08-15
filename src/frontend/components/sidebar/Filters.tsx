@@ -7,10 +7,12 @@ import {
 	setSidebarDensity,
 	type SidebarDensity,
 } from "../../lib/sidebar-density";
+import { AGENT_PERSON_KEY } from "../../lib/automation-audience";
 import type { Group } from "../../lib/sidebar-types";
 import { useIsPhone } from "../../hooks/useIsPhone";
 import { cn } from "../../ui/cn";
 import { RepoTile, repoLabel } from "../RepoTile";
+import { IconRobot } from "../icons";
 import { UserAvatar } from "../UserAvatar";
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -90,10 +92,23 @@ export function FilterPopover({
 		})),
 	];
 
-	// You first (the default), then teammates, the aggregate Backlog lens, and
-	// "Everyone" last. Owner-focused views retain their own Backlog rows.
+	// You first (the default), then teammates and the agent, the aggregate
+	// Backlog lens, and "Everyone" last. Owner-focused views retain their own
+	// Backlog rows.
 	const meKey = currentUser.toLowerCase();
 	const personAvatar = (name: string) => <UserAvatar name={name} size={16} />;
+	// The agent is one of the people in this list: it owns every automation
+	// nobody has taken. It has no photo, and an initial tile would read as a
+	// teammate you don't recognise, so it wears the machine face automation
+	// rows already use.
+	const personIcon = (key: string, label: string) =>
+		key === AGENT_PERSON_KEY ? (
+			<span className="inline-flex size-4 shrink-0 items-center justify-center rounded-[32%] bg-active text-dim">
+				<IconRobot size={13} />
+			</span>
+		) : (
+			personAvatar(label)
+		);
 	const personOptions: SelectOption[] = [
 		{ value: "me", label: `${currentUser} (you)`, icon: personAvatar(currentUser) },
 		...people
@@ -101,7 +116,7 @@ export function FilterPopover({
 			.map(({ key, label }) => ({
 				value: key,
 				label,
-				icon: personAvatar(label),
+				icon: personIcon(key, label),
 			})),
 		{ value: "unassigned", label: "Unassigned" },
 		{ value: "everyone", label: "Everyone" },

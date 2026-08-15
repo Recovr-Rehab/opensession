@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+	AGENT_PERSON_KEY,
 	automationInPersonLens,
 	automationInRepoLens,
 	ownerMatchesPerson,
@@ -32,18 +33,25 @@ describe("automationInPersonLens", () => {
 			expect(automationInPersonLens(a, "everyone", "Kent")).toBe(true);
 	});
 
-	test("me keeps yours and the ones nobody has taken", () => {
+	test("me keeps only the ones you own", () => {
 		expect(automationInPersonLens(mine, "me", "Kent")).toBe(true);
-		expect(automationInPersonLens(house, "me", "Kent")).toBe(true);
 		expect(automationInPersonLens(theirs, "me", "Kent")).toBe(false);
+		// Nobody has taken it, so it is the agent's rather than yours by default.
+		expect(automationInPersonLens(house, "me", "Kent")).toBe(false);
 	});
 
-	test("an automation with no owner set behaves as it always did", () => {
-		// The migration promise: until someone takes ownership, every lens that
-		// is not a specific teammate still shows the whole band.
-		const untouched = {};
-		expect(automationInPersonLens(untouched, "me", "Kent")).toBe(true);
-		expect(automationInPersonLens(untouched, "everyone", "Kent")).toBe(true);
+	test("the agent holds every automation nobody has taken", () => {
+		// Including one whose owner never existed on the wire.
+		for (const a of [house, {}]) {
+			expect(automationInPersonLens(a, AGENT_PERSON_KEY, "Kent")).toBe(true);
+			expect(automationInPersonLens(a, "everyone", "Kent")).toBe(true);
+		}
+		// An owned one is that person's, so it is not also the agent's.
+		expect(automationInPersonLens(mine, AGENT_PERSON_KEY, "Kent")).toBe(false);
+	});
+
+	test("the agent signed in as itself finds its routines under me", () => {
+		expect(automationInPersonLens(house, "me", AGENT_PERSON_KEY)).toBe(true);
 	});
 
 	test("a teammate lens keeps only theirs, not the unowned ones", () => {
@@ -52,8 +60,10 @@ describe("automationInPersonLens", () => {
 		expect(automationInPersonLens(house, "michiel", "Kent")).toBe(false);
 	});
 
-	test("unassigned is only the ones nobody owns", () => {
-		expect(automationInPersonLens(house, "unassigned", "Kent")).toBe(true);
+	test("unassigned holds no automations at all", () => {
+		// That lens is about work nobody claimed. An automation is either a
+		// person's or the agent's, so it is never in it.
+		expect(automationInPersonLens(house, "unassigned", "Kent")).toBe(false);
 		expect(automationInPersonLens(mine, "unassigned", "Kent")).toBe(false);
 	});
 
@@ -65,7 +75,7 @@ describe("automationInPersonLens", () => {
 	});
 
 	test("owner is optional on the wire", () => {
-		expect(automationInPersonLens({}, "unassigned", "Kent")).toBe(true);
+		expect(automationInPersonLens({}, AGENT_PERSON_KEY, "Kent")).toBe(true);
 		expect(automationInPersonLens({}, "michiel", "Kent")).toBe(false);
 	});
 });

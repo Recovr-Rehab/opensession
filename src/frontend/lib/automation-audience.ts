@@ -3,16 +3,27 @@
  *
  * An automation is owned by a person, the same way a session is started by
  * one, so the sidebar's person lens should narrow both. An automation edits
- * the codebase unattended, so the owner is who reviews what it did; an
- * unowned one is a house routine nobody has taken.
+ * the codebase unattended, so the owner is who reviews what it did.
+ *
+ * One nobody has taken is the agent's: something set it up, it is still
+ * running, and the agent is what runs it. That gives unowned work one named
+ * place a person can go and adopt it from, rather than a line in everybody's
+ * sidebar that everybody scrolls past.
  */
 
-import { DEFAULT_REPO_ID } from "./brand";
+import { AGENT_NAME, DEFAULT_REPO_ID } from "./brand";
 
 /**
- * What an automation the overview can't describe counts as: unowned. The runs
- * of a deleted automation stay in the band long after the automation is gone,
- * and nobody is accountable for them.
+ * The person key the agent answers to. It is the agent's own name, so an
+ * automation whose owner is set to the agent and one nobody has touched land
+ * in the same place, and a session the agent started sits there too.
+ */
+export const AGENT_PERSON_KEY = AGENT_NAME.trim().toLowerCase();
+
+/**
+ * What an automation the overview can't describe counts as: unowned, and so
+ * the agent's. The runs of a deleted automation stay in the band long after
+ * the automation is gone, and no person is accountable for them.
  */
 export const HOUSE_AUTOMATION: {
 	owner?: string;
@@ -37,31 +48,35 @@ export function ownerMatchesPerson(
 }
 
 /**
- * The four lens values, spelled out:
+ * The lens values, spelled out:
  *
- * - `everyone` — every automation, which is what the band showed before it
- *   had an audience at all.
- * - `me` — yours, plus the ones addressed to nobody in particular. A house
- *   routine like the production sweep is everyone's, so keeping it here is
- *   what stops the default view losing most of the band the day audiences
- *   arrived. What drops out is an automation someone else's name is on.
- * - `unassigned` — only the ones nobody is named on.
- * - a person key — the ones that report to that teammate. House routines are
- *   not theirs in particular, so they stay out: you asked for one person.
+ * - `everyone` — every automation.
+ * - `me` — the ones you own, and nothing else. An automation edits the
+ *   codebase unattended, so your sidebar holds what you are accountable for
+ *   reviewing.
+ * - the agent's key — the ones nobody has taken. They live there until a
+ *   person adopts one.
+ * - `unassigned` — no automations. That lens is about work nobody claimed, and
+ *   an automation is always either a person's or the agent's.
+ * - a person key — the ones that teammate owns.
  */
 export function automationInPersonLens(
 	automation: { owner?: string },
 	person: string,
 	currentUser: string,
 ): boolean {
-	const owner = (automation.owner || "").trim();
 	if (person === "everyone") return true;
-	if (!owner) return person === "me" || person === "unassigned";
-	if (person === "unassigned") return false;
+	// "me" stands in for your own name, so resolve it first: the agent signed
+	// in as itself then finds its own routines under "me" as well.
 	const key =
-		person === "me" ? currentUser.trim().toLowerCase() : person.trim();
+		person === "me"
+			? currentUser.trim().toLowerCase()
+			: person.trim().toLowerCase();
 	// Signed out, "mine" can't be answered: show the band rather than empty it.
-	if (!key || key === "anonymous") return person === "me";
+	if (person === "me" && (!key || key === "anonymous")) return true;
+	const owner = (automation.owner || "").trim();
+	if (!owner) return key === AGENT_PERSON_KEY;
+	if (person === "unassigned") return false;
 	return ownerMatchesPerson(owner, key);
 }
 

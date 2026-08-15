@@ -200,10 +200,12 @@ import {
 	type FeedFilterValues,
 } from "../lib/sidebar-filter";
 import {
+	AGENT_PERSON_KEY,
 	automationInPersonLens,
 	automationInRepoLens,
 	HOUSE_AUTOMATION,
 } from "../lib/automation-audience";
+import { AGENT_NAME } from "../lib/brand";
 import { useAutomationOverview } from "../lib/automation-overview";
 import {
 	isClaimed,
@@ -961,9 +963,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				? "All workspaces"
 				: filter.person === "unassigned"
 					? "Unassigned"
-					: team.find((m) => m.key === filter.person)?.person.name ||
-						people.find((p) => p.key === filter.person)?.label ||
-						filter.person;
+					: filter.person === AGENT_PERSON_KEY
+						? AGENT_NAME
+						: team.find((m) => m.key === filter.person)?.person.name ||
+							people.find((p) => p.key === filter.person)?.label ||
+							filter.person;
 
 	// Who each automation reports to, where it files, and what its last run
 	// concluded. Re-read when automation activity moves rather than on a timer:
@@ -980,6 +984,19 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		return `${count}:${newest}`;
 	}, [sessions]);
 	const automationOverview = useAutomationOverview(automationActivityKey);
+
+	// The agent is a person in the picker as well as a name on a row: it holds
+	// every automation nobody has taken, and those are still editing the
+	// codebase unattended. Offered only once there is something behind it, and
+	// merged with the agent's own sessions where it has started any.
+	const peopleWithAgent = useMemo(() => {
+		const unowned = Array.from(automationOverview.values()).some(
+			(a) => !a.owner,
+		);
+		if (!unowned || people.some((p) => p.key === AGENT_PERSON_KEY))
+			return people;
+		return [...people, { key: AGENT_PERSON_KEY, label: AGENT_NAME }];
+	}, [people, automationOverview]);
 
 	// Every non-archived session, narrowed by the repo/person filters and search.
 	// Rows are built per-workspace below; a session matching the filter surfaces its
@@ -4607,7 +4624,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					}
 					filter={filter}
 					repos={repos}
-					people={people}
+					people={peopleWithAgent}
 					currentUser={currentUser}
 					onChange={setFilter}
 					onClose={() => setFilterOpen(false)}
