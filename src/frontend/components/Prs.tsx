@@ -100,6 +100,16 @@ function weekTrend(stats: HomeStats | null): string | null {
   return `${Math.abs(pct)}% ${pct > 0 ? "busier" : "quieter"} than last week`;
 }
 
+function Separator() {
+  // A space of its own rather than a margin: the dot costs the line as little
+  // as it can, and the clauses stay on one row a little longer for it.
+  return (
+    <span aria-hidden="true" className="text-faint">
+      {" ·"}
+    </span>
+  );
+}
+
 // The page is about its list, so the day rides under the title as one line
 // instead of a slab of five figures with a second week-long tier under each.
 // The three kept are the ones you act on: what is live now, and how much
@@ -130,31 +140,38 @@ function OverviewLine({
           : "Analytics are loading"
       }
       aria-busy={!stats}
-      className="focus-ring group -mx-1 mt-1 flex max-w-full cursor-pointer items-center gap-2 rounded-sm px-1 text-left text-supporting tabular-nums text-dim transition-colors hover:text-fg"
+      // The clauses wrap rather than truncate: a narrow window should cost the
+      // line a second row, not hide the trend behind an ellipsis that gives no
+      // hint of what it swallowed.
+      className="focus-ring group -mx-1 mt-1 flex max-w-full cursor-pointer flex-wrap items-center gap-x-1.5 gap-y-0.5 rounded-sm px-1 text-left text-supporting tabular-nums text-dim transition-colors hover:text-fg"
     >
-      <span
-        aria-hidden="true"
-        className={
-          running > 0
-            ? "h-1.5 w-1.5 shrink-0 rounded-full bg-green motion-safe:animate-pulse"
-            : "h-1.5 w-1.5 shrink-0 rounded-full bg-line"
-        }
-      />
-      <span className="truncate">
+      <span className="flex items-center gap-2">
+        <span
+          aria-hidden="true"
+          className={
+            running > 0
+              ? "h-1.5 w-1.5 shrink-0 rounded-full bg-green motion-safe:animate-pulse"
+              : "h-1.5 w-1.5 shrink-0 rounded-full bg-line"
+          }
+        />
         {runningLabel(running)}
-        {today ? (
-          <>
-            {" · "}
-            {fmtCompact(today.sessions)} sessions and{" "}
-            {fmtAgentTime(today.durationMs)} of agent time today
-          </>
-        ) : null}
-        {trend ? (
-          <span className="text-faint transition-colors group-hover:text-dim">
-            {` · ${trend}`}
-          </span>
-        ) : null}
+        {/* Every separator trails the clause it follows, so a wrap leaves it at
+            the end of the line it finished. Led, it would orphan a dot at the
+            start of the next line, which reads as a bullet. */}
+        {today ? <Separator /> : null}
       </span>
+      {today ? (
+        <span>
+          {fmtCompact(today.sessions)} sessions,{" "}
+          {fmtAgentTime(today.durationMs)} of agent time today
+          {trend ? <Separator /> : null}
+        </span>
+      ) : null}
+      {trend ? (
+        <span className="text-faint transition-colors group-hover:text-dim">
+          {trend}
+        </span>
+      ) : null}
       {!stats && (
         <span className="h-2.5 w-40 shrink rounded-sm bg-line motion-safe:animate-pulse" />
       )}
