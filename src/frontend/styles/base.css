@@ -1280,6 +1280,20 @@ html.wco .app-body.sidebar-collapsed
 	overflow-wrap: anywhere;
 }
 
+/* Prose, in light, reads one step below the app's medium. Dropping the
+   -webkit-font-smoothing override handed macOS back the rasterization every
+   other app gets, and that puts about 10% more ink in each stem: solid on a
+   label you scan, thick across a paragraph you read. 450 lands the stroke back
+   where the 500 sat before (measured stem fill 55.1% before, 56.2% here, 58.0%
+   at 500). Bold and headings set their own 600, so only running text moves.
+   Dark keeps the 500 deliberately: there the fill comes from the rasterizer
+   rather than the weight, so even 400 recovers only a third of it, and the
+   lighter body would reach every client that never got the darkening in the
+   first place (Windows, Linux, the iOS PWA). */
+html[data-theme="light"] .markdown {
+	font-weight: 450;
+}
+
 .markdown p {
 	/* 8px on a 15px/24px body ≈ the 0.47em block rhythm the native app uses
 	   (blockSpacing 8 against 17pt). 6px left paragraphs reading as one slab.
