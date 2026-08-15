@@ -22,16 +22,15 @@ type ModelCatalog = { models: ModelOption[]; default: string };
 const MODEL_CACHE_MS = 60_000;
 const modelCatalogCache = new Map<string, { value: ModelCatalog; fetchedAt: number; pending?: Promise<ModelCatalog> }>();
 
-function modelCatalogKey(cloud: boolean, workspaceId?: string): string {
-	return `${cloud ? "cloud" : "local"}:${workspaceId || "global"}`;
+function modelCatalogKey(workspaceId?: string): string {
+	return workspaceId || "global";
 }
 
-async function refreshModelCatalog(cloud: boolean, workspaceId?: string): Promise<ModelCatalog> {
-	const key = modelCatalogKey(cloud, workspaceId);
+async function refreshModelCatalog(workspaceId?: string): Promise<ModelCatalog> {
+	const key = modelCatalogKey(workspaceId);
 	const current = modelCatalogCache.get(key);
 	if (current?.pending) return current.pending;
 	const params = new URLSearchParams();
-	if (cloud) params.set("cloud", "1");
 	if (workspaceId) params.set("workspace", workspaceId);
 	const pending = request<ModelCatalog>(`/models${params.size ? `?${params}` : ""}`, {
 		label: "Failed to fetch models",
@@ -88,17 +87,17 @@ export async function transcribeClip(audio: Blob): Promise<string> {
 	return typeof data?.text === "string" ? data.text : "";
 }
 
-export async function fetchModels(cloud = false, workspaceId?: string): Promise<{
+export async function fetchModels(workspaceId?: string): Promise<{
 	models: ModelOption[];
 	default: string;
 }> {
-	const cached = modelCatalogCache.get(modelCatalogKey(cloud, workspaceId));
+	const cached = modelCatalogCache.get(modelCatalogKey(workspaceId));
 	if (cached?.value.models.length) {
 		if (Date.now() - cached.fetchedAt > MODEL_CACHE_MS)
-			void refreshModelCatalog(cloud, workspaceId).catch(() => {});
+			void refreshModelCatalog(workspaceId).catch(() => {});
 		return cached.value;
 	}
-	return refreshModelCatalog(cloud, workspaceId);
+	return refreshModelCatalog(workspaceId);
 }
 
 /** Trimmed provider account shape for the per-session account picker. */
@@ -114,10 +113,10 @@ export interface ProviderAccountOption {
 	kind?: string;
 }
 
-export async function fetchProviderAccounts(cloud = false): Promise<ProviderAccountOption[]> {
+export async function fetchProviderAccounts(): Promise<ProviderAccountOption[]> {
 	const fetchPool = async (provider: "claude" | "codex", path: string) => {
 		try {
-			const data = await request<{ accounts?: any[] }>(`${path}${cloud ? "?cloud=1" : ""}`);
+			const data = await request<{ accounts?: any[] }>(path);
 			return (data?.accounts ?? []).map((a) => ({
 				id: a.id,
 				name: a.name,

@@ -98,8 +98,8 @@ function deletePending(ws: unknown, termId: string): void {
 /** The slice of UnifiedSession / the session file the terminal target needs. */
 export interface TerminalSessionInfo {
 	id?: string;
-	repo?: string;
-	createdBy?: string;
+	repo?: string | null;
+	createdBy?: string | null;
 	worktreeDir?: string | null;
 	sandbox?: { provider?: string; sandboxId?: string; workspace?: string };
 	runner?: { id: string; workspacePath: string };
@@ -202,7 +202,7 @@ async function resolveTarget(
 			target: "runner",
 			displayCwd: runner.workspacePath,
 			connect: async (io) => {
-				const opened = await openRunnerTerminal({ runnerId: runner.id, sessionId: session.id!, repo: session.repo!, workspacePath: runner.workspacePath, user: session.createdBy, cols: io.cols, rows: io.rows });
+				const opened = await openRunnerTerminal({ runnerId: runner.id, sessionId: session.id!, repo: session.repo!, workspacePath: runner.workspacePath, user: session.createdBy || undefined, cols: io.cols, rows: io.rows });
 				const detach = registerRunnerTerminalHandler((runnerId, message) => {
 					if (runnerId !== runner.id || message.id !== opened.terminalId) return;
 					if (message.t === "terminal_data" && typeof message.data === "string") io.onData(Buffer.from(message.data, "base64"));

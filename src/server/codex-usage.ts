@@ -149,7 +149,10 @@ async function probeCodexUsageUnlocked(
 	executable: string,
 	timeoutMs: number,
 ): Promise<CodexAccountUsage> {
-	let proc: ReturnType<typeof Bun.spawn>;
+	// Name the pipes in the type as well as the options: the bare spawn return
+	// type describes the DEFAULT stdio, where stdin is an inherited fd rather
+	// than the FileSink this writes to and stdout is not async-iterable.
+	let proc: Bun.Subprocess<"pipe", "pipe", "ignore">;
 	try {
 		proc = Bun.spawn([executable, "app-server"], {
 			env: appServerEnv(codexHome),

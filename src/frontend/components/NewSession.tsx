@@ -67,6 +67,8 @@ interface Props {
   forceMode?: "ask" | "code" | "scratch";
   /** When starting a session inside a workspace, the session joins that workspace… */
   workspaceId?: string;
+  /** Workspace whose model combinations this new, independent session can use. */
+  modelWorkspaceId?: string;
   /** …and defaults to the workspace's shared repo + worktree (a sibling's branch). */
   forceRepo?: string;
   forceBranch?: string;
@@ -650,7 +652,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   }
 
   useEffect(() => {
-		fetchModels(false, workspaceId)
+		fetchModels(modelWorkspaceId || workspaceId)
       .then((m) => {
         setModels(m.models);
         setDefaultModel(m.default);
@@ -675,7 +677,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
         });
       })
       .catch(() => {});
-	}, [workspaceId]);
+	}, [modelWorkspaceId, workspaceId]);
 
   // Worktrees are per-repo; refetch and reset the selection when it changes.
   // Inside a workspace, snap back to the shared sibling branch, not "New branch".
@@ -812,6 +814,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       ...(workspaceId
         ? { workspaceId: workspaceId, worktreeMode }
         : { createWorkspace: {} }),
+      ...(modelWorkspaceId ? { modelWorkspaceId } : {}),
       branch: mode === "code" ? branch : "",
       prompt: prompt.trim(),
       user: getCurrentUser(),
