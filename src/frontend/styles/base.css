@@ -1898,6 +1898,40 @@ html[data-theme="light"] .md-mermaid {
    specificity (0,1,1) and wins only by sitting later, so keep this block
    below the `.markdown` rules. */
 
+/* The baseline the whole family sits on. An inline-flex takes its baseline
+   from its first flex item, and for every chip below that item is a glyph box
+   with no text in it, so the chip's own words rode above the sentence's and
+   each one carried a hand-tuned `vertical-align` in em to put them back. Those
+   were measured in one font, and the app renders in SF, Inter or Segoe
+   depending on the machine, so they were only ever right on the machine they
+   were tuned on — the person chip's face fallback was 5px out.
+
+   A zero-width text run as the first item hands the container its LABEL's
+   baseline instead, which is correct in any font and needs no number. The
+   negative margin cancels the `gap` it would otherwise open before the glyph.
+   Measured at exactly 0 against the surrounding sentence for all four. */
+a.asset-ref::before,
+.session-link[data-session-id]::before,
+.automation-link[data-automation-id]::before,
+a.person-chip::before,
+a.pr-ref::before {
+	content: "\200b";
+	flex: none;
+	width: 0;
+	margin-inline-end: -4px;
+}
+a.pr-ref::before {
+	margin-inline-end: -3px;
+}
+
+/* Every chip below is as tall as the words inside it and no taller: the label's
+   own line box at 1.15, a glyph no bigger than that box, and 2.5px of room over
+   it against 1px under. At the old 1.3 leading with an 18px glyph they stood
+   23-25px tall inside a 24px line, so a paragraph carrying one had its leading
+   pushed apart and read as a slab dropped into the sentence. They now land at
+   19-21px, next to the 19px of an inline `code` capsule, which is the other
+   object a sentence can contain. */
+
 /* A scratch asset named in an answer. The file glyph and contained surface
    distinguish it from an ordinary web link without turning a sentence into a
    row of large cards; the full path remains in the link's title. */
@@ -1906,12 +1940,11 @@ a.asset-ref {
 	max-width: 100%;
 	align-items: center;
 	gap: 4px;
-	vertical-align: -0.35em;
-	/* Its own line box, like the two chips below. Without this the paragraph's
-	   24px lands inside the pill and pads it out to 28px tall, half of that
+	/* Its own line box, like the three chips below. Without this the
+	   paragraph's 24px lands inside the pill and pads it out, half of that
 	   under the baseline. */
-	line-height: 1.3;
-	padding: 4px 9px 1px 6px;
+	line-height: 1.15;
+	padding: 2.5px 9px 1px 6px;
 	border: 0;
 	border-radius: calc(9px * var(--rf)); corner-shape: var(--cs);
 	background: var(--accent-soft);
@@ -1934,17 +1967,17 @@ a.asset-ref:focus-visible {
 }
 .asset-ref-icon {
 	display: inline-grid;
-	width: 18px;
-	height: 18px;
+	width: 16px;
+	height: 16px;
 	flex: none;
 	place-items: center;
 	color: var(--accent-ink);
-	/* Onto the cap band, same 1px as the two chips below. */
+	/* Onto the cap band, same 1px as the three chips below. */
 	transform: translateY(-1px);
 }
 .asset-ref-icon svg {
-	width: 18px;
-	height: 18px;
+	width: 16px;
+	height: 16px;
 	stroke: currentColor;
 	stroke-width: 1.5;
 	stroke-linecap: round;
@@ -1981,12 +2014,6 @@ a.asset-ref:focus-visible {
 	display: inline-flex;
 	align-items: center;
 	gap: 4px;
-	/* Sits the chip's own words on the sentence's baseline. An inline-flex
-	   takes its baseline from the glyph box, which hangs lower than the label
-	   inside it, so the stock -0.2em left these words riding 1.5px over the
-	   ones around them. Same correction as the PR chip below, in a bigger
-	   number because this chip's em is 0.95 of the body's. */
-	vertical-align: -0.43em;
 	/* Never wider than the bubble it sits in; the label ellipsizes instead of
 	   pushing the chip past the edge. */
 	max-width: 100%;
@@ -1999,14 +2026,11 @@ a.asset-ref:focus-visible {
 	   around its label rather than a rounded rectangle sitting in prose. */
 	border-radius: calc(9px * var(--rf)); corner-shape: var(--cs);
 	/* Top and bottom are unequal on purpose, and that is what makes them LOOK
-	   equal. The line box hangs 4.6px below the baseline and only 2.6px above
-	   the cap, so symmetric padding leaves the words riding high in the pill
-	   by exactly the 2px difference. The extra px on top past that is Kent's
-	   eye, not arithmetic: descenders fill the room under the baseline while
-	   nothing fills the room over the caps, so a balanced pill still reads
-	   tight up there. Same sum as the PR chip below. */
-	padding: 4px 8px 1px 6px;
-	line-height: 1.3;
+	   equal: descenders fill the room under the baseline while nothing fills
+	   the room over the caps, so a balanced pill reads tight up there. Same
+	   split as the three chips around it. */
+	padding: 2.5px 8px 1px 6px;
+	line-height: 1.15;
 	cursor: pointer;
 	text-decoration: none;
 	white-space: nowrap;
@@ -2034,8 +2058,10 @@ a.asset-ref:focus-visible {
 .session-link-icon,
 .automation-link-icon {
 	display: inline-grid;
-	width: 18px;
-	height: 18px;
+	/* Never taller than the label's own line box, or the glyph rather than the
+	   words decides how tall the chip is — which is what made it a slab. */
+	width: 16px;
+	height: 16px;
 	flex: none;
 	place-items: center;
 	color: var(--text-dim);
@@ -2046,8 +2072,8 @@ a.asset-ref:focus-visible {
 }
 .session-link-icon svg,
 .automation-link-icon svg {
-	width: 18px;
-	height: 18px;
+	width: 16px;
+	height: 16px;
 	stroke: currentColor;
 	stroke-width: 1.5;
 	stroke-linecap: round;
@@ -2076,15 +2102,13 @@ a.asset-ref:focus-visible {
 .session-link[data-session-running] .session-link-icon svg {
 	display: none;
 }
-/* Painted into the glyph's own 18px box instead of being a 7px box of its
-   own. The chip is an inline-flex, so the sentence takes its baseline from
-   the first item, the icon, and a 7px box centred in that slot puts that
-   baseline 5.5px higher than the glyph does. That dropped the whole running
-   chip half a line below the words around it. */
+/* Painted into the glyph's own box instead of being a 7px box of its own, so
+   the running chip is the same size as the idle one and the dot lands where
+   the glyph did. */
 .session-link[data-session-running] .session-link-icon::before {
 	content: "";
-	width: 18px;
-	height: 18px;
+	width: 16px;
+	height: 16px;
 	background: radial-gradient(circle at 50% 50%, var(--yellow) 3.5px, transparent 3.6px);
 }
 
@@ -2098,10 +2122,6 @@ a.person-chip {
 	display: inline-flex;
 	align-items: center;
 	gap: 4px;
-	/* The face box is 16px against the session chip's 18px glyph, so it hangs
-	   less far below the label — a slightly smaller correction than that
-	   chip's -0.43em. */
-	vertical-align: -0.32em;
 	max-width: 100%;
 	font-size: 0.95em;
 	font-weight: 560;
@@ -2109,10 +2129,10 @@ a.person-chip {
 	color: var(--accent-ink);
 	border: 0;
 	border-radius: 999px;
-	/* Round, so the sides need the room the corners take away; the 3/1 split
+	/* Round, so the sides need the room the corners take away; the 2/1 split
 	   top-to-bottom is the same reading correction as its neighbours. */
-	padding: 3px 9px 1px 3px;
-	line-height: 1.3;
+	padding: 2px 9px 1px 3px;
+	line-height: 1.15;
 	cursor: pointer;
 	text-decoration: none;
 	white-space: nowrap;
@@ -2155,24 +2175,16 @@ a.pr-ref {
 	display: inline-flex;
 	align-items: center;
 	gap: 3px;
-	/* Sits the chip's own words on the sentence's baseline. The extra 0.15em
-	   past the session chip's -0.2em is what an inline-flex costs: its
-	   baseline comes from the glyph box, which hangs lower than the label it
-	   contains, so the stock value leaves the chip's text riding 2.3px over
-	   the words around it. In em so it holds at any body size. */
-	vertical-align: -0.35em;
 	background: var(--hover);
 	color: var(--text);
 	border: 0;
 	/* Capsule corner, same as the session chip above. */
 	border-radius: calc(9px * var(--rf)); corner-shape: var(--cs);
-	/* Unequal to read as equal, the same 4/1 split as the session chip above
-	   and for the same reason: the line box hangs ~5px below the baseline and
-	   only ~3px over the caps, so it is the TOP that needs the padding. A
-	   symmetric 3/3 put 8.3px over the caps against 5.7px under the baseline,
-	   which is the pill sitting low on its own label. */
-	padding: 4px 8px 1px 5px;
-	line-height: 1.3;
+	/* Unequal to read as equal, the same split as the session chip above and
+	   for the same reason: descenders fill the room under the baseline, so it
+	   is the TOP that needs the padding. */
+	padding: 2.5px 8px 1px 5px;
+	line-height: 1.15;
 	font-weight: 600;
 	font-variant-numeric: tabular-nums;
 	text-decoration: none;
@@ -2197,8 +2209,8 @@ a.pr-ref:focus-visible {
 }
 .pr-ref-icon {
 	display: inline-grid;
-	width: 18px;
-	height: 18px;
+	width: 16px;
+	height: 16px;
 	flex: none;
 	place-items: center;
 	color: var(--text-dim);
@@ -2208,8 +2220,8 @@ a.pr-ref:focus-visible {
 	transform: translateY(-1px);
 }
 .pr-ref-icon svg {
-	width: 18px;
-	height: 18px;
+	width: 16px;
+	height: 16px;
 	stroke: currentColor;
 	stroke-width: 1.5;
 	stroke-linecap: round;
