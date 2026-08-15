@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from "react";
+import { BrandMark } from "./BrandMark";
 import { UserAvatar } from "./UserAvatar";
 import { IconArrowUpRight } from "./icons";
 import { BASE_PATH } from "../lib/base";
 import { usePeople } from "../lib/people";
 import { Button } from "../ui/button";
+import { cn } from "../ui/cn";
 import { DeviceCode } from "../ui/device-code";
+import { InlineAlert } from "../ui/state";
 import { PulseDot } from "../ui/status";
 
 /**
@@ -94,6 +97,86 @@ export async function signOut(): Promise<void> {
 }
 
 /**
+ * A failed redirect sign-in lands back on `/?auth_error=…`. Read at module
+ * load, not when the sign-in screen mounts: App's route state stamps the root
+ * history entry with `replaceState(…, location.pathname)` on its very first
+ * render, so by the time this screen exists the query is already gone and the
+ * message never appeared. A module body runs during import, which is before
+ * any of that. Keep the entry's own state when clearing the query. It carries
+ * the router's depth, and blanking it costs Back the root it counts down to.
+ */
+const REDIRECT_ERROR: string | null = (() => {
+	try {
+		const err = new URLSearchParams(window.location.search).get("auth_error");
+		if (!err) return null;
+		window.history.replaceState(
+			window.history.state,
+			"",
+			window.location.pathname,
+		);
+		return err;
+	} catch {
+		return null;
+	}
+})();
+
+/**
+ * The shell every pre-app screen shares: sign-in, the local name picker, the
+ * expired-session notice, the retry after a failed status check. They were
+ * four hand-built boxes with their own paddings and inline styles, which is
+ * why the first thing a new teammate saw looked like a different product from
+ * the one behind it.
+ *
+ * One card, one corner, one width. The corner is the container step of the
+ * radius scale (`rounded-2xl`) rather than the card step: nothing is stacked
+ * around it, so it is the whole page's shape, and it wants to read as round as
+ * the mark above it. No hairline: a block on its own fill is already
+ * separated from the page (see src/frontend/AGENTS.md), and the shadow is what
+ * says the card arrived over it.
+ */
+function AuthCard({
+	mark,
+	title,
+	children,
+}: {
+	/** A 28px brand mark, drawn in the page's own ink on a true circle. */
+	mark?: React.ReactNode;
+	title: string;
+	children?: React.ReactNode;
+}) {
+	return (
+		<div className="flex h-screen items-center justify-center bg-surface p-6">
+			<div className="w-[400px] max-w-full rounded-2xl bg-panel p-8 text-center smooth-shadow-soft phone:p-6">
+				{mark && (
+					// `bg-fg`, not `bg-accent`: this circle is GitHub's mark, and it
+					// should stay ink-on-page in both themes the way GitHub's own
+					// mark does, rather than turning lime with the workspace accent.
+					// `rounded-full` is the one radius that opts out of the app's
+					// squircle, which is exactly right here: the logo is a circle.
+					<span className="mx-auto mb-5 flex size-14 items-center justify-center rounded-full bg-fg text-surface">
+						{mark}
+					</span>
+				)}
+				<h1 className="m-0 text-section-title font-semibold text-fg">{title}</h1>
+				{children}
+			</div>
+		</div>
+	);
+}
+
+/** The sentence under an AuthCard's title. */
+function AuthCopy({ children }: { children: React.ReactNode }) {
+	return (
+		// `last:mb-0` for the cards whose sentence IS the card (the expired
+		// notice): the margin is air before whatever follows, and with nothing
+		// following it just lands the card off-centre.
+		<p className="mx-auto mt-2 mb-6 max-w-[32ch] text-supporting leading-relaxed text-dim last:mb-0">
+			{children}
+		</p>
+	);
+}
+
+/**
  * Identity gate. Default: the historical localStorage name picker. When
  * GitHub web sign-in is active on the server (config
  * integrations.github.userPrAuth), the picker is replaced by a real GitHub
@@ -144,14 +227,19 @@ export function UserGate({ children }: { children: React.ReactNode }) {
 	if (!auth && !authFailed && user !== "Anonymous") return <>{children}</>;
 
 	if (!auth) {
+		if (authFailed) {
+			return (
+				<AuthCard title="Couldn't check sign-in">
+					<AuthCopy>The server didn't answer. It may still be starting up.</AuthCopy>
+					<Button variant="primary" size="lg" className="min-h-10 w-full" onClick={loadAuth}>
+						Try again
+					</Button>
+				</AuthCard>
+			);
+		}
 		return (
 			<div className="flex h-screen items-center justify-center bg-surface">
-				{authFailed ? (
-					<div className="text-center">
-						<p className="m-0 mb-3 text-body text-dim">Couldn't check sign-in.</p>
-						<Button size="sm" onClick={loadAuth}>Try again</Button>
-					</div>
-				) : showAuthWait ? (
+				{showAuthWait ? (
 					<div role="status" aria-live="polite" className="text-supporting text-faint">
 						Checking sign-in
 					</div>
@@ -179,46 +267,48 @@ export function UserGate({ children }: { children: React.ReactNode }) {
   if (user !== "Anonymous") return <>{children}</>;
 
   return (
-    <div className="flex h-screen items-center justify-center bg-surface">
-      <div className="w-[380px] max-w-[calc(100vw-32px)] rounded-lg border border-line bg-raised p-8 text-center max-[560px]:p-[22px]">
-        <h2 className="mt-0 mb-5 text-section-title">Who are you?</h2>
-        <div className="grid grid-cols-2 gap-2.5">
-          {roster.length ? (
-            roster.map(({ name }) => (
-              <button
-                key={name}
-                className="flex flex-col items-center gap-2 rounded-md border border-line-strong bg-panel p-3 text-item-title text-fg hover:border-accent hover:bg-hover"
-                onClick={() => setStoredUser(name)}
-              >
-                <UserAvatar name={name} size={36} />
-                {name}
-              </button>
-            ))
-          ) : (
+    <AuthCard title="Who are you?">
+      {roster.length > 0 && (
+        <AuthCopy>Pick your name. You can switch later.</AuthCopy>
+      )}
+      <div
+        className={cn(
+          "grid gap-2",
+          // One tile has no column to pair with: a half-width button floating
+          // in a card reads as a layout that lost its other half.
+          roster.length > 1 ? "grid-cols-2 phone:grid-cols-1" : "grid-cols-1",
+          // Without a roster there is no sentence above to hold the title off
+          // the tiles, so the grid carries that air itself.
+          roster.length === 0 && "mt-6",
+        )}
+      >
+        {(roster.length ? roster.map(({ name }) => name) : ["Local User"]).map(
+          (name) => (
             <button
-              className="flex flex-col items-center gap-2 rounded-md border border-line-strong bg-panel p-3 text-item-title text-fg hover:border-accent hover:bg-hover"
-              onClick={() => setStoredUser("Local User")}
+              key={name}
+              // The raised-control optics of Button's `default` variant, at
+              // tile proportions: a hairline is allowed here because the tile
+              // is a control, not a card (see src/frontend/AGENTS.md).
+              className="flex flex-col items-center gap-2 rounded-lg border border-line bg-button px-3 py-4 text-item-title font-medium text-fg smooth-shadow-xs transition-[border-color,scale] hover:border-line-strong active:scale-[0.98] focus-ring"
+              onClick={() => setStoredUser(name)}
             >
-              <UserAvatar name="Local User" size={36} />
-              Continue locally
+              <UserAvatar name={name} size={36} />
+              {roster.length ? name : "Continue locally"}
             </button>
-          )}
-        </div>
+          ),
+        )}
       </div>
-    </div>
+    </AuthCard>
   );
 }
 
 function LocalSessionExpired() {
   return (
-    <div className="flex h-screen items-center justify-center bg-surface">
-      <div className="w-[380px] max-w-[calc(100vw-32px)] rounded-lg border border-line bg-raised p-8 text-center max-[560px]:p-[22px]">
-        <h2 className="mt-0 mb-5 text-section-title">GitHub sign-in expired</h2>
-        <p className="text-dim">
-          Switch to cloud mode, sign in with GitHub, then restart local mode.
-        </p>
-      </div>
-    </div>
+    <AuthCard title="GitHub sign-in expired" mark={<BrandMark name="github" size={28} />}>
+      <AuthCopy>
+        Switch to cloud mode, sign in with GitHub, then restart local mode.
+      </AuthCopy>
+    </AuthCard>
   );
 }
 
@@ -236,23 +326,7 @@ function GithubSignIn({
     interval: number;
   } | null>(null);
   const [starting, setStarting] = useState(false);
-  // A failed redirect sign-in lands back on /?auth_error=… — surface it.
-  const [error, setError] = useState<string | null>(() => {
-    try {
-      const err = new URLSearchParams(window.location.search).get("auth_error");
-      if (err) {
-        // Keep the entry's state: it carries the router's depth, and blanking
-        // it costs Back the root it counts down to.
-        window.history.replaceState(
-          window.history.state,
-          "",
-          window.location.pathname,
-        );
-        return err;
-      }
-    } catch {}
-    return null;
-  });
+  const [error, setError] = useState<string | null>(REDIRECT_ERROR);
 
   // Poll GitHub (via the server) until the device code is authorized.
   useEffect(() => {
@@ -305,73 +379,82 @@ function GithubSignIn({
   }
 
   return (
-    <div className="flex h-screen items-center justify-center bg-surface">
-      <div className="w-[380px] max-w-[calc(100vw-32px)] rounded-lg border border-line bg-raised p-8 text-center max-[560px]:p-[22px]">
-        <h2 className="mt-0 mb-5 text-section-title">Sign in</h2>
-        {!flow ? (
-          <>
-            <p style={{ margin: "10px 0 16px", fontSize: 13, opacity: 0.75 }}>
-              This workspace uses GitHub sign-in. Your sessions will act as your
-              own GitHub account (PRs are authored by you).
-            </p>
-            {redirect ? (
-              <>
-                <button
-                  className="flex flex-col items-center gap-2 rounded-md border border-line-strong bg-panel p-3 text-item-title text-fg hover:border-accent hover:bg-hover"
-                  onClick={() => {
-                    window.location.href = `${BASE_PATH}/api/auth/login`;
-                  }}
-                  style={{ width: "100%" }}
-                >
-                  Sign in with GitHub
-                </button>
-                <button
-                  onClick={start}
-                  disabled={starting}
-                  style={{
-                    marginTop: 10,
-                    width: "100%",
-                    background: "none",
-                    border: "none",
-                    fontSize: 13,
-                    opacity: 0.6,
-                    textDecoration: "underline",
-                    cursor: "pointer",
-                  }}
-                >
-                  {starting ? "Starting…" : "Use a device code instead"}
-                </button>
-              </>
-            ) : (
-              <button className="flex flex-col items-center gap-2 rounded-md border border-line-strong bg-panel p-3 text-item-title text-fg hover:border-accent hover:bg-hover" onClick={start} disabled={starting} style={{ width: "100%" }}>
-                {starting ? "Starting…" : "Sign in with GitHub"}
-              </button>
-            )}
-          </>
-        ) : (
-          <div className="mt-2.5 flex flex-col items-center gap-3">
-            <p className="m-0 text-body text-dim">
-              Enter this code at{" "}
-              <span className="font-medium text-fg">
-                {flow.verificationUri.replace(/^https:\/\//, "")}
-              </span>
-            </p>
-            <DeviceCode code={flow.userCode} className="text-section-title" />
-            <a href={flow.verificationUri} target="_blank" rel="noreferrer">
-              <Button size="sm" variant="primary" icon={<IconArrowUpRight size={20} />}>
-                Open GitHub
-              </Button>
-            </a>
-            <span className="flex items-center gap-2 text-label text-dim">
-              <PulseDot size={7} />
-              Waiting for GitHub…
+    <AuthCard
+      title={flow ? "Enter this code" : "Sign in"}
+      mark={<BrandMark name="github" size={28} />}
+    >
+      {!flow ? (
+        <>
+          <AuthCopy>
+            Sessions act as your own GitHub account, so pull requests are
+            authored by you.
+          </AuthCopy>
+          <Button
+            variant="primary"
+            size="lg"
+            className="min-h-10 w-full"
+            icon={<BrandMark name="github" size={20} />}
+            disabled={starting && !redirect}
+            onClick={() => {
+              if (redirect) window.location.href = `${BASE_PATH}/api/auth/login`;
+              else void start();
+            }}
+          >
+            {!redirect && starting ? "Starting…" : "Continue with GitHub"}
+          </Button>
+          {redirect && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="mt-2.5"
+              onClick={start}
+              disabled={starting}
+            >
+              {starting ? "Starting…" : "Use a device code instead"}
+            </Button>
+          )}
+        </>
+      ) : (
+        <div className="flex flex-col items-center">
+          <AuthCopy>
+            GitHub will ask for it at{" "}
+            <span className="font-medium text-fg">
+              {flow.verificationUri.replace(/^https:\/\//, "")}
             </span>
-          </div>
-        )}
-        {error && (
-          <p style={{ marginTop: 10, fontSize: 13, color: "var(--red)" }}>{error}</p>
-        )}
-      </div>
-    </div>
+            .
+          </AuthCopy>
+          {/* The code is what this screen is for, so it gets the display step
+              and room to breathe rather than the inline chip size. */}
+          <DeviceCode
+            code={flow.userCode}
+            className="text-page-title px-4 py-2.5"
+          />
+          <a
+            href={flow.verificationUri}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-5 w-full"
+          >
+            <Button
+              variant="primary"
+              size="lg"
+              className="min-h-10 w-full"
+              icon={<IconArrowUpRight size={20} />}
+            >
+              Open GitHub
+            </Button>
+          </a>
+          <span className="mt-3.5 flex items-center gap-2 text-label text-dim">
+            <PulseDot size={7} />
+            Waiting for GitHub…
+          </span>
+        </div>
+      )}
+      {error && (
+        <InlineAlert variant="error" className="mt-5 text-left">
+          {error}
+        </InlineAlert>
+      )}
+    </AuthCard>
   );
 }
