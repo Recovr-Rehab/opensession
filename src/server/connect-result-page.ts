@@ -74,7 +74,6 @@ body{
   margin:0;display:grid;place-items:center;padding:24px;
   background:var(--page);color:var(--text);
   font:400 14px/1.5 -apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif;
-  -webkit-font-smoothing:antialiased;
 }
 .card{
   width:min(360px,100%);padding:32px 28px 24px;text-align:center;
