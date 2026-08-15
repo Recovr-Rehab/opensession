@@ -52,8 +52,10 @@ const TICK_MAX_H = 3;
 const TICK_REST_W = 8;
 const TICK_REST_H = 2;
 const TICK_REST_INK = 0.22;
-/** The message the reader is parked on, at rest: a touch longer, full ink. */
+/** The message the reader is parked on: a touch longer, full ink at rest and
+ *  a step back from it while the lens is up. */
 const TICK_CURRENT_W = 12;
+const TICK_HERE_INK = 0.5;
 /**
  * The lens, as each tick's share of the growth by its distance from the
  * pointer. It falls off fast and then trails, which is what reads as a curve
@@ -423,7 +425,11 @@ export function MessageRail({ messages, containerRef, leaveLatest }: Props) {
 								height: TICK_MAX_H,
 								transform: `scale(${width / TICK_MAX_W},${height / TICK_MAX_H})`,
 								opacity: Math.max(
-									here ? 1 : TICK_REST_INK,
+									// Where you are stays legible under the lens, but
+									// steps back while it is up: two ticks at full ink
+									// read as two peaks, and only one of them is the
+									// one a click would take.
+									here ? (hot ? TICK_HERE_INK : 1) : TICK_REST_INK,
 									TICK_REST_INK + (1 - TICK_REST_INK) * lift,
 								),
 								transitionDelay: entering
