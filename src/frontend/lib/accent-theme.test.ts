@@ -58,13 +58,13 @@ function luminance(hex: string) {
 }
 
 describe("accent theme", () => {
-	test("matches the native eleven-colour palette", () => {
-		expect(ACCENT_THEME_OPTIONS).toHaveLength(11);
+	test("matches the native ten-colour palette", () => {
+		expect(ACCENT_THEME_OPTIONS).toHaveLength(10);
 		expect(
 			new Set(
 				ACCENT_THEME_OPTIONS.map(({ light, dark }) => `${light}-${dark}`),
 			).size,
-		).toBe(11);
+		).toBe(10);
 	});
 
 	test("the CSS tokens and pre-paint bootstrap contain the same palette", async () => {
@@ -90,7 +90,7 @@ describe("accent theme", () => {
 		expect(css).toContain("--accent-ink-light: #8d7110");
 		// The pre-paint bootstrap has to retire the same selections the bundle
 		// does, or a migrated accent flashes its old id for one frame.
-		expect(html).toContain('var retired = { gold: "lime" }');
+		expect(html).toContain('var retired = { gold: "lime", purple: "pink" }');
 	});
 
 	test("the picker gives every accent a column", async () => {
@@ -122,6 +122,12 @@ describe("accent theme", () => {
 		expect(storage.getItem("opensession-accent")).toBe("lime");
 	});
 
+	test("migrates the removed Violet accent to Pink", () => {
+		storage.setItem("opensession-accent", "purple");
+		expect(getAccentTheme()).toBe("pink");
+		expect(storage.getItem("opensession-accent")).toBe("pink");
+	});
+
 	test("defaults to teal for missing or unknown values", () => {
 		expect(getAccentTheme()).toBe(DEFAULT_ACCENT_THEME);
 		storage.setItem("opensession-accent", "chartreuse");
@@ -129,13 +135,13 @@ describe("accent theme", () => {
 	});
 
 	test("persists and applies a selection", () => {
-		setAccentTheme("purple");
-		expect(getAccentTheme()).toBe("purple");
-		expect(dataset.accent).toBe("purple");
+		setAccentTheme("coral");
+		expect(getAccentTheme()).toBe("coral");
+		expect(dataset.accent).toBe("coral");
 	});
 
 	test("a cross-tab storage clear restores the default", () => {
-		dataset.accent = "purple";
+		dataset.accent = "coral";
 		handleAccentStorageChange({ key: null });
 		expect(dataset.accent).toBe(DEFAULT_ACCENT_THEME);
 	});

@@ -2,8 +2,8 @@ import XCTest
 @testable import OS1
 
 final class AccentThemeTests: XCTestCase {
-    func testPaletteHasElevenDistinctOptions() {
-        XCTAssertEqual(AccentTheme.allCases.count, 11)
+    func testPaletteHasTenDistinctOptions() {
+        XCTAssertEqual(AccentTheme.allCases.count, 10)
         XCTAssertEqual(
             Set(AccentTheme.allCases.map { "\($0.fills.light)-\($0.fills.dark)" }).count,
             AccentTheme.allCases.count
@@ -85,12 +85,19 @@ final class AccentThemeTests: XCTestCase {
         )
     }
 
+    func testRemovedVioletSelectionMigratesToPink() {
+        let defaults = scratchDefaults()
+        defaults.set("purple", forKey: AccentStore.defaultsKey)
+        XCTAssertEqual(AccentStore(defaults: defaults).theme, .pink)
+        XCTAssertEqual(defaults.string(forKey: AccentStore.defaultsKey), "pink")
+    }
+
     func testSelectionPersists() {
         let defaults = scratchDefaults()
         let store = AccentStore(defaults: defaults)
-        store.theme = .purple
-        XCTAssertEqual(defaults.string(forKey: AccentStore.defaultsKey), "purple")
-        XCTAssertEqual(AccentStore(defaults: defaults).theme, .purple)
+        store.theme = .coral
+        XCTAssertEqual(defaults.string(forKey: AccentStore.defaultsKey), "coral")
+        XCTAssertEqual(AccentStore(defaults: defaults).theme, .coral)
     }
 
     /// WCAG contrast between two packed sRGB values. The production copy is

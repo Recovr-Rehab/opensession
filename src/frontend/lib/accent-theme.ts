@@ -1,10 +1,10 @@
 /**
- * Eleven accents, ordered as a walk around the hue wheel from the blues.
+ * Ten accents, ordered as a walk around the hue wheel from the blues.
  *
  * Each fill runs at 92% of the chroma its hue can physically reach in sRGB at
  * its lightness, which is as saturated as the colour gets before it leaves the
  * gamut. That share is flat across the wheel, but the results are not: teal and
- * sky top out near chroma 0.10 and 0.13 where violet and orchid reach 0.26, so
+ * sky top out near chroma 0.10 and 0.13 where pink and coral reach 0.22, so
  * the cool end reads calmer than the warm one no matter what is asked of it.
  *
  * Two entries sit outside the rule. `lime` (Honey) is a yellow, and yellow only
@@ -20,8 +20,7 @@
 export const ACCENT_THEME_OPTIONS = [
 	{ value: "sky", label: "Sky", light: "#1d82bc", dark: "#2495d6" },
 	{ value: "indigo", label: "Indigo", light: "#6361f5", dark: "#767bf6" },
-	{ value: "purple", label: "Violet", light: "#9338f5", dark: "#9f5ff6" },
-	{ value: "pink", label: "Orchid", light: "#b03bb6", dark: "#c44bcb" },
+	{ value: "pink", label: "Pink", light: "#d1228c", dark: "#ef28a1" },
 	{ value: "coral", label: "Coral", light: "#dd233a", dark: "#f73648" },
 	{ value: "orange", label: "Tangerine", light: "#d3571c", dark: "#eb6221" },
 	{ value: "brown", label: "Walnut", light: "#76451f", dark: "#82502a" },
@@ -52,6 +51,7 @@ export function isAccentTheme(value: string | null): value is AccentTheme {
  */
 const RETIRED_THEMES: Record<string, AccentTheme> = {
 	gold: "lime",
+	purple: "pink",
 };
 
 export function getAccentTheme(): AccentTheme {

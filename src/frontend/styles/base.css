@@ -598,14 +598,9 @@ html[data-accent="teal"] {
 	--accent-dark: #259ea9;
 }
 
-html[data-accent="purple"] {
-	--accent-light: #9338f5;
-	--accent-dark: #9f5ff6;
-}
-
 html[data-accent="pink"] {
-	--accent-light: #b03bb6;
-	--accent-dark: #c44bcb;
+	--accent-light: #d1228c;
+	--accent-dark: #ef28a1;
 }
 
 html[data-accent="coral"] {

@@ -26,7 +26,6 @@ import UIKit
 enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
     case sky
     case indigo
-    case purple
     case pink
     case coral
     case orange
@@ -44,8 +43,7 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .sky: "Sky"
         case .indigo: "Indigo"
-        case .purple: "Violet"
-        case .pink: "Orchid"
+        case .pink: "Pink"
         case .coral: "Coral"
         case .orange: "Tangerine"
         case .brown: "Walnut"
@@ -59,8 +57,8 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
     /// Each fill runs at 92% of the chroma its hue can physically reach in sRGB
     /// at its lightness, which is as saturated as the colour gets before it
     /// leaves the gamut. The share is flat across the wheel; the results are
-    /// not. Teal and Sky top out near chroma 0.10 and 0.13 where Violet and
-    /// Orchid reach 0.26, so the cool end reads calmer than the warm one no
+    /// not. Teal and Sky top out near chroma 0.10 and 0.13 where Pink and
+    /// Coral reach 0.22, so the cool end reads calmer than the warm one no
     /// matter what is asked of it.
     ///
     /// Honey keeps one value in both appearances: yellow only exists at high
@@ -73,8 +71,7 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .sky: (0x1D_82_BC, 0x24_95_D6)
         case .indigo: (0x63_61_F5, 0x76_7B_F6)
-        case .purple: (0x93_38_F5, 0x9F_5F_F6)
-        case .pink: (0xB0_3B_B6, 0xC4_4B_CB)
+        case .pink: (0xD1_22_8C, 0xEF_28_A1)
         case .coral: (0xDD_23_3A, 0xF7_36_48)
         case .orange: (0xD3_57_1C, 0xEB_62_21)
         case .brown: (0x76_45_1F, 0x82_50_2A)
@@ -260,6 +257,7 @@ final class AccentStore {
         let normalized = switch stored {
         case "blue": AccentTheme.sky.rawValue
         case "gold": AccentTheme.lime.rawValue
+        case "purple": AccentTheme.pink.rawValue
         default: stored
         }
         theme = AccentTheme(rawValue: normalized) ?? .default
