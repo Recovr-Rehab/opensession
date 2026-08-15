@@ -51,7 +51,6 @@ struct SessionView: View {
     /// Armed when a page lands, disarmed by the height change it is waiting
     /// for.
     @State private var awaitingPrepend = false
-    @State private var prependRestoreTask: Task<Void, Never>?
     /// A page requested before the reader began a newer gesture must not claim
     /// their position when its delayed response finally arrives.
     @State private var prependRequestInteraction: Int?
@@ -60,19 +59,11 @@ struct SessionView: View {
     /// real tail append, regardless of modifier callback ordering.
     @State private var lastDisplayHistoryPrependSeq = 0
 
-    /// Live scroll geometry for the restore. In a box because it changes on
-    /// every scroll frame — see `TranscriptGeometryBox`.
-    @State private var scrollGeometry = TranscriptGeometryBox()
     /// The transcript's scroll position, for the one thing `ScrollViewProxy`
     /// cannot express: an exact offset. `scrollTo(_:anchor:)` can only align a
     /// ROW with an edge, and a session whose turns merge into a handful of
     /// screens-tall blocks has no row fine-grained enough to land on.
     @State private var scrollPosition = ScrollPosition()
-
-    /// Set when a "jump to the start" walk lands with more history still
-    /// behind it, so the loader it puts back on screen doesn't immediately
-    /// page again under the reader.
-    @State private var suppressAutoEarlier = false
 
     /// How work folds start out: messages (folded, but the turn's notes still
     /// read as transcript) / collapsed / expanded / auto (open while the turn
@@ -421,18 +412,15 @@ struct SessionView: View {
                             insetTop: $0.contentInsets.top
                         )
                     } action: { old, new in
-                        scrollGeometry.offset = new.offset
-                        scrollGeometry.contentHeight = new.contentHeight
-                        scrollGeometry.insetTop = new.insetTop
-                        guard awaitingPrepend, new.contentHeight != old.contentHeight
-                        else { return }
-                        awaitingPrepend = false
-                        prependDistanceFromEnd = TranscriptScroll.distanceFromEnd(
-                            offset: old.offset,
-                            contentHeight: old.contentHeight
-                        )
-                        prependBaselineContentHeight = old.contentHeight
-                        restoreAfterPrepend()
+                        if awaitingPrepend, new.contentHeight != old.contentHeight {
+                            awaitingPrepend = false
+                            prependDistanceFromEnd = TranscriptScroll.distanceFromEnd(
+                                offset: old.offset,
+                                contentHeight: old.contentHeight
+                            )
+                            prependBaselineContentHeight = old.contentHeight
+                        }
+                        restoreAfterPrependIfPossible(new)
                     }
                     // One viewport, for the content stack's floor above.
                     // `containerSize` is the unobstructed visible region (it
@@ -576,7 +564,6 @@ struct SessionView: View {
                     // stopped at its ceiling.
                     .onChange(of: viewModel.jumpLandedSeq) {
                         cancelPrependRestore()
-                        suppressAutoEarlier = viewModel.canLoadEarlier
                         if let first = viewModel.displayBlocks.first?.id {
                             proxy.scrollTo(first, anchor: .top)
                         }
@@ -918,16 +905,6 @@ struct SessionView: View {
         .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity)
         .padding(.vertical, 6)
-        .onAppear {
-            // A jump that stopped at its ceiling leaves this control on screen
-            // right under the reader; auto-paging there would yank the view
-            // they were just placed in. The next appearance loads as usual.
-            if suppressAutoEarlier {
-                suppressAutoEarlier = false
-            } else {
-                requestEarlier()
-            }
-        }
     }
 
     private func requestEarlier() {
@@ -1184,61 +1161,33 @@ struct SessionView: View {
         holdingAtLatest = false
     }
 
-    /// How long the prepend restore keeps re-asserting the reader's place.
-    /// The prepended rows are still measuring for about a second after they
-    /// arrive; measured on an iPhone 17 Pro, a page's height landed in four
-    /// steps over ~600ms, and its markdown kept adding to it after that.
-    private static let prependRestoreTicks = 12
-    private static let prependRestoreInterval = Duration.milliseconds(120)
-
-    /// Put the reader back where the page of earlier history found them.
+    /// Put the reader back where the page of earlier history found them as
+    /// soon as the lazy stack reports a valid post-prepend height.
     ///
     /// SwiftUI anchors a scroll view across a pure SIZE change, but not across
     /// the data change a prepend is: measured on an iPhone 17 Pro, one page
     /// moved the reader 1,254pt the first time and 2,186pt the next — to the
     /// top of the transcript, several screens from the line they were reading.
     ///
-    /// It re-asserts rather than setting the offset once, for two reasons the
-    /// measurements made plain: the page's rows keep growing as they realize
-    /// and parse, so the right offset is a moving target; and a write while
-    /// the scroll is still gliding from the flick that triggered the page is
-    /// dropped outright, so the first attempt often does nothing.
-    private func restoreAfterPrepend() {
+    /// Later markdown growth is an ordinary size change that SwiftUI anchors
+    /// itself. Rewriting the offset for every growth step fought scroll
+    /// momentum and made one history page feel like a dozen jumps.
+    private func restoreAfterPrependIfPossible(_ geometry: TranscriptGeometry) {
         guard let distance = prependDistanceFromEnd,
               let baseline = prependBaselineContentHeight
         else { return }
-        prependRestoreTask?.cancel()
-        prependRestoreTask = Task { @MainActor in
-            var lastRestoredHeight: CGFloat?
-            var unchangedHeightRetries = 0
-            for tick in 0..<SessionView.prependRestoreTicks {
-                if tick > 0 {
-                    try? await Task.sleep(for: SessionView.prependRestoreInterval)
-                    if Task.isCancelled { return }
-                }
-                let height = scrollGeometry.contentHeight
-                guard height > 0 else { continue }
-                guard let y = TranscriptScroll.restoredScrollY(
-                    distanceFromEnd: distance,
-                    contentHeight: height,
-                    insetTop: scrollGeometry.insetTop,
-                    minimumContentHeight: baseline
-                ) else { continue }
-                if height == lastRestoredHeight {
-                    unchangedHeightRetries += 1
-                    guard unchangedHeightRetries <= 2 else { continue }
-                } else {
-                    lastRestoredHeight = height
-                    unchangedHeightRetries = 0
-                }
-                scrollPosition.scrollTo(y: y)
-            }
-        }
+        guard let y = TranscriptScroll.restoredScrollY(
+            distanceFromEnd: distance,
+            contentHeight: geometry.contentHeight,
+            insetTop: geometry.insetTop,
+            minimumContentHeight: baseline
+        ) else { return }
+        prependDistanceFromEnd = nil
+        prependBaselineContentHeight = nil
+        scrollPosition.scrollTo(y: y)
     }
 
     private func cancelPrependRestore() {
-        prependRestoreTask?.cancel()
-        prependRestoreTask = nil
         awaitingPrepend = false
         prependDistanceFromEnd = nil
         prependBaselineContentHeight = nil
@@ -2175,15 +2124,12 @@ private struct SessionInputBar: View {
     /// last one working.
     private enum ComposerSheet: Identifiable {
         case goal, reference, schedule
-        /// Rewriting a message that's still waiting in the server's queue.
-        case editQueued(QueueItem)
 
         var id: String {
             switch self {
             case .goal: "goal"
             case .reference: "reference"
             case .schedule: "schedule"
-            case .editQueued(let item): "edit-\(item.id)"
             }
         }
     }
@@ -2395,20 +2341,6 @@ private struct SessionInputBar: View {
                         return "Couldn't schedule that message."
                     }
                 }
-            case .editQueued(let item):
-                // The raw content, not the chip's cleaned-up body: editing is
-                // only offered for messages a person typed, where the two are
-                // the same, and saving the stripped form of anything else
-                // would quietly drop its routing prefix.
-                QueuedMessageEditor(
-                    initial: item.content,
-                    images: item.images,
-                    hasFiles: item.hasFiles,
-                    onSave: { content, images in
-                        viewModel.editQueued(item, content: content, images: images)
-                    },
-                    onDelete: { viewModel.deleteQueued(item) }
-                )
             }
         }
         // No background: the composer and chips are individual glass elements
@@ -2595,18 +2527,28 @@ private struct SessionInputBar: View {
                     user: item.user
                 ).isGitHub
                 QueuedMessageRow(
-                    item: item,
-                    phase: .queued,
-                    showsDivider: item.id != firstRowId,
-                    // Steering needs a run to fold into, and the server can't
-                    // fold a message that carries files.
-                    onSteer: (viewModel.isRunning && !item.hasFiles && !isGitHub)
-                        ? { viewModel.steerQueued(item) } : nil,
-                    onEdit: { sheet = .editQueued(item) },
-                    onMove: (!isGitHub && viewModel.canReorder(item))
-                        ? { offset in viewModel.moveQueued(item, by: offset) } : nil,
-                    onDelete: { viewModel.deleteQueued(item) }
-                )
+                        item: item,
+                        phase: .queued,
+                        showsDivider: item.id != firstRowId,
+                        // Steering needs a run to fold into, and the server can't
+                        // fold a message that carries files.
+                        onSteer: (viewModel.isRunning && !item.hasFiles && !isGitHub)
+                            ? { viewModel.steerQueued(item) } : nil,
+                        onEdit: (!item.isLocalEcho && !item.hasFiles
+                            && !item.hasContextSessions && item.editable
+                            && MessageAttribution.isViewer(
+                                item.user ?? "",
+                                viewerName: ServerConfig.shared.userName,
+                                viewerLogin: ServerConfig.shared.githubLogin
+                            ))
+                            ? {
+                                viewModel.editQueuedInComposer(item)
+                                inputFocused = true
+                            } : nil,
+                        onMove: (!isGitHub && viewModel.canReorder(item))
+                            ? { offset in viewModel.moveQueued(item, by: offset) } : nil,
+                        onDelete: { viewModel.deleteQueued(item) }
+                    )
             }
             // Still ours: written, saved, not yet acknowledged by the server.
             // These sit last because they're the furthest from the transcript.
@@ -2800,6 +2742,10 @@ private struct SessionInputBar: View {
                 }
                 .onChange(of: viewModel.draft) { previous, draft in
                     if draft.isEmpty { draftWrapped = false }
+                    // Keep the unsent text where it survives this app: on the
+                    // server, per session (debounced inside the store). This
+                    // also covers sending, which empties the draft and so
+                    // takes the pencil off the row here and in the browser.
                     DraftsStore.shared.setText(draft, for: viewModel.session.id)
                     // Typing is the loudest possible "I'm here".
                     viewModel.userDidInteract()
@@ -3560,173 +3506,5 @@ private struct SessionInputBar: View {
                 }
             }
         }
-    }
-}
-
-/// Rewrite a message that's still waiting in the server's queue.
-///
-/// Edited in place rather than pulled back into the composer the way the web
-/// does it: the phone's composer usually holds a half-typed draft of its own,
-/// and a delete-then-resend would both lose the message's place in the queue
-/// and leave a window — one backgrounded app away — where it exists nowhere
-/// but a text field.
-private struct QueuedMessageEditor: View {
-    /// The message as it should be after the edit: its text, and the pictures
-    /// it carries as `data:` URLs.
-    let onSave: (String, [String]) -> Void
-    let onDelete: () -> Void
-
-    private let original: String
-    /// The pictures the message arrived with, by id, so "did anything change"
-    /// is a comparison of two small arrays rather than of six base64 blobs on
-    /// every keystroke.
-    private let originalImageIDs: [String]
-    /// Non-image attachments. Shown but not editable: they're staged
-    /// server-side references (a PDF already on disk), not something a
-    /// composer can hand back — removing one means discarding the message.
-    private let hasFiles: Bool
-    /// Decoded once, when the sheet opens: the body re-evaluates on every
-    /// keystroke, and base64-decoding six screenshots per character typed is
-    /// not something a text field should be paying for.
-    @State private var attached: [AttachedImage]
-    @State private var text: String
-    @FocusState private var focused: Bool
-    @Environment(\.dismiss) private var dismiss
-
-    /// Same ceiling as the composer, so a message can't grow attachments here
-    /// that it couldn't have been sent with.
-    private static let maxImages = 6
-
-    init(
-        initial: String,
-        images: [String] = [],
-        hasFiles: Bool = false,
-        onSave: @escaping (String, [String]) -> Void,
-        onDelete: @escaping () -> Void
-    ) {
-        original = initial.trimmingCharacters(in: .whitespacesAndNewlines)
-        _text = State(initialValue: initial)
-        let staged = images.compactMap(AttachedImage.init(dataURL:))
-        _attached = State(initialValue: staged)
-        originalImageIDs = staged.map(\.id)
-        self.hasFiles = hasFiles
-        self.onSave = onSave
-        self.onDelete = onDelete
-    }
-
-    private var trimmed: String {
-        text.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private var changed: Bool {
-        trimmed != original || attached.map(\.id) != originalImageIDs
-    }
-
-    /// The pictures, stacked over the text the way the composer stacks them
-    /// over its input — and literally the composer's own strip, so they are
-    /// viewed, paged through and removed here with the same taps they answer
-    /// to while you're writing the message.
-    @ViewBuilder
-    private var attachments: some View {
-        if !attached.isEmpty || hasFiles {
-            VStack(alignment: .leading, spacing: 6) {
-                if !attached.isEmpty {
-                    AttachedImagesRow(images: attached) { image in
-                        attached.removeAll { $0.id == image.id }
-                    }
-                }
-                if hasFiles {
-                    Label("Files stay attached", systemImage: "paperclip")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-        }
-    }
-
-    /// A sheet whose whole job is one piece of text: the text gets the whole
-    /// sheet, the way Mail and Notes give a compose field the screen. Cancel
-    /// and Save sit in the navigation bar where every other sheet in the app
-    /// puts them, which leaves the destructive action alone at the bottom
-    /// instead of crowded against the button you actually meant to hit.
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                attachments
-
-                TextEditor(text: $text)
-                    .font(.body)
-                    .scrollContentBackground(.hidden)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .focused($focused)
-
-                Divider()
-
-                // Laid out like the composer's control row: the attach button
-                // leads at the bottom-left, exactly where the "+" sits when
-                // you're writing a message, so adding a picture to a message
-                // you already sent is the same reach as adding one to a
-                // message you haven't. Discard keeps the far end, well away
-                // from it.
-                HStack(spacing: 8) {
-                    AttachImagesButton(images: $attached, maxCount: Self.maxImages)
-
-                    Text("Keeps its place in the queue.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-
-                    Spacer(minLength: 12)
-
-                    Button(role: .destructive) {
-                        onDelete()
-                        dismiss()
-                    } label: {
-                        Label("Discard", systemImage: "trash")
-                            .font(.subheadline)
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(OS1VisualStyle.redInk)
-                }
-                .padding(.horizontal, 16)
-                #if os(iOS)
-                // The attach button carries its own 44pt hit area, so the row
-                // needs no more than the air that keeps it off the divider.
-                .padding(.vertical, 4)
-                #else
-                .padding(.vertical, 10)
-                #endif
-            }
-            .navigationTitle("Edit message")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Save") {
-                        onSave(trimmed, attached.map(\.dataURL))
-                        dismiss()
-                    }
-                    // A message that still carries a picture is worth
-                    // sending without a word of text — what can't be saved
-                    // is one edited down to nothing at all, which is what
-                    // Discard is for.
-                    .disabled(!changed || (trimmed.isEmpty && attached.isEmpty))
-                }
-            }
-        }
-        #if os(iOS)
-        .presentationDetents([.medium, .large])
-        #else
-        .frame(minWidth: 420, minHeight: 280)
-        #endif
-        .onAppear { focused = true }
     }
 }

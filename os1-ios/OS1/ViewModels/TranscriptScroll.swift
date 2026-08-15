@@ -95,15 +95,3 @@ struct TranscriptGeometry: Equatable {
     /// The top inset the navigation bar takes, for `restoredScrollY`.
     var insetTop: CGFloat
 }
-
-/// The transcript's live scroll geometry, held by reference on purpose.
-///
-/// It updates on every frame of a scroll, and everything a `SessionView.body`
-/// reads re-evaluates the whole transcript with it — so the offset cannot live
-/// in `@State`. Only code outside `body` (the prepend restore) reads this.
-@MainActor
-final class TranscriptGeometryBox {
-    var offset: CGFloat = 0
-    var contentHeight: CGFloat = 0
-    var insetTop: CGFloat = 0
-}

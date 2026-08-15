@@ -198,6 +198,8 @@ export type ProtocolClientMessage =
       effort?: "low" | "medium" | "high" | string;
       fastMode?: boolean;
       /** Sibling-session ids whose transcripts ride along as context. */
+      contextSessions?: string[];
+      /** @deprecated Use contextSessions. */
       contextChats?: string[];
     }
   | {
@@ -218,15 +220,12 @@ export type ProtocolClientMessage =
     }
   | { type: "take_queued_prompt"; sessionId: string; queueId: string }
   | {
+      /** @deprecated Current clients take the item back into the composer. */
       type: "update_queued_prompt";
       sessionId: string;
       queueId?: string;
       queueIndex?: number;
       content: string;
-      /** The message's attachments after the edit, as composer `data:` URLs.
-       *  OMITTED means "leave them alone" — a client that only edits text
-       *  (the web composer) must not clear a queued screenshot; an empty
-       *  array is the explicit "remove them all". */
       images?: string[];
     }
   | {

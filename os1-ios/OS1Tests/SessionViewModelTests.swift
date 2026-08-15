@@ -1250,15 +1250,15 @@ final class SendDraftTests: XCTestCase {
         XCTAssertTrue(viewModel.deliveringItems.isEmpty)
     }
 
-    func testEditingQueuedMessageRewritesItInPlace() {
+    func testEditingQueuedMessageTakesItIntoTheNormalComposer() {
         queueTwo()
-        viewModel.editQueued(viewModel.queuedItems[0], content: "  second thoughts  ")
-        XCTAssertEqual(socket.updatedQueued.map(\.id), ["q1"])
-        XCTAssertEqual(socket.updatedQueued.map(\.content), ["second thoughts"])
-        XCTAssertEqual(
-            viewModel.queuedItems.map(\.content), ["second thoughts", "then this"],
-            "an edit must keep the message where it was in the queue"
-        )
+        viewModel.editQueuedInComposer(viewModel.queuedItems[0])
+        XCTAssertEqual(socket.takenQueueIds, ["q1"])
+        viewModel.handle(.queuedPromptTaken(
+            sessionId: "bks-1", queueId: "q1", item: viewModel.queuedItems[0], message: nil
+        ))
+        XCTAssertEqual(viewModel.draft, "first")
+        XCTAssertEqual(viewModel.queuedItems.map(\.id), ["q2"])
     }
 
     func testEditingSentMessageCopiesItIntoTheNormalComposer() {
@@ -1279,53 +1279,25 @@ final class SendDraftTests: XCTestCase {
         XCTAssertEqual(viewModel.notice, "Send or clear your draft before editing a message.")
     }
 
-    func testEditingQueuedMessageToNothingDiscardsIt() {
+    func testEditingQueuedMessageReturnsImagesToComposer() {
+        queueWithImage()
+        viewModel.editQueuedInComposer(viewModel.queuedItems[0])
+        viewModel.handle(.queuedPromptTaken(
+            sessionId: "bks-1", queueId: "q1", item: viewModel.queuedItems[0], message: nil
+        ))
+        XCTAssertEqual(viewModel.draft, "look at this")
+        XCTAssertEqual(viewModel.attachedImages.map(\.dataURL), [Self.pngURL])
+    }
+
+    func testRefusedQueuedEditLeavesTheQueueAndDraftAlone() {
         queueTwo()
-        viewModel.editQueued(viewModel.queuedItems[0], content: "   ")
-        XCTAssertTrue(socket.updatedQueued.isEmpty)
-        XCTAssertEqual(socket.deletedQueueIds, ["q1"])
-        XCTAssertEqual(viewModel.queuedItems.map(\.id), ["q2"])
-    }
-
-    /// A text-only edit names no images, and the server reads that as "leave
-    /// them alone" — sending [] instead would strip the screenshot off a
-    /// message whose words were the only thing being changed.
-    func testTextOnlyEditLeavesAttachmentsAlone() {
-        queueWithImage()
-        viewModel.editQueued(viewModel.queuedItems[0], content: "look again")
-        XCTAssertEqual(socket.updatedQueued.count, 1)
-        XCTAssertNil(socket.updatedQueued[0].images)
-        XCTAssertEqual(viewModel.queuedItems[0].images, [Self.pngURL])
-    }
-
-    func testEditingQueuedMessageReplacesItsAttachments() {
-        queueWithImage()
-        viewModel.editQueued(
-            viewModel.queuedItems[0], content: "this one instead", images: [Self.jpegURL]
-        )
-        XCTAssertEqual(socket.updatedQueued[0].images, [Self.jpegURL])
-        XCTAssertEqual(viewModel.queuedItems[0].images, [Self.jpegURL])
-    }
-
-    /// A picture with no words is a legitimate send, so emptying the text of a
-    /// message that still carries one is an edit, not a discard.
-    func testEditingAwayTheTextOfAnImageMessageKeepsIt() {
-        queueWithImage()
-        viewModel.editQueued(
-            viewModel.queuedItems[0], content: "  ", images: [Self.pngURL]
-        )
-        XCTAssertTrue(socket.deletedQueueIds.isEmpty)
-        XCTAssertEqual(socket.updatedQueued.map(\.content), [""])
-        XCTAssertEqual(viewModel.queuedItems.map(\.id), ["q1"])
-    }
-
-    /// Removing the last picture AND the text leaves nothing to send.
-    func testEditingAwayBothTextAndImagesDiscardsTheMessage() {
-        queueWithImage()
-        viewModel.editQueued(viewModel.queuedItems[0], content: "", images: [])
-        XCTAssertTrue(socket.updatedQueued.isEmpty)
-        XCTAssertEqual(socket.deletedQueueIds, ["q1"])
-        XCTAssertTrue(viewModel.queuedItems.isEmpty)
+        viewModel.editQueuedInComposer(viewModel.queuedItems[0])
+        viewModel.handle(.queuedPromptTaken(
+            sessionId: "bks-1", queueId: "q1", item: nil, message: "Already sent"
+        ))
+        XCTAssertTrue(viewModel.draft.isEmpty)
+        XCTAssertEqual(viewModel.queuedItems.map(\.id), ["q1", "q2"])
+        XCTAssertEqual(viewModel.notice, "Already sent")
     }
 
     private static let pngURL = "data:image/png;base64,iVBORw0KGgo="
@@ -1333,10 +1305,11 @@ final class SendDraftTests: XCTestCase {
 
     /// One server-known message waiting behind a run, carrying a screenshot.
     private func queueWithImage() {
+        let user = ServerConfig.shared.userName
         let json = """
         {"type":"queue_update","sessionId":"bks-1",
-         "queued":[{"id":"q1","content":"look at this","user":"ios",
-                    "images":["\(Self.pngURL)"]}],
+         "queued":[{"id":"q1","content":"look at this","user":"\(user)",
+                     "images":["\(Self.pngURL)"],"editable":true}],
          "steered":[]}
         """
         viewModel.handle(ServerEvent.parse(Data(json.utf8)))
@@ -1350,8 +1323,8 @@ final class SendDraftTests: XCTestCase {
         let chip = viewModel.queuedItems[0]
         XCTAssertTrue(chip.isLocalEcho)
         XCTAssertFalse(viewModel.canReorder(chip))
-        viewModel.editQueued(chip, content: "changed my mind")
-        XCTAssertTrue(socket.updatedQueued.isEmpty)
+        viewModel.editQueuedInComposer(chip)
+        XCTAssertTrue(socket.takenQueueIds.isEmpty)
         XCTAssertEqual(viewModel.queuedItems[0].content, "do this next")
     }
 
@@ -1371,12 +1344,13 @@ final class SendDraftTests: XCTestCase {
 
     /// Two server-known messages waiting behind a run.
     private func queueTwo() {
-        let json = #"""
+        let user = ServerConfig.shared.userName
+        let json = """
         {"type":"queue_update","sessionId":"bks-1",
-         "queued":[{"id":"q1","content":"first","user":"ios"},
-                   {"id":"q2","content":"then this","user":"ios"}],
+         "queued":[{"id":"q1","content":"first","user":"\(user)","editable":true},
+                   {"id":"q2","content":"then this","user":"\(user)","editable":true}],
          "steered":[]}
-        """#
+        """
         viewModel.handle(ServerEvent.parse(Data(json.utf8)))
     }
 
@@ -1685,7 +1659,7 @@ private final class MockSocket: SessionSocket {
     private(set) var prompts: [PromptCall] = []
     private(set) var steeredQueueIds: [String] = []
     private(set) var deletedQueueIds: [String] = []
-    private(set) var updatedQueued: [(id: String, content: String, images: [String]?)] = []
+    private(set) var takenQueueIds: [String] = []
     private(set) var reorders: [[String]] = []
     private(set) var awayFrames: [Bool] = []
 
@@ -1722,11 +1696,7 @@ private final class MockSocket: SessionSocket {
     }
     func steerQueued(sessionId: String, queueId: String) { steeredQueueIds.append(queueId) }
     func deleteQueued(sessionId: String, queueId: String) { deletedQueueIds.append(queueId) }
-    func updateQueued(
-        sessionId: String, queueId: String, content: String, images: [String]?
-    ) {
-        updatedQueued.append((id: queueId, content: content, images: images))
-    }
+    func takeQueued(sessionId: String, queueId: String) { takenQueueIds.append(queueId) }
     func reorderQueued(sessionId: String, order: [String]) { reorders.append(order) }
     func cancelWatchedRun() {}
     func answer(sessionId: String, questionId: String, answers: [String: String]?) {}

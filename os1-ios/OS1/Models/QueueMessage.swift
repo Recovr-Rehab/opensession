@@ -3,9 +3,9 @@ import Foundation
 /// How a queue chip should present a message that isn't necessarily something
 /// the person typed.
 ///
-/// The prompt queue also carries worker reports, workflow nudges, GitHub
-/// review feedback, and a teammate's answer routed back in.
-/// Each is marked with an HTML-comment sentinel and/or an `[attribution]`
+/// The prompt queue carries agent-to-agent deliveries too — worker reports,
+/// workflow nudges, GitHub review feedback, a teammate's answer routed back in —
+/// and each is marked with an HTML-comment sentinel and/or an `[attribution]`
 /// prefix. The transcript's markdown renderer swallows those; a plain-text
 /// chip shows them raw, so a queued worker report used to read as a literal
 /// `<!--os:worker-report-->` line. Mirrors the web's
@@ -16,7 +16,7 @@ struct QueueMessagePresentation: Equatable {
     /// The message with its delivery sentinels (and the routing prefix that
     /// comes with them) removed. A typed message is passed through untouched.
     let body: String
-    /// GitHub deliveries are informational. There's nothing to steer,
+    /// GitHub deliveries are informational — there's nothing to steer,
     /// edit, or reorder about them, so the chip only offers a dismiss.
     let isGitHub: Bool
     /// A review handoff is automated work waiting behind the current turn.
@@ -27,7 +27,7 @@ struct QueueMessagePresentation: Equatable {
         isReviewHandoff = isGitHub && Self.reviewHandoffSentinel.match(content) != nil
 
         // Every marker starts the message, so a couple of prefix tests settle
-        // the ordinary case without touching a regex. This runs for each
+        // the ordinary case without touching a regex — this runs for each
         // visible chip on every composer keystroke.
         if !isGitHub, !Self.mayCarryMarker(content) {
             label = nil
@@ -52,7 +52,7 @@ struct QueueMessagePresentation: Equatable {
 
         // The routing prefix a named teammate's message carries. Stripped only
         // when a sentinel behind it proves this is a delivery rather than
-        // something typed. An ordinary prompt is allowed to open with
+        // something typed — an ordinary prompt is allowed to open with
         // "[WIP] …" and must survive intact.
         let unprefixed = Self.attributionPrefix.match(content)?.rest ?? content
         if Self.workerSentinel.match(unprefixed) != nil {

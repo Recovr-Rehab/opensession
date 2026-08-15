@@ -273,8 +273,7 @@ export function queuedPromptIndex(
 	queueIndex?: number,
 ): number {
 	if (queueId) {
-		const byId = queue.findIndex((item) => item.id === queueId);
-		if (byId >= 0) return byId;
+		return queue.findIndex((item) => item.id === queueId);
 	}
 	if (
 		typeof queueIndex === "number" &&
@@ -291,6 +290,7 @@ export function deleteQueuedPrompt(
 	sessionId: string,
 	queueId?: string,
 	queueIndex?: number,
+	effects = true,
 ): boolean {
 	const queue = promptQueues.get(sessionId);
 	if (queue) {
@@ -299,8 +299,10 @@ export function deleteQueuedPrompt(
 			const next = queue.filter((_, i) => i !== index);
 			if (next.length > 0) promptQueues.set(sessionId, next);
 			else promptQueues.delete(sessionId);
-			persistQueues();
-			broadcastQueue(sessionId);
+			if (effects) {
+				persistQueues();
+				broadcastQueue(sessionId);
+			}
 			return true;
 		}
 	}
@@ -315,22 +317,18 @@ export function deleteQueuedPrompt(
 			const next = steered.filter((_, i) => i !== index);
 			if (next.length > 0) steeredReceipts.set(sessionId, next);
 			else steeredReceipts.delete(sessionId);
-			persistQueues();
-			broadcastQueue(sessionId);
+			if (effects) {
+				persistQueues();
+				broadcastQueue(sessionId);
+			}
 			return true;
 		}
 	}
 	return false;
 }
 
-/**
- * Rewrite a queued message in place, keeping its position in the queue.
- *
- * `images` is the message's attachments AFTER the edit: undefined leaves them
- * untouched (what a text-only editor sends), an array replaces them wholesale,
- * and an empty array clears them. Non-image `files` are never editable this
- * way — they're staged references, not something a composer can hand back.
- */
+/** Compatibility path for clients shipped before queued messages moved back
+ * into the normal composer. Current clients use takeQueuedPrompt instead. */
 export function updateQueuedPrompt(
 	sessionId: string,
 	queueId: string | undefined,
@@ -343,8 +341,7 @@ export function updateQueuedPrompt(
 	const index = queuedPromptIndex(queue, queueId, queueIndex);
 	if (index < 0) return false;
 	const item = queue[index];
-	if (!item) return false;
-	if (isGitHubQueueItem(item)) return false;
+	if (!item || isGitHubQueueItem(item)) return false;
 	item.content = content;
 	if (images) {
 		if (images.length > 0) item.images = images;
@@ -370,7 +367,11 @@ export function updateQueuedPrompt(
  * (unknown session, <2 items, or an order that doesn't change anything) return
  * false without a broadcast.
  */
-export function reorderQueuedPrompt(sessionId: string, order: string[]): boolean {
+export function reorderQueuedPrompt(
+	sessionId: string,
+	order: string[],
+	effects = true,
+): boolean {
 	const queue = promptQueues.get(sessionId);
 	if (!queue || queue.length < 2) return false;
 	const byId = new Map(
@@ -391,7 +392,9 @@ export function reorderQueuedPrompt(sessionId: string, order: string[]): boolean
 	// Same references in the same slots ⇒ nothing moved.
 	if (next.every((item, i) => item === queue[i])) return false;
 	promptQueues.set(sessionId, next);
-	persistQueues();
-	broadcastQueue(sessionId);
+	if (effects) {
+		persistQueues();
+		broadcastQueue(sessionId);
+	}
 	return true;
 }

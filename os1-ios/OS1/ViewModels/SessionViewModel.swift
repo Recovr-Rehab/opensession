@@ -1002,29 +1002,23 @@ final class SessionViewModel {
         queuedCount = queuedItems.count
     }
 
-    /// Rewrite a queued message in place, keeping its position in the queue.
-    /// Only server-known entries can be addressed this way — a local echo has
-    /// an id the server has never seen.
-    /// `images` is what the message carries after the edit, as `data:` URLs —
-    /// nil for a text-only edit, which leaves the attachments alone. A message
-    /// edited down to nothing at all (no text, no pictures) is a discard;
-    /// text-less but still carrying an image is a legitimate send, so it
-    /// stays.
-    func editQueued(_ item: QueueItem, content: String, images: [String]? = nil) {
-        let text = content.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !item.isLocalEcho else { return }
-        let attachments = images ?? item.images
-        guard !text.isEmpty || !attachments.isEmpty else {
-            deleteQueued(item)
+    /// Atomically take an ordinary message out of the server queue. The reply
+    /// restores its full payload into the normal composer.
+    func editQueuedInComposer(_ item: QueueItem) {
+        guard !item.isLocalEcho, !item.hasFiles, !item.hasContextSessions, item.editable,
+              MessageAttribution.isViewer(
+                item.user ?? "",
+                viewerName: ServerConfig.shared.userName,
+                viewerLogin: ServerConfig.shared.githubLogin
+              ) else {
             return
         }
-        socket?.updateQueued(
-            sessionId: session.id, queueId: item.id, content: text, images: images
-        )
-        if let index = queuedItems.firstIndex(where: { $0.id == item.id }) {
-            queuedItems[index] = queuedItems[index]
-                .withContent(text, images: images)
+        guard draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              attachedImages.isEmpty else {
+            notice = "Send or clear your draft before editing a queued message."
+            return
         }
+        socket?.takeQueued(sessionId: session.id, queueId: item.id)
     }
 
     /// Move a queued message one place towards (-1) or away from (+1) the
@@ -1385,6 +1379,18 @@ final class SessionViewModel {
             // Landed flags outlive their purpose once the chip is gone.
             landedChipIds.formIntersection(
                 Set((queued + steered + deliveringItems).map(\.id))
+            )
+        case .queuedPromptTaken(let id, let queueId, let item, let message)
+            where id == session.id:
+            guard let item else {
+                notice = message ?? "That queued message could not be edited."
+                break
+            }
+            removeChip(item)
+            deliveringItems.removeAll { $0.id == queueId }
+            draft = draft.isEmpty ? item.content : draft + "\n\n" + item.content
+            attachedImages.append(
+                contentsOf: item.images.compactMap(AttachedImage.init(dataURL:))
             )
 
         case .askQuestion(let id, let question) where id == session.id:

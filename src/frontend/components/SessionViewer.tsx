@@ -70,14 +70,13 @@ import {
 	fetchFileMentions,
 	fetchSkillMentions,
 	fetchSessionSubagents,
-	fetchRepos,
 	promoteSessionApi,
 	fetchSessionNotesApi,
 	postSessionNoteApi,
 	fetchPr,
 	fetchPreview,
-	type WorkspaceMediaItem,
 	portalActionApi,
+	type WorkspaceMediaItem,
 	type ModelOption,
 	type ProviderAccountOption,
 	type SessionSubagentSnapshot,
@@ -114,7 +113,7 @@ import {
 	type SlackSent,
 } from "./ShippedChangeComposer";
 import { BrandMark } from "./BrandMark";
-import { readFileAsDataUrl, type FileAttachment } from "../lib/images";
+import type { FileAttachment } from "../lib/images";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
 import {
 	isHiddenForSession,
@@ -310,6 +309,9 @@ type QueueReceipt = {
 	user?: string;
 	images?: string[];
 	files?: unknown;
+	contextSessions?: string[];
+	editable?: boolean;
+	editing?: boolean;
 };
 
 interface Props {
@@ -1150,13 +1152,6 @@ export function SessionViewer({
 		text: string;
 		replace?: boolean;
 	} | null>(null);
-	const [editingQueue, setEditingQueue] = useState<{
-		key: string;
-		queueId?: string;
-		queueIndex: number;
-		content: string;
-		images: string[];
-	} | null>(null);
 	// Optimistic just-sent messages, shown instantly and reconciled once the real
 	// turn lands (transcript) or the server confirms it as queued (busy path).
 	// `busyMode` marks a send made while the run was busy: it renders inside the
@@ -1619,7 +1614,7 @@ export function SessionViewer({
 	const currentGoal =
 		goalOverride !== undefined ? goalOverride : session.goal ?? null;
 	useEffect(() => {
-		fetchModels()
+		fetchModels(session.workspaceId || undefined)
 			.then((m) => {
 				setModels(m.models);
 				setDefaultModel(m.default);
@@ -1628,7 +1623,7 @@ export function SessionViewer({
 		fetchProviderAccounts()
 			.then(setAccounts)
 			.catch(() => {});
-	}, []);
+	}, [session.workspaceId]);
 	useEffect(() => {
 		setModel(session.model || "");
 	}, [session.id, session.model]);
@@ -2295,6 +2290,41 @@ export function SessionViewer({
 						setSteered(msg.steered || []);
 					}
 					break;
+				case "queued_prompt_taken": {
+					if (msg.sessionId !== session.id) break;
+					if (!msg.item) {
+						toast(msg.message || "That queued message could not be edited");
+						break;
+					}
+					const item = msg.item as QueueReceipt;
+					const existing = loadDraft(draftKey);
+					setImages((current) => [...current, ...(item.images ?? [])]);
+					const restoredFiles = Array.isArray(item.files)
+						? item.files.flatMap((file) => {
+							if (!file || typeof file !== "object") return [];
+							const value = file as Record<string, unknown>;
+							if (typeof value.name !== "string") return [];
+							return [{
+								name: value.name,
+								type: typeof value.type === "string"
+									? value.type
+									: "application/octet-stream",
+								...(typeof value.path === "string" ? { path: value.path } : {}),
+								...(typeof value.dataUrl === "string" ? { dataUrl: value.dataUrl } : {}),
+							}];
+						})
+						: [];
+					setFiles((current) => [...current, ...restoredFiles]);
+					setContextSessions((current) => [
+						...new Set([...current, ...(item.contextSessions ?? [])]),
+					]);
+					setComposerPrefill((current) => ({
+						seq: (current?.seq ?? 0) + 1,
+						text: item.content,
+						replace: !existing.text.trim(),
+					}));
+					break;
+				}
 				case "ask_question":
 					if (msg.sessionId === session.id) {
 						setAsk({ questionId: msg.questionId, questions: msg.questions });
@@ -2434,7 +2464,6 @@ export function SessionViewer({
 			supportsChangeSeq: true,
 			...resume,
 		});
-
 		return () => {
 			unsubscribe();
 			// Tell the server we stopped watching, so it can drop the transcript
@@ -3038,8 +3067,6 @@ export function SessionViewer({
 			latestAssistantMessage,
 		],
 	);
-	// Exact engine-state forks use Claude's SDK forkSession. Other backends can
-	// still fork as a new sibling with a transcript handoff.
 	const sendComposedSlackMessage = useCallback(async (message: string, channel: string, screenshots: string[]) => {
 		if (!slackComposer) return;
 		setSlackComposerStatus("sharing");
@@ -3076,6 +3103,8 @@ export function SessionViewer({
 			toast(error?.message || "Couldn't close the Slack composer");
 		}
 	}, [session.id, slackComposer]);
+	// Exact engine-state forks use Claude's SDK forkSession. Other backends can
+	// still fork as a new sibling with a transcript handoff.
 	const canForkSession =
 		session.source === "opensession" &&
 		!!(session.claudeSessionId || session.codexThreadId || session.transcriptPath);
@@ -3380,30 +3409,6 @@ export function SessionViewer({
 		discardOutbox(item);
 	}
 
-	function editSentMessageInComposer(entry: TranscriptEntry) {
-		const draft = loadDraft(draftKey);
-		if (
-			draft.text.trim() ||
-			images.length ||
-			files.length ||
-			quote ||
-			contextSessions.length
-		) {
-			toast("Send or clear your draft before editing a message");
-			return;
-		}
-		setImages(entry.images ?? []);
-		setFiles((entry.files ?? []).map((file) => ({
-			...file,
-			type: "application/octet-stream",
-		})));
-		setComposerPrefill((current) => ({
-			seq: (current?.seq ?? 0) + 1,
-			text: entry.content,
-			replace: true,
-		}));
-	}
-
 	function discardOutbox(item: PromptOutboxItem) {
 		setPending((current) =>
 			current.filter((entry) => entry.id !== `outbox-${item.clientId}`),
@@ -3454,27 +3459,48 @@ export function SessionViewer({
 		);
 	}
 
-	function openQueueEditor(q: QueueReceipt, index: number) {
-		setEditingQueue({
-			key: q.id || `queued-${index}`,
+	function editQueuedInComposer(q: QueueReceipt) {
+		const draft = loadDraft(draftKey);
+		if (
+			draft.text.trim() ||
+			images.length ||
+			files.length ||
+			quote ||
+			contextSessions.length
+		) {
+			toast("Send or clear your draft before editing a queued message");
+			return;
+		}
+		if (!q.id) return;
+		send({
+			type: "take_queued_prompt",
+			sessionId: session.id,
 			queueId: q.id,
-			queueIndex: index,
-			content: q.content,
-			images: q.images?.slice() ?? [],
 		});
 	}
 
-	function saveQueueEditor() {
-		if (!editingQueue) return;
-		send({
-			type: "update_queued_prompt",
-			sessionId: session.id,
-			queueId: editingQueue.queueId,
-			queueIndex: editingQueue.queueIndex,
-			content: editingQueue.content,
-			images: editingQueue.images,
-		});
-		setEditingQueue(null);
+	function editSentMessageInComposer(entry: TranscriptEntry) {
+		const draft = loadDraft(draftKey);
+		if (
+			draft.text.trim() ||
+			images.length ||
+			files.length ||
+			quote ||
+			contextSessions.length
+		) {
+			toast("Send or clear your draft before editing a message");
+			return;
+		}
+		setImages(entry.images ?? []);
+		setFiles((entry.files ?? []).map((file) => ({
+			...file,
+			type: "application/octet-stream",
+		})));
+		setComposerPrefill((current) => ({
+			seq: (current?.seq ?? 0) + 1,
+			text: entry.content,
+			replace: true,
+		}));
 	}
 
 	function handleQueueReorder(next: QueueReceipt[]) {
@@ -3516,19 +3542,23 @@ export function SessionViewer({
 	);
 	const hasLiveConversation =
 		pendingBubbles.length > 0 || liveTurnStore.hasText() || isBusy || !!ask;
-	const queuedReviewCount = queued.filter(
+	const shownQueued = queued;
+	const queuedReviewCount = shownQueued.filter(
 		(item) =>
 			classifyQueuedContent(item.content, item.user).notice?.kind ===
 			"review-handoff",
 	).length;
 
 	const queueCount =
-		queued.length + visibleSteered.length + pendingQueue.length + durableOutbox.length;
+		shownQueued.length + visibleSteered.length + pendingQueue.length + durableOutbox.length;
 	// Steered receipts are NOT queued — they're already delivered into the
 	// running turn and only shown here until it ends. Calling them "queued"
 	// read as "my message didn't go through" (three times, 2026-07-19).
 	const queuedMessageCount =
-		queued.length - queuedReviewCount + pendingQueue.length + durableOutbox.length;
+		shownQueued.length -
+		queuedReviewCount +
+		pendingQueue.length +
+		durableOutbox.length;
 	const queueTitle = waitingForWorkspace
 		? `Setting up your workspace · ${queueCount} queued`
 		: [
@@ -3606,20 +3636,25 @@ export function SessionViewer({
 				<Reorder.Group
 					as="div"
 					axis="y"
-					values={queued}
+					values={shownQueued}
 					onReorder={handleQueueReorder}
 					className={composerQueueList}
 				>
-				{queued.map((q, i) => {
+				{shownQueued.map((q, i) => {
 					const c = classifyQueuedContent(q.content, q.user);
 					const isGitHub = isGitHubAttribution(q.user);
 					const isReview = c.notice?.kind === "review-handoff";
 					const id = q.id;
 					const key = id || `queued-${i}`;
-					const canSteer = !isGitHub && !queueHasFiles(q);
+					const canSteer =
+						!isGitHub && !queueHasFiles(q) && !q.contextSessions?.length;
+					const canEdit =
+						!isGitHub &&
+						q.editable === true &&
+						personKey(q.user || "") === personKey(currentUser);
 					// A one-item queue has nothing to reorder — leave drag off so the
 					// lone message still selects/clicks normally.
-					const canReorder = queued.length > 1 && !isGitHub;
+					const canReorder = shownQueued.length > 1 && !isGitHub;
 					return (
 						<Reorder.Item
 							as="div"
@@ -3638,18 +3673,16 @@ export function SessionViewer({
 							)}
 						>
 							<div className={composerQueueActions}>
-								{!isGitHub ? (
-									<>
-										<Tooltip label="Edit queued message in place">
+								{canEdit ? (
+										<Tooltip label="Edit in composer">
 											<button
 												type="button"
 												className={composerQueueAction}
-												onClick={() => openQueueEditor(q, i)}
+											onClick={() => editQueuedInComposer(q)}
 											>
 												<IconPencil size={20} />
 											</button>
 										</Tooltip>
-									</>
 								) : null}
 								<Tooltip label={isReview ? "Dismiss review feedback" : "Delete queued message"}>
 									<button
@@ -3701,87 +3734,12 @@ export function SessionViewer({
 									</Tooltip>
 								)}
 							</div>
-							{editingQueue?.key === key ? (
-								<div className="flex flex-col gap-2 px-3 pb-3">
-									<textarea
-										className="min-h-24 w-full resize-y rounded-md border border-line bg-control px-3 py-2 text-body text-fg outline-none focus:border-line-strong"
-										aria-label="Queued message"
-										value={editingQueue.content}
-										onChange={(event) =>
-											setEditingQueue((current) =>
-												current ? { ...current, content: event.target.value } : current,
-											)
-										}
-									/>
-									{editingQueue.images.length > 0 && (
-										<div className="flex flex-wrap gap-2">
-											{editingQueue.images.map((src, imageIndex) => (
-												<div key={`${src.slice(0, 40)}-${imageIndex}`} className="relative">
-													<img src={src} alt="" className="size-14 rounded-md object-cover" />
-													<button
-														type="button"
-														aria-label={`Remove image ${imageIndex + 1}`}
-														className="focus-ring absolute -top-2 -right-2 flex size-7 items-center justify-center rounded-full bg-fg text-bg"
-														onClick={() =>
-															setEditingQueue((current) =>
-																current
-																	? {
-																			...current,
-																			images: current.images.filter((_, index) => index !== imageIndex),
-																		}
-																	: current,
-															)
-														}
-													>
-														×
-													</button>
-												</div>
-											))}
-										</div>
-									)}
-									<div className="flex flex-wrap items-center gap-2">
-										<label className="focus-ring inline-flex min-h-10 cursor-pointer items-center rounded-md px-3 text-label font-medium text-dim hover:bg-hover hover:text-fg">
-											Add images
-											<input
-												type="file"
-												accept="image/*"
-												multiple
-												className="sr-only"
-												onChange={(event) => {
-													const picked = Array.from(event.target.files ?? []);
-													void Promise.all(picked.map(readFileAsDataUrl)).then((next) =>
-														setEditingQueue((current) =>
-															current ? { ...current, images: [...current.images, ...next] } : current,
-														),
-													);
-													event.target.value = "";
-												}}
-											/>
-										</label>
-										{queueHasFiles(q) && (
-											<span className="text-meta text-faint">Attached files stay with this message.</span>
-										)}
-										<span className="ml-auto flex gap-2">
-											<Button size="sm" onClick={() => setEditingQueue(null)}>Cancel</Button>
-											<Button
-												variant="primary"
-												size="sm"
-												onClick={saveQueueEditor}
-												disabled={!editingQueue.content.trim() && editingQueue.images.length === 0 && !queueHasFiles(q)}
-											>
-												Save
-											</Button>
-										</span>
-									</div>
-								</div>
-							) : (
-								renderQueueContent(q, c, {
-									github: isGitHub,
-									// github outranks human: both were equally specific in the
-									// stylesheet and github came last.
-									tone: isGitHub ? "github" : c.senderVia ? "human" : "default",
-								})
-							)}
+							{renderQueueContent(q, c, {
+								github: isGitHub,
+								// github outranks human: both were equally specific in the
+								// stylesheet and github came last.
+								tone: isGitHub ? "github" : c.senderVia ? "human" : "default",
+							})}
 						</Reorder.Item>
 					);
 				})}
@@ -4051,7 +4009,6 @@ export function SessionViewer({
 				}}
 			/>
 		) : null;
-
 	// The composer takes a single `attached` node; stack the agents flap above
 	// the queue flap when both are live.
 	const attachedComposer =

@@ -25,6 +25,7 @@ enum ServerEvent: Sendable {
     /// to every client on change, and once at the handshake.
     case globalPresence(viewing: [PresenceEntry])
     case queueUpdate(sessionId: String, queued: [QueueItem], steered: [QueueItem])
+    case queuedPromptTaken(sessionId: String, queueId: String, item: QueueItem?, message: String?)
     /// Cost and context for the whole conversation, refolded by the server
     /// after each turn (and mid-run, as snapshots arrive).
     case usageUpdate(sessionId: String?, usage: SessionUsage)
@@ -101,6 +102,12 @@ enum ServerEvent: Sendable {
                 queued: (frame.queued ?? []).map(QueueItem.init),
                 steered: (frame.steered ?? []).map(QueueItem.init)
             )
+        case "queued_prompt_taken":
+            guard let id = frame.sessionId, let queueId = frame.queueId else { return .ignored }
+            return .queuedPromptTaken(
+                sessionId: id, queueId: queueId,
+                item: frame.item.map(QueueItem.init), message: frame.message
+            )
         case "usage_update":
             // `sessionId` is absent on the frame the create flow emits — that
             // socket is already scoped to the session being created — so the
@@ -138,7 +145,7 @@ enum ServerEvent: Sendable {
                 cwd: frame.cwd ?? ""
             )
         case "term_data":
-            // Base64 on the wire: pty output is bytes, not text, and a chunk
+            // Base64 on the wire: PTY output is bytes, not text, and a chunk
             // can split a multi-byte character. Decoding to a String is the
             // reader's job, which is where the partial tail is held.
             guard let data = Data(base64Encoded: frame.data ?? "") else { return .ignored }
@@ -153,17 +160,17 @@ enum ServerEvent: Sendable {
     }
 }
 
+/// One person and the session they are looking at, from `global_presence`.
+struct PresenceEntry: Equatable, Hashable, Sendable {
+    let user: String
+    let sessionId: String
+}
+
 struct SlackComposeRequest: Decodable, Equatable, Sendable, Identifiable {
     let id: String
     let message: String
     let channel: String?
     let images: [String]
-}
-
-/// One person and the session they are looking at, from `global_presence`.
-struct PresenceEntry: Equatable, Hashable, Sendable {
-    let user: String
-    let sessionId: String
 }
 
 /// Pagination cursor carried by transcript_init / transcript_history frames.
@@ -194,6 +201,8 @@ struct QueueItem: Identifiable, Equatable, Sendable {
     /// Whether file attachments ride along. The server can't fold a
     /// file-carrying message into a live run, so the chip hides Steer.
     let hasFiles: Bool
+    let editable: Bool
+    let hasContextSessions: Bool
 
     /// Chips minted locally (the optimistic echo of a busy send) carry an id
     /// the server has never seen, so the actions that address a queue entry
@@ -206,6 +215,8 @@ struct QueueItem: Identifiable, Equatable, Sendable {
         user = wire.user
         images = wire.images ?? []
         hasFiles = !(wire.files ?? []).isEmpty
+        editable = wire.editable ?? false
+        hasContextSessions = !(wire.contextSessions ?? []).isEmpty
     }
 
     /// Local optimistic construction — the composer's echo of a send made
@@ -216,13 +227,17 @@ struct QueueItem: Identifiable, Equatable, Sendable {
         content: String,
         user: String?,
         images: [String] = [],
-        hasFiles: Bool = false
+        hasFiles: Bool = false,
+        editable: Bool = true,
+        hasContextSessions: Bool = false
     ) {
         self.id = id
         self.content = content
         self.user = user
         self.images = images
         self.hasFiles = hasFiles
+        self.editable = editable
+        self.hasContextSessions = hasContextSessions
     }
 
     /// The same entry with new text — and, when the edit touched them, new
@@ -235,7 +250,9 @@ struct QueueItem: Identifiable, Equatable, Sendable {
             content: content,
             user: user,
             images: images ?? self.images,
-            hasFiles: hasFiles
+            hasFiles: hasFiles,
+            editable: editable,
+            hasContextSessions: hasContextSessions
         )
     }
 }
@@ -255,6 +272,8 @@ private struct RawFrame: Decodable {
         let user: String?
         let images: [String]?
         let files: [OpaqueFile]?
+        let editable: Bool?
+        let contextSessions: [String]?
     }
 
     let type: String
@@ -275,12 +294,14 @@ private struct RawFrame: Decodable {
     let viewing: [WireViewing]?
     let queued: [WireQueueItem]?
     let steered: [WireQueueItem]?
+    let item: WireQueueItem?
     let usage: SessionUsage?
     let questionId: String?
     let questions: [AskQuestion.Question]?
     let request: SlackComposeRequest?
     let requestId: String?
     let message: String?
+    let queueId: String?
     let truncated: Bool?
     let startOffset: Int?
     let rev: String?
