@@ -206,6 +206,19 @@ export const PR_STATE_TEXT: Record<PrTone, string> = {
 	muted: "text-dim",
 };
 
+/** The same headline inside the strip, where the band behind it is already a
+ *  whole field of the state's colour. A settled reading hands its hue to the
+ *  band and the one action beside it and keeps the panel's own ink: "Ready to
+ *  merge" in green, on green, next to a green Merge button said green four
+ *  times. A state that wants the reader — a conflict, a failing check — keeps
+ *  the tone in the words as well, because that is the one the eye should be
+ *  caught by. */
+export const PR_BAR_STATE_TEXT: Record<PrTone, string> = {
+	...PR_STATE_TEXT,
+	green: "text-fg",
+	purple: "text-fg",
+};
+
 export const PR_BAR_ERROR = "max-w-[180px] truncate text-meta text-red";
 
 /** Compact chip + primary action in the session header, shown while the
@@ -270,13 +283,28 @@ const CHIP_TONE_FLAT: Record<PrTone, string> = {
 		"border-[color-mix(in_srgb,var(--yellow)_22%,transparent)] bg-control text-yellow",
 };
 
+/** Where the tone is already painted behind the chip. The strip fills its
+ *  whole row with the state's colour, so a toned pill sitting on it is the
+ *  same fact a second time — on a "Ready to merge" strip it was the third
+ *  green, with the headline and the Merge button. The number is an identifier
+ *  rather than a status, so on a band it goes neutral and lets the band and
+ *  the one action carry the state. Where there is no band (the session header)
+ *  the chip is the only tone carrier and keeps it. */
+const chipOnBand = (size: ChipSize) => size === "bar";
+
 export function prChipClass(tone: PrTone, size: ChipSize): string {
 	const flat = size === "row";
 	// Only the neutral chip keeps the control shadow: a toned pill is already
 	// separated from the strip by its fill, and a sibling chip is too small to
-	// carry one.
+	// carry one. Keyed on the STRIP's tone, not the chip's own colour, so a
+	// neutral chip on a toned band doesn't lift off it as well.
 	const shadow = tone === "muted" && (size === "bar" || size === "head");
-	return `${CHIP_BASE} ${CHIP_SIZE[size]} ${flat ? CHIP_TONE_FLAT[tone] : CHIP_TONE[tone]}${shadow ? " smooth-shadow-sm" : ""}`;
+	const colour = chipOnBand(size)
+		? CHIP_TONE.muted
+		: flat
+			? CHIP_TONE_FLAT[tone]
+			: CHIP_TONE[tone];
+	return `${CHIP_BASE} ${CHIP_SIZE[size]} ${colour}${shadow ? " smooth-shadow-sm" : ""}`;
 }
 
 /** The outbound half of the split button: same tone, square inner corner, and
@@ -285,12 +313,19 @@ export function prChipExternalClass(tone: PrTone, size: "bar" | "head"): string 
 	const geometry =
 		// -ml-px collapses the shared seam to a single hairline.
 		"-ml-px inline-flex items-center justify-center rounded-e-control rounded-s-none border no-underline transition-[background-color,scale] active:scale-[0.96]";
+	// No ink of its own: the neutral half is an <a>, so its arrow takes the
+	// link colour, and the hover wash mixes from it.
+	const neutral =
+		"border-line bg-control hover:bg-[color-mix(in_srgb,currentColor_12%,transparent)]";
 	const colour =
 		tone === "muted"
-			? // No ink of its own: the neutral half is an <a>, so its arrow takes
-				// the link colour, and the hover wash mixes from it.
-				"border-line bg-control smooth-shadow-sm hover:bg-[color-mix(in_srgb,currentColor_12%,transparent)]"
-			: CHIP_TONE[tone];
+			? `${neutral} smooth-shadow-sm`
+			: chipOnBand(size)
+				? // On a band the arrow takes the chip's own ink rather than the
+					// link colour: a blue glyph on a green strip is a new hue in
+					// the one place the change was meant to remove one.
+					`${neutral} text-dim`
+				: CHIP_TONE[tone];
 	return `${geometry} ${size === "head" ? "size-[32px]" : "size-[30px]"} ${colour}`;
 }
 
@@ -303,7 +338,8 @@ export function prStackChipClass(tone: PrTone, size: "bar" | "head"): string {
 		size === "head"
 			? "min-h-[32px] pr-[9px] pl-[5px]"
 			: "min-h-[30px] pr-2 pl-1";
-	return `${CHIP_BASE} ${box} cursor-pointer rounded-control text-label ${CHIP_TONE[tone]}`;
+	const colour = chipOnBand(size) ? CHIP_TONE.muted : CHIP_TONE[tone];
+	return `${CHIP_BASE} ${box} cursor-pointer rounded-control text-label ${colour}`;
 }
 
 /** The split button's two halves lift over each other on hover/focus so the

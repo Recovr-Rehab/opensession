@@ -156,19 +156,16 @@ interface Props {
 	liveMedia?: WorkspaceMediaItem[];
 }
 
-/** A Review row's own status band. The row says where a review stands in three
-    places at once — the face, the words, the colour — and the colour is the one
-    that reads without being read, so a green reading is a green row rather than
-    a green word on a neutral one. Muted keeps the plate's own surface: "nothing
-    has happened yet" is not a status worth a band. */
+/** A Review row's own status band, for the one state that is addressed to the
+    reader. A band is pre-attentive only while its absence is the norm: with a
+    tinted strip above and a band on every row, nothing read without being read
+    and the panel was a stack of coloured fields. So the band is reserved for
+    "this wants you" — a blocking reading, a review waiting on you — and every
+    settled state carries its colour on the words and the row's own action
+    instead, which is where a row is read anyway. */
 type ReviewTone = "green" | "yellow" | "red" | "blue" | "muted";
-const REVIEW_ROW_BG: Record<ReviewTone, string> = {
-	green: "bg-green-soft",
-	yellow: "bg-yellow-soft",
-	red: "bg-red-soft",
-	blue: "bg-blue-soft",
-	muted: "",
-};
+const reviewBand = (tone: ReviewTone): string =>
+	tone === "red" ? "bg-red-soft" : "";
 
 /** The leading visual on a Review row: the box a `UserAvatar size={20}` fills,
     so a glyph and a face line up down the section. */
@@ -255,15 +252,15 @@ const STATUS_MARK: Record<
 		glyph: "+",
 		className: "bg-green-soft text-green",
 	},
-	// `yellow-tint` rather than `yellow`, for both the dot and the tile it sits
-	// on: these are fills, and light mode's text yellow is a dark ochre that
-	// reads as dirt at this size (see the note in base.css). Mixed here rather
-	// than taken from `--yellow-soft`, which is that same ochre at 12%.
+	// No tile and no hue: a list of changes is nearly always all
+	// modifications, so a tinted square on every row paints a column of colour
+	// that says the one thing every row already agreed on. The dot keeps the
+	// column's alignment and gives the `+` on the one created file somewhere
+	// to stand out against.
 	modified: {
 		label: "Modified",
 		glyph: STATUS_DOT,
-		className:
-			"bg-[color-mix(in_srgb,var(--yellow-tint)_18%,transparent)] text-yellow-tint",
+		className: "text-faint",
 	},
 	deleted: {
 		label: "Deleted",
@@ -601,17 +598,15 @@ function AgentReviewCard({
 				: score
 					? "text-red"
 					: "text-dim";
-	const rowTone: ReviewTone = active
-		? "blue"
-		: !score
-			? "muted"
-			: stale
-				? "yellow"
-				: score >= 4
-					? "green"
-					: score === 3
-						? "yellow"
-						: "red";
+	// One tone for the row, answering one question: does this reading want you?
+	// A blocking review does. 5/5 with no findings does not, and neither does a
+	// run still in flight — and a row with no state to lend keeps the neutral
+	// plate, band and action alike. The reading is still coloured where it is
+	// actually read: the score below, and the state word beside it.
+	const rowTone: ReviewTone =
+		!active && review && !stale && (review.blocking > 0 || (!!score && score <= 2))
+			? "red"
+			: "muted";
 	// One line in the panel's git-status grammar: the reading, then the single
 	// thing worth knowing about it. The reviewer's reasoning and the run time
 	// are a hover away in the summary popup, so the row never carries both.
@@ -729,12 +724,12 @@ function AgentReviewCard({
 					</Menu.Root>
 				)}
 			</div>
-			{/* Wider than the lists' hairline gap: these rows carry their own
-			    status band, and two bands a pixel apart read as one striped
-			    block. The gap matches the plate's own padding, and the two
-			    corners stay concentric: 14 inside + 8 of padding = 22. */}
-			<div className={cn(INFO_LIST_CLASS, "gap-2 rounded-2xl p-2")}>
-				<div className={cn(GIT_ROW, "rounded-lg py-2", REVIEW_ROW_BG[rowTone])}>
+			{/* The plate every other section in the panel uses. It used to run
+			    wider, to keep two status bands from reading as one striped
+			    block; at most one row carries a band now, so the section goes
+			    back to the panel's own list grammar. */}
+			<div className={INFO_LIST_CLASS}>
+				<div className={cn(GIT_ROW, "rounded-md py-2", reviewBand(rowTone))}>
 					<Popover.Root>
 						<Popover.Trigger
 							render={<div />}
@@ -996,15 +991,10 @@ function ReviewerChip({
 	const reviewNow = needsMyReview && !!onReviewPr;
 	// `who · where it stands`, in the agent row's grammar right above: the name
 	// keeps the row's own ink and the state carries the tone, exactly as the
-	// score does. The one state addressed to the reader says so instead, and
-	// takes the red plate with it — hue alone is a weak signal at 13px.
-	const rowTone: ReviewTone = needsMyReview
-		? "red"
-		: accepted
-			? "green"
-			: req || githubTarget
-				? "yellow"
-				: "muted";
+	// score does. Only the one state addressed to the reader takes the row
+	// itself — the red band, and the red on its action — because a review
+	// waiting on you is the single thing in this panel worth interrupting for.
+	const rowTone: ReviewTone = needsMyReview ? "red" : "muted";
 	// The face is the person the review sits with — you, when it is waiting on
 	// you, even though the words say so rather than naming you.
 	const faceName = selectedTeam
@@ -1053,11 +1043,11 @@ function ReviewerChip({
 			<div
 				className={cn(
 					GIT_ROW,
-					"rounded-lg py-2",
+					"rounded-md py-2",
 					// Background only: the row's own `text-fg` and a tone utility on
 					// the same element would resolve by Tailwind's output order, so
 					// the ink goes on the spans inside it instead.
-					REVIEW_ROW_BG[rowTone],
+					reviewBand(rowTone),
 				)}
 			>
 				{/* The reviewer's own picture, beside the agent's face on the row
@@ -1448,9 +1438,7 @@ export function WorkspaceInfo({
 			) : (
 				<div className={INFO_SECTION_CLASS}>
 					<div className={INFO_LABEL_CLASS}>Review</div>
-					<div className={cn(INFO_LIST_CLASS, "rounded-2xl p-2")}>
-						{reviewerRow}
-					</div>
+					<div className={INFO_LIST_CLASS}>{reviewerRow}</div>
 				</div>
 			)}
 			{sandbox && (

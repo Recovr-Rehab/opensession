@@ -41,6 +41,7 @@ import {
 	PR_HEAD_ERROR,
 	PR_SIB_DOT,
 	PR_SIB_DOT_BG,
+	PR_BAR_STATE_TEXT,
 	PR_STATE_TEXT,
 } from "../lib/pr-tone-classes";
 import { Tooltip } from "../ui/tooltip";
@@ -1046,7 +1047,7 @@ export function PrStatusBar({
 					trigger={
 							<button
 								type="button"
-								className={`${PR_BAR_STATE} ${PR_STATE_TEXT[headlineTone]}`}
+								className={`${PR_BAR_STATE} ${PR_BAR_STATE_TEXT[headlineTone]}`}
 								onClick={onOpenChecksTab}
 							>
 							{headlineLabel}
@@ -1056,7 +1057,7 @@ export function PrStatusBar({
 			) : (headline.key !== "no-pr" || statusRows.length > 0) && (
 				<Tooltip label="Open the PR tab">
 					<button
-						className={`${PR_BAR_STATE} ${PR_STATE_TEXT[headlineTone]}`}
+						className={`${PR_BAR_STATE} ${PR_BAR_STATE_TEXT[headlineTone]}`}
 						onClick={() => onOpenPrTab?.()}
 					>
 						{headlineLabel}
