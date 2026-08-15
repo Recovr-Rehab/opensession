@@ -5,7 +5,7 @@ import {
 	toOpencodeModel,
 	toPiModel,
 } from "./models";
-import { getWorkspace } from "./workspaces";
+import { getWorkspace, workspaceModelSettings } from "./workspaces";
 
 export interface ResolvedWorkspaceModelPreset {
 	/** The picker id retained on the session, so the UI and history keep the preset name. */
@@ -45,9 +45,12 @@ export function resolveWorkspaceModelPreset(
 	const id = (pi ? requested.slice(3) : requested).trim();
 	const match = id.match(/^workspace-preset\/([^/]+)\/([A-Za-z0-9_-]{1,64})$/);
 	if (!match || (typeof workspaceId === "string" && match[1] !== workspaceId)) return undefined;
-	const preset = getWorkspace(match[1])?.modelSettings?.presets?.find(
-		(item) => item.id === match[2],
-	);
+	// Resolve through workspaceModelSettings so the default presets stay
+	// selectable in workspaces that never saved their own copy.
+	const workspace = getWorkspace(match[1]);
+	const preset = workspace
+		? workspaceModelSettings(workspace).presets?.find((item) => item.id === match[2])
+		: undefined;
 	if (!preset?.lead?.model?.trim()) return undefined;
 	const lead = preset.lead.model.trim();
 	const routed =

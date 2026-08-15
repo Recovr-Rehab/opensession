@@ -73,7 +73,9 @@ function copyModelSettings(settings: WorkspaceModelSettings): WorkspaceModelSett
   return JSON.parse(JSON.stringify(settings)) as WorkspaceModelSettings;
 }
 
-/** Existing workspaces gain the same defaults until they save a local config. */
+/** A workspace without its own modelSettings inherits the current defaults.
+ *  Nothing materializes defaults into workspace files or list payloads; a
+ *  workspace stores modelSettings only once someone saves an edit. */
 export function workspaceModelSettings(workspace?: Workspace | null): WorkspaceModelSettings {
   return workspace?.modelSettings || copyModelSettings(DEFAULT_WORKSPACE_MODEL_SETTINGS);
 }
@@ -137,8 +139,12 @@ export function listWorkspaces(): Workspace[] {
     if (!file.endsWith(".json")) continue;
     try {
       const p = JSON.parse(readFileSync(`${WORKSPACES_DIR}/${file}`, "utf8"));
+      // No defaults backfill here: stamping the ~3KB default modelSettings on
+      // every row multiplied the list payload by the workspace count (13 MB on
+      // this instance). Absent modelSettings means "inherit the defaults":
+      // resolve through workspaceModelSettings() at the point of use.
       if (p && typeof p.id === "string" && typeof p.name === "string")
-        out.push({ ...p, modelSettings: p.modelSettings || copyModelSettings(DEFAULT_WORKSPACE_MODEL_SETTINGS) });
+        out.push(p);
     } catch {}
   }
   out.sort(
@@ -195,14 +201,7 @@ export function getWorkspace(id: string): Workspace | null {
   const f = fileFor(id);
   if (!existsSync(f)) return null;
 	try {
-		const workspace = JSON.parse(readFileSync(f, "utf8")) as Workspace;
-		if (workspace.modelSettings) return workspace;
-		// This is a one-time migration, not a merge. Once written, defaults are
-		// ordinary workspace JSON and a person can edit or remove any preset.
-		return saveWorkspace({
-			...workspace,
-			modelSettings: copyModelSettings(DEFAULT_WORKSPACE_MODEL_SETTINGS),
-		});
+		return JSON.parse(readFileSync(f, "utf8")) as Workspace;
 	} catch {
     return null;
   }
@@ -243,7 +242,6 @@ export function createWorkspace(input: {
     ...(input.attachedRepos && input.attachedRepos.length
       ? { attachedRepos: input.attachedRepos }
       : {}),
-    modelSettings: copyModelSettings(DEFAULT_WORKSPACE_MODEL_SETTINGS),
   };
   return saveWorkspace(workspace);
 }

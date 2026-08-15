@@ -38,7 +38,7 @@ import { searchSkills } from "../skills";
 import { handleSlashCommand } from "../slash-commands";
 import { suggestBranchName } from "../suggest-branch";
 import { type NativeSessionFile, type StackedOn } from "../types";
-import { type Workspace, type WorkspaceModelSettings, createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, updateWorkspace } from "../workspaces";
+import { DEFAULT_WORKSPACE_MODEL_SETTINGS, type Workspace, type WorkspaceModelSettings, createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, updateWorkspace } from "../workspaces";
 import { resolveExternalWorkspace, resolvePlainWorkspace, resolvePrWorkspace } from "../workspace-resolve";
 import { resolveModel } from "../models";
 import { REPOS, createWorktree, createWorktreeForExistingBranch, ensureScratchDir, getRepo, isSharedCheckoutDir, listWorktrees, repoForPath, sessionRepoId, worktreeHasWork, worktreeHeadBranch } from "../worktree";
@@ -362,7 +362,13 @@ export async function handleWorkspaceRoutes(
 	// ── Workspaces (containers that group sessions) ──
 	// A workspace is just metadata; membership lives on each session's `workspaceId`.
 	if (path === "/api/workspaces" && req.method === "GET") {
-		return Response.json({ workspaces: listWorkspaces() });
+		// The defaults ride once at the top level; a workspace row carries
+		// modelSettings only when someone saved their own copy. Stamping the
+		// defaults on every row multiplied the payload by the workspace count.
+		return Response.json({
+			workspaces: listWorkspaces(),
+			defaultModelSettings: DEFAULT_WORKSPACE_MODEL_SETTINGS,
+		});
 	}
 
 	if (path === "/api/workspaces" && req.method === "POST") {

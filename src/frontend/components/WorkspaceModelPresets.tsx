@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import type { Workspace } from "../lib/types";
-import { fetchModels, updateWorkspaceApi, invalidateModelsCache, type ModelOption } from "../lib/api";
+import { defaultWorkspaceModelSettings, fetchModels, updateWorkspaceApi, invalidateModelsCache, type ModelOption } from "../lib/api";
 import { Button } from "../ui/button";
 import { CardList } from "../ui/card";
 import { cn } from "../ui/cn";
@@ -239,12 +239,17 @@ export function WorkspaceModelPresets({
 	onOpenChange: (open: boolean) => void;
 	onSaved: () => void;
 }) {
-	const [settings, setSettings] = useState<Settings>(workspace.modelSettings || {});
+	const [settings, setSettings] = useState<Settings>(
+		workspace.modelSettings || defaultWorkspaceModelSettings() || {},
+	);
 	const [models, setModels] = useState<ModelOption[]>([]);
 	const [openPreset, setOpenPreset] = useState<string | null>(null);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	useEffect(() => setSettings(workspace.modelSettings || {}), [workspace]);
+	useEffect(
+		() => setSettings(workspace.modelSettings || defaultWorkspaceModelSettings() || {}),
+		[workspace],
+	);
 	useEffect(() => {
 		if (!open) return;
 		fetchModels(workspace.id)

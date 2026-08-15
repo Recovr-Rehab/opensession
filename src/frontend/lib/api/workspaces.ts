@@ -48,9 +48,21 @@ export async function fetchSessionOverview(
 
 // ── Workspaces (containers that group sessions) ──
 
+let defaultModelSettings: Workspace["modelSettings"] | undefined;
+
+/** The instance-wide default model settings, captured from the last workspaces
+ *  fetch. A workspace without its own modelSettings inherits these. */
+export function defaultWorkspaceModelSettings(): Workspace["modelSettings"] | undefined {
+	return defaultModelSettings;
+}
+
 export async function fetchWorkspaces(): Promise<Workspace[]> {
 	try {
-		const data = await request<{ workspaces?: Workspace[] }>("/workspaces");
+		const data = await request<{
+			workspaces?: Workspace[];
+			defaultModelSettings?: Workspace["modelSettings"];
+		}>("/workspaces");
+		if (data?.defaultModelSettings) defaultModelSettings = data.defaultModelSettings;
 		return data?.workspaces ?? [];
 	} catch (e) {
 		console.warn("fetchWorkspaces failed:", e);
