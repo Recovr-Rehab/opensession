@@ -3,8 +3,8 @@ import heroPosterUrl from "./hero-poster.webp";
 import heroPosterDarkUrl from "./hero-poster-dark.webp";
 
 /**
- * Tella's own backgrounds behind the hero: "Silver Silk" in light, "Midnight
- * Dust" in dark. A <source media> attribute would be the declarative way to
+ * Tella's own backgrounds behind the hero: "Silver Silk" in light, "Cobalt
+ * Veil" in dark, dimmed in CSS so the same silk reads as a night sky. A <source media> attribute would be the declarative way to
  * pick one, but browsers dropped support for it on <video>, so the choice is
  * made here and the element is keyed on it to force a reload rather than
  * leaving the old frame on screen.
@@ -15,7 +15,7 @@ const CLIPS = {
 		poster: heroPosterUrl,
 	},
 	dark: {
-		src: "https://ucarecdn.com/3edf6853-d7d6-49d5-a67d-b8bcc2b2d571/",
+		src: "https://ucarecdn.com/3e8909cf-5409-40b2-b8d3-8057004e0182/",
 		poster: heroPosterDarkUrl,
 	},
 };

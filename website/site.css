@@ -874,7 +874,7 @@ summary:focus-visible {
 		--line: rgba(255, 255, 255, 0.1);
 		--muted: #939397;
 		--ink-rgb: 255, 255, 255;
-		--stage-bg: #17171a;
+		--stage-bg: #14171d;
 		--window: #0d0d0f;
 		--window-shadow: rgba(0, 0, 0, 0.5);
 		--surface: #151517;
@@ -887,7 +887,17 @@ summary:focus-visible {
 
 	.gradient-fallback {
 		background:
-			radial-gradient(circle at 26% 16%, #262629 0, transparent 40%),
-			radial-gradient(circle at 74% 34%, #1c1c20 0, transparent 44%),
-			linear-gradient(145deg, #17171a 0%, #131316 52%, #09090b 100%);
+			radial-gradient(circle at 26% 16%, #262b38 0, transparent 40%),
+			radial-gradient(circle at 74% 34%, #1a1f2b 0, transparent 44%),
+			linear-gradient(145deg, #161a23 0%, #12151c 52%, #0a0b0f 100%);
+	}
+
+	/* Cobalt Veil is one of Tella's daylight silks, so it arrives far too
+	   bright for a dark page. Dimming the clip keeps its movement and its blue
+	   while letting the window on top stay the lightest thing in the frame.
+	   0.6 is measured rather than picked: the panel lands around 110 in
+	   luminance against the window's 30, so the blue is unmistakable and the
+	   product still sits in front of it. */
+	.hero-video {
+		filter: brightness(0.6) saturate(1.12);
 	}
