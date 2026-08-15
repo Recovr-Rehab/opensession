@@ -73,6 +73,7 @@
     "tailwindcss": "^4.3.2"
   },
   "patchedDependencies": {
+    "@base-ui/react@1.6.0": "patches/@base-ui%2Freact@1.6.0.patch",
     "@rynfar/meridian@1.51.0": "patches/@rynfar%2Fmeridian@1.51.0.patch"
   }
 }
