@@ -767,6 +767,18 @@ summary:focus-visible {
 		corner-shape: var(--cs);
 	}
 
+	/* A phone has no room to float a whole window inside a frame: at this width
+	   the app ends up too small to read. It runs off the right and bottom edges
+	   instead, which buys the same picture at a larger scale and reads as a
+	   window carrying on past the frame. The stage clips it, so the bleed costs
+	   no layout. */
+	.preview-wrap {
+		top: 7%;
+		right: -2px;
+		bottom: -2px;
+		left: 5%;
+	}
+
 	.button {
 		width: 100%;
 	}
