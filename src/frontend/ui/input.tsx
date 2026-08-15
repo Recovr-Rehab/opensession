@@ -74,9 +74,11 @@ type SelectProps = Omit<React.ComponentProps<"select">, "size"> & {
 	size?: Size;
 };
 
-/** Native select in the field shape. Kept native for the platform's own
- *  keyboard and mobile pickers; reach for `ui/menu` when the options need
- *  richer rows than a native list can carry. */
+/** Native select in the field shape. `ui/select` is the default now: it wears
+ *  the same field, and it opens the app's popup rather than the platform's
+ *  dropdown. Reach for this one only when you specifically want the OS picker
+ *  or a native select's own keyboard behaviour (see `PaletteSelect`,
+ *  `SessionSearch`). */
 export function Select({ className, size = "md", ...props }: SelectProps) {
 	return <select className={fieldClasses(size, cn("cursor-pointer", className))} {...props} />;
 }

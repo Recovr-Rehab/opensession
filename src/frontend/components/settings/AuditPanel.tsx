@@ -6,10 +6,11 @@ import {
 	SettingCard,
 	SettingsHeader,
 	SettingsPanel,
-	settingsSelectClass,
+	settingsInputClass,
 } from "../../ui/settings";
 import { EmptyState } from "../../ui/state";
 import { Switch } from "../../ui/switch";
+import { Select } from "./shared";
 
 /** Summarize one audit event for its row (the details live in the expand). */
 function auditSummary(e: Record<string, unknown>): string {
@@ -79,27 +80,29 @@ export function AuditPanel() {
 			/>
 
 			<div className="mb-3 flex flex-wrap items-center gap-2 px-5">
-				<select className={settingsSelectClass} value={date} onChange={(e) => setDate(e.target.value)} aria-label="Date">
-					{dates.map((d) => (
-						<option key={d} value={d}>
-							{d}
-						</option>
-					))}
-				</select>
-				<select className={settingsSelectClass} value={type} onChange={(e) => setType(e.target.value)} aria-label="Event type">
-					<option value="">{all ? "All events" : "Significant events"}</option>
-					{types.map((t) => (
-						<option key={t} value={t}>
-							{t}
-						</option>
-					))}
-				</select>
+				<Select
+					className="w-auto"
+					label="Date"
+					value={date}
+					options={dates.map((d) => ({ value: d, label: d }))}
+					onChange={setDate}
+				/>
+				<Select
+					className="w-auto"
+					label="Event type"
+					value={type}
+					options={[
+						{ value: "", label: all ? "All events" : "Significant events" },
+						...types.map((t) => ({ value: t, label: t })),
+					]}
+					onChange={setType}
+				/>
 				<label className="flex cursor-pointer items-center gap-2 text-label text-dim">
 					<Switch checked={all} onCheckedChange={setAll} />
 					Include tool firehose
 				</label>
 				<input
-					className={`${settingsSelectClass} min-w-[140px] flex-1`}
+					className={`${settingsInputClass} min-w-[140px] flex-1`}
 					value={q}
 					onChange={(e) => setQ(e.target.value)}
 					placeholder="Search (session id, tool, text…)"

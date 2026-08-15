@@ -5,6 +5,7 @@ import { Button } from "../ui/button";
 import { CardList } from "../ui/card";
 import { cn } from "../ui/cn";
 import { Modal } from "../ui/modal";
+import { Select } from "../ui/select";
 import { InlineAlert } from "../ui/state";
 import {
 	SettingCard,
@@ -17,7 +18,6 @@ import {
 	SettingsGroupLabel,
 	rowMenuTriggerClasses,
 	settingsInputClass,
-	settingsSelectClass,
 	settingsTextareaClass,
 } from "../ui/settings";
 import { EFFORTS, shortModelLabel } from "./ModelEffortSelect";
@@ -34,6 +34,35 @@ const blankPreset = (): Preset => ({
 	lead: { model: "", effort: "high" },
 	supporting: [],
 });
+
+/** The dialog's one select shape: a full-width field over the app's popup.
+ *  Its four fields differ only in the list they offer. */
+function ModelSelect({
+	items,
+	value,
+	label,
+	onChange,
+	className,
+}: {
+	items: { value: string; label: string }[];
+	value: string;
+	label: string;
+	onChange: (value: string) => void;
+	className?: string;
+}) {
+	return (
+		<Select.Root items={items} value={value} onValueChange={(next) => onChange(String(next))}>
+			<Select.Trigger aria-label={label} className={className} />
+			<Select.Popup>
+				{items.map((item) => (
+					<Select.Item key={item.value} value={item.value}>
+						{item.label}
+					</Select.Item>
+				))}
+			</Select.Popup>
+		</Select.Root>
+	);
+}
 
 /**
  * One preset in the list: a row you can read at a glance, and its editor
@@ -68,14 +97,12 @@ function PresetRow({
 		models.find((option) => option.id === model)?.label || shortModelLabel(model, models);
 	const patchSupporting = (index: number, patch: Partial<Supporting>) =>
 		onPatch({ supporting: supporting.map((member, i) => (i === index ? { ...member, ...patch } : member)) });
-	const modelOptions = (placeholder: string) => (
-		<>
-			<option value="">{placeholder}</option>
-			{models.map((model) => (
-				<option key={model.id} value={model.id}>{model.label}</option>
-			))}
-		</>
-	);
+	// "" is a real choice ("not set yet"), so it stays an item in the list
+	// rather than becoming the trigger's placeholder.
+	const modelItems = (prompt: string) => [
+		{ value: "", label: prompt },
+		...models.map((model) => ({ value: model.id, label: model.label })),
+	];
 	return (
 		<div>
 			<button
@@ -120,26 +147,22 @@ function PresetRow({
 					<div className="flex flex-wrap items-end gap-2">
 						<SettingsField className="mb-0 min-w-[13rem] flex-1">
 							Lead model
-							<select
-								className={settingsSelectClass}
+							<ModelSelect
+								items={modelItems("Choose a lead model")}
 								value={preset.lead.model}
-								onChange={(event) => onPatch({ lead: { ...preset.lead, model: event.target.value } })}
-							>
-								{modelOptions("Choose a lead model")}
-							</select>
+								label="Lead model"
+								onChange={(model) => onPatch({ lead: { ...preset.lead, model } })}
+							/>
 						</SettingsField>
 						{leadEfforts.length > 0 && (
 							<SettingsField className="mb-0 w-32">
 								Effort
-								<select
-									className={settingsSelectClass}
+								<ModelSelect
+									items={leadEfforts.map((effort) => ({ value: effort.id, label: effort.label }))}
 									value={preset.lead.effort || ""}
-									onChange={(event) => onPatch({ lead: { ...preset.lead, effort: event.target.value } })}
-								>
-									{leadEfforts.map((effort) => (
-										<option key={effort.id} value={effort.id}>{effort.label}</option>
-									))}
-								</select>
+									label="Effort"
+									onChange={(effort) => onPatch({ lead: { ...preset.lead, effort } })}
+								/>
 							</SettingsField>
 						)}
 					</div>
@@ -155,14 +178,13 @@ function PresetRow({
 									key={index}
 									className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 desktop:grid-cols-[minmax(0,1fr)_10rem_8rem_auto]"
 								>
-									<select
-										className={cn(settingsSelectClass, "col-start-1 row-start-1")}
+									<ModelSelect
+										className="col-start-1 row-start-1"
+										items={modelItems("Choose a supporting model")}
 										value={member.model}
-										aria-label="Supporting model"
-										onChange={(event) => patchSupporting(index, { model: event.target.value })}
-									>
-										{modelOptions("Choose a supporting model")}
-									</select>
+										label="Supporting model"
+										onChange={(model) => patchSupporting(index, { model })}
+									/>
 									<button
 										type="button"
 										className={cn(rowMenuTriggerClasses, "col-start-2 row-start-1 desktop:col-start-4")}
@@ -179,16 +201,13 @@ function PresetRow({
 										onChange={(event) => patchSupporting(index, { role: event.target.value })}
 									/>
 									{memberEfforts.length > 0 && (
-										<select
-											className={cn(settingsSelectClass, "col-span-2 desktop:col-span-1 desktop:col-start-3 desktop:row-start-1")}
+										<ModelSelect
+											className="col-span-2 desktop:col-span-1 desktop:col-start-3 desktop:row-start-1"
+											items={memberEfforts.map((effort) => ({ value: effort.id, label: effort.label }))}
 											value={member.effort || ""}
-											aria-label="Supporting model effort"
-											onChange={(event) => patchSupporting(index, { effort: event.target.value })}
-										>
-											{memberEfforts.map((effort) => (
-												<option key={effort.id} value={effort.id}>{effort.label}</option>
-											))}
-										</select>
+											label="Supporting model effort"
+											onChange={(effort) => patchSupporting(index, { effort })}
+										/>
 									)}
 								</div>
 							);

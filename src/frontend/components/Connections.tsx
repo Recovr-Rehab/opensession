@@ -1,6 +1,7 @@
 import { BASE_PATH } from "../lib/base";
 import React, { useEffect, useState, useCallback } from "react";
 import { Menu } from "../ui/menu";
+import { OptionSelect } from "../ui/select";
 import { cn } from "../ui/cn";
 import { Button } from "../ui/button";
 import { DeviceCode } from "../ui/device-code";
@@ -26,7 +27,6 @@ import {
   StatusChip,
   rowMenuTriggerClasses,
   settingsInputClass,
-  settingsSelectClass,
 } from "../ui/settings";
 import {
   IconArrowUpRight,
@@ -1082,17 +1082,14 @@ function PlainRouter() {
         </div>
         <div className="flex min-w-0 items-center gap-2.5 text-meta text-faint">
           <span className="whitespace-nowrap">Model for basic tickets:</span>
-          <select
-            className={cn(settingsSelectClass, "min-w-0 flex-1")}
+          <OptionSelect
+            className="min-w-0 flex-1"
+            label="Model for basic tickets"
             value={cfg.basicModel}
             disabled={saving}
-            onChange={(e) => save({ basicModel: e.target.value })}
-            aria-label="Model for basic tickets"
-          >
-            {models.map((m) => (
-              <option key={m.id} value={m.id}>{m.label}</option>
-            ))}
-          </select>
+            options={models.map((m) => ({ value: m.id, label: m.label }))}
+            onChange={(basicModel) => save({ basicModel })}
+          />
         </div>
         <textarea
           value={draft}
@@ -1194,10 +1191,15 @@ function AddMcpForm({ onClose, onAdded }: { onClose: () => void; onAdded: () => 
         </SettingsField>
         <SettingsField>
           Transport
-          <select className={settingsSelectClass} value={transport} onChange={(e) => setTransport(e.target.value as any)}>
-            <option value="http">http · remote MCP endpoint</option>
-            <option value="stdio">stdio · local command</option>
-          </select>
+          <OptionSelect
+            label="Transport"
+            value={transport}
+            options={[
+              { value: "http", label: "http · remote MCP endpoint" },
+              { value: "stdio", label: "stdio · local command" },
+            ]}
+            onChange={(next) => setTransport(next as any)}
+          />
         </SettingsField>
       </SettingsFormRow>
 

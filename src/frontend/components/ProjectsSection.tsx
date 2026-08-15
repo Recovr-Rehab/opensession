@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { cn } from "../ui/cn";
 import { Button } from "../ui/button";
 import { Modal } from "../ui/modal";
+import { OptionSelect } from "../ui/select";
 import { InlineAlert } from "../ui/state";
 import { IconTile } from "./BrandTile";
 import { IconPlus, IconTrash } from "./icons";
@@ -364,21 +365,28 @@ function NewProjectModal({
 					<div className="grid grid-cols-2 gap-3">
 						<div>
 							<label className={labelCls}>MCP server</label>
-							<select className={inputCls} value={server} onChange={(e) => setServer(e.target.value)}>
-								<option value="">Pick…</option>
-								{servers.map((s) => (
-									<option key={s} value={s}>{s}</option>
-								))}
-							</select>
+							<OptionSelect
+								label="MCP server"
+								value={server}
+								options={[
+									{ value: "", label: "Pick…" },
+									...servers.map((s) => ({ value: s, label: s })),
+								]}
+								onChange={setServer}
+							/>
 						</div>
 						<div>
 							<label className={labelCls}>List tool</label>
-							<select className={inputCls} value={tool} onChange={(e) => setTool(e.target.value)} disabled={!tools.length}>
-								<option value="">{tools.length ? "Pick…" : "Pick a server first"}</option>
-								{tools.map((t) => (
-									<option key={t.name} value={t.name} title={t.description}>{t.name}</option>
-								))}
-							</select>
+							<OptionSelect
+								label="List tool"
+								value={tool}
+								disabled={!tools.length}
+								options={[
+									{ value: "", label: tools.length ? "Pick…" : "Pick a server first" },
+									...tools.map((t) => ({ value: t.name, label: t.name })),
+								]}
+								onChange={setTool}
+							/>
 						</div>
 					</div>
 

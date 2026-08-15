@@ -10,6 +10,7 @@ import {
 	type EngineOption,
 } from "../lib/model-engine";
 import { Menu } from "../ui/menu";
+import { Select } from "../ui/select";
 import { Button } from "../ui/button";
 import { DeviceCode } from "../ui/device-code";
 import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
@@ -28,7 +29,6 @@ import {
 	SettingsHint,
 	rowMenuTriggerClasses,
 	settingsInputClass,
-	settingsSelectClass,
 } from "../ui/settings";
 import { Switch } from "../ui/switch";
 import { cn } from "../ui/cn";
@@ -181,6 +181,15 @@ function DefaultModelRow() {
 	const codexModels = legacy.filter((m) => m.provider === "codex");
 	const legacyGroup = (engine: string) =>
 		opencodeModels.length > 0 ? `Legacy · ${engine} (direct SDK)` : engine;
+	const engineLabel = (m: (typeof opencodeModels)[number]) =>
+		m.provider === "pi" ? m.label : shortModelLabel(m.id, models || []);
+	// The trigger reads the selected model's label from this flat list, so a
+	// closed select shows "Fable 5" rather than opencode/anthropic/claude-fable-5.
+	const items = [
+		...opencodeModels.map((m) => ({ value: m.id, label: engineLabel(m) })),
+		...claudeModels.map((m) => ({ value: m.id, label: m.label })),
+		...codexModels.map((m) => ({ value: m.id, label: m.label })),
+	];
 
 	return (
 		<SettingRow>
@@ -192,37 +201,44 @@ function DefaultModelRow() {
 				</SettingRowDescription>
 			</SettingRowText>
 			<SettingRowControl>
-				<select
-					className={settingsSelectClass}
+				<Select.Root
+					items={items}
 					value={current}
 					disabled={!models || saving}
-					onChange={(e) => handleChange(e.target.value)}
-					aria-label="Default model"
+					onValueChange={(id) => handleChange(String(id))}
 				>
-					{opencodeModels.map((m) => (
-						<option key={m.id} value={m.id}>
-							{m.provider === "pi" ? m.label : shortModelLabel(m.id, models || [])}
-						</option>
-					))}
-					{claudeModels.length > 0 && (
-						<optgroup label={legacyGroup("Claude")}>
-							{claudeModels.map((m) => (
-								<option key={m.id} value={m.id}>
-									{m.label}
-								</option>
-							))}
-						</optgroup>
-					)}
-					{codexModels.length > 0 && (
-						<optgroup label={legacyGroup("Codex")}>
-							{codexModels.map((m) => (
-								<option key={m.id} value={m.id}>
-									{m.label}
-								</option>
-							))}
-						</optgroup>
-					)}
-				</select>
+					<Select.Trigger
+						aria-label="Default model"
+						sizeTo={items.map((m) => m.label)}
+					/>
+					<Select.Popup align="end">
+						{opencodeModels.map((m) => (
+							<Select.Item key={m.id} value={m.id}>
+								{engineLabel(m)}
+							</Select.Item>
+						))}
+						{claudeModels.length > 0 && (
+							<Select.Group>
+								<Select.GroupLabel>{legacyGroup("Claude")}</Select.GroupLabel>
+								{claudeModels.map((m) => (
+									<Select.Item key={m.id} value={m.id}>
+										{m.label}
+									</Select.Item>
+								))}
+							</Select.Group>
+						)}
+						{codexModels.length > 0 && (
+							<Select.Group>
+								<Select.GroupLabel>{legacyGroup("Codex")}</Select.GroupLabel>
+								{codexModels.map((m) => (
+									<Select.Item key={m.id} value={m.id}>
+										{m.label}
+									</Select.Item>
+								))}
+							</Select.Group>
+						)}
+					</Select.Popup>
+				</Select.Root>
 			</SettingRowControl>
 		</SettingRow>
 	);
@@ -495,6 +511,11 @@ function ModelEngineDefaultsSection() {
 	if (engines.length < 2) return null;
 	const { opencode: engineModels } = splitModelOptions(models || []);
 	if (engineModels.length === 0) return null;
+	// "" is the real stored value for "no default engine", not a placeholder.
+	const engineItems = [
+		{ value: "", label: "Auto" },
+		...engines.map((e) => ({ value: e.id as string, label: e.label })),
+	];
 
 	return (
 		<>
@@ -509,20 +530,28 @@ function ModelEngineDefaultsSection() {
 								<SettingRowTitle>{shortModelLabel(m.id, models || [])}</SettingRowTitle>
 							</SettingRowText>
 							<SettingRowControl>
-								<select
-									className={settingsSelectClass}
+								<Select.Root
+									items={engineItems}
 									value={value}
 									disabled={saving === key}
-									onChange={(e) => handleChange(key, e.target.value)}
-									aria-label={`Default engine for ${shortModelLabel(m.id, models || [])}`}
+									onValueChange={(engine) => handleChange(key, String(engine))}
 								>
-									<option value="">Auto</option>
-									{engines.map((e) => (
-										<option key={e.id} value={e.id} disabled={!engineModelId(e.id, m.id)}>
-											{e.label}
-										</option>
-									))}
-								</select>
+									<Select.Trigger
+										aria-label={`Default engine for ${shortModelLabel(m.id, models || [])}`}
+										sizeTo={engineItems.map((e) => e.label)}
+									/>
+									<Select.Popup align="end">
+										{engineItems.map((e) => (
+											<Select.Item
+												key={e.value}
+												value={e.value}
+												disabled={!!e.value && !engineModelId(e.value as EngineId, m.id)}
+											>
+												{e.label}
+											</Select.Item>
+										))}
+									</Select.Popup>
+								</Select.Root>
 							</SettingRowControl>
 						</SettingRow>
 					);
@@ -559,6 +588,13 @@ function DefaultEngineRow({ piEnabled }: { piEnabled: boolean }) {
 			? current.slice("opencode/".length)
 			: null;
 	const piCanServe = !!tail;
+	const engineItems = [
+		{ value: "opencode", label: "OpenCode" },
+		{
+			value: "pi",
+			label: `Pi${!piEnabled ? " (disabled)" : !piCanServe ? " (model not served)" : ""}`,
+		},
+	];
 
 	async function handleChange(next: string) {
 		if (next === engine || !tail) return;
@@ -593,24 +629,71 @@ function DefaultEngineRow({ piEnabled }: { piEnabled: boolean }) {
 				</SettingRowDescription>
 			</SettingRowText>
 			<SettingRowControl>
-				<select
-					className={settingsSelectClass}
+				<Select.Root
+					items={engineItems}
 					value={engine}
 					disabled={!current || saving || !tail}
-					onChange={(e) => handleChange(e.target.value)}
-					aria-label="Default engine"
+					onValueChange={(next) => handleChange(String(next))}
 				>
-					<option value="opencode">OpenCode</option>
-					<option value="pi" disabled={!piCanServe || !piEnabled}>
-						{`Pi${!piEnabled ? " (disabled)" : !piCanServe ? " (model not served)" : ""}`}
-					</option>
-				</select>
+					<Select.Trigger aria-label="Default engine" sizeTo={engineItems.map((e) => e.label)} />
+					<Select.Popup align="end">
+						{engineItems.map((e) => (
+							<Select.Item
+								key={e.value}
+								value={e.value}
+								disabled={e.value === "pi" && (!piCanServe || !piEnabled)}
+							>
+								{e.label}
+							</Select.Item>
+						))}
+					</Select.Popup>
+				</Select.Root>
 			</SettingRowControl>
 		</SettingRow>
 	);
 }
 
 // ── Shared bits ────────────────────────────────────────────────────────────
+
+/** Who an account belongs to: the shared pool, or one person's own
+ *  subscription. Both account lists render this same row control. */
+function OwnerSelect({
+	value,
+	onChange,
+	label,
+	title,
+	disabled,
+}: {
+	value: string;
+	onChange: (owner: string) => void;
+	label: string;
+	title?: string;
+	disabled?: boolean;
+}) {
+	const items = [
+		{ value: "", label: "Shared pool" },
+		// Keep a non-team owner (e.g. set via the API) selectable.
+		...(value && !TEAM.includes(value) ? [{ value, label: `👤 ${value}` }] : []),
+		...TEAM.map((name) => ({ value: name, label: `👤 ${name}` })),
+	];
+	return (
+		<Select.Root
+			items={items}
+			value={value}
+			disabled={disabled}
+			onValueChange={(next) => onChange(String(next))}
+		>
+			<Select.Trigger aria-label={label} title={title} sizeTo={items.map((i) => i.label)} />
+			<Select.Popup align="end">
+				{items.map((i) => (
+					<Select.Item key={i.value} value={i.value}>
+						{i.label}
+					</Select.Item>
+				))}
+			</Select.Popup>
+		</Select.Root>
+	);
+}
 
 function Avatar({ name, className }: { name: string; className: string }) {
 	return (
@@ -1006,28 +1089,16 @@ function ClaudeAccountsSection() {
 								)}
 							</SettingRowText>
 							<SettingRowControl className="flex items-center gap-1.5">
-								<select
-									className={settingsSelectClass}
+								<OwnerSelect
 									value={a.owner || ""}
-									onChange={(e) => handleSetOwner(a, e.target.value)}
-									aria-label={`Owner of ${a.name}`}
+									onChange={(owner) => handleSetOwner(a, owner)}
+									label={`Owner of ${a.name}`}
 									title={
 										a.owner
 											? `${a.owner}'s personal sub. Their runs use it first, everyone else never does.`
 											: "Shared pool account, used by everyone and by automations."
 									}
-								>
-									<option value="">Shared pool</option>
-									{/* Keep a non-team owner (e.g. set via API) selectable. */}
-									{a.owner && !TEAM.includes(a.owner) && (
-										<option value={a.owner}>👤 {a.owner}</option>
-									)}
-									{TEAM.map((name) => (
-										<option key={name} value={name}>
-											👤 {name}
-										</option>
-									))}
-								</select>
+								/>
 								<Menu.Root>
 									<Menu.Trigger
 										className={rowMenuTriggerClasses}
@@ -1284,28 +1355,16 @@ function CodexAccountsSection() {
 								<CodexUsageMeters account={a} />
 							</SettingRowText>
 							<SettingRowControl className="flex items-center gap-1.5">
-								<select
-									className={settingsSelectClass}
+								<OwnerSelect
 									value={a.owner || ""}
-									onChange={(e) => handleSetOwner(a, e.target.value)}
-									aria-label={`Owner of ${a.name}`}
+									onChange={(owner) => handleSetOwner(a, owner)}
+									label={`Owner of ${a.name}`}
 									title={
 										a.owner
 											? `${a.owner}'s personal subscription. Their runs use it first, everyone else never does.`
 											: "Shared pool account, used by everyone and by automations."
 									}
-								>
-									<option value="">Shared pool</option>
-									{/* Keep a non-team owner (e.g. set via API) selectable. */}
-									{a.owner && !TEAM.includes(a.owner) && (
-										<option value={a.owner}>👤 {a.owner}</option>
-									)}
-									{TEAM.map((name) => (
-										<option key={name} value={name}>
-											👤 {name}
-										</option>
-									))}
-								</select>
+								/>
 								<Menu.Root>
 									<Menu.Trigger
 										className={rowMenuTriggerClasses}
@@ -1398,14 +1457,7 @@ function AddClaudeAccountForm({ onClose, onAdded }: { onClose: () => void; onAdd
 				</SettingsField>
 				<SettingsField className="mb-0 flex-1" title="Personal sub: this person's runs use the account first, with the shared pool as backup. Shared pool: used by everyone and by automations.">
 					Owner
-					<select className={settingsInputClass} value={owner} onChange={(e) => setOwner(e.target.value)}>
-						<option value="">Shared pool</option>
-						{TEAM.map((n) => (
-							<option key={n} value={n}>
-								👤 {n}
-							</option>
-						))}
-					</select>
+					<OwnerSelect value={owner} onChange={setOwner} label="Owner" />
 				</SettingsField>
 				<SettingsField className="mb-0 flex-1">
 					Usage credentials path
@@ -1569,6 +1621,15 @@ interface CodexDeviceLogin {
 	code?: string;
 	error?: string;
 }
+
+/** How a Codex account is added: a ChatGPT sign-in, an existing CODEX_HOME
+ *  directory, or a plain API key. */
+const KIND_ITEMS = [
+	{ value: "device", label: "ChatGPT sign-in · device code" },
+	{ value: "oauth", label: "ChatGPT sign-in · link and paste" },
+	{ value: "home", label: "ChatGPT login · existing CODEX_HOME directory" },
+	{ value: "api_key", label: "OpenAI API key" },
+];
 
 function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
 	const [name, setName] = useState("");
@@ -1745,17 +1806,21 @@ function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdde
 				</SettingsField>
 				<SettingsField className="mb-0 flex-1">
 					Kind
-					<select
-						className={settingsInputClass}
+					<Select.Root
+						items={KIND_ITEMS}
 						value={kind}
-						onChange={(e) => setKind(e.target.value as "device" | "oauth" | "api_key" | "home")}
 						disabled={!!login || !!oauth}
+						onValueChange={(next) => setKind(next as "device" | "oauth" | "api_key" | "home")}
 					>
-						<option value="device">ChatGPT sign-in · device code</option>
-						<option value="oauth">ChatGPT sign-in · link and paste</option>
-						<option value="home">ChatGPT login · existing CODEX_HOME directory</option>
-						<option value="api_key">OpenAI API key</option>
-					</select>
+						<Select.Trigger aria-label="Kind" />
+						<Select.Popup>
+							{KIND_ITEMS.map((k) => (
+								<Select.Item key={k.value} value={k.value}>
+									{k.label}
+								</Select.Item>
+							))}
+						</Select.Popup>
+					</Select.Root>
 				</SettingsField>
 				{kind !== "device" && kind !== "oauth" && (
 					<SettingsField className="mb-0 flex-1">
@@ -1771,14 +1836,12 @@ function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdde
 				)}
 				<SettingsField className="mb-0 flex-1" title="Personal sub: this person's runs use the account first, with the shared pool as backup. Shared pool: used by everyone and by automations.">
 					Owner
-					<select className={settingsInputClass} value={owner} onChange={(e) => setOwner(e.target.value)} disabled={!!login || !!oauth}>
-						<option value="">Shared pool</option>
-						{TEAM.map((n) => (
-							<option key={n} value={n}>
-								👤 {n}
-							</option>
-						))}
-					</select>
+					<OwnerSelect
+						value={owner}
+						onChange={setOwner}
+						label="Owner"
+						disabled={!!login || !!oauth}
+					/>
 				</SettingsField>
 			</div>
 

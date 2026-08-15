@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { bootstrapRunner, createRunnerPairing, fetchRunnerBootstrapTargets, fetchRunners, revokeRunner, updateRunner, type RunnerBootstrapTarget, type RunnerInfo } from "../../lib/api/runners";
 import { Button } from "../../ui/button";
 import { Input } from "../../ui/input";
+import { OptionSelect } from "../../ui/select";
 import { Switch } from "../../ui/switch";
 import { toast } from "../../ui/toast";
 import { SettingCard, SettingsGroupLabel, SettingsHeader, SettingsHint, SettingsPanel, SettingRow } from "../../ui/settings";
@@ -110,9 +111,15 @@ export function RunnersPanel() {
 			<div className="text-item-title font-semibold text-fg">{connectChoice === "ssh" ? "Migrate an SSH machine" : "Connect a Kubernetes GPU Runner"}</div>
 			<p className="mb-3 mt-1 text-supporting leading-relaxed text-dim">Select a preconfigured operator target. The migration installs and starts only the Runner service, then the machine connects outbound.</p>
 			{bootstrapTargets[connectChoice].length ? <>
-				<select className="w-full rounded-md border border-line bg-panel px-2 py-1.5 text-supporting text-fg" value={bootstrapTargetId} onChange={(event) => setBootstrapTargetId(event.target.value)}>
-					{bootstrapTargets[connectChoice].map((target) => <option key={target.id} value={target.id}>{target.label} · {target.host ? `${target.user}@${target.host}:${target.port}` : `${target.context} / ${target.namespace} / ${target.workload}`}</option>)}
-				</select>
+				<OptionSelect
+					label="Operator target"
+					value={bootstrapTargetId}
+					options={bootstrapTargets[connectChoice].map((target) => ({
+						value: target.id,
+						label: `${target.label} · ${target.host ? `${target.user}@${target.host}:${target.port}` : `${target.context} / ${target.namespace} / ${target.workload}`}`,
+					}))}
+					onChange={setBootstrapTargetId}
+				/>
 				<div className="mt-3 flex gap-2"><Button size="sm" onClick={() => void startBootstrap()}>Connect</Button><Button size="sm" variant="ghost" onClick={() => setConnectChoice("choices")}>Back</Button></div>
 			</> : <><p className="mb-0 text-supporting text-dim">No configured {connectChoice === "ssh" ? "SSH" : "Kubernetes"} targets are available.</p><Button className="mt-3" size="sm" variant="ghost" onClick={() => setConnectChoice("choices")}>Back</Button></>}
 		</div>}

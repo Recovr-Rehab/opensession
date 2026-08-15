@@ -2,6 +2,12 @@ import * as React from "react";
 import { Menu as BaseMenu } from "@base-ui/react/menu";
 import { ContextMenu as BaseContextMenu } from "@base-ui/react/context-menu";
 import { cn } from "./cn";
+import {
+	POPUP_HOOK,
+	popupItemClasses,
+	popupScrollClasses,
+	popupSurfaceClasses,
+} from "./popup-classes";
 
 /**
  * Menu on Base UI parts, styled with Tailwind tokens. Composable shape —
@@ -23,14 +29,9 @@ function Trigger({
 	return <BaseMenu.Trigger {...props} className={cn("focus-ring", className)} />;
 }
 
-// Shared popup chrome for both the click-menu and the right-click context menu:
-// overflow-hidden keeps the inner scrollbar's ends clipped to the rounded corner
-// instead of poking past it; the transition rides Base UI's lifecycle attrs.
-const popupClasses =
-	"min-w-[180px] overflow-hidden rounded-popup [corner-shape:squircle] bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-md outline-none origin-[var(--transform-origin)] transition-[transform,opacity] duration-[120ms] ease-out data-[starting-style]:scale-[0.97] data-[starting-style]:opacity-0 data-[ending-style]:opacity-0";
-
-const popupInnerClasses =
-	"max-h-[min(60vh,420px,var(--available-height))] overflow-y-auto overflow-x-hidden overscroll-contain p-1.5";
+// The popup chrome, the scroller inside it, and the row live in
+// ui/popup-classes.ts. The click-menu, the right-click menu and ui/select all
+// wear the same surface, so it has one home.
 
 function Popup({
 	className,
@@ -54,8 +55,8 @@ function Popup({
 				collisionPadding={8}
 				className="z-[10001] outline-none"
 			>
-				<BaseMenu.Popup className={cn("app-menu-popup", popupClasses, className)}>
-					<div className={popupInnerClasses}>{children}</div>
+				<BaseMenu.Popup className={cn(POPUP_HOOK, popupSurfaceClasses, className)}>
+					<div className={popupScrollClasses}>{children}</div>
 				</BaseMenu.Popup>
 			</BaseMenu.Positioner>
 		</BaseMenu.Portal>
@@ -82,20 +83,15 @@ function ContextPopup({
 				className="z-[10001] outline-none"
 			>
 				<BaseContextMenu.Popup
-					className={cn("app-menu-popup", popupClasses, className)}
+					className={cn(POPUP_HOOK, popupSurfaceClasses, className)}
 					finalFocus={finalFocus}
 				>
-					<div className={popupInnerClasses}>{children}</div>
+					<div className={popupScrollClasses}>{children}</div>
 				</BaseContextMenu.Popup>
 			</BaseContextMenu.Positioner>
 		</BaseContextMenu.Portal>
 	);
 }
-
-/** Shared row styling for anything that behaves like a menu item. Highlight
- * via Base UI's data-highlighted so keyboard navigation lights rows up too. */
-const itemClasses =
-	"flex w-full cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-left text-control-label text-fg no-underline outline-none data-[highlighted]:bg-hover";
 
 function Item({
 	className,
@@ -103,7 +99,7 @@ function Item({
 }: Omit<React.ComponentProps<typeof BaseMenu.Item>, "className"> & {
 	className?: string;
 }) {
-	return <BaseMenu.Item {...props} className={cn(itemClasses, className)} />;
+	return <BaseMenu.Item {...props} className={cn(popupItemClasses, className)} />;
 }
 
 function SubmenuTrigger({
@@ -115,7 +111,7 @@ function SubmenuTrigger({
 	return (
 		<BaseMenu.SubmenuTrigger
 			{...props}
-			className={cn(itemClasses, "data-[popup-open]:bg-hover", className)}
+			className={cn(popupItemClasses, "data-[popup-open]:bg-hover", className)}
 		/>
 	);
 }
@@ -127,7 +123,7 @@ function RadioItem({
 	className?: string;
 }) {
 	return (
-		<BaseMenu.RadioItem {...props} className={cn(itemClasses, className)} />
+		<BaseMenu.RadioItem {...props} className={cn(popupItemClasses, className)} />
 	);
 }
 
@@ -138,7 +134,7 @@ function CheckboxItem({
 	className?: string;
 }) {
 	return (
-		<BaseMenu.CheckboxItem {...props} className={cn(itemClasses, className)} />
+		<BaseMenu.CheckboxItem {...props} className={cn(popupItemClasses, className)} />
 	);
 }
 
