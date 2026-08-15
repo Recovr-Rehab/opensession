@@ -402,10 +402,19 @@ export const SIDEBAR_GROUP_DOT = "size-[7px] shrink-0 rounded-full opacity-85";
  * character it did before. The wash is its own 28px pseudo, because filling
  * the target would paint a slab the height of the row for a control that is
  * not the row (`paletteIconBtn` insets its own for the same reason).
+ *
+ * That wash is on the moment the ROW is hovered, not only once the pointer
+ * reaches the glyph: the heading is one row, so it lights as one. It can be
+ * unconditional here because the element is `hidden` until the row is hovered,
+ * which also keeps it out of Tailwind's variant-ordering — a second
+ * `group-hover/gh:before:bg-*` would resolve against `hover:before:bg-*` by
+ * compiled order rather than by which was written last. Pointing at the glyph
+ * itself then deepens the wash and brightens the ink, so the row still says
+ * where the control is.
  */
 export const SIDEBAR_AUTO_COG =
 	"relative -my-1 ml-auto hidden w-6 shrink-0 cursor-pointer items-center justify-center self-stretch text-dim group-hover/gh:inline-flex hover:text-fg " +
-	"before:absolute before:top-1/2 before:left-1/2 before:z-0 before:size-7 before:-translate-x-1/2 before:-translate-y-1/2 before:rounded-[calc(6px*var(--rf))] before:[corner-shape:var(--cs)] before:transition-[background] before:content-[''] hover:before:bg-pressed " +
+	"before:absolute before:top-1/2 before:left-1/2 before:z-0 before:size-7 before:-translate-x-1/2 before:-translate-y-1/2 before:rounded-[calc(6px*var(--rf))] before:[corner-shape:var(--cs)] before:transition-[background] before:content-[''] before:bg-hover hover:before:bg-pressed " +
 	"after:absolute after:-inset-x-1 after:inset-y-0 after:content-[''] " +
 	"[&>svg]:relative [&>svg]:z-[1]";
 
