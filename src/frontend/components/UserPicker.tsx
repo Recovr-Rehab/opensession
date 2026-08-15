@@ -218,7 +218,7 @@ function AuthCard({
 				/>
 				{/* Medium, not semibold: at 19px on the card's own paper the heavier
 				    step read as a slab rather than a heading. */}
-				<h1 className="m-0 text-section-title font-medium text-fg">{title}</h1>
+				<h1 className="m-0 text-section-title font-title text-fg">{title}</h1>
 				{children}
 			</div>
 		</div>

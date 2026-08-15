@@ -23,7 +23,7 @@ export function PageTitle({
 	return (
 		<h2
 			className={cn(
-				"m-0 text-section-title font-medium tracking-[-0.01em] text-fg",
+				"m-0 text-section-title font-title tracking-[-0.01em] text-fg",
 				className,
 			)}
 			{...props}

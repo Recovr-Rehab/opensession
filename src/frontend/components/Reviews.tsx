@@ -350,7 +350,7 @@ export function Reviews({
       <div className="flex min-w-0 flex-1 flex-col overflow-y-auto phone:overflow-x-hidden">
         <div className="sticky top-0 z-[3] bg-surface px-[22px] pt-4">
           <div className="mb-3 flex items-center justify-between gap-4">
-            <h1 className="m-0 text-section-title font-medium tracking-[-0.01em]">Reviews</h1>
+            <h1 className="m-0 text-section-title font-title tracking-[-0.01em]">Reviews</h1>
             <div className="flex w-60 items-center gap-[7px] rounded-md border border-line bg-raised px-2.5 py-1.5 text-faint transition-[border-color,background-color] focus-within:border-line-strong focus-within:bg-panel">
               <svg width="19" height="19" viewBox="0 0 16 16" fill="currentColor" aria-hidden>
                 <path d="M10.68 11.74a6 6 0 0 1-7.922-8.982 6 6 0 0 1 8.982 7.922l3.04 3.04a.749.749 0 0 1-.326 1.275.749.749 0 0 1-.734-.215ZM11.5 7a4.499 4.499 0 1 0-8.997 0A4.499 4.499 0 0 0 11.5 7Z" />

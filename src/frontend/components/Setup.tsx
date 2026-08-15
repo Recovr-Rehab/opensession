@@ -199,7 +199,7 @@ export function SetupPanel({ onDone }: { onDone?: () => void }) {
 					<StepRail current={index} status={status} onSelect={goTo} />
 
 					<div className="px-5">
-						<h2 className="m-0 text-section-title font-medium text-fg">
+						<h2 className="m-0 text-section-title font-title text-fg">
 							{step.title}
 						</h2>
 						<p className="m-0 mt-1 text-supporting leading-relaxed text-dim">

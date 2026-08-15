@@ -939,7 +939,7 @@ function MobileSettings({
 						    h1 hides in here (`[.settings-sheet_&]:hidden` in ui/settings).
 						    It carries the same weight that h1 does, so the title reads the
 						    same on a phone as it does on the desktop page. */}
-						<span className="text-section-title font-medium text-fg">
+						<span className="text-section-title font-title text-fg">
 							{detail ? shownLabel : "Settings"}
 						</span>
 						<button

@@ -166,6 +166,12 @@
 	/* Type + shape */
 	--font-sans: var(--sans);
 	--font-mono: var(--mono);
+	/* `font-title`: the weight a page's own name and the headings under it
+	   take. It resolves through base.css, so it re-cuts per theme the way every
+	   colour token here does: 500 in dark, 600 in light. Write it on a heading
+	   instead of `font-semibold`, or that heading is the one that stays heavy
+	   in dark. */
+	--font-weight-title: var(--title-weight);
 	--radius-panel: calc(var(--radius) * var(--rf));
 	/* The corner every button and chip in the chrome shares. legacy.css authors
 	   it as `calc(10px * var(--rf))` on .btn-viewer-pin / .btn-panel-toggle /
@@ -241,7 +247,7 @@
 	     15 -> text-body / base   prose you read
 	     17 -> text-dialog-title  a modal heading
 	     19 -> text-section-title a heading inside a page
-	     22 -> text-page-title    the page's own name, at the top of it
+	     24 -> text-page-title    the page's own name, at the top of it
 	     28 -> text-stat          the figure on a metric tile
 
 	   Pick by purpose, not by nearest number. Never write an arbitrary
@@ -252,14 +258,20 @@
 	   2026-08. Half those steps were within a pixel or two of a neighbour, so
 	   they drew no distinction a reader could see while giving each new surface
 	   a different answer to the same question. The seven that survive are spaced
-	   1.18x / 1.15x / 1.13x / 1.12x / 1.16x / 1.27x, which is the smallest gap
+	   1.18x / 1.15x / 1.13x / 1.12x / 1.26x / 1.17x, which is the smallest gap
 	   that still reads as a step.
 
-	   22 came back in 2026-08: page title and section title had been the same
-	   19px, so a page's own name carried no more weight than a heading inside
-	   it, and the only way to tell them apart was the bold the page title wore.
-	   Size is the better signal, and it let the title drop to semibold with the
-	   rest of the app's headings.
+	   The page title came back as its own step in 2026-08: it and the section
+	   title had both been 19px, so a page's own name carried no more weight
+	   than a heading inside it, and the only way to tell them apart was the
+	   bold the page title wore. Size is the better signal, and it let the title
+	   take the same weight as the rest of the app's headings.
+
+	   It landed at 22 and went to 24 a week later, because one step of size is
+	   all that separates the two now that they share a weight, and at 22 that
+	   step was doing the work of both. 24 is still under the display step: a
+	   figure on a metric tile is read before anything around it, a page's name
+	   is read once on the way in.
 
 	   Two families deliberately sit OUTSIDE the scale, and neither is a step:
 
@@ -279,7 +291,7 @@
 	--text-item-title: 14px;
 	--text-dialog-title: 17px;
 	--text-section-title: 19px;
-	--text-page-title: 22px;
+	--text-page-title: 24px;
 	/* Not a step: iOS Safari zooms the page in when a focused input is under
 	   16px, so every text input a phone can reach has to be at least this. It
 	   is a size the platform picks, so it is spelled once here rather than as

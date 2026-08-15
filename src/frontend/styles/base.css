@@ -302,6 +302,15 @@
 	--chip-ask-fg: #e3b341;
 	--mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
 	--sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+	/* The weight a title takes: a page's own name, and the headings under it.
+	   It is a token rather than a fixed utility because the right weight is not
+	   the same in both themes. Light text on a dark page blooms, putting more
+	   ink on screen than the same stem does as dark text on white, which is the
+	   argument the light ramp below already makes about its greys, pointed the
+	   other way. So dark carries the lighter cut and light steps back up to
+	   semibold, and a heading is written `font-title` once instead of pairing a
+	   weight with a theme override at every call site. */
+	--title-weight: 500;
 	--radius: 14px;
 	/* Squircle corner treatment (Chrome 139+ `corner-shape`). A superellipse
 	   hugs the corner tighter than a circular arc at the same radius, so a
@@ -370,6 +379,11 @@ html[data-theme="light"] {
 	--sidebar-bg: #fafafa;
 	--sidebar-material: rgba(250, 250, 250, 0.72);
 	--sidebar-material-sheen: rgba(255, 255, 255, 0.42);
+	/* Ink on white holds less of the page than white on charcoal does, so a
+	   title needs the heavier cut here to read as firmly as the lighter one
+	   does in dark. Same reasoning as the grey steps above, applied to stems
+	   instead of surfaces. */
+	--title-weight: 600;
 	/* L3 + a barely-there shadow — the clean lifted chip from the Codex
 	   reference. It used to be #ffffff, byte-identical to --bg, so a chip, the
 	   composer and the mention popup had no surface of their own in light; and

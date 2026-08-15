@@ -33,7 +33,7 @@ export function SettingsHeader({
 			{...props}
 		>
 			<div className="min-w-0">
-				<h1 className="m-0 text-page-title font-medium tracking-[-0.02em] text-fg [.settings-sheet_&]:hidden">
+				<h1 className="m-0 text-page-title font-title tracking-[-0.02em] text-fg [.settings-sheet_&]:hidden">
 					{title}
 				</h1>
 				{description && (
