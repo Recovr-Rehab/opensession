@@ -405,7 +405,13 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 														? onSelect(row.session)
 														: row.url && window.open(row.url, "_blank", "noopener")
 												}
-												title={`${repoLabel(row.repo)}${row.ref ? ` · ${row.ref}` : ""}`}
+												title={[
+													repoLabel(row.repo),
+													row.ref,
+													row.owner && !row.owner.person ? row.owner.label : "",
+												]
+													.filter(Boolean)
+													.join(" · ")}
 											>
 												{/* Who shipped it. An automation is an owner too, so
 												    it gets the column rather than the repo standing in
@@ -432,14 +438,12 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 															{row.ref}
 														</span>
 													)}
-													{/* Name an owner the picture can't: a glyph says
-													    "not a person", not which automation it was.
-													    A teammate's face is already their name. */}
-													{row.owner && !row.owner.person && (
-														<span className="max-w-[160px] shrink-0 truncate text-meta text-faint">
-															{row.owner.label}
-														</span>
-													)}
+													{/* Which automation shipped it is on the mark's own
+													    tooltip and on the row's. It used to sit here, but
+													    an owner name is as long as someone made it, and a
+													    third run of text truncating mid-word between the
+													    title and the diff read as damage rather than as a
+													    field. The glyph still says "not a person". */}
 												</span>
 												{/* A side that moved no lines is left off rather than
 												    written as a zero: every commit carries both counts. */}
