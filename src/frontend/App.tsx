@@ -4137,7 +4137,12 @@ export function App(
 						/>
 						{/* Desktop: docked toast at the sidebar bottom. On phones the
 						    update nudge moves to the top bar (next to the brand). */}
-						{!isPhone && <UpdatePill addHandler={addHandler} />}
+						{!isPhone && (
+							<div className="pointer-events-none absolute right-2 bottom-2 left-2 z-[9500] flex flex-col gap-2">
+								<DesktopLinkToast />
+								<UpdatePill addHandler={addHandler} />
+							</div>
+						)}
 						{/* Drag the right edge to resize: a hover/active hairline over a
 						    wider invisible grab strip. Hidden on mobile, where the drawer
 						    is a fixed width. It sits above both primary (20) and nested
@@ -4155,7 +4160,6 @@ export function App(
 
 					<div className={WORKSPACE_SHELL}>
 						<main className={DETAIL_PANE} ref={detailPaneRef}>
-							{route.view !== "session" && <DesktopLinkToast placement="page" />}
 						{/* WCO back/forward fallback: the primary cluster lives in the
 						    sidebar's top chrome row, which vanishes when the sidebar is
 						    collapsed — this floating copy shows only then (CSS-gated). */}

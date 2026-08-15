@@ -74,9 +74,9 @@ allowed navigation origin); the device-flow fallback link works too. The
 
 - `os1://…` opens the app and maps to the active server
   (e.g. `os1://session/abc` → `/session/abc`). Shared session, workspace and
-  PR pages show a dismissible **Open app** toast in a Mac browser, above the
-  composer when one is present. The click opens this protocol while leaving
-  the web page in place when the app is not installed.
+  PR pages show a dismissible **Open app** card at the bottom of the sidebar in
+  a Mac browser. The click opens this protocol while leaving the web page in
+  place when the app is not installed.
 - **Universal links** (plain `https://os.tella.dev/…` links opening the app,
   e.g. from Slack — Tella's host; see the rebrand note under Signing & release):
   the server side is done — Open Session serves

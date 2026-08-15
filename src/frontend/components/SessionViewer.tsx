@@ -103,7 +103,6 @@ import { useBackSwipe } from "../hooks/useBackSwipe";
 import { dedupeViewers, otherViewers } from "../lib/presence";
 import { personKey, prReviewCompletion } from "../lib/review-queue";
 import { Composer } from "./Composer";
-import { DesktopLinkToast } from "./DesktopLinkToast";
 import { ComposerAgents } from "./ComposerAgents";
 import { UsageMeter } from "./UsageMeter";
 import { SchedulePromptButton } from "./SchedulePrompt";
@@ -5971,7 +5970,6 @@ export function SessionViewer({
 										"desktop:[&>*]:-translate-x-[160px]",
 								)}
 							>
-								{focused && <DesktopLinkToast placement="composer" />}
 								{noEngine ? (
 									<div className="mx-auto max-w-[var(--session-col)] text-[13px] text-faint">
 										No engine session to resume

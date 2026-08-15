@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import type { WSServerMessage } from "../lib/types";
 import { subscribeFrontendVersion } from "../lib/frontend-version";
+import { SIDEBAR_TOAST_CARD } from "../lib/sidebar-toast-classes";
 import { Tooltip } from "../ui/tooltip";
 
 interface Props {
@@ -193,25 +194,7 @@ export function UpdatePill({ addHandler, variant = "toast" }: Props) {
 
   return (
     <div
-      className={
-        "absolute right-2 bottom-2 left-2 z-[9500] flex items-center justify-between gap-3 " +
-        // A card that FLOATS over the sidebar, so it lifts with an edge and a
-        // shadow rather than a fill. An L2 panel fill assumes the surface
-        // behind it is L1 chrome — but under the mac shell's vibrancy
-        // (html.material-backdrop) the sidebar is translucent, and #f0f0f0
-        // over a wallpaper-tinted material reads as a grey patch cut out of
-        // it, not as a card on top. These are the tokens the composer already
-        // uses for exactly that reason (see base.css's light block): white in
-        // light where a darker box would read as a well, --control-surface in
-        // dark where lighter already means lifted.
-        "rounded-row border border-[color:var(--composer-border)] bg-[var(--composer-surface)] " +
-        // A menu-tier cast, not the `soft` one: this card is small and docked
-        // against the sidebar edge, so the wide 56px layer read as a grey halo
-        // pooling around it rather than as a lift.
-        "smooth-shadow-md py-2.5 pr-2.5 pl-4 phone:shadow-[var(--composer-shadow)] " +
-        "animate-[update-toast-in_var(--dur-lg)_var(--ease)] motion-reduce:animate-none " +
-        "phone:bottom-[max(8px,env(safe-area-inset-bottom))]"
-      }
+      className={SIDEBAR_TOAST_CARD}
       role="status"
       aria-live="polite"
     >
