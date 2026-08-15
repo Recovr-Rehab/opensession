@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "../ui/button";
 import { Field, FieldGrid, Input } from "../ui/input";
+import { MENU_ICON, Menu } from "../ui/menu";
 import { Modal } from "../ui/modal";
 import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
 import {
+	rowMenuTriggerClasses,
 	SettingCard,
 	SettingRow,
 	SettingRowControl,
@@ -14,14 +16,14 @@ import {
 	SettingsHint,
 } from "../ui/settings";
 import { toast } from "../ui/toast";
-import { IconPencil, IconPlus, IconTrash } from "./icons";
+import { IconDotsHorizontal, IconPencil, IconPlus, IconTrash } from "./icons";
 import { setupRequest, type TeamMember } from "./setup-shared";
 import { UserAvatar } from "./UserAvatar";
 
 // Settings → Setup → Team: the manageable roster. The identity table drives
 // commit attribution, `allowedUsers` MCP scoping, and GitHub sign-in, so each
-// member row carries the aliases the matcher resolves through. Add/edit go
-// through a small dialog; remove is an inline two-tap confirm.
+// member row stays concise while every identifier remains available in the
+// edit dialog. Add/edit go through a small dialog; remove is confirmed.
 
 export function TeamSection({
 	onChanged,
@@ -129,9 +131,7 @@ function MemberRow({
 }) {
 	const details = [
 		member.email,
-		member.github && `gh:${member.github}`,
-		member.slackId,
-		member.aliases?.length ? `aka ${member.aliases.join(", ")}` : undefined,
+		member.github && `@${member.github}`,
 	].filter(Boolean);
 	return (
 		<SettingRow>
@@ -144,48 +144,27 @@ function MemberRow({
 					</SettingRowDescription>
 				)}
 			</SettingRowText>
-			<SettingRowControl className="flex items-center gap-1">
-				<Button
-					variant="ghost"
-					size="sm"
-					icon={<IconPencil size={16} />}
-					aria-label={`Edit ${member.name}`}
-					onClick={onEdit}
-				/>
-				<RemoveMemberButton member={member} onRemoved={onRemoved} />
+			<SettingRowControl>
+				<MemberActions member={member} onEdit={onEdit} onRemoved={onRemoved} />
 			</SettingRowControl>
 		</SettingRow>
 	);
 }
 
-/** Two-tap remove: the trash glyph arms a "Really remove?" confirm that
- * disarms itself after a beat — no browser confirm(). */
-function RemoveMemberButton({
+function MemberActions({
 	member,
+	onEdit,
 	onRemoved,
 }: {
 	member: TeamMember;
+	onEdit: () => void;
 	onRemoved: () => void | Promise<void>;
 }) {
-	const [confirming, setConfirming] = useState(false);
+	const [confirmOpen, setConfirmOpen] = useState(false);
 	const [busy, setBusy] = useState(false);
-	const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-	useEffect(
-		() => () => {
-			if (timer.current) clearTimeout(timer.current);
-		},
-		[],
-	);
-
-	function arm() {
-		setConfirming(true);
-		if (timer.current) clearTimeout(timer.current);
-		timer.current = setTimeout(() => setConfirming(false), 4000);
-	}
+	const cancelRef = useRef<HTMLButtonElement>(null);
 
 	async function remove() {
-		if (timer.current) clearTimeout(timer.current);
 		setBusy(true);
 		try {
 			await setupRequest(`/api/setup/team/${encodeURIComponent(member.name)}/remove`, {
@@ -196,25 +175,60 @@ function RemoveMemberButton({
 		} catch (e: any) {
 			toast(e.message, { variant: "error" });
 			setBusy(false);
-			setConfirming(false);
 		}
 	}
 
-	if (!confirming) {
-		return (
-			<Button
-				variant="ghost"
-				size="sm"
-				icon={<IconTrash size={16} />}
-				aria-label={`Remove ${member.name}`}
-				onClick={arm}
-			/>
-		);
-	}
 	return (
-		<Button variant="danger-strong" size="sm" onClick={remove} disabled={busy}>
-			{busy ? "Removing…" : "Really remove?"}
-		</Button>
+		<>
+			<Menu.Root>
+				<Menu.Trigger
+					className={rowMenuTriggerClasses}
+					aria-label={`Manage ${member.name}`}
+				>
+					<IconDotsHorizontal size={18} />
+				</Menu.Trigger>
+				<Menu.Popup align="end" sideOffset={4}>
+					<Menu.Item onClick={onEdit}>
+						<IconPencil size={16} className={MENU_ICON} />
+						Edit member
+					</Menu.Item>
+					<Menu.Item
+						className="text-red data-[highlighted]:bg-red-soft data-[highlighted]:text-red"
+						onClick={() => setConfirmOpen(true)}
+					>
+						<IconTrash size={16} />
+						Remove member
+					</Menu.Item>
+				</Menu.Popup>
+			</Menu.Root>
+			<Modal.Root
+				open={confirmOpen}
+				onOpenChange={(open) => {
+					if (!busy) setConfirmOpen(open);
+				}}
+				disablePointerDismissal={busy}
+			>
+				<Modal.Content initialFocus={cancelRef}>
+					<Modal.Header
+						title={`Remove ${member.name}?`}
+						description="This removes their identity mapping from Open Session."
+					/>
+					<Modal.Footer>
+						<Button
+							ref={cancelRef}
+							variant="ghost"
+							onClick={() => setConfirmOpen(false)}
+							disabled={busy}
+						>
+							Cancel
+						</Button>
+						<Button variant="danger-strong" onClick={remove} disabled={busy}>
+							{busy ? "Removing…" : "Remove"}
+						</Button>
+					</Modal.Footer>
+				</Modal.Content>
+			</Modal.Root>
+		</>
 	);
 }
 
