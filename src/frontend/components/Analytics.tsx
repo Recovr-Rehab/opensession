@@ -372,6 +372,15 @@ export function Analytics() {
 		if (!data) return null;
 		const labels = data.days.map((d) => d.date);
 
+		// The engine store prunes, so the oldest days of a long range have no
+		// token or cost data left. Plotting them as 0 would read as "usage
+		// started here"; the engine-derived charts start where the data does.
+		const firstMeasured = data.days.findIndex((d) => !d.unmeasured);
+		const engineFrom = firstMeasured < 0 ? data.days.length : firstMeasured;
+		const engineDays = data.days.slice(engineFrom);
+		const engineLabels = labels.slice(engineFrom);
+		const unmeasuredDays = data.totals.unmeasuredDays ?? engineFrom;
+
 		// Sessions by kind: fixed slots for the known kinds, everything else
 		// folds into a neutral "Other".
 		const presentKinds = KINDS.filter((k) => data.days.some((d) => (d.sessionsByKind[k.key] || 0) > 0));
@@ -400,7 +409,7 @@ export function Analytics() {
 		const hasOtherModel = data.models.length > 5;
 		const modelSeries: Series[] = topModels.map((m, i) => ({ label: m, color: slot(i + 1) }));
 		if (hasOtherModel) modelSeries.push({ label: "Other", color: OTHER_COLOR });
-		const modelValues = data.days.map((d) => {
+		const modelValues = engineDays.map((d) => {
 			const row = topModels.map((m) => d.outputByModel[m] || 0);
 			if (hasOtherModel) {
 				row.push(
@@ -428,7 +437,7 @@ export function Analytics() {
 		// series when a day actually has some, so the legend stays honest.
 		const hasCacheWrite = data.days.some((d) => d.cacheWriteTokens > 0);
 		if (hasCacheWrite) tokenSeries.push({ label: "Cache write", color: slot(7) });
-		const tokenValues = data.days.map((d) => {
+		const tokenValues = engineDays.map((d) => {
 			const row = [d.cacheReadTokens, d.inputTokens, d.outputTokens];
 			if (hasCacheWrite) row.push(d.cacheWriteTokens);
 			return row;
@@ -445,7 +454,7 @@ export function Analytics() {
 			.slice(0, 5)
 			.map((m) => m.model);
 		const costSeries: Series[] = costModels.map((m, i) => ({ label: m, color: slot(i + 1) }));
-		const costValues = data.days.map((d) => costModels.map((m) => d.costByModel?.[m] || 0));
+		const costValues = engineDays.map((d) => costModels.map((m) => d.costByModel?.[m] || 0));
 
 		const prSeries: Series[] = [
 			{ label: "Opened", color: slot(1) },
@@ -507,7 +516,7 @@ export function Analytics() {
 		});
 		const splitDate = labels[Math.floor(labels.length / 2)] || "";
 
-		return { labels, kindSeries, kindValues, modelSeries, modelValues, tokenSeries, tokenValues, totalTokens, costSeries, costValues, costUsd, requests, hasCost, prSeries, prValues, turnSeries, turnValues, factorySeries, factoryValues, rq, reviewSeries, reviewValues, splitDate, repoColor, personRepoRows, maxPersonOutput, personRepoSeries };
+		return { labels, engineLabels, unmeasuredDays, kindSeries, kindValues, modelSeries, modelValues, tokenSeries, tokenValues, totalTokens, costSeries, costValues, costUsd, requests, hasCost, prSeries, prValues, turnSeries, turnValues, factorySeries, factoryValues, rq, reviewSeries, reviewValues, splitDate, repoColor, personRepoRows, maxPersonOutput, personRepoSeries };
 	}, [data]);
 
 	// Deliberately NOT ui/input's field: these two sit inside the range row
@@ -640,19 +649,27 @@ export function Analytics() {
 							/>
 						</div>
 
+						{derived.unmeasuredDays > 0 && (
+							<p className="m-0 mt-2 text-meta text-faint">
+								Tokens and cost cover {derived.engineLabels[0]} onwards. The engine keeps about a month of message
+								history, so the earlier {derived.unmeasuredDays === 1 ? "day" : `${derived.unmeasuredDays} days`} of
+								this range have no data left to read. Everything else on this page covers the full range.
+							</p>
+						)}
+
 						<div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
 							<ChartCard title="Sessions per day" subtitle="Distinct sessions with agent activity" series={derived.kindSeries}>
 								<BarChart labels={derived.labels} series={derived.kindSeries} values={derived.kindValues} mode="stacked" />
 							</ChartCard>
 							<ChartCard title="Output tokens per day" subtitle="By model, top 5 in range" series={derived.modelSeries}>
-								<BarChart labels={derived.labels} series={derived.modelSeries} values={derived.modelValues} mode="stacked" />
+								<BarChart labels={derived.engineLabels} series={derived.modelSeries} values={derived.modelValues} mode="stacked" />
 							</ChartCard>
 							<ChartCard
 								title="Tokens per day"
 								subtitle="Every token the engines read and wrote, by kind"
 								series={derived.tokenSeries}
 							>
-								<BarChart labels={derived.labels} series={derived.tokenSeries} values={derived.tokenValues} mode="stacked" />
+								<BarChart labels={derived.engineLabels} series={derived.tokenSeries} values={derived.tokenValues} mode="stacked" />
 							</ChartCard>
 							{derived.hasCost && (
 								<ChartCard
@@ -661,7 +678,7 @@ export function Analytics() {
 									series={derived.costSeries}
 								>
 									<BarChart
-										labels={derived.labels}
+										labels={derived.engineLabels}
 										series={derived.costSeries}
 										values={derived.costValues}
 										mode="stacked"

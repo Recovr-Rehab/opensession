@@ -719,6 +719,9 @@ export interface AnalyticsSummary {
 		/** input + output + cache read + cache write. */
 		totalTokens: number;
 		costUsd: number;
+		/** The engine store no longer reaches this day, so its token and cost
+		 *  zeros mean "unknown". Chart it as a gap, never as a zero. */
+		unmeasured?: boolean;
 		outputByModel: Record<string, number>;
 		costByModel: Record<string, number>;
 		prsOpened: number;
@@ -746,6 +749,9 @@ export interface AnalyticsSummary {
 		requests: number;
 		/** Requests on a model with no catalog price, excluded from costUsd. */
 		unpricedRequests: number;
+		/** Days in range that predate the engine store's retention, so their
+		 *  tokens and cost are unknown rather than zero. */
+		unmeasuredDays: number;
 		prsOpened: number;
 		prsMerged: number;
 		allPrsOpened: number;
@@ -872,6 +878,7 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 		costUsd: 0,
 		requests: 0,
 		unpricedRequests: 0,
+		unmeasuredDays: 0,
 		prsOpened: 0,
 		prsMerged: 0,
 		allPrsOpened: 0,
@@ -1050,6 +1057,7 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 			cacheWriteTokens: engine?.cacheWrite || 0,
 			totalTokens: engine?.totalTokens || 0,
 			costUsd: round2(engine?.costUsd || 0),
+			...(engine?.unmeasured ? { unmeasured: true as const } : {}),
 			outputByModel,
 			costByModel: Object.fromEntries(Object.entries(costByModel).map(([m, c]) => [m, round2(c)])),
 			prsOpened,
@@ -1068,6 +1076,7 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 		totals.costUsd += engine?.costUsd || 0;
 		totals.requests += engine?.requests || 0;
 		totals.unpricedRequests += engine?.unpricedRequests || 0;
+		if (engine?.unmeasured) totals.unmeasuredDays++;
 	}
 	totals.totalTokens =
 		totals.inputTokens + totals.outputTokens + totals.cacheReadTokens + totals.cacheWriteTokens;

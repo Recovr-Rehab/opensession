@@ -31,6 +31,15 @@
  * priced at 2x base input, not the catalog's 1.25x, because every cache write
  * we make carries the 1-hour TTL (verified from the SDK transcripts, which
  * split ephemeral_1h from ephemeral_5m: 2.58B tokens to 1h, zero to 5m).
+ *
+ * Retention. opencode prunes the shard DBs, which held ~30 days when this was
+ * written. A day older than the store's earliest row is therefore not zero
+ * usage, it is NO DATA, and the two must never render the same way: a 90-day
+ * range would otherwise draw 60 days of flat zero and read as "we started in
+ * July". Such a day is marked `unmeasured` and the UI says so. The per-day
+ * cache below is what makes history outlive the source, so a day measured once
+ * stays measured: it is the durable record, and the prewarm is what keeps it
+ * ahead of the pruning.
  */
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
@@ -64,6 +73,9 @@ export interface EngineUsageDay {
 	costUsd: number;
 	/** Requests on a model with no catalog price, excluded from costUsd. */
 	unpricedRequests: number;
+	/** The day predates the store's earliest row, so its zeros mean "no data
+	 *  kept this far back", not "nothing ran". Never chart it as zero. */
+	unmeasured: boolean;
 }
 
 // ── Rates ──
@@ -140,23 +152,31 @@ function utcDate(ms: number): string {
 	return new Date(ms).toISOString().slice(0, 10);
 }
 
+export interface EngineUsageScan {
+	days: Map<string, Map<string, Bucket>>;
+	/** UTC date of the store's earliest surviving message, or null if empty.
+	 *  Anything before it has been pruned, so it is unmeasured rather than 0. */
+	earliest: string | null;
+}
+
 /**
  * Scan every shard DB for assistant messages at or after `fromDate`, bucketed
- * by UTC day and provider+model.
+ * by UTC day and provider+model, and report how far back the store still goes.
  *
  * Yields to the event loop between databases: a full scan is ~4k files and
  * about a minute of CPU, and the server serves HTTP throughout.
  */
-export async function scanEngineUsage(fromDate: string): Promise<Map<string, Map<string, Bucket>>> {
+export async function scanEngineUsage(fromDate: string): Promise<EngineUsageScan> {
 	const days = new Map<string, Map<string, Bucket>>();
+	let earliestMs = Number.POSITIVE_INFINITY;
 	const cutoff = Date.parse(`${fromDate}T00:00:00Z`);
-	if (!Number.isFinite(cutoff)) return days;
+	if (!Number.isFinite(cutoff)) return { days, earliest: null };
 	let files: string[];
 	try {
 		files = readdirSync(SHARD_DIR).filter((f) => f.endsWith(".db"));
 	} catch (e) {
 		console.error("[engine-usage] shard dir unreadable:", e);
-		return days;
+		return { days, earliest: null };
 	}
 	let scanned = 0;
 	for (const file of files) {
@@ -170,6 +190,11 @@ export async function scanEngineUsage(fromDate: string): Promise<Map<string, Map
 		let db: Database | undefined;
 		try {
 			db = new Database(path, { readonly: true });
+			// How far back the store still reaches. A DB skipped above cannot
+			// lower this into the requested range: every row in it predates the
+			// cutoff, which is the range's own start.
+			const first = db.query<{ t: number | null }, []>("select min(time_created) t from message").get();
+			if (first?.t) earliestMs = Math.min(earliestMs, first.t);
 			const rows = db
 				.query<{ time_created: number; data: string }, [number]>(
 					"select time_created, data from message where time_created >= ?",
@@ -208,11 +233,11 @@ export async function scanEngineUsage(fromDate: string): Promise<Map<string, Map
 		}
 		if (++scanned % 25 === 0) await new Promise((r) => setTimeout(r, 0));
 	}
-	return days;
+	return { days, earliest: Number.isFinite(earliestMs) ? utcDate(earliestMs) : null };
 }
 
 /** Price one day's buckets. */
-export function priceDay(date: string, byModel: Map<string, Bucket>): EngineUsageDay {
+export function priceDay(date: string, byModel: Map<string, Bucket>, unmeasured = false): EngineUsageDay {
 	const rates = loadRates();
 	const day: EngineUsageDay = {
 		date,
@@ -225,6 +250,7 @@ export function priceDay(date: string, byModel: Map<string, Bucket>): EngineUsag
 		totalTokens: 0,
 		costUsd: 0,
 		unpricedRequests: 0,
+		unmeasured,
 	};
 	for (const [key, b] of byModel) {
 		const [provider, model] = key.split("|");
@@ -260,7 +286,8 @@ export function emptyEngineUsageDay(date: string): EngineUsageDay {
 // forever, today is recomputed. One scan fills every day it covers, so a cold
 // range costs one pass rather than one per day.
 
-const CACHE_VERSION = 1;
+// 2: days before the store's earliest row carry `unmeasured` instead of zeros.
+const CACHE_VERSION = 2;
 
 // Reuse the analytics cache directory so both rollups age together.
 const stateCacheDir = () => stateDir("analytics-cache");
@@ -316,9 +343,13 @@ export async function engineUsageForDates(dates: string[]): Promise<Map<string, 
 		// Re-check: a concurrent scan may have filled these while we waited.
 		const stillMissing = missing.filter((d) => d >= today || !readDay(d));
 		if (stillMissing.length) {
-			const scanned = await scanEngineUsage(from);
+			const { days: scanned, earliest } = await scanEngineUsage(from);
 			for (const date of missing) {
-				const day = priceDay(date, scanned.get(date) ?? new Map());
+				// Before the store's horizon there is nothing left to read, so
+				// the day is unmeasured rather than zero. Cached as such: the
+				// pruned rows are never coming back.
+				const unmeasured = !!earliest && date < earliest;
+				const day = priceDay(date, scanned.get(date) ?? new Map(), unmeasured);
 				if (date < today) writeDay(day);
 				out.set(date, day);
 			}

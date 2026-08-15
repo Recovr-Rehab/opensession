@@ -870,6 +870,9 @@ export interface AnalyticsDay {
 	 *  not-yet-restarted server's payload. */
 	totalTokens?: number;
 	costUsd?: number;
+	/** The engine store no longer reaches this day: tokens and cost are
+	 *  unknown, not zero. Charts leave a gap rather than plotting 0. */
+	unmeasured?: boolean;
 	outputByModel: Record<string, number>;
 	costByModel?: Record<string, number>;
 	prsOpened: number;
@@ -973,6 +976,9 @@ export interface AnalyticsSummary {
 		costUsd?: number;
 		requests?: number;
 		unpricedRequests?: number;
+		/** Days in range the engine store no longer reaches, so their tokens
+		 *  and cost are unknown rather than zero. */
+		unmeasuredDays?: number;
 		prsOpened: number;
 		prsMerged: number;
 		allPrsOpened: number;

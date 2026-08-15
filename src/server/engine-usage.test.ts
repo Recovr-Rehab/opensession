@@ -91,6 +91,17 @@ describe("engine usage pricing", () => {
 		expect(day.unpricedRequests).toBe(4);
 	});
 
+	test("a day past the store's retention is unmeasured, not zero", () => {
+		// The shard DBs prune at about a month. Charting a pruned day as 0
+		// would read as "usage started here", so it carries a flag instead.
+		const pruned = priceDay("2026-05-20", new Map(), true);
+		expect(pruned.unmeasured).toBe(true);
+		expect(pruned.costUsd).toBe(0);
+		// A day inside the window with no traffic is a real zero.
+		const quiet = priceDay("2026-08-14", new Map());
+		expect(quiet.unmeasured).toBe(false);
+	});
+
 	test("models are ordered by cost, so the expensive one leads", () => {
 		const day = priceDay(
 			"2026-08-14",
