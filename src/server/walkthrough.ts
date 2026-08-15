@@ -12,10 +12,13 @@
  *
  * The walkthrough is also mirrored into the GitHub PR description as a
  * marker-delimited managed section (re-publish replaces it, human edits around
- * it survive). The media itself is linked, not inlined: os.tella.dev is
- * tailnet-only, so GitHub's camo proxy can never fetch it, and our only public
- * channels are banned for screenshots (PII rule). Links open fine for the
- * whole team (everyone is on the tailnet).
+ * it survive). The media is uploaded as GitHub user attachments
+ * (gh-attachments.ts) so it renders INLINE on GitHub — images as images, the
+ * demo video as a native player — and stays private-repo-scoped on GitHub's
+ * side. The staged local copies remain the source the session viewer and
+ * Review tab stream (via /media); when an upload fails the mirror falls back
+ * to linking that file's /media URL, which opens for the whole team (everyone
+ * is on the tailnet) but renders as a bare link on GitHub.
  */
 
 import { existsSync, mkdirSync, copyFileSync } from "fs";
@@ -26,6 +29,7 @@ import type {
   WalkthroughShot,
 } from "./types";
 import { UPLOADS_DIR } from "./uploads";
+import { uploadUserAttachment } from "./gh-attachments";
 import { findSession, touchNativeSession } from "./session-cache";
 import { transcriptStore } from "./transcript-store";
 import { resolvePrTarget } from "./session-repos";
@@ -172,26 +176,57 @@ function mediaUrl(path: string): string {
   return `${configuredServer().publicBaseUrl}/media?path=${encodeURIComponent(path)}`;
 }
 
-/** The marker-delimited markdown section spliced into the PR body. */
-function walkthroughPrSection(w: SessionWalkthrough): string {
+/** Every staged media path the walkthrough references, in section order. */
+function walkthroughMediaPaths(w: SessionWalkthrough): string[] {
+  return [
+    w.video,
+    ...(w.shots || []).flatMap((s) => [s.before, s.after]),
+  ].filter((p): p is string => !!p);
+}
+
+/** The marker-delimited markdown section spliced into the PR body. `attached`
+ *  maps staged media paths to their GitHub user-attachment URLs; a path with
+ *  no entry (upload failed) degrades to a /media link. */
+function walkthroughPrSection(
+  w: SessionWalkthrough,
+  attached: ReadonlyMap<string, string>,
+): string {
   const lines: string[] = ["## Walkthrough", ""];
+  let linked = 0;
   if (w.video) {
     const title = w.videoTitle || "Demo video";
-    lines.push(`▶ **[${title}](${mediaUrl(w.video)})**`, "");
+    const gh = attached.get(w.video);
+    // A user-attachment URL alone in its paragraph is what GitHub renders as
+    // an inline player; anything else on the line breaks that.
+    if (gh) lines.push(`**${title}**`, "", gh, "");
+    else {
+      linked++;
+      lines.push(`▶ **[${title}](${mediaUrl(w.video)})**`, "");
+    }
   }
   lines.push(w.summary.trim(), "");
   if (w.shots?.length) {
+    const cell = (path: string | undefined, label: string, caption?: string) => {
+      if (!path) return "—";
+      const text = `${label}${caption ? ` — ${caption}` : ""}`;
+      const gh = attached.get(path);
+      if (gh) return `![${text}](${gh})`;
+      linked++;
+      return `[${text}](${mediaUrl(path)})`;
+    };
     lines.push("| Before | After |", "| --- | --- |");
     for (const s of w.shots) {
-      const before = s.before ? `[Before${s.caption ? ` — ${s.caption}` : ""}](${mediaUrl(s.before)})` : "—";
-      const after = s.after ? `[After${s.caption ? ` — ${s.caption}` : ""}](${mediaUrl(s.after)})` : "—";
-      lines.push(`| ${before} | ${after} |`);
+      lines.push(`| ${cell(s.before, "Before", s.caption)} | ${cell(s.after, "After", s.caption)} |`);
     }
     lines.push("");
   }
-  lines.push(
-    `<sub>Media links open on ${configuredServer().publicBaseUrl}. Published from the session's Review tab, where they play inline.</sub>`,
-  );
+  if (linked) {
+    lines.push(
+      `<sub>Media links open on ${configuredServer().publicBaseUrl}. Published from the session's Review tab, where they play inline.</sub>`,
+    );
+  } else {
+    lines.push(`<sub>Published from the session's Review tab.</sub>`);
+  }
   return lines.join("\n");
 }
 
@@ -246,7 +281,15 @@ async function mirrorWalkthroughToPr(
   const details = await host.getPrDetails(target.branch, target.ghRepo);
   if (!details || details.state !== "OPEN")
     return { mirrored: false, reason: "no open PR for the session's branch" };
-  const section = walkthroughPrSection(walkthrough);
+  // Upload the media as GitHub user attachments so it renders inline in the
+  // PR. Sequential on purpose (a demo video can be tens of MB); each failure
+  // just leaves that file as a /media link.
+  const attached = new Map<string, string>();
+  for (const p of walkthroughMediaPaths(walkthrough)) {
+    const ghUrl = await uploadUserAttachment(target.ghRepo, p);
+    if (ghUrl) attached.set(p, ghUrl);
+  }
+  const section = walkthroughPrSection(walkthrough, attached);
   const result = await host.updatePrBody(
     target.branch,
     (body) => spliceWalkthroughSection(body, section),

@@ -7,8 +7,10 @@
  */
 
 import type { RouteContext } from "./context";
+import { resolveUserAttachment } from "../gh-attachments";
 import { isWithinUploads } from "../uploads";
 import { resolveLegacySessionsPath } from "../paths";
+import { getRepo } from "../worktree";
 const HOME = process.env.HOME || "";
 
 export async function handleMediaRoutes(
@@ -104,6 +106,35 @@ export async function handleMediaRoutes(
 		}
 		return new Response(file, {
 			headers: { ...baseHeaders, "Content-Length": String(size) },
+		});
+	}
+
+	// Redirect a GitHub user-attachment (github.com/user-attachments/assets/<id>)
+	// to a freshly signed URL the browser can fetch without GitHub cookies. PR
+	// prose on the review surfaces embeds these (see the frontend markdown
+	// renderer's gh-attachment rewrites); the canonical URL itself answers only
+	// to cookie auth. `repo` names the registered repo whose PR the prose came
+	// from — resolution is authorized through it. Same auth model as /media
+	// above: unguessable ids, tailnet-only server. Media elements re-request on
+	// seek/reload, so the redirect is uncacheable and each request gets a URL
+	// that is valid now (the server caches resolutions inside the JWT window).
+	const ghAsset = path.match(
+		/^\/gh-asset\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i,
+	);
+	if (ghAsset && req.method === "GET") {
+		let ghRepo: string | undefined;
+		try {
+			const repo = getRepo(url.searchParams.get("repo") || "");
+			if (repo.host !== "codestorage") ghRepo = repo.ghRepo;
+		} catch {
+			// Unknown repo id — fall through to 404.
+		}
+		if (!ghRepo) return new Response("unknown repo", { status: 404 });
+		const resolved = await resolveUserAttachment(ghAsset[1], ghRepo);
+		if (!resolved) return new Response("not found", { status: 404 });
+		return new Response(null, {
+			status: 302,
+			headers: { Location: resolved.url, "Cache-Control": "no-store" },
 		});
 	}
 

@@ -791,3 +791,44 @@ describe("renderMarkdown @-mentions", () => {
     expect(persons(renderMarkdown("@Kent"))).toEqual([]);
   });
 });
+
+describe("GitHub user-attachment media", () => {
+  const id = "d087b2cd-9724-4d3d-8b0e-8c25700395e1";
+  const url = `https://github.com/user-attachments/assets/${id}`;
+  const proxied = `/gh-asset/${id}?repo=opensession`;
+
+  it("proxies image syntax through /gh-asset", () => {
+    const html = renderPrCommentMarkdown(`![shot](${url})`, { repo: "opensession" });
+    expect(html).toContain(`<img class="md-image" src="${proxied}"`);
+    expect(html).toContain(`<a href="${proxied}"`);
+  });
+
+  it("renders a bare attachment URL as an inline video on PR surfaces", () => {
+    const html = renderPrCommentMarkdown(url, { repo: "opensession" });
+    expect(html).toContain(`<video class="md-video" src="${proxied}"`);
+  });
+
+  it("keeps a labelled link a link, pointed at the proxy", () => {
+    const html = renderPrCommentMarkdown(`[demo](${url})`, { repo: "opensession" });
+    expect(html).toContain(`<a href="${proxied}"`);
+    expect(html).toContain(">demo</a>");
+    expect(html).not.toContain("<video");
+  });
+
+  it("rewrites an expired signed URL onto the same proxy", () => {
+    const signed = `https://private-user-images.githubusercontent.com/213769834/636480332-${id}.png?jwt=eyJ0`;
+    const html = renderPrCommentMarkdown(`![shot](${signed})`, { repo: "opensession" });
+    expect(html).toContain(`src="${proxied}"`);
+  });
+
+  it("leaves the URL alone without a repo to authorize through", () => {
+    const html = renderPrCommentMarkdown(`![shot](${url})`);
+    expect(html).toContain(`src="${url}"`);
+  });
+
+  it("links rather than video-ifies a bare attachment URL in transcript prose", () => {
+    const html = renderMarkdown(url, { repo: "opensession" });
+    expect(html).not.toContain("<video");
+    expect(html).toContain(`<a href="${proxied}"`);
+  });
+});

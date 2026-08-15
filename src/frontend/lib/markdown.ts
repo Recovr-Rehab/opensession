@@ -597,6 +597,25 @@ let renderRepo: string | undefined;
 /** What the renderer does with raw HTML for the duration of one `md.parse()`. */
 let renderRawHtml: "escape" | "sanitize" = "escape";
 
+// GitHub user-attachment media (the canonical assets URL, or an already
+// expired signed private-user-images URL copied out of rendered HTML). The
+// canonical URL answers only to GitHub cookie auth, which an <img>/<video>
+// on our origin never has, so these render as broken media or dead links —
+// reroute them through the server's /gh-asset redirect (routes/media.ts),
+// which resolves a fresh signed URL with the bot credential. Resolution is
+// authorized through the context repo, so no repo means no rewrite.
+const GH_ATTACHMENT_URL =
+  /^https:\/\/github\.com\/user-attachments\/assets\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+const GH_SIGNED_ATTACHMENT_URL =
+  /^https:\/\/private-user-images\.githubusercontent\.com\/\d+\/\d+-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.\w+/i;
+
+function ghAttachmentProxyHref(href: string | undefined | null): string | null {
+  if (!href || !renderRepo) return null;
+  const m = GH_ATTACHMENT_URL.exec(href) || GH_SIGNED_ATTACHMENT_URL.exec(href);
+  if (!m) return null;
+  return `/gh-asset/${m[1].toLowerCase()}?repo=${encodeURIComponent(renderRepo)}`;
+}
+
 /** The repo a mention points at, or null when it can't be placed. */
 function prMentionRepo(qualifier: string | undefined): string | null {
   if (!qualifier) return renderRepo ?? null;
@@ -792,7 +811,19 @@ md.use({
           : String(token.text || `PR #${githubPr.number}`);
         return prMentionLink(githubPr.repo, githubPr.number, label);
       }
+      const ghAsset = ghAttachmentProxyHref(token.href);
+      // A bare user-attachment URL is how GitHub prose embeds a video (that
+      // is also what our own PR instructions and the walkthrough mirror
+      // emit), so on PR surfaces render the player GitHub would. Labelled
+      // links keep their label but point at the proxy, which is the only form
+      // of the URL that actually opens from here.
+      if (ghAsset && renderRawHtml === "sanitize" && isBareUrlLink(token)) {
+        return `<video class="md-video" src="${attr(ghAsset)}" controls playsinline preload="metadata"></video>`;
+      }
       const text = this.parser.parseInline(token.tokens);
+      if (ghAsset) {
+        return `<a href="${attr(ghAsset)}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+      }
       // A link to one of this session's scratch files is an asset, however it
       // was written: same chip, same overlay, so the two forms are one thing.
       const asset = assetLinkTarget(token.href);
@@ -841,9 +872,13 @@ md.use({
       if (/\.(mp4|webm|mov|m4v)([?#]|$)/i.test(token.href ?? "")) {
         return `<video class="md-video" src="${attr(token.href)}"${title} controls playsinline preload="metadata"></video>`;
       }
+      // Image syntax around a GitHub user attachment is an image (a video
+      // attachment is always embedded as a bare URL) — swap in the proxy
+      // href so it loads.
+      const href = ghAttachmentProxyHref(token.href) ?? token.href;
       return (
-        `<a href="${attr(token.href)}" target="_blank" rel="noopener noreferrer" class="md-image-link">` +
-        `<img class="md-image" src="${attr(token.href)}" alt="${attr(token.text)}"${title} loading="lazy" />` +
+        `<a href="${attr(href)}" target="_blank" rel="noopener noreferrer" class="md-image-link">` +
+        `<img class="md-image" src="${attr(href)}" alt="${attr(token.text)}"${title} loading="lazy" />` +
         `</a>`
       );
     },
