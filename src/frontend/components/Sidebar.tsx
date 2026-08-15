@@ -2423,6 +2423,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		});
 	}
 
+	// The rows below call `onClick()` with no arguments rather than handing the
+	// reference to the button. A handler that takes an optional argument is
+	// assignable to `() => void`, so wiring one straight to a DOM `onClick`
+	// type-checks and then receives the click event: that is what left Reports
+	// dead, because a mouse event carries `view` (the window, from UIEvent) and
+	// it overwrote the route's own view.
 	const tools: Array<{
 		id: SidebarToolId;
 		label: string;
@@ -2479,7 +2485,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			label: SIDEBAR_TOOL_LABELS.reports,
 			icon: <IconFile />,
 			active: reportsActive,
-			onClick: onOpenReports,
+			// Called with no target: the row opens the list of reports, while an
+			// automation's own report row below passes the one it names.
+			onClick: () => onOpenReports(),
 			title: "Recurring automation reports",
 		},
 		{
@@ -4330,7 +4338,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							<button
 								key={tool.id}
 								className={rowClass}
-								onClick={tool.onClick}
+								onClick={() => tool.onClick()}
 								title={tool.title}
 							>
 								{rowBody}
@@ -4341,7 +4349,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									render={
 										<button
 											className={rowClass}
-											onClick={tool.onClick}
+											onClick={() => tool.onClick()}
 											title={tool.title}
 										/>
 									}
