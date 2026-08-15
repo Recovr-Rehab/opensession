@@ -68,6 +68,7 @@ struct OS1App: App {
         // iOS app uses is not a Mac pattern.
         Settings {
             MacSettingsView()
+                .os1AccentToggles()
         }
         .windowResizability(.contentMinSize)
         #endif
@@ -87,6 +88,7 @@ struct RootView: View {
     var body: some View {
         SessionsListView()
             .tint(OS1VisualStyle.accentInk)
+            .os1AccentToggles()
             .background(OS1VisualStyle.background.ignoresSafeArea())
             .preferredColorScheme(preferredColorScheme)
             .sheet(isPresented: $showSettings) {

@@ -37,6 +37,40 @@ final class AccentThemeTests: XCTestCase {
         XCTAssertFalse(AccentTheme.mono.glyphIsWhite(dark: true))
     }
 
+    /// Two accents cannot say "on" with their own fill: Honey is 1.3:1 against
+    /// a white page in either appearance, and Black's fill turns white in dark
+    /// mode. Both borrow Sky. Everything else, including Black on a light page,
+    /// keeps its own colour, which is what stops this becoming a second palette.
+    func testOnlyTheTwoAccentsThatCannotCarryAControlBorrowOne() {
+        let borrowed = AccentTheme.sky.fills.dark
+        XCTAssertEqual(AccentTheme.lime.controlFills.light, borrowed)
+        XCTAssertEqual(AccentTheme.lime.controlFills.dark, borrowed)
+        XCTAssertEqual(AccentTheme.mono.controlFills.light, AccentTheme.mono.fills.light)
+        XCTAssertEqual(AccentTheme.mono.controlFills.dark, borrowed)
+        for theme in AccentTheme.allCases where theme != .lime && theme != .mono {
+            XCTAssertEqual(
+                theme.controlFills.light, theme.fills.light, "\(theme.rawValue) light"
+            )
+            XCTAssertEqual(
+                theme.controlFills.dark, theme.fills.dark, "\(theme.rawValue) dark"
+            )
+        }
+    }
+
+    /// The borrowed track has to carry the knob, which the platform draws
+    /// white. 3:1 is WCAG's floor for a control against what sits on it.
+    func testTheBorrowedControlFillCarriesAWhiteKnob() {
+        for theme in [AccentTheme.lime, .mono] {
+            for dark in [false, true] {
+                let fill = dark ? theme.controlFills.dark : theme.controlFills.light
+                XCTAssertGreaterThan(
+                    contrast(fill, 0xFF_FF_FF), 3.0,
+                    "\(theme.rawValue) (\(dark ? "dark" : "light")) control fill"
+                )
+            }
+        }
+    }
+
     func testDefaultsToSkyWhenNothingIsStored() {
         let store = AccentStore(defaults: scratchDefaults())
         XCTAssertEqual(store.theme, .sky)

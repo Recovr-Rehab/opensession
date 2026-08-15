@@ -70,6 +70,35 @@ enum AccentTheme: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    /// The fill a control uses to say "on": a switch track, a checkbox box.
+    ///
+    /// Every accent resolves straight through to its own fill except the two
+    /// that cannot carry that job. Honey is 1.3:1 against a white page and its
+    /// glyph is the 1.62:1 that only works at the size of an arrow in a disc,
+    /// so a yellow track reads as neither on nor off in either appearance.
+    /// Black's fill inverts with the page, so in dark mode it is a white track
+    /// with a white knob, and the ink ramp has nowhere left to deepen into.
+    /// Both borrow Sky, which is where the web's --accent-control lands too.
+    var controlFills: (light: UInt32, dark: UInt32) {
+        let borrowed = AccentTheme.sky.fills.dark
+        return switch self {
+        case .lime: (borrowed, borrowed)
+        // Light mode's own black plate reads perfectly well; only the white one
+        // has to give way.
+        case .mono: (fills.light, borrowed)
+        default: fills
+        }
+    }
+
+    /// `controlFills`, resolved per appearance. This is what a Toggle is
+    /// tinted with; `accent` stays the colour of everything else.
+    var accentControl: Color {
+        Color(platformColor: AccentTheme.dynamic(
+            light: AccentTheme.platformColor(controlFills.light),
+            dark: AccentTheme.platformColor(controlFills.dark)
+        ))
+    }
+
     /// The fill itself, resolved per appearance.
     var accent: Color {
         Color(platformColor: AccentTheme.dynamic(

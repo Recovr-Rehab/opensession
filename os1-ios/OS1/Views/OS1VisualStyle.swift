@@ -299,6 +299,9 @@ enum OS1VisualStyle {
     /// stays legible in either appearance. Derived from the fill's luminance —
     /// see `AccentTheme.onAccent`.
     static var onAccent: Color { AccentStore.shared.theme.onAccent }
+    /// The accent as a control's "on" state. Two accents cannot carry that job
+    /// and borrow Sky for it; see `AccentTheme.controlFills`.
+    static var accentControl: Color { AccentStore.shared.theme.accentControl }
     #if os(iOS)
     /// Links and other tappable words in running text.
     static let link = Color(uiColor: .link)
@@ -832,5 +835,33 @@ final class RepoImageCache {
         }.value
         // Decorative: `RepoTile` carries the repository name as its label.
         return thumbnail.map { Image(decorative: $0, scale: 1) }
+    }
+}
+
+/// Toggles read the accent's CONTROL form rather than the accent itself.
+///
+/// A switch is the one accent surface whose colour is a state rather than a
+/// decoration: it has to say on or off at a glance. Honey and Black cannot do
+/// that with their own fill (see `AccentTheme.controlFills`), so they borrow
+/// Sky, and every other accent resolves through unchanged.
+///
+/// It is a style rather than a `.tint` at each call site because a style
+/// travels through the environment: one modifier on the scene reaches all
+/// twenty-six toggles in the app, and a new one is covered the day it is
+/// written. `Toggle(configuration)` re-wraps the same control, and the inner
+/// `.switch` is what stops it recursing back into this style.
+struct AccentControlToggleStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Toggle(configuration)
+            .toggleStyle(.switch)
+            .tint(OS1VisualStyle.accentControl)
+    }
+}
+
+extension View {
+    /// Applied once per scene. The Mac's Settings window is its own scene, so
+    /// it needs this as much as the main window does.
+    func os1AccentToggles() -> some View {
+        toggleStyle(AccentControlToggleStyle())
     }
 }
