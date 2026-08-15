@@ -67,6 +67,35 @@ export function resolvedAssetPath(
 	return index || paths[0] || null;
 }
 
+/**
+ * The scratch asset a transcript media URL points at, if it is one.
+ *
+ * An inline player streams through /media?path=<abs>, which says nothing about
+ * the file being an artifact — so read the assets root out of the absolute
+ * path (~/.opensession-assets/<sessionId>/…, see src/server/session-assets.ts)
+ * and confirm the remainder against the folder listing. That second check is
+ * what makes this safe and alias-proof: a path that merely looks like an asset
+ * never opens one, and a file under a historical session id still matches
+ * because the listing merges those folders.
+ */
+export function assetPathForMediaSrc(
+	src: string,
+	assetPaths: readonly string[],
+): string | null {
+	if (!src) return null;
+	let mediaPath: string | null;
+	try {
+		// The base only has to make a relative src parseable; nothing reads it.
+		mediaPath = new URL(src, "http://media.invalid").searchParams.get("path");
+	} catch {
+		return null;
+	}
+	const rel = mediaPath
+		? /\/\.opensession-assets\/[^/]+\/(.+)$/.exec(mediaPath)?.[1]
+		: null;
+	return rel && assetPaths.includes(rel) ? rel : null;
+}
+
 /** Move through the flat, path-sorted asset list. The overlay behaves like the
  * transcript lightbox, so reaching either end wraps around. */
 export function adjacentAssetPath(

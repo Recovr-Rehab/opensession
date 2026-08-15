@@ -33,7 +33,8 @@ import {
 import { formatDuration } from "../lib/time";
 import { ExtBadge, fileExt } from "./lang-marks";
 import { openGalleryFrom } from "./MediaLightbox";
-import { useOpenAsset } from "../lib/open-asset";
+import { useOpenAsset, useOpenAssetPaths } from "../lib/open-asset";
+import { assetPathForMediaSrc } from "../lib/asset-preview";
 // Re-exported so the session view keeps one import for the transcript's
 // context providers; the context itself lives with the rest of the
 // open-an-asset behaviour, which the turn footer shares.
@@ -338,6 +339,7 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
   // say what the path means. A delete names one too, with nothing left to open.
   const assetPath = assetToolPath(toolName, shownInput);
   const asset = useOpenAsset();
+  const assetPaths = useOpenAssetPaths();
   const canOpenAsset =
     Boolean(assetPath && asset.available) && mcp?.tool !== "delete_asset";
   function showAsset() {
@@ -562,15 +564,25 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
               )}
               {shownResult.videos && shownResult.videos.length > 0 && (
                 <div className={TOOL_RESULT_MEDIA}>
-                  {shownResult.videos.map((src, i) => (
+                  {shownResult.videos.map((src, i) => {
+                    // A recording the call saved to the scratch folder opens as
+                    // that asset, so the file is one press from Download instead
+                    // of something to hunt for in the Assets tab.
+                    const videoAsset = assetPathForMediaSrc(src, assetPaths);
+                    const opensAsset = Boolean(videoAsset) && asset.available;
+                    return (
                     <div key={i} className="md-video-wrap">
                       <video className="md-video" src={src} controls playsInline preload="metadata" />
                       <button
                         type="button"
                         className="md-video-expand"
-                        aria-label="Expand"
-                        title="Expand"
+                        aria-label={opensAsset ? "Open asset" : "Expand"}
+                        title={opensAsset ? "Open asset" : "Expand"}
                         onClick={(e) => {
+                          if (opensAsset) {
+                            asset.open(videoAsset!);
+                            return;
+                          }
                           const vid = e.currentTarget.parentElement?.querySelector("video");
                           if (vid) openGalleryFrom(vid);
                         }}
@@ -578,7 +590,8 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
                         <IconExpand size={20} />
                       </button>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </>

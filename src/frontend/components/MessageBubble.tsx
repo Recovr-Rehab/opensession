@@ -10,10 +10,12 @@ import { Button } from "../ui/button";
 import { BASE_PATH } from "../lib/base";
 import { resolveEntryImageSrc } from "../lib/osBlob";
 import { extBadge } from "../lib/images";
-import { useOpenAssetPaths } from "../lib/open-asset";
+import { useOpenAsset, useOpenAssetPaths } from "../lib/open-asset";
+import { assetPathForMediaSrc } from "../lib/asset-preview";
 import { fullTime, shortTime } from "../lib/time";
 import { UserAvatar } from "./UserAvatar";
-import { IconPencil } from "./icons";
+import { openGalleryFrom } from "./MediaLightbox";
+import { IconExpand, IconPencil } from "./icons";
 import { personKey } from "../lib/review-queue";
 
 import {
@@ -469,7 +471,14 @@ function EntryImages({
 	);
 }
 
-/** Inline video players for attached/staged videos (streamed via <base>/media). */
+/** Inline video players for attached/staged videos (streamed via <base>/media).
+ *
+ * A player fills its own frame with playback controls, so the way out of it has
+ * to be drawn: without this button an OPENSESSION_VIDEO marker gives you a
+ * video you can watch and nothing you can do with the file. A recording the
+ * agent saved to the session's scratch folder opens as that asset — the same
+ * surface a chip opens, with the file's name, Download and Copy link — and
+ * anything else opens in the media lightbox, which downloads too. */
 function EntryVideos({
 	videos,
 	right,
@@ -477,20 +486,43 @@ function EntryVideos({
 	videos?: string[];
 	right?: boolean;
 }) {
+	const assetPaths = useOpenAssetPaths();
+	const asset = useOpenAsset();
 	if (!videos || videos.length === 0) return null;
 	return (
 		<div className={cn(msgMedia, right && "justify-end")}>
-			{videos.map((src, i) => (
-				<div key={i} className="md-video-wrap">
-					<video
-						className="md-video"
-						src={src}
-						controls
-						playsInline
-						preload="metadata"
-					/>
-				</div>
-			))}
+			{videos.map((src, i) => {
+				const assetPath = assetPathForMediaSrc(src, assetPaths);
+				const opensAsset = Boolean(assetPath) && asset.available;
+				return (
+					<div key={i} className="md-video-wrap">
+						<video
+							className="md-video"
+							src={src}
+							controls
+							playsInline
+							preload="metadata"
+						/>
+						<button
+							type="button"
+							className="md-video-expand"
+							aria-label={opensAsset ? "Open asset" : "Expand"}
+							title={opensAsset ? "Open asset" : "Expand"}
+							onClick={(e) => {
+								if (opensAsset) {
+									asset.open(assetPath!);
+									return;
+								}
+								const video =
+									e.currentTarget.parentElement?.querySelector("video");
+								if (video) openGalleryFrom(video);
+							}}
+						>
+							<IconExpand size={20} />
+						</button>
+					</div>
+				);
+			})}
 		</div>
 	);
 }
