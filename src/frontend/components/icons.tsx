@@ -450,17 +450,21 @@ export function IconHome(p: IconProps) {
 }
 
 /**
- * Broadcast arcs, for the Feed: what the team has been shipping, as it lands.
- * It used to be three dots beside three lines, which is the picture Tasks
- * wears (IconListCircles) one row below it in the sidebar, so the two tools
- * were telling you the same thing about themselves.
+ * A pulse, for the Feed: what the team has been shipping, as it lands.
+ *
+ * Two glyphs came before it. Three dots beside three lines was the picture
+ * Tasks wears (IconListCircles) one row below it. Broadcast arcs replaced
+ * that, and they say RSS: a stream you subscribe to from somewhere else,
+ * when this page is your own team's merges. They also carry all their ink in
+ * one corner, so the row sat off the glyph column its neighbours share.
+ *
+ * A pulse is centred on the grid, reads as activity rather than a source, and
+ * is the one silhouette in the rail that isn't nodes, boxes or bars.
  */
 export function IconFeed(p: IconProps) {
   return (
     <Svg {...p}>
-      <path {...stroke} d="M5.75 11.25A7.5 7.5 0 0 1 13.25 18.75" />
-      <path {...stroke} d="M5.75 5.75A13 13 0 0 1 18.75 18.75" />
-      <circle cx="6.6" cy="17.9" r="1.6" fill="currentColor" />
+      <path {...stroke} d="M4.75 12H7.75L10 5.75L13.75 18.25L16 12H19.25" />
     </Svg>
   );
 }

@@ -2452,7 +2452,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		{
 			id: "feed",
 			label: SIDEBAR_TOOL_LABELS.feed,
-			icon: <IconFeed className="-translate-y-px" />,
+			icon: <IconFeed />,
 			active: feedActive,
 			onClick: onOpenFeed,
 			title: "What the team has been shipping",
