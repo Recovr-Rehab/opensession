@@ -1593,7 +1593,7 @@ export function PrPanel({
                   {handEdited.length > 0 && send && (
                     <Button
                       variant="default"
-                      size="xs"
+                      size="sm"
                       onClick={tellAgentAboutEdits}
                       title="Sends a note listing your hand-edits so they get committed and pushed"
                     >

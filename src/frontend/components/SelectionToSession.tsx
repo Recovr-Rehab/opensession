@@ -129,9 +129,9 @@ export function SelectionToSession({ sessionId, label, send, children }: Props) 
               />
               <div className="flex justify-end gap-2">
                 <Button
-                  variant="default"
+                  variant="outline"
                   size="sm"
-                  className="min-h-0 border-line-strong bg-transparent px-3 py-[5px] text-label font-normal shadow-none"
+                  className="min-h-0 px-3 py-[5px] text-label font-normal"
                   onClick={dismiss}
                 >
                   Cancel

@@ -27,7 +27,7 @@ export function DesktopLinkToast({
 			<FloatingStatus className="pointer-events-auto gap-1.5 py-1.5 pr-1.5 pl-2">
 				<Button
 					variant="soft"
-					size="xs"
+					size="sm"
 					onClick={() => {
 						// A user-initiated hidden navigation can open a custom protocol while
 						// keeping this web page available when no desktop app handles it.
@@ -44,7 +44,7 @@ export function DesktopLinkToast({
 				<Tooltip label="Dismiss" side="top">
 					<Button
 						variant="ghost"
-						size="xs"
+						size="sm"
 						icon={<IconX size={16} />}
 						aria-label="Dismiss Open app"
 						onClick={() => setDismissed(true)}

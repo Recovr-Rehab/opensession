@@ -878,7 +878,7 @@ const AgentRow = React.memo(function AgentRow({
 							    (the transcript view polls). */}
 							{a.status !== "pending" && (
 								<Button
-									size="xs"
+									size="sm"
 									className="self-start"
 									onClick={() => onOpenConversation(a.seq)}
 								>

@@ -327,7 +327,7 @@ export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) 
         {handEdited.length > 0 && canSend && (
           <Button
             variant="default"
-            size="xs"
+            size="sm"
             className="ml-2 min-h-0 px-2 py-0.5 text-meta"
             onClick={tellAgentAboutEdits}
             title="Sends a note listing your hand-edits so they get reviewed and committed"
@@ -361,7 +361,7 @@ export function DiffPanel({ sessionId, isRunning, canSend, send, diff }: Props) 
         <Tooltip label="Refresh diff">
           <Button
             variant="ghost"
-            size="xs"
+            size="sm"
             className="min-h-0 px-1.5 py-0.5 text-sm text-faint hover:text-fg"
 				onClick={() => {
 					if (view === "flow") {

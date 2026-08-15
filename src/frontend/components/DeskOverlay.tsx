@@ -161,7 +161,7 @@ function DeskBody({
 				{voiceEnabled && (
 					<Button
 						variant="ghost"
-						size="xs"
+						size="sm"
 						className={`shrink-0 ${voiceActive ? "text-fg" : "text-faint"}`}
 						icon={<IconMic size={20} />}
 						onClick={toggleVoice}
@@ -175,7 +175,7 @@ function DeskBody({
 				)}
 				<Button
 					variant="ghost"
-					size="xs"
+					size="sm"
 					className="shrink-0 text-faint"
 					onClick={clearSession}
 					title="Clear the session here. The full transcript stays in the expanded session."
@@ -185,7 +185,7 @@ function DeskBody({
 				{sessionId && (
 					<Button
 						variant="ghost"
-						size="xs"
+						size="sm"
 						className="shrink-0 text-faint"
 						icon={<IconExpand size={20} />}
 						onClick={() => {
@@ -198,7 +198,7 @@ function DeskBody({
 				)}
 				<Button
 					variant="ghost"
-					size="xs"
+					size="sm"
 					className="shrink-0 text-faint"
 					icon={<IconX size={20} />}
 					onClick={onClose}

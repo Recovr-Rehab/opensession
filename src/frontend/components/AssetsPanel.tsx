@@ -134,7 +134,7 @@ export function AssetsPanel({
 					</span>
 					<Button
 						variant="ghost"
-						size="xs"
+						size="sm"
 						className="text-faint"
 						onClick={refresh}
 						title="Refresh the file list"

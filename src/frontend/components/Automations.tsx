@@ -430,18 +430,19 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
               <div className="ml-auto flex shrink-0 gap-1.5">
                 <Button
                   size="sm"
-                  className="border-line-strong bg-transparent shadow-none hover:bg-transparent"
+                  variant="outline"
                   onClick={() => handleRunNow(sel)}
                   disabled={sel.isRunning}
                 >
                   Run now
                 </Button>
-                <Button size="sm" className="border-line-strong bg-transparent shadow-none hover:bg-transparent" onClick={() => setEditMode(true)}>
+                <Button size="sm" variant="outline" onClick={() => setEditMode(true)}>
                   Edit
                 </Button>
                 <Button
                   size="sm"
-                  className="border-line-strong bg-transparent text-dim shadow-none hover:border-red hover:bg-transparent hover:text-red"
+                  variant="outline"
+                  className="hover:border-red hover:bg-transparent hover:text-red"
                   onClick={() => handleDelete(sel)}
                 >
                   Delete
@@ -901,7 +902,8 @@ function WebhookUrl({ id, secret }: { id: string; secret: string }) {
       </span>
       <Button
         size="sm"
-        className="shrink-0 border-line-strong bg-transparent shadow-none hover:bg-transparent"
+        variant="outline"
+        className="shrink-0"
         onClick={() => {
           navigator.clipboard.writeText(url).then(() => {
             setCopied(true);
@@ -1739,7 +1741,7 @@ function AutomationForm({
       {!inline && (
         <div className="flex items-center gap-2">
           {onBack && (
-            <Button size="sm" className="border-line-strong bg-transparent shadow-none hover:bg-transparent" onClick={onBack} title="Back to type chooser">
+            <Button size="sm" variant="outline" onClick={onBack} title="Back to type chooser">
               ←
             </Button>
           )}
@@ -1860,7 +1862,7 @@ function AutomationForm({
       <div>
         <Button
           size="sm"
-          className="border-line-strong bg-transparent shadow-none hover:bg-transparent"
+          variant="outline"
           onClick={() => setShowAdvanced(!showAdvanced)}
         >
           {showAdvanced ? "Hide advanced" : "Advanced"}

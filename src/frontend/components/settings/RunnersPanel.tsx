@@ -104,7 +104,7 @@ export function RunnersPanel() {
 				<Button size="sm" variant="soft" onClick={() => void chooseBootstrap("ssh")}>Migrate SSH machine</Button>
 				<Button size="sm" variant="soft" onClick={() => void chooseBootstrap("kubernetes")}>Connect Kubernetes GPU</Button>
 			</div>
-			<Button className="mt-3" size="xs" variant="ghost" onClick={() => setConnectChoice(null)}>Cancel</Button>
+			<Button className="mt-3" size="sm" variant="ghost" onClick={() => setConnectChoice(null)}>Cancel</Button>
 		</div>}
 		{(connectChoice === "ssh" || connectChoice === "kubernetes") && <div className="mx-4 mb-4 rounded-lg bg-raised p-4">
 			<div className="text-item-title font-semibold text-fg">{connectChoice === "ssh" ? "Migrate an SSH machine" : "Connect a Kubernetes GPU Runner"}</div>
@@ -114,7 +114,7 @@ export function RunnersPanel() {
 					{bootstrapTargets[connectChoice].map((target) => <option key={target.id} value={target.id}>{target.label} · {target.host ? `${target.user}@${target.host}:${target.port}` : `${target.context} / ${target.namespace} / ${target.workload}`}</option>)}
 				</select>
 				<div className="mt-3 flex gap-2"><Button size="sm" onClick={() => void startBootstrap()}>Connect</Button><Button size="sm" variant="ghost" onClick={() => setConnectChoice("choices")}>Back</Button></div>
-			</> : <><p className="mb-0 text-supporting text-dim">No configured {connectChoice === "ssh" ? "SSH" : "Kubernetes"} targets are available.</p><Button className="mt-3" size="xs" variant="ghost" onClick={() => setConnectChoice("choices")}>Back</Button></>}
+			</> : <><p className="mb-0 text-supporting text-dim">No configured {connectChoice === "ssh" ? "SSH" : "Kubernetes"} targets are available.</p><Button className="mt-3" size="sm" variant="ghost" onClick={() => setConnectChoice("choices")}>Back</Button></>}
 		</div>}
 
 		{pairing && <div className="mx-4 mb-4 rounded-lg bg-raised p-4">
@@ -128,7 +128,7 @@ export function RunnersPanel() {
 			<p className="mb-0 mt-2 text-meta text-faint">This one-time code expires at {new Date(pairing.expiresAt).toLocaleTimeString()}.</p>
 		</div>}
 
-		<SettingsGroupLabel actions={<Button size="xs" variant="ghost" onClick={() => void load()}>Refresh</Button>}>Workspace inventory</SettingsGroupLabel>
+		<SettingsGroupLabel actions={<Button size="sm" variant="ghost" onClick={() => void load()}>Refresh</Button>}>Workspace inventory</SettingsGroupLabel>
 		<SettingCard>
 			{loading && <div className="px-5 py-5 text-supporting text-dim">Loading Runners…</div>}
 			{!loading && !runners.length && <div className="px-5 py-5">
@@ -160,7 +160,7 @@ function RunnerRow({ runner, admin, busy, onChange, onRevoke }: { runner: Runner
 				{runner.workload && <div className="mt-1 text-meta text-dim">Working: {runner.workload.operation || runner.workload.sessionId || "session work"}</div>}
 			</div>
 			<div className="flex shrink-0 items-center gap-2">
-				{admin && <Button size="xs" variant="ghost" onClick={() => setEditing((value) => !value)}>{editing ? "Close" : "Details"}</Button>}
+				{admin && <Button size="sm" variant="ghost" onClick={() => setEditing((value) => !value)}>{editing ? "Close" : "Details"}</Button>}
 			</div>
 		</SettingRow>
 		{editing && <div className="border-t border-line px-5 py-3">

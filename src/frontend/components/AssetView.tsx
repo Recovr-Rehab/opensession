@@ -88,7 +88,7 @@ function AssetPager({
 				<Tooltip label="Previous asset (Left arrow)">
 					<Button
 						variant="ghost"
-						size="xs"
+						size="sm"
 						icon={<IconChevronLeft size={16} />}
 						aria-label="Previous asset"
 						className="size-9"
@@ -141,7 +141,7 @@ function AssetPager({
 				<Tooltip label="Next asset (Right arrow)">
 					<Button
 						variant="ghost"
-						size="xs"
+						size="sm"
 						icon={<IconChevronRight size={16} />}
 						aria-label="Next asset"
 						className="size-9"
@@ -391,7 +391,7 @@ export function AssetActions({
 			{onOpenAsTab && (
 				<Button
 					variant="ghost"
-					size="xs"
+					size="sm"
 					className="shrink-0"
 					onClick={onOpenAsTab}
 				>
@@ -409,7 +409,7 @@ export function AssetActions({
 			{onClose && (
 				<Button
 					variant="ghost"
-					size="xs"
+					size="sm"
 					aria-label="Close"
 					className="size-7 shrink-0 justify-center px-0"
 					onClick={onClose}
@@ -728,7 +728,7 @@ export function AssetOverlay({
 					{onOpenAsTab && (
 						<Button
 							variant="ghost"
-							size="xs"
+							size="sm"
 							icon={<IconArrowUpRight size={15} />}
 							className="shrink-0"
 							onClick={() => onOpenAsTab(file.path)}

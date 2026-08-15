@@ -787,7 +787,7 @@ function MobileActionSheet({
 									return (
 										<Button
 											variant="ghost"
-											size="xs"
+											size="sm"
 											key={m.key}
 											type="button"
 											className="gap-1.5 whitespace-normal px-2 text-control-label leading-normal"
@@ -815,7 +815,7 @@ function MobileActionSheet({
 								})}
 								<Button
 									variant="ghost"
-									size="xs"
+									size="sm"
 									type="button"
 									className="whitespace-normal px-2 text-control-label leading-normal"
 									style={{

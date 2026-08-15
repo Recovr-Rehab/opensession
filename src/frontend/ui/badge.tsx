@@ -28,7 +28,7 @@ import { cn } from "./cn";
  *    `outline` stays for the few places that sit ON a filled surface, where a
  *    soft fill has nothing to separate itself from.
  *
- * A badge that opens something is not a badge — use `Button` with `size="xs"`.
+ * A badge that opens something is not a badge. Use `Button` with `size="sm"`.
  */
 
 type Tone = "neutral" | "accent" | "success" | "warning" | "danger" | "info";

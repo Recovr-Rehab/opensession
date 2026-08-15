@@ -45,6 +45,7 @@ import { cn } from "./cn";
 type Variant =
 	| "default"
 	| "primary"
+	| "outline"
 	| "soft"
 	| "ghost"
 	| "success"
@@ -52,7 +53,7 @@ type Variant =
 	| "destructive"
 	| "positive"
 	| "warning";
-type Size = "xs" | "sm" | "md" | "lg";
+type Size = "sm" | "md" | "lg";
 
 const sizes: Record<Size, string> = {
 	// Heights bracket the app's existing chrome: 32px matches the viewer
@@ -63,10 +64,13 @@ const sizes: Record<Size, string> = {
 	// on .btn-viewer-pin / .btn-panel-toggle / .btn-viewer-newsession). The
 	// `rounded-xs`/`rounded-sm` this used to ship read visibly squarer than the
 	// buttons it sat beside — enough that call sites kept patching it back out
-	// by hand. Holding one corner across the scale is also what makes the four
+	// by hand. Holding one corner across the scale is also what makes the three
 	// sizes read as one family: it goes pill on the short sizes, exactly as the
 	// ~26px chrome buttons already do, and stays a soft rect on lg.
-	xs: "min-h-6 px-2.5 text-xs rounded-control",
+	//
+	// There used to be an `xs` between nothing and `sm`, 24px against 26px with
+	// the same padding, type and corner. Two names for one control: the 2px
+	// never told anyone anything, and choosing between them was a coin toss.
 	sm: "min-h-[26px] px-2.5 text-xs rounded-control",
 	md: "min-h-8 px-3 text-sm rounded-control",
 	lg: "min-h-9 px-3.5 text-base rounded-control",
@@ -75,7 +79,6 @@ const sizes: Record<Size, string> = {
 // Leading icon + label: shave 4px off the icon side, which is the glyph's own
 // whitespace minus the label's side bearing (see doc block).
 const iconLeadPad: Record<Size, string> = {
-	xs: "pl-1.5",
 	sm: "pl-1.5",
 	md: "pl-2",
 	lg: "pl-2.5",
@@ -83,7 +86,6 @@ const iconLeadPad: Record<Size, string> = {
 
 // Trailing caret + label: the same 4px shave, on the caret's side.
 const caretTrailPad: Record<Size, string> = {
-	xs: "pr-1.5",
 	sm: "pr-1.5",
 	md: "pr-2",
 	lg: "pr-2.5",
@@ -99,11 +101,10 @@ const PLAIN_GAP = "gap-1";
 // 14 draws an arrow about as tall as the cap height of a 12px label, which is
 // the proportion a dropdown affordance wants. Bigger and it competes with the
 // text it qualifies.
-const caretSize: Record<Size, number> = { xs: 14, sm: 14, md: 16, lg: 18 };
+const caretSize: Record<Size, number> = { sm: 14, md: 16, lg: 18 };
 
 // Icon-only: square hit target, symmetric.
 const iconOnlyPad: Record<Size, string> = {
-	xs: "w-6 px-0",
 	sm: "w-[26px] px-0",
 	md: "w-8 px-0",
 	lg: "w-9 px-0",
@@ -136,6 +137,19 @@ const variants: Record<Variant, string> = {
 	default:
 		"bg-button border-line text-dim smooth-shadow-xs hover:text-fg hover:border-line-strong",
 	primary: INK,
+	// An edge and nothing else: the quiet neutral button for a row of choices
+	// where none of them is the answer (a confirm's Cancel, a form's secondary
+	// actions). `default` is the raised control, so it carries a fill and a
+	// cast shadow that make a row of four read as four plates; this drops both
+	// and keeps the edge, at the stronger hairline so it still holds its shape
+	// on a panel. Sixteen buttons across eight files were writing this by hand
+	// as `border-line-strong bg-transparent shadow-none`, and disagreeing with
+	// each other about the hover.
+	//
+	// The hover is a wash, per the house rule: the hand-rolls mostly cancelled
+	// it (`hover:bg-transparent`), which left the whole feedback of pressing
+	// something as the label going one step darker.
+	outline: "border-line-strong text-dim hover:bg-hover hover:text-fg",
 	// A plate with no hairline: the filled-chip surface base.css describes as
 	// having "nothing but its fill to read against the page". `default` cannot
 	// simply drop its border, because its fill is paper in light and the border
@@ -177,6 +191,7 @@ const variants: Record<Variant, string> = {
 // Leading-icon dimming per variant (icon-only stays full strength).
 const iconDim: Record<Variant, string> = {
 	default: "opacity-60",
+	outline: "opacity-60",
 	primary: "opacity-80",
 	soft: "opacity-60",
 	ghost: "opacity-60",

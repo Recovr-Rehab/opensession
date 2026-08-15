@@ -130,7 +130,8 @@ export function ShellPanel({
           <div key={t.id} className="inline-flex items-stretch">
             <Button
               size="sm"
-              className={`rounded-r-none border-r-0 border-line-strong bg-transparent pr-1.5 shadow-none ${
+              variant="outline"
+              className={`rounded-r-none border-r-0 pr-1.5 ${
                 t.id === activeId ? "!bg-active !text-fg" : ""
               }`}
               onClick={() => setActiveId(t.id)}
@@ -141,7 +142,8 @@ export function ShellPanel({
               size="sm"
               aria-label={`Close terminal ${t.n}`}
               title="Close terminal (kills its PTY)"
-              className={`w-6 rounded-l-none border-line-strong bg-transparent px-0 text-faint shadow-none hover:text-fg ${
+              variant="outline"
+              className={`w-6 rounded-l-none px-0 text-faint ${
                 t.id === activeId ? "!bg-active" : ""
               }`}
               onClick={() => closeTab(t.id)}
@@ -153,7 +155,7 @@ export function ShellPanel({
         {tabs.length < MAX_SHELL_TABS && (
           <Button
             size="sm"
-            className="border-line-strong bg-transparent shadow-none"
+            variant="outline"
             onClick={addTab}
             title="New terminal tab"
             aria-label="New terminal tab"
@@ -165,7 +167,7 @@ export function ShellPanel({
       {tabs.length === 0 ? (
         <EmptyState
           action={
-            <Button size="sm" className="border-line-strong bg-transparent shadow-none" onClick={addTab}>
+            <Button size="sm" variant="outline" onClick={addTab}>
               Open a terminal
             </Button>
           }

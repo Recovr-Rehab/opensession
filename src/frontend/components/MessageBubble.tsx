@@ -142,7 +142,7 @@ export function ClampedBody({
 			{isLong && (
 				<Button
 					variant="ghost"
-					size="xs"
+					size="sm"
 					onClick={showAll ? () => setShowAll(false) : expand}
 					className="mt-1 min-h-0 justify-start whitespace-normal rounded-md border-0 px-2 py-1 text-left font-sans text-label font-medium leading-normal hover:bg-hover/40"
 				>

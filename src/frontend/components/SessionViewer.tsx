@@ -4690,9 +4690,9 @@ export function SessionViewer({
 							{deleting ? "…" : "Session"}
 						</Button>
 						<Button
-							variant="ghost"
+							variant="outline"
 							size="sm"
-							className="min-h-0 border-line-strong px-3 py-[5px] text-[13px] text-dim hover:bg-transparent hover:text-fg"
+							className="min-h-0 px-3 py-[5px] text-[13px]"
 							onClick={() => setShowDeleteConfirm(false)}
 							disabled={deleting}
 						>

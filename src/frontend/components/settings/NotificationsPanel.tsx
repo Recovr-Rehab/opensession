@@ -114,7 +114,7 @@ export function NotificationsPanel() {
 								onChange={(v) => patch({ sound: v })}
 							/>
 							<Button
-								size="xs"
+								size="sm"
 								variant="ghost"
 								onClick={() => playSound(s.sound)}
 								disabled={s.sound === "none"}
