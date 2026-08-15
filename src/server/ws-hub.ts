@@ -83,7 +83,13 @@ export function joinSession(ws: any, sessionId: string) {
 	// Opening a session is itself proof you're here; the idle window runs from now.
 	ws.data.activeAt = Date.now();
 	ensurePresenceSweep();
-	broadcastPresence(sessionId);
+	// Presence broadcasts are change-gated, but a newly watching client needs a
+	// snapshot even when this session has already been empty for a while. Without
+	// one it can keep rendering the face from the session it just left.
+	const viewers = broadcastPresence(sessionId, ws);
+	try {
+		ws.send(JSON.stringify({ type: "presence", sessionId, viewers }));
+	} catch {}
 }
 
 export function leaveSession(ws: any) {
@@ -191,20 +197,25 @@ export function setClientAway(ws: any, away: boolean) {
  *  stays silent instead of waking every client every 15s. */
 const lastPresence: Map<string, string> = (g.__lastPresence ??= new Map());
 
-function broadcastPresence(sessionId: string) {
+function presenceViewers(sessionId: string): string[] {
 	const set = sessionWatchers.get(sessionId);
-	const viewers = set
+	return set
 		? Array.from(set)
 				.filter((ws) => isPresent(ws))
 				.map((ws: any) => ws.data?.user || "Anonymous")
 		: [];
+}
+
+function broadcastPresence(sessionId: string, except?: any): string[] {
+	const viewers = presenceViewers(sessionId);
 	const key = viewers.join("\u0000");
 	if (lastPresence.get(sessionId) !== key) {
 		lastPresence.set(sessionId, key);
-		broadcastToSession(sessionId, { type: "presence", sessionId, viewers });
+		broadcastToSession(sessionId, { type: "presence", sessionId, viewers }, except);
 	}
-	if (!set) lastPresence.delete(sessionId);
+	if (!sessionWatchers.has(sessionId)) lastPresence.delete(sessionId);
 	broadcastGlobalPresence();
+	return viewers;
 }
 
 /** Expire only dead transports. Change-gated broadcasts keep the sweep quiet. */

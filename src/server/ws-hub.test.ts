@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import {
 	allClients,
 	computeGlobalPresence,
+	joinSession,
 	leaveSession,
 	sessionWatchers,
 } from "./ws-hub";
@@ -127,5 +128,29 @@ describe("computeGlobalPresence", () => {
 
 		leaveSession(ws);
 		expect(computeGlobalPresence(sessionWatchers)).toEqual([]);
+	});
+
+	test("a new watcher receives an empty snapshot when presence has not changed", () => {
+		const sessionId = crypto.randomUUID();
+		const first = {
+			data: { user: "Ada", watchingSessionId: sessionId, away: true },
+			send() {},
+		};
+		const frames: any[] = [];
+		const second = {
+			data: { user: "Grace", watchingSessionId: sessionId, away: true },
+			send(payload: string) {
+				frames.push(JSON.parse(payload));
+			},
+		};
+
+		joinSession(first, sessionId);
+		joinSession(second, sessionId);
+
+		expect(frames).toContainEqual({
+			type: "presence",
+			sessionId,
+			viewers: [],
+		});
 	});
 });
