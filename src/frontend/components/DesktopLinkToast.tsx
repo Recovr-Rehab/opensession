@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { IconX } from "./icons";
-import { PRODUCT_NAME } from "../lib/brand";
 import { desktopProtocolUrlFromBrowser } from "../lib/desktop-link";
 import { SIDEBAR_TOAST_CARD } from "../lib/sidebar-toast-classes";
 import { Button } from "../ui/button";
@@ -15,15 +14,14 @@ export function DesktopLinkToast() {
 		<div
 			className={SIDEBAR_TOAST_CARD}
 			role="region"
-			aria-label="Open in desktop app"
+			aria-label="Open in Mac app"
 		>
-			{/* Wraps rather than truncates: the product name is instance
-			    configurable, and at the card's width a two-word one already
-			    clipped to "Open in Open S…". Two lines match the update
-			    toast's height; the clamp keeps a long name from growing the
-			    card without bound. */}
-			<span className="min-w-0 flex-1 text-balance line-clamp-2 text-label font-medium leading-[1.3] text-fg">
-				Open in {PRODUCT_NAME}
+			{/* Names the destination rather than the product: you are already
+			    in the product, and the toast only ever renders on a Mac
+			    (desktop-link.ts gates on the platform). Saying the product
+			    name here just repeated the button. */}
+			<span className="min-w-0 flex-1 truncate text-label font-medium leading-[1.3] text-fg">
+				Open in Mac app
 			</span>
 			<div className="flex shrink-0 items-center gap-1">
 				<Button
@@ -40,14 +38,14 @@ export function DesktopLinkToast() {
 						setTimeout(() => frame.remove(), 1_500);
 					}}
 				>
-					Open app
+					Open
 				</Button>
 				<Tooltip label="Dismiss" side="top">
 					<Button
 						variant="ghost"
 						size="sm"
 						icon={<IconX size={16} />}
-						aria-label="Dismiss Open app"
+						aria-label="Dismiss"
 						onClick={() => setDismissed(true)}
 					/>
 				</Tooltip>
