@@ -10,6 +10,10 @@ enum WebIconKind {
     case gitMerge
     case archive
     case unarchive
+    /// A document. Ported from the web's `IconFile`, which is what its
+    /// Reports tool wears: the row and the sidebar entry lead to the same
+    /// documents, so they should not be drawn from two different sets.
+    case file
     /// Machine-owned session (an automation run). Ported from the web's
     /// `IconRobot`, because SF Symbols has no robot: the only match is
     /// `robotic.vacuum`, and the row's other identity glyphs are this set
@@ -158,6 +162,32 @@ struct WebIcon: View {
                     path.move(to: point(9.75, 14))
                     path.addLine(to: point(12, 11.75))
                     path.addLine(to: point(14.25, 14))
+                case .file:
+                    // Page with the corner cut away, then the fold itself.
+                    path.move(to: point(7.75, 19.25))
+                    path.addLine(to: point(16.25, 19.25))
+                    path.addCurve(
+                        to: point(18.25, 17.25),
+                        control1: point(17.355, 19.25),
+                        control2: point(18.25, 18.355)
+                    )
+                    path.addLine(to: point(18.25, 9))
+                    path.addLine(to: point(14, 4.75))
+                    path.addLine(to: point(7.75, 4.75))
+                    path.addCurve(
+                        to: point(5.75, 6.75),
+                        control1: point(6.645, 4.75),
+                        control2: point(5.75, 5.645)
+                    )
+                    path.addLine(to: point(5.75, 17.25))
+                    path.addCurve(
+                        to: point(7.75, 19.25),
+                        control1: point(5.75, 18.355),
+                        control2: point(6.645, 19.25)
+                    )
+                    path.move(to: point(18, 9.25))
+                    path.addLine(to: point(13.75, 9.25))
+                    path.addLine(to: point(13.75, 5))
                 case .filter, .robot:
                     break
                 }

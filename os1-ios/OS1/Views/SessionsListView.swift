@@ -2369,11 +2369,17 @@ struct SessionsListView: View {
                 showReports = true
             } label: {
                 HStack(spacing: 9) {
-                    Image(systemName: "doc.text")
-                        .symbolRenderingMode(.hierarchical)
-                        .font(.callout)
-                        .foregroundStyle(OS1VisualStyle.textDim)
+                    // The web's own Reports glyph rather than an SF Symbol:
+                    // this row and the Archived row under it are the same
+                    // kind of row, and every icon in the set is stroked at
+                    // 1.5 on a 24-point grid. `doc.text` came from a
+                    // different family and read heavier than its neighbour.
+                    WebIcon(kind: .file, size: 22, color: OS1VisualStyle.textDim)
                         .frame(width: 22, height: 22)
+                        // Same optical nudge the Archived row pays: the ink
+                        // is narrower than the repo tiles above, so its box
+                        // lands 1pt shy of their centre line.
+                        .offset(x: 1)
                     Text("Reports")
                         .font(.callout.weight(.medium))
                         .foregroundStyle(OS1VisualStyle.textDim)
