@@ -19,22 +19,22 @@ export const PR_LIST = "-mx-3";
 export const PR_SECTION_LABEL =
 	"m-0 mb-3.5 flex items-baseline gap-2 px-3 text-section-title font-semibold tracking-[-0.01em] text-fg";
 
-/** A date group: the same quiet label the archived list gives its own. */
-const GROUP_LABEL = "m-0 flex items-baseline gap-2 pr-3 font-semibold text-faint";
+/** A date group: the same quiet label the archived list gives its own. The
+ *  `px-3` pays back the list's outdent, so every label on the page and the row
+ *  content under it share one x. */
+const GROUP_LABEL = "m-0 flex items-baseline gap-2 px-3 font-semibold text-faint";
 
 /** A date belongs to the rows under it rather than to the state above it, so it
- *  sits tight to them and starts where their titles do: past the state glyph
- *  and the face, on the same x as the separator between rows. Flush left it
- *  stacked directly under Open as a second heading of the same shape, which is
- *  the one thing it must not read as. */
-export const PR_GROUP_LABEL = `${GROUP_LABEL} pb-1 pl-[74px] text-meta`;
+ *  stays on the content edge with them and sits tight to them: the air goes
+ *  above it, under the state heading. Size is what separates the two, not an
+ *  indent. */
+export const PR_GROUP_LABEL = `${GROUP_LABEL} pb-1 text-meta`;
 
-/** The same label in the feed, one step up the scale and back on the content
- *  edge (the `pl-3` pays back the list's outdent). The feed is grouped by day
- *  and nothing else, so the day is the heading a reader navigates by; on the
- *  pull request list a date sits under Open or Merged, which is the heading
+/** The same label in the feed, one step up the scale. The feed is grouped by
+ *  day and nothing else, so the day is the heading a reader navigates by; on
+ *  the pull request list a date sits under Open or Merged, which is the heading
  *  there, and stays the quieter of the two. */
-export const PR_FEED_GROUP_LABEL = `${GROUP_LABEL} pb-1.5 pl-3 text-label`;
+export const PR_FEED_GROUP_LABEL = `${GROUP_LABEL} pb-1.5 text-label`;
 
 /**
  * A pull request row.
