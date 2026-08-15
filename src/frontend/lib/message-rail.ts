@@ -2,12 +2,19 @@
  * Geometry shared by the message rail (components/MessageRail.tsx) and the
  * transcript layout that leaves room for it (lib/session-viewer-classes.ts).
  *
- * The rail sits in a gutter beside the reading column. It cannot overlap that
- * column: user bubbles are right-aligned against the column's edge, so an
- * invisible hit strip over them would swallow the selection drags that stage a
- * quote. The column is centred and capped, so a wide pane has gutters to spare
- * and a narrow one has none, which is why the room is reserved here rather
- * than hoped for.
+ * The rail sits in the LEFT gutter, beside the reading column. It cannot
+ * overlap that column: an invisible hit strip over the prose would swallow the
+ * selection drags that stage a quote. The column is centred and capped, so a
+ * wide pane has gutters to spare and a narrow one has none, which is why the
+ * room is reserved here rather than hoped for.
+ *
+ * The left edge is also the one edge no scrollbar can reach. On the right, a
+ * macOS scrollbar is an overlay that reserves NO layout width, so
+ * `offsetWidth - clientWidth` is 0 there and a rail placed at the measured
+ * inset lands under the thumb and fights it for every drag, while measuring
+ * perfectly on a Linux verification browser that paints classic scrollbars.
+ * That is how the first attempt at a rail shipped broken for every Mac user.
+ * Here the question cannot come up.
  *
  * The reservation is keyed to the same static media condition that shows the
  * rail, never to whether a session currently HAS one. A gutter that appeared
@@ -18,20 +25,13 @@
 /** Width of the rail's hit strip. */
 export const RAIL_W = 22;
 
-/**
- * Clearance kept for the scrollbar, on top of whatever width it measures.
- *
- * Measuring alone is not enough. A macOS scrollbar is an overlay that reserves
- * NO layout width, so `offsetWidth - clientWidth` is 0 there and a rail placed
- * at the measured inset lands directly under the scrollbar and fights its
- * thumb for every drag. It measures perfectly on a Linux verification browser,
- * which paints classic scrollbars, which is exactly how the first attempt at a
- * rail shipped broken for every Mac user.
- */
-export const SCROLLBAR_RESERVE = 15;
+/** Kept clear outboard of the rail, so it reads as sitting in a margin rather
+ *  than against the pane's edge. */
+export const RAIL_EDGE = 15;
 
-/** What the transcript keeps clear at each edge for the rail to live in. */
-export const RAIL_GUTTER = RAIL_W + SCROLLBAR_RESERVE;
+/** What the transcript keeps clear at each side for the rail to live in. Both
+ *  sides, so the column stays centred. */
+export const RAIL_GUTTER = RAIL_W + RAIL_EDGE;
 
 /**
  * That gutter as padding, for the transcript scroller and the composer under

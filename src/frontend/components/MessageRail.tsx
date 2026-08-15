@@ -1,15 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SentMessage } from "../lib/sent-messages";
-import { RAIL_GUTTER, RAIL_W, SCROLLBAR_RESERVE } from "../lib/message-rail";
+import { RAIL_EDGE, RAIL_GUTTER, RAIL_W } from "../lib/message-rail";
 import { relativeTime } from "../lib/api";
 import { IconGitCommit, IconPencil, IconPullRequest } from "./icons";
 import { Popover } from "../ui/popover";
 import { cn } from "../ui/cn";
 
 /**
- * Your own messages, as a rail of ticks down the right edge of the transcript.
+ * Your own messages, as a rail of ticks down the left edge of the transcript.
  * One tick per message, newest at the bottom. Running the pointer down the rail
  * previews them one at a time, and clicking jumps to the one under the pointer.
+ *
+ * On the left because that is the margin nothing else wants: the scrollbar and
+ * everything that dodges it live on the right, and a reader's eye returns to
+ * the left edge between lines anyway, so the ticks are already on the way.
  *
  * Deliberately an index of what YOU said, not a map of the document. A turn
  * here runs from one line to several thousand, so a proportional map would
@@ -43,9 +47,9 @@ const MIN_MESSAGES = 2;
  * tick under the pointer to full size and ink, and its neighbours part way, so
  * the target is legible at a 2px pitch without anything ever moving.
  *
- * Each tick is LAID OUT at its largest and scaled down from its right edge, so
+ * Each tick is LAID OUT at its largest and scaled down from its outer edge, so
  * every size here is a transform: no layout on a rail of sixty ticks, and the
- * right edge stays put while the left one travels.
+ * ticks grow inward, toward the column, from a left edge that never moves.
  */
 const TICK_MAX_W = 20;
 const TICK_MAX_H = 3;
@@ -88,10 +92,8 @@ interface Props {
 	leaveLatest: () => void;
 }
 
-/** Where the rail can sit, or null when the gutter is too narrow for it. */
+/** Room for the rail, or null when the gutter is too narrow for it. */
 interface RailBox {
-	/** Distance from the container's right edge. */
-	inset: number;
 	/** The container's height, which the tick pitch is fitted to. */
 	height: number;
 }
@@ -150,29 +152,20 @@ export function MessageRail({ messages, containerRef, leaveLatest }: Props) {
 		const el = containerRef.current;
 		if (!el) return;
 		const rect = el.getBoundingClientRect();
-		// A classic scrollbar takes its width out of the box; an overlay one
-		// takes it out of nothing and paints over the padding instead. Both are
-		// answered the same way, by keeping the reserve clear of the measured
-		// width, so the rail lands in the same place on both platforms and a
-		// Linux verification browser renders what a Mac does.
-		const scrollbar = el.offsetWidth - el.clientWidth;
 		// Measure the rendered reading column rather than computing it from
 		// --session-col: rows carry `.msg`, and a measured edge is already
 		// right under the workspace peek's translate and any future change to
 		// the column. The transcript reserves this gutter (lib/message-rail.ts),
 		// so the check is a backstop against a layout that stops doing so.
+		// No scrollbar arithmetic: this is the left edge, where there is none.
 		const row = el.querySelector<HTMLElement>(".msg");
-		const gutter = row
-			? rect.right - scrollbar - row.getBoundingClientRect().right
-			: 0;
+		const gutter = row ? row.getBoundingClientRect().left - rect.left : 0;
+		// Sub-pixel slack: the reservation and the requirement are the same
+		// number, so an exact comparison can lose to a fractional layout.
 		const next =
-			gutter >= RAIL_GUTTER
-				? { inset: scrollbar + SCROLLBAR_RESERVE, height: rect.height }
-				: null;
+			gutter >= RAIL_GUTTER - 0.5 ? { height: rect.height } : null;
 		setBox((prev) =>
-			prev && next && prev.inset === next.inset && prev.height === next.height
-				? prev
-				: next,
+			prev && next && prev.height === next.height ? prev : next,
 		);
 		setScrollable(el.scrollHeight > el.clientHeight + STICK_SLACK);
 	}, [containerRef]);
@@ -215,13 +208,13 @@ export function MessageRail({ messages, containerRef, leaveLatest }: Props) {
 		() => ({
 			getBoundingClientRect: () => {
 				const rail = railRef.current?.getBoundingClientRect();
-				const right = rail?.right ?? 0;
+				const left = rail?.left ?? 0;
 				const top = (rail?.top ?? 0) + tickY(active) - TICK_MAX_H / 2;
 				return {
-					x: right - TICK_MAX_W,
+					x: left,
 					y: top,
-					left: right - TICK_MAX_W,
-					right,
+					left,
+					right: left + TICK_MAX_W,
 					top,
 					bottom: top + TICK_MAX_H,
 					width: TICK_MAX_W,
@@ -356,7 +349,7 @@ export function MessageRail({ messages, containerRef, leaveLatest }: Props) {
 					// reserves (lib/message-rail.ts).
 					"desktop:[@media(hover:hover)]:block",
 				)}
-				style={{ right: box.inset, width: RAIL_W, height: boxH }}
+				style={{ left: RAIL_EDGE, width: RAIL_W, height: boxH }}
 				onPointerEnter={(event) => {
 					if (event.pointerType === "touch") return;
 					// Name the tick in the same event that wakes the rail, so the
@@ -415,7 +408,7 @@ export function MessageRail({ messages, containerRef, leaveLatest }: Props) {
 							key={message.id}
 							aria-hidden
 							className={cn(
-								"absolute right-0 block origin-right rounded-[999px] bg-fg",
+								"absolute left-0 block origin-left rounded-[999px] bg-fg",
 								"transition-[transform,opacity] duration-200 ease-[var(--ease)]",
 								"motion-reduce:transition-none",
 							)}
@@ -450,7 +443,7 @@ export function MessageRail({ messages, containerRef, leaveLatest }: Props) {
 
 			{shown && (
 				<Popover.Popup
-					side="left"
+					side="right"
 					align="center"
 					sideOffset={10}
 					anchor={tickAnchor}
