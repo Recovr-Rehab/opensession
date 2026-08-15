@@ -277,6 +277,7 @@ import {
 	VIEWER_HEADER,
 	VIEWER_HEADER_ACTIONS,
 	VIEWER_INPUT,
+	VIEWER_MENU_SEP,
 	VIEWER_MESSAGES,
 	VIEWER_MESSAGES_REGION,
 	VIEWER_OVERFLOW,
@@ -4539,9 +4540,11 @@ export function SessionViewer({
 						</Menu.Popup>
 					</Menu.SubmenuRoot>
 				);
-				// Pin and Spin off live here at every width alongside the other
-				// session-level actions, keeping the visible header focused on status.
-				const overflowActions = (
+				// Where this workspace sits for you: pinned as a tab, kept in your own
+				// sidebar lanes. These lead the menu: they are what people reopen it
+				// for, and they say what the session IS to you rather than doing
+				// something with it.
+				const placementActions = (
 					<>
 						<Menu.Item
 							className={pinned ? "text-yellow" : undefined}
@@ -4553,9 +4556,7 @@ export function SessionViewer({
 						>
 							<IconPin size={20} fill={pinned ? "currentColor" : "none"} className={pinned ? undefined : MENU_ICON} />
 							<span className="grow">{pinned ? "Unpin tab" : "Pin as tab"}</span>
-							<span className="ml-auto text-[11px] font-semibold tracking-normal text-faint">
-								{isApple ? "⌘P" : "Ctrl+P"}
-							</span>
+							<Menu.Shortcut>{isApple ? "⌘P" : "Ctrl+P"}</Menu.Shortcut>
 						</Menu.Item>
 						{/* Claim this workspace into your own sidebar lanes — the twin of
 						    the sidebar row's right-click action, for when you're already
@@ -4582,13 +4583,17 @@ export function SessionViewer({
 								</span>
 							</Menu.Item>
 						)}
-						<SpinOffMenu
-							session={session}
-							entries={entries}
-							send={send}
-							connected={connected}
-						/>
 					</>
+				);
+				// Start something from this session. Renders nothing until the session
+				// has an assistant turn to spin off.
+				const spinOffAction = (
+					<SpinOffMenu
+						session={session}
+						entries={entries}
+						send={send}
+						connected={connected}
+					/>
 				);
 				// Archive is the reversible primary "done with this" action — it sits
 				// above Delete in the menu so the safe choice reads first. When the
@@ -4613,9 +4618,7 @@ export function SessionViewer({
 									? "Unarchive session"
 									: "Archive session"}
 						</span>
-						<span className="ml-auto text-[11px] font-semibold tracking-normal text-faint">
-							{archiveShortcutLabel}
-						</span>
+						<Menu.Shortcut>{archiveShortcutLabel}</Menu.Shortcut>
 					</Menu.Item>
 				);
 				// Delete is destructive, so it never rides in the visible action bar —
@@ -4728,6 +4731,86 @@ export function SessionViewer({
 							</a>
 						))}
 					</>
+				);
+				// The ⋯ menu. One instance, placed by width: on desktop it rides at the
+				// end of the title cluster, where it reads as this workspace's own menu
+				// and leaves the right end of the bar to status. Phones hide the title
+				// row, so there it stays in the actions cluster as the floating pill
+				// that carries everything the bar has no room for.
+				//
+				// The order runs: where this workspace sits for you, then what you can
+				// start from it, then where else it lives, then how it ends. Archive
+				// and Delete stay together at the bottom so the destructive end of the
+				// menu is one place rather than two.
+				const overflowMenu = (
+					<Menu.Root open={overflowOpen} onOpenChange={setOverflowOpen}>
+						<div className={VIEWER_OVERFLOW}>
+							<Menu.Trigger
+								// Rendered AS the Button primitive rather than restyled to
+								// look like one, so the box, radius, hover wash, transition
+								// and press scale are identical to the share and side-panel
+								// buttons by construction instead of by hand-matching.
+								render={
+									<Button
+										variant="ghost"
+										size="md"
+										icon={<IconDotsHorizontal size={22} />}
+									/>
+								}
+								className={cn(
+									// base.css turns on the squircle via
+									// `[class*="rounded-"]:not([class*="rounded-full"])`. That
+									// `:not` is a substring test on the whole class attribute,
+									// so the mobile `rounded-full` below disqualifies this
+									// element at EVERY width and it renders plain-round while
+									// its neighbours are squircles. Set it back explicitly,
+									// and keep a true circle on mobile.
+									"[corner-shape:squircle] phone:[corner-shape:round]",
+									"phone:h-10 phone:min-h-10 phone:w-10 phone:rounded-full phone:border-line phone:bg-bg phone:text-accent phone:shadow-[0_2px_12px_rgba(0,0,0,0.1)]",
+									overflowOpen && "bg-hover text-fg phone:border-[color-mix(in_srgb,var(--accent)_12%,transparent)] phone:bg-accent-soft phone:text-accent",
+								)}
+								title="More actions"
+								aria-label="More actions"
+							/>
+							<Menu.Popup
+								// Desktop: opens rightward from a trigger that now sits at the
+								// left of the bar. Phones keep it flush with the right edge.
+								align={isPhone ? "end" : "start"}
+								sideOffset={6}
+								className="min-w-[240px] max-w-[min(300px,calc(100vw-24px))]"
+							>
+								{/* Quick session actions use the same focus, spacing, collision,
+								    and dismissal behavior as every other app menu. Each group is
+								    conditional, so the rules between them collapse themselves
+								    rather than being predicted here (VIEWER_MENU_SEP). */}
+								{placementActions}
+								{isPhone && addToSidebarAction(true)}
+								{(compactHeader || isPhone) && shareAction(true)}
+								<Menu.Separator className={VIEWER_MENU_SEP} />
+								{newSessionAction}
+								{spinOffAction}
+								{transcriptActions}
+								{/* Preview waits for its status before rendering, so it used to
+								    be parked below Delete to keep the rows above it still. That
+								    request is a local read that settles inside the popup's own
+								    120ms enter, and keeping the two destructive rows last is
+								    worth more than the last of that stillness. */}
+								<PreviewButton
+									session={session}
+									onAttachImage={(img) => setImages((prev) => [...prev, img])}
+									onStatusChange={setPreviewStatus}
+									onOpenTab={onOpenPreviewTab}
+									variant="menu"
+								/>
+								<Menu.Separator className={VIEWER_MENU_SEP} />
+								{isPhone && secondaryActions(true)}
+								{archivedActions}
+								<Menu.Separator className={VIEWER_MENU_SEP} />
+								{archiveAction}
+								{deleteAction}
+							</Menu.Popup>
+						</div>
+					</Menu.Root>
 				);
 				const header = (
 					<div
@@ -4894,6 +4977,14 @@ export function SessionViewer({
 							Archived
 						</button>
 					)}
+					{/* This workspace's own menu, at the end of its own cluster. It used
+					    to sit at the far right of the bar, a whole header away from the
+					    thing it acts on and mixed in with the status controls; here it
+					    reads as belonging to the name, and the right end is left to say
+					    what the workspace is doing. Pulled in a little because the
+					    button pads its own glyph, so the row's 10px gap would read as
+					    closer to 15. */}
+					{!isPhone && <div className="-ml-1 flex-none">{overflowMenu}</div>}
 				</div>
 				<div className={VIEWER_HEADER_ACTIONS} ref={headerActionsRef}>
 					{!isPhone && secondaryActions(false)}
@@ -4917,69 +5008,14 @@ export function SessionViewer({
 							))}
 						</div>
 					)}
-					{/* Share rides inline when there's room, else collapses behind ⋯
-					    so it never crowds the title. It sits before Workspace so the
-					    Workspace toggle stays rightmost. On phones the secondary
-					    controls fold in too. The ⋯ menu is always present — Spin off
-					    and Delete live only in there. */}
+					{/* Share rides inline when there's room, else collapses into the ⋯
+					    menu so it never crowds the title. It sits before Workspace so
+					    the Workspace toggle stays rightmost. On phones the secondary
+					    controls fold in too. */}
 					{!compactHeader && !isPhone && shareAction(false)}
-					<Menu.Root open={overflowOpen} onOpenChange={setOverflowOpen}>
-						<div className={VIEWER_OVERFLOW}>
-							<Menu.Trigger
-								// Rendered AS the Button primitive rather than restyled to
-								// look like one, so the box, radius, hover wash, transition
-								// and press scale are identical to the share and side-panel
-								// buttons by construction instead of by hand-matching.
-								render={
-									<Button
-										variant="ghost"
-										size="md"
-										icon={<IconDotsHorizontal size={22} />}
-									/>
-								}
-								className={cn(
-									// base.css turns on the squircle via
-									// `[class*="rounded-"]:not([class*="rounded-full"])`. That
-									// `:not` is a substring test on the whole class attribute,
-									// so the mobile `rounded-full` below disqualifies this
-									// element at EVERY width and it renders plain-round while
-									// its neighbours are squircles. Set it back explicitly,
-									// and keep a true circle on mobile.
-									"[corner-shape:squircle] phone:[corner-shape:round]",
-									"phone:h-10 phone:min-h-10 phone:w-10 phone:rounded-full phone:border-line phone:bg-bg phone:text-accent phone:shadow-[0_2px_12px_rgba(0,0,0,0.1)]",
-									overflowOpen && "bg-hover text-fg phone:border-[color-mix(in_srgb,var(--accent)_12%,transparent)] phone:bg-accent-soft phone:text-accent",
-								)}
-								title="More actions"
-								aria-label="More actions"
-							/>
-							<Menu.Popup
-								align="end"
-								sideOffset={6}
-								className="min-w-[240px] max-w-[min(300px,calc(100vw-24px))]"
-							>
-								{/* Quick session actions use the same focus, spacing, collision,
-								    and dismissal behavior as every other app menu. */}
-								{isPhone && addToSidebarAction(true)}
-								{isPhone && secondaryActions(true)}
-								{(compactHeader || isPhone) && shareAction(true)}
-								{newSessionAction}
-								{archivedActions}
-								{transcriptActions}
-								{overflowActions}
-								{archiveAction}
-								{deleteAction}
-								{/* Preview waits for its status request before rendering. Keep it last
-								    so stable session actions never shift when that request settles. */}
-								<PreviewButton
-									session={session}
-									onAttachImage={(img) => setImages((prev) => [...prev, img])}
-									onStatusChange={setPreviewStatus}
-									onOpenTab={onOpenPreviewTab}
-									variant="menu"
-								/>
-							</Menu.Popup>
-						</div>
-					</Menu.Root>
+					{/* Phones only: the title row this menu normally sits in is hidden
+					    at that width, so it rides here as the floating pill instead. */}
+					{isPhone && overflowMenu}
 					{/* Code-workspace testing affordances dock immediately left of the
 					    side-panel toggle. The local preview launcher lives in the ⋯ menu;
 					    the globe rides here only while the panel is closed —

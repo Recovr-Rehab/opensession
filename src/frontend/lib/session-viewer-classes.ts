@@ -153,6 +153,18 @@ export const SESSION_LINK_PLAIN = "border-[rgba(13,148,136,0.5)] text-[#5eead4]"
  *  they would otherwise crowd the title. */
 export const VIEWER_OVERFLOW = "relative inline-flex";
 
+/**
+ * A rule between two groups of the ⋯ menu. Most of that menu is conditional, so
+ * a whole group can render nothing on a given session and a separator written
+ * between groups lands doubled, or at the very top. Some rows decide their own
+ * emptiness at runtime (Spin off needs an assistant turn, Preview needs its
+ * status), so rather than predict it, each rule hides when it has no group
+ * above it. `session-menu-sep` is the hook for that adjacent-sibling test and
+ * carries nothing else.
+ */
+export const VIEWER_MENU_SEP =
+	"session-menu-sep first:hidden [.session-menu-sep+&]:hidden";
+
 export const VIEWER_DELETE_CONFIRM = "flex gap-1.5";
 
 /* ── Panes ──────────────────────────────────────────────────────────────── */
