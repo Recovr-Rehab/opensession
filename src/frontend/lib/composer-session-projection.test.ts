@@ -2,11 +2,13 @@ import { beforeEach, describe, expect, test } from "bun:test";
 import { setSessionTitles } from "./markdown";
 import {
 	applyComposerSessionEdit,
+	composerCanonicalSelection,
 	composerDisplayOffset,
 	projectComposerSessions,
 } from "./composer-session-projection";
 
 const ID = "os-01a006d8-eddd-7000-bca2-b010caf2d8e7";
+const OTHER_ID = "os-01a00733-0547-7000-9abb-cc2b8fc3502f";
 
 describe("composer session projection", () => {
 	beforeEach(() => setSessionTitles([[ID, "Clean pasted session links"]]));
@@ -53,6 +55,29 @@ describe("composer session projection", () => {
 		expect(
 			applyComposerSessionEdit(projected, next, 8, 8).canonicalText,
 		).toBe(next);
+	});
+
+	test("an exact edit range distinguishes sessions with the same title", () => {
+		setSessionTitles([
+			[ID, "Same title"],
+			[OTHER_ID, "Same title"],
+		]);
+		const projected = projectComposerSessions(`${ID} ${OTHER_ID}`);
+		expect(projected.displayText).toBe("Same title Same title");
+		expect(
+			applyComposerSessionEdit(projected, "Same title", 0, 0, {
+				start: 0,
+				end: 11,
+			}).canonicalText,
+		).toBe(OTHER_ID);
+	});
+
+	test("copying part of a title expands to the canonical session id", () => {
+		const projected = projectComposerSessions(`Compare ${ID} now`);
+		expect(composerCanonicalSelection(projected, 12, 20)).toEqual({
+			start: 8,
+			end: 47,
+		});
 	});
 
 	test("maps a canonical caret past the token into display text", () => {

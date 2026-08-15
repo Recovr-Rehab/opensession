@@ -50,7 +50,12 @@ function slashContextAt(value: string, caret: number): { start: number; query: s
 
 interface Options {
   value: string;
-  onChange: (value: string) => void;
+  /** Return a remapped caret when the host projects a different visible value. */
+  onChange: (
+    value: string,
+    selectionStart?: number,
+    selectionEnd?: number,
+  ) => number | void;
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
   /**
    * Enables "@"-mention file autocomplete. Given the text typed after the "@",
@@ -217,10 +222,10 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, sk
     const after = value.slice(caret);
     const insert = `${mention.kind === "skill" ? "/" : "@"}${item.insert} `;
     const next = before + insert + after;
-    pendingCaret.current = before.length + insert.length;
+    const nextCaret = before.length + insert.length;
     setMention(null);
     setSuggestions([]);
-    onChange(next);
+    pendingCaret.current = onChange(next, nextCaret, nextCaret) ?? nextCaret;
   }
 
   function handleKeyDown(e: React.KeyboardEvent): boolean {

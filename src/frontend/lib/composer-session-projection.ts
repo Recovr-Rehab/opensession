@@ -13,6 +13,12 @@ export interface ComposerSessionProjection {
 	sessions: DisplaySessionRange[];
 }
 
+export interface ComposerDisplayEdit {
+	/** Changed range in the previous projected textarea value. */
+	start: number;
+	end: number;
+}
+
 function codeRanges(text: string): Array<{ start: number; end: number }> {
 	const ranges: Array<{ start: number; end: number }> = [];
 	const fences = /```[\s\S]*?```|```[\s\S]*$/g;
@@ -78,6 +84,25 @@ export function composerCanonicalOffset(
 	return offset + delta;
 }
 
+/** Map a projected selection to canonical text, expanding partial tokens. */
+export function composerCanonicalSelection(
+	projection: ComposerSessionProjection,
+	start: number,
+	end = start,
+): { start: number; end: number } {
+	const canonicalStart = composerCanonicalOffset(projection, start);
+	if (start === end) return { start: canonicalStart, end: canonicalStart };
+	const touchedEnd = projection.sessions.find(
+		(session) => end > session.start && end < session.end,
+	);
+	return {
+		start: canonicalStart,
+		end: touchedEnd
+			? touchedEnd.canonicalEnd
+			: composerCanonicalOffset(projection, end),
+	};
+}
+
 /**
  * Apply one native textarea edit to canonical text. An edit that touches a
  * named session consumes the whole token, matching its atomic presentation.
@@ -87,6 +112,7 @@ export function applyComposerSessionEdit(
 	nextDisplayText: string,
 	selectionStart = nextDisplayText.length,
 	selectionEnd = selectionStart,
+	editHint?: ComposerDisplayEdit,
 ): {
 	canonicalText: string;
 	canonicalSelectionStart: number;
@@ -94,23 +120,36 @@ export function applyComposerSessionEdit(
 	touchedSession: boolean;
 } {
 	const previous = projection.displayText;
-	let start = 0;
-	while (
-		start < previous.length &&
-		start < nextDisplayText.length &&
-		previous[start] === nextDisplayText[start]
-	)
-		start++;
+	let start = editHint?.start ?? 0;
+	let previousEnd = editHint?.end ?? previous.length;
+	let nextEnd = nextDisplayText.length - (previous.length - previousEnd);
+	const validHint =
+		!!editHint &&
+		start >= 0 &&
+		previousEnd >= start &&
+		previousEnd <= previous.length &&
+		nextEnd >= start &&
+		previous.slice(0, start) === nextDisplayText.slice(0, start) &&
+		previous.slice(previousEnd) === nextDisplayText.slice(nextEnd);
+	if (!validHint) {
+		start = 0;
+		while (
+			start < previous.length &&
+			start < nextDisplayText.length &&
+			previous[start] === nextDisplayText[start]
+		)
+			start++;
 
-	let previousEnd = previous.length;
-	let nextEnd = nextDisplayText.length;
-	while (
-		previousEnd > start &&
-		nextEnd > start &&
-		previous[previousEnd - 1] === nextDisplayText[nextEnd - 1]
-	) {
-		previousEnd--;
-		nextEnd--;
+		previousEnd = previous.length;
+		nextEnd = nextDisplayText.length;
+		while (
+			previousEnd > start &&
+			nextEnd > start &&
+			previous[previousEnd - 1] === nextDisplayText[nextEnd - 1]
+		) {
+			previousEnd--;
+			nextEnd--;
+		}
 	}
 
 	const touched = projection.sessions.filter(

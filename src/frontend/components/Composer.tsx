@@ -18,7 +18,9 @@ import { insertPastedSessionId } from "../lib/session-url";
 import {
   applyComposerSessionEdit,
   composerCanonicalOffset,
+  composerCanonicalSelection,
   composerDisplayOffset,
+  type ComposerDisplayEdit,
   projectComposerSessions,
 } from "../lib/composer-session-projection";
 import { onSessionTitlesChanged } from "../lib/markdown";
@@ -471,60 +473,113 @@ export function Composer({
   const text = isControlled ? value : innerValue;
   const setText = isControlled ? onChange ?? (() => {}) : setInnerValue;
   const [, setSessionTitleVersion] = useState(0);
-  useEffect(
-    () => onSessionTitlesChanged(() => setSessionTitleVersion((n) => n + 1)),
-    [],
-  );
   const sessionProjection = projectComposerSessions(text);
+  const sessionProjectionRef = useRef(sessionProjection);
+  sessionProjectionRef.current = sessionProjection;
   const displayText = sessionProjection.displayText;
-  const pendingSelection = useRef<{ start: number; end: number } | null>(null);
-  const sessionEditHistory = useRef<{
+  const pendingCanonicalSelection = useRef<{
+    start: number;
+    end: number;
+  } | null>(null);
+  const sessionEditHistory = useRef<Array<{
     beforeCanonical: string;
     beforeDisplay: string;
-    beforeCaret: number;
+    beforeSelectionCanonical: { start: number; end: number };
     afterCanonical: string;
     afterDisplay: string;
-    afterCaret: number;
+    afterSelectionCanonical: { start: number; end: number };
+    blockedByNativeEdits: boolean;
+  }>>([]);
+  const sessionRedoHistory = useRef<typeof sessionEditHistory.current>([]);
+  const beforeInput = useRef<{
+    start: number;
+    end: number;
+    inputType: string;
   } | null>(null);
+  useEffect(
+    () =>
+      onSessionTitlesChanged(() => {
+        const el = textareaRef.current;
+        if (el) {
+          pendingCanonicalSelection.current = composerCanonicalSelection(
+            sessionProjectionRef.current,
+            el.selectionStart,
+            el.selectionEnd,
+          );
+        }
+        setSessionTitleVersion((n) => n + 1);
+      }),
+    [textareaRef],
+  );
   const setDisplayText = (
     next: string,
     selectionStart = next.length,
     selectionEnd = selectionStart,
+    options?: {
+      editHint?: ComposerDisplayEdit;
+      inputKind?: "native" | "programmatic" | "history";
+      beforeSelection?: { start: number; end: number };
+    },
   ) => {
+    const inputKind = options?.inputKind ?? "programmatic";
     const edit = applyComposerSessionEdit(
       sessionProjection,
       next,
       selectionStart,
       selectionEnd,
+      options?.editHint,
     );
     const projected = projectComposerSessions(edit.canonicalText);
-    pendingSelection.current = {
-      start: composerDisplayOffset(projected, edit.canonicalSelectionStart),
-      end: composerDisplayOffset(projected, edit.canonicalSelectionEnd),
+    pendingCanonicalSelection.current = {
+      start: edit.canonicalSelectionStart,
+      end: edit.canonicalSelectionEnd,
     };
-    if (edit.touchedSession) {
-      const touched = sessionProjection.sessions.find(
-        (session) =>
-          edit.canonicalSelectionStart >= session.canonicalStart &&
-          edit.canonicalSelectionStart <= session.canonicalEnd,
-      );
-      sessionEditHistory.current = {
+    if (edit.touchedSession && inputKind !== "history") {
+      const beforeSelection = options?.beforeSelection ?? {
+        start: options?.editHint?.start ?? selectionStart,
+        end: options?.editHint?.end ?? selectionStart,
+      };
+      sessionEditHistory.current.push({
         beforeCanonical: text,
         beforeDisplay: displayText,
-        beforeCaret: touched?.end ?? selectionStart,
+        beforeSelectionCanonical: composerCanonicalSelection(
+          sessionProjection,
+          beforeSelection.start,
+          beforeSelection.end,
+        ),
         afterCanonical: edit.canonicalText,
         afterDisplay: projected.displayText,
-        afterCaret: pendingSelection.current.end,
-      };
+        afterSelectionCanonical: {
+          start: edit.canonicalSelectionStart,
+          end: edit.canonicalSelectionEnd,
+        },
+        blockedByNativeEdits: false,
+      });
+      if (sessionEditHistory.current.length > 50)
+        sessionEditHistory.current.shift();
+      sessionRedoHistory.current = [];
+    } else if (inputKind === "native") {
+      // Let native undo consume ordinary edits before crossing a token edit.
+      const history = sessionEditHistory.current.at(-1);
+      if (history) history.blockedByNativeEdits = true;
+      sessionRedoHistory.current = [];
+    } else if (inputKind === "programmatic") {
+      // Programmatic edits have no browser history entry to cross later.
+      sessionEditHistory.current = [];
+      sessionRedoHistory.current = [];
     }
     setText(edit.canonicalText);
+    return composerDisplayOffset(projected, edit.canonicalSelectionEnd);
   };
   useLayoutEffect(() => {
-    const selection = pendingSelection.current;
+    const selection = pendingCanonicalSelection.current;
     const el = textareaRef.current;
     if (!selection || !el) return;
-    pendingSelection.current = null;
-    el.setSelectionRange(selection.start, selection.end);
+    pendingCanonicalSelection.current = null;
+    el.setSelectionRange(
+      composerDisplayOffset(sessionProjection, selection.start),
+      composerDisplayOffset(sessionProjection, selection.end),
+    );
   }, [displayText, textareaRef]);
   useEffect(() => {
     if (!isControlled && draftKey) saveDraft(draftKey, { text: innerValue });
@@ -886,9 +941,8 @@ export function Composer({
   // mirror, so the press lands on the field. The browser has already placed
   // the caret by the time click fires, and a caret strictly inside a pill came
   // from pressing it (its edges still place a caret, which is the margin that
-  // keeps an ordinary click near a pill from eating one). Deleting through
-  // execCommand keeps the edit on the native undo stack; splicing the value in
-  // React state would quietly cost you ⌘Z.
+  // keeps an ordinary click near a pill from eating one). Mentions keep native
+  // undo through execCommand. Session tokens use the canonical history below.
   function removePillAtCaret(el: HTMLTextAreaElement): boolean {
     if (el.selectionStart !== el.selectionEnd) return false;
     const caret = el.selectionStart;
@@ -899,12 +953,26 @@ export function Composer({
     // The trailing space goes with it, so removing a pill mid-sentence
     // doesn't leave a double space behind.
     const end = displayText[hit.end] === " " ? hit.end + 1 : hit.end;
-    el.setSelectionRange(hit.start, end);
-    if (!document.execCommand("delete")) {
-      setDisplayText(displayText.slice(0, hit.start) + displayText.slice(end));
-      queueMicrotask(() =>
-        textareaRef.current?.setSelectionRange(hit.start, hit.start),
+    if ("id" in hit) {
+      setDisplayText(
+        displayText.slice(0, hit.start) + displayText.slice(end),
+        hit.start,
+        hit.start,
+        {
+          editHint: { start: hit.start, end },
+          beforeSelection: { start: caret, end: caret },
+        },
       );
+    } else {
+      el.setSelectionRange(hit.start, end);
+      if (!document.execCommand("delete")) {
+        setDisplayText(
+          displayText.slice(0, hit.start) + displayText.slice(end),
+          hit.start,
+          hit.start,
+          { editHint: { start: hit.start, end } },
+        );
+      }
     }
     return true;
   }
@@ -932,14 +1000,77 @@ export function Composer({
     );
     if (!hit) return false;
     const end = back ? Math.max(caret, hit.end) : hit.end;
-    el.setSelectionRange(hit.start, end);
-    if (!document.execCommand("delete")) {
-      setDisplayText(displayText.slice(0, hit.start) + displayText.slice(end));
-      queueMicrotask(() =>
-        textareaRef.current?.setSelectionRange(hit.start, hit.start),
+    if ("id" in hit) {
+      setDisplayText(
+        displayText.slice(0, hit.start) + displayText.slice(end),
+        hit.start,
+        hit.start,
+        {
+          editHint: { start: hit.start, end },
+          beforeSelection: { start: caret, end: caret },
+        },
       );
+    } else {
+      el.setSelectionRange(hit.start, end);
+      if (!document.execCommand("delete")) {
+        setDisplayText(
+          displayText.slice(0, hit.start) + displayText.slice(end),
+          hit.start,
+          hit.start,
+          { editHint: { start: hit.start, end } },
+        );
+      }
     }
     return true;
+  }
+
+  function canonicalClipboardSelection(el: HTMLTextAreaElement) {
+    if (el.selectionStart === el.selectionEnd) return null;
+    const touchesSession = sessionRanges.some(
+      (session) =>
+        el.selectionStart < session.end && el.selectionEnd > session.start,
+    );
+    if (!touchesSession) return null;
+    const selection = composerCanonicalSelection(
+      sessionProjection,
+      el.selectionStart,
+      el.selectionEnd,
+    );
+    return {
+      text: text.slice(selection.start, selection.end),
+      displayStart: el.selectionStart,
+      displayEnd: el.selectionEnd,
+    };
+  }
+
+  function copySessionSelection(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const selection = canonicalClipboardSelection(e.currentTarget);
+    if (!selection) return;
+    e.preventDefault();
+    e.clipboardData.setData("text/plain", selection.text);
+  }
+
+  function cutSessionSelection(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const selection = canonicalClipboardSelection(e.currentTarget);
+    if (!selection) return;
+    e.preventDefault();
+    e.clipboardData.setData("text/plain", selection.text);
+    setDisplayText(
+      displayText.slice(0, selection.displayStart) +
+        displayText.slice(selection.displayEnd),
+      selection.displayStart,
+      selection.displayStart,
+      {
+        editHint: {
+          start: selection.displayStart,
+          end: selection.displayEnd,
+        },
+        beforeSelection: {
+          start: selection.displayStart,
+          end: selection.displayEnd,
+        },
+      },
+    );
   }
 
   // A pill that can be pressed has to look it, and the field on top owns the
@@ -990,7 +1121,6 @@ export function Composer({
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
-    const history = sessionEditHistory.current;
     const undo =
       (e.metaKey || e.ctrlKey) &&
       !e.altKey &&
@@ -1000,23 +1130,28 @@ export function Composer({
       !e.altKey &&
       ((e.metaKey && e.shiftKey && e.key.toLowerCase() === "z") ||
         (e.ctrlKey && !e.metaKey && e.key.toLowerCase() === "y"));
-    if (history && undo && text === history.afterCanonical) {
-      e.preventDefault();
-      pendingSelection.current = {
-        start: history.beforeCaret,
-        end: history.beforeCaret,
-      };
-      setText(history.beforeCanonical);
-      return;
+    if (undo) {
+      const history = sessionEditHistory.current.at(-1);
+      if (history?.blockedByNativeEdits) return;
+      if (history && text === history.afterCanonical) {
+        e.preventDefault();
+        sessionEditHistory.current.pop();
+        sessionRedoHistory.current.push(history);
+        pendingCanonicalSelection.current = history.beforeSelectionCanonical;
+        setText(history.beforeCanonical);
+        return;
+      }
     }
-    if (history && redo && text === history.beforeCanonical) {
-      e.preventDefault();
-      pendingSelection.current = {
-        start: history.afterCaret,
-        end: history.afterCaret,
-      };
-      setText(history.afterCanonical);
-      return;
+    if (redo) {
+      const history = sessionRedoHistory.current.at(-1);
+      if (history && text === history.beforeCanonical) {
+        e.preventDefault();
+        sessionRedoHistory.current.pop();
+        sessionEditHistory.current.push(history);
+        pendingCanonicalSelection.current = history.afterSelectionCanonical;
+        setText(history.afterCanonical);
+        return;
+      }
     }
     if (mentions.handleKeyDown(e)) return;
     if ((e.nativeEvent as any).isComposing) return;
@@ -1301,38 +1436,90 @@ export function Composer({
                     : placeholder
             }
             value={displayText}
+            onBeforeInput={(e) => {
+              const native = e.nativeEvent as InputEvent;
+              beforeInput.current = {
+                start: e.currentTarget.selectionStart,
+                end: e.currentTarget.selectionEnd,
+                inputType: native.inputType || "",
+              };
+            }}
             onChange={(e) => {
               const inputType = (e.nativeEvent as InputEvent).inputType;
-              const history = sessionEditHistory.current;
-              if (
-                inputType === "historyUndo" &&
-                history &&
-                e.target.value === history.beforeDisplay
-              ) {
-                pendingSelection.current = {
-                  start: e.target.selectionStart,
-                  end: e.target.selectionEnd,
-                };
-                setText(history.beforeCanonical);
-                return;
+              const historyInput =
+                inputType === "historyUndo" || inputType === "historyRedo";
+              if (historyInput) {
+                const source =
+                  inputType === "historyUndo"
+                    ? sessionEditHistory.current
+                    : sessionRedoHistory.current;
+                const history = source.at(-1);
+                const undo =
+                  inputType === "historyUndo" &&
+                  history &&
+                  text === history.afterCanonical &&
+                  e.target.value === history.beforeDisplay;
+                const redo =
+                  inputType === "historyRedo" &&
+                  history &&
+                  text === history.beforeCanonical &&
+                  e.target.value === history.afterDisplay;
+                if (history && (undo || redo)) {
+                  source.pop();
+                  (undo
+                    ? sessionRedoHistory.current
+                    : sessionEditHistory.current
+                  ).push(history);
+                  pendingCanonicalSelection.current = undo
+                    ? history.beforeSelectionCanonical
+                    : history.afterSelectionCanonical;
+                  setText(
+                    undo ? history.beforeCanonical : history.afterCanonical,
+                  );
+                  beforeInput.current = null;
+                  return;
+                }
               }
-              if (
-                inputType === "historyRedo" &&
-                history &&
-                e.target.value === history.afterDisplay
-              ) {
-                pendingSelection.current = {
-                  start: e.target.selectionStart,
-                  end: e.target.selectionEnd,
-                };
-                setText(history.afterCanonical);
-                return;
+
+              const before = historyInput ? null : beforeInput.current;
+              beforeInput.current = null;
+              let editHint: ComposerDisplayEdit | undefined;
+              if (before) {
+                let { start, end } = before;
+                const removed = Math.max(
+                  0,
+                  displayText.length - e.target.value.length,
+                );
+                const kind = inputType || before.inputType;
+                if (start === end && kind.endsWith("Backward"))
+                  start = Math.max(0, start - removed);
+                else if (start === end && kind.endsWith("Forward"))
+                  end = Math.min(displayText.length, end + removed);
+                editHint = { start, end };
               }
               setDisplayText(
                 e.target.value,
                 e.target.selectionStart,
                 e.target.selectionEnd,
+                {
+                  editHint,
+                  inputKind: historyInput ? "history" : "native",
+                  ...(before
+                    ? {
+                        beforeSelection: {
+                          start: before.start,
+                          end: before.end,
+                        },
+                      }
+                    : {}),
+                },
               );
+              if (
+                inputType === "historyUndo" &&
+                sessionEditHistory.current.at(-1)?.afterDisplay === e.target.value
+              ) {
+                sessionEditHistory.current.at(-1)!.blockedByNativeEdits = false;
+              }
               // Caret has moved to the new value; re-evaluate after React commits.
               queueMicrotask(mentions.sync);
             }}
@@ -1360,6 +1547,8 @@ export function Composer({
               // Let a click on a suggestion (mousedown) win the race first.
               setTimeout(mentions.close, 120);
             }}
+            onCopy={copySessionSelection}
+            onCut={cutSessionSelection}
             onPaste={handlePaste}
             disabled={disabled}
             rows={1}

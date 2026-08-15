@@ -142,6 +142,19 @@ describe("session ids in the mirror", () => {
 		);
 	});
 
+	test("title backticks do not consume a following code fence", () => {
+		const title = "Fix ``` fences";
+		const text = `${title}\n\`\`\`\ncode\n\`\`\`\nplain`;
+		expect(
+			composerHighlightHtml(text, [], [
+				{ start: 0, end: title.length, id: ID, label: title },
+			]),
+		).toBe(
+			'<span class="cmp-session cmp-session-named">Fix ``` fences</span>\n' +
+				'<span class="cmp-fence">```\ncode\n```</span>\nplain​',
+		);
+	});
+
 	test("the longer legacy prefix lends the same slot", () => {
 		expect(composerSessionRanges(`bks-${ID.slice(3)}`)).toEqual([
 			{ start: 0, end: 40, id: `bks-${ID.slice(3)}` },

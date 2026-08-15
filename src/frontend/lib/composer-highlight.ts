@@ -109,20 +109,6 @@ export function composerSessionRanges(text: string): SessionRange[] {
 /** Both kinds of pill, in the order they appear in the draft. */
 type DraftRange = MentionRange | SessionRange;
 
-function overlapsSession(
-	ranges: DraftRange[],
-	start: number,
-	end: number,
-): boolean {
-	return ranges.some(
-		(range) =>
-			"id" in range &&
-			!!range.label &&
-			start < range.end &&
-			end > range.start,
-	);
-}
-
 function draftRanges(
 	text: string,
 	people: Person[],
@@ -135,6 +121,19 @@ function draftRanges(
 	// A mention starts at an `@` and an id never does, so the two kinds cannot
 	// overlap and sorting by start is enough to walk them as one list.
 	return ranges.sort((a, b) => a.start - b.start);
+}
+
+/** Hide title backticks from the code scanner without changing offsets. */
+function syntaxText(text: string, sessions: SessionRange[]): string {
+	let out = text;
+	for (const session of sessions) {
+		if (!session.label) continue;
+		const title = out
+			.slice(session.start, session.end)
+			.replaceAll("`", " ");
+		out = out.slice(0, session.start) + title + out.slice(session.end);
+	}
+	return out;
 }
 
 /**
@@ -206,20 +205,20 @@ function chips(
  * being pointed at. */
 function inlineCode(
 	text: string,
+	syntax: string,
 	from: number,
 	to: number,
 	ranges: DraftRange[],
 ): string {
-	const seg = text.slice(from, to);
+	const seg = syntax.slice(from, to);
 	let out = "";
 	let last = from;
 	const re = /`[^`\n]+`/g;
 	let m: RegExpExecArray | null;
 	while ((m = re.exec(seg))) {
 		const at = from + m.index;
-		if (overlapsSession(ranges, at, at + m[0].length)) continue;
 		out += chips(text, last, at, ranges);
-		out += `<span class="cmp-code">${esc(m[0])}</span>`;
+		out += `<span class="cmp-code">${esc(text.slice(at, at + m[0].length))}</span>`;
 		last = at + m[0].length;
 	}
 	return out + chips(text, last, to, ranges);
@@ -239,17 +238,17 @@ export function composerHighlightHtml(
 	sessions: SessionRange[] = composerSessionRanges(text),
 ): string {
 	const ranges = draftRanges(text, people, sessions);
+	const syntax = syntaxText(text, sessions);
 	let out = "";
 	let last = 0;
 	const re = /```[\s\S]*?```|```[\s\S]*$/g;
 	let m: RegExpExecArray | null;
-	while ((m = re.exec(text))) {
-		if (overlapsSession(ranges, m.index, m.index + m[0].length)) continue;
-		out += inlineCode(text, last, m.index, ranges);
-		out += `<span class="cmp-fence">${esc(m[0])}</span>`;
+	while ((m = re.exec(syntax))) {
+		out += inlineCode(text, syntax, last, m.index, ranges);
+		out += `<span class="cmp-fence">${esc(text.slice(m.index, m.index + m[0].length))}</span>`;
 		last = m.index + m[0].length;
 	}
-	out += inlineCode(text, last, text.length, ranges);
+	out += inlineCode(text, syntax, last, text.length, ranges);
 	return out + "​";
 }
 
