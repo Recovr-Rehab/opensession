@@ -46,8 +46,15 @@ import {
  * nav is a column of chrome; what separates it from the content is the seam
  * and the shadow on the content's left edge (see SETTINGS_CONTENT), so the
  * column itself needs no fill and no border of its own.
+ *
+ * It clips, because the content column enters from 18px right of where it
+ * rests (`settings-paper-in`). Without the clip that overhang gives the window
+ * a horizontal scrollbar for the length of the entrance, and a scrollbar
+ * appearing and vanishing is louder than the motion it belongs to. Nothing
+ * here needs to escape the page: both columns scroll themselves, and the
+ * menus in the nav footer portal to the body.
  */
-export const SETTINGS_PAGE = "flex min-h-0 flex-1 bg-sidebar";
+export const SETTINGS_PAGE = "flex min-h-0 flex-1 overflow-hidden bg-sidebar";
 
 /**
  * The nav column. No fill, no edge: the page under it is already the sidebar
@@ -58,6 +65,12 @@ export const SETTINGS_PAGE = "flex min-h-0 flex-1 bg-sidebar";
  * drift. The compact overrides in that string key off a `data-density`
  * attribute this element deliberately does not carry: the preference is named
  * "Compact sidebar" and retunes the rail you work in, not a nav you visit.
+ *
+ * It deliberately has no entrance of its own when Settings opens (see
+ * `settings-paper-in` in base.css). The column it replaces was the app's own
+ * sidebar, on this same surface at this same edge, so it is the half of the
+ * page that did not change, and it is what the content column arrives over.
+ * Fading it in as well only empties the window for a frame.
  */
 export const SETTINGS_NAV =
 	`flex w-58 shrink-0 flex-col px-3 py-4 [html.wco_&]:pt-(--desktop-header-h) ${SIDEBAR_DENSITY_VARS}`;
@@ -107,9 +120,15 @@ export const SETTINGS_BACK =
  * SETTINGS_PAGE opens: the content is paper laid over the chrome, and the only
  * thing between them is that hairline plus, in light, a little depth. The
  * shadow rides `--content-edge-shadow`, which is `none` in dark.
+ *
+ * It is also the only thing that moves when Settings opens, sliding in from the
+ * right over the chrome (`settings-paper-in`). That is the paper being laid
+ * down, seam and shadow first, and it is the direction a pushed panel arrives
+ * from on phones. It takes the spatial duration because it crosses the page,
+ * and it animates alone: the nav is already there to receive it.
  */
 export const SETTINGS_CONTENT =
-	"flex min-w-0 flex-1 justify-center overflow-y-auto border-l border-divider bg-surface px-8 pt-11 desktop:[box-shadow:var(--content-edge-shadow)]";
+	"flex min-w-0 flex-1 justify-center overflow-y-auto border-l border-divider bg-surface px-8 pt-11 desktop:[box-shadow:var(--content-edge-shadow)] animate-[settings-paper-in_var(--dur-lg)_var(--ease)] motion-reduce:animate-none";
 export const SETTINGS_CONTENT_TOOL = "min-h-0 p-0";
 
 /** Same column inside the phone sheet — a phone gutter instead of the desktop one. */

@@ -1271,10 +1271,10 @@ html.wco {
    `wco-chrome` is the opt-in: any row that spans the top of a pane at
    `--desktop-header-h` carries it, and gets the drag region plus every
    carve-out below. It is one name rather than a list of them because a row
-   left out of the list is a dead stretch of the window's top edge — the
-   report pages had two such rows, and the window could only be dragged by the
+   left out of the list is a dead stretch of the window's top edge: the report
+   pages had two such rows, and the window could only be dragged by the
    sidebar. Rows: the sidebar brand row, the session header, the plain pane
-   title, the PR bar, and both report headers. */
+   title, the PR bar, the analytics bar, and both report headers. */
 html.wco .wco-chrome {
 	-webkit-app-region: drag;
 	app-region: drag;
@@ -2631,5 +2631,31 @@ html[data-theme="light"] span.commit-ref:hover {
 	to {
 		opacity: 1;
 		transform: translateY(0) scale(1);
+	}
+}
+
+/* Settings arriving over the app on desktop (see lib/settings-classes.ts).
+   The page replaces the whole app body in one frame: the session you were
+   reading becomes a window of unrelated chrome, with nothing saying where it
+   came from.
+
+   Exactly one column animates. The nav is the app sidebar's surface in the app
+   sidebar's place, so it is drawn from the first frame: it is the thing that
+   did not change. Only the content column moves. It arrives from the right,
+   the direction a pushed panel already comes from on phones, carrying its seam
+   and edge shadow across the chrome it is laid on. That is the same "paper
+   over chrome" the two surfaces describe at rest.
+
+   The nav fading in alongside it was tried and is wrong: with both columns
+   starting at zero the window is briefly EMPTY, and a blank flash is a worse
+   thing to have added than the hard cut it was meant to soften. An entrance
+   needs something to enter over.
+
+   Only the `from` step is written, so the column settles at whatever its own
+   rules say instead of at a resting value copied in here. */
+@keyframes settings-paper-in {
+	from {
+		opacity: 0;
+		transform: translateX(18px);
 	}
 }
