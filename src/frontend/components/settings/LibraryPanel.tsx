@@ -26,8 +26,8 @@ import { useIsPhone } from "../../hooks/useIsPhone";
 import {
 	markTileClass,
 	markTileGradient,
+	markTileInk,
 	markTileShadow,
-	MARK_TONES,
 	type MarkTone,
 } from "../../lib/mark-tile";
 import {
@@ -56,9 +56,9 @@ import { Switch } from "../../ui/switch";
 // It reads as a gallery rather than a settings form: a grid of cards, each
 // led by the mark of the thing it installs. A catalog is browsed before it is
 // read, and a column of identical text rows gives a person nothing to aim at
-// — the tile is what makes "the GitHub one" findable without reading.
+// The tile is what makes "the GitHub one" findable without reading.
 //
-// Installing deliberately does NOT happen here — each type keeps the install
+// Installing deliberately does NOT happen here: each type keeps the install
 // path it already has (a config seed, a pre-filled create form, credentials in
 // Setup), and the card links into it. The one exception is a core tool, whose
 // switch is client state today; see the caveat rendered under that group. ──
@@ -90,7 +90,7 @@ type Glyph = { icon: ComponentType<{ size?: number }>; tone: MarkTone };
  *  sidebar already names it. */
 const TOOL_GLYPHS: Record<string, Glyph> = {
 	tasks: { icon: IconListCircles, tone: "blue" },
-	catchup: { icon: IconInbox, tone: "indigo" },
+	catchup: { icon: IconInbox, tone: "amber" },
 	supporttinder: { icon: IconMessages, tone: "pink" },
 	reports: { icon: IconStack, tone: "purple" },
 	analytics: { icon: IconChart, tone: "teal" },
@@ -98,7 +98,7 @@ const TOOL_GLYPHS: Record<string, Glyph> = {
 
 /**
  * An automation's glyph, read off what the job is about. Every automation is
- * a prompt on a trigger, so typed strictly they would all draw one bolt — and
+ * a prompt on a trigger, so typed strictly they would all draw one bolt, and
  * a column of seventeen identical bolts is a column with nothing to aim at.
  * The word that names the job is the best signal available: a catalog is
  * scanned, and "the error one" is how someone looks for it.
@@ -112,19 +112,19 @@ const JOB_GLYPHS: { match: RegExp; glyph: Glyph }[] = [
 	{ match: /doc|changelog|spell|release note/, glyph: { icon: IconNote, tone: "purple" } },
 	{ match: /test|flaky/, glyph: { icon: IconCheckCircle, tone: "green" } },
 	{ match: /support|ticket|recap|digest|rollup/, glyph: { icon: IconMessages, tone: "orange" } },
-	{ match: /dream|reflect|retro|nightly/, glyph: { icon: IconMoon, tone: "indigo" } },
+	{ match: /dream|reflect|retro|nightly/, glyph: { icon: IconMoon, tone: "amber" } },
 	{ match: /depend|cleanup|refactor|code/, glyph: { icon: IconWrench, tone: "teal" } },
 	{ match: /\bpr\b|pull request|review|merge|branch/, glyph: { icon: IconPullRequest, tone: "blue" } },
 ];
 
 const TYPE_GLYPHS: Record<LibraryEntryType, Glyph> = {
 	tool: { icon: IconStack, tone: "blue" },
-	automation: { icon: IconBolt, tone: "indigo" },
+	automation: { icon: IconBolt, tone: "pink" },
 	integration: { icon: IconPlug, tone: "teal" },
 };
 
 /** A service named in the entry's own name, for the entries that carry no
- *  `requires` — every automation TEMPLATE, which is most of the catalog. Only
+ *  `requires`, which is every automation TEMPLATE, most of the catalog. Only
  *  the name is searched: a description mentioning a repo called tella-fusion
  *  is not a Tella automation. */
 const BRAND_IN_NAME = new RegExp(`\\b(${Object.keys(BRANDS).join("|")})\\b`);
@@ -166,7 +166,7 @@ function EntryIcon({ entry, size = 34 }: { entry: LibraryEntry; size?: number })
 				// White, in both themes. The plate is a saturated colour either
 				// way, so the ink on it does not answer to the page.
 				color: "#fff",
-				boxShadow: markTileShadow(MARK_TONES[glyph.tone][1]),
+				boxShadow: markTileShadow(markTileInk(glyph.tone)),
 			}}
 		>
 			<Icon size={Math.round(size * 0.54)} />
@@ -176,7 +176,7 @@ function EntryIcon({ entry, size = 34 }: { entry: LibraryEntry; size?: number })
 
 /** A card's action: a raised pill, the Button primitive's `default` recipe at
  *  `sm`. It is an anchor rather than a button because every install path is a
- *  place — the automation form, Setup — and a link is what a place takes. */
+ *  place (the automation form, Setup), and a link is what a place takes. */
 const installLinkClass =
 	"inline-flex min-h-[26px] shrink-0 items-center rounded-control border border-line bg-button px-2.5 text-xs font-medium text-dim no-underline smooth-shadow-xs transition-colors hover:border-line-strong hover:text-fg";
 
@@ -352,7 +352,7 @@ export function LibraryPanel() {
 	)) {
 		if (entry.installed !== true) continue;
 		// A glyph rule is a singleton, so the object itself is the mark's
-		// identity — no key to keep in sync with the table above.
+		// identity, with no key to keep in sync with the table above.
 		const mark = brandFor(entry) ?? glyphFor(entry);
 		if (!byMark.has(mark)) byMark.set(mark, entry);
 	}
@@ -446,7 +446,7 @@ export function LibraryPanel() {
 					    readable description, one up otherwise. The measure is the
 					    CONTAINER's, not the window's: this panel sits beside the
 					    settings nav, so a viewport query would say "wide" for a
-					    column that isn't. The gutter is wide on purpose — with no
+					    column that isn't. The gutter is wide on purpose: with no
 					    fill under a row, the air is what tells the two columns
 					    apart. */}
 					<div className="@container">
