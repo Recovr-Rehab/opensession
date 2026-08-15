@@ -132,6 +132,42 @@ export function sessionPrPresentation(prs?: SessionPrRef[]): {
 }
 
 /**
+ * Does this session carry a given PR — on its own branch, through an attached
+ * repo, by link, or by discovery? The client-side mirror of the server's
+ * `sessionMatchesPr` (workspace-resolve.ts).
+ *
+ * A workspace holds many sessions and many PRs, but the review canvas only
+ * offers the PRs of the session it renders — so opening "that PR" means
+ * landing on a session that has it, not on whichever session the workspace
+ * normally opens with.
+ */
+export function sessionCarriesPr(
+	session: UnifiedSession,
+	pr: { repo: string; branch?: string; number?: number },
+): boolean {
+	const same = (ref: {
+		repo?: string;
+		branch?: string | null;
+		number?: number;
+	}) =>
+		ref.repo === pr.repo &&
+		((!!pr.branch && ref.branch === pr.branch) ||
+			(pr.number !== undefined && ref.number === pr.number));
+	return (
+		same({
+			repo: session.repo,
+			branch: session.branch,
+			number: session.prNumber,
+		}) ||
+		(session.prs || []).some(same) ||
+		(session.linkedPrs || []).some(same) ||
+		(session.attachedRepos || []).some((r) =>
+			same({ repo: r.repo, branch: r.branch }),
+		)
+	);
+}
+
+/**
  * Does this session have a PR at all? Counts the singular branch-derived fields
  * as well as the `prs` list, so a session whose PR sits on a branch it doesn't
  * own (a discovered one) counts too — those still have a diff to review.

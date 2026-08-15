@@ -86,6 +86,7 @@ import {
 	PR_WEBHOOK_FALLBACK_POLL_MS,
 } from "../lib/poll";
 import { sessionPrPresentation } from "../lib/session-prs";
+import type { PrFocus } from "../lib/pr-focus";
 import { reviewLoopResult } from "../lib/review-loop";
 import { CONTINUE_AFTER_FAILURE_PROMPT } from "../lib/continue-run";
 import {
@@ -420,11 +421,17 @@ interface Props {
 	onOpenReview?: () => void;
 	/**
 	 * Which PR the Review pane should land on, pulsed by the app when a sidebar
-	 * row opened it: a workspace can carry several PRs, and the row you clicked
-	 * says which one you meant. `seq` re-applies the same PR after you've
-	 * switched targets by hand.
+	 * row or a `repo#123` chip opened it: a workspace can carry several PRs,
+	 * and the one you clicked says which you meant. `seq` re-applies the same
+	 * PR after you've switched targets by hand. Branch and number are both
+	 * optional — see lib/pr-focus.ts for what each caller knows.
 	 */
-	reviewFocusPr?: { repo: string; branch: string; seq: number } | null;
+	reviewFocusPr?: {
+		repo: string;
+		branch?: string;
+		number?: number;
+		seq: number;
+	} | null;
 	/**
 	 * Whether the Preview environment pane (the PR's Vercel preview, full-width) is
 	 * foregrounded — driven by the top tab strip's Preview environment view-tab (App state).
@@ -891,9 +898,7 @@ export function SessionViewer({
 	);
 	// Which PR the Review tab should open on, set by the PR chips in the
 	// Workspace strip (seq lets the same chip re-focus after a manual switch).
-	const [reviewFocus, setReviewFocus] = useState<
-		{ repo?: string; branch?: string; view?: "checks"; seq: number } | undefined
-	>(undefined);
+	const [reviewFocus, setReviewFocus] = useState<PrFocus | undefined>(undefined);
 	const focusPrInReview = useCallback(
 		(ref?: { repo: string; branch: string }, view?: "checks") => {
 			if (ref || view)
@@ -910,6 +915,7 @@ export function SessionViewer({
 		setReviewFocus((prev) => ({
 			repo: reviewFocusPr.repo,
 			branch: reviewFocusPr.branch,
+			number: reviewFocusPr.number,
 			seq: (prev?.seq ?? 0) + 1,
 		}));
 	}, [reviewFocusPr?.seq]);

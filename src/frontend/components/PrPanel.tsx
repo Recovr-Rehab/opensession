@@ -52,6 +52,12 @@ import { UserAvatar } from "./UserAvatar";
 import { renderPrCommentMarkdown } from "../lib/markdown";
 import { useMarkdownRepo } from "./MarkdownBody";
 import { isOutdatedReviewComment } from "../lib/pr-comments";
+import {
+  dedupeTargets,
+  matchFocusTarget,
+  type PrFocus,
+  type PrTarget,
+} from "../lib/pr-focus";
 import { providerFromUrl, prCapabilities } from "../lib/provider";
 import { pollWhileVisible, PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import { Textarea } from "../ui/input";
@@ -129,11 +135,12 @@ interface Props {
    */
   discoveredPrs?: LinkedPrEntry[];
   /**
-   * Preselect one of the targets — the PR chips in the Workspace strip open the
-   * Review tab on a specific PR. `seq` is bumped per click so clicking the same
-   * chip again re-focuses it after the user has switched tabs by hand.
+   * Preselect one of the targets — the PR chips in the Workspace strip, and
+   * `repo#123` mentions in prose, open the Review tab on a specific PR. `seq`
+   * is bumped per click so clicking the same chip again re-focuses it after
+   * the user has switched tabs by hand. See lib/pr-focus.ts for the matching.
    */
-  focusTarget?: { repo?: string; branch?: string; view?: "checks"; seq: number };
+  focusTarget?: PrFocus;
   /** Offer the "Link PR" affordance (session Review tab; off in the Reviews drawer). */
   linkable?: boolean;
   /**
@@ -186,37 +193,6 @@ export interface LinkedPrEntry {
   number?: number;
   url?: string;
   title?: string;
-}
-
-/**
- * One selectable PR in the panel: the primary repo's, an attached repo's, or a
- * manually linked one. Primary/attached target by repo id (the server resolves
- * the branch); linked PRs carry an explicit branch since they can live on any
- * branch — including another branch of the primary repo.
- */
-interface PrTarget {
-  key: string;
-  repo: string;
-  branch?: string;
-  primary?: boolean;
-  linked?: boolean;
-  /** Found via the session link in the PR body, not stored on the session. */
-  discovered?: boolean;
-  label: string;
-}
-
-/** First target per key wins — a PR reached two ways (linked and discovered,
- *  or an attached repo whose branch also carries a discovered PR) is one tab. */
-function dedupeTargets(targets: PrTarget[]): PrTarget[] {
-  const seen = new Set<string>();
-  return targets.filter((t) => {
-    // An attached/primary repo tab has no branch of its own (the server
-    // resolves it), so it can't collide with a branch-keyed target.
-    const key = t.branch ? `${t.repo}\u0000${t.branch}` : `repo:${t.repo}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
 }
 
 /** One narrative section of the AI review guide (mirrors the server shape). */
@@ -322,6 +298,7 @@ export function PrPanel({
         key: `${lp.repo} ${lp.branch}`,
         repo: lp.repo,
         branch: lp.branch,
+        number: lp.number,
         linked: true,
         label: lp.number
           ? `${repoLabel(lp.repo)} #${lp.number}`
@@ -333,6 +310,7 @@ export function PrPanel({
         key: `${dp.repo} ${dp.branch}`,
         repo: dp.repo,
         branch: dp.branch,
+        number: dp.number,
         discovered: true,
         label: dp.number
           ? `${repoLabel(dp.repo)} #${dp.number}`
@@ -345,26 +323,33 @@ export function PrPanel({
     () => (targets.find((t) => t.primary) ?? targets[0])?.key,
   );
   const active = targets.find((t) => t.key === activeKey) ?? targets[0];
-  // A PR chip in the Workspace strip opened the Review tab on a specific PR.
-  // Keyed on `seq` so re-clicking the same chip re-focuses it, and so a
-  // re-render never fights the user's own tab choice.
+  // A PR chip — in the Workspace strip, or a `repo#123` mention in prose —
+  // opened the Review tab on a specific PR. Keyed on `seq` so re-clicking the
+  // same chip re-focuses it, and so a re-render never fights a tab the reader
+  // picked by hand.
+  //
+  // A request waits for the target it names instead of being dropped: the PRs
+  // arrive with the session, so a `/pr/<number>` link followed cold resolves
+  // long before there is anything to select, and giving up on the first pass
+  // is exactly what leaves the reader on the primary PR.
+  const focusApplied = useRef<{ target?: number; checks?: number }>({});
   useEffect(() => {
     if (!focusTarget) return;
-    if (focusTarget.repo) {
-      const match =
-        targets.find(
-          (t) =>
-            t.repo === focusTarget.repo &&
-            (focusTarget.branch ? t.branch === focusTarget.branch : !t.branch),
-        ) ?? targets.find((t) => t.repo === focusTarget.repo);
-      if (match) setActiveKey(match.key);
+    const { seq } = focusTarget;
+    if (focusTarget.repo && focusApplied.current.target !== seq) {
+      const match = matchFocusTarget(targets, focusTarget);
+      if (match) {
+        focusApplied.current.target = seq;
+        setActiveKey(match.key);
+      }
     }
     // Checks stopped being a page of their own: reveal them where they live.
-    if (focusTarget.view === "checks") {
+    if (focusTarget.view === "checks" && focusApplied.current.checks !== seq) {
+      focusApplied.current.checks = seq;
       setPage("overview");
-      setFocusChecksSeq((seq) => seq + 1);
+      setFocusChecksSeq((prev) => prev + 1);
     }
-  }, [focusTarget?.seq]);
+  }, [focusTarget?.seq, targets]);
   const loadTargetKey = previewTarget
     ? `preview:${previewTarget.repo}:${previewTarget.branch}`
     : active?.key || sessionId;

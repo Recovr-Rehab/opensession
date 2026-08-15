@@ -3,6 +3,7 @@ import type { UnifiedSession } from "./types";
 import {
 	collapsePrLinkSessions,
 	prLinksMatch,
+	sessionCarriesPr,
 	sessionHasPr,
 	sessionPrApproved,
 	sessionPrMerged,
@@ -310,5 +311,63 @@ describe("PR link search", () => {
 				"https://github.com/tellahq/tella-fusion/pull/5513",
 			),
 		).toBe(true);
+	});
+});
+
+describe("sessionCarriesPr", () => {
+	test("its own branch's PR, by number or by branch", () => {
+		const value = session({ repo: "gitops", branch: "grid-pool", prNumber: 955 });
+
+		expect(sessionCarriesPr(value, { repo: "gitops", number: 955 })).toBe(true);
+		expect(sessionCarriesPr(value, { repo: "gitops", branch: "grid-pool" })).toBe(
+			true,
+		);
+		expect(sessionCarriesPr(value, { repo: "gitops", number: 961 })).toBe(false);
+	});
+
+	test("PRs it opened elsewhere: attached, linked, discovered", () => {
+		const value = session({
+			repo: "gitops",
+			branch: "grid-pool",
+			prs: [
+				{
+					repo: "gitops",
+					branch: "node-taints",
+					source: "discovered",
+					number: 961,
+				},
+			],
+			linkedPrs: [
+				{ repo: "tella-fusion", branch: "webapp", number: 5528 },
+			],
+			attachedRepos: [
+				{ repo: "shared-infra", branch: "iops", dir: "/tmp/iops" },
+			],
+		});
+
+		expect(sessionCarriesPr(value, { repo: "gitops", number: 961 })).toBe(true);
+		expect(sessionCarriesPr(value, { repo: "tella-fusion", number: 5528 })).toBe(
+			true,
+		);
+		expect(sessionCarriesPr(value, { repo: "shared-infra", branch: "iops" })).toBe(
+			true,
+		);
+	});
+
+	test("never matches on the repo alone", () => {
+		// Two sessions in one workspace can both work in gitops; only the one
+		// that has THIS PR should be opened for it.
+		const value = session({ repo: "gitops", branch: "other", prNumber: 12 });
+
+		expect(sessionCarriesPr(value, { repo: "gitops" })).toBe(false);
+		expect(sessionCarriesPr(value, { repo: "gitops", number: 955 })).toBe(false);
+	});
+
+	test("a same-numbered PR in another repo is a different PR", () => {
+		const value = session({ repo: "gitops", branch: "grid-pool", prNumber: 955 });
+
+		expect(sessionCarriesPr(value, { repo: "tella-fusion", number: 955 })).toBe(
+			false,
+		);
 	});
 });

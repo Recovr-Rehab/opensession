@@ -90,6 +90,14 @@ async function serialized<T>(lockKey: string, fn: () => Promise<T>): Promise<T> 
 export interface ResolvedWorkspace {
   workspace: Workspace;
   created: boolean;
+  /**
+   * The PR this resolve was about, normalized against the PR caches (a caller
+   * with only a number gets the branch back, and the other way round). A
+   * workspace carries many PRs, so the caller has to be told WHICH one it
+   * asked for to open the review on it: the workspace record's own
+   * branch/prNumber is the first PR filed here, not the one just clicked.
+   */
+  pr?: { repo: string; number?: number; branch?: string };
 }
 
 /**
@@ -122,6 +130,14 @@ export async function resolvePrWorkspace(input: {
     }
     if (number === undefined && !branch) return null;
 
+    // Handed back to the caller so it can open the review on THIS PR rather
+    // than on whichever one the workspace was minted from.
+    const pr = {
+      repo: repoId,
+      ...(number !== undefined ? { number } : {}),
+      ...(branch ? { branch } : {}),
+    };
+
     const key =
       number !== undefined
         ? `ghpr-${prKey(number, getRepo(repoId).ghRepo)}`
@@ -143,7 +159,7 @@ export async function resolvePrWorkspace(input: {
     const byKey = key ? findWorkspaceByKey(key) : null;
     if (byKey) {
       adoptSiblingSessions(byKey.id, matches);
-      return { workspace: byKey, created: false };
+      return { workspace: byKey, created: false, pr };
     }
 
     // 2. A session already carrying this PR that's filed under a workspace.
@@ -154,7 +170,7 @@ export async function resolvePrWorkspace(input: {
         if (!ws) continue;
         const stamped = stampWorkspaceIdentity(ws.id, stamp) || ws;
         adoptSiblingSessions(stamped.id, matches);
-        return { workspace: stamped, created: false };
+        return { workspace: stamped, created: false, pr };
       }
       // 3. A workspace owning the PR head branch's worktree.
       const wt = (await listWorktrees(repoId)).find((w) => w.branch === branch);
@@ -162,7 +178,7 @@ export async function resolvePrWorkspace(input: {
       if (owner) {
         const stamped = stampWorkspaceIdentity(owner.id, stamp) || owner;
         adoptSiblingSessions(stamped.id, matches);
-        return { workspace: stamped, created: false };
+        return { workspace: stamped, created: false, pr };
       }
     }
 
@@ -181,7 +197,7 @@ export async function resolvePrWorkspace(input: {
       ...(branch ? { branch } : {}),
     });
     adoptSiblingSessions(workspace.id, matches);
-    return { workspace, created: true };
+    return { workspace, created: true, pr };
   });
 }
 

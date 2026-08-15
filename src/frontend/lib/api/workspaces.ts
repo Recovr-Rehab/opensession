@@ -99,6 +99,17 @@ export async function deleteWorkspaceApi(id: string): Promise<void> {
  * Start (or reuse) a triage session for a Plain thread — runs the "Plain
  * ticket triage" automation. Slow (~15-60s) when it has to boot a fresh run.
  */
+export interface ResolvedWorkspace {
+	workspaceId: string;
+	created: boolean;
+	/**
+	 * For a PR target: which PR was resolved, with the branch filled in from
+	 * the server's PR caches. The workspace holds every PR its sessions
+	 * opened, so this is what says which one to foreground.
+	 */
+	pr?: { repo: string; number?: number; branch?: string };
+}
+
 /**
  * Resolve-or-create the ONE workspace for a PR or a Plain support ticket
  * (adopt-don't-duplicate — server-side workspace-resolve.ts). Sidebar PR and
@@ -110,8 +121,8 @@ export async function resolveWorkspaceApi(
 		| { plainThreadId: string; name?: string }
 		| { externalRef: ExternalRef; name?: string },
 	user?: string,
-): Promise<{ workspaceId: string; created: boolean }> {
-	return request<{ workspaceId: string; created: boolean }>(
+): Promise<ResolvedWorkspace> {
+	return request<ResolvedWorkspace>(
 		"/workspaces/resolve",
 		{
 			method: "POST",

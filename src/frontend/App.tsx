@@ -138,7 +138,7 @@ import {
 	getWorkspaceLastSession,
 	saveWorkspaceLastSession,
 } from "./lib/workspace-last-session";
-import { sessionHasPr } from "./lib/session-prs";
+import { sessionCarriesPr, sessionHasPr } from "./lib/session-prs";
 import { sessionHasWorkspace } from "./lib/session-workspace";
 import type {
 	Workspace,
@@ -1161,14 +1161,33 @@ export function App(
 	// (a feature shipped as two PRs, a discovered one), and they each get their
 	// own sidebar row — so the row you clicked, not the primary, decides.
 	// `seq` re-applies the same PR after you've switched targets by hand.
+	//
+	// Named loosely on purpose: a sidebar row knows the branch, a `repo#123`
+	// chip in prose only the number, and the server can fill the branch in
+	// only for PRs its caches cover (lib/pr-focus.ts does the matching).
 	const [reviewFocusPr, setReviewFocusPr] = useState<{
 		repo: string;
-		branch: string;
+		branch?: string;
+		number?: number;
 		seq: number;
 	} | null>(null);
-	const focusReviewPr = React.useCallback((repo: string, branch: string) => {
-		setReviewFocusPr((prev) => ({ repo, branch, seq: (prev?.seq ?? 0) + 1 }));
-	}, []);
+	const reviewFocusPrRef = useRef(reviewFocusPr);
+	reviewFocusPrRef.current = reviewFocusPr;
+	// The `seq` the workspace landing effect has already used to pick a session
+	// (below). Without it a stale request would keep redirecting every later
+	// visit to this workspace's Review.
+	const landedFocusSeq = useRef<number | null>(null);
+	const focusReviewPr = React.useCallback(
+		(repo: string, branch?: string, number?: number) => {
+			setReviewFocusPr((prev) => ({
+				repo,
+				branch,
+				number,
+				seq: (prev?.seq ?? 0) + 1,
+			}));
+		},
+		[],
+	);
 	// One-shot guard consumed by the workspace default-pane seeding effect (set
 	// when closing a view tab replaces the workspace URL — see onCloseView).
 	const suppressWsSeedRef = useRef(false);
@@ -1602,7 +1621,26 @@ export function App(
 			setReviewOpen((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
 			setActiveViewTab("review");
 			const first = firstLiveSession();
-			if (first) navigate({ view: "session", id: first.id }, { replace: true });
+			// Something asked for a specific PR (a sidebar row, a `repo#123`
+			// chip). The session this workspace normally opens with need not be
+			// the one that has it, and the review canvas only offers the PRs of
+			// the session it renders — so land on a sibling that carries it.
+			// Consumed by seq: only a request made for THIS navigation redirects.
+			const focus = reviewFocusPrRef.current;
+			const pending =
+				focus && landedFocusSeq.current !== focus.seq ? focus : null;
+			if (pending) landedFocusSeq.current = pending.seq;
+			const carrier =
+				pending && first && !sessionCarriesPr(first, pending)
+					? sessionsRef.current.find(
+							(s) =>
+								!s.archived &&
+								s.workspaceId === key &&
+								sessionCarriesPr(s, pending),
+						)
+					: undefined;
+			const landOn = carrier ?? first;
+			if (landOn) navigate({ view: "session", id: landOn.id }, { replace: true });
 		} else if (tab === "conversation") {
 			setConversationClosed((prev) => {
 				if (!prev.has(key)) return prev;
@@ -1671,7 +1709,17 @@ export function App(
 					...(route.number !== undefined ? { number: route.number } : {}),
 				},
 			})
-				.then(({ workspaceId }) => toWorkspace(workspaceId, "review"))
+				.then(({ workspaceId, pr }) => {
+					// The workspace is the PR's home, not the PR itself: it holds
+					// every PR its sessions opened. Say which one this link meant,
+					// or the review opens on whichever came first.
+					focusReviewPr(
+						pr?.repo ?? route.repo,
+						pr?.branch ?? route.branch,
+						pr?.number ?? route.number,
+					);
+					toWorkspace(workspaceId, "review");
+				})
 				.catch(() => {
 					// Addressed by branch there is still a preview to render; by
 					// number alone a failed resolve means no such PR, and the pane
@@ -2202,7 +2250,7 @@ export function App(
 					},
 				});
 				refreshWorkspaces();
-				focusReviewPr(item.pr.repo, item.pr.branch);
+				focusReviewPr(item.pr.repo, item.pr.branch, item.pr.number);
 				navigate({ view: "workspace", id: workspaceId, tab: "review" });
 			} catch {
 				if (item.sessionId) navigate({ view: "reviews", id: item.sessionId });
@@ -2224,7 +2272,7 @@ export function App(
 					},
 				});
 				refreshWorkspaces();
-				focusReviewPr(pr.repo, pr.branch);
+				focusReviewPr(pr.repo, pr.branch, pr.number);
 				navigate({ view: "workspace", id: workspaceId, tab: "review" });
 			} catch {
 				navigate({ view: "pr", repo: pr.repo, branch: pr.branch });

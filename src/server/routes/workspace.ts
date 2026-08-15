@@ -436,6 +436,9 @@ export async function handleWorkspaceRoutes(
 			return Response.json({
 				workspaceId: resolved.workspace.id,
 				created: resolved.created,
+				// Which PR was asked for, normalized — the workspace can carry
+				// several, and the caller opens the review on this one.
+				...(resolved.pr ? { pr: resolved.pr } : {}),
 			});
 		}
 		return Response.json(
