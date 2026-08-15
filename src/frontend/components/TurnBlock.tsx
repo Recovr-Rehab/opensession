@@ -10,11 +10,10 @@ import {
   toolSummary,
   useToolPathRoots,
 } from "./ToolCallBlock";
-import { ClampedBody } from "./MessageBubble";
-import { resolveEntryImageSrc } from "../lib/osBlob";
+import { ClampedBody, EntryImages, EntryVideos } from "./MessageBubble";
 import { IconChevronDown, IconStack } from "./icons";
 import { cn } from "../ui/cn";
-import { msgBody, msgMedia } from "../lib/msg-classes";
+import { msgBody } from "../lib/msg-classes";
 import { formatDuration } from "../lib/time";
 import {
   getTurnActivityPref,
@@ -50,6 +49,10 @@ interface Props {
  * one click away. The counts sit after the meta run and never shrink; the
  * duration/steps run truncates first, so a phone drops characters off the
  * middle instead of the numbers.
+ *
+ * Below the line sits the one thing the fold does not hide: media the turn
+ * explicitly surfaced. See featuredTurnMedia for why a marked screenshot is
+ * not treated as work.
  */
 // Memoized with a custom comparator: TranscriptBlocks rebuilds the `items`
 // arrays and the `toolResults` Map on every render, so plain shallow-prop memo
@@ -73,7 +76,9 @@ export const TurnBlock = React.memo(function TurnBlock({
   // working and folds it again the moment the turn settles — a failed step or
   // a screenshot inside the turn used to pin it open forever, which is the one
   // thing both "Always folded" and "Expand while running" promise never
-  // happens. Failures and media are one click away inside the disclosure.
+  // happens. Failures are one click away inside the disclosure, and media the
+  // agent explicitly surfaced outlives the fold on its own (featuredTurnMedia)
+  // rather than holding every step open with it.
   // "messages" folds the tool calls and nothing else,
   // "collapsed" folds the notes away too, and both stay folded even during a
   // live turn — the work line's tail reports the running tool. ToolCallBlock
@@ -139,6 +144,13 @@ export const TurnBlock = React.memo(function TurnBlock({
     }
   }
   const lastItem = items[items.length - 1];
+  // Survives the fold: a marked screenshot is the answer to "show me", so
+  // closing the turn takes the steps and leaves the picture. Only while the
+  // steps are hidden — expanded, the media renders in the row that produced
+  // it, and a strip as well would show it twice.
+  const featured = expanded
+    ? { images: [], videos: [] }
+    : featuredTurnMedia(items, toolResults);
 
   return (
     <div
@@ -232,6 +244,14 @@ export const TurnBlock = React.memo(function TurnBlock({
               {failures} failed {failures === 1 ? "step" : "steps"}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Aligned with the fold's own rows (see TurnMessage on the 7px). */}
+      {(featured.images.length > 0 || featured.videos.length > 0) && (
+        <div className="pl-[7px] pr-1">
+          <EntryImages images={featured.images} sessionId={sessionId} />
+          <EntryVideos videos={featured.videos} />
         </div>
       )}
     </div>
@@ -491,26 +511,52 @@ function TurnMessage({
         entry={entry}
         sessionId={sessionId}
       />
-      {entry.images && entry.images.length > 0 && (
-        <div className={msgMedia}>
-          {entry.images.map((raw, i) => {
-            const src = resolveEntryImageSrc(raw, sessionId);
-            return (
-              <a
-                key={i}
-                href={src}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="md-image-link"
-              >
-                <img className="md-image" src={src} alt="" loading="lazy" />
-              </a>
-            );
-          })}
-        </div>
-      )}
+      <EntryImages images={entry.images} sessionId={sessionId} />
     </div>
   );
+}
+
+/**
+ * The media a turn's steps explicitly SURFACED, deduped and in call order.
+ *
+ * An OPENSESSION_IMAGE/_VIDEO marker is the agent saying "look at this", which
+ * makes the picture an artifact addressed to the reader rather than part of
+ * the work — so the fold hides the steps and keeps it (see the strip under the
+ * fold header). Media a step merely touched, a Read of a PNG or a path that
+ * turned up in output, is not featured and stays inside the fold: a
+ * forty-screenshot verification loop must not put forty images on the page.
+ *
+ * A loop that captures to one path over and over features the same src each
+ * time, so dedupe by src: the strip is what the turn produced, not how many
+ * times it wrote the file.
+ */
+function featuredTurnMedia(
+  items: TranscriptEntry[],
+  toolResults: Map<string, TranscriptEntry>
+): { images: string[]; videos: string[] } {
+  const images: string[] = [];
+  const videos: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of items) {
+    const result = entry.toolUseId ? toolResults.get(entry.toolUseId) : undefined;
+    if (!result?.featuredMedia?.length) continue;
+    // Take the srcs off images[]/videos[] rather than off featuredMedia, so
+    // what renders is always something the entry can resolve — bounded entries
+    // rewrite images[] to os-blob: markers and leave featuredMedia at the
+    // original path.
+    const featured = new Set(result.featuredMedia);
+    for (const src of result.images || []) {
+      if (!featured.has(src) || seen.has(src)) continue;
+      seen.add(src);
+      images.push(src);
+    }
+    for (const src of result.videos || []) {
+      if (!featured.has(src) || seen.has(src)) continue;
+      seen.add(src);
+      videos.push(src);
+    }
+  }
+  return { images, videos };
 }
 
 function turnBlockPropsEqual(prev: Props, next: Props): boolean {

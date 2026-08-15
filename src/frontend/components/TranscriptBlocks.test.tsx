@@ -353,6 +353,100 @@ describe("TranscriptBlocks compact tool runs", () => {
 	});
 });
 
+describe("TranscriptBlocks featured media outlives the fold", () => {
+	/** A settled turn: one routine call, then a step that surfaced media. */
+	const turn = (result: Partial<TranscriptEntry>): TranscriptEntry[] => [
+		{ id: "prompt", type: "user", content: "Show me", timestamp: "2026-08-15T06:00:00Z" },
+		{ id: "bash", type: "tool_use", toolUseId: "bash-call", toolName: "bash", toolInput: { command: "bun run capture" }, content: "Using bash", timestamp: "2026-08-15T06:00:01Z" },
+		{ id: "bash-result", type: "tool_result", toolUseId: "bash-call", content: "captured", timestamp: "2026-08-15T06:00:02Z" },
+		{ id: "shot", type: "tool_use", toolUseId: "shot-call", toolName: "read", toolInput: { filePath: "/tmp/shot.png" }, content: "Using read", timestamp: "2026-08-15T06:00:03Z" },
+		{ id: "shot-result", type: "tool_result", toolUseId: "shot-call", content: "Image read successfully", timestamp: "2026-08-15T06:00:04Z", ...result },
+		{ id: "answer", type: "assistant", content: "Here it is.", timestamp: "2026-08-15T06:00:05Z" },
+	];
+
+	test("keeps a marked screenshot on screen once the turn settles", () => {
+		setTurnActivity(null);
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				entries={turn({
+					images: ["/media?path=featured.png"],
+					featuredMedia: ["/media?path=featured.png"],
+				})}
+			/>,
+		);
+
+		// The work is folded: no step rows, no command.
+		expect(html).toContain("Worked");
+		expect(html).not.toContain("bun run capture");
+		// The picture the agent asked to show is not work, so it stays.
+		expect(html).toContain('src="/media?path=featured.png"');
+		expect(html).toContain("md-image");
+	});
+
+	test("leaves media the turn merely touched inside the fold", () => {
+		setTurnActivity(null);
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks entries={turn({ images: ["/media?path=incidental.png"] })} />,
+		);
+
+		// A Read of a PNG attaches its image without featuring it. Forty of
+		// those in a verification loop must not land on the page.
+		expect(html).toContain("Worked");
+		expect(html).not.toContain("incidental.png");
+	});
+
+	test("shows a featured video with its player", () => {
+		setTurnActivity(null);
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				entries={turn({
+					videos: ["/media?path=demo.mp4"],
+					featuredMedia: ["/media?path=demo.mp4"],
+				})}
+			/>,
+		);
+
+		expect(html).toContain('src="/media?path=demo.mp4"');
+		expect(html).toContain("md-video");
+	});
+
+	test("renders one tile for a loop that captured to the same path twice", () => {
+		setTurnActivity(null);
+		const shot = (n: number): TranscriptEntry[] => [
+			{ id: `shot-${n}`, type: "tool_use", toolUseId: `shot-call-${n}`, toolName: "bash", toolInput: { command: "bun run capture" }, content: "Using bash", timestamp: `2026-08-15T06:0${n}:00Z` },
+			{ id: `shot-result-${n}`, type: "tool_result", toolUseId: `shot-call-${n}`, content: "OPENSESSION_IMAGE: /tmp/after.png", images: ["/media?path=after.png"], featuredMedia: ["/media?path=after.png"], timestamp: `2026-08-15T06:0${n}:01Z` },
+		];
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				entries={[
+					{ id: "prompt", type: "user", content: "Iterate", timestamp: "2026-08-15T06:00:00Z" },
+					...shot(1),
+					...shot(2),
+					{ id: "answer", type: "assistant", content: "Done.", timestamp: "2026-08-15T06:03:00Z" },
+				]}
+			/>,
+		);
+
+		expect(html.match(/src="\/media\?path=after\.png"/g)).toHaveLength(1);
+	});
+
+	test("does not repeat the media that its own open row is already showing", () => {
+		setTurnActivity("expanded");
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				entries={turn({
+					images: ["/media?path=featured.png"],
+					featuredMedia: ["/media?path=featured.png"],
+				})}
+			/>,
+		);
+
+		expect(html).toContain("bun run capture");
+		expect(html.match(/src="\/media\?path=featured\.png"/g)).toHaveLength(1);
+		setTurnActivity(null);
+	});
+});
+
 describe("TranscriptBlocks review loops", () => {
 	test("folds review work but leaves a following user request in the conversation", () => {
 		const html = renderToStaticMarkup(

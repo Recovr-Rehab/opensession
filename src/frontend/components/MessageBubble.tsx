@@ -439,8 +439,11 @@ interface Props {
 
 /** Inline images carried on an entry (Read-of-image results, pasted images).
  *  os-blob: markers (transcript-v2 bounded entries) resolve to the
- *  transcript-image route; real srcs pass through untouched. */
-function EntryImages({
+ *  transcript-image route; real srcs pass through untouched.
+ *
+ *  Exported for the turn fold, which shows a turn's intermediate notes and its
+ *  featured media with the same markup a bubble uses. */
+export function EntryImages({
 	images,
 	sessionId,
 	right,
@@ -479,7 +482,7 @@ function EntryImages({
  * agent saved to the session's scratch folder opens as that asset — the same
  * surface a chip opens, with the file's name, Download and Copy link — and
  * anything else opens in the media lightbox, which downloads too. */
-function EntryVideos({
+export function EntryVideos({
 	videos,
 	right,
 }: {
