@@ -225,6 +225,21 @@ export const HEADER_TITLE_PILL =
 	"phone:pointer-events-auto";
 
 /**
+ * The pill on a page that names itself, which is every page but a session: it
+ * is not there until that name has scrolled up under the bar, and then it is.
+ * The iOS large title, on the surface the pattern comes from — `data-shown` is
+ * set by hooks/useLargeTitle.ts.
+ *
+ * The whole lozenge fades, not just the word inside it. This one is a floating
+ * pill rather than a band across the top, so an empty one is a blank white
+ * capsule sitting in the header with nothing in it, which is worse than the
+ * duplicate title it was there to avoid.
+ */
+export const HEADER_TITLE_PILL_FADE =
+	"phone:translate-y-1 phone:opacity-0 phone:transition-[opacity,translate] " +
+	"phone:data-[shown]:translate-y-0 phone:data-[shown]:opacity-100";
+
+/**
  * On a session the pill is the tap target for the settings menu, and the name
  * dims on press to say so. The group name is what carries that press down to
  * the name; it is only on the markup when the pill is actually tappable, so

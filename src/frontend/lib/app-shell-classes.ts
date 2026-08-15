@@ -182,6 +182,13 @@ export const DETAIL_TOPBAR =
  *
  * The bottom hairline drops when the tab strip follows, leaving the strip's
  * own bottom inset as the single divider above the content.
+ *
+ * The row is always drawn on a route that has a name, whether or not the name
+ * is showing in it (DETAIL_TOPBAR_TITLE_TEXT below decides that). Two things
+ * depend on the box rather than on the word: in the desktop shell this row is
+ * the window's titlebar, and a row that came and went with the scroll would
+ * take the top edge's drag region with it; and `.detail-topbar:empty` collapses
+ * the bar, so the pane's content would jump 52px up and down as you scrolled.
  */
 export const DETAIL_TOPBAR_TITLE =
 	"detail-topbar-title wco-chrome flex h-[var(--desktop-header-h)] items-center px-4 " +
@@ -192,6 +199,24 @@ export const DETAIL_TOPBAR_TITLE =
 	// fallback nav/search cluster beside it.
 	"desktop:[.app-body.sidebar-collapsed_&]:pl-[148px] " +
 	"phone:hidden";
+
+/**
+ * The word inside that row, which is only there once the page's own heading has
+ * gone. `data-shown` is set by hooks/useLargeTitle.ts.
+ *
+ * It rises the last few pixels as it arrives, from the direction the heading it
+ * replaces just left in, so the name reads as having moved up into the bar
+ * rather than as a second copy switching on. Tailwind's default duration and
+ * curve are the app's `--dur-micro` / `--ease`, which is the step for an
+ * in-place state change and needs no value of its own here.
+ *
+ * Only the word fades. The row keeps its fill and its hairline throughout —
+ * they belong to the bar, not to the title, and fading the box would take the
+ * top of the window with it.
+ */
+export const DETAIL_TOPBAR_TITLE_TEXT =
+	"translate-y-1 opacity-0 transition-[opacity,translate] " +
+	"data-[shown]:translate-y-0 data-[shown]:opacity-100";
 
 /**
  * The right panel portals into this slot. `contents` dissolves it so the panel

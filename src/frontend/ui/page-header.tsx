@@ -22,6 +22,12 @@ export function PageTitle({
 }: React.ComponentPropsWithoutRef<"h2">) {
 	return (
 		<h2
+			// The anchor for the iOS large-title handoff: while this heading is on
+			// screen it is the page's name, and the chrome row above stays quiet;
+			// once it has scrolled under that row, the row picks the name up. Read
+			// by hooks/useLargeTitle.ts, which the app's top bar and the Analytics
+			// range bar both call. Nothing else reads it, and it styles nothing.
+			data-large-title=""
 			className={cn(
 				"m-0 text-section-title font-title tracking-[-0.01em] text-fg",
 				className,

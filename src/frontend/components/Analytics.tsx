@@ -8,8 +8,12 @@ import { Button } from "../ui/button";
 import { Segmented, SegmentedOption } from "../ui/segmented";
 import { PageTitle } from "../ui/page-header";
 import { cn } from "../ui/cn";
-import { SCROLL_EDGE_DIVIDER } from "../lib/app-shell-classes";
+import {
+	DETAIL_TOPBAR_TITLE_TEXT,
+	SCROLL_EDGE_DIVIDER,
+} from "../lib/app-shell-classes";
 import { useScrollEdge } from "../hooks/useScrollEdge";
+import { useLargeTitleHandoff } from "../hooks/useLargeTitle";
 
 /**
  * Analytics: what happened on/because of Open Session over a date range —
@@ -351,6 +355,10 @@ export function Analytics() {
 	// the same question the same way.
 	const [barEl, setBarEl] = useState<HTMLElement | null>(null);
 	useScrollEdge(barEl, ".analytics-scroll");
+	// The bar carries the page's name only once the heading below has gone
+	// under it — the same handoff the app's own top bar makes on every other
+	// page. See hooks/useLargeTitle.ts.
+	const titleHandedOver = useLargeTitleHandoff(barEl, "Analytics");
 
 	useEffect(() => {
 		document.title = docTitle("Analytics");
@@ -560,13 +568,22 @@ export function Analytics() {
 			>
 				{/* The bar's fill and hairline run the full pane; its contents keep to
 				    the column the cards below are centred in. Same box as the content
-				    container down there, padding included, so the range control lands
-				    on the cards' right edge.
-				    The page's name is not in here. It sits directly under this row in
-				    this same column, so a small copy of the word stacked 60px above
-				    the real title read as a mistake rather than as chrome. The bar is
-				    the range bar; the page names itself. */}
-				<div className="mx-auto flex w-full max-w-[1080px] flex-wrap items-center justify-end gap-3 px-4 md:px-6">
+				    container down there, padding included, so the name sits on the
+				    cards' left edge and the range control on their right.
+				    The name is only here once the page's own heading — directly under
+				    this row, in this same column — has scrolled away. Held at rest it
+				    was a small copy of the word stacked 60px above the real one, which
+				    read as a mistake rather than as chrome. */}
+				<div className="mx-auto flex w-full max-w-[1080px] flex-wrap items-center justify-between gap-3 px-4 md:px-6">
+					<span
+						className={cn(
+							"text-item-title font-semibold text-fg",
+							DETAIL_TOPBAR_TITLE_TEXT,
+						)}
+						data-shown={titleHandedOver || undefined}
+					>
+						Analytics
+					</span>
 					{/* On a phone the two controls can't sit beside each other as one
 					    block, and stacking them would double the bar. `contents` hands
 					    them to the row's own wrap instead, so only the dates take a

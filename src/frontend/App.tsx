@@ -22,6 +22,7 @@ import {
 	DETAIL_PANE,
 	DETAIL_TOPBAR,
 	DETAIL_TOPBAR_TITLE,
+	DETAIL_TOPBAR_TITLE_TEXT,
 	RIGHT_PANEL_SLOT,
 	SCROLL_EDGE_DIVIDER,
 	tabSplitDropPreviewClass,
@@ -36,6 +37,7 @@ import {
 	HEADER_TITLE_COL,
 	HEADER_TITLE_MODEL,
 	HEADER_TITLE_PILL,
+	HEADER_TITLE_PILL_FADE,
 	HEADER_TITLE_PILL_TAPPABLE,
 	HEADER_TITLE_REPO,
 	HEADER_TITLE_ROW,
@@ -117,6 +119,7 @@ import { useIsPhone } from "./hooks/useIsPhone";
 import { useShortcutKeys } from "./hooks/useShortcutBindings";
 import { useInputAlerts } from "./hooks/useInputAlerts";
 import { useScrollEdge } from "./hooks/useScrollEdge";
+import { useLargeTitleHandoff } from "./hooks/useLargeTitle";
 import { initAlerts } from "./lib/notify";
 import { registerServiceWorker } from "./lib/push";
 import {
@@ -656,6 +659,11 @@ export function App(
 	// (session name + actions, incl. the workspace-panel toggle) into this slot so
 	// the layout reads name-on-top / tabs-below; other views render a plain title.
 	const [topbarEl, setTopbarEl] = useState<HTMLDivElement | null>(null);
+	// The phone's own top bar, held for the same reason the pane's is: its title
+	// pill waits for the page's heading to scroll under it, and where that edge
+	// falls is this row's own bottom — which on the routes whose header floats
+	// over the content is not where the pane starts.
+	const [appHeaderEl, setAppHeaderEl] = useState<HTMLElement | null>(null);
 	// The sidebar's chrome strip, held for the same reason: the hairline it grows
 	// once its list has scrolled under it is driven from here (useScrollEdge).
 	const [sidebarBrandEl, setSidebarBrandEl] = useState<HTMLDivElement | null>(
@@ -3231,6 +3239,14 @@ export function App(
 						? routeWorkspace?.name || "Workspace"
 						: "";
 
+	// Whether the bar is holding that name yet. It stays quiet while the page
+	// below heads itself with the same word, and picks the name up once that
+	// heading has scrolled under it. A route whose page does not name itself —
+	// a workspace, or the New session dialog over whatever page was already
+	// open — reads true from the start and is labelled as it always was.
+	const titleHandedOver = useLargeTitleHandoff(topbarEl, topbarTitle);
+	const phoneTitleHandedOver = useLargeTitleHandoff(appHeaderEl, topbarTitle);
+
 	// Mobile top-bar brand: logo only, as the settings trigger. On desktop the
 	// avatar in the chrome row plays that part instead, so the top stays just
 	// the title + the collapse toggle.
@@ -3748,6 +3764,7 @@ export function App(
 				    suppress this one there to avoid a duplicate back bar. */}
 				{route.view !== "catchup" && (
 				<header
+					ref={setAppHeaderEl}
 					className={appHeader({
 						detail: mobileDetail,
 						floating: route.view === "prs" || route.view === "session",
@@ -3785,14 +3802,23 @@ export function App(
 					    title. Desktop hides the whole bar.
 					    A page that heads itself and leaves `topbarTitle` blank (Analytics,
 					    Reports) gets no pill at all: an empty one is a white lozenge with
-					    nothing in it. */}
+					    nothing in it.
+					    A page that heads itself and DOES have a title here keeps the pill
+					    but not its ink: it fades in once its own heading has scrolled
+					    under this bar, which is the large-title move on the platform it
+					    was borrowed from. A session names a thing rather than a page, so
+					    its pill is always up. */}
 					{mobileDetail && (route.view === "session" || topbarTitle) && (
 						<span
-							className={
+							data-shown={
+								route.view === "session" || phoneTitleHandedOver || undefined
+							}
+							className={cn(
 								route.view === "session" && currentSession
 									? `${HEADER_TITLE_PILL_TAPPABLE} session-settings-trigger`
-									: HEADER_TITLE_PILL
-								}
+									: HEADER_TITLE_PILL,
+								route.view !== "session" && HEADER_TITLE_PILL_FADE,
+							)}
 								{...(route.view === "session" && currentSession
 									? {
 										role: "button",
@@ -4264,10 +4290,17 @@ export function App(
 								!(route.view === "workspace" && routeWorkspace) &&
 								topbarTitle && (
 								// Where you are, not the page's heading: these routes are
-								// pages, and a page keeps its own title in its body. This
-								// says which one is open once that title has scrolled away,
-								// the way the chat header names the session.
-								<span className={DETAIL_TOPBAR_TITLE}>{topbarTitle}</span>
+								// pages, and a page keeps its name in its body. The bar picks
+								// that name up once it has scrolled out of sight, the way the
+								// chat header names the session — see hooks/useLargeTitle.ts.
+								<span className={DETAIL_TOPBAR_TITLE}>
+									<span
+										className={DETAIL_TOPBAR_TITLE_TEXT}
+										data-shown={titleHandedOver || undefined}
+									>
+										{topbarTitle}
+									</span>
+								</span>
 							)}
 						</div>
 						{!activeTabSplit && renderTabBar(null)}
