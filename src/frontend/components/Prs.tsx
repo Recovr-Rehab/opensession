@@ -52,14 +52,16 @@ const compactFmt = new Intl.NumberFormat("en", {
   maximumFractionDigits: 1,
 });
 const fmtCompact = (n: number) => compactFmt.format(n);
-const HOME_STATS_CACHE_KEY = "opensession.homeStats.v1";
+const HOME_STATS_CACHE_KEY = "opensession.homeStats.v2";
 
 function readCachedHomeStats(): HomeStats | null {
   try {
     const cached = JSON.parse(
       localStorage.getItem(HOME_STATS_CACHE_KEY) || "null",
     ) as Partial<HomeStats> | null;
-    return cached?.today && cached.week ? (cached as HomeStats) : null;
+    return cached?.today && cached.week && cached.completeWeek && cached.priorWeek
+      ? (cached as HomeStats)
+      : null;
   } catch {
     return null;
   }
@@ -84,6 +86,20 @@ function runningLabel(running: number): string {
   return running === 1 ? "1 agent running" : `${running} agents running`;
 }
 
+// Agent time over the last seven whole days against the seven before them. A
+// percentage is the only shape a trend takes in one clause, and agent time is
+// the field that answers "how much did we get through" without needing a
+// second number beside it. Under 5% is noise at this scale, so it says so
+// rather than reporting a 2% week as movement.
+function weekTrend(stats: HomeStats | null): string | null {
+  const now = stats?.completeWeek?.durationMs ?? 0;
+  const before = stats?.priorWeek?.durationMs ?? 0;
+  if (!now || !before) return null;
+  const pct = Math.round(((now - before) / before) * 100);
+  if (Math.abs(pct) < 5) return "level with last week";
+  return `${Math.abs(pct)}% ${pct > 0 ? "busier" : "quieter"} than last week`;
+}
+
 // The page is about its list, so the day rides under the title as one line
 // instead of a slab of five figures with a second week-long tier under each.
 // The three kept are the ones you act on: what is live now, and how much
@@ -99,17 +115,22 @@ function OverviewLine({
   onOpenAnalytics?: () => void;
 }) {
   const today = stats?.today;
+  const trend = weekTrend(stats);
   return (
     <button
       type="button"
       onClick={onOpenAnalytics}
       title={
         today
-          ? `Open Analytics · ${today.turns.toLocaleString()} turns and ${fmtCompact(today.outputTokens)} tokens out today`
+          ? `Open Analytics · ${today.turns.toLocaleString()} turns and ${fmtCompact(today.outputTokens)} tokens out today${
+              trend
+                ? ` · ${fmtAgentTime(stats!.completeWeek.durationMs)} of agent time over the last 7 whole days against ${fmtAgentTime(stats!.priorWeek.durationMs)} the week before`
+                : ""
+            }`
           : "Analytics are loading"
       }
       aria-busy={!stats}
-      className="focus-ring -mx-1 mt-1 flex max-w-full cursor-pointer items-center gap-2 rounded-sm px-1 text-left text-supporting tabular-nums text-dim transition-colors hover:text-fg"
+      className="focus-ring group -mx-1 mt-1 flex max-w-full cursor-pointer items-center gap-2 rounded-sm px-1 text-left text-supporting tabular-nums text-dim transition-colors hover:text-fg"
     >
       <span
         aria-hidden="true"
@@ -127,6 +148,11 @@ function OverviewLine({
             {fmtCompact(today.sessions)} sessions and{" "}
             {fmtAgentTime(today.durationMs)} of agent time today
           </>
+        ) : null}
+        {trend ? (
+          <span className="text-faint transition-colors group-hover:text-dim">
+            {` · ${trend}`}
+          </span>
         ) : null}
       </span>
       {!stats && (

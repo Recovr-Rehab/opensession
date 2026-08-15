@@ -70,6 +70,10 @@ export interface HomeStatsBucket {
 export interface HomeStats {
 	today: HomeStatsBucket;
 	week: HomeStatsBucket;
+	/** The seven whole days behind today, and the seven behind those. Today is
+	 *  left out of both so the two windows are the same length of finished day. */
+	completeWeek: HomeStatsBucket;
+	priorWeek: HomeStatsBucket;
 }
 
 export async function fetchHomeStats(): Promise<HomeStats> {

@@ -1334,7 +1334,12 @@ export interface HomeStatsBucket {
 /** Cheap numbers for the Home overview strip: audit-rollup reads only — no
  *  session-store scan and no gh calls. Past days come straight from the disk
  *  cache; today's rollup recomputes only when its audit file has grown. */
-export function buildHomeStats(): { today: HomeStatsBucket; week: HomeStatsBucket } {
+export function buildHomeStats(): {
+	today: HomeStatsBucket;
+	week: HomeStatsBucket;
+	completeWeek: HomeStatsBucket;
+	priorWeek: HomeStatsBucket;
+} {
 	const empty = (): HomeStatsBucket => ({
 		sessions: 0,
 		turns: 0,
@@ -1345,32 +1350,54 @@ export function buildHomeStats(): { today: HomeStatsBucket; week: HomeStatsBucke
 		cacheReadTokens: 0,
 		cacheWriteTokens: 0,
 	});
-	let today = empty();
-	const week = empty();
-	const weekSessions = new Set<string>();
-	for (let i = 6; i >= 0; i--) {
-		const date = new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10);
+	// Fifteen days back: today, the seven whole days behind it, and the seven
+	// behind those, which is what a week-over-week comparison needs.
+	const days: { bucket: HomeStatsBucket; ids: string[] }[] = [];
+	for (let back = 0; back <= 14; back++) {
+		const date = new Date(Date.now() - back * 86_400_000).toISOString().slice(0, 10);
 		const r = cachedRollup(date);
-		const bucket: HomeStatsBucket = {
-			sessions: Object.keys(r.bySession).length,
-			turns: r.turns,
-			errors: r.errors,
-			durationMs: r.durationMs,
-			inputTokens: r.tokens.input,
-			outputTokens: r.tokens.output,
-			cacheReadTokens: r.tokens.cacheRead,
-			cacheWriteTokens: r.tokens.cacheWrite,
-		};
-		for (const id of Object.keys(r.bySession)) weekSessions.add(id);
-		week.turns += bucket.turns;
-		week.errors += bucket.errors;
-		week.durationMs += bucket.durationMs;
-		week.inputTokens += bucket.inputTokens;
-		week.outputTokens += bucket.outputTokens;
-		week.cacheReadTokens += bucket.cacheReadTokens;
-		week.cacheWriteTokens += bucket.cacheWriteTokens;
-		if (i === 0) today = bucket;
+		days.push({
+			bucket: {
+				sessions: Object.keys(r.bySession).length,
+				turns: r.turns,
+				errors: r.errors,
+				durationMs: r.durationMs,
+				inputTokens: r.tokens.input,
+				outputTokens: r.tokens.output,
+				cacheReadTokens: r.tokens.cacheRead,
+				cacheWriteTokens: r.tokens.cacheWrite,
+			},
+			ids: Object.keys(r.bySession),
+		});
 	}
-	week.sessions = weekSessions.size;
-	return { today, week };
+	// Both ends inclusive, counted in days back from today. Sessions are the
+	// one field that can't be summed: a session that ran across three days is
+	// one session in the window, so the ids are deduped instead.
+	const fold = (from: number, to: number): HomeStatsBucket => {
+		const out = empty();
+		const ids = new Set<string>();
+		for (let back = from; back <= to; back++) {
+			const day = days[back];
+			if (!day) continue;
+			out.turns += day.bucket.turns;
+			out.errors += day.bucket.errors;
+			out.durationMs += day.bucket.durationMs;
+			out.inputTokens += day.bucket.inputTokens;
+			out.outputTokens += day.bucket.outputTokens;
+			out.cacheReadTokens += day.bucket.cacheReadTokens;
+			out.cacheWriteTokens += day.bucket.cacheWriteTokens;
+			for (const id of day.ids) ids.add(id);
+		}
+		out.sessions = ids.size;
+		return out;
+	};
+	return {
+		today: days[0]!.bucket,
+		week: fold(0, 6),
+		// The two comparable windows leave today out. It is still running, so a
+		// window holding it always reads low against one that doesn't, and at
+		// breakfast that reads as a collapse in activity rather than a morning.
+		completeWeek: fold(1, 7),
+		priorWeek: fold(8, 14),
+	};
 }
