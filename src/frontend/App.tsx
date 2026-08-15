@@ -1401,16 +1401,17 @@ export function App(
 		const splash = document.getElementById("splash");
 		let removal: ReturnType<typeof setTimeout> | undefined;
 		const hide = () => {
-			// Hands the window over: the desktop shell's vibrancy is gated on this
-			// too, so the window stays opaque for as long as the splash is up. It
-			// is set whether or not a splash is on the page, since a window that
-			// never gets it stays opaque for good.
-			document.documentElement.classList.add("app-ready");
 			if (!splash) return;
 			splash.classList.add("splash-hide");
 			removal = setTimeout(() => splash.remove(), 400);
 		};
 		if (!loading) {
+			// The window is only handed over when there is something in it: the
+			// desktop shell's vibrancy is gated on this class, and a transparent
+			// window with an empty app in it reads as no window at all. The cap
+			// below deliberately does not set it, so a server that never answers
+			// gets the app's own surface rather than a hole in the desktop.
+			document.documentElement.classList.add("app-ready");
 			hide();
 			return () => clearTimeout(removal);
 		}
