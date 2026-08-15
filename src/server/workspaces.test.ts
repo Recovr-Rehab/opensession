@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "fs";
+import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -15,6 +15,7 @@ const {
 	createWorkspace,
 	deleteWorkspace,
 	getWorkspace,
+	listWorkspaces,
 	stampWorkspaceIdentity,
 	updateWorkspace,
 	workspaceName,
@@ -110,5 +111,39 @@ describe("workspaceName", () => {
 
 	test("refuses an unsafe id", () => {
 		expect(workspaceName("../etc/passwd")).toBeNull();
+	});
+});
+
+// Open Session's own repo was renamed, and workspaces written before it still
+// say `backstage` on disk. Clients group by the id they are handed, so an
+// un-normalized read draws the repo a second sidebar band with no icon.
+describe("a repo that has been renamed", () => {
+	test("reads back under the id it is registered under now", () => {
+		const ws = createWorkspace({
+			name: "Written before the rename",
+			repo: "opensession",
+			createdBy: "Kent",
+		});
+		writeFileSync(
+			join(scratch, ".opensession-workspaces", `${ws.id}.json`),
+			JSON.stringify({
+				...ws,
+				repo: "backstage",
+				attachedRepos: [{ repo: "backstage", branch: "main", dir: "/tmp/wt" }],
+			}),
+		);
+
+		expect(getWorkspace(ws.id)?.repo).toBe("opensession");
+		expect(getWorkspace(ws.id)?.attachedRepos?.[0]?.repo).toBe("opensession");
+		expect(listWorkspaces().find((w) => w.id === ws.id)?.repo).toBe("opensession");
+	});
+
+	test("leaves an id that is registered alone", () => {
+		const ws = createWorkspace({
+			name: "Written after it",
+			repo: "opensession",
+			createdBy: "Kent",
+		});
+		expect(getWorkspace(ws.id)?.repo).toBe("opensession");
 	});
 });

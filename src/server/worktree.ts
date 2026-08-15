@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, statSync } from "fs"
 import { resolve as resolvePath } from "path";
 import type { UnifiedSession } from "./types";
 import { stopPreview } from "./preview";
-import { configuredPaths, configuredRepos, configuredSelfDev, defaultRepo, type Repo } from "./config";
+import { canonicalRepoId, configuredPaths, configuredRepos, configuredSelfDev, defaultRepo, type Repo } from "./config";
 import { stateDir } from "./paths";
 
 // The Repo type + registry defaults live in config.ts now. Re-exported so existing
@@ -37,7 +37,10 @@ export const REPOS: Record<string, Repo> = new Proxy({} as Record<string, Repo>,
 
 export function getRepo(id?: string): Repo {
   if (!id) return defaultRepo();
-  const repo = configuredRepos()[id];
+  // A record written before a repo was renamed still names the old id, and it
+  // means the same checkout it always did, so resolve through the rename
+  // rather than failing on it (canonicalRepoId).
+  const repo = configuredRepos()[id] || configuredRepos()[canonicalRepoId(id)];
   if (repo) return repo;
   throw new Error(`Unknown repo "${id}"`);
 }

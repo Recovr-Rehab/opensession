@@ -23,7 +23,7 @@
  */
 
 import { homeDir } from "./paths";
-import { defaultRepo } from "./config";
+import { canonicalRepoId, defaultRepo } from "./config";
 import {
   existsSync,
   mkdirSync,
@@ -132,6 +132,22 @@ function safeId(id: string): boolean {
   return /^[A-Za-z0-9_-]{1,64}$/.test(id);
 }
 
+/**
+ * A workspace as read from disk, with its repo ids resolved through any rename
+ * (canonicalRepoId). A workspace file keeps whatever id was registered when it
+ * was written, and every client groups by that id: 633 of the workspaces on
+ * this instance say `backstage`, which drew the repo a second sidebar band of
+ * its own. Reading through this is what keeps one repo one band, and the file
+ * itself is rewritten with the current id the next time it is saved.
+ *
+ * Both callers hand it a freshly parsed object, so it normalizes in place.
+ */
+function fromDisk(p: Workspace): Workspace {
+  if (p.repo) p.repo = canonicalRepoId(p.repo);
+  for (const r of p.attachedRepos || []) r.repo = canonicalRepoId(r.repo);
+  return p;
+}
+
 export function listWorkspaces(): Workspace[] {
   if (!existsSync(WORKSPACES_DIR)) return [];
   const out: Workspace[] = [];
@@ -144,7 +160,7 @@ export function listWorkspaces(): Workspace[] {
       // this instance). Absent modelSettings means "inherit the defaults":
       // resolve through workspaceModelSettings() at the point of use.
       if (p && typeof p.id === "string" && typeof p.name === "string")
-        out.push(p);
+        out.push(fromDisk(p));
     } catch {}
   }
   out.sort(
@@ -201,7 +217,7 @@ export function getWorkspace(id: string): Workspace | null {
   const f = fileFor(id);
   if (!existsSync(f)) return null;
 	try {
-		return JSON.parse(readFileSync(f, "utf8")) as Workspace;
+		return fromDisk(JSON.parse(readFileSync(f, "utf8")) as Workspace);
 	} catch {
     return null;
   }
