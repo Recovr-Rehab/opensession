@@ -9,10 +9,15 @@ import {
 	SETTINGS_CONTENT_TOOL,
 	SETTINGS_PAGE,
 	SETTINGS_PANEL_FRAME,
+	SETTINGS_PANEL_FRAME_GALLERY,
 	SETTINGS_PANEL_FRAME_SHEET,
 	SETTINGS_SHEET_LIST,
 	SETTINGS_SHEET_SEARCH_BAR,
+	SETTINGS_NAV,
+	SETTINGS_NAV_CAPTION,
+	SETTINGS_NAV_GROUP,
 	SETTINGS_NAV_ICON,
+	SETTINGS_NAV_LIST,
 	SETTINGS_NAV_ROW,
 } from "../lib/settings-classes";
 import { matchSections, type SectionHit } from "../lib/settings-search";
@@ -95,6 +100,10 @@ const TOOL_SECTIONS = new Set<SettingsSectionKey>([
 	"goals",
 	"security",
 ]);
+
+/** Sections that are browsed rather than read down, and take the wider
+ *  column for it (see SETTINGS_PANEL_FRAME_GALLERY). */
+const GALLERY_SECTIONS = new Set<SettingsSectionKey>(["library"]);
 
 const SECTIONS: {
 	key: SettingsSectionKey;
@@ -764,17 +773,19 @@ export function Settings({
 		<div className={SETTINGS_PAGE}>
 			{/* Back and search stay put; only the section list scrolls, so neither
 			    they nor the account footer are lost once the list outgrows the nav. */}
-			<aside className="flex w-58 shrink-0 flex-col border-r border-line bg-raised px-3 py-4 [html.wco_&]:pt-(--desktop-header-h)">
+			<aside className={SETTINGS_NAV}>
 				<button className={SETTINGS_BACK} onClick={onBack}>
-					<svg width="20" height="20" viewBox="0 0 16 16" fill="none">
-						<path
-							d="M10 3.5L5.5 8l4.5 4.5"
-							stroke="currentColor"
-							strokeWidth="1.5"
-							strokeLinecap="round"
-							strokeLinejoin="round"
-						/>
-					</svg>
+					<span className={SETTINGS_NAV_ICON}>
+						<svg width="20" height="20" viewBox="0 0 16 16" fill="none">
+							<path
+								d="M10 3.5L5.5 8l4.5 4.5"
+								stroke="currentColor"
+								strokeWidth="1.5"
+								strokeLinecap="round"
+								strokeLinejoin="round"
+							/>
+						</svg>
+					</span>
 					Back to app
 				</button>
 				<NavSearch
@@ -783,10 +794,10 @@ export function Settings({
 					onSubmit={() => firstHit && onSelect(firstHit.key)}
 					className="mb-1"
 				/>
-				<div className="-mx-1 flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-1 pt-2">
+				<div className={SETTINGS_NAV_LIST}>
 					{shown.map((g) => (
-						<div className="mb-3 flex flex-col gap-px" key={g.group}>
-							<div className="px-2.5 pt-2 pb-1 text-meta font-bold tracking-[0.02em] text-faint">{g.group}</div>
+						<div className={SETTINGS_NAV_GROUP} key={g.group}>
+							<div className={SETTINGS_NAV_CAPTION}>{g.group}</div>
 							{g.hits.map(({ item: s, hint }) => (
 								<button
 									key={s.key}
@@ -829,7 +840,13 @@ export function Settings({
 				{TOOL_SECTIONS.has(active) ? (
 					<SectionPanel section={active} workspace={workspace}>{children}</SectionPanel>
 				) : (
-					<div className={SETTINGS_PANEL_FRAME}>
+					<div
+						className={
+							GALLERY_SECTIONS.has(active)
+								? SETTINGS_PANEL_FRAME_GALLERY
+								: SETTINGS_PANEL_FRAME
+						}
+					>
 						<SectionPanel section={active} onBack={onBack} workspace={workspace}>
 							{children}
 						</SectionPanel>
@@ -919,7 +936,7 @@ function MobileSettings({
 										<div className="mb-2 mt-5 px-1 text-control-label font-semibold text-faint">
 											{g.group}
 										</div>
-										<div className="overflow-hidden rounded-2xl bg-raised">
+										<div className="overflow-hidden rounded-2xl bg-settings-plate">
 											{g.hits.map(({ item: s, hint }) => (
 												<button
 													key={s.key}

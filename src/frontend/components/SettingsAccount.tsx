@@ -1,5 +1,6 @@
 import React from "react";
 import { SETTINGS_NAV_ICON, SETTINGS_NAV_ROW } from "../lib/settings-classes";
+import { SIDEBAR_HOVER_LAYER, SIDEBAR_RAIL_GAP } from "../lib/sidebar-classes";
 import { Menu } from "../ui/menu";
 import { IconCheck, IconLogOut } from "./icons";
 import {
@@ -65,16 +66,20 @@ export function SettingsAccountFooter() {
 	return (
 		// Sticky so it stays reachable once the section list outgrows the nav
 		// (the negative margins cover the nav's own padding as rows scroll under).
-		<div className="sticky bottom-0 -mx-3 -mb-4 mt-auto flex flex-col gap-1 border-x-0 border-b-0 border-t border-solid border-line bg-raised px-3 pb-4 pt-3">
+		// It carries the nav's own surface, not a raised one: the block is the
+		// bottom of that column, not a bar laid across it. Its 6px gutter is the
+		// list's outdent spelled forwards, so the account row and Sign out sit on
+		// the same rail as the sections above them.
+		<div className="sticky bottom-0 -mx-3 -mb-4 mt-auto flex flex-col border-x-0 border-b-0 border-t border-solid border-divider bg-sidebar px-1.5 pb-4 pt-3">
 			{githubAuth ? (
-				<div className="flex items-center gap-2.5 px-2 py-1.5">
+				<div className={`flex items-center ${SIDEBAR_RAIL_GAP} py-[var(--sidebar-row-pad)] pl-2.5 pr-2`}>
 					<AccountIdentity name={currentUser} subtitle={subtitle} />
 				</div>
 			) : (
 				<Menu.Root>
 					<Menu.Trigger
 						aria-label="Switch account"
-						className="flex w-full min-w-0 items-center gap-2.5 rounded-lg border-none bg-transparent px-2 py-1.5 text-left hover:bg-hover data-[popup-open]:bg-hover"
+						className={`flex w-full min-w-0 items-center ${SIDEBAR_RAIL_GAP} rounded-row border-none bg-transparent py-[var(--sidebar-row-pad)] pl-2.5 pr-2 text-left data-[popup-open]:bg-selected ${SIDEBAR_HOVER_LAYER}`}
 					>
 						<AccountIdentity name={currentUser} subtitle={subtitle} />
 						<svg
@@ -141,7 +146,7 @@ export function SettingsAccountCard() {
 			<div className="mb-2 mt-5 px-1 text-control-label font-semibold text-faint">
 				Account
 			</div>
-			<div className="overflow-hidden rounded-2xl bg-raised">
+			<div className="overflow-hidden rounded-2xl bg-settings-plate">
 				{githubAuth ? (
 					<div className={rowClass}>
 						<AccountIdentity name={currentUser} subtitle={subtitle} />

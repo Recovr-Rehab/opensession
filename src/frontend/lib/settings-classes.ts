@@ -22,21 +22,93 @@
  * what phones have been rendering, so SETTINGS_CONTENT_SHEET is the same
  * string either way rather than quietly re-cutting a layout this change is not
  * about.
+ *
+ * The desktop nav is not a cousin of the app's sidebar, it is the same design:
+ * it takes that rail's surface, vertical scale, 22px glyph rail, hover layer
+ * and selected wash from lib/sidebar-classes rather than re-deriving them
+ * here. Anything below that reads as a settings-only number is a number the
+ * two navs genuinely differ on, and says why.
  */
 
-/** The full-window page: side nav + content, filling the app body. */
-export const SETTINGS_PAGE = "flex min-h-0 flex-1 bg-surface";
+import {
+	SIDEBAR_DENSITY_VARS,
+	SIDEBAR_GROUP,
+	SIDEBAR_HOVER_LAYER,
+	SIDEBAR_RAIL,
+	SIDEBAR_RAIL_GAP,
+} from "./sidebar-classes";
 
-/** "Back to app" — a full-width quiet row at the top of the side nav. */
+/**
+ * The full-window page: side nav + content, filling the app body.
+ *
+ * It paints the SIDEBAR's surface rather than the page's, which is what
+ * APP_BODY does and the first half of why the two navs read as one design. A
+ * nav is a column of chrome; what separates it from the content is the seam
+ * and the shadow on the content's left edge (see SETTINGS_CONTENT), so the
+ * column itself needs no fill and no border of its own.
+ */
+export const SETTINGS_PAGE = "flex min-h-0 flex-1 bg-sidebar";
+
+/**
+ * The nav column. No fill, no edge: the page under it is already the sidebar
+ * surface, exactly as the app's own sidebar sits on APP_BODY's.
+ *
+ * It also sets the sidebar's vertical scale, so a settings row, its caption
+ * and the app's rows run on one set of numbers instead of two copies that
+ * drift. The compact overrides in that string key off a `data-density`
+ * attribute this element deliberately does not carry: the preference is named
+ * "Compact sidebar" and retunes the rail you work in, not a nav you visit.
+ */
+export const SETTINGS_NAV =
+	`flex w-58 shrink-0 flex-col px-3 py-4 [html.wco_&]:pt-(--desktop-header-h) ${SIDEBAR_DENSITY_VARS}`;
+
+/**
+ * The scrolling section list, and one group inside it.
+ *
+ * The list is outdented past the nav's gutter so a row's pill sits 6px from
+ * the column edge and its content lands on the app sidebar's 16px rail
+ * (6 + the row's own 10px). That overflow is what gives the rail its
+ * Conductor-style pill; see SIDEBAR_LIST, which is the same move from the
+ * other direction. Its scrollbar is hidden for the reason the app's is: a
+ * track down the middle of the window cuts the nav off from the content.
+ */
+export const SETTINGS_NAV_LIST =
+	"-mx-1.5 flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto pt-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
+
+export const SETTINGS_NAV_GROUP = `flex flex-col ${SIDEBAR_GROUP}`;
+
+/**
+ * A group's caption — Personal, Workspace. The app's band headings in every
+ * respect that shows: the caption height, 13px semibold, and dim ink rather
+ * than faint. It was 11px bold with letterspacing, which is a different
+ * typographic idea (a small-caps label) from the one the sidebar uses.
+ */
+export const SETTINGS_NAV_CAPTION =
+	"flex h-[var(--sidebar-cap-h)] shrink-0 items-center px-2.5 text-label font-semibold text-dim";
+
+/**
+ * "Back to app" — the first row of the nav, and now a member of the row family
+ * below rather than a smaller control above it: same box, same rail, so its
+ * chevron and the section glyphs share a centre line.
+ *
+ * No `w-full`. It is outdented like the list, and a stretched flex child
+ * already measures its container plus those two negative margins; `w-full`
+ * would size it to the container alone and pull the pill back in on the right.
+ */
 export const SETTINGS_BACK =
-	"mb-3 flex w-full cursor-pointer items-center gap-2 rounded-[calc(8px*var(--rf))] border-none bg-transparent px-2.5 py-1.5 text-left text-control-label font-medium text-dim hover:bg-hover hover:text-fg";
+	`group -mx-1.5 mb-2 flex cursor-pointer items-center ${SIDEBAR_RAIL_GAP} rounded-row border-none bg-transparent py-[var(--sidebar-row-pad)] pr-2 pl-2.5 text-left text-item-title font-medium text-dim hover:text-fg ${SIDEBAR_HOVER_LAYER}`;
 
 /**
  * The scrolling content column beside the nav. `tool` sections fill it
  * edge-to-edge; pass the flag through `cn()` so tailwind-merge drops the
  * padding rather than leaving two padding utilities to fight by output order.
+ *
+ * The seam and the shadow are DETAIL_PANE's, the other half of the pair
+ * SETTINGS_PAGE opens: the content is paper laid over the chrome, and the only
+ * thing between them is that hairline plus a little depth.
  */
-export const SETTINGS_CONTENT = "flex min-w-0 flex-1 justify-center overflow-y-auto px-8 pt-11";
+export const SETTINGS_CONTENT =
+	"flex min-w-0 flex-1 justify-center overflow-y-auto border-l border-divider bg-surface px-8 pt-11 desktop:shadow-[-1px_0_8px_rgba(0,0,0,0.05)]";
 export const SETTINGS_CONTENT_TOOL = "min-h-0 p-0";
 
 /** Same column inside the phone sheet — a phone gutter instead of the desktop one. */
@@ -45,6 +117,14 @@ export const SETTINGS_CONTENT_SHEET =
 
 /** The reading column a settings panel sits in, and its bottom air. */
 export const SETTINGS_PANEL_FRAME = "w-full max-w-[720px] self-start pb-22";
+
+/**
+ * The column a settings panel that BROWSES sits in. The Library is a catalog
+ * rather than a form: its cards go two up, and at the reading column's 720px
+ * a card is narrow enough that the sentence saying what it does gets cut off
+ * mid-word. The measure that matters here is the card's, not the paragraph's.
+ */
+export const SETTINGS_PANEL_FRAME_GALLERY = "w-full max-w-[980px] self-start pb-22";
 export const SETTINGS_PANEL_FRAME_SHEET = "w-full max-w-[720px] self-start pb-12";
 
 /**
@@ -77,19 +157,29 @@ export const SETTINGS_SHEET_SEARCH_BAR =
 	"before:[mask-image:linear-gradient(to_top,#000_0%,#000_62%,transparent_100%)]";
 
 /**
- * A row in the settings navigation — the desktop sidebar's list and the
- * account block under it, which are one list visually and were two copies of
- * this string.
+ * A row in the settings navigation — the section list and the account block
+ * under it, which are one list visually and were two copies of this string.
  *
- * The gap is `gap-2` rather than the 11px it carried: measured on the rendered
- * pixels, an 18px glyph leaves ~2.5px of whitespace inside its own box, so 11
- * put 13.5 to 16px of air between icon and label while every button in the app
- * sits near 9.5. A nav row can read a little looser than a control, but not
- * half again as loose.
+ * This is SIDEBAR_ROW: the same 2px gap between rows, the same
+ * `--sidebar-row-pad` box around a 22px rail, the same 7px to the title, the
+ * same asymmetric 10/8 gutters.
+ *
+ * The two fills are the point of the exercise. Selected was `bg-active`
+ * (#e0e0e0 in light) — an opaque surface from the top of the elevation ramp,
+ * which put a grey plate on the one row you are already reading. It takes
+ * `--selected` now, the translucent ink the app marks an open session with,
+ * and hover is the sidebar's LAYER rather than a colour, so pointing at the
+ * selected row lifts it instead of swapping one wash for a lighter one. See
+ * SIDEBAR_HOVER_LAYER, which explains why that has to be a layer.
  */
 export const SETTINGS_NAV_ROW =
-	"group flex w-full cursor-pointer items-center gap-2 rounded-row border-none bg-transparent px-2.5 py-2 text-left text-item-title font-medium text-dim hover:bg-hover hover:text-fg data-active:bg-active data-active:text-fg";
+	`group mt-0.5 flex w-full cursor-pointer items-center ${SIDEBAR_RAIL_GAP} rounded-row border-none bg-transparent py-[var(--sidebar-row-pad)] pr-2 pl-2.5 text-left text-item-title font-medium text-dim hover:text-fg data-active:bg-selected data-active:text-fg ${SIDEBAR_HOVER_LAYER}`;
 
-/** The row's glyph well: fixed 18px so labels align whatever the icon draws. */
+/**
+ * The row's glyph well: the sidebar's 22px rail, not an 18px box. The glyphs
+ * themselves are still 18px — the rail is what puts every settings label on
+ * the same left edge as every sidebar title, and it centres a mark of any size
+ * on that column.
+ */
 export const SETTINGS_NAV_ICON =
-	"inline-flex size-[18px] flex-none items-center justify-center text-faint group-hover:text-fg group-data-active:text-fg";
+	`${SIDEBAR_RAIL} text-faint group-hover:text-fg group-data-active:text-fg`;

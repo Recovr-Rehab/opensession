@@ -65,6 +65,11 @@
 	   `--panel-plate`, so `bg-panel` inside the column resolves to the lighter
 	   step and every plate, chip and pill in there moves together. */
 	--color-panel-surface: var(--panel-surface);
+	/* The plate a settings group sits on. Its own surface rather than `raised`:
+	   a settings page stacks several of them down one reading column, which is
+	   the same argument `panel-surface` makes for the right-hand panel (see
+	   base.css). */
+	--color-settings-plate: var(--settings-plate);
 	/* Floating popups (hover cards, menus). Its own surface rather than
 	   bg-panel: in light a popup is paper on the page, not a panel in it.
 	   `popup-glass` is that same paper held up to the light — pair it with

@@ -82,8 +82,12 @@ export function SettingsGroupLabel({
  * Card supplies the borderless part now, so all this adds is the corner and the
  * fill. A settings group is a CONTAINER of rows rather than a single card, and
  * the scale gives a container the largest step: `rounded-2xl` (22px × --rf), the
- * same corner the phone sheet's section list already carries. */
-const settingsSurface = "rounded-2xl bg-raised";
+ * same corner the phone sheet's section list already carries.
+ *
+ * The fill is `settings-plate`, not `raised`: a page of these is a column of
+ * blocks, and at the full L1 grey the column reads as the page's material
+ * rather than as a few quiet groups on paper. See base.css. */
+const settingsSurface = "rounded-2xl bg-settings-plate";
 
 export function SettingCard({
 	className,
