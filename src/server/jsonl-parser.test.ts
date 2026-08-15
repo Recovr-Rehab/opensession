@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  extractImageMarkers,
   extractImplicitMedia,
   extractVideoMarkers,
   parseJsonlLinesAsync,
@@ -643,6 +644,55 @@ describe("extractVideoMarkers", () => {
       "/media?path=%2Ftmp%2Fcapture-one.mp4",
       "/media?path=%2Ftmp%2Fsecond.webm",
     ]);
+  });
+});
+
+describe("markers wrapped in markdown", () => {
+  it("reads a bolded image marker", () => {
+    expect(
+      extractImageMarkers("**OPENSESSION_IMAGE: /tmp/scale-shots/cmp-final.png**"),
+    ).toEqual(["/media?path=%2Ftmp%2Fscale-shots%2Fcmp-final.png"]);
+  });
+
+  it("reads italic, backticked and bulleted markers", () => {
+    expect(extractImageMarkers("*OPENSESSION_IMAGE: /tmp/a.png*")).toEqual([
+      "/media?path=%2Ftmp%2Fa.png",
+    ]);
+    expect(extractImageMarkers("`OPENSESSION_IMAGE: /tmp/b.png`")).toEqual([
+      "/media?path=%2Ftmp%2Fb.png",
+    ]);
+    expect(extractVideoMarkers("- OPENSESSION_VIDEO: /tmp/c.mp4")).toEqual([
+      "/media?path=%2Ftmp%2Fc.mp4",
+    ]);
+  });
+
+  it("keeps underscores that belong to the path", () => {
+    expect(extractImageMarkers("__OPENSESSION_IMAGE: /tmp/my_final_shot.png__")).toEqual([
+      "/media?path=%2Ftmp%2Fmy_final_shot.png",
+    ]);
+  });
+
+  it("strips the whole wrapped line from an assistant bubble", () => {
+    const path = writeFixture([
+      assistantLine(
+        "a-wrapped",
+        "Done.\n\n**OPENSESSION_IMAGE: /tmp/shot.png**\n\nTop is now.",
+      ),
+    ]);
+    const [entry] = parseTranscript(path);
+    expect(entry.images).toEqual(["/media?path=%2Ftmp%2Fshot.png"]);
+    expect(entry.content).not.toContain("OPENSESSION_IMAGE");
+    expect(entry.content).not.toContain("**");
+    expect(entry.content).toContain("Top is now.");
+  });
+
+  it("renders an emphasised bare path mention", () => {
+    const shot = join(dir, "emphasised.png");
+    writeFileSync(shot, "x");
+    expect(extractImplicitMedia(`Look at **${shot}** for the result.`)).toEqual({
+      images: [`/media?path=${encodeURIComponent(shot)}`],
+      videos: [],
+    });
   });
 });
 

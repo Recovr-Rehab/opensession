@@ -154,11 +154,26 @@ function attachUploads(
 // marker into a /media URL the frontend streams.
 // (BACKSTAGE_VIDEO is the pre-rename marker — it lives forever in old
 // transcripts and in scripts that haven't updated yet, so keep reading it.)
-const VIDEO_MARKER = /^[\t ]*(?:OPENSESSION|BACKSTAGE)_VIDEO:[\t ]*(\/\S+)[\t ]*$/gm;
+// Agents dress the line up: bold it, fence it in backticks, hang it off a
+// bullet. The wrapper is presentation, not a different intent, so read
+// through it. Anchoring to a bare line start made `**OPENSESSION_IMAGE: x**`
+// fall through as literal text, and the implicit-mention fallback missed it
+// too (a trailing `*` fails that lookahead), so the whole feature vanished
+// with no error anywhere.
+const MARKER_OPEN = "[\\t ]*(?:[-*>][\\t ]*)?[*_`]{0,3}[\\t ]*";
+const MARKER_CLOSE = "[\\t ]*[*_`]{0,3}[\\t ]*";
+/** Path capture is lazy so the closing emphasis isn't eaten as path chars. */
+function markerRe(keyword: string): RegExp {
+  return new RegExp(
+    `^${MARKER_OPEN}(?:${keyword}):[\\t ]*(/\\S+?)${MARKER_CLOSE}$`,
+    "gm",
+  );
+}
+const VIDEO_MARKER = markerRe("(?:OPENSESSION|BACKSTAGE)_VIDEO");
 // Sibling marker for stills (thumbnails, extracted frames, downloaded
 // images): `OPENSESSION_IMAGE: <abs-path>` renders inline via the same
 // authenticated media route, landing in the entry's existing `images` field.
-const IMAGE_MARKER = /^[\t ]*OPENSESSION_IMAGE:[\t ]*(\/\S+)[\t ]*$/gm;
+const IMAGE_MARKER = markerRe("OPENSESSION_IMAGE");
 
 function extractMarker(text: string, marker: RegExp): string[] {
   if (!text) return [];
@@ -184,8 +199,10 @@ export function extractImageMarkers(text: string): string[] {
 // source file's "/assets/x.png" never render), remote candidates must be
 // clean URLs ending in a media extension, and both are capped per entry.
 const IMAGE_EXT = /\.(?:png|jpe?g|gif|webp)$/i;
+// `*` and `_` sit in both boundaries so a path a person emphasised
+// (`**/tmp/shot.png**`) reads the same as a bare one.
 const LOCAL_MEDIA_RE =
-  /(?:^|[\s"'`(=])(\/[^\s"'`)\]},;]+\.(?:png|jpe?g|gif|webp|mp4|webm|mov|m4v))(?=$|[\s"'`)\]},;:])/gim;
+  /(?:^|[\s"'`(=*_])(\/[^\s"'`)\]},;]+\.(?:png|jpe?g|gif|webp|mp4|webm|mov|m4v))(?=$|[\s"'`)\]},;:*_])/gim;
 const REMOTE_MEDIA_RE =
   /(https?:\/\/[^\s"'`)\]}>,;]+\.(?:png|jpe?g|gif|webp|mp4|webm|mov|m4v)(?:\?[^\s"'`)\]}>,;]*)?)/gi;
 const IMPLICIT_MEDIA_CAP = 6;
