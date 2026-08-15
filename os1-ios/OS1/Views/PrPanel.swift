@@ -157,20 +157,28 @@ struct PrPanelView: View {
     @ViewBuilder
     private var content: some View {
         if let pr = viewModel.prDetails {
-            // The platform's own tab bar, at the bottom where a thumb is,
-            // rather than a strip we draw under the header.
-            TabView(selection: $page) {
-                Tab("Overview", systemImage: "text.bubble", value: Page.overview) {
-                    overviewPage(pr)
-                }
-
-                Tab("Files", systemImage: "doc.plaintext", value: Page.files) {
-                    PrReviewCanvas(viewModel: viewModel, lens: $lens)
-                }
-
-                Tab("Info", systemImage: "info.circle", value: Page.info) {
-                    infoPage(pr)
-                }
+            VStack(spacing: 0) {
+                // The chat's own tab idiom, at the top where the session
+                // strip puts it, so the two surfaces read as one app.
+                PillTabBar(
+                    selection: $page,
+                    items: [
+                        .init(
+                            value: .overview,
+                            title: "Overview",
+                            symbol: "text.bubble",
+                            count: conversation(pr).count
+                        ),
+                        .init(
+                            value: .files,
+                            title: "Files",
+                            symbol: "doc.plaintext",
+                            count: pr.changedFiles ?? pr.files?.count
+                        ),
+                        .init(value: .info, title: "Info", symbol: "info.circle"),
+                    ]
+                )
+                pages(pr)
             }
             .toolbar {
                 // The code page's own controls, only where they apply.
@@ -249,121 +257,210 @@ struct PrPanelView: View {
         }
     }
 
+    /// The three pages, swipeable between: a phone reader moving between the
+    /// conversation and the code should be able to do it with a thumb, not
+    /// only by aiming at a pill.
+    @ViewBuilder
+    private func pages(_ pr: PrDetails) -> some View {
+        #if os(iOS)
+        TabView(selection: $page) {
+            overviewPage(pr).tag(Page.overview)
+            PrReviewCanvas(viewModel: viewModel, lens: $lens).tag(Page.files)
+            infoPage(pr).tag(Page.info)
+        }
+        .tabViewStyle(.page(indexDisplayMode: .never))
+        #else
+        switch page {
+        case .overview: overviewPage(pr)
+        case .files: PrReviewCanvas(viewModel: viewModel, lens: $lens)
+        case .info: infoPage(pr)
+        }
+        #endif
+    }
+
     // MARK: - Info
 
     /// How the pull request stands: who is on it, what ran, what landed, what
     /// changed. On the web this is the rail beside the conversation; a phone
     /// has no beside, so it is a page you go to for the numbers.
     ///
-    /// Every group reads the same way — a label, the one-line answer on the
-    /// right of that label, then the first few rows and a way to see the rest.
-    /// Nothing here opens a chevron inside a chevron.
+    /// Groups are cards on a tinted page rather than rows on a flat one. Each
+    /// carries its label and the one-line answer ABOVE it, so the page can be
+    /// read down the left edge — label, answer, detail — instead of as one
+    /// long list where every line has the same weight.
     private func infoPage(_ pr: PrDetails) -> some View {
-        List {
-            statusSection(pr)
-            reviewersSection(pr)
-            checksSection(pr)
-            commitsSection(pr)
-            filesSection(pr)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                statusGroup(pr)
+                reviewersGroup(pr)
+                checksGroup(pr)
+                commitsGroup(pr)
+                filesGroup(pr)
+            }
+            .padding(16)
         }
-        .insetGroupedListCompat()
-        #if os(iOS)
-        .scrollContentBackground(.hidden)
-        .background(OS1VisualStyle.background)
-        #endif
+        .background(OS1VisualStyle.raised)
         .refreshable { await viewModel.refreshPr() }
     }
 
-    /// A group's label, and the one thing worth knowing about it beside it.
-    private func infoHeader(_ title: String, detail: Text? = nil) -> some View {
-        HStack(spacing: 8) {
-            Text(title)
-            Spacer(minLength: 8)
-            detail
-        }
-    }
-
-    private func infoRow(_ label: String, value: String, tint: Color? = nil) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(label)
-                .font(.subheadline)
-                .foregroundStyle(OS1VisualStyle.textDim)
-            Spacer(minLength: 8)
-            Text(value)
-                .font(.subheadline)
-                .foregroundStyle(tint ?? OS1VisualStyle.text)
-                .multilineTextAlignment(.trailing)
-                .lineLimit(2)
-        }
-    }
-
-    /// Where it lands, whether it can, and what the reviewers decided.
-    @ViewBuilder
-    private func statusSection(_ pr: PrDetails) -> some View {
-        Section {
-            if let head = pr.headRefName, let base = pr.baseRefName {
-                infoRow("Branch", value: head)
-                infoRow("Into", value: base)
+    /// One group: its label and answer, then a card of rows.
+    private func infoGroup(
+        _ title: String,
+        answer: Text? = nil,
+        @ViewBuilder rows: () -> some View
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 8) {
+                Text(title)
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(OS1VisualStyle.textDim)
+                Spacer(minLength: 8)
+                answer?.font(.footnote.weight(.semibold))
             }
+            .padding(.horizontal, 4)
+            VStack(spacing: 0) { rows() }
+                .background(
+                    OS1VisualStyle.background,
+                    in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                )
+        }
+    }
+
+    /// A row inside a card, with the hairline that separates it from the next.
+    private func infoRow(
+        _ label: String,
+        value: String,
+        tint: Color? = nil,
+        last: Bool = false
+    ) -> some View {
+        VStack(spacing: 0) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(label)
+                    .font(.subheadline)
+                    .foregroundStyle(OS1VisualStyle.textDim)
+                Spacer(minLength: 8)
+                Text(value)
+                    .font(.subheadline)
+                    .foregroundStyle(tint ?? OS1VisualStyle.text)
+                    .multilineTextAlignment(.trailing)
+                    .lineLimit(2)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            if !last { Divider().padding(.leading, 14) }
+        }
+    }
+
+    /// The button that opens the rest of a group, on the card's own last row.
+    private func moreRow(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack {
+                Text(title)
+                    .font(.subheadline)
+                    .foregroundStyle(Color.accentColor)
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func statusGroup(_ pr: PrDetails) -> some View {
+        infoGroup(
+            "Status",
+            answer: Text(stateLabel(pr)).foregroundColor(pr.summary.color)
+        ) {
+            if let head = pr.headRefName { infoRow("Branch", value: head) }
+            if let base = pr.baseRefName { infoRow("Into", value: base) }
             if pr.mergeable == "CONFLICTING" {
                 infoRow(
                     "Merge",
                     value: "Conflicts with \(pr.baseRefName ?? "the base")",
-                    tint: OS1VisualStyle.yellowInk
+                    tint: OS1VisualStyle.yellowInk,
+                    last: reviewBadge(pr.reviewDecision) == nil
                 )
             } else if pr.isOpen {
-                infoRow("Merge", value: "No conflicts", tint: OS1VisualStyle.greenInk)
+                infoRow(
+                    "Merge",
+                    value: "No conflicts",
+                    tint: OS1VisualStyle.greenInk,
+                    last: reviewBadge(pr.reviewDecision) == nil
+                )
             }
             if let decision = reviewBadge(pr.reviewDecision) {
-                infoRow("Review", value: decision.label, tint: decision.color)
+                infoRow("Review", value: decision.label, tint: decision.color, last: true)
             }
             if let error = actionError {
                 Text(error)
                     .font(.footnote)
                     .foregroundStyle(OS1VisualStyle.redInk)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 11)
             }
-        } header: {
-            infoHeader("Status", detail: Text(stateLabel(pr)).foregroundColor(pr.summary.color))
         }
     }
 
-    /// Checks, worst first: a page of green rows tells you nothing, and the
+    @ViewBuilder
+    private func reviewersGroup(_ pr: PrDetails) -> some View {
+        if let reviewers = pr.reviewers, !reviewers.isEmpty {
+            infoGroup("Reviewers") {
+                ForEach(Array(reviewers.enumerated()), id: \.offset) { index, reviewer in
+                    infoRow(
+                        reviewer.isTeam == true ? "@\(reviewer.login)" : reviewer.login,
+                        value: reviewerBadge(reviewer.state)?.label ?? "",
+                        tint: reviewerBadge(reviewer.state)?.color,
+                        last: index == reviewers.count - 1
+                    )
+                }
+            }
+        }
+    }
+
+    /// Checks, worst first: a card of green rows tells you nothing, and the
     /// one that failed is the reason you opened this.
     @ViewBuilder
-    private func checksSection(_ pr: PrDetails) -> some View {
+    private func checksGroup(_ pr: PrDetails) -> some View {
         let checks = (pr.checks ?? []).sorted { rank($0) < rank($1) }
         if !checks.isEmpty {
             let shown = checksExpanded ? checks : Array(checks.prefix(4))
-            Section {
-                ForEach(Array(shown.enumerated()), id: \.offset) { _, check in
-                    Group {
-                        if let url = check.url.flatMap(URL.init) {
-                            Link(destination: url) { checkRow(check) }
-                                .foregroundStyle(.primary)
-                        } else {
-                            checkRow(check)
+            let more = checks.count > shown.count || checksExpanded
+            infoGroup(
+                "Checks",
+                answer: Text(checksHeader(checks))
+                    .foregroundColor(checkTone(checksRank(checks)))
+            ) {
+                ForEach(Array(shown.enumerated()), id: \.offset) { index, check in
+                    let isLast = !more && index == shown.count - 1
+                    VStack(spacing: 0) {
+                        Group {
+                            if let url = check.url.flatMap(URL.init) {
+                                Link(destination: url) { checkRow(check) }
+                            } else {
+                                checkRow(check)
+                            }
                         }
+                        // Rows in this card all breathe the same: the check
+                        // row was drawn for a List, which supplied its own.
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 11)
+                        if !isLast { Divider().padding(.leading, 14) }
                     }
-                    .listRowBackground(checkRowTint(check.rank))
+                    .background(checkRowTint(check.rank))
                 }
-                if checks.count > shown.count || checksExpanded {
-                    Button(checksExpanded ? "Show fewer" : "Show all \(checks.count)") {
+                if more {
+                    moreRow(checksExpanded ? "Show fewer" : "Show all \(checks.count)") {
                         checksExpanded.toggle()
                     }
-                    .font(.subheadline)
                 }
-            } header: {
-                infoHeader(
-                    "Checks",
-                    detail: Text(checksHeader(checks))
-                        .foregroundColor(checkTone(checksRank(checks)))
-                )
             }
         }
     }
 
     /// What to show first: what went wrong, then what is still going, then
-    /// what passed. Skipped checks sort last — four grey rows are the least
+    /// what passed. Skipped sorts last — four grey rows are the least
     /// informative thing a run can say about itself.
     private func rank(_ check: PrCheck) -> Int {
         switch check.rank {
@@ -397,91 +494,102 @@ struct PrPanelView: View {
             return "\(failed) failed"
         }
         if checks.contains(where: { $0.rank == .pending }) { return "Running" }
-        // Not "all \(passed) passed": the rest are skipped or neutral, so a
-        // count here would disagree with the list under it.
+        // Not "all \(passed) passed" when some were skipped: a count here
+        // would disagree with the rows it opens.
         return passed == checks.count ? "All \(passed) passed" : "All passed"
     }
 
     @ViewBuilder
-    private func commitsSection(_ pr: PrDetails) -> some View {
+    private func commitsGroup(_ pr: PrDetails) -> some View {
         if let commits = pr.commits, !commits.isEmpty {
             let shown = commitsExpanded ? commits : Array(commits.prefix(3))
-            Section {
-                ForEach(shown) { commit in
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(commit.messageHeadline ?? commit.shortOid)
-                                .font(.subheadline)
-                                .lineLimit(2)
-                            if let author = commit.author, !author.isEmpty {
-                                Text(author)
-                                    .font(.caption2)
-                                    .foregroundStyle(OS1VisualStyle.textDim)
+            let more = commits.count > shown.count || commitsExpanded
+            infoGroup(
+                "Commits",
+                answer: Text("\(commits.count)").foregroundColor(OS1VisualStyle.textDim)
+            ) {
+                ForEach(Array(shown.enumerated()), id: \.offset) { index, commit in
+                    VStack(spacing: 0) {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(commit.messageHeadline ?? commit.shortOid)
+                                    .font(.subheadline)
+                                    .foregroundStyle(OS1VisualStyle.text)
+                                    .lineLimit(2)
+                                if let author = commit.author, !author.isEmpty {
+                                    Text(author)
+                                        .font(.caption2)
+                                        .foregroundStyle(OS1VisualStyle.textDim)
+                                }
                             }
+                            Spacer(minLength: 8)
+                            Text(commit.shortOid)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(OS1VisualStyle.textDim)
                         }
-                        Spacer(minLength: 8)
-                        Text(commit.shortOid)
-                            .font(.caption.monospaced())
-                            .foregroundStyle(OS1VisualStyle.textDim)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 11)
+                        if more || index < shown.count - 1 {
+                            Divider().padding(.leading, 14)
+                        }
                     }
                 }
-                if commits.count > shown.count || commitsExpanded {
-                    Button(commitsExpanded ? "Show fewer" : "Show all \(commits.count)") {
+                if more {
+                    moreRow(commitsExpanded ? "Show fewer" : "Show all \(commits.count)") {
                         commitsExpanded.toggle()
                     }
-                    .font(.subheadline)
                 }
-            } header: {
-                infoHeader(
-                    "Commits",
-                    detail: Text("\(commits.count)").foregroundColor(OS1VisualStyle.textDim)
-                )
             }
         }
     }
 
     /// What changed, by size. Tapping one crosses to the code page, where the
-    /// same file folds open — the info page never loads a patch of its own.
+    /// same file is already open — the info page never loads a patch of its own.
     @ViewBuilder
-    private func filesSection(_ pr: PrDetails) -> some View {
+    private func filesGroup(_ pr: PrDetails) -> some View {
         if let files = pr.files, !files.isEmpty {
             let shown = filesExpanded ? files : Array(files.prefix(5))
-            Section {
-                ForEach(shown) { file in
+            let more = files.count > shown.count || filesExpanded
+            infoGroup(
+                "Files",
+                answer: Text("+\(pr.additions ?? 0) −\(pr.deletions ?? 0)")
+                    .foregroundColor(OS1VisualStyle.textDim)
+            ) {
+                ForEach(Array(shown.enumerated()), id: \.offset) { index, file in
                     Button {
                         page = .files
                         Haptics.play(.selection)
                     } label: {
-                        HStack(spacing: 8) {
-                            Text(file.path)
-                                .font(.footnote)
-                                .foregroundStyle(OS1VisualStyle.text)
-                                .lineLimit(1)
-                                .truncationMode(.head)
-                            Spacer(minLength: 8)
-                            Text("+\(file.additions ?? 0)")
-                                .font(.caption2.monospaced())
-                                .foregroundStyle(OS1VisualStyle.greenInk)
-                            Text("−\(file.deletions ?? 0)")
-                                .font(.caption2.monospaced())
-                                .foregroundStyle(OS1VisualStyle.redInk)
+                        VStack(spacing: 0) {
+                            HStack(spacing: 8) {
+                                Text(file.path)
+                                    .font(.footnote)
+                                    .foregroundStyle(OS1VisualStyle.text)
+                                    .lineLimit(1)
+                                    .truncationMode(.head)
+                                Spacer(minLength: 8)
+                                Text("+\(file.additions ?? 0)")
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(OS1VisualStyle.greenInk)
+                                Text("−\(file.deletions ?? 0)")
+                                    .font(.caption2.monospaced())
+                                    .foregroundStyle(OS1VisualStyle.redInk)
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 11)
+                            if more || index < shown.count - 1 {
+                                Divider().padding(.leading, 14)
+                            }
                         }
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
-                if files.count > shown.count || filesExpanded {
-                    Button(filesExpanded ? "Show fewer" : "Show all \(files.count)") {
+                if more {
+                    moreRow(filesExpanded ? "Show fewer" : "Show all \(files.count)") {
                         filesExpanded.toggle()
                     }
-                    .font(.subheadline)
                 }
-            } header: {
-                infoHeader(
-                    "Files",
-                    detail: Text("+\(pr.additions ?? 0) −\(pr.deletions ?? 0)")
-                        .foregroundColor(OS1VisualStyle.textDim)
-                )
             }
         }
     }
@@ -759,26 +867,6 @@ struct PrPanelView: View {
                 .foregroundStyle(OS1VisualStyle.yellow)
         case .neutral:
             Image(systemName: "minus.circle").foregroundStyle(.secondary)
-        }
-    }
-
-    @ViewBuilder
-    private func reviewersSection(_ pr: PrDetails) -> some View {
-        if let reviewers = pr.reviewers, !reviewers.isEmpty {
-            Section("Reviewers") {
-                ForEach(Array(reviewers.enumerated()), id: \.offset) { _, reviewer in
-                    HStack {
-                        Text(reviewer.isTeam == true ? "@\(reviewer.login) (team)" : reviewer.login)
-                            .font(.subheadline)
-                        Spacer()
-                        if let state = reviewerBadge(reviewer.state) {
-                            Text(state.label)
-                                .font(.caption)
-                                .foregroundStyle(state.color)
-                        }
-                    }
-                }
-            }
         }
     }
 
