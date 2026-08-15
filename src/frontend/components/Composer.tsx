@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useShortcutLabel } from "../hooks/useShortcutBindings";
 import type { ModelOption, FileMention, ProviderAccountOption } from "../lib/api";
 import { splitAttachments, imageFilesFromPaste, type FileAttachment } from "../lib/images";
@@ -6,11 +12,16 @@ import { loadDraft, onDraftsChanged, saveDraft } from "../lib/drafts";
 import {
   composerHighlightHtml,
   composerMentionRanges,
-  composerSessionRanges,
   needsComposerHighlight,
 } from "../lib/composer-highlight";
 import { insertPastedSessionId } from "../lib/session-url";
-import { sessionTitleFor, shortSessionId } from "../lib/markdown";
+import {
+  applyComposerSessionEdit,
+  composerCanonicalOffset,
+  composerDisplayOffset,
+  projectComposerSessions,
+} from "../lib/composer-session-projection";
+import { onSessionTitlesChanged } from "../lib/markdown";
 import { usePeople } from "../lib/people";
 import { ImageThumbs } from "./ImageThumbs";
 import { FileChips } from "./FileChips";
@@ -27,7 +38,6 @@ import {
   IconCrosshair,
   IconCheck,
   IconEye,
-  IconMessage,
   IconNote,
   IconStopSquare,
 } from "./icons";
@@ -460,6 +470,62 @@ export function Composer({
   const isControlled = value !== undefined;
   const text = isControlled ? value : innerValue;
   const setText = isControlled ? onChange ?? (() => {}) : setInnerValue;
+  const [, setSessionTitleVersion] = useState(0);
+  useEffect(
+    () => onSessionTitlesChanged(() => setSessionTitleVersion((n) => n + 1)),
+    [],
+  );
+  const sessionProjection = projectComposerSessions(text);
+  const displayText = sessionProjection.displayText;
+  const pendingSelection = useRef<{ start: number; end: number } | null>(null);
+  const sessionEditHistory = useRef<{
+    beforeCanonical: string;
+    beforeDisplay: string;
+    beforeCaret: number;
+    afterCanonical: string;
+    afterDisplay: string;
+    afterCaret: number;
+  } | null>(null);
+  const setDisplayText = (
+    next: string,
+    selectionStart = next.length,
+    selectionEnd = selectionStart,
+  ) => {
+    const edit = applyComposerSessionEdit(
+      sessionProjection,
+      next,
+      selectionStart,
+      selectionEnd,
+    );
+    const projected = projectComposerSessions(edit.canonicalText);
+    pendingSelection.current = {
+      start: composerDisplayOffset(projected, edit.canonicalSelectionStart),
+      end: composerDisplayOffset(projected, edit.canonicalSelectionEnd),
+    };
+    if (edit.touchedSession) {
+      const touched = sessionProjection.sessions.find(
+        (session) =>
+          edit.canonicalSelectionStart >= session.canonicalStart &&
+          edit.canonicalSelectionStart <= session.canonicalEnd,
+      );
+      sessionEditHistory.current = {
+        beforeCanonical: text,
+        beforeDisplay: displayText,
+        beforeCaret: touched?.end ?? selectionStart,
+        afterCanonical: edit.canonicalText,
+        afterDisplay: projected.displayText,
+        afterCaret: pendingSelection.current.end,
+      };
+    }
+    setText(edit.canonicalText);
+  };
+  useLayoutEffect(() => {
+    const selection = pendingSelection.current;
+    const el = textareaRef.current;
+    if (!selection || !el) return;
+    pendingSelection.current = null;
+    el.setSelectionRange(selection.start, selection.end);
+  }, [displayText, textareaRef]);
   useEffect(() => {
     if (!isControlled && draftKey) saveDraft(draftKey, { text: innerValue });
   }, [isControlled, draftKey, innerValue]);
@@ -493,7 +559,8 @@ export function Composer({
       const el = textareaRef.current;
       if (el) {
         el.focus();
-        el.selectionStart = el.selectionEnd = next.length;
+        const at = composerDisplayOffset(projectComposerSessions(next), next.length);
+        el.selectionStart = el.selectionEnd = at;
       }
     });
   }, [prefill]);
@@ -642,14 +709,14 @@ export function Composer({
   const vim = useVimMode({
     enabled: vimEnabled,
     textareaRef,
-    value: text,
-    onChange: setText,
+    value: displayText,
+    onChange: setDisplayText,
   });
 
   // "@"-mention file autocomplete (shared with the New-session prompt field).
   const mentions = useFileMentions({
-    value: text,
-    onChange: setText,
+    value: displayText,
+    onChange: setDisplayText,
     textareaRef,
     mentionFetch,
     skillsFetch,
@@ -711,9 +778,9 @@ export function Composer({
   // Insert an "@" at the caret and focus the textarea, opening the mention popup.
   function startMention() {
     const el = textareaRef.current;
-    const at = el ? el.selectionStart : text.length;
-    const next = text.slice(0, at) + "@" + text.slice(at);
-    setText(next);
+    const at = el ? el.selectionStart : displayText.length;
+    const next = displayText.slice(0, at) + "@" + displayText.slice(at);
+    setDisplayText(next);
     queueMicrotask(() => {
       const t = textareaRef.current;
       if (t) {
@@ -774,10 +841,10 @@ export function Composer({
     if (!el) return;
     el.style.height = "";
     // min-/max-height clamp this, so tall drafts scroll internally at the cap.
-    if (text) el.style.height = `${el.scrollHeight}px`;
+    if (displayText) el.style.height = `${el.scrollHeight}px`;
     // Height (and thus clip state) just changed — re-evaluate the edge fades.
     updateFade(el);
-  }, [text, isPhone, minimized]);
+  }, [displayText, isPhone, minimized]);
 
   // Live code styling: when the draft contains a backtick, a metrics-identical
   // mirror div paints `inline` / ```fence``` tints behind a transparent-text
@@ -789,77 +856,25 @@ export function Composer({
   // mention would only chip on the next keystroke.
   const people = usePeople();
   const hlRef = useRef<HTMLDivElement>(null);
-  const hlActive = needsComposerHighlight(text, people);
+  const sessionRanges = sessionProjection.sessions;
+  const hlActive = needsComposerHighlight(displayText, people, sessionRanges);
   const hlHtml = useMemo(
-    () => (hlActive ? composerHighlightHtml(text, people) : ""),
-    [hlActive, text, people],
+    () =>
+      hlActive
+        ? composerHighlightHtml(displayText, people, sessionRanges)
+        : "",
+    [hlActive, displayText, people, sessionRanges],
   );
   const mentionRanges = useMemo(
-    () => composerMentionRanges(text, people),
-    [text, people],
+    () => composerMentionRanges(displayText, people),
+    [displayText, people],
   );
-  const sessionRanges = useMemo(() => composerSessionRanges(text), [text]);
   // A pill's padding is bought out of the space beside it, so the draft pays a
   // wider word space only while it holds one. Both the field and the mirror
   // wear it, or the painted text slides off the caret behind it. Both KINDS of
   // pill ask for it: a session id sits between words exactly as a mention does,
   // and without the room its wash runs up against them.
   const hasPill = mentionRanges.length > 0 || sessionRanges.length > 0;
-
-  // A session in the draft is an id, because the draft is plain text and the id
-  // is what the message has to carry — it is what the agent resolves and what
-  // every client chips. But an id is not what the session is CALLED, and the
-  // mirror cannot show a name in its place: it may only recolour the glyphs the
-  // field lays out, never swap them, or the caret stops landing where the words
-  // are. So the name goes where there is room for it, in the context row above
-  // the field, next to the quote and note chips — the row that already means
-  // "this is attached to the next send, and here is how to take it off".
-  //
-  // Derived from the text rather than stored beside it, which is the whole
-  // reason this is safe: a saved draft, a draft synced from the phone and a
-  // draft you edited by hand all describe themselves. Nothing to fall out of
-  // step, and nothing to lose when a reference is typed rather than pasted.
-  const sessionRefs = useMemo(() => {
-    const seen = new Map<string, { id: string; label: string }>();
-    for (const range of sessionRanges) {
-      if (seen.has(range.id)) continue;
-      seen.set(range.id, {
-        id: range.id,
-        label: sessionTitleFor(range.id) ?? shortSessionId(range.id),
-      });
-    }
-    return [...seen.values()];
-  }, [sessionRanges]);
-
-  // Taking the chip off takes the reference out of the sentence — the chip
-  // names what is in the draft, so leaving the id behind would make it lie. One
-  // space beside it goes too, so removing a reference mid-sentence does not
-  // leave a double space; and the delete runs through execCommand for the same
-  // reason the mention's does, to stay on the field's native undo stack.
-  function removeSessionRef(id: string) {
-    const hits = sessionRanges.filter((r) => r.id === id);
-    if (!hits.length) return;
-    const el = textareaRef.current;
-    const bounds = hits.map((r) => {
-      const end = text[r.end] === " " ? r.end + 1 : r.end;
-      const start =
-        end === r.end && r.start > 0 && text[r.start - 1] === " "
-          ? r.start - 1
-          : r.start;
-      return { start, end };
-    });
-    if (el && bounds.length === 1) {
-      const [only] = bounds;
-      el.focus({ preventScroll: true });
-      el.setSelectionRange(only!.start, only!.end);
-      if (document.execCommand("delete")) return;
-    }
-    let next = text;
-    for (const b of [...bounds].reverse())
-      next = next.slice(0, b.start) + next.slice(b.end);
-    setText(next);
-    el?.focus({ preventScroll: true });
-  }
   useEffect(() => {
     // The textarea scrolls internally at max-height; keep the mirror locked to it.
     const el = textareaRef.current;
@@ -867,24 +882,26 @@ export function Composer({
     if (el && hl) hl.scrollTop = el.scrollTop;
   }, [hlHtml, textareaRef]);
 
-  // Pressing a mention pill removes it. The textarea covers the mirror, so the
-  // press lands on the field — but the browser has already placed the caret by
-  // the time click fires, and a caret strictly INSIDE a pill can only have come
+  // Pressing a mention or session pill removes it. The textarea covers the
+  // mirror, so the press lands on the field. The browser has already placed
+  // the caret by the time click fires, and a caret strictly inside a pill came
   // from pressing it (its edges still place a caret, which is the margin that
-  // keeps an ordinary click near a mention from eating one). Deleting through
+  // keeps an ordinary click near a pill from eating one). Deleting through
   // execCommand keeps the edit on the native undo stack; splicing the value in
   // React state would quietly cost you ⌘Z.
-  function removeMentionAtCaret(el: HTMLTextAreaElement): boolean {
+  function removePillAtCaret(el: HTMLTextAreaElement): boolean {
     if (el.selectionStart !== el.selectionEnd) return false;
     const caret = el.selectionStart;
-    const hit = mentionRanges.find((r) => caret > r.start && caret < r.end);
+    const hit = [...mentionRanges, ...sessionRanges].find(
+      (r) => caret > r.start && caret < r.end,
+    );
     if (!hit) return false;
-    // The trailing space goes with it, so removing a mention mid-sentence
+    // The trailing space goes with it, so removing a pill mid-sentence
     // doesn't leave a double space behind.
-    const end = text[hit.end] === " " ? hit.end + 1 : hit.end;
+    const end = displayText[hit.end] === " " ? hit.end + 1 : hit.end;
     el.setSelectionRange(hit.start, end);
     if (!document.execCommand("delete")) {
-      setText(text.slice(0, hit.start) + text.slice(end));
+      setDisplayText(displayText.slice(0, hit.start) + displayText.slice(end));
       queueMicrotask(() =>
         textareaRef.current?.setSelectionRange(hit.start, hit.start),
       );
@@ -892,7 +909,7 @@ export function Composer({
     return true;
   }
 
-  // Backspace at a mention's end takes the whole name in one press, and Delete
+  // Backspace at a pill's end takes the whole reference in one press, and Delete
   // at its start does the same forwards. The pill reads as one object, so it
   // has to erase like one — picking it apart a letter at a time would also
   // spend two keystrokes rendering a half-name that chips back into prose.
@@ -903,20 +920,21 @@ export function Composer({
   // the space would be worse than useless: the name loses the terminator that
   // makes it a mention, so the pill would vanish into plain text and the next
   // press would start eating letters.
-  function deleteWholeMention(key: string, el: HTMLTextAreaElement): boolean {
+  function deleteWholePill(key: string, el: HTMLTextAreaElement): boolean {
     if (el.selectionStart !== el.selectionEnd) return false;
     const caret = el.selectionStart;
     const back = key === "Backspace";
-    const hit = mentionRanges.find((r) =>
+    const hit = [...mentionRanges, ...sessionRanges].find((r) =>
       back
-        ? caret === r.end || (caret === r.end + 1 && text[r.end] === " ")
+        ? caret === r.end ||
+          (caret === r.end + 1 && displayText[r.end] === " ")
         : caret === r.start,
     );
     if (!hit) return false;
     const end = back ? Math.max(caret, hit.end) : hit.end;
     el.setSelectionRange(hit.start, end);
     if (!document.execCommand("delete")) {
-      setText(text.slice(0, hit.start) + text.slice(end));
+      setDisplayText(displayText.slice(0, hit.start) + displayText.slice(end));
       queueMicrotask(() =>
         textareaRef.current?.setSelectionRange(hit.start, hit.start),
       );
@@ -927,37 +945,41 @@ export function Composer({
   // A pill that can be pressed has to look it, and the field on top owns the
   // cursor — so hover is hit-tested against the mirror's own spans and painted
   // by a data attribute on the one under the pointer.
-  const hoveredMention = useRef<HTMLElement | null>(null);
-  function updateMentionHover(x: number, y: number) {
+  const hoveredPill = useRef<HTMLElement | null>(null);
+  function updatePillHover(x: number, y: number) {
     const hl = hlRef.current;
     const el = textareaRef.current;
     if (!hl || !el) return;
     let hit: HTMLElement | null = null;
-    for (const span of hl.querySelectorAll<HTMLElement>(".cmp-mention")) {
+    for (const span of hl.querySelectorAll<HTMLElement>(
+      ".cmp-mention, .cmp-session",
+    )) {
       // Per fragment, not per span: a mention that wraps has two boxes.
       for (const r of span.getClientRects())
         if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom)
           hit = span;
       if (hit) break;
     }
-    if (hoveredMention.current === hit) return;
-    hoveredMention.current?.removeAttribute("data-hover");
+    if (hoveredPill.current === hit) return;
+    hoveredPill.current?.removeAttribute("data-hover");
     hit?.setAttribute("data-hover", "");
-    hoveredMention.current = hit;
+    hoveredPill.current = hit;
     el.style.cursor = hit ? "pointer" : "";
   }
   // Every keystroke rewrites the mirror's innerHTML, so the hovered span is a
   // dangling node from the render before it.
   useEffect(() => {
-    hoveredMention.current = null;
+    hoveredPill.current = null;
     if (textareaRef.current) textareaRef.current.style.cursor = "";
   }, [hlHtml, textareaRef]);
 
   // Dictated text lands at the end of the draft (with a joining space) and
   // focus returns to the textarea so you can touch it up and send.
   function insertDictation(t: string) {
-    const next = text.trim() ? `${text.replace(/\s+$/, "")} ${t}` : t;
-    setText(next);
+    const next = displayText.trim()
+      ? `${displayText.replace(/\s+$/, "")} ${t}`
+      : t;
+    setDisplayText(next);
     queueMicrotask(() => {
       const el = textareaRef.current;
       if (el) {
@@ -968,6 +990,34 @@ export function Composer({
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
+    const history = sessionEditHistory.current;
+    const undo =
+      (e.metaKey || e.ctrlKey) &&
+      !e.altKey &&
+      !e.shiftKey &&
+      e.key.toLowerCase() === "z";
+    const redo =
+      !e.altKey &&
+      ((e.metaKey && e.shiftKey && e.key.toLowerCase() === "z") ||
+        (e.ctrlKey && !e.metaKey && e.key.toLowerCase() === "y"));
+    if (history && undo && text === history.afterCanonical) {
+      e.preventDefault();
+      pendingSelection.current = {
+        start: history.beforeCaret,
+        end: history.beforeCaret,
+      };
+      setText(history.beforeCanonical);
+      return;
+    }
+    if (history && redo && text === history.beforeCanonical) {
+      e.preventDefault();
+      pendingSelection.current = {
+        start: history.afterCaret,
+        end: history.afterCaret,
+      };
+      setText(history.afterCanonical);
+      return;
+    }
     if (mentions.handleKeyDown(e)) return;
     if ((e.nativeEvent as any).isComposing) return;
     if (
@@ -976,7 +1026,7 @@ export function Composer({
       !e.ctrlKey &&
       !e.altKey &&
       textareaRef.current &&
-      deleteWholeMention(e.key, textareaRef.current)
+      deleteWholePill(e.key, textareaRef.current)
     ) {
       e.preventDefault();
       return;
@@ -1008,8 +1058,13 @@ export function Composer({
       !e.metaKey &&
       !e.ctrlKey
     ) {
-      const caret = textareaRef.current?.selectionStart ?? text.length;
-      if (insideOpenFence(text, caret)) return; // let the newline land
+      const displayCaret =
+        textareaRef.current?.selectionStart ?? displayText.length;
+      const canonicalCaret = composerCanonicalOffset(
+        sessionProjection,
+        displayCaret,
+      );
+      if (insideOpenFence(text, canonicalCaret)) return; // let the newline land
     }
     // While a run is busy, ⌘/Ctrl+Enter does its own configured follow-up
     // action (Settings → Preferences, default steer: fold into the running turn
@@ -1151,17 +1206,6 @@ export function Composer({
               disabled={disabled}
             />
           )}
-          {sessionRefs.map((ref) => (
-            <ComposerContextChip
-              key={`session:${ref.id}`}
-              icon={<IconMessage size={15} />}
-              label={ref.label}
-              title={`Referencing ${ref.label} (${ref.id})`}
-              onRemove={() => removeSessionRef(ref.id)}
-              removeLabel={`Remove the reference to ${ref.label}`}
-              disabled={disabled}
-            />
-          ))}
         </AnimatePresence>
         <ImageThumbs images={imgs} onRemove={removeImage} disabled={disabled} />
         <FileChips files={fls} onRemove={removeFile} disabled={disabled} />
@@ -1256,20 +1300,50 @@ export function Composer({
                     ? "Chat with selected text"
                     : placeholder
             }
-            value={text}
+            value={displayText}
             onChange={(e) => {
-              setText(e.target.value);
+              const inputType = (e.nativeEvent as InputEvent).inputType;
+              const history = sessionEditHistory.current;
+              if (
+                inputType === "historyUndo" &&
+                history &&
+                e.target.value === history.beforeDisplay
+              ) {
+                pendingSelection.current = {
+                  start: e.target.selectionStart,
+                  end: e.target.selectionEnd,
+                };
+                setText(history.beforeCanonical);
+                return;
+              }
+              if (
+                inputType === "historyRedo" &&
+                history &&
+                e.target.value === history.afterDisplay
+              ) {
+                pendingSelection.current = {
+                  start: e.target.selectionStart,
+                  end: e.target.selectionEnd,
+                };
+                setText(history.afterCanonical);
+                return;
+              }
+              setDisplayText(
+                e.target.value,
+                e.target.selectionStart,
+                e.target.selectionEnd,
+              );
               // Caret has moved to the new value; re-evaluate after React commits.
               queueMicrotask(mentions.sync);
             }}
             onKeyDown={handleKeyDown}
             onKeyUp={mentions.sync}
             onClick={(e) => {
-              if (removeMentionAtCaret(e.currentTarget)) return;
+              if (removePillAtCaret(e.currentTarget)) return;
               mentions.sync();
             }}
-            onMouseMove={(e) => updateMentionHover(e.clientX, e.clientY)}
-            onMouseLeave={() => updateMentionHover(-1, -1)}
+            onMouseMove={(e) => updatePillHover(e.clientX, e.clientY)}
+            onMouseLeave={() => updatePillHover(-1, -1)}
             onScroll={(e) => {
               if (hlRef.current)
                 hlRef.current.scrollTop = e.currentTarget.scrollTop;

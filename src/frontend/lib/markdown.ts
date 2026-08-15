@@ -206,6 +206,7 @@ const AUTOMATION_ID_BARE = new RegExp(
 // The app shell registers the titles it already polls (App.tsx); anything not in
 // that list — archived, deleted, not yet polled — falls back to a shortened id.
 let sessionTitles = new Map<string, string>();
+const sessionTitleListeners = new Set<() => void>();
 /** Sessions whose agent is mid-run, for the chip's live dot. */
 let runningSessions = new Set<string>();
 const SESSION_TITLE_MAX = 38;
@@ -245,6 +246,13 @@ export function setSessionTitles(
   sessionTitles = next;
   // Labels are baked into the cached HTML, so it has to go when they change.
   mdCache.clear();
+  for (const listener of sessionTitleListeners) listener();
+}
+
+/** Re-render draft projections when a session is named or renamed. */
+export function onSessionTitlesChanged(listener: () => void): () => void {
+  sessionTitleListeners.add(listener);
+  return () => sessionTitleListeners.delete(listener);
 }
 
 // ── @-mentions of teammates ────────────────────────────────────────────────
@@ -320,7 +328,11 @@ function personChip(person: { name: string; github?: string }): string {
 
 /** Keep already-rendered session chips in step with who is running now. */
 function syncRenderedSessionRuns(): void {
-  if (typeof document === "undefined") return;
+  if (
+    typeof document === "undefined" ||
+    typeof document.querySelectorAll !== "function"
+  )
+    return;
   for (const anchor of document.querySelectorAll<HTMLAnchorElement>(
     "a.session-link[data-session-id]",
   )) {
@@ -332,12 +344,8 @@ function syncRenderedSessionRuns(): void {
 }
 
 /**
- * The title we know for a session id, and the abbreviated id to fall back on.
- * Exported for the composer, which has to NAME a session somewhere a chip
- * cannot go: the draft is plain text, so a reference in it is the id and only
- * the id, and the name has to be shown beside the field instead. Same registry
- * the rendered chips label themselves from, so the draft and the sent message
- * call a session the same thing.
+ * The title we know for a session id. The composer and sent-message chips use
+ * the same registry, so a reference keeps one name before and after sending.
  */
 export function sessionTitleFor(id: string): string | undefined {
   return sessionTitles.get(id);

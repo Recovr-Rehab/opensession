@@ -119,6 +119,29 @@ describe("session ids in the mirror", () => {
 		);
 	});
 
+	test("a known session shows its name inline", () => {
+		const label = "Clean pasted open session links";
+		expect(
+			composerHighlightHtml(`look at ${label} first`, [], [
+				{ start: 8, end: 39, id: ID, label },
+			]),
+		).toBe(
+			'look at <span class="cmp-session cmp-session-named">' +
+				"Clean pasted open session links</span> first​",
+		);
+	});
+
+	test("markdown in a session title stays inside the session pill", () => {
+		const title = "Fix `inline` and ``` fences";
+		expect(
+			composerHighlightHtml(title, [], [
+				{ start: 0, end: title.length, id: ID, label: title },
+			]),
+		).toBe(
+			'<span class="cmp-session cmp-session-named">Fix `inline` and ``` fences</span>​',
+		);
+	});
+
 	test("the longer legacy prefix lends the same slot", () => {
 		expect(composerSessionRanges(`bks-${ID.slice(3)}`)).toEqual([
 			{ start: 0, end: 40, id: `bks-${ID.slice(3)}` },

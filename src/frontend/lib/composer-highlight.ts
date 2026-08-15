@@ -74,6 +74,8 @@ export interface SessionRange {
 	/** Exclusive. */
 	end: number;
 	id: string;
+	/** Visible title when the textarea is projecting this id as a named token. */
+	label?: string;
 }
 
 /**
@@ -107,10 +109,28 @@ export function composerSessionRanges(text: string): SessionRange[] {
 /** Both kinds of pill, in the order they appear in the draft. */
 type DraftRange = MentionRange | SessionRange;
 
-function draftRanges(text: string, people: Person[]): DraftRange[] {
+function overlapsSession(
+	ranges: DraftRange[],
+	start: number,
+	end: number,
+): boolean {
+	return ranges.some(
+		(range) =>
+			"id" in range &&
+			!!range.label &&
+			start < range.end &&
+			end > range.start,
+	);
+}
+
+function draftRanges(
+	text: string,
+	people: Person[],
+	sessions: SessionRange[],
+): DraftRange[] {
 	const ranges: DraftRange[] = [
 		...composerMentionRanges(text, people),
-		...composerSessionRanges(text),
+		...sessions,
 	];
 	// A mention starts at an `@` and an id never does, so the two kinds cannot
 	// overlap and sorting by start is enough to walk them as one list.
@@ -142,18 +162,18 @@ function mentionHtml(text: string, range: MentionRange): string {
 }
 
 /**
- * One session pill. Same trick as the face, for the same reason: the mirror
- * may not take a pixel of width, so the chat glyph has nowhere to go except a
- * slot the text already owns. The `os-` / `bks-` prefix lends it one — that
- * prefix is the least of the id, since the glyph beside it now says "session"
- * far better than three characters of it did, and the text underneath is
- * untouched, so the caret, the selection and a copy still see every character.
+ * One session pill. A known session already arrives as its projected title,
+ * so the mirror only paints the pill around those same characters. An unknown
+ * session keeps its id. The chat glyph then has nowhere to go except a slot the
+ * text already owns, so the `os-` / `bks-` prefix lends it one.
  *
  * Hiding the whole prefix rather than part of it is the point. A uuid is not
  * read as a word, so losing `os-` reads as a labelled chip; losing only the
  * `o` would leave `s-01a0…`, which reads as damage.
  */
 function sessionHtml(text: string, range: SessionRange): string {
+	if (range.label)
+		return `<span class="cmp-session cmp-session-named">${esc(text.slice(range.start, range.end))}</span>`;
 	const prefixEnd = text.indexOf("-", range.start) + 1;
 	const prefix = esc(text.slice(range.start, prefixEnd));
 	const rest = esc(text.slice(prefixEnd, range.end));
@@ -197,6 +217,7 @@ function inlineCode(
 	let m: RegExpExecArray | null;
 	while ((m = re.exec(seg))) {
 		const at = from + m.index;
+		if (overlapsSession(ranges, at, at + m[0].length)) continue;
 		out += chips(text, last, at, ranges);
 		out += `<span class="cmp-code">${esc(m[0])}</span>`;
 		last = at + m[0].length;
@@ -215,13 +236,15 @@ function inlineCode(
 export function composerHighlightHtml(
 	text: string,
 	people: Person[] = [],
+	sessions: SessionRange[] = composerSessionRanges(text),
 ): string {
-	const ranges = draftRanges(text, people);
+	const ranges = draftRanges(text, people, sessions);
 	let out = "";
 	let last = 0;
 	const re = /```[\s\S]*?```|```[\s\S]*$/g;
 	let m: RegExpExecArray | null;
 	while ((m = re.exec(text))) {
+		if (overlapsSession(ranges, m.index, m.index + m[0].length)) continue;
 		out += inlineCode(text, last, m.index, ranges);
 		out += `<span class="cmp-fence">${esc(m[0])}</span>`;
 		last = m.index + m[0].length;
@@ -236,10 +259,11 @@ export function composerHighlightHtml(
 export function needsComposerHighlight(
 	text: string,
 	people: Person[] = [],
+	sessions: SessionRange[] = composerSessionRanges(text),
 ): boolean {
 	return (
 		text.includes("`") ||
 		composerMentionRanges(text, people).length > 0 ||
-		composerSessionRanges(text).length > 0
+		sessions.length > 0
 	);
 }
