@@ -233,8 +233,14 @@
 	--tooltip-bg: #303030;
 	--tooltip-fg: #eeeeee;
 	--tooltip-ring: rgba(255, 255, 255, 0.1);
-	--green: #3fb950;
-	--green-soft: rgba(63, 185, 80, 0.14);
+	/* Status green and red. Both are held at the lightness they had and taken
+	   out to the chroma their hue can carry, which is what separates them from
+	   the greyed GitHub-era pair they started as. Lightness is the channel that
+	   is spoken for: green is the fill under CheckStatusIcon's white knockout
+	   and red is the fill under the sidebar's white attention count, so moving
+	   it moves a contrast ratio. Chroma costs nothing there. */
+	--green: #00bc52;
+	--green-soft: rgba(0, 188, 82, 0.14);
 	--yellow: #d29922;
 	/* The wash behind a --yellow label: the "Running" pill. In-progress work is
 	   yellow throughout — the pulsing run indicators and the "In progress"
@@ -250,8 +256,8 @@
 	--yellow-tint: #d29922;
 	--blue: #58a6ff;
 	--blue-soft: rgba(88, 166, 255, 0.13);
-	--red: #f85149;
-	--red-soft: rgba(248, 81, 73, 0.12);
+	--red: #fc4a47;
+	--red-soft: rgba(252, 74, 71, 0.12);
 	--purple: #a371f7;
 	/* Tool-family hues (transcript timeline icons + detail accents) */
 	--tool-run: #3fb950;
@@ -442,8 +448,16 @@ html[data-theme="light"] {
 	--tooltip-bg: #222222;
 	--tooltip-fg: #ffffff;
 	--tooltip-ring: rgba(255, 255, 255, 0.12);
-	--green: #1a7f37;
-	--green-soft: rgba(26, 127, 55, 0.12);
+	/* See the note on the dark pair. Light mode is where the old values read as
+	   dated, because sRGB holds almost no chroma at the lightness they sat at:
+	   the green was 92% of the little a forest green can carry. These lift the
+	   lightness instead, which is the only way to a vivid green here, and they
+	   spend the contrast headroom the two fills were carrying rather than the
+	   floor. White on green goes 5.08:1 to 3.82:1, above the 3:1 a knocked-out
+	   glyph needs, and white on red 5.36:1 to 4.54:1, still past 4.5:1 for the
+	   10px count that sits on it. */
+	--green: #009740;
+	--green-soft: rgba(0, 151, 64, 0.12);
 	--yellow: #9a6700;
 	--yellow-soft: rgba(154, 103, 0, 0.12);
 	/* See the note on --yellow-tint above: light mode's ink is too dark and too
@@ -451,8 +465,8 @@ html[data-theme="light"] {
 	--yellow-tint: #f0b400;
 	--blue: #0969da;
 	--blue-soft: rgba(9, 105, 218, 0.1);
-	--red: #cf222e;
-	--red-soft: rgba(207, 34, 46, 0.1);
+	--red: #de3334;
+	--red-soft: rgba(222, 51, 52, 0.1);
 	--purple: #8250df;
 	--tool-run: #1a7f37;
 	--tool-file: #0969da;

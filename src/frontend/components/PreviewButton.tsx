@@ -42,7 +42,7 @@ const spinnerClass =
   "size-[10px] shrink-0 rounded-full border border-line-strong border-t-accent animate-[preview-spin_0.7s_linear_infinite]";
 
 const popoverActionClass =
-  "w-full rounded-control border border-[rgba(248,81,73,0.4)] bg-transparent px-2.5 py-[5px] text-xs font-semibold text-red disabled:cursor-default disabled:opacity-45 disabled:hover:bg-transparent hover:bg-[rgba(248,81,73,0.12)]";
+  "w-full rounded-control border border-[color-mix(in_srgb,var(--red)_40%,transparent)] bg-transparent px-2.5 py-[5px] text-xs font-semibold text-red disabled:cursor-default disabled:opacity-45 disabled:hover:bg-transparent hover:bg-[color-mix(in_srgb,var(--red)_12%,transparent)]";
 
 /**
  * Header control for a session's local dev server ("Preview"). When the
@@ -334,7 +334,7 @@ export function PreviewButton({
                 className={cn(
                   "size-[7px] shrink-0 rounded-full",
                   s.running
-                    ? "bg-green shadow-[0_0_0_2px_rgba(63,185,80,0.18)]"
+                    ? "bg-green shadow-[0_0_0_2px_color-mix(in_srgb,var(--green)_18%,transparent)]"
                     : "bg-[var(--text-faint)] shadow-none",
                 )}
               />
@@ -602,7 +602,7 @@ export function PreviewButton({
             className={cn(
               splitSegmentBase,
               "gap-1.5 whitespace-nowrap rounded-l-[calc(5px*var(--rf))] px-[11px] py-[5px] text-label font-semibold text-green no-underline",
-              "hover:relative hover:z-[1] hover:border-[rgba(63,185,80,0.5)] hover:bg-[rgba(63,185,80,0.12)] hover:text-green",
+              "hover:relative hover:z-[1] hover:border-[color-mix(in_srgb,var(--green)_50%,transparent)] hover:bg-[color-mix(in_srgb,var(--green)_12%,transparent)] hover:text-green",
             )}
             href={url}
             target="_blank"
@@ -624,7 +624,7 @@ export function PreviewButton({
             className={cn(
               splitSegmentBase,
               "group gap-1.5 whitespace-nowrap rounded-l-[calc(5px*var(--rf))] px-[11px] py-[5px] text-label font-semibold text-dim",
-              "cursor-pointer hover:relative hover:z-[1] hover:border-[rgba(248,81,73,0.4)] hover:bg-[rgba(248,81,73,0.1)] hover:text-red",
+              "cursor-pointer hover:relative hover:z-[1] hover:border-[color-mix(in_srgb,var(--red)_40%,transparent)] hover:bg-[color-mix(in_srgb,var(--red)_10%,transparent)] hover:text-red",
             )}
             onClick={stop}
             disabled={stopping}
@@ -672,7 +672,7 @@ export function PreviewButton({
             splitSegmentBase,
             "-ml-px px-2 py-1",
             running
-              ? "text-[color:color-mix(in_srgb,var(--green)_72%,var(--text-dim))] hover:relative hover:z-[1] hover:border-[rgba(63,185,80,0.5)] hover:bg-[rgba(63,185,80,0.12)] hover:text-green"
+              ? "text-[color:color-mix(in_srgb,var(--green)_72%,var(--text-dim))] hover:relative hover:z-[1] hover:border-[color-mix(in_srgb,var(--green)_50%,transparent)] hover:bg-[color-mix(in_srgb,var(--green)_12%,transparent)] hover:text-green"
               : "hover:relative hover:z-[1] hover:border-accent hover:bg-hover hover:text-accent",
             "aria-disabled:cursor-default aria-disabled:opacity-45 aria-disabled:hover:border-line-strong aria-disabled:hover:bg-transparent aria-disabled:hover:text-dim",
           )}
@@ -689,7 +689,7 @@ export function PreviewButton({
             className={cn(
               splitSegmentBase,
               "-ml-px px-2 py-1 text-[color:color-mix(in_srgb,var(--green)_72%,var(--text-dim))]",
-              "hover:relative hover:z-[1] hover:border-[rgba(63,185,80,0.5)] hover:bg-[rgba(63,185,80,0.12)] hover:text-green",
+              "hover:relative hover:z-[1] hover:border-[color-mix(in_srgb,var(--green)_50%,transparent)] hover:bg-[color-mix(in_srgb,var(--green)_12%,transparent)] hover:text-green",
             )}
             onClick={snap}
             disabled={snapping}
@@ -708,11 +708,11 @@ export function PreviewButton({
                   ? "text-[color:color-mix(in_srgb,var(--green)_72%,var(--text-dim))]"
                   : "text-dim",
                 open || running
-                  ? "relative z-[1] border-[rgba(63,185,80,0.5)] bg-[rgba(63,185,80,0.12)] text-green"
+                  ? "relative z-[1] border-[color-mix(in_srgb,var(--green)_50%,transparent)] bg-[color-mix(in_srgb,var(--green)_12%,transparent)] text-green"
                   : "",
                 !running && "hover:relative hover:z-[1] hover:border-accent hover:bg-hover hover:text-accent",
                 running && !open &&
-                  "hover:relative hover:z-[1] hover:border-[rgba(63,185,80,0.5)] hover:bg-[rgba(63,185,80,0.12)] hover:text-green",
+                  "hover:relative hover:z-[1] hover:border-[color-mix(in_srgb,var(--green)_50%,transparent)] hover:bg-[color-mix(in_srgb,var(--green)_12%,transparent)] hover:text-green",
               )}
               title="Dev server processes"
             >
