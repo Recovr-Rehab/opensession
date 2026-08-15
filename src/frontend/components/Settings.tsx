@@ -960,7 +960,7 @@ function MobileSettings({
 										<div className="mb-2 mt-5 px-1 text-control-label font-semibold text-faint">
 											{g.group}
 										</div>
-										<div className="overflow-hidden rounded-2xl border border-line bg-settings-plate">
+										<div className="overflow-hidden rounded-2xl border border-divider bg-settings-plate">
 											{g.hits.map(({ item: s, hint }) => (
 												<button
 													key={s.key}

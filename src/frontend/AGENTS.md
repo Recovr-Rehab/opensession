@@ -63,9 +63,13 @@ language instead of introducing a new local style for each feature.
   has deliberately been taken below where a fill alone holds its shape, which
   today is the settings plate (`--settings-plate`, `ui/settings.tsx`): there
   the hairline replaces the weight the fill gave up rather than adding to it,
-  and the pair is quieter than the full L1 grey was on its own. That is a
-  trade, not a licence. It does not extend to `Card`, which stays borderless,
-  and a card that still carries a normal fill has nothing to trade.
+  and the pair is quieter than the full L1 grey was on its own. It takes
+  `border-divider`, the chrome seam, not the `border-line` its own rows take:
+  closing a block's shape asks less of a line than separating two rows does,
+  and at the row weight the outline was the loudest thing on the page. That is
+  a trade, not a licence. It does not extend to `Card`, which stays
+  borderless, and a card that still carries a normal fill has nothing to
+  trade.
 - Round generously, and scale the radius with the box. The scale in
   `styles/tailwind.css` runs `rounded-sm` 4, `rounded-md` 7, `rounded-lg` 14,
   `rounded-xl` 18, `rounded-2xl` 22, plus the named chrome corners

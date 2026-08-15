@@ -92,11 +92,18 @@ export function SettingsGroupLabel({
  * why this surface carries a hairline where the house rule says a card should
  * not (see src/frontend/AGENTS.md). The edge REPLACES the weight the fill gave
  * up rather than adding to it: the two together are quieter than the L1 grey
- * was on its own. It is the same `line` the rows inside take, so the block
- * reads as one drawn object instead of an outline round a set of rules. Do not
- * restore the heavier fill and keep the edge, and do not add the edge back to
- * `Card`, which is borderless for the reason the rule gives. */
-const settingsSurface = "rounded-2xl border border-line bg-settings-plate";
+ * was on its own. Do not restore the heavier fill and keep the edge, and do
+ * not add the edge back to `Card`, which is borderless for the reason the rule
+ * gives.
+ *
+ * It takes `divider`, the chrome seam, rather than the `line` the rows inside
+ * take. Those are two different jobs at the same scale: a rule between rows
+ * has content on both sides and has to be read as a separation, while this one
+ * only has to close the block's shape, and the fill under it is already saying
+ * where the block is. At the row weight the outline was the loudest thing on
+ * the page. `divider` is `line` at 55%, so it lands under the rules it
+ * contains and the block reads as one object rather than a frame. */
+const settingsSurface = "rounded-2xl border border-divider bg-settings-plate";
 
 export function SettingCard({
 	className,
