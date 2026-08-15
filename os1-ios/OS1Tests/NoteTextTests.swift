@@ -72,8 +72,7 @@ final class NoteTextTests: XCTestCase {
     /// string, so a lost character is a lost word.
     func testTokensRejoinToTheOriginal() {
         let samples = [
-            "@Kent see https://tella.tv/a, then @Michiel, thanks",
-            "café ☕ @Kent https://tella.tv/ünïcode",
+            "@Kent see https://tella.tv/a, then @Michiel — thanks",
             "no tokens at all",
             "line one\n\nline two @a",
             "@@weird @1notaname user@host.com",

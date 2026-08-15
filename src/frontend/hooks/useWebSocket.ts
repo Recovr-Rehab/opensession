@@ -108,7 +108,7 @@ export function useWebSocket(presenceActive = true) {
     };
 
     ws.onmessage = (e) => {
-      if (wsRef.current !== ws) return; // superseded socket — ignore stragglers
+      if (wsRef.current !== ws) return; // superseded socket, ignore stragglers
       aliveRef.current = true;
       countSessionPerf(
         "ws_bytes_received",

@@ -1,6 +1,6 @@
 import type { UnifiedSession } from "./types";
 import type { OpenPr } from "./api";
-import { GITHUB_BOT_LOGINS } from "./brand";
+import { isBotAuthor } from "./pr-comments";
 import { FALLBACK_REPO, sessionRepoOr } from "./session-repo";
 
 export type ReviewBucket = "ready" | "attention" | "waiting";
@@ -348,11 +348,7 @@ export function buildReviewQueue(
 		// it, so it never changed the answer. Dropping it removes a second full
 		// scan of every session, per PR.
 		const owners = ownersByBranch.get(branchKey(pr.repo, pr.branch)) || [];
-		const author = pr.author.toLowerCase();
-		const automation =
-			GITHUB_BOT_LOGINS.has(author) ||
-			author.endsWith("-bot") ||
-			author.endsWith("[bot]");
+		const automation = isBotAuthor(pr.author);
 		const requested = (pr.reviewRequested || []).some(
 			(person) => person.toLowerCase() === me,
 		);

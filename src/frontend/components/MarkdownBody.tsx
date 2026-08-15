@@ -161,7 +161,7 @@ export function MarkdownBody({
 				// continues), so only an un-cancelled run counts as upgraded.
 				if (alive) upgradedRef.current = { el, key: upgradeKey };
 			},
-			() => {}, // both upgrades are progressive enhancement — plain pre stays
+			() => {}, // both upgrades are progressive enhancement, plain pre stays
 		);
 		return () => {
 			alive = false;

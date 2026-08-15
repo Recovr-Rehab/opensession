@@ -455,9 +455,9 @@ export function Composer({
   useEffect(() => {
     if (!isControlled && draftKey) saveDraft(draftKey, { text: innerValue });
   }, [isControlled, draftKey, innerValue]);
-  // Drafts can also arrive from another device. Never replace text under a
-  // live cursor; hold it until blur, then apply it only if it is still the
-  // server-backed copy (a later local keystroke has already won otherwise).
+  // A draft can also arrive from elsewhere: typed on the phone, or sent there
+  // and cleared. Take it while the field is unfocused, so text can appear (or
+  // go) under someone who is not looking, but never under their cursor.
   const pendingRemoteText = useRef<string | null>(null);
   useEffect(() => {
     if (isControlled || !draftKey) return;

@@ -313,7 +313,7 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
       !followingRef.current &&
       distanceFromBottom() > STICK_THRESHOLD
     ) {
-      setNewBelow(true); // content arrived out of view — let the UI announce it
+      setNewBelow(true); // content arrived out of view, let the UI announce it
     }
     updateScrollToBottomVisibility();
   }, [sizeSpacer, anchorToTop, distanceFromBottom, updateScrollToBottomVisibility]);
@@ -339,7 +339,7 @@ export function useSessionScroll(initialFollowing = true): SessionScroll {
     const now = performance.now();
     if (autoFlightRef.current) {
       if (now > autoFlightRef.current) {
-        autoFlightRef.current = 0; // overdue — treat the event as the reader's
+        autoFlightRef.current = 0; // overdue, treat the event as the reader's
       } else if (atEdge) {
         autoFlightRef.current = 0; // arrived
         if (!followingRef.current) setFollowing(true);

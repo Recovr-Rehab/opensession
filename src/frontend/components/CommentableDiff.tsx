@@ -890,7 +890,9 @@ export function CommentableDiff({
           })
         : files.map(renderFile)}
       <div className="pb-2 text-center text-meta text-faint">
-        {reviewMode
+        {disabled
+          ? disabledHint || "Commenting is unavailable right now."
+          : reviewMode
           ? "Click a line number (drag for a range) to add a comment. They stay pending until you finish the review."
           : "Click a line number (drag for a range) to comment."}
       </div>

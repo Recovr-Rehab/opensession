@@ -27,7 +27,7 @@ const mediaUrl = (path: string) => `/media?path=${encodeURIComponent(path)}`;
  *
  * Because it is opaque it reads on a white screenshot and on a dark one alike,
  * so it can simply follow the app theme instead of sampling the image under
- * it. A drop shadow under the hairline is what lifts it off the picture, now
+ * it. A tight shadow under the hairline is what lifts it off the picture, now
  * that the tile's corner no longer holds it in place.
  *
  * `rounded-[999px]`, not `rounded-full`: base.css grants squircle corners to
@@ -396,13 +396,13 @@ export function WalkthroughCard({
 															)
 														}
 													/>
-											<span
-												className={cn(
-													SHOT_LABEL,
-													WALKTHROUGH_LABEL_TONE[side],
-												)}
-											>
-												{WALKTHROUGH_LABEL_TEXT[side]}
+													<span
+														className={cn(
+															SHOT_LABEL,
+															WALKTHROUGH_LABEL_TONE[side],
+														)}
+													>
+														{WALKTHROUGH_LABEL_TEXT[side]}
 													</span>
 												</button>
 											</figure>
@@ -523,14 +523,14 @@ export function WalkthroughCard({
 																	alt={`${shot.caption || "change"} · ${side}`}
 																	loading="lazy"
 																/>
-																<span
-																	className={cn(
-																		SHOT_LABEL,
-														WALKTHROUGH_LABEL_TONE[side],
-																	)}
-																>
-													{WALKTHROUGH_LABEL_TEXT[side]}
-																</span>
+															<span
+																className={cn(
+																	SHOT_LABEL,
+																	WALKTHROUGH_LABEL_TONE[side],
+																)}
+															>
+																{WALKTHROUGH_LABEL_TEXT[side]}
+															</span>
 															</button>
 														</figure>
 													),
