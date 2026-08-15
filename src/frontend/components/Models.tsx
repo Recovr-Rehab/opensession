@@ -92,17 +92,19 @@ interface CodexAccountInfo {
 	usable: boolean;
 	usage: {
 		fetchedAt: string;
-		buckets: {
-			id: string;
-			label?: string;
-			plan?: string;
-			primary: (UsageWindow & { windowDurationMins: number | null }) | null;
-			secondary: (UsageWindow & { windowDurationMins: number | null }) | null;
-			rateLimitReachedType?: string;
-		}[];
+		buckets: CodexUsageBucket[];
 		resetCreditsAvailable: number | null;
 		error?: string;
 	} | null;
+}
+
+interface CodexUsageBucket {
+	id: string;
+	label?: string;
+	plan?: string;
+	primary: (UsageWindow & { windowDurationMins: number | null }) | null;
+	secondary: (UsageWindow & { windowDurationMins: number | null }) | null;
+	rateLimitReachedType?: string;
 }
 
 /** The subscription half of Settings → Models: the Anthropic/OpenAI accounts
@@ -643,7 +645,6 @@ function usageTone(pct: number | null): keyof typeof usageToneClasses {
 }
 
 const statusToneClasses = {
-	green: "bg-green-soft text-green",
 	red: "bg-red-soft text-red",
 	yellow: "bg-[rgba(210,153,34,0.15)] text-yellow",
 } as const;
@@ -691,21 +692,22 @@ function absoluteReset(resetsAt: string | null): string | undefined {
 }
 
 /**
- * The meters under an account share one grid, so labels, bars, values and
- * reset times line up down their columns however many windows the account
- * reports. Each meter used to be its own flex row carrying hard-coded column
- * widths (w-11 / w-[34px] / w-[132px]) — nothing was actually aligned, and a
- * label longer than 44px was simply truncated.
+ * The meters under an account share one grid, so bars and values line up down
+ * their columns however many windows the account reports. Each row is two
+ * things, not four: what the limit is and when it frees up on the left, how
+ * full it is on the right. The label column used to be a fixed 46px, which
+ * truncated every Codex bucket to "Codex…" / "GPT-5…", losing the one word
+ * that said which limit you were looking at.
  */
 function MeterGroup({ children }: { children: React.ReactNode }) {
 	return (
-		<div className="mt-2 grid max-w-[420px] grid-cols-[46px_minmax(0,1fr)_auto_minmax(88px,auto)] items-center gap-x-2.5 gap-y-1.5 text-meta">
+		<div className="mt-2 grid max-w-[420px] grid-cols-[minmax(0,1fr)_112px_minmax(42px,auto)] items-center gap-x-3 gap-y-1.5 text-meta phone:grid-cols-[minmax(0,1fr)_72px_minmax(38px,auto)] phone:gap-x-2">
 			{children}
 		</div>
 	);
 }
 
-/** One row of MeterGroup's grid: label, bar, value, note. */
+/** One row of MeterGroup's grid: label and note, bar, value. */
 function Meter({
 	label,
 	labelTitle,
@@ -724,8 +726,20 @@ function Meter({
 }) {
 	return (
 		<>
-			<span className="truncate text-faint" title={labelTitle}>
+			{/* One line on desktop; on a phone the column is too narrow for
+			    "Fable · resets in 5d", so it wraps rather than clipping the
+			    reset time, which a touch device can't reveal with a tooltip. */}
+			<span
+				className="overflow-hidden text-ellipsis whitespace-nowrap text-dim phone:overflow-visible phone:whitespace-normal"
+				title={labelTitle}
+			>
 				{label}
+				{note ? (
+					<span className="text-faint" title={noteTitle}>
+						{" · "}
+						{note}
+					</span>
+				) : null}
 			</span>
 			<div className="h-1.5 overflow-hidden rounded-full bg-active">
 				<div
@@ -737,9 +751,6 @@ function Meter({
 				/>
 			</div>
 			<span className="text-right tabular-nums text-dim">{value}</span>
-			<span className="truncate text-faint" title={noteTitle}>
-				{note}
-			</span>
 		</>
 	);
 }
@@ -778,7 +789,7 @@ function ExtraUsageRow({
 			labelTitle="Usage-credits: pay-as-you-go spend past the subscription limits, against this account's monthly credit cap (set at claude.ai)"
 			pct={pct}
 			value={usd(extra.usedCredits)}
-			note={`${extra.monthlyLimit > 0 ? `of ${usd(extra.monthlyLimit)}/mo` : "no monthly cap"}${
+			note={`${extra.monthlyLimit > 0 ? `${usd(extra.monthlyLimit)}/mo cap` : "no monthly cap"}${
 				extra.enabled ? "" : " · off"
 			}`}
 		/>
@@ -787,7 +798,11 @@ function ExtraUsageRow({
 
 // ── Claude accounts ────────────────────────────────────────────────────────
 
-/** The one pill that matters most — never stacked, so nothing collides. */
+/**
+ * The one thing that needs attention, never stacked, so nothing collides. A
+ * healthy account gets no pill: its meters already say it is fine, and nine
+ * green "In rotation" pills down a page hid the two accounts that weren't.
+ */
 function ClaudeStatusPill({ a }: { a: ClaudeAccountInfo }) {
 	if (a.usage?.error && a.usage.errorStatus === 401)
 		return (
@@ -813,7 +828,7 @@ function ClaudeStatusPill({ a }: { a: ClaudeAccountInfo }) {
 				Limit hit
 			</StatusPill>
 		);
-	if (a.usable) return <StatusPill tone="green">In rotation</StatusPill>;
+	if (a.usable) return null;
 	return <StatusPill tone="yellow">Near limit</StatusPill>;
 }
 
@@ -951,10 +966,17 @@ function ClaudeAccountsSection() {
 									<SettingRowTitle className="truncate">{a.name}</SettingRowTitle>
 									<ClaudeStatusPill a={a} />
 								</div>
-								<SettingRowDescription className="truncate">
-									{a.email ? `${a.email} · ` : ""}
-									{a.plan ? `${a.plan.replace("default_claude_", "")} · ` : ""}
-									{a.tokenMasked}
+								{/* One line that identifies the account. The masked token only
+								    earns its place when there is no email to name it by; it
+								    stays in the tooltip either way. */}
+								<SettingRowDescription
+									className="truncate"
+									title={[a.email, a.plan?.replace("default_claude_", ""), a.tokenMasked]
+										.filter(Boolean)
+										.join(" · ")}
+								>
+									{a.email || a.tokenMasked}
+									{a.plan ? ` · ${a.plan.replace("default_claude_", "")}` : ""}
 								</SettingRowDescription>
 								{a.noUsageScope && !a.usage ? (
 									<div className="mt-1.5 text-meta text-faint">
@@ -1071,7 +1093,7 @@ function CodexStatusPill({ account }: { account: CodexAccountInfo }) {
 				Usage unknown
 			</StatusPill>
 		);
-	return <StatusPill tone="green">In rotation</StatusPill>;
+	return null;
 }
 
 function CodexUsageMeters({ account }: { account: CodexAccountInfo }) {
@@ -1086,11 +1108,24 @@ function CodexUsageMeters({ account }: { account: CodexAccountInfo }) {
 	if (account.usage.error)
 		return <div className="mt-1.5 text-meta text-red">{account.usage.error}</div>;
 
-	const windows = account.usage.buckets.flatMap((bucket) =>
-		[bucket.primary, bucket.secondary].flatMap((window) =>
-			window ? [{ bucket, window }] : [],
-		),
-	);
+	// Shortest window first, then by bucket name, so the same limits sit in the
+	// same order under every account. The API returns buckets in whatever order
+	// the account reports them, which had one row reading Codex then Spark and
+	// the next the other way round.
+	const bucketName = (bucket: CodexUsageBucket) =>
+		bucket.label || (bucket.id === "codex" ? "Codex" : bucket.id);
+	const windows = account.usage.buckets
+		.flatMap((bucket) =>
+			[bucket.primary, bucket.secondary].flatMap((window) =>
+				window ? [{ bucket, window }] : [],
+			),
+		)
+		.sort(
+			(a, b) =>
+				(a.window.windowDurationMins ?? Infinity) -
+					(b.window.windowDurationMins ?? Infinity) ||
+				bucketName(a.bucket).localeCompare(bucketName(b.bucket)),
+		);
 	const windowLabel = (minutes: number | null) => {
 		if (!minutes) return "Usage";
 		if (minutes % 10_080 === 0) return `${minutes / 10_080}w`;
@@ -1105,11 +1140,10 @@ function CodexUsageMeters({ account }: { account: CodexAccountInfo }) {
 				<MeterGroup>
 					{windows.map(({ bucket, window }, index) => {
 						const duration = windowLabel(window.windowDurationMins);
-						const bucketLabel = bucket.label || (bucket.id === "codex" ? "Codex" : bucket.id);
 						return (
 							<UsageBar
 								key={`${bucket.id}-${window.windowDurationMins ?? index}`}
-								label={multipleBuckets ? `${bucketLabel} · ${duration}` : duration}
+								label={multipleBuckets ? `${bucketName(bucket)} ${duration}` : duration}
 								window={window}
 							/>
 						);
@@ -1236,13 +1270,16 @@ function CodexAccountsSection() {
 									<SettingRowTitle className="truncate">{a.name}</SettingRowTitle>
 									<CodexStatusPill account={a} />
 								</div>
-								<SettingRowDescription className="truncate">
+								{/* A ChatGPT login is named by its plan; the CODEX_HOME path it
+								    lives at is the longest string on the row and identifies
+								    nothing the account name doesn't, so it moves to the tooltip.
+								    An API key has no plan, so its masked key stays visible. */}
+								<SettingRowDescription className="truncate" title={a.valueMasked}>
 									{a.kind === "api_key" ? "API key" : "ChatGPT login"}
 									{a.usage?.buckets.find((bucket) => bucket.plan)?.plan
 										? ` · ${a.usage.buckets.find((bucket) => bucket.plan)!.plan}`
 										: ""}
-									{" · "}
-									{a.valueMasked}
+									{a.kind === "api_key" ? ` · ${a.valueMasked}` : ""}
 								</SettingRowDescription>
 								<CodexUsageMeters account={a} />
 							</SettingRowText>
