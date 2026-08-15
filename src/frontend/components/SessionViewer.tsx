@@ -196,7 +196,7 @@ import {
 	IconStack,
 } from "./icons";
 import { SessionRelations, type RelatedSession } from "./SessionRelations";
-import { Spinner } from "../ui/spinner";
+import { PageLoader } from "../ui/page-loader";
 import {
 	SOURCE_CHIP,
 	SOURCE_CHIP_ARCHIVED,
@@ -6436,7 +6436,7 @@ export function SessionViewer({
 function WorkspaceWaiting({ detail }: { detail: string }) {
 	return (
 		<div className="flex h-full min-h-[240px] flex-col items-center justify-center gap-1 px-6 text-center">
-			<Spinner size="md" className="mb-2 text-dim" />
+			<PageLoader className="mb-2 text-dim" />
 			<div className="text-item-title font-semibold text-fg">
 				Setting up your workspace
 			</div>

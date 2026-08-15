@@ -3,6 +3,7 @@ import { ApiError, fetchPreview } from "../lib/api";
 import { BASE_PATH, stripBasePath } from "../lib/base";
 import { PRODUCT_NAME, docTitle } from "../lib/brand";
 import { withPreviewPath } from "../lib/preview-url";
+import { PageLoader } from "../ui/page-loader";
 
 /**
  * Preview interstitial — the page a "Start preview" click opens in a new tab
@@ -116,10 +117,7 @@ export function PreviewWait({ sessionId }: { sessionId: string }) {
 			</div>
 			{state === "waiting" ? (
 				<>
-					<span
-						className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-accent"
-						aria-hidden="true"
-					/>
+					<PageLoader className="text-dim" />
 					<div className="text-item-title font-semibold text-fg">
 						Starting the dev server…
 					</div>

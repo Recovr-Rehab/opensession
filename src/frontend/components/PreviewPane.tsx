@@ -4,6 +4,7 @@ import { startPreviewApi, stopPreviewApi } from "../lib/api";
 import type { UnifiedSession } from "../lib/types";
 import { withPreviewPath } from "../lib/preview-url";
 import { Button } from "../ui/button";
+import { PageLoader } from "../ui/page-loader";
 
 /**
  * Full-width Preview view-tab (a sibling of Review/Preview environment/Assets): the
@@ -107,10 +108,7 @@ export function PreviewPane({
 				/>
 			) : (
 				<div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-					<span
-						className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-accent"
-						aria-hidden="true"
-					/>
+					<PageLoader className="text-dim" />
 					<div className="text-item-title font-semibold text-fg">
 						{status?.starting || !status ? "Starting the dev server…" : "Preview is not running"}
 					</div>

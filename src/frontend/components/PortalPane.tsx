@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { PortalTarget } from "../lib/portals";
 import { Button } from "../ui/button";
+import { PageLoader } from "../ui/page-loader";
 import { IconArrowUpRight, IconGlobe, IconRestore } from "./icons";
 
 /** Browser-like center pane for one service exposed by a session portal. */
@@ -47,11 +48,12 @@ export function PortalPane({ target }: { target: PortalTarget }) {
 			</div>
 			<div className="relative min-h-0 flex-1 bg-white">
 				{loading ? (
-					<div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-panel">
-						<span
-							className="h-5 w-5 animate-spin rounded-full border-2 border-line-strong border-t-accent"
-							aria-label={`Loading ${target.name}`}
-						/>
+					<div
+						role="status"
+						aria-label={`Loading ${target.name}`}
+						className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center bg-panel"
+					>
+						<PageLoader className="text-dim" />
 					</div>
 				) : null}
 				<iframe

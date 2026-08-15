@@ -182,6 +182,12 @@
       width: 76px;
       height: 76px;
     }
+    /* ui/page-loader wears this same wave for regions inside the app that have
+       not arrived yet. The shell cannot import the bundle's CSS, so it keeps
+       its own copy; the bars are sized against the 76px logo here and against a
+       label there, but the CADENCE is the shared part — 1s, 0.6→1, 0.15s
+       apart. Change one and change the other, or the app opens at one rate and
+       loads at another. */
     .splash-bars {
       display: flex;
       align-items: center;

@@ -1,6 +1,7 @@
 import * as React from "react";
 import { IconX } from "../components/icons";
 import { cn } from "./cn";
+import { PageLoader } from "./page-loader";
 import { Spinner } from "./spinner";
 
 /**
@@ -20,8 +21,11 @@ import { Spinner } from "./spinner";
  *    a card draws that card's surface (`card`); one living *inside* a card's
  *    row list just takes the row's padding and stays left-aligned (`row`), so
  *    it lines up with the rows it replaces instead of floating in the middle.
- *  - loading is the quietest register (faint label + the waiting `Spinner`;
- *    never the PixelSpinner, which means a model is generating),
+ *  - loading is the quietest register, and its mark follows the placement: a
+ *    `block` stands in for a whole region and wears the launch screen's wave
+ *    (`PageLoader`), a `row` or `card` is one small thing working and keeps the
+ *    ring (`Spinner`). Never the PixelSpinner, which means a model is
+ *    generating,
  *    empty sits one step up (dim, with an optional title/icon/action when
  *    there's something to *do* about it), and alerts are the only state that
  *    gets a surface and a hue.
@@ -88,6 +92,14 @@ export function LoadingState({
 	placement?: StatePlacement;
 	spinner?: boolean;
 }) {
+	// The mark follows the placement, because the placement is already the
+	// answer to "how much is waiting". A `block` stands in for a whole region,
+	// which is what the launch wave is for, and it sits ABOVE the label there —
+	// the splash's own arrangement, and the one that reads as a page rather than
+	// as a sentence with a mark in front of it. A `row` or a `card` is a small
+	// thing working inside a page that has already arrived, so it keeps the ring
+	// on the label's line, where bars would be illegible anyway.
+	const block = placement === "block";
 	return (
 		<div
 			role="status"
@@ -95,8 +107,9 @@ export function LoadingState({
 			className={cn(placements[placement], className)}
 			{...props}
 		>
+			{block && spinner && <PageLoader className="text-dim" />}
 			<div className="inline-flex items-center gap-2 text-supporting text-faint">
-				{spinner && <Spinner />}
+				{!block && spinner && <Spinner />}
 				{children}
 			</div>
 		</div>
