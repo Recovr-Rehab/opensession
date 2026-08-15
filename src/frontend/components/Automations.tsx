@@ -712,7 +712,10 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
  */
 function TriggerIcon({ automation }: { automation: Automation }) {
   // Normalize each glyph's drawn height, not just its SVG box. These icons
-  // occupy different proportions of the shared 24px viewBox.
+  // occupy different proportions of the shared 24px viewBox. The plug takes a
+  // step less than the rest at the same drawn height: the clock it sits among
+  // is a circle, and a circle reads smaller than an upright form that puts ink
+  // at the very top and bottom of its box.
   const { Icon, scale } = automation.slackWatch
     ? { Icon: IconHash, scale: "scale-[1.15]" }
     : automation.schedule
@@ -721,7 +724,7 @@ function TriggerIcon({ automation }: { automation: Automation }) {
         ? { Icon: IconBolt, scale: "scale-[1.15]" }
         : automation.webhookEnabled === false
           ? { Icon: IconPlayOutline, scale: "scale-110" }
-          : { Icon: IconPlug, scale: "scale-[1.15]" };
+          : { Icon: IconPlug, scale: "scale-[1.08]" };
   return (
     <span
       className={cn(
