@@ -813,16 +813,26 @@ struct TurnFooterView: View {
 /// can never leave a footer wearing two generations of chip at once. The web
 /// keeps the same promise with a single `CHIP` class string.
 ///
-/// A capsule, like the web's: `rounded-control` is 12px, and on a chip that
-/// tall it clamps to half the height, so the authored radius has always drawn
-/// a pill there.
+/// A pill, like the web's: `rounded-control` is 12px, and on a chip this tall
+/// the two corners of an edge cannot both fit, so the authored radius has
+/// always clamped to half the height and drawn a capsule.
+///
+/// Circular rather than a squircle, which is where the two clients part
+/// company on purpose. Chrome draws the web chip as a squircle because
+/// base.css grants `corner-shape` to every `rounded-*` class; WebKit ships no
+/// `corner-shape` at all, so Safari and the iOS PWA already draw the same
+/// chip with circular ends, and iOS reserves the squircle for rounded
+/// RECTANGLES (icons, cards, sheets) while its own pills stay capsules.
+/// Note `Capsule(style: .continuous)` is not a third option: measured against
+/// the rendered corner it is identical to `.circular`, so the argument only
+/// looks like it does something.
 private extension View {
     func footerChip(leading: CGFloat, trailing: CGFloat) -> some View {
         self
             .padding(.leading, leading)
             .padding(.trailing, trailing)
             .padding(.vertical, 4)
-            .background(OS1VisualStyle.chipFill, in: Capsule(style: .continuous))
+            .background(OS1VisualStyle.chipFill, in: Capsule())
     }
 }
 

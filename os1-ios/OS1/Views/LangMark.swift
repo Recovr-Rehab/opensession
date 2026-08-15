@@ -27,10 +27,6 @@ struct ExtBadge: View {
         let ext = LangMark.ext(of: name)
         content(for: ext)
             .foregroundStyle(LangMark.ink(for: ext))
-            // The ink sits a point low inside the centred box: its optical
-            // baseline then meets the filename beside it instead of floating
-            // above it.
-            .offset(y: 1)
             .frame(minWidth: box, minHeight: box)
             .accessibilityHidden(true)
     }
@@ -49,6 +45,7 @@ struct ExtBadge: View {
             Text(LangMark.label(for: ext))
                 .font(.system(size: letterSize, weight: .bold))
                 .monospacedDigit()
+                .offset(y: LangMark.capCentringOffset(size: letterSize))
         }
     }
 }
@@ -79,6 +76,26 @@ enum LangMark {
     }
 
     static func mark(for ext: String) -> BrandLogo? { marks[ext] }
+
+    /// How far to move all-caps text so its INK centres where a brand mark's
+    /// does. Positive moves down.
+    ///
+    /// A brand mark is centred on its drawing; a `Text` is centred on its line
+    /// box, which reserves room under the baseline for descenders that "SH"
+    /// and "MJS" do not have. Centring the box therefore leaves the letters
+    /// sitting lower than the mark beside them, and lower than the counts at
+    /// the other end of the chip, which are cap-height too. The web has the
+    /// same problem and answers it with a flat 1px nudge; the metrics are
+    /// right here and scale with Dynamic Type, so use them.
+    static func capCentringOffset(size: CGFloat) -> CGFloat {
+        #if os(macOS)
+        let font = NSFont.systemFont(ofSize: size, weight: .bold)
+        #else
+        let font = UIFont.systemFont(ofSize: size, weight: .bold)
+        #endif
+        // `descender` is negative, so this is (cap - (ascent - |descent|)) / 2.
+        return (font.capHeight - font.ascender - font.descender) / 2
+    }
 
     /// The language's hue, mixed a quarter of the way toward the
     /// appearance's own text colour, exactly as the web's

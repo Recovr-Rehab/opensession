@@ -148,6 +148,30 @@ final class LangMarkTests: XCTestCase {
         XCTAssertFalse(SVGPath.parse("M0 0L").isEmpty)
     }
 
+    // MARK: - Centring
+
+    /// All-caps letters have no descender, so a `Text` centred on its line box
+    /// sits lower than the brand mark beside it. Measured on the shipped
+    /// build, every badge sat 0.8pt to 1.3pt below its chip; the correction
+    /// lifts the letters the rest of the way onto the mark's line.
+    func testCapCentringLiftsLettersOntoTheMarksLine() {
+        for size in [8.0, 10.0, 13.0, 20.0] as [CGFloat] {
+            let offset = LangMark.capCentringOffset(size: size)
+            // Upward, and a fraction of the type size rather than a nudge
+            // that would show as a misalignment of its own.
+            XCTAssertLessThan(offset, 0, "\(size)pt should lift, not drop")
+            XCTAssertGreaterThan(offset, -size * 0.12, "\(size)pt lifts too far")
+        }
+    }
+
+    /// It has to scale with the type, which is the whole reason it is computed
+    /// from the font rather than written down as the web's flat 1px.
+    func testCapCentringScalesWithTheType() {
+        let small = LangMark.capCentringOffset(size: 10)
+        let large = LangMark.capCentringOffset(size: 20)
+        XCTAssertEqual(large, small * 2, accuracy: 0.05)
+    }
+
     // MARK: - Ink
 
     /// The web paints `color-mix(in oklab, <hue> 75%, var(--text))`, and
