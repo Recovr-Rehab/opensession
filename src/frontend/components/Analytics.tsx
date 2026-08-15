@@ -651,7 +651,7 @@ export function Analytics() {
 
 						{derived.unmeasuredDays > 0 && (
 							<p className="m-0 mt-2 text-meta text-faint">
-								Tokens and cost cover {derived.engineLabels[0]} onwards. The engine keeps about a month of message
+								Tokens and cost cover {shortDate(derived.engineLabels[0])} onwards. The engine keeps about a month of message
 								history, so the earlier {derived.unmeasuredDays === 1 ? "day" : `${derived.unmeasuredDays} days`} of
 								this range have no data left to read. Everything else on this page covers the full range.
 							</p>
