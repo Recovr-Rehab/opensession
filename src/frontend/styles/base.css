@@ -1565,6 +1565,88 @@ html.wco .app-body.sidebar-collapsed
 	background: var(--cmp-face) center / cover no-repeat, var(--bg-active);
 	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 14%, transparent);
 }
+/* A session id in the draft, the counterpart to the `session-link` chip a sent
+   message renders — and where a pasted session link lands, since the composer
+   shortens one to the id it carries (`pastedSessionId` in lib/session-url.ts).
+   The pill is the receipt for that: someone just watched a URL they pasted
+   turn into an id, and the wash is what says the composer understood it rather
+   than mangled it.
+
+   Built like the mention pill above, and tinted deliberately unlike it. That
+   chip is accent because a mention is addressed AT somebody; this one takes
+   the same neutral wash the sent chip does, because a session reference is a
+   destination rather than an alert (see `.session-link[data-session-id]`).
+   Accent on both would spend the one distinction the two pills exist to draw.
+
+   It reaches 4px rather than the mention's 5, and that one pixel is what buys
+   it out of the word-spacing tax. A 14px draft sets words 3.7px apart, so a
+   5px wash overruns the space and the field has to widen every space in the
+   draft to make room (`composerMentionSpacing` in lib/composer-classes.ts) —
+   which, measured side by side, costs a whole sentence its spacing to gain the
+   pill nothing the eye can find. At 4px the wash lands inside the space the
+   type already gives it, under the next word's own side bearing. A mention is
+   usually one word in a sentence of prose; a pasted link is often the whole
+   sentence, which is why the two pills answer this differently.
+
+   Where the mention paints its wash on a pseudo-element, this one paints on
+   the span, and that is the difference between the two that is NOT taste. A
+   pseudo-element is one rectangle over the whole inline box, which is fine for
+   a name and wrong for a forty-character id: on a phone it wraps, and one
+   rectangle over two lines is a slab lying across the sentence rather than a
+   pill around the id. `box-decoration-break: clone` gives each line fragment
+   its own capsule.
+
+   The 4px then has to come from somewhere that is not padding, because
+   horizontal padding on an inline box moves every glyph after it and the
+   mirror may not move a glyph. Two offset copies of the box do it instead: an
+   outer box-shadow is clipped to OUTSIDE the border box, so each copy shows
+   only as a 4px sliver at one end, the two never overlap, and the wash stays
+   one flat translucent value rather than doubling where they meet. Vertical
+   padding is safe (it does not affect line layout) and is what gives the
+   capsule its height. */
+.composer-hl .cmp-session {
+	padding: 2px 0;
+	border-radius: 999px;
+	background: var(--hover);
+	box-shadow:
+		4px 0 0 var(--hover),
+		-4px 0 0 var(--hover);
+	-webkit-box-decoration-break: clone;
+	box-decoration-break: clone;
+}
+/* The glyph, painted into the slot the `os-` / `bks-` prefix lends it — the
+   same trade the face makes with the `@`, and for the same reason: the mirror
+   may not take a pixel of width, so a picture can only go where the text
+   already is. The prefix is what the draft can most afford to lose, because
+   the glyph beside it names a session far better than three characters of it
+   did, and the text underneath is untouched, so the caret, the selection and a
+   copy still see the whole id.
+
+   Sized in `em` because the slot is (the phone composer sets 16px), and
+   centred rather than pinned left: `bks-` is a character wider than `os-`, and
+   centring is what keeps the glyph off both edges of either one. Masked rather
+   than drawn as a background image so it takes `--text-dim` from the same
+   token the sent chip's glyph uses, in both themes. */
+.composer-hl .cmp-sid {
+	position: relative;
+	color: transparent;
+	/* The same chat glyph the sent chip draws (SESSION_CHIP_ICON in
+	   lib/markdown.ts), inlined so it can be a mask. Held in a variable because
+	   the prefixed and unprefixed mask below must never drift apart. */
+	--cmp-session-glyph: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6.75 5.25H17.25C18.3546 5.25 19.25 6.14543 19.25 7.25V14.25C19.25 15.3546 18.3546 16.25 17.25 16.25H11.25L7.25 19.25V16.25H6.75C5.64543 16.25 4.75 15.3546 4.75 14.25V7.25C4.75 6.14543 5.64543 5.25 6.75 5.25Z'/%3E%3C/svg%3E");
+}
+.composer-hl .cmp-sid::before {
+	content: "";
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 1.25em;
+	height: 1.25em;
+	transform: translate(-50%, -50%);
+	background: var(--text-dim);
+	-webkit-mask: var(--cmp-session-glyph) center / contain no-repeat;
+	mask: var(--cmp-session-glyph) center / contain no-repeat;
+}
 html[data-theme="light"] .composer-hl .cmp-code {
 	background: rgba(149, 59, 57, 0.1);
 	color: #953b39;

@@ -72,7 +72,14 @@ export const composerTextarea =
  *  because every space pays it, not just the two beside the pill. A sentence
  *  set this way on its own reads as broken word spacing, which is what a
  *  permanent 3.5px did. Scoped, the cost lands on the draft that wanted the
- *  chip and ordinary prose keeps the type's own spacing. */
+ *  chip and ordinary prose keeps the type's own spacing.
+ *
+ *  The session pill declines it, and that is a deliberate difference rather
+ *  than an oversight: measured side by side, a sentence around a session id
+ *  reads worse set this way than the pill does one pixel tighter, so that
+ *  wash takes 4px instead of 5 and lives inside the space the type already
+ *  gives it (base.css). A mention is usually one word in a sentence of prose;
+ *  a pasted link is often the sentence. */
 export const composerMentionSpacing = "[word-spacing:3.5px]";
 export const composerTextareaPadding = "px-0 pt-0.5 pb-1";
 /** In the resting pill the field is one row inside a 4px-inset box, so it

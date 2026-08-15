@@ -8,6 +8,7 @@ import {
   composerMentionRanges,
   needsComposerHighlight,
 } from "../lib/composer-highlight";
+import { insertPastedSessionId } from "../lib/session-url";
 import { usePeople } from "../lib/people";
 import { ImageThumbs } from "./ImageThumbs";
 import { FileChips } from "./FileChips";
@@ -679,6 +680,9 @@ export function Composer({
   }
 
   function handlePaste(e: React.ClipboardEvent) {
+    // A session link goes in as the id it carries, which is the same reference
+    // in a third of the room and chips the same way (lib/session-url.ts).
+    if (insertPastedSessionId(e)) return;
     if (!canAttach) return;
     const pasted = imageFilesFromPaste(e);
     if (pasted.length) {
@@ -791,9 +795,11 @@ export function Composer({
     () => composerMentionRanges(text, people),
     [text, people],
   );
-  // A pill's padding is bought out of the space beside it, so the draft pays a
-  // wider word space only while it holds a mention. Both the field and the
-  // mirror wear it, or the painted text slides off the caret behind it.
+  // A mention pill's padding is bought out of the space beside it, so the draft
+  // pays a wider word space only while it holds one. Both the field and the
+  // mirror wear it, or the painted text slides off the caret behind it. The
+  // session pill buys nothing here — it takes a narrower wash instead, so an
+  // ordinary sentence around a pasted link keeps the type's own spacing.
   const hasMention = mentionRanges.length > 0;
   useEffect(() => {
     // The textarea scrolls internally at max-height; keep the mirror locked to it.
@@ -1118,12 +1124,22 @@ export function Composer({
                 composerTextareaPadding,
                 "pointer-events-none absolute inset-0 z-0 overflow-hidden text-fg break-words whitespace-pre-wrap select-none",
                 hasMention && composerMentionSpacing,
-                // A mention's wash reaches 5px past its own box (base.css), so
-                // one at either end of a line would be cut off by this box.
-                // The padding pushes the clip edge out; the matching negative
+                // A pill's wash reaches past its own box (base.css), so one at
+                // either end of a line would be cut off by this box. The
+                // padding pushes the clip edge out; the matching negative
                 // margin takes it back out of the content origin, so every
                 // glyph still lands exactly where the textarea puts it.
-                "-mx-[6px] px-[6px]",
+                //
+                // The width is the third of those three and it was missing.
+                // `inset-0` sizes this box from its container, and a negative
+                // margin does not grow an over-constrained absolute box — so
+                // the padding came out of the CONTENT, leaving the mirror 12px
+                // narrower than the field (measured 672 against 684). It wraps
+                // a word early at that width, which put the painted text on a
+                // different line from the caret and the selection under it on
+                // any draft long enough to wrap. Asking for the 12px back
+                // makes the two agree glyph for glyph again.
+                "-mx-[6px] w-[calc(100%+12px)] px-[6px]",
               )}
               aria-hidden="true"
               dangerouslySetInnerHTML={{ __html: hlHtml }}

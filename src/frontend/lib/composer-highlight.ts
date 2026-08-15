@@ -6,6 +6,7 @@
 // outside the box. The markup here never adds padding, font, or size changes.
 
 import type { Person } from "./people";
+import { UUIDV7 } from "./session-url";
 
 function esc(s: string): string {
 	return s
@@ -67,6 +68,55 @@ export function composerMentionRanges(
 	return out;
 }
 
+/** One session id in the draft, as offsets into it. */
+export interface SessionRange {
+	start: number;
+	/** Exclusive. */
+	end: number;
+	id: string;
+}
+
+/**
+ * A minted session id standing on its own. The leading guard is what keeps the
+ * pill off the tail of a session URL still sitting in the draft: the renderer
+ * chips that URL whole, so painting a pill over its last forty characters
+ * would promise a chip in a place no chip appears.
+ */
+const SESSION_RE = new RegExp(`(^|[^\\w/-])((?:os|bks)-${UUIDV7})`, "gi");
+
+/**
+ * The session ids in a draft. Only the minted shape, matching what the
+ * renderer chips as a bare word (the `sessionId` extension in markdown.ts) —
+ * a pill the sent message does not draw would be a promise the composer
+ * cannot keep.
+ *
+ * This is where a pasted link ends up: `pastedSessionId` shortens the URL to
+ * the id it carries, and the pill is what says so.
+ */
+export function composerSessionRanges(text: string): SessionRange[] {
+	if (!text.includes("-")) return [];
+	const out: SessionRange[] = [];
+	SESSION_RE.lastIndex = 0;
+	for (let m = SESSION_RE.exec(text); m; m = SESSION_RE.exec(text)) {
+		const start = m.index + m[1]!.length;
+		out.push({ start, end: start + m[2]!.length, id: m[2]! });
+	}
+	return out;
+}
+
+/** Both kinds of pill, in the order they appear in the draft. */
+type DraftRange = MentionRange | SessionRange;
+
+function draftRanges(text: string, people: Person[]): DraftRange[] {
+	const ranges: DraftRange[] = [
+		...composerMentionRanges(text, people),
+		...composerSessionRanges(text),
+	];
+	// A mention starts at an `@` and an id never does, so the two kinds cannot
+	// overlap and sorting by start is enough to walk them as one list.
+	return ranges.sort((a, b) => a.start - b.start);
+}
+
 /**
  * One mention pill. The face is the tricky part: the mirror may not take a
  * pixel of width, so there is nowhere to PUT a picture — the pill is exactly
@@ -91,31 +141,54 @@ function mentionHtml(text: string, range: MentionRange): string {
 	);
 }
 
-/** Mentions inside a plain (non-code) run of the draft. */
-function mentions(
+/**
+ * One session pill. Same trick as the face, for the same reason: the mirror
+ * may not take a pixel of width, so the chat glyph has nowhere to go except a
+ * slot the text already owns. The `os-` / `bks-` prefix lends it one — that
+ * prefix is the least of the id, since the glyph beside it now says "session"
+ * far better than three characters of it did, and the text underneath is
+ * untouched, so the caret, the selection and a copy still see every character.
+ *
+ * Hiding the whole prefix rather than part of it is the point. A uuid is not
+ * read as a word, so losing `os-` reads as a labelled chip; losing only the
+ * `o` would leave `s-01a0…`, which reads as damage.
+ */
+function sessionHtml(text: string, range: SessionRange): string {
+	const prefixEnd = text.indexOf("-", range.start) + 1;
+	const prefix = esc(text.slice(range.start, prefixEnd));
+	const rest = esc(text.slice(prefixEnd, range.end));
+	return (
+		`<span class="cmp-session"><span class="cmp-sid">${prefix}</span>` +
+		`${rest}</span>`
+	);
+}
+
+/** Pills inside a plain (non-code) run of the draft. */
+function chips(
 	text: string,
 	from: number,
 	to: number,
-	ranges: MentionRange[],
+	ranges: DraftRange[],
 ): string {
 	let out = "";
 	let last = from;
 	for (const range of ranges) {
 		if (range.start < last || range.end > to) continue;
 		out += esc(text.slice(last, range.start));
-		out += mentionHtml(text, range);
+		out += "id" in range ? sessionHtml(text, range) : mentionHtml(text, range);
 		last = range.end;
 	}
 	return out + esc(text.slice(last, to));
 }
 
-/** Wrap `inline code` spans within a non-fence segment. A mention inside code
- * stays plain — it is quoted text, not somebody being addressed. */
+/** Wrap `inline code` spans within a non-fence segment. A pill inside code
+ * stays plain — it is quoted text, not somebody being addressed or a place
+ * being pointed at. */
 function inlineCode(
 	text: string,
 	from: number,
 	to: number,
-	ranges: MentionRange[],
+	ranges: DraftRange[],
 ): string {
 	const seg = text.slice(from, to);
 	let out = "";
@@ -124,25 +197,26 @@ function inlineCode(
 	let m: RegExpExecArray | null;
 	while ((m = re.exec(seg))) {
 		const at = from + m.index;
-		out += mentions(text, last, at, ranges);
+		out += chips(text, last, at, ranges);
 		out += `<span class="cmp-code">${esc(m[0])}</span>`;
 		last = at + m[0].length;
 	}
-	return out + mentions(text, last, to, ranges);
+	return out + chips(text, last, to, ranges);
 }
 
 /**
  * Render a composer draft to mirror HTML: ``` fences (closed, or open-ended
  * while still being typed) become .cmp-fence, `inline code` becomes .cmp-code,
- * and a finished @-mention becomes .cmp-mention. Inline backticks inside a
- * fence are left alone. A trailing zero-width space keeps the mirror's last
- * line from collapsing when the draft ends in \n.
+ * a finished @-mention becomes .cmp-mention, and a session id becomes
+ * .cmp-session. Inline backticks inside a fence are left alone. A trailing
+ * zero-width space keeps the mirror's last line from collapsing when the draft
+ * ends in \n.
  */
 export function composerHighlightHtml(
 	text: string,
 	people: Person[] = [],
 ): string {
-	const ranges = composerMentionRanges(text, people);
+	const ranges = draftRanges(text, people);
 	let out = "";
 	let last = 0;
 	const re = /```[\s\S]*?```|```[\s\S]*$/g;
@@ -156,12 +230,16 @@ export function composerHighlightHtml(
 	return out + "​";
 }
 
-/** Only mount the mirror when the draft has something to paint — code markup
- * or a finished mention. Plain drafts keep the stock opaque textarea (zero
- * desync risk). */
+/** Only mount the mirror when the draft has something to paint — code markup,
+ * a finished mention, or a session id. Plain drafts keep the stock opaque
+ * textarea (zero desync risk). */
 export function needsComposerHighlight(
 	text: string,
 	people: Person[] = [],
 ): boolean {
-	return text.includes("`") || composerMentionRanges(text, people).length > 0;
+	return (
+		text.includes("`") ||
+		composerMentionRanges(text, people).length > 0 ||
+		composerSessionRanges(text).length > 0
+	);
 }

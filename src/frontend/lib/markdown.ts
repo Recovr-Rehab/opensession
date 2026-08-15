@@ -1,10 +1,10 @@
 import { Marked } from "marked";
 import { BASE_PATH } from "./base";
-import { PUBLIC_BASE_URL } from "./brand";
 import { sanitizeHtmlFragment } from "./html-sanitize";
 import { prStatusMark, type PrStatusInput } from "./pr-status";
 import { repoLabel } from "./repo-label";
 import { cleanSessionTitle } from "./session-title";
+import { INTERNAL_HOSTS, UUIDV7, internalUrlTarget } from "./session-url";
 import { sessionAssetRawUrl } from "./api/sessions";
 
 // Dedicated marked instance for session messages so this config doesn't leak
@@ -184,7 +184,6 @@ function assetLinkTarget(href: string | null | undefined): string | null {
 // worker it spawned (and back). A container-level click handler (SessionViewer)
 // navigates on data-session-id, since dangerouslySetInnerHTML can't carry React
 // handlers.
-const UUIDV7 = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 // Every minted id is `<prefix>-<uuidv7>`; only the pre-rename `bks-` prefix also
 // covers hand-made slug ids (`bks-ghpr-5099-review`), so it alone keeps the
 // looser shape — `os-` is short enough that a loose form would turn ordinary
@@ -768,23 +767,6 @@ function githubCommitTarget(
   return null;
 }
 
-// Links into OS1 itself must not open a new window — it's the same app. Known
-// public hosts cover links pasted as absolute URLs viewed from another origin
-// (e.g. the ts.net entry); same-origin covers everything else, prefix included
-// (stripBasePath-style legacy /opensession + /backstage forms).
-const INTERNAL_HOSTS = new Set(
-  [
-    typeof location === "undefined" ? "" : location.hostname,
-    (() => {
-      try {
-        return new URL(PUBLIC_BASE_URL).hostname;
-      } catch {
-        return "";
-      }
-    })(),
-  ].filter(Boolean),
-);
-
 /**
  * Turn chip tokens back into the literal text they were written as, in place.
  * Only used inside an explicit link, where a chip would nest an anchor; the
@@ -822,36 +804,6 @@ function isBareUrlLink(token: any): boolean {
   const strip = (v: string) => String(v ?? "").replace(/\/+$/, "");
   const text = strip(token.text);
   return text.length > 0 && text === strip(token.href);
-}
-
-function internalHref(href: string | null | undefined): {
-  sessionId?: string;
-  automationId?: string;
-} | null {
-  if (!href) return null;
-  const loc =
-    typeof location !== "undefined" ? location.href : "http://127.0.0.1:3850/";
-  let url: URL;
-  try {
-    url = new URL(String(href), loc);
-  } catch {
-    return null;
-  }
-  const sameOrigin =
-    typeof location !== "undefined" && url.origin === location.origin;
-  if (!sameOrigin && !INTERNAL_HOSTS.has(url.hostname)) return null;
-  const path = url.pathname.replace(/^\/(?:opensession|backstage)(?=\/)/, "");
-  // The path already says "session", so both prefixes take the loose shape here.
-  const m =
-    path.match(/^\/session\/((?:os|bks)-[a-z0-9][a-z0-9-]{5,})\/?$/i) ??
-    path.match(
-      /^\/workspace\/[^/]+\/session\/((?:os|bks)-[a-z0-9][a-z0-9-]{5,})\/?$/i,
-    );
-  const automation = path.match(new RegExp(`^/automations/(auto-${UUIDV7})/?$`, "i"));
-  return {
-    sessionId: m ? decodeURIComponent(m[1]) : undefined,
-    automationId: automation ? decodeURIComponent(automation[1]) : undefined,
-  };
 }
 
 md.use({
@@ -937,7 +889,7 @@ md.use({
       if (asset && renderAssetSessionId)
         return assetChip(renderAssetSessionId, asset, text);
       const title = token.title ? ` title="${attr(token.title)}"` : "";
-      const internal = internalHref(token.href);
+      const internal = internalUrlTarget(token.href);
       if (internal) {
         // A pasted session URL auto-links with the whole ~90-char URL as
         // its text, which ran straight past the message bubble's edge inside

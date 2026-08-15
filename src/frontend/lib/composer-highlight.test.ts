@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
 	composerHighlightHtml,
 	composerMentionRanges,
+	composerSessionRanges,
 	needsComposerHighlight,
 } from "./composer-highlight";
 
@@ -9,6 +10,7 @@ const TEAM = [
 	{ name: "Michiel", fullName: "Michiel Westerbeek" },
 	{ name: "Kent", fullName: "Kent de Bruin" },
 ];
+const ID = "os-01a006d8-eddd-7000-bca2-b010caf2d8e7";
 
 describe("composerHighlightHtml", () => {
 	test("plain text passes through escaped", () => {
@@ -109,11 +111,58 @@ describe("mentions in the mirror", () => {
 	});
 });
 
+describe("session ids in the mirror", () => {
+	test("a bare id becomes a pill, with the prefix lending the glyph its slot", () => {
+		expect(composerHighlightHtml(`look at ${ID} first`)).toBe(
+			'look at <span class="cmp-session"><span class="cmp-sid">os-</span>' +
+				'01a006d8-eddd-7000-bca2-b010caf2d8e7</span> first​',
+		);
+	});
+
+	test("the longer legacy prefix lends the same slot", () => {
+		expect(composerSessionRanges(`bks-${ID.slice(3)}`)).toEqual([
+			{ start: 0, end: 40, id: `bks-${ID.slice(3)}` },
+		]);
+		expect(composerHighlightHtml(`bks-${ID.slice(3)}`)).toContain(
+			'<span class="cmp-sid">bks-</span>',
+		);
+	});
+
+	// The renderer chips a pasted URL whole, so a pill over its last forty
+	// characters would promise a chip in a place no chip appears.
+	test("an id inside a URL is not a pill of its own", () => {
+		expect(composerSessionRanges(`https://os.tella.dev/session/${ID}`)).toEqual([]);
+		expect(composerSessionRanges(`/workspace/ws-1/session/${ID}`)).toEqual([]);
+	});
+
+	test("an id inside code stays plain", () => {
+		expect(composerHighlightHtml(`\`${ID}\``)).toBe(
+			`<span class="cmp-code">\`${ID}\`</span>​`,
+		);
+	});
+
+	test("a half-typed or mis-shaped id is not a pill", () => {
+		expect(composerSessionRanges("os-01a006d8-eddd")).toEqual([]);
+		expect(composerSessionRanges("os-release")).toEqual([]);
+	});
+
+	test("a mention and an id in one draft both chip, in order", () => {
+		expect(composerHighlightHtml(`@Kent see ${ID}`, TEAM)).toBe(
+			'<span class="cmp-mention">@Kent</span> see ' +
+				'<span class="cmp-session"><span class="cmp-sid">os-</span>' +
+				"01a006d8-eddd-7000-bca2-b010caf2d8e7</span>​",
+		);
+	});
+});
+
 describe("needsComposerHighlight", () => {
-	test("a backtick, or a finished mention", () => {
+	test("a backtick, a finished mention, or a session id", () => {
 		expect(needsComposerHighlight("plain")).toBe(false);
 		expect(needsComposerHighlight("has `code`")).toBe(true);
 		expect(needsComposerHighlight("ask @Kent now", TEAM)).toBe(true);
 		expect(needsComposerHighlight("ask @Kent now")).toBe(false);
+		expect(needsComposerHighlight(`look at ${ID}`)).toBe(true);
+		// A draft full of hyphens is not a draft full of pills.
+		expect(needsComposerHighlight("a well-worn re-check")).toBe(false);
 	});
 });

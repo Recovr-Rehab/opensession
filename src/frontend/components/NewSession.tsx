@@ -13,6 +13,7 @@ import { FileChips } from "./FileChips";
 import { useFileMentions } from "./useFileMentions";
 import { peopleMentionMatches } from "../lib/people";
 import { NO_REPO } from "../lib/session-repo";
+import { insertPastedSessionId } from "../lib/session-url";
 import {
   IconPaperclip,
   IconChevronDown,
@@ -772,6 +773,9 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   }
 
   function handlePaste(e: React.ClipboardEvent) {
+    // A session link goes in as the id it carries, which is the same reference
+    // in a third of the room and chips the same way (lib/session-url.ts).
+    if (insertPastedSessionId(e)) return;
     const imgs = imageFilesFromPaste(e);
     if (imgs.length) {
       e.preventDefault();
