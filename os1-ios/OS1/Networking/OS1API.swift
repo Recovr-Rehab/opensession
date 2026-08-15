@@ -57,7 +57,7 @@ enum OS1API {
     /// answers with the whole list, which still splits correctly downstream
     /// (`prepared` sorts archived rows out either way).
     static func sessions() async throws -> [Session] {
-        try await get("/api/sessions?archived=exclude")
+        try await get("/api/sessions?archived=exclude", revalidating: true)
     }
 
     /// Archived sessions, as summaries.
@@ -67,7 +67,7 @@ enum OS1API {
     /// hydrates it first (`session(id:)`). Barely changes between polls, so
     /// it settles into a 304 while the live slice keeps churning.
     static func archivedSessions() async throws -> [Session] {
-        try await get("/api/sessions?archived=only&slim=1")
+        try await get("/api/sessions?archived=only&slim=1", revalidating: true)
     }
 
     /// One session, whole. The list used to be the only source of a session
@@ -1794,21 +1794,62 @@ enum OS1API {
         return data
     }
 
+    /// `revalidating` asks the server whether the body changed instead of for
+    /// the body: the last ETag rides with the request, and a 304 is answered
+    /// from `RevalidationCache` without a transfer or a decode. Worth it only
+    /// where the same path is read again and again and the answer is usually
+    /// the same, which is the polled lists and nothing else so far.
     private static func get<T: Decodable & Sendable>(
         _ path: String,
-        authorized: Bool = true
+        authorized: Bool = true,
+        revalidating: Bool = false
     ) async throws -> T {
         let config = ServerConfig.shared
         guard let base = config.baseURL else { throw APIError.notConfigured }
         if authorized && !config.isConfigured { throw APIError.notConfigured }
         guard let url = URL(string: base.absoluteString + path) else { throw APIError.badURL }
 
-        let request = authorized ? config.authorizedRequest(url) : URLRequest(url: url)
+        var request = authorized ? config.authorizedRequest(url) : URLRequest(url: url)
+        let cache = RevalidationCache.shared
+        // Server and token, and deliberately not the display name: the token
+        // is what decides which account a body was answered for, while the
+        // name arrives later (`ServerConfig` backfills it from /api/auth/
+        // status), and keying on it threw the first response of every launch
+        // away for a change that was never a change of account.
+        let connection = "\(base.absoluteString)|\(config.token)"
+        var conditional = false
+        if revalidating, let etag = cache.validator(for: path, connection: connection) {
+            request.setValue(etag, forHTTPHeaderField: "If-None-Match")
+            // Ours is the validator this request is asking on, so URLSession's
+            // own cache must neither answer it nor add a second one.
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+            conditional = true
+        }
+
         let (data, response) = try await URLSession.shared.data(for: request)
-        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+        let http = response as? HTTPURLResponse
+        if conditional, http?.statusCode == 304 {
+            if let cached = cache.value(T.self, for: path) { return cached }
+            // The body went away under us. Ask again without the validator
+            // rather than report a 304 to a caller that has nothing either;
+            // the entry is gone now, so the second attempt cannot loop.
+            cache.forget(path)
+            return try await get(path, authorized: authorized, revalidating: revalidating)
+        }
+        if let http, !(200..<300).contains(http.statusCode) {
             throw APIError.http(http.statusCode)
         }
-        return try await decodeDetached(T.self, from: data)
+        let decoded = try await decodeDetached(T.self, from: data)
+        if revalidating {
+            if let etag = http?.value(forHTTPHeaderField: "ETag") {
+                cache.store(decoded, etag: etag, for: path, connection: connection)
+            } else {
+                // A server that answers this path without one must not be
+                // asked conditionally on a validator it never gave.
+                cache.forget(path)
+            }
+        }
+        return decoded
     }
 
     /// Decode off the main actor. OS1API is @MainActor, and decoding inline
