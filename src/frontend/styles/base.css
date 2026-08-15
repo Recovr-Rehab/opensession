@@ -60,6 +60,13 @@
 	   window/backdrop — the sidebar surface at partial opacity. */
 	--sidebar-material: rgba(34, 34, 34, 0.66);
 	--sidebar-material-sheen: rgba(255, 255, 255, 0.035);
+	/* The cast on the content column's left edge, which gives the chrome beside
+	   it a little depth. Dark has none, for the reason --auth-card-edge drops
+	   its cast below: black ink on a near-black column lands as a smudge rather
+	   than a lift. It measured one grey step over 7px, which is not depth, and
+	   the seam is already saying where the sidebar ends. Light keeps it: see
+	   the light block. */
+	--content-edge-shadow: none;
 	/* Level with the sidebar in both themes: a top bar that sits between the
 	   page and the sidebar reads as a third surface across one row of chrome. */
 	--topbar-bg: var(--sidebar-bg);
@@ -384,6 +391,9 @@ html[data-theme="light"] {
 	--sidebar-bg: #fafafa;
 	--sidebar-material: rgba(250, 250, 250, 0.72);
 	--sidebar-material-sheen: rgba(255, 255, 255, 0.42);
+	/* See :root. On paper the cast reads, and it is half of what holds the
+	   chrome column apart from the content beside it. */
+	--content-edge-shadow: -1px 0 8px rgba(0, 0, 0, 0.05);
 	/* Ink on white holds less of the page than white on charcoal does, so a
 	   title needs the heavier cut here to read as firmly as the lighter one
 	   does in dark. Same reasoning as the grey steps above, applied to stems

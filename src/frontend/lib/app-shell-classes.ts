@@ -13,8 +13,8 @@
  *
  * The shell also has two complete layouts rather than one with tweaks. On
  * desktop it is two flush columns: the sidebar, then the workspace filling the
- * rest of the window, with a hairline seam and a soft shadow falling back onto
- * the sidebar. On phones the
+ * rest of the window, with a hairline seam and, in light, a soft shadow falling
+ * back onto the sidebar. On phones the
  * outer box DISSOLVES — `.workspace-shell` was `display: contents`
  * — and the pane becomes an iOS-style page stack, absolutely positioned and
  * slid in from the right over the sidebar. The desktop form is unprefixed and
@@ -55,9 +55,11 @@ export const APP_BODY =
 /**
  * The detail pane and its optional right panel as one object, flush to the
  * window: the workspace takes every pixel the sidebar leaves, and the only
- * thing between the two is the seam and a subtle shadow on its left edge. No
- * gutter and no corner: the shadow only gives the sidebar a little depth
- * against the workspace without turning the seam into a raised card edge.
+ * thing between the two is the seam and, in light, a subtle shadow on its left
+ * edge. No gutter and no corner: the shadow only gives the sidebar a little
+ * depth against the workspace without turning the seam into a raised card
+ * edge. `--content-edge-shadow` is `none` in dark, where a black cast on a
+ * near-black column reads as a smudge rather than depth.
  *
  * `display: contents` on phones is load-bearing rather than tidy: dissolving
  * the box restores `.detail-pane` and the fixed panel portal to the layout
@@ -66,9 +68,9 @@ export const APP_BODY =
 export const WORKSPACE_SHELL =
 	// Above the sidebar's pinned labels (z 20), so their scroll-under washes
 	// cannot cut the shadow. The resize grabber stays above both at z 30.
-	"relative z-[25] flex min-h-0 min-w-0 flex-1 overflow-hidden border-l border-divider bg-surface desktop:shadow-[-1px_0_8px_rgba(0,0,0,0.05)] " +
+	"relative z-[25] flex min-h-0 min-w-0 flex-1 overflow-hidden border-l border-divider bg-surface desktop:[box-shadow:var(--content-edge-shadow)] " +
 	// Collapsed sidebar: nothing to divide from or cast depth onto.
-	"[.app-body.sidebar-collapsed_&]:border-l-0 [.app-body.sidebar-collapsed_&]:shadow-none " +
+	"[.app-body.sidebar-collapsed_&]:border-l-0 [.app-body.sidebar-collapsed_&]:[box-shadow:none] " +
 	"phone:contents";
 
 /**

@@ -105,10 +105,11 @@ export const SETTINGS_BACK =
  *
  * The seam and the shadow are DETAIL_PANE's, the other half of the pair
  * SETTINGS_PAGE opens: the content is paper laid over the chrome, and the only
- * thing between them is that hairline plus a little depth.
+ * thing between them is that hairline plus, in light, a little depth. The
+ * shadow rides `--content-edge-shadow`, which is `none` in dark.
  */
 export const SETTINGS_CONTENT =
-	"flex min-w-0 flex-1 justify-center overflow-y-auto border-l border-divider bg-surface px-8 pt-11 desktop:shadow-[-1px_0_8px_rgba(0,0,0,0.05)]";
+	"flex min-w-0 flex-1 justify-center overflow-y-auto border-l border-divider bg-surface px-8 pt-11 desktop:[box-shadow:var(--content-edge-shadow)]";
 export const SETTINGS_CONTENT_TOOL = "min-h-0 p-0";
 
 /** Same column inside the phone sheet — a phone gutter instead of the desktop one. */
