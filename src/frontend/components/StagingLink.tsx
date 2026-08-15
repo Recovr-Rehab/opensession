@@ -11,12 +11,11 @@ import { toast } from "../ui/toast";
 import { CopyCheck, useCopy } from "../ui/copy";
 import { IconArrowUpRight, IconGlobe } from "./icons";
 import { checkClass, isDeployment } from "./PrPanel";
-import { isApple } from "../lib/platform";
+import { useShortcutLabel } from "../hooks/useShortcutBindings";
 
-// Keyboard hint for the open-staging chord (SessionViewer owns the handler —
-// this component mounts once per layout variant, so a listener here would
-// register multiple times).
-const OPEN_CHORD = isApple ? "⌘O" : "Ctrl+O";
+// The open-preview chord's handler lives in SessionViewer: this component
+// mounts once per layout variant, so a listener here would register several
+// times. All that happens here is advertising whatever it is bound to.
 
 /* The amber pill in the workspace panel. Sized to the Merge button it sits
    beside (13px/600, 5px 11px, 7px corner) so the two read as one row. The base
@@ -248,14 +247,16 @@ export function StagingLink({
 		: rebuilding
 			? ICON_REBUILDING
 			: ICON_READY;
+	const openChord = useShortcutLabel("open-preview");
+	const chordHint = openChord ? `${openChord}; ` : "";
 	const tooltip = (copyHint: string) =>
 		copied
 			? "Link copied"
 			: building
 				? `Preview environment ${staging.status.toLowerCase()}… ${copyHint}`
 				: rebuilding
-					? `Redeploying for the latest push. Opens the previous deploy until it lands (${OPEN_CHORD}; ${copyHint})`
-					: `Open the preview environment to test this PR on real infra (${OPEN_CHORD}; ${copyHint})`;
+					? `Redeploying for the latest push. Opens the previous deploy until it lands (${chordHint}${copyHint})`
+					: `Open the preview environment to test this PR on real infra (${chordHint}${copyHint})`;
 
 	if (variant === "header") {
 		return (

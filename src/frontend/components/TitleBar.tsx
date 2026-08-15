@@ -1,5 +1,6 @@
 import { IconChevronLeft, IconChevronRight, IconSearch } from "./icons";
 import { Tooltip } from "../ui/tooltip";
+import { useShortcutKeys } from "../hooks/useShortcutBindings";
 
 /**
  * Back/forward cluster for Window Controls Overlay mode.
@@ -26,6 +27,7 @@ export function TitleBar({
 	pane?: boolean;
 	onSearch?: () => void;
 }) {
+	const commandMenuKeys = useShortcutKeys("command-menu");
 	return (
 		<div className={pane ? "wco-nav wco-nav-pane" : "wco-nav"}>
 			<Tooltip label="Back" side="bottom">
@@ -47,7 +49,7 @@ export function TitleBar({
 				</button>
 			</Tooltip>
 			{onSearch && (
-				<Tooltip label="Command menu" side="bottom" shortcut={["⌘", "K"]}>
+				<Tooltip label="Command menu" side="bottom" shortcut={commandMenuKeys ?? undefined}>
 					<button
 						className="inline-flex size-[30px] cursor-pointer items-center justify-center rounded-md border-none bg-transparent p-0 text-dim hover:bg-hover hover:text-fg [-webkit-app-region:no-drag] [app-region:no-drag]"
 						onClick={onSearch}

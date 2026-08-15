@@ -1,27 +1,7 @@
-import { isApple, isChromium } from "./platform";
-
-// Archive the active workspace. The viewer's ⌘E/⌘⇧A archives just the open
-// session and bails on Alt, so the Alt-carrying escalation here never
-// double-fires it.
-export const ARCHIVE_WS_SHORTCUT_KEYS = isApple
-	? ["⌘", "⌥", "⇧", "A"]
-	: ["Ctrl", "Alt", "Shift", "A"];
-// Chromium reserves ⌘E before the page sees it; advertise the working alias.
-export const ARCHIVE_SHORTCUT_KEYS = isChromium
-	? isApple
-		? ["⌘", "⇧", "A"]
-		: ["Ctrl", "Shift", "A"]
-	: isApple
-		? ["⌘", "E"]
-		: ["Ctrl", "E"];
-export const PIN_SHORTCUT_KEYS = isApple ? ["⌘", "P"] : ["Ctrl", "P"];
-
-/** ⌘E (primary) or ⌘⇧A (legacy) — the archive-this-session chord. */
-export function isArchiveChord(e: KeyboardEvent): boolean {
-	if (!(e.metaKey || e.ctrlKey) || e.altKey) return false;
-	const k = e.key.toLowerCase();
-	return (k === "e" && !e.shiftKey) || (k === "a" && e.shiftKey);
-}
+// The archive chords themselves live in lib/shortcuts, which is where every
+// rebindable command is declared and where the keycaps to advertise come from
+// (shortcutKeys / useShortcutKeys). What stays here is the touch behaviour of
+// a sidebar row, plus the focus rule the archive chords share with a swipe.
 
 /** True when an editable element owns focus and should keep the archive
  * chords for itself. The main composer textarea is exempt: it autofocuses on

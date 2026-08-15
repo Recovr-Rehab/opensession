@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useShortcutLabel } from "../hooks/useShortcutBindings";
 import { Reorder } from "motion/react";
 import type { UnifiedSession } from "../lib/types";
 import { TAB_COLORS, colorHex } from "../lib/tab-colors";
@@ -12,7 +13,6 @@ import { isAutomationSession } from "../lib/landing-session";
 import { ArchivedSessionItems } from "./ArchivedSessionItems";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { UserAvatar } from "./UserAvatar";
-import { isApple } from "../lib/platform";
 import {
 	NEW_MENU,
 	NEW_MENU_ITEM,
@@ -194,6 +194,8 @@ export function SessionTabs({
 	onRestore,
 	onToast,
 }: Props) {
+	const copyTranscriptLabel = useShortcutLabel("session-copy-transcript");
+	const closeLabel = useShortcutLabel("session-close");
 	const [newMenu, setNewMenu] = useState<NewMenu | null>(null);
 	const [editKey, setEditKey] = useState<string | null>(null);
 	const [draft, setDraft] = useState("");
@@ -698,8 +700,8 @@ export function SessionTabs({
 											<Menu.Popup>
 												<Menu.Item onClick={() => void copySessionTranscript(session, "concise", onToast)}>
 													<span className="grow">Concise</span>
-													{key === activeId && (
-														<Menu.Shortcut>{isApple ? "⌘ ⌥ C" : "Ctrl+Alt+C"}</Menu.Shortcut>
+													{key === activeId && copyTranscriptLabel && (
+														<Menu.Shortcut>{copyTranscriptLabel}</Menu.Shortcut>
 													)}
 												</Menu.Item>
 												<Menu.Item onClick={() => void copySessionTranscript(session, "full", onToast)}>
@@ -738,8 +740,8 @@ export function SessionTabs({
 										<ContextMenu.Separator />
 										<ContextMenu.Item onClick={() => onClose(session)}>
 											<span className="grow">Close tab</span>
-											{key === activeId && (
-												<ContextMenu.Shortcut>{isApple ? "⌘ W" : "Ctrl+W"}</ContextMenu.Shortcut>
+											{key === activeId && closeLabel && (
+												<ContextMenu.Shortcut>{closeLabel}</ContextMenu.Shortcut>
 											)}
 										</ContextMenu.Item>
 									</ContextMenu.Popup>

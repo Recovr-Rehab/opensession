@@ -245,9 +245,10 @@ import { isPinned, togglePin, onPinsChanged } from "../lib/pins";
 import { getLane, onLanesChanged, type Lane } from "../lib/lanes";
 import { ownedBy } from "../lib/sidebar-lanes";
 import { useSessionScroll } from "../hooks/useSessionScroll";
+import { useShortcutKeys, useShortcutLabel } from "../hooks/useShortcutBindings";
 import { useSidePanel } from "../hooks/useSidePanel";
 import { sessionHasWorkspace } from "../lib/session-workspace";
-import { isApple, isChromium } from "../lib/platform";
+import { matchesShortcut } from "../lib/shortcuts";
 import { PulseDot } from "../ui/status";
 import {
 	PANEL_BACK,
@@ -559,13 +560,6 @@ function useLivePlan(
 	}, [entries, running]);
 }
 
-const archiveShortcutLabel = isChromium
-	? isApple
-		? "⌘⇧A"
-		: "Ctrl+Shift+A"
-	: isApple
-		? "⌘E"
-		: "Ctrl+E";
 
 // Hidden for at least this long, returning to the tab is a "reopen" — jump to
 // the live edge even if nothing new arrived. Shorter absences (glancing at a
@@ -1736,10 +1730,7 @@ export function SessionViewer({
 			if (
 				!focused ||
 				e.defaultPrevented ||
-				!(e.metaKey || e.ctrlKey) ||
-				e.altKey ||
-				e.shiftKey ||
-				(e.key.toLowerCase() !== "p" && e.code !== "KeyP") ||
+				!matchesShortcut(e, "session-pin") ||
 				document.querySelector(
 					".palette-backdrop, .composer-schedule-modal-backdrop, .session-delete-overlay",
 				)
@@ -1912,6 +1903,9 @@ export function SessionViewer({
 
 	// Session-wide composer shortcuts. ⌘/Ctrl+N toggles team-note mode even when
 	// the composer is not focused; Ctrl+R focuses it directly.
+	const archiveShortcutLabel = useShortcutLabel("session-archive");
+	const copyTranscriptLabel = useShortcutLabel("session-copy-transcript");
+	const newSiblingKeys = useShortcutKeys("session-new-sibling");
 	const composerRef = useRef<HTMLTextAreaElement | null>(null);
 	useEffect(() => {
 		function onKeyDown(e: KeyboardEvent) {
@@ -1919,10 +1913,7 @@ export function SessionViewer({
 			if (
 				!e.defaultPrevented &&
 				!e.repeat &&
-				(e.metaKey || e.ctrlKey) &&
-				!e.altKey &&
-				!e.shiftKey &&
-				(e.key.toLowerCase() === "n" || e.code === "KeyN") &&
+				matchesShortcut(e, "composer-note") &&
 				!document.querySelector(
 					".palette-backdrop, .composer-schedule-modal-backdrop, .session-delete-overlay",
 				)
@@ -1932,13 +1923,7 @@ export function SessionViewer({
 				queueMicrotask(() => composerRef.current?.focus());
 				return;
 			}
-			if (
-				e.key.toLowerCase() === "r" &&
-				e.ctrlKey &&
-				!e.metaKey &&
-				!e.altKey &&
-				!e.shiftKey
-			) {
+			if (matchesShortcut(e, "composer-focus")) {
 				e.preventDefault();
 				composerRef.current?.focus();
 			}
@@ -1957,22 +1942,13 @@ export function SessionViewer({
 	useEffect(() => {
 		function onKeyDown(e: KeyboardEvent) {
 			if (!focused) return;
-			// Match e.code too: with Option held, some layouts/browsers alter
-			// e.key; the physical-key code never changes.
-			const arrow =
-				e.key === "ArrowUp" || e.code === "ArrowUp"
-					? "ArrowUp"
-					: e.key === "ArrowDown" || e.code === "ArrowDown"
-						? "ArrowDown"
-						: null;
-			if (
-				e.defaultPrevented ||
-				!arrow ||
-				!(e.metaKey || e.ctrlKey) ||
-				!e.altKey ||
-				e.shiftKey
-			)
-				return;
+			if (e.defaultPrevented) return;
+			const dir = matchesShortcut(e, "effort-up")
+				? 1
+				: matchesShortcut(e, "effort-down")
+					? -1
+					: 0;
+			if (dir === 0) return;
 			const effectiveModel = model || defaultModel;
 			const supportedIds =
 				models.find((m) => m.id === effectiveModel)?.efforts ?? [];
@@ -1984,7 +1960,6 @@ export function SessionViewer({
 					? "high"
 					: supported[0].id;
 			const idx = supported.findIndex((ef) => ef.id === effective);
-			const dir = arrow === "ArrowUp" ? 1 : -1;
 			const next =
 				supported[(idx + dir + supported.length) % supported.length];
 			if (!next) return;
@@ -2002,26 +1977,15 @@ export function SessionViewer({
 	useEffect(() => {
 		function onKeyDown(e: KeyboardEvent) {
 			if (!focused) return;
-			const arrow =
-				e.key === "ArrowUp" || e.code === "ArrowUp"
-					? "ArrowUp"
-					: e.key === "ArrowDown" || e.code === "ArrowDown"
-						? "ArrowDown"
-						: null;
-			if (
-				e.defaultPrevented ||
-				!arrow ||
-				!e.ctrlKey ||
-				!e.shiftKey ||
-				e.metaKey ||
-				e.altKey
-			)
-				return;
+			if (e.defaultPrevented) return;
+			const up = matchesShortcut(e, "transcript-up");
+			const down = matchesShortcut(e, "transcript-down");
+			if (!up && !down) return;
 			const el = messagesRef.current;
 			if (!el) return;
 			e.preventDefault();
 			const delta = Math.max(120, el.clientHeight * 0.8);
-			if (arrow === "ArrowDown") {
+			if (down) {
 				const remaining = el.scrollHeight - el.clientHeight - el.scrollTop;
 				if (remaining - delta < 48) {
 					scrollToLatest();
@@ -2029,7 +1993,7 @@ export function SessionViewer({
 				}
 			}
 			el.scrollBy({
-				top: arrow === "ArrowUp" ? -delta : delta,
+				top: up ? -delta : delta,
 				behavior: "smooth",
 			});
 		}
@@ -4209,13 +4173,7 @@ export function SessionViewer({
 			// visible row comes next. Keep this listener as the route-level fallback:
 			// the viewer remains mounted even when the sidebar cannot handle the open
 			// session. `defaultPrevented` above ensures only one handler fires.
-			const k = e.key.toLowerCase();
-			const archiveChord =
-				(e.metaKey || e.ctrlKey) &&
-				!e.altKey &&
-				(((k === "e" || e.code === "KeyE") && !e.shiftKey) ||
-					((k === "a" || e.code === "KeyA") && e.shiftKey));
-			if (archiveChord && !archiving) {
+			if (matchesShortcut(e, "session-archive") && !archiving) {
 				e.preventDefault();
 				void handleArchive();
 			}
@@ -4335,11 +4293,11 @@ export function SessionViewer({
 	useEffect(() => {
 		function onKeyDown(e: KeyboardEvent) {
 			if (!focused) return;
+			const openPr = matchesShortcut(e, "open-pr");
+			const openPreview = matchesShortcut(e, "open-preview");
 			if (
 				e.defaultPrevented ||
-				!(e.metaKey || e.ctrlKey) ||
-				e.altKey ||
-				e.shiftKey ||
+				(!openPr && !openPreview) ||
 				document.querySelector(
 					".palette-backdrop, .composer-schedule-modal-backdrop, .session-delete-overlay",
 				)
@@ -4356,15 +4314,14 @@ export function SessionViewer({
 			if (editable && !editable.classList.contains("composer-textarea")) {
 				return;
 			}
-			const k = e.key.toLowerCase();
-			if (k === "g") {
+			if (openPr) {
 				// Primary branch's PR, falling back to the first attached/linked
 				// repo PR on multi-repo sessions.
 				const prUrl = session.prUrl ?? session.prs?.find((p) => p.url)?.url;
 				if (!prUrl) return;
 				e.preventDefault();
 				window.open(prUrl, "_blank", "noopener");
-			} else if (k === "o" && staging) {
+			} else if (openPreview && staging) {
 				e.preventDefault();
 				// Match the globe's click semantics: before the first deploy goes
 				// Ready the branch alias 404s, so swallow the chord with the same
@@ -4525,7 +4482,9 @@ export function SessionViewer({
 							>
 								<IconListCircles size={20} className={MENU_ICON} />
 								<span className="grow">Concise</span>
-								<Menu.Shortcut>{isApple ? "⌘⌥C" : "Ctrl+Alt+C"}</Menu.Shortcut>
+								{copyTranscriptLabel && (
+								<Menu.Shortcut>{copyTranscriptLabel}</Menu.Shortcut>
+							)}
 							</Menu.Item>
 							<Menu.Item
 								onClick={() => {
@@ -4627,8 +4586,12 @@ export function SessionViewer({
 						disabled={archiving}
 						title={
 							session.archived
-								? `Unarchive session (${archiveShortcutLabel})`
-								: `Archive session (${archiveShortcutLabel})`
+								? archiveShortcutLabel
+									? `Unarchive session (${archiveShortcutLabel})`
+									: "Unarchive session"
+								: archiveShortcutLabel
+										? `Archive session (${archiveShortcutLabel})`
+										: "Archive session"
 						}
 					>
 						<IconArchive size={20} className={MENU_ICON} />
@@ -4641,7 +4604,9 @@ export function SessionViewer({
 									? "Unarchive session"
 									: "Archive session"}
 						</span>
-						<Menu.Shortcut>{archiveShortcutLabel}</Menu.Shortcut>
+						{archiveShortcutLabel && (
+							<Menu.Shortcut>{archiveShortcutLabel}</Menu.Shortcut>
+						)}
 					</Menu.Item>
 				);
 				// Delete is destructive, so it never rides in the visible action bar —
@@ -5000,7 +4965,7 @@ export function SessionViewer({
 									<Tooltip
 										label="New tab in this workspace"
 										shortcut={
-											isApple ? ["⌘", "⌥", "N"] : ["Ctrl", "Alt", "N"]
+											newSiblingKeys ?? undefined
 										}
 									>
 										<Button

@@ -44,6 +44,7 @@ import { ModelsPanel } from "./settings/ModelsPanel";
 import { NotificationsPanel } from "./settings/NotificationsPanel";
 import { PapercutsPanel } from "./settings/PapercutsPanel";
 import { PreferencesPanel } from "./settings/PreferencesPanel";
+import { ShortcutsPanel } from "./settings/ShortcutsPanel";
 import { PrewarmingPanel } from "./settings/PrewarmingPanel";
 import { ReposPanel } from "./settings/ReposPanel";
 import { SandboxesPanel } from "./settings/SandboxesPanel";
@@ -78,6 +79,7 @@ export type SettingsSectionKey =
 	| "preferences"
 	| "notifications"
 	| "appearance"
+	| "shortcuts"
 	| "setup"
 	| "identity"
 	| "repos"
@@ -203,6 +205,27 @@ const SECTIONS: {
 			>
 				<circle cx="8" cy="8" r="5.5" />
 				<path d="M8 2.5a5.5 5.5 0 0 1 0 11z" fill="currentColor" stroke="none" />
+			</svg>
+		),
+	},
+	{
+		key: "shortcuts",
+		label: "Shortcuts",
+		group: "Personal",
+		icon: (
+			<svg
+				width="20"
+				height="20"
+				viewBox="0 0 16 16"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.4"
+			>
+				<rect x="1.4" y="3.6" width="13.2" height="8.8" rx="2" />
+				<path
+					d="M4.3 6.4h.01M6.7 6.4h.01M9.1 6.4h.01M11.5 6.4h.01M4.3 9.6h7.2"
+					strokeLinecap="round"
+				/>
 			</svg>
 		),
 	},
@@ -685,6 +708,7 @@ function SectionPanel({
 			{section === "notifications" && <NotificationsPanel />}
 			{section === "preferences" && <PreferencesPanel />}
 			{section === "appearance" && <AppearancePanel />}
+			{section === "shortcuts" && <ShortcutsPanel />}
 			{section === "setup" && <SetupPanel onDone={onBack} />}
 			{section === "identity" && <IdentityPanel />}
 			{section === "repos" && <ReposPanel />}

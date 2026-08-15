@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useShortcutLabel } from "../hooks/useShortcutBindings";
 import type { ModelOption, FileMention, ProviderAccountOption } from "../lib/api";
 import { splitAttachments, imageFilesFromPaste, type FileAttachment } from "../lib/images";
 import { loadDraft, onDraftsChanged, saveDraft } from "../lib/drafts";
@@ -421,6 +422,7 @@ export function Composer({
     draftKey ? loadDraft(draftKey).text : "",
   );
   const isPhone = useIsPhone();
+  const noteChord = useShortcutLabel("composer-note");
   // "Send messages with" preference (Settings → Preferences): Enter or ⌘/Ctrl+Enter.
   const [sendKey, setSendKey] = useState(getSendKeyPref);
   useEffect(() => onSendKeyChanged(() => setSendKey(getSendKeyPref())), []);

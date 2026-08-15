@@ -48,7 +48,7 @@ import { Tooltip } from "../ui/tooltip";
 import { ContextMenu, Menu } from "../ui/menu";
 import { Spinner } from "../ui/spinner";
 import { cn } from "../ui/cn";
-import { isApple } from "../lib/platform";
+import { useShortcutLabel } from "../hooks/useShortcutBindings";
 import { PrChecksPopover } from "./PrChecksPopover";
 import { PrSeriesRows } from "./PrSeriesRows";
 import { PrStackChip } from "./pr/StackPopover";
@@ -327,8 +327,8 @@ function PrBarButton({
 	);
 }
 
-// Keyboard hint for the open-PR chord (SessionViewer owns the handler).
-const PR_CHORD = isApple ? "⌘G" : "Ctrl+G";
+// The open-PR chord's handler lives in SessionViewer; the chip only
+// advertises whatever it is bound to.
 
 /**
  * The PR chip links to Open Session's review by default. GitHub remains a
@@ -348,6 +348,7 @@ function PrNumberChip({
 }) {
 	const [copied, setCopied] = useState<"link" | "number" | null>(null);
 	const provider = providerFromUrl(pr.url);
+	const prChord = useShortcutLabel("open-pr");
 
 	const copy = useCallback((kind: "link" | "number", text: string) => {
 		navigator.clipboard?.writeText(text).then(() => {
@@ -417,7 +418,13 @@ function PrNumberChip({
 					</ContextMenu.Item>
 				</ContextMenu.Popup>
 			</ContextMenu.Root>
-			<Tooltip label={`Open on ${provider.name} (${PR_CHORD})`}>
+			<Tooltip
+				label={
+					prChord
+						? `Open on ${provider.name} (${prChord})`
+						: `Open on ${provider.name}`
+				}
+			>
 				<a
 					className={`${prChipExternalClass(tone, size)} ${PR_CHIP_SEAM}`}
 					href={pr.url}

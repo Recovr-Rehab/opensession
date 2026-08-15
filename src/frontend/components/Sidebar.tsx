@@ -157,6 +157,8 @@ import { RowCardPopup } from "./SidebarRowCards";
 import { pointerCanHover } from "../lib/pointer";
 import { RepoTile, repoLabel } from "./RepoTile";
 import { useIsPhone } from "../hooks/useIsPhone";
+import { useShortcutKeys } from "../hooks/useShortcutBindings";
+import { matchesShortcut, shortcutLabel } from "../lib/shortcuts";
 import { PrRow } from "./PrRow";
 import {
 	buildReviewQueue,
@@ -220,8 +222,6 @@ import {
 import { sessionHasPr } from "../lib/session-prs";
 import { sessionHasWorkspace } from "../lib/session-workspace";
 import {
-	ARCHIVE_SHORTCUT_KEYS,
-	ARCHIVE_WS_SHORTCUT_KEYS,
 	LONG_PRESS_MS,
 	LONG_PRESS_SLOP,
 	SWIPE_AXIS_LOCK_PX,
@@ -231,12 +231,10 @@ import {
 	clampSwipe,
 	editableSwallowsArchiveChord,
 	fullSwipeThreshold,
-	isArchiveChord,
 	swipeCommitOffset,
 	type SwipeAction,
 	type SwipeState,
 } from "../lib/sidebar-swipe";
-import { isApple } from "../lib/platform";
 import {
 	KNOWN_PEOPLE,
 	MINE_STATUS_META,
@@ -1960,6 +1958,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		archiveSelected: archiveOpenSessionWithNext,
 	}));
 
+	// Advertised keycaps, read through the registry so a rebind in Settings
+	// repaints the hints instead of leaving them describing the old chord.
+	const archiveKeys = useShortcutKeys("session-archive");
+	const newSessionKeys = useShortcutKeys("session-new");
+	const archiveWsKeys = useShortcutKeys("workspace-archive");
+
 	// ⌘E (or the legacy ⌘⇧A) archives the open session and lands on the next entry
 	// in the sidebar, rather than dropping back to Home. This lives here (not in
 	// the viewer) because the sidebar owns the row ordering that defines "next".
@@ -1969,7 +1973,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// the whole workspace.
 	useEffect(() => {
 		function onKeyDown(e: KeyboardEvent) {
-			if (e.defaultPrevented || !isArchiveChord(e)) return;
+			if (e.defaultPrevented || !matchesShortcut(e, "session-archive")) return;
 			if (
 				document.querySelector(
 					".palette-backdrop, .composer-schedule-modal-backdrop, .session-delete-overlay",
@@ -1994,13 +1998,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// exactly one fires. Targets the workspace holding the open session.
 	useEffect(() => {
 		function onKeyDown(e: KeyboardEvent) {
-			if (
-				e.defaultPrevented ||
-				e.key.toLowerCase() !== "a" ||
-				!(e.metaKey || e.ctrlKey) ||
-				!e.shiftKey ||
-				!e.altKey
-			)
+			if (e.defaultPrevented || !matchesShortcut(e, "workspace-archive"))
 				return;
 			if (editableSwallowsArchiveChord(e.target)) return;
 			const row = wsRowOrder.find(
@@ -2026,14 +2024,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// (SessionViewer); Shift so ⌘⇧-arrow text selection keeps working.
 	useEffect(() => {
 		function onKeyDown(e: KeyboardEvent) {
-			if (
-				e.defaultPrevented ||
-				(e.key !== "ArrowUp" && e.key !== "ArrowDown") ||
-				!(e.metaKey || e.ctrlKey) ||
-				e.altKey ||
-				e.shiftKey
-			)
-				return;
+			if (e.defaultPrevented) return;
+			const dir = matchesShortcut(e, "sidebar-next")
+				? 1
+				: matchesShortcut(e, "sidebar-prev")
+					? -1
+					: 0;
+			if (dir === 0) return;
 			if (
 				document.querySelector(
 					".palette-backdrop, .composer-schedule-modal-backdrop, .session-delete-overlay",
@@ -2049,7 +2046,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			const idx = candidates.findIndex((item) =>
 				item.hasAttribute("data-selected"),
 			);
-			const dir = e.key === "ArrowDown" ? 1 : -1;
 			// No selected sidebar item (e.g. Home): enter from the edge.
 			const next =
 				idx < 0
@@ -3039,8 +3035,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								// ⌘⌥⇧A escalation only matters with more than one session.
 								active
 									? row.sessions.length > 1
-										? ARCHIVE_WS_SHORTCUT_KEYS
-										: ARCHIVE_SHORTCUT_KEYS
+										? (archiveWsKeys ?? undefined)
+										: (archiveKeys ?? undefined)
 									: undefined
 							}
 						>
@@ -4568,7 +4564,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						    workspace. */}
 						<Tooltip
 							label="New session"
-							shortcut={isApple ? ["⌘", "S"] : ["Ctrl", "S"]}
+							shortcut={newSessionKeys ?? undefined}
 						>
 						<button
 							className={cn(
@@ -4774,7 +4770,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							kind: "item",
 							icon: <IconLink size={20} />,
 							label: "Copy link",
-							shortcut: "⌘⇧C",
+							shortcut: shortcutLabel("session-copy-link") ?? undefined,
 							onClick: () =>
 								copyToClipboard(absoluteLink(sessionPath(first)), () =>
 									onToast?.("Link copied"),

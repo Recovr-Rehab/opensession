@@ -113,6 +113,7 @@ import { useHydratedSession } from "./hooks/useHydratedSession";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useBackSwipe } from "./hooks/useBackSwipe";
 import { useIsPhone } from "./hooks/useIsPhone";
+import { useShortcutKeys } from "./hooks/useShortcutBindings";
 import { useInputAlerts } from "./hooks/useInputAlerts";
 import { initAlerts } from "./lib/notify";
 import { registerServiceWorker } from "./lib/push";
@@ -198,7 +199,7 @@ import { PR_DOT_TONE } from "./lib/session-tab-classes";
 import { dedupeViewers, otherViewers } from "./lib/presence";
 import { copySessionTranscript } from "./lib/transcript-copy";
 import { effectiveTheme, setThemePref } from "./lib/theme";
-import { isApple } from "./lib/platform";
+import { matchesShortcut, shortcutPrimaryKeys } from "./lib/shortcuts";
 import type { UnifiedSession } from "./lib/types";
 // Order matters: base.css (tokens, reset, platform chrome) then legacy.css,
 // which is now empty and stays imported so the "never add here" contract keeps
@@ -261,6 +262,7 @@ const SETTINGS_SECTIONS = new Set<SettingsSectionKey>([
 	"preferences",
 	"notifications",
 	"appearance",
+	"shortcuts",
 	"setup",
 	"identity",
 	"repos",
@@ -1307,27 +1309,26 @@ export function App(
 	// it).
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
-			const k = e.key.toLowerCase();
-			if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && k === "k") {
+			if (matchesShortcut(e, "command-menu")) {
 				e.preventDefault();
 				setSearchOpen((o) => !o);
 				return;
 			}
-			if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && k === "j") {
+			if (matchesShortcut(e, "desk")) {
 				// Summon/dismiss the Desk overlay. Esc-close is handled by the
 				// overlay itself (Base UI dialog / the bottom sheet).
 				e.preventDefault();
 				setDeskOpen((o) => !o);
 				return;
 			}
-			if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && k === "b") {
+			if (matchesShortcut(e, "sidebar-toggle")) {
 				// Toggle the desktop left sidebar. ⌘B is the panel-toggle
 				// convention (VS Code / Slack).
 				e.preventDefault();
 				toggleSidebarCollapsed();
 				return;
 			}
-			if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && k === "s") {
+			if (matchesShortcut(e, "session-new")) {
 				// Start a session in a new workspace — the sidebar "+", by
 				// keyboard. ⌘⌥N is the neighbouring chord and deliberately does
 				// something else: it opens a sibling session in the workspace you
@@ -1337,9 +1338,10 @@ export function App(
 				openPalette();
 				return;
 			}
-			if ((e.metaKey || e.ctrlKey) && e.shiftKey && k === "c") {
-				// Let a real text selection copy normally; only hijack ⌘⇧C when
-				// there's a linkable view and nothing is selected.
+			if (matchesShortcut(e, "session-copy-link")) {
+				// Let a real text selection copy normally; only hijack the chord
+				// when there's a linkable view and nothing is selected. This is
+				// why matchesShortcut doesn't preventDefault for us.
 				if (window.getSelection?.()?.toString()) return;
 				const path = copyLinkPathRef.current;
 				if (!path) return;
@@ -3119,21 +3121,13 @@ export function App(
 	// the desktop shell), we take it.
 	useEffect(() => {
 		const onKey = (e: KeyboardEvent) => {
-			if (!(e.metaKey || e.ctrlKey)) return;
-			if (e.shiftKey) {
-				if (!e.altKey && e.key.toLowerCase() === "t") {
-					e.preventDefault();
-					void reopenLastArchivedRef.current();
-				}
-				// ⌘⇧Z is redo everywhere else, so it deliberately falls through.
-				return;
-			}
-			// ⌘Z undoes the last archive. Unlike the archive chords, every
+			// Reopen undoes the last archive. Unlike the archive chords, every
 			// editable keeps it — including the composer textarea, where undoing
 			// what you typed is exactly what ⌘Z should do. Sits above the
 			// no-open-session bail because archiving the workspace you were in
-			// can leave you on Home with nothing selected.
-			if (!e.altKey && e.key.toLowerCase() === "z") {
+			// can leave you on Home with nothing selected. (⌘⇧Z is redo
+			// everywhere else, so it is deliberately not one of the defaults.)
+			if (matchesShortcut(e, "session-reopen")) {
 				const editable = (e.target as HTMLElement | null)?.closest(
 					"input, textarea, select, [contenteditable='true'], [contenteditable='']",
 				);
@@ -3144,14 +3138,13 @@ export function App(
 			}
 			const s = currentSessionRef.current;
 			if (!s) return;
-			// e.code, not e.key: on macOS ⌥C types "ç".
-			if (e.altKey && e.code === "KeyC") {
+			if (matchesShortcut(e, "session-copy-transcript")) {
 				e.preventDefault();
 				void copySessionTranscript(s, "concise", showToast);
-			} else if (!e.altKey && e.key.toLowerCase() === "w") {
+			} else if (matchesShortcut(e, "session-close")) {
 				e.preventDefault();
 				void closeSessionRef.current(s);
-			} else if (e.altKey && e.code === "KeyN") {
+			} else if (matchesShortcut(e, "session-new-sibling")) {
 				e.preventDefault();
 				void handleNewSessionRef.current("share");
 			}
@@ -3210,8 +3203,7 @@ export function App(
 	// weight as the fuller play/globe glyphs there (a framed rectangle reads a
 	// hair lighter than a filled triangle / globe at the same nominal size).
 	const panelIcon = <IconSidebarLeft size={24} />;
-	const appleShortcuts = isApple;
-	const mod = appleShortcuts ? "⌘" : "Ctrl";
+	const sidebarToggleKeys = useShortcutKeys("sidebar-toggle");
 	const currentTheme = effectiveTheme();
 	const commandActions: CommandPaletteAction[] = [
 		{
@@ -3220,7 +3212,7 @@ export function App(
 			description: "Start a new ask or code session",
 			category: "Actions",
 			keywords: ["create", "session", "workspace"],
-			shortcut: [mod, "S"],
+			shortcut: shortcutPrimaryKeys("session-new") ?? undefined,
 			icon: <IconPlus size={18} />,
 			run: () => openPalette(),
 		},
@@ -3232,7 +3224,7 @@ export function App(
 						description: "Share the current workspace and worktree",
 						category: "Actions" as const,
 						keywords: ["tab", "conversation", "sibling"],
-						shortcut: [mod, appleShortcuts ? "⌥" : "Alt", "N"],
+						shortcut: shortcutPrimaryKeys("session-new-sibling") ?? undefined,
 						icon: <IconPlus size={18} />,
 						run: () => void handleNewSession("share"),
 					},
@@ -3242,7 +3234,7 @@ export function App(
 						description: "Copy a concise version of the current transcript",
 						category: "Actions" as const,
 						keywords: ["transcript", "clipboard"],
-						shortcut: [mod, appleShortcuts ? "⌥" : "Alt", "C"],
+						shortcut: shortcutPrimaryKeys("session-copy-transcript") ?? undefined,
 						icon: <IconCopy size={18} />,
 						run: () =>
 							void copySessionTranscript(currentSession, "concise", showToast),
@@ -3259,7 +3251,7 @@ export function App(
 						keywords: currentSession.archived
 							? ["restore", "open"]
 							: ["close", "remove"],
-						shortcut: [mod, appleShortcuts ? "⇧" : "Shift", "A"],
+						shortcut: shortcutPrimaryKeys("session-archive") ?? undefined,
 						icon: <IconArchive size={18} />,
 						run: () =>
 							void (currentSession.archived
@@ -3279,7 +3271,7 @@ export function App(
 								: `Bring back "${restorableArchived[0].title || "the session you just archived"}"`,
 						category: "Actions" as const,
 						keywords: ["unarchive", "restore", "undo", "closed", "reopen"],
-						shortcut: [mod, "Z"],
+						shortcut: shortcutPrimaryKeys("session-reopen") ?? undefined,
 						icon: <IconUnarchive size={18} />,
 						run: () => void reopenLastArchived(),
 					},
@@ -3293,7 +3285,7 @@ export function App(
 						description: "Copy a shareable link to this session, workspace, or PR",
 						category: "Actions" as const,
 						keywords: ["url", "share", "clipboard"],
-						shortcut: [mod, appleShortcuts ? "⇧" : "Shift", "C"],
+						shortcut: shortcutPrimaryKeys("session-copy-link") ?? undefined,
 						icon: <IconCopy size={18} />,
 						run: () => {
 							const path = copyLinkPathRef.current;
@@ -3318,7 +3310,7 @@ export function App(
 			description: "Open the standing concierge session",
 			category: "Actions",
 			keywords: ["concierge", "assistant"],
-			shortcut: [mod, "J"],
+			shortcut: shortcutPrimaryKeys("desk") ?? undefined,
 			icon: <IconDesk size={18} />,
 			run: () => setDeskOpen(true),
 		},
@@ -3328,7 +3320,7 @@ export function App(
 			description: "Toggle the workspace sidebar",
 			category: "Actions",
 			keywords: ["toggle", "panel", "navigation"],
-			shortcut: [mod, "B"],
+			shortcut: shortcutPrimaryKeys("sidebar-toggle") ?? undefined,
 			icon: <IconSidebarLeft size={18} />,
 			run: toggleSidebarCollapsed,
 		},
@@ -3921,7 +3913,7 @@ export function App(
 								<Tooltip
 									label="Hide sidebar"
 									side="bottom"
-									shortcut={["⌘", "B"]}
+									shortcut={sidebarToggleKeys ?? undefined}
 								>
 									{/* Padding box, matching .viewer-code-icon exactly, so the
 									    sidebar's chrome row and the session header's icon

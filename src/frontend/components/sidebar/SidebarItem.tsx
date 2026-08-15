@@ -1,4 +1,5 @@
 import { useIsPhone } from "../../hooks/useIsPhone";
+import { useShortcutKeys } from "../../hooks/useShortcutBindings";
 import { hasDraft } from "../../lib/drafts";
 import { markRead, markUnread } from "../../lib/reads";
 import {
@@ -17,7 +18,7 @@ import {
 	SIDEBAR_WS_DRAFT,
 } from "../../lib/sidebar-classes";
 import { isClaimed, pinnedLane, runNeedsAttention, stripPrTitlePrefix } from "../../lib/sidebar-lanes";
-import { ARCHIVE_SHORTCUT_KEYS, LONG_PRESS_MS, LONG_PRESS_SLOP, PIN_SHORTCUT_KEYS, SWIPE_AXIS_LOCK_PX, SWIPE_COMMIT_MS, SWIPE_OPEN_THRESHOLD, SWIPE_REVEAL_PX, clampSwipe, fullSwipeThreshold, swipeCommitOffset, type SwipeAction } from "../../lib/sidebar-swipe";
+import { LONG_PRESS_MS, LONG_PRESS_SLOP, SWIPE_AXIS_LOCK_PX, SWIPE_COMMIT_MS, SWIPE_OPEN_THRESHOLD, SWIPE_REVEAL_PX, clampSwipe, fullSwipeThreshold, swipeCommitOffset, type SwipeAction } from "../../lib/sidebar-swipe";
 import { MINE_STATUS_META, type LaneChoice } from "../../lib/sidebar-types";
 import type { UnifiedSession } from "../../lib/types";
 import { Button } from "../../ui/button";
@@ -113,6 +114,9 @@ export function SidebarItem({
 	onSetStatus?: (status: LaneChoice | null) => void;
 }) {
 	const isPhone = useIsPhone();
+	// The row's tooltips advertise whatever the user has these bound to.
+	const pinKeys = useShortcutKeys("session-pin");
+	const archiveKeys = useShortcutKeys("session-archive");
 	const waiting = !!session.waitingForInput || runNeedsAttention(session);
 	const [editing, setEditing] = useState(false);
 	const [draft, setDraft] = useState("");
@@ -564,7 +568,7 @@ export function SidebarItem({
 			{!isPhone && (
 			<Tooltip
 				label={pinned ? "Unpin session" : "Pin session"}
-				shortcut={selected ? PIN_SHORTCUT_KEYS : undefined}
+				shortcut={selected ? (pinKeys ?? undefined) : undefined}
 			>
 				<span
 					className={cn(
@@ -587,7 +591,7 @@ export function SidebarItem({
 			{!isPhone && (
 			<Tooltip
 				label="Archive session"
-				shortcut={selected ? ARCHIVE_SHORTCUT_KEYS : undefined}
+				shortcut={selected ? (archiveKeys ?? undefined) : undefined}
 			>
 				<span
 					className={cn(ROW_ACTION, "right-[7px]")}
