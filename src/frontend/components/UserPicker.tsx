@@ -121,6 +121,44 @@ const REDIRECT_ERROR: string | null = (() => {
 })();
 
 /**
+ * The backdrop behind every gate screen: the same "Silver Silk" loop the
+ * landing page runs, so the site and the app's front door are one surface.
+ * Served from our own origin (routes/static-assets.ts), never the site's CDN.
+ *
+ * Three layers, each covering for the one above it: a flat fill that is
+ * whatever paints first, the loop's own first frame as a background image, and
+ * the video. So an offline browser, a slow connection and a reduced-motion
+ * visitor all get the same picture, just not moving. `aria-hidden` and
+ * `pointer-events-none` because it is wallpaper.
+ *
+ * The scrim is the one theme-aware part: it mixes the page's own background
+ * into the silk, which lightens it a touch in light mode and takes the glare
+ * off it in dark, where a full-brightness silver screen would be the only
+ * bright thing on the display.
+ */
+function AuthBackdrop() {
+	return (
+		<div
+			aria-hidden="true"
+			className="pointer-events-none absolute inset-0 select-none bg-[#d9d7d1] bg-cover bg-center"
+			style={{ backgroundImage: `url(${BASE_PATH}/signin-bg.webp)` }}
+		>
+			<video
+				className="size-full object-cover motion-reduce:hidden"
+				autoPlay
+				loop
+				muted
+				playsInline
+				poster={`${BASE_PATH}/signin-bg.webp`}
+			>
+				<source src={`${BASE_PATH}/signin-bg.mp4`} type="video/mp4" />
+			</video>
+			<div className="absolute inset-0 bg-[color-mix(in_srgb,var(--bg)_22%,transparent)]" />
+		</div>
+	);
+}
+
+/**
  * The shell every pre-app screen shares: sign-in, the local name picker, the
  * expired-session notice, the retry after a failed status check. They were
  * four hand-built boxes with their own paddings and inline styles, which is
@@ -131,12 +169,14 @@ const REDIRECT_ERROR: string | null = (() => {
  * radius scale (`rounded-2xl`) rather than the card step: nothing is stacked
  * around it, so it is the whole page's shape.
  *
- * It carries a hairline, which a card normally does not (see
- * src/frontend/AGENTS.md). This one sits alone on an empty white page, where a
- * cast shadow is the only thing drawing its edge and a soft one reads as haze
- * rather than as lift. The pair is the documented trade: the hairline draws the
- * shape, so the shadow can pull in to `md` and say only how far off the page
- * the card is.
+ * It is paper (`bg-surface`, the page's own base) rather than the panel grey
+ * every other card takes, and it has no hairline. Both follow from what is
+ * behind it: on the silk it is the only opaque thing on screen, so its own
+ * edge is drawn by the contrast with a moving backdrop rather than by a
+ * border, and it can take the `lg` cast a card genuinely floating over
+ * something has earned. It read differently on the flat white page it used to
+ * sit on, where a soft cast alone was haze and a hairline had to draw the
+ * shape.
  *
  * Every screen opens on the product's own icon, the same one the loading
  * splash shows (index.html), so the app you are signing in to is what you land
@@ -150,8 +190,9 @@ function AuthCard({
 	children?: React.ReactNode;
 }) {
 	return (
-		<div className="flex h-screen items-center justify-center bg-surface p-6">
-			<div className="w-[400px] max-w-full rounded-2xl border border-line bg-panel p-8 text-center smooth-shadow-md phone:p-6">
+		<div className="relative flex h-screen items-center justify-center overflow-hidden p-6">
+			<AuthBackdrop />
+			<div className="relative w-[400px] max-w-full rounded-2xl bg-surface p-8 text-center smooth-shadow-lg phone:p-6">
 				<img
 					src={`${BASE_PATH}/mac-app-icon.png`}
 					alt=""
@@ -239,10 +280,13 @@ export function UserGate({ children }: { children: React.ReactNode }) {
 				</AuthCard>
 			);
 		}
+		// The same backdrop, so the wait and the card it resolves into are one
+		// screen rather than a white flash and then a picture.
 		return (
-			<div className="flex h-screen items-center justify-center bg-surface">
+			<div className="relative flex h-screen items-center justify-center overflow-hidden">
+				<AuthBackdrop />
 				{showAuthWait ? (
-					<div role="status" aria-live="polite" className="text-supporting text-faint">
+					<div role="status" aria-live="polite" className="relative text-supporting text-dim">
 						Checking sign-in
 					</div>
 				) : null}

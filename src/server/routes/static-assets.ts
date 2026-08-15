@@ -117,6 +117,28 @@ export async function handleStaticAssetsRoutes(
 		);
 	}
 
+	// The sign-in screen's backdrop: the "Silver Silk" loop the landing page
+	// runs, re-encoded down from the site's 4K/7.4MB master (1920x1080, no
+	// audio track, 435KB) and vendored rather than pulled from the site's CDN.
+	// A login screen is the one surface that has to render before anything is
+	// trusted, on a server that is usually private, so it cannot depend on a
+	// third-party fetch — and nobody should have to talk to a CDN to look at
+	// our sign-in box. The webp is the video's own first frame, so the swap
+	// when the loop starts is invisible, and it is what a reduced-motion
+	// visitor gets instead.
+	const mediaFiles: Record<string, string> = {
+		"/signin-bg.mp4": `${FRONTEND_SRC}/signin-bg.mp4`,
+		"/signin-bg.webp": `${FRONTEND_SRC}/signin-bg.webp`,
+	};
+	if (mediaFiles[path] && req.method === "GET") {
+		return new Response(Bun.file(mediaFiles[path]), {
+			headers: {
+				"Content-Type": path.endsWith(".mp4") ? "video/mp4" : "image/webp",
+				"Cache-Control": "public, max-age=86400, must-revalidate",
+			},
+		});
+	}
+
 	// Per-repo icons for the RepoTile UI: a repo's configured `icon` PNG, and
 	// nothing else. Anything without one 404s and the client paints its
 	// colored letter tile instead.
