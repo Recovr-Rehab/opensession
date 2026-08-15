@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
-import { fetchWorktrees, fetchModels, fetchFileMentions, fetchSkillMentions, fetchConnections, fetchSandboxStatus, requestSandboxPrewarm, suggestBranch, fetchProviderAccounts, fetchRepos, type ProviderAccountOption, type ModelOption, type SandboxStatusInfo } from "../lib/api";
+import { fetchWorktrees, fetchModels, fetchFileMentions, fetchSkillMentions, fetchConnections, fetchSandboxStatus, requestSandboxPrewarm, suggestBranch, fetchProviderAccounts, fetchRepos, createWorkspaceApi, updateWorkspaceApi, ApiError, type ProviderAccountOption, type ModelOption, type SandboxStatusInfo } from "../lib/api";
 import { getCurrentUser } from "./UserPicker";
 import { splitAttachments, imageFilesFromPaste, type FileAttachment } from "../lib/images";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
@@ -27,7 +27,7 @@ import {
   IconMessage,
   IconStack,
 } from "./icons";
-import type { WSServerMessage } from "../lib/types";
+import type { WSServerMessage, Workspace } from "../lib/types";
 import { VoiceInput } from "./VoiceInput";
 import { useIsPhone } from "../hooks/useIsPhone";
 import { PaletteSelect } from "./PaletteSelect";
@@ -87,6 +87,9 @@ interface Props {
     /** Start the session without following it — leave the current view alone. */
     background?: boolean;
   }) => void;
+  /** "Save as draft" succeeded: the workspace that now holds the draft
+   *  (freshly created, or the scoped `workspaceId` when saving into one). */
+  onDraftSaved?: (ws: Workspace) => void;
 }
 
 interface Worktree {
@@ -217,7 +220,7 @@ const MODEL_PILL = cn(
    session, "background" leaves you where you were, and "more" keeps the palette
    up for the next task. The order is the dropdown's, so the cycle shortcut and
    the menu step the same way. */
-const CREATE_ACTIONS = ["open", "background", "more"] as const;
+const CREATE_ACTIONS = ["open", "background", "more", "draft"] as const;
 type CreateAction = (typeof CREATE_ACTIONS)[number];
 /** ⌘⌥↓ / ⌘⌥↑ (Ctrl+Alt elsewhere). Vertical rather than horizontal because
  *  Chrome and Safari own ⌘⌥← / ⌘⌥→ for tab switching. */
@@ -227,6 +230,7 @@ const CREATE_LABELS: Record<CreateAction, string> = {
 	open: "Create",
 	background: "Create in background",
 	more: "Create more",
+	draft: "Save draft",
 };
 
 /* Split button: primary Create action + a caret that opens a mode dropdown.
@@ -240,16 +244,21 @@ const CREATE_LABELS: Record<CreateAction, string> = {
    plate read visibly square next to its neighbours. */
 const CREATE_SPLIT = "relative inline-flex shrink-0 items-stretch";
 const CREATE_MAIN =
-	"inline-flex cursor-pointer items-center gap-[7px] border-none bg-accent px-3.5 py-[7px] text-label font-semibold text-on-accent transition-[background-color,opacity] enabled:hover:bg-accent-hover disabled:cursor-default disabled:opacity-40 phone:rounded-[999px] max-[560px]:px-3";
+	"inline-flex cursor-pointer items-center gap-[7px] border-none bg-accent px-3.5 py-[7px] text-label font-semibold text-on-accent transition-[background-color,opacity] enabled:hover:bg-accent-hover disabled:cursor-default disabled:opacity-40 max-[560px]:px-3";
 /** The desktop corner, split between the two shapes the button takes: half of
  *  a split button beside its caret, or the whole button when there is no caret
  *  (inline). Written as two whole classes rather than one plus an override,
  *  because both set `border-top-left-radius`, and which one wins is decided by
- *  the compiled sheet's order rather than the order they are listed here. */
-const CREATE_MAIN_SPLIT = "desktop:rounded-l-control";
-const CREATE_MAIN_WHOLE = "desktop:rounded-control";
+ *  the compiled sheet's order rather than the order they are listed here.
+ *
+ *  On a phone the split stays a split (the caret is the only way to reach
+ *  "Save as draft" there): the main button keeps the pill's left half and the
+ *  caret takes its right half, so together they still read as one pill. Only
+ *  the inline card (no caret at all) rounds the whole button on a phone. */
+const CREATE_MAIN_SPLIT = "desktop:rounded-l-control phone:rounded-l-[999px] phone:rounded-r-none";
+const CREATE_MAIN_WHOLE = "desktop:rounded-control phone:rounded-[999px]";
 const CREATE_CARET =
-	"inline-flex cursor-pointer items-center gap-[7px] rounded-r-control border-none bg-accent p-[7px] text-label font-semibold text-on-accent shadow-[inset_1px_0_0_rgba(0,0,0,0.14)] transition-[background-color,opacity] enabled:hover:bg-accent-hover phone:hidden";
+	"inline-flex cursor-pointer items-center gap-[7px] rounded-r-control phone:rounded-r-[999px] border-none bg-accent p-[7px] text-label font-semibold text-on-accent shadow-[inset_1px_0_0_rgba(0,0,0,0.14)] transition-[background-color,opacity] enabled:hover:bg-accent-hover";
 const CREATE_KBD = "opacity-70";
 const CREATE_MENU =
 	"absolute bottom-[calc(100%+6px)] right-0 z-20 min-w-[208px] rounded-control bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] p-[5px] smooth-shadow-ring-md";
@@ -327,6 +336,13 @@ function readPrefill() {
   };
 }
 
+/** The workspace name a draft auto-follows: the prompt's first non-empty
+ *  line, trimmed and capped. Mirrors the server's own follow in
+ *  updateWorkspace (workspaces.ts). */
+function firstNonEmptyLine(text: string): string {
+  return text.split("\n").find((l) => l.trim())?.trim() ?? "";
+}
+
 /** Fallback branch name from the prompt when Haiku's auto-suggest hasn't landed. */
 function slugifyBranch(text: string): string {
   const slug = text
@@ -339,7 +355,7 @@ function slugifyBranch(text: string): string {
   return slug || "new-session";
 }
 
-export function NewSession({ onBack, inline, focusSeq, send, addHandler, connected, prefillPrompt, forceMode, workspaceId, modelWorkspaceId, forceRepo, forceBranch, onCreateStarted }: Props) {
+export function NewSession({ onBack, inline, focusSeq, send, addHandler, connected, prefillPrompt, forceMode, workspaceId, modelWorkspaceId, forceRepo, forceBranch, onCreateStarted, onDraftSaved }: Props) {
   const [prefill] = useState(readPrefill);
   // What the session may do, and nothing else — the footer's Ask toggle. The
   // repo is a separate axis, so Scratch is not a third value here: it is what
@@ -783,8 +799,41 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     }
   }
 
+  // "Save as draft" doesn't start a session at all: it parks the prompt on a
+  // workspace (a fresh one, or the one this palette is already scoped to) and
+  // never sends create_session. Separate from handleCreate's session_created
+  // wait below, which this action never triggers.
+  async function saveAsDraft() {
+    const text = prompt.trim();
+    if (!text) return;
+    setError(null);
+    setCreating(true);
+    try {
+      const draft = { text, updatedAt: new Date().toISOString(), by: getCurrentUser() };
+      const ws = workspaceId
+        ? // Scoped to an existing workspace: update its draft, never rename it.
+          await updateWorkspaceApi(workspaceId, { draft })
+        : await createWorkspaceApi({
+            name: firstNonEmptyLine(text).slice(0, 80) || "Draft",
+            ...(repo && repo !== NO_REPO ? { repo } : {}),
+            draft: { ...draft, autoName: true },
+          });
+      clearDraft("new-session");
+      window.dispatchEvent(new Event("opensession:workspaces-changed"));
+      onDraftSaved?.(ws);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Couldn't save the draft");
+    } finally {
+      setCreating(false);
+    }
+  }
+
   function handleCreate() {
     if (!canCreate) return;
+    if (createAction === "draft") {
+      void saveAsDraft();
+      return;
+    }
     const branch =
       selectedWorktree === "__new__"
         ? newBranch.trim() || slugifyBranch(prompt)
@@ -843,16 +892,20 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
 
   const canCreate =
     !creating &&
-    connected &&
-    // "No repo" is a choice, so it passes; only an unresolved picker (an
-    // instance with no repositories registered yet) blocks.
-    !!repo &&
-    // Unsupported model × environment combo: the server would reject the
-    // create with the same message (resolveRequestedSandbox) — block here so
-    // the wall is discovered before submit, not after.
-    !sandboxModelWarning &&
-    (prompt.trim() || images.length > 0 || files.length > 0) &&
-    (mode === "ask" || mode === "scratch" || selectedWorktree !== "");
+    // A draft is just the prompt text parked on a workspace: none of the
+    // session-create gates (connection, repo, sandbox, branch) apply.
+    (createAction === "draft"
+      ? !!prompt.trim()
+      : connected &&
+        // "No repo" is a choice, so it passes; only an unresolved picker (an
+        // instance with no repositories registered yet) blocks.
+        !!repo &&
+        // Unsupported model × environment combo: the server would reject the
+        // create with the same message (resolveRequestedSandbox). Block here
+        // so the wall is discovered before submit, not after.
+        !sandboxModelWarning &&
+        (prompt.trim() || images.length > 0 || files.length > 0) &&
+        (mode === "ask" || mode === "scratch" || selectedWorktree !== ""));
 
   // "Create from…" picks the base a code session branches off, so it only
   // appears for a Code session that has a repo. Ask cuts no worktree, and Code
@@ -1284,7 +1337,9 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                 disabled={!canCreate}
               >
                 {creating
-                  ? "Creating…"
+                  ? createAction === "draft"
+                    ? "Saving…"
+                    : "Creating…"
                   : CREATE_LABELS[createAction]}
                 {/* The hint has to match the preference — a bare ↩ next to a
                     field that only creates on ⌘↩ is what made Enter look
@@ -1341,6 +1396,11 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                       desc: "Stay where you are",
                     },
                     { action: "more" as const, title: "Create more", desc: "Stay here to start another" },
+                    {
+                      action: "draft" as const,
+                      title: "Save as draft",
+                      desc: "Keeps the prompt in the sidebar. Nothing runs yet.",
+                    },
                   ].map((opt) => (
                     <button
                       key={opt.action}

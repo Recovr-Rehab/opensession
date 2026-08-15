@@ -55,6 +55,21 @@ export interface WorkspaceModelSettings {
   presets?: WorkspaceModelPreset[];
 }
 
+/** A composer, not a document store. Mirrors MAX_DRAFT_LENGTH in drafts.ts. */
+const MAX_DRAFT_LENGTH = 32_000;
+
+/** An unsent composer prompt parked on a workspace before any session exists. */
+export interface WorkspaceDraft {
+  text: string;
+  /** ISO time of the keystroke this text came from (client clock). */
+  updatedAt: string;
+  by?: string;
+  /** While truthy, applying a draft update also renames the workspace to the
+   *  draft's first line (see updateWorkspace); a manual rename sets this false
+   *  and stops the follow for life. */
+  autoName?: boolean;
+}
+
 /** Seeded into every new workspace. These are ordinary presets, not runtime
  * feature flags: removing one removes it, and new combinations use this shape. */
 export const DEFAULT_WORKSPACE_MODEL_SETTINGS: WorkspaceModelSettings = {
@@ -117,6 +132,13 @@ export interface Workspace {
   attachedRepos?: AttachedRepo[];
   /** Workspace-specific model families and combinations. */
   modelSettings?: WorkspaceModelSettings;
+  /**
+   * An unsent composer prompt parked here before any session exists. Absent
+   * = no draft. Never backfilled onto a workspace record (same rule as
+   * modelSettings above: stamping this on every row would multiply the list
+   * payload by the workspace count).
+   */
+  draft?: WorkspaceDraft;
 }
 
 function ensureDir(): void {
@@ -235,6 +257,7 @@ export function createWorkspace(input: {
   branch?: string;
   worktreeDir?: string;
   attachedRepos?: AttachedRepo[];
+  draft?: WorkspaceDraft;
   /** Reuse a caller-supplied id (e.g. migration wrapping an orphan session). */
   id?: string;
   createdAt?: string;
@@ -257,6 +280,9 @@ export function createWorkspace(input: {
     ...(input.worktreeDir ? { worktreeDir: input.worktreeDir } : {}),
     ...(input.attachedRepos && input.attachedRepos.length
       ? { attachedRepos: input.attachedRepos }
+      : {}),
+    ...(input.draft
+      ? { draft: { ...input.draft, text: input.draft.text.slice(0, MAX_DRAFT_LENGTH) } }
       : {}),
   };
   return saveWorkspace(workspace);
@@ -393,18 +419,68 @@ export function stampWorkspaceIdentity(
   return saveWorkspace(next);
 }
 
-/** Merge a partial patch into a workspace. Returns the updated record, or null. */
+/**
+ * Merge a partial patch into a workspace. Returns the updated record, or null.
+ *
+ * `draft` has its own semantics, mirroring upsertDraft in drafts.ts:
+ * - `null` removes the field.
+ * - An object applies only when there's no current draft, or its `updatedAt`
+ *   is >= the stored one (ISO strings compare lexically). An older write is
+ *   refused so a stale client can't clobber newer typing.
+ * - While the applying draft's `autoName` is truthy, and the current draft
+ *   (if any) hasn't been demoted to `autoName: false`, the workspace is also
+ *   renamed to the draft text's first non-empty line (trimmed, sliced to 80
+ *   chars; the name is left alone if that line is blank).
+ * - An explicit `patch.name` (manual rename) always wins, and, when a draft
+ *   exists, permanently demotes it to `autoName: false`, stopping the follow
+ *   for life.
+ */
 export function updateWorkspace(
   id: string,
   patch: Partial<
     Pick<Workspace, "name" | "repo" | "color" | "order" | "branch" | "worktreeDir" | "attachedRepos" | "modelSettings">
-  >,
+  > & { draft?: WorkspaceDraft | null },
 ): Workspace | null {
   const cur = getWorkspace(id);
   if (!cur) return null;
+  const manualRename = patch.name !== undefined;
+
+  let nextDraft: WorkspaceDraft | undefined = cur.draft;
+  let draftApplied: WorkspaceDraft | undefined;
+  if (patch.draft === null) {
+    nextDraft = undefined;
+  } else if (patch.draft !== undefined) {
+    if (!cur.draft || patch.draft.updatedAt >= cur.draft.updatedAt) {
+      nextDraft = { ...patch.draft, text: patch.draft.text.slice(0, MAX_DRAFT_LENGTH) };
+      draftApplied = nextDraft;
+    }
+  }
+
+  // A manual rename stops the auto-name follow permanently, whatever draft
+  // this patch ends up carrying.
+  if (manualRename && nextDraft) nextDraft = { ...nextDraft, autoName: false };
+
+  // Name-follow: a freshly-applied draft update renames the workspace to its
+  // first non-empty line, but only while autoName is truthy and hasn't
+  // already been demoted, and never alongside an explicit rename, which
+  // always wins and just demoted the follow above.
+  let followedName: string | undefined;
+  if (
+    !manualRename &&
+    draftApplied &&
+    patch.draft &&
+    patch.draft.autoName &&
+    (!cur.draft || cur.draft.autoName !== false)
+  ) {
+    const firstLine =
+      draftApplied.text.split("\n").find((l) => l.trim())?.trim() ?? "";
+    if (firstLine) followedName = firstLine.slice(0, 80);
+  }
+
   const next: Workspace = {
     ...cur,
     ...(patch.name !== undefined ? { name: patch.name.trim().slice(0, 120) || cur.name } : {}),
+    ...(followedName ? { name: followedName } : {}),
     ...(patch.repo !== undefined ? { repo: patch.repo } : {}),
     ...(patch.color !== undefined ? { color: patch.color } : {}),
     ...(patch.order !== undefined ? { order: patch.order } : {}),
@@ -412,6 +488,7 @@ export function updateWorkspace(
     ...(patch.worktreeDir !== undefined ? { worktreeDir: patch.worktreeDir } : {}),
     ...(patch.attachedRepos !== undefined ? { attachedRepos: patch.attachedRepos } : {}),
     ...(patch.modelSettings !== undefined ? { modelSettings: patch.modelSettings } : {}),
+    draft: nextDraft,
   };
   return saveWorkspace(next);
 }

@@ -15,7 +15,7 @@ import { BottomSheet, SheetBody, SheetItem, SheetSeparator } from "../../ui/shee
 import { openLightbox } from "../MediaLightbox";
 import { repoLabel } from "../RepoTile";
 import { CardFooter, CardLink, checksLabel, osReviewLabel } from "../SidebarRowCards";
-import { IconArrowUpRight, IconGitMerge, IconInbox, IconLink, IconMail, IconMoon, IconPin, IconPullRequest } from "../icons";
+import { IconArrowUpRight, IconGitMerge, IconInbox, IconLink, IconMail, IconMoon, IconPencil, IconPin, IconPullRequest } from "../icons";
 import React, { useEffect, useState } from "react";
 
 // The session card, in the shape the workspace card already proved: what the
@@ -196,24 +196,36 @@ export function WsPrStatusMark({
 }: {
 	sessions: UnifiedSession[];
 	size: number;
-	workspace?: { branch?: string | null; prNumber?: number } | null;
+	workspace?: {
+		branch?: string | null;
+		prNumber?: number;
+		draft?: { text: string } | null;
+	} | null;
 }) {
 	const session = frontingPrSession(sessions);
 	if (!session) {
 		// Rows that can never have a PR — feed/scratch workspaces (repo-less
 		// sessions, no workspace branch/PR) — get an empty alignment slot, not a
-		// misleading git glyph.
+		// misleading git glyph. A draft workspace (no session at all yet) gets
+		// the same pencil the row's own unsent-draft mark uses elsewhere.
 		const canPr =
 			sessions.some((c) => c.branch || c.prUrl || c.repo) ||
 			!!workspace?.branch ||
 			workspace?.prNumber !== undefined;
-		if (!canPr)
+		if (!canPr) {
+			if (workspace?.draft)
+				return (
+					<span className="flex items-center" title="Draft">
+						<IconPencil size={size} className="text-faint" />
+					</span>
+				);
 			return (
 				<span
 					className="flex shrink-0 items-center justify-center"
 					style={{ width: size, height: size }}
 				/>
 			);
+		}
 		return (
 			<span className="flex items-center" title="No pull request">
 				<IconPullRequest size={size} className="text-faint" />
@@ -263,7 +275,12 @@ export function WsStatusMark({
 	row,
 	size = 20,
 }: {
-	row: { status: MineStatus; running: boolean; sessions: UnifiedSession[] };
+	row: {
+		status: MineStatus;
+		running: boolean;
+		sessions: UnifiedSession[];
+		workspace?: { draft?: { text: string } | null } | null;
+	};
 	size?: number;
 }) {
 	// Every mark rides in the same `size`-wide (20px) flex slot so #number/title
@@ -283,6 +300,14 @@ export function WsStatusMark({
 		slot(<span className={`size-2 shrink-0 rounded-full ${cls}`} />);
 	if (row.status === "needsinput") return dot(SIDEBAR_STATUS_DOT.waiting);
 	if (row.running) return dot(SIDEBAR_STATUS_DOT.running);
+	// A draft workspace has no session and so no PR to show. The flat-repo
+	// grouping's mark stands in for WsPrStatusMark's own draft branch above.
+	if (row.workspace?.draft && row.sessions.length === 0)
+		return (
+			<span className="flex items-center" title="Draft">
+				<IconPencil size={size} className="text-faint" />
+			</span>
+		);
 	if (row.status === "review") {
 		const open = row.sessions.filter((c) => c.prState === "OPEN");
 		const allDraft = open.length > 0 && open.every((c) => c.prIsDraft);

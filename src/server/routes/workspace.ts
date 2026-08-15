@@ -38,13 +38,41 @@ import { searchSkills } from "../skills";
 import { handleSlashCommand } from "../slash-commands";
 import { suggestBranchName } from "../suggest-branch";
 import { type NativeSessionFile, type StackedOn } from "../types";
-import { DEFAULT_WORKSPACE_MODEL_SETTINGS, type Workspace, type WorkspaceModelSettings, createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, updateWorkspace } from "../workspaces";
+import { DEFAULT_WORKSPACE_MODEL_SETTINGS, type Workspace, type WorkspaceDraft, type WorkspaceModelSettings, createWorkspace, deleteWorkspace, getWorkspace, listWorkspaces, updateWorkspace } from "../workspaces";
 import { resolveExternalWorkspace, resolvePlainWorkspace, resolvePrWorkspace } from "../workspace-resolve";
 import { resolveModel } from "../models";
 import { REPOS, createWorktree, createWorktreeForExistingBranch, ensureScratchDir, getRepo, isSharedCheckoutDir, listWorktrees, repoForPath, sessionRepoId, worktreeHasWork, worktreeHeadBranch } from "../worktree";
 import { randomUUIDv7 } from "bun";
 import { copyFileSync, existsSync, mkdirSync, readFileSync } from "fs";
 import { isNativeSessionId } from "../paths";
+
+/**
+ * Validate a `draft` field from a workspace create/patch body. `null` (clear)
+ * passes through as-is; an invalid shape returns `undefined` so the caller
+ * can 400. `updatedAt` is the client's stamp when it parses as a date, else
+ * the server's own clock. A client draft doesn't have to carry one.
+ */
+function parseWorkspaceDraft(
+	input: unknown,
+): WorkspaceDraft | null | undefined {
+	if (input === null) return null;
+	if (!input || typeof input !== "object") return undefined;
+	const body = input as Record<string, unknown>;
+	if (typeof body.text !== "string") return undefined;
+	if (body.by !== undefined && typeof body.by !== "string") return undefined;
+	if (body.autoName !== undefined && typeof body.autoName !== "boolean")
+		return undefined;
+	const updatedAt =
+		typeof body.updatedAt === "string" && !Number.isNaN(Date.parse(body.updatedAt))
+			? body.updatedAt
+			: new Date().toISOString();
+	return {
+		text: body.text,
+		updatedAt,
+		...(body.by !== undefined ? { by: body.by as string } : {}),
+		...(body.autoName !== undefined ? { autoName: body.autoName as boolean } : {}),
+	};
+}
 
 function findNativeSessionForFileMentions(
 	sessionId: string | null,
@@ -377,14 +405,23 @@ export async function handleWorkspaceRoutes(
 			repo?: string;
 			color?: string;
 			user?: string;
+			draft?: unknown;
 		};
 		if (!body.name || !body.name.trim())
 			return Response.json({ error: "name required" }, { status: 400 });
+		let draft: WorkspaceDraft | undefined;
+		if (body.draft !== undefined) {
+			const parsed = parseWorkspaceDraft(body.draft);
+			if (parsed === undefined)
+				return Response.json({ error: "invalid draft" }, { status: 400 });
+			if (parsed !== null) draft = parsed;
+		}
 		const workspace = createWorkspace({
 			name: body.name,
 			repo: body.repo,
 			color: body.color,
 			createdBy: requestUser(ctx, body.user) || "Anonymous",
+			...(draft ? { draft } : {}),
 		});
 		return Response.json({ workspace });
 	}
@@ -456,8 +493,20 @@ export async function handleWorkspaceRoutes(
 			color?: string;
 			order?: number;
 			modelSettings?: WorkspaceModelSettings;
+			draft?: unknown;
 		};
-		const workspace = updateWorkspace(id, body);
+		const { draft: rawDraft, ...rest } = body;
+		let draft: WorkspaceDraft | null | undefined;
+		if (rawDraft !== undefined) {
+			const parsed = parseWorkspaceDraft(rawDraft);
+			if (parsed === undefined)
+				return Response.json({ error: "invalid draft" }, { status: 400 });
+			draft = parsed;
+		}
+		const workspace = updateWorkspace(id, {
+			...rest,
+			...(rawDraft !== undefined ? { draft } : {}),
+		});
 		if (!workspace)
 			return Response.json({ error: "Workspace not found" }, { status: 404 });
 		return Response.json({ workspace });

@@ -147,3 +147,141 @@ describe("a repo that has been renamed", () => {
 		expect(getWorkspace(ws.id)?.repo).toBe("opensession");
 	});
 });
+
+describe("workspace draft", () => {
+	test("create carries a draft", () => {
+		const ws = createWorkspace({
+			name: "Untitled workspace",
+			createdBy: "Kent",
+			draft: { text: "fix the flaky test", updatedAt: "2026-08-15T10:00:00.000Z" },
+		});
+		expect(getWorkspace(ws.id)?.draft?.text).toBe("fix the flaky test");
+	});
+
+	test("no draft on create means absent, not backfilled", () => {
+		const ws = createWorkspace({ name: "No draft", createdBy: "Kent" });
+		expect(getWorkspace(ws.id)?.draft).toBeUndefined();
+	});
+
+	test("caps draft text at 32k on create", () => {
+		const ws = createWorkspace({
+			name: "Huge draft",
+			createdBy: "Kent",
+			draft: { text: "x".repeat(40_000), updatedAt: "2026-08-15T10:00:00.000Z" },
+		});
+		expect(getWorkspace(ws.id)?.draft?.text.length).toBe(32_000);
+	});
+
+	test("an update applies when there's no prior draft", () => {
+		const ws = createWorkspace({ name: "Fresh", createdBy: "Kent" });
+		const out = updateWorkspace(ws.id, {
+			draft: { text: "first draft", updatedAt: "2026-08-15T10:00:00.000Z" },
+		});
+		expect(out?.draft?.text).toBe("first draft");
+	});
+
+	test("a newer draft wins", () => {
+		const ws = createWorkspace({
+			name: "Newer wins",
+			createdBy: "Kent",
+			draft: { text: "old text", updatedAt: "2026-08-15T10:00:00.000Z" },
+		});
+		const out = updateWorkspace(ws.id, {
+			draft: { text: "new text", updatedAt: "2026-08-15T10:05:00.000Z" },
+		});
+		expect(out?.draft?.text).toBe("new text");
+	});
+
+	test("an older draft is refused", () => {
+		const ws = createWorkspace({
+			name: "Refuse older",
+			createdBy: "Kent",
+			draft: { text: "kept text", updatedAt: "2026-08-15T10:05:00.000Z" },
+		});
+		const out = updateWorkspace(ws.id, {
+			draft: { text: "stale text", updatedAt: "2026-08-15T10:00:00.000Z" },
+		});
+		expect(out?.draft?.text).toBe("kept text");
+		expect(getWorkspace(ws.id)?.draft?.text).toBe("kept text");
+	});
+
+	test("null clears the draft", () => {
+		const ws = createWorkspace({
+			name: "Clear me",
+			createdBy: "Kent",
+			draft: { text: "goodbye", updatedAt: "2026-08-15T10:00:00.000Z" },
+		});
+		const out = updateWorkspace(ws.id, { draft: null });
+		expect(out?.draft).toBeUndefined();
+		expect(getWorkspace(ws.id)?.draft).toBeUndefined();
+	});
+
+	test("caps draft text at 32k on update", () => {
+		const ws = createWorkspace({ name: "Cap on update", createdBy: "Kent" });
+		const out = updateWorkspace(ws.id, {
+			draft: { text: "y".repeat(50_000), updatedAt: "2026-08-15T10:00:00.000Z" },
+		});
+		expect(out?.draft?.text.length).toBe(32_000);
+	});
+
+	test("autoName follows the draft's first non-empty line", () => {
+		const ws = createWorkspace({ name: "Untitled workspace", createdBy: "Kent" });
+		const out = updateWorkspace(ws.id, {
+			draft: {
+				text: "\n  Fix the flaky login test  \nsome more detail here",
+				updatedAt: "2026-08-15T10:00:00.000Z",
+				autoName: true,
+			},
+		});
+		expect(out?.name).toBe("Fix the flaky login test");
+		expect(out?.draft?.autoName).toBe(true);
+	});
+
+	test("autoName keeps following on later draft updates", () => {
+		const ws = createWorkspace({ name: "Untitled workspace", createdBy: "Kent" });
+		updateWorkspace(ws.id, {
+			draft: { text: "first line", updatedAt: "2026-08-15T10:00:00.000Z", autoName: true },
+		});
+		const out = updateWorkspace(ws.id, {
+			draft: { text: "second line", updatedAt: "2026-08-15T10:05:00.000Z", autoName: true },
+		});
+		expect(out?.name).toBe("second line");
+	});
+
+	test("a blank first line keeps the current name", () => {
+		const ws = createWorkspace({ name: "Untitled workspace", createdBy: "Kent" });
+		const out = updateWorkspace(ws.id, {
+			draft: { text: "   \n\n  ", updatedAt: "2026-08-15T10:00:00.000Z", autoName: true },
+		});
+		expect(out?.name).toBe("Untitled workspace");
+	});
+
+	test("manual rename sets autoName false and stops the follow", () => {
+		const ws = createWorkspace({ name: "Untitled workspace", createdBy: "Kent" });
+		updateWorkspace(ws.id, {
+			draft: { text: "draft-derived name", updatedAt: "2026-08-15T10:00:00.000Z", autoName: true },
+		});
+		const renamed = updateWorkspace(ws.id, { name: "Manually chosen name" });
+		expect(renamed?.name).toBe("Manually chosen name");
+		expect(renamed?.draft?.autoName).toBe(false);
+
+		// A later draft update no longer renames the workspace.
+		const later = updateWorkspace(ws.id, {
+			draft: {
+				text: "trying to rename again",
+				updatedAt: "2026-08-15T10:10:00.000Z",
+				autoName: true,
+			},
+		});
+		expect(later?.name).toBe("Manually chosen name");
+	});
+
+	test("autoName:false on the incoming draft does not rename", () => {
+		const ws = createWorkspace({ name: "Untitled workspace", createdBy: "Kent" });
+		const out = updateWorkspace(ws.id, {
+			draft: { text: "should not rename", updatedAt: "2026-08-15T10:00:00.000Z", autoName: false },
+		});
+		expect(out?.name).toBe("Untitled workspace");
+		expect(out?.draft?.autoName).toBe(false);
+	});
+});

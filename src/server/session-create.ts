@@ -421,6 +421,14 @@ export async function openCreatedSession(
 		if (preparingEnvironment) preparingWorkspaces.add(bksId);
 		try {
 			await persist();
+			// A session starting in a workspace consumes its draft. The
+			// composer prompt it held is now this session's opening prompt.
+			// After persist() so this never races the create with a client
+			// still editing the draft through the workspace PATCH route.
+			if (spec.workspaceId) {
+				const ws = getWorkspace(spec.workspaceId);
+				if (ws?.draft) updateWorkspace(ws.id, { draft: null });
+			}
 			io.announce({
 				id: bksId,
 				workspaceId: spec.announceWorkspaceId,
@@ -1211,13 +1219,17 @@ export async function handleCreateSessionMessage(
 		// An auto-created workspace is renamed ONCE from the generated
 		// summary (see openCreatedSession) — it provisionally wears the raw
 		// first line. Only a workspace minted by THIS create gets auto-named;
-		// an adopted pre-existing workspace keeps its own name.
+		// an adopted pre-existing workspace keeps its own name. Same one-shot
+		// deal for a workspace whose first session just consumed a draft that
+		// still wears the draft's first-line name (autoName not demoted to
+		// false). The generated title upgrades that first line the same way.
 		const wsAutoNamed =
 			mintedForSession ||
 			(createdWorkspaceNow &&
 				!!workspace &&
 				!!msg.createWorkspace &&
-				!msg.createWorkspace.name);
+				!msg.createWorkspace.name) ||
+			(!mintedForSession && !!workspace?.draft && workspace.draft.autoName !== false);
 		// Non-image attachments: stage to disk, hand the agent the paths.
 		let openingPrompt = withUploadsNote(
 			prompt,

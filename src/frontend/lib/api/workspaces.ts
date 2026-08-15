@@ -70,6 +70,19 @@ export async function fetchWorkspaces(): Promise<Workspace[]> {
 	}
 }
 
+export async function createWorkspaceApi(input: {
+	name: string;
+	repo?: string;
+	draft?: Workspace["draft"];
+}): Promise<Workspace> {
+	const body = await request<{ workspace: Workspace }>("/workspaces", {
+		method: "POST",
+		body: input,
+		label: "Failed to create the workspace",
+	});
+	return body.workspace;
+}
+
 export async function updateWorkspaceApi(
 	id: string,
 	patch: {
@@ -79,6 +92,8 @@ export async function updateWorkspaceApi(
 		color?: string | null;
 		order?: number;
 		modelSettings?: Workspace["modelSettings"];
+		/** null clears the draft. */
+		draft?: Workspace["draft"] | null;
 	},
 ): Promise<Workspace> {
 	const body = await request<{ workspace: Workspace }>(

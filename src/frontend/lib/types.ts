@@ -536,6 +536,8 @@ export interface Workspace {
 	plainThreadId?: string;
 	/** Generic feed-item linkage (Tella videos, …) — the feeds design. */
 	externalRefs?: ExternalRef[];
+	/** An unsent composer prompt parked here before any session exists. */
+	draft?: { text: string; updatedAt: string; by?: string; autoName?: boolean };
 	modelSettings?: {
 		presets?: Array<{
 			id: string;

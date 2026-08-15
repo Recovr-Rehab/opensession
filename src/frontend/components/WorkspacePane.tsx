@@ -2,7 +2,7 @@ import { AGENT_NAME } from "../lib/brand";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Workspace, UnifiedSession, WSServerMessage } from "../lib/types";
-import { fetchModels, type ModelOption } from "../lib/api";
+import { fetchModels, updateWorkspaceApi, type ModelOption } from "../lib/api";
 import { Composer } from "./Composer";
 import { ConversationPane } from "./ConversationPane";
 import { FeedWebPane, refWebPanel } from "./FeedWebPane";
@@ -102,18 +102,70 @@ export function WorkspacePane({
 	rightPanelEl,
 }: Props) {
 	const draftKey = `workspace-home:${workspace.id}`;
-	const [prompt, setPrompt] = useState(() => loadDraft(draftKey).text);
+	// Seed from the local (this-browser) draft first: it's the freshest thing
+	// typed here. Fall back to the server's parked draft (typed on
+	// another device, or by whoever saved it from the New Session composer).
+	const [prompt, setPrompt] = useState(() => {
+		const local = loadDraft(draftKey).text;
+		return local || workspace.draft?.text || "";
+	});
+	const currentUser = useCurrentUser();
+	// Only a workspace the server already knows has a draft gets autosaved back
+	// to it. An ordinary sessionless workspace (no draft yet) must not have
+	// one invented for it just because its composer has text.
+	const hasServerDraft = !!workspace.draft;
+	const draftAutoName = workspace.draft?.autoName;
+	const promptRef = useRef(prompt);
+	promptRef.current = prompt;
+	const currentUserRef = useRef(currentUser);
+	currentUserRef.current = currentUser;
+	const serverDraftTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+	const pushServerDraft = React.useCallback(
+		(text: string) => {
+			void updateWorkspaceApi(workspace.id, {
+				draft: {
+					text,
+					updatedAt: new Date().toISOString(),
+					by: currentUserRef.current,
+					autoName: draftAutoName,
+				},
+				// Autosave must never block typing. A flaky connection just means
+				// the next keystroke's debounce tries again.
+			}).catch(() => {});
+		},
+		[workspace.id, draftAutoName],
+	);
 	useEffect(() => {
 		saveDraft(draftKey, { text: prompt });
-	}, [draftKey, prompt]);
+		if (!hasServerDraft) return;
+		clearTimeout(serverDraftTimer.current);
+		serverDraftTimer.current = setTimeout(() => pushServerDraft(prompt), 800);
+		return () => clearTimeout(serverDraftTimer.current);
+	}, [draftKey, prompt, hasServerDraft, pushServerDraft]);
 	const [starting, setStarting] = useState(false);
 	const [startError, setStartError] = useState<string | null>(null);
 	const startingRef = useRef(false);
 	const startTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+	// A debounced write in flight when the pane unmounts (navigating away)
+	// would otherwise be dropped entirely. Flush it instead of losing the
+	// last few keystrokes. Not when a session start is what unmounted the
+	// pane, though: the server consumed the draft at create, and a flush
+	// would park the just-sent prompt back on the workspace as a stale draft.
+	const hasServerDraftRef = useRef(hasServerDraft);
+	hasServerDraftRef.current = hasServerDraft;
+	useEffect(() => {
+		return () => {
+			if (serverDraftTimer.current) {
+				clearTimeout(serverDraftTimer.current);
+				if (hasServerDraftRef.current && !startingRef.current)
+					pushServerDraft(promptRef.current);
+			}
+		};
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
 	const [models, setModels] = useState<ModelOption[]>([]);
 	const [defaultModel, setDefaultModel] = useState("");
 	const [model, setModel] = useState(""); // "" = default
-	const currentUser = useCurrentUser();
 	const isPhone = useIsPhone();
 	const sidePanel = useSidePanel();
 
@@ -146,6 +198,11 @@ export function WorkspacePane({
 				setStartError(msg.message || "Failed to start the session.");
 			} else if (msg.type === "session_created" && startingRef.current) {
 				clearDraft(draftKey);
+				// Cancel any in-flight draft autosave too: the server consumed
+				// the workspace draft at create, and a late debounce landing
+				// after that clear would resurrect it as a stale draft.
+				clearTimeout(serverDraftTimer.current);
+				serverDraftTimer.current = undefined;
 			}
 		});
 	}, [addHandler, draftKey]);

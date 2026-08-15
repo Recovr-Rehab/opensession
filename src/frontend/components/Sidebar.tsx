@@ -1228,10 +1228,25 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				),
 			);
 		}
-		// A workspace with no sessions gets NO row. Workspaces are minted with their
-		// first session (or by the PR/ticket resolvers, which park them under Pull
-		// requests / Support until a session joins), so a sessionless one is a leftover —
-		// its sessions were archived or deleted — not a place to start work.
+		// A draft workspace (an unsent "Save as draft" prompt, no session yet) is
+		// the one sessionless exception below: it earns a row of its own, since
+		// it IS a place to start work. The composer is sitting there prefilled,
+		// waiting to be sent. mkRow's activity/creation dates default to a
+		// session that doesn't exist here, so they're patched from the
+		// workspace + draft record instead.
+		for (const ws of workspaces) {
+			if (!ws.draft || byWs.has(ws.id)) continue;
+			rows.push({
+				...mkRow(`workspace:${ws.id}`, ws, ws.name, []),
+				lastActivity: ws.draft.updatedAt,
+				createdAt: ws.createdAt,
+			});
+		}
+		// A workspace with no sessions and no draft gets NO row. Workspaces are
+		// minted with their first session (or by the PR/ticket resolvers, which
+		// park them under Pull requests / Support until a session joins), so a
+		// sessionless one is a leftover (its sessions were archived or deleted),
+		// not a place to start work.
 		//
 		// Automation runs are the one session kind that lives outside a workspace: a
 		// workspace per run would bury every real one, so they render in the

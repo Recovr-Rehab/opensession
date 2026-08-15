@@ -4066,6 +4066,13 @@ export function App(
 									navigate({ view: "session", id: session.id });
 								} else {
 									const p = workspaces.find((x) => x.id === id);
+									// A draft workspace has no session and no other pane, but it
+									// isn't "nothing to open": WorkspacePane is its home, with
+									// the composer prefilled from the parked draft.
+									if (p?.draft) {
+										navigate({ view: "workspace", id });
+										return;
+									}
 									// Default the new session onto the workspace's own branch (share
 									// its worktree) when it has one — e.g. all sessions archived.
 									setPalette({
@@ -4530,6 +4537,10 @@ export function App(
 													originPath: routePath(routeRef.current),
 												};
 											}}
+											onDraftSaved={(ws) => {
+												refreshWorkspaces();
+												navigate({ view: "workspace", id: ws.id });
+											}}
 										/>
 									)}
 								</div>
@@ -4639,6 +4650,11 @@ export function App(
 								user: getCurrentUser(),
 								originPath: routePath(routeRef.current),
 							};
+						}}
+						onDraftSaved={(ws) => {
+							closePalette();
+							refreshWorkspaces();
+							navigate({ view: "workspace", id: ws.id });
 						}}
 					/>
 				)}
