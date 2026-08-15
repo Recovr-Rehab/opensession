@@ -14,6 +14,21 @@ import { Button } from "../ui/button";
 import { CopyCheck, useCopy } from "../ui/copy";
 import { IconChevronLeft, IconChevronRight, IconFile, IconLink } from "./icons";
 import { Select } from "../ui/input";
+import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
+import { SIDEBAR_RAIL } from "../lib/sidebar-classes";
+import { reportUrgencyDot, reportUrgencyLabel } from "../lib/report-urgency";
+import { shortTime } from "../lib/time";
+import {
+	REPORTS_COLUMN,
+	REPORTS_COLUMN_HEADER,
+	REPORTS_COLUMN_TITLE,
+	REPORTS_LIST,
+	REPORTS_ROW,
+	REPORTS_ROW_HEAD,
+	REPORTS_ROW_LATEST,
+	REPORTS_ROW_NAME,
+	REPORTS_ROW_TIME,
+} from "../lib/reports-classes";
 
 interface Props {
 	selectedAutomationId?: string;
@@ -150,21 +165,22 @@ export function Reports({
 	};
 
 	if (groups === null)
-		return <div className="flex flex-1 items-center justify-center text-dim">Loading reports…</div>;
+		return (
+			<div className="flex min-h-0 flex-1 items-center justify-center">
+				<LoadingState>Loading reports…</LoadingState>
+			</div>
+		);
 
 	if (!groups.length)
 		return (
-			<div className="flex flex-1 items-center justify-center p-8">
-				<div className="max-w-[420px] text-center">
-					<div className="mx-auto mb-4 flex size-12 items-center justify-center rounded-lg bg-surface text-dim">
-						<IconFile size={24} />
-					</div>
-					<h1 className="m-0 text-page-title font-semibold text-fg">Reports</h1>
-					<p className="mt-2 text-sm leading-6 text-dim">
-						Recurring automation reports will collect here, with the latest result and full history in one place.
-					</p>
-					{error && <p className="mt-3 text-sm text-red">{error}</p>}
-				</div>
+			<div className="flex min-h-0 flex-1 flex-col items-center justify-center p-8">
+				<EmptyState icon={<IconFile size={22} />} title="No reports yet">
+					Recurring automation reports collect here, with the latest result and
+					the full history in one place.
+				</EmptyState>
+				{error && (
+					<InlineAlert className="mt-2 max-w-[420px]">{error}</InlineAlert>
+				)}
 			</div>
 		);
 
@@ -176,31 +192,62 @@ export function Reports({
 	return (
 		<div className="flex min-h-0 flex-1">
 			{showList && (
-				<aside className={`flex min-h-0 flex-col bg-panel ${isPhone ? "w-full flex-1" : "w-[300px] shrink-0 border-r border-line"}`}>
-					<div className="border-b border-line px-4 py-4">
-						<h1 className="m-0 text-section-title font-semibold tracking-[-0.02em] text-fg">Reports</h1>
-						<p className="m-0 mt-1 text-xs text-dim">Recurring intelligence, organized by automation</p>
+				<aside className={REPORTS_COLUMN}>
+					<div className={REPORTS_COLUMN_HEADER}>
+						<h1 className={REPORTS_COLUMN_TITLE}>Reports</h1>
 					</div>
-					<div className="min-h-0 flex-1 overflow-y-auto p-2">
-						{groups.map((group) => (
-							<button
-								key={group.automationId}
-								type="button"
-								className={`mb-1 flex w-full items-start gap-3 rounded-control border-0 px-3 py-3 text-left cursor-pointer ${!isPhone && selectedAutomationId === group.automationId ? "bg-active" : "bg-transparent hover:bg-hover"}`}
-								onClick={() => onSelect(group.automationId)}
-							>
-								<span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-surface text-accent"><IconFile size={17} /></span>
-								<span className="min-w-0 flex-1">
-									<span className="block truncate text-sm font-medium text-fg">{group.automationName}</span>
-									<span className="mt-1 block truncate text-xs text-dim">{group.latest.title}</span>
-									<span className="mt-1.5 flex min-w-0 items-center gap-1.5 text-meta text-faint">
-										<span className="truncate">{formatDate(group.latest.createdAt)} · {group.count} {group.count === 1 ? "report" : "reports"}</span>
-										<ReportSignal report={group.latest} />
+					<div className={REPORTS_LIST}>
+						{groups.map((group) => {
+							const urgency = reportUrgencyLabel(group.latest.urgency);
+							return (
+								<button
+									key={group.automationId}
+									type="button"
+									className={REPORTS_ROW}
+									data-active={
+										(!isPhone && selectedAutomationId === group.automationId) ||
+										undefined
+									}
+									onClick={() => onSelect(group.automationId)}
+								>
+									<span className={SIDEBAR_RAIL}>
+										<span
+											className="size-[7px] rounded-full"
+											style={{
+												backgroundColor: reportUrgencyDot(group.latest.urgency),
+											}}
+										/>
 									</span>
-								</span>
-								<IconChevronRight size={16} className="mt-2 shrink-0 text-faint" />
-							</button>
-						))}
+									<span className="min-w-0 flex-1">
+										<span className={REPORTS_ROW_HEAD}>
+											<span className={REPORTS_ROW_NAME}>
+												{group.automationName}
+											</span>
+											{/* The dot is the only urgency signal on the row, and a
+											    colour is nothing to a screen reader. Named here
+											    rather than in the rail so the row reads "Cassandra,
+											    low urgency" instead of leading with it. */}
+											{urgency && <span className="sr-only">{urgency}</span>}
+											<span
+												className={REPORTS_ROW_TIME}
+												title={new Date(group.latest.createdAt).toLocaleString()}
+											>
+												{shortTime(group.latest.createdAt)}
+											</span>
+										</span>
+										<span className={REPORTS_ROW_LATEST}>
+											{group.latest.title}
+										</span>
+									</span>
+									{isPhone && (
+										<IconChevronRight
+											size={16}
+											className="mt-0.5 shrink-0 text-faint"
+										/>
+									)}
+								</button>
+							);
+						})}
 					</div>
 				</aside>
 			)}

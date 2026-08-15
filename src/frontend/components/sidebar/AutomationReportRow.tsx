@@ -19,6 +19,7 @@ import {
 	SIDEBAR_WS_TIME,
 	SIDEBAR_WS_TIME_HOVER,
 } from "../../lib/sidebar-classes";
+import { reportUrgencyDot } from "../../lib/report-urgency";
 import { shortTime } from "../../lib/time";
 import { cn } from "../../ui/cn";
 import { Popover } from "../../ui/popover";
@@ -26,18 +27,6 @@ import { CardFooter, RowCardPopup, useRowHoverCard } from "../SidebarRowCards";
 import { SIDEBAR_ROW, SIDEBAR_ROW_TITLE } from "./SidebarItem";
 
 type Report = NonNullable<AutomationOverview["latestReport"]>;
-
-/**
- * Urgency colours the row's dot, on the same scale the support lanes use. An
- * unset urgency is not "low" — the report simply didn't say — so it takes the
- * neutral mark rather than borrowing the calmest one.
- */
-const URGENCY_DOT: Record<string, string> = {
-	critical: "var(--red)",
-	high: "var(--yellow)",
-	medium: "var(--blue)",
-	low: "var(--text-faint)",
-};
 
 export function AutomationReportRow({
 	report,
@@ -65,10 +54,7 @@ export function AutomationReportRow({
 				<span className={SIDEBAR_RAIL}>
 					<span
 						className="size-[7px] rounded-full"
-						style={{
-							backgroundColor:
-								URGENCY_DOT[report.urgency || ""] || "var(--text-faint)",
-						}}
+						style={{ backgroundColor: reportUrgencyDot(report.urgency) }}
 					/>
 				</span>
 				<span className={SIDEBAR_ROW_TITLE}>{report.title}</span>
