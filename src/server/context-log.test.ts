@@ -436,6 +436,29 @@ describe("context-log: standing context is recorded on change, not per turn", ()
 		);
 	});
 
+	test("an undefined scope reads as \"all\" instead of killing the turn", async () => {
+		const sessionId = "os-std-undefined-scope";
+		__setEngineForTest(makeFakeEngine([{ kind: "clean", text: ["ok"] }]).engine);
+		const events: StreamEvent[] = [];
+		// `mcpServers` is typed as required, but the create path casts an
+		// optional value into it, so undefined does reach the choke point. It
+		// spread-crashed the whole turn on the day this landed; an audit
+		// record must never be able to do that.
+		for await (const e of runAgent({
+			prompt: "go",
+			cwd: dir,
+			mcpServers: undefined as unknown as "all",
+			fallbackModel: "none",
+			promptEntryId: "turn-undefined",
+			journal: { osSessionId: sessionId, kind: "session" },
+		}))
+			events.push(e);
+		expect(events.some((e) => e.type === "error")).toBe(false);
+		const rows = standing(sessionId, "tools");
+		expect(rows).toHaveLength(1);
+		expect(JSON.parse(rows[0].content).mcpScope).toBe("all");
+	});
+
 	test("nothing is recorded for a session-less run", async () => {
 		__setEngineForTest(makeFakeEngine([{ kind: "clean" }]).engine);
 		await drain(

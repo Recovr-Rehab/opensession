@@ -243,11 +243,43 @@ export function canonicalJson(value: unknown): string {
 }
 
 /**
- * Record one standing model-visible input, if it changed. Never throws, for
- * the same reason the injection logger doesn't: an audit write must not fail
- * the turn it describes.
+ * Record one standing model-visible input, if it changed.
+ *
+ * Never throws, and the try/catch is load-bearing rather than defensive
+ * decoration: this runs inside `runOnModel`, so anything that escapes it kills
+ * the turn it was only supposed to describe. It did, once, within an hour of
+ * landing — `[...opts.mcpServers]` on a create-path run whose scope was
+ * undefined despite the required type (2026-08-16). An audit record is never
+ * worth a turn.
  */
 export function logStandingContext(input: StandingContextInput): void {
+	try {
+		appendStandingContext(input);
+	} catch (e) {
+		console.warn(
+			`[context-log] standing "${input.source}" not recorded: ${e instanceof Error ? e.message : String(e)}`,
+		);
+	}
+}
+
+/**
+ * The same, for a record built from structured values: the serialization
+ * happens INSIDE the guard, which is where a producer's own bad input (a
+ * missing field, a circular object) would otherwise escape.
+ */
+export function logStandingJson(
+	input: Omit<StandingContextInput, "content"> & { value: unknown },
+): void {
+	try {
+		appendStandingContext({ ...input, content: canonicalJson(input.value) });
+	} catch (e) {
+		console.warn(
+			`[context-log] standing "${input.source}" not recorded: ${e instanceof Error ? e.message : String(e)}`,
+		);
+	}
+}
+
+function appendStandingContext(input: StandingContextInput): void {
 	const sessionId = input.sessionId || "";
 	const content = input.content?.trim();
 	if (!sessionId || !content) return;

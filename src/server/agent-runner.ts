@@ -87,7 +87,7 @@ import {
 import { buildEngineSwitchHandoffNote } from "./fork-handoff";
 import { personaName } from "./config";
 import { wrapContext } from "./prompt-context";
-import { canonicalJson, logInjectedContext, logStandingContext } from "./context-log";
+import { logInjectedContext, logStandingJson } from "./context-log";
 import {
   beginTurn,
   endTurn,
@@ -462,12 +462,17 @@ function runOnModel(opts: RunAgentOpts, model: string | undefined): AsyncIterabl
   // for EVERY engine — the direct SDK adapters assemble their own tool lists
   // and would each need their own call otherwise. What the runner adds below
   // it (`mcp-servers`) is the resolution of this scope, not a second copy.
-  logStandingContext({
+  logStandingJson({
     sessionId: opts.journal?.osSessionId || opts.transcriptSessionId,
     turnId: opts.promptEntryId || opts.startToken,
     source: "tools",
-    content: canonicalJson({
-      mcpScope: opts.mcpServers === "all" ? "all" : [...opts.mcpServers].sort(),
+    value: {
+      // `mcpServers` is typed as required, and the create path passes it
+      // through a cast that can still be undefined at runtime — which reads
+      // as "all" per McpScope's own contract, and must never be spread.
+      mcpScope: Array.isArray(opts.mcpServers)
+        ? [...opts.mcpServers].sort()
+        : (opts.mcpServers ?? "all"),
       inProcess: Object.keys(opts.inProcessMcp || {}).sort(),
       // Names, not the refusal messages: those are model-visible through the
       // instructions record, and folding them in here would churn this hash
@@ -476,7 +481,7 @@ function runOnModel(opts: RunAgentOpts, model: string | undefined): AsyncIterabl
       confirmTools: Object.keys(opts.confirmTools || {}).sort(),
       mode: opts.mode || null,
       localWorkspaceToolsDisabled: !!opts.disableLocalWorkspaceTools,
-    }),
+    },
   });
   if (engineForTest) return engineForTest(opts, mapped);
   const route = routeModel(requested, { interactive: isInteractiveRun(opts) });

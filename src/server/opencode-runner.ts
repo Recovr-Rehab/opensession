@@ -278,7 +278,7 @@ import { bashAskPolicyReply } from "./command-policy";
 import { buildEngineSwitchHandoffNote } from "./fork-handoff";
 import { recoverFreshEngineTranscript } from "./engine-handoff-transcript";
 import { wrapContext } from "./prompt-context";
-import { canonicalJson, logInjectedContext, logStandingContext } from "./context-log";
+import { logInjectedContext, logStandingContext, logStandingJson } from "./context-log";
 import { ensureAnthropicBridge } from "./anthropic-bridge";
 import { ensureAgentAwsCredsFile } from "./aws-creds";
 import {
@@ -3936,11 +3936,11 @@ async function* runOpencodeAttempt(
     {
       const standingSessionId = journal?.osSessionId || opts.transcriptSessionId;
       const standingTurnId = opts.promptEntryId || opts.startToken;
-      logStandingContext({
+      logStandingJson({
         sessionId: standingSessionId,
         turnId: standingTurnId,
         source: "mcp-servers",
-        content: canonicalJson({
+        value: {
           shared,
           mounted: Object.keys(externalMcp).sort(),
           inProcess: Object.keys(opts.inProcessMcp || {}).sort(),
@@ -3951,7 +3951,7 @@ async function* runOpencodeAttempt(
             : ((ocConfig.tools as Record<string, boolean> | undefined) ?? {}),
           agents: Object.keys((ocConfig.agent as Record<string, unknown>) || {}).sort(),
           ...(promptAgent ? { promptAgent } : {}),
-        }),
+        },
       });
       // The standing instruction text itself: run guidance, the repos/PR flow
       // notes, the denied-tool notes, and the checkout's own untracked
