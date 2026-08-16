@@ -41,6 +41,7 @@ import {
   remoteCloneUrl,
   remoteWarmWorkspaceDir,
   removeRemoteState,
+  resolveTrustPolicy,
   runRemoteLifecycleHook,
   setupRemoteWorkspace,
   touchRemoteState,
@@ -520,8 +521,10 @@ export class MicrovmProvider implements SandboxProvider {
     }
     const cfg = config();
     let previous = findRemoteStateBySession(this.id, spec.sessionId);
-    const trustProfile = spec.trustProfile || previous?.trustProfile || "interactive";
-    const egressAllowlist = spec.egressAllowlist || previous?.egressAllowlist || [];
+    // Resolved once, from the spec plus what this sandbox was recorded with,
+    // and carried into every writeRemoteState below. A later ensure() that
+    // omits the policy (recreate, resume) inherits it rather than reopening.
+    const { trustProfile, egressAllowlist } = resolveTrustPolicy(spec, previous);
     const repo = getRepo(spec.repo || previous?.repoId);
     const { sandboxEnvironmentSettings } = await import("../environments");
     const resources = previous?.resources || sandboxEnvironmentSettings(repo.id, this.id);
@@ -934,6 +937,10 @@ export const microvmPrewarmAdapter: PrewarmAdapter = {
         resources: machine(options.resources),
         createdAt: new Date().toISOString(),
         lastActivityAt: new Date().toISOString(),
+        // An unclaimed prewarm holds no session's credentials; the adopting
+        // ensure() rewrites this state with that session's resolved policy.
+        trustProfile: "interactive",
+        egressAllowlist: [],
       });
       return { sandboxId: id, driver: driverFor(idx) };
     } catch (error) {

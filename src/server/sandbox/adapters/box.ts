@@ -58,6 +58,7 @@ import {
   readRemoteState,
   remoteCloneUrl,
   removeRemoteState,
+  resolveTrustPolicy,
   setupRemoteWorkspace,
   shellQuoteWord,
   touchRemoteState,
@@ -645,6 +646,7 @@ export class BoxProvider implements SandboxProvider {
     }
     const cfg = boxClientConfig();
     const prevState = findRemoteStateBySession(this.id, spec.sessionId);
+    const trust = resolveTrustPolicy(spec, prevState);
     const repo = getRepo(spec.repo || prevState?.repoId);
     const branch = spec.branch || prevState?.branch || repo.defaultBranch;
     const cwd =
@@ -745,7 +747,7 @@ export class BoxProvider implements SandboxProvider {
       branch,
       repo.defaultBranch,
       repo.id,
-      { sandboxId: box.id, provider: this.id, sessionId: spec.sessionId, repoId: repo.id, trustProfile: spec.trustProfile },
+      { sandboxId: box.id, provider: this.id, sessionId: spec.sessionId, repoId: repo.id, trustProfile: trust.trustProfile },
     );
     writeRemoteState({
       sandboxId: box.id,
@@ -756,6 +758,7 @@ export class BoxProvider implements SandboxProvider {
       branch,
       createdAt: prevState?.createdAt || new Date().toISOString(),
       lastActivityAt: new Date().toISOString(),
+      ...trust,
     });
     return this.makeHandle(cfg, box.id, spec.sessionId, cwd);
   }

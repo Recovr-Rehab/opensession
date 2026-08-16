@@ -26,6 +26,7 @@ import {
   readRemoteState,
   remoteCloneUrl,
   removeRemoteState,
+  resolveTrustPolicy,
   setupRemoteWorkspace,
   shellQuoteWord,
   touchRemoteState,
@@ -180,6 +181,7 @@ export class ModalProvider implements SandboxProvider {
       createIfMissing: true,
     });
     let prevState = findRemoteStateBySession(this.id, spec.sessionId);
+    const trust = resolveTrustPolicy(spec, prevState);
     const repo = getRepo(spec.repo || prevState?.repoId);
     const branch = spec.branch || prevState?.branch || repo.defaultBranch;
     const cwd =
@@ -306,7 +308,7 @@ export class ModalProvider implements SandboxProvider {
         branch,
         repo.defaultBranch,
         repo.id,
-        { sandboxId: sandbox.sandboxId, provider: this.id, sessionId: spec.sessionId, repoId: repo.id, trustProfile: spec.trustProfile },
+        { sandboxId: sandbox.sandboxId, provider: this.id, sessionId: spec.sessionId, repoId: repo.id, trustProfile: trust.trustProfile },
       );
     } catch (e) {
       // A failed first bootstrap is not useful and otherwise remains paid
@@ -324,6 +326,7 @@ export class ModalProvider implements SandboxProvider {
       branch,
       createdAt: createdAt || new Date().toISOString(),
       lastActivityAt: new Date().toISOString(),
+      ...trust,
     });
     return this.makeHandle(sandbox, spec.sessionId, cwd);
   }

@@ -27,6 +27,7 @@ import {
   readRemoteState,
   remoteCloneUrl,
   removeRemoteState,
+  resolveTrustPolicy,
   setupRemoteWorkspace,
   shellQuoteWord,
   touchRemoteState,
@@ -220,6 +221,7 @@ export class LambdaMicrovmProvider implements SandboxProvider {
     const { cfg, region } = awsConfig();
     const client = await awsClient();
     let prevState = findRemoteStateBySession(this.id, spec.sessionId);
+    const trust = resolveTrustPolicy(spec, prevState);
     const repo = getRepo(spec.repo || prevState?.repoId);
     const branch = spec.branch || prevState?.branch || repo.defaultBranch;
     const cwd =
@@ -284,6 +286,7 @@ export class LambdaMicrovmProvider implements SandboxProvider {
           branch,
           createdAt: new Date().toISOString(),
           lastActivityAt: new Date().toISOString(),
+          ...trust,
         });
       }
       const response = await client.send(
@@ -336,6 +339,7 @@ export class LambdaMicrovmProvider implements SandboxProvider {
         branch,
         createdAt: response.startedAt?.toISOString() || new Date().toISOString(),
         lastActivityAt: new Date().toISOString(),
+        ...trust,
       });
     }
 
@@ -352,7 +356,7 @@ export class LambdaMicrovmProvider implements SandboxProvider {
         branch,
         repo.defaultBranch,
         repo.id,
-        { sandboxId: id, provider: this.id, sessionId: spec.sessionId, repoId: repo.id, trustProfile: spec.trustProfile },
+        { sandboxId: id, provider: this.id, sessionId: spec.sessionId, repoId: repo.id, trustProfile: trust.trustProfile },
       );
     } catch (e) {
       if (created) await this.terminate(client, id).catch(() => {});
@@ -367,6 +371,7 @@ export class LambdaMicrovmProvider implements SandboxProvider {
       branch,
       createdAt: info.startedAt?.toISOString() || new Date().toISOString(),
       lastActivityAt: new Date().toISOString(),
+      ...trust,
     });
     return this.makeHandle(client, info, spec.sessionId, cwd);
   }

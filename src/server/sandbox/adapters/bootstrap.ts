@@ -111,6 +111,7 @@ import type {
   RunHandleCallbacks,
   Sandbox,
   SandboxProviderId,
+  SandboxSessionSpec,
   SandboxStatus,
 } from "../provider";
 
@@ -336,7 +337,20 @@ function hostOpencodeNativeAuthPath(): string {
 
 // ── Provider state files (mirror docker's, namespaced per provider) ──────────
 
-export interface RemoteSandboxState {
+/**
+ * The trust policy a sandbox EXISTS under. It belongs to the sandbox, not to
+ * the ensure() call that happens to be running: provider.ts's contract is that
+ * an automation sandbox fails closed unless the provider installed its
+ * credential-minimal profile and outbound network policy, and a call that
+ * re-enters ensure() without repeating the policy must not quietly reopen it.
+ */
+export interface SandboxTrustPolicy {
+  trustProfile: "interactive" | "automation";
+  /** Hostnames, IPs, CIDRs, or URLs permitted for automation egress. */
+  egressAllowlist: string[];
+}
+
+export interface RemoteSandboxState extends SandboxTrustPolicy {
   sandboxId: string;
   /** Crash-safe idempotency token while a provider create call is in flight. */
   pendingClientToken?: string;
@@ -344,12 +358,55 @@ export interface RemoteSandboxState {
   sessionId: string;
   cwd: string;
   repoId?: string;
-  trustProfile?: "interactive" | "automation";
-  egressAllowlist?: string[];
   resources?: { cpu?: number; memoryMb?: number; diskGb?: number };
   branch?: string;
   createdAt: string;
   lastActivityAt: string;
+}
+
+/**
+ * The policy an ensure() runs under: the caller's when it declares one, else
+ * the one the sandbox was RECORDED with. Every path that re-enters ensure()
+ * without a policy (the recreate route, a provider resume, a state-driven
+ * get()) inherits it instead of falling back to the open "interactive"
+ * default, and a caller that tries to downgrade a recorded automation sandbox
+ * is refused: dropping the egress firewall and the credential-minimal
+ * projection is exactly the widening the contract exists to prevent.
+ */
+export function resolveTrustPolicy(
+  spec: Pick<SandboxSessionSpec, "trustProfile" | "egressAllowlist">,
+  previous?: Partial<SandboxTrustPolicy> | null,
+): SandboxTrustPolicy {
+  const recorded = previous?.trustProfile;
+  if (recorded === "automation" && spec.trustProfile === "interactive") {
+    throw new Error(
+      "this sandbox was created under the automation trust profile and cannot " +
+        "be reopened as interactive. Delete the session's sandbox instead.",
+    );
+  }
+  return {
+    trustProfile: spec.trustProfile || recorded || "interactive",
+    // Only a caller that states the profile may restate the allowlist; a
+    // policy-less re-entry inherits the recorded one rather than widening.
+    egressAllowlist:
+      (spec.trustProfile ? spec.egressAllowlist : undefined) ||
+      previous?.egressAllowlist ||
+      [],
+  };
+}
+
+/**
+ * The trust policy recorded for a session's sandbox. For callers that must
+ * re-enter ensure() AFTER destroy() has deleted the state file (the recreate
+ * route). Null when the provider keeps no state here (local, docker).
+ */
+export function recordedTrustPolicy(
+  provider: string,
+  sessionId: string,
+): SandboxTrustPolicy | null {
+  const state = findRemoteStateBySession(provider, sessionId);
+  if (!state) return null;
+  return { trustProfile: state.trustProfile, egressAllowlist: state.egressAllowlist };
 }
 
 function sanitizeName(s: string): string {
@@ -367,10 +424,17 @@ export function readRemoteState(
   try {
     const p = statePath(provider, sandboxId);
     if (!existsSync(p)) return null;
-    return JSON.parse(readFileSync(p, "utf-8"));
+    return withTrustPolicy(JSON.parse(readFileSync(p, "utf-8")));
   } catch {
     return null;
   }
+}
+
+/** State files written before the policy was recorded carry none. They can
+ *  only be interactive sandboxes: automation ensures have always declared the
+ *  profile, and every writer now records what resolveTrustPolicy returned. */
+function withTrustPolicy(state: RemoteSandboxState): RemoteSandboxState {
+  return { ...state, ...resolveTrustPolicy({}, state) };
 }
 
 export function writeRemoteState(state: RemoteSandboxState): void {
@@ -417,7 +481,8 @@ export function listRemoteStates(provider: string): RemoteSandboxState[] {
       if (!f.startsWith(`${provider}-`) || !f.endsWith(".json")) continue;
       try {
         const s: RemoteSandboxState = JSON.parse(readFileSync(`${STATE_DIR}/${f}`, "utf-8"));
-        if (s.provider === provider && s.sandboxId && s.sessionId) states.push(s);
+        if (s.provider === provider && s.sandboxId && s.sessionId)
+          states.push(withTrustPolicy(s));
       } catch {}
     }
   } catch {}
