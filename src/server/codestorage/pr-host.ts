@@ -31,7 +31,7 @@ import type {
 	PrDetails,
 	PrDiffData,
 	PrFile,
-} from "../pr-info";
+} from "../pr-contract";
 import { CODESTORAGE_CAPABILITIES, type BulkPr, type PrHost } from "../pr-host";
 import {
 	deleteBranch,

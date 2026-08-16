@@ -31,30 +31,18 @@ import {
 	prMetaForBranch,
 	submitPrReview,
 	updatePrBody,
-	type MergeMethod,
-	type MutationPrMeta,
-	type PrCommentInput,
-	type PrDetails,
-	type PrDiffData,
-	type PrReviewInput,
 } from "./pr-info";
+import type {
+	MergeMethod,
+	MutationPrMeta,
+	PrCommentInput,
+	PrDetails,
+	PrDiffData,
+	PrHostCapabilities,
+	PrReviewInput,
+} from "./pr-contract";
+export type { PrHostCapabilities } from "./pr-contract";
 import { fetchWithTimeout } from "./shared/fetch-with-timeout";
-
-/** What a PR host supports, so the UI can hide surfaces a host has no
- *  concept of (code.storage: no CI checks, reviewer lists, viewed state,
- *  stacks, review-comment threads, or image blobs by ref). */
-export interface PrHostCapabilities {
-	checks: boolean;
-	reviewers: boolean;
-	viewedState: boolean;
-	stacks: boolean;
-	reviewComments: boolean;
-	prCreate: boolean;
-	images: boolean;
-	/** Git notes on commits (surfaced in the commits tab). code.storage only —
-	 *  GitHub has no notes API, so its commit entries never carry them. */
-	commitNotes: boolean;
-}
 
 /** One row of the bulk `gh pr list` refresh (sessions.ts). `latestReviews`
  *  and `body` are only populated by listOpenPrs — see the field comments. */

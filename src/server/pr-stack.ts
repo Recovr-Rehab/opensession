@@ -33,33 +33,8 @@
 import { serviceGithubCredential, type GithubCredential } from "./github-auth";
 import { ghRateLimited, noteGhRateLimited, isGhRateLimitMsg } from "./github-limit";
 import { audited } from "./audit";
-
-/** One PR in a stack, ordered from the trunk upward. */
-export interface PrStackLayer {
-  number: number;
-  title: string;
-  url: string;
-  state: "OPEN" | "MERGED" | "CLOSED";
-  isDraft: boolean;
-  headRefName: string;
-  baseRefName: string;
-  /** GitHub's position within the stack; 1 is the layer closest to the trunk. */
-  position: number;
-  /** True for the PR this stack was fetched for. */
-  current?: boolean;
-}
-
-export interface PrStack {
-  /** The stack number GitHub shows in its UI — also what `gh stack link` takes. */
-  number: number;
-  /** Branch the bottom layer targets (the trunk the stack sits on). */
-  baseRefName: string;
-  size: number;
-  /** Position of the PR this stack was fetched for. */
-  position: number;
-  /** Every layer, bottom (trunk-most) first. */
-  layers: PrStackLayer[];
-}
+import type { PrStack, PrStackLayer } from "./pr-contract";
+export type { PrStack, PrStackLayer } from "./pr-contract";
 
 /** The per-PR fields every layer is built from. */
 const LAYER_FIELDS = "number title url state isDraft headRefName baseRefName";
