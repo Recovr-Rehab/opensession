@@ -17,7 +17,11 @@ import {
 import { isClaimed } from "../lib/sidebar-lanes";
 import type { UnifiedSession } from "../lib/types";
 import { Button } from "../ui/button";
+import { EmptyState } from "../ui/state";
 import { useCurrentUser } from "./UserPicker";
+
+const TLDRAW_LICENSE_KEY =
+	typeof process !== "undefined" ? process.env.TLDRAW_LICENSE_KEY : "";
 
 function cardShapes(editor: Editor): SessionCardShape[] {
 	return editor
@@ -88,14 +92,18 @@ export default function SessionCanvas({
 				const p = cardSlot(i);
 				if (!occupied.has(slotKey(p.x, p.y))) slots.push(p);
 			}
+			// Reversed so the most recently active card ends up highest in the
+			// z-order; creation order is stacking order in tldraw.
 			editor.createShapes(
-				toAdd.map((s, i) => ({
-					id: createShapeId(`card-${s.id}`),
-					type: "session-card" as const,
-					x: slots[i]?.x ?? cardSlot(i).x,
-					y: slots[i]?.y ?? cardSlot(i).y,
-					props: { sessionId: s.id },
-				})),
+				toAdd
+					.map((s, i) => ({
+						id: createShapeId(`card-${s.id}`),
+						type: "session-card" as const,
+						x: slots[i]?.x ?? cardSlot(i).x,
+						y: slots[i]?.y ?? cardSlot(i).y,
+						props: { sessionId: s.id },
+					}))
+					.reverse(),
 			);
 			if (live.length === 0)
 				editor.zoomToFit({ animation: { duration: 0 } });
@@ -121,6 +129,14 @@ export default function SessionCanvas({
 		editor.zoomToFit({ animation: { duration: 320 } });
 	}
 
+	if (!TLDRAW_LICENSE_KEY) {
+		return (
+			<EmptyState className="h-full" title="Canvas needs a tldraw license">
+				Set TLDRAW_LICENSE_KEY on this server to use Canvas.
+			</EmptyState>
+		);
+	}
+
 	return (
 		<div className="relative h-full w-full overflow-hidden">
 			<CanvasDataContext.Provider value={data}>
@@ -128,8 +144,9 @@ export default function SessionCanvas({
 					key={user.toLowerCase()}
 					persistenceKey={`opensession-canvas-${user.toLowerCase()}`}
 					shapeUtils={CANVAS_SHAPE_UTILS}
+					licenseKey={TLDRAW_LICENSE_KEY}
 					hideUi
-					onMount={(e) => setEditor(e)}
+					onMount={setEditor}
 				/>
 			</CanvasDataContext.Provider>
 			<div className="absolute bottom-3 left-3 z-10 flex gap-1 phone:bottom-[calc(12px+env(safe-area-inset-bottom))]">

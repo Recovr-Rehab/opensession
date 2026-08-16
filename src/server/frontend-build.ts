@@ -107,6 +107,11 @@ export async function buildFrontend(): Promise<string> {
 	const result = await Bun.build({
 		entrypoints: [`${FRONTEND_SRC}/App.tsx`],
 		outdir: FRONTEND_DIST,
+		define: {
+			"process.env.TLDRAW_LICENSE_KEY": JSON.stringify(
+				process.env.TLDRAW_LICENSE_KEY ?? "",
+			),
+		},
 		minify: true,
 		splitting: true,
 		sourcemap: "none",

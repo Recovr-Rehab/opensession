@@ -190,7 +190,13 @@ export class SessionCardUtil extends ShapeUtil<SessionCardShape> {
 
 	override component(shape: SessionCardShape) {
 		return (
-			<HTMLContainer style={{ pointerEvents: "all" }}>
+			<HTMLContainer
+				style={{ pointerEvents: "all" }}
+				// Touching a card raises it: overlapping cards otherwise keep
+				// their creation order, and a card stuck underneath a neighbour
+				// has an unclickable composer.
+				onPointerDown={() => this.editor.bringToFront([shape.id])}
+			>
 				<CanvasCard sessionId={shape.props.sessionId} />
 			</HTMLContainer>
 		);
