@@ -141,7 +141,7 @@ struct WorktreeInfoView: View {
         if !viewModel.isRunning, let last = latestActivity {
             parts.append("Updated \(Self.ago(Date().timeIntervalSince(last)))")
         }
-        let queued = max(viewModel.queuedCount, currentSession.queuedCount ?? 0)
+        let queued = viewModel.queuedCount
         if queued > 0 { parts.append("\(queued) queued") }
         if sessions.count > 1 { parts.append("\(sessions.count) sessions") }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")

@@ -41,7 +41,13 @@ final class SessionViewModel {
     /// server's journaled run start (from the sessions list row); a run that
     /// starts while watching anchors to the status flip.
     private(set) var runStartedAt: Date?
-    private(set) var queuedCount = 0
+    /// Before the watch answers, the sessions row is the only queue summary
+    /// available. Once detailed queue state arrives, derive the count from its
+    /// items so a stale list snapshot cannot contradict the visible queue.
+    private var hasDetailedQueue = false
+    var queuedCount: Int {
+        hasDetailedQueue ? queuedItems.count : session.queuedCount ?? 0
+    }
     /// What this conversation has cost and how full its context window is.
     /// Seeded from the session row and then kept live by `usage_update`,
     /// which the server broadcasts mid-run as well as at the end of a turn.
@@ -346,7 +352,6 @@ final class SessionViewModel {
         self.outbox = outbox
         self.conversationLoadTimeout = conversationLoadTimeout
         self.isRunning = session.isRunning ?? false
-        self.queuedCount = session.queuedCount ?? 0
         self.usage = session.usage
         self.model = session.model ?? ""
         self.effort = session.effort ?? ""
@@ -404,6 +409,14 @@ final class SessionViewModel {
         }
         guard stopped else { return }
 
+        // Queue items belong to the old socket snapshot. While closed, fall
+        // back to the fresh sessions-row summary until the new watch supplies
+        // its detailed queue.
+        hasDetailedQueue = false
+        queuedItems = []
+        steeredItems = []
+        updateDelivering([])
+
         if let running = session.isRunning {
             isRunning = running
             runStartedAt = running ? session.runStartedDate : nil
@@ -412,7 +425,6 @@ final class SessionViewModel {
                 isStreaming = false
             }
         }
-        queuedCount = session.queuedCount ?? 0
         model = session.model ?? ""
         effort = session.effort ?? ""
         fastMode = session.fastMode ?? false
@@ -742,9 +754,9 @@ final class SessionViewModel {
                 content: item.content,
                 user: item.user
             )
+            hasDetailedQueue = true
             if delivery.status == "steered" { steeredItems.append(chip) }
             else { queuedItems.append(chip) }
-            queuedCount = queuedItems.count
         case "handled":
             // A slash command (/model, /goal …) — the server's answer is the
             // whole result; nothing enters the transcript.
@@ -1004,7 +1016,6 @@ final class SessionViewModel {
         // re-drains the same id, and the fresh chip would prune instantly as
         // a 30s-old ghost.
         deliveringSince.removeValue(forKey: item.id)
-        queuedCount = queuedItems.count
     }
 
     /// Atomically take an ordinary message out of the server queue. The reply
@@ -1340,6 +1351,7 @@ final class SessionViewModel {
             }
 
         case .queueUpdate(let id, let queued, let steered) where id == session.id:
+            hasDetailedQueue = true
             // A chip that vanishes from the server's queue without its message
             // having landed in the transcript is mid-delivery: the drain
             // broadcasts the emptied queue before the engine turn writes the
@@ -1384,7 +1396,6 @@ final class SessionViewModel {
             let steeredIds = Set(steered.map(\.id))
             queuedItems = queued.filter { !steeredIds.contains($0.id) }
             steeredItems = steered
-            queuedCount = queuedItems.count
             // Landed flags outlive their purpose once the chip is gone.
             landedChipIds.formIntersection(
                 Set((queuedItems + steeredItems + deliveringItems).map(\.id))
@@ -1636,7 +1647,6 @@ final class SessionViewModel {
                     $0.id.hasPrefix("local-queued-") && chipDelivered($0, in: entry.text)
                 }) {
                     queuedItems.remove(at: chipIndex)
-                    queuedCount = queuedItems.count
                 }
                 // The durable copy of a delivering chip's message landing is
                 // the hand-off the holding state exists for — one entry can
