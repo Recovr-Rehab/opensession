@@ -18,6 +18,8 @@ import {
 	worktreeHasWork,
 } from "./worktree";
 import { hasRemoteWorkspace } from "./sandbox";
+import type { WorkspaceExecSession } from "./sandbox/workspace-exec";
+import { existsSync } from "fs";
 import {
 	findWorkspaceByWorktree,
 	getWorkspace,
@@ -260,6 +262,52 @@ export async function memoryNoteFor(
 		console.warn("[memory] failed to render session memory note:", e);
 	}
 	return parts.filter(Boolean).join("\n\n");
+}
+
+export interface WorktreeTarget {
+	repoId: string;
+	dir: string;
+	primary: boolean;
+	defaultBranch: string;
+	/**
+	 * Whether git can actually act on this checkout: the dir exists on the
+	 * host, or it's the primary repo of a remote workspace (volume-mode
+	 * sandbox or runner), where commands route through the session's exec
+	 * instead of a host path. Attached repos are always host worktrees.
+	 */
+	reachable: boolean;
+}
+
+/**
+ * Resolve which of a session's checkouts a worktree operation targets. With no
+ * `repoId` (or the primary project's id) it's the session's own worktree; an
+ * attached project id targets that repo's isolated worktree. Returns null when
+ * the session carries no checkout for that id.
+ *
+ * Every worktree route resolves through here so "which repo, which dir, can I
+ * reach it" is answered once: the routes used to inline the same lookup and
+ * apply the remote-workspace exception inconsistently, so a volume-mode session
+ * had a worktree for diff/status/push/pull and none for image/file reads.
+ */
+export function resolveWorktreeTarget(
+	session: Pick<UnifiedSession, "repo" | "worktreeDir" | "attachedRepos"> &
+		WorkspaceExecSession,
+	repoId?: string | null,
+): WorktreeTarget | null {
+	const primaryRepo = sessionRepoId(session) ?? defaultRepo().id;
+	const primary = !repoId || repoId === primaryRepo;
+	const dir = primary
+		? session.worktreeDir
+		: (session.attachedRepos || []).find((r) => r.repo === repoId)?.dir;
+	if (!dir) return null;
+	const id = primary ? primaryRepo : repoId!;
+	return {
+		repoId: id,
+		dir,
+		primary,
+		defaultBranch: getRepo(id).defaultBranch,
+		reachable: existsSync(dir) || (primary && hasRemoteWorkspace(session)),
+	};
 }
 
 /**

@@ -11,8 +11,9 @@ import type { DiffGroupFile } from "../diff-groups";
 import { type SessionDiff, discardSessionFile, getSessionDiff } from "../git-diff";
 import { getGitStatus, gitPull, gitPush } from "../git-status";
 import { imageContentType, imageHeaders } from "../image-mime";
-import { hasRemoteWorkspace, workspaceExecFor } from "../sandbox";
+import { workspaceExecFor } from "../sandbox";
 import { findSession } from "../session-cache";
+import { resolveWorktreeTarget } from "../session-repos";
 import { sessionTouchedPaths } from "../session-touched";
 import { getRepo, isSharedCheckoutDir, sessionRepoId } from "../worktree";
 import { defaultRepo } from "../config";
@@ -51,25 +52,13 @@ export async function handleSessionGitRoutes(
 		// One diff per repo in the session: primary worktree + each attached repo.
 		// Each carries its repo id so the panel can show a repo switcher and
 		// route per-line feedback to the right checkout.
-		const targets: Array<{
-			repo: string;
-			dir: string | null;
-			primary: boolean;
-		}> = [
-			{
-				repo: sessionRepoId(session) ?? defaultRepo().id,
-				dir: session.worktreeDir,
-				primary: true,
-			},
-			...(session.attachedRepos || []).map((r) => ({
-				repo: r.repo,
-				dir: r.dir,
-				primary: false,
-			})),
+		const repoIds = [
+			sessionRepoId(session) ?? defaultRepo().id,
+			...(session.attachedRepos || []).map((r) => r.repo),
 		];
 
 		const repos = await Promise.all(
-			targets.map(async (t) => {
+			repoIds.map(async (repoId, index) => {
 				let diff: SessionDiff = {
 					branch: null,
 					baseRef: null,
@@ -79,21 +68,27 @@ export async function handleSessionGitRoutes(
 					rawPatch: "",
 					diffVersion: "",
 				};
-				// Volume-mode sandbox workspaces have no host dir — the primary
-				// repo's diff runs through the session's sandbox exec instead
-				// (workspaceExecFor; host exec when no active sandbox). Attached
-				// repos are always host worktrees.
-				const remote = t.primary && hasRemoteWorkspace(session);
-				if (t.dir && (existsSync(t.dir) || remote)) {
+				// A volume-mode workspace has no host dir but is still reachable:
+				// the primary repo's diff runs through the session's sandbox exec
+				// instead (workspaceExecFor; host exec when no active sandbox).
+				const target = resolveWorktreeTarget(session, repoId);
+				if (target?.reachable) {
 					try {
 						diff = await getSessionDiff(
-							t.dir,
-							getRepo(t.repo).defaultBranch,
-							t.primary ? await workspaceExecFor(session, t.dir) : undefined,
+							target.dir,
+							target.defaultBranch,
+							target.primary
+								? await workspaceExecFor(session, target.dir)
+								: undefined,
 						);
 					} catch {}
 				}
-				return { repo: t.repo, dir: t.dir, primary: t.primary, diff };
+				return {
+					repo: repoId,
+					dir: target?.dir ?? null,
+					primary: index === 0,
+					diff,
+				};
 			}),
 		);
 
@@ -180,24 +175,11 @@ export async function handleSessionGitRoutes(
 		if (!body.path)
 			return Response.json({ error: "Missing path" }, { status: 400 });
 
-		// Resolve the worktree dir for the targeted repo (primary or attached).
-		const primaryRepo = sessionRepoId(session) ?? defaultRepo().id;
-		let dir: string | null = null;
-		let repoId = primaryRepo;
-		if (!body.repo || body.repo === primaryRepo) {
-			dir = session.worktreeDir;
-		} else {
-			const att = (session.attachedRepos || []).find(
-				(r) => r.repo === body.repo,
-			);
-			dir = att?.dir ?? null;
-			repoId = body.repo;
-		}
-		// Primary volume-mode workspaces exist only in the sandbox — route the
-		// discard through its exec instead of requiring a host dir.
-		const primaryRemote =
-			(!body.repo || body.repo === primaryRepo) && hasRemoteWorkspace(session);
-		if (!dir || (!existsSync(dir) && !primaryRemote))
+		// Primary volume-mode workspaces exist only in the sandbox — the
+		// resolver counts them as reachable and the discard routes through
+		// the session's exec instead of a host dir.
+		const target = resolveWorktreeTarget(session, body.repo);
+		if (!target?.reachable)
 			return Response.json(
 				{ error: "No worktree for this repo" },
 				{ status: 400 },
@@ -205,12 +187,12 @@ export async function handleSessionGitRoutes(
 
 		try {
 			await discardSessionFile(
-				dir,
-				getRepo(repoId).defaultBranch,
+				target.dir,
+				target.defaultBranch,
 				body.path,
 				body.oldPath,
-				!body.repo || body.repo === primaryRepo
-					? await workspaceExecFor(session, dir)
+				target.primary
+					? await workspaceExecFor(session, target.dir)
 					: undefined,
 			);
 		} catch (e: any) {
@@ -234,28 +216,22 @@ export async function handleSessionGitRoutes(
 		const session = findSession(sessionId);
 		if (!session)
 			return Response.json({ error: "Session not found" }, { status: 404 });
-		const repoId = url.searchParams.get("repo");
-		const primaryRepo = sessionRepoId(session) ?? defaultRepo().id;
-		const isPrimary = !repoId || repoId === primaryRepo;
-		const dir = isPrimary
-			? session.worktreeDir
-			: (session.attachedRepos || []).find((r) => r.repo === repoId)?.dir;
 		// Primary volume-mode workspaces have no host dir — status runs
-		// through the sandbox exec (host exec when no active sandbox).
-		const remote = isPrimary && hasRemoteWorkspace(session);
-		if (!dir || (!existsSync(dir) && !remote)) return Response.json(null);
-		const repoConf = getRepo(repoId || primaryRepo);
+		// through the sandbox exec (host exec when no active sandbox). No
+		// checkout at all answers 200 with null; clients read that.
+		const target = resolveWorktreeTarget(session, url.searchParams.get("repo"));
+		if (!target?.reachable) return Response.json(null);
 		// A shared checkout holds every concurrent session's edits, so the raw
 		// dirty count belongs to nobody. Scope it to the files this session's own
 		// tool calls wrote.
-		const ownPaths = isSharedCheckoutDir(dir)
-			? await sessionTouchedPaths(session, dir)
+		const ownPaths = isSharedCheckoutDir(target.dir)
+			? await sessionTouchedPaths(session, target.dir)
 			: undefined;
 		return Response.json(
 			await getGitStatus(
-				dir,
-				repoConf.defaultBranch,
-				isPrimary ? await workspaceExecFor(session, dir) : undefined,
+				target.dir,
+				target.defaultBranch,
+				target.primary ? await workspaceExecFor(session, target.dir) : undefined,
 				ownPaths,
 			),
 		);
@@ -277,22 +253,24 @@ export async function handleSessionGitRoutes(
 		const filePath = url.searchParams.get("path") || "";
 		const contentType = imageContentType(filePath);
 		if (!contentType) return new Response("Not an image path", { status: 400 });
-		const repoId = url.searchParams.get("repo");
-		const primaryRepo = sessionRepoId(session) ?? defaultRepo().id;
-		const isPrimary = !repoId || repoId === primaryRepo;
-		const dir = isPrimary
-			? session.worktreeDir
-			: (session.attachedRepos || []).find((r) => r.repo === repoId)?.dir;
-		if (!dir || !existsSync(dir)) return new Response("No worktree", { status: 404 });
+		const target = resolveWorktreeTarget(session, url.searchParams.get("repo"));
+		if (!target?.reachable) return new Response("No worktree", { status: 404 });
+		const dir = target.dir;
+		// Reachable but host-invisible (volume-mode sandbox / runner): image
+		// bytes are read straight off the host fs, so say that plainly instead
+		// of claiming the session has no worktree.
+		if (!existsSync(dir))
+			return new Response("Worktree is not readable on the host", {
+				status: 400,
+			});
 		// Keep reads inside the worktree — the path comes from the client.
 		const abs = resolve(dir, filePath);
 		if (abs !== dir && !abs.startsWith(`${dir}/`))
 			return new Response("Bad path", { status: 400 });
 		try {
 			if (url.searchParams.get("side") === "base") {
-				const repoConf = getRepo(repoId || primaryRepo);
 				const base = (
-					await $`git -C ${dir} merge-base HEAD origin/${repoConf.defaultBranch}`
+					await $`git -C ${dir} merge-base HEAD origin/${target.defaultBranch}`
 						.quiet()
 						.text()
 				).trim();
@@ -342,13 +320,18 @@ export async function handleSessionGitRoutes(
 		if (!filePath)
 			return Response.json({ error: "Missing path" }, { status: 400 });
 		const repoId = body ? body.repo || null : url.searchParams.get("repo");
-		const primaryRepo = sessionRepoId(session) ?? defaultRepo().id;
-		const isPrimary = !repoId || repoId === primaryRepo;
-		const dir = isPrimary
-			? session.worktreeDir
-			: (session.attachedRepos || []).find((r) => r.repo === repoId)?.dir;
-		if (!dir || !existsSync(dir))
+		const target = resolveWorktreeTarget(session, repoId);
+		if (!target?.reachable)
 			return Response.json({ error: "No worktree" }, { status: 404 });
+		const dir = target.dir;
+		// Reachable but host-invisible (volume-mode sandbox / runner): both the
+		// read and the edit-mode write go through the host fs, so say that
+		// plainly instead of claiming the session has no worktree.
+		if (!existsSync(dir))
+			return Response.json(
+				{ error: "Worktree is not readable on the host" },
+				{ status: 400 },
+			);
 		// Keep reads/writes inside the worktree — the path comes from the client.
 		const abs = resolve(dir, filePath);
 		if (abs !== dir && !abs.startsWith(`${dir}/`))
@@ -372,9 +355,8 @@ export async function handleSessionGitRoutes(
 
 		try {
 			if (url.searchParams.get("side") === "base") {
-				const repoConf = getRepo(repoId || primaryRepo);
 				const base = (
-					await $`git -C ${dir} merge-base HEAD origin/${repoConf.defaultBranch}`
+					await $`git -C ${dir} merge-base HEAD origin/${target.defaultBranch}`
 						.quiet()
 						.text()
 				).trim();
@@ -410,20 +392,16 @@ export async function handleSessionGitRoutes(
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		const body = await req.json().catch(() => ({}));
 		const repoId = typeof body?.repo === "string" ? body.repo : null;
-		const primaryRepo = sessionRepoId(session) ?? defaultRepo().id;
-		const isPrimary = !repoId || repoId === primaryRepo;
-		const dir = isPrimary
-			? session.worktreeDir
-			: (session.attachedRepos || []).find((r) => r.repo === repoId)?.dir;
-		if (!dir || (!existsSync(dir) && !(isPrimary && hasRemoteWorkspace(session))))
+		const target = resolveWorktreeTarget(session, repoId);
+		if (!target?.reachable)
 			return Response.json(
 				{ error: "Session has no worktree" },
 				{ status: 400 },
 			);
 		const result = await gitPush(
-			dir,
+			target.dir,
 			session.branch || "HEAD",
-			isPrimary ? await workspaceExecFor(session, dir) : undefined,
+			target.primary ? await workspaceExecFor(session, target.dir) : undefined,
 		);
 		if ("error" in result) return Response.json(result, { status: 502 });
 		return Response.json(result);
@@ -444,20 +422,16 @@ export async function handleSessionGitRoutes(
 			return Response.json({ error: "Session not found" }, { status: 404 });
 		const body = await req.json().catch(() => ({}));
 		const repoId = typeof body?.repo === "string" ? body.repo : null;
-		const primaryRepo = sessionRepoId(session) ?? defaultRepo().id;
-		const isPrimary = !repoId || repoId === primaryRepo;
-		const dir = isPrimary
-			? session.worktreeDir
-			: (session.attachedRepos || []).find((r) => r.repo === repoId)?.dir;
-		if (!dir || (!existsSync(dir) && !(isPrimary && hasRemoteWorkspace(session))))
+		const target = resolveWorktreeTarget(session, repoId);
+		if (!target?.reachable)
 			return Response.json(
 				{ error: "Session has no worktree" },
 				{ status: 400 },
 			);
 		const result = await gitPull(
-			dir,
-			body?.base ? getRepo(repoId || primaryRepo).defaultBranch : undefined,
-			isPrimary ? await workspaceExecFor(session, dir) : undefined,
+			target.dir,
+			body?.base ? target.defaultBranch : undefined,
+			target.primary ? await workspaceExecFor(session, target.dir) : undefined,
 		);
 		if ("error" in result) return Response.json(result, { status: 502 });
 		return Response.json(result);
