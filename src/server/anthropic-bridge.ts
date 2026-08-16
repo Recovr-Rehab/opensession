@@ -85,10 +85,8 @@ import { query, createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk"
 import { z } from "zod";
 import { audit, summarizeText } from "./audit";
 import {
-  getAccountById,
-  getUsableAccountById,
   hasAccounts,
-  pickAccount,
+  resolveAccount,
   type ClaudeAccount,
 } from "./claude-accounts";
 import { CLAUDE_CODE_BIN } from "./runner-shared";
@@ -204,71 +202,59 @@ export interface BridgeAccountPin {
  *    reason to fence it off from the pool.
  *
  *  A `pin` (in-process pi runs only) is tried first; with accountStrict the
- *  walk never widens past it. The "no designated bridge account" / "no usable
- *  Claude account" wordings are load-bearing: isPiUsageLimitShape's anthropic
- *  arm keys on them. */
+ *  walk never widens past it. Another user's personal subscription never
+ *  serves, on any path — the ordered policy and that owner gate both live in
+ *  resolveAccount; this only renders its refusals. The "no designated bridge
+ *  account" / "no usable Claude account" wordings are load-bearing:
+ *  isPiUsageLimitShape's anthropic arm keys on them. */
 export function pickBridgeAccount(
   model: string | undefined,
   pin?: BridgeAccountPin
 ): ClaudeAccount | { error: string } {
   const cfg = readOpencodeBridgeConfig();
   const ids = cfg?.enabled ? cfg.bridgeAccountIds || [] : [];
-  if (!ids.length) {
-    // Pool mode. Pin first (an id outside the pool's usable set behaves like
-    // the designated walk: strict refuses, non-strict falls through).
-    if (pin?.accountId) {
-      const pinned = getUsableAccountById(pin.accountId, model, pin.usageCredits);
-      if (pinned) return pinned;
-      if (pin.accountStrict) {
-        const pinName = getAccountById(pin.accountId)?.name || pin.accountId;
-        return {
+  const resolved = resolveAccount({
+    user: pin?.user,
+    model,
+    pinnedId: pin?.accountId,
+    strictPin: pin?.accountStrict,
+    designatedIds: ids,
+    allowExtraUsage: pin?.usageCredits,
+  });
+  if ("account" in resolved) return resolved.account;
+  const refusal = resolved.refusal;
+  if (refusal.kind === "pin-not-designated") {
+    // Config error, deliberately NOT exhaustion-shaped — hopping models would
+    // not fix a pin that names a non-designated account.
+    return {
+      error:
+        `pinned account "${refusal.pinName}" is not a designated bridge account ` +
+        "(opencode bridgeAccountIds is set, so only those ids may serve bridge traffic) — " +
+        "strict pin, refusing to widen",
+    };
+  }
+  if (refusal.kind === "pin-unusable") {
+    return ids.length
+      ? {
           error:
-            `no usable Claude account (pinned "${pinName}" is exhausted, disabled or ` +
+            `no designated bridge account is currently usable (pinned "${refusal.pinName}" is ` +
+            "exhausted or disabled; strict pin — not widening to the other designated accounts)",
+        }
+      : {
+          error:
+            `no usable Claude account (pinned "${refusal.pinName}" is exhausted, disabled or ` +
             "unknown; strict pin — not widening to the pool)",
         };
-      }
-    }
-    const picked = pickAccount(undefined, pin?.user, model, pin?.usageCredits);
-    if (picked) return picked;
-    if (!hasAccounts()) {
-      // Deliberately NOT usage-limit-shaped: an empty pool is a config
-      // problem, and hopping models would not fix it.
-      return { error: "no Claude accounts configured (add one in Settings → Usage)" };
-    }
-    return { error: "no usable Claude account in the pool (all exhausted or sidelined)" };
   }
-  if (pin?.accountId) {
-    const pinName = getAccountById(pin.accountId)?.name || pin.accountId;
-    if (!ids.includes(pin.accountId)) {
-      if (pin.accountStrict) {
-        // Config error, deliberately NOT exhaustion-shaped — hopping models
-        // would not fix a pin that names a non-designated account.
-        return {
-          error:
-            `pinned account "${pinName}" is not a designated bridge account ` +
-            "(opencode bridgeAccountIds is set, so only those ids may serve bridge traffic) — " +
-            "strict pin, refusing to widen",
-        };
-      }
-      // Non-strict pin outside the designation: ignore it, walk the list.
-    } else {
-      const pinned = getUsableAccountById(pin.accountId, model, pin.usageCredits);
-      if (pinned) return pinned;
-      if (pin.accountStrict) {
-        return {
-          error:
-            `no designated bridge account is currently usable (pinned "${pinName}" is ` +
-            "exhausted or disabled; strict pin — not widening to the other designated accounts)",
-        };
-      }
-    }
+  if (refusal.kind === "designated-dry") {
+    return { error: `no designated bridge account is currently usable (tried: ${refusal.tried})` };
   }
-  for (const id of ids) {
-    const usable = getUsableAccountById(id, model, pin?.usageCredits);
-    if (usable) return usable;
+  if (refusal.kind === "none-configured") {
+    // Deliberately NOT usage-limit-shaped: an empty pool is a config problem,
+    // and hopping models would not fix it.
+    return { error: "no Claude accounts configured (add one in Settings → Usage)" };
   }
-  const known = ids.map((id) => getAccountById(id)?.name || id).join(", ");
-  return { error: `no designated bridge account is currently usable (tried: ${known})` };
+  return { error: "no usable Claude account in the pool (all exhausted or sidelined)" };
 }
 
 // ── Anthropic request → SDK prompt mapping ───────────────────────────────────
