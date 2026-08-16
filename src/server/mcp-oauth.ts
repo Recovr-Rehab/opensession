@@ -62,6 +62,42 @@ interface ServerAuth {
 
 type Store = Record<string, ServerAuth>;
 
+/**
+ * Which grant slot on a ServerAuth we're talking about: the workspace-wide
+ * one, or one team member's. Addressing a slot by name only ("shared" vs a
+ * team name in the same string) let a caller pair one identity's grant with
+ * another identity's slot, so a refresh could write a token into a slot it
+ * never read from. The union keeps the two together.
+ */
+type GrantSlot = { kind: "shared" } | { kind: "user"; teamName: string };
+
+/** A grant plus the slot it was read from — the expiry decision and the
+ *  refreshed token's destination can no longer disagree. */
+type GrantRef = GrantSlot & { grant: Grant };
+
+/** Team name from a pending flow: absent = the shared grant. */
+function slotFor(teamName?: string): GrantSlot {
+  return teamName ? { kind: "user", teamName } : { kind: "shared" };
+}
+
+function slotLabel(slot: GrantSlot): string {
+  return slot.kind === "shared" ? "shared" : slot.teamName;
+}
+
+function grantRef(
+  auth: ServerAuth | undefined,
+  slot: GrantSlot,
+): GrantRef | undefined {
+  const grant =
+    slot.kind === "shared" ? auth?.shared : auth?.users?.[slot.teamName];
+  return grant ? { ...slot, grant } : undefined;
+}
+
+function writeGrant(entry: ServerAuth, slot: GrantSlot, grant: Grant): void {
+  if (slot.kind === "shared") entry.shared = grant;
+  else entry.users = { ...(entry.users || {}), [slot.teamName]: grant };
+}
+
 function readStore(): Store {
   try {
     return JSON.parse(readFileSync(STORE_PATH, "utf8"));
@@ -356,9 +392,7 @@ export async function completeMcpOauthFlow(
     const fresh = readStore();
     const entry = fresh[flow.name];
     if (!entry) throw new Error(`Registration for ${flow.name} vanished`);
-    if (flow.teamName)
-      entry.users = { ...(entry.users || {}), [flow.teamName]: grant };
-    else entry.shared = grant;
+    writeGrant(entry, slotFor(flow.teamName), grant);
     writeStore(fresh);
     return { name: flow.name, teamName: flow.teamName };
   }
@@ -405,11 +439,7 @@ export async function completeMcpOauthFlow(
   const fresh = readStore();
   const entry = fresh[flow.name];
   if (!entry) throw new Error(`Registration for ${flow.name} vanished`);
-  if (flow.teamName) {
-    entry.users = { ...(entry.users || {}), [flow.teamName]: grant };
-  } else {
-    entry.shared = grant;
-  }
+  writeGrant(entry, slotFor(flow.teamName), grant);
   writeStore(fresh);
   return { name: flow.name, teamName: flow.teamName };
 }
@@ -419,10 +449,10 @@ const REFRESH_AHEAD_MS = 5 * 60_000;
 async function refreshGrant(
   name: string,
   auth: ServerAuth,
-  who: "shared" | string,
+  ref: GrantRef,
 ): Promise<void> {
-  const grant = who === "shared" ? auth.shared : auth.users?.[who];
-  if (!grant?.tokens.refreshToken) return;
+  const { grant } = ref;
+  if (!grant.tokens.refreshToken) return;
   const body = new URLSearchParams({
     grant_type: "refresh_token",
     refresh_token: grant.tokens.refreshToken,
@@ -457,26 +487,34 @@ async function refreshGrant(
     const store = readStore();
     const entry = store[name];
     if (!entry) return;
-    if (who === "shared") entry.shared = next;
-    else entry.users = { ...(entry.users || {}), [who]: next };
+    writeGrant(entry, ref, next);
     writeStore(store);
   } catch (e) {
-    console.error(`[mcp-oauth] refresh failed for ${name}/${who}:`, e);
+    console.error(
+      `[mcp-oauth] refresh failed for ${name}/${slotLabel(ref)}:`,
+      e,
+    );
   }
 }
 
 async function refreshExpiring(): Promise<void> {
   const store = readStore();
   for (const [name, auth] of Object.entries(store)) {
-    const targets: Array<"shared" | string> = [
-      ...(auth.shared ? (["shared"] as const) : []),
-      ...Object.keys(auth.users || {}),
+    const slots: GrantSlot[] = [
+      ...(auth.shared ? [{ kind: "shared" } as const] : []),
+      ...Object.keys(auth.users || {}).map(
+        (teamName) => ({ kind: "user", teamName }) as const,
+      ),
     ];
-    for (const who of targets) {
-      const g = who === "shared" ? auth.shared : auth.users?.[who];
-      const exp = g?.tokens.expiresAt;
-      if (g?.tokens.refreshToken && exp && exp - Date.now() < REFRESH_AHEAD_MS)
-        await refreshGrant(name, auth, who);
+    for (const slot of slots) {
+      const ref = grantRef(auth, slot);
+      const exp = ref?.grant.tokens.expiresAt;
+      if (
+        ref?.grant.tokens.refreshToken &&
+        exp &&
+        exp - Date.now() < REFRESH_AHEAD_MS
+      )
+        await refreshGrant(name, auth, ref);
     }
   }
 }
@@ -512,25 +550,22 @@ export function mcpUserGrantHeader(
   if (!user) return undefined;
   const teamName = resolveTeammate(user)?.name;
   if (!teamName) return undefined;
-  return grantHeader(name, readStore()[name]?.users?.[teamName], teamName);
+  return grantHeader(name, { kind: "user", teamName });
 }
 
 /** The workspace-wide grant ONLY. */
 export function mcpSharedGrantHeader(name: string): string | undefined {
-  return grantHeader(name, readStore()[name]?.shared, "shared");
+  return grantHeader(name, { kind: "shared" });
 }
 
-function grantHeader(
-  name: string,
-  grant: Grant | undefined,
-  who: string,
-): string | undefined {
+function grantHeader(name: string, slot: GrantSlot): string | undefined {
   ensureTicker();
   const auth = readStore()[name];
-  if (!auth || !grant) return undefined;
-  const { accessToken, expiresAt, refreshToken } = grant.tokens;
+  const ref = grantRef(auth, slot);
+  if (!auth || !ref) return undefined;
+  const { accessToken, expiresAt, refreshToken } = ref.grant.tokens;
   if (expiresAt && expiresAt - Date.now() < REFRESH_AHEAD_MS && refreshToken)
-    refreshGrant(name, auth, who).catch(() => {});
+    refreshGrant(name, auth, ref).catch(() => {});
   if (expiresAt && expiresAt < Date.now()) return undefined;
   return `Bearer ${accessToken}`;
 }
