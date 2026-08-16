@@ -111,7 +111,6 @@ import {
 	getSidebarDensity,
 	onSidebarDensityChanged,
 } from "../lib/sidebar-density";
-import { getSidebarOrder, onSidebarOrderChanged } from "../lib/sidebar-order";
 import {
 	getRepoOrder,
 	mergeRepoOrder,
@@ -324,14 +323,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	const [expanded, setExpanded] = useState<Set<string>>(readExpanded);
 	const [hiddenTools, setHiddenTools] = useState(readHiddenSidebarTools);
 	const [hiddenFeeds, setHiddenFeeds] = useState(readHiddenSidebarFeeds);
-	const [sidebarOrder, setSidebarOrder] = useState(getSidebarOrder);
-	useEffect(
-		() => onSidebarOrderChanged(() => setSidebarOrder(getSidebarOrder())),
-		[],
-	);
-	// Tools stay at flex order 0, so only these bands move beneath it.
-	const sectionOrder = (section: (typeof sidebarOrder)[number]) =>
-		sidebarOrder.indexOf(section) + 1;
 	const [savedRepoOrder, setSavedRepoOrder] = useState(getRepoOrder);
 	useEffect(
 		() => onRepoOrderChanged(() => setSavedRepoOrder(getRepoOrder())),
@@ -4504,10 +4495,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			)}
 			</div>
 
-			<div
-				className="block max-w-full min-w-0 flex-none"
-				style={{ order: sectionOrder("workspaces") }}
-			>
+			<div className="block max-w-full min-w-0 flex-none">
 			<div
 				className={cn(
 					"mt-1 pb-0.5 pt-3",
@@ -5494,10 +5482,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 
 				{/* ── Automations (one collapsible band, one group per automation) ── */}
 				{groups.length > 0 && (
-					<div
-						className={cn(SIDEBAR_INDEPENDENT_SECTION, "mt-2 pb-7")}
-						style={{ order: sectionOrder("automations") }}
-					>
+					<div className={cn(SIDEBAR_INDEPENDENT_SECTION, "mt-2 pb-7")}>
 						<div
 							className={cn(
 								SIDEBAR_BAND_LABEL,

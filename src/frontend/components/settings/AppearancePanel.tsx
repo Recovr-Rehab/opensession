@@ -1,4 +1,3 @@
-import { Reorder } from "motion/react";
 import React, { useEffect, useState } from "react";
 import { IconCheck } from "../icons";
 import { fetchFeeds } from "../../lib/api";
@@ -16,13 +15,6 @@ import {
 	readHiddenSidebarFeeds,
 	setSidebarFeedVisible,
 } from "../../lib/sidebar-feeds";
-import {
-	getSidebarOrder,
-	onSidebarOrderChanged,
-	setSidebarOrder,
-	SIDEBAR_SECTION_LABELS,
-	type SidebarSectionId,
-} from "../../lib/sidebar-order";
 import {
 	onSidebarToolsChanged,
 	readHiddenSidebarTools,
@@ -56,10 +48,6 @@ import {
 import { Segmented, SegmentedOption } from "../../ui/segmented";
 import {
 	SettingCard,
-	SettingRow as SettingsRow,
-	SettingRowDescription,
-	SettingRowText,
-	SettingRowTitle,
 	SettingsGroupLabel,
 	SettingsHeader,
 	SettingsPanel,
@@ -252,17 +240,6 @@ export function AppearancePanel() {
 			alive = false;
 		};
 	}, []);
-	const [sidebarOrder, setSidebarOrderState] = useState(getSidebarOrder);
-	const sidebarOrderRef = React.useRef(sidebarOrder);
-	useEffect(
-		() =>
-			onSidebarOrderChanged(() => {
-				const next = getSidebarOrder();
-				sidebarOrderRef.current = next;
-				setSidebarOrderState(next);
-			}),
-		[],
-	);
 	useEffect(
 		() =>
 			onSidebarToolsChanged(() =>
@@ -336,34 +313,6 @@ export function AppearancePanel() {
 				Sidebar
 			</SettingsGroupLabel>
 			<SettingCard>
-				<SettingsRow className="flex-col !items-stretch">
-					<SettingRowText>
-						<SettingRowTitle>Section order</SettingRowTitle>
-						<SettingRowDescription>
-							Reorder the sections below Tools. Stored per user and follows you
-							across devices.
-						</SettingRowDescription>
-					</SettingRowText>
-					<Reorder.Group
-						as="div"
-						axis="y"
-						values={sidebarOrder}
-						onReorder={(next: SidebarSectionId[]) => {
-							sidebarOrderRef.current = next;
-							setSidebarOrderState(next);
-						}}
-						className="mt-2 overflow-hidden rounded-lg bg-surface"
-					>
-						{sidebarOrder.map((section, index) => (
-							<SidebarOrderRow
-								key={section}
-								section={section}
-								index={index}
-								onCommit={() => setSidebarOrder(sidebarOrderRef.current)}
-							/>
-						))}
-					</Reorder.Group>
-				</SettingsRow>
 				<SettingRow
 					title="Row density"
 					desc="Compact tightens the sidebar so more workspaces fit on screen. Phone layouts keep their larger touch targets at either setting."
@@ -437,50 +386,5 @@ export function AppearancePanel() {
 				))}
 			</SettingCard>
 		</SettingsPanel>
-	);
-}
-
-function SidebarOrderRow({
-	section,
-	index,
-	onCommit,
-}: {
-	section: SidebarSectionId;
-	index: number;
-	onCommit: () => void;
-}) {
-	return (
-		<Reorder.Item
-			as="div"
-			value={section}
-			onDragEnd={onCommit}
-			whileDrag={{
-				scale: 1.015,
-				zIndex: 3,
-				borderRadius: "calc(8px * var(--rf))",
-				boxShadow: "0 8px 24px rgba(0, 0, 0, 0.24)",
-			}}
-			className="relative flex min-h-11 touch-none cursor-grab select-none items-center gap-2 border-b border-line bg-surface px-3 first:rounded-t-lg last:rounded-b-lg last:border-b-0 active:cursor-grabbing"
-		>
-			<span className="w-5 text-meta tabular-nums text-faint">
-				{index + 1}
-			</span>
-			<span className="min-w-0 flex-1 text-item-title font-medium text-fg">
-				{SIDEBAR_SECTION_LABELS[section]}
-			</span>
-			<span
-				className="inline-flex size-9 items-center justify-center text-faint"
-				aria-hidden="true"
-			>
-				<svg width="18" height="18" viewBox="0 0 18 18" fill="currentColor" aria-hidden="true">
-					<circle cx="6" cy="4" r="1.2" />
-					<circle cx="12" cy="4" r="1.2" />
-					<circle cx="6" cy="9" r="1.2" />
-					<circle cx="12" cy="9" r="1.2" />
-					<circle cx="6" cy="14" r="1.2" />
-					<circle cx="12" cy="14" r="1.2" />
-				</svg>
-			</span>
-		</Reorder.Item>
 	);
 }
