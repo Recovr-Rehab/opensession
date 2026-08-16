@@ -181,6 +181,7 @@ import {
   readLocalInstructions,
 } from "./opencode-policy";
 import { buildRunInstructions } from "./run-instructions";
+import { logStandingContext } from "./context-log";
 import { bashAskPolicyReply } from "./command-policy";
 import {
   appendOpencodeTranscript,
@@ -1642,6 +1643,13 @@ export async function* runPi(
             tool: "sessions",
           }
         : undefined,
+    });
+
+    logStandingContext({
+      sessionId: unifiedSessionId,
+      turnId: opts.promptEntryId || opts.startToken,
+      source: "instructions",
+      content: instructions,
     });
 
     const agentDir = `${PI_STATE_DIR}/agent`;

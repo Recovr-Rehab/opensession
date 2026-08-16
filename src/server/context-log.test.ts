@@ -530,6 +530,33 @@ describe("context-log: standing context is recorded on change, not per turn", ()
 		);
 	});
 
+	test("pi instructions record once across turns, and again only when the text changes", () => {
+		const sessionId = "os-std-pi-instructions";
+		const text = "## Run policy\nkeep the checkout intact\n";
+		for (const turnId of ["turn-1", "turn-2"]) {
+			logStandingContext({
+				sessionId,
+				turnId,
+				source: "instructions",
+				content: text,
+			});
+		}
+
+		expect(standing(sessionId, "instructions")).toHaveLength(1);
+		logStandingContext({
+			sessionId,
+			turnId: "turn-3",
+			source: "instructions",
+			content: `${text}use the private index\n`,
+		});
+		const rows = standing(sessionId, "instructions");
+		expect(rows).toHaveLength(2);
+		expect(rows.map((row) => row.contextInjection?.turnId)).toEqual([
+			"turn-1",
+			"turn-3",
+		]);
+	});
+
 	test("nothing is recorded for a session-less run", async () => {
 		__setEngineForTest(makeFakeEngine([{ kind: "clean" }]).engine);
 		await drain(
