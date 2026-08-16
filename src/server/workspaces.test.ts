@@ -118,6 +118,25 @@ describe("workspaceName", () => {
 	test("refuses an unsafe id", () => {
 		expect(workspaceName("../etc/passwd")).toBeNull();
 	});
+
+	test("follows the active state root", () => {
+		const otherRoot = mkdtempSync(join(tmpdir(), "opensession-workspaces-other-"));
+		const id = "ws-state-root-switch";
+		try {
+			createWorkspace({ id, name: "First root", createdBy: "Kent" });
+			expect(workspaceName(id)).toBe("First root");
+
+			process.env.OPENSESSION_STATE_DIR = otherRoot;
+			createWorkspace({ id, name: "Second root", createdBy: "Kent" });
+			expect(workspaceName(id)).toBe("Second root");
+
+			process.env.OPENSESSION_STATE_DIR = scratch;
+			expect(workspaceName(id)).toBe("First root");
+		} finally {
+			process.env.OPENSESSION_STATE_DIR = scratch;
+			rmSync(otherRoot, { recursive: true, force: true });
+		}
+	});
 });
 
 // Open Session's own repo was renamed, and workspaces written before it still
