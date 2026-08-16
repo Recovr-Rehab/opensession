@@ -729,27 +729,38 @@ export function App(
 	});
 	const sidebarWidthRef = useRef(sidebarWidth);
 	sidebarWidthRef.current = sidebarWidth;
+	// The column the width lands on, so a drag can write it without a render.
+	const sidebarColRef = useRef<HTMLDivElement>(null);
 	function startSidebarResize(e: React.MouseEvent) {
 		e.preventDefault();
 		document.body.classList.add("resizing-sidebar");
 		// Snap Motion layout morphs while dragging — the composer + sidebar rows
 		// re-measure on every step, so springing them reads as funky text.
 		const restoreMotion = suppressLayoutAnimations();
+		// Only the column reads the width mid-drag, and it reads it as a custom
+		// property. Routing every pointer event through state instead re-ran the
+		// whole shell (list filter + sort, command actions, every pane prop) at
+		// pointer rate; the state catches up once, on drop.
+		let width = sidebarWidthRef.current;
+		let frame = 0;
+		const paint = () => {
+			frame = 0;
+			sidebarColRef.current?.style.setProperty("--sidebar-w", `${width}px`);
+		};
 		const onMove = (ev: MouseEvent) => {
 			// The sidebar is the leftmost element, so the pointer's x is its width.
-			const w = Math.min(480, Math.max(200, ev.clientX));
-			sidebarWidthRef.current = w;
-			setSidebarWidth(w);
+			width = Math.min(480, Math.max(200, ev.clientX));
+			sidebarWidthRef.current = width;
+			if (!frame) frame = requestAnimationFrame(paint);
 		};
 		const onUp = () => {
 			document.body.classList.remove("resizing-sidebar");
 			restoreMotion();
 			window.removeEventListener("mousemove", onMove);
 			window.removeEventListener("mouseup", onUp);
-			localStorage.setItem(
-				"opensession-sidebar-w",
-				String(Math.round(sidebarWidthRef.current)),
-			);
+			if (frame) cancelAnimationFrame(frame);
+			setSidebarWidth(width);
+			localStorage.setItem("opensession-sidebar-w", String(Math.round(width)));
 		};
 		window.addEventListener("mousemove", onMove);
 		window.addEventListener("mouseup", onUp);
@@ -3961,6 +3972,7 @@ export function App(
 					    platform chrome (html.material-backdrop, the reduced-transparency
 					    fallback) paints this surface by name. */}
 					<div
+						ref={sidebarColRef}
 						className={cn(
 							"sidebar-container flex min-h-0 shrink-0 flex-col bg-sidebar [--sidebar-icon-left:16px]",
 							// Desktop and the exposed workspace gutter share one chrome

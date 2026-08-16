@@ -290,6 +290,7 @@ import {
   maskOpenaiAccount,
   opencodeHasNativeOpenaiAuth,
   openaiPromptVariant,
+  type OpenaiAuthMechanism,
 } from "./opencode-openai-auth";
 import {
   markCodexExhausted,
@@ -2616,6 +2617,21 @@ export type OpencodeTurnFailure =
   | { kind: "provider_overloaded"; message: string }
   | { kind: "other"; message: string };
 
+type BridgeAccountState =
+  | { kind: "meridian"; account: ClaudeAccount; livenessGuard: true }
+  | { kind: "openai"; account: CodexAccount; livenessGuard: boolean };
+
+export function openaiBridgeAccountState(
+  account: CodexAccount,
+  mechanism: OpenaiAuthMechanism,
+): Extract<BridgeAccountState, { kind: "openai" }> {
+  return {
+    kind: "openai",
+    account,
+    livenessGuard: mechanism !== "api-key",
+  };
+}
+
 export function classifyOpencodeTurnFailure(
   providerID: string,
   message: string,
@@ -3677,16 +3693,10 @@ async function* runOpencodeAttempt(
   let bridgeRunEnd: (status: string, detail?: string) => void = () => {};
   // Liveness guard: subscription-bridge runs (meridian / openai) that hang at
   // an auth wall never produce output; the 60-min turn deadline is uselessly
-  // long for that. When set, a run that emits nothing within LIVENESS_MS aborts
-  // with a clear error. `bridgeAccountLabel` names the account in that error.
-  let bridgeLivenessGuard = false;
-  let bridgeAccountLabel = "";
-  // Meridian-bridge account for this attempt (anthropic runs): rotation and
-  // exhaustion-marking need the id, not just the display label.
-  let pickedMeridian: ClaudeAccount | undefined;
-  // Codex account for this attempt (openai runs) — same role as pickedMeridian
-  // for the openai-side sideline + rotate on usage limits.
-  let pickedOpenai: CodexAccount | undefined;
+  // long for that. The account state also retains API-key bindings for usage-
+  // limit rotation while leaving their OAuth-only liveness guard disabled.
+  let bridgeAccount: BridgeAccountState | undefined;
+  const bridgeAccountLabel = () => bridgeAccount?.account.name || "";
   // The provider's most recent in-turn retry error (opencode retries stream
   // errors internally with backoff and stays silent while doing so — the
   // RetryPart / session.status events are the only visibility we get).
@@ -3885,9 +3895,7 @@ async function* runOpencodeAttempt(
             ...(detail ? { error: detail } : {}),
           });
         };
-        bridgeLivenessGuard = true;
-        bridgeAccountLabel = picked.name;
-        pickedMeridian = picked;
+        bridgeAccount = { kind: "meridian", account: picked, livenessGuard: true };
       } else if (bridgeMode === "native") {
         const bridge = ensureAnthropicBridge();
         bridgeTag = "anthropic-native";
@@ -3983,14 +3991,9 @@ async function* runOpencodeAttempt(
             ...(detail ? { error: detail } : {}),
           });
         };
-        // API-key runs authenticate synchronously (no OAuth wall to hang on);
-        // guard only the subscription paths (local-seeded and remote-seeded)
-        // where an auth hang is possible.
-        if (bound.mechanism !== "api-key") {
-          bridgeLivenessGuard = true;
-          bridgeAccountLabel = picked.name;
-          pickedOpenai = picked;
-        }
+        // API-key runs authenticate synchronously (no OAuth wall to hang on),
+        // but still retain their account for usage-limit rotation.
+        bridgeAccount = openaiBridgeAccountState(picked, bound.mechanism);
       }
       // picked.error (no codex accounts) ⇒ fall through to opencode's own
       // host auth (`opencode auth login`) — but only when that credential
@@ -4792,10 +4795,10 @@ async function* runOpencodeAttempt(
       const message =
         info.kind === "request"
           ? `opencode turn produced no output for ${Math.round(info.quietMs / 60_000)} min ` +
-            `on account "${bridgeAccountLabel}" with no tool running — the provider request ` +
+            `on account "${bridgeAccountLabel()}" with no tool running — the provider request ` +
             "died without surfacing an error (wedged bridge or silent retry backoff); aborting"
           : `opencode task subagent produced no output for ${Math.round(info.quietMs / 60_000)} min ` +
-            `on account "${bridgeAccountLabel}" — the engine bridge wedged mid-turn ` +
+            `on account "${bridgeAccountLabel()}" — the engine bridge wedged mid-turn ` +
             "(new requests hang while established streams keep flowing); aborting";
       turnFailure = classifyOpencodeTurnFailure(
         parsed.providerID,
@@ -4862,7 +4865,7 @@ async function* runOpencodeAttempt(
       const subIssue = isClaudeSubscriptionError(message);
       if (
         parsed.providerID === "anthropic" &&
-        pickedMeridian &&
+        bridgeAccount?.kind === "meridian" &&
         !turnFailure &&
         (isClaudeUsageLimitError(message, true) || subIssue)
       ) {
@@ -4875,7 +4878,7 @@ async function* runOpencodeAttempt(
         turnFailure = classifyOpencodeTurnFailure(
           parsed.providerID,
           `${subIssue ? "Claude subscription issue" : "Claude usage limit"} on account ` +
-            `"${bridgeAccountLabel}": ${message.slice(0, 300)}`,
+            `"${bridgeAccountLabel()}": ${message.slice(0, 300)}`,
           "usage_limit",
         );
         engineAbortInFlight = client.session
@@ -4891,10 +4894,14 @@ async function* runOpencodeAttempt(
       // usage-limit lane: the accounts this hit were healthy and in heavy use
       // elsewhere at the time, so an hours-long sideline would punish a good
       // account for what is a spawn-time failure on this box.
-      if (pickedMeridian && !turnFailure && isClaudeBridgeLaunchError(message)) {
+      if (
+        bridgeAccount?.kind === "meridian" &&
+        !turnFailure &&
+        isClaudeBridgeLaunchError(message)
+      ) {
         turnFailure = classifyOpencodeTurnFailure(
           parsed.providerID,
-          `opencode could not launch Claude Code on account "${bridgeAccountLabel}": ` +
+          `opencode could not launch Claude Code on account "${bridgeAccountLabel()}": ` +
             `${message.slice(0, 300)}`,
           "liveness_wedge",
         );
@@ -4909,13 +4916,13 @@ async function* runOpencodeAttempt(
       // downstream.
       if (
         parsed.providerID === "openai" &&
-        pickedOpenai &&
+        bridgeAccount?.kind === "openai" &&
         !turnFailure &&
         isCodexUsageLimitError(message)
       ) {
         turnFailure = classifyOpencodeTurnFailure(
           parsed.providerID,
-          `OpenAI usage limit on codex account "${bridgeAccountLabel}": ${message.slice(0, 300)}`,
+          `OpenAI usage limit on codex account "${bridgeAccountLabel()}": ${message.slice(0, 300)}`,
           "usage_limit",
         );
         engineAbortInFlight = client.session
@@ -4930,7 +4937,7 @@ async function* runOpencodeAttempt(
       ) {
         turnFailure = classifyOpencodeTurnFailure(
           parsed.providerID,
-          `OpenAI provider overloaded on account "${bridgeAccountLabel}": ${message.slice(0, 300)}`,
+          `OpenAI provider overloaded on account "${bridgeAccountLabel()}": ${message.slice(0, 300)}`,
           "provider_overloaded",
         );
         engineAbortInFlight = client.session
@@ -4978,7 +4985,7 @@ async function* runOpencodeAttempt(
         providerStallNoticed = true;
         appendOpencodeTranscript(ocSessionId, [
           transcriptLineRunnerNotice(
-            `Provider stream is stalling on account "${bridgeAccountLabel}" — the engine is retrying ` +
+            `Provider stream is stalling on account "${bridgeAccountLabel()}" — the engine is retrying ` +
               `(${message.slice(0, 160)}). If it keeps making no progress the run auto-respawns the ` +
               `engine and retries.`
           ),
@@ -5008,7 +5015,7 @@ async function* runOpencodeAttempt(
       turnFailure = classifyOpencodeTurnFailure(
         parsed.providerID,
         `opencode ${parsed.providerID} run made no progress for ${Math.round(stalledMs / 60_000)} min ` +
-          `on account "${bridgeAccountLabel}": ${providerRetryStreak} provider retries with no output ` +
+          `on account "${bridgeAccountLabel()}": ${providerRetryStreak} provider retries with no output ` +
           `in between (last: ${message.slice(0, 200)}); aborting`,
         "liveness_wedge",
       );
@@ -5157,7 +5164,7 @@ async function* runOpencodeAttempt(
           const normalizedEffort = normalizeModelEffort(model, effort);
           return openaiPromptVariant(
             normalizedEffort,
-            !!opts.fastMode && !!pickedOpenai,
+            !!opts.fastMode && bridgeAccount?.kind === "openai",
           );
         })(),
         // Shared servers: session context (`system` appends to opencode's own
@@ -5205,7 +5212,7 @@ async function* runOpencodeAttempt(
     // nothing has streamed within LIVENESS_MS, abort with a clear error naming
     // the account, rather than holding the session busy for an hour.
     const LIVENESS_MS = 90_000;
-    const livenessTimer = bridgeLivenessGuard
+    const livenessTimer = bridgeAccount?.livenessGuard
       ? setTimeout(() => {
           if (sawFirstOutput || idle || abortController.signal.aborted) return;
           // Name the real cause when the provider told us (captured retry
@@ -5217,10 +5224,10 @@ async function* runOpencodeAttempt(
             parsed.providerID === "openai" ? isCodexUsageLimitError : (m: string) => isClaudeUsageLimitError(m, true);
           const message = lastProviderRetryError
             ? `opencode ${parsed.providerID} run produced no output within ${LIVENESS_MS / 1000}s — ` +
-              `the provider kept retrying on account "${bridgeAccountLabel}": ` +
+              `the provider kept retrying on account "${bridgeAccountLabel()}": ` +
               `${lastProviderRetryError.slice(0, 300)}; aborting`
             : `opencode ${parsed.providerID} run produced no output within ${LIVENESS_MS / 1000}s — ` +
-              `the engine bridge on account "${bridgeAccountLabel}" went silent (wedged proxy or auth hang); aborting`;
+              `the engine bridge on account "${bridgeAccountLabel()}" went silent (wedged proxy or auth hang); aborting`;
           turnFailure ??= classifyOpencodeTurnFailure(
             parsed.providerID,
             message,
@@ -5374,8 +5381,9 @@ async function* runOpencodeAttempt(
       // another eligible account exists, ask the wrapper for one retry on it
       // instead of failing the turn. No account left ⇒ terminal error with
       // usageLimitExhausted so agent-runner's model fallback takes over.
-      if (failure.kind === "usage_limit" && pickedMeridian) {
+      if (failure.kind === "usage_limit" && bridgeAccount?.kind === "meridian") {
         {
+          const account = bridgeAccount.account;
           const failureDetail = (lastProviderRetryError || failure.message).toLowerCase();
           const exhaustedModel =
             meridianModels.find(
@@ -5385,7 +5393,7 @@ async function* runOpencodeAttempt(
                   required.replace(/^claude-/, "").replace(/-\d+$/, "")
                 )
             ) || parsed.modelID;
-          markExhausted(pickedMeridian.id, exhaustedModel);
+          markExhausted(account.id, exhaustedModel);
           if (rotation) {
             const repickNext = () => {
               const p = pickMeridianAccount(
@@ -5441,7 +5449,7 @@ async function* runOpencodeAttempt(
               bridgeRunEnd("error", failure.message);
               rotation.rotate = true;
               rotation.note =
-                `Usage limit on "${pickedMeridian.name}" ` +
+                `Usage limit on "${account.name}" ` +
                 `(${parsed.modelID}); switched to "${next.name}".`;
               return;
             }
@@ -5462,9 +5470,10 @@ async function* runOpencodeAttempt(
       // exists; the rotation rerun re-picks at bind time, which now skips the
       // sidelined account. No account left ⇒ terminal with usageLimitExhausted
       // so agent-runner's model fallback takes over.
-      if (failure.kind === "usage_limit" && pickedOpenai) {
+      if (failure.kind === "usage_limit" && bridgeAccount?.kind === "openai") {
         {
-          markCodexExhausted(pickedOpenai.id, parsed.modelID);
+          const account = bridgeAccount.account;
+          markCodexExhausted(account.id, parsed.modelID);
           const next = pickOpenaiAccount(
             parsed.modelID,
             readOpencodeBridgeConfig()?.openaiAccounts,
@@ -5474,12 +5483,12 @@ async function* runOpencodeAttempt(
             opts.accountId,
             opts.accountStrict,
           );
-          if (rotation && !("error" in next) && next.id !== pickedOpenai.id) {
+          if (rotation && !("error" in next) && next.id !== account.id) {
             turnEvent({ direction: "out", kind: "account_switch", account: next.name });
             bridgeRunEnd("error", failure.message);
             rotation.rotate = true;
             rotation.note =
-              `Usage limit on "${pickedOpenai.name}" ` +
+              `Usage limit on "${account.name}" ` +
               `(${parsed.modelID}); switched to "${next.name}".`;
             return;
           }
@@ -5505,8 +5514,9 @@ async function* runOpencodeAttempt(
       // the pool even though this run won't retry again.
       let wedgeSwitchTo: string | undefined;
       if (failure.kind === "liveness_wedge") {
-        if (pickedOpenai) {
-          const marked = markCodexWedged(pickedOpenai.id);
+        if (bridgeAccount?.kind === "openai") {
+          const account = bridgeAccount.account;
+          const marked = markCodexWedged(account.id);
           const next = pickOpenaiAccount(
             parsed.modelID,
             readOpencodeBridgeConfig()?.openaiAccounts,
@@ -5516,13 +5526,14 @@ async function* runOpencodeAttempt(
             opts.accountId,
             opts.accountStrict,
           );
-          if ("error" in next || next.id === pickedOpenai.id) {
-            if (marked) clearCodexWedge(pickedOpenai.id);
+          if ("error" in next || next.id === account.id) {
+            if (marked) clearCodexWedge(account.id);
           } else {
             wedgeSwitchTo = next.name;
           }
-        } else if (pickedMeridian) {
-          const marked = markWedged(pickedMeridian.id);
+        } else if (bridgeAccount?.kind === "meridian") {
+          const account = bridgeAccount.account;
+          const marked = markWedged(account.id);
           const next = pickMeridianAccount(
             user,
             meridianModels,
@@ -5534,8 +5545,8 @@ async function* runOpencodeAttempt(
             true,
             opts.usageCredits,
           );
-          if ("error" in next || next.id === pickedMeridian.id) {
-            if (marked) clearWedge(pickedMeridian.id);
+          if ("error" in next || next.id === account.id) {
+            if (marked) clearWedge(account.id);
           } else {
             wedgeSwitchTo = next.name;
           }
@@ -5584,9 +5595,9 @@ async function* runOpencodeAttempt(
         if (failure.kind === "liveness_wedge") turn.wedgeRetries++;
         rotation.rotate = true;
         rotation.note = failure.kind === "liveness_wedge"
-          ? `Engine went silent on "${bridgeAccountLabel}"; restarted and retrying` +
+          ? `Engine went silent on "${bridgeAccountLabel()}"; restarted and retrying` +
             (wedgeSwitchTo ? ` on "${wedgeSwitchTo}".` : ".")
-          : `Engine error on "${bridgeAccountLabel}"; retrying.`;
+          : `Engine error on "${bridgeAccountLabel()}"; retrying.`;
         return;
       }
       turnEvent({ direction: "out", kind: "error", error: failure.message });
@@ -5661,7 +5672,7 @@ async function* runOpencodeAttempt(
     if (info?.error?.name === "MessageAbortedError" && !textOut) {
       const abortedMsg =
         `opencode engine turn was aborted externally before producing output ` +
-        `on account "${bridgeAccountLabel}"`;
+        `on account "${bridgeAccountLabel()}"`;
       // Not gated on attemptIndex: opencode latches an abort issued while no
       // message is running and applies it to the NEXT prompt, so a wedge
       // retry (attempt 1) is a common victim (seen 19:06 2026-07-16, fence
@@ -5714,7 +5725,7 @@ async function* runOpencodeAttempt(
     if (!textOut.trim()) {
       const emptyMessage =
         `opencode ${parsed.providerID} returned a successful stop with no final text ` +
-        `on account "${bridgeAccountLabel}"`;
+        `on account "${bridgeAccountLabel()}"`;
       // Strip the empty message when it carries no tool work either: a
       // reasoning-only assistant tail poisons every later request on the
       // OpenAI Responses backend, so leave it in place and the continuation —

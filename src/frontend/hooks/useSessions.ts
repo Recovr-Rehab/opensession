@@ -60,6 +60,11 @@ export function useSessions({
   // When the live list last came back. Settles a local unarchive: a poll that
   // STARTED after the change and still doesn't list the session means the
   // change didn't take, and the override should stop hiding the archived row.
+  // Every poll writes it, including the byte-identical ones the ETag and
+  // `lastTextRef` guards exist to make free — as state that re-rendered the
+  // whole app every 5s for nothing. The ref is the value; the state is only
+  // the trigger, promoted while an override is actually waiting on it.
+  const liveAtRef = useRef(0);
   const [liveAt, setLiveAt] = useState(0);
   const [archivedIndex, setArchivedIndex] = useState<UnifiedSession[] | null>(
     null,
@@ -83,6 +88,11 @@ export function useSessions({
   // in the archived index has nothing in `live` to flip, so `patch` puts it
   // there. Assigned below, once the merge has run.
   const mergedRef = useRef<UnifiedSession[]>(live);
+  // Read by the poll to decide whether anything is waiting on `liveAt`.
+  const locallyArchivedRef = useRef(locallyArchived);
+  locallyArchivedRef.current = locallyArchived;
+  const locallyUnarchivedRef = useRef(locallyUnarchived);
+  locallyUnarchivedRef.current = locallyUnarchived;
   // Raw JSON text of the last applied poll. When a poll returns byte-identical
   // data (the common case every 5s), skip setSessions entirely — a fresh array
   // identity would otherwise re-render the whole app (Sidebar memos, the open
@@ -139,7 +149,12 @@ export function useSessions({
             applyServer(JSON.parse(snapshot.text));
           }
         }
-        setLiveAt(startedAt);
+        liveAtRef.current = startedAt;
+        if (
+          locallyArchivedRef.current.size > 0 ||
+          locallyUnarchivedRef.current.size > 0
+        )
+          setLiveAt(startedAt);
         setLoading(false);
         setError(null);
       } catch (e: any) {
@@ -270,7 +285,7 @@ export function useSessions({
     if (locallyArchived.size === 0 && locallyUnarchived.size === 0) return;
     const settled = settledOverrides({
       live,
-      liveAt,
+      liveAt: liveAtRef.current,
       archivedIndex,
       archivedIndexAt,
       locallyArchived,
@@ -288,6 +303,9 @@ export function useSessions({
         for (const id of settled.unarchived) next.delete(id);
         return next;
       });
+    // `liveAt` is here as the trigger for a poll that landed with an override
+    // pending; the value the settle reads is the ref above, which every poll
+    // updates.
   }, [
     live,
     liveAt,
