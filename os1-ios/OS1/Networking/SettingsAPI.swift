@@ -528,6 +528,57 @@ enum SettingsAPI {
         )
     }
 
+    // MARK: - Identity
+
+    static func instanceIdentity() async throws -> InstanceIdentitySettings {
+        try await request("/api/settings/identity")
+    }
+
+    /// An empty string is meaningful here: the server reads it as "restore
+    /// the built-in default" rather than as a name of no characters, and
+    /// answers with the default it fell back to.
+    static func saveInstanceIdentity(_ patch: [String: Any]) async throws -> InstanceIdentitySettings {
+        try await request("/api/settings/identity", method: "PUT", body: patch)
+    }
+
+    // MARK: - Members
+
+    static func teamMembers() async throws -> TeamMembersResponse {
+        try await request("/api/setup/team")
+    }
+
+    static func addTeamMember(_ body: [String: Any]) async throws -> TeamMemberResponse {
+        try await request("/api/setup/team", method: "POST", body: body)
+    }
+
+    /// Addressed by the member's CURRENT name, because a rename rides inside
+    /// the patch: the path says who is being edited, the body says what to.
+    static func updateTeamMember(name: String, patch: [String: Any]) async throws -> TeamMemberResponse {
+        try await request("/api/setup/team/\(segment(name))", method: "PUT", body: patch)
+    }
+
+    /// A POST, not a DELETE: the route spells removal as an action on the
+    /// member so a stray DELETE on the roster path cannot empty it.
+    static func removeTeamMember(name: String) async throws -> SettingsOK {
+        try await request("/api/setup/team/\(segment(name))/remove", method: "POST")
+    }
+
+    // MARK: - Integrations
+
+    /// Only the flag. Credentials are declared per integration and validated
+    /// server-side, and this client never sends one.
+    static func setIntegrationEnabled(id: String, enabled: Bool) async throws -> IntegrationUpdateResponse {
+        try await request(
+            "/api/setup/integrations/\(segment(id))",
+            method: "PUT",
+            body: ["enabled": enabled]
+        )
+    }
+
+    static func setGithubSignIn(enabled: Bool) async throws -> GithubSignInResponse {
+        try await request("/api/setup/github", method: "PUT", body: ["userPrAuth": enabled])
+    }
+
     // MARK: - Transport
 
     private static func request<T: Decodable & Sendable>(

@@ -1150,27 +1150,18 @@ enum OS1API {
             let names: [String]?
         }
 
-        struct Github: Codable, Sendable {
-            let userPrAuth: Bool?
-            let clientIdConfigured: Bool?
-            let redirectFlowAvailable: Bool?
-            let botTokenPresent: Bool?
-            let callbackUrl: String?
-        }
-
-        struct Integration: Codable, Sendable {
-            let id: String
-            let label: String?
-            let enabled: Bool?
-            let missingRequired: [String]?
-        }
-
         let publicBaseUrl: String?
         let repos: [Repo]?
         let team: Team?
         let engine: Engine?
-        let github: Github?
-        let integrations: [Integration]?
+        // The integration and sign-in halves are the settings models, not a
+        // second lean copy: Settings -> Integrations manages what this
+        // checklist reports, and two decodes of one payload drift.
+        // Settable: the Integrations page writes a changed integration back
+        // into the snapshot it is showing, so returning to the list does not
+        // wait for a refetch to reflect a switch that already landed.
+        var github: GithubSignInSettings?
+        var integrations: [IntegrationSettings]?
     }
 
     static func setupStatus() async throws -> SetupStatus {

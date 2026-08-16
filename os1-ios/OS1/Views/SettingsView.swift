@@ -95,8 +95,18 @@ struct SettingsView: View {
                 settingsLink("Setup", icon: "checklist") {
                     SetupSettingsView()
                 }
+                // Three glyphs of a person in one settings screen, so each
+                // says which one: a name card for what the instance is
+                // called, a crop of one face for your own sign-ins, two
+                // figures for the roster of everybody.
+                settingsLink("Identity", icon: "person.text.rectangle") {
+                    IdentitySettingsView()
+                }
                 settingsLink("Repositories", icon: "shippingbox") {
                     RepositoriesSettingsView()
+                }
+                settingsLink("Members", icon: "person.2") {
+                    MembersSettingsView()
                 }
                 settingsLink("Models", icon: "square.grid.2x2") {
                     ModelsSettingsView()
@@ -113,6 +123,9 @@ struct SettingsView: View {
                 }
                 settingsLink("Runners", icon: "desktopcomputer") {
                     RunnersSettingsView()
+                }
+                settingsLink("Integrations", icon: "puzzlepiece.extension") {
+                    IntegrationsSettingsView()
                 }
                 settingsLink("Connections", icon: "point.3.connected.trianglepath.dotted") {
                     ConnectionsSettingsView()

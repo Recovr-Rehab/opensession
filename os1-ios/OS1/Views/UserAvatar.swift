@@ -16,9 +16,15 @@ import UIKit
 struct UserAvatar: View {
     /// Display name, as the server sends it. nil = whoever is signed in here.
     var person: String?
+    /// Their GitHub login, when the caller already holds it. The roster does,
+    /// and the directory this would otherwise resolve through is filled from
+    /// /api/people, which an instance can leave empty — so without this the
+    /// one screen that knows every login still draws initials.
+    var login: String?
     var size: CGFloat = 26
 
-    private var login: String {
+    private var resolvedLogin: String {
+        if let login, !login.isEmpty { return login }
         guard let person else { return ServerConfig.shared.githubLogin }
         return TeamDirectory.shared.githubLogin(for: person) ?? ""
     }
@@ -43,7 +49,7 @@ struct UserAvatar: View {
         .frame(width: size, height: size)
         .clipShape(Circle())
         .accessibilityLabel(name.isEmpty ? "You" : name)
-        .task(id: login) {
+        .task(id: resolvedLogin) {
             if let url = avatarURL {
                 await AvatarImageCache.shared.ensureLoaded(url)
             }
@@ -51,10 +57,10 @@ struct UserAvatar: View {
     }
 
     private var avatarURL: URL? {
-        guard !login.isEmpty else { return nil }
+        guard !resolvedLogin.isEmpty else { return nil }
         // GitHub serves any account's avatar at github.com/<login>.png; 3x the
         // point size keeps it crisp on retina displays.
-        return URL(string: "https://github.com/\(login).png?size=\(Int(size * 3))")
+        return URL(string: "https://github.com/\(resolvedLogin).png?size=\(Int(size * 3))")
     }
 
     private var initialCircle: some View {
@@ -67,7 +73,7 @@ struct UserAvatar: View {
     }
 
     private var initial: String {
-        let source = name.isEmpty ? login : name
+        let source = name.isEmpty ? resolvedLogin : name
         guard let first = source.trimmingCharacters(in: .whitespaces).first else {
             return "?"
         }
@@ -77,7 +83,7 @@ struct UserAvatar: View {
     /// Stable per-name hue so the fallback doesn't shift between launches
     /// (Swift's hashValue is seeded per-process).
     private var fallbackColor: Color {
-        let source = name.isEmpty ? login : name
+        let source = name.isEmpty ? resolvedLogin : name
         var hash: UInt32 = 2166136261
         for byte in source.utf8 {
             hash = (hash ^ UInt32(byte)) &* 16777619

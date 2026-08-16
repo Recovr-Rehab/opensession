@@ -36,8 +36,6 @@ struct SetupSettingsView: View {
                 gettingStarted(status)
                 yourAccounts()
                 repositories(status)
-                team(status)
-                integrations(status)
             } else if loading {
                 Section { ProgressView("Loading setup…") }
             } else if error == nil {
@@ -94,28 +92,40 @@ struct SetupSettingsView: View {
                 )
             }
 
+            // Each remaining row is the way into the page that owns it, so
+            // this screen stays a checklist. It used to repeat the roster and
+            // the integration list underneath itself, which is one more place
+            // for the same facts to be stated differently.
             let team = s.team
             let count = team?.count ?? 0
-            StatusRow(
-                title: "Team roster",
-                detail: count > 0
-                    ? (team?.names ?? []).joined(separator: ", ")
-                    : "Add teammates so commits and sessions attribute to real people.",
-                tone: count > 0 ? .on : .warn,
-                label: count > 0 ? "\(count) \(count == 1 ? "member" : "members")" : "Empty"
-            )
-
-            if let github = s.github {
-                let state = githubState(github)
+            NavigationLink {
+                MembersSettingsView()
+            } label: {
                 StatusRow(
-                    title: "GitHub sign-in",
-                    detail: (github.userPrAuth ?? false) && (github.clientIdConfigured ?? false)
-                        ? "Teammates sign in with GitHub and open PRs as themselves."
-                        : "Off, so the UI uses the name picker and PRs come from the bot account. It needs an OAuth app, set up on the web.",
-                    tone: state.tone,
-                    label: state.label
+                    title: "Team roster",
+                    detail: count > 0
+                        ? (team?.names ?? []).joined(separator: ", ")
+                        : "Add teammates so commits and sessions attribute to real people.",
+                    tone: count > 0 ? .on : .warn,
+                    label: count > 0 ? "\(count) \(count == 1 ? "member" : "members")" : "Empty"
                 )
             }
+
+            if let github = s.github {
+                let state = IntegrationRules.githubState(github)
+                NavigationLink {
+                    IntegrationsSettingsView()
+                } label: {
+                    StatusRow(
+                        title: "GitHub sign-in",
+                        detail: IntegrationRules.githubDetail(github),
+                        tone: state.tone,
+                        label: state.label
+                    )
+                }
+            }
+
+            integrationsRow(s.integrations ?? [])
         } header: {
             Text("Getting started")
         }
@@ -203,51 +213,27 @@ struct SetupSettingsView: View {
         }
     }
 
+    /// How many integrations are actually on, as the way into the page that
+    /// turns them on. Credentials are still typed on the web — a key is
+    /// pasted from another screen and unreadable once stored — and the page
+    /// says so rather than this row carrying the caveat.
     @ViewBuilder
-    private func team(_ s: OS1API.SetupStatus) -> some View {
-        let names = s.team?.names ?? []
-        if !names.isEmpty {
-            Section("Team") {
-                ForEach(names, id: \.self) { name in
-                    Text(name)
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func integrations(_ s: OS1API.SetupStatus) -> some View {
-        let items = s.integrations ?? []
+    private func integrationsRow(_ items: [IntegrationSettings]) -> some View {
         if !items.isEmpty {
-            Section {
-                ForEach(items, id: \.id) { item in
-                    let state = integrationState(item)
-                    HStack(spacing: 8) {
-                        Text(item.label ?? item.id)
-                        Spacer(minLength: 8)
-                        StateChip(tone: state.tone, label: state.label)
-                    }
-                }
-            } header: {
-                Text("Integrations")
-            } footer: {
-                // The one line the brief for this screen has to carry: an API
-                // key is pasted from somewhere else and is unreadable once
-                // stored, so say where it gets finished instead of offering a
-                // field that can only be got wrong here.
-                Text("API keys are entered on the web at \(webHost(s)), under Settings → Setup.")
+            let on = items.filter { IntegrationRules.state($0).tone == .on }
+            NavigationLink {
+                IntegrationsSettingsView()
+            } label: {
+                StatusRow(
+                    title: "Integrations",
+                    detail: on.isEmpty
+                        ? "Connect the tools sessions read from and reply in."
+                        : on.map(\.title).joined(separator: ", "),
+                    tone: on.isEmpty ? .off : .on,
+                    label: "\(on.count)/\(items.count) on"
+                )
             }
         }
-    }
-
-    /// Where the web UI lives, for the rows this screen deliberately can't
-    /// finish. The server's own `publicBaseUrl` rather than the address this
-    /// device dials, which on a tunnelled or tailnet setup is not the one a
-    /// teammate would type into a browser.
-    private func webHost(_ s: OS1API.SetupStatus) -> String {
-        let raw = s.publicBaseUrl ?? ServerConfig.shared.baseURLString
-        if let host = URL(string: raw)?.host, !host.isEmpty { return host }
-        return raw.isEmpty ? "the web UI" : raw
     }
 
     private func load() async {
@@ -276,27 +262,6 @@ enum SetupTone {
         case .off: OS1VisualStyle.textFaint
         }
     }
-}
-
-private func integrationState(
-    _ i: OS1API.SetupStatus.Integration
-) -> (tone: SetupTone, label: String) {
-    let enabled = i.enabled ?? false
-    let missing = i.missingRequired ?? []
-    if enabled && missing.isEmpty { return (.on, "On") }
-    if enabled { return (.warn, "Missing credentials") }
-    return (.off, "Off")
-}
-
-private func githubState(
-    _ g: OS1API.SetupStatus.Github
-) -> (tone: SetupTone, label: String) {
-    let userPrAuth = g.userPrAuth ?? false
-    if userPrAuth && (g.clientIdConfigured ?? false) {
-        return (.on, (g.redirectFlowAvailable ?? false) ? "Active" : "Device flow only")
-    }
-    if userPrAuth { return (.warn, "Missing client id") }
-    return (.off, "Off")
 }
 
 /// `start.sh` (or an instance `previewCommand`) is the load-bearing half —
@@ -333,7 +298,7 @@ private func lifecycleState(
 
 /// The web's `StateChip`: a tone dot and its word, sized to sit at the end of
 /// a row without competing with the row's own title.
-private struct StateChip: View {
+struct StateChip: View {
     let tone: SetupTone
     let label: String
 
