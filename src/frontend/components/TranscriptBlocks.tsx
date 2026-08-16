@@ -69,12 +69,25 @@ interface Props {
 	reviewLoopsOpen?: boolean;
 }
 
-function reviewHandoff(block: RenderBlock): number | null | undefined {
-	if (block.kind !== "entry") return undefined;
-	const notice = classifyEntry(block.entry).notice;
-	if (notice?.kind !== "review-handoff") return undefined;
-	const match = notice.title.match(/PR #(\d+)/);
-	return match ? Number(match[1]) : null;
+type ReviewBlockRole =
+	| { kind: "handoff"; prNumber: number | null }
+	| { kind: "user-message" }
+	| { kind: "other" };
+
+/** The same classification that chooses MessageBubble's presentation also
+ * decides whether a row starts or ends a review phase. Several operational
+ * notices have a legacy `type: "user"` wire shape, so the raw type alone
+ * cannot distinguish a person's request from status plumbing. */
+function reviewBlockRole(block: RenderBlock): ReviewBlockRole {
+	if (block.kind !== "entry") return { kind: "other" };
+	const entry = classifyEntry(block.entry);
+	if (entry.notice?.kind === "review-handoff") {
+		const match = entry.notice.title.match(/PR #(\d+)/);
+		return { kind: "handoff", prNumber: match ? Number(match[1]) : null };
+	}
+	return entry.type === "user" && !entry.notice
+		? { kind: "user-message" }
+		: { kind: "other" };
 }
 
 /** A review handoff and the agent work it triggers form one quiet phase. A
@@ -84,29 +97,28 @@ function groupReviewLoops(blocks: RenderBlock[]): RenderBlock[] {
 	const grouped: RenderBlock[] = [];
 	for (let i = 0; i < blocks.length; i++) {
 		const first = blocks[i];
-		const firstPr = reviewHandoff(first);
-		if (firstPr === undefined) {
+		const firstRole = reviewBlockRole(first);
+		if (firstRole.kind !== "handoff") {
 			grouped.push(first);
 			continue;
 		}
 		const loop: RenderBlock[] = [first];
 		let rounds = 1;
-		let prNumber = firstPr;
+		let prNumber = firstRole.prNumber;
 		while (i + 1 < blocks.length) {
 			const next = blocks[i + 1];
+			const nextRole = reviewBlockRole(next);
 			// Notes and walkthroughs have their own placement and must never vanish
 			// inside an automation disclosure.
 			if (next.kind === "note" || next.kind === "walkthrough") break;
 			// A normal user message is a new conversation phase. A second review
 			// handoff belongs to this loop and starts its next round.
-			if (next.kind === "entry" && next.entry.type === "user" && reviewHandoff(next) === undefined)
-				break;
+			if (nextRole.kind === "user-message") break;
 			i++;
 			loop.push(next);
-			const nextPr = reviewHandoff(next);
-			if (nextPr !== undefined) {
+			if (nextRole.kind === "handoff") {
 				rounds++;
-				prNumber ??= nextPr;
+				prNumber ??= nextRole.prNumber;
 			}
 		}
 		grouped.push({ kind: "review-loop", blocks: loop, prNumber, rounds });
@@ -261,7 +273,7 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 		!!reviewResult &&
 		lastReviewLoop >= 0 &&
 		!groupedBlocks.slice(lastReviewLoop + 1).some(
-			(block) => block.kind === "entry" && block.entry.type === "user",
+			(block) => reviewBlockRole(block).kind === "user-message",
 		);
 
 	return (
@@ -308,7 +320,7 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 												// Inside the fold the row is one child among many, so it
 												// carries its own lift onto the answer above it.
 												<TurnFooter className={TURN_FOOTER_LIFT} entry={inner.entry} durationMs={inner.durationMs} files={inner.files} assets={inner.assets} onFork={onFork} />
-											) : inner.kind === "entry" && reviewHandoff(inner) === undefined ? (
+											) : inner.kind === "entry" && reviewBlockRole(inner).kind !== "handoff" ? (
 												<MessageBubble
 													entry={inner.entry}
 													owner={owner}
