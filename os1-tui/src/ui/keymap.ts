@@ -10,7 +10,11 @@
 
 export type Pane = "sidebar" | "transcript" | "composer";
 
-export type Mode =
+/**
+ * Which keymap is live. The app's `Mode` (ui-state.ts) is the same set of
+ * names carrying per-mode state; the keymap only ever needs the name.
+ */
+export type ModeKind =
 	/** Moving around: sidebar/transcript focused, keys are commands. */
 	| "nav"
 	/** Typing a prompt. Printable keys belong to the input. */
@@ -23,6 +27,10 @@ export type Mode =
 	| "picker"
 	/** Command prompt (^b :). */
 	| "command"
+	/** Rename prompt (^b ,). */
+	| "rename"
+	/** New-session prompt (^b c). */
+	| "new"
 	/** Help overlay (^b ?). */
 	| "help";
 
@@ -75,7 +83,7 @@ export type Key = {
 };
 
 export type KeymapState = {
-	mode: Mode;
+	mode: ModeKind;
 	pane: Pane;
 	/** The prefix has been pressed; the next key is a prefix command. */
 	prefixArmed: boolean;
@@ -316,8 +324,12 @@ export function resolveKey(
 					return { prefixArmed: false, consumed: true };
 			}
 
+		// The prompt overlays: a textarea has focus, so only the keys that drive
+		// the overlay are taken and everything else is text.
 		case "picker":
 		case "command":
+		case "rename":
+		case "new":
 			if (key.name === "escape") return act({ type: "exit-mode" });
 			if (key.name === "return" || key.name === "enter") {
 				return act({ type: "open-selected" });

@@ -30,7 +30,7 @@ import { Sidebar } from "./sidebar";
 import { StatusBar } from "./status-bar";
 import { theme } from "./theme";
 import { Transcript } from "./transcript";
-import { UiStore } from "./ui-state";
+import { isPromptMode, MODE, UiStore, type Mode } from "./ui-state";
 
 /** The scroll verbs, pulled off the Action union so scrollBy can name them. */
 type ScrollBy = Extract<Action, { type: "scroll" }>["by"];
@@ -138,8 +138,8 @@ export function App({
 	// until a human acts. Typing is never interrupted — only nav mode yields.
 	useEffect(() => {
 		const current = uiStore.getState();
-		if (state.ask && current.mode === "nav") uiStore.set({ mode: "ask" });
-		if (!state.ask && current.mode === "ask") uiStore.set({ mode: "nav" });
+		if (state.ask && current.mode.kind === "nav") uiStore.set({ mode: MODE.ask });
+		if (!state.ask && current.mode.kind === "ask") uiStore.set({ mode: MODE.nav });
 	}, [state.ask, uiStore]);
 
 	useEffect(() => {
@@ -150,6 +150,11 @@ export function App({
 
 	function note(text: string, kind: "info" | "error" = "info"): void {
 		uiStore.set({ message: { text, kind } });
+	}
+
+	/** What closing an overlay or leaving a mode drops back to. */
+	function baseMode(): Mode {
+		return stateRef.current.ask ? MODE.ask : MODE.nav;
 	}
 
 	/** When the last ctrl+c landed — a second one inside the window quits. */
@@ -265,13 +270,12 @@ export function App({
 
 	function submitOverlay(): void {
 		const value = overlayRef.current?.plainText.trim() ?? "";
-		const overlay = uiStore.getState().overlay;
-		uiStore.set({ overlay: null, mode: stateRef.current.ask ? "ask" : "nav" });
-		if (!overlay) return;
+		const mode = uiStore.getState().mode;
+		uiStore.set({ mode: baseMode() });
 
-		switch (overlay.kind) {
+		switch (mode.kind) {
 			case "picker": {
-				const chosen = pickerMatches(flatRef.current, value)[overlay.selected];
+				const chosen = pickerMatches(flatRef.current, value)[mode.selected];
 				if (chosen) uiStore.openTab(chosen.id);
 				return;
 			}
@@ -283,6 +287,8 @@ export function App({
 				return;
 			case "command":
 				runCommand(value);
+				return;
+			default:
 				return;
 		}
 	}
@@ -358,22 +364,21 @@ export function App({
 				// Focusing the composer with no session open would leave the user
 				// typing into nothing.
 				if (next === "composer" && !uiStore.activeSessionId) {
-					uiStore.set({ pane: "sidebar", mode: "nav" });
+					uiStore.set({ pane: "sidebar", mode: MODE.nav });
 					return;
 				}
-				uiStore.set({
-					pane: next,
-					mode: next === "composer" ? "composer" : stateRef.current.ask ? "ask" : "nav",
-				});
+				// Replacing the whole mode is the point: moving focus closes any
+				// overlay instead of leaving it on screen with nav keys behind it.
+				uiStore.set({ pane: next, mode: next === "composer" ? MODE.composer : baseMode() });
 				return;
 			}
 			case "move-cursor":
-				if (current.overlay?.kind === "picker") {
+				if (current.mode.kind === "picker") {
 					const matches = pickerMatches(flatRef.current, overlayRef.current?.plainText ?? "");
 					uiStore.set({
-						overlay: {
+						mode: {
 							kind: "picker",
-							selected: clamp(current.overlay.selected + action.delta, 0, matches.length - 1),
+							selected: clamp(current.mode.selected + action.delta, 0, matches.length - 1),
 						},
 					});
 					return;
@@ -384,7 +389,7 @@ export function App({
 				});
 				return;
 			case "open-selected": {
-				if (current.overlay) {
+				if (isPromptMode(current.mode)) {
 					submitOverlay();
 					return;
 				}
@@ -393,7 +398,7 @@ export function App({
 				return;
 			}
 			case "new-session":
-				uiStore.set({ overlay: { kind: "new" }, mode: "command" });
+				uiStore.set({ mode: MODE.new });
 				return;
 			case "close-tab":
 				closeActiveTab();
@@ -410,7 +415,7 @@ export function App({
 					note("no session open", "error");
 					return;
 				}
-				uiStore.set({ overlay: { kind: "rename" }, mode: "command" });
+				uiStore.set({ mode: MODE.rename });
 				return;
 			case "archive": {
 				const sessionId = uiStore.activeSessionId;
@@ -441,22 +446,21 @@ export function App({
 				return;
 			}
 			case "toggle-help":
-				uiStore.set({ mode: current.mode === "help" ? "nav" : "help" });
+				uiStore.set({ mode: current.mode.kind === "help" ? MODE.nav : MODE.help });
 				return;
 			case "open-picker":
-				uiStore.set({ overlay: { kind: "picker", selected: 0 }, mode: "picker" });
+				uiStore.set({ mode: { kind: "picker", selected: 0 } });
 				return;
 			case "open-command":
-				uiStore.set({ overlay: { kind: "command" }, mode: "command" });
+				uiStore.set({ mode: MODE.command });
 				return;
 			case "enter-scroll":
-				uiStore.set({ pane: "transcript", mode: "scroll" });
+				uiStore.set({ pane: "transcript", mode: MODE.scroll });
 				return;
 			case "exit-mode":
 				uiStore.set({
-					overlay: null,
-					mode: stateRef.current.ask ? "ask" : "nav",
-					pane: current.mode === "composer" ? "transcript" : current.pane,
+					mode: baseMode(),
+					pane: current.mode.kind === "composer" ? "transcript" : current.pane,
 				});
 				return;
 			case "scroll":
@@ -471,7 +475,7 @@ export function App({
 					note("open a session first", "error");
 					return;
 				}
-				uiStore.set({ pane: "composer", mode: "composer" });
+				uiStore.set({ pane: "composer", mode: MODE.composer });
 				return;
 			case "submit":
 				submitPrompt(action.busyMode);
@@ -506,7 +510,7 @@ export function App({
 		// A keypress is the cheapest honest proof that they are.
 		watchedRef.current?.markActive();
 		const { mode, pane, prefixArmed } = uiStore.getState();
-		const resolution = resolveKey(key, { mode, pane, prefixArmed }, prefix);
+		const resolution = resolveKey(key, { mode: mode.kind, pane, prefixArmed }, prefix);
 		if (resolution.prefixArmed !== prefixArmed) {
 			uiStore.set({ prefixArmed: resolution.prefixArmed });
 		}
@@ -518,8 +522,7 @@ export function App({
 	// runs before the default insert, so `preventDefault` really suppresses
 	// typing). Everywhere else the global handler owns the keyboard. Exactly one
 	// of the two is live at a time — that's what stops double-handling.
-	const textFocused =
-		ui.mode === "composer" || ui.mode === "command" || ui.mode === "picker";
+	const textFocused = ui.mode.kind === "composer" || isPromptMode(ui.mode);
 	useKeyboard((key) => {
 		if (textFocused) return;
 		dispatch(key);
@@ -532,9 +535,9 @@ export function App({
 	const sidebarWidth = clamp(Math.floor(width * 0.28), 22, 34);
 	const showSidebar = !ui.zoom && width >= 60;
 	const tabSessions = ui.tabs.map((id) => byId.get(id) ?? ({ id } as Session));
-	const pickerSelected = ui.overlay?.kind === "picker" ? ui.overlay.selected : 0;
+	const pickerSelected = ui.mode.kind === "picker" ? ui.mode.selected : 0;
 	const pickerQuery =
-		ui.overlay?.kind === "picker" ? (overlayRef.current?.plainText ?? "") : "";
+		ui.mode.kind === "picker" ? (overlayRef.current?.plainText ?? "") : "";
 
 	return (
 		<box flexDirection="column" width={width} height={height}>
@@ -562,7 +565,7 @@ export function App({
 					session={session}
 					state={state}
 					focused={ui.pane === "transcript"}
-					scrollMode={ui.mode === "scroll"}
+					scrollMode={ui.mode.kind === "scroll"}
 					spinnerFrame={spinnerFrame}
 					connection={snapshot.connection}
 					scrollRef={scrollRef}
@@ -571,7 +574,7 @@ export function App({
 
 			{session ? (
 				<Composer
-					focused={ui.mode === "composer"}
+					focused={ui.mode.kind === "composer"}
 					busy={state.isRunning}
 					queuedCount={state.queued.length}
 					placeholder={
@@ -593,16 +596,16 @@ export function App({
 				waiting={waiting}
 				running={running}
 				prefixArmed={ui.prefixArmed}
-				mode={ui.mode}
+				mode={ui.mode.kind}
 				message={ui.message?.text}
 				messageKind={ui.message?.kind}
 				spinnerFrame={spinnerFrame}
 				width={width}
 			/>
 
-			{ui.mode === "help" ? <Help height={height} /> : null}
+			{ui.mode.kind === "help" ? <Help height={height} /> : null}
 
-			{ui.overlay?.kind === "picker" ? (
+			{ui.mode.kind === "picker" ? (
 				<PromptOverlay
 					title="sessions"
 					value={pickerQuery}
@@ -617,7 +620,7 @@ export function App({
 				/>
 			) : null}
 
-			{ui.overlay?.kind === "command" ? (
+			{ui.mode.kind === "command" ? (
 				<PromptOverlay
 					title="command"
 					value=""
@@ -627,7 +630,7 @@ export function App({
 				/>
 			) : null}
 
-			{ui.overlay?.kind === "rename" ? (
+			{ui.mode.kind === "rename" ? (
 				<PromptOverlay
 					title="rename session"
 					value=""
@@ -637,7 +640,7 @@ export function App({
 				/>
 			) : null}
 
-			{ui.overlay?.kind === "new" ? (
+			{ui.mode.kind === "new" ? (
 				<PromptOverlay
 					title="new session"
 					value=""
