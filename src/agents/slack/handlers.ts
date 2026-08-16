@@ -650,7 +650,6 @@ export async function processMessage(
       worktreeDir: msg.worktreeDir || null,
       branch: msg.branch || null,
       repoId: msg.repoId || null,
-      mode: msg.worktreeDir ? "worktree" : "conversational",
       createdAt: new Date().toISOString(),
       lastActivity: new Date().toISOString(),
     };
@@ -678,7 +677,6 @@ export async function processMessage(
     session.worktreeDir = msg.worktreeDir;
     session.branch = msg.branch || session.branch;
     if (msg.repoId) session.repoId = msg.repoId;
-    session.mode = "worktree";
     await persistSession(session);
   }
 

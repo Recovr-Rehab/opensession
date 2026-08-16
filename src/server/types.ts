@@ -299,7 +299,11 @@ export interface UnifiedSession {
   };
 }
 
-// Slack session file format (two variants exist)
+// Slack session file format (two variants exist). This is the one record type
+// for a Slack session: the loop's in-memory shape (SlackSession in
+// src/agents/slack/state.ts) narrows it to the fields the loop always has.
+// saveSession merges over whatever is already on disk rather than projecting a
+// fixed field list, so keys written by other writers survive a write.
 export interface SlackSessionFile {
   branch?: string | null;
   userId?: string;
@@ -310,9 +314,12 @@ export interface SlackSessionFile {
   lastActivity?: string;
   channel?: string;
   threadTs?: string;
-  mode?: "conversational" | "worktree";
   model?: string;
   codexThreadId?: string | null;
+  /** Registered repo id this session works in; unset/null = the default repo
+   *  (tella-fusion), which is the historical shape, so old session files stay
+   *  valid. */
+  repoId?: string | null;
   /** Pi engine session id, written by agent-session-sync for pi/* runs (its
    *  own slot — pi uuids are shape-indistinguishable from claude ids, so the
    *  claude slot can't carry them unambiguously; a claude-slot mirror rides
