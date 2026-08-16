@@ -26,7 +26,6 @@ type Pending = {
 
 type Connection = {
 	ws: any;
-	runner: Runner;
 	connectedAt: number;
 	protocolVersion: number;
 	capabilities: Runner["capabilities"];
@@ -72,8 +71,9 @@ function sendRunnerTerminalFrame(runnerId: string, message: Record<string, unkno
 export async function openRunnerTerminal(input: { runnerId: string; sessionId: string; repo: string; workspacePath: string; user?: string; cols?: number; rows?: number }): Promise<{ terminalId: string; cwd: string }> {
 	const connection = connections.get(input.runnerId);
 	if (!connection || connection.protocolVersion !== PROTOCOL_VERSION) throw new Error(`Runner ${input.runnerId} is not connected`);
-	if (!runnerAllowed(connection.runner, { user: input.user, repo: input.repo, permission: "terminals" })) throw new Error(`Runner ${connection.runner.name} is not permitted for terminals`);
-	if (!runnerOwnsWorkspace(connection.runner, input.workspacePath, input.sessionId)) throw new Error("Runner terminal workspace is outside its managed roots");
+	const runner = getRunner(input.runnerId);
+	if (!runner || !runnerAllowed(runner, { user: input.user, repo: input.repo, permission: "terminals" })) throw new Error(`Runner ${runner?.name ?? input.runnerId} is not permitted for terminals`);
+	if (!runnerOwnsWorkspace(runner, input.workspacePath, input.sessionId)) throw new Error("Runner terminal workspace is outside its managed roots");
 	const id = `rt${++executionCounter}-${randomBytes(12).toString("base64url")}`;
 	const operationToken = randomBytes(18).toString("base64url");
 	audit({ msg: "runner_terminal_start", runner_id: input.runnerId, session_id: input.sessionId, repo: input.repo, operation_id: id });
@@ -131,9 +131,10 @@ export async function execRunnerWorkspace(
 ): Promise<RunnerExecResult> {
 	const connection = connections.get(runnerId);
 	if (!connection || connection.protocolVersion !== PROTOCOL_VERSION) throw new Error(`Runner ${runnerId} is not connected`);
-	if (!runnerAllowed(connection.runner, { user: input.user, repo: input.repo, permission: "fullSessions" }))
-		throw new Error(`Runner ${connection.runner.name} is not permitted for this session workspace`);
-	if (!runnerOwnsWorkspace(connection.runner, input.workspacePath, input.sessionId))
+	const runner = getRunner(runnerId);
+	if (!runner || !runnerAllowed(runner, { user: input.user, repo: input.repo, permission: "fullSessions" }))
+		throw new Error(`Runner ${runner?.name ?? runnerId} is not permitted for this session workspace`);
+	if (!runnerOwnsWorkspace(runner, input.workspacePath, input.sessionId))
 		throw new Error("Runner workspace path is outside its managed roots");
 	return execRunnerCommand(connection, runnerId, input.command, {
 		cwd: input.workspacePath, timeoutMs: input.timeoutMs, user: input.user, repo: input.repo, sessionId: input.sessionId,
@@ -147,9 +148,10 @@ export async function execRunnerWorkspace(
 export async function cleanupRunnerWorkspace(input: { runnerId: string; sessionId: string; repo: string; workspacePath: string; user?: string }): Promise<void> {
 	const connection = connections.get(input.runnerId);
 	if (!connection || connection.protocolVersion !== PROTOCOL_VERSION) throw new Error(`Runner ${input.runnerId} is not connected`);
-	if (connection.runner.workspaceRetention !== "delete") return;
-	if (!runnerAllowed(connection.runner, { user: input.user, repo: input.repo, permission: "fullSessions" })) throw new Error(`Runner ${connection.runner.name} is not permitted for workspace cleanup`);
-	if (!runnerOwnsWorkspace(connection.runner, input.workspacePath, input.sessionId)) throw new Error("Runner cleanup workspace is outside its managed roots");
+	const runner = getRunner(input.runnerId);
+	if (!runner || !runnerAllowed(runner, { user: input.user, repo: input.repo, permission: "fullSessions" })) throw new Error(`Runner ${runner?.name ?? input.runnerId} is not permitted for workspace cleanup`);
+	if (runner.workspaceRetention !== "delete") return;
+	if (!runnerOwnsWorkspace(runner, input.workspacePath, input.sessionId)) throw new Error("Runner cleanup workspace is outside its managed roots");
 	const id = `rc${++executionCounter}-${Date.now().toString(36)}`;
 	const operationToken = randomBytes(18).toString("base64url");
 	audit({ msg: "runner_workspace_cleanup_start", runner_id: input.runnerId, session_id: input.sessionId, repo: input.repo, operation_id: id });
@@ -171,8 +173,9 @@ export async function requestRunnerPortal(
 ): Promise<unknown> {
 	const connection = connections.get(runnerId);
 	if (!connection || connection.protocolVersion !== PROTOCOL_VERSION) throw new Error(`Runner ${runnerId} is not connected`);
-	if (!runnerAllowed(connection.runner, { user: input.user, repo: input.repo, permission: "portals" })) throw new Error(`Runner ${connection.runner.name} is not permitted to expose Portals`);
-	if (!runnerOwnsWorkspace(connection.runner, input.workspacePath, input.sessionId)) throw new Error("Runner Portal workspace is outside its managed roots");
+	const runner = getRunner(runnerId);
+	if (!runner || !runnerAllowed(runner, { user: input.user, repo: input.repo, permission: "portals" })) throw new Error(`Runner ${runner?.name ?? runnerId} is not permitted to expose Portals`);
+	if (!runnerOwnsWorkspace(runner, input.workspacePath, input.sessionId)) throw new Error("Runner Portal workspace is outside its managed roots");
 	const id = `rp${++executionCounter}-${Date.now().toString(36)}`;
 	const operationToken = randomBytes(18).toString("base64url");
 	audit({ msg: "runner_portal_request_start", runner_id: runnerId, session_id: input.sessionId, repo: input.repo, operation: input.operation, operation_id: id });
@@ -234,8 +237,9 @@ export async function runnerHostStatus(
 ): Promise<boolean> {
 	const connection = connections.get(runnerId);
 	if (!connection || connection.protocolVersion !== PROTOCOL_VERSION) return false;
-	if (!runnerAllowed(connection.runner, { user: input.user, repo: input.repo, permission: "fullSessions" })) return false;
-	if (!runnerOwnsWorkspace(connection.runner, input.workspacePath, input.sessionId)) return false;
+	const runner = getRunner(runnerId);
+	if (!runner || !runnerAllowed(runner, { user: input.user, repo: input.repo, permission: "fullSessions" })) return false;
+	if (!runnerOwnsWorkspace(runner, input.workspacePath, input.sessionId)) return false;
 	const id = `rs${++executionCounter}-${Date.now().toString(36)}`;
 	const operationToken = randomBytes(18).toString("base64url");
 	const result = await new Promise<RunnerExecResult>((resolve) => {
@@ -287,7 +291,7 @@ export function runnerWsOpen(ws: any): boolean {
 	connections.get(runnerId)?.ws?.close?.(1000, "replaced by reconnect");
 	const runner = getRunner(runnerId);
 	if (!runner) { ws.close(1008, "revoked"); return true; }
-	connections.set(runnerId, { ws, runner, connectedAt: Date.now(), protocolVersion: 0, capabilities: runner.capabilities, resources: runner.resources, pending: new Map() });
+	connections.set(runnerId, { ws, connectedAt: Date.now(), protocolVersion: 0, capabilities: runner.capabilities, resources: runner.resources, pending: new Map() });
 	touchRunner(runnerId);
 	console.log(`[runners] ${runner.name} attached (${runnerId})`);
 	return true;
@@ -305,9 +309,11 @@ export function runnerWsMessage(ws: any, raw: string | Buffer): boolean {
 		case "hello": {
 			const version = Number(message.version ?? 0);
 			if (version !== PROTOCOL_VERSION) { ws.close(1008, "unsupported protocol"); return true; }
+			const runner = getRunner(runnerId);
+			if (!runner) { ws.close(1008, "revoked"); return true; }
 			connection.protocolVersion = version;
-			const capabilities = message.capabilities && typeof message.capabilities === "object" ? message.capabilities : connection.runner.capabilities;
-			const resources = message.resources && typeof message.resources === "object" ? message.resources : connection.runner.resources;
+			const capabilities = message.capabilities && typeof message.capabilities === "object" ? message.capabilities : runner.capabilities;
+			const resources = message.resources && typeof message.resources === "object" ? message.resources : runner.resources;
 			connection.capabilities = capabilities;
 			connection.resources = resources;
 			touchRunner(runnerId, { capabilities, resources, softwareVersion: typeof message.softwareVersion === "string" ? message.softwareVersion : undefined });
@@ -434,11 +440,12 @@ export async function prepareRunnerWorkspace(
 	const connection = connections.get(runnerId);
 	if (!connection || connection.protocolVersion !== PROTOCOL_VERSION)
 		throw new Error(`Runner ${runnerId} is not connected`);
-	if (!runnerAllowed(connection.runner, { user: request.user, repo: request.repo, permission: "fullSessions" }))
-		throw new Error(`Runner ${connection.runner.name} is not permitted for full sessions`);
-	if (!connection.runner.workspaceRoots.length)
-		throw new Error(`Runner ${connection.runner.name} has no managed workspace root`);
-	if (!runnerOwnsWorkspace(connection.runner, request.workspacePath, request.sessionId))
+	const runner = getRunner(runnerId);
+	if (!runner || !runnerAllowed(runner, { user: request.user, repo: request.repo, permission: "fullSessions" }))
+		throw new Error(`Runner ${runner?.name ?? runnerId} is not permitted for full sessions`);
+	if (!runner.workspaceRoots.length)
+		throw new Error(`Runner ${runner.name} has no managed workspace root`);
+	if (!runnerOwnsWorkspace(runner, request.workspacePath, request.sessionId))
 		throw new Error("Runner workspace path is outside its managed roots");
 	const id = `rw${++executionCounter}-${Date.now().toString(36)}`;
 	const operationToken = randomBytes(18).toString("base64url");
@@ -479,9 +486,10 @@ export async function launchRunnerHost(
 	const connection = connections.get(runnerId);
 	if (!connection || connection.protocolVersion !== PROTOCOL_VERSION)
 		throw new Error(`Runner ${runnerId} is not connected`);
-	if (!runnerAllowed(connection.runner, { user: request.user, repo: request.repo, permission: "fullSessions" }))
-		throw new Error(`Runner ${connection.runner.name} is not permitted for full sessions`);
-	if (!runnerOwnsWorkspace(connection.runner, request.spec.cwd, request.sessionId))
+	const runner = getRunner(runnerId);
+	if (!runner || !runnerAllowed(runner, { user: request.user, repo: request.repo, permission: "fullSessions" }))
+		throw new Error(`Runner ${runner?.name ?? runnerId} is not permitted for full sessions`);
+	if (!runnerOwnsWorkspace(runner, request.spec.cwd, request.sessionId))
 		throw new Error("Runner host path is outside its managed workspace roots");
 	const id = `rh${++executionCounter}-${Date.now().toString(36)}`;
 	const operationToken = randomBytes(18).toString("base64url");
@@ -522,14 +530,15 @@ export function runnerWsClose(ws: any): boolean {
 		pending.resolve({ code: -1, stdout: pending.stdout.join(""), stderr: `${pending.stderr.join("")}\n[Runner disconnected]` });
 	}
 	connections.delete(runnerId);
-	console.log(`[runners] ${connection.runner.name} detached (${runnerId})`);
+	console.log(`[runners] ${getRunner(runnerId)?.name ?? runnerId} detached (${runnerId})`);
 	return true;
 }
 
 export async function execOnRunner(runnerId: string, command: string, options: RunnerExecOptions = {}): Promise<RunnerExecResult> {
 	const connection = connections.get(runnerId);
 	if (!connection || connection.protocolVersion !== PROTOCOL_VERSION) throw new Error(`Runner ${runnerId} is not connected`);
-	if (!runnerAllowed(connection.runner, { user: options.user, repo: options.repo, permission: "commands" })) throw new Error(`Runner ${connection.runner.name} is not permitted for this command`);
+	const runner = getRunner(runnerId);
+	if (!runner || !runnerAllowed(runner, { user: options.user, repo: options.repo, permission: "commands" })) throw new Error(`Runner ${runner?.name ?? runnerId} is not permitted for this command`);
 	return execRunnerCommand(connection, runnerId, command, { ...options, permission: "commands", operation: "command" });
 }
 
