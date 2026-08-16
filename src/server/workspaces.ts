@@ -201,30 +201,36 @@ export function listWorkspaces(): Workspace[] {
 }
 
 /**
- * id → name for every workspace, held in memory.
+ * id → name for every workspace in the active workspace directory, held in
+ * memory. The directory is part of the cache key because state roots can
+ * change within one process in tests and dev tooling.
  *
  * The session list stamps each row with its workspace's name so a client can
  * title a workspace row before (or without) loading the workspace list. Doing
  * that from disk would mean re-reading every workspace file on each list
  * rebuild: 4,378 files and ~0.4s on this instance. The map is built once and
  * then maintained by the writers below, which are the only code that ever
- * writes a workspace file.
+ * writes a workspace file for a given state root.
  */
-let workspaceNameCache: Map<string, string> | null = null;
+let workspaceNameCache: {
+  dir: string;
+  names: Map<string, string>;
+} | null = null;
 
 function workspaceNameMap(): Map<string, string> {
-  if (workspaceNameCache) return workspaceNameCache;
+  const dir = workspacesDir();
+  if (workspaceNameCache?.dir === dir) return workspaceNameCache.names;
   const names = new Map<string, string>();
-  if (existsSync(workspacesDir()))
-    for (const file of readdirSync(workspacesDir())) {
+  if (existsSync(dir))
+    for (const file of readdirSync(dir)) {
       if (!file.endsWith(".json")) continue;
       try {
-        const p = JSON.parse(readFileSync(`${workspacesDir()}/${file}`, "utf8"));
+        const p = JSON.parse(readFileSync(`${dir}/${file}`, "utf8"));
         if (typeof p?.id === "string" && typeof p?.name === "string")
           names.set(p.id, p.name);
       } catch {}
     }
-  workspaceNameCache = names;
+  workspaceNameCache = { dir, names };
   return names;
 }
 
@@ -236,8 +242,10 @@ export function workspaceName(id: string): string | null {
 
 /** The one write path for a workspace file, so the name map stays current. */
 function saveWorkspace(workspace: Workspace): Workspace {
-  writeJsonAtomic(fileFor(workspace.id), workspace);
-  workspaceNameCache?.set(workspace.id, workspace.name);
+  const dir = workspacesDir();
+  writeJsonAtomic(`${dir}/${workspace.id}.json`, workspace);
+  if (workspaceNameCache?.dir === dir)
+    workspaceNameCache.names.set(workspace.id, workspace.name);
   return workspace;
 }
 
@@ -531,11 +539,12 @@ export function restampWorkspaceWorktree(
  */
 export function deleteWorkspace(id: string): boolean {
   if (!safeId(id)) return false;
-  const f = fileFor(id);
+  const dir = workspacesDir();
+  const f = `${dir}/${id}.json`;
   if (!existsSync(f)) return false;
   try {
     rmSync(f);
-    workspaceNameCache?.delete(id);
+    if (workspaceNameCache?.dir === dir) workspaceNameCache.names.delete(id);
     // A deleted workspace's scratch dir (scratch-mode sessions — see
     // worktree.ts ensureScratchDir) goes with it; safeId() already rules
     // out anything path-escaping.
