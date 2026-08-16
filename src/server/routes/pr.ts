@@ -204,15 +204,20 @@ export async function handlePrRoutes(
 			url.searchParams.get("branch"),
 		);
 		if (!target) return Response.json(null);
-		const repoId =
-			url.searchParams.get("repo") || session.repo || defaultRepo().id;
 		const host = prHostFor(getRepo(target.repoId));
-		const fallback = cachedPrDetailsForSession(session, repoId, target.branch);
+		const fallback = cachedPrDetailsForSession(
+			session,
+			target.repoId,
+			target.branch,
+		);
 		// The branch this session stacked on, for the panel's "link this stack"
 		// action. Only for the session's OWN branch — an attached or linked PR is
 		// not what this session was stacked on top of.
+		const primaryTarget = resolvePrTarget(session);
 		const stackBase =
-			session.stackedOn?.branch && target.branch === session.branch
+			session.stackedOn?.branch &&
+			target.repoId === primaryTarget?.repoId &&
+			target.branch === primaryTarget.branch
 				? session.stackedOn.branch
 				: undefined;
 		const withReview = <T extends { number: number; headRefOid?: string } | null>(
@@ -982,7 +987,7 @@ export async function handlePrRoutes(
 			].join("\n");
 			const { id } = await getSessionControl().createSession({
 				prompt,
-				repo: session.repo || defaultRepo().id,
+				repo: target.repoId,
 				mode: "code",
 				branch: target.branch,
 				parentSessionId: session.id,
