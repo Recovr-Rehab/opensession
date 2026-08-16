@@ -1,5 +1,13 @@
 # Plugins — design proposal
 
+**Update (2026-08-16): the data-only half shipped.** A package is a git
+repository with a manifest bundling feeds, automation recipes, skills and MCP
+server entries, installed with `opensession plugins add <owner/repo>` and
+listed in the Library. Runtime-loaded code is explicitly deferred, with
+reasons. See [packages.md](packages.md) and
+[adrs/publishable-packages.md](../adrs/publishable-packages.md); the plugin
+runtime described below is still a proposal.
+
 **Update (2026-08-13): Notes was removed from core** — the collaborative-notes
 store, its routes, WebSocket relay, MCP server and UI are gone, and so is its
 library card. The stored documents under `~/.opensession-notes/` were left

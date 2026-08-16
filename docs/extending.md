@@ -134,6 +134,15 @@ that product's repository instead.
 If you catch yourself pasting the same three paragraphs into prompts, that is a
 skill.
 
+## Handing one of these to somebody else
+
+Any of the above that is data (an MCP server entry, a feed descriptor, an
+automation recipe, a skill) can be bundled into a **package**: a git
+repository with an `opensession-plugin.json` manifest, installed with
+`opensession plugins add <owner/repo>`. It is the unit that makes an extension
+publishable, and it deliberately carries no runtime code. See
+[packages.md](packages.md).
+
 ## What not to extend
 
 **The runner.** `agent-runner.ts`, `opencode-runner.ts` and `host-client.ts` are
