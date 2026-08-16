@@ -21,6 +21,7 @@ import {
 	type Chord,
 	type ShortcutId,
 } from "../../lib/shortcuts";
+import { Input } from "../../ui/input";
 import { Button } from "../../ui/button";
 import {
 	SettingCard,
@@ -34,7 +35,6 @@ import {
 	SettingsHint,
 	SettingsPanel,
 	rowMenuTriggerClasses,
-	settingsInputClass,
 } from "../../ui/settings";
 import { Menu, MENU_ICON } from "../../ui/menu";
 import {
@@ -378,8 +378,8 @@ export function ShortcutsPanel() {
 					size={20}
 					className="pointer-events-none absolute left-8 top-1/2 -translate-y-1/2 text-faint"
 				/>
-				<input
-					className={`${settingsInputClass} w-full !pl-11`}
+				<Input
+					className="pl-11"
 					type="search"
 					value={query}
 					onChange={(e) => setQuery(e.target.value)}

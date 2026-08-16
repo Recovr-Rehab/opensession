@@ -58,6 +58,7 @@ import {
 	onVimModeChanged,
 	setVimModePref,
 } from "../../lib/vim-pref";
+import { Input, Textarea } from "../../ui/input";
 import { Button } from "../../ui/button";
 import {
 	SettingCard,
@@ -66,8 +67,6 @@ import {
 	SettingsHint,
 	SettingsPanel,
 	SettingsSection,
-	settingsInputClass,
-	settingsTextareaClass,
 } from "../../ui/settings";
 import { InlineAlert, LoadingState } from "../../ui/state";
 import { Switch } from "../../ui/switch";
@@ -142,9 +141,9 @@ function DeskVoiceApiKeyRow() {
 				}
 				control={
 					<div className="flex items-center gap-2">
-						<input
-							className={settingsInputClass}
+						<Input
 							type="password"
+							autoComplete="off"
 							value={apiKey}
 							onChange={(e) => setApiKey(e.target.value)}
 							placeholder="sk-…"
@@ -263,8 +262,7 @@ function PersonalPromptPanel() {
 		<>
 			{label}
 			<SettingsSection>
-				<textarea
-					className={settingsTextareaClass}
+				<Textarea
 					rows={10}
 					placeholder='e.g. "Keep answers short. Prefer tables for comparisons. Always mention which files you touched."'
 					value={prompt}

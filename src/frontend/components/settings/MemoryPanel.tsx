@@ -9,12 +9,12 @@ import {
 	type MemoryScopeDto,
 } from "../../lib/api";
 import { Button } from "../../ui/button";
+import { Textarea } from "../../ui/input";
 import {
 	SettingsGroupLabel,
 	SettingsHeader,
 	SettingsPanel,
 	SettingsSection,
-	settingsTextareaClass,
 } from "../../ui/settings";
 import { EmptyState, InlineAlert, LoadingState } from "../../ui/state";
 import { toast } from "../../ui/toast";
@@ -79,8 +79,7 @@ function MemoryEntryRow({
 	if (editing)
 		return (
 			<div className="border-b border-line px-5 py-3 last:border-b-0">
-				<textarea
-					className={settingsTextareaClass}
+				<Textarea
 					rows={2}
 					value={draft}
 					autoFocus
@@ -90,7 +89,7 @@ function MemoryEntryRow({
 						if (e.key === "Escape") setEditing(false);
 					}}
 				/>
-				<div className="mt-1.5 flex gap-2">
+				<div className="mt-1.5 flex items-center gap-2">
 					<Button
 						variant="primary"
 						size="sm"
@@ -100,7 +99,7 @@ function MemoryEntryRow({
 						Save
 					</Button>
 					<Button
-						variant="soft"
+						variant="ghost"
 						size="sm"
 						onClick={() => {
 							setDraft(entry.text);
@@ -109,6 +108,8 @@ function MemoryEntryRow({
 					>
 						Cancel
 					</Button>
+					{/* Both shortcuts were already wired and undiscoverable. */}
+					<span className="ml-auto text-meta text-faint">⌘↵ to save · Esc to cancel</span>
 				</div>
 			</div>
 		);
@@ -188,7 +189,7 @@ function MemoryScopeCard({
 					variant="ghost"
 					aria-label={`Add memory to ${scoped.scope.label}`}
 					icon={<IconPlus size={16} />}
-					onClick={() => setAdding((v) => !v)}
+					onClick={() => setAdding(true)}
 				>
 					Add
 				</Button>
@@ -198,18 +199,12 @@ function MemoryScopeCard({
 					No memories yet.
 				</div>
 			)}
-			{scoped.entries.map((e) => (
-				<MemoryEntryRow
-					key={e.id}
-					scopeKey={scoped.scope.key}
-					entry={e}
-					onChanged={onChanged}
-				/>
-			))}
+			{/* Directly under the Add button that opened it. It used to render
+			    after every entry, so on a long scope the form appeared far below
+			    the button and clicking Add looked like it did nothing. */}
 			{adding && (
-				<div className="border-t border-line px-5 py-3">
-					<textarea
-						className={settingsTextareaClass}
+				<div className="border-b border-line px-5 py-3">
+					<Textarea
 						rows={2}
 						placeholder="A durable, self-contained fact…"
 						value={draft}
@@ -220,7 +215,7 @@ function MemoryScopeCard({
 							if (e.key === "Escape") setAdding(false);
 						}}
 					/>
-					<div className="mt-1.5 flex gap-2">
+					<div className="mt-1.5 flex items-center gap-2">
 						<Button
 							variant="primary"
 							size="sm"
@@ -229,16 +224,21 @@ function MemoryScopeCard({
 						>
 							Save
 						</Button>
-						<Button
-							variant="soft"
-							size="sm"
-							onClick={() => setAdding(false)}
-						>
+						<Button variant="ghost" size="sm" onClick={() => setAdding(false)}>
 							Cancel
 						</Button>
+						<span className="ml-auto text-meta text-faint">⌘↵ to save · Esc to cancel</span>
 					</div>
 				</div>
 			)}
+			{scoped.entries.map((e) => (
+				<MemoryEntryRow
+					key={e.id}
+					scopeKey={scoped.scope.key}
+					entry={e}
+					onChanged={onChanged}
+				/>
+			))}
 		</SettingsSection>
 	);
 }

@@ -42,8 +42,8 @@ import {
 	SettingsHeader,
 	SettingsHint,
 	SettingsPanel,
-	settingsInputClass,
 } from "../../ui/settings";
+import { Input } from "../../ui/input";
 import { Badge } from "../../ui/badge";
 import { Segmented, SegmentedOption } from "../../ui/segmented";
 import { EmptyState, InlineAlert, LoadingState } from "../../ui/state";
@@ -416,8 +416,8 @@ export function LibraryPanel() {
 			)}
 
 			<div className="flex flex-wrap items-center gap-2 px-5">
-				<input
-					className={`${settingsInputClass} min-w-[180px] flex-1`}
+				<Input
+					className="min-w-[180px] flex-1"
 					placeholder="Search the library"
 					value={query}
 					onChange={(e) => setQuery(e.target.value)}

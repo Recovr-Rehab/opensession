@@ -207,6 +207,11 @@ function ConnectDialog({
 	const [memoryMb, setMemoryMb] = useState(String(connection.settings.memoryMb || ""));
 	const [saving, setSaving] = useState(false);
 	const [confirmingDisconnect, setConfirmingDisconnect] = useState(false);
+	// The credential field, so the dialog opens ready to paste rather than with
+	// focus on its close button. Only one of the two branches below renders, so
+	// they share the ref; Docker has no field at all and leaves it null, which
+	// Base UI treats as "focus the first tabbable" exactly as before.
+	const firstFieldRef = useRef<HTMLInputElement>(null);
 
 	async function connect() {
 		setSaving(true);
@@ -263,7 +268,7 @@ function ConnectDialog({
 				onOpenChange(next);
 			}}
 		>
-			<Modal.Content widthClassName="max-w-[31rem]">
+			<Modal.Content widthClassName="max-w-[31rem]" initialFocus={firstFieldRef}>
 				<Modal.Header
 					title={`${exists ? "Configure" : "Connect"} ${provider.label}`}
 					description={
@@ -278,6 +283,7 @@ function ConnectDialog({
 				{(connection.provider === "daytona" || connection.provider === "box") && (
 					<Field label={connection.provider === "box" ? "Box API key" : "Daytona API key"}>
 						<Input
+							ref={firstFieldRef}
 							type="password"
 							autoComplete="off"
 							placeholder={connection.hasCredentials ? "Leave blank to keep current key" : `Enter ${connection.provider === "box" ? "box_…" : "API key"}`}
@@ -291,6 +297,7 @@ function ConnectDialog({
 					<div className="grid gap-3 sm:grid-cols-2">
 						<Field label="Modal token ID">
 							<Input
+								ref={firstFieldRef}
 								type="password"
 								autoComplete="off"
 								placeholder={connection.hasCredentials ? "Keep current token" : "Token ID"}

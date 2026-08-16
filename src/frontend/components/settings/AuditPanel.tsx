@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { fetchAudit } from "../../lib/api";
 import { BASE_PATH } from "../../lib/base";
+import { Input } from "../../ui/input";
 import { Button } from "../../ui/button";
 import {
 	SettingCard,
 	SettingsHeader,
 	SettingsPanel,
-	settingsInputClass,
 } from "../../ui/settings";
 import { EmptyState } from "../../ui/state";
 import { Switch } from "../../ui/switch";
@@ -101,8 +101,8 @@ export function AuditPanel() {
 					<Switch checked={all} onCheckedChange={setAll} />
 					Include tool firehose
 				</label>
-				<input
-					className={`${settingsInputClass} min-w-[140px] flex-1`}
+				<Input
+					className="min-w-[140px] flex-1"
 					value={q}
 					onChange={(e) => setQ(e.target.value)}
 					placeholder="Search (session id, tool, text…)"
