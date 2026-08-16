@@ -55,8 +55,9 @@ export default function SessionCanvas({
 		() => ({
 			sessions: new Map(sessions.map((s) => [s.id, s])),
 			onOpenSession,
+			compactAtLowZoom: isPhone,
 		}),
-		[sessions, onOpenSession],
+		[sessions, onOpenSession, isPhone],
 	);
 
 	// The app themes via html[data-theme]; tldraw needs to be told.

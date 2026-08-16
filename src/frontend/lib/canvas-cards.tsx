@@ -77,11 +77,13 @@ export function canvasSessions(
 export interface CanvasData {
 	sessions: Map<string, UnifiedSession>;
 	onOpenSession: (id: string) => void;
+	compactAtLowZoom: boolean;
 }
 
 export const CanvasDataContext = createContext<CanvasData>({
 	sessions: new Map(),
 	onOpenSession: () => {},
+	compactAtLowZoom: false,
 });
 
 // ── Transcript tails ─────────────────────────────────────────────────────────

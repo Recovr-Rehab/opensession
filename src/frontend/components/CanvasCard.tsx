@@ -5,6 +5,7 @@
 // composer. Pointer events on interactive regions stop propagating so tldraw
 // drags the card only from its header and edges.
 import { useContext, useEffect, useRef, useState } from "react";
+import { useEditor, useValue } from "tldraw";
 import {
 	appendLocalEntry,
 	CanvasDataContext,
@@ -37,11 +38,83 @@ function statusColor(session: UnifiedSession): string {
 	return meta?.dotColor ?? "var(--text-faint)";
 }
 
+// A 380px card nearly fills the phone at 1x. At 0.5x several cards become
+// visible together, so mounting their full transcript trees can exhaust WebKit.
+const COMPACT_ZOOM = 0.75;
+
+function CanvasCardOverview({ session }: { session: UnifiedSession }) {
+	const unread = isUnread(session.id, session.lastActivity, getReads());
+	const meta = [session.repo, session.branch, session.startedBy].filter(Boolean);
+	const context =
+		session.prTitle ||
+		session.workspaceName ||
+		(session.isRunning ? "Working…" : "Session ready");
+	return (
+		<div
+			className="flex h-full w-full flex-col overflow-hidden rounded-xl bg-panel shadow-lg"
+			data-canvas-detail="overview"
+		>
+			<div className="flex items-center gap-2 px-3.5 pb-1 pt-2.5">
+				<span
+					className="size-2 shrink-0 rounded-full"
+					style={{ background: statusColor(session) }}
+				/>
+				<span className="min-w-0 flex-1 truncate text-item-title font-medium text-fg">
+					{session.title || "Untitled session"}
+				</span>
+				{unread && (
+					<span
+						className="size-2 shrink-0 rounded-full"
+						style={{ background: "var(--blue)" }}
+					/>
+				)}
+			</div>
+			<div className="truncate px-3.5 pb-1.5 text-meta text-dim">
+				{meta.join(" · ")}
+			</div>
+			<div className="min-h-0 flex-1 px-3.5 py-2 text-label leading-normal text-fg">
+				{context}
+			</div>
+			<div className="px-2.5 pb-2.5 pt-1">
+				<div className="rounded-control border border-line bg-surface px-2.5 py-1.5 text-label text-faint">
+					{session.isRunning ? "Reply (running)…" : "Reply…"}
+				</div>
+			</div>
+		</div>
+	);
+}
+
 export function CanvasCard({ sessionId }: { sessionId: string }) {
-	const { sessions, onOpenSession } = useContext(CanvasDataContext);
+	const editor = useEditor();
+	const { sessions, onOpenSession, compactAtLowZoom } =
+		useContext(CanvasDataContext);
 	const session = sessions.get(sessionId);
-	const activity = session?.lastActivity || "";
-	const { entries, failed } = useTranscriptTail(sessionId, activity);
+	const compact = useValue(
+		"canvas card detail",
+		() => compactAtLowZoom && editor.getEfficientZoomLevel() < COMPACT_ZOOM,
+		[compactAtLowZoom, editor],
+	);
+
+	if (!session) {
+		return (
+			<div className="flex h-full w-full items-center justify-center rounded-xl bg-panel text-label text-faint shadow-lg">
+				Session no longer listed
+			</div>
+		);
+	}
+	if (compact) return <CanvasCardOverview session={session} />;
+	return <CanvasCardDetail session={session} onOpenSession={onOpenSession} />;
+}
+
+function CanvasCardDetail({
+	session,
+	onOpenSession,
+}: {
+	session: UnifiedSession;
+	onOpenSession: (id: string) => void;
+}) {
+	const activity = session.lastActivity || "";
+	const { entries, failed } = useTranscriptTail(session.id, activity);
 	const [local, setLocal] = useState<TranscriptEntry[] | null>(null);
 	const [text, setText] = useState("");
 	const [receipt, setReceipt] = useState<string | null>(null);
@@ -72,14 +145,6 @@ export function CanvasCard({ sessionId }: { sessionId: string }) {
 	useEffect(() => {
 		setLocal(null);
 	}, [entries]);
-
-	if (!session) {
-		return (
-			<div className="flex h-full w-full items-center justify-center rounded-xl bg-panel text-label text-faint shadow-lg">
-				Session no longer listed
-			</div>
-		);
-	}
 
 	const unread = isUnread(session.id, session.lastActivity, reads);
 	const meta = [
