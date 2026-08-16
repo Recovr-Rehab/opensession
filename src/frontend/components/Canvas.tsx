@@ -14,6 +14,7 @@ import {
 	CARD_LIMIT,
 	type SessionCardShape,
 } from "../lib/canvas-cards";
+import { useIsPhone } from "../hooks/useIsPhone";
 import { isClaimed } from "../lib/sidebar-lanes";
 import type { UnifiedSession } from "../lib/types";
 import { Button } from "../ui/button";
@@ -21,6 +22,14 @@ import { EmptyState } from "../ui/state";
 import { useCurrentUser } from "./UserPicker";
 
 const TLDRAW_LICENSE_KEY = process.env.TLDRAW_LICENSE_KEY ?? "";
+const DESKTOP_CAMERA_OPTIONS = {
+	camera: { zoomSteps: [0.05, 0.1, 0.25, 0.5, 1, 2, 4, 8] },
+};
+// At 2x a card is already wider than a phone. tldraw's 4x and 8x steps
+// create backing surfaces large enough for iOS WebKit to terminate the page.
+const PHONE_CAMERA_OPTIONS = {
+	camera: { zoomSteps: [0.05, 0.1, 0.25, 0.5, 1, 2] },
+};
 
 function cardShapes(editor: Editor): SessionCardShape[] {
 	return editor
@@ -36,6 +45,7 @@ export default function SessionCanvas({
 	onOpenSession: (id: string) => void;
 }) {
 	const user = useCurrentUser();
+	const isPhone = useIsPhone();
 	const [editor, setEditor] = useState<Editor | null>(null);
 	const relevant = useMemo(
 		() => canvasSessions(sessions, isClaimed),
@@ -144,6 +154,7 @@ export default function SessionCanvas({
 					persistenceKey={`opensession-canvas-${user.toLowerCase()}`}
 					shapeUtils={CANVAS_SHAPE_UTILS}
 					licenseKey={TLDRAW_LICENSE_KEY}
+					options={isPhone ? PHONE_CAMERA_OPTIONS : DESKTOP_CAMERA_OPTIONS}
 					hideUi
 					onMount={setEditor}
 				/>
