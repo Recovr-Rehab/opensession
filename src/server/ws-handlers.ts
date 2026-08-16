@@ -473,8 +473,7 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 				// back). The watch stays put — the transcript must keep streaming so
 				// unread counts and notifications still land — but an away socket
 				// stops showing its owner's face to everyone else.
-				const presenceSuppressed =
-					(ws.data as any).presenceSuppressed === true;
+				const presenceSuppressed = ws.data.presenceSuppressed === true;
 				setClientAway(ws, presenceSuppressed || msg.away === true);
 				// Coming back to a session whose turn finished while everyone was
 				// away → drop in an away-summary system chip (recap.ts).
@@ -513,13 +512,13 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 				if (msg.user) data.user = msg.user;
 				joinSession(ws, sessionId);
 				console.log(
-					`[presence] watch user=${JSON.stringify(data.user || "Anonymous")} login=${JSON.stringify(data.authLogin || null)} session=${JSON.stringify(sessionId)} client=${JSON.stringify((data as any).presenceClient || "unknown")}`,
+					`[presence] watch user=${JSON.stringify(data.user || "Anonymous")} login=${JSON.stringify(data.authLogin || null)} session=${JSON.stringify(sessionId)} client=${JSON.stringify(data.presenceClient || "unknown")}`,
 				);
 
 				// Opening a session whose last turn finished with nobody watching →
 				// drop in an away-summary system chip (recap.ts). Fire-and-forget;
 				// the recap arrives through the transcript bus like any append.
-				if ((data as any).presenceSuppressed !== true) {
+				if (data.presenceSuppressed !== true) {
 					maybeRecapOnReturn(sessionId, data.user || undefined);
 					maybeSuggestRepliesOnReturn(sessionId, data.user || undefined);
 				}

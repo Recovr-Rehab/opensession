@@ -5,6 +5,7 @@ import {
 	joinSession,
 	leaveSession,
 	sessionWatchers,
+	type WSClientData,
 } from "./ws-hub";
 
 const sockets = new Set<any>();
@@ -25,6 +26,7 @@ describe("computeGlobalPresence", () => {
 		activeAt = Date.now(),
 	) => ({
 		data: {
+			watchingSessionId: null,
 			user,
 			watchJoinedAt: at,
 			away,
@@ -92,6 +94,7 @@ describe("computeGlobalPresence", () => {
 				watchers({
 					stale: [{
 						data: {
+							watchingSessionId: "stale",
 							user: "Ada",
 							watchJoinedAt: 1,
 							away: false,
@@ -128,6 +131,31 @@ describe("computeGlobalPresence", () => {
 
 		leaveSession(ws);
 		expect(computeGlobalPresence(sessionWatchers)).toEqual([]);
+	});
+
+	test("join tracks the complete runtime client state", () => {
+		const sessionId = crypto.randomUUID();
+		const data = {
+			watchingSessionId: sessionId,
+			user: "Automation",
+			transcriptV2: true,
+			presenceClient: "test-client",
+			presenceSuppressed: true,
+		} satisfies WSClientData;
+		const socket: Parameters<typeof joinSession>[0] = {
+			data,
+			send() {},
+		};
+
+		joinSession(socket, sessionId);
+
+		expect(socket.data.watchJoinedAt).toBeNumber();
+		expect(socket.data).toMatchObject({
+			transcriptV2: true,
+			presenceClient: "test-client",
+			presenceSuppressed: true,
+		});
+		leaveSession(socket);
 	});
 
 	test("a new watcher receives an empty snapshot when presence has not changed", () => {
