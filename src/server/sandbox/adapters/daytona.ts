@@ -52,6 +52,7 @@ import {
   readRemoteState,
   remoteCloneUrl,
   removeRemoteState,
+  resolveTrustPolicy,
   setupRemoteWorkspace,
   shellQuoteWord,
   touchRemoteState,
@@ -340,6 +341,7 @@ export class DaytonaProvider implements SandboxProvider {
     const cfg = daytonaConfig();
     const client = await daytonaClient();
     const prevState = findRemoteStateBySession(this.id, spec.sessionId);
+    const trust = resolveTrustPolicy(spec, prevState);
     const repo = getRepo(spec.repo || prevState?.repoId);
     const branch = spec.branch || prevState?.branch || repo.defaultBranch;
     const cwd =
@@ -449,7 +451,7 @@ export class DaytonaProvider implements SandboxProvider {
       branch,
       repo.defaultBranch,
       repo.id,
-      { sandboxId: sbx.id, provider: this.id, sessionId: spec.sessionId, repoId: repo.id, trustProfile: spec.trustProfile },
+      { sandboxId: sbx.id, provider: this.id, sessionId: spec.sessionId, repoId: repo.id, trustProfile: trust.trustProfile },
     );
     writeRemoteState({
       sandboxId: sbx.id,
@@ -460,6 +462,7 @@ export class DaytonaProvider implements SandboxProvider {
       branch,
       createdAt: prevState?.createdAt || new Date().toISOString(),
       lastActivityAt: new Date().toISOString(),
+      ...trust,
     });
     return this.makeHandle(sbx, spec.sessionId, cwd);
   }

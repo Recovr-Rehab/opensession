@@ -3,9 +3,45 @@
 import { audit } from "../audit";
 import { hostRunBusy } from "../host-registry";
 import { getSandboxProvider } from "../sandbox";
+import {
+	recordedTrustPolicy,
+	type SandboxTrustPolicy,
+} from "../sandbox/adapters/bootstrap";
+import type { SandboxSessionSpec } from "../sandbox/provider";
 import { dropSandboxPreviewRoutes } from "../preview";
 import { findSession, touchNativeSession } from "../session-cache";
 import type { RouteContext } from "./context";
+
+type RecreateSession = Pick<
+	NonNullable<ReturnType<typeof findSession>>,
+	"id" | "repo" | "branch" | "mode" | "worktreeDir" | "automation" | "automationId"
+>;
+
+/**
+ * The ensure() spec a recreate re-enters the provider with. The trust policy
+ * belongs to the sandbox, so `trust` is what it was RECORDED with, read before
+ * destroy() deletes that record. Without it an automation's sandbox comes back
+ * "interactive": no egress firewall, no credential-minimal projection, under a
+ * contract documented as fail-closed (provider.ts). Providers that keep no
+ * such record still fail closed on the profile for an automation-owned session.
+ */
+export function recreateSandboxSpec(
+	session: RecreateSession,
+	trust: SandboxTrustPolicy | null,
+): SandboxSessionSpec {
+	const trustProfile =
+		trust?.trustProfile ||
+		(session.automationId || session.automation ? "automation" : undefined);
+	return {
+		sessionId: session.id,
+		repo: session.repo,
+		branch: session.branch || undefined,
+		mode: session.mode,
+		cwd: session.worktreeDir || undefined,
+		...(trustProfile ? { trustProfile } : {}),
+		...(trust ? { egressAllowlist: trust.egressAllowlist } : {}),
+	};
+}
 
 async function sandboxView(session: NonNullable<ReturnType<typeof findSession>>) {
 	const recorded = session.sandbox;
@@ -111,16 +147,16 @@ export async function handleSandboxRoutes(
 					{ error: "Recreate deletes unpushed sandbox workspace data; confirm is required" },
 					{ status: 400 },
 				);
+			// destroy() deletes the provider's state file, so the sandbox's
+			// recorded trust policy has to be read before it.
+			const spec = recreateSandboxSpec(
+				session,
+				recordedTrustPolicy(recorded.provider, session.id),
+			);
 			touchNativeSession(session.id, { sandbox: { ...recorded, lifecycle: "preparing", lastLifecycleError: undefined } });
 			await dropSandboxPreviewRoutes(recorded.sandboxId);
 			await provider.destroy(recorded.sandboxId);
-			const recreated = await provider.ensure({
-				sessionId: session.id,
-				repo: session.repo,
-				branch: session.branch || undefined,
-				mode: session.mode,
-				cwd: session.worktreeDir || undefined,
-			});
+			const recreated = await provider.ensure(spec);
 			touchNativeSession(session.id, {
 				sandbox: {
 					...recorded,

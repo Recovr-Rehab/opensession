@@ -49,6 +49,7 @@ import {
   readRemoteState,
   remoteCloneUrl,
   removeRemoteState,
+  resolveTrustPolicy,
   setupRemoteWorkspace,
   touchRemoteState,
   withRemoteEnsureLock,
@@ -145,6 +146,7 @@ export class E2bProvider implements SandboxProvider {
     const apiKey = apiKeyOrThrow();
     const SandboxCls = await e2bSandboxClass();
     const prevState = findRemoteStateBySession(this.id, spec.sessionId);
+    const trust = resolveTrustPolicy(spec, prevState);
     const repo = getRepo(spec.repo || prevState?.repoId);
     const branch = spec.branch || prevState?.branch || repo.defaultBranch;
     const cwd =
@@ -183,7 +185,7 @@ export class E2bProvider implements SandboxProvider {
       branch,
       repo.defaultBranch,
       repo.id,
-      { sandboxId: sbx.sandboxId, provider: this.id, sessionId: spec.sessionId, repoId: repo.id, trustProfile: spec.trustProfile },
+      { sandboxId: sbx.sandboxId, provider: this.id, sessionId: spec.sessionId, repoId: repo.id, trustProfile: trust.trustProfile },
     );
     writeRemoteState({
       sandboxId: sbx.sandboxId,
@@ -194,6 +196,7 @@ export class E2bProvider implements SandboxProvider {
       branch,
       createdAt: prevState?.createdAt || new Date().toISOString(),
       lastActivityAt: new Date().toISOString(),
+      ...trust,
     });
     return this.makeHandle(sbx, spec.sessionId, cwd);
   }
