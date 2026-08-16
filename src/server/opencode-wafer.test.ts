@@ -37,11 +37,23 @@ function waferProvider() {
 }
 
 describe("Wafer provider", () => {
+  test("keeps every id lowercase, the only form that survives resolveModel", () => {
+    // resolveModel() canonicalizes model ids to lowercase, and OpenCode's own
+    // model lookup is case-sensitive — a mixed-case id (the casing Wafer's docs
+    // print) arrives there lowercased and fails with "Model not found".
+    for (const id of WAFER_PICKER_MODELS) expect(id).toEqual(id.toLowerCase());
+    // Wafer treats its names case-insensitively, so the documented casing still
+    // resolves to the same entry for labels and efforts.
+    expect(waferModelEfforts("DeepSeek-V4-Flash-0731-Fast")).toEqual(
+      waferModelEfforts("deepseek-v4-flash-0731-fast"),
+    );
+  });
+
   test("seeds the public catalog", () => {
     expect(defaultPickerModelsForProvider("wafer")).toEqual(
       WAFER_PICKER_MODELS,
     );
-    expect(WAFER_PICKER_MODELS).toContain("DeepSeek-V4-Flash-0731-Fast");
+    expect(WAFER_PICKER_MODELS).toContain("deepseek-v4-flash-0731-fast");
     expect(WAFER_PICKER_MODELS).toHaveLength(7);
     expect(defaultPickerModelsForProvider("xai")).toEqual([]);
   });
@@ -58,7 +70,7 @@ describe("Wafer provider", () => {
     ]);
     expect(
       (provider.models as Record<string, unknown>)[
-        "DeepSeek-V4-Flash-0731-Fast"
+        "deepseek-v4-flash-0731-fast"
       ],
     ).toMatchObject({
       name: "DeepSeek V4 Flash",
@@ -85,16 +97,16 @@ describe("Wafer provider", () => {
 
   test("exposes catalog labels and per-model efforts", () => {
     expect(
-      opencodeModelLabel("opencode/wafer/DeepSeek-V4-Flash-0731-Fast"),
+      opencodeModelLabel("opencode/wafer/deepseek-v4-flash-0731-fast"),
     ).toBe("DeepSeek V4 Flash");
     expect(opencodeModelLabel("opencode/wafer/glm5.2-fast")).toBe(
       "GLM 5.2 Fast",
     );
-    expect(opencodeModelLabel("opencode/wafer/Kimi-K2.6")).toBe("Kimi K2.6");
+    expect(opencodeModelLabel("opencode/wafer/kimi-k2.6")).toBe("Kimi K2.6");
     // One ladder across the catalog — Wafer normalizes effort at its edge, so
     // the DeepSeek and Kimi routes take `medium` too despite their upstream
     // catalogs listing only low/high/max.
-    for (const id of ["DeepSeek-V4-Flash-0731-Fast", "Kimi-K3", "GLM-5.2"]) {
+    for (const id of ["deepseek-v4-flash-0731-fast", "kimi-k3", "glm-5.2"]) {
       expect(modelEfforts(`opencode/wafer/${id}`)).toEqual([
         "low",
         "medium",

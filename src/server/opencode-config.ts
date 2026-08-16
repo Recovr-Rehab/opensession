@@ -127,7 +127,15 @@ const WAFER_EFFORTS: readonly WaferEffort[] = ["low", "medium", "high", "max"];
  *
  * Every model gets the WAFER_EFFORTS variants above, which is also what turns
  * thinking on: Wafer serves every model with reasoning OFF until a request
- * carries an effort. */
+ * carries an effort.
+ *
+ * The ids are LOWERCASE, unlike the mixed-case strings Wafer's own docs and
+ * catalog print ("DeepSeek-V4-Flash-0731-Fast"). Model ids are case-insensitive
+ * here and resolveModel() canonicalizes every one to lowercase, so a mixed-case
+ * id reaches OpenCode lowercased and fails its case-SENSITIVE model lookup
+ * ("Model not found: wafer/deepseek-v4-flash-0731-fast. Did you mean …?").
+ * Wafer documents its own model names as case-insensitive, so the lowercase
+ * form is what both ends accept. `name` carries the display casing. */
 const WAFER_MODELS: Record<
   string,
   {
@@ -141,13 +149,13 @@ const WAFER_MODELS: Record<
     temperature?: boolean;
   }
 > = {
-  "DeepSeek-V4-Flash-0731-Fast": {
+  "deepseek-v4-flash-0731-fast": {
     name: "DeepSeek V4 Flash",
     context: 1_048_576,
     output: 384_000,
     cost: { input: 0.28, output: 0.56, cache_read: 0.07 },
   },
-  "GLM-5.2": {
+  "glm-5.2": {
     name: "GLM 5.2",
     context: 1_048_576,
     output: 131_072,
@@ -159,13 +167,13 @@ const WAFER_MODELS: Record<
     output: 131_072,
     cost: { input: 2.1, output: 6.6, cache_read: 0.21 },
   },
-  "GLM-5.1": {
+  "glm-5.1": {
     name: "GLM 5.1",
     context: 202_752,
     output: 131_072,
     cost: { input: 1.0, output: 3.2, cache_read: 0.1 },
   },
-  "Kimi-K3": {
+  "kimi-k3": {
     name: "Kimi K3",
     context: 1_048_576,
     output: 131_072,
@@ -181,7 +189,7 @@ const WAFER_MODELS: Record<
     attachment: true,
     temperature: false,
   },
-  "Kimi-K2.6": {
+  "kimi-k2.6": {
     name: "Kimi K2.6",
     context: 262_144,
     output: 65_536,
