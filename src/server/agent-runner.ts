@@ -218,6 +218,12 @@ export interface RunAgentOpts {
    */
   user?: string;
   /**
+   * Forward assistant text as it is generated (per-user opt-in, see
+   * stream-text.ts). Off = the opencode runner mirrors each text part
+   * only once it is complete, so the reply arrives in one `stream_text` frame.
+   */
+  streamPartialText?: boolean;
+  /**
    * Model to switch to when the primary model dies on usage limits with no
    * account left in its pool (claude-runner/codex-runner rotate their own
    * account pools first — this fires only once a whole pool is exhausted).

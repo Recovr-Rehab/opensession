@@ -30,6 +30,7 @@ import { syncAgentSessionEngine } from "./agent-session-sync";
 import { getRunState, transitionRunState } from "./run-state";
 import { getAutomation, selfImproveMcpForSession } from "./automations";
 import { resolveSessionRunInputs } from "./session-run-inputs";
+import { streamPartialTextEnabled } from "./stream-text";
 import { defaultRepo } from "./config";
 import { isDevInstance } from "./dev-mode";
 import {
@@ -2008,6 +2009,13 @@ async function runSessionPromptInner(
 		// Gate per-user MCP servers (allowedUsers) to the prompt's author. Automation
 		// sessions pass no user, so they never see a user-restricted server.
 		user: runInputs.user,
+		// Live typing is the run owner's personal choice (stream-text.ts).
+		// Fall back to the session's owner so an auto-continue, queue drain or
+		// restart resume — none of which carry a prompt author — keeps typing
+		// the same way the turns around it did.
+		streamPartialText: streamPartialTextEnabled(
+			runInputs.user || session.startedBy,
+		),
 		journal: { osSessionId: session.id, kind: "prompt" },
 		startToken,
 		onAskUser: makeAskHandler(sessionId),

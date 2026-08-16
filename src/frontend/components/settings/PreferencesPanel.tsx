@@ -49,6 +49,11 @@ import {
 	type TurnActivityPref,
 } from "../../lib/turn-activity";
 import {
+	getStreamTextPref,
+	onStreamTextChanged,
+	setStreamTextPref,
+} from "../../lib/stream-text-pref";
+import {
 	getReplySuggestionsPref,
 	onReplySuggestionsChanged,
 	setReplySuggestionsPref,
@@ -367,6 +372,11 @@ export function PreferencesPanel() {
 		() => onTurnActivityChanged(() => setTurnActivity(getTurnActivityPref())),
 		[],
 	);
+	const [streamText, setStreamText] = useState(getStreamTextPref);
+	useEffect(
+		() => onStreamTextChanged(() => setStreamText(getStreamTextPref())),
+		[],
+	);
 	useEffect(() => {
 		fetchModels()
 			.then((m) => setModelOptions(m.models))
@@ -504,11 +514,24 @@ export function PreferencesPanel() {
 						/>
 					}
 				/>
+				<SettingRow
+					title="Live typing"
+					desc="Show the reply as it is written instead of when it finishes."
+					control={
+						<Switch
+							aria-label="Live typing"
+							checked={streamText}
+							onCheckedChange={setStreamTextPref}
+						/>
+					}
+				/>
 			</SettingCard>
 			<SettingsHint>
 				By default a turn is open while it runs and folds away once it settles.
 				"Fold tool calls" instead folds only the tool calls, leaving the rest of the
-				turn reading as normal transcript.
+				turn reading as normal transcript. Live typing applies to sessions you
+				run, and everyone watching one sees it. A reasoning model still thinks
+				before it writes, so the reply starts once thinking ends.
 			</SettingsHint>
 
 			<DeskVoicePanel />

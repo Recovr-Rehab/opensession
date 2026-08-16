@@ -155,6 +155,7 @@ import {
   activeRunRecords,
   type ActiveRunRecord,
 } from "./run-journal";
+import { streamPartialTextEnabled, TextPartStream } from "./stream-text";
 import { transitionRunState } from "./run-state";
 import {
   adoptedProcHandle,
@@ -3181,6 +3182,9 @@ function makePartMirror(ctx: {
   compactionMsgs: Set<string>;
   startedTools: Set<string>;
   finishedTools: Set<string>;
+  /** Type the reply out as it is generated instead of mirroring each text part
+   * only once complete. Per-user opt-in — see stream-text.ts. */
+  streamPartialText?: boolean;
 }): { mirrorTextPart: (part: any) => void; mirrorToolPart: (part: any) => void } {
   const {
     ocSessionId,
@@ -3192,10 +3196,29 @@ function makePartMirror(ctx: {
     compactionMsgs,
     startedTools,
     finishedTools,
+    streamPartialText,
   } = ctx;
   let envelopeLeakSteers = 0;
+  // Emits only what the stream has not carried yet for a part, so the deltas
+  // plus the completion tail concatenate to exactly the finished text.
+  const textStream = new TextPartStream();
+  const pushTextTail = (part: any) => {
+    const tail = textStream.tail(part.id, part.text);
+    if (tail) push({ type: "text_chunk", text: tail });
+  };
   const mirrorTextPart = (part: any) => {
-    if (part.type === "text" && !part.synthetic && part.time?.end && !emittedText.has(part.id)) {
+    if (part.type !== "text" || part.synthetic) return;
+    // Still being written: type it out. Compaction summaries are bookkeeping
+    // rather than the reply, so they never reach the bubble, streamed or not.
+    if (
+      streamPartialText &&
+      !part.time?.end &&
+      !emittedText.has(part.id) &&
+      !compactionMsgs.has(part.messageID)
+    ) {
+      pushTextTail(part);
+    }
+    if (part.time?.end && !emittedText.has(part.id)) {
       emittedText.add(part.id);
       if (compactionMsgs.has(part.messageID)) {
         turnEvent({ direction: "out", kind: "compaction_summary", ...summarizeText(part.text) });
@@ -3207,7 +3230,9 @@ function makePartMirror(ctx: {
         appendOpencodeTranscript(ocSessionId, [
           transcriptLineAssistantText(part.text, part.id, undefined, model),
         ]);
-        push({ type: "text_chunk", text: part.text });
+        // The whole part when nothing streamed, otherwise just the tail.
+        pushTextTail(part);
+        textStream.done(part.id);
         // Assistant text shaped like a tool transcript = the model
         // narrating tool calls/results it invented (see
         // looksLikeFabricatedToolTranscript). Correct it in-band before
@@ -4845,6 +4870,7 @@ async function* runOpencodeAttempt(
       compactionMsgs,
       startedTools,
       finishedTools,
+      streamPartialText: opts.streamPartialText,
     });
 
     // opencode retries provider stream errors internally (exponential backoff,
@@ -6147,6 +6173,9 @@ export async function tryReattachOpencodeRun(
         compactionMsgs,
         startedTools,
         finishedTools,
+        // No RunAgentOpts on this path: a reattached turn is resumed from the
+        // journal, which preserves the run's user, so read the pref from that.
+        streamPartialText: streamPartialTextEnabled(run.user),
       });
       abortController.signal.addEventListener("abort", () => {
         void client.session.abort({ path: { id: ocSessionId! }, ...q }).catch(() => {});
