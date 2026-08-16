@@ -1332,26 +1332,6 @@ export function App(
 		return () => window.removeEventListener("popstate", onPop);
 	}, []);
 
-	// Creator Micro macropad → client-side navigation. A local daemon on the
-	// user's machine streams app route paths (e.g. "/workspace/<ws>/session/<session>")
-	// over SSE; each message navigates in-app via the router — no reload.
-	// Silently inert when the daemon isn't running / not on this machine.
-	useEffect(() => {
-		if (typeof window === "undefined" || typeof EventSource === "undefined")
-			return;
-		let es: EventSource | undefined;
-		try {
-			es = new EventSource("http://localhost:8766/nav");
-			es.onmessage = (e) => {
-				const path = typeof e.data === "string" ? e.data.trim() : "";
-				if (!path.startsWith("/")) return;
-				navigate(parseRoute(path));
-			};
-			es.onerror = () => {}; // daemon absent: EventSource retries quietly
-		} catch {}
-		return () => es?.close();
-	}, []);
-
 	// The link ⌘⇧C copies: the open session/workspace, or the open PR preview.
 	// Assigned during render (below, once currentSession is known); null when
 	// the current view has nothing linkable.
