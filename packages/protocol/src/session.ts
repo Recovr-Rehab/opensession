@@ -93,9 +93,11 @@ export interface TranscriptEntry {
    *  run token — the payload rode with, so a replay can group a turn's
    *  injections with the message they were attached to. On a standing-context
    *  entry `hash` is the sha256 of the recorded content and `bytes` its length:
-   *  the record is written once per source and again only when the hash moves,
-   *  so a reader reconstructs a turn's standing input by taking the newest
-   *  record of each source at or before it. Servers keep these entries out of
+   *  one version of one source is one row (the entry id is content-addressed,
+   *  so re-asserting it upserts), and a reader reconstructs a turn's standing
+   *  input by taking the newest record of each source at or before it.
+   *  `turnId` there names the turn that recorded that version. Servers keep
+   *  these entries out of
    *  the default projection (they're a debug/replay record, not conversation),
    *  so a client only ever sees one if it asked for them. */
   contextInjection?: {

@@ -90,9 +90,14 @@ The record is an ordinary entry again: a `system` entry tagged `noticeKind:
 metadata (`source`, `turnId`, `hash`, `bytes`). The same predicate
 (`isContextInjection`) covers both kinds, so a standing record inherits every
 exclusion an injection record has rather than needing to be added to each one.
-The hash rides as metadata and as the basis of the entry id instead of keying a
-separate content-addressed table — the store already dedupes by entry id, and
-a parallel store is what this design exists to avoid.
+The hash rides as metadata and as the entry id instead of keying a separate
+content-addressed table: the store already dedupes by entry id, so one version
+of one source is one row however often it is re-asserted, and a parallel store
+is what this design exists to avoid. That matters because the in-process
+"already recorded" map dies with the server, and a restart would otherwise
+append another copy of a 273KB instructions record for every live session. The
+one thing it costs: a source that goes A to B and back to A upserts A's
+original row rather than earning a later one.
 
 Three sources today:
 

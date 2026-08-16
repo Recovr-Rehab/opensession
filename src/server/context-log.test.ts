@@ -383,6 +383,19 @@ describe("context-log: standing context is recorded on change, not per turn", ()
 		]);
 	});
 
+	test("a server restart does not append a second copy of an unchanged record", async () => {
+		const sessionId = "os-std-restart";
+		await turn(sessionId, { promptEntryId: "turn-1" });
+		// What a restart looks like from here: the in-process hash map is gone,
+		// so the next turn re-records. The entry id is content-addressed, so
+		// that lands on the same row instead of a second copy — which on a
+		// 273KB instructions record is the difference between a bounded log and
+		// megabytes a day.
+		(globalThis as any).__osStandingContext?.clear();
+		await turn(sessionId, { promptEntryId: "turn-2" });
+		expect(standing(sessionId, "tools")).toHaveLength(1);
+	});
+
 	test("a fallback hop reuses the record instead of writing a second", async () => {
 		const sessionId = "os-std-fallback";
 		__setEngineForTest(

@@ -43,12 +43,11 @@
  * standing input by taking the newest record of each source at or before it.
  *
  * The record is an ordinary entry again — same reasons, plus the store's
- * blob-splitting, which matters more here (an instructions file is tens of KB).
- * The hash rides as metadata and as the basis of the entry id rather than
- * keying a separate content-addressed table: the store already dedupes by
- * entry id, and a parallel store is the thing this design exists to avoid. The
- * one cost is that a source that changes A → B → A stores A twice, which is
- * the honest reading of the timeline anyway.
+ * blob-splitting, which matters more here (a real instructions payload measured
+ * 273KB). The hash rides as metadata and as the entry id rather than keying a
+ * separate content-addressed table: the store already dedupes by entry id, so
+ * one version of one source is one row however many times it is re-asserted,
+ * and a parallel store is the thing this design exists to avoid.
  *
  * ## What is NOT covered
  *
@@ -289,12 +288,20 @@ function appendStandingContext(input: StandingContextInput): void {
 	if (standing.size >= STANDING_MAX) standing.clear();
 	standing.set(key, hash);
 	const turnId = input.turnId || "";
-	// Content-derived like an injection id, but over the HASH plus the turn:
-	// re-recording the same version within a turn upserts one row, while a
-	// version that comes back in a later turn earns a new row at a new seq —
-	// which is what keeps "newest record at or before this turn" true.
+	// Content-addressed, and deliberately NOT keyed by turn: one version of one
+	// source is one row for the life of the session, so re-recording it upserts
+	// in place instead of appending. The map above already skips the common
+	// case; this is what covers the case it cannot see, a server restart, which
+	// on this instance happens many times a day and would otherwise append
+	// another copy of a 273KB instructions record per session per restart
+	// (measured 2026-08-16).
+	//
+	// The cost is a source that changes A → B → A: the returning version
+	// upserts A's original row rather than earning a later one, so the
+	// timeline reads as if B were still in force. Rare, and cheap next to
+	// unbounded duplication of the biggest record we write.
 	const id = `std-${createHash("sha256")
-		.update(`${sessionId}\u0000${turnId}\u0000${input.source}\u0000${hash}`)
+		.update(`${sessionId}\u0000${input.source}\u0000${hash}`)
 		.digest("hex")
 		.slice(0, 32)}`;
 	storeAppendUserLineEarly(
