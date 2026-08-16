@@ -9,26 +9,22 @@ import { existsSync, readFileSync } from "fs";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import { configuredPaths, defaultRepo } from "../../server/config";
 import { statePath } from "../../server/paths";
+import type { SlackSessionFile } from "../../server/types";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export interface SlackSession {
+/** The Slack loop's in-memory view of a session: the on-disk record with the
+ *  fields the loop always has narrowed to required. One type, so a field can't
+ *  exist in memory but not in the write path (repoId used to). */
+export interface SlackSession extends SlackSessionFile {
   channel: string;
   threadTs: string;
   userId: string;
   claudeSessionId: string | null;
-  /** Codex thread id, once the session has run on a codex-provider model. */
-  codexThreadId?: string | null;
-  /** Model id for this session's runs (set via /model); unset = default. */
-  model?: string;
   worktreeDir: string | null;
   branch: string | null;
-  /** Registered repo id this session works in; unset/null = the default repo
-   *  (tella-fusion) — the historical shape, so old session files stay valid. */
-  repoId?: string | null;
-  mode: "conversational" | "worktree";
   createdAt: string;
   lastActivity: string;
 }
@@ -148,23 +144,24 @@ export function getSessionKey(channel: string, threadTs?: string): string {
 // Session persistence
 // ---------------------------------------------------------------------------
 
+/** Read-modify-write, not a projection. This file has writers outside the loop
+ *  (agent-session-sync's piSessionId, `wt new-slack`'s branch-file fields), and
+ *  a full-file replace built from a hand-listed set of fields silently dropped
+ *  every key the loop doesn't carry. Undefined in-memory fields don't overwrite
+ *  what's on disk; an explicit null does (resetting claudeSessionId). */
 export async function saveSession(session: SlackSession): Promise<void> {
   const key = getSessionKey(session.channel, session.threadTs);
   const sessionFile = `${SESSION_DIR}/${key}.json`;
-  const data = {
-    channel: session.channel,
-    threadTs: session.threadTs,
-    userId: session.userId,
-    claudeSessionId: session.claudeSessionId,
-    codexThreadId: session.codexThreadId ?? null,
-    model: session.model,
-    worktreeDir: session.worktreeDir,
-    branch: session.branch,
-    mode: session.mode,
-    createdAt: session.createdAt,
+  const existing: SlackSessionFile = (await loadSession(key)) ?? {};
+  const patch = Object.fromEntries(
+    Object.entries(session).filter(([, v]) => v !== undefined)
+  );
+  writeJsonAtomic(sessionFile, {
+    ...existing,
+    ...patch,
+    codexThreadId: session.codexThreadId ?? existing.codexThreadId ?? null,
     lastActivity: new Date().toISOString(),
-  };
-  writeJsonAtomic(sessionFile, data);
+  });
 }
 
 export async function loadSession(
@@ -174,7 +171,7 @@ export async function loadSession(
     const sessionFile = `${SESSION_DIR}/${key}.json`;
     const file = Bun.file(sessionFile);
     if (await file.exists()) {
-      return JSON.parse(await file.text());
+      return JSON.parse(await file.text()) as SlackSession;
     }
     return null;
   } catch {
