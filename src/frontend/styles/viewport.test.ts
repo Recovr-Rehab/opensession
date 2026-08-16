@@ -13,6 +13,14 @@ describe("app viewport", () => {
 		expect(root).not.toMatch(/height:\s*100(?:d|l|s)?vh/);
 	});
 
+	test("focused text fields release the physical-screen override for keyboard panning", async () => {
+		const css = await Bun.file(CSS).text();
+
+		expect(css).toMatch(
+			/html:has\(body\.kb-open\),\s*body\.kb-open\s*\{[^}]*height:\s*100%\s*!important/,
+		);
+	});
+
 	test("standalone iPhones expand both document roots to the physical screen", async () => {
 		const html = await Bun.file(HTML).text();
 

@@ -953,6 +953,15 @@ body {
 	overflow: hidden;
 }
 
+/* The standalone correction is for the resting window only. When a text field
+   focuses, release its inline screen.height so WebKit can pan the original
+   viewport above the keyboard. The keyboard covers the letterboxed strip while
+   this class is present, and removing the class restores full device height. */
+html:has(body.kb-open),
+body.kb-open {
+	height: 100% !important;
+}
+
 /* ── Native feel: UI chrome isn't text-selectable ────────────────
    Disable text selection everywhere by default so labels, buttons,
    nav, headers, tabs and status text behave like a native app — no
