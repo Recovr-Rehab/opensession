@@ -2,7 +2,7 @@
  * Per-PR state for the github agent, one JSON file per PR at
  * ~/.opensession-github/<prNumber>.json. Tracks the single review comment id, which
  * head SHAs we've already reviewed (dedup), the resumable review session, and the
- * auto-fix / simplify run state. Mirrors the grafana-poller dedup store.
+ * auto-fix run state. Mirrors the grafana-poller dedup store.
  *
  * In-process locks coalesce rapid webhook bursts (force-push, stacked commits)
  * within one process; the on-disk state guards across restarts.
@@ -28,13 +28,6 @@ export interface AutoFixState {
   statusCommentId?: number;
   requestedBy?: string; // github login that applied the label (for commit attribution)
   steer?: string; // free-text steer from the triggering message (recovered on restart)
-  startedAt: string;
-}
-
-export interface SimplifyState {
-  active: boolean;
-  doneSha?: string;
-  requestedBy?: string;
   startedAt: string;
 }
 
@@ -66,7 +59,6 @@ export interface GithubPrState {
   /** The last review's conclusion (verdict/confidence), for the UI. */
   lastReview?: LastReviewState;
   autoFix?: AutoFixState;
-  simplify?: SimplifyState;
   /** Review → owning-session fix rounds (handoff.ts); cleared when a review
    *  comes back satisfied or the PR closes. */
   handoff?: HandoffState;
@@ -257,6 +249,91 @@ export function listPrStates(): GithubPrState[] {
     } catch {}
   }
   return out;
+}
+
+// ── Startup recovery selection ───────────────────────────────
+
+/** The recovery markers a PR state can carry, in the order that decides which
+ *  run owns the PR. Outermost first: auto-fix's gate review sets `activeRun`
+ *  while `autoFix.active` is still set (that pair is NORMAL, not corruption), so
+ *  resuming the fix loop resumes the review with it. */
+export type RecoveryKind = "auto-fix" | "run" | "mention" | "pending-mention";
+
+const RECOVERY_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/** When the marker was armed — the age `planRecovery` judges it by. */
+export function recoveryMarkerAt(s: GithubPrState, kind: RecoveryKind): string | undefined {
+  switch (kind) {
+    case "auto-fix":
+      return s.autoFix?.startedAt;
+    case "run":
+      return s.activeRun?.startedAt;
+    case "mention":
+      return s.activeMention?.startedAt;
+    case "pending-mention":
+      return s.pendingMention?.receivedAt;
+  }
+}
+
+function markersOn(s: GithubPrState): RecoveryKind[] {
+  const out: RecoveryKind[] = [];
+  if (s.autoFix?.active) out.push("auto-fix");
+  if (s.activeRun) out.push("run");
+  if (s.activeMention) out.push("mention");
+  if (s.pendingMention) out.push("pending-mention");
+  return out;
+}
+
+/**
+ * Pick the ONE run a restart should resume for this PR, plus the markers to
+ * clear on the way. Walks the markers outermost-first: each is stale (older than
+ * RECOVERY_MAX_AGE_MS, or undated) or live, and the first live one wins — every
+ * marker after it belongs to a run nested inside it, so firing those too would
+ * start a second run for the same PR.
+ *
+ * Crash recovery only makes sense across one restart window: an older flag is a
+ * leftover whose cleanup failed, and re-firing it would spawn a surprise run
+ * (and PR comments) on a long-dead PR at every boot. Stale flags are cleared and
+ * the next marker considered instead.
+ *
+ * Pure: the caller clears `stale` and fires `fire`.
+ */
+export function planRecovery(
+  s: GithubPrState,
+  now = Date.now(),
+): { fire?: RecoveryKind; stale: RecoveryKind[] } {
+  const stale: RecoveryKind[] = [];
+  for (const kind of markersOn(s)) {
+    const t = Date.parse(recoveryMarkerAt(s, kind) || "");
+    if (t && now - t <= RECOVERY_MAX_AGE_MS) return { fire: kind, stale };
+    stale.push(kind);
+  }
+  return { stale };
+}
+
+/** Clear one recovery marker (used for the stale ones planRecovery reports). */
+export function clearRecoveryMarker(s: GithubPrState, kind: RecoveryKind): void {
+  updatePrState(
+    s.prNumber,
+    s.headRef,
+    (st) => {
+      switch (kind) {
+        case "auto-fix":
+          if (st.autoFix) st.autoFix.active = false;
+          break;
+        case "run":
+          st.activeRun = undefined;
+          break;
+        case "mention":
+          st.activeMention = undefined;
+          break;
+        case "pending-mention":
+          st.pendingMention = undefined;
+          break;
+      }
+    },
+    s.ghRepo,
+  );
 }
 
 // ── In-process locks ─────────────────────────────────────────

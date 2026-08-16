@@ -61,7 +61,6 @@ export async function runSimplify(
       pr.number,
       pr.headRef,
       (s) => {
-        s.simplify = { active: true, requestedBy, startedAt };
         s.activeRun = { kind: "simplify", requestedBy, startedAt, progressCommentId: progressId ?? undefined, steer };
       },
       pr.ghRepo,
@@ -97,7 +96,6 @@ export async function runSimplify(
       pr.number,
       pr.headRef,
       (s) => {
-        if (s.simplify) { s.simplify.active = false; s.simplify.doneSha = pr.headSha; }
         if (s.activeRun?.kind === "simplify") s.activeRun = undefined;
       },
       pr.ghRepo,
@@ -130,7 +128,6 @@ export async function runSimplify(
       pr.number,
       pr.headRef,
       (s) => {
-        if (s.simplify) s.simplify.active = false;
         if (s.activeRun?.kind === "simplify") s.activeRun = undefined;
       },
       pr.ghRepo,
