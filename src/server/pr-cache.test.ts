@@ -105,7 +105,14 @@ describe("markCachedPrMerged", () => {
 		const swept = new Map([
 			["prcachetest", new Map([["stack-layer-3", openRow(778, "stack-layer-3")]])],
 		]);
-		prCache.__applyPrCloseTombstonesForTest(swept, refreshGeneration);
+		// Authoritative: the sweep actually re-queried this repo, so the overlay
+		// may be dropped. A sweep that skipped the repo keeps it (covered in
+		// pr-cache-staleness.test.ts).
+		prCache.__applyPrCloseTombstonesForTest(
+			swept,
+			refreshGeneration,
+			new Set(["prcachetest"]),
+		);
 
 		expect(swept.get("prcachetest")?.get("stack-layer-3")?.state).toBe("OPEN");
 	});

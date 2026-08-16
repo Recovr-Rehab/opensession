@@ -400,7 +400,13 @@ function applyPrCloseTombstones(
 			// skipped this repo entirely (rate limit, unchanged probe, failed open
 			// query), which never observed the close at all. Same authority rule
 			// the review mutations below use.
-			const [ghRepo] = key.split("#");
+			// Two key shapes live in these maps: `owner/repo#<number>` from
+			// closeTombstoneKey, and `owner/repo@<branch>` from
+			// mergedBranchTombstoneKey (a merge recorded before any cached row
+			// named the number). Cut at whichever separator comes first — a
+			// ghRepo holds neither character, a branch may hold "@".
+			const cut = key.search(/[#@]/);
+			const ghRepo = cut === -1 ? key : key.slice(0, cut);
 			const repoId = prRepos().find((repo) => repo.ghRepo === ghRepo)?.id;
 			if (
 				generation <= refreshGeneration &&
@@ -436,8 +442,9 @@ function applyPrCloseTombstones(
 export function __applyPrCloseTombstonesForTest(
 	data: Map<string, Map<string, PrInfo>>,
 	refreshGeneration: number,
+	authoritativeRepos: Set<string> = new Set(),
 ): void {
-	applyPrCloseTombstones(data, refreshGeneration);
+	applyPrCloseTombstones(data, refreshGeneration, authoritativeRepos);
 }
 
 /** The cached head branch of an open PR, by number — lets webhook events that
