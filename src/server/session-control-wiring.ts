@@ -5,6 +5,14 @@
  * answers/creates exactly like a human in the web UI. Also keeps the linked
  * Slack-channel index + inbound-message bridge fresh. Module-scope side
  * effects: re-run on every hot reload (cheap, and keeps closures current).
+ *
+ * This module holds NO allowlist and gates nothing. Registering the surface is
+ * unconditional; who may reach it is decided entirely at the wiring site —
+ * opensession-sessions goes to interactive runs only (interactiveMcpServers in
+ * interactive-mcp.ts, whose run-rpc builder fails closed for automation-owned
+ * sessions). So a capability added to a callback here reaches every run kind
+ * that already carries the server, and none that doesn't. Widen or narrow the
+ * exposure there, never here.
  */
 
 import { AUTO_CONTINUE_USER } from "./auto-continue";
