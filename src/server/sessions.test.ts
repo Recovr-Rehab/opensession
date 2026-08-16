@@ -227,6 +227,36 @@ describe("getAllSessions", () => {
 		});
 	});
 
+	it("reads back every engine session id engineSessionPatch writes", async () => {
+		const { engineSessionPatch, engineSessionIdFor } = await import(
+			`./sessions.ts?test=${crypto.randomUUID()}`
+		);
+
+		// The round trip is the invariant: a read rule that drifts from the write
+		// rule returns undefined, which the caller can't tell from "first run" —
+		// so it mints a fresh engine session and loses the conversation.
+		for (const [provider, id] of [
+			["claude", "claude-session-1"],
+			["codex", uuidV7ForDate("2026-07-02T19:00:00.000Z")],
+			["opencode", "ses_abc123"],
+			["pi", "pi-session-1"],
+		] as const) {
+			expect(engineSessionIdFor(engineSessionPatch(provider, id), provider)).toBe(id);
+		}
+
+		// Legacy files: an opencode id riding the claude slot resumes opencode,
+		// never claude; a pre-pi-slot claude uuid still serves a pi run.
+		expect(engineSessionIdFor({ claudeSessionId: "ses_abc123" }, "opencode")).toBe(
+			"ses_abc123",
+		);
+		expect(engineSessionIdFor({ claudeSessionId: "ses_abc123" }, "claude")).toBeUndefined();
+		expect(engineSessionIdFor({ claudeSessionId: "ses_abc123" }, "pi")).toBeUndefined();
+		expect(engineSessionIdFor({ claudeSessionId: "claude-session-1" }, "pi")).toBe(
+			"claude-session-1",
+		);
+		expect(engineSessionIdFor({}, "claude")).toBeUndefined();
+	});
+
 	it("falls back to the other engine transcript when the active provider has none", async () => {
 		const codexThreadId = uuidV7ForDate("2026-07-02T18:45:00.000Z");
 		const rolloutDir = join(home, ".codex", "sessions", "2026", "07", "02");

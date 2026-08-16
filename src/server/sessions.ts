@@ -590,6 +590,44 @@ export function engineSessionPatch(
   return { claudeSessionId: engineSessionId || undefined };
 }
 
+/**
+ * Inverse of engineSessionPatch: which id a run on `provider` resumes. Keep the
+ * two together — a read rule that drifts from the write rule yields undefined,
+ * which is indistinguishable from "first run on this provider", so the caller
+ * mints a fresh engine session and the conversation silently loses its history.
+ *
+ * The slots follow the writer's table, plus the fallbacks that table's
+ * transitional mirror implies:
+ * - opencode reads its own slot, then a `ses_`-shaped claude-slot ride (the
+ *   mirror engineSessionPatch still writes, and all a pre-slot file has).
+ * - pi reads its own slot, then a NON-`ses_` claude slot for files from before
+ *   the pi slot existed. A genuine claude uuid riding there just misses the pi
+ *   session dir and starts fresh, same as no id.
+ * - claude never resumes a `ses_`-shaped id: that ride was written by an
+ *   opencode run, and handing it to the Claude SDK would fail the resume.
+ */
+export function engineSessionIdFor(
+  session: {
+    claudeSessionId?: string | null;
+    codexThreadId?: string | null;
+    opencodeSessionId?: string | null;
+    piSessionId?: string | null;
+  },
+  provider: "claude" | "codex" | "opencode" | "pi"
+): string | undefined {
+  const claudeSlot = session.claudeSessionId || undefined;
+  const riddenByOpencode = isOpencodeSessionId(claudeSlot);
+  if (provider === "codex") return session.codexThreadId || undefined;
+  if (provider === "opencode")
+    return (
+      session.opencodeSessionId ||
+      (riddenByOpencode ? claudeSlot : undefined)
+    );
+  if (provider === "pi")
+    return session.piSessionId || (riddenByOpencode ? undefined : claudeSlot);
+  return riddenByOpencode ? undefined : claudeSlot;
+}
+
 function sessionEngineKeys(session: UnifiedSession): string[] {
   return [
     session.claudeSessionId ? `claude:${session.claudeSessionId}` : null,
