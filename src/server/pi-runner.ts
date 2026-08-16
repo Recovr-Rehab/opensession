@@ -1120,15 +1120,15 @@ export async function* runPi(
   const isScratch = mode === "scratch";
 
   const runKey = opts.sessionId || journal?.osSessionId || crypto.randomUUID();
-  if (activeRuns.has(runKey)) {
+  const registeredKeys = new Set<string>([runKey]);
+  if (journal?.osSessionId) registeredKeys.add(journal.osSessionId);
+  if (opts.transcriptSessionId) registeredKeys.add(opts.transcriptSessionId);
+  if ([...registeredKeys].some((key) => activeRuns.has(key))) {
     yield { type: "error", content: "Session is busy" };
     return;
   }
   const abort = new AbortController();
   const handle: PiRunHandle = { abort };
-  const registeredKeys = new Set<string>([runKey]);
-  if (journal?.osSessionId) registeredKeys.add(journal.osSessionId);
-  if (opts.transcriptSessionId) registeredKeys.add(opts.transcriptSessionId);
   for (const key of registeredKeys) activeRuns.set(key, handle);
 
   // The unified session id every transcript row keys on; kind-only loop runs
