@@ -834,10 +834,26 @@ export function SessionViewer({
 		() => sessionPrPresentation(session.prs),
 		[session.prs],
 	);
-	const mergedPr =
+	const mergedPrValue =
 		prPresentation.primary?.state === "MERGED"
 			? prPresentation.primary
 			: undefined;
+	// The sessions poll rebuilds session.prs every tick, so `primary` is a new
+	// object on every render. Everything downstream memoizes on it, including
+	// the Slack share the memoized transcript takes as a prop, so key it on the
+	// fields those readers use, the way the walkthrough below does.
+	const mergedPrKey = mergedPrValue
+		? [
+				mergedPrValue.number,
+				mergedPrValue.repo,
+				mergedPrValue.branch ?? "",
+				mergedPrValue.title ?? "",
+			].join("\u0000")
+		: "";
+	const mergedPr = useMemo(
+		() => mergedPrValue,
+		[mergedPrKey], // eslint-disable-line react-hooks/exhaustive-deps
+	);
 	const [shippedChangeStatus, setShippedChangeStatus] = useState<
 		"idle" | "sharing"
 	>("idle");
@@ -1304,6 +1320,15 @@ export function SessionViewer({
 		() => session.walkthrough,
 		[walkthroughKey], // eslint-disable-line react-hooks/exhaustive-deps
 	);
+	// The PR verdict on the transcript's last review loop, keyed the same way:
+	// it is built fresh from the polled session on every render, and an
+	// unstable prop here re-renders the whole transcript on every poll tick.
+	const reviewResultValue = reviewLoopResult(session);
+	const reviewResultKey = JSON.stringify(reviewResultValue ?? null);
+	const reviewResult = useMemo(
+		() => reviewResultValue,
+		[reviewResultKey], // eslint-disable-line react-hooks/exhaustive-deps
+	);
 	// Open state + width of the right panel. Browser-level, and shared with the
 	// session-less workspace route so the column keeps its place and size when
 	// a workspace has no session to show yet (hooks/useSidePanel).
@@ -1443,12 +1468,13 @@ export function SessionViewer({
 	} = useSessionScroll(cachedTranscript?.following ?? true);
 
 	// Keep the cached snapshot current as live frames and history pages land.
-	// Scroll position is updated synchronously in handleMessagesScroll below.
+	// Scroll position is updated synchronously in handleMessagesScroll below;
+	// the anchor is carried rather than recomputed, because this runs on every
+	// streamed frame and pickScrollAnchor reads a rect per [data-eid] node.
 	useEffect(() => {
 		if (transcriptReadySessionRef.current !== session.id) return;
 		const previous = cachedTranscriptView(session.id);
 		const el = messagesRef.current;
-		const anchor = el ? pickScrollAnchor(el) : null;
 		cacheTranscriptView(session.id, {
 			entries,
 			cursor: transcriptCursorRef.current,
@@ -1457,13 +1483,47 @@ export function SessionViewer({
 			historyStart: historyStartRef.current,
 			scrollTop: el?.scrollTop ?? previous?.scrollTop ?? 0,
 			following,
-			anchorEid: anchor?.dataset.eid ?? previous?.anchorEid ?? null,
-			anchorTop:
-				anchor && el
-					? anchor.getBoundingClientRect().top - el.getBoundingClientRect().top
-					: previous?.anchorTop ?? null,
+			anchorEid: previous?.anchorEid ?? null,
+			anchorTop: previous?.anchorTop ?? null,
 		});
 	}, [entries, following, historyTruncated, messagesRef, session.id]);
+	// Where the anchor is computed. Nothing reads it until this session is
+	// opened again, and pickScrollAnchor reads a rect per [data-eid] node, so
+	// it runs once the reader settles instead of on every scroll event and
+	// every streamed frame.
+	const captureScrollAnchor = useCallback(() => {
+		const el = messagesRef.current;
+		const cached = transcriptViewCache.get(session.id);
+		if (!el || !cached) return;
+		// Nothing qualifying at the top edge clears the pair, rather than
+		// leaving one the reader has scrolled away from.
+		const anchor = pickScrollAnchor(el);
+		cacheTranscriptView(session.id, {
+			...cached,
+			scrollTop: el.scrollTop,
+			following: followingLive.current,
+			anchorEid: anchor?.dataset.eid ?? null,
+			anchorTop: anchor
+				? anchor.getBoundingClientRect().top - el.getBoundingClientRect().top
+				: null,
+		});
+	}, [followingLive, messagesRef, session.id]);
+	const anchorCaptureRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const scheduleAnchorCapture = useCallback(() => {
+		if (anchorCaptureRef.current) clearTimeout(anchorCaptureRef.current);
+		anchorCaptureRef.current = setTimeout(captureScrollAnchor, 250);
+	}, [captureScrollAnchor]);
+	// And once more on the way out, so the last thing the reader did is what a
+	// switch back restores to. App keys SessionViewer on the session id
+	// (App.tsx), so this cleanup still sees the transcript it measures: React
+	// commits deletions before insertions.
+	useLayoutEffect(() => {
+		return () => {
+			if (anchorCaptureRef.current) clearTimeout(anchorCaptureRef.current);
+			anchorCaptureRef.current = null;
+			captureScrollAnchor();
+		};
+	}, [captureScrollAnchor]);
 	useEffect(() => {
 		setEntries((prev) => withModelSwitches(prev, session.modelHistory));
 	}, [session.modelHistory]);
@@ -2898,17 +2958,15 @@ export function SessionViewer({
 		lastHistoryScrollTopRef.current = current;
 		onScroll();
 		const cached = transcriptViewCache.get(session.id);
+		// Only the cheap fields here: a scroll event must not walk the
+		// transcript. The anchor follows once the reader settles.
 		if (el && cached) {
-			const anchor = pickScrollAnchor(el);
 			cacheTranscriptView(session.id, {
 				...cached,
 				scrollTop: current,
 				following: followingLive.current,
-				anchorEid: anchor?.dataset.eid ?? null,
-				anchorTop: anchor
-					? anchor.getBoundingClientRect().top - el.getBoundingClientRect().top
-					: null,
 			});
+			scheduleAnchorCapture();
 		}
 		if (
 			el &&
@@ -2921,7 +2979,14 @@ export function SessionViewer({
 			historyGestureUntilRef.current = 0;
 			loadEarlierHistory();
 		}
-	}, [followingLive, loadEarlierHistory, messagesRef, onScroll, session.id]);
+	}, [
+		followingLive,
+		loadEarlierHistory,
+		messagesRef,
+		onScroll,
+		scheduleAnchorCapture,
+		session.id,
+	]);
 	useEffect(() => {
 		const el = messagesRef.current;
 		if (!el || sessionHidden) return;
@@ -3018,11 +3083,24 @@ export function SessionViewer({
 	const latestAssistantMessage = entries.findLast(
 		(entry) => entry.type === "assistant" && entry.content.trim(),
 	)?.content.trim() || "";
-	const shippedSent =
+	const shippedSentValue =
 		shippedShare ||
 		(mergedPr
 			? session.slackShares?.findLast((share) => share.prNumber === mergedPr.number)
 			: undefined);
+	// Same reason as mergedPr above: a receipt read off the polled session is a
+	// fresh object every tick, and the share below is a transcript prop.
+	const shippedSentKey = shippedSentValue
+		? [
+				shippedSentValue.channelName,
+				shippedSentValue.permalink,
+				shippedSentValue.at,
+			].join("\u0000")
+		: "";
+	const shippedSent = useMemo(
+		() => shippedSentValue,
+		[shippedSentKey], // eslint-disable-line react-hooks/exhaustive-deps
+	);
 	const shippedChangeShare = useMemo(
 		() =>
 			mergedPr
@@ -3166,6 +3244,35 @@ export function SessionViewer({
 	// selection replaces it immediately and stays highlighted while you type.
 	const [quote, setQuote] = useState<Quote | null>(null);
 	const clearQuote = useCallback(() => setQuote(null), []);
+	// Whether a draft is in the way of reopening a message in the composer, read
+	// through a ref. Every value it reads changes as you type or attach, and
+	// the transcript's onEditMessage has to keep one identity across all of
+	// that: the memoized TranscriptBlocks is what stands between a keystroke
+	// and a re-render of the whole conversation.
+	const composerDraftRef = useRef({
+		draftKey,
+		images,
+		files,
+		quote,
+		contextSessions,
+	});
+	composerDraftRef.current = {
+		draftKey,
+		images,
+		files,
+		quote,
+		contextSessions,
+	};
+	const composerHasDraft = useCallback(() => {
+		const current = composerDraftRef.current;
+		return Boolean(
+			loadDraft(current.draftKey).text.trim() ||
+				current.images.length ||
+				current.files.length ||
+				current.quote ||
+				current.contextSessions.length,
+		);
+	}, []);
 	// Switching sessions drops staged selections: they quote THAT transcript.
 	useEffect(() => {
 		setQuote(null);
@@ -3456,14 +3563,7 @@ export function SessionViewer({
 	}
 
 	function editQueuedInComposer(q: QueueReceipt) {
-		const draft = loadDraft(draftKey);
-		if (
-			draft.text.trim() ||
-			images.length ||
-			files.length ||
-			quote ||
-			contextSessions.length
-		) {
+		if (composerHasDraft()) {
 			toast("Send or clear your draft before editing a queued message");
 			return;
 		}
@@ -3475,15 +3575,10 @@ export function SessionViewer({
 		});
 	}
 
-	function editSentMessageInComposer(entry: TranscriptEntry) {
-		const draft = loadDraft(draftKey);
-		if (
-			draft.text.trim() ||
-			images.length ||
-			files.length ||
-			quote ||
-			contextSessions.length
-		) {
+	// Stable identity: this is a prop of the memoized transcript, so a fresh
+	// function each render would re-render every bubble on every poll tick.
+	const editSentMessageInComposer = useCallback((entry: TranscriptEntry) => {
+		if (composerHasDraft()) {
 			toast("Send or clear your draft before editing a message");
 			return;
 		}
@@ -3497,7 +3592,7 @@ export function SessionViewer({
 			text: entry.content,
 			replace: true,
 		}));
-	}
+	}, [composerHasDraft]);
 
 	function handleQueueReorder(next: QueueReceipt[]) {
 		pendingReorderRef.current = next;
@@ -5830,7 +5925,7 @@ export function SessionViewer({
 															entries={entries}
 															live={isBusy}
 															sessionId={session.id}
-															reviewResult={reviewLoopResult(session)}
+															reviewResult={reviewResult}
 															onEditMessage={editSentMessageInComposer}
 															// Same gate the composer sends under: a busy session
 															// is already continuing, and one you cannot type into

@@ -44,6 +44,24 @@ export interface SessionDiffState {
 }
 
 /**
+ * Whether two poll results would render the same file list. The server stamps
+ * each repo's patch with a content hash, so the version pair settles it; the
+ * empty-diff placeholder carries no hash, which is what the size guards cover.
+ */
+function sameRepoDiffs(a: RepoDiff[] | null, b: RepoDiff[]): boolean {
+	if (a === null || a.length !== b.length) return false;
+	return a.every((repo, i) => {
+		const next = b[i];
+		return (
+			repo.repo === next.repo &&
+			repo.diff.diffVersion === next.diff.diffVersion &&
+			repo.diff.rawPatch.length === next.diff.rawPatch.length &&
+			repo.diff.files.length === next.diff.files.length
+		);
+	});
+}
+
+/**
  * Fetch + poll a session's live worktree diff. Used both by the DiffPanel and
  * by SessionViewer (to show the changed-file count on the Changes tab) — sharing
  * one hook means one poll instead of two racing fetches of the same big patch.
@@ -57,11 +75,19 @@ export function useSessionDiff(
   const [repos, setRepos] = useState<RepoDiff[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // What the last committed poll held, and whether that poll succeeded. The
+  // poll re-fetches the same patch every 8s while a run is going, and an
+  // identical answer must not reach state: committing one re-renders every
+  // mounted file of the diff for nothing. Cleared on failure so the next
+  // success always commits, error or not.
+  const committed = useRef<{ repos: RepoDiff[] } | null>(null);
 
 	const load = useCallback(async (urgent = false) => {
     try {
       const data = await fetchDiff(sessionId);
       if (data.error) throw new Error(data.error);
+      const next = data.repos || [];
+      if (committed.current && sameRepoDiffs(committed.current.repos, next)) return;
       // @pierre/diffs renders on the main thread (disableWorkerPool) and
       // parsePatchFiles runs during render, so committing a large diff is a long,
       // uninterruptible task. Commit it as a transition so an urgent interaction —
@@ -69,13 +95,15 @@ export function useSessionDiff(
       // for the whole diff to parse and paint. If the user closes the panel before
       // this render commits, React discards it and the panel closes instantly.
 		const commit = () => {
-			setRepos(data.repos || []);
+			committed.current = { repos: next };
+			setRepos(next);
 			setError(null);
 			setLoading(false);
 		};
 		if (urgent) commit();
 		else startTransition(commit);
     } catch (e: any) {
+      committed.current = null;
       setError(e.message);
       setLoading(false);
     }
@@ -84,6 +112,7 @@ export function useSessionDiff(
   // Switching sessions: drop the previous session's diff so a stale count/patch
   // doesn't flash before the new fetch lands.
   useEffect(() => {
+    committed.current = null;
     setRepos(null);
     setError(null);
     setLoading(true);

@@ -1124,6 +1124,13 @@ const MD_CACHE_MAX = 500;
 const MD_CACHE_INPUT_MAX = 32 * 1024;
 /** The context key an empty context produces, which caches under `src` alone. */
 const EMPTY_CONTEXT_KEY = ["", "", "", ""].join("\u0000");
+// The last source rendered under each context. A streaming message renders a
+// longer prefix of itself every frame, and each one is a fresh key: without
+// this, one message inserts hundreds of dead entries and evicts every other
+// bubble's HTML, which then re-parses on scroll-back. Dropping the prefix as
+// its successor lands keeps a stream to one slot.
+const mdStreamTail = new Map<string, string>();
+const MD_STREAM_TAIL_MAX = 32;
 
 export interface MarkdownContext {
   /**
@@ -1189,6 +1196,7 @@ export function renderMarkdown(src: string, ctx?: MarkdownContext): string {
     renderRawHtml = previousRawHtml;
   }
   if (cacheable) {
+    dropStreamedPrefix(contextKey, src);
     mdCache.set(cacheKey, out);
     if (mdCache.size > MD_CACHE_MAX) {
       const oldest = mdCache.keys().next().value;
@@ -1196,6 +1204,32 @@ export function renderMarkdown(src: string, ctx?: MarkdownContext): string {
     }
   }
   return out;
+}
+
+/**
+ * Evict the partial this render continues, and remember this one in its place.
+ * Only an exact prefix counts, so two messages streaming under one context
+ * simply keep their own entries rather than evicting each other's.
+ */
+function dropStreamedPrefix(contextKey: string, src: string) {
+  const previous = mdStreamTail.get(contextKey);
+  if (
+    previous !== undefined &&
+    previous.length < src.length &&
+    src.startsWith(previous)
+  )
+    mdCache.delete(
+      contextKey === EMPTY_CONTEXT_KEY
+        ? previous
+        : `${contextKey}\u0000${previous}`,
+    );
+  mdStreamTail.delete(contextKey);
+  mdStreamTail.set(contextKey, src);
+  while (mdStreamTail.size > MD_STREAM_TAIL_MAX) {
+    const oldest = mdStreamTail.keys().next().value;
+    if (oldest === undefined) break;
+    mdStreamTail.delete(oldest);
+  }
 }
 
 function withoutSingleParagraph(html: string): string {

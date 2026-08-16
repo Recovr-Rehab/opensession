@@ -1,4 +1,11 @@
-import React, { useMemo, useState, useRef, useCallback, useEffect } from "react";
+import React, {
+  useMemo,
+  useState,
+  useRef,
+  useCallback,
+  useEffect,
+  startTransition,
+} from "react";
 import { parsePatchFiles } from "@pierre/diffs";
 import { EditProvider, FileDiff } from "@pierre/diffs/react";
 import type {
@@ -188,6 +195,17 @@ const NO_VIEWED: ReadonlySet<string> = new Set();
 const LOCK_FILE =
   /(^|\/)(bun\.lockb?|package-lock\.json|yarn\.lock|pnpm-lock\.yaml|Cargo\.lock|Gemfile\.lock|composer\.lock|poetry\.lock|uv\.lock|go\.sum|flake\.lock|Podfile\.lock|Package\.resolved)$/;
 
+/* Mounting a FileDiff parses and highlights that file on the main thread, so a
+   surface that opens many at once — the review canvas expands every file, and
+   "Expand all" is one click anywhere — commits one long, uninterruptible task.
+   Admit them a couple per frame instead: the top of the diff paints straight
+   away and the rest arrive under it, with the thread free in between for
+   scrolling, clicking and the caret. The budget only ever gates a batch that
+   opened together; once it has caught up with what is open, expanding one more
+   file mounts it in the same commit as the click, as before. */
+const MOUNT_FIRST_BATCH = 2;
+const MOUNT_PER_FRAME = 4;
+
 // The viewed set spans the whole PR while a guide section renders a subset,
 // so count intersections rather than trusting `viewed.size`.
 function countViewed(
@@ -260,6 +278,9 @@ export function CommentableDiff({
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
+  // How many of the currently-open files may mount their FileDiff. Grows a
+  // batch per frame until it covers them all (see MOUNT_FIRST_BATCH).
+  const [mountBudget, setMountBudget] = useState(MOUNT_FIRST_BATCH);
   const toggle = useCallback((i: number) => {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -356,6 +377,7 @@ export function CommentableDiff({
           .filter((index) => !LOCK_FILE.test(files[index].name)),
       ),
     );
+    setMountBudget(MOUNT_FIRST_BATCH);
     viewedCollapseKey.current = null;
   }, [patch, defaultExpandedFiles, files]);
 
@@ -584,6 +606,30 @@ export function CommentableDiff({
     return m;
   }, [pendingComments]);
 
+  // A file is open when the reader expanded it, or when something inside it
+  // has to stay on screen: a comment being written, comments already added, an
+  // edit session (collapsing would unmount the editor mid-edit).
+  const isOpenAt = (file: FileDiffMetadata, index: number) =>
+    expanded.has(index) ||
+    draft?.fileIndex === index ||
+    (pendingByFile.get(file.name)?.length ?? 0) > 0 ||
+    editingPath === file.name;
+  // Open files in reading order, so the staged budget admits them top-down.
+  const mountRank = new Map<number, number>();
+  files.forEach((file, index) => {
+    if (isOpenAt(file, index)) mountRank.set(index, mountRank.size);
+  });
+
+  useEffect(() => {
+    if (mountBudget >= mountRank.size) return;
+    // A frame apart, and as a transition, so a click or a scroll lands before
+    // the next batch of files rather than behind it.
+    const frame = requestAnimationFrame(() =>
+      startTransition(() => setMountBudget((n) => n + MOUNT_PER_FRAME)),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [mountBudget, mountRank.size]);
+
   if (files.length === 0) {
     return <EmptyState>Nothing to display</EmptyState>;
   }
@@ -596,6 +642,9 @@ export function CommentableDiff({
     // the diff), already-added pending comments (so they stay visible), or an
     // active edit session (collapsing would unmount the editor mid-edit).
     const isOpen = expanded.has(i) || isDraftFile || pend.length > 0 || isEditing;
+    // Open, but its turn to parse has not come round yet — the header is
+    // already drawn open, and the diff drops in a frame or two later.
+    const mounted = (mountRank.get(i) ?? 0) < mountBudget;
     const isViewed = viewed.has(file.name);
     const editable =
       !!editFile && file.type !== "deleted" && !IMAGE_EXT.test(file.name);
@@ -781,7 +830,7 @@ export function CommentableDiff({
         {isOpen &&
           (imageSrcs && IMAGE_EXT.test(file.name) ? (
             <ImageDiffRow file={file} srcs={imageSrcs(file)} />
-          ) : (
+          ) : !mounted ? null : (
             <FileDiffRow
               key={theme}
               file={file}
@@ -1109,6 +1158,13 @@ const FileDiffRow = React.memo(function FileDiffRow({
       lineAnnotations={annotations}
       selectedLines={selectedLines}
       renderAnnotation={renderAnnotation}
+      // Not the lever it looks like: the prop only decides whether to pass the
+      // pool down from @pierre/diffs' WorkerPoolContext, and nothing in this
+      // app mounts that provider, so highlighting is on the main thread either
+      // way. Wiring the pool needs a workerFactory pointing at a bundled
+      // worker script, and Bun's bundler (1.3.14) does not transform
+      // `new Worker(new URL(...))` at all, so the URL would ship verbatim and
+      // 404. Staged mounting above is what keeps the task short instead.
       disableWorkerPool
     />
   );

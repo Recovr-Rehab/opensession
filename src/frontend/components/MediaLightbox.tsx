@@ -484,6 +484,8 @@ function ZoomableImage({
 }) {
 	const wrapRef = useRef<HTMLDivElement>(null);
 	const imgRef = useRef<HTMLImageElement>(null);
+	/** Cached layoutOrigin(), see there. Null means "measure on next read". */
+	const layout = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
 	const t = useRef({ s: 1, tx: 0, ty: 0 });
 	const swipeX = useRef(0);
 	const pointers = useRef(new Map<number, { x: number; y: number }>());
@@ -539,19 +541,48 @@ function ZoomableImage({
 		const wrap = wrapRef.current;
 		if (!enterFrom || !wrap) return;
 		if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+		// The wrapper is translated for the length of this, so the img's rect is
+		// in motion and must not be cached from it.
+		layout.current = null;
 		applySwipe(enterFrom * Math.min(140, window.innerWidth * 0.25));
 		const frame = requestAnimationFrame(() => applySwipe(0, true));
 		return () => cancelAnimationFrame(frame);
 	}, [enterFrom, src]);
 
 	/** The img's layout (untransformed) viewport rect — transform-origin is 0 0,
-	 * so the rendered top-left is layout top-left + current translation. */
+	 * so the rendered top-left is layout top-left + current translation.
+	 *
+	 * Cached, because reading it is a layout read and the callers sit between
+	 * transform writes: measuring per pointer event forces a synchronous reflow
+	 * on every frame of a pinch or pan, at up to the pointer's rate. The value
+	 * it returns is by construction independent of the transform, so nothing
+	 * a gesture does can invalidate it — only a real layout change can. */
 	function layoutOrigin() {
+		if (layout.current) return layout.current;
 		const img = imgRef.current!;
 		const r = img.getBoundingClientRect();
 		const { s, tx, ty } = t.current;
-		return { x: r.left - tx, y: r.top - ty, w: r.width / s, h: r.height / s };
+		return (layout.current = {
+			x: r.left - tx,
+			y: r.top - ty,
+			w: r.width / s,
+			h: r.height / s,
+		});
 	}
+	// The picture's box moves with the viewport, and moves again when a new src
+	// decodes at a different aspect. Each gesture also re-measures on its first
+	// press: the wrapper carries the page-turn translation, so a box read while
+	// that is running describes where the picture was, not where it settles.
+	useEffect(() => {
+		const forget = () => {
+			layout.current = null;
+		};
+		window.addEventListener("resize", forget);
+		return () => window.removeEventListener("resize", forget);
+	}, []);
+	useEffect(() => {
+		layout.current = null;
+	}, [src]);
 
 	/** Keep the scaled image covering the viewport (or centered when smaller).
 	 * Bounds are the full screen, not the letterboxed wrapper — a zoomed photo
@@ -594,6 +625,9 @@ function ZoomableImage({
 	}
 
 	function onPointerDown(e: React.PointerEvent) {
+		// One measurement per gesture: nothing that happens between here and the
+		// last finger up can move the picture's layout box.
+		layout.current = null;
 		wrapRef.current?.setPointerCapture(e.pointerId);
 		pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 		const pts = [...pointers.current.values()];
@@ -765,6 +799,11 @@ function ZoomableImage({
 				src={src}
 				alt=""
 				draggable={false}
+				// object-contain sizes the box from the decoded picture, so the
+				// box before load is not the box after it.
+				onLoad={() => {
+					layout.current = null;
+				}}
 				// The scrim is near-black in both themes, so a dark screenshot
 				// opened full size has no edge of its own and bleeds into it.
 				// A white hairline rather than border-line-strong: this surface

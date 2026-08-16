@@ -228,9 +228,19 @@ function splitPatchByFile(patch: string): Map<string, string> {
 export function sectionsWithPatches(guide: ReviewGuideData, patch: string) {
   const byFile = splitPatchByFile(patch);
   const unclaimed = new Set(byFile.keys());
+  // A suffix match can only ever pair two paths that end in the same segment,
+  // so bucket the patch's paths by basename once rather than scanning every
+  // one of them per section file.
+  const basename = (path: string) => path.slice(path.lastIndexOf("/") + 1);
+  const byBasename = new Map<string, string[]>();
+  for (const path of byFile.keys()) {
+    const bucket = byBasename.get(basename(path));
+    if (bucket) bucket.push(path);
+    else byBasename.set(basename(path), [path]);
+  }
   const resolve = (file: string): string | null => {
     if (byFile.has(file)) return file;
-    for (const path of byFile.keys())
+    for (const path of byBasename.get(basename(file)) ?? [])
       if (path.endsWith(`/${file}`) || file.endsWith(`/${path}`)) return path;
     return null;
   };
@@ -377,7 +387,10 @@ export function PrPanel({
   const [reviewing, setReviewing] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
   const [reviewEvent, setReviewEvent] = useState<ReviewEvent>("APPROVE");
-  const [summary, setSummary] = useState("");
+  // Only the dialog's opening value and what it hands back on close. The live
+  // field lives in FinishReviewDialog: a keystroke here would re-render every
+  // mounted file of the diff behind it.
+  const [summaryDraft, setSummaryDraft] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [reviewDone, setReviewDone] = useState<string | null>(null);
@@ -785,16 +798,18 @@ export function PrPanel({
 
   // Inline comments don't post one-by-one — they accumulate as pending and ship
   // together when the reviewer finishes the review (the provider's native flow).
-  async function handleAddPending(target: CommentTarget, text: string) {
+  // Both are stable: they ride diffProps into every mounted file row, so a new
+  // identity here re-renders the whole diff.
+  const handleAddPending = useCallback(async (target: CommentTarget, text: string) => {
     setPending((prev) => [...prev, { ...target, text, id: crypto.randomUUID() }]);
     setReviewDone(null);
-  }
+  }, []);
 
-  function handleRemovePending(id: string) {
+  const handleRemovePending = useCallback((id: string) => {
     setPending((prev) => prev.filter((c) => c.id !== id));
-  }
+  }, []);
 
-  async function handleSubmitReview() {
+  async function handleSubmitReview(summary: string) {
     if (submitting) return;
     const actionTargetKey = loadTargetKey;
     if (
@@ -851,7 +866,7 @@ export function PrPanel({
       }
       if (actionTargetKey !== activeLoadTargetRef.current) return;
       setPending([]);
-      setSummary("");
+      setSummaryDraft("");
       setReviewOpen(false);
       setReviewEvent("APPROVE");
       setMergeAfterReview(false);
@@ -1132,6 +1147,58 @@ export function PrPanel({
     [sessions, active?.repo, active?.branch, pr?.number, pr?.headRefName],
   );
 
+  const currentGuide = guide?.key === guideKey ? guide.data : null;
+  // Slicing the patch per section walks every byte of it, so it cannot run on
+  // renders it has nothing to do with — while the guide is the open lens, that
+  // would be once per keystroke in the review summary.
+  const guideSections = useMemo(
+    () => (currentGuide && diff?.patch ? sectionsWithPatches(currentGuide, diff.patch) : []),
+    [currentGuide, diff?.patch],
+  );
+
+  // Every diff on the code page is the same commentable surface; only the
+  // patch it is handed differs (the whole PR, or one guide section). Memoized
+  // because it is the props object of every mounted file row: rebuilding it
+  // re-renders the whole diff, however unrelated the state change was.
+  const diffProps = useMemo(
+    () =>
+      diff && {
+        diffStyle,
+        wrapLines,
+        stickyFileHeaders: true,
+        defaultExpandedFiles: Infinity,
+        viewedFiles: prViewed?.key === viewedKey ? prViewed.viewed : undefined,
+        onToggleViewed: handleToggleViewed,
+        disabled: !reviewing || !caps.reviewComments,
+        disabledHint: !caps.reviewComments
+          ? `Inline review comments aren't supported on ${provider.name}`
+          : "Start a review to add inline comments.",
+        submitLabel: "Add comment",
+        placeholder: `Comment on #${diff.number}, added to your pending review…`,
+        pendingComments: reviewing ? pending : undefined,
+        onRemovePending: handleRemovePending,
+        onSubmit: handleAddPending,
+        imageSrcs,
+        editFile,
+      },
+    [
+      diff,
+      diffStyle,
+      wrapLines,
+      prViewed,
+      viewedKey,
+      handleToggleViewed,
+      reviewing,
+      caps.reviewComments,
+      provider.name,
+      pending,
+      handleRemovePending,
+      handleAddPending,
+      imageSrcs,
+      editFile,
+    ],
+  );
+
   const showBar = targets.length > 1;
   const switcher = showBar ? (
     <div className={PR_REPO_TABS}>
@@ -1249,9 +1316,6 @@ export function PrPanel({
     pr.mergeable !== "CONFLICTING" &&
     checkSummary.failed === 0 &&
     checkSummary.pending === 0;
-  const currentGuide = guide?.key === guideKey ? guide.data : null;
-  const guideSections =
-    currentGuide && diff?.patch ? sectionsWithPatches(currentGuide, diff.patch) : [];
   const reviewSubmitLabel =
     reviewEvent === "APPROVE"
       ? mergeAfterReview && canMergeAfterReview
@@ -1260,28 +1324,6 @@ export function PrPanel({
       : reviewEvent === "REQUEST_CHANGES"
         ? "Request changes"
         : "Submit review";
-  // Every diff on the code page is the same commentable surface; only the
-  // patch it is handed differs (the whole PR, or one guide section).
-  const diffProps = diff && {
-    diffStyle,
-    wrapLines,
-    stickyFileHeaders: true,
-    defaultExpandedFiles: Infinity,
-    viewedFiles: prViewed?.key === viewedKey ? prViewed.viewed : undefined,
-    onToggleViewed: handleToggleViewed,
-    disabled: !reviewing || !caps.reviewComments,
-    disabledHint: !caps.reviewComments
-      ? `Inline review comments aren't supported on ${provider.name}`
-      : "Start a review to add inline comments.",
-    submitLabel: "Add comment",
-    placeholder: `Comment on #${diff.number}, added to your pending review…`,
-    pendingComments: reviewing ? pending : undefined,
-    onRemovePending: handleRemovePending,
-    onSubmit: handleAddPending,
-    imageSrcs,
-    editFile,
-  };
-
   const rail = (
     <ReviewRail
       className={railStacked ? "min-w-0" : "w-[264px] shrink-0"}
@@ -1953,8 +1995,7 @@ export function PrPanel({
           pendingCount={pending.length}
           event={reviewEvent}
           onEventChange={setReviewEvent}
-          summary={summary}
-          onSummaryChange={setSummary}
+          defaultSummary={summaryDraft}
           canMerge={canMergeAfterReview}
           mergeAfterReview={mergeAfterReview}
           onMergeAfterReviewChange={setMergeAfterReview}
@@ -1962,7 +2003,10 @@ export function PrPanel({
           submitting={submitting}
           submitLabel={reviewSubmitLabel}
           onSubmit={handleSubmitReview}
-          onClose={() => setReviewOpen(false)}
+          onClose={(summary) => {
+            setSummaryDraft(summary);
+            setReviewOpen(false);
+          }}
         />
       )}
     </div>
@@ -1976,14 +2020,18 @@ export function PrPanel({
  * Approving and merging are separate decisions, so they are separate controls.
  * The verdict rows are the choice; merging is an opt-in that starts off, which
  * keeps the primary action "Approve" until someone asks for more.
+ *
+ * The summary is held here rather than by the canvas: the canvas re-renders the
+ * whole diff, and this is a field someone types a paragraph into. It is seeded
+ * from `defaultSummary` and handed back on both exits, so closing the dialog
+ * and reopening it still finds the draft.
  */
 function FinishReviewDialog({
   prNumber,
   pendingCount,
   event,
   onEventChange,
-  summary,
-  onSummaryChange,
+  defaultSummary,
   canMerge,
   mergeAfterReview,
   onMergeAfterReviewChange,
@@ -1997,17 +2045,17 @@ function FinishReviewDialog({
   pendingCount: number;
   event: ReviewEvent;
   onEventChange: (event: ReviewEvent) => void;
-  summary: string;
-  onSummaryChange: (summary: string) => void;
+  defaultSummary: string;
   canMerge: boolean;
   mergeAfterReview: boolean;
   onMergeAfterReviewChange: (merge: boolean) => void;
   error: string | null;
   submitting: boolean;
   submitLabel: string;
-  onSubmit: () => void;
-  onClose: () => void;
+  onSubmit: (summary: string) => void;
+  onClose: (summary: string) => void;
 }) {
+  const [summary, setSummary] = useState(defaultSummary);
   const open = useEnterOnMount();
   // Without this Base UI focuses the first tabbable, which is the header's
   // close. A focus ring on the ✕ is the wrong first read for a dialog you
@@ -2023,7 +2071,7 @@ function FinishReviewDialog({
     },
   ];
   return (
-    <Modal.Root open={open} onOpenChange={(next) => !next && onClose()}>
+    <Modal.Root open={open} onOpenChange={(next) => !next && onClose(summary)}>
       <Modal.Content widthClassName="max-w-[30rem]" initialFocus={summaryRef}>
         <Modal.Header
           title="Finish review"
@@ -2062,7 +2110,7 @@ function FinishReviewDialog({
             event === "APPROVE" || pendingCount > 0 ? "Summary (optional)" : "Summary"
           }
           value={summary}
-          onChange={(e) => onSummaryChange(e.target.value)}
+          onChange={(e) => setSummary(e.target.value)}
         />
         {event === "APPROVE" && canMerge && (
           // Quieter than the verdict rows on purpose: merging is an extra you
@@ -2077,8 +2125,12 @@ function FinishReviewDialog({
         )}
         {error && <div className="text-supporting text-red">{error}</div>}
         <Modal.Footer>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" onClick={onSubmit} disabled={submitting}>
+          <Button onClick={() => onClose(summary)}>Cancel</Button>
+          <Button
+            variant="primary"
+            onClick={() => onSubmit(summary)}
+            disabled={submitting}
+          >
             {submitting ? "Submitting…" : submitLabel}
           </Button>
         </Modal.Footer>
