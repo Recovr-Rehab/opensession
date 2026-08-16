@@ -1217,6 +1217,10 @@ export async function maybeLaunchSandboxedRun(
 			aws: true,
 			author: commitAuthorFor(opts.user, session.startedBy),
 			user: opts.user,
+			// Live typing, per the run owner's preference (stream-text.ts).
+			streamPartialText: streamPartialTextEnabled(
+				opts.user || session.startedBy || session.createdBy,
+			),
 			mcpGrantUser: session.startedBy || undefined,
 			fallbackModel: interactiveFallbackModel(session.model),
 			effort: session.effort,

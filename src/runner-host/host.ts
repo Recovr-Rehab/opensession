@@ -429,6 +429,7 @@ try {
     aws: spec.aws,
     author: spec.author,
     user: spec.user,
+    streamPartialText: spec.streamPartialText,
     fallbackModel: spec.fallbackModel,
     effort: spec.effort,
     fastMode: spec.fastMode,

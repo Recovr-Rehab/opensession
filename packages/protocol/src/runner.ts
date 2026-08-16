@@ -86,6 +86,10 @@ export interface RunHostSpec {
   aws?: boolean;
   author?: GitIdentity | null;
   user?: string;
+  /** Type the reply out as it is generated (the run owner's Live typing
+   * preference, resolved server-side). Absent on specs written by an older
+   * server, which simply means the host keeps mirroring whole text parts. */
+  streamPartialText?: boolean;
   fallbackModel?: string;
   /** Reasoning effort for the run (UI scale; each runner normalizes it). */
   effort?: string;
