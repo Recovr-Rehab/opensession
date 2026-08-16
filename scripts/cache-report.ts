@@ -70,8 +70,16 @@ import { loadRates, scanClaudeDirect, scanCodexDirect, type EngineUsageScan } fr
 
 const SHARD_DIR = `${OPENSESSION_SESSIONS_DIR}/opencode/db`;
 
-/** A first-of-turn request this far behind its predecessor should still find a
- *  warm prefix: every cache write we make carries the 1-hour TTL. */
+/**
+ * Gap buckets for the first request of a turn, because "should the cache still
+ * be warm?" has a different answer per provider and the coarse question is not
+ * worth asking. Anthropic writes we make carry the 1-hour TTL (engine-usage.ts).
+ * OpenAI's automatic caching is far shorter-lived — minutes of inactivity — so
+ * an hour-wide bucket would book ordinary expiry as breakage there. Only the
+ * tightest bucket is unambiguous on BOTH: a request seconds behind its
+ * predecessor that still misses is a prefix that changed, not a cache that aged.
+ */
+const HOT_MS = 5 * 60_000;
 const WARM_MS = 60 * 60_000;
 
 interface Agg {
@@ -141,7 +149,7 @@ interface OpencodeScan {
 	rows: number;
 }
 
-type Position = "first-warm" | "first-cold" | "mid-turn";
+type Position = "first-hot" | "first-warm" | "first-cold" | "mid-turn";
 
 /**
  * Read every shard DB for assistant requests at or after `cutoff`.
@@ -219,15 +227,18 @@ async function scanOpencode(cutoff: number): Promise<OpencodeScan> {
 				out.rows++;
 				const provider = String(d.providerID || d.model?.providerID || "?");
 				const model = String(d.modelID || d.model?.modelID || "?").split("/").pop() || "?";
+				const gap = prevAt > 0 ? row.time_created - prevAt : Number.POSITIVE_INFINITY;
 				const position: Position = !expectFirst
 					? "mid-turn"
-					: prevAt > 0 && row.time_created - prevAt <= WARM_MS
-						? "first-warm"
-						: "first-cold";
+					: gap <= HOT_MS
+						? "first-hot"
+						: gap <= WARM_MS
+							? "first-warm"
+							: "first-cold";
 				add(out.byPool, pool, u, session);
 				add(out.byModel, `${pool}|${provider}|${model}`, u, session);
 				add(out.byPosition, `${pool}|${provider}|${position}`, u, session);
-				if (position === "first-warm") add(out.bySession, `${pool}|${provider}|${session}`, u, session);
+				if (position === "first-hot") add(out.bySession, `${pool}|${provider}|${session}`, u, session);
 				expectFirst = false;
 				prevAt = row.time_created;
 			}
@@ -306,10 +317,11 @@ function poolTable(scan: OpencodeScan): string[] {
 }
 
 function positionTable(scan: OpencodeScan, minRequests: number): string[] {
-	const order: Position[] = ["first-warm", "first-cold", "mid-turn"];
+	const order: Position[] = ["first-hot", "first-warm", "first-cold", "mid-turn"];
 	const label: Record<Position, string> = {
-		"first-warm": "1st of turn, <1h since last",
-		"first-cold": "1st of turn, cold/unknown",
+		"first-hot": "1st of turn, <5m since last",
+		"first-warm": "1st of turn, 5m-1h",
+		"first-cold": "1st of turn, >1h/unknown",
 		"mid-turn": "tool round (same turn)",
 	};
 	const providers = [...new Set([...scan.byPosition.keys()].map((k) => k.split("|")[1]))].sort();
@@ -442,7 +454,7 @@ async function main(): Promise<void> {
 	}
 
 	if (worstSessions > 0) {
-		console.log(`\n── worst ${worstSessions} sessions by uncached input on warm first-of-turn requests ──`);
+		console.log(`\n── worst ${worstSessions} sessions by uncached input on hot (<5m) first-of-turn requests ──`);
 		const rows = [...scan.bySession.entries()].sort((a, b) => b[1].input - a[1].input).slice(0, worstSessions);
 		for (const [key, a] of rows) {
 			const [pool, provider, session] = key.split("|");
