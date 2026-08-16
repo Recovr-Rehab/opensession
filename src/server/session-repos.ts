@@ -278,6 +278,63 @@ export interface WorktreeTarget {
 	reachable: boolean;
 }
 
+interface ProjectedPrTarget {
+	repoId: string;
+	branch: string;
+	source: "primary" | "attached" | "linked" | "discovered";
+}
+
+/**
+ * Project every session shape onto one ordered set of PR targets. `prs` is the
+ * current derived shape and owns each primary/attached slot it carries. The
+ * persisted branch, attached repos, and links fill gaps for legacy sessions
+ * and branches that do not have a cached PR yet.
+ */
+function projectPrTargets(session: UnifiedSession): ProjectedPrTarget[] {
+	const targets: ProjectedPrTarget[] = (session.prs || [])
+		.filter((ref) => ref.repo && ref.branch)
+		.map((ref) => ({
+			repoId: ref.repo,
+			branch: ref.branch,
+			source: ref.source,
+		}));
+	const primaryBranch = sessionPrBranch(session);
+	if (primaryBranch && !targets.some((target) => target.source === "primary")) {
+		targets.unshift({
+			repoId: sessionRepoId(session) ?? defaultRepo().id,
+			branch: primaryBranch,
+			source: "primary",
+		});
+	}
+	for (const attached of session.attachedRepos || []) {
+		if (
+			!targets.some(
+				(target) =>
+					target.source === "attached" && target.repoId === attached.repo,
+			)
+		)
+			targets.push({
+				repoId: attached.repo,
+				branch: attached.branch,
+				source: "attached",
+			});
+	}
+	for (const linked of session.linkedPrs || []) {
+		if (
+			!targets.some(
+				(target) =>
+					target.repoId === linked.repo && target.branch === linked.branch,
+			)
+		)
+			targets.push({
+				repoId: linked.repo,
+				branch: linked.branch,
+				source: "linked",
+			});
+	}
+	return targets;
+}
+
 /**
  * Resolve which of a session's checkouts a worktree operation targets. With no
  * `repoId` (or the primary project's id) it's the session's own worktree; an
@@ -322,45 +379,28 @@ export function resolvePrTarget(
 	repoId?: string | null,
 	branch?: string | null,
 ): { ghRepo: string; branch: string; repoId: string } | null {
-	const primaryBranch = sessionPrBranch(session);
-	const primaryRepo = sessionRepoId(session) ?? defaultRepo().id;
-	// Explicit repo+branch — a linked PR, which may live on a different branch
-	// of the primary repo. Only pairs the session actually lists resolve, so
-	// the PR routes can't be pointed at an arbitrary branch.
-	if (repoId && branch) {
-		const lp = (session.linkedPrs || []).find(
-			(r) => r.repo === repoId && r.branch === branch,
-		);
-		const att = (session.attachedRepos || []).find(
-			(r) => r.repo === repoId && r.branch === branch,
-		);
-		// A PR discovered through its attribution footer is one of the session's
-		// own, so its detail/diff/review/merge routes resolve like a linked one.
-		const found = (session.prs || []).find(
-			(r) => r.repo === repoId && r.branch === branch,
-		);
-		const isPrimary = repoId === primaryRepo && branch === primaryBranch;
-		if (!lp && !att && !found && !isPrimary) return null;
-		return { ghRepo: hostRepoId(getRepo(repoId)), branch, repoId };
-	}
-	if (!repoId || repoId === primaryRepo) {
-		if (!primaryBranch) return null;
-		return {
-			ghRepo: hostRepoId(getRepo(primaryRepo)),
-			branch: primaryBranch,
-			repoId: primaryRepo,
-		};
-	}
-	const att = (session.attachedRepos || []).find(
-		(r) => r.repo === repoId,
-	);
-	if (att)
-		return { ghRepo: hostRepoId(getRepo(att.repo)), branch: att.branch, repoId: att.repo };
-	const lp =
-		(session.linkedPrs || []).find((r) => r.repo === repoId) ||
-		(session.prs || []).find((r) => r.repo === repoId);
-	if (!lp) return null;
-	return { ghRepo: hostRepoId(getRepo(lp.repo)), branch: lp.branch, repoId: lp.repo };
+	const targets = projectPrTargets(session);
+	const target = repoId && branch
+		? targets.find(
+				(candidate) => candidate.repoId === repoId && candidate.branch === branch,
+			)
+		: repoId
+			? targets.find(
+					(candidate) =>
+						candidate.repoId === repoId && candidate.source === "primary",
+				) ||
+				targets.find(
+					(candidate) =>
+						candidate.repoId === repoId && candidate.source === "attached",
+				) ||
+				targets.find((candidate) => candidate.repoId === repoId)
+			: targets.find((candidate) => candidate.source === "primary");
+	if (!target) return null;
+	return {
+		ghRepo: hostRepoId(getRepo(target.repoId)),
+		branch: target.branch,
+		repoId: target.repoId,
+	};
 }
 
 /**

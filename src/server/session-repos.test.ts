@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { resolveSessionRepoContext, resolveWorktreeTarget } from "./session-repos";
+import {
+	resolvePrTarget,
+	resolveSessionRepoContext,
+	resolveWorktreeTarget,
+} from "./session-repos";
+import type { UnifiedSession } from "./types";
 import { getRepo } from "./worktree";
 
 const session = {
@@ -109,5 +114,72 @@ describe("resolveWorktreeTarget", () => {
 		const resolved = resolveWorktreeTarget({ worktreeDir: hostDir });
 		expect(resolved?.repoId).toBe("opensession");
 		expect(resolved?.primary).toBe(true);
+	});
+});
+
+describe("resolvePrTarget", () => {
+	test("uses the projected PR refs when they conflict with legacy fields", () => {
+		const modern = {
+			repo: "opensession",
+			branch: "legacy-primary",
+			prNumber: 10,
+			prUrl: "https://github.com/tellahq/opensession/pull/10",
+			attachedRepos: [
+				{
+					repo: "tella-fusion",
+					dir: "/home/ubuntu/worktrees/tella-fusion-legacy",
+					branch: "legacy-attached",
+				},
+			],
+			prs: [
+				{
+					repo: "opensession",
+					branch: "projected-primary",
+					source: "primary",
+					number: 20,
+				},
+				{
+					repo: "tella-fusion",
+					branch: "projected-attached",
+					source: "attached",
+					number: 21,
+				},
+			],
+		} as UnifiedSession;
+
+		expect(resolvePrTarget(modern)?.branch).toBe("projected-primary");
+		expect(resolvePrTarget(modern, "tella-fusion")?.branch).toBe(
+			"projected-attached",
+		);
+		expect(
+			resolvePrTarget(modern, "tella-fusion", "legacy-attached"),
+		).toBeNull();
+	});
+
+	test("projects legacy primary, attached, and linked targets", () => {
+		const legacy = {
+			repo: "opensession",
+			branch: "legacy-primary",
+			prNumber: 10,
+			prUrl: "https://github.com/tellahq/opensession/pull/10",
+			attachedRepos: [
+				{
+					repo: "tella-fusion",
+					dir: "/home/ubuntu/worktrees/tella-fusion-legacy",
+					branch: "legacy-attached",
+				},
+			],
+			linkedPrs: [
+				{ repo: "opensession", branch: "legacy-follow-up", number: 11 },
+			],
+		} as UnifiedSession;
+
+		expect(resolvePrTarget(legacy)?.branch).toBe("legacy-primary");
+		expect(resolvePrTarget(legacy, "tella-fusion")?.branch).toBe(
+			"legacy-attached",
+		);
+		expect(
+			resolvePrTarget(legacy, "opensession", "legacy-follow-up")?.branch,
+		).toBe("legacy-follow-up");
 	});
 });
