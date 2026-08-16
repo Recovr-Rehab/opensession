@@ -243,6 +243,7 @@ import {
 	type MineStatus,
 	type Props,
 	type SidebarHandle,
+	type WsRow,
 } from "../lib/sidebar-types";
 import { FeedFilterMenu, FeedRow, SupportRow } from "./sidebar/FeedRows";
 import { FilterPopover, RepoFilterChip } from "./sidebar/Filters";
@@ -1066,27 +1067,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	}, [openPrs]);
 
 	// ── Workspace rows ──────────────────────────────────────────────────────
-	// The sidebar's main list is Workspaces (not individual sessions): one row per
-	// workspace, plus one implicit row per not-yet-wrapped standalone session (the
-	// pre-migration case — the data migration wraps those 1:1). A row's status
-	// dot is derived from its most urgent session; clicking opens the first session.
-	interface WsRow {
-		/** Pin/menu key: `workspace:<id>` for real workspaces, the session id solo. */
-		key: string;
-		/** Real workspace record, or null for an implicit single-session row. */
-		workspace: Workspace | null;
-		name: string;
-		sessions: UnifiedSession[]; // createdAt asc, so sessions[0] is "the first session"
-		status: MineStatus;
-		lastActivity: string;
-		createdAt: string;
-		unread: boolean;
-		/** Who tagged you in one of this row's sessions, if anyone. */
-		mention?: string;
-		running: boolean;
-		/** Lowercased owner (workspace creator, else the first session's starter). */
-		owner: string;
-	}
+	// The row shape itself is WsRow in lib/sidebar-types.
 	const selectedSession = sessions.find((session) => session.id === selectedId) || null;
 
 	// Most-urgent-first for the row dot: a blocked question beats everything,
@@ -1569,15 +1550,21 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// an approval otherwise takes the row OUT of the sidebar (it lands in
 	// completedReviewRows below, which the status lanes exclude too), so the one
 	// moment the work comes back to you is the moment it disappears.
+	// A row where GitHub still asks YOU to review stays in Needs review, the same
+	// exclusion Awaiting review makes above: a bot-owned row you sent out through
+	// the Reviewer picker, whose PR a teammate then approved, satisfies both
+	// predicates, and without this it renders in both bands at once.
 	const approvedReviewRows = useMemo(() => {
 		const me = currentUser.toLowerCase();
+		const needsKeys = new Set(needsReviewRows.map((r) => r.key));
 		return reviewScopeRows.filter(
 			// wsPrApproved already means "approved and not merged".
 			(r) =>
+				!needsKeys.has(r.key) &&
 				wsPrApproved(r) &&
 				r.sessions.some((c) => c.reviewRequest?.by?.toLowerCase() === me),
 		);
-	}, [reviewScopeRows, currentUser]);
+	}, [reviewScopeRows, currentUser, needsReviewRows]);
 	// Completed reviews are hidden from the sidebar, but their keys still need to
 	// be excluded from the normal status lanes. A fresh or reopened request clears
 	// the completion state and makes the row actionable again. Completion can come
@@ -1712,6 +1699,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		reviewBandKeys,
 		activeSnoozeKeys,
 		lanes,
+		// rowIsFeedOnly closes over this; the feed descriptors land after mount,
+		// so without it idle feed rows sit in the lanes until something else
+		// invalidates.
+		feedRefKinds,
 	]);
 
 	// ── PR rows in the project lanes ────────────────────────────────────────
