@@ -1998,6 +1998,12 @@ export function releaseJournaledRunRpcContext(run: ActiveRunRecord): void {
 export async function abortDetachedOpencodeTurn(run: ActiveRunRecord): Promise<boolean> {
   const ocSessionId = run.claudeSessionId;
   if (!ocSessionId || !run.serverKey) return false;
+  // An engine session id outlives the turn that created it: the session's
+  // next prompt resumes the same one. So never abort a session some live
+  // in-process run owns: it either attached after all, or the person has
+  // re-prompted and this would kill their new turn. That owner has its own
+  // cancellation path (cancelOpencodeRun).
+  if (activeOpencodeRuns.has(ocSessionId)) return false;
   let aborted = false;
   for (const entry of detachedTurnCandidates(run.serverKey)) {
     const q = entry.shared ? { query: { directory: run.cwd } } : {};
