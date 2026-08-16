@@ -169,6 +169,11 @@ export interface PlanAction {
 	detail: string;
 	/** The manifest piece to install, carried so apply needs no second lookup. */
 	payload?: unknown;
+	/** Skills only: the incoming SKILL.md's hash, and the one already installed.
+	 *  A SKILL.md is text an agent loads into context, so an upstream rewrite is
+	 *  a code change, and the review has to show it rather than swap it in. */
+	hash?: string;
+	previousHash?: string;
 }
 
 export interface InstallPlan {
@@ -222,6 +227,10 @@ export function planInstall(
 	manifest: PackageManifest,
 	state: InstanceState,
 	owned: InstalledArtifact[] = [],
+	/** Hash of a skill directory's SKILL.md in the fetched checkout. Injected so
+	 *  planning stays free of IO; without it a skill's line says only where it
+	 *  lands, which is all a first install can say anyway. */
+	hashSkill?: (relPath: string) => string | undefined,
 ): InstallPlan {
 	const actions: PlanAction[] = [];
 	const conflicts: string[] = [];
@@ -234,13 +243,21 @@ export function planInstall(
 		present: boolean,
 		detail: string,
 		payload?: unknown,
+		hashes?: { hash?: string; previousHash?: string },
 	) => {
 		const mine = owns(owned, kind, ref);
 		if (present && !mine) {
 			conflicts.push(`${kind} "${ref}" already exists and is not from this package`);
 			return;
 		}
-		actions.push({ kind, ref, verb: mine ? "update" : "add", detail, payload });
+		actions.push({
+			kind,
+			ref,
+			verb: mine ? "update" : "add",
+			detail,
+			payload,
+			...hashes,
+		});
 	};
 
 	for (const [name, cfg] of Object.entries(manifest.mcpServers || {})) {
@@ -279,7 +296,22 @@ export function planInstall(
 
 	for (const path of manifest.skills || []) {
 		const name = skillName(path);
-		consider("skill", name, state.skills.includes(name), `${SKILLS_DIR}/${name}/`, path);
+		const hash = hashSkill?.(path);
+		const previousHash = owned.find((a) => a.kind === "skill" && a.ref === name)?.hash;
+		const change =
+			!previousHash || !hash
+				? ""
+				: hash === previousHash
+					? " (unchanged)"
+					: ` (content changed: ${previousHash.slice(0, 8)} to ${hash.slice(0, 8)})`;
+		consider(
+			"skill",
+			name,
+			state.skills.includes(name),
+			`${SKILLS_DIR}/${name}/${change}`,
+			path,
+			{ hash, previousHash },
+		);
 	}
 
 	const keep = new Set(actions.map((a) => `${a.kind}:${a.ref}`));
@@ -582,7 +614,17 @@ function confirmPlan(
 		info(dim(`\n  servers are available to every session (use --users to scope them)`));
 	}
 	for (const warning of plan.warnings) warn(warning);
-	if (plan.actions.some((a) => a.kind === "skill")) {
+	// An upstream rewrite of a SKILL.md is a change to what the model is told,
+	// so it gets named rather than folded into the generic caution.
+	const rewritten = plan.actions
+		.filter((a) => a.kind === "skill" && a.previousHash && a.hash && a.hash !== a.previousHash)
+		.map((a) => a.ref);
+	if (rewritten.length) {
+		warn(
+			`upstream rewrote ${rewritten.join(", ")}`,
+			`read the new text: ${SKILLS_DIR}/${rewritten[0]}/SKILL.md is replaced`,
+		);
+	} else if (plan.actions.some((a) => a.kind === "skill")) {
 		warn("a skill is text an agent loads into context", "read it before confirming");
 	}
 	console.log("");
@@ -628,7 +670,10 @@ async function addPackage(source: string, opts: PluginsOptions): Promise<number>
 	renameSync(staging, dir);
 
 	const stores = await defaultStores();
-	const plan = planInstall(manifest, await stores.state(), existing?.artifacts || []);
+	const plan = planInstall(manifest, await stores.state(), existing?.artifacts || [], (rel) => {
+		const path = join(dir, rel, "SKILL.md");
+		return existsSync(path) ? sha256(path) : undefined;
+	});
 	if (plan.conflicts.length) {
 		fail(`${manifest.name} would collide with what is already here`);
 		for (const conflict of plan.conflicts) info(dim(`  ${conflict}`));
