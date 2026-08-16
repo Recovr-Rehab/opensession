@@ -24,6 +24,13 @@
  *    live turn, or null when the run can't be reattached (caller falls back to
  *    the continuation re-prompt).
  *
+ * The direct-SDK engines export these as free functions rather than an
+ * adapter object, and agent-runner.ts dispatches to them through a table of
+ * export names. That table types itself off this interface and checks each
+ * name against the adapter's real exports, so a renamed or missing control op
+ * is a compile error there rather than an undefined that quietly downgrades a
+ * steer to queueing or hides a live run from the shutdown drain.
+ *
  * Types are reused via type-only imports from the existing modules
  * (run-events.ts is the runner's own event-type home; RunAgentOpts /
  * ActiveRunRecord from their owners) so an adapter is conformant by
