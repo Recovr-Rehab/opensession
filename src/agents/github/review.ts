@@ -7,7 +7,7 @@
  */
 import { personaName } from "../../server/config";
 import { getPrDetails, getPrDiff, type PrDetails } from "../../server/pr-info";
-import { claimLock, releaseLock, getOrInitPrState, writePrState } from "./state";
+import { claimLock, releaseLock, getOrInitPrState, updatePrState, recordReviewed, clearActiveRun } from "./state";
 import { announceGithubRun, runGithubAgent, sessionUrl } from "./run";
 import { buildReviewPrompt, DEFAULT_REVIEW_PROMPT } from "./prompts";
 import {
@@ -139,8 +139,17 @@ export async function runReview(
     // Concurrent deliveries are coalesced by the in-process "review" lock above;
     // the SHA is recorded only AFTER a successful run (below) so a transient
     // failure can be retried rather than permanently suppressed.
+    // `state` stays a read-only snapshot of what the PREVIOUS review left behind
+    // (lastReview / lastReviewedSha below); every mutation goes through updatePrState.
     const isUpdate = state.reviewedShas.length > 0;
-    state.activeRun = { kind: "review", requestedBy: "", startedAt: new Date().toISOString(), steer };
+    updatePrState(
+      pr.number,
+      pr.headRef,
+      (s) => {
+        s.activeRun = { kind: "review", requestedBy: "", startedAt: new Date().toISOString(), steer };
+      },
+      pr.ghRepo,
+    );
 
     // Look up by number before publishing the session link. If details are
     // unavailable, no worker exists and the next delivery remains retryable.
@@ -171,8 +180,14 @@ export async function runReview(
       pr.ghRepo,
     );
     if (placeholderId) {
-      state.summaryCommentId = placeholderId;
-      writePrState(state);
+      updatePrState(
+        pr.number,
+        pr.headRef,
+        (s) => {
+          s.summaryCommentId = placeholderId;
+        },
+        pr.ghRepo,
+      );
       if (prevId && prevId !== placeholderId) await supersedeReviewComment(prevId, pr.ghRepo).catch(() => {});
     }
     // If the placeholder failed, summaryCommentId keeps prevId and postReview edits it.
@@ -369,20 +384,22 @@ export async function runReview(
     // Record the SHA as reviewed only on a successful run, so a transient failure
     // (model error/timeout) leaves it eligible for retry on the next delivery.
     if (!reviewError && pr.headSha) {
-      const s = getOrInitPrState(pr.number, pr.headRef, pr.ghRepo);
-      if (!s.reviewedShas.includes(pr.headSha)) s.reviewedShas.push(pr.headSha);
-      s.lastReviewedSha = pr.headSha;
-      // Keep the verdict alongside it so the sidebar can show the score without
-      // reading the PR's comments back off GitHub.
-      s.lastReview = {
-        verdict: outcome.verdict,
-        confidence: outcome.confidence,
-        findings: outcome.findings,
-        blocking: outcome.blocking,
-        sha: pr.headSha,
-        at: new Date().toISOString(),
-      };
-      writePrState(s);
+      // The verdict is kept alongside the SHA so the sidebar can show the score
+      // without reading the PR's comments back off GitHub.
+      recordReviewed(
+        pr.number,
+        pr.headRef,
+        pr.headSha,
+        {
+          verdict: outcome.verdict,
+          confidence: outcome.confidence,
+          findings: outcome.findings,
+          blocking: outcome.blocking,
+          sha: pr.headSha,
+          at: new Date().toISOString(),
+        },
+        pr.ghRepo,
+      );
     }
 
     return outcome;
@@ -392,11 +409,7 @@ export async function runReview(
   } finally {
     // Clear the recovery flag on completion; a killed process leaves it set so the
     // github agent re-runs the review on startup.
-    const s = getOrInitPrState(pr.number, pr.headRef, pr.ghRepo);
-    if (s.activeRun?.kind === "review") {
-      s.activeRun = undefined;
-      writePrState(s);
-    }
+    clearActiveRun(pr.number, pr.headRef, "review", pr.ghRepo);
     releaseLock("review", pr.number, pr.ghRepo);
   }
 }
@@ -425,7 +438,7 @@ async function postReview(
   summaryOnly = false,
   extraSummary = "",
 ): Promise<void> {
-  const state = getOrInitPrState(pr.number, pr.headRef, pr.ghRepo);
+  const knownCommentId = getOrInitPrState(pr.number, pr.headRef, pr.ghRepo).summaryCommentId;
   const shortSha = (pr.headSha || "").slice(0, 7);
 
   // Summary comment (single, edited in place).
@@ -484,16 +497,23 @@ async function postReview(
     .join("\n");
 
   // Edit the placeholder posted at the start; fall back to a new comment if it's gone.
-  let id: number | null = state.summaryCommentId ?? null;
+  let id: number | null = knownCommentId ?? null;
   if (id) {
     const ok = await editIssueComment(id, composed, pr.ghRepo);
     if (!ok) id = await postIssueComment(pr.number, composed, pr.ghRepo);
   } else {
     id = await postIssueComment(pr.number, composed, pr.ghRepo);
   }
-  if (id && id !== state.summaryCommentId) {
-    state.summaryCommentId = id;
-    writePrState(state);
+  if (id && id !== knownCommentId) {
+    const postedId = id;
+    updatePrState(
+      pr.number,
+      pr.headRef,
+      (s) => {
+        s.summaryCommentId = postedId;
+      },
+      pr.ghRepo,
+    );
   }
 
   // Existing inline threads on the PR: used to (a) resolve our own threads GitHub

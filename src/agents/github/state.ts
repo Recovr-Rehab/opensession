@@ -150,13 +150,23 @@ export function getOrInitPrState(prNumber: number, headRef: string, ghRepo?: str
   );
 }
 
-export function writePrState(state: GithubPrState): void {
+/** Module-private on purpose: a caller that holds a whole-file snapshot across an
+ *  await and writes it back reverts whatever another behavior landed in between.
+ *  Every mutation goes through updatePrState (or one of the helpers below), which
+ *  re-reads immediately before patching. */
+function writePrState(state: GithubPrState): void {
   state.updatedAt = new Date().toISOString();
   // Keep the reviewed-SHA list bounded.
   if (state.reviewedShas.length > 20) state.reviewedShas = state.reviewedShas.slice(-20);
   writeJsonAtomic(statePath(state.prNumber, state.ghRepo), state);
 }
 
+/**
+ * Read, patch, write: the ONLY way to mutate a PR's state. Behaviors keep their
+ * own locals across network work and call this at each commit point, so a write
+ * from the other lane (reviews and code actions hold different locks by design)
+ * survives instead of being reverted by a stale snapshot.
+ */
 export function updatePrState(
   prNumber: number,
   headRef: string,
@@ -188,10 +198,53 @@ export function setPendingMention(
 
 /** Clear the pending-mention marker once a run owns the mention or it completes. */
 export function clearPendingMention(prNumber: number, ghRepo?: string): void {
-  const s = readPrState(prNumber, ghRepo);
-  if (!s?.pendingMention) return;
-  s.pendingMention = undefined;
-  writePrState(s);
+  if (!readPrState(prNumber, ghRepo)?.pendingMention) return;
+  updatePrState(
+    prNumber,
+    `pr-${prNumber}`,
+    (s) => {
+      s.pendingMention = undefined;
+    },
+    ghRepo,
+  );
+}
+
+/** Record a completed review: the SHA (dedup) plus the verdict the UI shows. */
+export function recordReviewed(
+  prNumber: number,
+  headRef: string,
+  sha: string,
+  lastReview: LastReviewState,
+  ghRepo?: string,
+): void {
+  updatePrState(
+    prNumber,
+    headRef,
+    (s) => {
+      if (!s.reviewedShas.includes(sha)) s.reviewedShas.push(sha);
+      s.lastReviewedSha = sha;
+      s.lastReview = lastReview;
+    },
+    ghRepo,
+  );
+}
+
+/** Clear the one-shot recovery marker — but only when it's still ours. A run that
+ *  chains into another one (simplify → re-review) must not clear the successor's. */
+export function clearActiveRun(
+  prNumber: number,
+  headRef: string,
+  kind: NonNullable<GithubPrState["activeRun"]>["kind"],
+  ghRepo?: string,
+): void {
+  updatePrState(
+    prNumber,
+    headRef,
+    (s) => {
+      if (s.activeRun?.kind === kind) s.activeRun = undefined;
+    },
+    ghRepo,
+  );
 }
 
 /** Every PR state file (for the startup recovery sweep). */

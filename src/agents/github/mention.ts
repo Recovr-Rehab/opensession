@@ -13,8 +13,8 @@ import { createWorktreeForPrBranch, createWorktreeForFollowup } from "../../serv
 import {
   claimLock,
   releaseLock,
-  getOrInitPrState,
-  writePrState,
+  readPrState,
+  updatePrState,
   setPendingMention,
   clearPendingMention,
 } from "./state";
@@ -213,28 +213,34 @@ export async function runConversationalMention(
       mode: "code",
     });
 
-    const st = getOrInitPrState(prNumber, headRef, ghRepo);
+    const prior = readPrState(prNumber, ghRepo);
     // Reuse the progress comment only when recovering an interrupted run.
-    const reuseId = recovering ? st.activeMention?.progressCommentId : undefined;
+    const reuseId = recovering ? prior?.activeMention?.progressCommentId : undefined;
     const progressId = await postOrEditComment(
       prNumber,
       reuseId,
       `${REPLY_MARKER}\n🔄 On it — working on @${args.author}'s request… · ${link}`,
       ghRepo,
     );
-    st.activeMention = {
-      author: args.author,
-      body: args.body,
-      kind: args.kind,
-      replyToId: args.replyToId,
-      inline: args.inline,
-      progressCommentId: progressId ?? undefined,
-      startedAt: new Date().toISOString(),
-    };
-    // This run now owns recovery via activeMention; drop the on-receipt marker in
-    // the same write so recovery never replays it twice.
-    st.pendingMention = undefined;
-    writePrState(st);
+    updatePrState(
+      prNumber,
+      headRef,
+      (s) => {
+        s.activeMention = {
+          author: args.author,
+          body: args.body,
+          kind: args.kind,
+          replyToId: args.replyToId,
+          inline: args.inline,
+          progressCommentId: progressId ?? undefined,
+          startedAt: new Date().toISOString(),
+        };
+        // This run now owns recovery via activeMention; drop the on-receipt marker
+        // in the same write so recovery never replays it twice.
+        s.pendingMention = undefined;
+      },
+      ghRepo,
+    );
 
     // Code mode in the PR-branch worktree so the agent can make + push changes if asked.
     const worktreeDir = await createWorktreeForPrBranch(
@@ -283,9 +289,14 @@ export async function runConversationalMention(
   } finally {
     // Clear recovery state on completion; a killed process leaves it set so the
     // github agent re-runs the mention on startup.
-    const fin = getOrInitPrState(prNumber, headRef || `pr-${prNumber}`, ghRepo);
-    fin.activeMention = undefined;
-    writePrState(fin);
+    updatePrState(
+      prNumber,
+      headRef || `pr-${prNumber}`,
+      (s) => {
+        s.activeMention = undefined;
+      },
+      ghRepo,
+    );
     releaseLock("code", prNumber, ghRepo);
   }
 }

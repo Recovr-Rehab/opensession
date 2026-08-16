@@ -16,7 +16,7 @@ import { defaultRepo } from "../../server/config";
 import { audit } from "../../server/audit";
 import { tryGetSessionControl } from "../../server/session-control";
 import { editIssueComment, fetchReviewFindings, getComment } from "./github-rest";
-import { getOrInitPrState, isLockHeld, readPrState, writePrState, type GithubPrState } from "./state";
+import { getOrInitPrState, isLockHeld, readPrState, updatePrState } from "./state";
 import { matchSessions, workspaceIdForRepo } from "./session-notify";
 import { handoffActive, handoffDecision, reviewSatisfied } from "./handoff-gates";
 import { buildHandoffMessage } from "./prompts";
@@ -45,8 +45,14 @@ export function isHandoffActive(prNumber: number, ghRepo?: string): boolean {
 export function clearHandoff(prNumber: number, ghRepo?: string): void {
   const s = readPrState(prNumber, ghRepo);
   if (!s?.handoff) return;
-  s.handoff = undefined;
-  writePrState(s);
+  updatePrState(
+    prNumber,
+    s.headRef,
+    (st) => {
+      st.handoff = undefined;
+    },
+    ghRepo,
+  );
 }
 
 /**
@@ -83,7 +89,7 @@ export async function maybeHandoffFindings(pr: PrRef, review: ReviewResult | nul
       // fresh summary comment, so this lands once per review, not per sweep).
       await appendToSummary(
         pr,
-        getOrInitPrState(pr.number, pr.headRef, pr.ghRepo),
+        getOrInitPrState(pr.number, pr.headRef, pr.ghRepo).summaryCommentId,
         `🔁 Not merge-ready and no live session owns this branch — add the \`os-auto-fix\` label and I'll fix the findings automatically.`,
       );
       audit({
@@ -101,7 +107,7 @@ export async function maybeHandoffFindings(pr: PrRef, review: ReviewResult | nul
     const decision = handoffDecision(state.handoff, sha, MAX_ROUNDS);
     if (decision === "duplicate") return;
     if (decision === "capped") {
-      await announceCap(pr, state);
+      await announceCap(pr);
       return;
     }
 
@@ -132,13 +138,21 @@ export async function maybeHandoffFindings(pr: PrRef, review: ReviewResult | nul
       return;
     }
 
-    state.handoff = {
-      rounds: round,
-      lastSha: sha,
-      sessionId: target.id,
-      deliveredAt: new Date().toISOString(),
-    };
-    writePrState(state);
+    // Re-read here: the delivery above is a network round-trip, and a mention
+    // webhook landing in that window writes to the same file.
+    const delivered = updatePrState(
+      pr.number,
+      pr.headRef,
+      (s) => {
+        s.handoff = {
+          rounds: round,
+          lastSha: sha,
+          sessionId: target.id,
+          deliveredAt: new Date().toISOString(),
+        };
+      },
+      pr.ghRepo,
+    );
     audit({
       msg: "review_handoff",
       pr_number: pr.number,
@@ -154,7 +168,7 @@ export async function maybeHandoffFindings(pr: PrRef, review: ReviewResult | nul
     );
     await appendToSummary(
       pr,
-      state,
+      delivered.summaryCommentId,
       `🔁 Handed ${review.findings} finding(s) to the owning session — fix round ${round}/${MAX_ROUNDS} · [open session](${uiSessionUrl(target.id)})`,
     );
   } catch (e) {
@@ -163,20 +177,26 @@ export async function maybeHandoffFindings(pr: PrRef, review: ReviewResult | nul
 }
 
 /** One-time "over to humans" notice once the round cap is hit. */
-async function announceCap(pr: PrRef, state: GithubPrState): Promise<void> {
-  if (!state.handoff || state.handoff.cappedAnnounced) return;
+async function announceCap(pr: PrRef): Promise<void> {
+  const state = readPrState(pr.number, pr.ghRepo);
+  if (!state?.handoff || state.handoff.cappedAnnounced) return;
   await appendToSummary(
     pr,
-    state,
+    state.summaryCommentId,
     `🔁 Still not merge-ready after ${state.handoff.rounds} handed-off fix round(s) — over to humans. (The \`os-auto-fix\` label still works for another automated pass.)`,
   );
-  state.handoff.cappedAnnounced = true;
-  writePrState(state);
+  updatePrState(
+    pr.number,
+    pr.headRef,
+    (s) => {
+      if (s.handoff) s.handoff.cappedAnnounced = true;
+    },
+    pr.ghRepo,
+  );
 }
 
 /** Append a status line to the current review summary comment (best-effort). */
-async function appendToSummary(pr: PrRef, state: GithubPrState, line: string): Promise<void> {
-  const id = state.summaryCommentId;
+async function appendToSummary(pr: PrRef, id: number | undefined, line: string): Promise<void> {
   if (!id) return;
   try {
     const existing = await getComment(id, pr.ghRepo);

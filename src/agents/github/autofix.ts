@@ -14,8 +14,7 @@ import { createWorktreeForPrBranch } from "../../server/worktree";
 import {
   claimLock,
   releaseLock,
-  getOrInitPrState,
-  writePrState,
+  updatePrState,
   readPrState,
 } from "./state";
 import { announceGithubRun, runGithubAgent, authorForLogin, sessionUrl } from "./run";
@@ -162,9 +161,14 @@ export async function runAutoFix(
       const id = await postIssueComment(pr.number, body, pr.ghRepo);
       if (id) {
         statusCommentId = id;
-        const s = getOrInitPrState(pr.number, pr.headRef, pr.ghRepo);
-        s.autoFix = { ...(s.autoFix || { active: true, iterations: 0, startedAt: new Date().toISOString() }), statusCommentId: id };
-        writePrState(s);
+        updatePrState(
+          pr.number,
+          pr.headRef,
+          (s) => {
+            s.autoFix = { ...(s.autoFix || { active: true, iterations: 0, startedAt: new Date().toISOString() }), statusCommentId: id };
+          },
+          pr.ghRepo,
+        );
       }
     }
   };
@@ -179,9 +183,14 @@ export async function runAutoFix(
     // A killed-and-recovered loop re-enters with no steer arg; pull it back from state.
     const effectiveSteer = steer ?? (resuming ? prior?.steer : undefined);
 
-    const s = getOrInitPrState(pr.number, pr.headRef, pr.ghRepo);
-    s.autoFix = { active: true, iterations, startedAt, statusCommentId, requestedBy, worktreeDir: prior?.worktreeDir, lastPushedSha: prior?.lastPushedSha, steer: effectiveSteer };
-    writePrState(s);
+    updatePrState(
+      pr.number,
+      pr.headRef,
+      (s) => {
+        s.autoFix = { active: true, iterations, startedAt, statusCommentId, requestedBy, worktreeDir: prior?.worktreeDir, lastPushedSha: prior?.lastPushedSha, steer: effectiveSteer };
+      },
+      pr.ghRepo,
+    );
 
     const bksId = await announceGithubRun({
       prNumber: pr.number,
@@ -270,9 +279,16 @@ export async function runAutoFix(
       lastDisp = parseDispositions(result.text);
       const remaining = remainingFrom(lastDisp);
 
-      const st = getOrInitPrState(pr.number, pr.headRef, pr.ghRepo);
-      st.autoFix = { active: true, iterations, startedAt, statusCommentId, requestedBy, worktreeDir, lastPushedSha, steer: effectiveSteer };
-      writePrState(st);
+      // The loop's own locals are authoritative here. Re-reading them off disk
+      // would pick up whatever a concurrent review lane last wrote.
+      updatePrState(
+        pr.number,
+        pr.headRef,
+        (s) => {
+          s.autoFix = { active: true, iterations, startedAt, statusCommentId, requestedBy, worktreeDir, lastPushedSha, steer: effectiveSteer };
+        },
+        pr.ghRepo,
+      );
 
       if (result.error) { outcome = `⚠️ Stopped — the fix run errored: ${result.error}`; transientExit = true; break; }
 
@@ -406,8 +422,14 @@ export async function runAutoFix(
     const dispBlock = lastDisp ? formatDispositions(lastDisp) : "";
     await updateStatus(dispBlock ? `${outcome || "done."}\n\n${dispBlock}` : outcome || "done.");
 
-    const fin = getOrInitPrState(pr.number, pr.headRef, pr.ghRepo);
-    if (fin.autoFix) { fin.autoFix.active = false; fin.autoFix.iterations = iterations; fin.autoFix.lastPushedSha = lastPushedSha; writePrState(fin); }
+    updatePrState(
+      pr.number,
+      pr.headRef,
+      (s) => {
+        if (s.autoFix) { s.autoFix.active = false; s.autoFix.iterations = iterations; s.autoFix.lastPushedSha = lastPushedSha; }
+      },
+      pr.ghRepo,
+    );
 
     // Refresh the pinned review against the fixed code. The auto-fix push won't
     // trigger a `synchronize` review on its own (it's authored by the bot account,
@@ -433,8 +455,14 @@ export async function runAutoFix(
   } catch (e) {
     console.error(`[github] auto-fix error for PR #${pr.number}:`, e);
     transientExit = true; // an unexpected throw is infrastructure, not a verdict
-    const fin = getOrInitPrState(pr.number, pr.headRef, pr.ghRepo);
-    if (fin.autoFix) { fin.autoFix.active = false; writePrState(fin); }
+    updatePrState(
+      pr.number,
+      pr.headRef,
+      (s) => {
+        if (s.autoFix) s.autoFix.active = false;
+      },
+      pr.ghRepo,
+    );
     await updateStatus(
       `⚠️ Auto-fix errored: ${(e as any)?.message || e} Keeping the \`${LABEL_AUTOFIX}\` label — I'll retry automatically.`,
     ).catch(() => {});

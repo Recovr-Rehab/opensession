@@ -6,7 +6,7 @@
 import { personaName } from "../../server/config";
 import { getPrDetails, getPrDiff } from "../../server/pr-info";
 import { createWorktreeForPrBranch } from "../../server/worktree";
-import { claimLock, releaseLock, getOrInitPrState, writePrState } from "./state";
+import { claimLock, releaseLock, readPrState, updatePrState } from "./state";
 import { announceGithubRun, runGithubAgent, authorForLogin, finalSummary, sessionUrl } from "./run";
 import { buildSimplifyPrompt } from "./prompts";
 import { postOrEditComment, removeLabel, SIMPLIFY_MARKER } from "./github-rest";
@@ -47,19 +47,25 @@ export async function runSimplify(
     });
     onSessionCreated?.(bksId);
 
-    const s = getOrInitPrState(pr.number, pr.headRef, pr.ghRepo);
+    const prior = readPrState(pr.number, pr.ghRepo);
     // Reuse this run's comment only when recovering an interrupted run; a fresh
     // trigger (no activeRun) posts a new comment.
-    const reuseId = s.activeRun?.kind === "simplify" ? s.activeRun.progressCommentId : undefined;
+    const reuseId = prior?.activeRun?.kind === "simplify" ? prior.activeRun.progressCommentId : undefined;
     const progressId = await postOrEditComment(
       pr.number,
       reuseId,
       `${SIMPLIFY_MARKER}\n✨ **${personaName()} simplify** — working on PR #${pr.number}… · ${link}`,
       pr.ghRepo,
     );
-    s.simplify = { active: true, requestedBy, startedAt };
-    s.activeRun = { kind: "simplify", requestedBy, startedAt, progressCommentId: progressId ?? undefined, steer };
-    writePrState(s);
+    updatePrState(
+      pr.number,
+      pr.headRef,
+      (s) => {
+        s.simplify = { active: true, requestedBy, startedAt };
+        s.activeRun = { kind: "simplify", requestedBy, startedAt, progressCommentId: progressId ?? undefined, steer };
+      },
+      pr.ghRepo,
+    );
 
     const worktreeDir = await createWorktreeForPrBranch(
       pr.headRef,
@@ -87,10 +93,15 @@ export async function runSimplify(
       pr.ghRepo,
     );
 
-    const fin = getOrInitPrState(pr.number, pr.headRef, pr.ghRepo);
-    if (fin.simplify) { fin.simplify.active = false; fin.simplify.doneSha = pr.headSha; }
-    fin.activeRun = undefined;
-    writePrState(fin);
+    updatePrState(
+      pr.number,
+      pr.headRef,
+      (s) => {
+        if (s.simplify) { s.simplify.active = false; s.simplify.doneSha = pr.headSha; }
+        if (s.activeRun?.kind === "simplify") s.activeRun = undefined;
+      },
+      pr.ghRepo,
+    );
 
     // Re-review the simplified result (per the "simplify then re-review" decision).
     if (!result.error) {
@@ -113,10 +124,17 @@ export async function runSimplify(
     // Clear the recovery flag on any completion (success/handled error). If the
     // process is KILLED mid-run, finally doesn't run → activeRun persists → the
     // github agent re-runs it on startup.
-    const fin = getOrInitPrState(pr.number, pr.headRef, pr.ghRepo);
-    if (fin.simplify) fin.simplify.active = false;
-    fin.activeRun = undefined;
-    writePrState(fin);
+    // Kind-scoped: the re-review above may own activeRun by now, and clearing
+    // its marker would lose that run's crash recovery.
+    updatePrState(
+      pr.number,
+      pr.headRef,
+      (s) => {
+        if (s.simplify) s.simplify.active = false;
+        if (s.activeRun?.kind === "simplify") s.activeRun = undefined;
+      },
+      pr.ghRepo,
+    );
     for (const name of labelAliases(LABEL_SIMPLIFY)) {
       await removeLabel(pr.number, name, pr.ghRepo).catch(() => {});
     }
