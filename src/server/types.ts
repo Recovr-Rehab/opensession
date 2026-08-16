@@ -77,6 +77,11 @@ export interface UnifiedSession {
    * (restart-fresh) by design.
    */
   runState?: string;
+  /** DERIVED, never read off the session file: the mapper resolves it from the
+   *  engine ids and the worktree (`resolveTranscriptPath` in sessions.ts), so a
+   *  `transcriptPath` written into a session file is ignored. A test that wants
+   *  a session with history writes the transcript where the derivation points
+   *  (`h.writeEngineTranscript`), rather than setting this. */
   transcriptPath: string | null;
   prUrl?: string;
   prState?: "OPEN" | "MERGED" | "CLOSED";
@@ -265,7 +270,10 @@ export interface UnifiedSession {
   // Source-specific
   linearIssue?: { identifier: string; title: string; url?: string };
   slackThread?: { channel: string; threadTs: string };
-  mcpServers?: string[]; // External MCP servers loaded for this session
+  /** The MCP allowlist this session was created with, copied from its file.
+   *  Read by `sessionMcpScopeSource` (session-run-inputs.ts) as the "session"
+   *  scope; absent or empty means the run sees every server the prompter may. */
+  mcpServers?: string[];
   /** Sandbox opt-in (see docs/self-hosting-sandboxes.md): mirrors the session file's field.
    *  Runs route through the named provider when config + kill-switch allow;
    *  `sandboxId` is set once a provider materializes the sandbox (Phase 1+).

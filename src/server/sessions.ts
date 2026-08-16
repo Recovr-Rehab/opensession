@@ -915,6 +915,12 @@ function scanNativeSessions(): UnifiedSession[] {
       archivedReason: data.archivedReason,
       plainThreadId: data.plainThreadId,
       externalRefs: data.externalRefs,
+      // The MCP allowlist the session was created with. Dropping it here left
+      // `sessionMcpScopeSource`'s "session" branch unreachable, so a session
+      // created with a picked set of servers ran its first turn scoped (the
+      // create path passes the picked list straight to the run) and every turn
+      // after it against all of them.
+      mcpServers: data.mcpServers,
       model: data.model,
       effort: data.effort,
       fastMode: data.fastMode,

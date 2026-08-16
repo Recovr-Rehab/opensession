@@ -142,6 +142,35 @@ describe("transcript snapshots", () => {
     h.snapshot("mcp-allowlist-filtering", { sessionId: sid, calls });
   });
 
+  // The other half of the allowlist contract: an ordinary interactive session
+  // that was created with a picked set of servers. The choice is stamped on the
+  // session file at create time, so it has to survive being read back. The
+  // first turn gets the picked list from the create path either way, and a
+  // session whose stamp is dropped on the way out of the store quietly widens
+  // to every server on turn two.
+  test("session-stamped allowlist survives the read back", async () => {
+    if (!h.ready) return;
+    const sid = "bks-snap-session-mcp";
+    h.writeSession(sid, {
+      mode: "scratch",
+      repo: "snapshot-repo",
+      workspaceId: "ws-snap-session-mcp",
+      mcpServers: ["snapshot-alpha"],
+    });
+
+    const calls: FakeCall[] = [];
+    await h.prompt({
+      sessionId: sid,
+      content: "what can you reach on this turn?",
+      user: "SnapshotOwner",
+      collect: calls,
+      turns: [{ kind: "clean", engineSessionId: "ses_snap_session_mcp", text: ["Only alpha."] }],
+    });
+
+    expect(calls[0].opts.mcpServers).toEqual(["snapshot-alpha"]);
+    h.snapshot("session-stamped-mcp-allowlist", { sessionId: sid, calls });
+  });
+
   // A mid-session engine switch: turn one runs on the claude engine, the model
   // is then changed to a codex id, and turn two must carry a handoff note built
   // from the stored transcript, which the incoming engine has never seen.

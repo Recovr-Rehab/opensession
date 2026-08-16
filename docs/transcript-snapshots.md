@@ -43,6 +43,7 @@ Fixtures live in `src/server/testing/snapshots/`.
 | --- | --- |
 | `plain-turn-context-fencing` | A teammate's prompt with a sibling session attached as context. The store keeps the human's message; the model gets the `<opensession:context>` block and the `[Name]` attribution. |
 | `mcp-allowlist-filtering` | An automation-owned session prompted by a human. The allowlist drops one server, the per-user `allowedUsers` gate drops another, and the automation's denied tools are stripped from the model's tool list. |
+| `session-stamped-mcp-allowlist` | An ordinary session created with a picked set of servers. The stamp on the session file survives the read back, so the scope holds on every turn and not just the first. |
 | `engine-switch-handoff` | Two turns with a model change in between. Turn two starts a fresh engine session and carries the handoff note built from the stored transcript. |
 | `memory-scope-injection` | Repo, user and team memory rendered into the run's session note, and logged into the transcript as a context-injection entry. |
 
