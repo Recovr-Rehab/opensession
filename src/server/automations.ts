@@ -527,6 +527,122 @@ function sanitizeAutomationWorkspace(
   return id;
 }
 
+/** A validator either returns the value to store or the reason it can't. */
+type AutomationFieldValidator = (v: unknown) => unknown;
+
+function isFieldError(v: unknown): v is { error: string } {
+  return (
+    !!v &&
+    typeof v === "object" &&
+    !Array.isArray(v) &&
+    typeof (v as { error?: unknown }).error === "string"
+  );
+}
+
+/**
+ * Every caller-writable automation field and the validator that owns it.
+ * Create and update both apply this one table, so a field can't be sanitized
+ * on one write path and stored raw on the other — the drift that let a blank
+ * name or an empty prompt in through PUT /api/automations/:id and the
+ * update_automation MCP tool, both of which hand over unvalidated input.
+ *
+ * Order matters: it's the order errors are reported in, and name/prompt come
+ * first the way they always did on create.
+ *
+ * Fields NOT listed here are not caller-writable: id, createdAt, createdBy,
+ * webhookSecret and the run ledger stay whatever the record (or the create
+ * defaults) already say.
+ */
+const AUTOMATION_FIELDS: Record<string, AutomationFieldValidator> = {
+  name: (v) => {
+    const name = typeof v === "string" ? v.trim() : "";
+    return name || { error: "Name is required" };
+  },
+  prompt: (v) => {
+    const prompt = typeof v === "string" ? v.trim() : "";
+    return prompt || { error: "Prompt is required" };
+  },
+  runOnceAt: (v) => sanitizeRunOnceAt(v),
+  schedule: (v) => {
+    const schedule = typeof v === "string" ? v.trim() : "";
+    if (schedule && !parseCron(schedule)) {
+      return { error: `Invalid cron expression: "${schedule}"` };
+    }
+    return schedule;
+  },
+  mode: (v) => (v === "code" ? "code" : "ask"),
+  // Only an explicit false opts out; every existing caller omits this and
+  // keeps the old always-enabled behaviour.
+  enabled: (v) => v !== false,
+  eventKey: (v) => (typeof v === "string" ? v.trim() : "") || undefined,
+  mcpServers: (v) => sanitizeMcpList(v),
+  repo: (v) => sanitizeRepo(v),
+  prReviewer: (v) => sanitizePrReviewer(v),
+  owner: (v) => sanitizeOwner(v),
+  workspaceId: (v) => sanitizeAutomationWorkspace(v),
+  selfImprove: (v) => v === true || undefined,
+  workflows: (v) => v === true || undefined,
+  claudeCliEnv: (v) => v === true || undefined,
+  codexCliEnv: (v) => v === true || undefined,
+  model: (v) => sanitizeModel(v),
+  fallbackModel: (v) => sanitizeModel(v, true),
+  accountId: (v) => sanitizeAccountId(v),
+  // Only false is worth storing — unset/true both mean the hard-pin default.
+  accountStrict: (v) => (v === false ? false : undefined),
+  usageCredits: (v) => v === true || undefined,
+  sandbox: (v) => v === true || undefined,
+  grafanaPoll: (v) => sanitizeGrafanaPoll(v),
+  slackWatch: (v) => sanitizeSlackWatch(v),
+  inputs: (v) => sanitizeAutomationInputs(v),
+  outputs: (v) => sanitizeAutomationOutputs(v),
+  webhookEnabled: (v) => (v === false ? false : undefined),
+};
+
+/** Cross-field rules, run once at the end of every write. */
+function normalizeAutomation(
+  next: Automation,
+  touched: ReadonlySet<string>,
+): Automation | { error: string } {
+  if (!(next.name || "").trim()) return { error: "Name is required" };
+  if (!(next.prompt || "").trim()) return { error: "Prompt is required" };
+  // A one-off and a recurring cron are mutually exclusive, and the scheduler
+  // takes the one-off branch: leaving both set means the cron never fires and
+  // then disappears with the record the one-off deletes after it runs.
+  // Whichever the caller just set wins — a fresh cron clears a stale one-off,
+  // otherwise the one-off wins as it does on create.
+  if (next.runOnceAt && next.schedule) {
+    if (touched.has("schedule") && !touched.has("runOnceAt")) {
+      next.runOnceAt = undefined;
+    } else {
+      next.schedule = "";
+    }
+  }
+  const sandboxValidation = validateSandboxAutomation(next);
+  if (sandboxValidation) return sandboxValidation;
+  return next;
+}
+
+/**
+ * Apply caller input onto a base record: create passes a defaults record,
+ * update passes the stored one. A field is only touched when the caller named
+ * it, so an update leaves everything it didn't mention alone.
+ */
+function applyAutomationConfig(
+  base: Automation,
+  input: Record<string, unknown>,
+): Automation | { error: string } {
+  const next = { ...base };
+  const touched = new Set<string>();
+  for (const [field, validate] of Object.entries(AUTOMATION_FIELDS)) {
+    if (!(field in input)) continue;
+    const value = validate(input[field]);
+    if (isFieldError(value)) return value;
+    (next as Record<string, unknown>)[field] = value;
+    touched.add(field);
+  }
+  return normalizeAutomation(next, touched);
+}
+
 export function createAutomation(input: {
   name: string;
   prompt: string;
@@ -560,86 +676,19 @@ export function createAutomation(input: {
   outputs?: AutomationOutput[];
   webhookEnabled?: boolean;
 }): Automation | { error: string } {
-  if (!input.name.trim()) return { error: "Name is required" };
-  if (!input.prompt.trim()) return { error: "Prompt is required" };
-  const runOnceAt = sanitizeRunOnceAt(input.runOnceAt);
-  if (runOnceAt && typeof runOnceAt === "object") return runOnceAt;
-  // A one-off and a recurring cron are mutually exclusive — the one-off wins.
-  const schedule = runOnceAt ? "" : (input.schedule || "").trim();
-  if (schedule && !parseCron(schedule)) {
-    return { error: `Invalid cron expression: "${schedule}"` };
-  }
-  const repo = sanitizeRepo(input.repo);
-  if (repo && typeof repo === "object") return repo;
-  const prReviewer = sanitizePrReviewer(input.prReviewer);
-  if (prReviewer && typeof prReviewer === "object") return prReviewer;
-  const owner = sanitizeOwner(input.owner);
-  if (owner && typeof owner === "object") return owner;
-  const workspaceId = sanitizeAutomationWorkspace(input.workspaceId);
-  if (workspaceId && typeof workspaceId === "object") return workspaceId;
-  const model = sanitizeModel(input.model);
-  if (model && typeof model === "object") return model;
-  const fallbackModel = sanitizeModel(input.fallbackModel, true);
-  if (fallbackModel && typeof fallbackModel === "object") return fallbackModel;
-  const accountId = sanitizeAccountId(input.accountId);
-  if (accountId && typeof accountId === "object") return accountId;
-  const grafanaPoll = sanitizeGrafanaPoll(input.grafanaPoll);
-  if (grafanaPoll && "error" in grafanaPoll) return grafanaPoll;
-  const slackWatch = sanitizeSlackWatch(input.slackWatch);
-  if (slackWatch && "error" in slackWatch) return slackWatch;
-  const inputs = sanitizeAutomationInputs(input.inputs);
-  if (inputs && "error" in inputs) return inputs;
-  const outputs = sanitizeAutomationOutputs(input.outputs);
-  if (outputs && "error" in outputs) return outputs;
-
-  const sandboxValidation = validateSandboxAutomation({
-    sandbox: input.sandbox,
-    model,
-    accountId,
-    accountStrict: input.accountStrict,
-    fallbackModel,
-    mcpServers: input.mcpServers,
-    claudeCliEnv: input.claudeCliEnv,
-    codexCliEnv: input.codexCliEnv,
-  });
-  if (sandboxValidation) return sandboxValidation;
-
-  const a: Automation = {
+  const base: Automation = {
     id: `auto-${randomUUIDv7()}`,
-    name: input.name.trim(),
-    prompt: input.prompt.trim(),
-    schedule,
-    runOnceAt,
-    mode: input.mode === "code" ? "code" : "ask",
-    // Only an explicit false opts out; every existing caller omits this and
-    // keeps the old always-enabled behaviour.
-    enabled: input.enabled !== false,
+    name: "",
+    prompt: "",
+    schedule: "",
+    mode: "ask",
+    enabled: true,
     createdBy: input.createdBy || "Anonymous",
     createdAt: new Date().toISOString(),
     webhookSecret: generateSecret(),
-    webhookEnabled: input.webhookEnabled === false ? false : undefined,
-    eventKey: (input.eventKey || "").trim() || undefined,
-    mcpServers: sanitizeMcpList(input.mcpServers),
-    repo,
-    prReviewer,
-    owner,
-    workspaceId,
-    selfImprove: input.selfImprove === true || undefined,
-    workflows: input.workflows === true || undefined,
-    claudeCliEnv: input.claudeCliEnv === true || undefined,
-    codexCliEnv: input.codexCliEnv === true || undefined,
-    model,
-    fallbackModel,
-    accountId,
-    // Only false is worth storing — unset/true both mean the hard-pin default.
-    accountStrict: input.accountStrict === false ? false : undefined,
-    usageCredits: input.usageCredits === true || undefined,
-    sandbox: input.sandbox === true || undefined,
-    grafanaPoll,
-    slackWatch,
-    inputs,
-    outputs,
   };
+  const a = applyAutomationConfig(base, input as Record<string, unknown>);
+  if ("error" in a) return a;
   saveAutomation(a);
   return a;
 }
@@ -690,88 +739,8 @@ export function updateAutomation(
 ): Automation | { error: string } {
   const a = getAutomation(id);
   if (!a) return { error: "Automation not found" };
-  if (patch.schedule !== undefined && patch.schedule.trim() && !parseCron(patch.schedule)) {
-    return { error: `Invalid cron expression: "${patch.schedule}"` };
-  }
-  const next = { ...a, ...patch };
-  if ("runOnceAt" in patch) {
-    const runOnceAt = sanitizeRunOnceAt(patch.runOnceAt);
-    if (runOnceAt && typeof runOnceAt === "object") return runOnceAt;
-    next.runOnceAt = runOnceAt;
-    if (runOnceAt) next.schedule = ""; // one-off and cron are mutually exclusive
-  }
-  if ("mcpServers" in patch) next.mcpServers = sanitizeMcpList(patch.mcpServers);
-  if ("repo" in patch) {
-    const repo = sanitizeRepo(patch.repo);
-    if (repo && typeof repo === "object") return repo;
-    next.repo = repo;
-  }
-  if ("prReviewer" in patch) {
-    const prReviewer = sanitizePrReviewer(patch.prReviewer);
-    if (prReviewer && typeof prReviewer === "object") return prReviewer;
-    next.prReviewer = prReviewer;
-  }
-  if ("owner" in patch) {
-    const owner = sanitizeOwner(patch.owner);
-    if (owner && typeof owner === "object") return owner;
-    next.owner = owner;
-  }
-  if ("workspaceId" in patch) {
-    const workspaceId = sanitizeAutomationWorkspace(patch.workspaceId);
-    if (workspaceId && typeof workspaceId === "object") return workspaceId;
-    next.workspaceId = workspaceId;
-  }
-  if ("selfImprove" in patch) next.selfImprove = patch.selfImprove === true || undefined;
-  if ("workflows" in patch) next.workflows = patch.workflows === true || undefined;
-  if ("claudeCliEnv" in patch) next.claudeCliEnv = patch.claudeCliEnv === true || undefined;
-  if ("codexCliEnv" in patch) next.codexCliEnv = patch.codexCliEnv === true || undefined;
-  if ("grafanaPoll" in patch) {
-    const grafanaPoll = sanitizeGrafanaPoll(patch.grafanaPoll);
-    if (grafanaPoll && "error" in grafanaPoll) return grafanaPoll;
-    next.grafanaPoll = grafanaPoll;
-  }
-  if ("slackWatch" in patch) {
-    const slackWatch = sanitizeSlackWatch(patch.slackWatch);
-    if (slackWatch && "error" in slackWatch) return slackWatch;
-    next.slackWatch = slackWatch;
-  }
-  if ("inputs" in patch) {
-    const inputs = sanitizeAutomationInputs(patch.inputs);
-    if (inputs && "error" in inputs) return inputs;
-    next.inputs = inputs;
-  }
-  if ("outputs" in patch) {
-    const outputs = sanitizeAutomationOutputs(patch.outputs);
-    if (outputs && "error" in outputs) return outputs;
-    next.outputs = outputs;
-  }
-  if ("webhookEnabled" in patch) {
-    next.webhookEnabled = patch.webhookEnabled === false ? false : undefined;
-  }
-  if ("model" in patch) {
-    const model = sanitizeModel(patch.model);
-    if (model && typeof model === "object") return model;
-    next.model = model;
-  }
-  if ("fallbackModel" in patch) {
-    const fallbackModel = sanitizeModel(patch.fallbackModel, true);
-    if (fallbackModel && typeof fallbackModel === "object") return fallbackModel;
-    next.fallbackModel = fallbackModel;
-  }
-  if ("accountId" in patch) {
-    const accountId = sanitizeAccountId(patch.accountId);
-    if (accountId && typeof accountId === "object") return accountId;
-    next.accountId = accountId;
-  }
-  if ("accountStrict" in patch) {
-    next.accountStrict = patch.accountStrict === false ? false : undefined;
-  }
-  if ("usageCredits" in patch) {
-    next.usageCredits = patch.usageCredits === true || undefined;
-  }
-  if ("sandbox" in patch) next.sandbox = patch.sandbox === true || undefined;
-  const sandboxValidation = validateSandboxAutomation(next);
-  if (sandboxValidation) return sandboxValidation;
+  const next = applyAutomationConfig(a, patch as Record<string, unknown>);
+  if ("error" in next) return next;
   // Backfill secrets for automations created before webhook support
   if (!next.webhookSecret) next.webhookSecret = generateSecret();
   saveAutomation(next);
