@@ -31,6 +31,9 @@ export function broadcastToAll(msg: object) {
 export interface WSClientData {
 	watchingSessionId: string | null;
 	user: string | null;
+	/** Dedicated tldraw sync sockets bypass the ordinary UI WebSocket hub. */
+	canvasRoomId?: string;
+	canvasSessionId?: string;
 	/** Verified sign-in identity stamped at upgrade (web-auth.ts). When set,
 	 *  it overrides any client-claimed `user` in messages (ws-handlers.ts). */
 	authUser?: string | null;

@@ -1,8 +1,8 @@
 // The Canvas tool: sessions as cards on an infinite tldraw canvas. pan,
-// zoom, arrange, and talk to any of them in place. Card positions persist
-// locally per user (tldraw's own IndexedDB store); the set of cards tracks
-// the live session list, seeded in inbox-activity order and re-sortable any
-// time with the toolbar's "Sort by activity".
+// zoom, arrange, and talk to any of them in place. Card geometry is shared and
+// persisted by the server's tldraw room; the set of cards tracks the live
+// session list, seeded in inbox-activity order and re-sortable any time with
+// the toolbar's "Sort by activity".
 import { useEffect, useMemo, useState } from "react";
 import { Tldraw, createShapeId, type Editor } from "tldraw";
 import {
@@ -15,11 +15,14 @@ import {
 	type SessionCardShape,
 } from "../lib/canvas-cards";
 import { useIsPhone } from "../hooks/useIsPhone";
+import { useCanvasStore } from "../lib/canvas-sync";
+import { usePeople } from "../lib/people";
 import { isClaimed } from "../lib/sidebar-lanes";
 import type { UnifiedSession } from "../lib/types";
 import { Button } from "../ui/button";
 import { EmptyState } from "../ui/state";
 import { useCurrentUser } from "./UserPicker";
+import { CanvasCollaborators } from "./CanvasCollaborators";
 
 const TLDRAW_LICENSE_KEY = process.env.TLDRAW_LICENSE_KEY ?? "";
 const DESKTOP_CAMERA_OPTIONS = {
@@ -37,14 +40,31 @@ function cardShapes(editor: Editor): SessionCardShape[] {
 		.filter((s) => s.type === "session-card") as SessionCardShape[];
 }
 
-export default function SessionCanvas({
-	sessions,
-	onOpenSession,
-}: {
+const CANVAS_COMPONENTS = { InFrontOfTheCanvas: CanvasCollaborators };
+
+interface SessionCanvasProps {
 	sessions: UnifiedSession[];
 	onOpenSession: (id: string) => void;
-}) {
+}
+
+export default function SessionCanvas(props: SessionCanvasProps) {
+	if (!TLDRAW_LICENSE_KEY) {
+		return (
+			<EmptyState className="h-full" title="Canvas needs a tldraw license">
+				Set TLDRAW_LICENSE_KEY on this server to use Canvas.
+			</EmptyState>
+		);
+	}
+	return <SyncedSessionCanvas {...props} />;
+}
+
+function SyncedSessionCanvas({
+	sessions,
+	onOpenSession,
+}: SessionCanvasProps) {
 	const user = useCurrentUser();
+	const people = usePeople();
+	const store = useCanvasStore(user, people);
 	const isPhone = useIsPhone();
 	const [editor, setEditor] = useState<Editor | null>(null);
 	const relevant = useMemo(
@@ -139,21 +159,14 @@ export default function SessionCanvas({
 		editor.zoomToFit({ animation: { duration: 320 } });
 	}
 
-	if (!TLDRAW_LICENSE_KEY) {
-		return (
-			<EmptyState className="h-full" title="Canvas needs a tldraw license">
-				Set TLDRAW_LICENSE_KEY on this server to use Canvas.
-			</EmptyState>
-		);
-	}
-
 	return (
 		<div className="relative h-full w-full overflow-hidden">
 			<CanvasDataContext.Provider value={data}>
 				<Tldraw
 					key={user.toLowerCase()}
-					persistenceKey={`opensession-canvas-${user.toLowerCase()}`}
+					store={store}
 					shapeUtils={CANVAS_SHAPE_UTILS}
+					components={CANVAS_COMPONENTS}
 					licenseKey={TLDRAW_LICENSE_KEY}
 					options={isPhone ? PHONE_CAMERA_OPTIONS : DESKTOP_CAMERA_OPTIONS}
 					hideUi

@@ -11,6 +11,7 @@ import {
 import { enableOpencodeServerDetach } from "./src/server/opencode-detach";
 import { adoptDetachedOpencodeServers } from "./src/server/opencode-runner";
 import { startAccountHealthMonitor } from "./src/server/account-health";
+import { flushCanvasRooms, handleCanvasWsUpgrade } from "./src/server/canvas-room";
 import { startAnalyticsPrewarm } from "./src/server/analytics";
 import { startDiskGc } from "./src/server/disk-gc";
 import { startWorktreeReaper } from "./src/server/worktree-reaper";
@@ -211,6 +212,7 @@ const server: import("bun").Server<WSClientData> = hotServe({
 				"/goals/*",
 				"/tasks",
 				"/analytics",
+				"/canvas",
 				"/reports",
 				"/reports/*",
 				"/support-tinder",
@@ -273,7 +275,7 @@ const server: import("bun").Server<WSClientData> = hotServe({
 					req.method !== "GET" &&
 					req.method !== "HEAD" &&
 					req.method !== "OPTIONS";
-				if (mutation || path === "/ws") {
+				if (mutation || path === "/ws" || path === "/canvas-ws") {
 					const violation = crossSiteViolation(req);
 					if (violation) {
 						return Response.json(
@@ -345,6 +347,7 @@ const server: import("bun").Server<WSClientData> = hotServe({
 					((path.startsWith("/api/") &&
 						!path.startsWith("/api/auth/")) ||
 						path === "/ws" ||
+						path === "/canvas-ws" ||
 						// Agent-published apps (src/server/deploys.ts). Explicitly
 						// listed because /d/ is a page-ish path, and page loads are
 						// otherwise left open so the sign-in screen can render — a
@@ -367,6 +370,15 @@ const server: import("bun").Server<WSClientData> = hotServe({
 			}
 
 			// WebSocket upgrade
+			if (path === "/canvas-ws") {
+				const authFirst = authUser ? authUser.name.split(" ")[0] : null;
+				const rejected = await handleCanvasWsUpgrade(req, server, {
+					user: authFirst,
+					login: authUser?.login || null,
+				});
+				return rejected ?? (undefined as any);
+			}
+
 			if (path === "/ws") {
 				// The verified identity is stamped in the historical picker format
 				// (first name — what createdBy/attribution have always stored);
@@ -879,6 +891,7 @@ if (!g.__opensessionBooted) {
 			}
 		} catch {}
 		broadcastToAll({ type: "server_restarting", ...(restartBy ? { by: restartBy } : {}) });
+		flushCanvasRooms();
 		if (!timersDead) await new Promise((r) => setTimeout(r, 150));
 		// Stop agents from accepting new work (Slack socket, webhook intake, …).
 		// BOUNDED: an agent shutdown that awaits a flaky network call (e.g. the
