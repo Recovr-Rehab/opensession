@@ -21,6 +21,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import {
   assertContainedPiPath,
+  isPiSessionBusy,
   isPiUsageLimitShape,
   makeGuardedGrepExecute,
   makeGuardedToolOps,
@@ -359,6 +360,39 @@ describe("runPi pi/openai account wiring (no engine, no network)", () => {
     expect(err).toBeDefined();
     expect(String(err.content)).toContain("expired");
     expect(err.usageLimitExhausted).toBe(true);
+  });
+
+  test("a transcript alias admits only one run and is cleaned up", async () => {
+    writeFileSync(storePath, JSON.stringify({ accounts: [] }));
+    const transcriptSessionId = `pi-shared-transcript-${crypto.randomUUID()}`;
+    const firstRunKey = `pi-first-${crypto.randomUUID()}`;
+    const secondRunKey = `pi-second-${crypto.randomUUID()}`;
+    const runOpts = {
+      prompt: "hi",
+      cwd: dir,
+      mode: "ask" as const,
+      mcpServers: [],
+      journal: { kind: "prompt" },
+      transcriptSessionId,
+    };
+    const first = runPi({ ...runOpts, sessionId: firstRunKey }, "pi/openai/gpt-5.6-sol");
+
+    const firstError = await first.next();
+    expect(firstError.value).toMatchObject({ type: "error", usageLimitExhausted: true });
+    expect(isPiSessionBusy(firstRunKey)).toBe(true);
+    expect(isPiSessionBusy(transcriptSessionId)).toBe(true);
+
+    const second = runPi({ ...runOpts, sessionId: secondRunKey }, "pi/openai/gpt-5.6-sol");
+    const busy = await second.next();
+    expect(busy.value).toMatchObject({ type: "error", content: "Session is busy" });
+    expect(isPiSessionBusy(secondRunKey)).toBe(false);
+    expect(isPiSessionBusy(transcriptSessionId)).toBe(true);
+
+    expect((await second.next()).done).toBe(true);
+    expect((await first.next()).done).toBe(true);
+    expect(isPiSessionBusy(firstRunKey)).toBe(false);
+    expect(isPiSessionBusy(secondRunKey)).toBe(false);
+    expect(isPiSessionBusy(transcriptSessionId)).toBe(false);
   });
 });
 
