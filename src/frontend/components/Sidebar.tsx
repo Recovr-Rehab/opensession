@@ -186,6 +186,12 @@ import {
 	setSidebarFeedVisible,
 } from "../lib/sidebar-feeds";
 import {
+	PLAIN_ID,
+	SUPPORT_SURFACE_OPTIONS,
+	setSupportSurface,
+	supportSurfaceOf,
+} from "../lib/support-surface";
+import {
 	DEFAULT_PROJECT,
 	EXPANDED_KEY,
 	FEED_FILTERS_KEY,
@@ -2488,11 +2494,21 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// read as theirs, so a borrowed sidebar is their workspaces and nothing
 	// else. Another teammate, or your own sidebar back, is a click away in
 	// "Group, filter & sort" — and the strip at the top is the way out.
+	// Support is the one tool whose visibility is not its own: it and the Plain
+	// band are two doors onto one queue, and both at once would list the same
+	// tickets twice. The band wins when the stored lists still say both, which
+	// is every account that had arranged its tools before the tool existed.
+	const supportSurface = supportSurfaceOf(
+		!hiddenTools.has(PLAIN_ID),
+		!hiddenFeeds.has(PLAIN_ID),
+	);
 	const visibleTools = borrowedLens
 		? []
 		: fittingTools.filter(
 				(tool) =>
-					!hiddenTools.has(tool.id) && !(productEmpty && tool.id === "prs"),
+					!hiddenTools.has(tool.id) &&
+					!(productEmpty && tool.id === "prs") &&
+					!(tool.id === PLAIN_ID && supportSurface !== "page"),
 			);
 
 	const setToolVisible = setSidebarToolVisible;
@@ -2507,40 +2523,74 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// the source's brand tile — so the menu reads as the list it edits rather
 	// than as seven words. That spends the leading slot, so the tick moves to
 	// the trailing edge, where the status flyout already puts its own.
+	//
+	// Support is the exception: it is a choice of surface rather than a tool to
+	// tick, so it gets its own group of three and appears in neither list.
 	const sidebarMenuEntries: CtxEntry[] = [
 		{ kind: "label", label: "Tools" },
-		...fittingTools.map((tool): CtxEntry => {
-			const shown = !hiddenTools.has(tool.id);
-			return {
-				kind: "item",
-				// The glyphs are drawn at the sidebar's 22px rail size; the menu's
-				// icon column is 20, the size every other row here uses.
-				icon: <span className="inline-flex [&_svg]:size-[20px]">{tool.icon}</span>,
-				label: tool.label,
-				trailing: shown ? (
-					<IconCheck size={20} style={{ color: "var(--text-dim)" }} />
-				) : undefined,
-				keepOpen: true,
-				onClick: () => setToolVisible(tool.id, !shown),
-			};
-		}),
-		...(feeds.length > 0
+		...fittingTools
+			.filter((tool) => tool.id !== PLAIN_ID)
+			.map((tool): CtxEntry => {
+				const shown = !hiddenTools.has(tool.id);
+				return {
+					kind: "item",
+					// The glyphs are drawn at the sidebar's 22px rail size; the
+					// menu's icon column is 20, the size every other row here uses.
+					icon: (
+						<span className="inline-flex [&_svg]:size-[20px]">{tool.icon}</span>
+					),
+					label: tool.label,
+					trailing: shown ? (
+						<IconCheck size={20} style={{ color: "var(--text-dim)" }} />
+					) : undefined,
+					keepOpen: true,
+					onClick: () => setToolVisible(tool.id, !shown),
+				};
+			}),
+		// One queue, one decision: the band and the page are alternatives, so
+		// they are three rows of a choice here rather than two independent ticks
+		// that could leave the same tickets on screen twice. Same wording and
+		// same order as Settings > Appearance.
+		...(feeds.some((feed) => feed.id === PLAIN_ID)
+			? ([
+					{ kind: "sep" },
+					{ kind: "label", label: "Support tickets" },
+					...SUPPORT_SURFACE_OPTIONS.map(
+						({ value, label }): CtxEntry => ({
+							kind: "item",
+							icon: <span className="inline-flex [&_svg]:size-[20px]" />,
+							label,
+							trailing:
+								supportSurface === value ? (
+									<IconCheck size={20} style={{ color: "var(--text-dim)" }} />
+								) : undefined,
+							keepOpen: true,
+							onClick: () => setSupportSurface(value),
+						}),
+					),
+				] as CtxEntry[])
+			: []),
+		...(feeds.filter((feed) => feed.id !== PLAIN_ID).length > 0
 			? ([
 					{ kind: "sep" },
 					{ kind: "label", label: "Sources" },
-					...feeds.map((feed): CtxEntry => {
-						const shown = !hiddenFeeds.has(feed.id);
-						return {
-							kind: "item",
-							icon: <RepoTile name={feed.id} className={SIDEBAR_REPO_TILE} />,
-							label: feed.title,
-							trailing: shown ? (
-								<IconCheck size={20} style={{ color: "var(--text-dim)" }} />
-							) : undefined,
-							keepOpen: true,
-							onClick: () => setSidebarFeedVisible(feed.id, !shown),
-						};
-					}),
+					...feeds
+						.filter((feed) => feed.id !== PLAIN_ID)
+						.map((feed): CtxEntry => {
+							const shown = !hiddenFeeds.has(feed.id);
+							return {
+								kind: "item",
+								icon: (
+									<RepoTile name={feed.id} className={SIDEBAR_REPO_TILE} />
+								),
+								label: feed.title,
+								trailing: shown ? (
+									<IconCheck size={20} style={{ color: "var(--text-dim)" }} />
+								) : undefined,
+								keepOpen: true,
+								onClick: () => setSidebarFeedVisible(feed.id, !shown),
+							};
+						}),
 				] as CtxEntry[])
 			: []),
 	];
