@@ -13,6 +13,7 @@ import {
 	IconCheckCircle,
 	IconInbox,
 	IconListCircles,
+	IconMail,
 	IconMessages,
 	IconMoon,
 	IconNote,
@@ -96,6 +97,7 @@ type Glyph = { icon: ComponentType<{ size?: number }>; tone: MarkTone };
  *  sidebar already names it. */
 const TOOL_GLYPHS: Record<string, Glyph> = {
 	tasks: { icon: IconListCircles, tone: "sky" },
+	plain: { icon: IconMail, tone: "orange" },
 	catchup: { icon: IconInbox, tone: "green" },
 	supporttinder: { icon: IconMessages, tone: "coral" },
 	reports: { icon: IconStack, tone: "indigo" },

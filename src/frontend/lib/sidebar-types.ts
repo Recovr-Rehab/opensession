@@ -52,6 +52,10 @@ export interface Props {
 	onOpenPrItem: (item: ReviewQueueItem) => void;
 	/** The open workspace id (route or the open session's), for row selection. */
 	selectedWorkspaceId?: string | null;
+	/** True while the Support queue (the Plain tool) is open. */
+	plainActive: boolean;
+	/** Open the Support queue: the Plain tickets in a column of their own. */
+	onOpenPlain: () => void;
 	/** True while the Support Tinder deck is open — highlights its entry. */
 	supportTinderActive: boolean;
 	/** Open Support Tinder (swipe triage of the Plain Todo queue). */

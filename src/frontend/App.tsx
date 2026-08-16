@@ -70,6 +70,7 @@ import { Goals } from "./components/Goals";
 import { Archived } from "./components/Archived";
 import { Reviews } from "./components/Reviews";
 import { PrQueuePreview } from "./components/PrQueuePreview";
+import { SupportInbox } from "./components/SupportInbox";
 import { SupportPreview } from "./components/SupportPreview";
 import { WorkspacePane } from "./components/WorkspacePane";
 import { Reports } from "./components/Reports";
@@ -100,6 +101,7 @@ import {
 	IconGlobe,
 	IconInbox,
 	IconListCircles,
+	IconMail,
 	IconMessages,
 	IconMoon,
 	IconFeed,
@@ -233,6 +235,9 @@ type Route =
 	| { view: "pr"; repo: string; branch?: undefined; number: number }
 	// Session-less support-ticket preview (a Support row with no session yet).
 	| { view: "support"; threadId: string }
+	// The Support queue as its own place: the Plain tickets in a column beside
+	// the sidebar, the open one read next to them, no session in sight.
+	| { view: "plain"; threadId?: string }
 	| { view: "reports"; automationId?: string; reportId?: string }
 	// Analytics — sessions/tokens/models/PRs over a date range.
 	| { view: "analytics" }
@@ -347,6 +352,14 @@ function parseRoute(pathname: string): Route {
 	const supportMatch = pathname.match(/^\/support\/(.+)$/);
 	if (supportMatch)
 		return { view: "support", threadId: decodeURIComponent(supportMatch[1]) };
+	// The Support queue: <base>/plain, with the open ticket in the path so a
+	// ticket read here can be linked to.
+	const plainMatch = pathname.match(/^\/plain(?:\/(.+))?$/);
+	if (plainMatch)
+		return {
+			view: "plain",
+			threadId: plainMatch[1] ? decodeURIComponent(plainMatch[1]) : undefined,
+		};
 	const reportsMatch = pathname.match(/^\/reports(?:\/([^/]+)(?:\/([^/]+))?)?$/);
 	if (reportsMatch)
 		return {
@@ -417,6 +430,10 @@ function routePath(route: Route): string {
 			}`;
 		case "support":
 			return `${BASE_PATH}/support/${encodeURIComponent(route.threadId)}`;
+		case "plain":
+			return route.threadId
+				? `${BASE_PATH}/plain/${encodeURIComponent(route.threadId)}`
+				: `${BASE_PATH}/plain`;
 		case "reports":
 			return route.automationId
 				? `${BASE_PATH}/reports/${encodeURIComponent(route.automationId)}${route.reportId ? `/${encodeURIComponent(route.reportId)}` : ""}`
@@ -3446,6 +3463,15 @@ export function App(
 				] as CommandPaletteAction[])
 			: []),
 		{
+			id: "support",
+			label: "Support",
+			description: "Read and answer Plain tickets",
+			category: "Navigate",
+			keywords: ["tickets", "plain", "inbox"],
+			icon: <IconMail size={18} />,
+			run: () => navigate({ view: "plain" }),
+		},
+		{
 			id: "reports",
 			label: "Reports",
 			description: "Open recurring automation reports",
@@ -4046,6 +4072,8 @@ export function App(
 							}
 							onOpenPrItem={openPrWorkspace}
 							selectedWorkspaceId={activeWorkspaceId}
+							plainActive={route.view === "plain"}
+							onOpenPlain={() => navigate({ view: "plain" })}
 							supportTinderActive={route.view === "supporttinder"}
 							onOpenSupportTinder={() => navigate({ view: "supporttinder" })}
 							reportsActive={route.view === "reports"}
@@ -4406,6 +4434,15 @@ export function App(
 						) : route.view === "tasks" ? (
 							<Tasks
 								addHandler={addHandler}
+								onOpenSession={(id) => navigate({ view: "session", id })}
+							/>
+						) : route.view === "plain" ? (
+							<SupportInbox
+								threadId={route.threadId ?? null}
+								sessions={sessions}
+								onSelectThread={(threadId) =>
+									navigate({ view: "plain", threadId })
+								}
 								onOpenSession={(id) => navigate({ view: "session", id })}
 							/>
 						) : route.view === "support" ? (

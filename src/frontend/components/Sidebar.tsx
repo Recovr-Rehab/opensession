@@ -287,6 +287,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	onOpenAutomation,
 	onOpenPrItem,
 	selectedWorkspaceId = null,
+	plainActive,
+	onOpenPlain,
 	supportTinderActive,
 	onOpenSupportTinder,
 	reportsActive,
@@ -2496,6 +2498,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			onClick: onOpenTasks,
 			title: "Your open tasks",
 			count: taskCount,
+		},
+		{
+			id: "plain",
+			label: SIDEBAR_TOOL_LABELS.plain,
+			icon: <IconMail />,
+			active: plainActive,
+			onClick: onOpenPlain,
+			title: "Support tickets waiting in Plain",
 		},
 		{
 			id: "catchup",
