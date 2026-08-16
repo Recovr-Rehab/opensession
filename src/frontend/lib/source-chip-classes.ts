@@ -38,10 +38,20 @@ export function sourceChipTone(source: SessionSource | "ask" | string): string {
 	return TONE[source] ?? "";
 }
 
-/** The "Archived" chip in the session header — a button, so it carries a
- *  pressed/disabled story the display-only chips don't. Its own padding and
- *  size deliberately override SOURCE_CHIP's: it is a tap target, not a label. */
+/**
+ * The "Archived" chip in the session header. Not a source chip: it is a state,
+ * and a button, so it stands on its own class rather than overriding
+ * SOURCE_CHIP. It carries the archive glyph beside the word — the word alone
+ * read as a label dropped into the title line, where the glyph names the state
+ * the way the automation and sandbox badges beside it name theirs.
+ *
+ * Medium, not bold: the glyph is a 1.5 stroke, and bold text next to it reads
+ * as two weights in one chip. `rounded-[999px]`, not `rounded-full`, because
+ * full is the one radius base.css excludes from `corner-shape: squircle`, and
+ * a true capsule here is the only one on the row.
+ */
 export const SOURCE_CHIP_ARCHIVED =
-	"cursor-pointer px-2.5 py-[3px] text-meta leading-[1.2] transition-[background,color] " +
+	"inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-[999px] bg-active px-2.5 py-[3px] " +
+	"text-meta font-medium leading-[1.2] text-dim transition-[background,color] " +
 	"duration-[var(--dur-micro)] ease-[var(--ease)] [&:hover:not(:disabled)]:bg-hover " +
 	"[&:hover:not(:disabled)]:text-fg disabled:cursor-default disabled:opacity-60";

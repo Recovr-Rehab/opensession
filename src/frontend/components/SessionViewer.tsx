@@ -4960,15 +4960,14 @@ export function SessionViewer({
 					{session.archived && (
 						<button
 							type="button"
-							className={cn(
-								SOURCE_CHIP,
-								sourceChipTone("cli"),
-								SOURCE_CHIP_ARCHIVED,
-							)}
+							className={SOURCE_CHIP_ARCHIVED}
 							onClick={handleArchive}
 							disabled={archiving}
 							title="Click to unarchive"
 						>
+							{/* The set's smallest step (MIN_ICON_SIZE); anything below it is
+							    clamped up to this anyway, so say so. */}
+							<IconArchive size={20} />
 							Archived
 						</button>
 					)}
