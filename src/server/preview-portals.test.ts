@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { join } from "path";
 import {
+	getSandboxPreviewStatus,
 	portalRouteAuthorized,
 	previewServerConfig,
 	writeSandboxPreviewAwsCredentials,
@@ -65,4 +69,51 @@ describe("permission-coupled preview portals", () => {
 		);
 		expect(env.AWS_CONFIG_FILE).toBe("/tmp/opensession-preview-aws/config");
 	});
+
+	test("a stopped Portal whose port was taken over stays stopped and gets no URL", async () => {
+		const port = 18_704;
+		// A registered repo must own the worktree path, so stand the temp dir up
+		// as a worktree of this repo rather than a bare scratch directory.
+		const root = mkdtempSync(join(tmpdir(), "os-preview-portals-test-"));
+		const worktree = join(root, "opensession-portal-status");
+		mkdirSync(worktree);
+		const previousRoot = process.env.OPENSESSION_WORKTREES_DIR;
+		process.env.OPENSESSION_WORKTREES_DIR = root;
+		const record = { name: "api", key: "PORTAL_API_PORT", command: "bun run api", port, state: "stopped" };
+		writeFileSync(
+			join(worktree, ".ports.conf"),
+			`# opensession-portal ${JSON.stringify(record)}\nPORTAL_API_PORT=${port}\n`,
+		);
+		// Something else is listening on the Portal's port: a survivor of a
+		// failed kill, or an unrelated process that claimed it afterwards.
+		const squatter = Bun.serve({ port, fetch: () => new Response("squatter") });
+		try {
+			const status = await getSandboxPreviewStatus(sandboxIn(worktree, port), worktree);
+			const api = status.services.find((service) => service.key === "PORTAL_API_PORT");
+			expect(api).toMatchObject({ state: "stopped", running: false, managed: true });
+			expect(api?.previewUrl ?? null).toBe(null);
+			for (const service of status.services) expect(service.running).toBe(service.state === "awake");
+		} finally {
+			squatter.stop(true);
+			if (previousRoot == null) delete process.env.OPENSESSION_WORKTREES_DIR;
+			else process.env.OPENSESSION_WORKTREES_DIR = previousRoot;
+			rmSync(root, { recursive: true, force: true });
+		}
+	});
 });
+
+function sandboxIn(cwd: string, port: number): Sandbox {
+	return {
+		id: "sandbox-preview-portals-test", provider: "docker", cwd,
+		async exec(command: string[]) {
+			const proc = Bun.spawn(command, { cwd, stdout: "pipe", stderr: "pipe" });
+			const [stdout, stderr, exitCode] = await Promise.all([
+				new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited,
+			]);
+			return { exitCode, stdout, stderr };
+		},
+		launchRun: () => { throw new Error("not used"); },
+		async ports() { return { [port]: port }; },
+		async status() { return "running"; },
+	} as unknown as Sandbox;
+}

@@ -10,7 +10,9 @@ import { statePath } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import type { PreviewService, PreviewStatus } from "./preview";
 
-type CachedPortal = Pick<PreviewService, "name" | "key" | "port" | "description" | "defaultPath" | "state" | "managed">;
+/** `state` is optional on the wire of this durable store: entries written
+ *  before it became a required PreviewService field have none. */
+type CachedPortal = Pick<PreviewService, "name" | "key" | "port" | "description" | "defaultPath" | "managed"> & { state?: PreviewService["state"] };
 type CachedEntry = { sessionId: string; sandboxId: string; services: CachedPortal[]; updatedAt: string };
 type Store = { portals: CachedEntry[] };
 
@@ -40,13 +42,16 @@ export function cacheSandboxPortals(sessionId: string, sandboxId: string, servic
 export function sleepingSandboxPortalStatus(sessionId: string, sandboxId?: string): PreviewStatus | null {
 	const entry = load().portals.find((item) => item.sessionId === sessionId && (!sandboxId || item.sandboxId === sandboxId));
 	if (!entry) return null;
-	const services: PreviewService[] = entry.services.map((service) => ({
-		...service,
-		running: false,
-		previewUrl: null,
-		state: service.state === "failed" || service.state === "stopped" ? service.state : "sleeping",
-		pids: [],
-	}));
+	const services: PreviewService[] = entry.services.map((service) => {
+		const cached = service.state ?? "stopped";
+		return {
+			...service,
+			running: false,
+			previewUrl: null,
+			state: cached === "failed" || cached === "stopped" ? cached : "sleeping",
+			pids: [],
+		};
+	});
 	const webapp = services.find((service) => service.key === "WEBAPP_PORT") ?? services[0];
 	return {
 		hasPortsConf: services.length > 0,
