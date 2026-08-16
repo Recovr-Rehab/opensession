@@ -66,16 +66,54 @@ export function repoForPath(p: string): Repo {
   return repo;
 }
 
+/** The repo owning a worktree, read from its `.git` pointer file — git's own
+ *  record of the checkout the worktree was cut from, so it is authoritative
+ *  where the path convention only guesses. Null when `dir` has no `.git` FILE
+ *  (a main checkout's `.git` is a directory, and a reaped worktree has
+ *  nothing at all) or when the pointer names an unregistered repo.
+ *
+ *  `gitdir` is the raw pointer target; worktree-reaper needs it to run
+ *  `git worktree remove` through the owning checkout. */
+export function repoFromGitPointer(dir: string): { repo: Repo; gitdir: string } | null {
+  let pointer: string;
+  try {
+    pointer = readFileSync(`${dir}/.git`, "utf8");
+  } catch {
+    return null;
+  }
+  const gitdir = pointer.replace(/^gitdir:\s*/, "").trim();
+  const ownerPath = canonicalPath(gitdir.split("/.git/worktrees/")[0] ?? "");
+  for (const repo of Object.values(configuredRepos())) {
+    if (canonicalPath(repo.repo) === ownerPath) return { repo, gitdir };
+  }
+  return null;
+}
+
 /** Like `repoForPath`, but undefined instead of throwing when no registered
  *  repo owns the path — a scratch dir, a sandbox volume, a stale path from a
  *  repo that has since been unregistered. */
 export function repoForPathOrNull(p: string): Repo | undefined {
   const cp = canonicalPath(p);
   for (const r of Object.values(configuredRepos())) {
-    if (cp === canonicalPath(r.repo) || cp.startsWith(`${canonicalPath(worktreesDir())}/${r.wtPrefix}-`))
-      return r;
+    if (cp === canonicalPath(r.repo)) return r;
   }
-  return undefined;
+  // Ask git before reading the path. `wtPrefix` defaults to the repo id, so
+  // two registered repos can have prefix-overlapping ids (`app`, `app-web`)
+  // and `<wt>/app-web-<branch>` matches BOTH conventions; the .git pointer
+  // does not guess.
+  const owner = repoFromGitPointer(cp);
+  if (owner) return owner.repo;
+  // Fallback for dirs that are no longer on disk — reaped worktrees whose
+  // path a session file still records. Longest prefix wins so the answer is
+  // the most specific convention that matches, not whichever repo config
+  // happened to list first.
+  const wtRoot = canonicalPath(worktreesDir());
+  let best: Repo | undefined;
+  for (const r of Object.values(configuredRepos())) {
+    if (!cp.startsWith(`${wtRoot}/${r.wtPrefix}-`)) continue;
+    if (!best || r.wtPrefix.length > best.wtPrefix.length) best = r;
+  }
+  return best;
 }
 
 /**
