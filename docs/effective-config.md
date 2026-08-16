@@ -18,8 +18,10 @@ Query parameters:
 
 | Param | Meaning |
 | --- | --- |
-| `user` | Resolve as this person instead of the caller. The `allowedUsers` gate and the shared-server key both key off it. |
+| `user` | Who the next turn is attributed to. The `allowedUsers` gate and the shared-server key both key off it. Ignored while web sign-in is active: the verified identity wins, the same rule that stops anyone acting under another name (`requestUser`). |
 | `verbose=1` | Add the static tables that are the same for every session (the ask-mode bash allowlist). |
+
+So on a signed-in instance the dump answers "how would this session run *for me*". A loopback caller is the `Automation` machine identity, which is why a curl from the box reports `identity.runUser: "Automation"` rather than the session's owner.
 
 Auth is the same as every other session route. The endpoint is read-only: the
 account row *peeks* the pool (`recordPick: false`) rather than picking from it.
