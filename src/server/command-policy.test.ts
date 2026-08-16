@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   bashAskPolicyReply,
   evaluateCommand,
+  EXEC_WRAPPER_NAMES,
   orgFloorPolicy,
   scannableCommand,
   type CommandPolicy,
@@ -270,6 +271,69 @@ describe("evasion corpus", () => {
     ]) {
       expect(evaluateCommand(c, p).decision, c).toBe("require_approval");
     }
+  });
+
+  test("every registered wrapper peels for all four payload questions", () => {
+    // One invocation per wrapper: bare name, plus whatever operand it needs
+    // before the command word. A new wrapper without an entry fails here.
+    const invocations: Record<string, string> = {
+      builtin: "builtin",
+      command: "command",
+      env: "env",
+      exec: "exec",
+      nice: "nice",
+      nohup: "nohup",
+      stdbuf: "stdbuf -oL",
+      sudo: "sudo",
+      time: "time",
+      timeout: "timeout 5",
+    };
+    expect(Object.keys(invocations).sort()).toEqual([...EXEC_WRAPPER_NAMES].sort());
+    for (const name of EXEC_WRAPPER_NAMES) {
+      const w = invocations[name]!;
+      for (const c of [
+        // The `-c` payload, stdin fed to a shell, a literal producer behind
+        // the wrapper, and the executable word being a variable. None of these
+        // match on the surface string: the quoted payload collapses to '' and
+        // the `;` keeps the rule from spanning the assignment.
+        `${w} bash -c 'acmecli login'`,
+        `echo 'acmecli login' | ${w} bash`,
+        `${w} echo 'acmecli login' | bash`,
+        `V=acmecli; ${w} $V login`,
+      ]) {
+        expect(evaluateCommand(c, layerPolicy).decision, c).toBe("deny");
+      }
+    }
+  });
+
+  test("xargs and coproc did not leak into the stdin question", () => {
+    // They execute their input as ARGUMENTS, not as a shell script, so a
+    // literal piped into them is data. Gating these would be a false positive.
+    for (const c of ["echo 'acmecli login' | xargs true", "echo 'acmecli login' | coproc true"]) {
+      expect(evaluateCommand(c, layerPolicy).decision, c).toBe("allow");
+    }
+  });
+
+  test("wrappers the payload scan used to miss are gated (stdbuf, builtin)", () => {
+    const p = orgFloorPolicy();
+    // stdbuf was in every wrapper table except the one that extracts `-c`
+    // payloads, so this fell through to no payload at all.
+    expect(evaluateCommand("stdbuf -oL bash -c 'rm -rf /tmp/x'", p).decision).toBe("require_approval");
+    expect(evaluateCommand("stdbuf -o0 -e0 sudo bash -c 'rm -rf /tmp/x'", p).decision).toBe("require_approval");
+    // builtin was only known to the literal-producer table.
+    expect(evaluateCommand("builtin bash -c 'rm -rf /tmp/x'", p).decision).toBe("require_approval");
+    expect(evaluateCommand("echo 'rm -rf /tmp/x' | builtin bash", p).decision).toBe("require_approval");
+    expect(evaluateCommand("C='rm'; builtin $C -rf /tmp/x", p).decision).toBe("require_approval");
+  });
+
+  test("a wrapper that does not execute what follows stops the peel", () => {
+    const p = orgFloorPolicy();
+    // `command -v bash` prints a path; the payload is never run. The abort now
+    // holds for every question, including the stdin one.
+    expect(evaluateCommand("command -v bash -c 'rm -rf /tmp/x'", p).decision).toBe("allow");
+    expect(evaluateCommand("echo 'rm -rf /tmp/x' | command -v bash", p).decision).toBe("allow");
+    // Only as a leading option: an operand ends the option scan.
+    expect(evaluateCommand("command bash -c 'rm -rf /tmp/x' -v", p).decision).toBe("require_approval");
   });
 
   test("allowlist mode denies anything unmatched", () => {

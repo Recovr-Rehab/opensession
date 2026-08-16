@@ -17,9 +17,10 @@
  * word-boundary rules still see them; multi-word strings collapse to inert
  * quotes so DATA never matches), decodes ANSI-C escapes, extracts `$(…)` and
  * backtick substitutions, and recurses into every executed payload it can see
- * — `bash -c`, `eval`, `env -S`, `xargs`, wrapper chains (sudo/nice/timeout/
- * time/nohup/stdbuf/command/exec), literal stdin piped into a shell, here-
- * strings, and simple `V=cmd; $V` indirection — to a depth of 8.
+ * — `bash -c`, `eval`, `env -S`, `xargs`, wrapper chains (`EXEC_WRAPPERS`:
+ * sudo/nice/timeout/time/nohup/stdbuf/command/builtin/exec/env), literal stdin
+ * piped into a shell, here-strings, and simple `V=cmd; $V` indirection — to a
+ * depth of 8.
  *
  * Enforcement wiring lives in opencode-runner.ts: unattended code-mode runs
  * get a `bash: {"*": "ask"}` permission config, and the permission-ask bridge
@@ -331,14 +332,128 @@ function splitStringPayload(args: string[], split: number): { value: string | un
   return { value, rest };
 }
 
-function envSplitWords(args: string[]): string[] | undefined {
-  const split = args.findIndex(
-    (arg) => arg === "-S" || arg.startsWith("-S") || arg === "--split-string" || arg.startsWith("--split-string="),
-  );
-  if (split < 0) return undefined;
-  const { value, rest } = splitStringPayload(args, split);
-  if (value === undefined) return [];
-  return scanShell([value, ...rest].join(" ")).commands[0] ?? [];
+/**
+ * A transparent exec wrapper: it eats some of its own options and then hands
+ * the remaining words to another command. Every question this module asks
+ * about a command segment — does it read stdin as a shell, does it produce a
+ * literal, where is its executable word, what payload does it execute — has to
+ * peel the same chain before it can answer, so the chain is described once.
+ *
+ * Shells, `eval`, `xargs`, `coproc` and the `echo`/`printf` producers are
+ * deliberately NOT wrappers: they mean different things to different questions.
+ * Admitting `xargs` to the stdin question would gate commands whose stdin is
+ * never shell-executed.
+ */
+interface ExecWrapper {
+  /** Options whose value is a separate word, so that word is not the command. */
+  valueOptions?: Set<string>;
+  /** Operand words consumed before the command (timeout's duration). */
+  skipOperands?: number;
+  /** VAR=value words between the options and the command (env). */
+  envAssignments?: boolean;
+  /** `-S`/`--split-string`: what follows is a shell string, not an argv (env). */
+  splitString?: boolean;
+  /** Leading options after which the wrapper does not execute what follows. */
+  abortOptions?: (option: string) => boolean;
+}
+
+const NO_VALUE_OPTIONS = new Set<string>();
+
+const EXEC_WRAPPERS = new Map<string, ExecWrapper>([
+  ["builtin", { abortOptions: () => true }],
+  ["command", { abortOptions: (option) => option === "-v" || option === "-V" }],
+  [
+    "env",
+    {
+      valueOptions: new Set(["-u", "--unset", "-C", "--chdir", "-S", "--split-string"]),
+      envAssignments: true,
+      splitString: true,
+    },
+  ],
+  ["exec", { valueOptions: new Set(["-a"]) }],
+  ["nice", { valueOptions: new Set(["-n", "--adjustment"]) }],
+  ["nohup", {}],
+  ["stdbuf", { valueOptions: new Set(["-i", "--input", "-o", "--output", "-e", "--error"]) }],
+  [
+    "sudo",
+    {
+      valueOptions: new Set([
+        "-u",
+        "--user",
+        "-g",
+        "--group",
+        "-h",
+        "--host",
+        "-p",
+        "--prompt",
+        "-C",
+        "--chdir",
+        "-T",
+        "--command-timeout",
+        "-R",
+        "--chroot",
+        "-t",
+        "--type",
+      ]),
+    },
+  ],
+  ["time", { valueOptions: new Set(["-o", "--output", "-f", "--format"]) }],
+  ["timeout", { valueOptions: new Set(["-s", "--signal", "-k", "--kill-after"]), skipOperands: 1 }],
+]);
+
+/** The wrapper names, for tests that want to sweep the whole registry. */
+export const EXEC_WRAPPER_NAMES: readonly string[] = [...EXEC_WRAPPERS.keys()];
+
+interface UnwrappedExec {
+  /** The wrapped words, every wrapper peeled off. */
+  inner: string[];
+  /** Where `inner` starts in the words handed in — callers that need a position, not a slice. */
+  offset: number;
+  /** `env -S`: a shell string to execute, so there is no inner argv. */
+  shellString?: string;
+  /** The wrapper does not execute what follows (`command -v`, `builtin -x`). */
+  aborted?: boolean;
+}
+
+function unwrapExec(words: string[]): UnwrappedExec {
+  let inner = words;
+  let offset = 0;
+  for (;;) {
+    const start = commandStart(inner);
+    if (start >= inner.length) return { inner, offset };
+    const executableWord = inner[start]!;
+    const wrapper = EXEC_WRAPPERS.get(executableWord.split("/").pop() ?? executableWord);
+    if (!wrapper) return { inner, offset };
+    const args = inner.slice(start + 1);
+    if (wrapper.abortOptions) {
+      for (const arg of args) {
+        if (arg === "--" || arg === "-" || !arg.startsWith("-")) break;
+        if (wrapper.abortOptions(arg.replace(/=.*/, ""))) return { inner: [], offset, aborted: true };
+      }
+    }
+    if (wrapper.splitString) {
+      const split = args.findIndex((arg) => arg.startsWith("-S") || arg.startsWith("--split-string"));
+      if (split >= 0) {
+        const { value, rest } = splitStringPayload(args, split);
+        if (value === undefined) return { inner: [], offset, aborted: true };
+        return { inner: [], offset, shellString: [value, ...rest].join(" ") };
+      }
+    }
+    let next = optionCommand(args, 0, wrapper.valueOptions ?? NO_VALUE_OPTIONS) + (wrapper.skipOperands ?? 0);
+    if (wrapper.envAssignments) while (next < args.length && /^[A-Za-z_]\w*=/.test(args[next]!)) next++;
+    offset += start + 1 + next;
+    inner = args.slice(next);
+  }
+}
+
+/** The `env -S` string as an argv, for the questions that ask about a command rather than a payload. */
+function splitStringWords(shellString: string): string[] {
+  return scanShell(shellString).commands[0] ?? [];
+}
+
+function executableName(words: string[], start: number): string {
+  const word = words[start]!;
+  return word.split("/").pop() ?? word;
 }
 
 function shellPipelines(input: string): string[][] {
@@ -391,145 +506,36 @@ function shellPipelines(input: string): string[][] {
 }
 
 function segmentConsumesShellStdin(words: string[]): boolean {
-  const start = commandStart(words);
-  if (start >= words.length) return false;
-  const executableWord = words[start]!;
-  const executable = executableWord.split("/").pop() ?? executableWord;
-  const args = words.slice(start + 1);
-  if (["bash", "sh", "dash", "zsh", "ksh"].includes(executable)) {
-    const stdinScripts = new Set(["-", "/dev/stdin", "/dev/fd/0", "/proc/self/fd/0"]);
-    for (let i = 0; i < args.length; i++) {
-      const arg = args[i]!;
-      if (/^-[^-]*c/.test(arg)) return false;
-      if (arg === "-s") return true;
-      if (["-O", "-o", "--rcfile", "--init-file"].includes(arg)) {
-        i++;
-        continue;
-      }
-      if (arg === "--") return args[i + 1] === undefined || stdinScripts.has(args[i + 1]!);
-      if (!arg.startsWith("-") || arg === "-") return stdinScripts.has(arg);
+  const { inner, shellString, aborted } = unwrapExec(words);
+  if (aborted) return false;
+  if (shellString !== undefined) return segmentConsumesShellStdin(splitStringWords(shellString));
+  const start = commandStart(inner);
+  if (start >= inner.length) return false;
+  if (!["bash", "sh", "dash", "zsh", "ksh"].includes(executableName(inner, start))) return false;
+  const args = inner.slice(start + 1);
+  const stdinScripts = new Set(["-", "/dev/stdin", "/dev/fd/0", "/proc/self/fd/0"]);
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!;
+    if (/^-[^-]*c/.test(arg)) return false;
+    if (arg === "-s") return true;
+    if (["-O", "-o", "--rcfile", "--init-file"].includes(arg)) {
+      i++;
+      continue;
     }
-    return true;
+    if (arg === "--") return args[i + 1] === undefined || stdinScripts.has(args[i + 1]!);
+    if (!arg.startsWith("-") || arg === "-") return stdinScripts.has(arg);
   }
-  if (executable === "env") {
-    const split = envSplitWords(args);
-    if (split) return segmentConsumesShellStdin(split);
-    let next = optionCommand(args, 0, new Set(["-u", "--unset", "-C", "--chdir", "-S", "--split-string"]));
-    while (next < args.length && /^[A-Za-z_]\w*=/.test(args[next]!)) next++;
-    return segmentConsumesShellStdin(args.slice(next));
-  }
-  if (executable === "command") return segmentConsumesShellStdin(args.slice(optionCommand(args, 0, new Set())));
-  if (executable === "exec") return segmentConsumesShellStdin(args.slice(optionCommand(args, 0, new Set(["-a"]))));
-  if (executable === "sudo") {
-    const next = optionCommand(
-      args,
-      0,
-      new Set([
-        "-u",
-        "--user",
-        "-g",
-        "--group",
-        "-h",
-        "--host",
-        "-p",
-        "--prompt",
-        "-C",
-        "--chdir",
-        "-T",
-        "--command-timeout",
-        "-R",
-        "--chroot",
-        "-t",
-        "--type",
-      ]),
-    );
-    return segmentConsumesShellStdin(args.slice(next));
-  }
-  if (executable === "nice")
-    return segmentConsumesShellStdin(args.slice(optionCommand(args, 0, new Set(["-n", "--adjustment"]))));
-  if (executable === "timeout") {
-    const duration = optionCommand(args, 0, new Set(["-s", "--signal", "-k", "--kill-after"]));
-    return segmentConsumesShellStdin(args.slice(duration + 1));
-  }
-  if (executable === "time")
-    return segmentConsumesShellStdin(args.slice(optionCommand(args, 0, new Set(["-o", "--output", "-f", "--format"]))));
-  if (executable === "nohup") return segmentConsumesShellStdin(args.slice(optionCommand(args, 0, new Set())));
-  if (executable === "stdbuf") {
-    return segmentConsumesShellStdin(
-      args.slice(optionCommand(args, 0, new Set(["-i", "--input", "-o", "--output", "-e", "--error"]))),
-    );
-  }
-  return false;
+  return true;
 }
 
 function literalProducerPayload(words: string[]): string | undefined {
-  const start = commandStart(words);
-  if (start >= words.length) return undefined;
-  const executableWord = words[start]!;
-  const executable = executableWord.split("/").pop() ?? executableWord;
-  let args = words.slice(start + 1);
-  if (executable === "command") {
-    let next = 0;
-    for (; next < args.length; next++) {
-      if (args[next] === "--") {
-        next++;
-        break;
-      }
-      if (args[next] === "-v" || args[next] === "-V") return undefined;
-      if (args[next] !== "-p") break;
-    }
-    return literalProducerPayload(args.slice(next));
-  }
-  if (executable === "builtin") {
-    if (args[0]?.startsWith("-") && args[0] !== "--") return undefined;
-    return literalProducerPayload(args[0] === "--" ? args.slice(1) : args);
-  }
-  if (executable === "exec") return literalProducerPayload(args.slice(optionCommand(args, 0, new Set(["-a"]))));
-  if (executable === "env") {
-    const split = envSplitWords(args);
-    if (split) return literalProducerPayload(split);
-    let next = optionCommand(args, 0, new Set(["-u", "--unset", "-C", "--chdir"]));
-    while (next < args.length && /^[A-Za-z_]\w*=/.test(args[next]!)) next++;
-    return literalProducerPayload(args.slice(next));
-  }
-  if (executable === "sudo") {
-    const next = optionCommand(
-      args,
-      0,
-      new Set([
-        "-u",
-        "--user",
-        "-g",
-        "--group",
-        "-h",
-        "--host",
-        "-p",
-        "--prompt",
-        "-C",
-        "--chdir",
-        "-T",
-        "--command-timeout",
-        "-R",
-        "--chroot",
-        "-t",
-        "--type",
-      ]),
-    );
-    return literalProducerPayload(args.slice(next));
-  }
-  if (executable === "nice")
-    return literalProducerPayload(args.slice(optionCommand(args, 0, new Set(["-n", "--adjustment"]))));
-  if (executable === "timeout") {
-    const duration = optionCommand(args, 0, new Set(["-s", "--signal", "-k", "--kill-after"]));
-    return literalProducerPayload(args.slice(duration + 1));
-  }
-  if (executable === "time")
-    return literalProducerPayload(args.slice(optionCommand(args, 0, new Set(["-o", "--output", "-f", "--format"]))));
-  if (executable === "nohup") return literalProducerPayload(args.slice(optionCommand(args, 0, new Set())));
-  if (executable === "stdbuf")
-    return literalProducerPayload(
-      args.slice(optionCommand(args, 0, new Set(["-i", "--input", "-o", "--output", "-e", "--error"]))),
-    );
+  const { inner, shellString, aborted } = unwrapExec(words);
+  if (aborted) return undefined;
+  if (shellString !== undefined) return literalProducerPayload(splitStringWords(shellString));
+  const start = commandStart(inner);
+  if (start >= inner.length) return undefined;
+  const executable = executableName(inner, start);
+  let args = inner.slice(start + 1);
   if (args[0] === "--") args = args.slice(1);
   if (executable === "echo") {
     let decodeEscapes = false;
@@ -610,50 +616,14 @@ function hereStringShellPayloads(input: string): string[] {
 function simpleVariablePayloads(input: string): string[] {
   const values = new Map<string, string>();
   const payloads: string[] = [];
-  const executableIndex = (words: string[], offset = 0): number | undefined => {
-    const start = commandStart(words);
-    if (start >= words.length) return undefined;
-    const executableWord = words[start]!;
-    const executable = executableWord.split("/").pop() ?? executableWord;
-    const args = words.slice(start + 1);
-    let next: number | undefined;
-    if (executable === "command" || executable === "nohup") next = optionCommand(args, 0, new Set());
-    else if (executable === "exec") next = optionCommand(args, 0, new Set(["-a"]));
-    else if (executable === "env") {
-      next = optionCommand(args, 0, new Set(["-u", "--unset", "-C", "--chdir", "-S", "--split-string"]));
-      while (next < args.length && /^[A-Za-z_]\w*=/.test(args[next]!)) next++;
-    } else if (executable === "sudo") {
-      next = optionCommand(
-        args,
-        0,
-        new Set([
-          "-u",
-          "--user",
-          "-g",
-          "--group",
-          "-h",
-          "--host",
-          "-p",
-          "--prompt",
-          "-C",
-          "--chdir",
-          "-T",
-          "--command-timeout",
-          "-R",
-          "--chroot",
-          "-t",
-          "--type",
-        ]),
-      );
-    } else if (executable === "nice") next = optionCommand(args, 0, new Set(["-n", "--adjustment"]));
-    else if (executable === "timeout")
-      next = optionCommand(args, 0, new Set(["-s", "--signal", "-k", "--kill-after"])) + 1;
-    else if (executable === "time") next = optionCommand(args, 0, new Set(["-o", "--output", "-f", "--format"]));
-    else if (executable === "stdbuf")
-      next = optionCommand(args, 0, new Set(["-i", "--input", "-o", "--output", "-e", "--error"]));
-    if (next === undefined) return offset + start;
-    const nested = executableIndex(args.slice(next), offset + start + 1 + next);
-    return nested;
+  const executableIndex = (words: string[]): number | undefined => {
+    const { inner, offset, shellString, aborted } = unwrapExec(words);
+    // A split string is a payload, not a word position — segmentShellPayloads
+    // recurses into it instead.
+    if (aborted || shellString !== undefined) return undefined;
+    const start = commandStart(inner);
+    if (start >= inner.length) return undefined;
+    return offset + start;
   };
   for (const words of scanShell(input).commands) {
     const start = commandStart(words);
@@ -674,11 +644,14 @@ function simpleVariablePayloads(input: string): string[] {
 }
 
 function segmentShellPayloads(words: string[]): string[] {
-  const start = commandStart(words);
-  if (start >= words.length) return [];
-  const executableWord = words[start]!;
-  const executable = executableWord.split("/").pop() ?? executableWord;
-  const args = words.slice(start + 1);
+  const { inner, shellString, aborted } = unwrapExec(words);
+  if (aborted) return [];
+  // `env -S 'rm -rf x'` executes the split string itself, so it IS the payload.
+  if (shellString !== undefined) return [shellString];
+  const start = commandStart(inner);
+  if (start >= inner.length) return [];
+  const executable = executableName(inner, start);
+  const args = inner.slice(start + 1);
   if (["bash", "sh", "dash", "zsh", "ksh"].includes(executable)) {
     for (let j = 0; j < args.length; j++) {
       if (args[j] === "--" || !args[j]!.startsWith("-")) return [];
@@ -691,65 +664,6 @@ function segmentShellPayloads(words: string[]): string[] {
     return [];
   }
   if (executable === "eval") return args.length ? [args.join(" ")] : [];
-  if (executable === "env") {
-    const split = args.findIndex(
-      (arg) => arg === "-S" || arg.startsWith("-S") || arg === "--split-string" || arg.startsWith("--split-string="),
-    );
-    if (split >= 0) {
-      const { value, rest } = splitStringPayload(args, split);
-      return value === undefined ? [] : [[value, ...rest].join(" ")];
-    }
-    let next = optionCommand(args, 0, new Set(["-u", "--unset", "-C", "--chdir", "-S", "--split-string"]));
-    while (next < args.length && /^[A-Za-z_]\w*=/.test(args[next]!)) next++;
-    return segmentShellPayloads(args.slice(next));
-  }
-  if (executable === "command") {
-    let next = 0;
-    for (; next < args.length; next++) {
-      if (args[next] === "--") {
-        next++;
-        break;
-      }
-      if (args[next] === "-v" || args[next] === "-V") return [];
-      if (args[next] !== "-p") break;
-    }
-    return segmentShellPayloads(args.slice(next));
-  }
-  if (executable === "exec") return segmentShellPayloads(args.slice(optionCommand(args, 0, new Set(["-a"]))));
-  if (executable === "sudo") {
-    const next = optionCommand(
-      args,
-      0,
-      new Set([
-        "-u",
-        "--user",
-        "-g",
-        "--group",
-        "-h",
-        "--host",
-        "-p",
-        "--prompt",
-        "-C",
-        "--chdir",
-        "-T",
-        "--command-timeout",
-        "-R",
-        "--chroot",
-        "-t",
-        "--type",
-      ]),
-    );
-    return segmentShellPayloads(args.slice(next));
-  }
-  if (executable === "nice")
-    return segmentShellPayloads(args.slice(optionCommand(args, 0, new Set(["-n", "--adjustment"]))));
-  if (executable === "timeout") {
-    const duration = optionCommand(args, 0, new Set(["-s", "--signal", "-k", "--kill-after"]));
-    return segmentShellPayloads(args.slice(duration + 1));
-  }
-  if (executable === "time")
-    return segmentShellPayloads(args.slice(optionCommand(args, 0, new Set(["-o", "--output", "-f", "--format"]))));
-  if (executable === "nohup") return segmentShellPayloads(args.slice(optionCommand(args, 0, new Set())));
   if (executable === "coproc") return segmentShellPayloads(args);
   if (executable === "xargs") {
     const next = optionCommand(
