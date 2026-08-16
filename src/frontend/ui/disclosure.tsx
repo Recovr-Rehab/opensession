@@ -1,7 +1,7 @@
 import * as React from "react";
-import { Collapsible } from "@base-ui/react/collapsible";
 import { IconChevronRight } from "../components/icons";
 import { cn } from "./cn";
+import { Collapsible, collapsiblePanelClasses } from "./collapsible";
 
 /**
  * Disclosure — a titled block that opens and closes in place.
@@ -50,20 +50,7 @@ export function Disclosure({
 				</Collapsible.Trigger>
 				{actions}
 			</div>
-			<Collapsible.Panel
-				className={cn(
-					// Base UI publishes the measured height as a custom property;
-					// animating to it (rather than to `auto`) is what makes the
-					// open/close interpolate at all.
-					"h-[var(--collapsible-panel-height)] overflow-hidden transition-[height] duration-[var(--dur)] ease-[var(--ease)]",
-					"data-[starting-style]:h-0 data-[ending-style]:h-0",
-					// Preflight is deliberately not imported (see AGENTS.md), so the
-					// UA's `[hidden]` rule is the only thing hiding a closed panel —
-					// and any display utility here would outrank it.
-					"[&[hidden]]:hidden",
-					panelClassName,
-				)}
-			>
+			<Collapsible.Panel className={cn(collapsiblePanelClasses, panelClassName)}>
 				<div className="pt-3">{children}</div>
 			</Collapsible.Panel>
 		</Collapsible.Root>

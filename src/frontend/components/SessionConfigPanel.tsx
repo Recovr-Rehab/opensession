@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Collapsible } from "@base-ui/react/collapsible";
 import {
 	fetchSessionEffectiveConfig,
 	relativeTime,
@@ -22,6 +21,7 @@ import {
 } from "../lib/session-viewer-classes";
 import { Badge } from "../ui/badge";
 import { cn } from "../ui/cn";
+import { Collapsible, collapsiblePanelClasses } from "../ui/collapsible";
 import { InlineAlert, LoadingState } from "../ui/state";
 import { IconChevronRight } from "./icons";
 import { getCurrentUser } from "./UserPicker";
@@ -64,10 +64,10 @@ const PREVIEW = 6;
  *
  * Deliberately not `ui/disclosure.tsx`, whose trigger is a foreground-weight
  * row and whose panel pads its own children — both fight the label-over-plate
- * grammar every other section in this panel uses. Same Base UI Collapsible
- * underneath, so the aria wiring and the measured-height animation are the
- * primitive's rather than a hand-rolled copy. The chevron sits on the right so
- * the label keeps the x every other label in the panel is aligned to.
+ * grammar every other section in this panel uses. It composes the same parts
+ * from `ui/collapsible`, so the aria wiring and the measured-height animation
+ * are the primitive's rather than a hand-rolled copy. The chevron sits on the
+ * right so the label keeps the x every other label in the panel is aligned to.
  */
 function ConfigSection({
 	label,
@@ -107,17 +107,7 @@ function ConfigSection({
 					/>
 				</span>
 			</Collapsible.Trigger>
-			<Collapsible.Panel
-				className={cn(
-					// Base UI publishes the measured height as a custom property;
-					// animating to it (rather than to `auto`) is what interpolates.
-					"h-[var(--collapsible-panel-height)] overflow-hidden transition-[height] duration-[var(--dur)] ease-[var(--ease)]",
-					"data-[starting-style]:h-0 data-[ending-style]:h-0",
-					// Preflight is deliberately not imported (see AGENTS.md), so the
-					// UA's `[hidden]` rule is the only thing hiding a closed panel.
-					"[&[hidden]]:hidden",
-				)}
-			>
+			<Collapsible.Panel className={collapsiblePanelClasses}>
 				{children}
 			</Collapsible.Panel>
 		</Collapsible.Root>
