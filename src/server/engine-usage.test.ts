@@ -1,8 +1,15 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadRates, priceDay, resetRatesForTest, scanClaudeDirect, scanCodexDirect } from "./engine-usage";
+import {
+	engineUsageForDates,
+	loadRates,
+	priceDay,
+	resetRatesForTest,
+	scanClaudeDirect,
+	scanCodexDirect,
+} from "./engine-usage";
 
 /**
  * Pricing is the whole point of this module: the audit log's own cost field
@@ -11,6 +18,7 @@ import { loadRates, priceDay, resetRatesForTest, scanClaudeDirect, scanCodexDire
 
 let dir = "";
 const prevEnv = process.env.OPENCODE_MODELS_JSON;
+const prevStateDir = process.env.OPENSESSION_STATE_DIR;
 
 const CATALOG = {
 	anthropic: {
@@ -33,12 +41,15 @@ beforeAll(() => {
 	const p = join(dir, "models.json");
 	writeFileSync(p, JSON.stringify(CATALOG));
 	process.env.OPENCODE_MODELS_JSON = p;
+	process.env.OPENSESSION_STATE_DIR = dir;
 	resetRatesForTest();
 });
 
 afterAll(() => {
 	if (prevEnv === undefined) delete process.env.OPENCODE_MODELS_JSON;
 	else process.env.OPENCODE_MODELS_JSON = prevEnv;
+	if (prevStateDir === undefined) delete process.env.OPENSESSION_STATE_DIR;
+	else process.env.OPENSESSION_STATE_DIR = prevStateDir;
 	resetRatesForTest();
 	rmSync(dir, { recursive: true, force: true });
 });
@@ -94,8 +105,13 @@ describe("engine usage pricing", () => {
 	test("a day past the store's retention is unmeasured, not zero", () => {
 		// The shard DBs prune at about a month. Charting a pruned day as 0
 		// would read as "usage started here", so it carries a flag instead.
-		const pruned = priceDay("2026-05-20", new Map(), true);
+		const pruned = priceDay("2026-05-20", new Map(), {
+			opencode: "unmeasured",
+			"claude-direct": "measured",
+			"codex-direct": "measured",
+		});
 		expect(pruned.unmeasured).toBe(true);
+		expect(pruned.coverage.opencode).toBe("unmeasured");
 		expect(pruned.costUsd).toBe(0);
 		// A day inside the window with no traffic is a real zero.
 		const quiet = priceDay("2026-08-14", new Map());
@@ -111,6 +127,81 @@ describe("engine usage pricing", () => {
 			]),
 		);
 		expect(day.byModel[0].model).toBe("claude-fable-5");
+	});
+});
+
+describe("engine usage day cache migration", () => {
+	const cacheFixture = (date: string, day: Record<string, unknown>) => {
+		const cacheDir = join(dir, ".opensession-analytics-cache");
+		mkdirSync(cacheDir, { recursive: true });
+		const path = join(cacheDir, `engine-day-${date}.json`);
+		writeFileSync(path, JSON.stringify({ v: 3, day }));
+		return path;
+	};
+
+	test("preserves nonzero merged history when migrating the old OpenCode horizon flag", async () => {
+		const date = "2001-02-03";
+		const legacyDay = {
+			date,
+			byModel: [
+				{
+					provider: "anthropic",
+					model: "claude-opus-5",
+					requests: 7,
+					input: 11,
+					output: 13,
+					cacheRead: 17,
+					cacheWrite: 19,
+					costUsd: 23,
+				},
+			],
+			requests: 7,
+			input: 11,
+			output: 13,
+			cacheRead: 17,
+			cacheWrite: 19,
+			totalTokens: 60,
+			costUsd: 23,
+			unpricedRequests: 5,
+			unmeasured: true,
+		};
+		const path = cacheFixture(date, legacyDay);
+
+		const day = (await engineUsageForDates([date])).get(date)!;
+
+		expect(day).toEqual({
+			...legacyDay,
+			coverage: { opencode: "unmeasured", "claude-direct": "measured", "codex-direct": "measured" },
+			unmeasured: false,
+		});
+		expect(JSON.parse(readFileSync(path, "utf-8"))).toEqual({ v: 3, day });
+	});
+
+	test("keeps an empty legacy retention gap unmeasured", async () => {
+		const date = "2001-02-04";
+		const legacyDay = {
+			date,
+			byModel: [],
+			requests: 0,
+			input: 0,
+			output: 0,
+			cacheRead: 0,
+			cacheWrite: 0,
+			totalTokens: 0,
+			costUsd: 0,
+			unpricedRequests: 0,
+			unmeasured: true,
+		};
+		cacheFixture(date, legacyDay);
+
+		const day = (await engineUsageForDates([date])).get(date)!;
+
+		expect(day.unmeasured).toBe(true);
+		expect(day.coverage).toEqual({
+			opencode: "unmeasured",
+			"claude-direct": "measured",
+			"codex-direct": "measured",
+		});
 	});
 });
 
