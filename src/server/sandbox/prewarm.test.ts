@@ -119,7 +119,9 @@ function writeConfig(overrides: Record<string, unknown>): void {
 /** Fake adapter whose driver satisfies the real dial-back + bootstrap-marker
  *  probes. `gate` (when provided) holds create() open so bootstrapping-state
  *  concurrency can be asserted. */
-function makeFakeAdapter(opts: { markerAnswer?: string; gate?: Promise<void> } = {}) {
+function makeFakeAdapter(
+  opts: { markerAnswer?: string; gate?: Promise<void>; destroyGate?: Promise<void> } = {},
+) {
   const created: string[] = [];
   const destroyed: string[] = [];
   const resources: Array<{ cpu?: number; memoryMb?: number; diskGb?: number } | undefined> = [];
@@ -147,6 +149,7 @@ function makeFakeAdapter(opts: { markerAnswer?: string; gate?: Promise<void> } =
     },
     async destroy(id: string) {
       destroyed.push(id);
+      if (opts.destroyGate) await opts.destroyGate;
     },
     async listPrewarmed() {
       return [];
@@ -288,12 +291,28 @@ describe("claimPrewarm (adoption)", () => {
   });
 
   test.skipIf(killSwitch)("discardClaimedPrewarm destroys a claimed-but-unusable sandbox", async () => {
-    const fake = makeFakeAdapter();
+    let finishDestroy!: () => void;
+    const destroyGate = new Promise<void>((resolve) => (finishDestroy = resolve));
+    const fake = makeFakeAdapter({ destroyGate });
     await requestPrewarm("daytona", "tella-fusion");
     await until(() => readyEntry()?.state === "ready");
     const claim = claimPrewarm("daytona", "tella-fusion", "bks-s")!;
     discardClaimedPrewarm("daytona", claim.sandboxId);
+    discardClaimedPrewarm("daytona", claim.sandboxId);
     await until(() => fake.destroyed.includes(claim.sandboxId));
+    expect(fake.destroyed.filter((id) => id === claim.sandboxId)).toHaveLength(1);
+    expect(
+      [..._prewarmPoolForTest().values()].find((entry) => entry.sandboxId === claim.sandboxId)
+        ?.state,
+    ).toBe("destroying");
+    expect(existsSync(join(prewarmDir(), "daytona-tella-fusion.json.destroying"))).toBe(true);
+    await sweepPrewarms();
+    expect(fake.destroyed.filter((id) => id === claim.sandboxId)).toHaveLength(1);
+    finishDestroy();
+    await until(() => _prewarmPoolForTest().size === 0);
+    expect(_prewarmPoolForTest().size).toBe(0);
+    expect(existsSync(join(prewarmDir(), "daytona-tella-fusion.json.claimed"))).toBe(false);
+    expect(existsSync(join(prewarmDir(), "daytona-tella-fusion.json.destroying"))).toBe(false);
   });
 });
 
@@ -413,6 +432,19 @@ describe("sweepPrewarms", () => {
     await sweepPrewarms();
     expect(existsSync(tomb)).toBe(false);
     expect(fake.destroyed).toEqual([]);
+  });
+
+  test.skipIf(killSwitch)("restart resumes cleanup from a .destroying tombstone", async () => {
+    const fake = makeFakeAdapter();
+    mkdirSync(prewarmDir(), { recursive: true });
+    const tomb = join(prewarmDir(), "daytona-tella-fusion.json.destroying");
+    writeFileSync(
+      tomb,
+      JSON.stringify({ sandboxId: "pw-discarded", provider: "daytona" }),
+    );
+    await sweepPrewarms();
+    await until(() => fake.destroyed.includes("pw-discarded"));
+    expect(existsSync(tomb)).toBe(false);
   });
 
   test.skipIf(killSwitch)("provider orphan audit reaps untracked prewarms with our keys only", async () => {

@@ -80,7 +80,12 @@ import {
 export const PREWARM_LABEL = "opensession.prewarm";
 export const PREWARM_KEY_LABEL = "opensession.prewarm.key";
 
-export type PrewarmEntryState = "bootstrapping" | "ready" | "claimed" | "failed";
+export type PrewarmEntryState =
+  | "bootstrapping"
+  | "ready"
+  | "claimed"
+  | "destroying"
+  | "failed";
 
 export interface SandboxMachineSettings {
   cpu?: number;
@@ -166,18 +171,29 @@ const BACKSTOP_DELETE_MIN = 60;
 
 // ── State (globalThis for --hot survival; files for restart reaping) ────────
 
-function pool(): Map<string, PrewarmEntry> {
-  const g = globalThis as unknown as { __sandboxPrewarmPool?: Map<string, PrewarmEntry> };
-  return (g.__sandboxPrewarmPool ??= new Map());
+interface PrewarmRecord {
+  entry: PrewarmEntry;
+  /** Runtime-only completion owned by the same record as the lifecycle state. */
+  bootstrapDone?: Promise<void>;
+  /** Runtime-only provider cleanup, shared by every overlapping cleanup path. */
+  destroyDone?: Promise<void>;
 }
 
-/** key → the in-flight bootstrap's completion promise (never rejects — the
- *  bootstrap catches into entry.state). Lets an ensure() WAIT for a warming
- *  sandbox instead of cold-creating a racing sibling (claimPrewarmOrWait).
- *  In-memory only: a restarted process can't await it and must cold-create. */
-function bootstrapDone(): Map<string, Promise<void>> {
-  const g = globalThis as unknown as { __sandboxPrewarmDone?: Map<string, Promise<void>> };
-  return (g.__sandboxPrewarmDone ??= new Map());
+function pool(): Map<string, PrewarmRecord> {
+  const g = globalThis as unknown as {
+    __sandboxPrewarmPool?: Map<string, PrewarmRecord | PrewarmEntry>;
+    __sandboxPrewarmDone?: Map<string, Promise<void>>;
+  };
+  const records = (g.__sandboxPrewarmPool ??= new Map());
+  for (const [key, value] of records) {
+    if ("entry" in value) continue;
+    records.set(key, {
+      entry: value,
+      bootstrapDone: g.__sandboxPrewarmDone?.get(key),
+    });
+  }
+  delete g.__sandboxPrewarmDone;
+  return records as Map<string, PrewarmRecord>;
 }
 
 function prewarmDir(): string {
@@ -262,8 +278,11 @@ async function adapterFor(provider: string): Promise<PrewarmAdapter | null> {
   return null;
 }
 
-function destroyLater(provider: string, sandboxId: string, why: string): void {
-  void (async () => {
+function destroyRecord(record: PrewarmRecord, why: string): Promise<void> {
+  const { provider, sandboxId } = record.entry;
+  if (!sandboxId) return Promise.resolve();
+  if (record.destroyDone) return record.destroyDone;
+  const done = (async () => {
     try {
       const adapter = await adapterFor(provider);
       await adapter?.destroy(sandboxId);
@@ -272,6 +291,28 @@ function destroyLater(provider: string, sandboxId: string, why: string): void {
       console.warn(`[sandbox-prewarm] destroy of ${sandboxId} (${why}) failed:`, e);
     }
   })();
+  record.destroyDone = done;
+  return done;
+}
+
+/** Restart orphans have no in-memory owner to transition. Give cleanup a
+ * short-lived owner so it still uses the same one-shot destruction path. */
+function destroyUntrackedLater(provider: string, sandboxId: string, why: string): void {
+  void destroyRecord(
+    {
+      entry: {
+        key: `${provider}:untracked:${sandboxId}`,
+        provider,
+        repoId: "untracked",
+        state: "failed",
+        signature: "",
+        sandboxId,
+        createdAt: new Date().toISOString(),
+        lastTouchedAt: new Date().toISOString(),
+      },
+    },
+    why,
+  );
 }
 
 // ── Requesting (the typing-driven entry point) ──────────────────────────────
@@ -320,9 +361,11 @@ export async function requestPrewarm(
   const { sandboxEnvironmentSettings } = await import("./environments");
   const resources = sandboxEnvironmentSettings(repoId, provider);
   const p = pool();
-  let entry = p.get(key);
+  let record = p.get(key);
+  let entry = record?.entry;
   if (entry && entry.signature !== prewarmSignature(provider, resources)) {
     await invalidatePrewarm(provider, repoId);
+    record = undefined;
     entry = undefined;
   }
   if (entry && (entry.state === "bootstrapping" || entry.state === "ready")) {
@@ -339,10 +382,12 @@ export async function requestPrewarm(
 
   // Caps — this is paid compute.
   const live = [...p.values()].filter(
-    (e) => e.state === "bootstrapping" || e.state === "ready",
+    ({ entry: e }) => e.state === "bootstrapping" || e.state === "ready",
   );
   if (live.length >= cfg.maxLive) return { state: "at-capacity" };
-  if (live.some((e) => e.state === "bootstrapping")) return { state: "at-capacity" };
+  if (live.some(({ entry: e }) => e.state === "bootstrapping")) {
+    return { state: "at-capacity" };
+  }
 
   const adapter = await adapterFor(provider);
   if (!adapter) return { state: "unsupported" };
@@ -361,12 +406,13 @@ export async function requestPrewarm(
     createdAt: now,
     lastTouchedAt: now,
   };
-  p.set(key, fresh);
+  const freshRecord: PrewarmRecord = { entry: fresh };
+  p.set(key, freshRecord);
   persist(fresh);
-  const done = runPrewarmBootstrap(fresh, adapter);
-  bootstrapDone().set(key, done);
+  const done = runPrewarmBootstrap(freshRecord, adapter);
+  freshRecord.bootstrapDone = done;
   void done.finally(() => {
-    if (bootstrapDone().get(key) === done) bootstrapDone().delete(key);
+    if (freshRecord.bootstrapDone === done) freshRecord.bootstrapDone = undefined;
   });
   return { state: "bootstrapping" };
 }
@@ -374,32 +420,33 @@ export async function requestPrewarm(
 /** Extend a live prewarm's TTL (requestPrewarm calls it; exported for
  *  callers that only want to keep an existing prewarm alive). */
 export function touchPrewarm(provider: string, repoId: string): void {
-  const entry = pool().get(`${provider}:${repoId}`);
+  const entry = pool().get(`${provider}:${repoId}`)?.entry;
   if (!entry || (entry.state !== "bootstrapping" && entry.state !== "ready")) return;
   entry.lastTouchedAt = new Date().toISOString();
   persist(entry);
 }
 
 export function prewarmStatus(provider: string, repoId: string): PrewarmEntry | undefined {
-  const entry = pool().get(`${provider}:${repoId}`);
+  const entry = pool().get(`${provider}:${repoId}`)?.entry;
   return entry ? { ...entry } : undefined;
 }
 
 /** Remove a provider/repo prewarm before an explicit environment rebuild. */
 export async function invalidatePrewarm(provider: string, repoId: string): Promise<void> {
   const key = `${provider}:${repoId}`;
-  const entry = pool().get(key);
-  if (!entry) return;
+  const record = pool().get(key);
+  if (!record) return;
+  const { entry } = record;
   pool().delete(key);
   removeFile(entry);
   if (entry.sandboxId && entry.state !== "claimed") {
-    const adapter = await adapterFor(provider);
-    await adapter?.destroy(entry.sandboxId);
+    await destroyRecord(record, "invalidated");
   }
 }
 
-async function runPrewarmBootstrap(entry: PrewarmEntry, adapter: PrewarmAdapter): Promise<void> {
-  const current = () => pool().get(entry.key) === entry;
+async function runPrewarmBootstrap(record: PrewarmRecord, adapter: PrewarmAdapter): Promise<void> {
+  const { entry } = record;
+  const current = () => pool().get(entry.key) === record;
   try {
     const ttl = sandboxPrewarmConfig().ttlMinutes;
     console.log(`[sandbox-prewarm] starting ${entry.key} prewarm (user ${entry.user || "?"})`);
@@ -415,7 +462,7 @@ async function runPrewarmBootstrap(entry: PrewarmEntry, adapter: PrewarmAdapter)
     entry.sandboxId = sandboxId;
     if (!current()) {
       // Reaped (TTL) or reset while creating — don't leak the sandbox.
-      destroyLater(entry.provider, sandboxId, "superseded mid-create");
+      void destroyRecord(record, "superseded mid-create");
       return;
     }
     persist(entry);
@@ -439,7 +486,7 @@ async function runPrewarmBootstrap(entry: PrewarmEntry, adapter: PrewarmAdapter)
       await assertDialbackReachable(driver, `${entry.provider}-prewarm`);
       await bootstrapRemoteSandbox(driver, `${entry.provider}-prewarm`);
       if (!current()) {
-        destroyLater(entry.provider, sandboxId, "superseded mid-bootstrap");
+        void destroyRecord(record, "superseded mid-bootstrap");
         return;
       }
       // Repo-template providers ALWAYS pre-clone and run `.agents/setup`
@@ -470,7 +517,7 @@ async function runPrewarmBootstrap(entry: PrewarmEntry, adapter: PrewarmAdapter)
       }
     }
     if (!current()) {
-      destroyLater(entry.provider, sandboxId, "superseded mid-warm");
+      void destroyRecord(record, "superseded mid-warm");
       return;
     }
     if (adapter.publishTemplate && !restoredFromTemplate) {
@@ -482,7 +529,7 @@ async function runPrewarmBootstrap(entry: PrewarmEntry, adapter: PrewarmAdapter)
       await adapter.park(sandboxId);
     }
     if (!current()) {
-      destroyLater(entry.provider, sandboxId, "superseded mid-park");
+      void destroyRecord(record, "superseded mid-park");
       return;
     }
     entry.state = "ready";
@@ -493,7 +540,7 @@ async function runPrewarmBootstrap(entry: PrewarmEntry, adapter: PrewarmAdapter)
     console.log(`[sandbox-prewarm] ${entry.key} ready (${sandboxId})`);
   } catch (e) {
     console.warn(`[sandbox-prewarm] ${entry.key} bootstrap failed:`, e);
-    if (entry.sandboxId) destroyLater(entry.provider, entry.sandboxId, "bootstrap failed");
+    void destroyRecord(record, "bootstrap failed");
     if (current()) {
       entry.state = "failed";
       entry.error = String((e as any)?.message || e).slice(0, 300);
@@ -522,14 +569,15 @@ export function claimPrewarm(
 ): { sandboxId: string } | null {
   const key = `${provider}:${repoId}`;
   const p = pool();
-  const entry = p.get(key);
+  const record = p.get(key);
+  const entry = record?.entry;
   if (!entry || entry.state !== "ready" || !entry.sandboxId) return null;
   if (entry.signature !== prewarmSignature(provider, entry.resources)) {
     // Runner pin or provider create-shape changed since this was warmed —
     // never adopt (stale payload / wrong-sized sandbox).
     p.delete(key);
     removeFile(entry);
-    destroyLater(provider, entry.sandboxId, "stale bootstrap signature");
+    void destroyRecord(record, "stale bootstrap signature");
     return null;
   }
   // On-disk arbiter: the rename fails for everyone but the first claimant
@@ -546,7 +594,7 @@ export function claimPrewarm(
   // Tombstone key: frees `key` for a fresh prewarm while still protecting
   // the adopted sandbox from the orphan audit until the grace passes.
   p.delete(key);
-  p.set(`${key}#${entry.sandboxId}`, entry);
+  p.set(`${key}#${entry.sandboxId}`, record);
   return { sandboxId: entry.sandboxId };
 }
 
@@ -576,11 +624,12 @@ export async function claimPrewarmOrWait(
   const claimed = claimPrewarm(provider, repoId, sessionId);
   if (claimed) return claimed;
   const key = `${provider}:${repoId}`;
-  const entry = pool().get(key);
+  const record = pool().get(key);
+  const entry = record?.entry;
   if (!entry || entry.state !== "bootstrapping") return null;
   const age = Date.now() - Date.parse(entry.createdAt);
   if (!Number.isFinite(age) || age > (opts?.maxAgeMs ?? 60_000)) return null;
-  const done = bootstrapDone().get(key);
+  const done = record.bootstrapDone;
   if (!done) return null; // not ours to await (restarted process)
   console.log(
     `[sandbox-prewarm] ensure(${sessionId.slice(0, 20)}…) waiting for in-flight ${key} prewarm (${Math.round(age / 1000)}s old)…`,
@@ -595,17 +644,44 @@ export async function claimPrewarmOrWait(
   return claimPrewarm(provider, repoId, sessionId);
 }
 
-/** Fire-and-forget destroy for a claimed sandbox the adopter found unusable
- *  (gone/broken on inspection) — keeps paid compute at zero either way. */
+/** Release and destroy a claimed sandbox the adopter found unusable. The owner
+ *  moves to destroying until provider cleanup settles, so status and orphan
+ *  auditing cannot disagree about who owns the sandbox. */
 export function discardClaimedPrewarm(provider: string, sandboxId: string): void {
-  destroyLater(provider, sandboxId, "claimed but unusable");
+  const found = [...pool().entries()].find(
+    ([, { entry }]) =>
+      entry.provider === provider &&
+      entry.sandboxId === sandboxId &&
+      (entry.state === "claimed" || entry.state === "destroying"),
+  );
+  if (found) {
+    const [key, record] = found;
+    const wasClaimed = record.entry.state === "claimed";
+    record.entry.state = "destroying";
+    if (wasClaimed) {
+      try {
+        renameSync(
+          `${fileFor(record.entry)}.claimed`,
+          `${fileFor(record.entry)}.destroying`,
+        );
+      } catch {}
+    }
+    void destroyRecord(record, "claimed but unusable").finally(() => {
+      if (pool().get(key) === record) pool().delete(key);
+      try {
+        unlinkSync(`${fileFor(record.entry)}.destroying`);
+      } catch {}
+    });
+    return;
+  }
+  destroyUntrackedLater(provider, sandboxId, "claimed but unusable");
 }
 
 // ── Sweep (TTL + restart reaping + provider-side orphan audit) ──────────────
 
 function knownSandboxIds(provider: string): Set<string> {
   const known = new Set<string>();
-  for (const e of pool().values()) {
+  for (const { entry: e } of pool().values()) {
     if (e.provider === provider && e.sandboxId) known.add(e.sandboxId);
   }
   try {
@@ -633,12 +709,13 @@ export async function sweepPrewarms(now = Date.now()): Promise<void> {
   const ttlMs = cfg.ttlMinutes * 60_000;
   const p = pool();
 
-  for (const [key, entry] of [...p.entries()]) {
+  for (const [key, record] of [...p.entries()]) {
+    const { entry } = record;
     if (entry.state === "bootstrapping" || entry.state === "ready") {
       if (now - Date.parse(entry.lastTouchedAt) > ttlMs) {
         p.delete(key);
         removeFile(entry);
-        if (entry.sandboxId) destroyLater(entry.provider, entry.sandboxId, "ttl expired");
+        if (entry.sandboxId) void destroyRecord(record, "ttl expired");
         else console.log(`[sandbox-prewarm] dropped ${key} (ttl expired before create)`);
       }
     } else if (entry.state === "failed") {
@@ -664,10 +741,32 @@ export async function sweepPrewarms(now = Date.now()): Promise<void> {
     const dir = prewarmDir();
     if (existsSync(dir)) {
       const owned = new Set(
-        [...p.values()].map((e) => fileFor(e).split("/").pop()!),
+        [...p.values()].map(({ entry }) => {
+          const base = fileFor(entry).split("/").pop()!;
+          if (entry.state === "claimed") return `${base}.claimed`;
+          if (entry.state === "destroying") return `${base}.destroying`;
+          return base;
+        }),
       );
       for (const f of readdirSync(dir)) {
         const full = `${dir}/${f}`;
+        if (owned.has(f)) continue;
+        if (f.endsWith(".json.destroying")) {
+          try {
+            const s = JSON.parse(readFileSync(full, "utf-8"));
+            if (s?.sandboxId && typeof s.provider === "string") {
+              destroyUntrackedLater(
+                String(s.provider),
+                String(s.sandboxId),
+                "destroy interrupted by restart",
+              );
+            }
+          } catch {}
+          try {
+            unlinkSync(full);
+          } catch {}
+          continue;
+        }
         if (f.endsWith(".json.claimed")) {
           // Adopted before a restart — the session owns the sandbox. Unlink
           // the tombstone once its orphan-audit protection window passed.
@@ -676,11 +775,15 @@ export async function sweepPrewarms(now = Date.now()): Promise<void> {
           } catch {}
           continue;
         }
-        if (!f.endsWith(".json") || owned.has(f)) continue;
+        if (!f.endsWith(".json")) continue;
         try {
           const s = JSON.parse(readFileSync(full, "utf-8"));
           if (s?.sandboxId && typeof s.provider === "string") {
-            destroyLater(String(s.provider), String(s.sandboxId), "orphaned by restart");
+            destroyUntrackedLater(
+              String(s.provider),
+              String(s.sandboxId),
+              "orphaned by restart",
+            );
           }
         } catch {}
         try {
@@ -709,7 +812,8 @@ async function auditProviderOrphans(now: number): Promise<void> {
     // A create in flight has a live sandbox with no recorded id yet — skip
     // this provider's audit round rather than destroy it mid-bootstrap.
     const creating = [...pool().values()].some(
-      (e) => e.provider === provider && e.state === "bootstrapping" && !e.sandboxId,
+      ({ entry: e }) =>
+        e.provider === provider && e.state === "bootstrapping" && !e.sandboxId,
     );
     if (creating) continue;
     const adapter = await adapterFor(provider);
@@ -783,7 +887,6 @@ export function _setPrewarmAdapterForTest(provider: string, adapter: PrewarmAdap
 export function _resetPrewarmForTest(): void {
   testAdapters.clear();
   pool().clear();
-  bootstrapDone().clear();
   const g = globalThis as unknown as {
     __prewarmOrphanAuditAt?: number;
     __sandboxPrewarmRate?: Map<string, number[]>;
@@ -793,7 +896,7 @@ export function _resetPrewarmForTest(): void {
 }
 
 export function _prewarmPoolForTest(): Map<string, PrewarmEntry> {
-  return pool();
+  return new Map([...pool()].map(([key, record]) => [key, record.entry]));
 }
 
 /** Stop the sweep interval (test teardown — a leaked timer in a test process
