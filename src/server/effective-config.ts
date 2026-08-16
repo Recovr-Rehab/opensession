@@ -462,7 +462,12 @@ export async function buildSessionEffectiveConfig(
         routed.model,
       ),
       "opencode-runner.ts claudePoolDryReason",
-      { stability: "load-dependent" },
+      {
+        stability: "load-dependent",
+        note:
+          "the dispatch-time circuit, which considers the MAIN model only — a preset whose " +
+          "oracle model is exhausted fails in `predicted` while this stays null",
+      },
     );
     account.bridgeTag = row(
       "error" in picked ? null : `anthropic-${picked.id}`,
@@ -519,8 +524,12 @@ export async function buildSessionEffectiveConfig(
     ),
     disabledIds: row(Object.keys(policy.disables).sort(), "opencode-policy.ts opencodeRunPolicy.disables"),
     bashPolicy: row(
-      session.mode === "ask" ? "ASK_BASH_PERMISSIONS (read-only allowlist)" : "unrestricted",
-      "runner-shared.ts ASK_BASH_PERMISSIONS",
+      session.mode === "ask"
+        ? "ASK_BASH_PERMISSIONS (read-only allowlist)"
+        : isUnattendedKind(baseJournalKind(journalKind))
+          ? "every command asks, answered by the org-floor command policy"
+          : "unrestricted",
+      "runner-shared.ts ASK_BASH_PERMISSIONS / command-policy.ts (unattended code runs)",
       { stability: "static" },
     ),
   };
@@ -600,7 +609,11 @@ export async function buildSessionEffectiveConfig(
         : inProcess.some((n) => !SHARED_INPROCESS_SERVERS.includes(n))
           ? `in-process server(s) outside SHARED_INPROCESS_SERVERS: ${inProcess.filter((n) => !SHARED_INPROCESS_SERVERS.includes(n)).join(", ")}`
           : "not an interactive run kind";
-  const bridgeTagValue = (account.bridgeTag?.value as string | null) ?? "plain";
+  // The pool key bakes in the bridge account, so it is only knowable once the
+  // account is. "plain" is the runner's own tag for a provider with no
+  // subscription bridge (a plain API key); an anthropic run whose account did
+  // not resolve has no key to predict, and saying "plain" there would be a lie.
+  const bridgeTag = "bridgeTag" in account ? (account.bridgeTag!.value as string | null) : "plain";
   const placement: Record<string, ConfigRow> = {
     shared: row(shared, "opencode-policy.ts sharedOpencodeEligible", {
       stability: "load-dependent",
@@ -609,9 +622,18 @@ export async function buildSessionEffectiveConfig(
         : nonSharedReason,
     }),
     serverKey: row(
-      shared ? sharedServerKey(bridgeTagValue, inputs.user, githubLogin) : session.id,
+      !shared
+        ? session.id
+        : bridgeTag
+          ? sharedServerKey(bridgeTag, inputs.user, githubLogin)
+          : null,
       "opencode-policy.ts sharedServerKey (shared) / session id (per-session)",
-      { stability: "load-dependent" },
+      {
+        stability: "load-dependent",
+        ...(shared && !bridgeTag
+          ? { note: "unresolved — the bridge account this key is built from did not resolve" }
+          : {}),
+      },
     ),
     externalMcpAtConfigLevel: row(
       shared ? "all" : (inputs.mcpServers ?? "all"),
