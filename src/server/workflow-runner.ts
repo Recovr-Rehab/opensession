@@ -412,11 +412,11 @@ export function startWorkflow(opts: StartWorkflowOpts): { runId: string } {
 	if (syntaxError) throw new Error(syntaxError);
 	const runId = `wf-${randomUUIDv7()}`;
 
-	// Replay is keyed by hash ONLY, consumed FIFO per hash: seq (worker call
-	// order) is nondeterministic across runs — under parallel()/pipeline() a
-	// dependent chain's next agent() fires when its previous result ARRIVES,
-	// which is wall-clock order live but call order on replay, so a seq-keyed
-	// journal misses on exactly the fan-out scripts this feature targets.
+	// Replay matches by hash only: seq (worker invocation order) can differ
+	// across runs when a dependent chain advances after a wall-clock result.
+	// Within one hash bucket, however, seq owns ordering. Journal lines append
+	// on completion, so using file order would swap results when two identical
+	// concurrent calls finish out of order.
 	// Failed outcomes are journaled (audit trail) but never replayed — resume
 	// means "retry what didn't finish", so a transient failure gets a fresh
 	// execution instead of a cached error.
@@ -446,6 +446,12 @@ export function startWorkflow(opts: StartWorkflowOpts): { runId: string } {
 			const queue = replay.get(entry.hash);
 			if (queue) queue.push(normalized);
 			else replay.set(entry.hash, [normalized]);
+		}
+		for (const queue of replay.values()) {
+			queue.sort((a, b) => a.seq - b.seq);
+		}
+		for (const queue of mcpReplay.values()) {
+			queue.sort((a, b) => a.seq - b.seq);
 		}
 	}
 
@@ -759,8 +765,8 @@ function runWorkflow(
 		const label = agentLabel(msg.prompt, msg.opts);
 		const structured = msg.opts.schema !== undefined ? true : undefined;
 
-		// FIFO per hash; only ok outcomes were admitted to the map (see
-		// startWorkflow) — a previously-failed call re-executes on resume.
+		// Invocation order per hash; only ok outcomes were admitted to the map
+		// (see startWorkflow), so a previously failed call re-executes on resume.
 		const queue = replay.get(hash);
 		const journaled = queue?.length ? queue.shift() : undefined;
 		if (journaled) {
@@ -1018,7 +1024,8 @@ function runWorkflow(
 		}
 		const hash = hashMcpCall(msg.server, msg.tool, msg.args);
 
-		// FIFO per hash; only ok outcomes were admitted (a failed call re-runs).
+		// Invocation order per hash; only ok outcomes were admitted, so a failed
+		// call re-runs.
 		const queue = mcpReplay.get(hash);
 		const journaled = queue?.length ? queue.shift() : undefined;
 		if (journaled) {

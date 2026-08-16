@@ -316,9 +316,9 @@ function walkSchema(value: unknown, schema: unknown, path: string, errors: strin
 // ── Write agents: branch naming + git plumbing ───────────────────────────────
 
 /**
- * A write agent's branch: `wf-<short runId>-<seq>`. Derived ONLY from
- * (runId, seq) — no Date.now/random — so a resumed run addresses the same
- * branch it created, and a replayed outcome still points at real work.
+ * A write agent's branch: `wf-<short runId>-<seq>`. Derived only from the run
+ * and agent invocation ordinal, with no Date.now/random. Replayed outcomes
+ * keep pointing at the branch recorded in their journal artifact.
  */
 export function workflowBranchName(runId: string, seq: number): string {
 	const compact = runId.replace(/[^A-Za-z0-9]/g, "").toLowerCase();

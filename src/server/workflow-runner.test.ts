@@ -586,6 +586,42 @@ describe("journal replay determinism", () => {
 		expect(resumed.agents.every((a) => a.cached)).toBe(true);
 	});
 
+	test("identical parallel agent calls replay in invocation order", async () => {
+		const script = [
+			'export const meta = { name: "identical-agents" };',
+			'return await parallel([() => agent("same"), () => agent("same")]);',
+		].join("\n");
+		const firstResult = deferred<WorkflowAgentOutcome>();
+		let invocation = 0;
+		const executor1 = fakeExecutor(() => {
+			const current = invocation++;
+			return current === 0
+				? firstResult.promise
+				: { ok: true, text: "second" };
+		});
+		const { runId } = start({ script, executor: executor1 });
+		await waitUntil(() => readWorkflowJournal(runId).length === 1);
+		firstResult.resolve({ ok: true, text: "first" });
+		const first = await waitForFinished(runId);
+		expect(first.result).toEqual(["first", "second"]);
+		// The faster second call is physically appended first.
+		expect(
+			readWorkflowJournal(runId)
+				.filter((entry): entry is WorkflowJournalEntry => !isMcpJournalEntry(entry))
+				.map((entry) => entry.seq),
+		).toEqual([1, 0]);
+
+		const executor2 = echoExecutor();
+		const { runId: resumedId } = start({
+			script,
+			executor: executor2,
+			resumeFromRunId: runId,
+		});
+		const resumed = await waitForFinished(resumedId);
+		expect(resumed.result).toEqual(first.result);
+		expect(executor2.calls).toHaveLength(0);
+	});
+
 	test("failed outcomes are journaled but re-executed on resume", async () => {
 		const script = [
 			'export const meta = { name: "retry" };',
@@ -857,6 +893,45 @@ describe("workflow mcp.*", () => {
 		// The replayed record carries into the new run's journal, so resuming
 		// the resumed run replays too.
 		expect(readWorkflowJournal(resumedId).filter(isMcpJournalEntry).length).toBe(1);
+	});
+
+	test("identical parallel tool calls replay in invocation order", async () => {
+		const script = [
+			'export const meta = { name: "mcp-identical" };',
+			"return await parallel([",
+			"  () => mcp.linear.create_issue({ title: 'same' }),",
+			"  () => mcp.linear.create_issue({ title: 'same' }),",
+			"]);",
+		].join("\n");
+		const firstResult = deferred<string>();
+		let invocation = 0;
+		const firstHost = fakeMcpHost(() => {
+			const current = invocation++;
+			return current === 0 ? firstResult.promise : "ISSUE-2";
+		});
+		const { runId } = start({
+			executor: echoExecutor(),
+			mcpHost: firstHost,
+			script,
+		});
+		await waitUntil(() => readWorkflowJournal(runId).length === 1);
+		firstResult.resolve("ISSUE-1");
+		const first = await waitForFinished(runId);
+		expect(first.result).toEqual(["ISSUE-1", "ISSUE-2"]);
+		expect(
+			readWorkflowJournal(runId).filter(isMcpJournalEntry).map((entry) => entry.seq),
+		).toEqual([1, 0]);
+
+		const secondHost = fakeMcpHost(() => "must not run");
+		const { runId: resumedId } = start({
+			executor: echoExecutor(),
+			mcpHost: secondHost,
+			script,
+			resumeFromRunId: runId,
+		});
+		const resumed = await waitForFinished(resumedId);
+		expect(resumed.result).toEqual(first.result);
+		expect(secondHost.calls).toHaveLength(0);
 	});
 
 	test("a failed call is NOT replayed — resume retries it", async () => {

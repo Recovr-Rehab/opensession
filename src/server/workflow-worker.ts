@@ -63,6 +63,8 @@ let started = false;
  *  rejects; the script decides what to do with nulls. */
 function agent(prompt: unknown, opts?: WorkflowAgentOpts): Promise<unknown> {
 	const callId = callCounter++;
+	// The bridge call id is also the agent invocation ordinal. The parent uses
+	// it to restore repeated identical calls in invocation order on replay.
 	const seq = callId;
 	const callOpts: WorkflowAgentOpts = { ...(opts || {}) };
 	if (callOpts.phase === undefined && currentPhase !== undefined) {
