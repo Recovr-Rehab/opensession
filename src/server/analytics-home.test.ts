@@ -28,6 +28,7 @@ function usage(date: string, input: number, output: number): EngineUsageDay {
 		totalTokens: input + output + input * 10 + output * 10,
 		costUsd: 0,
 		unpricedRequests: 0,
+		coverage: { opencode: "measured", "claude-direct": "measured", "codex-direct": "measured" },
 		unmeasured: false,
 	};
 }
