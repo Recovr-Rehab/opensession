@@ -44,6 +44,9 @@ import {
   steerOpencodeRun,
   EMPTY_COMPLETION_RESULT,
   claudePoolDryReason,
+  restoreJournaledRunRpcContext,
+  releaseJournaledRunRpcContext,
+  abortDetachedOpencodeTurn,
 } from "./opencode-runner";
 // Static import is deliberate: the pi-runner module itself is cheap (the
 // heavy @earendil-works SDK import stays dynamic inside it, prewarmed only
@@ -964,6 +967,13 @@ const activeRecoveryRuns: Map<string, ActiveRunRecord> = ((globalThis as any)
   .__activeRecoveryRuns ??= new Map());
 const activeRecoveryWorkerRunKeys: Set<string> = ((globalThis as any)
   .__activeRecoveryWorkerRunKeys ??= new Set());
+// Recoveries that reached a LIVE engine turn (reattach succeeded). Two
+// consequences: their queue slot is released (the turn runs on a detached
+// server and costs this process nothing), and an abandonment must not abort
+// their engine session — an attached run owns an AbortController, and after
+// journalClear the same engine session id belongs to the continuation.
+const attachedRecoveryRunKeys: Set<string> = ((globalThis as any)
+  .__attachedRecoveryRunKeys ??= new Set());
 
 // Hot reloads can leave the pre-token Set globals alive in old module
 // closures. Keep observing them until those preparations unwind; using a new
@@ -983,6 +993,10 @@ function trackRecovery(run: ActiveRunRecord): void {
   for (const id of [run.osSessionId, run.claudeSessionId]) {
     if (id) activeRecoveryRuns.set(id, run);
   }
+  // The run's detached engine is executing RIGHT NOW, whatever the recovery
+  // queue is doing — give its in-process MCP calls their token back here
+  // rather than in the reattach body, which may be minutes away (2026-08-16).
+  restoreJournaledRunRpcContext(run);
 }
 
 function untrackRecovery(run: ActiveRunRecord): void {
@@ -990,6 +1004,8 @@ function untrackRecovery(run: ActiveRunRecord): void {
     if (id && activeRecoveryRuns.get(id)?.runKey === run.runKey)
       activeRecoveryRuns.delete(id);
   }
+  attachedRecoveryRunKeys.delete(run.runKey);
+  releaseJournaledRunRpcContext(run);
 }
 
 /** Mark a session as starting a run (call synchronously, before any await). */
@@ -1192,8 +1208,15 @@ export function cancelAgentRun(...ids: Array<string | null | undefined>): boolea
     }
   }
   for (const run of records.values()) {
-    if (recoveryRunKeys.has(run.runKey))
+    if (recoveryRunKeys.has(run.runKey)) {
       cancelledRecoveries.add(run);
+      // Stop has to reach the ENGINE even when the recovery never started: a
+      // detached turn that was never reattached has no in-process
+      // AbortController for cancelOpencodeRun to find, so without this it
+      // keeps working in the session's worktree after the session goes idle.
+      if (!attachedRecoveryRunKeys.has(run.runKey))
+        void abortDetachedOpencodeTurn(run).catch(() => {});
+    }
     journalClear(run.runKey);
     // A queued recovery has not crossed an async boundary yet, so its marker
     // is enough to make it exit when scheduled. An active worker keeps its
@@ -1293,47 +1316,65 @@ export function resumeInterruptedRuns(
   };
   const recoveryTask = (
     run: ActiveRunRecord,
-    task: () => Promise<void>,
+    task: (releaseQueueSlot: () => void) => Promise<void>,
   ): (() => Promise<void>) => {
     // A claimed journal record is intentionally durable, but the recovery
-    // queue is bounded. If every worker gets stuck, a later claim used to
-    // stay busy forever without ever reaching journalStartRecovery. Settle it
-    // explicitly so the person can send the prompt again instead of finding a
-    // permanently spinning session.
+    // queue is bounded, so a run can sit here behind other recoveries. It
+    // must never be declared dead for that reason: its engine turn is still
+    // executing on a detached server that outlived the restart, so telling
+    // the person "send the prompt again" left the predecessor working and put
+    // TWO engines in one worktree (2026-08-16). Start it instead, outside the
+    // queue, which is the one thing a starved recovery actually needs.
     let started = false;
-    const queuedTooLong = setTimeout(() => {
-      if (started || settledRunKeys.has(run.runKey)) return;
-      console.error(
-        `[runner] Restart recovery for ${run.runKey} waited in the queue for ${BOOT_RECOVERY_QUEUE_WAIT_MS / 60_000} minutes without starting`,
-      );
-      reportRecoveryFailure(
-        run,
-        "Restart recovery didn't start in time. Send the prompt again.",
-      );
-    }, BOOT_RECOVERY_QUEUE_WAIT_MS);
-
-    return async () => {
+    let queuedTooLong: ReturnType<typeof setTimeout> | undefined;
+    const start = async () => {
+      if (started) return;
       started = true;
       clearTimeout(queuedTooLong);
       if (settledRunKeys.has(run.runKey)) return;
       activeRecoveryWorkerRunKeys.add(run.runKey);
-      try {
-        await task();
-      } catch (error) {
-        // Keep one unexpected recovery failure from stranding the rest of the
-        // boot queue behind it. Normal recovery paths already report their own
-        // failures, so this is only the last-resort guard.
-        console.error(`[runner] Recovery worker crashed for ${run.runKey}:`, error);
-        if (!settledRunKeys.has(run.runKey))
-          reportRecoveryFailure(
-            run,
-            "Restart recovery stopped unexpectedly. Send the prompt again to continue.",
-          );
-      } finally {
-        activeRecoveryWorkerRunKeys.delete(run.runKey);
-        untrackRecovery(run);
-      }
+      let releaseQueueSlot!: () => void;
+      const slotFree = new Promise<void>((resolve) => {
+        releaseQueueSlot = resolve;
+      });
+      // The task keeps running after it frees its slot; only the QUEUE's
+      // accounting ends early. Its own try/finally still owns the recovery
+      // lifetime (worker key, untrackRecovery), so nothing else moves.
+      void (async () => {
+        try {
+          await task(releaseQueueSlot);
+        } catch (error) {
+          // Keep one unexpected recovery failure from stranding the rest of the
+          // boot queue behind it. Normal recovery paths already report their own
+          // failures, so this is only the last-resort guard.
+          console.error(`[runner] Recovery worker crashed for ${run.runKey}:`, error);
+          if (!settledRunKeys.has(run.runKey))
+            reportRecoveryFailure(
+              run,
+              "Restart recovery stopped unexpectedly. Send the prompt again to continue.",
+            );
+        } finally {
+          activeRecoveryWorkerRunKeys.delete(run.runKey);
+          untrackRecovery(run);
+          releaseQueueSlot();
+        }
+      })();
+      await slotFree;
     };
+    queuedTooLong = setTimeout(() => {
+      if (started || settledRunKeys.has(run.runKey)) return;
+      console.warn(
+        `[runner] Restart recovery for ${run.runKey} waited ${BOOT_RECOVERY_QUEUE_WAIT_MS / 60_000} minutes for a queue slot — starting it outside the queue`,
+      );
+      audit({
+        kind: "restart_recovery_promoted",
+        session_id: run.osSessionId,
+        run_key: run.runKey,
+        waited_ms: BOOT_RECOVERY_QUEUE_WAIT_MS,
+      });
+      void start();
+    }, BOOT_RECOVERY_QUEUE_WAIT_MS);
+    return start;
   };
   const cancelRecoveredEngine = (run: ActiveRunRecord): void => {
     for (const id of [run.claudeSessionId, run.osSessionId, run.runKey]) {
@@ -1348,7 +1389,18 @@ export function resumeInterruptedRuns(
   journalQuarantine(quarantined);
   for (const entry of quarantined) {
     if (!entry.notify || !entry.run.osSessionId) continue;
-    reportRecoveryFailure(entry.run, recoveryQuarantineMessage(entry));
+    const message = recoveryQuarantineMessage(entry);
+    // A quarantined record can still have a live detached engine turn behind
+    // it, and nothing else will ever stop that turn — the record leaves the
+    // recovery path for good. Abort it BEFORE the session is told to send the
+    // prompt again, or the replacement runs beside its predecessor.
+    if (entry.run.serverKey && entry.run.claudeSessionId) {
+      void abortDetachedOpencodeTurn(entry.run)
+        .catch(() => {})
+        .finally(() => reportRecoveryFailure(entry.run, message));
+      continue;
+    }
+    reportRecoveryFailure(entry.run, message);
   }
   const recoveryTasks: Array<() => Promise<void>> = [];
 
@@ -1610,7 +1662,7 @@ export function resumeInterruptedRuns(
     }
     rememberHandledSession(run);
     trackRecovery(run);
-    recoveryTasks.push(recoveryTask(run, async () => {
+    recoveryTasks.push(recoveryTask(run, async (releaseQueueSlot) => {
       let recoverySettled = false;
       try {
         if (abandonStoppedRecovery(run)) return;
@@ -1643,6 +1695,12 @@ export function resumeInterruptedRuns(
             );
           if (reattached) {
             Object.assign(run, journalMarkRecoveryAttached(run) || {});
+            attachedRecoveryRunKeys.add(run.runKey);
+            // This turn executes on a detached server: following it costs
+            // this process nothing, so it must not hold a bounded recovery
+            // slot. Holding one is what starved every interrupted run past
+            // the fourth until the queue-wait timer fired (2026-08-16).
+            releaseQueueSlot();
             console.log(
               `[runner] Reattached ${run.kind || "run"} ${run.osSessionId || run.runKey} to its live engine turn (server ${run.serverKey})`
             );
@@ -1755,9 +1813,20 @@ export function resumeInterruptedRuns(
 
 export const MAX_BOOT_RECOVERIES = 32;
 export const BOOT_RECOVERY_CONCURRENCY = 4;
-// Long enough for a busy restart to drain legitimate work, short enough that a
-// claimed-but-never-started recovery cannot make a session look active forever.
-export const BOOT_RECOVERY_QUEUE_WAIT_MS = 10 * 60 * 1000;
+// How long a recovery may wait for a queue slot before it is started anyway,
+// outside the queue. Long enough that a busy restart drains its legitimate
+// work first; bounded because the alternative — waiting forever — leaves a
+// live engine turn nobody is following. It is deliberately NOT a deadline
+// after which the run is declared dead: the engine is still executing.
+export let BOOT_RECOVERY_QUEUE_WAIT_MS = 10 * 60 * 1000;
+
+/** Test seam: shorten the queue wait so the promotion path is observable
+ *  without a ten-minute test. Returns the previous value. */
+export function __setRecoveryQueueWaitMsForTest(ms: number): number {
+  const prev = BOOT_RECOVERY_QUEUE_WAIT_MS;
+  BOOT_RECOVERY_QUEUE_WAIT_MS = ms;
+  return prev;
+}
 export const MAX_BOOT_RESUME_ATTEMPTS = 2;
 export const MAX_RECOVERY_AGE_MS = 24 * 60 * 60 * 1000;
 

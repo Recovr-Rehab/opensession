@@ -215,6 +215,8 @@ import {
   unregisterRunToken,
   registerOcSessionContext,
   unregisterOcSessionContext,
+  releaseOcSessionContext,
+  type OcSessionContext,
 } from "./run-rpc";
 import {
   parseOpencodeModel,
@@ -1891,6 +1893,145 @@ function scheduleDetachedRecoveryExpiry(): void {
     detachedRecoveryEntries.clear();
   }, DETACHED_RECOVERY_GRACE_MS);
   (timer as unknown as { unref?: () => void }).unref?.();
+}
+
+/** Adopted instances that could still be hosting a journaled run's engine
+ *  session: the pool entry for its serverKey plus same-key draining ones (a
+ *  drain-respawn can leave the live turn on a superseded instance). The same
+ *  set tryReattachOpencodeRun scans, without its probe. */
+function detachedTurnCandidates(serverKey: string): OpencodeServerEntry[] {
+  const candidates: OpencodeServerEntry[] = [];
+  const pooled = servers.get(serverKey);
+  if (pooled && pooled.proc.detached && pooled.proc.exitCode === null) candidates.push(pooled);
+  for (const d of drainingServers) {
+    if (d.key === serverKey && d.proc.detached && d.proc.exitCode === null) candidates.push(d);
+  }
+  return candidates;
+}
+
+/** What restoreJournaledRunRpcContext registered, per run key, so the release
+ *  is exactly-once and only ever drops its own registrations. */
+interface JournaledRpcContext {
+  tokens: string[];
+  ocSessionId?: string;
+  ocCtx?: OcSessionContext;
+}
+const journaledRpcContexts: Map<string, JournaledRpcContext> = (g.__journaledRpcContexts ??=
+  new Map());
+
+/**
+ * Re-register an interrupted run's in-process MCP auth from the journal, at
+ * boot, BEFORE its recovery is scheduled.
+ *
+ * The run token and the opencode-session → opensession-session mapping live
+ * only in this process (run-rpc.ts), so a restart drops them, and until
+ * 2026-08-16 the only code that put them back was the reattach generator body
+ * — which runs when the bounded recovery queue reaches the run. Meanwhile the
+ * run's DETACHED `opencode serve` is still executing its turn and still
+ * calling the opensession-* tools: every one of those calls was answered
+ * "unauthorized (unknown run token)" or "unauthorized (unresolved opencode
+ * session)" for as long as the run sat in the queue, and forever if its
+ * recovery was abandoned. Registering from the journal closes that window;
+ * the pool is populated by adoptDetachedOpencodeServers, which boot awaits
+ * before resuming.
+ *
+ * Authorization is unchanged: this registers exactly what the reattach
+ * registers, and run-rpc still builds every call's tools through the
+ * per-session interactive builder (automation-owned sessions stay
+ * fail-closed there).
+ */
+export function restoreJournaledRunRpcContext(run: ActiveRunRecord): boolean {
+  const sessionId = run.osSessionId;
+  if (!sessionId || !run.serverKey || journaledRpcContexts.has(run.runKey)) return false;
+  const candidates = detachedTurnCandidates(run.serverKey);
+  if (!candidates.length) return false;
+  const held: JournaledRpcContext = { tokens: [] };
+  for (const entry of candidates) {
+    if (!entry.rpcToken) continue;
+    registerRunToken(entry.rpcToken, { sessionId, user: run.user });
+    held.tokens.push(entry.rpcToken);
+  }
+  // Session-tagged calls (shared servers only) need the per-session mapping
+  // too, or they resolve to whichever run registered the token last and are
+  // refused outright. Adoption already probed which instance reports this
+  // engine session busy — prefer it when it differs from the pool entry.
+  const ocSessionId = run.claudeSessionId;
+  const hosting =
+    candidates.find((e) => e.shared && e.recoveringSessionIds?.has(ocSessionId || "")) ??
+    candidates.find((e) => e.shared);
+  if (ocSessionId && hosting?.rpcToken) {
+    const ocCtx: OcSessionContext = { sessionId, user: run.user, token: hosting.rpcToken };
+    registerOcSessionContext(ocSessionId, ocCtx);
+    held.ocSessionId = ocSessionId;
+    held.ocCtx = ocCtx;
+  }
+  if (!held.tokens.length && !held.ocCtx) return false;
+  journaledRpcContexts.set(run.runKey, held);
+  return true;
+}
+
+/** Drop what restoreJournaledRunRpcContext registered for a run whose
+ *  recovery has ended (settled, abandoned, or finished). Idempotent; the
+ *  token registry is refcounted and the mapping release is identity-scoped,
+ *  so a reattach's own register/unregister pair nests inside this safely. */
+export function releaseJournaledRunRpcContext(run: ActiveRunRecord): void {
+  const held = journaledRpcContexts.get(run.runKey);
+  if (!held) return;
+  journaledRpcContexts.delete(run.runKey);
+  for (const token of held.tokens) unregisterRunToken(token);
+  if (held.ocCtx) releaseOcSessionContext(held.ocSessionId, held.ocCtx);
+}
+
+/**
+ * Abort the engine turn of a journaled run whose restart recovery is being
+ * abandoned before it ever reattached (Stop while the recovery is still
+ * queued; a quarantined journal record).
+ *
+ * A detached `opencode serve` runs outside this process's cgroup and keeps
+ * executing its turn whatever opensession decides — and with no reattach
+ * there is no in-process AbortController for it either, so cancelOpencodeRun
+ * cannot reach it. Telling the session "send the prompt again" while that
+ * turn is still running is what put two engines in one worktree on
+ * 2026-08-16. Best effort by nature: an instance we cannot reach cannot be
+ * told anything.
+ */
+export async function abortDetachedOpencodeTurn(run: ActiveRunRecord): Promise<boolean> {
+  const ocSessionId = run.claudeSessionId;
+  if (!ocSessionId || !run.serverKey) return false;
+  let aborted = false;
+  for (const entry of detachedTurnCandidates(run.serverKey)) {
+    const q = entry.shared ? { query: { directory: run.cwd } } : {};
+    try {
+      const client = clientFor(entry);
+      const sess = await client.session.get({
+        path: { id: ocSessionId },
+        ...q,
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (!sess.data) continue;
+      await client.session.abort({ path: { id: ocSessionId }, ...q });
+      aborted = true;
+    } catch {}
+  }
+  if (aborted) {
+    appendOpencodeTranscript(ocSessionId, [
+      transcriptLineRunnerNotice(
+        "Restart recovery was abandoned for this turn, so the engine turn that " +
+          "survived the restart was stopped. Nothing is still running in the background.",
+      ),
+    ]);
+    audit({
+      msg: "claude_turn_event",
+      provider: PROVIDER,
+      run_key: run.runKey,
+      session_id: run.osSessionId,
+      run_kind: `${run.kind || "run"}-abandon`,
+      claude_session_id: ocSessionId,
+      direction: "in",
+      kind: "abandoned_turn_aborted",
+    });
+  }
+  return aborted;
 }
 
 /**

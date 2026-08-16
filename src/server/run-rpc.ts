@@ -105,6 +105,26 @@ export function unregisterOcSessionContext(ocSessionId: string | undefined): voi
   if (ocSessionId) ocSessions.delete(ocSessionId);
 }
 
+/**
+ * Identity-scoped release: drop the mapping only if it is still the exact
+ * context object the caller registered.
+ *
+ * Boot re-registers an interrupted run's mapping from the journal
+ * (restoreJournaledRunRpcContext) so its still-live detached engine can reach
+ * the in-process tools before its recovery is scheduled. That registration
+ * and the reattach's own (opencode-runner) overlap, and an engine session id
+ * is REUSED by the session's next prompt — so an unconditional delete on the
+ * boot registration's release can take a live run's routing away with it.
+ * Reference identity is the cheapest way to only ever release your own.
+ */
+export function releaseOcSessionContext(
+  ocSessionId: string | undefined,
+  ctx: OcSessionContext,
+): void {
+  if (!ocSessionId) return;
+  if (ocSessions.get(ocSessionId) === ctx) ocSessions.delete(ocSessionId);
+}
+
 /** Constant-time string compare (length mismatch short-circuits — the length
  *  of a random UUID token is not a secret). Used by the WS upgrade checks in
  *  src/server/run-ws.ts. NOTE: the tokens registry above is deliberately NOT
