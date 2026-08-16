@@ -20,7 +20,7 @@ Contributor doc. Nothing here is operator configuration.
 ## Running
 
 ```sh
-bun test src/server/zz-snapshot-runs.test.ts                       # compare
+bun run test:snapshots                                             # compare
 OPENSESSION_SNAPSHOT=record bun test src/server/zz-snapshot-runs.test.ts   # re-record
 ```
 
@@ -29,6 +29,11 @@ state (sessions dir, transcript store, MCP config, memory store) that an
 earlier file in a full `bun test` may already have frozen; when that happens
 the harness says so and every scenario skips rather than snapshotting this
 machine's real sessions, memories and MCP servers.
+
+That skip is why the suite has its own command and its own CI step: inside the
+sweep these scenarios protect nothing. The script sets
+`OPENSESSION_SNAPSHOT_STRICT=1`, which turns an unready harness into a failure
+rather than a silent pass, so the step cannot go green by skipping everything.
 
 Fixtures live in `src/server/testing/snapshots/`.
 

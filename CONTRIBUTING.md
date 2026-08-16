@@ -55,13 +55,23 @@ anywhere but loopback.
 
 ```sh
 bun run typecheck      # must be clean
-bun test               # must be green
+bun run test           # must be green
+bun run test:snapshots # the run-pipeline fixtures, which only work run alone
 ```
 
-CI runs both, plus an end-to-end install on Linux and macOS. If you touched
-`install.sh`, the CLI or the service definitions, that installer job is the one
-that matters — it catches the things unit tests cannot, like a `PATH` that
-works interactively and not from a script.
+`bun run test` is `bun test src scripts`, which is where every server-side test
+lives. A bare `bun test` also sweeps `os1-tui/`, a separate package with its own
+`node_modules`, and fails to resolve its imports unless you installed there too;
+that client has its own suite (`cd os1-tui && bun test`) and its own CI job.
+
+The snapshot suite needs its own command because it redirects module state that
+an earlier file in a sweep may already have frozen, in which case it skips
+itself. See [transcript snapshots](docs/transcript-snapshots.md).
+
+CI runs all of these, plus an end-to-end install on Linux and macOS. If you
+touched `install.sh`, the CLI or the service definitions, that installer job is
+the one that matters — it catches the things unit tests cannot, like a `PATH`
+that works interactively and not from a script.
 
 ## Things that will surprise you
 

@@ -37,6 +37,16 @@ beforeAll(async () => {
 afterAll(() => h?.restore());
 
 describe("transcript snapshots", () => {
+  // `bun run test:snapshots` sets this, which is also how CI runs the file.
+  // Skipping every scenario is the right answer inside a full sweep and a
+  // silent pass anywhere else: run on its own, an unready harness is the
+  // failure, not a note in the log.
+  test("the harness owns its own module state", () => {
+    if (process.env.OPENSESSION_SNAPSHOT_STRICT !== "1") return;
+    expect(h.ready).toBe(true);
+  });
+
+
   // A plain turn from a teammate, with a sibling session's transcript attached
   // as context. Proves the fence contract end to end: the store keeps the
   // human's message, the model gets the injected block, and the attribution

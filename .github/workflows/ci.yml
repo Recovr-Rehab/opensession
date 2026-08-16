@@ -75,6 +75,16 @@ jobs:
         continue-on-error: true
         run: bun test src scripts
 
+      # The snapshot scenarios are exactly the part of that sweep the ordering
+      # problem eats: they redirect the sessions dir, transcript store, MCP
+      # config and memory store, and when an earlier file has already frozen
+      # those they skip themselves rather than snapshot the runner's own data.
+      # So they only protect anything when run on their own, which is what this
+      # step does. Unlike the sweep it IS a gate: one file, no key, no network,
+      # no engine subprocess, and it fails if the harness comes up unready.
+      - name: Transcript snapshots
+        run: bun run test:snapshots
+
   # The terminal client is its own package (own deps, own tsconfig — its JSX
   # resolves to OpenTUI's elements, not React DOM's), so it gets its own job.
   # Unlike the server sweep above this one IS a gate: the suite is isolated,

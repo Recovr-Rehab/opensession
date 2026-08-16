@@ -20,7 +20,8 @@
     "opensession": "bun scripts/cli.ts",
     "setup": "bun scripts/cli.ts onboard",
     "start": "bun opensession.ts",
-    "test": "bun test",
+    "test": "bun test src scripts",
+    "test:snapshots": "OPENSESSION_SNAPSHOT_STRICT=1 bun test src/server/zz-snapshot-runs.test.ts",
     "typecheck": "tsc --noEmit",
     "website:build": "bun scripts/build-website.ts",
     "website:dev": "bun --hot scripts/website-dev.ts"
