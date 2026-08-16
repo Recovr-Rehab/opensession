@@ -67,6 +67,51 @@ export async function releaseCdpBrowser(lease: CdpBrowserLease): Promise<void> {
 	await proc.exited;
 }
 
+export type CdpSend = (method: string, params?: Record<string, unknown>) => Promise<any>;
+
+/**
+ * Correlate CDP command ids on `socket` and hand back a `send`.
+ *
+ * A reply carrying an `error` REJECTS rather than resolving undefined. Every
+ * caller here used to drop `message.error` on the floor, so a refused command
+ * looked exactly like one that returned nothing. In css-rulekill that is
+ * indistinguishable from "deleting this rule changed nothing", the one verdict
+ * that tool exists to produce.
+ *
+ * `shape` keeps each script's existing contract: "result" unwraps
+ * `message.result`, "envelope" hands back the whole reply.
+ */
+export function cdpSender(socket: WebSocket, shape: "result" | "envelope" = "result"): CdpSend {
+	let lastId = 0;
+	const pending = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void; method: string }>();
+	socket.addEventListener("message", (event) => {
+		const message = JSON.parse(String((event as MessageEvent).data));
+		if (!message.id) return;
+		const entry = pending.get(message.id);
+		if (!entry) return;
+		pending.delete(message.id);
+		if (message.error) {
+			const { code, message: text, data } = message.error;
+			entry.reject(new Error(`CDP ${entry.method} failed: ${code} ${text}${data ? ` (${data})` : ""}`));
+			return;
+		}
+		entry.resolve(shape === "envelope" ? message : message.result);
+	});
+	// A socket that goes away mid-command would otherwise hang the script on a
+	// promise nothing can settle.
+	socket.addEventListener("close", () => {
+		for (const entry of pending.values())
+			entry.reject(new Error(`CDP socket closed before ${entry.method} replied`));
+		pending.clear();
+	});
+	return (method, params = {}) =>
+		new Promise<any>((resolve, reject) => {
+			const id = ++lastId;
+			pending.set(id, { resolve, reject, method });
+			socket.send(JSON.stringify({ id, method, params }));
+		});
+}
+
 export async function closeCdpTarget(port: number, targetId?: string): Promise<void> {
 	if (!targetId) return;
 	await fetch(`http://127.0.0.1:${port}/json/close/${encodeURIComponent(targetId)}`).catch(() => {});
