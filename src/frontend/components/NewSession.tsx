@@ -225,6 +225,16 @@ const MODEL_PILL = cn(
    the menu step the same way. */
 const CREATE_ACTIONS = ["open", "background", "more", "draft"] as const;
 type CreateAction = (typeof CREATE_ACTIONS)[number];
+
+// What the card is doing, and what it ended on. "savingDraft" and "creating"
+// are two different waits (a promise and a WebSocket message), and "failed" is
+// the terminal state both of them can reach, including the create whose answer
+// never comes back because the socket dropped.
+type CreateStatus =
+  | { kind: "idle" }
+  | { kind: "savingDraft" }
+  | { kind: "creating" }
+  | { kind: "failed"; message: string };
 /** ⌘⌥↓ / ⌘⌥↑ (Ctrl+Alt elsewhere). Vertical rather than horizontal because
  *  Chrome and Safari own ⌘⌥← / ⌘⌥→ for tab switching. */
 const CYCLE_SHORTCUT = isApple ? ["⌘", "⌥", "↓"] : ["Ctrl", "Alt", "↓"];
@@ -455,10 +465,15 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   const [suggestingBranch, setSuggestingBranch] = useState(false);
   const [images, setImages] = useState<string[]>(() => loadDraft("new-session").images);
   const [files, setFiles] = useState<FileAttachment[]>(() => loadDraft("new-session").files);
-  const [creating, setCreating] = useState(false);
+  // One status for both completion protocols: "savingDraft" resolves through a
+  // promise, "creating" waits for a WebSocket message, and "failed" carries the
+  // message either of them ended on. A single boolean could not say which
+  // protocol was running, and had no terminal state for a create whose answer
+  // never arrives.
+  const [status, setStatus] = useState<CreateStatus>({ kind: "idle" });
+  const busy = status.kind === "creating" || status.kind === "savingDraft";
   // Which edges of the prompt have content beyond them, and so earn a hairline.
   const [edges, setEdges] = useState({ top: false, bottom: false });
-  const [error, setError] = useState<string | null>(null);
   const [models, setModels] = useState<ModelOption[]>([]);
   const [defaultModel, setDefaultModel] = useState("");
   const [model, setModel] = useState(""); // "" = default
@@ -574,13 +589,13 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     setSandboxWarmed(false);
   }, [sandboxProvider, repo]);
   useEffect(() => {
-    if (!shouldPrewarm || !prompt.trim() || creating) return;
+    if (!shouldPrewarm || !prompt.trim() || busy) return;
     if (Date.now() - lastPrewarmAtRef.current < 60_000) return;
     lastPrewarmAtRef.current = Date.now();
     requestSandboxPrewarm(sandboxProvider, repo, getCurrentUser())
       .then((r) => setSandboxWarmed(r.state === "ready"))
       .catch(() => {});
-  }, [prompt, shouldPrewarm, sandboxProvider, repo, creating]);
+  }, [prompt, shouldPrewarm, sandboxProvider, repo, busy]);
 
   // MCP servers: empty by default (minimal context), users can opt in for
   // specific ones. The list comes from mcp-config.json via the connections
@@ -687,7 +702,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   // popup stops keydown propagation before it leaves the card, which is also
   // why it can use a chord the rest of the app is free to bind elsewhere.
   function cycleCreateAction(e: React.KeyboardEvent) {
-    if (creating) return;
+    if (busy) return;
     if (!(e.metaKey || e.ctrlKey) || !e.altKey || e.shiftKey) return;
     const step = e.code === "ArrowDown" ? 1 : e.code === "ArrowUp" ? -1 : 0;
     if (!step) return;
@@ -765,6 +780,10 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   // session_created is announced before the worktree even boots, so it can
   // arrive before a `creating`-gated effect would have registered this handler
   // — the palette would miss it (stuck on "creating", draft never cleared).
+  // It stays armed until a terminal message arrives, which is deliberately not
+  // the same as status.kind === "creating": a create that lost its socket shows
+  // "failed" while this stays true, so a late session_created still clears the
+  // draft instead of leaving the prompt behind for a session that does exist.
   const creatingRef = useRef(false);
   // A successful create replaces the surface behind this dialog. Returning
   // focus to the now-removed opener makes Base UI advance to the new session's
@@ -776,8 +795,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       if (!creatingRef.current) return;
       if (msg.type === "error") {
         creatingRef.current = false;
-        setError(msg.message);
-        setCreating(false);
+        setStatus({ kind: "failed", message: msg.message });
       } else if (msg.type === "session_created") {
         creatingRef.current = false;
         // The prompt was consumed — drop the stored draft either way.
@@ -791,13 +809,12 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
         // unmounts this card. If anything ever kept it mounted, what is left
         // behind should be an empty prompt rather than the one just sent.
         if (createAction === "more" || inline) {
-          setCreating(false);
+          setStatus({ kind: "idle" });
           setPrompt("");
           setImages([]);
           setFiles([]);
           setNewBranch("");
           setBranchEdited(false);
-          setError(null);
           promptRef.current?.focus();
         } else {
           // Only an "open" create replaces the surface behind the palette, so
@@ -809,6 +826,19 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       }
     });
   }, [addHandler, createAction, inline]);
+
+  // The create's only completion signal is a message on this socket, so a drop
+  // between the send and session_created is a wait that can never end. Without
+  // this the card sits on "Creating…" with Create and the options caret both
+  // disabled and the draft still parked, and only a reload gets out.
+  useEffect(() => {
+    if (connected || status.kind !== "creating") return;
+    setStatus({
+      kind: "failed",
+      message:
+        "Lost the connection before the session started. It may still have been created, so check Sessions before trying again.",
+    });
+  }, [connected, status.kind]);
 
   async function addAttachments(picked: FileList | File[]) {
     const { images: imgs, files: fls, rejected } = await splitAttachments(picked);
@@ -835,8 +865,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   async function saveAsDraft() {
     const text = prompt.trim();
     if (!text) return;
-    setError(null);
-    setCreating(true);
+    setStatus({ kind: "savingDraft" });
     try {
       const draft = { text, updatedAt: new Date().toISOString(), by: getCurrentUser() };
       const ws = workspaceId
@@ -848,12 +877,14 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
             draft: { ...draft, autoName: true },
           });
       clearDraft("new-session");
+      setStatus({ kind: "idle" });
       window.dispatchEvent(new Event("opensession:workspaces-changed"));
       onDraftSaved?.(ws);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Couldn't save the draft");
-    } finally {
-      setCreating(false);
+      setStatus({
+        kind: "failed",
+        message: e instanceof ApiError ? e.message : "Couldn't save the draft",
+      });
     }
   }
 
@@ -868,10 +899,9 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
         ? newBranch.trim() || slugifyBranch(prompt)
         : selectedWorktree;
 
-    setError(null);
     // With "Create more" off, App tears down the palette when the
     // session_created event arrives (and drops us into the new session).
-    setCreating(true);
+    setStatus({ kind: "creating" });
     creatingRef.current = true;
     // Workspace linkage: scoped to an existing workspace (the tab/sidebar +),
     // the session joins it — sharing its worktree when reusing the sibling branch,
@@ -920,7 +950,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   }
 
   const canCreate =
-    !creating &&
+    !busy &&
     // A draft is just the prompt text parked on a workspace: none of the
     // session-create gates (connection, repo, sandbox, branch) apply.
     (createAction === "draft"
@@ -1044,7 +1074,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
             }}
             // A feed workspace is repo-less by construction (its subject is a
             // Tella video, not a checkout), so its create doesn't offer one.
-            disabled={creating || forceMode === "scratch"}
+            disabled={busy || forceMode === "scratch"}
             ariaLabel="Repository"
             isPhone={isPhone}
           >
@@ -1070,7 +1100,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
             value={selectedWorktree}
             options={createFromOptions}
             onChange={setSelectedWorktree}
-            disabled={creating}
+            disabled={busy}
             ariaLabel="Create from"
             isPhone={isPhone}
             align="end"
@@ -1226,15 +1256,15 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
             placeholder={
               mode === "ask" ? "What do you want to find out?" : "What do you want to work on?"
             }
-            disabled={creating}
+            disabled={busy}
             {...noAutofill}
           />
           </div>
-          <ImageThumbs images={images} onRemove={(i) => setImages((p) => p.filter((_, idx) => idx !== i))} disabled={creating} />
-          <FileChips files={files} onRemove={(i) => setFiles((p) => p.filter((_, idx) => idx !== i))} disabled={creating} />
+          <ImageThumbs images={images} onRemove={(i) => setImages((p) => p.filter((_, idx) => idx !== i))} disabled={busy} />
+          <FileChips files={files} onRemove={(i) => setFiles((p) => p.filter((_, idx) => idx !== i))} disabled={busy} />
         </div>
 
-        {error && <div className={ERROR}>{error}</div>}
+        {status.kind === "failed" && <div className={ERROR}>{status.message}</div>}
         {sandboxModelWarning && (
           <div className={ERROR} role="alert">
             {sandboxModelWarning}
@@ -1249,7 +1279,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                 type="button"
                 className={FOOTER_ICON_BTN}
                 onClick={() => fileInputRef.current?.click()}
-                disabled={creating}
+                disabled={busy}
                 aria-label="Attach a file"
               >
                 <IconPaperclip size={20} />
@@ -1284,7 +1314,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                   type="button"
                   className={permission === "ask" ? ASK_BTN_ON : FOOTER_ICON_BTN}
                   onClick={togglePermission}
-                  disabled={creating}
+                  disabled={busy}
                   aria-pressed={permission === "ask"}
                   aria-label="Ask mode"
                 >
@@ -1305,7 +1335,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
 						(sandboxProvider || modelEngine(effectiveModelId) !== "opencode" || selectedMcpServers.length > 0) &&
                       paletteIconBtnOn,
                   )}
-                  disabled={creating}
+                  disabled={busy}
                   aria-label="More options"
                 >
                   <IconDotsHorizontal size={20} />
@@ -1423,11 +1453,11 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
               accounts={accountProvider && accounts.length > 0 ? accounts : undefined}
               accountId={accountId}
               onAccountChange={setAccountId}
-              disabled={creating}
+              disabled={busy}
             />
             <VoiceInput
               className={FOOTER_ICON_BTN}
-              disabled={creating}
+              disabled={busy}
               onText={(t) => {
                 setPrompt((prev) => (prev.trim() ? `${prev.replace(/\s+$/, "")} ${t}` : t));
                 promptRef.current?.focus();
@@ -1443,11 +1473,11 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                 onClick={handleCreate}
                 disabled={!canCreate}
               >
-                {creating
-                  ? createAction === "draft"
-                    ? "Saving…"
-                    : "Creating…"
-                  : CREATE_LABELS[createAction]}
+                {status.kind === "savingDraft"
+                  ? "Saving…"
+                  : status.kind === "creating"
+                    ? "Creating…"
+                    : CREATE_LABELS[createAction]}
                 {/* The hint has to match the preference — a bare ↩ next to a
                     field that only creates on ⌘↩ is what made Enter look
                     broken in the first place. */}
@@ -1481,7 +1511,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                     : "disabled:cursor-default disabled:opacity-40"
                 }`}
                 onClick={() => setCreateMenuOpen((v) => !v)}
-                disabled={creating}
+                disabled={busy}
                 aria-haspopup="menu"
                 aria-expanded={createMenuOpen}
                 aria-label="Create options"
@@ -1572,7 +1602,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       // Mid-create the palette isn't dismissable. An open mention popup also
       // owns the next click: it lives outside the dialog, so pressing it would
       // otherwise read as an outside press and close the whole palette.
-      disablePointerDismissal={creating || mentions.open}
+      disablePointerDismissal={busy || mentions.open}
     >
       <Modal.Content
         variant="palette"
