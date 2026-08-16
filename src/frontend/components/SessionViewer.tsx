@@ -949,6 +949,18 @@ export function SessionViewer({
 	}, [reviewFocusPr?.seq]);
 	// Worktree roots for the transcript's tool rows: paths inside them render
 	// repo-relative instead of as a long absolute path (see tidyPath).
+	//
+	// Keyed on the contents, the way mergedPr above is: a poll that changed any
+	// session re-parses the whole list, so `attachedRepos` is a new array on
+	// most ticks with the same repos in it. This one is a context value, which
+	// no memo downstream can stop, so a fresh identity re-renders every tool
+	// row in the transcript. tidyPath reads dir and label, and nothing else.
+	const toolPathRootsKey = [
+		session.worktreeDir || "",
+		...(session.attachedRepos || []).map(
+			(repo) => `${repo.dir}\u0000${repo.repo}`,
+		),
+	].join("\u0001");
 	const toolPathRoots = useMemo(
 		() =>
 			[
@@ -958,7 +970,7 @@ export function SessionViewer({
 					label: repo.repo,
 				})),
 			].filter((root) => Boolean(root.dir)),
-		[session.worktreeDir, session.attachedRepos],
+		[toolPathRootsKey], // eslint-disable-line react-hooks/exhaustive-deps
 	);
 	const githubReviewRepos = reviewRepos;
 	const panelReviewRepos = promotedPr ? [] : githubReviewRepos;

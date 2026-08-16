@@ -4,7 +4,7 @@ import { MessageBubble } from "./MessageBubble";
 import { NoteBubble } from "./NoteBubble";
 import { ToolSection, TurnBlock } from "./TurnBlock";
 import {
-	collectTouchedFiles,
+	turnTouchedFiles,
 	TurnFooter,
 	TURN_FOOTER_LIFT,
 	type TouchedFile,
@@ -212,7 +212,7 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 				durationMs:
 					new Date(final.timestamp).getTime() -
 					new Date(turn[0].timestamp).getTime(),
-				files: collectTouchedFiles(turn),
+				files: turnTouchedFiles(turn),
 				assets: collectWrittenAssets(turn),
 			});
 		}

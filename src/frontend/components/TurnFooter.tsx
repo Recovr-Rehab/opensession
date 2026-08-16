@@ -695,6 +695,41 @@ export function collectTouchedFiles(items: TranscriptEntry[]): TouchedFile[] {
   );
 }
 
+// The merged list for a whole turn, on top of the per-entry cache above.
+// TranscriptBlocks rebuilds its blocks in render, so every streamed frame
+// re-merges every settled turn: the per-entry cache spares the diff text, but
+// mergeTouchedFiles still copies a row and its hunks array per touched file,
+// for each turn in the transcript. This hands back the same array instead, so
+// a turn nothing has happened in costs nothing.
+//
+// Keyed on the turn's last entry rather than the array, which the caller
+// builds fresh each time. Entries are replaced rather than mutated when they
+// change (mergeTranscriptEntries), so the members are compared by identity on
+// a hit: a tool call earlier in the turn can be replaced while the last entry
+// stands, and the merged list would then be stale.
+const touchedFilesByTurn = new WeakMap<
+  TranscriptEntry,
+  { items: TranscriptEntry[]; files: TouchedFile[] }
+>();
+const NO_TOUCHED_FILES: TouchedFile[] = [];
+
+/** collectTouchedFiles, holding one array identity while the turn is unchanged. */
+export function turnTouchedFiles(items: TranscriptEntry[]): TouchedFile[] {
+  const key = items[items.length - 1];
+  if (!key) return NO_TOUCHED_FILES;
+  const hit = touchedFilesByTurn.get(key);
+  if (hit && sameEntries(hit.items, items)) return hit.files;
+  const files = collectTouchedFiles(items);
+  touchedFilesByTurn.set(key, { items: items.slice(), files });
+  return files;
+}
+
+function sameEntries(a: TranscriptEntry[], b: TranscriptEntry[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
 /**
  * Files (and ± line counts) from a codex-style patch body: "*** Update File:
  * src/x.ts" headers followed by +/- lines, as apply_patch sends them.

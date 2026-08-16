@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test";
 import type { TranscriptEntry } from "../lib/types";
-import { collectTouchedFiles, touchedFilesFromTool } from "./TurnFooter";
+import {
+  collectTouchedFiles,
+  touchedFilesFromTool,
+  turnTouchedFiles,
+} from "./TurnFooter";
 
 function edit(
   id: string,
@@ -126,4 +130,49 @@ test("a tool that only reports a path carries no hunks", () => {
 
 test("a bash call touches nothing", () => {
   expect(touchedFilesFromTool(edit("h", "Bash", { command: "ls" }))).toEqual([]);
+});
+
+function answer(id: string): TranscriptEntry {
+  return {
+    id,
+    type: "assistant",
+    content: "done",
+    timestamp: "2026-08-16T10:00:01.000Z",
+  };
+}
+
+// The caller builds the turn array in render, so an equal turn arrives as a
+// fresh array on every frame. Holding one identity is the whole point: the
+// footer takes it as a prop.
+test("an unchanged turn keeps one array identity", () => {
+  const tool = edit("i1", "Write", {
+    file_path: "/repo/src/i.ts",
+    content: "a",
+  });
+  const final = answer("i2");
+  const files = turnTouchedFiles([tool, final]);
+  expect(turnTouchedFiles([tool, final])).toBe(files);
+  expect(files).toEqual(collectTouchedFiles([tool, final]));
+});
+
+// The cache is keyed on the turn's last entry, which a mid-turn edit leaves
+// alone — so the members are compared, or a settled answer would keep showing
+// the counts its tool call had when it was first read.
+test("replacing an entry inside the turn re-collects it", () => {
+  const final = answer("j3");
+  const before = turnTouchedFiles([
+    edit("j1", "Write", { file_path: "/repo/src/j.ts", content: "a" }),
+    final,
+  ]);
+  expect(before[0].additions).toBe(1);
+  const after = turnTouchedFiles([
+    edit("j1", "Write", { file_path: "/repo/src/j.ts", content: "a\nb\nc" }),
+    final,
+  ]);
+  expect(after).not.toBe(before);
+  expect(after[0].additions).toBe(3);
+});
+
+test("an empty turn touches nothing", () => {
+  expect(turnTouchedFiles([])).toEqual([]);
 });
