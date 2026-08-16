@@ -127,7 +127,29 @@ export interface WorkflowExecCtx {
 	onEngineSession?: (engineSessionId: string) => void;
 }
 
+/** What a write agent LEFT ON DISK: a retained branch and its diffstat. It is
+ *  present exactly when a branch survived the run, which is a different axis
+ *  from `ok` — a failed agent that committed something itself keeps its branch
+ *  (and its worktree), and a successful agent that changed nothing does not. */
+export interface WorkflowAgentArtifact {
+	/** The agent's own branch, still on disk. */
+	branch: string;
+	worktreeDir: string;
+	/** Always true while an artifact exists (no branch is kept for no change);
+	 *  carried explicitly because snapshots and scripts read it directly. */
+	changed: boolean;
+	/** Paths touched vs. the base commit. Absent when the branch was retained
+	 *  without a run of our own commit machinery (a failed agent's own commit). */
+	files?: string[];
+	insertions?: number;
+	deletions?: number;
+	/** The auto-commit's sha. */
+	commit?: string;
+}
+
 export interface WorkflowAgentOutcome {
+	/** Did the TURN succeed? Says nothing about `artifact` — read that for
+	 *  what the agent left behind. */
 	ok: boolean;
 	/** Raw final text (capped at maxResultChars). */
 	text?: string;
@@ -141,17 +163,53 @@ export interface WorkflowAgentOutcome {
 	/** Where it ran (the session's worktree, or a write agent's own one). */
 	cwd?: string;
 	// ── write agents ──
-	/** The agent's own branch (write agents only). */
-	branch?: string;
-	worktreeDir?: string;
-	/** Did the agent actually change anything? (false → worktree removed.) */
+	/** Set exactly when a branch was retained, whether the turn succeeded or
+	 *  failed. Read this (never `ok`) to decide whether there is anything to
+	 *  merge() or clean up. */
+	artifact?: WorkflowAgentArtifact;
+	/** Did the agent actually change anything? (false → worktree removed.)
+	 *  Mirrors `artifact?.changed` and is false when there is no artifact. */
 	changed?: boolean;
-	/** Paths touched vs. the base commit. */
+	// The remaining fields mirror `artifact` for journal entries written before
+	// it existed (normalizeWorkflowOutcome lifts them back out on read) and for
+	// consumers that predate it. New code reads `artifact`.
+	/** @deprecated read `artifact.branch`. */
+	branch?: string;
+	/** @deprecated read `artifact.worktreeDir`. */
+	worktreeDir?: string;
+	/** @deprecated read `artifact.files`. */
 	files?: string[];
+	/** @deprecated read `artifact.insertions`. */
 	insertions?: number;
+	/** @deprecated read `artifact.deletions`. */
 	deletions?: number;
-	/** The auto-commit's sha. */
+	/** @deprecated read `artifact.commit`. */
 	commit?: string;
+}
+
+/** Lift a journal entry's outcome into the current shape. Entries written
+ *  before `artifact` existed carry the branch and diffstat at the top level;
+ *  without this a resumed run replays them with no branch on the row and hands
+ *  the script a null branch it cannot merge(). Returns the outcome unchanged
+ *  when there is nothing to lift. */
+export function normalizeWorkflowOutcome(
+	outcome: WorkflowAgentOutcome,
+): WorkflowAgentOutcome {
+	if (outcome.artifact || !outcome.branch) return outcome;
+	return {
+		...outcome,
+		artifact: {
+			branch: outcome.branch,
+			// Pre-artifact entries always carried worktreeDir alongside branch;
+			// an entry missing it still merges (merge() works off the branch).
+			worktreeDir: outcome.worktreeDir ?? "",
+			changed: outcome.changed !== false,
+			...(outcome.files ? { files: outcome.files } : {}),
+			...(outcome.insertions !== undefined ? { insertions: outcome.insertions } : {}),
+			...(outcome.deletions !== undefined ? { deletions: outcome.deletions } : {}),
+			...(outcome.commit ? { commit: outcome.commit } : {}),
+		},
+	};
 }
 
 /** Outcome of a merge() call: every branch lands in exactly one bucket. A

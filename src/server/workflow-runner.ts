@@ -40,6 +40,7 @@ import { tryGetSessionControl } from "./session-control";
 import {
 	WORKFLOW_LIMITS,
 	isMcpJournalEntry,
+	normalizeWorkflowOutcome,
 	type WorkerToParent,
 	type WorkflowAgentOpts,
 	type WorkflowAgentOutcome,
@@ -435,9 +436,16 @@ export function startWorkflow(opts: StartWorkflowOpts): { runId: string } {
 				continue;
 			}
 			if (!entry.outcome.ok) continue;
+			// Entries written before outcome.artifact existed carry the branch and
+			// diffstat at the top level; lift them so a replayed write agent still
+			// reports its branch instead of a null the script can't merge().
+			const normalized: WorkflowJournalEntry = {
+				...entry,
+				outcome: normalizeWorkflowOutcome(entry.outcome),
+			};
 			const queue = replay.get(entry.hash);
-			if (queue) queue.push(entry);
-			else replay.set(entry.hash, [entry]);
+			if (queue) queue.push(normalized);
+			else replay.set(entry.hash, [normalized]);
 		}
 	}
 
@@ -691,32 +699,42 @@ function runWorkflow(
 		if (!outcome.ok) return null;
 		const value = outcome.structured ?? outcome.text ?? null;
 		if (!write) return value;
+		// The artifact — not `ok`, not the outcome's legacy top-level copies —
+		// says whether there is a branch to hand to merge().
+		const artifact = outcome.artifact;
 		return {
 			text: outcome.text ?? "",
 			...(outcome.structured !== undefined ? { structured: outcome.structured } : {}),
-			branch: outcome.branch ?? null,
-			worktreeDir: outcome.worktreeDir ?? null,
-			changed: outcome.changed === true,
-			files: outcome.files ?? [],
-			insertions: outcome.insertions ?? 0,
-			deletions: outcome.deletions ?? 0,
+			branch: artifact?.branch ?? null,
+			worktreeDir: artifact?.worktreeDir ?? null,
+			changed: artifact?.changed === true,
+			files: artifact?.files ?? [],
+			insertions: artifact?.insertions ?? 0,
+			deletions: artifact?.deletions ?? 0,
 			seq,
 		};
 	}
 
-	/** Copy the outcome's drill-in pointer + write artifacts onto the row. */
+	/** Copy the outcome's drill-in pointer + write artifact onto the row. The
+	 *  artifact is keyed on itself, not on the row's `write` flag or on `ok`:
+	 *  a failed agent that committed something keeps its branch, and the row
+	 *  has to show it or the branch is only reachable by reading the journal. */
 	function applyOutcome(
 		agent: WorkflowAgentSnapshot,
 		outcome: WorkflowAgentOutcome,
 	): void {
 		if (outcome.engineSessionId) agent.engineSessionId = outcome.engineSessionId;
-		if (agent.write) {
-			agent.changed = outcome.changed === true;
-			if (outcome.branch) agent.branch = outcome.branch;
-			if (outcome.files) agent.filesChanged = outcome.files.length;
-			if (outcome.insertions !== undefined) agent.insertions = outcome.insertions;
-			if (outcome.deletions !== undefined) agent.deletions = outcome.deletions;
+		const artifact = outcome.artifact;
+		if (!artifact) {
+			// Nothing on disk. A write agent still reports "no changes".
+			if (agent.write) agent.changed = false;
+			return;
 		}
+		agent.changed = artifact.changed;
+		agent.branch = artifact.branch;
+		if (artifact.files) agent.filesChanged = artifact.files.length;
+		if (artifact.insertions !== undefined) agent.insertions = artifact.insertions;
+		if (artifact.deletions !== undefined) agent.deletions = artifact.deletions;
 	}
 
 	async function handleAgentCall(
