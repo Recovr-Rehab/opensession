@@ -304,6 +304,39 @@ export type ProtocolClientMessage =
     };
 
 /**
+ * The live half of a turn: the frames a session emits while it runs, plus the
+ * committed transcript_append that lands the result.
+ *
+ * Declared once and used twice on purpose. A server that speaks the feed
+ * wraps these in `session_feed` (`event`); one that doesn't sends the same
+ * frame at the top level of ProtocolServerMessage. Both routes carry the
+ * identical shape, so a client can unwrap a feed frame straight into its
+ * ordinary handler, and a new field can never reach one route only.
+ */
+export type SessionLiveEvent =
+  | {
+      type: "transcript_append";
+      sessionId?: string;
+      entries: TranscriptEntry[];
+      /** Resume cursor after this append (see transcript_init.endOffset). */
+      endOffset?: number;
+      rev?: string;
+      /** Transcript v2 seq bounds. Upsert republishes reuse the entry's
+       *  ORIGINAL seq, so firstSeq can sit below the client's lastSeq —
+       *  merge by id, track lastSeq as a max, never assume monotonic. */
+      v2?: boolean;
+      firstSeq?: number;
+      lastSeq?: number;
+      lastChangeSeq?: number;
+    }
+  | { type: "stream_start"; sessionId: string; by?: string }
+  | { type: "stream_text"; sessionId?: string; text: string }
+  | { type: "stream_tool_use"; sessionId?: string; entry: TranscriptEntry }
+  | { type: "stream_tool_result"; sessionId?: string; entry: TranscriptEntry }
+  | { type: "stream_done"; sessionId?: string }
+  | { type: "session_status"; sessionId?: string; isRunning: boolean };
+
+/**
  * Core server → client frames. sessionId on the session-scoped messages lets
  * viewers drop events meant for a different session (socket races,
  * creator-side direct sends); optional where a few direct replies
@@ -350,21 +383,6 @@ export type ProtocolServerMessage =
       lastSeq?: number;
     }
   | {
-      type: "transcript_append";
-      sessionId?: string;
-      entries: TranscriptEntry[];
-      /** Resume cursor after this append (see transcript_init.endOffset). */
-      endOffset?: number;
-      rev?: string;
-      /** Transcript v2 seq bounds. Upsert republishes reuse the entry's
-       *  ORIGINAL seq, so firstSeq can sit below the client's lastSeq —
-       *  merge by id, track lastSeq as a max, never assume monotonic. */
-      v2?: boolean;
-      firstSeq?: number;
-      lastSeq?: number;
-      lastChangeSeq?: number;
-    }
-  | {
       type: "session_feed";
       sessionId: string;
       feedEpoch: string;
@@ -373,22 +391,7 @@ export type ProtocolServerMessage =
       turnId?: string;
       entryId?: string;
       phase: "delta" | "committed" | "status";
-      event:
-        | {
-            type: "transcript_append";
-            sessionId?: string;
-            entries: TranscriptEntry[];
-            firstSeq?: number;
-            lastSeq?: number;
-            lastChangeSeq?: number;
-            v2?: boolean;
-          }
-        | { type: "stream_start"; sessionId: string; by?: string }
-        | { type: "stream_text"; sessionId?: string; text: string }
-        | { type: "stream_tool_use"; sessionId?: string; entry: TranscriptEntry }
-        | { type: "stream_tool_result"; sessionId?: string; entry: TranscriptEntry }
-        | { type: "stream_done"; sessionId?: string }
-        | { type: "session_status"; sessionId?: string; isRunning: boolean };
+      event: SessionLiveEvent;
     }
   | {
       type: "feed_snapshot";
@@ -404,12 +407,8 @@ export type ProtocolServerMessage =
         startedAt: number;
       };
     }
-  | { type: "session_status"; sessionId?: string; isRunning: boolean }
-  | { type: "stream_start"; sessionId: string; by?: string }
-  | { type: "stream_text"; sessionId?: string; text: string }
-  | { type: "stream_tool_use"; sessionId?: string; entry: TranscriptEntry }
-  | { type: "stream_tool_result"; sessionId?: string; entry: TranscriptEntry }
-  | { type: "stream_done"; sessionId?: string }
+  // The same live-turn frames a feed server wraps in session_feed.event.
+  | SessionLiveEvent
   | { type: "usage_update"; sessionId: string; usage: SessionUsage }
   | {
       type: "session_created";
