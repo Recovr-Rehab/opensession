@@ -50,6 +50,7 @@ import {
   restoreJournaledRunRpcContext,
   releaseJournaledRunRpcContext,
   abortDetachedOpencodeTurn,
+  registerPendingRecoveryProbe,
 } from "./opencode-runner";
 // Static import is deliberate: the pi-runner module itself is cheap (the
 // heavy @earendil-works SDK import stays dynamic inside it, prewarmed only
@@ -1044,6 +1045,14 @@ const activeRecoveryWorkerRunKeys: Set<string> = ((globalThis as any)
 // journalClear the same engine session id belongs to the continuation.
 const attachedRecoveryRunKeys: Set<string> = ((globalThis as any)
   .__attachedRecoveryRunKeys ??= new Set());
+
+// Boot adoption reserves each detached survivor until its recovery reaches
+// it. What "until" means lives here, not on a clock: a recovery is still
+// coming while it is tracked, whether it is queued behind the bounded boot
+// queue, promoted out of it, or mid-probe. Registering in memory at module
+// scope keeps the dependency one-way (agent-runner → opencode-runner) and
+// arms nothing; same shape as run-journal's registerActiveRunProbe.
+registerPendingRecoveryProbe((ocSessionId) => activeRecoveryRuns.has(ocSessionId));
 
 // Hot reloads can leave the pre-token Set globals alive in old module
 // closures. Keep observing them until those preparations unwind; using a new

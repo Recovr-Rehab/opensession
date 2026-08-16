@@ -964,6 +964,9 @@ export interface OpencodeServerEntry {
   /** Busy turns observed during boot adoption but not yet claimed by journal
    *  reattachment. Protects the survivor during the restart recovery gap. */
   recoveringSessionIds?: Set<string>;
+  /** When those reservations were taken — the ceiling on how long one may be
+   *  held by a recovery probe that can never go false. */
+  recoveryReservedAt?: number;
   /** Stable per-server run-rpc token for the in-process stdio proxies. */
   rpcToken: string;
   /** Stable per-server Meridian proxy API key (meridian-mode servers only) —
@@ -1868,31 +1871,170 @@ async function probeDetachedRecords(
   return results;
 }
 
-const DETACHED_RECOVERY_GRACE_MS = 5 * 60_000;
-const detachedRecoveryEntries = new Set<OpencodeServerEntry>();
+/**
+ * Whether some restart recovery still intends to claim this engine session's
+ * live turn — queued behind the bounded boot queue, promoted out of it, or
+ * mid-probe. Registered by agent-runner at module scope, the same shape as
+ * run-journal's `registerActiveRunProbe`, because the recovery lifecycle
+ * lives there and the import may only run agent-runner → opencode-runner.
+ *
+ * No probe registered means nothing is pending. Adoption only runs when
+ * `opencodeDetachActive()`, i.e. in the boot path, which imports agent-runner
+ * before the first expiry tick can fire; a process with no probe is a test or
+ * a script that never scheduled a recovery at all.
+ */
+const pendingRecoveryProbes: Set<(ocSessionId: string) => boolean> =
+  (g.__pendingRecoveryProbes ??= new Set());
+
+export function registerPendingRecoveryProbe(
+  probe: (ocSessionId: string) => boolean,
+): () => void {
+  pendingRecoveryProbes.add(probe);
+  return () => pendingRecoveryProbes.delete(probe);
+}
+
+function recoveryStillClaimable(ocSessionId: string): boolean {
+  for (const probe of pendingRecoveryProbes) {
+    try {
+      if (probe(ocSessionId)) return true;
+    } catch {}
+  }
+  return false;
+}
+
+/** How often an unclaimed reservation is re-examined. */
+export let DETACHED_RECOVERY_GRACE_MS = 5 * 60_000;
+/**
+ * Hard ceiling on how long one reservation may be held, however loudly a
+ * probe insists its recovery is still coming. This exists only for a probe
+ * that can never go false (a hot reload stranding a worker's globals), so it
+ * must sit comfortably ABOVE the longest legitimate wait: a recovery may sit
+ * queued for `BOOT_RECOVERY_QUEUE_WAIT_MS` (agent-runner, 10 min) before it
+ * is promoted and only then runs its reattach probe. The 2026-08-16 incident
+ * was exactly this relationship inverted — a 5-minute release against a
+ * 10-minute queue wait. Keep it at >= 3x the queue wait; the test asserts it.
+ */
+export let DETACHED_RECOVERY_MAX_MS = 30 * 60_000;
+
+/** Test seam: the reservation lifecycle is only reachable from a boot that
+ *  adopted a live detached server, so both windows have to be shortenable to
+ *  observe it. Returns the previous values. */
+export function __setDetachedRecoveryTimingForTest(t: {
+  graceMs: number;
+  maxMs: number;
+}): { graceMs: number; maxMs: number } {
+  const prev = { graceMs: DETACHED_RECOVERY_GRACE_MS, maxMs: DETACHED_RECOVERY_MAX_MS };
+  DETACHED_RECOVERY_GRACE_MS = t.graceMs;
+  DETACHED_RECOVERY_MAX_MS = t.maxMs;
+  return prev;
+}
+
+/** Test seam: stand in for the adoption sweep — track a draining survivor,
+ *  reserve its live turns, and arm the expiry exactly as boot does. Returns a
+ *  cleanup that drops the entry from the draining set. */
+export function __reserveDetachedRecoveryForTest(
+  entry: OpencodeServerEntry,
+  ocSessionIds: string[],
+): () => void {
+  if (entry.draining) drainingServers.add(entry);
+  else servers.set(entry.key, entry);
+  reserveDetachedRecovery(entry, ocSessionIds);
+  scheduleDetachedRecoveryExpiry();
+  return () => {
+    drainingServers.delete(entry);
+    if (servers.get(entry.key) === entry) servers.delete(entry.key);
+    entry.recoveringSessionIds = undefined;
+    entry.recoveryReservedAt = undefined;
+  };
+}
 
 function reserveDetachedRecovery(entry: OpencodeServerEntry, busySessionIds: string[]): void {
   if (!busySessionIds.length) return;
   entry.recoveringSessionIds = new Set(busySessionIds);
-  detachedRecoveryEntries.add(entry);
+  entry.recoveryReservedAt = Date.now();
 }
 
-function scheduleDetachedRecoveryExpiry(): void {
-  if (!detachedRecoveryEntries.size) return;
-  const timer = setTimeout(() => {
-    for (const entry of detachedRecoveryEntries) {
-      const unclaimed = recoveringRunCount(entry);
-      if (unclaimed > 0) {
-        entry.recoveringSessionIds?.clear();
-        console.warn(
-          `[opencode-runner] released ${unclaimed} unclaimed recovery reservation(s) for ${entry.key}`,
-        );
-        reapDrainedServer(entry);
-      }
+/** Every live entry still holding a reservation. Derived from the two pool
+ *  collections rather than a set of its own: both are parked on globalThis,
+ *  so a hot reload keeps them, where a private set would go empty while the
+ *  reservations it was supposed to be expiring lived on. */
+function reservedRecoveryEntries(): OpencodeServerEntry[] {
+  const out: OpencodeServerEntry[] = [];
+  for (const entry of servers.values()) if (entry.recoveringSessionIds?.size) out.push(entry);
+  for (const entry of drainingServers) if (entry.recoveringSessionIds?.size) out.push(entry);
+  return out;
+}
+
+/** Nothing will claim this engine session's turn on this server key — the
+ *  reattach declined it, or the recovery was abandoned outright. Drop the
+ *  reservation at the decision point instead of leaving it to the tick. */
+function releaseRecoveryReservation(serverKey: string | undefined, ocSessionId: string): void {
+  if (!serverKey) return;
+  for (const entry of detachedTurnCandidates(serverKey)) {
+    if (!entry.recoveringSessionIds?.delete(ocSessionId)) continue;
+    if (!entry.recoveringSessionIds.size) {
+      entry.recoveryReservedAt = undefined;
+      reapDrainedServer(entry);
     }
-    detachedRecoveryEntries.clear();
+  }
+}
+
+/**
+ * Release the reservations no restart recovery still intends to claim.
+ *
+ * This used to run once, five minutes after adoption, and released EVERY
+ * unclaimed reservation — reaping a draining survivor that was still
+ * executing its turn. Five minutes is shorter than the recovery queue's own
+ * wait (`BOOT_RECOVERY_QUEUE_WAIT_MS`, 10 min), so a recovery that had done
+ * nothing worse than queue behind four others lost its engine before it was
+ * even promoted to start (2026-08-16). The clock never knew anything the
+ * recovery state does not say better, so ask that instead.
+ */
+function expireDetachedRecoveryReservations(): void {
+  const now = Date.now();
+  for (const entry of reservedRecoveryEntries()) {
+    const reserved = entry.recoveringSessionIds!;
+    // The ceiling only fires for a probe that can never go false; a recovery
+    // that is merely slow keeps its engine for as long as it needs one.
+    const heldMs = now - (entry.recoveryReservedAt ?? now);
+    const expired = heldMs >= DETACHED_RECOVERY_MAX_MS;
+    let released = 0;
+    for (const ocSessionId of reserved) {
+      if (!expired && recoveryStillClaimable(ocSessionId)) continue;
+      reserved.delete(ocSessionId);
+      released++;
+    }
+    if (released) {
+      console.warn(
+        `[opencode-runner] released ${released} unclaimed recovery reservation(s) for ${entry.key}` +
+          (expired
+            ? ` — held ${Math.round(heldMs / 60_000)} min for a recovery that never claimed them`
+            : ""),
+      );
+    }
+    if (!reserved.size) {
+      entry.recoveryReservedAt = undefined;
+      reapDrainedServer(entry);
+    }
+  }
+}
+
+/** Re-examine reservations every grace period for as long as any survives.
+ *  Idempotent, and armed only from the boot adoption sweep (never at module
+ *  scope), so importing this module stays free of tickers. */
+function scheduleDetachedRecoveryExpiry(): void {
+  if (g.__detachedRecoveryExpiryTimer || !reservedRecoveryEntries().length) return;
+  const timer = setTimeout(() => {
+    g.__detachedRecoveryExpiryTimer = undefined;
+    try {
+      expireDetachedRecoveryReservations();
+    } catch (e) {
+      console.error("[opencode-runner] recovery reservation sweep failed:", e);
+    }
+    scheduleDetachedRecoveryExpiry();
   }, DETACHED_RECOVERY_GRACE_MS);
   (timer as unknown as { unref?: () => void }).unref?.();
+  g.__detachedRecoveryExpiryTimer = timer;
 }
 
 /** Adopted instances that could still be hosting a journaled run's engine
@@ -2019,6 +2161,10 @@ export async function abortDetachedOpencodeTurn(run: ActiveRunRecord): Promise<b
       aborted = true;
     } catch {}
   }
+  // Abandoned either way: an instance we could not reach cannot be told
+  // anything, and no recovery is coming back for this turn. Hand the
+  // survivor's reservation back now rather than making the sweep infer it.
+  releaseRecoveryReservation(run.serverKey, ocSessionId);
   if (aborted) {
     appendOpencodeTranscript(ocSessionId, [
       transcriptLineRunnerNotice(
@@ -5554,7 +5700,12 @@ export async function tryReattachOpencodeRun(
       continue;
     }
   }
-  if (!entry) return null;
+  if (!entry) {
+    // No candidate even knows the session: the reservation adoption took for
+    // it can never be claimed, and the caller falls back to a continuation.
+    releaseRecoveryReservation(serverKey, ocSessionId);
+    return null;
+  }
   const shared = !!entry.shared;
   const q = shared ? { query: { directory: run.cwd } } : {};
   const client = clientFor(entry);
@@ -5601,6 +5752,7 @@ export async function tryReattachOpencodeRun(
       try {
         await client.session.abort({ path: { id: ocSessionId }, ...q });
       } catch {}
+      releaseRecoveryReservation(serverKey, ocSessionId);
       return null;
     }
   }
@@ -5612,6 +5764,7 @@ export async function tryReattachOpencodeRun(
     // that died with the old instance (bks-019f8530, 2026-07-21). A
     // confirmed-incomplete turn falls back to the continuation re-prompt
     // (caller handles null); no signal keeps the finalize path.
+    releaseRecoveryReservation(serverKey, ocSessionId);
     return null;
   }
   const model = run.model || "";
