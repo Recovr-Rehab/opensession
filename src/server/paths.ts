@@ -1,11 +1,17 @@
 /**
  * Shared on-disk paths for the session store.
  *
- * The active dir resolves once at load, so every module — and every read and
- * write — stays on the same one for the life of the process.
+ * State roots resolve at CALL time (statePath, stateDir, sessionsDir), so a
+ * process that repoints OPENSESSION_STATE_DIR gets one consistent answer
+ * everywhere. `OPENSESSION_SESSIONS_DIR` is the one exception: it is a
+ * load-time snapshot, kept for the ~50 modules that read it as a binding.
+ * Anything resolving a path itself should call sessionsDir(). Never mix the
+ * two: reading one input live and the other pinned is how a dev instance ends
+ * up matching its own state root but writing into the live store.
  */
 
 import { existsSync } from "fs";
+import { dirname } from "path";
 import { homedir } from "os";
 import { randomUUIDv7 } from "bun";
 
@@ -47,8 +53,25 @@ function resolveSessionsDir(): string {
   return stateDir("sessions");
 }
 
-/** The active session-store dir. */
+/** The active session-store dir, snapshotted at load. */
 export let OPENSESSION_SESSIONS_DIR = resolveSessionsDir();
+
+/**
+ * The active session-store dir, resolved per call. Shaped like
+ * workspacesDir() (src/server/workspaces.ts) and draftsDir() for the same
+ * reason: a live env has to beat a load-time pin, or a repointed state root
+ * gets a store that belongs to another instance. Falls back to the exported
+ * binding (the load-time value, or whatever __setSessionsDirForTest last set)
+ * when neither env var is in play, so the test seam keeps working.
+ */
+export function sessionsDir(): string {
+  return (
+    process.env.OPENSESSION_SESSIONS_DIR ||
+    (process.env.OPENSESSION_STATE_DIR
+      ? `${process.env.OPENSESSION_STATE_DIR}/.opensession-sessions`
+      : OPENSESSION_SESSIONS_DIR)
+  );
+}
 
 /**
  * Test seam (bun tests only): repoint the session store AFTER this module has
@@ -84,13 +107,21 @@ const LEGACY_SESSIONS_DIR_NAMES = [".opensession-chats", ".backstage-chats"];
  */
 export function resolveLegacySessionsPath(p: string): string {
   if (!p.startsWith("/")) return p;
-  const roots = [process.env.OPENSESSION_STATE_DIR, homeDir()];
+  // Both sides come from the same sessionsDir() call: the former store sat
+  // where the active one sits, so the prefix to match is derived from it
+  // rather than re-read from the env. Mixing a live root with a pinned store
+  // makes the function disagree with itself: an isolated instance would match
+  // its own state root and then remap into the live store.
+  const active = sessionsDir();
+  const roots = [dirname(active)];
+  const home = homeDir();
+  if (!roots.includes(home)) roots.push(home);
   for (const name of LEGACY_SESSIONS_DIR_NAMES) {
     for (const root of roots) {
       if (!root) continue;
       const prefix = `${root}/${name}/`;
       if (!p.startsWith(prefix)) continue;
-      const remapped = `${OPENSESSION_SESSIONS_DIR}/${p.slice(prefix.length)}`;
+      const remapped = `${active}/${p.slice(prefix.length)}`;
       if (remapped !== p && !existsSync(p) && existsSync(remapped))
         return remapped;
       return p;
