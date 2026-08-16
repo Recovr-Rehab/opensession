@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type RefObject } from "react";
 import {
 	addKeychainCredential,
 	deleteKeychainCredential,
@@ -9,13 +9,14 @@ import {
 	type KeychainGrantDto,
 } from "../../lib/api";
 import { Button } from "../../ui/button";
+import { Field, Input } from "../../ui/input";
+import { Modal } from "../../ui/modal";
 import {
 	SettingCard,
 	SettingsGroupLabel,
 	SettingsHeader,
 	SettingsHint,
 	SettingsPanel,
-	settingsInputClass,
 } from "../../ui/settings";
 import { EmptyState, InlineAlert, LoadingState } from "../../ui/state";
 import { SettingRow } from "./shared";
@@ -31,14 +32,7 @@ export function KeychainPanel() {
 	} | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [adding, setAdding] = useState(false);
-	const [service, setService] = useState("");
-	const [host, setHost] = useState("");
-	const [secret, setSecret] = useState("");
-	const [description, setDescription] = useState("");
-	const [header, setHeader] = useState("");
-	const [methods, setMethods] = useState("");
-	const [prefixes, setPrefixes] = useState("");
-	const [busy, setBusy] = useState(false);
+	const serviceRef = useRef<HTMLInputElement>(null);
 
 	const reload = useCallback(() => {
 		fetchKeychain()
@@ -46,38 +40,6 @@ export function KeychainPanel() {
 			.catch((e) => setError(e.message));
 	}, []);
 	useEffect(reload, [reload]);
-
-	const submit = () => {
-		setBusy(true);
-		addKeychainCredential({
-			service: service.trim(),
-			host: host.trim(),
-			secret,
-			...(description.trim() ? { description: description.trim() } : {}),
-			...(header.trim() ? { injection: { header: header.trim() } } : {}),
-			...(methods.trim()
-				? { allowedMethods: methods.split(",").map((m) => m.trim()).filter(Boolean) }
-				: {}),
-			...(prefixes.trim()
-				? { allowedPathPrefixes: prefixes.split(",").map((p) => p.trim()).filter(Boolean) }
-				: {}),
-		})
-			.then(() => {
-				// Clear the secret first and always — it must not survive a
-				// failed reload in a React state a devtools user can read back.
-				setSecret("");
-				setService("");
-				setHost("");
-				setDescription("");
-				setHeader("");
-				setMethods("");
-				setPrefixes("");
-				setAdding(false);
-				reload();
-			})
-			.catch((e) => setError(e.message))
-			.finally(() => setBusy(false));
-	};
 
 	const panelHeader = (
 		<SettingsHeader
@@ -105,78 +67,28 @@ export function KeychainPanel() {
 
 			<SettingsGroupLabel className="flex items-center justify-between gap-2">
 				Credentials
-				<Button size="sm" variant="ghost" onClick={() => setAdding((v) => !v)}>
-					{adding ? "Cancel" : "Add credential"}
+				<Button size="sm" variant="ghost" onClick={() => setAdding(true)}>
+					Add credential
 				</Button>
 			</SettingsGroupLabel>
 
-			{adding && (
-				<SettingCard>
-					<div className="flex flex-col gap-2 p-5">
-						<input
-							className={settingsInputClass}
-							value={service}
-							onChange={(e) => setService(e.target.value)}
-							placeholder="service slug, e.g. vercel"
-							aria-label="Service slug"
-						/>
-						<input
-							className={settingsInputClass}
-							value={host}
-							onChange={(e) => setHost(e.target.value)}
-							placeholder="api host, e.g. api.vercel.com"
-							aria-label="API host"
-						/>
-						<input
-							className={settingsInputClass}
-							type="password"
-							value={secret}
-							onChange={(e) => setSecret(e.target.value)}
-							placeholder="secret (never shown again, never sent to a model)"
-							aria-label="Secret"
-						/>
-						<input
-							className={settingsInputClass}
-							value={description}
-							onChange={(e) => setDescription(e.target.value)}
-							placeholder="what it's for (optional)"
-							aria-label="Description"
-						/>
-						<input
-							className={settingsInputClass}
-							value={header}
-							onChange={(e) => setHeader(e.target.value)}
-							placeholder="header (optional, default: Authorization: Bearer)"
-							aria-label="Injection header"
-						/>
-						<input
-							className={settingsInputClass}
-							value={methods}
-							onChange={(e) => setMethods(e.target.value)}
-							placeholder="allowed methods, comma-separated (optional, e.g. GET)"
-							aria-label="Allowed methods"
-						/>
-						<input
-							className={settingsInputClass}
-							value={prefixes}
-							onChange={(e) => setPrefixes(e.target.value)}
-							placeholder="allowed path prefixes, comma-separated (optional, e.g. /v1/deployments)"
-							aria-label="Allowed path prefixes"
-						/>
-						<SettingsHint>
-							Narrow the methods and paths where you can. A grant can only reach what the
-							credential allows, so this is the ceiling on anything you approve later.
-						</SettingsHint>
-						<Button
-							size="sm"
-							disabled={busy || !service.trim() || !host.trim() || !secret}
-							onClick={submit}
-						>
-							{busy ? "Saving…" : "Save credential"}
-						</Button>
-					</div>
-				</SettingCard>
-			)}
+			<Modal.Root open={adding} onOpenChange={setAdding}>
+				{/* The form is a child so Base UI's portal remounts it on every
+				    open. That is what clears the typed secret when the dialog is
+				    dismissed rather than saved: it used to be cleared only on a
+				    successful submit, so cancelling left it sitting in a React
+				    state a devtools user could read back. */}
+				<Modal.Content initialFocus={serviceRef}>
+					<AddCredentialForm
+						serviceRef={serviceRef}
+						onAdded={() => {
+							setAdding(false);
+							reload();
+						}}
+						onError={setError}
+					/>
+				</Modal.Content>
+			</Modal.Root>
 
 			{data.credentials.length === 0 ? (
 				<EmptyState placement="card">
@@ -265,4 +177,108 @@ export function KeychainPanel() {
 			)}
 		</SettingsPanel>
 	);
+}
+
+/**
+ * Registering a credential. Every field used to be placeholder-only with an
+ * `aria-label`, so the moment you typed, the one thing telling you what the
+ * box was for disappeared — and seven of those stacked in a card pushed the
+ * credentials list off the page. Real labels now, and the placeholders say
+ * what leaving a field blank does instead of restating the label.
+ *
+ * Two zones: what the credential IS, then the ceiling on how it may be used.
+ */
+function AddCredentialForm({
+	serviceRef,
+	onAdded,
+	onError,
+}: {
+	serviceRef: RefObject<HTMLInputElement | null>;
+	onAdded: () => void;
+	onError: (message: string) => void;
+}) {
+	const [service, setService] = useState("");
+	const [host, setHost] = useState("");
+	const [secret, setSecret] = useState("");
+	const [description, setDescription] = useState("");
+	const [header, setHeader] = useState("");
+	const [methods, setMethods] = useState("");
+	const [prefixes, setPrefixes] = useState("");
+	const [busy, setBusy] = useState(false);
+	const ready = Boolean(service.trim() && host.trim() && secret);
+
+	const submit = (event: FormEvent) => {
+		event.preventDefault();
+		if (!ready) return;
+		setBusy(true);
+		addKeychainCredential({
+			service: service.trim(),
+			host: host.trim(),
+			secret,
+			...(description.trim() ? { description: description.trim() } : {}),
+			...(header.trim() ? { injection: { header: header.trim() } } : {}),
+			...(methods.trim() ? { allowedMethods: list(methods) } : {}),
+			...(prefixes.trim() ? { allowedPathPrefixes: list(prefixes) } : {}),
+		})
+			.then(() => {
+				// Clear the secret first and always — it must not survive a
+				// failed reload in a React state a devtools user can read back.
+				setSecret("");
+				onAdded();
+			})
+			.catch((e) => onError(e.message))
+			.finally(() => setBusy(false));
+	};
+
+	return (
+		<>
+			<Modal.Header
+				title="Add credential"
+				description="A session can borrow it with your approval. The secret is injected server-side, so the agent never sees it."
+			/>
+			<form className="flex flex-col gap-5" onSubmit={submit}>
+				<div className="flex flex-col gap-3">
+					<Field label="Service">
+						<Input ref={serviceRef} value={service} onChange={(e) => setService(e.target.value)} placeholder="vercel" autoCapitalize="none" spellCheck={false} />
+					</Field>
+					<Field label="API host">
+						<Input value={host} onChange={(e) => setHost(e.target.value)} placeholder="api.vercel.com" autoCapitalize="none" spellCheck={false} />
+					</Field>
+					<Field label="Secret">
+						<Input type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="Never shown again" autoComplete="off" />
+					</Field>
+					<Field label="Description" title="Optional.">
+						<Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What it is for" />
+					</Field>
+				</div>
+				<div className="flex flex-col gap-3">
+					<Field label="Injection header">
+						<Input value={header} onChange={(e) => setHeader(e.target.value)} placeholder="Authorization: Bearer" autoCapitalize="none" spellCheck={false} />
+					</Field>
+					<Field label="Allowed methods" title="Comma-separated.">
+						<Input value={methods} onChange={(e) => setMethods(e.target.value)} placeholder="Any method" autoCapitalize="none" spellCheck={false} />
+					</Field>
+					<Field label="Allowed path prefixes" title="Comma-separated.">
+						<Input value={prefixes} onChange={(e) => setPrefixes(e.target.value)} placeholder="Any path" autoCapitalize="none" spellCheck={false} />
+					</Field>
+					{/* The hint belongs to this zone, so it sits inside it rather
+					    than floating between the fields and the actions. */}
+					<p className="m-0 text-meta leading-relaxed text-faint">
+						Narrow the methods and paths where you can. A grant can only reach what the
+						credential allows, so this is the ceiling on anything you approve later.
+					</p>
+				</div>
+				<Modal.Footer>
+					<Modal.Close render={<Button variant="ghost" disabled={busy}>Cancel</Button>} />
+					<Button variant="primary" type="submit" disabled={busy || !ready}>
+						{busy ? "Saving…" : "Add credential"}
+					</Button>
+				</Modal.Footer>
+			</form>
+		</>
+	);
+}
+
+function list(value: string): string[] {
+	return value.split(",").map((item) => item.trim()).filter(Boolean);
 }
