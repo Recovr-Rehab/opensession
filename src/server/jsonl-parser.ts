@@ -7,16 +7,17 @@ import { withToolPresentations } from "@tellahq/opensession-protocol/tool-presen
 import { SLACK_ID_TO_NAME } from "./shared/user-mappings";
 import { stripContext } from "./prompt-context";
 import { configuredIntegration } from "./config";
-import {
-  isFileReadOutput,
-  isGrepResultOutput,
-  isReservedMediaHost,
-} from "./transcript-media";
+import { extractAssistantVideos, toolResultMedia } from "./transcript-media";
 export {
+  extractAssistantVideos,
+  extractImageMarkers,
+  extractImplicitMedia,
+  extractVideoMarkers,
   isFileReadOutput,
   isGrepResultOutput,
   isReservedMediaHost,
   sanitizeTranscriptMediaEntry,
+  toolResultMedia,
 } from "./transcript-media";
 
 const SLACK_USERS = SLACK_ID_TO_NAME;
@@ -147,123 +148,6 @@ function attachUploads(
       entry.files = [...(entry.files || []), f];
     }
   }
-}
-
-// Transcript messages can't return video blocks (unlike Read-of-image), so a
-// tool or assistant can print `OPENSESSION_VIDEO: <abs-path>` and we turn each
-// marker into a /media URL the frontend streams.
-// (BACKSTAGE_VIDEO is the pre-rename marker — it lives forever in old
-// transcripts and in scripts that haven't updated yet, so keep reading it.)
-// Agents dress the line up: bold it, fence it in backticks, hang it off a
-// bullet. The wrapper is presentation, not a different intent, so read
-// through it. Anchoring to a bare line start made `**OPENSESSION_IMAGE: x**`
-// fall through as literal text, and the implicit-mention fallback missed it
-// too (a trailing `*` fails that lookahead), so the whole feature vanished
-// with no error anywhere.
-const MARKER_OPEN = "[\\t ]*(?:[-*>][\\t ]*)?[*_`]{0,3}[\\t ]*";
-const MARKER_CLOSE = "[\\t ]*[*_`]{0,3}[\\t ]*";
-/** Path capture is lazy so the closing emphasis isn't eaten as path chars. */
-function markerRe(keyword: string): RegExp {
-  return new RegExp(
-    `^${MARKER_OPEN}(?:${keyword}):[\\t ]*(/\\S+?)${MARKER_CLOSE}$`,
-    "gm",
-  );
-}
-const VIDEO_MARKER = markerRe("(?:OPENSESSION|BACKSTAGE)_VIDEO");
-// Sibling marker for stills (thumbnails, extracted frames, downloaded
-// images): `OPENSESSION_IMAGE: <abs-path>` renders inline via the same
-// authenticated media route, landing in the entry's existing `images` field.
-const IMAGE_MARKER = markerRe("OPENSESSION_IMAGE");
-
-function extractMarker(text: string, marker: RegExp): string[] {
-  if (!text) return [];
-  const out: string[] = [];
-  for (const m of text.matchAll(marker)) {
-    out.push(`/media?path=${encodeURIComponent(m[1])}`);
-  }
-  return out;
-}
-
-export function extractVideoMarkers(text: string): string[] {
-  return extractMarker(text, VIDEO_MARKER);
-}
-
-export function extractImageMarkers(text: string): string[] {
-  return extractMarker(text, IMAGE_MARKER);
-}
-
-// Implicit media: tool results and assistant text that
-// mention media by path/URL render it inline WITHOUT needing the explicit
-// markers. Guardrails against code-session noise: local candidates must be
-// absolute paths that actually exist on disk (a diff's `b/logo.png` or a
-// source file's "/assets/x.png" never render), remote candidates must be
-// clean URLs ending in a media extension, and both are capped per entry.
-const IMAGE_EXT = /\.(?:png|jpe?g|gif|webp)$/i;
-// `*` and `_` sit in both boundaries so a path a person emphasised
-// (`**/tmp/shot.png**`) reads the same as a bare one.
-const LOCAL_MEDIA_RE =
-  /(?:^|[\s"'`(=*_])(\/[^\s"'`)\]},;]+\.(?:png|jpe?g|gif|webp|mp4|webm|mov|m4v))(?=$|[\s"'`)\]},;:*_])/gim;
-const REMOTE_MEDIA_RE =
-  /(https?:\/\/[^\s"'`)\]}>,;]+\.(?:png|jpe?g|gif|webp|mp4|webm|mov|m4v)(?:\?[^\s"'`)\]}>,;]*)?)/gi;
-const IMPLICIT_MEDIA_CAP = 6;
-
-export function extractImplicitMedia(text: string): {
-  images: string[];
-  videos: string[];
-} {
-  const images: string[] = [];
-  const videos: string[] = [];
-  if (!text || text.length > 512_000) return { images, videos };
-  // Quoted code is not an artifact: search snippets and file listings carry
-  // fixture URLs (see transcript-media.ts for why this stays envelope-shaped).
-  if (isGrepResultOutput(text) || isFileReadOutput(text)) return { images, videos };
-  const seen = new Set<string>();
-  const add = (src: string, pathLike: string) => {
-    if (seen.has(src)) return;
-    const bucket = IMAGE_EXT.test(pathLike.replace(/\?.*$/, ""))
-      ? images
-      : videos;
-    if (bucket.length >= IMPLICIT_MEDIA_CAP) return;
-    seen.add(src);
-    bucket.push(src);
-  };
-  for (const m of text.matchAll(LOCAL_MEDIA_RE)) {
-    const p = m[1];
-    try {
-      if (!existsSync(p)) continue;
-    } catch {
-      continue;
-    }
-    add(`/media?path=${encodeURIComponent(p)}`, p);
-  }
-  // Reserved documentation/testing names serve nothing, wherever they turn up.
-  for (const m of text.matchAll(REMOTE_MEDIA_RE))
-    if (!isReservedMediaHost(m[1])) add(m[1], m[1]);
-  return { images, videos };
-}
-
-export function extractAssistantVideos(text: string): {
-  content: string;
-  videos: string[];
-  images: string[];
-} {
-  const videos = extractVideoMarkers(text);
-  const images = extractImageMarkers(text);
-  let content = text;
-  if (videos.length > 0) content = content.replace(VIDEO_MARKER, "");
-  if (images.length > 0) content = content.replace(IMAGE_MARKER, "");
-  // Implicit mentions render too (markers stay the explicit override; the
-  // Set-union keeps a marker + bare mention of the same file to one embed).
-  const implicit = extractImplicitMedia(content);
-  const vset = new Set(videos);
-  const iset = new Set(images);
-  for (const v of implicit.videos) vset.add(v);
-  for (const i of implicit.images) iset.add(i);
-  return {
-    content: videos.length || images.length ? content.trimEnd() : text,
-    videos: [...vset],
-    images: [...iset],
-  };
 }
 
 /**
@@ -432,24 +316,9 @@ function parseEntry(raw: RawJsonlEntry): TranscriptEntry[] {
                     .map((c: any) => c.text)
                     .join("\n")
                 : "";
-          const implicitTool = extractImplicitMedia(resultText);
-          // Markers are the agent asking for this one to be SHOWN; a Read's
-          // image block and a path that merely turns up in output are working
-          // artifacts. Both attach, only the marked ones are featured — see
-          // TranscriptEntry.featuredMedia.
-          const markerImages = extractImageMarkers(resultText);
-          const markerVideos = extractVideoMarkers(resultText);
-          const images = [
-            ...new Set([
-              ...extractImages(block.content),
-              ...markerImages,
-              ...implicitTool.images,
-            ]),
-          ];
-          const videos = [
-            ...new Set([...markerVideos, ...implicitTool.videos]),
-          ];
-          const featuredMedia = [...new Set([...markerImages, ...markerVideos])];
+          // Markers, implicit mentions and the Read image block, derived the
+          // same way on every engine — see toolResultMedia.
+          const media = toolResultMedia(resultText, extractImages(block.content));
           // A Task/Agent result carries the spawned sub-agent's id on the line's
           // toolUseResult; attach it so the UI can open the sub-agent transcript.
           const agentId = raw.toolUseResult?.agentId;
@@ -464,9 +333,7 @@ function parseEntry(raw: RawJsonlEntry): TranscriptEntry[] {
             toolUseId: block.tool_use_id,
             ...(block.is_error ? { isError: true } : {}),
             ...(agentId ? { agentId } : {}),
-            ...(images.length > 0 ? { images } : {}),
-            ...(videos.length > 0 ? { videos } : {}),
-            ...(featuredMedia.length > 0 ? { featuredMedia } : {}),
+            ...media,
           });
         } else if (block.type === "text" && !raw.isMeta) {
           const harness = harnessEntryFor(
@@ -721,14 +588,15 @@ function parseCodexEntry(raw: any): TranscriptEntry[] {
     }
     if (p.type === "function_call_output" || p.type === "custom_tool_call_output") {
       const content = outputText(p.output);
-      const videos = extractVideoMarkers(content);
       return [{
         id: p.call_id ? `tr-${p.call_id}` : stableCodexId("tr-codex", raw, p, content),
         type: "tool_result",
         content,
         timestamp: ts,
         toolUseId: p.call_id,
-        ...(videos.length > 0 ? { videos } : {}),
+        // Codex hands over no attachment media, but the markers and implicit
+        // mentions in the text render exactly as on the other engines.
+        ...toolResultMedia(content),
       }];
     }
     if (p.type === "file_change") {
@@ -759,14 +627,13 @@ function parseCodexEntry(raw: any): TranscriptEntry[] {
     }
     if (p.type === "local_shell_call_output") {
       const content = outputText(p.output);
-      const videos = extractVideoMarkers(content);
       return [{
         id: p.call_id ? `tr-${p.call_id}` : stableCodexId("tr-codex", raw, p, content),
         type: "tool_result",
         content,
         timestamp: ts,
         toolUseId: p.call_id,
-        ...(videos.length > 0 ? { videos } : {}),
+        ...toolResultMedia(content),
       }];
     }
     if (p.type === "web_search_call") {

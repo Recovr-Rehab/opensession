@@ -1,3 +1,4 @@
+import { existsSync } from "fs";
 import type { TranscriptEntry } from "./types";
 
 /**
@@ -52,6 +53,160 @@ export function isReservedMediaHost(src: string): boolean {
     // Unparseable as a URL — not something a browser can load either.
     return true;
   }
+}
+
+// Transcript messages can't return video blocks (unlike Read-of-image), so a
+// tool or assistant can print `OPENSESSION_VIDEO: <abs-path>` and we turn each
+// marker into a /media URL the frontend streams.
+// (BACKSTAGE_VIDEO is the pre-rename marker — it lives forever in old
+// transcripts and in scripts that haven't updated yet, so keep reading it.)
+// Agents dress the line up: bold it, fence it in backticks, hang it off a
+// bullet. The wrapper is presentation, not a different intent, so read
+// through it. Anchoring to a bare line start made `**OPENSESSION_IMAGE: x**`
+// fall through as literal text, and the implicit-mention fallback missed it
+// too (a trailing `*` fails that lookahead), so the whole feature vanished
+// with no error anywhere.
+const MARKER_OPEN = "[\\t ]*(?:[-*>][\\t ]*)?[*_`]{0,3}[\\t ]*";
+const MARKER_CLOSE = "[\\t ]*[*_`]{0,3}[\\t ]*";
+/** Path capture is lazy so the closing emphasis isn't eaten as path chars. */
+function markerRe(keyword: string): RegExp {
+  return new RegExp(
+    `^${MARKER_OPEN}(?:${keyword}):[\\t ]*(/\\S+?)${MARKER_CLOSE}$`,
+    "gm",
+  );
+}
+const VIDEO_MARKER = markerRe("(?:OPENSESSION|BACKSTAGE)_VIDEO");
+// Sibling marker for stills (thumbnails, extracted frames, downloaded
+// images): `OPENSESSION_IMAGE: <abs-path>` renders inline via the same
+// authenticated media route, landing in the entry's existing `images` field.
+const IMAGE_MARKER = markerRe("OPENSESSION_IMAGE");
+
+function extractMarker(text: string, marker: RegExp): string[] {
+  if (!text) return [];
+  const out: string[] = [];
+  for (const m of text.matchAll(marker)) {
+    out.push(`/media?path=${encodeURIComponent(m[1])}`);
+  }
+  return out;
+}
+
+export function extractVideoMarkers(text: string): string[] {
+  return extractMarker(text, VIDEO_MARKER);
+}
+
+export function extractImageMarkers(text: string): string[] {
+  return extractMarker(text, IMAGE_MARKER);
+}
+
+// Implicit media: tool results and assistant text that
+// mention media by path/URL render it inline WITHOUT needing the explicit
+// markers. Guardrails against code-session noise: local candidates must be
+// absolute paths that actually exist on disk (a diff's `b/logo.png` or a
+// source file's "/assets/x.png" never render), remote candidates must be
+// clean URLs ending in a media extension, and both are capped per entry.
+const IMAGE_EXT = /\.(?:png|jpe?g|gif|webp)$/i;
+// `*` and `_` sit in both boundaries so a path a person emphasised
+// (`**/tmp/shot.png**`) reads the same as a bare one.
+const LOCAL_MEDIA_RE =
+  /(?:^|[\s"'`(=*_])(\/[^\s"'`)\]},;]+\.(?:png|jpe?g|gif|webp|mp4|webm|mov|m4v))(?=$|[\s"'`)\]},;:*_])/gim;
+const REMOTE_MEDIA_RE =
+  /(https?:\/\/[^\s"'`)\]}>,;]+\.(?:png|jpe?g|gif|webp|mp4|webm|mov|m4v)(?:\?[^\s"'`)\]}>,;]*)?)/gi;
+const IMPLICIT_MEDIA_CAP = 6;
+
+export function extractImplicitMedia(text: string): {
+  images: string[];
+  videos: string[];
+} {
+  const images: string[] = [];
+  const videos: string[] = [];
+  if (!text || text.length > 512_000) return { images, videos };
+  // Quoted code is not an artifact: search snippets and file listings carry
+  // fixture URLs (see the envelope predicates above for why this stays
+  // envelope-shaped).
+  if (isGrepResultOutput(text) || isFileReadOutput(text)) return { images, videos };
+  const seen = new Set<string>();
+  const add = (src: string, pathLike: string) => {
+    if (seen.has(src)) return;
+    const bucket = IMAGE_EXT.test(pathLike.replace(/\?.*$/, ""))
+      ? images
+      : videos;
+    if (bucket.length >= IMPLICIT_MEDIA_CAP) return;
+    seen.add(src);
+    bucket.push(src);
+  };
+  for (const m of text.matchAll(LOCAL_MEDIA_RE)) {
+    const p = m[1];
+    try {
+      if (!existsSync(p)) continue;
+    } catch {
+      continue;
+    }
+    add(`/media?path=${encodeURIComponent(p)}`, p);
+  }
+  // Reserved documentation/testing names serve nothing, wherever they turn up.
+  for (const m of text.matchAll(REMOTE_MEDIA_RE))
+    if (!isReservedMediaHost(m[1])) add(m[1], m[1]);
+  return { images, videos };
+}
+
+export function extractAssistantVideos(text: string): {
+  content: string;
+  videos: string[];
+  images: string[];
+} {
+  const videos = extractVideoMarkers(text);
+  const images = extractImageMarkers(text);
+  let content = text;
+  if (videos.length > 0) content = content.replace(VIDEO_MARKER, "");
+  if (images.length > 0) content = content.replace(IMAGE_MARKER, "");
+  // Implicit mentions render too (markers stay the explicit override; the
+  // Set-union keeps a marker + bare mention of the same file to one embed).
+  const implicit = extractImplicitMedia(content);
+  const vset = new Set(videos);
+  const iset = new Set(images);
+  for (const v of implicit.videos) vset.add(v);
+  for (const i of implicit.images) iset.add(i);
+  return {
+    content: videos.length || images.length ? content.trimEnd() : text,
+    videos: [...vset],
+    images: [...iset],
+  };
+}
+
+/**
+ * A tool result's media, derived once for every engine. The claude, opencode
+ * and codex parsers and the live opencode stream all render the same result
+ * text, so they all call this: while each kept its own copy the codex branches
+ * read video markers only, and an `OPENSESSION_IMAGE:` line — the thing agents
+ * are told to print when they want a human to LOOK at something — rendered on
+ * two engines and silently vanished on the third (2026-08-16).
+ *
+ * `attached` is the media the engine hands over out of band: a Read's image
+ * block on claude, opencodeToolResultImages on opencode, nothing on codex.
+ * Markers are the agent asking for that one to be SHOWN, so only they are
+ * featured; attachments and paths that merely turn up in the output attach
+ * without opening their row (see TranscriptEntry.featuredMedia).
+ *
+ * Returns only the keys it found, so callers spread it straight into the
+ * entry they are building.
+ */
+export function toolResultMedia(
+  text: string,
+  attached: string[] = [],
+): Pick<TranscriptEntry, "images" | "videos" | "featuredMedia"> {
+  const markerImages = extractImageMarkers(text);
+  const markerVideos = extractVideoMarkers(text);
+  const implicit = extractImplicitMedia(text);
+  const images = [
+    ...new Set([...attached, ...markerImages, ...implicit.images]),
+  ];
+  const videos = [...new Set([...markerVideos, ...implicit.videos])];
+  const featuredMedia = [...new Set([...markerImages, ...markerVideos])];
+  return {
+    ...(images.length ? { images } : {}),
+    ...(videos.length ? { videos } : {}),
+    ...(featuredMedia.length ? { featuredMedia } : {}),
+  };
 }
 
 /**

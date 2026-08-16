@@ -1,5 +1,5 @@
 import { describe, expect, test, beforeAll, afterAll } from "bun:test";
-import { mkdtempSync, rmSync, existsSync } from "fs";
+import { mkdtempSync, rmSync, existsSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { Database } from "bun:sqlite";
@@ -39,7 +39,7 @@ const {
   opencodeTurnActivitySnapshot,
   opencodeTurnLooksCompleted,
 } = mod;
-const { parseJsonlLines } = await import("./jsonl-parser");
+const { parseJsonlLines, parseTranscript } = await import("./jsonl-parser");
 const { TranscriptStore, transcriptStore, __setTranscriptStoreForTest } = await import(
   "./transcript-store"
 );
@@ -581,6 +581,79 @@ describe("readOpencodeTranscript (SQLite)", () => {
         timestamp: "2026-07-24T00:00:00.000Z",
       })
     ).toBeNull();
+  });
+  test("the same tool output yields the same media on claude, opencode and codex", () => {
+    // The three engines used to derive this separately, and codex read video
+    // markers only: an OPENSESSION_IMAGE line rendered on two engines and
+    // silently vanished on the third. One derivation now, asserted as one.
+    const implicit = join(scratch, "parity-implicit.png");
+    writeFileSync(implicit, "x");
+    const output = [
+      "captured",
+      "OPENSESSION_IMAGE: /tmp/parity-shot.png",
+      "OPENSESSION_VIDEO: /tmp/parity-clip.mp4",
+      `wrote ${implicit}`,
+    ].join("\n");
+    const media = (e: TranscriptEntry | undefined) => ({
+      images: e?.images,
+      videos: e?.videos,
+      featuredMedia: e?.featuredMedia,
+    });
+    const toolResult = (entries: TranscriptEntry[]) =>
+      entries.find((e) => e.type === "tool_result");
+
+    const sessionId = "ses_media_parity";
+    const createdAt = 1783501700000;
+    const db = new Database(dbPath);
+    db.query("INSERT INTO session VALUES (?, 'p', 't', 1, 1)").run(sessionId);
+    db.query("INSERT INTO message VALUES (?, ?, ?, ?, ?)").run(
+      "msg_media_parity", sessionId, createdAt, createdAt,
+      JSON.stringify({ role: "assistant", time: { created: createdAt } }),
+    );
+    db.query("INSERT INTO part VALUES (?, ?, ?, ?, ?, ?)").run(
+      "prt_media_parity", "msg_media_parity", sessionId, createdAt, createdAt,
+      JSON.stringify({
+        type: "tool",
+        tool: "bash",
+        state: { status: "completed", input: { command: "shot.sh" }, output },
+      }),
+    );
+    db.close();
+    const opencode = media(toolResult(readOpencodeTranscript(sessionId)));
+
+    const claudePath = join(scratch, "parity-claude.jsonl");
+    writeFileSync(claudePath, JSON.stringify({
+      type: "user",
+      uuid: "u-parity",
+      timestamp: "2026-08-16T00:00:00.000Z",
+      message: {
+        role: "user",
+        content: [{ type: "tool_result", tool_use_id: "toolu_parity", content: output }],
+      },
+    }) + "\n");
+    const claude = media(toolResult(parseTranscript(claudePath)));
+
+    const codexPath = join(scratch, "rollout-parity-thread.jsonl");
+    writeFileSync(codexPath, JSON.stringify({
+      timestamp: "2026-08-16T00:00:00.000Z",
+      type: "response_item",
+      payload: { type: "local_shell_call_output", call_id: "call_parity", output },
+    }) + "\n");
+    const codex = media(toolResult(parseTranscript(codexPath)));
+
+    expect(claude).toEqual({
+      images: [
+        "/media?path=%2Ftmp%2Fparity-shot.png",
+        `/media?path=${encodeURIComponent(implicit)}`,
+      ],
+      videos: ["/media?path=%2Ftmp%2Fparity-clip.mp4"],
+      featuredMedia: [
+        "/media?path=%2Ftmp%2Fparity-shot.png",
+        "/media?path=%2Ftmp%2Fparity-clip.mp4",
+      ],
+    });
+    expect(opencode).toEqual(claude);
+    expect(codex).toEqual(claude);
   });
   test("unknown session / missing db degrade to []", () => {
     expect(readOpencodeTranscript("ses_nope")).toEqual([]);
