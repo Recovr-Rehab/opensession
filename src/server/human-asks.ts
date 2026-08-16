@@ -63,7 +63,6 @@ export type HumanAskState =
   | "scheduled" // registered, not yet delivered (deferred trigger pending)
   | "delivered" // DM sent, awaiting a reply
   | "answered"
-  | "timeout"
   | "cancelled";
 
 /** When the teammate is actually pinged. A string atIso means "at that instant". */
@@ -138,7 +137,7 @@ function persist(): void {
 }
 
 function isTerminal(a: HumanAsk): boolean {
-  return a.state === "answered" || a.state === "cancelled" || a.state === "timeout";
+  return a.state === "answered" || a.state === "cancelled";
 }
 
 /**
