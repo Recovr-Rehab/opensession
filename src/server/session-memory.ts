@@ -29,7 +29,7 @@ import { readdirSync } from "fs";
 import {
   loadScope,
   saveScope,
-  MEMORY_DIR,
+  memoryDir,
   type MemoryEntry,
 } from "../agents/slack/memory";
 import { resolveTeammate, SLACK_ID_TO_NAME } from "./shared/user-mappings";
@@ -166,7 +166,7 @@ export function describeScope(key: string): MemoryScope | null {
 export async function listAllMemory(repoIds: string[]): Promise<ScopedMemory[]> {
   const keys = new Set<string>(["workspace", ...repoIds.map((r) => `repo-${r}`)]);
   try {
-    for (const f of readdirSync(MEMORY_DIR)) {
+    for (const f of readdirSync(memoryDir())) {
       if (f.endsWith(".json")) keys.add(f.slice(0, -5));
     }
   } catch {} // no store dir yet — the fixed scopes still render

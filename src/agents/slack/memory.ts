@@ -19,6 +19,24 @@ import { writeJsonAtomic } from "../../server/shared/atomic-write";
 
 export const MEMORY_DIR = `${process.env.HOME}/.michael-memory`;
 
+// Test seam: the snapshot harness (src/server/testing/) redirects the store so
+// a recorded fixture can never embed the team's real memories, and so a run's
+// injected memory note is fixture data rather than whatever this box happens
+// to remember. Resolved per call; MEMORY_DIR itself stays the default.
+let memoryDirOverride: string | null = null;
+
+/** Directory backing the scope stores (MEMORY_DIR unless a test redirects it). */
+export function memoryDir(): string {
+  return memoryDirOverride ?? MEMORY_DIR;
+}
+
+/** Point the memory store at another directory; returns the previous value. */
+export function __setMemoryDirForTest(dir: string | null): string | null {
+  const prev = memoryDirOverride;
+  memoryDirOverride = dir;
+  return prev;
+}
+
 export interface MemoryEntry {
   id: string;
   text: string;
@@ -50,7 +68,7 @@ function resolveScopes(ctx: MemoryContext): {
 }
 
 function scopeFile(scope: string): string {
-  return `${MEMORY_DIR}/${scope}.json`;
+  return `${memoryDir()}/${scope}.json`;
 }
 
 /** Exported for session-memory.ts (repo/user/team scopes share this store). */
