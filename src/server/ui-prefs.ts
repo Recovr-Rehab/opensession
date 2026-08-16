@@ -1,21 +1,19 @@
 /**
  * Per-user UI reading preferences (small string key→value map). Like pins.ts /
  * tab-colors.ts, each user (the self-selected `backstage-user` name from the
- * UserPicker — not an auth identity) gets one JSON file
- * `~/.opensession-ui-prefs/<user>.json` of shape `{ prefs: { [key]: value } }`.
+ * UserPicker — not an auth identity) gets one JSON file under
+ * `~/.opensession-ui-prefs/` of shape `{ prefs: { [key]: value } }`.
  * These are cross-device view preferences (first user: the turn-activity fold
  * setting) — the localStorage copy on each browser is just a cache of this.
+ * Filename, directory resolution and legacy-name fallback come from
+ * shared/user-store.ts.
  *
  * Writes are PATCH-merge (not replace): each device only knows the prefs it
  * has touched, so a whole-map PUT from a stale device would clobber keys set
  * elsewhere. A key set to null in the patch is deleted.
  */
 
-import { existsSync, mkdirSync, readFileSync } from "fs";
-import { writeJsonAtomic } from "./shared/atomic-write";
-import { stateDir } from "./paths";
-
-const PREFS_DIR = stateDir("ui-prefs");
+import { userStore } from "./shared/user-store";
 
 // Guardrails on a free-form map: sane key shape, short string values, bounded
 // entry count — this is a preferences file, not a datastore.
@@ -27,19 +25,6 @@ const MAX_ENTRIES = 100;
 
 export function maxValueLength(key: string): number {
 	return LONG_VALUE_KEYS.has(key) ? MAX_LONG_VALUE_LEN : MAX_VALUE_LEN;
-}
-
-/** Map a free-form user name to a safe filename; empty/odd input → Anonymous. */
-function sanitizeUser(user: string): string {
-	const cleaned = (user || "")
-		.trim()
-		.replace(/[^A-Za-z0-9_-]/g, "_")
-		.slice(0, 64);
-	return cleaned || "Anonymous";
-}
-
-function fileFor(user: string): string {
-	return `${PREFS_DIR}/${sanitizeUser(user)}.json`;
 }
 
 export type UiPrefs = Record<string, string>;
@@ -64,15 +49,10 @@ function clean(input: unknown): UiPrefs {
 	return out;
 }
 
+const store = userStore<UiPrefs>({ name: "ui-prefs", field: "prefs", clean });
+
 export function getUiPrefs(user: string): UiPrefs {
-	try {
-		const f = fileFor(user);
-		if (!existsSync(f)) return {};
-		const raw = JSON.parse(readFileSync(f, "utf8"));
-		return clean(raw?.prefs);
-	} catch {
-		return {};
-	}
+	return store.get(user);
 }
 
 /**
@@ -91,8 +71,5 @@ export function patchUiPrefs(user: string, patch: unknown): UiPrefs {
 				current[key] = value;
 		}
 	}
-	const cleaned = clean(current);
-	if (!existsSync(PREFS_DIR)) mkdirSync(PREFS_DIR, { recursive: true });
-	writeJsonAtomic(fileFor(user), { prefs: cleaned });
-	return cleaned;
+	return store.set(user, current);
 }

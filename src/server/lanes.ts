@@ -1,9 +1,11 @@
 /**
  * Per-user sidebar lanes. Like pins.ts, each user (the self-selected
  * `backstage-user` name from the UserPicker — not an auth identity) gets one
- * JSON file `~/.opensession-lanes/<user>.json` of shape
+ * JSON file under `~/.opensession-lanes/` of shape
  * `{ lanes: { [sessionId]: lane } }`, where `lane` is one of the sidebar's
  * status-lane keys (needsinput/inprogress/review/merged/pending) or "mine".
+ * Filename, directory resolution and legacy-name fallback come from
+ * shared/user-store.ts.
  *
  * An entry means "this session belongs in MY sidebar" — that's what pulls an
  * automation run or a teammate's workspace out of its own band and into your
@@ -17,11 +19,7 @@
  * before lanes went per-user; new writes land here.
  */
 
-import { existsSync, mkdirSync, readFileSync } from "fs";
-import { writeJsonAtomic } from "./shared/atomic-write";
-import { stateDir } from "./paths";
-
-const LANES_DIR = stateDir("lanes");
+import { userStore } from "./shared/user-store";
 
 /**
  * Allowed lane keys — the frontend's MineStatus, plus the "mine" sentinel: a
@@ -37,31 +35,7 @@ const ALLOWED = new Set([
 	"mine",
 ]);
 
-/** Map a free-form user name to a safe filename; empty/odd input → Anonymous. */
-function sanitizeUser(user: string): string {
-	const cleaned = (user || "")
-		.trim()
-		.replace(/[^A-Za-z0-9_-]/g, "_")
-		.slice(0, 64);
-	return cleaned || "Anonymous";
-}
-
-function fileFor(user: string): string {
-	return `${LANES_DIR}/${sanitizeUser(user)}.json`;
-}
-
 export type Lanes = Record<string, string>;
-
-export function getLanes(user: string): Lanes {
-	try {
-		const f = fileFor(user);
-		if (!existsSync(f)) return {};
-		const raw = JSON.parse(readFileSync(f, "utf8"));
-		return clean(raw?.lanes);
-	} catch {
-		return {};
-	}
-}
 
 /** Keep only string-id → allowed-lane entries. */
 function clean(input: unknown): Lanes {
@@ -84,12 +58,13 @@ function clean(input: unknown): Lanes {
 	return out;
 }
 
+const store = userStore<Lanes>({ name: "lanes", field: "lanes", clean });
+
+export function getLanes(user: string): Lanes {
+	return store.get(user);
+}
+
 /** Replace a user's lanes (validated). Returns the stored map. */
 export function setLanes(user: string, lanes: unknown): Lanes {
-	const cleaned = clean(lanes);
-	try {
-		if (!existsSync(LANES_DIR)) mkdirSync(LANES_DIR, { recursive: true });
-		writeJsonAtomic(fileFor(user), { lanes: cleaned });
-	} catch {}
-	return cleaned;
+	return store.set(user, lanes);
 }

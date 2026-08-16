@@ -1,17 +1,15 @@
 /**
  * Per-user session tab colors. Like pins.ts, each user (the self-selected
  * `backstage-user` name from the UserPicker — not an auth identity) gets one
- * JSON file `~/.opensession-tab-colors/<user>.json` of shape
+ * JSON file under `~/.opensession-tab-colors/` of shape
  * `{ colors: { [sessionId]: colorKey } }`, where `colorKey` is one of the
  * named swatches in the frontend palette (see lib/tab-colors.ts). Colors are
- * a per-user view preference, so they live next to pins and sync across devices.
+ * a per-user view preference, so they live next to pins and sync across
+ * devices; filename, directory resolution and legacy-name fallback come from
+ * shared/user-store.ts.
  */
 
-import { existsSync, mkdirSync, readFileSync } from "fs";
-import { writeJsonAtomic } from "./shared/atomic-write";
-import { stateDir } from "./paths";
-
-const COLORS_DIR = stateDir("tab-colors");
+import { userStore } from "./shared/user-store";
 
 /** Allowed swatch keys — keep in sync with TAB_COLORS in lib/tab-colors.ts. */
 const ALLOWED = new Set([
@@ -24,31 +22,7 @@ const ALLOWED = new Set([
 	"pink",
 ]);
 
-/** Map a free-form user name to a safe filename; empty/odd input → Anonymous. */
-function sanitizeUser(user: string): string {
-	const cleaned = (user || "")
-		.trim()
-		.replace(/[^A-Za-z0-9_-]/g, "_")
-		.slice(0, 64);
-	return cleaned || "Anonymous";
-}
-
-function fileFor(user: string): string {
-	return `${COLORS_DIR}/${sanitizeUser(user)}.json`;
-}
-
 export type TabColors = Record<string, string>;
-
-export function getTabColors(user: string): TabColors {
-	try {
-		const f = fileFor(user);
-		if (!existsSync(f)) return {};
-		const raw = JSON.parse(readFileSync(f, "utf8"));
-		return clean(raw?.colors);
-	} catch {
-		return {};
-	}
-}
 
 /** Keep only string-id → allowed-color entries. */
 function clean(input: unknown): TabColors {
@@ -69,12 +43,17 @@ function clean(input: unknown): TabColors {
 	return out;
 }
 
+const store = userStore<TabColors>({
+	name: "tab-colors",
+	field: "colors",
+	clean,
+});
+
+export function getTabColors(user: string): TabColors {
+	return store.get(user);
+}
+
 /** Replace a user's tab colors (validated). Returns the stored map. */
 export function setTabColors(user: string, colors: unknown): TabColors {
-	const cleaned = clean(colors);
-	try {
-		if (!existsSync(COLORS_DIR)) mkdirSync(COLORS_DIR, { recursive: true });
-		writeJsonAtomic(fileFor(user), { colors: cleaned });
-	} catch {}
-	return cleaned;
+	return store.set(user, colors);
 }

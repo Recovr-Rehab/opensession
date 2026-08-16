@@ -5,19 +5,18 @@
  * memoryNoteFor in session-repos.ts). Automation runs never receive it: they
  * pass no user, same containment as memory.
  *
- * Storage mirrors the pins.ts flat-file pattern (one JSON file per user under
- * ~/.opensession-personal-prompts), but keyed through the SAME identity
- * resolution as user memory (session-memory.ts userScope): a teammate's
- * an alias / email / Slack id / web login all land on one
- * `user-<slackId>` file, so the prompt follows the person across surfaces.
+ * Storage is the shared per-user flat-file store (shared/user-store.ts), one
+ * JSON file per person under ~/.opensession-personal-prompts. Unlike its
+ * siblings the identity is not the display name: it is resolved through the
+ * SAME identity table as user memory (session-memory.ts userScope), so a
+ * teammate's alias / email / Slack id / web login all land on one
+ * `user-<slackId>` key and the prompt follows the person across surfaces.
+ * Files written under the older `user-<slackId>.json` spelling are still read
+ * (the store's legacy fallback) until the next write moves them.
  */
 
-import { existsSync, mkdirSync, readFileSync } from "fs";
-import { writeJsonAtomic } from "./shared/atomic-write";
-import { stateDir } from "./paths";
+import { userStore } from "./shared/user-store";
 import { resolveTeammate } from "./shared/user-mappings";
-
-const DIR = stateDir("personal-prompts");
 
 /** Keep the injected block bounded — this rides in every run's system note. */
 const MAX_PROMPT_LEN = 8000;
@@ -32,14 +31,18 @@ function keyFor(user: string | undefined | null): string | null {
 	return key ? `user-${key}` : null;
 }
 
+const store = userStore<string>({
+	name: "personal-prompts",
+	field: "prompt",
+	clean: (raw) =>
+		typeof raw === "string" ? raw.trim().slice(0, MAX_PROMPT_LEN) : "",
+	identity: keyFor,
+	extra: () => ({ updatedAt: new Date().toISOString() }),
+});
+
 export function getPersonalPrompt(user: string | undefined | null): string {
 	try {
-		const key = keyFor(user);
-		if (!key) return "";
-		const f = `${DIR}/${key}.json`;
-		if (!existsSync(f)) return "";
-		const raw = JSON.parse(readFileSync(f, "utf8"));
-		return typeof raw?.prompt === "string" ? raw.prompt : "";
+		return store.get(user ?? "");
 	} catch {
 		return "";
 	}
@@ -50,19 +53,7 @@ export function setPersonalPrompt(
 	user: string | undefined | null,
 	prompt: unknown,
 ): string {
-	const key = keyFor(user);
-	if (!key) return "";
-	const clean = String(prompt ?? "")
-		.trim()
-		.slice(0, MAX_PROMPT_LEN);
-	try {
-		if (!existsSync(DIR)) mkdirSync(DIR, { recursive: true });
-		writeJsonAtomic(`${DIR}/${key}.json`, {
-			prompt: clean,
-			updatedAt: new Date().toISOString(),
-		});
-	} catch {}
-	return clean;
+	return store.set(user ?? "", String(prompt ?? ""));
 }
 
 /**
