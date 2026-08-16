@@ -36,28 +36,46 @@ export interface Participant {
   email: string | null;
 }
 
-export interface ActiveSession {
+const PHASES = ["awaiting_direction", "planning", "awaiting_implementation", "working"] as const;
+
+/**
+ * Where a session is in its lifecycle. One value at a time, so a combination
+ * the previous three booleans could express but no code path meant, such as
+ * "awaiting direction while planning", is now unrepresentable.
+ */
+export type SessionPhase = (typeof PHASES)[number];
+
+/**
+ * The fields kept in `<branch>.json`. Saves take a Partial of this and
+ * startup hydration spreads the whole record into the live session, so every
+ * field the save writes is read back by construction.
+ */
+export interface StoredSession {
   branch: string;
   claudeSessionId: string | null;
-  accessToken: string;
-  issueTitle: string;
   issueIdentifier: string;
-  issueId: string;
-  issueDescription: string;
-  issueUrl: string;
-  teamId: string;
+  issueTitle: string;
   worktreeDir: string;
+  /** "" when the file predates the Linear agent-session id being recorded. */
   linearSessionId: string;
-  abortController?: AbortController;
-  isPlanning: boolean;
-  planningConversation: Array<{ role: "michael" | "user"; content: string; timestamp: string }>;
-  awaitingImplementationConfirmation: boolean;
-  awaitingInitialDirection: boolean;
+  phase: SessionPhase;
+  issueId: string;
+  issueUrl: string;
   participants: Participant[];
   lastActiveUser: Participant | null;
   issueCreator: Participant | null;
   /** Model id for this session's runs (from the session file); unset = default. */
   model?: string;
+  updatedAt?: string;
+}
+
+/** A stored session plus the parts that only exist while the process runs. */
+export interface ActiveSession extends StoredSession {
+  accessToken: string;
+  issueDescription: string;
+  teamId: string;
+  abortController?: AbortController;
+  planningConversation: Array<{ role: "michael" | "user"; content: string; timestamp: string }>;
 }
 
 /** In-memory active sessions: linearSessionId -> ActiveSession */
@@ -141,80 +159,87 @@ export async function createWorktree(
 
 // --- Session persistence ---
 
-export async function saveSessionInfo(
-  branch: string,
-  claudeSessionId: string | null,
-  issueIdentifier: string,
-  issueTitle: string,
-  worktreeDir: string,
-  linearSessionId?: string,
-  awaitingImplementationConfirmation?: boolean,
-  issueId?: string,
-  issueUrl?: string,
-  participants?: Participant[],
-  lastActiveUser?: Participant | null,
-  awaitingInitialDirection?: boolean,
-  issueCreator?: Participant | null,
-  model?: string
-): Promise<void> {
-  const sessionFile = `${SESSION_DIR}/${branch}.json`;
-
-  let existing: Record<string, unknown> = {};
-  try {
-    const existingFile = Bun.file(sessionFile);
-    if (await existingFile.exists()) {
-      existing = JSON.parse(await existingFile.text());
-    }
-  } catch {
-    // start fresh
-  }
-
-  const data = {
+/** A blank record, so a partial save always has every field to merge onto. */
+function emptyStored(branch: string): StoredSession {
+  return {
     branch,
-    claudeSessionId,
-    issueIdentifier,
-    issueTitle,
-    worktreeDir,
-    linearSessionId,
-    awaitingImplementationConfirmation:
-      awaitingImplementationConfirmation !== undefined
-        ? awaitingImplementationConfirmation
-        : (existing.awaitingImplementationConfirmation || false),
-    awaitingInitialDirection:
-      awaitingInitialDirection !== undefined
-        ? awaitingInitialDirection
-        : (existing.awaitingInitialDirection || false),
-    issueId: issueId || existing.issueId || "",
-    issueUrl: issueUrl || existing.issueUrl || "",
-    participants: participants !== undefined ? participants : (existing.participants || []),
-    lastActiveUser: lastActiveUser !== undefined ? lastActiveUser : (existing.lastActiveUser || null),
-    issueCreator: issueCreator !== undefined ? issueCreator : (existing.issueCreator || null),
-    model: model !== undefined ? model : (existing.model || undefined),
-    updatedAt: new Date().toISOString(),
+    claudeSessionId: null,
+    issueIdentifier: "",
+    issueTitle: "",
+    worktreeDir: "",
+    linearSessionId: "",
+    phase: "working",
+    issueId: "",
+    issueUrl: "",
+    participants: [],
+    lastActiveUser: null,
+    issueCreator: null,
   };
-  writeJsonAtomic(sessionFile, data);
 }
 
-export async function loadSessionInfo(branch: string): Promise<{
-  claudeSessionId: string | null;
-  issueIdentifier: string;
-  issueTitle?: string;
-  worktreeDir: string;
-  linearSessionId?: string;
-  awaitingImplementationConfirmation?: boolean;
-  awaitingInitialDirection?: boolean;
-  issueId?: string;
-  issueUrl?: string;
-  participants?: Participant[];
-  lastActiveUser?: Participant | null;
-  issueCreator?: Participant | null;
-  model?: string;
-  updatedAt?: string;
-} | null> {
+/**
+ * Read one session file, migrating files written before `phase` replaced the
+ * three booleans. `awaitingInitialDirection` was only ever written as true and
+ * never cleared, so on those files it means "awaiting direction" only while
+ * there is no engine session id: once a turn has run, direction was given.
+ */
+function storedFromFile(branch: string, raw: Record<string, any>): StoredSession {
+  const claudeSessionId = raw.claudeSessionId ?? null;
+  const phase: SessionPhase = (PHASES as readonly string[]).includes(raw.phase)
+    ? raw.phase
+    : raw.awaitingInitialDirection && !claudeSessionId
+      ? "awaiting_direction"
+      : raw.awaitingImplementationConfirmation
+        ? "awaiting_implementation"
+        : "working";
+
+  return {
+    branch,
+    claudeSessionId,
+    issueIdentifier: raw.issueIdentifier ?? "",
+    issueTitle: raw.issueTitle ?? "",
+    worktreeDir: raw.worktreeDir ?? "",
+    linearSessionId: raw.linearSessionId ?? "",
+    phase,
+    issueId: raw.issueId ?? "",
+    issueUrl: raw.issueUrl ?? "",
+    participants: raw.participants ?? [],
+    lastActiveUser: raw.lastActiveUser ?? null,
+    issueCreator: raw.issueCreator ?? null,
+    model: raw.model ?? undefined,
+    updatedAt: raw.updatedAt,
+  };
+}
+
+/**
+ * Merge a patch over the stored session: named fields move, everything else
+ * keeps what is on disk. A key left out (or explicitly undefined) is a
+ * deliberate "keep the stored value", not a miscounted argument slot.
+ */
+export async function saveSessionInfo(
+  branch: string,
+  patch: Partial<StoredSession>
+): Promise<void> {
+  const defined = Object.fromEntries(
+    Object.entries(patch).filter(([, v]) => v !== undefined)
+  ) as Partial<StoredSession>;
+
+  const existing = await loadSessionInfo(branch);
+  const data: StoredSession = {
+    ...emptyStored(branch),
+    ...(existing || {}),
+    ...defined,
+    branch,
+    updatedAt: new Date().toISOString(),
+  };
+  writeJsonAtomic(`${SESSION_DIR}/${branch}.json`, data);
+}
+
+export async function loadSessionInfo(branch: string): Promise<StoredSession | null> {
   try {
     const file = Bun.file(`${SESSION_DIR}/${branch}.json`);
     if (await file.exists()) {
-      return JSON.parse(await file.text());
+      return storedFromFile(branch, JSON.parse(await file.text()));
     }
     return null;
   } catch {
@@ -539,46 +564,36 @@ export async function loadActiveSessionsOnStartup(tokens: LinearTokens): Promise
     for (const file of files) {
       try {
         const branch = file.replace(".json", "");
-        const sessionData = await loadSessionInfo(branch);
+        const stored = await loadSessionInfo(branch);
 
         if (
-          sessionData &&
-          sessionData.linearSessionId &&
-          (sessionData.claudeSessionId || sessionData.awaitingInitialDirection)
+          stored &&
+          stored.linearSessionId &&
+          (stored.claudeSessionId || stored.phase === "awaiting_direction")
         ) {
           // Don't resurrect long-idle sessions — a week without a run means the
           // ticket moved on without us; the file stays on disk for manual resume.
-          const updatedAt = Date.parse(sessionData.updatedAt || "");
+          const updatedAt = Date.parse(stored.updatedAt || "");
           if (!updatedAt || Date.now() - updatedAt > STALE_SESSION_MS) {
             skippedStale++;
             continue;
           }
 
+          // Spreading the stored record hydrates every persisted field,
+          // including any added later; only the run-time-only parts are
+          // supplied here.
           const session: ActiveSession = {
-            branch,
-            claudeSessionId: sessionData.claudeSessionId,
+            ...stored,
             accessToken,
-            issueTitle: sessionData.issueTitle || "",
-            issueIdentifier: sessionData.issueIdentifier,
-            issueId: sessionData.issueId || "",
             issueDescription: "",
-            issueUrl: sessionData.issueUrl || "",
             teamId: "",
-            worktreeDir: sessionData.worktreeDir,
-            linearSessionId: sessionData.linearSessionId,
-            isPlanning: false,
             planningConversation: [],
-            awaitingImplementationConfirmation: sessionData.awaitingImplementationConfirmation || false,
-            awaitingInitialDirection: sessionData.awaitingInitialDirection || false,
-            participants: sessionData.participants || [],
-            lastActiveUser: sessionData.lastActiveUser || null,
-            issueCreator: sessionData.issueCreator || null,
           };
 
-          activeSessions.set(sessionData.linearSessionId, session);
+          activeSessions.set(stored.linearSessionId, session);
 
           console.log(
-            `[linear] Restored session: ${branch} (Claude: ${sessionData.claudeSessionId}, Linear: ${sessionData.linearSessionId})`
+            `[linear] Restored session: ${branch} (Claude: ${stored.claudeSessionId}, Linear: ${stored.linearSessionId})`
           );
         }
       } catch (e) {

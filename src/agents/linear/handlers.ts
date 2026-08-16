@@ -131,8 +131,8 @@ export async function handleIssueUpdate(webhook: IssueWebhook, tokens: LinearTok
     const diskSession = await loadSessionInfo(branch);
     if (diskSession?.claudeSessionId) {
       existingSession = {
+        ...diskSession,
         branch,
-        claudeSessionId: diskSession.claudeSessionId,
         accessToken,
         issueTitle: details.title,
         issueIdentifier: issue.identifier,
@@ -140,16 +140,11 @@ export async function handleIssueUpdate(webhook: IssueWebhook, tokens: LinearTok
         issueDescription: details.description,
         issueUrl: details.url,
         teamId: details.teamId,
-        worktreeDir: diskSession.worktreeDir,
-        linearSessionId: diskSession.linearSessionId || "",
-        isPlanning: false,
         planningConversation: [],
-        awaitingImplementationConfirmation: diskSession.awaitingImplementationConfirmation || false,
-        awaitingInitialDirection: false,
-        participants: diskSession.participants || [],
-        lastActiveUser: diskSession.lastActiveUser || null,
+        // The ticket is in progress, so direction was given long ago; only a
+        // pending implementation confirmation survives the hydrate.
+        phase: diskSession.phase === "awaiting_implementation" ? "awaiting_implementation" : "working",
         issueCreator: diskSession.issueCreator || details.creator || null,
-        model: diskSession.model,
       };
       if (diskSession.linearSessionId) {
         activeSessions.set(diskSession.linearSessionId, existingSession);
@@ -169,8 +164,7 @@ export async function handleIssueUpdate(webhook: IssueWebhook, tokens: LinearTok
   console.log(`[linear] Auto-implementing ${issue.identifier} - has plan and moved to In Progress`);
 
   if (existingSession.claudeSessionId) {
-    existingSession.awaitingImplementationConfirmation = false;
-    existingSession.isPlanning = false;
+    existingSession.phase = "working";
 
     const { participantsSection, coAuthorInstruction } = buildParticipantSections(
       existingSession.participants || [],
@@ -204,19 +198,20 @@ export async function handleIssueUpdate(webhook: IssueWebhook, tokens: LinearTok
 
         existingSession!.claudeSessionId = claudeSessionId;
 
-        await saveSessionInfo(
-          existingSession!.branch,
+        await saveSessionInfo(existingSession!.branch, {
           claudeSessionId,
-          issue.identifier,
-          details.title,
-          existingSession!.worktreeDir,
-          existingSession!.linearSessionId,
-          undefined,
-          existingSession!.issueId,
-          existingSession!.issueUrl,
-          existingSession!.participants,
-          existingSession!.lastActiveUser
-        );
+          issueIdentifier: issue.identifier,
+          issueTitle: details.title,
+          worktreeDir: existingSession!.worktreeDir,
+          linearSessionId: existingSession!.linearSessionId,
+          phase: existingSession!.phase,
+          issueId: existingSession!.issueId,
+          issueUrl: existingSession!.issueUrl,
+          participants: existingSession!.participants,
+          lastActiveUser: existingSession!.lastActiveUser,
+          issueCreator: existingSession!.issueCreator,
+          model: existingSession!.model,
+        });
 
         if (result?.includes("IMPLEMENTATION_COMPLETE") && existingSession!.linearSessionId) {
           const creatorGithub = linearEmailToGithubUsername(existingSession!.issueCreator?.email || null);
@@ -288,25 +283,16 @@ export async function handleAgentSession(
           }
         }).catch(() => {});
         session = {
+          ...diskSession,
           branch,
-          claudeSessionId: diskSession.claudeSessionId,
           accessToken: "",
           issueTitle: agentSession.issue.title,
-          issueIdentifier: diskSession.issueIdentifier,
           issueId: agentSession.issue.id,
           issueDescription: agentSession.issue.description || "",
           issueUrl: agentSession.issue.url,
           teamId: "",
-          worktreeDir: diskSession.worktreeDir,
           linearSessionId: agentSession.id,
-          isPlanning: false,
           planningConversation: [],
-          awaitingImplementationConfirmation: diskSession.awaitingImplementationConfirmation || false,
-          awaitingInitialDirection: diskSession.awaitingInitialDirection || false,
-          participants: diskSession.participants || [],
-          lastActiveUser: diskSession.lastActiveUser || null,
-          issueCreator: diskSession.issueCreator || null,
-          model: diskSession.model,
         };
         activeSessions.set(agentSession.id, session);
       }
@@ -342,12 +328,11 @@ export async function handleAgentSession(
         let effectivePrompt = prompt;
 
         // Initial direction routing
-        if (session.awaitingInitialDirection) {
-          session.awaitingInitialDirection = false;
+        if (session.phase === "awaiting_direction") {
           const lowerPrompt = prompt.toLowerCase().trim();
 
           if (lowerPrompt.includes("plan")) {
-            session.isPlanning = true;
+            session.phase = "planning";
             effectivePrompt = PLANNING_PROMPT
               .replaceAll("$ISSUE_ID", session.issueIdentifier)
               .replaceAll("$ISSUE_URL", session.issueUrl)
@@ -359,7 +344,7 @@ export async function handleAgentSession(
               body: "Starting planning interview...",
             });
           } else if (lowerPrompt.includes("implement")) {
-            session.isPlanning = false;
+            session.phase = "working";
             await moveToStatus(accessToken, session.issueId, session.teamId, "In Progress");
 
             const { participantsSection, coAuthorInstruction } = buildParticipantSections(
@@ -379,7 +364,7 @@ export async function handleAgentSession(
               body: MESSAGES.implementationStarted,
             });
           } else {
-            session.isPlanning = false;
+            session.phase = "working";
             effectivePrompt = `You are ${personaName()}, working on Linear ticket ${session.issueIdentifier} (${session.issueUrl}).
 
 **Title:** ${session.issueTitle}
@@ -392,8 +377,8 @@ Help with whatever they're asking. You have a worktree ready at ${session.worktr
         }
 
         // Implementation confirmation
-        else if (session.awaitingImplementationConfirmation) {
-          session.awaitingImplementationConfirmation = false;
+        else if (session.phase === "awaiting_implementation") {
+          session.phase = "working";
           const { participantsSection, coAuthorInstruction } = buildParticipantSections(
             session.participants || [],
             session.lastActiveUser || null
@@ -414,7 +399,7 @@ Help with whatever they're asking. You have a worktree ready at ${session.worktr
         }
 
         // Planning continuation
-        if (session.isPlanning && session.planningConversation.length > 0) {
+        if (session.phase === "planning" && session.planningConversation.length > 0) {
           session.planningConversation.push({
             role: "user",
             content: prompt,
@@ -455,48 +440,46 @@ Help with whatever they're asking. You have a worktree ready at ${session.worktr
 
             s.claudeSessionId = claudeSessionId;
 
-            await saveSessionInfo(
-              s.branch,
+            await saveSessionInfo(s.branch, {
               claudeSessionId,
-              s.issueIdentifier,
-              s.issueTitle,
-              s.worktreeDir,
-              s.linearSessionId,
-              undefined,
-              s.issueId,
-              s.issueUrl,
-              s.participants,
-              s.lastActiveUser,
-              undefined,
-              undefined,
-              s.model
-            );
+              issueIdentifier: s.issueIdentifier,
+              issueTitle: s.issueTitle,
+              worktreeDir: s.worktreeDir,
+              linearSessionId: s.linearSessionId,
+              phase: s.phase,
+              issueId: s.issueId,
+              issueUrl: s.issueUrl,
+              participants: s.participants,
+              lastActiveUser: s.lastActiveUser,
+              issueCreator: s.issueCreator,
+              model: s.model,
+            });
 
             if (result) {
-              if (result.includes("PLANNING_COMPLETE") && s.isPlanning) {
+              if (result.includes("PLANNING_COMPLETE") && s.phase === "planning") {
                 const planMatch = result.split("PLANNING_COMPLETE")[0].trim();
                 if (planMatch) {
                   await postComment(accessToken, s.issueId, `# Implementation Plan\n\n${planMatch}`);
                 }
 
                 await moveToStatus(accessToken, s.issueId, s.teamId, "Ready");
-                s.isPlanning = false;
                 s.planningConversation = [];
-                s.awaitingImplementationConfirmation = true;
+                s.phase = "awaiting_implementation";
 
-                await saveSessionInfo(
-                  s.branch,
-                  s.claudeSessionId,
-                  s.issueIdentifier,
-                  s.issueTitle,
-                  s.worktreeDir,
-                  s.linearSessionId,
-                  true,
-                  s.issueId,
-                  s.issueUrl,
-                  s.participants,
-                  s.lastActiveUser
-                );
+                await saveSessionInfo(s.branch, {
+                  claudeSessionId: s.claudeSessionId,
+                  issueIdentifier: s.issueIdentifier,
+                  issueTitle: s.issueTitle,
+                  worktreeDir: s.worktreeDir,
+                  linearSessionId: s.linearSessionId,
+                  phase: s.phase,
+                  issueId: s.issueId,
+                  issueUrl: s.issueUrl,
+                  participants: s.participants,
+                  lastActiveUser: s.lastActiveUser,
+                  issueCreator: s.issueCreator,
+                  model: s.model,
+                });
 
                 await createAgentActivity(accessToken, agentSession.id, {
                   type: "elicitation",
@@ -520,7 +503,7 @@ Help with whatever they're asking. You have a worktree ready at ${session.worktr
                     : "Implementation complete! PR creation may have failed - please check manually.",
                 });
               } else {
-                if (s.isPlanning) {
+                if (s.phase === "planning") {
                   s.planningConversation.push({
                     role: "michael",
                     content: result,
@@ -529,7 +512,7 @@ Help with whatever they're asking. You have a worktree ready at ${session.worktr
                 }
                 // Planning-interview turns are questions by design → elicitation
                 // (Linear prompts the user to answer); runner failures → error.
-                const type = s.isPlanning
+                const type = s.phase === "planning"
                   ? "elicitation"
                   : result.startsWith("Error:")
                     ? "error"
@@ -614,10 +597,8 @@ Help with whatever they're asking. You have a worktree ready at ${session.worktr
     teamId,
     worktreeDir,
     linearSessionId: agentSession.id,
-    isPlanning: false,
+    phase: "awaiting_direction",
     planningConversation: [],
-    awaitingImplementationConfirmation: false,
-    awaitingInitialDirection: true,
     participants: [],
     lastActiveUser: null,
     issueCreator: issueDetails.creator,
@@ -628,21 +609,20 @@ Help with whatever they're asking. You have a worktree ready at ${session.worktr
     try {
       await createWorktree(branch, issue.identifier, issue.title, issue.description || "", issue.url);
 
-      await saveSessionInfo(
-        branch,
-        null,
-        issue.identifier,
-        issue.title,
+      await saveSessionInfo(branch, {
+        claudeSessionId: null,
+        issueIdentifier: issue.identifier,
+        issueTitle: issue.title,
         worktreeDir,
-        agentSession.id,
-        undefined,
-        issue.id,
-        issue.url,
-        session.participants,
-        session.lastActiveUser,
-        true,
-        session.issueCreator
-      );
+        linearSessionId: agentSession.id,
+        phase: session.phase,
+        issueId: issue.id,
+        issueUrl: issue.url,
+        participants: session.participants,
+        lastActiveUser: session.lastActiveUser,
+        issueCreator: session.issueCreator,
+        model: session.model,
+      });
 
       // Link the Linear session to the web UI session viewer
       updateAgentSession(accessToken, agentSession.id, {

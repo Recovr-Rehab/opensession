@@ -77,7 +77,7 @@ export class LinearAgent implements AgentModule {
       sessions: Array.from(activeSessions.values()).map((s) => ({
         branch: s.branch,
         issue: s.issueIdentifier,
-        isPlanning: s.isPlanning,
+        isPlanning: s.phase === "planning",
       })),
     };
   }
