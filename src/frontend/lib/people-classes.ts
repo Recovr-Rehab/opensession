@@ -28,7 +28,7 @@ export const PEOPLE_CHIP_SELECTED =
 
 /** The glyph slot in a chip that has no face of its own (Everyone). */
 export const PEOPLE_CHIP_GLYPH =
-	"flex size-[26px] shrink-0 items-center justify-center rounded-full bg-hover text-dim";
+	"flex size-[26px] shrink-0 items-center justify-center rounded-[32%] bg-hover text-dim";
 
 /** The same slot on the accent plate: the wash is ink, which disappears into a
  *  dark fill, so it inverts with the chip. */
