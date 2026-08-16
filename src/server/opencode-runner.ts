@@ -964,6 +964,9 @@ export interface OpencodeServerEntry {
   /** Busy turns observed during boot adoption but not yet claimed by journal
    *  reattachment. Protects the survivor during the restart recovery gap. */
   recoveringSessionIds?: Set<string>;
+  /** Reservations backed by a successful non-idle status probe. Conservative
+   *  reservations stay only in recoveringSessionIds. */
+  confirmedRecoverySessionIds?: Set<string>;
   /** When those reservations were taken — the ceiling on how long one may be
    *  held by a recovery probe that can never go false. */
   recoveryReservedAt?: number;
@@ -1822,49 +1825,70 @@ function syncDetachedRecord(entry: OpencodeServerEntry): void {
   });
 }
 
-/** How many journaled runs are still EXECUTING on this detached server, per
- *  the server's own in-memory `/session/status`. Status is scoped to the
- *  per-directory instance — an unscoped call returns `{}` even mid-turn
- *  (verified live 2026-07-29) — so probe with each journaled run's cwd and
- *  check that run's engine session specifically. Unreachable server → 0
- *  (the caller stops it, same as an unhealthy adoptee). */
-async function detachedRecordBusySessionIds(rec: DetachedServerRecord): Promise<string[]> {
-  const runs = activeRunRecords().filter(
-    (r) => r.serverKey === rec.key && r.claudeSessionId && r.cwd
-  );
-  if (!runs.length) return [];
+export interface DetachedRecordProbe {
+  healthy: boolean;
+  busySessionIds: string[];
+  /** Journaled sessions whose status request did not answer. Adoption policy
+   *  must not read these as confirmed idle. */
+  uncertainSessionIds: string[];
+}
+
+type DetachedTurnStatusProbe = (
+  rec: DetachedServerRecord,
+  run: ActiveRunRecord,
+) => Promise<"busy" | "idle">;
+
+const probeDetachedTurnStatus: DetachedTurnStatusProbe = async (rec, run) => {
   const client = clientFor({ url: rec.url, password: rec.password } as OpencodeServerEntry);
+  const st = await client.session.status({
+    query: { directory: run.cwd },
+    signal: AbortSignal.timeout(3_000),
+  });
+  if (st.error) throw new Error(JSON.stringify(st.error));
+  const statuses = st.data as Record<string, { type?: string }> | undefined;
+  const mine = statuses?.[run.claudeSessionId!];
+  return mine && mine.type !== "idle" ? "busy" : "idle";
+};
+
+/** Classify journaled turns pinned to one detached record. The injectable
+ *  probe is an adoption-policy test seam; production uses the authenticated
+ *  directory-scoped status endpoint above. */
+export async function __probeDetachedRecordForTest(
+  rec: DetachedServerRecord,
+  runs: ActiveRunRecord[],
+  probe: DetachedTurnStatusProbe = probeDetachedTurnStatus,
+): Promise<Omit<DetachedRecordProbe, "healthy">> {
   const busy: string[] = [];
-  for (const run of runs) {
+  const uncertain: string[] = [];
+  for (const run of runs.filter(
+    (r) => r.serverKey === rec.key && r.claudeSessionId && r.cwd,
+  )) {
     try {
-      const st = await client.session.status({
-        query: { directory: run.cwd },
-        signal: AbortSignal.timeout(3_000),
-      });
-      const statuses = st.data as Record<string, { type?: string }> | undefined;
-      const mine = statuses?.[run.claudeSessionId!];
-      if (mine && mine.type !== "idle") busy.push(run.claudeSessionId!);
+      if ((await probe(rec, run)) === "busy") busy.push(run.claudeSessionId!);
     } catch {
-      // Probe failure = no evidence of a live turn on this instance.
+      // A timeout is not an idle answer. Preserve the journal's ownership so
+      // boot adoption can hand the decision to the longer reattach probe.
+      uncertain.push(run.claudeSessionId!);
     }
   }
-  return busy;
+  return { busySessionIds: busy, uncertainSessionIds: uncertain };
 }
 
 async function probeDetachedRecords(
   records: DetachedServerRecord[],
-): Promise<Map<string, { healthy: boolean; busySessionIds: string[] }>> {
+): Promise<Map<string, DetachedRecordProbe>> {
   const queue = [...records];
-  const results = new Map<string, { healthy: boolean; busySessionIds: string[] }>();
+  const results = new Map<string, DetachedRecordProbe>();
+  const runs = activeRunRecords();
   const workers = Array.from({ length: Math.min(8, queue.length) }, async () => {
     for (;;) {
       const record = queue.shift();
       if (!record) return;
-      const [healthy, busySessionIds] = await Promise.all([
+      const [healthy, turnProbe] = await Promise.all([
         opencodeServerHealthy(record.url, record.password),
-        detachedRecordBusySessionIds(record),
+        __probeDetachedRecordForTest(record, runs),
       ]);
-      results.set(record.unit, { healthy, busySessionIds });
+      results.set(record.unit, { healthy, ...turnProbe });
     }
   });
   await Promise.all(workers);
@@ -1944,13 +1968,35 @@ export function __reserveDetachedRecoveryForTest(
     drainingServers.delete(entry);
     if (servers.get(entry.key) === entry) servers.delete(entry.key);
     entry.recoveringSessionIds = undefined;
+    entry.confirmedRecoverySessionIds = undefined;
     entry.recoveryReservedAt = undefined;
   };
 }
 
-function reserveDetachedRecovery(entry: OpencodeServerEntry, busySessionIds: string[]): void {
-  if (!busySessionIds.length) return;
-  entry.recoveringSessionIds = new Set(busySessionIds);
+/** Claim one boot-adoption reservation without reaping the server under the
+ *  reattach that is about to increment activeRuns. Teardown performs the
+ *  draining reap after finalization. */
+function claimDetachedRecovery(entry: OpencodeServerEntry, ocSessionId: string): void {
+  if (!entry.recoveringSessionIds?.delete(ocSessionId)) return;
+  entry.confirmedRecoverySessionIds?.delete(ocSessionId);
+  if (!entry.recoveringSessionIds.size) entry.recoveryReservedAt = undefined;
+}
+
+export function __claimDetachedRecoveryForTest(
+  entry: OpencodeServerEntry,
+  ocSessionId: string,
+): void {
+  claimDetachedRecovery(entry, ocSessionId);
+}
+
+function reserveDetachedRecovery(
+  entry: OpencodeServerEntry,
+  recoverySessionIds: string[],
+  confirmedSessionIds: string[] = recoverySessionIds,
+): void {
+  if (!recoverySessionIds.length) return;
+  entry.recoveringSessionIds = new Set(recoverySessionIds);
+  entry.confirmedRecoverySessionIds = new Set(confirmedSessionIds);
   entry.recoveryReservedAt = Date.now();
 }
 
@@ -1972,6 +2018,7 @@ function releaseRecoveryReservation(serverKey: string | undefined, ocSessionId: 
   if (!serverKey) return;
   for (const entry of detachedTurnCandidates(serverKey)) {
     if (!entry.recoveringSessionIds?.delete(ocSessionId)) continue;
+    entry.confirmedRecoverySessionIds?.delete(ocSessionId);
     if (!entry.recoveringSessionIds.size) {
       entry.recoveryReservedAt = undefined;
       reapDrainedServer(entry);
@@ -2002,6 +2049,7 @@ function expireDetachedRecoveryReservations(): void {
     for (const ocSessionId of reserved) {
       if (!expired && recoveryStillClaimable(ocSessionId)) continue;
       reserved.delete(ocSessionId);
+      entry.confirmedRecoverySessionIds?.delete(ocSessionId);
       released++;
     }
     if (released) {
@@ -2099,6 +2147,9 @@ export function restoreJournaledRunRpcContext(run: ActiveRunRecord): boolean {
   // engine session busy — prefer it when it differs from the pool entry.
   const ocSessionId = run.claudeSessionId;
   const hosting =
+    candidates.find(
+      (e) => e.shared && e.confirmedRecoverySessionIds?.has(ocSessionId || ""),
+    ) ??
     candidates.find((e) => e.shared && e.recoveringSessionIds?.has(ocSessionId || "")) ??
     candidates.find((e) => e.shared);
   if (ocSessionId && hosting?.rpcToken) {
@@ -2137,7 +2188,10 @@ export function releaseJournaledRunRpcContext(run: ActiveRunRecord): void {
  * 2026-08-16. Best effort by nature: an instance we cannot reach cannot be
  * told anything.
  */
-export async function abortDetachedOpencodeTurn(run: ActiveRunRecord): Promise<boolean> {
+export async function abortDetachedOpencodeTurn(
+  run: ActiveRunRecord,
+  signal?: AbortSignal,
+): Promise<boolean> {
   const ocSessionId = run.claudeSessionId;
   if (!ocSessionId || !run.serverKey) return false;
   // An engine session id outlives the turn that created it: the session's
@@ -2146,21 +2200,39 @@ export async function abortDetachedOpencodeTurn(run: ActiveRunRecord): Promise<b
   // re-prompted and this would kill their new turn. That owner has its own
   // cancellation path (cancelOpencodeRun).
   if (activeOpencodeRuns.has(ocSessionId)) return false;
-  let aborted = false;
-  for (const entry of detachedTurnCandidates(run.serverKey)) {
+  const attempts = detachedTurnCandidates(run.serverKey).map(async (entry) => {
     const q = entry.shared ? { query: { directory: run.cwd } } : {};
-    try {
-      const client = clientFor(entry);
-      const sess = await client.session.get({
-        path: { id: ocSessionId },
-        ...q,
-        signal: AbortSignal.timeout(5_000),
-      });
-      if (!sess.data) continue;
-      await client.session.abort({ path: { id: ocSessionId }, ...q });
-      aborted = true;
-    } catch {}
-  }
+    const candidateSignal = signal
+      ? AbortSignal.any([signal, AbortSignal.timeout(5_000)])
+      : AbortSignal.timeout(5_000);
+    while (!candidateSignal.aborted) {
+      try {
+        const client = clientFor(entry);
+        const sess = await client.session.get({
+          path: { id: ocSessionId },
+          ...q,
+          signal: candidateSignal,
+        });
+        if (sess.error) throw new Error(JSON.stringify(sess.error));
+        if (!sess.data) return false;
+        // Ownership can change while the lookup is in flight. Recovery remains
+        // gated on this operation, so this final check closes that window.
+        if (candidateSignal.aborted || activeOpencodeRuns.has(ocSessionId)) return false;
+        const result = await client.session.abort({
+          path: { id: ocSessionId },
+          ...q,
+          signal: candidateSignal,
+        });
+        if (result.error) throw new Error(JSON.stringify(result.error));
+        return true;
+      } catch {
+        if (candidateSignal.aborted) return false;
+        await Bun.sleep(100);
+      }
+    }
+    return false;
+  });
+  const aborted = (await Promise.all(attempts)).some(Boolean);
   // Abandoned either way: an instance we could not reach cannot be told
   // anything, and no recovery is coming back for this turn. Hand the
   // survivor's reservation back now rather than making the sweep infer it.
@@ -2212,16 +2284,45 @@ export function adoptDetachedOpencodeServers(): Promise<number> {
 async function adoptDetachedOpencodeServersInner(): Promise<number> {
   const records = readDetachedRegistry();
   if (!records.length) return 0;
+  const probes = await probeDetachedRecords(records);
+  return applyDetachedAdoption(records, probes, {
+    procHandle: adoptedProcHandle,
+    stopUnit: stopDetachedUnit,
+    removeRecord: removeDetachedRecord,
+    scheduleIdle: scheduleIdleKill,
+    finish: () => {
+      reapOrphanedDetachedScopes();
+      ensureScopeReapTicker();
+    },
+  }).adopted;
+}
+
+interface DetachedAdoptionOps {
+  procHandle: (unit: string, pid: number) => ServerProcHandle;
+  stopUnit: (unit: string) => void;
+  removeRecord: (unit: string) => void;
+  scheduleIdle: (key: string) => void;
+  finish: () => void;
+}
+
+interface DetachedAdoptionResult {
+  adopted: number;
+  managed: OpencodeServerEntry[];
+}
+
+function applyDetachedAdoption(
+  records: DetachedServerRecord[],
+  probes: Map<string, DetachedRecordProbe>,
+  ops: DetachedAdoptionOps,
+): DetachedAdoptionResult {
   const byKey = new Map<string, typeof records>();
   for (const r of records) {
     const list = byKey.get(r.key);
     if (list) list.push(r);
     else byKey.set(r.key, [r]);
   }
-  // Probe concurrently, mutate the registry serially below. This keeps boot
-  // recovery bounded without racing read-modify-write registry updates.
-  const probes = await probeDetachedRecords(records);
   let adopted = 0;
+  const managed: OpencodeServerEntry[] = [];
   for (const [key, recs] of byKey) {
     // Newest per key wins the pool slot; older duplicates are config-change
     // drains the restart cut short. They can STILL be executing live turns —
@@ -2244,10 +2345,13 @@ async function adoptDetachedOpencodeServersInner(): Promise<number> {
         [...drainingServers].some((e) => e.proc.unit === r.unit) ||
         [...servers.values()].some((e) => e.proc.unit === r.unit);
       if (tracked) continue;
-      const busySessionIds = probes.get(r.unit)?.busySessionIds ?? [];
-      if (busySessionIds.length > 0) {
+      const probe = probes.get(r.unit);
+      const busySessionIds = probe?.busySessionIds ?? [];
+      const uncertainSessionIds = probe?.uncertainSessionIds ?? [];
+      const recoverySessionIds = [...new Set([...busySessionIds, ...uncertainSessionIds])];
+      if (recoverySessionIds.length > 0) {
         const entry: OpencodeServerEntry = {
-          proc: adoptedProcHandle(r.unit, r.pid),
+          proc: ops.procHandle(r.unit, r.pid),
           url: r.url,
           password: r.password,
           cwd: r.cwd,
@@ -2263,37 +2367,44 @@ async function adoptDetachedOpencodeServersInner(): Promise<number> {
           lastUsed: Date.now(),
           activeRuns: 0,
         };
-        reserveDetachedRecovery(entry, busySessionIds);
+        reserveDetachedRecovery(entry, recoverySessionIds, busySessionIds);
         drainingServers.add(entry);
+        managed.push(entry);
         // Registry record stays: a further restart re-probes it, and the
         // eventual killServerProc removes it.
         console.log(
-          `[opencode-runner] kept superseded detached server ${r.unit} (${key}) — ${busySessionIds.length} live turn(s), draining`
+          `[opencode-runner] kept superseded detached server ${r.unit} (${key}): ` +
+            `${busySessionIds.length} live, ${uncertainSessionIds.length} uncertain turn(s), draining`
         );
         continue;
       }
-      stopDetachedUnit(r.unit);
-      removeDetachedRecord(r.unit);
+      ops.stopUnit(r.unit);
+      ops.removeRecord(r.unit);
       console.log(`[opencode-runner] stopped superseded detached server ${r.unit} (${key})`);
     }
     if (servers.has(key)) continue; // hot reload — the pool entry never died
     const probe = probes.get(newest.unit);
     const healthy = probe?.healthy ?? false;
     const busySessionIds = probe?.busySessionIds ?? [];
-    if (!healthy && !busySessionIds.length) {
-      stopDetachedUnit(newest.unit);
-      removeDetachedRecord(newest.unit);
+    const uncertainSessionIds = probe?.uncertainSessionIds ?? [];
+    const recoverySessionIds = [...new Set([...busySessionIds, ...uncertainSessionIds])];
+    if (!healthy && !recoverySessionIds.length) {
+      ops.stopUnit(newest.unit);
+      ops.removeRecord(newest.unit);
       continue;
     }
     const entry: OpencodeServerEntry = {
-      proc: adoptedProcHandle(newest.unit, newest.pid),
+      proc: ops.procHandle(newest.unit, newest.pid),
       url: newest.url,
       password: newest.password,
       cwd: newest.cwd,
       configHash: newest.configHash,
       key,
       shared: newest.shared,
-      draining: !healthy,
+      // A status timeout is not an idle answer even when the cheap health
+      // endpoint happened to answer. Keep it out of the reusable pool until
+      // restart recovery's session-specific probe adjudicates the journal.
+      draining: !healthy || uncertainSessionIds.length > 0,
       rpcToken: newest.rpcToken,
       meridianKey: newest.meridianKey,
       meridianPort: newest.meridianPort,
@@ -2307,10 +2418,11 @@ async function adoptDetachedOpencodeServersInner(): Promise<number> {
       lastUsed: dbLastActivityMs(newest.dbPath) ?? Date.now(),
       activeRuns: 0,
     };
-    reserveDetachedRecovery(entry, busySessionIds);
-    if (healthy) {
+    reserveDetachedRecovery(entry, recoverySessionIds, busySessionIds);
+    managed.push(entry);
+    if (!entry.draining) {
       servers.set(key, entry);
-      scheduleIdleKill(key);
+      ops.scheduleIdle(key);
       adopted++;
       console.log(
         `[opencode-runner] adopted detached server for ${key} (${newest.unit}, ${newest.url})`
@@ -2318,14 +2430,56 @@ async function adoptDetachedOpencodeServersInner(): Promise<number> {
     } else {
       drainingServers.add(entry);
       console.warn(
-        `[opencode-runner] kept unhealthy detached server ${newest.unit} (${key}) — ` +
-          `${busySessionIds.length} live turn(s), draining`,
+        `[opencode-runner] kept detached server ${newest.unit} (${key}): ` +
+          `${busySessionIds.length} live, ${uncertainSessionIds.length} uncertain turn(s), draining`,
       );
     }
   }
-  reapOrphanedDetachedScopes();
-  ensureScopeReapTicker();
-  return adopted;
+  ops.finish();
+  return { adopted, managed };
+}
+
+/** Exercise the real adoption policy without touching systemd or the detached
+ *  registry. Unit names and pool keys should be unique to the test. */
+export function __adoptDetachedRecordsForTest(
+  records: DetachedServerRecord[],
+  probes: Map<string, DetachedRecordProbe>,
+): {
+  adopted: number;
+  stopped: string[];
+  removed: string[];
+  managed: OpencodeServerEntry[];
+  cleanup: () => void;
+} {
+  const stopped: string[] = [];
+  const removed: string[] = [];
+  const result = applyDetachedAdoption(records, probes, {
+    procHandle: (unit, pid) => ({
+      unit,
+      pid,
+      detached: true,
+      exitCode: null,
+      killed: false,
+      exited: new Promise<number>(() => {}),
+      kill: () => stopped.push(unit),
+    }),
+    stopUnit: (unit) => stopped.push(unit),
+    removeRecord: (unit) => removed.push(unit),
+    scheduleIdle: () => {},
+    finish: () => {},
+  });
+  return {
+    ...result,
+    stopped,
+    removed,
+    cleanup: () => {
+      for (const entry of result.managed) {
+        if (entry.idleTimer) clearTimeout(entry.idleTimer);
+        drainingServers.delete(entry);
+        if (servers.get(entry.key) === entry) servers.delete(entry.key);
+      }
+    },
+  };
 }
 
 /**
@@ -5666,6 +5820,8 @@ export async function tryReattachOpencodeRun(
   if (!candidates.length) return null;
   let entry: OpencodeServerEntry | undefined;
   let busy = false;
+  let confirmedBusy = false;
+  let uncertainEntry: OpencodeServerEntry | undefined;
   for (const cand of candidates) {
     const candQ = cand.shared ? { query: { directory: run.cwd } } : {};
     try {
@@ -5674,16 +5830,19 @@ export async function tryReattachOpencodeRun(
         ...candQ,
         signal: AbortSignal.timeout(5_000),
       });
+      if (sess.error) throw new Error(JSON.stringify(sess.error));
       if (!sess.data) continue;
       const st = await clientFor(cand).session.status({
         ...candQ,
         signal: AbortSignal.timeout(5_000),
       });
+      if (st.error) throw new Error(JSON.stringify(st.error));
       const statuses = st.data as Record<string, { type?: string }> | undefined;
       const mine = statuses?.[ocSessionId];
       if (mine && mine.type !== "idle") {
         entry = cand;
         busy = true;
+        confirmedBusy = true;
         break;
       }
       entry ??= cand;
@@ -5693,12 +5852,14 @@ export async function tryReattachOpencodeRun(
       // instead of falling through to a continuation that could double-drive
       // the still-live original turn.
       if (cand.recoveringSessionIds?.has(ocSessionId)) {
-        entry = cand;
-        busy = true;
-        break;
+        uncertainEntry ??= cand;
       }
       continue;
     }
+  }
+  if (!confirmedBusy && uncertainEntry) {
+    entry = uncertainEntry;
+    busy = true;
   }
   if (!entry) {
     // No candidate even knows the session: the reservation adoption took for
@@ -5779,7 +5940,10 @@ export async function tryReattachOpencodeRun(
     for (const key of registeredKeys) activeOpencodeRuns.set(key, abortController);
     detachedRunKeys.add(runKey);
     const server = entry!;
-    if (busy) server.recoveringSessionIds?.delete(ocSessionId!);
+    // Both paths claim the reservation: a busy turn is followed live, while
+    // an idle turn is finalized from the engine store. Leaving the latter
+    // reserved pins an uncertain draining adoptee until the expiry sweep.
+    claimDetachedRecovery(server, ocSessionId!);
     // Claim only once iteration starts, so a caller failing between receiving
     // this generator and its first next() cannot leak an active-run hold. The
     // recovery reservation protects the server until this synchronous step.

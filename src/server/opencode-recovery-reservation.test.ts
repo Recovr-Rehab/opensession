@@ -5,6 +5,7 @@ import {
 import {
   DETACHED_RECOVERY_GRACE_MS,
   DETACHED_RECOVERY_MAX_MS,
+  __claimDetachedRecoveryForTest,
   __reserveDetachedRecoveryForTest,
   __setDetachedRecoveryTimingForTest,
   abortDetachedOpencodeTurn,
@@ -215,8 +216,21 @@ describe("detached recovery reservations", () => {
       cwd: "/tmp",
       startedAt: new Date().toISOString(),
     } as ActiveRunRecord;
-    await abortDetachedOpencodeTurn(run);
+    await abortDetachedOpencodeTurn(run, AbortSignal.timeout(20));
 
     expect(entry.recoveringSessionIds?.has("oc-abandoned")).toBe(false);
+  });
+
+  test("claiming an idle completion releases its adoption reservation", () => {
+    timing(60_000, 120_000);
+    const entry = makeEntry("key-idle-complete");
+    reserve(entry, ["oc-idle-complete"]);
+
+    __claimDetachedRecoveryForTest(entry, "oc-idle-complete");
+
+    expect(entry.recoveringSessionIds?.has("oc-idle-complete")).toBe(false);
+    expect(entry.recoveryReservedAt).toBeUndefined();
+    // Claiming must not reap before attach() increments activeRuns.
+    expect(entry.killed()).toBe(false);
   });
 });

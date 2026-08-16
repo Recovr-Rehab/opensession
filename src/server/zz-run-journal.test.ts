@@ -29,6 +29,8 @@ beforeEach(() => {
 
 afterEach(() => {
 	agent.__setEngineForTest(null);
+	agent.__setAbortDetachedForTest(null);
+	agent.__setReattachForTest(null);
 	mod.__setActiveRunsPathForTest(oldJournal);
 	if (oldForceLimit === undefined) delete process.env.OPENSESSION_FORCE_LIMIT;
 	else process.env.OPENSESSION_FORCE_LIMIT = oldForceLimit;
@@ -438,6 +440,193 @@ describe("run journal", () => {
 			reason: "recursive_recovery_kind",
 			notify: false,
 		});
+	});
+
+	it("aborts a discarded duplicate's different detached engine session", async () => {
+		const sessionId = `duplicate-engine-${crypto.randomUUID()}`;
+		const oldEngine = `engine-old-${crypto.randomUUID()}`;
+		const keptEngine = `engine-kept-${crypto.randomUUID()}`;
+		const now = Date.now();
+		const aborted: string[] = [];
+		agent.__setAbortDetachedForTest((async (run: mod.ActiveRunRecord) => {
+			aborted.push(run.claudeSessionId!);
+			return true;
+		}) as typeof import("./opencode-runner").abortDetachedOpencodeTurn);
+		agent.__setReattachForTest((async (run: mod.ActiveRunRecord) => {
+			const stream = (async function* () {
+				yield { type: "done", sessionId: run.claudeSessionId, result: "done" } as StreamEvent;
+			})();
+			(stream as any).cancelDetachedTurn = async () => {};
+			return stream;
+		}) as any);
+		mod.journalSet({
+			runKey: `run-old-${crypto.randomUUID()}`,
+			osSessionId: sessionId,
+			claudeSessionId: oldEngine,
+			serverKey: `server-${crypto.randomUUID()}`,
+			cwd: "/tmp",
+			startedAt: new Date(now - 1_000).toISOString(),
+		});
+		mod.journalSet({
+			runKey: `run-kept-${crypto.randomUUID()}`,
+			osSessionId: sessionId,
+			claudeSessionId: keptEngine,
+			serverKey: `server-${crypto.randomUUID()}`,
+			cwd: "/tmp",
+			startedAt: new Date(now).toISOString(),
+		});
+		clearRunState(sessionId);
+
+		try {
+			agent.resumeInterruptedRuns();
+			const deadline = Date.now() + 2_000;
+			while (!aborted.length && Date.now() < deadline) await Bun.sleep(5);
+			expect(aborted).toEqual([oldEngine]);
+			while (agent.isAgentSessionBusy(sessionId) && Date.now() < deadline) await Bun.sleep(5);
+		} finally {
+			clearRunState(sessionId);
+		}
+	});
+
+	it("does not abort a discarded duplicate when the kept recovery owns the same engine session", async () => {
+		const sessionId = `duplicate-same-engine-${crypto.randomUUID()}`;
+		const engineId = `engine-${crypto.randomUUID()}`;
+		const now = Date.now();
+		const aborted: string[] = [];
+		agent.__setAbortDetachedForTest((async (run: mod.ActiveRunRecord) => {
+			aborted.push(run.claudeSessionId!);
+			return true;
+		}) as typeof import("./opencode-runner").abortDetachedOpencodeTurn);
+		agent.__setReattachForTest((async (run: mod.ActiveRunRecord) => {
+			const stream = (async function* () {
+				yield { type: "done", sessionId: run.claudeSessionId, result: "done" } as StreamEvent;
+			})();
+			(stream as any).cancelDetachedTurn = async () => {};
+			return stream;
+		}) as any);
+		for (const [suffix, startedAt] of [
+			["old", new Date(now - 1_000).toISOString()],
+			["kept", new Date(now).toISOString()],
+		] as const) {
+			mod.journalSet({
+				runKey: `run-${suffix}-${crypto.randomUUID()}`,
+				osSessionId: sessionId,
+				claudeSessionId: engineId,
+				serverKey: `server-${crypto.randomUUID()}`,
+				cwd: "/tmp",
+				startedAt,
+			});
+		}
+		clearRunState(sessionId);
+
+		try {
+			agent.resumeInterruptedRuns();
+			const deadline = Date.now() + 2_000;
+			while (agent.isAgentSessionBusy(sessionId) && Date.now() < deadline) await Bun.sleep(5);
+			expect(aborted).toEqual([]);
+		} finally {
+			clearRunState(sessionId);
+		}
+	});
+
+	it("waits for a discarded duplicate's abort before starting the kept recovery", async () => {
+		const sessionId = `duplicate-abort-gate-${crypto.randomUUID()}`;
+		const now = Date.now();
+		let releaseAbort!: () => void;
+		const abortGate = new Promise<void>((resolve) => {
+			releaseAbort = resolve;
+		});
+		let reattachCalls = 0;
+		agent.__setAbortDetachedForTest((async () => {
+			await abortGate;
+			return true;
+		}) as typeof import("./opencode-runner").abortDetachedOpencodeTurn);
+		agent.__setReattachForTest((async (run: mod.ActiveRunRecord) => {
+			reattachCalls++;
+			const stream = (async function* () {
+				yield { type: "done", sessionId: run.claudeSessionId, result: "done" } as StreamEvent;
+			})();
+			(stream as any).cancelDetachedTurn = async () => {};
+			return stream;
+		}) as any);
+		for (const [suffix, startedAt] of [
+			["old", new Date(now - 1_000).toISOString()],
+			["kept", new Date(now).toISOString()],
+		] as const) {
+			mod.journalSet({
+				runKey: `run-${suffix}-${crypto.randomUUID()}`,
+				osSessionId: sessionId,
+				claudeSessionId: `engine-${suffix}-${crypto.randomUUID()}`,
+				serverKey: `server-${crypto.randomUUID()}`,
+				cwd: "/tmp",
+				startedAt,
+			});
+		}
+		clearRunState(sessionId);
+
+		try {
+			agent.resumeInterruptedRuns();
+			await Bun.sleep(50);
+			expect(reattachCalls).toBe(0);
+
+			releaseAbort();
+			const deadline = Date.now() + 2_000;
+			while (reattachCalls === 0 && Date.now() < deadline) await Bun.sleep(5);
+			expect(reattachCalls).toBe(1);
+			while (agent.isAgentSessionBusy(sessionId) && Date.now() < deadline) await Bun.sleep(5);
+		} finally {
+			releaseAbort();
+			clearRunState(sessionId);
+		}
+	});
+
+	it("starts the kept recovery after a discarded duplicate's abort times out", async () => {
+		const sessionId = `duplicate-abort-timeout-${crypto.randomUUID()}`;
+		const now = Date.now();
+		let reattachCalls = 0;
+		let abortCancelled = false;
+		agent.__setAbortDetachedForTest((async (_run, signal) =>
+			new Promise<boolean>((resolve) => {
+				signal?.addEventListener("abort", () => {
+					abortCancelled = true;
+					resolve(false);
+				}, { once: true });
+			})) as typeof import("./opencode-runner").abortDetachedOpencodeTurn);
+		agent.__setReattachForTest((async (run: mod.ActiveRunRecord) => {
+			reattachCalls++;
+			const stream = (async function* () {
+				yield { type: "done", sessionId: run.claudeSessionId, result: "done" } as StreamEvent;
+			})();
+			(stream as any).cancelDetachedTurn = async () => {};
+			return stream;
+		}) as any);
+		for (const [suffix, startedAt] of [
+			["old", new Date(now - 1_000).toISOString()],
+			["kept", new Date(now).toISOString()],
+		] as const) {
+			mod.journalSet({
+				runKey: `run-${suffix}-${crypto.randomUUID()}`,
+				osSessionId: sessionId,
+				claudeSessionId: `engine-${suffix}-${crypto.randomUUID()}`,
+				serverKey: `server-${crypto.randomUUID()}`,
+				cwd: "/tmp",
+				startedAt,
+			});
+		}
+		clearRunState(sessionId);
+		const previousWait = agent.__setDetachedAbortWaitMsForTest(30);
+
+		try {
+			agent.resumeInterruptedRuns();
+			const deadline = Date.now() + 2_000;
+			while (reattachCalls === 0 && Date.now() < deadline) await Bun.sleep(5);
+			expect(reattachCalls).toBe(1);
+			expect(abortCancelled).toBe(true);
+			while (agent.isAgentSessionBusy(sessionId) && Date.now() < deadline) await Bun.sleep(5);
+		} finally {
+			agent.__setDetachedAbortWaitMsForTest(previousWait);
+			clearRunState(sessionId);
+		}
 	});
 
 	it("deduplicates and bounds restart recovery while rejecting recursive records", () => {

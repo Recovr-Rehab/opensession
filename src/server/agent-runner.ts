@@ -300,6 +300,42 @@ export function __setReattachForTest(fn: typeof tryReattachOpencodeRun | null): 
   reattachForTest = fn;
 }
 
+/** Test seam for abandonment paths that must reach a detached engine turn. */
+let abortDetachedForTest: typeof abortDetachedOpencodeTurn | null = null;
+export let DETACHED_ABORT_WAIT_MS = 7_000;
+export function __setAbortDetachedForTest(
+  fn: typeof abortDetachedOpencodeTurn | null,
+): void {
+  abortDetachedForTest = fn;
+}
+
+export function __setDetachedAbortWaitMsForTest(ms: number): number {
+  const previous = DETACHED_ABORT_WAIT_MS;
+  DETACHED_ABORT_WAIT_MS = ms;
+  return previous;
+}
+
+function abortInterruptedDetachedTurn(run: ActiveRunRecord): Promise<boolean> {
+  const controller = new AbortController();
+  const abort = (abortDetachedForTest ?? abortDetachedOpencodeTurn)(run, controller.signal);
+  return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      controller.abort();
+      resolve(false);
+    }, DETACHED_ABORT_WAIT_MS);
+    void abort.then(
+      (result) => {
+        clearTimeout(timeout);
+        resolve(result);
+      },
+      () => {
+        clearTimeout(timeout);
+        resolve(false);
+      },
+    );
+  });
+}
+
 type ModelAvailabilityProbe = (opts: RunAgentOpts, model: string) => string | null;
 let modelAvailabilityForTest: ModelAvailabilityProbe | null = null;
 export function __setModelAvailabilityForTest(fn: ModelAvailabilityProbe | null): void {
@@ -1294,7 +1330,7 @@ export function cancelAgentRun(...ids: Array<string | null | undefined>): boolea
       // AbortController for cancelOpencodeRun to find, so without this it
       // keeps working in the session's worktree after the session goes idle.
       if (!attachedRecoveryRunKeys.has(run.runKey))
-        void abortDetachedOpencodeTurn(run).catch(() => {});
+        void abortInterruptedDetachedTurn(run).catch(() => {});
     }
     journalClear(run.runKey);
     // A queued recovery has not crossed an async boundary yet, so its marker
@@ -1477,20 +1513,30 @@ export function resumeInterruptedRuns(
   const taken = takeInterruptedRuns();
   const { interrupted, quarantined } = sanitizeInterruptedRuns(taken);
   journalQuarantine(quarantined);
+  const recoveringEngineSessions = new Set(
+    interrupted.flatMap((run) => (run.claudeSessionId ? [run.claudeSessionId] : [])),
+  );
+  const quarantineAborts: Promise<boolean>[] = [];
   for (const entry of quarantined) {
-    if (!entry.notify || !entry.run.osSessionId) continue;
-    const message = recoveryQuarantineMessage(entry);
     // A quarantined record can still have a live detached engine turn behind
-    // it, and nothing else will ever stop that turn — the record leaves the
-    // recovery path for good. Abort it BEFORE the session is told to send the
-    // prompt again, or the replacement runs beside its predecessor.
-    if (entry.run.serverKey && entry.run.claudeSessionId) {
-      void abortDetachedOpencodeTurn(entry.run)
-        .catch(() => {})
-        .finally(() => reportRecoveryFailure(entry.run, message));
+    // it, including a duplicate that deliberately carries notify:false. Abort
+    // a discarded engine session unless the kept recovery owns the same one;
+    // abortDetachedOpencodeTurn separately guards live in-process ownership.
+    const shouldAbortDetached =
+      !!entry.run.serverKey &&
+      !!entry.run.claudeSessionId &&
+      !recoveringEngineSessions.has(entry.run.claudeSessionId);
+    const abort = shouldAbortDetached
+      ? abortInterruptedDetachedTurn(entry.run).catch(() => false)
+      : undefined;
+    if (abort) quarantineAborts.push(abort);
+    if (!entry.notify || !entry.run.osSessionId) {
+      void abort;
       continue;
     }
-    reportRecoveryFailure(entry.run, message);
+    const message = recoveryQuarantineMessage(entry);
+    if (abort) void abort.finally(() => reportRecoveryFailure(entry.run, message));
+    else reportRecoveryFailure(entry.run, message);
   }
   const recoveryTasks: Array<() => Promise<void>> = [];
 
@@ -1898,7 +1944,10 @@ export function resumeInterruptedRuns(
     }));
   }
 
-  void runRecoveryQueue(recoveryTasks);
+  // A discarded duplicate can still be modifying the same worktree. Finish
+  // every best-effort detached abort before any kept recovery reattaches or
+  // starts a continuation, so this boot never drives both at once.
+  void Promise.all(quarantineAborts).then(() => runRecoveryQueue(recoveryTasks));
 
   return resumed;
 }
