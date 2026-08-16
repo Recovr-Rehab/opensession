@@ -20,7 +20,7 @@ import {
 } from "../../lib/api/sandboxes";
 import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
-import { Input, Select } from "../../ui/input";
+import { Field, Input, Select } from "../../ui/input";
 import { Modal } from "../../ui/modal";
 import {
 	SettingCard,
@@ -276,8 +276,7 @@ function ConnectDialog({
 				/>
 
 				{(connection.provider === "daytona" || connection.provider === "box") && (
-					<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
-						{connection.provider === "box" ? "Box API key" : "Daytona API key"}
+					<Field label={connection.provider === "box" ? "Box API key" : "Daytona API key"}>
 						<Input
 							type="password"
 							autoComplete="off"
@@ -285,13 +284,12 @@ function ConnectDialog({
 							value={apiKey}
 							onChange={(event) => setApiKey(event.target.value)}
 						/>
-					</label>
+					</Field>
 				)}
 
 				{connection.provider === "modal" && (
 					<div className="grid gap-3 sm:grid-cols-2">
-						<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
-							Modal token ID
+						<Field label="Modal token ID">
 							<Input
 								type="password"
 								autoComplete="off"
@@ -299,9 +297,8 @@ function ConnectDialog({
 								value={tokenId}
 								onChange={(event) => setTokenId(event.target.value)}
 							/>
-						</label>
-						<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
-							Modal token secret
+						</Field>
+						<Field label="Modal token secret">
 							<Input
 								type="password"
 								autoComplete="off"
@@ -309,7 +306,7 @@ function ConnectDialog({
 								value={tokenSecret}
 								onChange={(event) => setTokenSecret(event.target.value)}
 							/>
-						</label>
+						</Field>
 					</div>
 				)}
 
@@ -324,15 +321,14 @@ function ConnectDialog({
 
 				{remote && (
 					<>
-						<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
-							Public callback URL
+						<Field label="Public callback URL">
 							<Input
 								type="url"
 								placeholder="https://ingress.example.com"
 								value={publicBaseUrl}
 								onChange={(event) => setPublicBaseUrl(event.target.value)}
 							/>
-						</label>
+						</Field>
 						{ingress.note && <p className="m-0 text-supporting text-dim">{ingress.note}</p>}
 						{ingress.health !== "ready" && (
 							<details className="rounded-lg bg-surface p-3 text-meta text-dim">
@@ -349,33 +345,27 @@ function ConnectDialog({
 							<details className="rounded-lg bg-surface p-3 text-supporting text-dim">
 								<summary className="cursor-pointer font-medium text-fg">Provider settings</summary>
 								<div className="mt-3 grid gap-3 sm:grid-cols-2">
-									<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
-										Region
+									<Field label="Region">
 										<Input value={region} onChange={(event) => setRegion(event.target.value)} placeholder="Provider default" />
-									</label>
-									<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
-										CPU
+									</Field>
+									<Field label="CPU">
 										<Input type="number" min="1" value={cpu} onChange={(event) => setCpu(event.target.value)} placeholder="Provider default" />
-									</label>
-									<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
-										Memory (MB)
+									</Field>
+									<Field label="Memory (MB)">
 										<Input type="number" min="512" value={memoryMb} onChange={(event) => setMemoryMb(event.target.value)} placeholder="Provider default" />
-									</label>
+									</Field>
 									{connection.provider === "daytona" ? (
-										<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
-											Base snapshot
+										<Field label="Base snapshot">
 											<Input value={snapshot} onChange={(event) => setSnapshot(event.target.value)} placeholder="Daytona default" />
-										</label>
+										</Field>
 									) : connection.provider === "modal" ? (
 										<>
-											<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
-												Modal app
+											<Field label="Modal app">
 												<Input value={app} onChange={(event) => setApp(event.target.value)} placeholder="opensession-sandboxes" />
-											</label>
-											<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
-												Environment
+											</Field>
+											<Field label="Environment">
 												<Input value={environment} onChange={(event) => setEnvironment(event.target.value)} placeholder="Modal default" />
-											</label>
+											</Field>
 										</>
 									) : null}
 								</div>
@@ -601,8 +591,7 @@ function ProjectEnvironmentDialog({
 				/>
 				{!target ? (
 					<div className="grid gap-3 sm:grid-cols-2">
-						<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
-							Provider
+						<Field label="Provider">
 							<Select
 								value={provider}
 								onChange={(event) =>
@@ -615,9 +604,8 @@ function ProjectEnvironmentDialog({
 									</option>
 								))}
 							</Select>
-						</label>
-						<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
-							Project
+						</Field>
+						<Field label="Project">
 							<Select value={repo} onChange={(event) => setRepo(event.target.value)}>
 								{projectOptions.map((environment) => (
 									<option key={environment.repo} value={environment.repo}>
@@ -625,7 +613,7 @@ function ProjectEnvironmentDialog({
 									</option>
 								))}
 							</Select>
-						</label>
+						</Field>
 					</div>
 				) : (
 					<div className="flex items-center gap-3 rounded-lg bg-surface p-3">
@@ -637,8 +625,7 @@ function ProjectEnvironmentDialog({
 					</div>
 				)}
 
-				<label className="flex flex-col gap-1.5 text-label font-medium text-dim">
-					Machine size
+				<Field label="Machine size">
 					<Select value={profile} onChange={(event) => setProfile(event.target.value)}>
 						{machineProfiles(provider).map((candidate) => (
 							<option key={candidate.id} value={candidate.id}>
@@ -646,7 +633,7 @@ function ProjectEnvironmentDialog({
 							</option>
 						))}
 					</Select>
-				</label>
+				</Field>
 				<div className="rounded-lg bg-surface p-3 text-supporting leading-relaxed text-dim">
 					{provider === "daytona" &&
 						"Daytona supports custom resource combinations, but these documented sizes avoid invalid or undersized setups."}
