@@ -24,7 +24,8 @@ import { Modal } from "../ui/modal";
 import { CheckStatusIcon } from "./CheckStatusIcon";
 import { IconDotsHorizontal, IconPencil, IconPlus, IconTrash } from "./icons";
 import { SOURCE_CHIP } from "../lib/source-chip-classes";
-import { Field, Input, Select, Textarea } from "../ui/input";
+import { Field, Input, Textarea } from "../ui/input";
+import { OptionSelect } from "../ui/select";
 import {
   SettingCard,
   SettingRow,
@@ -429,7 +430,7 @@ function NewScanModal({
   const [error, setError] = useState<string | null>(null);
   // Open with the caret in the first field rather than on the close button,
   // which is where Base UI puts it by default.
-  const repoRef = React.useRef<HTMLSelectElement>(null);
+  const repoRef = React.useRef<HTMLButtonElement>(null);
 
   const singleRepo = scope === "single" && !!repo;
   const canRecur = singleRepo && !interactive;
@@ -485,7 +486,11 @@ function NewScanModal({
         />
 
         <div className="flex flex-col gap-3.5">
+          {/* self-start: the track hugs its two options. A flex column stretches
+              its children, and a stretched segmented control is a full-width
+              well with a knob sitting in one corner of it. */}
           <Segmented
+            className="self-start"
             label="Scan scope"
             value={scope}
             onValueChange={(next) => {
@@ -504,25 +509,26 @@ function NewScanModal({
 
           {scope === "single" && (
             <Field label="Repository">
-              <Select ref={repoRef} value={repo} onChange={(e) => setRepo(e.target.value)}>
-                {repos.map((r) => (
-                  <option key={r} value={r}>
-                    {repoLabel(r)}
-                  </option>
-                ))}
-              </Select>
+              <OptionSelect
+                triggerRef={repoRef}
+                label="Repository"
+                value={repo}
+                options={repos.map((r) => ({ value: r, label: repoLabel(r) }))}
+                onChange={setRepo}
+              />
             </Field>
           )}
 
           <Field label="Scan profile">
-            <Select value={profileId} onChange={(e) => setProfileId(e.target.value)}>
-              <option value="">None · default threat model</option>
-              {profiles.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </Select>
+            <OptionSelect
+              label="Scan profile"
+              value={profileId}
+              options={[
+                { value: "", label: "None · default threat model" },
+                ...profiles.map((p) => ({ value: p.id, label: p.name })),
+              ]}
+              onChange={setProfileId}
+            />
             {profiles.length === 0 && (
               <span className="text-meta font-normal text-faint">
                 No profiles yet. A profile tells a scan how to read your code.
@@ -540,15 +546,17 @@ function NewScanModal({
           </Field>
 
           <Field label="Repeats">
-            <Select
+            <OptionSelect
+              label="Repeats"
               value={canRecur ? recurrence : "none"}
-              onChange={(e) => setRecurrence(e.target.value as any)}
+              options={[
+                { value: "none", label: "Does not repeat" },
+                { value: "daily", label: "Daily" },
+                { value: "weekly", label: "Weekly" },
+              ]}
+              onChange={(next) => setRecurrence(next as "none" | "daily" | "weekly")}
               disabled={!canRecur}
-            >
-              <option value="none">Does not repeat</option>
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly</option>
-            </Select>
+            />
             {!singleRepo && (
               <span className="text-meta font-normal text-faint">
                 Recurring and interactive scans take one repository at a time.

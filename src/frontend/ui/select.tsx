@@ -227,6 +227,7 @@ export function OptionSelect<T extends string>({
 	disabled,
 	className,
 	size,
+	triggerRef,
 }: {
 	value: T;
 	options: { value: T; label: string; disabled?: boolean }[];
@@ -236,6 +237,9 @@ export function OptionSelect<T extends string>({
 	className?: string;
 	/** The control step, as on `Button` and the fields. Defaults to `md`. */
 	size?: Size;
+	/** The trigger element, for a dialog that opens with the caret in this
+	 *  field (`Modal.Content`'s `initialFocus`). */
+	triggerRef?: React.ComponentProps<typeof Trigger>["ref"];
 }) {
 	return (
 		<Select.Root
@@ -247,6 +251,7 @@ export function OptionSelect<T extends string>({
 			onValueChange={(next) => onChange(next as T)}
 		>
 			<Select.Trigger
+				ref={triggerRef}
 				aria-label={label}
 				className={className}
 				size={size}

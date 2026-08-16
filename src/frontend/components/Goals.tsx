@@ -23,7 +23,8 @@ import { cn } from "../ui/cn";
 import { CheckStatusIcon } from "./CheckStatusIcon";
 import { IconPlus } from "./icons";
 import { SOURCE_CHIP } from "../lib/source-chip-classes";
-import { Field, FieldGrid, Input, Select, Textarea } from "../ui/input";
+import { Field, FieldGrid, Input, Textarea } from "../ui/input";
+import { OptionSelect } from "../ui/select";
 import {
   SettingCard,
   SettingsForm,
@@ -645,47 +646,54 @@ function GoalForm({
 
       <FieldGrid>
         <Field label="Mode">
-          <Select value={mode} onChange={(e) => setMode(e.target.value as "ask" | "code")}>
-            <option value="ask">Ask · read-only research and measurement</option>
-            <option value="code">Code · persistent worktree, can open PRs</option>
-          </Select>
+          <OptionSelect
+            label="Mode"
+            value={mode}
+            options={[
+              { value: "ask", label: "Ask · read-only research and measurement" },
+              { value: "code", label: "Code · persistent worktree, can open PRs" },
+            ]}
+            onChange={(next) => setMode(next as "ask" | "code")}
+          />
         </Field>
 
         <Field label="Repository">
-          <Select value={repo} onChange={(e) => setRepo(e.target.value)}>
-            {repos.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.label || repoLabel(item.id)}
-              </option>
-            ))}
-          </Select>
+          <OptionSelect
+            label="Repository"
+            value={repo}
+            options={repos.map((item) => ({
+              value: item.id,
+              label: item.label || repoLabel(item.id),
+            }))}
+            onChange={setRepo}
+          />
         </Field>
 
         <Field label="Model">
-          <Select value={model} onChange={(e) => setModel(e.target.value)}>
-            <option value="">Default{defaultModel ? ` · ${defaultModel}` : ""}</option>
-            {models.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}
-                {accountPoolSuffix(m)}
-              </option>
-            ))}
-          </Select>
+          <OptionSelect
+            label="Model"
+            value={model}
+            options={[
+              { value: "", label: `Default${defaultModel ? ` · ${defaultModel}` : ""}` },
+              ...models.map((m) => ({ value: m.id, label: m.label + accountPoolSuffix(m) })),
+            ]}
+            onChange={setModel}
+          />
         </Field>
 
         <Field
           label="Fallback model"
           title="Used only when every account for the primary model has hit its usage limit"
         >
-          <Select value={fallbackModel} onChange={(e) => setFallbackModel(e.target.value)}>
-            <option value="">None · fail instead</option>
-            {models.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}
-                {accountPoolSuffix(m)}
-              </option>
-            ))}
-          </Select>
+          <OptionSelect
+            label="Fallback model"
+            value={fallbackModel}
+            options={[
+              { value: "", label: "None · fail instead" },
+              ...models.map((m) => ({ value: m.id, label: m.label + accountPoolSuffix(m) })),
+            ]}
+            onChange={setFallbackModel}
+          />
         </Field>
       </FieldGrid>
 
