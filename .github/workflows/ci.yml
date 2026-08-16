@@ -44,28 +44,34 @@ jobs:
       - name: Type-check
         run: bun run typecheck
 
-      # The unit suite is NOT a gate yet, and that is a deliberate, temporary
-      # call rather than laziness. Two separate problems:
+      # The unit suite is NOT a gate yet, and that is a deliberate call rather
+      # than laziness: it is ORDER DEPENDENT, and the order is not stable
+      # between identical runs, so neither colour means what a gate needs it to
+      # mean.
       #
-      #   1. Three files already failed on master before this workflow existed
-      #      (zz-opencode-mirror + opencode-transcript predate the transcript-v2
-      #      store — PR #73 ports the first; sessions.test.ts expects
-      #      getOpenPrs().reviewRequested to be [] where the code returns
-      #      undefined).
-      #   2. Worse, the suite is ORDER DEPENDENT. Excluding those three files
-      #      changed the discovery order and a different four failed
-      #      (opencodeAutomationModel, buildOpencodeInstructions,
-      #      sessionMemoryScopes, requestPrewarm) — all of which pass in
-      #      isolation. There is shared state leaking between test files.
+      # Measured 2026-08-16, one commit, clean detached worktree, four
+      # consecutive sweeps of exactly this command: two green at 2904 pass, two
+      # red. The red ones did not agree with each other. Both flagged the two
+      # cases in zz-pr-cache-staleness.test.ts, which sit at 5000ms (their
+      # timeout) in the sweep and pass in 54ms run alone; one also flagged
+      # "repository loading recovers from transient server failures", which
+      # fails when an earlier os1-tui file leaves @opentui's one-key `window`
+      # stub on globalThis for a later frontend file to trip over.
       #
-      # Until (2) is fixed the suite cannot gate anything: which tests fail
-      # depends on what else ran, so a red build would not reliably mean "you
-      # broke something". It still runs on every PR so regressions are visible in
-      # the log, and the type-check plus the real end-to-end installs below ARE
-      # gates.
+      # So a red build would not reliably mean "you broke something" — and, the
+      # half people forget, a green sweep is not evidence the ordering is fixed:
+      # it was green half the time with the problem fully present. Two runs are
+      # not enough to conclude anything either. The three files that failed
+      # outright when this workflow was written (zz-opencode-mirror,
+      # opencode-transcript, sessions.test.ts) have since been fixed; the shared
+      # state between files has not.
+      #
+      # It still runs on every PR so regressions are visible in the log, and the
+      # type-check plus the real end-to-end installs below ARE gates.
       #
       # Fixing this means finding the cross-file state (this codebase parks a lot
-      # on globalThis) and isolating it. Then delete continue-on-error.
+      # on globalThis) and isolating it. Then delete continue-on-error, on the
+      # evidence of repeated sweeps rather than one.
       #
       # Scoped to the server suite on purpose: `os1-tui/` is a separate package
       # with its own node_modules, so the root sweep can't resolve its imports —
