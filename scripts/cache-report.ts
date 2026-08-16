@@ -6,6 +6,7 @@
  *   bun scripts/cache-report.ts --days 30
  *   bun scripts/cache-report.ts --json
  *   bun scripts/cache-report.ts --sessions 15   # worst sessions by wasted input
+ *   bun scripts/cache-report.ts --prefix        # expiry vs prefix breakage
  *
  * The number this answers: of the prompt tokens we send, what fraction did the
  * provider serve from its cache rather than bill as fresh input —
@@ -55,12 +56,43 @@
  * is the signature of a per-turn prefix change; a low rate everywhere is
  * ordinary cold-start traffic.
  *
+ * PREFIX COVERAGE (`--prefix`) is the instrument that separates a cache that
+ * aged from a prefix that changed, which the hit rate alone cannot do on
+ * OpenAI. Both look identical there: OpenAI has no write bucket, so expiry and
+ * breakage are both billed as uncached input. The discriminator is that a
+ * request's cache read can be compared against what the request BEFORE it sent:
+ *
+ *     coverage = cacheRead(N) / prompt(N-1)
+ *
+ * If the prefix is stable, request N re-sends everything N-1 sent and should
+ * read all of it back, so coverage near 1 is health and the shortfall is what a
+ * perfect cache would have served. Bucketing that by the gap since the previous
+ * request then tells the two apart by SHAPE rather than by level: expiry decays
+ * monotonically with the gap, while a prefix that changed produces a floor that
+ * is flat in the gap. A control is essential, because the comparison is only
+ * meaningful between requests that are actually continuations of one another.
+ * A compaction call, a different agent, or a different reasoning-effort variant
+ * is a different prompt by construction, and scoring it against its predecessor
+ * books a design decision as a cache failure. Those are classified out, and the
+ * classification is most of what this section is for: it is what moved the
+ * headline OpenAI first-of-turn number from "half the prefix misses" to a
+ * decomposition in which most of the miss is not breakage at all.
+ *
  * Caveats worth knowing before quoting a number. Turn position is computed from
  * the rows inside the window, so a session that straddles the start of the
  * range can have its first in-window request misread as first-of-turn (a small
  * effect at 7 days, smaller at 30). The direct engines are reported as totals
  * only: their stores are per-request transcripts with no pool and no cheap turn
- * boundary, so they get an engine-level rate and nothing finer.
+ * boundary, so they get an engine-level rate and nothing finer. Coverage uses
+ * `parentID` for the turn boundary rather than the user-row walk above, because
+ * it survives a store whose user rows were pruned; the two agree where both
+ * apply. And coverage means different things on the two providers, for the same
+ * reason the hit rate does: on Anthropic a broken prefix is re-WRITTEN rather
+ * than billed as input, so its coverage does fall but the shortfall lands in
+ * `cache write` and costs 2x base input rather than 10x. Read Anthropic's
+ * coverage next to the `uncached in` column of the cause table, where the whole
+ * continuation row is a couple of thousand tokens a week: the shape is
+ * comparable across providers, the money is not.
  */
 
 import { Database } from "bun:sqlite";
@@ -81,6 +113,69 @@ const SHARD_DIR = `${OPENSESSION_SESSIONS_DIR}/opencode/db`;
  */
 const HOT_MS = 5 * 60_000;
 const WARM_MS = 60 * 60_000;
+
+/** Finer gap buckets for the coverage section. The point is the SHAPE across
+ *  them, so they have to be narrow enough to show a decay starting within a
+ *  couple of minutes, which the three coarse buckets above cannot. */
+const GAP_BUCKETS: readonly [string, number][] = [
+	["<30s", 30_000],
+	["30s-1m", 60_000],
+	["1-2m", 120_000],
+	["2-5m", 300_000],
+	["5-10m", 600_000],
+	["10-20m", 1_200_000],
+	["20-40m", 2_400_000],
+	["40-60m", 3_600_000],
+	["1-2h", 7_200_000],
+	["2-6h", 21_600_000],
+	[">6h", Number.POSITIVE_INFINITY],
+];
+
+function gapBucket(gap: number): string {
+	for (const [name, limit] of GAP_BUCKETS) if (gap <= limit) return name;
+	return ">6h";
+}
+
+/**
+ * Why a request could not have read its predecessor's prompt back. Only
+ * `continuation` is a fair test of prefix stability: the others send a
+ * deliberately different prompt, so their miss is a design decision and
+ * counting it as breakage is the measurement trap this section exists to avoid.
+ */
+type Cause =
+	| "mid-turn (new tool output)"
+	| "session start"
+	| "compaction call"
+	| "agent/variant/model switch"
+	| "continuation";
+
+const CAUSE_ORDER: Cause[] = [
+	"mid-turn (new tool output)",
+	"session start",
+	"compaction call",
+	"agent/variant/model switch",
+	"continuation",
+];
+
+/** A prompt below this is a title/summary utility call, not a conversation;
+ *  scoring one against a full context measures nothing. */
+const MIN_PREV_PROMPT = 4096;
+
+interface CoverageCell {
+	requests: number;
+	coverage: number;
+	full: number;
+	partial: number;
+	zero: number;
+	cacheRead: number;
+	input: number;
+	/** What a perfect cache would have served and did not. */
+	shortfall: number;
+}
+
+function emptyCoverage(): CoverageCell {
+	return { requests: 0, coverage: 0, full: 0, partial: 0, zero: 0, cacheRead: 0, input: 0, shortfall: 0 };
+}
 
 interface Agg {
 	requests: number;
@@ -145,11 +240,95 @@ interface OpencodeScan {
 	byPosition: Map<string, Agg>;
 	/** `${pool}|${provider}|${session}` → wasted uncached input on warm turns. */
 	bySession: Map<string, Agg>;
+	/** `${provider}|${cause}` → every request, classified by why it could not
+	 *  have re-read its predecessor's prompt. Sums to all uncached input. */
+	byCause: Map<string, Agg>;
+	/** `${provider}|${continuation ? "cont" : "switch"}|${gapBucket}`. */
+	byCoverage: Map<string, CoverageCell>;
+	/** Size- and gap-matched pairs isolating the reasoning-effort variant:
+	 *  `${provider}|${changed ? "changed" : "same"}`. */
+	variantPairs: Map<string, CoverageCell>;
 	dbs: number;
 	rows: number;
 }
 
+/** The previous request in a session, kept to score the next one against. */
+interface PrevRequest {
+	at: number;
+	prompt: number;
+	parent: string;
+	agent: string;
+	variant: string;
+	model: string;
+}
+
 type Position = "first-hot" | "first-warm" | "first-cold" | "mid-turn";
+
+/**
+ * Classify one request against its predecessor and fold it into the coverage
+ * aggregates. Split out of the scan walk because the classification, not the
+ * arithmetic, is the substance: every branch that is not `continuation` is a
+ * request whose prompt deliberately differs from the one before it, and the
+ * whole value of this section is refusing to score those as cache failures.
+ */
+function scoreCoverage(
+	out: OpencodeScan,
+	provider: string,
+	u: Omit<Agg, "sessions" | "requests">,
+	prev: PrevRequest | undefined,
+	cur: PrevRequest,
+): void {
+	const sessionAgg = (cause: Cause) => {
+		let a = out.byCause.get(`${provider}|${cause}`);
+		if (!a) out.byCause.set(`${provider}|${cause}`, (a = emptyAgg()));
+		a.requests++;
+		a.input += u.input;
+		a.cacheRead += u.cacheRead;
+		a.cacheWrite += u.cacheWrite;
+		a.output += u.output;
+	};
+	if (!prev) return void sessionAgg("session start");
+	if (cur.parent === prev.parent) return void sessionAgg("mid-turn (new tool output)");
+	if (cur.agent === "compaction") return void sessionAgg("compaction call");
+
+	const switched = cur.agent !== prev.agent || cur.variant !== prev.variant || cur.model !== prev.model;
+	sessionAgg(switched ? "agent/variant/model switch" : "continuation");
+	if (prev.prompt < MIN_PREV_PROMPT) return;
+
+	const gap = cur.at - prev.at;
+	const coverage = Math.min(1, u.cacheRead / prev.prompt);
+	const key = `${provider}|${switched ? "switch" : "cont"}|${gapBucket(gap)}`;
+	let c = out.byCoverage.get(key);
+	if (!c) out.byCoverage.set(key, (c = emptyCoverage()));
+	c.requests++;
+	c.coverage += coverage;
+	c.cacheRead += u.cacheRead;
+	c.input += u.input;
+	c.shortfall += Math.max(0, Math.min(prev.prompt, cur.prompt) - u.cacheRead);
+	if (coverage >= 0.95) c.full++;
+	else if (coverage >= 0.05) c.partial++;
+	else c.zero++;
+
+	// The variant test. Holding agent, model, gap and prompt size fixed leaves
+	// the reasoning-effort variant as the only thing that moved, so the two rows
+	// are a controlled comparison rather than a correlation: nothing here can
+	// have expired, and neither side sent materially more text than the other.
+	if (cur.agent !== prev.agent || cur.model !== prev.model) return;
+	if (gap > 120_000 || prev.prompt < 20_000) return;
+	const ratio = cur.prompt / prev.prompt;
+	if (ratio < 0.98 || ratio > 1.1) return;
+	const pk = `${provider}|${cur.variant !== prev.variant ? "changed" : "same"}`;
+	let p = out.variantPairs.get(pk);
+	if (!p) out.variantPairs.set(pk, (p = emptyCoverage()));
+	p.requests++;
+	p.coverage += coverage;
+	p.cacheRead += u.cacheRead;
+	p.input += u.input;
+	p.shortfall += Math.max(0, Math.min(prev.prompt, cur.prompt) - u.cacheRead);
+	if (coverage >= 0.95) p.full++;
+	else if (coverage >= 0.05) p.partial++;
+	else p.zero++;
+}
 
 /**
  * Read every shard DB for assistant requests at or after `cutoff`.
@@ -164,6 +343,9 @@ async function scanOpencode(cutoff: number): Promise<OpencodeScan> {
 		byModel: new Map(),
 		byPosition: new Map(),
 		bySession: new Map(),
+		byCause: new Map(),
+		byCoverage: new Map(),
+		variantPairs: new Map(),
 		dbs: 0,
 		rows: 0,
 	};
@@ -196,11 +378,13 @@ async function scanOpencode(cutoff: number): Promise<OpencodeScan> {
 			let session = "";
 			let expectFirst = false;
 			let prevAt = 0;
+			let prev: PrevRequest | undefined;
 			for (const row of rows) {
 				if (row.session_id !== session) {
 					session = row.session_id;
 					expectFirst = false;
 					prevAt = 0;
+					prev = undefined;
 				}
 				let d: Record<string, any>;
 				try {
@@ -239,6 +423,25 @@ async function scanOpencode(cutoff: number): Promise<OpencodeScan> {
 				add(out.byModel, `${pool}|${provider}|${model}`, u, session);
 				add(out.byPosition, `${pool}|${provider}|${position}`, u, session);
 				if (position === "first-hot") add(out.bySession, `${pool}|${provider}|${session}`, u, session);
+
+				// Prefix coverage: score this request against the one before it.
+				const agent = String(d.agent || "?");
+				// An absent variant is its own value, not a missing one: a request
+				// opencode issued itself carries no effort where ours does, and
+				// that difference is exactly what the variant test is looking for.
+				const variant = d.variant === undefined ? "-" : String(d.variant);
+				const prompt = u.input + u.cacheRead;
+				const parent = String(d.parentID || "");
+				scoreCoverage(out, provider, u, prev, {
+					at: row.time_created,
+					prompt,
+					parent,
+					agent,
+					variant,
+					model,
+				});
+				prev = { at: row.time_created, prompt, parent, agent, variant, model };
+
 				expectFirst = false;
 				prevAt = row.time_created;
 			}
@@ -358,6 +561,71 @@ function modelTable(scan: OpencodeScan, minRequests: number): string[] {
 	return lines;
 }
 
+function causeTable(scan: OpencodeScan, provider: string): string[] {
+	const rows = CAUSE_ORDER.map((c) => [c, scan.byCause.get(`${provider}|${c}`)] as const).filter(
+		(r): r is readonly [Cause, Agg] => !!r[1],
+	);
+	const total = rows.reduce((n, [, a]) => n + a.input, 0);
+	const lines = [
+		`${col("cause", 30)} ${col("requests", 9, true)} ${col("uncached in", 12, true)} ${col("share", 7, true)} ${col("read/req", 9, true)}`,
+	];
+	for (const [cause, a] of rows) {
+		lines.push(
+			`${col(cause, 30)} ${col(num(a.requests), 9, true)} ${col(num(a.input), 12, true)} ${col(pct(total ? a.input / total : 0), 7, true)} ${col(num(a.cacheRead / a.requests), 9, true)}`,
+		);
+	}
+	return lines;
+}
+
+function coverageTable(scan: OpencodeScan, provider: string, kind: "cont" | "switch", minRequests: number): string[] {
+	const lines = [
+		`${col("gap since previous", 20)} ${col("reqs", 6, true)} ${col("coverage", 9, true)} ${col("full", 6, true)} ${col("partial", 8, true)} ${col("zero", 6, true)} ${col("read/req", 9, true)}`,
+	];
+	for (const [bucket] of GAP_BUCKETS) {
+		const c = scan.byCoverage.get(`${provider}|${kind}|${bucket}`);
+		if (!c || c.requests < minRequests) continue;
+		lines.push(
+			`${col(bucket, 20)} ${col(String(c.requests), 6, true)} ${col(pct(c.coverage / c.requests), 9, true)} ${col(pct(c.full / c.requests), 6, true)} ${col(pct(c.partial / c.requests), 8, true)} ${col(pct(c.zero / c.requests), 6, true)} ${col(num(c.cacheRead / c.requests), 9, true)}`,
+		);
+	}
+	return lines;
+}
+
+/** The whole prefix section: coverage by gap, the variant control, and the
+ *  decomposition of uncached input by cause. */
+function prefixSection(scan: OpencodeScan): string[] {
+	const lines: string[] = [];
+	const providers = [...new Set([...scan.byCause.keys()].map((k) => k.split("|")[0]))].sort();
+	for (const provider of providers) {
+		lines.push(`\n── ${provider}: uncached input by cause ──`);
+		lines.push(...causeTable(scan, provider));
+		lines.push(`\n── ${provider}: prefix coverage on CONTINUATIONS (same agent, variant and model) ──`);
+		lines.push("   (coverage = cacheRead(N) / prompt(N-1); a decay across the gap is expiry,");
+		lines.push("    a flat floor that is already there at <30s is a prefix that changed)");
+		lines.push(...coverageTable(scan, provider, "cont", 10));
+		const sw = coverageTable(scan, provider, "switch", 10);
+		if (sw.length > 1) {
+			lines.push(`\n── ${provider}: the same, on agent/variant/model SWITCHES (different prompt by design) ──`);
+			lines.push(...sw);
+		}
+		const same = scan.variantPairs.get(`${provider}|same`);
+		const changed = scan.variantPairs.get(`${provider}|changed`);
+		if (same?.requests && changed?.requests) {
+			lines.push(`\n── ${provider}: effort-variant control (same agent+model, gap <2m, prompt size +0/+10%) ──`);
+			lines.push(`${col("variant", 20)} ${col("pairs", 6, true)} ${col("coverage", 9, true)} ${col("zero", 6, true)} ${col("read/req", 9, true)}`);
+			for (const [label, c] of [
+				["unchanged", same],
+				["changed", changed],
+			] as const) {
+				lines.push(
+					`${col(label, 20)} ${col(String(c.requests), 6, true)} ${col(pct(c.coverage / c.requests), 9, true)} ${col(pct(c.zero / c.requests), 6, true)} ${col(num(c.cacheRead / c.requests), 9, true)}`,
+				);
+			}
+		}
+	}
+	return lines;
+}
+
 function directTable(label: string, byModel: Map<string, Agg>): string[] {
 	const lines: string[] = [];
 	for (const [key, a] of [...byModel.entries()].sort((x, y) => y[1].input - x[1].input)) {
@@ -381,6 +649,7 @@ async function main(): Promise<void> {
 	const minRequests = flag("min-requests", 50);
 	const worstSessions = flag("sessions", 0);
 	const asJson = argv.includes("--json");
+	const showPrefix = argv.includes("--prefix");
 
 	const cutoff = Date.now() - days * 86_400_000;
 	const started = Date.now();
@@ -394,6 +663,22 @@ async function main(): Promise<void> {
 	const codex = foldDays(codexDays);
 
 	if (asJson) {
+		const dumpCoverage = (m: Map<string, CoverageCell>) =>
+			Object.fromEntries(
+				[...m].map(([k, c]) => [
+					k,
+					{
+						requests: c.requests,
+						meanCoverage: c.requests ? c.coverage / c.requests : 0,
+						full: c.full,
+						partial: c.partial,
+						zero: c.zero,
+						cacheRead: c.cacheRead,
+						input: c.input,
+						shortfall: c.shortfall,
+					},
+				]),
+			);
 		const dump = (m: Map<string, Agg>) =>
 			Object.fromEntries(
 				[...m].map(([k, a]) => [
@@ -418,6 +703,9 @@ async function main(): Promise<void> {
 						byPool: dump(scan.byPool),
 						byModel: dump(scan.byModel),
 						byPosition: dump(scan.byPosition),
+						byCause: dump(scan.byCause),
+						byCoverage: dumpCoverage(scan.byCoverage),
+						variantPairs: dumpCoverage(scan.variantPairs),
 					},
 					claudeDirect: dump(claude),
 					codexDirect: dump(codex),
@@ -451,6 +739,11 @@ async function main(): Promise<void> {
 		);
 		for (const l of directTable("claude-direct", claude)) console.log(l);
 		for (const l of directTable("codex-direct", codex)) console.log(l);
+	}
+
+	if (showPrefix) {
+		console.log("\n── prefix coverage: did a request read back what the one before it sent? ──");
+		for (const l of prefixSection(scan)) console.log(l);
 	}
 
 	if (worstSessions > 0) {
