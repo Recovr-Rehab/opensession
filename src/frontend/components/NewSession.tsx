@@ -25,6 +25,7 @@ import {
   IconBox,
   IconMessage,
   IconStack,
+  IconNewBranch,
 } from "./icons";
 import type { WSServerMessage, Workspace } from "../lib/types";
 import { VoiceInput } from "./VoiceInput";
@@ -1016,19 +1017,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
             {/* shrink-0 like every other glyph in the header: a long branch
                 name squeezes the trigger, and the icon was giving up its width
                 before the label gave up characters, leaving a sliver. */}
-            <svg
-              className="shrink-0"
-              width="19"
-              height="19"
-              viewBox="0 0 16 16"
-              fill="none"
-              aria-hidden="true"
-            >
-              <circle cx="4" cy="4" r="1.7" stroke="currentColor" strokeWidth="1.3" />
-              <circle cx="4" cy="12" r="1.7" stroke="currentColor" strokeWidth="1.3" />
-              <circle cx="12" cy="5.5" r="1.7" stroke="currentColor" strokeWidth="1.3" />
-              <path d="M4 5.7v4.6M4 8h4a4 4 0 004-4" stroke="currentColor" strokeWidth="1.3" />
-            </svg>
+            <IconNewBranch className="shrink-0" size={19} />
             <span className="truncate">{createFromLabel}</span>
             <IconChevronDown className={CHEVRON} size={22} />
           </PaletteSelect>
