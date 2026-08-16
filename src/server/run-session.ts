@@ -61,6 +61,7 @@ import { registerRunToken, unregisterRunToken } from "./run-rpc";
 import { createSlackPostScanner, linkThreadInIndex } from "./slack-links";
 import { STRIPE_CONFIRM_TOOLS, looksLikeFabricatedToolTranscript } from "./runner-shared";
 import {
+	engineSessionIdFor,
 	engineSessionPatch,
 	engineUserTexts,
 	getEngineTranscriptPath,
@@ -1563,31 +1564,9 @@ async function runSessionPromptInner(
 	// stacking onto the previous snapshot (which would double-count).
 	let latestUsage: SessionUsage | undefined = session.usage;
 	let usageBase: SessionUsage | undefined = latestUsage;
-	// Opencode ids live in their own slot (with a transitional mirror in the
-	// claude slot — recognizable by the ses_ shape; see engineSessionPatch).
-	// A claude run never resumes a ses_-shaped id: that ride was written by an
-	// opencode run, and handing it to the Claude SDK would fail the resume.
-	const engineSessionId =
-		(provider === "codex"
-			? session.codexThreadId
-			: provider === "pi"
-				? // Slack/linear files sync pi ids into their piSessionId slot (with
-					// a claude-slot mirror for the owning loop) — fall back to a
-					// non-ses_ claude slot for files from before the pi slot existed.
-					// A genuine claude uuid riding there just misses the pi session
-					// dir and starts fresh, same as no id.
-					session.piSessionId ||
-					(isOpencodeSessionId(session.claudeSessionId)
-						? undefined
-						: session.claudeSessionId || undefined)
-				: provider === "opencode"
-					? session.opencodeSessionId ||
-						(isOpencodeSessionId(session.claudeSessionId)
-							? session.claudeSessionId
-							: undefined)
-					: isOpencodeSessionId(session.claudeSessionId)
-						? undefined
-						: session.claudeSessionId);
+	// Which slot holds the id this provider resumes is the inverse of the write
+	// rule in engineSessionPatch, so both live together in sessions.ts.
+	const engineSessionId = engineSessionIdFor(session, provider);
 	// A claude session with no engine id yet is a *fresh* session (e.g. a new sibling
 	// session opened from the tab strip's +): its first prompt starts a new claude
 	// conversation, and finalSessionId is persisted below — same as codex, which
@@ -1641,25 +1620,10 @@ async function runSessionPromptInner(
 		!!session.model &&
 		engineFamily(session.lastEngineModel) !== engineFamily(session.model);
 	if (lastProvider && (lastProvider !== provider || familySwitch)) {
-		const prevEngineId =
-			lastProvider === "codex"
-				? session.codexThreadId
-				: lastProvider === "pi"
-					? // Same pi-slot + claude-slot fallback as the run-start arm above,
-						// so a pi→anything switch on a slack/linear session still finds
-						// the id to build its handoff from.
-						session.piSessionId ||
-						(isOpencodeSessionId(session.claudeSessionId)
-							? undefined
-							: session.claudeSessionId || undefined)
-					: lastProvider === "opencode"
-						? session.opencodeSessionId ||
-							(isOpencodeSessionId(session.claudeSessionId)
-								? session.claudeSessionId
-								: undefined)
-						: isOpencodeSessionId(session.claudeSessionId)
-							? undefined
-							: session.claudeSessionId;
+		// Same slot rule as the run-start arm above, read for the OUTGOING
+		// engine, so a pi→anything switch on a slack/linear session still finds
+		// the id to build its handoff from.
+		const prevEngineId = engineSessionIdFor(session, lastProvider);
 		// The pi read serves the owned transcript store, where THIS turn's
 		// prompt is already durably persisted (storeAppendUserLineEarly above) —
 		// drop it so the handoff describes history *before* the prompt, which
