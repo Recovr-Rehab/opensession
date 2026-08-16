@@ -12,8 +12,8 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 export async function handleAnalyticsRoutes(ctx: RouteContext): Promise<Response | undefined> {
 	const { req, url, path } = ctx;
 	if (req.method !== "GET") return undefined;
-	// Compact today/7d numbers for the Home overview strip (rollups only).
-	if (path === "/api/analytics/home") return Response.json(buildHomeStats());
+	// Compact today/7d numbers for the Home overview strip.
+	if (path === "/api/analytics/home") return Response.json(await buildHomeStats());
 	if (path !== "/api/analytics") return undefined;
 
 	const today = new Date().toISOString().slice(0, 10);
