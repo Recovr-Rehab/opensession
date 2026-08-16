@@ -24,12 +24,13 @@
  * created — points the state dirs at a scratch dir, imports every module one
  * at a time, and reports each hit with the frame that made it.
  *
- * Deliberately NOT counted: frontend-build.ts builds the SPA bundle at import
- * when .frontend-dist is stale (`export const frontend` is a value the routes
- * read). The child pre-stubs the built-bundle global so that build is skipped
- * rather than run for real. It is a genuine module-scope side effect and a
- * known exemption, kept because making it lazy is a change to the served
- * bundle plumbing, not to this hazard class.
+ * Nothing is exempt. frontend-build.ts was, for a day: it compiled the SPA at
+ * import when .frontend-dist was stale, and the probe pre-stubbed the built
+ * bundle so the scan came back clean around it. That is now
+ * `ensureFrontendBuilt()`, awaited in opensession.ts before the port binds, so
+ * the module allocates the bundle object and nothing else. If a module ever
+ * needs an exemption again, prefer moving the resource — an exemption here is
+ * a hole in the only check that sees through a start function three files away.
  *
  * Usage: bun scripts/check-module-side-effects.ts [--json]
  * Exit 1 when anything is created at import time. src/server/module-side-effects.test.ts

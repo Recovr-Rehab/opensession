@@ -361,16 +361,49 @@ function tryReuseFrontendDist(): boolean {
 	}
 }
 
-if (!IS_DEV && !g.__opensessionFrontend) {
-	if (!tryReuseFrontendDist()) {
-		console.log("Building frontend (split + minified)…");
-		await buildFrontend();
-	}
-}
-
+/**
+ * The served bundle, or null under OPENSESSION_DEV=1 (where Bun's HMR server
+ * serves the app instead).
+ *
+ * Allocated at import, FILLED by ensureFrontendBuilt(). Allocating an empty
+ * object is not a resource; a Bun.build plus a Tailwind subprocess plus ~480
+ * written files are, and this module sits on the import chain of every route,
+ * so building here compiled the whole SPA for any script or test that reached
+ * it (scripts/check-module-side-effects.ts). The object has to exist before
+ * the build rather than replace it after: routes hold this one reference for
+ * the life of the process and read `indexHtml` fresh per request, which is
+ * exactly what lets a rebuild land without a restart.
+ */
 export const frontend: FrontendBundle | null = IS_DEV
 	? null
-	: (g.__opensessionFrontend as FrontendBundle);
+	: ((g.__opensessionFrontend ??= {
+			indexHtml: "",
+			gzip: new Map<string, Blob>(),
+			version: "",
+		}) as FrontendBundle);
+
+/**
+ * Fill the bundle: rehydrate an unchanged .frontend-dist, or build it.
+ *
+ * opensession.ts awaits this before the server binds a port, so no request
+ * can arrive at an empty shell. Idempotent — a `bun --hot` reload re-evaluates
+ * this module and finds the globalThis store already filled — and concurrent
+ * callers share one build. It throws when the build fails with no reusable
+ * dist, which fails the boot loudly rather than serving an app with no JS.
+ */
+export function ensureFrontendBuilt(): Promise<void> {
+	if (!frontend || frontend.version) return Promise.resolve();
+	if (!g.__opensessionFrontendBuild) {
+		g.__opensessionFrontendBuild = (async () => {
+			if (tryReuseFrontendDist()) return;
+			console.log("Building frontend (split + minified)…");
+			await buildFrontend();
+		})().finally(() => {
+			g.__opensessionFrontendBuild = undefined;
+		});
+	}
+	return g.__opensessionFrontendBuild as Promise<void>;
+}
 
 export const SPA_HEADERS = {
 	"Content-Type": "text/html; charset=utf-8",
@@ -387,9 +420,12 @@ const homepage = IS_DEV
 
 export const spaEntry = frontend
 	? () =>
-			new Response(frontend.indexHtml, {
-				headers: SPA_HEADERS,
-			})
+			// Unbuilt is unreachable in the server (boot awaits
+			// ensureFrontendBuilt before binding); saying so out loud beats
+			// serving an empty document to whatever got here another way.
+			frontend.version
+				? new Response(frontend.indexHtml, { headers: SPA_HEADERS })
+				: new Response("Frontend is still building", { status: 503 })
 	: homepage ?? (() => new Response("Hosted frontend unavailable", { status: 503 }));
 
 /**

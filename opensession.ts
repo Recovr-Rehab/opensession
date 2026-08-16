@@ -24,7 +24,7 @@ import { makeAskHandler } from "./src/server/asks";
 import { automationResumeMcpForSession, ensureConfiguredAutomations, getWebhookRoutes, setEventSessionCallback, settleResumedAutomationRun, startScheduler } from "./src/server/automations";
 import { startUsagePoller } from "./src/server/claude-accounts";
 import { startCodexUsagePoller } from "./src/server/codex-accounts";
-import { FRONTEND_SRC, IS_DEV, SPA_HEADERS, frontend, scheduleFrontendRebuild, sharedCheckoutEditors, spaEntry } from "./src/server/frontend-build";
+import { FRONTEND_SRC, IS_DEV, SPA_HEADERS, ensureFrontendBuilt, frontend, scheduleFrontendRebuild, sharedCheckoutEditors, spaEntry } from "./src/server/frontend-build";
 import { configuredIntegration } from "./src/server/config";
 import { initHumanAsks } from "./src/server/human-asks";
 import { interactiveMcpServers } from "./src/server/interactive-mcp";
@@ -144,6 +144,14 @@ const g = globalThis as any;
 let agents: AgentModule[] = (g.__agents as AgentModule[] | undefined) ?? [];
 
 console.log(`Starting Open Session server on ${HOST}:${PORT}...`);
+
+// The SPA bundle, before anything can ask for it. frontend-build.ts used to
+// compile it at import instead, which meant any script or test that reached a
+// route module built the whole app — the same import-time-resource hazard the
+// listeners above moved out of module scope. Awaited here rather than lazily
+// per request so a cold boot still binds with the shell ready, and idempotent,
+// so a `bun --hot` reload passes straight through.
+await ensureFrontendBuilt();
 
 // Reuse the listening server across hot reloads so existing WebSocket clients
 // and in-flight runs survive a tweak; a fresh `bun run` just creates it once.

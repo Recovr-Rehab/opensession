@@ -43,15 +43,6 @@ function record(kind: string): void {
 	hits.push({ kind, module: current, frame: frameOf() });
 }
 
-// frontend-build.ts builds the SPA at import when the dist is stale. Stubbing
-// the built-bundle global makes that a no-op — see the exemption note in
-// check-module-side-effects.ts.
-(globalThis as any).__opensessionFrontend = {
-	indexHtml: "",
-	gzip: new Map(),
-	version: "side-effect-probe",
-};
-
 const timerStub = {
 	unref() {
 		return timerStub;
