@@ -425,6 +425,16 @@ export type ProtocolServerMessage =
     }
   | { type: "ask_resolved"; sessionId: string; questionId: string }
   | {
+      /**
+       * Quick-reply chips for the turn that just ended (server/reply-suggestions.ts).
+       * `null` retires the row: the turn they answered has been answered.
+       * Picking a chip fills the composer, so `text` is a draft, never a send.
+       */
+      type: "reply_suggestions";
+      sessionId: string;
+      suggestions: { label: string; text: string }[] | null;
+    }
+  | {
       type: "slack_composer";
       sessionId: string;
       request: {

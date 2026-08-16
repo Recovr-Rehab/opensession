@@ -99,7 +99,31 @@ export const composerTextareaPaddingMinimized = "px-1 py-0";
    utility and a child's own `shrink` are the same specificity, so the pill's
    opt-back-in would have depended on the compiled sheet's order. */
 export const composerToolbar =
-	"mt-2.5 flex items-center gap-2 phone:mt-1.5 phone:gap-1.5";
+	"relative mt-2.5 flex items-center gap-2 phone:mt-1.5 phone:gap-1.5";
+/** The seam a scrolling draft earns.
+ *
+ *  Past the field's cap the draft scrolls inside the composer, and the last
+ *  visible line is cut mid-glyph a few pixels above the toolbar — text and
+ *  controls read as one run, with the cut looking like a rendering fault. The
+ *  hairline says the two are different regions and that the text continues
+ *  under it. It is the same rule the palette draws over its footer
+ *  (NewSession) and the app draws under its top bars (SCROLL_EDGE_DIVIDER),
+ *  earned on the same terms: only while content actually sits beyond the edge,
+ *  so a draft that fits keeps an undivided box.
+ *
+ *  A pseudo-element rather than a `border-t`, because a border that appears
+ *  would push the toolbar down a pixel each time you scrolled past the fold.
+ *  It bleeds past the composer's own padding to the box's inner edges — inset
+ *  to the text column it reads as a rule under a paragraph rather than as the
+ *  floor of the scrolling region.
+ *
+ *  `data-scroll-under` is written imperatively by the composer's scroll
+ *  handler, for the reason the fade above it is: a state round-trip lands the
+ *  line a frame late, which during momentum scroll reads as a flicker. */
+export const composerToolbarScrollDivider =
+	"before:pointer-events-none before:absolute before:-inset-x-3.5 before:top-0 " +
+	"before:h-px before:bg-divider before:opacity-0 before:transition-opacity " +
+	"before:content-[''] data-[scroll-under]:before:opacity-100 phone:before:-inset-x-3";
 /** Resting phone pill: `display: contents` lifts the toolbar's buttons into
  *  the composer's own flex row, so the textarea can sit between the "+" and
  *  the mic/send and `order` can sequence them. Combine through `cn()` —

@@ -49,6 +49,11 @@ import {
 	type TurnActivityPref,
 } from "../../lib/turn-activity";
 import {
+	getReplySuggestionsPref,
+	onReplySuggestionsChanged,
+	setReplySuggestionsPref,
+} from "../../lib/reply-suggestions";
+import {
 	getVimModePref,
 	onVimModeChanged,
 	setVimModePref,
@@ -327,11 +332,21 @@ export function PreferencesPanel() {
 	const [sendKey, setSendKey] = useState<SendKeyPref>(getSendKeyPref);
 	const [busySend, setBusySend] = useState<BusySendPrefs>(getBusySendPrefs);
 	const [vimMode, setVimMode] = useState<boolean>(getVimModePref);
+	const [quickReplies, setQuickReplies] = useState<boolean>(
+		getReplySuggestionsPref,
+	);
 	const [pinNew, setPinNew] = useState<boolean>(getPinNewSessions);
 	const [pinNewWs, setPinNewWs] = useState<boolean>(getPinNewWorkspaces);
 	useEffect(() => onSendKeyChanged(() => setSendKey(getSendKeyPref())), []);
 	useEffect(() => onBusySendChanged(() => setBusySend(getBusySendPrefs())), []);
 	useEffect(() => onVimModeChanged(() => setVimMode(getVimModePref())), []);
+	useEffect(
+		() =>
+			onReplySuggestionsChanged(() =>
+				setQuickReplies(getReplySuggestionsPref()),
+			),
+		[],
+	);
 	useEffect(
 		() => onPinNewSessionsChanged(() => setPinNew(getPinNewSessions())),
 		[],
@@ -424,6 +439,17 @@ export function PreferencesPanel() {
 								/>
 							)}
 						</div>
+					}
+				/>
+				<SettingRow
+					title="Quick replies"
+					desc="Suggest short follow-ups above the composer when a turn ends on a choice. Picking one fills the draft."
+					control={
+						<Switch
+							aria-label="Quick replies"
+							checked={quickReplies}
+							onCheckedChange={setReplySuggestionsPref}
+						/>
 					}
 				/>
 				<SettingRow

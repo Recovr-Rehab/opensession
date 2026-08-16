@@ -28,6 +28,7 @@ import { findSession, invalidateSessionsCache, maybePersistEffort, maybePersistF
 import { engineUserTexts, mergedSessionTranscript, mergedSessionTranscriptAsync, v2MirrorFiles, v2TranscriptHasDrift } from "./sessions";
 import { handleSlashCommand } from "./slash-commands";
 import { maybeRecapOnReturn } from "./recap";
+import { maybeSuggestRepliesOnReturn, resendReplySuggestions } from "./reply-suggestions";
 import { resizeTerminal, startSessionTerminal, stopAllTerminals, stopTerminal, writeTerminal } from "./terminals";
 import { classifyEntries } from "@tellahq/opensession-protocol/notices";
 import { withToolPresentations } from "@tellahq/opensession-protocol/tool-presentation";
@@ -83,6 +84,7 @@ function sendWatchExtras(
 		);
 	}
 	resendPendingSlackComposer(sessionId, (message) => ws.send(JSON.stringify(message)));
+	resendReplySuggestions(sessionId, (message) => ws.send(JSON.stringify(message)));
 
 	// Older in-memory rows may lack ids; assign and persist them before
 	// sending so edit/delete/steer actions can address the same row.
@@ -475,8 +477,12 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 				// Coming back to a session whose turn finished while everyone was
 				// away → drop in an away-summary system chip (recap.ts).
 				const returnedTo = ws.data?.watchingSessionId;
-				if (!presenceSuppressed && msg.away !== true && returnedTo)
+				if (!presenceSuppressed && msg.away !== true && returnedTo) {
 					maybeRecapOnReturn(returnedTo, ws.data?.user || undefined);
+					// Same return: offer the finished turn's choice as chips if it
+					// ended one while nobody was here (reply-suggestions.ts).
+					maybeSuggestRepliesOnReturn(returnedTo, ws.data?.user || undefined);
+				}
 				break;
 			}
 
@@ -511,8 +517,10 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 				// Opening a session whose last turn finished with nobody watching →
 				// drop in an away-summary system chip (recap.ts). Fire-and-forget;
 				// the recap arrives through the transcript bus like any append.
-				if ((data as any).presenceSuppressed !== true)
+				if ((data as any).presenceSuppressed !== true) {
 					maybeRecapOnReturn(sessionId, data.user || undefined);
+					maybeSuggestRepliesOnReturn(sessionId, data.user || undefined);
+				}
 
 				// Transcript v2 (flag + supportsSeq gated): eligible watches are
 				// served from the owned store + bus with seq cursors — no mirror

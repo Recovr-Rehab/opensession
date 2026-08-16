@@ -52,6 +52,12 @@ import {
 	type LiveSubagent,
 } from "./ToolCallBlock";
 import { parsePlanItems, type PlanItem } from "@tellahq/opensession-protocol/todo-plan";
+import { ReplySuggestions } from "./ReplySuggestions";
+import {
+	getReplySuggestionsPref,
+	onReplySuggestionsChanged,
+	type ReplySuggestion,
+} from "../lib/reply-suggestions";
 import { MarkdownBody, useMarkdownRepo } from "./MarkdownBody";
 import {
 	OpenAssetPathsProvider,
@@ -524,6 +530,9 @@ interface Props {
 const NO_SUBAGENTS: SubagentRef[] = [];
 const NO_PLAN: PlanItem[] = [];
 const NO_WORKFLOW_RUNS: WorkflowRunSnapshot[] = [];
+// Same reason: the empty row is set on every stream_start, and a fresh array
+// each time would re-render the composer block for nothing.
+const EMPTY_SUGGESTIONS: ReplySuggestion[] = [];
 
 // A two-item "plan" is ceremony, not a plan — below this the flap stays shut
 // and the checklist lives in the transcript like any other tool call.
@@ -1147,6 +1156,22 @@ export function SessionViewer({
 		text: string;
 		replace?: boolean;
 	} | null>(null);
+	// Quick-reply chips for the turn that just ended (components/ReplySuggestions).
+	// Server-generated and server-cleared; a picked chip retires the row here.
+	const [replySuggestions, setReplySuggestions] =
+		useState<ReplySuggestion[]>(EMPTY_SUGGESTIONS);
+	// Settings → Preferences, default on. Only hides the row: the server keeps
+	// its own switch (OPENSESSION_REPLY_SUGGESTIONS=0) for the generation.
+	const [showReplySuggestions, setShowReplySuggestions] = useState(
+		getReplySuggestionsPref,
+	);
+	useEffect(
+		() =>
+			onReplySuggestionsChanged(() =>
+				setShowReplySuggestions(getReplySuggestionsPref()),
+			),
+		[],
+	);
 	// Optimistic just-sent messages, shown instantly and reconciled once the real
 	// turn lands (transcript) or the server confirms it as queued (busy path).
 	// `busyMode` marks a send made while the run was busy: it renders inside the
@@ -2303,6 +2328,11 @@ export function SessionViewer({
 						);
 					}
 					break;
+				case "reply_suggestions":
+					// Null retires the row (the turn they answered has been answered).
+					if (msg.sessionId === session.id)
+						setReplySuggestions(msg.suggestions ?? []);
+					break;
 				case "slack_composer":
 					if (msg.sessionId === session.id) {
 						setSlackComposer(msg.request);
@@ -2343,6 +2373,10 @@ export function SessionViewer({
 				case "stream_start":
 					setIsStreaming(true);
 					liveTurnStore.start(msg.by);
+					// A new turn answers the last one's chips. The server clears its
+					// copy on the same event; this is what stops the row lingering
+					// for the seconds before that broadcast lands.
+					setReplySuggestions(EMPTY_SUGGESTIONS);
 					break;
 				case "stream_text": {
 					if (isTimelineOnlyRunnerNotice(msg.text)) break;
@@ -6006,6 +6040,31 @@ export function SessionViewer({
 										</button>
 									</div>
 								)}
+								{/* Quick replies for the turn that just ended. Off while a
+								    run is live (they answer a finished turn), while an ask
+								    card is up (that card already offers the choices, with
+								    the agent's own wording), and while forking (the point
+								    there is a new direction, not a follow-up). Same width
+								    as the composer box so the pills line up with its edge. */}
+								{showReplySuggestions &&
+									!isBusy &&
+									!ask &&
+									!forkFrom &&
+									replySuggestions.length > 0 && (
+										<ReplySuggestions
+											className="mx-auto w-full max-w-[calc(var(--session-col)+40px)]"
+											suggestions={replySuggestions}
+											onPick={(text) => {
+												setComposerPrefill((current) => ({
+													seq: (current?.seq ?? 0) + 1,
+													text,
+													replace: false,
+												}));
+												setReplySuggestions(EMPTY_SUGGESTIONS);
+												if (!isPhone) composerRef.current?.focus();
+											}}
+										/>
+									)}
 								<Composer
 									// Uncontrolled: the draft lives in the Composer (persisted
 									// per session via draftKey). Remount on the tab-bar +

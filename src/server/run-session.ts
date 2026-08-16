@@ -87,6 +87,7 @@ import {
 import { ensureSandboxWithTransientRetry } from "./sandbox/reliability";
 import { getTitleOverride } from "./title-overrides";
 import { ensureGeneratedTitle } from "./generated-titles";
+import { clearReplySuggestions, maybeSuggestReplies } from "./reply-suggestions";
 import { commitAuthorFor } from "./shared/user-mappings";
 import { writeFileAtomic, writeJsonAtomic } from "./shared/atomic-write";
 import { startWatching } from "./file-watcher";
@@ -1906,6 +1907,10 @@ async function runSessionPromptInner(
 		});
 	}
 
+	// The last turn's quick-reply chips offered a choice that this prompt just
+	// made, whichever way it was made (see reply-suggestions.ts).
+	clearReplySuggestions(sessionId);
+
 	// Everyone viewing this session sees the prompt and the live run
 	broadcastToSession(sessionId, {
 		type: "stream_start",
@@ -2405,6 +2410,12 @@ async function runSessionPromptInner(
 		// what the turn's start time lets recap.ts check.
 		if (!endedWithError && (assistantText.trim() || toolUseCount > 0))
 			markRecapPendingIfUnwatched(sessionId, turnMetricStartedAt);
+		// A turn that ended on a choice ("fix both, or only step 1?") offers that
+		// choice as chips above the composer. Generated only for a watcher who is
+		// actually there; anyone arriving later gets them on watch instead
+		// (reply-suggestions.ts).
+		if (!endedWithError && assistantText.trim())
+			maybeSuggestReplies(sessionId, user || session.startedBy || undefined);
 	}
 }
 

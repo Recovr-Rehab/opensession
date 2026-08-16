@@ -56,6 +56,7 @@ import {
   composerToolbar,
   composerToolbarMinimized,
   composerToolbarPill,
+  composerToolbarScrollDivider,
   composerToolbarSelect,
 } from "../lib/composer-classes";
 import { noAutofill } from "../lib/composer-autofill";
@@ -735,36 +736,43 @@ export function Composer({
   }
 
   // Once the draft grows past the composer's max-height the textarea scrolls
-  // internally; without help the clipped text ends in a hard horizontal cut at
-  // the container edge. We fade the edge instead: a scroll-aware mask on the
-  // input region that softens the top once you've scrolled down, and the bottom
-  // while there's still text below. Only the active edges dim, so a resting
-  // first line never fades. Phone-only — the tall desktop field rarely clips.
+  // internally, and without help the clipped text ends in a hard cut at both
+  // ends of the field. Each end gets the treatment its own edge asks for.
   //
-  // Driven imperatively (write the mask straight onto the wrapper) rather than
-  // through React state: a state-round-trip lags the scroll by a render, so the
-  // mask is a frame stale during momentum scroll and reads as a flicker (or, if
-  // a scroll event coalesces, never updates at all). The mask must track
-  // scrollTop exactly, so we set it in the same handler that observes the scroll.
+  // The TOP has no chrome to hold a line — the text simply meets the box's
+  // padding — so it dissolves: a scroll-aware mask over the input region,
+  // applied only once you have actually scrolled down, so a resting first line
+  // never fades.
+  //
+  // The BOTTOM does have chrome: the toolbar row sits right under the fold. A
+  // fade there would dim the last line of a draft you are still writing, so it
+  // takes a hairline instead (composerToolbarScrollDivider), which says the
+  // text continues under the controls without touching the text itself. It is
+  // drawn while content sits below the fold and stands down at the end of the
+  // draft, so a field that fits keeps an undivided box.
+  //
+  // Both are driven imperatively (mask straight onto the wrapper, attribute
+  // straight onto the toolbar) rather than through React state: a state
+  // round-trip lags the scroll by a render, so the edge is a frame stale during
+  // momentum scroll and reads as a flicker (or, if a scroll event coalesces,
+  // never updates at all). They must track scrollTop exactly, so we set them in
+  // the same handler that observes the scroll.
   const FADE_PX = 26;
-  function updateFade(el: HTMLTextAreaElement) {
+  function updateScrollEdges(el: HTMLTextAreaElement) {
     const wrap = el.parentElement; // .composer-input-wrap (masks textarea + hl mirror as one)
     if (!wrap) return;
-    const top = isPhone && el.scrollTop > 1;
-    const bottom =
-      isPhone && el.scrollTop + el.clientHeight < el.scrollHeight - 1;
-    const mask =
-      top || bottom
-        ? `linear-gradient(to bottom, ${
-            top ? "transparent 0, #000 " + FADE_PX + "px" : "#000 0"
-          }, ${
-            bottom
-              ? "#000 calc(100% - " + FADE_PX + "px), transparent 100%"
-              : "#000 100%"
-          })`
-        : "";
+    // Not `> 0`: scrollTop is fractional at fractional zoom, and an overscroll
+    // bounce drives it past both ends.
+    const top = el.scrollTop > 1;
+    const mask = top
+      ? `linear-gradient(to bottom, transparent 0, #000 ${FADE_PX}px, #000 100%)`
+      : "";
     wrap.style.setProperty("-webkit-mask-image", mask);
     wrap.style.setProperty("mask-image", mask);
+    toolbarRef.current?.toggleAttribute(
+      "data-scroll-under",
+      el.scrollTop + el.clientHeight < el.scrollHeight - 1,
+    );
   }
 
   // Auto-grow to fit the draft. Only a NON-EMPTY draft is measured; an empty
@@ -785,9 +793,20 @@ export function Composer({
     el.style.height = "";
     // min-/max-height clamp this, so tall drafts scroll internally at the cap.
     if (displayText) el.style.height = `${el.scrollHeight}px`;
-    // Height (and thus clip state) just changed — re-evaluate the edge fades.
-    updateFade(el);
+    // Height (and thus clip state) just changed — re-evaluate both edges.
+    updateScrollEdges(el);
   }, [displayText, isPhone, minimized]);
+
+  // The draft can also start or stop clipping without a keystroke: the pane is
+  // resized, a split opens, the phone keyboard takes the field's cap down. The
+  // observer answers those the same way the effect answers typing.
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => updateScrollEdges(el));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   // Live code styling: when the draft contains a backtick, a metrics-identical
   // mirror div paints `inline` / ```fence``` tints behind a transparent-text
@@ -1220,7 +1239,7 @@ export function Composer({
             onScroll={(e) => {
               if (hlRef.current)
                 hlRef.current.scrollTop = e.currentTarget.scrollTop;
-              updateFade(e.currentTarget);
+              updateScrollEdges(e.currentTarget);
             }}
             onFocus={() => setFocused(true)}
             onBlur={() => {
@@ -1243,7 +1262,11 @@ export function Composer({
           />
         </motion.div>
         <div
-          className={cn(composerToolbar, minimized && composerToolbarMinimized)}
+          className={cn(
+            composerToolbar,
+            composerToolbarScrollDivider,
+            minimized && composerToolbarMinimized,
+          )}
           ref={toolbarRef}
           // Phones: a toolbar tap must not blur the textarea — the blur would
           // collapse the empty composer mid-tap (unmounting the model pill and
