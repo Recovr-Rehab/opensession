@@ -73,6 +73,7 @@ export interface PreviewService {
   /** Raw .ports.conf key, e.g. "WEBAPP_PORT". */
   key: string;
   port: number;
+  /** Derived from `state`, never probed separately: `state === "awake"`. */
   running: boolean;
   pids: number[];
   /** Authenticated URL for this individual service when it is reachable. */
@@ -80,7 +81,9 @@ export interface PreviewService {
 	/** Session supervisor metadata for an agent-created Portal. */
 	description?: string;
 	defaultPath?: string;
-	state?: "starting" | "awake" | "sleeping" | "waking" | "failed" | "stopped";
+	/** The one lifecycle field. A managed Portal takes it from its supervisor;
+	 *  an unmanaged .ports.conf service gets it from the single port probe. */
+	state: "starting" | "awake" | "sleeping" | "waking" | "failed" | "stopped";
 	managed?: boolean;
 }
 
@@ -620,6 +623,7 @@ export async function getPreviewStatus(worktreeDir: string): Promise<PreviewStat
           port: 0,
           running: poolLive === true,
           pids: [],
+          state: poolLive === true ? "awake" : "starting",
         },
       ],
       portalRecipes: hostPreviewPortalRecipes(worktreeDir),
@@ -629,22 +633,31 @@ export async function getPreviewStatus(worktreeDir: string): Promise<PreviewStat
 	const portalRecords = await listPortalServices(worktreeDir);
 	const portalByKey = new Map(portalRecords.map((record) => [record.key, record]));
   const observedServices: PreviewService[] = await Promise.all(
-    ports.map(async ({ key, port }) => {
+    ports.map(async ({ key, port }): Promise<PreviewService> => {
+ 		const portal = portalByKey.get(key);
+		// A managed Portal has one liveness owner: listPortalServices already
+		// probed this port. Probing it again here is what let a stopped Portal
+		// whose port had been taken over report itself as running.
+		if (portal) {
+			return {
+				name: portal.name, key, port,
+				running: portal.state === "awake",
+				pids: portal.pid ? [portal.pid] : [],
+				...(portal.description ? { description: portal.description } : {}),
+				...(portal.defaultPath ? { defaultPath: portal.defaultPath } : {}),
+				state: portal.state, managed: true,
+			};
+		}
       const pids = await listenersOnPort(port);
       // Root-owned listeners (docker-proxy fronting a preview-pool container)
       // show no pid to non-root `ss -p` — a listening socket counts as
       // running even when we can't see who owns it.
-      const running =
+      const awake =
         key === "WEBAPP_PORT" && poolLive != null
           ? poolLive
           : pids.length > 0 || (await portListening(port));
-		const portal = portalByKey.get(key);
-      return {
-			name: portal?.name ?? friendly(key), key, port, running, pids,
-			...(portal?.description ? { description: portal.description } : {}),
-			...(portal?.defaultPath ? { defaultPath: portal.defaultPath } : {}),
-			...(portal ? { state: portal.state, managed: true } : {}),
-		};
+      const state = awake ? "awake" : "stopped";
+      return { name: friendly(key), key, port, running: state === "awake", pids, state };
     }),
   );
   const host = await previewHost();
@@ -655,7 +668,7 @@ export async function getPreviewStatus(worktreeDir: string): Promise<PreviewStat
   for (const service of observedServices) {
     const httpsPort = hostServiceHttpsPort(service.port);
     let previewUrl: string | null = null;
-    if (service.running && httpsPort != null) {
+    if (service.state === "awake" && httpsPort != null) {
       if (await ensurePreviewRoute(httpsPort, `127.0.0.1:${service.port}`, host)) {
         previewUrl = `https://${host}:${httpsPort}`;
       }
@@ -1213,10 +1226,14 @@ export async function getSandboxPreviewStatus(
 	const portMap = usesOutboundSandboxPortalRelay(sandbox.provider) ? {} : await sandbox.ports(ports.map((service) => service.port));
   const host = await previewHost();
   for (const { key, port } of ports) {
-		const portal = portalByKey.get(key);
-    const running = await sandboxPortListening(sandbox, port);
+ 		const portal = portalByKey.get(key);
+		// One probe per service. A managed Portal's state comes from
+		// listSandboxPortalServices, which already spent that container round
+		// trip; only unmanaged .ports.conf entries are connected to here.
+		const state = portal ? portal.state : (await sandboxPortListening(sandbox, port)) ? "awake" : "stopped";
+		const running = state === "awake";
     let previewUrl: string | null = null;
-		if (running && usesOutboundSandboxPortalRelay(sandbox.provider)) {
+ 		if (running && usesOutboundSandboxPortalRelay(sandbox.provider)) {
 			previewUrl = sessionId ? await ensureRemoteSandboxPortalAgent({ sessionId, sandbox, port }) : null;
 		} else if (running) {
       const entry = portMap[port];
@@ -1249,9 +1266,10 @@ export async function getSandboxPreviewStatus(
       running,
       pids: [],
       previewUrl,
-		...(portal?.description ? { description: portal.description } : {}),
-		...(portal?.defaultPath ? { defaultPath: portal.defaultPath } : {}),
-		...(portal ? { state: portal.state, managed: true } : {}),
+ 		...(portal?.description ? { description: portal.description } : {}),
+ 		...(portal?.defaultPath ? { defaultPath: portal.defaultPath } : {}),
+ 		state,
+ 		...(portal ? { managed: true } : {}),
     });
   }
   const webapp = services.find((s) => s.key === "WEBAPP_PORT");
