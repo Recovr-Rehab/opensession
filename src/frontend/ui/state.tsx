@@ -263,10 +263,10 @@ export function TranscriptSkeleton({
 type AlertVariant = "error" | "warn" | "info";
 
 // Border at 40% of the hue over its soft fill — the `.form-error` recipe,
-// generalised. (There is no --yellow-soft, hence the mix.)
+// generalised.
 const alertVariants: Record<AlertVariant, string> = {
 	error: "border-[color-mix(in_srgb,var(--red)_40%,transparent)] bg-red-soft text-red",
-	warn: "border-[color-mix(in_srgb,var(--yellow)_40%,transparent)] bg-[color-mix(in_srgb,var(--yellow)_12%,transparent)] text-yellow",
+	warn: "border-[color-mix(in_srgb,var(--yellow)_40%,transparent)] bg-yellow-soft text-yellow",
 	info: "border-[color-mix(in_srgb,var(--blue)_40%,transparent)] bg-blue-soft text-blue",
 };
 
