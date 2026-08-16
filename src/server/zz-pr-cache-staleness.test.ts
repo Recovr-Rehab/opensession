@@ -1,3 +1,8 @@
+// zz- prefix: this file drives a REAL bulk sweep, and pr-cache.ts keeps its
+// lastFullRefresh map at module scope behind a 10-minute coalescing window
+// (MIN_FULL_REFRESH_MS). A test file that loaded pr-cache.ts earlier leaves
+// that window armed, so the sweep skips the open query and these assertions
+// hang. Sorting last keeps the module cold enough for the sweep to run.
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
