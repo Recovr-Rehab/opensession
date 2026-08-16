@@ -32,6 +32,13 @@ export type SandboxProviderId =
   | "microvm"
   | "lambda-microvm";
 
+/** Selection authority for starting new work on a configured provider. */
+export type SandboxProviderUsability =
+  | { state: "not_configured"; configured: false; usable: false }
+  | { state: "unavailable"; configured: true; usable: false }
+  | { state: "unqualified"; configured: true; usable: false }
+  | { state: "usable"; configured: true; usable: true };
+
 /**
  * Everything a provider needs to create-or-reuse the sandbox for a session.
  * For the local provider this resolves to a worktree path via the existing
