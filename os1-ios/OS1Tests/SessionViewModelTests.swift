@@ -1232,6 +1232,22 @@ final class SendDraftTests: XCTestCase {
         XCTAssertEqual(socket.deletedQueueIds, ["q1"])
     }
 
+    /// The two server lists render as separate rows, so a chip claimed by
+    /// both would show the same message twice, labelled "steering" AND
+    /// "queued". The steer receipt is the further-along state and wins.
+    func testChipInBothServerListsRendersOnlyAsSteered() {
+        let json = #"""
+        {"type":"queue_update","sessionId":"bks-1",
+         "queued":[{"id":"q1","content":"both","user":"ios"},
+                   {"id":"q2","content":"later","user":"ios"}],
+         "steered":[{"id":"q1","content":"both","user":"ios"}]}
+        """#
+        viewModel.handle(ServerEvent.parse(Data(json.utf8)))
+        XCTAssertEqual(viewModel.steeredItems.map(\.id), ["q1"])
+        XCTAssertEqual(viewModel.queuedItems.map(\.id), ["q2"])
+        XCTAssertEqual(viewModel.queuedCount, 1)
+    }
+
     /// A dismissed steer receipt leaves the server queue without its message
     /// ever landing in the transcript — the exact shape the delivering-hold
     /// looks for. Without the optimistic removal it comes straight back as a

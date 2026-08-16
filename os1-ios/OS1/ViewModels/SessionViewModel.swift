@@ -999,6 +999,11 @@ final class SessionViewModel {
         queuedItems.removeAll { $0.id == item.id }
         steeredItems.removeAll { $0.id == item.id }
         deliveringItems.removeAll { $0.id == item.id }
+        // The delivery clock has to go with the chip: a leftover start would
+        // be inherited by `updateDelivering` if the server re-lists and
+        // re-drains the same id, and the fresh chip would prune instantly as
+        // a 30s-old ghost.
+        deliveringSince.removeValue(forKey: item.id)
         queuedCount = queuedItems.count
     }
 
@@ -1373,12 +1378,16 @@ final class SessionViewModel {
                     return !replaced && !messageLanded(chip)
                 }
             )
-            queuedItems = queued
+            // The two lists render as separate rows, so an id claimed by both
+            // would show the same message twice, labelled "steering" AND
+            // "queued". A steer receipt is the further-along state, so it wins.
+            let steeredIds = Set(steered.map(\.id))
+            queuedItems = queued.filter { !steeredIds.contains($0.id) }
             steeredItems = steered
-            queuedCount = queued.count
+            queuedCount = queuedItems.count
             // Landed flags outlive their purpose once the chip is gone.
             landedChipIds.formIntersection(
-                Set((queued + steered + deliveringItems).map(\.id))
+                Set((queuedItems + steeredItems + deliveringItems).map(\.id))
             )
         case .queuedPromptTaken(let id, let queueId, let item, let message)
             where id == session.id:
@@ -1388,6 +1397,7 @@ final class SessionViewModel {
             }
             removeChip(item)
             deliveringItems.removeAll { $0.id == queueId }
+            deliveringSince.removeValue(forKey: queueId)
             draft = draft.isEmpty ? item.content : draft + "\n\n" + item.content
             attachedImages.append(
                 contentsOf: item.images.compactMap(AttachedImage.init(dataURL:))
