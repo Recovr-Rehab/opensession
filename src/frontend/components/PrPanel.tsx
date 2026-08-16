@@ -195,6 +195,8 @@ export interface LinkedPrEntry {
   title?: string;
 }
 
+const NO_LINKED_PRS: LinkedPrEntry[] = [];
+
 /** One narrative section of the AI review guide (mirrors the server shape). */
 interface ReviewGuideSection {
   title: string;
@@ -285,7 +287,9 @@ export function PrPanel({
   // Local copy of the linked-PR list so link/unlink applies instantly; the
   // sessions list catches up on its next refresh.
   const [linkedLocal, setLinkedLocal] = useState<LinkedPrEntry[] | null>(null);
-  const linked = linkedLocal ?? linkedPrs ?? [];
+  // One identity for "no linked PRs", or the `targets` memo below re-runs on
+  // every render for the (common) session with none.
+  const linked = linkedLocal ?? linkedPrs ?? NO_LINKED_PRS;
   const targets = useMemo<PrTarget[]>(
     () => dedupeTargets([
       ...(previewTarget
