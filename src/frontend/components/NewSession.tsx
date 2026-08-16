@@ -1,26 +1,18 @@
-import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
-import { fetchWorktrees, fetchModels, fetchFileMentions, fetchSkillMentions, fetchConnections, fetchSandboxStatus, requestSandboxPrewarm, suggestBranch, fetchProviderAccounts, fetchRepos, createWorkspaceApi, updateWorkspaceApi, ApiError, type ProviderAccountOption, type ModelOption, type SandboxStatusInfo } from "../lib/api";
+import React, { useState, useEffect, useRef } from "react";
+import { fetchWorktrees, fetchModels, fetchConnections, fetchSandboxStatus, requestSandboxPrewarm, suggestBranch, fetchProviderAccounts, fetchRepos, createWorkspaceApi, updateWorkspaceApi, ApiError, type ProviderAccountOption, type ModelOption, type SandboxStatusInfo } from "../lib/api";
 import { getCurrentUser } from "./UserPicker";
-import { splitAttachments, imageFilesFromPaste, type FileAttachment } from "../lib/images";
-import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
+import { splitAttachments, type FileAttachment } from "../lib/images";
+import { loadDraft, clearDraft } from "../lib/drafts";
 import { getDefaultModelPref } from "../lib/default-model-pref";
 import { baseModelId, modelEngine } from "./ModelEffortSelect";
 import { getSendKeyPref, onSendKeyChanged } from "../lib/send-key-pref";
-import { insideOpenFence, isSendCombo, MOD_ENTER_GLYPH } from "../lib/send-key";
+import { MOD_ENTER_GLYPH } from "../lib/send-key";
 import { isApple } from "../lib/platform";
-import { ImageThumbs } from "./ImageThumbs";
-import { FileChips } from "./FileChips";
-import { useFileMentions } from "./useFileMentions";
-import { peopleMentionMatches } from "../lib/people";
 import { NO_REPO } from "../lib/session-repo";
-import { insertPastedSessionId } from "../lib/session-url";
 import {
-  COMPOSER_HIGHLIGHT_MAX_CHARS,
-  composerHighlightHtml,
-  paintPillHover,
-} from "../lib/composer-highlight";
-import { composerPillSpacing } from "../lib/composer-classes";
-import { useSessionNameProjection } from "../hooks/useSessionNameProjection";
+  NewSessionPrompt,
+  type NewSessionPromptHandle,
+} from "./NewSessionPrompt";
 import {
   IconPaperclip,
   IconChevronDown,
@@ -46,7 +38,6 @@ import { IconTile } from "./BrandTile";
 import { Tooltip } from "../ui/tooltip";
 import { Modal, useEnterOnMount } from "../ui/modal";
 import { composerBox } from "../lib/composer-classes";
-import { noAutofill } from "../lib/composer-autofill";
 import { tintedSurfaceParts } from "../lib/tinted-surface";
 import { cn } from "../ui/cn";
 import {
@@ -158,18 +149,8 @@ const TRIGGER_STRONG =
 	"relative inline-flex min-w-0 max-w-[46%] cursor-pointer items-center gap-1.5 rounded-control px-2 py-[5px] text-item-title font-semibold text-fg transition-colors hover:bg-hover disabled:cursor-default disabled:opacity-55";
 const CHEVRON = "-ml-0.5 shrink-0 text-faint";
 
-/** One scroll surface for the prompt and its attachments. Keeping the image in
- *  this flow means it travels with the text instead of pinning over it.
- *
- *  `pt-1` rather than `pt-3`: the header already carries 11px below its row, so
- *  a 12px reserve here put 28px between the repo picker and the placeholder
- *  while the prompt sat flush against the footer. Now that the hairline only
- *  appears once the prompt scrolls, the header and the prompt read as one
- *  block, and that gap read as a hole in it. */
-const BODY =
-	"relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-4 pt-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
-const TEXTAREA =
-	"block min-h-[132px] w-full resize-none overflow-hidden border-none bg-transparent font-sans text-body leading-[1.55] text-fg outline-none placeholder:text-faint disabled:opacity-60";
+/* (The prompt's own surface — the scroller and the field — moved to
+   NewSessionPrompt, with the draft state it belongs to.) */
 const ERROR = "mx-4 mb-2 rounded-md bg-red-soft px-2.5 py-[7px] text-supporting text-red";
 
 /* Single-line footer: the model pill is the only flexible item — it gives way
@@ -458,10 +439,24 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   const [newBranch, setNewBranch] = useState(prefill.branch);
   // An explicit prefill (Home hand-off, deep link) wins; otherwise restore the
   // stored draft so closing the palette / navigating away doesn't lose a
-  // half-written task. Mirrored back below; cleared on session_created.
-  const [prompt, setPrompt] = useState(
-    prefillPrompt || prefill.prompt || loadDraft("new-session").text,
+  // half-written task. Cleared on session_created.
+  //
+  // The draft itself belongs to NewSessionPrompt rather than to this component,
+  // because typing must not re-render the palette around it. What stays here is
+  // only what the palette reads: the current text in a ref, for the moment a
+  // create is submitted; whether there is any text, which is the Create
+  // button's gate; and the text once typing stops, which is what the branch
+  // name is suggested from.
+  const [initialPrompt] = useState(
+    () => prefillPrompt || prefill.prompt || loadDraft("new-session").text,
   );
+  const promptText = useRef(initialPrompt);
+  const promptHandle = useRef<NewSessionPromptHandle | null>(null);
+  const [hasPromptText, setHasPromptText] = useState(() =>
+    /\S/.test(initialPrompt),
+  );
+  const [settledPrompt, setSettledPrompt] = useState(initialPrompt);
+  const [mentionOpen, setMentionOpen] = useState(false);
   // Whether the user has hand-edited the branch field. Once true we stop
   // auto-suggesting so we never clobber what they typed. A prefilled branch
   // (deep link) counts as already-owned.
@@ -593,13 +588,15 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     setSandboxWarmed(false);
   }, [sandboxProvider, repo]);
   useEffect(() => {
-    if (!shouldPrewarm || !prompt.trim() || busy) return;
+    // Whether the prompt has anything in it, not what it says: the throttle
+    // below means only the first character of a draft ever fires this.
+    if (!shouldPrewarm || !hasPromptText || busy) return;
     if (Date.now() - lastPrewarmAtRef.current < 60_000) return;
     lastPrewarmAtRef.current = Date.now();
     requestSandboxPrewarm(sandboxProvider, repo, getCurrentUser())
       .then((r) => setSandboxWarmed(r.state === "ready"))
       .catch(() => {});
-  }, [prompt, shouldPrewarm, sandboxProvider, repo, busy]);
+  }, [hasPromptText, shouldPrewarm, sandboxProvider, repo, busy]);
 
   // MCP servers: empty by default (minimal context), users can opt in for
   // specific ones. The list comes from mcp-config.json via the connections
@@ -619,51 +616,10 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     );
   }
 
-  // "@"-mention file autocomplete against the selected repo's repo (no
-  // session exists yet, so search by repo).
   const promptRef = useRef<HTMLTextAreaElement>(null);
   // Hidden <input type="file"> driven by the "Add file" button — the mobile
   // path, since there's no clipboard paste there.
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // A pasted session link is stored as its id and shown as that session's
-  // name, exactly as in the session composer. The palette is where most links
-  // are dropped, and a first prompt that reads as forty characters of uuid says
-  // nothing about what it points at.
-  const sessionNames = useSessionNameProjection({
-    text: prompt,
-    setText: setPrompt,
-    textareaRef: promptRef,
-  });
-  // Only session references paint here. The palette has no `inline code` tint
-  // and no mention pills, and a reference is the one thing in this field whose
-  // text is not what will be sent, so it is the one thing that has to say so.
-  const hlRef = useRef<HTMLDivElement>(null);
-  const hoveredPill = useRef<HTMLElement | null>(null);
-  // Same cap the session composer's mirror takes: this one is rebuilt and
-  // re-parsed on every keystroke too, so past that length the pill costs more
-  // than it is worth and the plain field takes over.
-  const sessionPill =
-    sessionNames.sessions.length > 0 &&
-    sessionNames.displayText.length <= COMPOSER_HIGHLIGHT_MAX_CHARS;
-  const sessionHighlightHtml = sessionPill
-    ? composerHighlightHtml(sessionNames.displayText, [], sessionNames.sessions)
-    : "";
-  // Every keystroke rewrites the mirror's innerHTML, so the hovered span is a
-  // dangling node from the render before it.
-  useEffect(() => {
-    hoveredPill.current = null;
-    if (promptRef.current) promptRef.current.style.cursor = "";
-  }, [sessionHighlightHtml]);
-  const mentions = useFileMentions({
-    value: sessionNames.displayText,
-    onChange: sessionNames.setDisplayText,
-    textareaRef: promptRef,
-    mentionFetch: async (q) => [
-      ...peopleMentionMatches(q),
-      ...(await fetchFileMentions(q, undefined, repo)),
-    ],
-    skillsFetch: (q) => fetchSkillMentions(q, undefined, repo),
-  });
 
   // (The prompt is focused on open by Modal.Content's initialFocus — a mount
   // effect here would run a frame before the dialog's popup exists.)
@@ -676,15 +632,8 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     promptRef.current?.focus();
   }, [inline, focusSeq, isPhone]);
 
-  // (The prompt's auto-grow lives in the layout effect further down, next to
-  // the scroll-fade it feeds. A second copy of it here ran the same
-  // write-measure-write against the committed DOM after paint, so every
-  // keystroke measured the field twice and forced two layouts instead of one.)
-
-  // Keep the draft store in sync so a dismissed palette can restore the work.
-  useEffect(() => {
-    saveDraft("new-session", { text: prompt, images, files });
-  }, [prompt, images, files]);
+  // (The prompt's auto-grow, its scroll-fade and the draft store it writes
+  // through all live in NewSessionPrompt now, beside the text they read.)
 
   // Close the Create dropdown on an outside click.
   useEffect(() => {
@@ -756,27 +705,30 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       .catch(() => setWorktrees([]));
   }, [repo, forceBranch]);
 
-  // Auto-suggest a branch name from the prompt (debounced Haiku call), but only
-  // while the field is "ours" — once the user types in it (branchEdited) we back
-  // off. The latest-request guard drops a stale response if the user starts
-  // editing the branch while a suggestion is in flight.
+  // Auto-suggest a branch name from the prompt (a Haiku call, once typing has
+  // stopped), but only while the field is "ours" — once the user types in it
+  // (branchEdited) we back off. The latest-request guard drops a stale response
+  // if the user starts editing the branch while a suggestion is in flight.
+  //
+  // The wait for typing to stop is the prompt field's, not this component's:
+  // this is the one thing here that reads what the draft SAYS, so it is handed
+  // the text once it has held still rather than on every character.
   const branchEditedRef = useRef(branchEdited);
   branchEditedRef.current = branchEdited;
   const suggestSeqRef = useRef(0);
   useEffect(() => {
     if (mode !== "code" || selectedWorktree !== "__new__" || branchEdited) return;
-    if (prompt.trim().length < 10) return;
+    if (settledPrompt.trim().length < 10) return;
     const seq = ++suggestSeqRef.current;
-    const t = setTimeout(async () => {
+    void (async () => {
       setSuggestingBranch(true);
-      const branch = await suggestBranch(prompt.trim());
+      const branch = await suggestBranch(settledPrompt.trim());
       setSuggestingBranch(false);
       // Drop if superseded by a newer prompt or the user grabbed the field.
       if (seq !== suggestSeqRef.current || branchEditedRef.current) return;
       if (branch) setNewBranch(branch);
-    }, 700);
-    return () => clearTimeout(t);
-  }, [prompt, mode, selectedWorktree, branchEdited]);
+    })();
+  }, [settledPrompt, mode, selectedWorktree, branchEdited]);
 
   // Registered from mount and gated on a ref set synchronously in handleCreate:
   // session_created is announced before the worktree even boots, so it can
@@ -812,7 +764,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
         // behind should be an empty prompt rather than the one just sent.
         if (createAction === "more" || inline) {
           setStatus({ kind: "idle" });
-          setPrompt("");
+          promptHandle.current?.setText("");
           setImages([]);
           setFiles([]);
           setNewBranch("");
@@ -849,23 +801,12 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     if (rejected.length) alert(`Couldn't attach:\n${rejected.join("\n")}`);
   }
 
-  function handlePaste(e: React.ClipboardEvent) {
-    // A session link goes in as the id it carries, which is the same reference
-    // in a third of the room and chips the same way (lib/session-url.ts).
-    if (insertPastedSessionId(e)) return;
-    const imgs = imageFilesFromPaste(e);
-    if (imgs.length) {
-      e.preventDefault();
-      void addAttachments(imgs);
-    }
-  }
-
   // "Save as draft" doesn't start a session at all: it parks the prompt on a
   // workspace (a fresh one, or the one this palette is already scoped to) and
   // never sends create_session. Separate from handleCreate's session_created
   // wait below, which this action never triggers.
   async function saveAsDraft() {
-    const text = prompt.trim();
+    const text = promptText.current.trim();
     if (!text) return;
     setStatus({ kind: "savingDraft" });
     try {
@@ -896,6 +837,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       void saveAsDraft();
       return;
     }
+    const prompt = promptText.current.trim();
     const branch =
       selectedWorktree === "__new__"
         ? newBranch.trim() || slugifyBranch(prompt)
@@ -912,7 +854,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     const worktreeMode =
       mode === "ask" ? "ask" : mode === "code" && selectedWorktree === "__new__" ? "stack" : "share";
     onCreateStarted?.({
-      prompt: prompt.trim(),
+      prompt,
       mode,
       repo,
       branch: mode === "code" ? branch : null,
@@ -931,7 +873,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
         : { createWorkspace: {} }),
       ...(modelWorkspaceId ? { modelWorkspaceId } : {}),
       branch: mode === "code" ? branch : "",
-      prompt: prompt.trim(),
+      prompt,
       user: getCurrentUser(),
       ...(model ? { model } : {}),
       effort,
@@ -956,7 +898,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     // A draft is just the prompt text parked on a workspace: none of the
     // session-create gates (connection, repo, sandbox, branch) apply.
     (createAction === "draft"
-      ? !!prompt.trim()
+      ? hasPromptText
       : connected &&
         // "No repo" is a choice, so it passes; only an unresolved picker (an
         // instance with no repositories registered yet) blocks.
@@ -965,7 +907,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
         // create with the same message (resolveRequestedSandbox). Block here
         // so the wall is discovered before submit, not after.
         !sandboxModelWarning &&
-        (prompt.trim() || images.length > 0 || files.length > 0) &&
+        (hasPromptText || images.length > 0 || files.length > 0) &&
         (mode === "ask" || mode === "scratch" || selectedWorktree !== ""));
 
   // "Create from…" picks the base a code session branches off, so it only
@@ -982,48 +924,12 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     ...worktrees.map((wt) => ({ value: wt.branch, label: wt.branch })),
   ];
 
-  // The prompt grows naturally; once the palette reaches its viewport cap the
-  // BODY becomes the single scroller, carrying attachments with the text. Each
-  // edge's hairline marks content continuing beyond the visible area.
-  function updatePromptFade(el: HTMLDivElement) {
-    // Each hairline earns its place only while content sits beyond that edge:
-    // a short prompt that fits gets a clean, undivided card.
-    const hidden = el.scrollHeight - el.clientHeight;
-    const next = {
-      top: el.scrollTop > 1,
-      bottom: hidden > 1 && hidden - el.scrollTop > 1,
-    };
+  // Which edges of the prompt earn a hairline. The field measures its own
+  // scroller and reports; holding the previous object when nothing moved is
+  // what keeps a scroll (or a keystroke) from re-rendering the card.
+  function handlePromptEdges(next: { top: boolean; bottom: boolean }) {
     setEdges((prev) => (prev.top === next.top && prev.bottom === next.bottom ? prev : next));
   }
-
-  // Both effects below key on the scroller NODE rather than on a render pass.
-  // Base UI mounts the popup's children in a later commit than the one that
-  // opens the dialog, so an effect keyed on `prompt` (or on `open`) has already
-  // run and bailed on a null ref by the time the textarea exists. That left a
-  // prefilled or restored prompt clipped at its 132px minimum and unscrollable.
-  const [promptBody, setPromptBody] = useState<HTMLDivElement | null>(null);
-  const attachPromptBody = React.useCallback(
-    (node: HTMLDivElement | null) => {
-      mentions.inputWrapRef.current = node;
-      setPromptBody(node);
-    },
-    [mentions.inputWrapRef],
-  );
-
-  useLayoutEffect(() => {
-    const textarea = promptRef.current;
-    if (!textarea || !promptBody) return;
-    textarea.style.height = "0px";
-    textarea.style.height = `${textarea.scrollHeight}px`;
-    updatePromptFade(promptBody);
-  }, [promptBody, sessionNames.displayText, images.length, files.length]);
-
-  useEffect(() => {
-    if (!promptBody) return;
-    const observer = new ResizeObserver(() => updatePromptFade(promptBody));
-    observer.observe(promptBody);
-    return () => observer.disconnect();
-  }, [promptBody]);
 
   // One frame closed so the palette animates in; App mounts us already-open.
   const open = useEnterOnMount();
@@ -1129,144 +1035,34 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
           )}
         </div>
 
-        {/* Prompt */}
-        <div
-          className={BODY}
-          onDrop={(e) => {
-            if (e.dataTransfer?.files?.length) {
-              e.preventDefault();
-              void addAttachments(e.dataTransfer.files);
-            }
-          }}
-          onDragOver={(e) => e.preventDefault()}
-          onScroll={(e) => updatePromptFade(e.currentTarget)}
-          ref={attachPromptBody}
-        >
-          {mentions.popup}
-          <div className="relative">
-            {sessionPill && (
-              // `composer-hl` stays as a hook: the pill spans inside this
-              // mirror are written as innerHTML by lib/composer-highlight.ts,
-              // so their rules can only be reached through it. Same trick as
-              // the session composer: a metrics-identical layer paints the
-              // pill behind a transparent-text field, which keeps the native
-              // caret, selection and undo.
-              <div
-                ref={hlRef}
-                className={cn(
-                  "composer-hl",
-                  TEXTAREA,
-                  "pointer-events-none absolute inset-0 z-0 h-full select-none overflow-hidden break-words whitespace-pre-wrap",
-                  composerPillSpacing,
-                  // Padding here is two things added together, and both are
-                  // load-bearing. 6px of it is clearance: a pill's wash reaches
-                  // past its own box (base.css), so one at either end of a line
-                  // would be clipped by this box, and the negative margin plus
-                  // the width give that room back outside the content. The
-                  // other 2px is the browser's own textarea padding, which this
-                  // field keeps, unlike the session composer, which zeroes it.
-                  // Without it every glyph here sits two pixels left of the one
-                  // it paints over, which puts the wash off the word.
-                  "-mx-[6px] w-[calc(100%+12px)] px-[8px] py-[2px]",
-                )}
-                aria-hidden="true"
-                dangerouslySetInnerHTML={{ __html: sessionHighlightHtml }}
-              />
-            )}
-          <textarea
-            ref={promptRef}
-            className={cn(
-              TEXTAREA,
-              sessionPill && [
-                composerPillSpacing,
-                "relative z-[1] break-words text-transparent caret-[var(--text)]",
-              ],
-            )}
-            value={sessionNames.displayText}
-            onBeforeInput={sessionNames.handleBeforeInput}
-            onChange={(e) => {
-              // A token undo/redo is replayed against canonical state and the
-              // caret is already placed, so nothing else is owed here.
-              // The picker re-syncs from the committed value in its own effect,
-              // which is both later and more reliable than a microtask queued
-              // from here (see useFileMentions).
-              sessionNames.handleChange(e);
-            }}
-            onCopy={sessionNames.handleCopy}
-            onCut={sessionNames.handleCut}
-            onMouseMove={(e) =>
-              paintPillHover(
-                hlRef.current,
-                promptRef.current,
-                e.clientX,
-                e.clientY,
-                hoveredPill,
-              )
-            }
-            onMouseLeave={() =>
-              paintPillHover(hlRef.current, promptRef.current, -1, -1, hoveredPill)
-            }
-            onKeyDown={(e) => {
-              // An undo that has to cross a session token replays canonical
-              // state; every other ⌘Z is left to the field's own history.
-              if (sessionNames.handleUndoRedoKey(e)) return;
-              // ⌘/Ctrl+Enter creates whatever the send-key preference is.
-              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-                e.preventDefault();
-                handleCreate();
-                return;
-              }
-              // The @/slash popup claims plain Enter to accept a suggestion.
-              if (mentions.handleKeyDown(e)) return;
-              // A reference reads as one object, so it erases like one.
-              if (
-                (e.key === "Backspace" || e.key === "Delete") &&
-                !e.metaKey &&
-                !e.ctrlKey &&
-                !e.altKey &&
-                promptRef.current &&
-                sessionNames.deleteTokenAtEdge(e.key, promptRef.current)
-              ) {
-                e.preventDefault();
-                return;
-              }
-              // Otherwise the send key creates, exactly as it sends in the session
-              // composer — including the unclosed-``` fence exception, so a
-              // multi-line code block can still be typed into the first prompt.
-              // Nothing to create yet? Let the newline land rather than eating
-              // the keystroke.
-              if (!isSendCombo(e, sendKey) || !canCreate) return;
-              // The caret is an offset into the DISPLAYED text, and a fence is
-              // a fact about the draft, so the two have to be read in the same
-              // terms.
-              const caret = sessionNames.canonicalOffset(
-                promptRef.current?.selectionStart ?? sessionNames.displayText.length,
-              );
-              if (insideOpenFence(prompt, caret)) return;
-              e.preventDefault();
-              handleCreate();
-            }}
-            onKeyUp={mentions.sync}
-            onClick={(e) => {
-              // Pressing a reference removes it, the way the pill says it will.
-              if (sessionNames.removeTokenAtCaret(e.currentTarget)) return;
-              mentions.sync();
-            }}
-            onBlur={() => setTimeout(mentions.close, 120)}
-            onPaste={handlePaste}
-            // Ask sessions read and explain; they never touch the code. Asking
-            // "what to work on" in that mode invites a prompt the session
-            // cannot carry out.
-            placeholder={
-              mode === "ask" ? "What do you want to find out?" : "What do you want to work on?"
-            }
-            disabled={busy}
-            {...noAutofill}
-          />
-          </div>
-          <ImageThumbs images={images} onRemove={(i) => setImages((p) => p.filter((_, idx) => idx !== i))} disabled={busy} />
-          <FileChips files={files} onRemove={(i) => setFiles((p) => p.filter((_, idx) => idx !== i))} disabled={busy} />
-        </div>
+        {/* Prompt. It owns the draft: see NewSessionPrompt for why the text
+            does not live in this component. */}
+        <NewSessionPrompt
+          initialText={initialPrompt}
+          textareaRef={promptRef}
+          valueRef={promptText}
+          handle={promptHandle}
+          repo={repo}
+          // Ask sessions read and explain; they never touch the code. Asking
+          // "what to work on" in that mode invites a prompt the session
+          // cannot carry out.
+          placeholder={
+            mode === "ask" ? "What do you want to find out?" : "What do you want to work on?"
+          }
+          disabled={busy}
+          images={images}
+          files={files}
+          onRemoveImage={(i) => setImages((p) => p.filter((_, idx) => idx !== i))}
+          onRemoveFile={(i) => setFiles((p) => p.filter((_, idx) => idx !== i))}
+          onAddAttachments={(picked) => void addAttachments(picked)}
+          sendKey={sendKey}
+          canCreate={canCreate}
+          onCreate={handleCreate}
+          onHasTextChange={setHasPromptText}
+          onDraftSettled={setSettledPrompt}
+          onEdgesChange={handlePromptEdges}
+          onMentionOpenChange={setMentionOpen}
+        />
 
         {status.kind === "failed" && <div className={ERROR}>{status.message}</div>}
         {sandboxModelWarning && (
@@ -1463,7 +1259,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
               className={FOOTER_ICON_BTN}
               disabled={busy}
               onText={(t) => {
-                setPrompt((prev) => (prev.trim() ? `${prev.replace(/\s+$/, "")} ${t}` : t));
+                promptHandle.current?.appendText(t);
                 promptRef.current?.focus();
               }}
             />
@@ -1606,7 +1402,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       // Mid-create the palette isn't dismissable. An open mention popup also
       // owns the next click: it lives outside the dialog, so pressing it would
       // otherwise read as an outside press and close the whole palette.
-      disablePointerDismissal={busy || mentions.open}
+      disablePointerDismissal={busy || mentionOpen}
     >
       <Modal.Content
         variant="palette"

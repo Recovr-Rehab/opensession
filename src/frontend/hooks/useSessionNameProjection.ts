@@ -104,8 +104,27 @@ export function useSessionNameProjection({
 	setText: (next: string) => void;
 	textareaRef: React.RefObject<HTMLTextAreaElement | null>;
 }): SessionNameProjection {
-	const [, setTitleVersion] = useState(0);
-	const projection = projectComposerSessions(text);
+	const [titleVersion, setTitleVersion] = useState(0);
+	// One entry, keyed by the draft it was built from. Projecting scans the
+	// whole draft twice for code ranges, and the same text is projected twice
+	// per keystroke — once by the edit that produced it, once by the render it
+	// causes — so the edit seeds this and the render reads it back. It also
+	// keeps `sessions` at one identity across a re-render that did not touch
+	// the text, which is what lets anything downstream memoize on it.
+	const cache = useRef<{
+		text: string;
+		version: number;
+		projection: ComposerSessionProjection;
+	} | null>(null);
+	function projectionFor(next: string): ComposerSessionProjection {
+		const hit = cache.current;
+		if (hit && hit.text === next && hit.version === titleVersion)
+			return hit.projection;
+		const projection = projectComposerSessions(next);
+		cache.current = { text: next, version: titleVersion, projection };
+		return projection;
+	}
+	const projection = projectionFor(text);
 	const projectionRef = useRef(projection);
 	projectionRef.current = projection;
 	const displayText = projection.displayText;
@@ -155,7 +174,7 @@ export function useSessionNameProjection({
 			selectionEnd,
 			options?.editHint,
 		);
-		const projected = projectComposerSessions(edit.canonicalText);
+		const projected = projectionFor(edit.canonicalText);
 		pendingCanonicalSelection.current = {
 			start: edit.canonicalSelectionStart,
 			end: edit.canonicalSelectionEnd,
