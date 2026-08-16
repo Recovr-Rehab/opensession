@@ -171,7 +171,7 @@ const variants: Record<Variant, string> = {
 	// that same #ebebeb over the white page, so nothing moved where the old
 	// value was right, and it holds its shape on a panel, a card, or the
 	// sidebar's translucent material.
-	soft: "bg-[color-mix(in_srgb,var(--text)_8%,transparent)] border-transparent text-dim hover:bg-[color-mix(in_srgb,var(--text)_13%,transparent)] hover:text-fg data-[popup-open]:bg-[color-mix(in_srgb,var(--text)_13%,transparent)] data-[popup-open]:text-fg",
+	soft: "bg-fg/8 border-transparent text-dim hover:bg-fg/13 hover:text-fg data-[popup-open]:bg-fg/13 data-[popup-open]:text-fg",
 	// No plate at all until you reach for it. A ghost is the right weight for a
 	// control that is *reporting state* as much as inviting a press — a filter
 	// that says "In all workspaces" is mostly a label — so the row stays quiet
@@ -193,11 +193,11 @@ const variants: Record<Variant, string> = {
 	//
 	// Green is the second-most reached-for colour in the app after the accent
 	// (approve a review, merge, mark read), so it earns a pair of its own.
-	success: "bg-green-soft border-transparent text-green hover:bg-[color-mix(in_srgb,var(--green)_22%,transparent)]",
-	danger: "bg-red-soft border-transparent text-red hover:bg-[color-mix(in_srgb,var(--red)_22%,transparent)]",
+	success: "bg-green-soft border-transparent text-green hover:bg-green/22",
+	danger: "bg-red-soft border-transparent text-red hover:bg-red/22",
 	// Yellow has no strong half: it qualifies an action ("delete the session,
 	// keep the worktree"), and nothing in the app commits in yellow.
-	warning: "bg-yellow-soft border-transparent text-yellow hover:bg-[color-mix(in_srgb,var(--yellow)_22%,transparent)]",
+	warning: "bg-yellow-soft border-transparent text-yellow hover:bg-yellow/22",
 	// Solid red plate — the button that actually does the irreversible thing
 	// (a modal's confirm, the second click of a two-click close). Shares
 	// `primary`'s shape, so the two swap cleanly in a footer.
