@@ -946,8 +946,11 @@ body {
 }
 
 #root {
-	height: 100vh;
-	height: 100dvh;
+	/* The fixed body already is the viewport. Fill that parent instead of
+	   measuring the dynamic viewport again: Chrome on Android can report 100dvh
+	   above the navigation inset while the fixed containing block still reaches
+	   the device edge, leaving a strip of body background below the app. */
+	height: 100%;
 	overflow: hidden;
 }
 
