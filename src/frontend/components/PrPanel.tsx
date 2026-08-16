@@ -427,9 +427,12 @@ export function PrPanel({
       localStorage.setItem("opensession-pr-diff-wrap", wrap ? "1" : "0");
     } catch {}
   };
-  const [guide, setGuide] = useState<ReviewGuideData | null>(null);
+  // Keyed like the code flow below, so one target's guide never renders under
+  // another's diff and a slow response can't land after the panel moved on.
+  const [guide, setGuide] = useState<{ key: string; data: ReviewGuideData } | null>(null);
   const [guideLoading, setGuideLoading] = useState(false);
   const [guideFailed, setGuideFailed] = useState(false);
+  const guideGenerationRef = useRef(0);
   const [codeFlow, setCodeFlow] = useState<{ key: string; data: CodeFlowResult } | null>(null);
   const [codeFlowLoading, setCodeFlowLoading] = useState(false);
   const [codeFlowError, setCodeFlowError] = useState<string | null>(null);
@@ -670,19 +673,25 @@ export function PrPanel({
     diffGroupsRetry,
   ]);
 
+  // A guide belongs to one target's head commit: the key is what makes a
+  // guide from the PR the panel just left read as absent rather than current.
+  const guideKey = diff ? `${loadTargetKey}\0${diff.headRefOid}` : "";
   const loadGuide = useCallback(async () => {
+    if (!guideKey) return;
+    const generation = ++guideGenerationRef.current;
     setGuideLoading(true);
     setGuideFailed(false);
     try {
       const data = previewTarget
         ? await fetchPrPreviewGuide(previewTarget.repo, previewTarget.branch)
         : await fetchReviewGuide(sessionId, active?.repo, active?.branch);
-      if (data) setGuide(data);
+      if (generation !== guideGenerationRef.current) return;
+      if (data) setGuide({ key: guideKey, data });
       else setGuideFailed(true);
     } catch {
-      setGuideFailed(true);
+      if (generation === guideGenerationRef.current) setGuideFailed(true);
     } finally {
-      setGuideLoading(false);
+      if (generation === guideGenerationRef.current) setGuideLoading(false);
     }
   }, [
     sessionId,
@@ -690,6 +699,7 @@ export function PrPanel({
     active?.branch,
     previewTarget?.repo,
     previewTarget?.branch,
+    guideKey,
   ]);
 
   const prPatchVersion = diff?.diffVersion || "";
@@ -743,12 +753,21 @@ export function PrPanel({
   // refetch when a new push moves the head commit.
   const showingGuide = page === "files" && codeView === "guide";
   const showingFlow = page === "files" && codeView === "flow";
+  // A different PR or a new head commit is a different guide: drop the in-flight
+  // and failed flags with it, or one failure would disable auto-load for the
+  // rest of the panel's life. The keyed `guide` itself goes stale on its own.
   useEffect(() => {
-    if (!showingGuide || !diff?.patch) return;
+    guideGenerationRef.current += 1;
+    setGuideLoading(false);
+    setGuideFailed(false);
+  }, [guideKey]);
+
+  useEffect(() => {
+    if (!showingGuide || !diff?.patch || !guideKey) return;
     if (guideLoading || guideFailed) return;
-    if (guide && guide.headRefOid === diff.headRefOid) return;
+    if (guide?.key === guideKey) return;
     void loadGuide();
-  }, [showingGuide, diff?.patch, diff?.headRefOid, guide, guideLoading, guideFailed, loadGuide]);
+  }, [showingGuide, diff?.patch, guideKey, guide, guideLoading, guideFailed, loadGuide]);
 
   useEffect(() => {
     if (!showingFlow || codeFlowLoading || codeFlowError) return;
@@ -1230,7 +1249,9 @@ export function PrPanel({
     pr.mergeable !== "CONFLICTING" &&
     checkSummary.failed === 0 &&
     checkSummary.pending === 0;
-  const guideSections = guide && diff?.patch ? sectionsWithPatches(guide, diff.patch) : [];
+  const currentGuide = guide?.key === guideKey ? guide.data : null;
+  const guideSections =
+    currentGuide && diff?.patch ? sectionsWithPatches(currentGuide, diff.patch) : [];
   const reviewSubmitLabel =
     reviewEvent === "APPROVE"
       ? mergeAfterReview && canMergeAfterReview
@@ -1763,7 +1784,7 @@ export function PrPanel({
                       : "No text diff is available for this pull request."}
                 </div>
               ) : codeView === "guide" ? (
-                guideLoading ? (
+                guideLoading || (!currentGuide && !guideFailed) ? (
                   <>
                     <div className="mb-4 rounded-sm border border-line bg-panel px-3 py-2 text-xs text-faint">
                       Writing the review guide… You can review the file diff while it groups the change by intent.
@@ -1780,7 +1801,7 @@ export function PrPanel({
                       Retry
                     </button>
                   </div>
-                ) : guide ? (
+                ) : currentGuide ? (
                   <>
                     <div className="mb-7 grid grid-cols-[54px_minmax(0,1fr)] gap-4 px-1">
                       <div className="text-meta font-medium leading-relaxed text-faint">
@@ -1788,7 +1809,7 @@ export function PrPanel({
                       </div>
                       <div>
                         <h2 className="m-0 text-item-title font-semibold tracking-[-0.01em] text-fg">
-                          {guide.sections.length} focused review step{guide.sections.length === 1 ? "" : "s"}
+                          {currentGuide.sections.length} focused review step{currentGuide.sections.length === 1 ? "" : "s"}
                         </h2>
                         <p className="mt-1 max-w-[680px] text-xs leading-relaxed text-dim">
                           {reviewing
