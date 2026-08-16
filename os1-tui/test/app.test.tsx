@@ -304,6 +304,34 @@ describe("tmux keys", () => {
 		expect(frame).toContain("unrelated thing");
 	});
 
+	test("moving focus closes the picker instead of leaving q armed to quit", async () => {
+		const app = await mount({
+			sessions: [fakeSession({ id: "bks-1", title: "wire the socket" })],
+		});
+		active = app;
+		app.mockInput.pressKey("b", { ctrl: true });
+		app.mockInput.pressKey("w");
+		await app.flush();
+		expect(app.frame()).toContain("esc cancels");
+
+		// While the picker is up, q is filter text.
+		app.mockInput.pressKey("q");
+		await app.flush();
+		expect(app.exited()).toBe(false);
+		expect(app.frame()).toContain("esc cancels");
+
+		// Movement resolves ahead of the per-mode tables, so it lands while the
+		// picker is open. It must take the picker with it: mode and "an overlay is
+		// open" are one field, so it can't leave the picker rendered over nav keys.
+		app.mockInput.pressArrow("down", { meta: true });
+		await app.flush();
+		expect(app.frame()).not.toContain("esc cancels");
+
+		app.mockInput.pressKey("q");
+		await app.flush();
+		expect(app.exited()).toBe(true);
+	});
+
 	test("^b x cancels the running turn", async () => {
 		const app = await mount({ sessions: [fakeSession({ id: "bks-1", isRunning: true })] });
 		active = app;

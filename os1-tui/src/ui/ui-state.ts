@@ -1,5 +1,5 @@
 /**
- * Where the user is: tabs, panes, modes, overlays.
+ * Where the user is: tabs, panes, mode.
  *
  * This is a ref-backed store rather than a pile of `useState`, for one concrete
  * reason: a terminal delivers keystrokes faster than React re-renders. `^b w`
@@ -12,14 +12,57 @@
  * same way.
  */
 
-import type { Mode, Pane } from "./keymap";
+import type { Pane } from "./keymap";
 
-export type Overlay =
+/**
+ * Where keys go, and what is on screen — one field, deliberately.
+ *
+ * Mode and "is an overlay open" used to be two fields, and every action that
+ * opened a prompt had to set both and keep them agreeing. Anything that touched
+ * only the mode (focus-pane, next-tab, zoom) left a picker rendered with nav
+ * keys live behind it, so `q` quit the app instead of typing into the filter.
+ * With one field an action replaces the whole state, and the two can't disagree.
+ * The picker's cursor lives in the variant that owns it.
+ */
+export type Mode =
+	| { kind: "nav" }
+	| { kind: "composer" }
+	| { kind: "ask" }
+	| { kind: "scroll" }
+	| { kind: "help" }
 	| { kind: "picker"; selected: number }
 	| { kind: "command" }
 	| { kind: "rename" }
-	| { kind: "new" }
-	| null;
+	| { kind: "new" };
+
+/**
+ * The modes that carry no state of their own, as shared constants: patching in
+ * a fresh object would make `UiStore.set` see a change and re-render for a mode
+ * that didn't move.
+ */
+export const MODE = {
+	nav: { kind: "nav" },
+	composer: { kind: "composer" },
+	ask: { kind: "ask" },
+	scroll: { kind: "scroll" },
+	help: { kind: "help" },
+	command: { kind: "command" },
+	rename: { kind: "rename" },
+	new: { kind: "new" },
+} satisfies Record<string, Mode>;
+
+/** Modes that put a prompt overlay on screen, with a textarea holding focus. */
+export function isPromptMode(mode: Mode): boolean {
+	switch (mode.kind) {
+		case "picker":
+		case "command":
+		case "rename":
+		case "new":
+			return true;
+		default:
+			return false;
+	}
+}
 
 export type UiState = {
 	/** Session ids with an open tab, in tab order. */
@@ -31,7 +74,6 @@ export type UiState = {
 	pane: Pane;
 	prefixArmed: boolean;
 	zoom: boolean;
-	overlay: Overlay;
 	message?: { text: string; kind: "info" | "error" };
 };
 
@@ -40,11 +82,10 @@ export function initialUiState(initialSessionId?: string): UiState {
 		tabs: initialSessionId ? [initialSessionId] : [],
 		activeTab: 0,
 		cursor: 0,
-		mode: "nav",
+		mode: MODE.nav,
 		pane: initialSessionId ? "transcript" : "sidebar",
 		prefixArmed: false,
 		zoom: false,
-		overlay: null,
 	};
 }
 
@@ -87,14 +128,13 @@ export class UiStore {
 		this.set((current) => {
 			const at = current.tabs.indexOf(sessionId);
 			if (at >= 0) {
-				return { activeTab: at, pane: "transcript", mode: "nav", overlay: null };
+				return { activeTab: at, pane: "transcript", mode: MODE.nav };
 			}
 			return {
 				tabs: [...current.tabs, sessionId],
 				activeTab: current.tabs.length,
 				pane: "transcript",
-				mode: "nav",
-				overlay: null,
+				mode: MODE.nav,
 			};
 		});
 	}

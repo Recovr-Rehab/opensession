@@ -200,6 +200,42 @@ describe("scroll mode", () => {
 	});
 });
 
+describe("the prompt overlays", () => {
+	test("q is text in every one of them, not a quit", () => {
+		for (const mode of ["picker", "command", "rename", "new"] as const) {
+			const result = resolveKey(key("q"), state({ mode }));
+			expect(result.action).toBeUndefined();
+			expect(result.consumed).toBe(false);
+		}
+	});
+
+	test("enter submits and escape cancels", () => {
+		for (const mode of ["picker", "command", "rename", "new"] as const) {
+			expect(resolveKey(key("return"), state({ mode })).action).toEqual({
+				type: "open-selected",
+			});
+			expect(resolveKey(key("escape"), state({ mode })).action).toEqual({
+				type: "exit-mode",
+			});
+		}
+	});
+
+	// Movement resolves ahead of the per-mode tables, so it reaches the app while
+	// the picker is up. The app answers by replacing the whole mode, which closes
+	// the picker — what it must never do is leave the picker rendered with nav
+	// keys live behind it, where `q` quit the TUI.
+	test("movement still resolves while the picker is open", () => {
+		const picker = state({ mode: "picker" });
+		expect(resolveKey(key("down", { meta: true }), picker).action).toEqual({
+			type: "focus-pane",
+			direction: "next",
+		});
+		expect(resolveKey(key("n"), state({ mode: "picker", prefixArmed: true })).action).toEqual({
+			type: "next-tab",
+		});
+	});
+});
+
 describe("ask mode", () => {
 	test("number keys answer, i escapes to free text", () => {
 		const ask = state({ mode: "ask" });
