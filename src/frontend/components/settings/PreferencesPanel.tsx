@@ -516,7 +516,7 @@ export function PreferencesPanel() {
 				/>
 				<SettingRow
 					title="Live typing"
-					desc="Show the reply as it is written instead of when it finishes."
+					desc="Show replies in your sessions as they are written, not when they finish."
 					control={
 						<Switch
 							aria-label="Live typing"
@@ -529,9 +529,8 @@ export function PreferencesPanel() {
 			<SettingsHint>
 				By default a turn is open while it runs and folds away once it settles.
 				"Fold tool calls" instead folds only the tool calls, leaving the rest of the
-				turn reading as normal transcript. Live typing applies to sessions you
-				run, and everyone watching one sees it. A reasoning model still thinks
-				before it writes, so the reply starts once thinking ends.
+				turn reading as normal transcript. A reasoning model thinks before it
+				writes, so live typing starts when the thinking ends.
 			</SettingsHint>
 
 			<DeskVoicePanel />
