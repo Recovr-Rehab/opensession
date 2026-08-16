@@ -91,7 +91,6 @@ import { SessionSplit, type SplitSide } from "./components/SessionSplit";
 import { RestartOverlay } from "./components/RestartOverlay";
 import { MediaLightboxHost } from "./components/MediaLightbox";
 import { ChipHoverCards } from "./components/ChipHoverCard";
-import { ShortcutCheatSheet } from "./components/ShortcutCheatSheet";
 import { UpdatePill } from "./components/UpdatePill";
 import { DesktopLinkToast } from "./components/DesktopLinkToast";
 import {
@@ -268,7 +267,6 @@ const NO_SUBAGENTS: SubagentRef[] = [];
 // How long the launch splash may hold the screen while the first session list
 // is still in flight. Past this the app takes over and reports for itself.
 const SPLASH_MAX_MS = 8000;
-const SPLASH_EXIT_MS = 400;
 
 // Route views that render as a tool section inside the Settings surface.
 const TOOL_VIEWS = ["automations", "security", "goals"] as const;
@@ -582,7 +580,6 @@ export function App(
 		patch,
 		remove,
 	} = useSessions({ loadArchived: route.view === "archived" });
-	const [launchComplete, setLaunchComplete] = useState(false);
 	const auth = useAuthStatus();
 	const currentUser = useCurrentUser();
 	const { connected, send, addHandler } = useWebSocket();
@@ -1305,8 +1302,6 @@ export function App(
 	// The Desk overlay (⌘J / the floating desk button): a standing concierge
 	// session on top of whatever view is open.
 	const [deskOpen, setDeskOpen] = useState(false);
-	// The shortcut cheat sheet (⌘/): every chord on one card, over any view.
-	const [shortcutsOpen, setShortcutsOpen] = useState(false);
 	// Open-task count for the Tasks toolbar entry — refreshed on every
 	// todos_changed broadcast (the Tasks page, agent tools, or another tab).
 	const [taskCount, setTaskCount] = useState(0);
@@ -1370,13 +1365,6 @@ export function App(
 				// overlay itself (Base UI dialog / the bottom sheet).
 				e.preventDefault();
 				setDeskOpen((o) => !o);
-				return;
-			}
-			if (matchesShortcut(e, "shortcuts-help")) {
-				// The one chord whose job is to say what the other chords are, so
-				// it opens over whatever is on screen and closes the same way.
-				e.preventDefault();
-				setShortcutsOpen((o) => !o);
 				return;
 			}
 			if (matchesShortcut(e, "sidebar-toggle")) {
@@ -1445,7 +1433,7 @@ export function App(
 		const hide = () => {
 			if (!splash) return;
 			splash.classList.add("splash-hide");
-			removal = setTimeout(() => splash.remove(), SPLASH_EXIT_MS);
+			removal = setTimeout(() => splash.remove(), 400);
 		};
 		if (!loading) {
 			// The window is only handed over when there is something in it: the
@@ -1462,12 +1450,6 @@ export function App(
 			clearTimeout(cap);
 			clearTimeout(removal);
 		};
-	}, [loading]);
-
-	useEffect(() => {
-		if (loading) return;
-		const timer = setTimeout(() => setLaunchComplete(true), SPLASH_EXIT_MS);
-		return () => clearTimeout(timer);
 	}, [loading]);
 
 	// When a session is created from the New Session form or Ask box, jump straight into it
@@ -3201,95 +3183,6 @@ export function App(
 	const reopenLastArchivedRef = useRef(reopenLastArchived);
 	reopenLastArchivedRef.current = reopenLastArchived;
 
-	/**
-	 * Foreground a tab by its strip id — a session or a pane, since the strip
-	 * holds both in one order. Mirrors what SessionTabs' own onSelect and
-	 * onSelectView do, so the keyboard lands exactly where a click would.
-	 */
-	function activateStripTab(id: string): boolean {
-		const session = workspaceSessions.find((s) => s.id === id);
-		if (session) {
-			setActiveViewTab(null);
-			navigate({ view: "session", id: session.id });
-			return true;
-		}
-		if (!viewTabs.some((tab) => tab.id === id)) return false;
-		selectViewTab(id);
-		return true;
-	}
-	/** Walk the strip, wrapping at the ends. False when there is no strip. */
-	function stepStripTab(delta: number): boolean {
-		if (stripTabIds.length < 2) return false;
-		const at = focusedTopTabId ? stripTabIds.indexOf(focusedTopTabId) : -1;
-		// Nothing in the strip is focused (a pane the order doesn't know):
-		// enter from whichever end the direction comes from.
-		const from = at < 0 ? (delta > 0 ? -1 : 0) : at;
-		const next =
-			stripTabIds[(from + delta + stripTabIds.length) % stripTabIds.length];
-		return !!next && activateStripTab(next);
-	}
-	/** Foreground the nth tab (0-based). False when there is no nth tab. */
-	function jumpStripTab(index: number): boolean {
-		if (stripTabIds.length < 2) return false;
-		const id = stripTabIds[index];
-		if (!id) return false;
-		// Already there: report it handled anyway, so the chord never falls
-		// through and types the Option character it stands for on a Mac.
-		if (id === focusedTopTabId) return true;
-		return activateStripTab(id);
-	}
-	const tabNavRef = useRef({ stepStripTab, jumpStripTab });
-	tabNavRef.current = { stepStripTab, jumpStripTab };
-
-	// ⌘⌥←/→ walk the workspace's tab strip (⌃⌥ on Chromium, which takes the ⌘⌥
-	// pair for its own tabs), and ⌥1…⌥9 jump straight to one. Both read the
-	// strip's left-to-right order, panes included, so what the keyboard
-	// reaches is what the eye reads. They fire with the composer focused, the
-	// same trade the sidebar's ⌘↑/⌘↓ cycling already makes: moving between
-	// tabs without leaving the keyboard is the whole point.
-	//
-	// The digits are hard-coded rather than nine registry commands. Matching
-	// is exact on the whole chord, so a command per digit is the only shape
-	// the registry could hold, and the modifier — the one part anyone would
-	// want to rebind — is not something a chord list can express. They are
-	// listed on the shortcuts page as a reference row instead.
-	useEffect(() => {
-		const onKey = (e: KeyboardEvent) => {
-			if (e.defaultPrevented) return;
-			const dir = matchesShortcut(e, "tab-next")
-				? 1
-				: matchesShortcut(e, "tab-prev")
-					? -1
-					: 0;
-			// Read the digit off `e.code`: Option rewrites `e.key` (⌥1 is "¡"
-			// on a Mac), and a non-Latin layout would hide it too.
-			const digit =
-				!dir &&
-				e.altKey &&
-				!e.metaKey &&
-				!e.ctrlKey &&
-				!e.shiftKey &&
-				/^Digit[1-9]$/.test(e.code)
-					? Number(e.code.slice(5))
-					: 0;
-			if (!dir && !digit) return;
-			if (
-				document.querySelector(
-					".palette-backdrop, .composer-schedule-modal-backdrop, .session-delete-overlay",
-				)
-			)
-				return;
-			// Only claim the keystroke once there is a tab to move to, so a
-			// workspace with no strip leaves the chord to whatever wants it.
-			const acted = dir
-				? tabNavRef.current.stepStripTab(dir)
-				: tabNavRef.current.jumpStripTab(digit - 1);
-			if (acted) e.preventDefault();
-		};
-		window.addEventListener("keydown", onKey);
-		return () => window.removeEventListener("keydown", onKey);
-	}, []);
-
 	// Tab shortcuts matching the strip's context-menu hints: ⌘⌥C copies the
 	// concise transcript, ⌘W closes (archives) the tab, ⌘⌥N opens a new tab
 	// (sibling session) in the workspace, and ⌘Z (or the legacy ⌘⇧T) reopens what
@@ -4377,6 +4270,14 @@ export function App(
 							}}
 							onSetStatus={setSessionLanes}
 						/>
+						{/* Desktop: docked toast at the sidebar bottom. On phones the
+						    update nudge moves to the top bar (next to the brand). */}
+						{!isPhone && (
+							<div className="pointer-events-none absolute right-2 bottom-2 left-2 z-[9500] flex flex-col gap-2">
+								<DesktopLinkToast />
+								<UpdatePill addHandler={addHandler} />
+							</div>
+						)}
 						{/* Drag the right edge to resize: a hover/active hairline over a
 						    wider invisible grab strip. Hidden on mobile, where the drawer
 						    is a fixed width. It sits above both primary (20) and nested
@@ -4770,16 +4671,6 @@ export function App(
 				</div>
 				)}
 
-				{/* Desktop notifications float over the sidebar rather than living inside
-				    it. Their readable width and interactions therefore survive a narrow or
-				    collapsed sidebar. Phones keep the compact update pill in the top bar. */}
-				{!isPhone && (
-					<div className="pointer-events-none fixed bottom-2 left-2 z-[9500] flex w-fit max-w-[calc(100vw-16px)] flex-col gap-2">
-						{launchComplete && <DesktopLinkToast />}
-						<UpdatePill addHandler={addHandler} />
-					</div>
-				)}
-
 				{/* Mobile-only floating + on the root list page — thumb-reach shortcut
 				    to the new-session palette (desktop hides it via CSS; the sidebar's
 				    own + covers that layout). */}
@@ -4869,16 +4760,6 @@ export function App(
 						}}
 					/>
 				)}
-
-				{/* ⌘/ cheat sheet — every chord, with the reader's own bindings. */}
-				<ShortcutCheatSheet
-					open={shortcutsOpen}
-					onOpenChange={setShortcutsOpen}
-					onCustomize={() => {
-						setShortcutsOpen(false);
-						navigate({ view: "settings", section: "shortcuts" });
-					}}
-				/>
 
 				{/* Hover cards for the session and PR chips inside rendered
 				    markdown. One watcher for the whole app: the chips are HTML
