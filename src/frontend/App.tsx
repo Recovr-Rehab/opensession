@@ -1653,6 +1653,20 @@ export function App(
 			setPendingReviewOpen(null);
 		}
 	}, [wsKey, pendingReviewOpen]);
+	// Add the Review view-tab for a workspace. Presence is the OR of reviewOpen
+	// and "PR-backed and not in reviewClosed", but reviewClosed alone feeds
+	// reviewDismissed (and through it defaultSessionWorkspaceView) — so adding
+	// the tab must also clear an earlier dismissal, or the workspace reports a
+	// dismissed Review while the Review tab is sitting in the strip.
+	function addReviewTab(key: string) {
+		setReviewOpen((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
+		setReviewClosed((prev) => {
+			if (!prev.has(key)) return prev;
+			const next = new Set(prev);
+			next.delete(key);
+			return next;
+		});
+	}
 	// Landing on the workspace route: foreground its default pane. An explicit
 	// /review or /conversation suffix wins; otherwise land in the remembered
 	// session (or the main session on first visit). A session-less PR workspace still
@@ -1707,7 +1721,7 @@ export function App(
 			return first && !first.archived ? first : undefined;
 		};
 		if (tab === "review") {
-			setReviewOpen((prev) => (prev.has(key) ? prev : new Set(prev).add(key)));
+			addReviewTab(key);
 			setActiveViewTab("review");
 			const first = firstLiveSession();
 			// Something asked for a specific PR (a sidebar row, a `repo#123`
@@ -1760,9 +1774,7 @@ export function App(
 			} else if (p && (p.branch || p.prNumber !== undefined)) {
 				// Session-less PR/branch workspace: Review is the only meaningful
 				// surface, so foreground it like an explicit /review landing.
-				setReviewOpen((prev) =>
-					prev.has(key) ? prev : new Set(prev).add(key),
-				);
+				addReviewTab(key);
 				setActiveViewTab("review");
 			}
 		}
@@ -2107,18 +2119,8 @@ export function App(
 	// one (fired by the PR status chip / "open PR" affordances in SessionViewer).
 	function openReview() {
 		if (!wsKey) return;
-		const key = wsKey;
-		setReviewOpen((prev) => {
-			if (prev.has(key)) return prev;
-			return new Set(prev).add(key);
-		});
-		// Un-dismiss a PR-backed workspace's default-present tab.
-		setReviewClosed((prev) => {
-			if (!prev.has(key)) return prev;
-			const next = new Set(prev);
-			next.delete(key);
-			return next;
-		});
+		// Also un-dismisses a PR-backed workspace's default-present tab.
+		addReviewTab(wsKey);
 		setActiveViewTab("review");
 	}
 	function closeReviewTab() {
