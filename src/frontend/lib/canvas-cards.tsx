@@ -76,12 +76,16 @@ export function canvasSessions(
 
 export interface CanvasData {
 	sessions: Map<string, UnifiedSession>;
+	teamViewing: Array<{ user: string; sessionId: string }>;
+	currentUser: string;
 	onOpenSession: (id: string) => void;
 	compactAtLowZoom: boolean;
 }
 
 export const CanvasDataContext = createContext<CanvasData>({
 	sessions: new Map(),
+	teamViewing: [],
+	currentUser: "",
 	onOpenSession: () => {},
 	compactAtLowZoom: false,
 });

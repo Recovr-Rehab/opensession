@@ -44,6 +44,7 @@ const CANVAS_COMPONENTS = { InFrontOfTheCanvas: CanvasCollaborators };
 
 interface SessionCanvasProps {
 	sessions: UnifiedSession[];
+	teamViewing: Array<{ user: string; sessionId: string }>;
 	onOpenSession: (id: string) => void;
 }
 
@@ -60,6 +61,7 @@ export default function SessionCanvas(props: SessionCanvasProps) {
 
 function SyncedSessionCanvas({
 	sessions,
+	teamViewing,
 	onOpenSession,
 }: SessionCanvasProps) {
 	const user = useCurrentUser();
@@ -74,10 +76,12 @@ function SyncedSessionCanvas({
 	const data = useMemo(
 		() => ({
 			sessions: new Map(sessions.map((s) => [s.id, s])),
+			teamViewing,
+			currentUser: user,
 			onOpenSession,
 			compactAtLowZoom: isPhone,
 		}),
-		[sessions, onOpenSession, isPhone],
+		[sessions, teamViewing, user, onOpenSession, isPhone],
 	);
 
 	// The app themes via html[data-theme]; tldraw needs to be told.

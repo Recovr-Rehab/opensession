@@ -12,22 +12,7 @@ import {
 	canvasUserId,
 } from "../../shared/canvas-schema";
 import type { Person } from "./people";
-
-const USER_COLORS = [
-	"#2563eb",
-	"#7c3aed",
-	"#db2777",
-	"#dc2626",
-	"#d97706",
-	"#059669",
-	"#0891b2",
-];
-
-function hash(value: string): number {
-	let result = 0;
-	for (const char of value) result = (result * 31 + char.charCodeAt(0)) | 0;
-	return Math.abs(result);
-}
+import { canvasIdentityColor } from "./canvas-card-identity";
 
 export function canvasSyncUrl(): string {
 	const protocol = location.protocol === "https:" ? "wss:" : "ws:";
@@ -46,7 +31,7 @@ function useCanvasUserStore(user: string, people: Person[]): TLUserStore {
 		const record = UserRecordType.create({
 			id: canvasUserId(key),
 			name: person?.name || user || "Anonymous",
-			color: USER_COLORS[hash(key) % USER_COLORS.length]!,
+			color: canvasIdentityColor(key),
 			imageUrl: login ? `https://github.com/${login}.png?size=96` : "",
 		});
 		return {

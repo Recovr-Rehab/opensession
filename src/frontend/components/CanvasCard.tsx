@@ -4,7 +4,7 @@
 // the composer delivers through the same REST prompt route as the main
 // composer. Pointer events on interactive regions stop propagating so tldraw
 // drags the card only from its header and edges.
-import { useContext, useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState, type CSSProperties } from "react";
 import { useEditor, useValue } from "tldraw";
 import {
 	appendLocalEntry,
@@ -12,6 +12,11 @@ import {
 	useTranscriptTail,
 } from "../lib/canvas-cards";
 import { deliverSessionPrompt } from "../lib/api";
+import {
+	canvasCardCollaborators,
+	canvasCardCreator,
+	canvasCardSurface,
+} from "../lib/canvas-card-identity";
 import { compactAge } from "../lib/pr-rows";
 import { getReads, isUnread, onReadsChanged } from "../lib/reads";
 import { mineStatus } from "../lib/sidebar-lanes";
@@ -20,7 +25,8 @@ import type { TranscriptEntry, UnifiedSession } from "../lib/types";
 import { Button } from "../ui/button";
 import { Textarea } from "../ui/input";
 import { getCurrentUser } from "./UserPicker";
-import { IconArrowUp, IconExpand } from "./icons";
+import { UserAvatar } from "./UserAvatar";
+import { IconArrowUp, IconExpand, IconRobot } from "./icons";
 
 function stop(e: { stopPropagation: () => void }) {
 	e.stopPropagation();
@@ -42,7 +48,106 @@ function statusColor(session: UnifiedSession): string {
 // transcript tree can exhaust WebKit, so switch to the lightweight overview.
 const COMPACT_ZOOM = 0.4;
 
-function CanvasCardOverview({ session }: { session: UnifiedSession }) {
+function cardStyle(session: UnifiedSession): CSSProperties {
+	return {
+		"--canvas-card-surface": canvasCardSurface(session),
+	} as CSSProperties;
+}
+
+function CanvasCardAvatarStack({
+	session,
+	teamViewing,
+	currentUser,
+}: {
+	session: UnifiedSession;
+	teamViewing: Array<{ user: string; sessionId: string }>;
+	currentUser: string;
+}) {
+	const creator = canvasCardCreator(session);
+	const collaborators = canvasCardCollaborators(
+		session,
+		teamViewing,
+		currentUser,
+	);
+	const shown = collaborators.slice(0, 2);
+	const remaining = collaborators.length - shown.length;
+	if (creator.kind === "unknown" && shown.length === 0) return null;
+	const creatorLabel =
+		creator.kind === "automation"
+			? `${creator.name}, automation creator`
+			: creator.kind === "person"
+				? `${creator.name}, creator`
+				: null;
+	const accessibilityLabel = [
+		creatorLabel,
+		collaborators.length
+			? `Collaborating: ${collaborators.join(", ")}`
+			: null,
+	]
+		.filter(Boolean)
+		.join(". ");
+	const avatarStyle = {
+		boxShadow:
+			"var(--avatar-edge), 0 0 0 2px var(--canvas-card-surface)",
+	};
+	return (
+		<div
+			className="flex shrink-0 items-center -space-x-1.5"
+			role="group"
+			aria-label={accessibilityLabel}
+		>
+			{creator.kind === "automation" ? (
+				<span
+					className="relative z-10 inline-flex size-5 items-center justify-center rounded-[32%] text-[var(--canvas-card-color)] shadow-[0_0_0_2px_var(--canvas-card-surface)]"
+					style={{
+						"--canvas-card-color": creator.color,
+						background: `color-mix(in oklab, ${creator.color} 18%, var(--canvas-card-surface))`,
+					} as CSSProperties}
+					title={`${creator.name} · Automation`}
+				>
+					<IconRobot size={15} />
+				</span>
+			) : creator.kind === "person" ? (
+				<UserAvatar
+					name={creator.name}
+					login={creator.login}
+					size={20}
+					title={`${creator.name} · Creator`}
+					style={avatarStyle}
+					className="z-10"
+				/>
+			) : null}
+			{shown.map((name, index) => (
+				<UserAvatar
+					key={name.toLowerCase()}
+					name={name}
+					size={20}
+					title={`${name} · Collaborating`}
+					style={avatarStyle}
+					className={index === 0 ? "z-[9]" : "z-[8]"}
+				/>
+			))}
+			{remaining > 0 && (
+				<span
+					className="relative z-[7] flex size-5 items-center justify-center rounded-[32%] bg-active text-[9px] font-semibold tabular-nums text-dim shadow-[0_0_0_2px_var(--canvas-card-surface)]"
+					title={`${remaining} more collaborators`}
+				>
+					+{remaining}
+				</span>
+			)}
+		</div>
+	);
+}
+
+function CanvasCardOverview({
+	session,
+	teamViewing,
+	currentUser,
+}: {
+	session: UnifiedSession;
+	teamViewing: Array<{ user: string; sessionId: string }>;
+	currentUser: string;
+}) {
 	const unread = isUnread(session.id, session.lastActivity, getReads());
 	const meta = [session.repo, session.branch, session.startedBy].filter(Boolean);
 	const context =
@@ -51,7 +156,8 @@ function CanvasCardOverview({ session }: { session: UnifiedSession }) {
 		(session.isRunning ? "Working…" : "Session ready");
 	return (
 		<div
-			className="flex h-full w-full flex-col overflow-hidden rounded-xl bg-panel shadow-lg"
+			className="flex h-full w-full flex-col overflow-hidden rounded-xl bg-[var(--canvas-card-surface)] shadow-lg"
+			style={cardStyle(session)}
 			data-canvas-detail="overview"
 		>
 			<div className="flex items-center gap-2 px-3.5 pb-1 pt-2.5">
@@ -68,6 +174,11 @@ function CanvasCardOverview({ session }: { session: UnifiedSession }) {
 						style={{ background: "var(--blue)" }}
 					/>
 				)}
+				<CanvasCardAvatarStack
+					session={session}
+					teamViewing={teamViewing}
+					currentUser={currentUser}
+				/>
 			</div>
 			<div className="truncate px-3.5 pb-1.5 text-meta text-dim">
 				{meta.join(" · ")}
@@ -86,7 +197,7 @@ function CanvasCardOverview({ session }: { session: UnifiedSession }) {
 
 export function CanvasCard({ sessionId }: { sessionId: string }) {
 	const editor = useEditor();
-	const { sessions, onOpenSession, compactAtLowZoom } =
+	const { sessions, teamViewing, currentUser, onOpenSession, compactAtLowZoom } =
 		useContext(CanvasDataContext);
 	const session = sessions.get(sessionId);
 	const compact = useValue(
@@ -102,15 +213,33 @@ export function CanvasCard({ sessionId }: { sessionId: string }) {
 			</div>
 		);
 	}
-	if (compact) return <CanvasCardOverview session={session} />;
-	return <CanvasCardDetail session={session} onOpenSession={onOpenSession} />;
+	if (compact)
+		return (
+			<CanvasCardOverview
+				session={session}
+				teamViewing={teamViewing}
+				currentUser={currentUser}
+			/>
+		);
+	return (
+		<CanvasCardDetail
+			session={session}
+			teamViewing={teamViewing}
+			currentUser={currentUser}
+			onOpenSession={onOpenSession}
+		/>
+	);
 }
 
 function CanvasCardDetail({
 	session,
+	teamViewing,
+	currentUser,
 	onOpenSession,
 }: {
 	session: UnifiedSession;
+	teamViewing: Array<{ user: string; sessionId: string }>;
+	currentUser: string;
 	onOpenSession: (id: string) => void;
 }) {
 	const activity = session.lastActivity || "";
@@ -191,7 +320,10 @@ function CanvasCardDetail({
 	}
 
 	return (
-		<div className="flex h-full w-full flex-col overflow-hidden rounded-xl bg-panel shadow-lg">
+		<div
+			className="flex h-full w-full flex-col overflow-hidden rounded-xl bg-[var(--canvas-card-surface)] shadow-lg"
+			style={cardStyle(session)}
+		>
 			{/* Header: the drag surface. Everything below stops propagation. */}
 			<div className="flex cursor-grab items-center gap-2 px-3.5 pb-1 pt-2.5">
 				<span
@@ -212,6 +344,11 @@ function CanvasCardDetail({
 						title="New activity"
 					/>
 				)}
+				<CanvasCardAvatarStack
+					session={session}
+					teamViewing={teamViewing}
+					currentUser={currentUser}
+				/>
 				<Button
 					variant="ghost"
 					size="sm"
