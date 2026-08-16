@@ -458,4 +458,88 @@ describe("plugins update, end to end", () => {
 		},
 		120_000,
 	);
+
+	test(
+		"a package that renames itself upstream keeps one ledger entry",
+		async () => {
+			const root = mkdtempSync(join(tmpdir(), "plugins-rename-"));
+			const upstream = join(root, "upstream");
+			const ledgerPath = join(root, "state", ".opensession-plugins.json");
+			const mcpPath = join(root, "mcp-config.json");
+			const checkouts = join(root, "state", ".opensession-plugins");
+			const env = {
+				...process.env,
+				OPENSESSION_STATE_DIR: join(root, "state"),
+				OPENSESSION_CONFIG: join(root, "config.json"),
+				OPENSESSION_SKILLS_DIR: join(root, "skills"),
+				OPENSESSION_MCP_CONFIG: mcpPath,
+				GIT_AUTHOR_NAME: "Scratch",
+				GIT_AUTHOR_EMAIL: "scratch@example.invalid",
+				GIT_COMMITTER_NAME: "Scratch",
+				GIT_COMMITTER_EMAIL: "scratch@example.invalid",
+			};
+			const git = (...args: string[]) =>
+				Bun.spawnSync(["git", "-C", upstream, ...args], { env, stdout: "pipe", stderr: "pipe" });
+			const cli = (...args: string[]) => {
+				const proc = Bun.spawnSync([process.execPath, CLI, "plugins", ...args], { env, stdout: "pipe", stderr: "pipe" });
+				return { code: proc.exitCode, out: proc.stdout.toString() + proc.stderr.toString() };
+			};
+			const packages = () => JSON.parse(readFileSync(ledgerPath, "utf8")).packages;
+			// Named differently from the package, so the rename cannot be read
+			// off an artifact by accident.
+			const named = (name: string, version: string, servers: string[]) =>
+				JSON.stringify({
+					name,
+					version,
+					description: "Scratch package",
+					mcpServers: Object.fromEntries(
+						servers.map((s) => [s, { command: "/bin/true", args: [`--${s}`] }]),
+					),
+				});
+
+			try {
+				mkdirSync(join(root, "state"), { recursive: true });
+				mkdirSync(upstream, { recursive: true });
+				writeFileSync(join(upstream, "opensession-plugin.json"), named("scratch-pkg", "0.1.0", ["alpha", "beta"]));
+				git("init", "-q", "-b", "main");
+				git("add", "-A");
+				git("commit", "-qm", "v1");
+				expect(cli("add", upstream, "--yes").code).toBe(0);
+				const before = packages()[0];
+				expect(before.name).toBe("scratch-pkg");
+
+				// Upstream renames the package and drops a server. The remaining
+				// server keeps its name, which is the half that used to fail: the
+				// lookup missed the ledger entry, so "alpha" came back as a
+				// collision with something this very package installed.
+				writeFileSync(join(upstream, "opensession-plugin.json"), named("scratch-renamed", "0.2.0", ["alpha"]));
+				git("add", "-A");
+				git("commit", "-qm", "v2");
+
+				const updated = cli("update", "scratch-pkg", "--yes");
+				expect(updated.code).toBe(0);
+				expect(updated.out).toContain("renamed: scratch-pkg → scratch-renamed");
+
+				// One entry, under the new name, carrying the original install.
+				const after = packages();
+				expect(after.map((p: { name: string }) => p.name)).toEqual(["scratch-renamed"]);
+				expect(after[0].version).toBe("0.2.0");
+				expect(after[0].installedAt).toBe(before.installedAt);
+				expect(after[0].artifacts.map((a: InstalledArtifact) => a.ref)).toEqual(["alpha"]);
+
+				// The dropped server really went, rather than being orphaned with
+				// nothing in the ledger left pointing at it.
+				expect(Object.keys(JSON.parse(readFileSync(mcpPath, "utf8")).mcpServers)).toEqual(["alpha"]);
+				expect(existsSync(join(checkouts, "scratch-pkg"))).toBe(false);
+
+				// And the new name is what remove now answers to.
+				expect(cli("update", "scratch-renamed", "--yes").code).toBe(0);
+				expect(cli("remove", "scratch-renamed").code).toBe(0);
+				expect(packages()).toEqual([]);
+			} finally {
+				rmSync(root, { recursive: true, force: true });
+			}
+		},
+		120_000,
+	);
 });

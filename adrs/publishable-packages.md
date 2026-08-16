@@ -132,8 +132,8 @@ automation keys, skill directories, with hashes). Without that record, remove
 has to guess from name prefixes, and guessing wrong deletes somebody's
 hand-written automation.
 
-Two traps that the ledger and the plan exist to avoid, both already documented
-in `docs/plugins.md`:
+Three traps that the ledger and the plan exist to avoid, the first two already
+documented in `docs/plugins.md`:
 
 - **Seed resurrection.** An automation from a package lives in the config seed
   list, and seeding is create-if-absent on every boot. Removing the package has
@@ -144,6 +144,12 @@ in `docs/plugins.md`:
 - **Install state is server-side.** The ledger is a file in the state dir, not
   localStorage, so what is installed is the same fact for the web UI, the
   native app and the next boot.
+- **A package may rename itself.** The manifest name is the ledger key, so an
+  entry has to be found by where it came from as well: matching only the new
+  name turns an update into a first install, which either collides with the
+  artifacts the package itself installed or writes a second entry and strands
+  the first with no name anyone can remove it by. The lookup is name, then
+  origin, and a rename migrates the entry and says so in the review.
 
 Installation is per-instance. Scoping at the point of use is the pattern three
 times over already (feeds scope `mcpServers`, automations carry allowlists,

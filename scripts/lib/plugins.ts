@@ -85,6 +85,45 @@ export function resolveSource(input: string): { url: string } | { error: string 
 	return { error: `unrecognised source '${source}'. Use owner/repo, a git URL, or a path` };
 }
 
+/**
+ * Do two recorded sources point at the same upstream? `.git` and a trailing
+ * slash are noise, and `owner/repo` is the same thing as its https form, so
+ * both go through resolveSource first.
+ *
+ * Case is only folded for remote URLs. A local path is a filesystem path, and
+ * on a case-sensitive filesystem /tmp/Pkg and /tmp/pkg are two repositories.
+ */
+export function sameOrigin(a: string, b: string): boolean {
+	const normalise = (input: string): string => {
+		const resolved = resolveSource(input);
+		const url = ("url" in resolved ? resolved.url : input).trim();
+		const trimmed = url.replace(/\.git$/i, "").replace(/\/+$/, "");
+		const local = /^([/.]|file:\/\/)/.test(trimmed);
+		return local ? trimmed : trimmed.toLowerCase();
+	};
+	return !!a && !!b && normalise(a) === normalise(b);
+}
+
+/**
+ * The ledger entry this install belongs to.
+ *
+ * By name first, which is the ordinary case, then by where it came from. A
+ * package is free to rename itself upstream, and looking it up only by the new
+ * name found nothing: the install then read as a first install, so the
+ * artifacts it already owns came back as conflicts against itself — or, when
+ * the rename renamed them too, it wrote a second ledger entry and left the
+ * first one with nothing pointing at it and no way to remove it by name.
+ */
+export function findInstalledPackage(
+	name: string,
+	source: string,
+): InstalledPackage | undefined {
+	return (
+		readInstalledPackage(name) ??
+		listInstalledPackages().find((pkg) => sameOrigin(pkg.source, source))
+	);
+}
+
 const CLONE_HARDENING = [
 	"-c",
 	"protocol.ext.allow=never",
@@ -602,10 +641,14 @@ function confirmPlan(
 	commit: string | undefined,
 	allowedUsers: string[] | undefined,
 	yes: boolean,
+	renamedFrom?: string,
 ): boolean {
 	heading(`${manifest.name} ${manifest.version}`);
 	info(dim(manifest.description));
 	info(dim(`${source}${commit ? ` @ ${commit.slice(0, 8)}` : ""}`));
+	// Named before the artifact lines, because it changes what the operator is
+	// looking at: this is the package they know under the old name.
+	if (renamedFrom) info(`renamed: ${renamedFrom} → ${manifest.name}`);
 	console.log("");
 	for (const line of reviewLines(manifest, plan)) info(line);
 	if (allowedUsers?.length) {
@@ -664,7 +707,11 @@ async function addPackage(source: string, opts: PluginsOptions): Promise<number>
 	}
 	const { manifest } = read;
 
-	const existing = readInstalledPackage(manifest.name);
+	const existing = findInstalledPackage(manifest.name, source);
+	// Same install, new name upstream. The plan below then treats the artifacts
+	// as this package's own — an update, not a collision — and the ledger entry
+	// moves to the new name instead of a second one appearing beside it.
+	const renamedFrom = existing && existing.name !== manifest.name ? existing.name : undefined;
 	const dir = join(root, manifest.name);
 	rmSync(dir, { recursive: true, force: true });
 	renameSync(staging, dir);
@@ -682,7 +729,7 @@ async function addPackage(source: string, opts: PluginsOptions): Promise<number>
 	}
 
 	const allowedUsers = parseUsers(opts.users) || existing?.allowedUsers;
-	if (!confirmPlan(manifest, plan, source, fetched.commit, allowedUsers, !!opts.yes)) {
+	if (!confirmPlan(manifest, plan, source, fetched.commit, allowedUsers, !!opts.yes, renamedFrom)) {
 		if (!existing) rmSync(dir, { recursive: true, force: true });
 		info(dim("nothing was installed"));
 		return 1;
@@ -700,7 +747,19 @@ async function addPackage(source: string, opts: PluginsOptions): Promise<number>
 			installedAt: existing?.installedAt,
 		});
 		recordInstalledPackage(record);
-		ok(`${existing ? "updated" : "installed"} ${manifest.name} ${manifest.version}`);
+		if (renamedFrom) {
+			// New entry first, then drop the old name: interrupted here the
+			// package is listed twice, which a re-run settles. The other order
+			// would leave it listed nowhere and unremovable.
+			forgetInstalledPackage(renamedFrom);
+			if (existing?.dir && existing.dir !== dir && existing.dir.includes(".opensession-plugins")) {
+				rmSync(existing.dir, { recursive: true, force: true });
+			}
+		}
+		ok(
+			`${existing ? "updated" : "installed"} ${manifest.name} ${manifest.version}`,
+			renamedFrom ? `renamed from ${renamedFrom}` : undefined,
+		);
 	} catch (e) {
 		fail("install failed and was rolled back", (e as Error).message);
 		return 1;
