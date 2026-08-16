@@ -20,8 +20,7 @@ import { Button } from "../ui/button";
 import { EmptyState } from "../ui/state";
 import { useCurrentUser } from "./UserPicker";
 
-const TLDRAW_LICENSE_KEY =
-	typeof process !== "undefined" ? process.env.TLDRAW_LICENSE_KEY : "";
+const TLDRAW_LICENSE_KEY = process.env.TLDRAW_LICENSE_KEY ?? "";
 
 function cardShapes(editor: Editor): SessionCardShape[] {
 	return editor
