@@ -20,6 +20,7 @@ node_modules/@openai/codex-linux-x64/
 node_modules/.bin/codex
 .frontend-dist/
 .website-dist/
+.website-dist-stage/
 website/.demo-tailwind.css
 node_modules
 __pycache__/
