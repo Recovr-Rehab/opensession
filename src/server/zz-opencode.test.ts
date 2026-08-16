@@ -14,6 +14,7 @@ import {
   sharedOpencodeEligible,
   sharedServerKey,
   opencodeServerDisposition,
+  classifyOpencodeTurnFailure,
   shouldRepairEmptyCompletion,
   shouldRetryTransientRun,
   emptyCompletionRepairPrompt,
@@ -186,10 +187,51 @@ describe("empty successful completion recovery", () => {
 });
 
 describe("transient bridge recovery", () => {
+  test("classifies provider limits once while preserving the user-facing message", () => {
+    const anthropicMessage = "Claude usage limit reached";
+    const openaiMessage = "The usage limit has been reached";
+
+    expect(classifyOpencodeTurnFailure("anthropic", anthropicMessage)).toEqual({
+      kind: "usage_limit",
+      message: anthropicMessage,
+    });
+    expect(classifyOpencodeTurnFailure("openai", openaiMessage)).toEqual({
+      kind: "usage_limit",
+      message: openaiMessage,
+    });
+    expect(classifyOpencodeTurnFailure("openai", "fetch failed")).toEqual({
+      kind: "other",
+      message: "fetch failed",
+    });
+  });
+
+  test("keeps explicit failure kinds authoritative over message text", () => {
+    expect(
+      classifyOpencodeTurnFailure(
+        "openai",
+        "OpenAI provider overloaded on account alpha",
+        "provider_overloaded",
+      ),
+    ).toEqual({
+      kind: "provider_overloaded",
+      message: "OpenAI provider overloaded on account alpha",
+    });
+    expect(
+      classifyOpencodeTurnFailure(
+        "anthropic",
+        "Claude subscription issue on account beta",
+        "usage_limit",
+      ),
+    ).toEqual({
+      kind: "usage_limit",
+      message: "Claude subscription issue on account beta",
+    });
+  });
+
   test("walks two alternative accounts after distinct bridge wedges", () => {
     expect(
       shouldRetryTransientRun({
-        livenessWedged: true,
+        failure: { kind: "liveness_wedge", message: "silent bridge" },
         hasAlternativeAccount: true,
         attemptIndex: 0,
         wedgeRetries: 0,
@@ -197,7 +239,7 @@ describe("transient bridge recovery", () => {
     ).toBe(true);
     expect(
       shouldRetryTransientRun({
-        livenessWedged: true,
+        failure: { kind: "liveness_wedge", message: "silent bridge" },
         hasAlternativeAccount: true,
         attemptIndex: 1,
         wedgeRetries: 1,
@@ -205,7 +247,7 @@ describe("transient bridge recovery", () => {
     ).toBe(true);
     expect(
       shouldRetryTransientRun({
-        livenessWedged: true,
+        failure: { kind: "liveness_wedge", message: "silent bridge" },
         hasAlternativeAccount: true,
         attemptIndex: 2,
         wedgeRetries: 2,
@@ -216,7 +258,7 @@ describe("transient bridge recovery", () => {
   test("keeps ordinary and same-account transient retries at one", () => {
     expect(
       shouldRetryTransientRun({
-        livenessWedged: false,
+        failure: { kind: "other", message: "fetch failed" },
         hasAlternativeAccount: false,
         attemptIndex: 0,
         wedgeRetries: 0,
@@ -224,7 +266,7 @@ describe("transient bridge recovery", () => {
     ).toBe(true);
     expect(
       shouldRetryTransientRun({
-        livenessWedged: false,
+        failure: { kind: "other", message: "fetch failed" },
         hasAlternativeAccount: false,
         attemptIndex: 1,
         wedgeRetries: 0,
@@ -232,7 +274,7 @@ describe("transient bridge recovery", () => {
     ).toBe(false);
     expect(
       shouldRetryTransientRun({
-        livenessWedged: true,
+        failure: { kind: "liveness_wedge", message: "silent bridge" },
         hasAlternativeAccount: false,
         attemptIndex: 1,
         wedgeRetries: 1,
@@ -243,12 +285,25 @@ describe("transient bridge recovery", () => {
   test("does not respawn a server after an explicit provider overload", () => {
     expect(
       shouldRetryTransientRun({
-        livenessWedged: false,
+        failure: {
+          kind: "provider_overloaded",
+          message: "OpenAI provider overloaded on account alpha",
+        },
         hasAlternativeAccount: true,
         attemptIndex: 0,
         wedgeRetries: 0,
-        providerOverloaded: true,
       })
+    ).toBe(false);
+  });
+
+  test("does not retry a classified usage limit as a transient failure", () => {
+    expect(
+      shouldRetryTransientRun({
+        failure: { kind: "usage_limit", message: "Claude usage limit reached" },
+        hasAlternativeAccount: true,
+        attemptIndex: 0,
+        wedgeRetries: 0,
+      }),
     ).toBe(false);
   });
 });
