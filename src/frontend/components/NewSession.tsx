@@ -14,6 +14,9 @@ import { useFileMentions } from "./useFileMentions";
 import { peopleMentionMatches } from "../lib/people";
 import { NO_REPO } from "../lib/session-repo";
 import { insertPastedSessionId } from "../lib/session-url";
+import { composerHighlightHtml, paintPillHover } from "../lib/composer-highlight";
+import { composerPillSpacing } from "../lib/composer-classes";
+import { useSessionNameProjection } from "../hooks/useSessionNameProjection";
 import {
   IconPaperclip,
   IconChevronDown,
@@ -603,9 +606,33 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   // Hidden <input type="file"> driven by the "Add file" button — the mobile
   // path, since there's no clipboard paste there.
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // A pasted session link is stored as its id and shown as that session's
+  // name, exactly as in the session composer. The palette is where most links
+  // are dropped, and a first prompt that reads as forty characters of uuid says
+  // nothing about what it points at.
+  const sessionNames = useSessionNameProjection({
+    text: prompt,
+    setText: setPrompt,
+    textareaRef: promptRef,
+  });
+  // Only session references paint here. The palette has no `inline code` tint
+  // and no mention pills, and a reference is the one thing in this field whose
+  // text is not what will be sent, so it is the one thing that has to say so.
+  const hlRef = useRef<HTMLDivElement>(null);
+  const hoveredPill = useRef<HTMLElement | null>(null);
+  const sessionPill = sessionNames.sessions.length > 0;
+  const sessionHighlightHtml = sessionPill
+    ? composerHighlightHtml(sessionNames.displayText, [], sessionNames.sessions)
+    : "";
+  // Every keystroke rewrites the mirror's innerHTML, so the hovered span is a
+  // dangling node from the render before it.
+  useEffect(() => {
+    hoveredPill.current = null;
+    if (promptRef.current) promptRef.current.style.cursor = "";
+  }, [sessionHighlightHtml]);
   const mentions = useFileMentions({
-    value: prompt,
-    onChange: setPrompt,
+    value: sessionNames.displayText,
+    onChange: sessionNames.setDisplayText,
     textareaRef: promptRef,
     mentionFetch: async (q) => [
       ...peopleMentionMatches(q),
@@ -633,7 +660,9 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     if (!el) return;
     el.style.height = "auto";
     el.style.height = `${el.scrollHeight}px`;
-  }, [prompt]);
+    // The displayed text, not the draft: a session named while this sits open
+    // swaps an id for a title and can change how many lines it takes.
+  }, [sessionNames.displayText]);
 
   // Keep the draft store in sync so a dismissed palette can restore the work.
   useEffect(() => {
@@ -955,7 +984,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     textarea.style.height = "0px";
     textarea.style.height = `${textarea.scrollHeight}px`;
     updatePromptFade(promptBody);
-  }, [promptBody, prompt, images.length, files.length]);
+  }, [promptBody, sessionNames.displayText, images.length, files.length]);
 
   useEffect(() => {
     if (!promptBody) return;
@@ -1082,15 +1111,71 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
           ref={attachPromptBody}
         >
           {mentions.popup}
+          <div className="relative">
+            {sessionPill && (
+              // `composer-hl` stays as a hook: the pill spans inside this
+              // mirror are written as innerHTML by lib/composer-highlight.ts,
+              // so their rules can only be reached through it. Same trick as
+              // the session composer: a metrics-identical layer paints the
+              // pill behind a transparent-text field, which keeps the native
+              // caret, selection and undo.
+              <div
+                ref={hlRef}
+                className={cn(
+                  "composer-hl",
+                  TEXTAREA,
+                  "pointer-events-none absolute inset-0 z-0 h-full select-none overflow-hidden break-words whitespace-pre-wrap",
+                  composerPillSpacing,
+                  // Padding here is two things added together, and both are
+                  // load-bearing. 6px of it is clearance: a pill's wash reaches
+                  // past its own box (base.css), so one at either end of a line
+                  // would be clipped by this box, and the negative margin plus
+                  // the width give that room back outside the content. The
+                  // other 2px is the browser's own textarea padding, which this
+                  // field keeps, unlike the session composer, which zeroes it.
+                  // Without it every glyph here sits two pixels left of the one
+                  // it paints over, which puts the wash off the word.
+                  "-mx-[6px] w-[calc(100%+12px)] px-[8px] py-[2px]",
+                )}
+                aria-hidden="true"
+                dangerouslySetInnerHTML={{ __html: sessionHighlightHtml }}
+              />
+            )}
           <textarea
             ref={promptRef}
-            className={TEXTAREA}
-            value={prompt}
+            className={cn(
+              TEXTAREA,
+              sessionPill && [
+                composerPillSpacing,
+                "relative z-[1] break-words text-transparent caret-[var(--text)]",
+              ],
+            )}
+            value={sessionNames.displayText}
+            onBeforeInput={sessionNames.handleBeforeInput}
             onChange={(e) => {
-              setPrompt(e.target.value);
+              // A token undo/redo is replayed against canonical state and the
+              // caret is already placed, so nothing else is owed here.
+              if (sessionNames.handleChange(e)) return;
               queueMicrotask(mentions.sync);
             }}
+            onCopy={sessionNames.handleCopy}
+            onCut={sessionNames.handleCut}
+            onMouseMove={(e) =>
+              paintPillHover(
+                hlRef.current,
+                promptRef.current,
+                e.clientX,
+                e.clientY,
+                hoveredPill,
+              )
+            }
+            onMouseLeave={() =>
+              paintPillHover(hlRef.current, promptRef.current, -1, -1, hoveredPill)
+            }
             onKeyDown={(e) => {
+              // An undo that has to cross a session token replays canonical
+              // state; every other ⌘Z is left to the field's own history.
+              if (sessionNames.handleUndoRedoKey(e)) return;
               // ⌘/Ctrl+Enter creates whatever the send-key preference is.
               if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
                 e.preventDefault();
@@ -1099,19 +1184,40 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
               }
               // The @/slash popup claims plain Enter to accept a suggestion.
               if (mentions.handleKeyDown(e)) return;
+              // A reference reads as one object, so it erases like one.
+              if (
+                (e.key === "Backspace" || e.key === "Delete") &&
+                !e.metaKey &&
+                !e.ctrlKey &&
+                !e.altKey &&
+                promptRef.current &&
+                sessionNames.deleteTokenAtEdge(e.key, promptRef.current)
+              ) {
+                e.preventDefault();
+                return;
+              }
               // Otherwise the send key creates, exactly as it sends in the session
               // composer — including the unclosed-``` fence exception, so a
               // multi-line code block can still be typed into the first prompt.
               // Nothing to create yet? Let the newline land rather than eating
               // the keystroke.
               if (!isSendCombo(e, sendKey) || !canCreate) return;
-              const caret = promptRef.current?.selectionStart ?? prompt.length;
+              // The caret is an offset into the DISPLAYED text, and a fence is
+              // a fact about the draft, so the two have to be read in the same
+              // terms.
+              const caret = sessionNames.canonicalOffset(
+                promptRef.current?.selectionStart ?? sessionNames.displayText.length,
+              );
               if (insideOpenFence(prompt, caret)) return;
               e.preventDefault();
               handleCreate();
             }}
             onKeyUp={mentions.sync}
-            onClick={mentions.sync}
+            onClick={(e) => {
+              // Pressing a reference removes it, the way the pill says it will.
+              if (sessionNames.removeTokenAtCaret(e.currentTarget)) return;
+              mentions.sync();
+            }}
             onBlur={() => setTimeout(mentions.close, 120)}
             onPaste={handlePaste}
             // Ask sessions read and explain; they never touch the code. Asking
@@ -1123,6 +1229,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
             disabled={creating}
             {...noAutofill}
           />
+          </div>
           <ImageThumbs images={images} onRemove={(i) => setImages((p) => p.filter((_, idx) => idx !== i))} disabled={creating} />
           <FileChips files={files} onRemove={(i) => setFiles((p) => p.filter((_, idx) => idx !== i))} disabled={creating} />
         </div>

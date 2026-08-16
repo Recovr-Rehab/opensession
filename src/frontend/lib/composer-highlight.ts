@@ -252,6 +252,41 @@ export function composerHighlightHtml(
 	return out + "​";
 }
 
+/**
+ * A pill that can be pressed has to look it, and the field on top owns the
+ * cursor, so hover is hit-tested against the mirror's own spans and painted
+ * by a data attribute on the one under the pointer. Both composers paint it
+ * the same way, so the hit test lives here beside the markup it reads.
+ *
+ * `hovered` carries the span between calls; it belongs to the caller because
+ * the mirror's innerHTML is rewritten on every keystroke, which leaves the
+ * previous span dangling.
+ */
+export function paintPillHover(
+	mirror: HTMLElement | null,
+	field: HTMLTextAreaElement | null,
+	x: number,
+	y: number,
+	hovered: { current: HTMLElement | null },
+): void {
+	if (!mirror || !field) return;
+	let hit: HTMLElement | null = null;
+	for (const span of mirror.querySelectorAll<HTMLElement>(
+		".cmp-mention, .cmp-session",
+	)) {
+		// Per fragment, not per span: a name that wraps has two boxes.
+		for (const rect of span.getClientRects())
+			if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom)
+				hit = span;
+		if (hit) break;
+	}
+	if (hovered.current === hit) return;
+	hovered.current?.removeAttribute("data-hover");
+	hit?.setAttribute("data-hover", "");
+	hovered.current = hit;
+	field.style.cursor = hit ? "pointer" : "";
+}
+
 /** Only mount the mirror when the draft has something to paint — code markup,
  * a finished mention, or a session id. Plain drafts keep the stock opaque
  * textarea (zero desync risk). */
