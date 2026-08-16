@@ -2015,6 +2015,7 @@ export function SessionViewer({
 	const archiveShortcutLabel = useShortcutLabel("session-archive");
 	const copyTranscriptLabel = useShortcutLabel("session-copy-transcript");
 	const newSiblingKeys = useShortcutKeys("session-new-sibling");
+	const transcriptDownKeys = useShortcutKeys("transcript-down");
 	const composerRef = useRef<HTMLTextAreaElement | null>(null);
 	useEffect(() => {
 		function onKeyDown(e: KeyboardEvent) {
@@ -4479,6 +4480,29 @@ export function SessionViewer({
 		return () => window.removeEventListener("keydown", onKeyDown);
 	}, [focused, session.prUrl, session.prs, session.previewPath, staging]);
 
+	// ⌘. asks to stop the running turn from anywhere in the session. Escape
+	// asks the same question, but only with the composer focused — which is
+	// exactly where you are not when you have been reading the transcript.
+	//
+	// Both land on the composer's own confirmation. The dialog, and the rule
+	// that it goes away when the turn finishes on its own rather than stopping
+	// the next one, live there; this only asks for it, through a counter, so
+	// there is no second copy of any of that here. (The stop BUTTON stays
+	// immediate: pressing it is already deliberate.)
+	const [stopRequest, setStopRequest] = useState(0);
+	useEffect(() => {
+		function onKeyDown(e: KeyboardEvent) {
+			if (!focused || e.defaultPrevented) return;
+			if (!matchesShortcut(e, "run-stop")) return;
+			// Nothing running: leave the chord alone rather than swallowing it.
+			if (!isBusy || forkFrom) return;
+			e.preventDefault();
+			setStopRequest((n) => n + 1);
+		}
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [focused, isBusy, forkFrom]);
+
 	return (
 		<div className="relative flex h-full min-h-0 flex-col">
 			{deleting && (
@@ -6095,21 +6119,28 @@ export function SessionViewer({
 							)}
 
 							{showScrollToBottom && entries.length > 0 && (
-									<button
-										className={cn(
-											TRANSCRIPT_PILL_BUTTON,
-											"absolute bottom-6 left-1/2 z-[5] -translate-x-1/2",
-										)}
-										onClick={() => scrollToLatest("smooth")}
-										title="Scroll to the bottom"
+									/* The pill and the chord do the same thing — a Down that
+									   would land at the live edge resumes following — so the
+									   button is where that chord is worth advertising. */
+									<Tooltip
+										label="Scroll to the bottom"
+										shortcut={transcriptDownKeys ?? undefined}
 									>
-										<IconArrowDown
-											size={13}
-											className="text-dim transition-transform group-hover:translate-y-px"
-											aria-hidden
-										/>
-										{newBelow ? "New messages" : "Scroll to bottom"}
-									</button>
+										<button
+											className={cn(
+												TRANSCRIPT_PILL_BUTTON,
+												"absolute bottom-6 left-1/2 z-[5] -translate-x-1/2",
+											)}
+											onClick={() => scrollToLatest("smooth")}
+										>
+											<IconArrowDown
+												size={13}
+												className="text-dim transition-transform group-hover:translate-y-px"
+												aria-hidden
+											/>
+											{newBelow ? "New messages" : "Scroll to bottom"}
+										</button>
+									</Tooltip>
 								)}
 							</div>
 
@@ -6207,6 +6238,9 @@ export function SessionViewer({
 									onNoteModeChange={setNoteMode}
 									busy={isBusy && !forkFrom}
 									onStop={handleCancel}
+									// Bumped by the ⌘. listener above; the composer opens the
+									// same confirmation Escape does.
+									stopRequest={stopRequest}
 									// Leaving ask mode is a setting of this session, so it sits in
 									// the composer's "+" with the rest of them rather than as its
 									// own chip. The row stays open reading "Switching to code…"

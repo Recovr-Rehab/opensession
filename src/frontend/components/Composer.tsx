@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { useShortcutLabel } from "../hooks/useShortcutBindings";
+import {
+  useShortcutKeys,
+  useShortcutLabel,
+} from "../hooks/useShortcutBindings";
 import type { ModelOption, FileMention, ProviderAccountOption } from "../lib/api";
 import { splitAttachments, imageFilesFromPaste, type FileAttachment } from "../lib/images";
 import { loadDraft, onDraftsChanged, saveDraft } from "../lib/drafts";
@@ -75,7 +78,6 @@ import {
   insideOpenFence,
   isSendCombo,
   MOD_ENTER_GLYPH,
-  sendKeyLabel,
 } from "../lib/send-key";
 import { getSendKeyPref, onSendKeyChanged } from "../lib/send-key-pref";
 import { isApple } from "../lib/platform";
@@ -128,6 +130,13 @@ interface Props {
   sendTitle?: string;
   busy?: boolean;
   onStop?: () => void;
+  /**
+   * Ask for the stop confirmation from outside the composer — the parent bumps
+   * this counter, and each bump opens the same dialog Escape does. A counter
+   * rather than a callback ref because the question is "has one more been
+   * asked for", which a boolean can't say twice in a row.
+   */
+  stopRequest?: number;
   models: ModelOption[];
   defaultModel: string;
   /** Current model id; "" = default. */
@@ -385,6 +394,7 @@ export function Composer({
   sendTitle,
   busy,
   onStop,
+  stopRequest,
   models,
   defaultModel,
   model,
@@ -433,6 +443,9 @@ export function Composer({
   );
   const isPhone = useIsPhone();
   const noteChord = useShortcutLabel("composer-note");
+  const stopKeys = useShortcutKeys("run-stop");
+  const effortUpLabel = useShortcutLabel("effort-up");
+  const effortDownLabel = useShortcutLabel("effort-down");
   // "Send messages with" preference (Settings → Preferences): Enter or ⌘/Ctrl+Enter.
   const [sendKey, setSendKey] = useState(getSendKeyPref);
   useEffect(() => onSendKeyChanged(() => setSendKey(getSendKeyPref())), []);
@@ -592,6 +605,11 @@ export function Composer({
     ]
       .filter(Boolean)
       .join("  ");
+  // The send key as keycaps for the button's tooltip. It is a preference
+  // rather than a registry chord — Settings → Preferences owns which key
+  // sends — so the caps come from lib/send-key, not from shortcutKeys.
+  const sendKeyCaps =
+    sendKey === "mod-enter" ? [MOD_ENTER_GLYPH] : [isApple ? "↵" : "Enter"];
 
   // Escape asked to stop the run and is waiting on an answer. A turn that
   // finishes on its own while the question is up leaves nothing to stop, so
@@ -602,6 +620,25 @@ export function Composer({
   useEffect(() => {
     if (!busy) setStopConfirm(false);
   }, [busy]);
+  /** Raise the question. Deferred a microtask so the dialog mounts AFTER the
+   *  keystroke that asked for it has finished dispatching: Base UI's dismissal
+   *  listener would otherwise consume its own opener. */
+  function requestStop() {
+    queueMicrotask(() => {
+      if (busyRef.current) setStopConfirm(true);
+    });
+  }
+  // The same question, asked from outside (SessionViewer's ⌘. listener, which
+  // reaches the reader who is in the transcript rather than the composer).
+  // Seeded from the incoming value so a remount — the tab-bar + gives the
+  // composer a fresh key — never reads as a fresh request.
+  const lastStopRequest = useRef(stopRequest ?? 0);
+  useEffect(() => {
+    const asked = stopRequest ?? 0;
+    if (asked === lastStopRequest.current) return;
+    lastStopRequest.current = asked;
+    if (busy && onStop && !disabled) requestStop();
+  }, [stopRequest]);
 
   // Which toolbar popover is open ("add" menu or "goal" editor). Closed on an
   // outside click or after an action.
@@ -990,11 +1027,7 @@ export function Composer({
     if (e.key === "Escape" && busy && onStop && !disabled) {
       e.preventDefault();
       e.stopPropagation();
-      // Mount after this Escape dispatch completes. Mounting Base UI's dialog
-      // during the same event lets its dismissal listener consume the opener.
-      queueMicrotask(() => {
-        if (busyRef.current) setStopConfirm(true);
-      });
+      requestStop();
       return;
     }
     // Inside an unclosed ``` fence, plain Enter inserts a newline instead of
@@ -1553,7 +1586,17 @@ export function Composer({
               >
                 <ModelEffortSelect
                   className={cn(palettePill, composerToolbarPill)}
-                  title={modelTitle || "Model and reasoning effort for this session"}
+                  // The pill is where the effort chords are worth naming: they
+                  // step what it displays. Appended to the native title the
+                  // trigger already carries, so a reader who hovers the thing
+                  // they would otherwise click finds them.
+                  title={
+                    (modelTitle ||
+                      "Model and reasoning effort for this session") +
+                    (effortDownLabel && effortUpLabel
+                      ? `\n${effortDownLabel} / ${effortUpLabel} steps the effort`
+                      : "")
+                  }
                   models={models}
                   defaultModel={defaultModel}
                   model={model}
@@ -1602,7 +1645,13 @@ export function Composer({
           </motion.div>
 
           {busy && onStop && (
-            <Tooltip label="Stop. Interrupts the current turn; the session stays ready.">
+            <Tooltip
+              label="Stop. Interrupts the current turn; the session stays ready."
+              // The chord that reaches this from anywhere in the session.
+              // Escape does the same from inside the composer, but two chords
+              // side by side in one badge row would read as a single one.
+              shortcut={stopKeys ?? undefined}
+            >
               <button
                 type="button"
                 className={cn(
@@ -1639,13 +1688,23 @@ export function Composer({
                 <Tooltip
                   label={
                     noteMode
-                      ? `Add note (${sendKeyLabel(sendKey)})`
+                      ? "Add note"
                       : steerSend
                         ? "Steer message"
-                        : sendTitle ||
-                          (busy
-                            ? "Queue message"
-                            : `Send (${sendKeyLabel(sendKey)})`)
+                        : sendTitle || (busy ? "Queue message" : "Send")
+                  }
+                  // Keycaps rather than the key's name in the label: the row
+                  // of chips is the same thing every other control shows, and
+                  // a name in parentheses read as part of the sentence.
+                  // Holding the modifier switches the action to steer, and
+                  // the chord with it. A caller-supplied `sendTitle` explains
+                  // something other than sending, so it keeps no caps.
+                  shortcut={
+                    steerSend
+                      ? [MOD_ENTER_GLYPH]
+                      : !noteMode && sendTitle
+                        ? undefined
+                        : sendKeyCaps
                   }
                 >
                   <ContextMenu.Trigger

@@ -42,8 +42,12 @@ export type ShortcutId =
 	| "sidebar-toggle"
 	| "sidebar-next"
 	| "sidebar-prev"
+	| "tab-next"
+	| "tab-prev"
+	| "shortcuts-help"
 	| "session-new"
 	| "session-new-sibling"
+	| "run-stop"
 	| "session-close"
 	| "session-archive"
 	| "workspace-archive"
@@ -115,6 +119,35 @@ export const SHORTCUT_COMMANDS: ShortcutCommand[] = [
 		group: "Navigation",
 		defaults: ["mod+arrowup"],
 	},
+	// The tab strip's horizontal answer to the sidebar's ⌘↑/⌘↓. ⌘⌥ arrows are
+	// the neighbouring family (⌘⌥↑/↓ already step the reasoning effort), which
+	// is why the pair reads as one set — but Chromium takes ⌘⌥→/← for its own
+	// tab strip before the page sees them, so both carry a ⌃⌥ alias and
+	// advertise it there. Off Apple the two spell the same keycaps, since
+	// `ctrl` folds into `mod` on a PC.
+	{
+		id: "tab-next",
+		title: "Next tab",
+		description: "Move to the tab on the right in this workspace",
+		group: "Navigation",
+		defaults: ["mod+alt+arrowright", "ctrl+alt+arrowright"],
+		preferAliasOnChromium: true,
+	},
+	{
+		id: "tab-prev",
+		title: "Previous tab",
+		description: "Move to the tab on the left in this workspace",
+		group: "Navigation",
+		defaults: ["mod+alt+arrowleft", "ctrl+alt+arrowleft"],
+		preferAliasOnChromium: true,
+	},
+	{
+		id: "shortcuts-help",
+		title: "Shortcut list",
+		description: "Show every shortcut without leaving what you are doing",
+		group: "Navigation",
+		defaults: ["mod+/"],
+	},
 	{
 		id: "session-new",
 		title: "New session",
@@ -128,6 +161,16 @@ export const SHORTCUT_COMMANDS: ShortcutCommand[] = [
 		description: "Start a session in the workspace you are already in",
 		group: "Sessions",
 		defaults: ["mod+alt+n"],
+	},
+	// Escape already asks this, but only with the composer focused, which is
+	// exactly where you are not when you have been reading the transcript. The
+	// two land on the same confirmation.
+	{
+		id: "run-stop",
+		title: "Stop the run",
+		description: "Ask to interrupt the turn that is running",
+		group: "Sessions",
+		defaults: ["mod+."],
 	},
 	{
 		id: "session-close",
@@ -274,6 +317,20 @@ export const SHORTCUT_REFERENCE: ShortcutReference[] = [
 		title: "Answer a question",
 		description: "Pick a lettered option on a question card",
 		keys: ["A", "B", "C"],
+	},
+	// A chord family, not a command: the digit varies, and matching is exact on
+	// the whole chord, so there is nothing here one binding could stand for.
+	// Rebinding the modifier alone is not something the registry can express,
+	// so this stays hard-coded in App and is listed rather than offered.
+	{
+		title: "Jump to a tab",
+		description: "Open the first nine tabs in the workspace by number",
+		keys: isApple ? ["⌥", "1"] : ["Alt", "1"],
+	},
+	{
+		title: "Sort a card in Catch up",
+		description: "Archive it, mark it read, or keep it for later",
+		keys: ["←", "→", "↑"],
 	},
 ];
 
