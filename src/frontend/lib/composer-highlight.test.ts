@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
 	composerHighlightHtml,
+	SESSION_GLYPH_SLOT,
 	composerMentionRanges,
 	composerSessionRanges,
 	needsComposerHighlight,
@@ -119,14 +120,16 @@ describe("session ids in the mirror", () => {
 		);
 	});
 
-	test("a known session shows its name inline", () => {
-		const label = "Clean pasted open session links";
+	test("a known session shows its name behind the chat glyph", () => {
+		const title = "Clean pasted open session links";
+		const label = SESSION_GLYPH_SLOT + title;
 		expect(
 			composerHighlightHtml(`look at ${label} first`, [], [
-				{ start: 8, end: 39, id: ID, label },
+				{ start: 8, end: 8 + label.length, id: ID, label },
 			]),
 		).toBe(
 			'look at <span class="cmp-session cmp-session-named">' +
+				`<span class="cmp-sglyph">${SESSION_GLYPH_SLOT}</span>` +
 				"Clean pasted open session links</span> first​",
 		);
 	});

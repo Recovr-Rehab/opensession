@@ -1654,6 +1654,27 @@ html.wco .app-body.sidebar-collapsed .wco-chrome {
 	-webkit-mask: var(--cmp-session-glyph) center / contain no-repeat;
 	mask: var(--cmp-session-glyph) center / contain no-repeat;
 }
+/* The same glyph for a named reference, which has no prefix to lend it a slot:
+   the projection reserves one in front of the title instead
+   (SESSION_GLYPH_SLOT in lib/composer-highlight.ts). Narrower than the id's,
+   because that one is centred over three or four characters of room while this
+   sits in a slot cut to its own size. */
+.composer-hl .cmp-sglyph {
+	position: relative;
+	color: transparent;
+}
+.composer-hl .cmp-sglyph::before {
+	content: "";
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	width: 1.1em;
+	height: 1.1em;
+	transform: translate(-50%, -50%);
+	background: var(--text-dim);
+	-webkit-mask: var(--cmp-session-glyph) center / contain no-repeat;
+	mask: var(--cmp-session-glyph) center / contain no-repeat;
+}
 html[data-theme="light"] .composer-hl .cmp-code {
 	background: rgba(149, 59, 57, 0.1);
 	color: #953b39;

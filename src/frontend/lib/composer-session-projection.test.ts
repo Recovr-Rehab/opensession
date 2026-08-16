@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { setSessionTitles } from "./markdown";
+import { SESSION_GLYPH_SLOT } from "./composer-highlight";
 import {
 	applyComposerSessionEdit,
 	composerCanonicalSelection,
@@ -13,18 +14,19 @@ const OTHER_ID = "os-01a00733-0547-7000-9abb-cc2b8fc3502f";
 describe("composer session projection", () => {
 	beforeEach(() => setSessionTitles([[ID, "Clean pasted session links"]]));
 
-	test("shows the title while retaining the canonical id", () => {
+	test("shows the title, behind a slot for the chat glyph, while retaining the canonical id", () => {
+		const label = `${SESSION_GLYPH_SLOT}Clean pasted session links`;
 		const projected = projectComposerSessions(`Compare ${ID} now`);
-		expect(projected.displayText).toBe("Compare Clean pasted session links now");
+		expect(projected.displayText).toBe(`Compare ${label} now`);
 		expect(projected.canonicalText).toBe(`Compare ${ID} now`);
 		expect(projected.sessions).toEqual([
 			{
 				start: 8,
-				end: 34,
+				end: 8 + label.length,
 				id: ID,
 				canonicalStart: 8,
 				canonicalEnd: 47,
-				label: "Clean pasted session links",
+				label,
 			},
 		]);
 	});
@@ -34,7 +36,7 @@ describe("composer session projection", () => {
 		expect(
 			applyComposerSessionEdit(
 				projected,
-				"Please compare Clean pasted session links now",
+				`Please compare ${SESSION_GLYPH_SLOT}Clean pasted session links now`,
 			).canonicalText,
 		).toBe(`Please compare ${ID} now`);
 	});
@@ -44,7 +46,7 @@ describe("composer session projection", () => {
 		expect(
 			applyComposerSessionEdit(
 				projected,
-				"Compare Clean pasted sesion links now",
+				`Compare ${SESSION_GLYPH_SLOT}Clean pasted sesion links now`,
 			).canonicalText,
 		).toBe("Compare  now");
 	});
@@ -62,19 +64,20 @@ describe("composer session projection", () => {
 			[ID, "Same title"],
 			[OTHER_ID, "Same title"],
 		]);
+		const label = `${SESSION_GLYPH_SLOT}Same title`;
 		const projected = projectComposerSessions(`${ID} ${OTHER_ID}`);
-		expect(projected.displayText).toBe("Same title Same title");
+		expect(projected.displayText).toBe(`${label} ${label}`);
 		expect(
-			applyComposerSessionEdit(projected, "Same title", 0, 0, {
+			applyComposerSessionEdit(projected, label, 0, 0, {
 				start: 0,
-				end: 11,
+				end: label.length + 1,
 			}).canonicalText,
 		).toBe(OTHER_ID);
 	});
 
 	test("copying part of a title expands to the canonical session id", () => {
 		const projected = projectComposerSessions(`Compare ${ID} now`);
-		expect(composerCanonicalSelection(projected, 12, 20)).toEqual({
+		expect(composerCanonicalSelection(projected, 14, 22)).toEqual({
 			start: 8,
 			end: 47,
 		});
@@ -82,8 +85,9 @@ describe("composer session projection", () => {
 
 	test("maps a canonical caret past the token into display text", () => {
 		const projected = projectComposerSessions(`Compare ${ID} now`);
-		expect(composerDisplayOffset(projected, 47)).toBe(34);
-		expect(composerDisplayOffset(projected, 51)).toBe(38);
+		const label = `${SESSION_GLYPH_SLOT}Clean pasted session links`;
+		expect(composerDisplayOffset(projected, 47)).toBe(8 + label.length);
+		expect(composerDisplayOffset(projected, 51)).toBe(12 + label.length);
 	});
 
 	test("leaves session ids inside code untouched", () => {
@@ -98,7 +102,7 @@ describe("composer session projection", () => {
 		const canonical = applyComposerSessionEdit(empty, `Compare ${ID}`).canonicalText;
 		expect(canonical).toBe(`Compare ${ID}`);
 		expect(projectComposerSessions(canonical).displayText).toBe(
-			"Compare Clean pasted session links",
+			`Compare ${SESSION_GLYPH_SLOT}Clean pasted session links`,
 		);
 	});
 });

@@ -68,6 +68,20 @@ export function composerMentionRanges(
 	return out;
 }
 
+/**
+ * The room a named session's chat glyph is painted into, prepended to the
+ * title by the projection (lib/composer-session-projection.ts).
+ *
+ * The mirror may not take a pixel of width, so a glyph can only go where the
+ * text already is. An id lends the slot its `os-` prefix occupies; a title has
+ * no characters to spare, so the projection reserves two of them. Figure
+ * spaces, for two reasons: they are non-breaking, so a wrapped reference never
+ * leaves its glyph stranded at the end of a line, and unlike an ordinary space
+ * they are not word separators, so the composer's wider word spacing does not
+ * stretch the slot out from under the glyph.
+ */
+export const SESSION_GLYPH_SLOT = "\u2007\u2007";
+
 /** One session id in the draft, as offsets into it. */
 export interface SessionRange {
 	start: number;
@@ -171,8 +185,17 @@ function mentionHtml(text: string, range: MentionRange): string {
  * `o` would leave `s-01a0…`, which reads as damage.
  */
 function sessionHtml(text: string, range: SessionRange): string {
-	if (range.label)
-		return `<span class="cmp-session cmp-session-named">${esc(text.slice(range.start, range.end))}</span>`;
+	if (range.label) {
+		const shown = text.slice(range.start, range.end);
+		const slot = shown.startsWith(SESSION_GLYPH_SLOT)
+			? SESSION_GLYPH_SLOT.length
+			: 0;
+		return (
+			`<span class="cmp-session cmp-session-named">` +
+			(slot ? `<span class="cmp-sglyph">${esc(shown.slice(0, slot))}</span>` : "") +
+			`${esc(shown.slice(slot))}</span>`
+		);
+	}
 	const prefixEnd = text.indexOf("-", range.start) + 1;
 	const prefix = esc(text.slice(range.start, prefixEnd));
 	const rest = esc(text.slice(prefixEnd, range.end));

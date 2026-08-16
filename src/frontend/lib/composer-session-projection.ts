@@ -1,4 +1,8 @@
-import { composerSessionRanges, type SessionRange } from "./composer-highlight";
+import {
+	composerSessionRanges,
+	SESSION_GLYPH_SLOT,
+	type SessionRange,
+} from "./composer-highlight";
 import { sessionTitleFor } from "./markdown";
 
 export interface DisplaySessionRange extends SessionRange {
@@ -51,7 +55,10 @@ export function projectComposerSessions(
 		)
 			continue;
 		displayText += canonicalText.slice(canonicalCursor, range.start);
-		const label = sessionTitleFor(range.id);
+		// A named reference leads with the chat glyph, the way the chip in a
+		// sent message does, so the slot it is painted into comes first.
+		const title = sessionTitleFor(range.id);
+		const label = title ? SESSION_GLYPH_SLOT + title : undefined;
 		const start = displayText.length;
 		displayText += label ?? range.id;
 		sessions.push({
