@@ -289,6 +289,13 @@ export function __setEngineForTest(fn: EngineRunner | null): void {
   engineForTest = fn;
 }
 
+/** Test seam for the reattach half of restart recovery — the only part of a
+ *  recovery that needs a surviving detached `opencode serve` to exercise. */
+let reattachForTest: typeof tryReattachOpencodeRun | null = null;
+export function __setReattachForTest(fn: typeof tryReattachOpencodeRun | null): void {
+  reattachForTest = fn;
+}
+
 type ModelAvailabilityProbe = (opts: RunAgentOpts, model: string) => string | null;
 let modelAvailabilityForTest: ModelAvailabilityProbe | null = null;
 export function __setModelAvailabilityForTest(fn: ModelAvailabilityProbe | null): void {
@@ -1676,7 +1683,7 @@ export function resumeInterruptedRuns(
         if (run.serverKey) {
           if (run.osSessionId)
             transitionRunState(run.osSessionId, "reattach_start", { run_key: run.runKey });
-          const reattached = await tryReattachOpencodeRun(run, {
+          const reattached = await (reattachForTest ?? tryReattachOpencodeRun)(run, {
             onAskUser: run.osSessionId ? askHandlerFor?.(run.osSessionId) : undefined,
           }).catch((e) => {
             console.warn(`[runner] Reattach probe failed for ${run.runKey}:`, e);

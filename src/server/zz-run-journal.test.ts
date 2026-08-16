@@ -801,3 +801,67 @@ describe("restart recovery queue", () => {
 		}
 	});
 });
+
+describe("restart recovery reattach", () => {
+	it("does not let a reattached turn hold a queue slot", async () => {
+		// Every one of these runs survived the restart on its own detached
+		// server and is still executing. Following such a turn costs this
+		// process nothing, so all five must attach at once — holding a slot
+		// for the turn's whole lifetime is what starved the fifth run until
+		// the queue-wait timer fired (2026-08-16).
+		const attached: string[] = [];
+		let openGate!: () => void;
+		const gate = new Promise<void>((resolve) => {
+			openGate = resolve;
+		});
+		agent.__setReattachForTest((async (run: any) => {
+			attached.push(run.runKey);
+			const stream = (async function* () {
+				yield { type: "init", sessionId: run.claudeSessionId, provider: "opencode" };
+				await gate;
+				yield {
+					type: "done",
+					sessionId: run.claudeSessionId,
+					provider: "opencode",
+					result: "picked up where the restart left off",
+				};
+			})();
+			(stream as any).cancelDetachedTurn = async () => {};
+			return stream;
+		}) as any);
+		const sessions = Array.from(
+			{ length: 5 },
+			(_, i) => `reattach-${i}-${crypto.randomUUID()}`,
+		);
+		sessions.forEach((sessionId, i) => {
+			mod.journalSet({
+				runKey: `run-${sessionId}`,
+				osSessionId: sessionId,
+				claudeSessionId: `engine-${sessionId}`,
+				serverKey: `shared:test-${i}`,
+				prompt: "continue",
+				cwd: "/tmp",
+				model: "claude-fable-5",
+				startedAt: new Date(Date.now() - i * 1000).toISOString(),
+			});
+			clearRunState(sessionId);
+		});
+		// Long enough that a fifth attach can only come from a freed slot,
+		// never from the queue-wait timer starting the run outside the queue.
+		const previousWait = agent.__setRecoveryQueueWaitMsForTest(30_000);
+		try {
+			const resumedAt = Date.now();
+			agent.resumeInterruptedRuns();
+			while (attached.length < 5) await Bun.sleep(5);
+			expect(Date.now() - resumedAt).toBeLessThan(5_000);
+		} finally {
+			agent.__setRecoveryQueueWaitMsForTest(previousWait);
+			agent.__setReattachForTest(null);
+			openGate();
+			for (const sessionId of sessions) {
+				while (agent.isAgentSessionBusy(sessionId)) await Bun.sleep(5);
+				clearRunState(sessionId);
+			}
+		}
+	});
+});
