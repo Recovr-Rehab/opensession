@@ -5,6 +5,15 @@ Adding capability should mean touching one of these — if you find yourself
 editing `opensession.ts`, that is usually a sign the thing you want is missing an
 extension point rather than that you need to edit the entry file.
 
+Before extending, read what is already there. Two catalogs under
+`docs/generated/` are produced from the code itself by
+`bun scripts/gen-catalogs.ts`, and a test fails when they go stale:
+
+- [generated/mcp-tools.md](generated/mcp-tools.md) — every tool the built-in
+  `opensession-*` servers expose, with the run classes that can call it.
+- [generated/engines.md](generated/engines.md) — the engine adapters, what
+  turns each one on, and which engine a model routes to.
+
 ## 1. MCP servers — give sessions new tools
 
 The lowest-effort way to add capability, and the one that requires no Open Session
@@ -37,6 +46,14 @@ Two things worth knowing:
 
 Config is read per run, so adding a server does not need a restart. Changing the
 *enforcement* code does.
+
+Open Session's own tools are different: the `opensession-*` servers run
+in-process and are handed to a run by code, not config —
+`src/server/interactive-mcp.ts` for interactive runs,
+`src/server/automations.ts` for unattended ones. Adding one means adding an
+entry to `src/server/mcp-catalog.ts` as well, which is what keeps
+[generated/mcp-tools.md](generated/mcp-tools.md) honest; the test suite fails
+until you do.
 
 ## 2. Automation recipes — package a repeatable job
 
