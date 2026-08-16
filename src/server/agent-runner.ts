@@ -1410,7 +1410,11 @@ export function resumeInterruptedRuns(
       if (started) return;
       started = true;
       clearTimeout(queuedTooLong);
-      if (settledRunKeys.has(run.runKey)) return;
+      if (settledRunKeys.has(run.runKey)) {
+        // Never reaches the worker's finally, so drain the stop marker here.
+        cancelledRecoveries.delete(run);
+        return;
+      }
       activeRecoveryWorkerRunKeys.add(run.runKey);
       let releaseQueueSlot!: () => void;
       const slotFree = new Promise<void>((resolve) => {
@@ -1435,6 +1439,13 @@ export function resumeInterruptedRuns(
         } finally {
           activeRecoveryWorkerRunKeys.delete(run.runKey);
           untrackRecovery(run);
+          // abandonStoppedRecovery is what normally drains the stop marker,
+          // but only on the paths that reach it: a recovery that ended with a
+          // terminal event can stop polling first. Drain unconditionally here
+          // so a cancelled recovery cannot hold its record for the process
+          // lifetime. Safe after untrackRecovery: cancelAgentRun can no
+          // longer find this run to mark it again.
+          cancelledRecoveries.delete(run);
           releaseQueueSlot();
         }
       })();
@@ -1541,7 +1552,8 @@ export function resumeInterruptedRuns(
               terminalSeen = settleRecovery(run, event) || terminalSeen;
             } else emitRecoveryEvent(run, event);
           }
-          if (!terminalSeen && !abandonStoppedRecovery(run)) {
+          if (abandonStoppedRecovery(run)) return;
+          if (!terminalSeen) {
             reportRecoveryFailure(
               run,
               "Restart recovery ended before the Runner returned a final result. Send the prompt again to continue.",
@@ -1549,7 +1561,8 @@ export function resumeInterruptedRuns(
           }
         } catch (error) {
           console.error(`[runner] Runner resume failed for ${run.runKey}:`, error);
-          if (!terminalSeen && !abandonStoppedRecovery(run)) {
+          if (abandonStoppedRecovery(run)) return;
+          if (!terminalSeen) {
             reportRecoveryFailure(
               run,
               "Restart recovery failed while reconnecting to the Runner. Check its connection, then send the prompt again.",
