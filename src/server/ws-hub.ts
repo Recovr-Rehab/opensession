@@ -16,7 +16,7 @@ const g = globalThis as any;
 // moment. Every connected WebSocket is also tracked so we can warn them all
 // before the process goes down for a deploy.
 export const BOOT_ID: string = (g.__bootId ??= crypto.randomUUID());
-export const allClients: Set<any> = (g.__allClients ??= new Set());
+export const allClients: Set<WebSocketClient> = (g.__allClients ??= new Set());
 
 export function broadcastToAll(msg: object) {
 	const payload = JSON.stringify(msg);
@@ -55,11 +55,24 @@ export interface WSClientData {
 	supportsFeed?: boolean;
 	sinceFeedSeq?: number;
 	feedEpoch?: string;
+	/** Most recent session join, used to collapse a user's multiple sockets. */
+	watchJoinedAt?: number;
+	/** This socket is served by the transcript store instead of a file watcher. */
+	transcriptV2?: boolean;
+	/** User-agent provenance for presence diagnostics. */
+	presenceClient?: string;
+	/** Automated and hosted-loopback clients never appear in presence. */
+	presenceSuppressed?: boolean;
+}
+
+interface WebSocketClient {
+	data: WSClientData;
+	send(data: string): unknown;
 }
 
 // sessionId → sockets currently viewing that session (collaboration fan-out)
-export const sessionWatchers: Map<string, Set<any>> = (g.__sessionWatchers ??=
-	new Map());
+export const sessionWatchers: Map<string, Set<WebSocketClient>> =
+	(g.__sessionWatchers ??= new Map());
 
 // Sessions whose workspace (worktree) is still being prepared by their create
 // run — the create announces session_created BEFORE the slow git work, and this
@@ -69,7 +82,7 @@ export const sessionWatchers: Map<string, Set<any>> = (g.__sessionWatchers ??=
 export const preparingWorkspaces: Set<string> = (g.__preparingWorkspaces ??=
 	new Set());
 
-export function joinSession(ws: any, sessionId: string) {
+export function joinSession(ws: WebSocketClient, sessionId: string) {
 	let set = sessionWatchers.get(sessionId);
 	if (!set) {
 		set = new Set();
@@ -92,7 +105,7 @@ export function joinSession(ws: any, sessionId: string) {
 	} catch {}
 }
 
-export function leaveSession(ws: any) {
+export function leaveSession(ws: WebSocketClient) {
 	const sessionId = ws.data?.watchingSessionId;
 	if (!sessionId) return;
 	const set = sessionWatchers.get(sessionId);
@@ -110,7 +123,7 @@ export function leaveSession(ws: any) {
 export function broadcastToSession(
 	sessionId: string,
 	msg: object,
-	except?: any,
+	except?: WebSocketClient,
 ) {
 	const set = sessionWatchers.get(sessionId);
 	// Advance feed state even with no viewers, so a backgrounded client can
@@ -150,7 +163,7 @@ const PRESENCE_LIVENESS_MS = 75_000;
 const PRESENCE_IDLE_MS = 10 * 60_000;
 const PRESENCE_SWEEP_MS = 15_000;
 
-function isPresent(ws: any, now = Date.now()): boolean {
+function isPresent(ws: Pick<WebSocketClient, "data">, now = Date.now()): boolean {
 	const data = ws?.data;
 	if (!data || data.away === true) return false;
 	if (now - (data.lastSeenAt || 0) >= PRESENCE_LIVENESS_MS) return false;
@@ -162,7 +175,7 @@ function isPresent(ws: any, now = Date.now()): boolean {
  * `active` says it was a person doing something rather than a heartbeat, which
  * is what keeps the face on (see PRESENCE_IDLE_MS).
  */
-export function markClientSeen(ws: any, active = false) {
+export function markClientSeen(ws: WebSocketClient, active = false) {
 	if (!ws?.data) return;
 	const was = isPresent(ws);
 	ws.data.lastSeenAt = Date.now();
@@ -179,7 +192,7 @@ export function markClientSeen(ws: any, active = false) {
  * `away: false` doubles as the attention refresh: clients re-send it while the
  * person keeps using the app, which is what holds a face past PRESENCE_IDLE_MS.
  */
-export function setClientAway(ws: any, away: boolean) {
+export function setClientAway(ws: WebSocketClient, away: boolean) {
 	if (!ws?.data) return;
 	const was = isPresent(ws);
 	ws.data.away = away;
@@ -200,11 +213,14 @@ function presenceViewers(sessionId: string): string[] {
 	return set
 		? Array.from(set)
 				.filter((ws) => isPresent(ws))
-				.map((ws: any) => ws.data?.user || "Anonymous")
+				.map((ws) => ws.data.user || "Anonymous")
 		: [];
 }
 
-function broadcastPresence(sessionId: string, except?: any): string[] {
+function broadcastPresence(
+	sessionId: string,
+	except?: WebSocketClient,
+): string[] {
 	const viewers = presenceViewers(sessionId);
 	const key = viewers.join("\u0000");
 	if (lastPresence.get(sessionId) !== key) {
@@ -240,7 +256,7 @@ function ensurePresenceSweep() {
  * hidden one: the away socket can no longer win on recency.
  */
 export function computeGlobalPresence(
-	watchers: Map<string, Set<any>>,
+	watchers: ReadonlyMap<string, ReadonlySet<Pick<WebSocketClient, "data">>>,
 ): Array<{ user: string; sessionId: string }> {
 	const latest = new Map<string, { sessionId: string; at: number }>();
 	for (const [sessionId, set] of watchers) {
