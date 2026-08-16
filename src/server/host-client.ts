@@ -96,9 +96,6 @@ export interface HostedRunOpts {
   aws?: boolean;
   author?: GitIdentity | null;
   user?: string;
-  /** Run owner's Live typing preference (stream-text.ts), forwarded to the
-   * remote host and to the in-process fallback below. */
-  streamPartialText?: boolean;
   fallbackModel?: string;
   journalKind?: string;
   firstJournaledAt?: string;
@@ -140,7 +137,6 @@ export async function* runAgentHosted(opts: HostedRunOpts): AsyncGenerator<Strea
     forkSession: opts.forkSession,
     resumeSessionAt: opts.resumeSessionAt,
     mcpServers: opts.mcpServers ?? "all",
-    streamPartialText: opts.streamPartialText,
     inProcessMcp: opts.fallbackInProcessMcp?.(),
     reposNote: opts.reposNote,
     deniedTools: opts.deniedTools,
@@ -188,7 +184,6 @@ async function spawnHostRun(opts: HostedRunOpts): Promise<HostHandle> {
     aws: opts.aws,
     author: opts.author,
     user: opts.user,
-    streamPartialText: opts.streamPartialText,
     fallbackModel: opts.fallbackModel,
     journalKind: opts.journalKind,
     firstJournaledAt: opts.firstJournaledAt,

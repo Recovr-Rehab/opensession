@@ -18,7 +18,6 @@ import { claimRunnerWorkload, getRunner, setRunnerWorkload } from "./runners";
 import { registerRunWsHost, runWsConnector } from "./run-ws";
 import type { UnifiedSession } from "./types";
 import { interactiveMcpServers } from "./interactive-mcp";
-import { streamPartialTextEnabled } from "./stream-text";
 import { interactiveFallbackModel } from "./models";
 import { STRIPE_CONFIRM_TOOLS } from "./runner-shared";
 import { commitAuthorFor } from "./shared/user-mappings";
@@ -83,10 +82,6 @@ export async function maybeLaunchRunnerRun(
 		confirmTools: STRIPE_CONFIRM_TOOLS,
 		author: commitAuthorFor(opts.user, session.startedBy),
 		user: opts.user,
-		// Live typing, per the run owner's preference (stream-text.ts).
-		streamPartialText: streamPartialTextEnabled(
-			opts.user || session.startedBy || session.createdBy,
-		),
 		mcpGrantUser: session.startedBy || undefined,
 		fallbackModel: interactiveFallbackModel(session.model),
 		journalKind: "prompt",

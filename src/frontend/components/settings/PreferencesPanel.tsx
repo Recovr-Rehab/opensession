@@ -49,11 +49,6 @@ import {
 	type TurnActivityPref,
 } from "../../lib/turn-activity";
 import {
-	getStreamTextPref,
-	onStreamTextChanged,
-	setStreamTextPref,
-} from "../../lib/stream-text-pref";
-import {
 	getReplySuggestionsPref,
 	onReplySuggestionsChanged,
 	setReplySuggestionsPref,
@@ -372,11 +367,6 @@ export function PreferencesPanel() {
 		() => onTurnActivityChanged(() => setTurnActivity(getTurnActivityPref())),
 		[],
 	);
-	const [streamText, setStreamText] = useState(getStreamTextPref);
-	useEffect(
-		() => onStreamTextChanged(() => setStreamText(getStreamTextPref())),
-		[],
-	);
 	useEffect(() => {
 		fetchModels()
 			.then((m) => setModelOptions(m.models))
@@ -514,23 +504,11 @@ export function PreferencesPanel() {
 						/>
 					}
 				/>
-				<SettingRow
-					title="Live typing"
-					desc="Show replies in your sessions as they are written, not when they finish."
-					control={
-						<Switch
-							aria-label="Live typing"
-							checked={streamText}
-							onCheckedChange={setStreamTextPref}
-						/>
-					}
-				/>
 			</SettingCard>
 			<SettingsHint>
 				By default a turn is open while it runs and folds away once it settles.
 				"Fold tool calls" instead folds only the tool calls, leaving the rest of the
-				turn reading as normal transcript. A reasoning model thinks before it
-				writes, so live typing starts when the thinking ends.
+				turn reading as normal transcript.
 			</SettingsHint>
 
 			<DeskVoicePanel />

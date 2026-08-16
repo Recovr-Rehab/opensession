@@ -55,7 +55,6 @@ import { buildBranchNote, memoryNoteFor, workspaceOwningWorktree } from "./sessi
 import { ownedWorktree } from "./session-workspace";
 import { engineSessionPatch } from "./sessions";
 import { commitAuthorFor, userMatchesAny } from "./shared/user-mappings";
-import { streamPartialTextEnabled } from "./stream-text";
 import { sanitizeBranchSlug } from "./suggest-branch";
 import { type NativeSessionFile, type SessionUsage, type UnifiedSession } from "./types";
 import { parseImageDataUrls, stageFileAttachments, withUploadsNote } from "./uploads";
@@ -584,15 +583,6 @@ export async function openCreatedSession(
 				// inside their own launchers.
 				author: commitAuthorFor(spec.user, spec.createdBy),
 				user: spec.user, // gate per-user MCP servers (allowedUsers) to the creator
-				// Live typing, per the creator's preference (stream-text.ts). This
-				// is the session's FIRST turn and does not go through
-				// runSessionPrompt, so it needs the flag in its own right — every
-				// later turn reads the same preference there. createdBy is the
-				// fallback because a session started through the sessions MCP
-				// carries an owner but no prompt author.
-				streamPartialText: streamPartialTextEnabled(
-					spec.user || spec.createdBy,
-				),
 				journal: { osSessionId: bksId, kind: "create" },
 				startToken,
 				onAskUser: makeAskHandler(bksId),

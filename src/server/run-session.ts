@@ -30,7 +30,6 @@ import { syncAgentSessionEngine } from "./agent-session-sync";
 import { getRunState, transitionRunState } from "./run-state";
 import { getAutomation, selfImproveMcpForSession } from "./automations";
 import { resolveSessionRunInputs } from "./session-run-inputs";
-import { streamPartialTextEnabled } from "./stream-text";
 import { defaultRepo } from "./config";
 import { isDevInstance } from "./dev-mode";
 import {
@@ -1217,10 +1216,6 @@ export async function maybeLaunchSandboxedRun(
 			aws: true,
 			author: commitAuthorFor(opts.user, session.startedBy),
 			user: opts.user,
-			// Live typing, per the run owner's preference (stream-text.ts).
-			streamPartialText: streamPartialTextEnabled(
-				opts.user || session.startedBy || session.createdBy,
-			),
 			mcpGrantUser: session.startedBy || undefined,
 			fallbackModel: interactiveFallbackModel(session.model),
 			effort: session.effort,
@@ -2013,16 +2008,6 @@ async function runSessionPromptInner(
 		// Gate per-user MCP servers (allowedUsers) to the prompt's author. Automation
 		// sessions pass no user, so they never see a user-restricted server.
 		user: runInputs.user,
-		// Live typing is the run owner's personal choice (stream-text.ts).
-		// Fall back to the session's owner so a turn with no prompt author (an
-		// auto-continue, a queue drain, a restart resume, or a session started
-		// through the sessions MCP) types the same way the turns around it do.
-		// createdBy is the field that actually carries the owner; startedBy is
-		// null on every session on disk. An automation's owner is its display
-		// name ("X (automation)"), which has no prefs entry, so those stay off.
-		streamPartialText: streamPartialTextEnabled(
-			runInputs.user || session.startedBy || session.createdBy,
-		),
 		journal: { osSessionId: session.id, kind: "prompt" },
 		startToken,
 		onAskUser: makeAskHandler(sessionId),

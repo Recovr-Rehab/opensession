@@ -81,16 +81,9 @@ export class LiveTurnStore {
 	}
 
 	append(text: string) {
-		// A block that already landed durably is swallowed rather than shown
-		// twice. It can arrive in one piece (a whole-part mirror) or in several
-		// (live typing keeps delivering the tail after the entry landed), so
-		// match the front of what is still outstanding and keep the rest.
-		for (let i = 0; i < this.landed.length; i++) {
-			const outstanding = this.landed[i];
-			if (!outstanding.startsWith(text)) continue;
-			const rest = outstanding.slice(text.length);
-			if (rest) this.landed[i] = rest;
-			else this.landed.splice(i, 1);
+		const landedIdx = this.landed.indexOf(text);
+		if (landedIdx !== -1) {
+			this.landed.splice(landedIdx, 1);
 			return;
 		}
 		if (!text) return;
@@ -120,22 +113,7 @@ export class LiveTurnStore {
 		for (const content of contents) {
 			const before = this.snapshot.text + this.pending;
 			const after = before.replace(content, "");
-			if (after === before) {
-				// Not in the buffer as a whole. With live typing the durable entry
-				// can land while the tail is still streaming, so the buffer may hold
-				// just the start of this block: clear what is already on screen and
-				// remember only the outstanding remainder, which `append` swallows
-				// as it arrives. Anything more tangled (a partial trailing other
-				// unlanded text) falls through to the whole-block path, which is
-				// what shipped before typing existed.
-				if (before && content.startsWith(before)) {
-					this.landed.push(content.slice(before.length));
-					this.snapshot = { ...this.snapshot, text: "" };
-					this.pending = "";
-					continue;
-				}
-				this.landed.push(content);
-			}
+			if (after === before) this.landed.push(content);
 			this.snapshot = { ...this.snapshot, text: after };
 			this.pending = "";
 		}
