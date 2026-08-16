@@ -57,6 +57,8 @@ deploy/sandbox/microvm/.cache-busybox
 !.agents/skills/simplify/**
 !.agents/skills/pr-autofix/
 !.agents/skills/pr-autofix/**
+!.agents/skills/audit-codebase/
+!.agents/skills/audit-codebase/**
 .claude/skills
 skills-lock.json
 .css-shots/

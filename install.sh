@@ -370,7 +370,7 @@ fi
 step "Agent skills"
 GLOBAL_SKILLS="$HOME/.config/opencode/skills"
 mkdir -p "$GLOBAL_SKILLS"
-for skill in simplify pr-autofix; do
+for skill in simplify pr-autofix audit-codebase; do
   source="$DIR/.agents/skills/$skill"
   target="$GLOBAL_SKILLS/$skill"
   [ -d "$source" ] || continue
