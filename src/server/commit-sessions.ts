@@ -16,6 +16,12 @@
  * Each session's transcript is read once, from a stored per-session cursor, so
  * a sweep costs only what has been written since the last one, and the links
  * are kept on disk so a restart does not re-read the store.
+ *
+ * Reading a transcript once is what makes the sweep cheap, and it is also the
+ * thing that can lose a link for good: a row read before anyone asked about
+ * the commit it names is never read again. Two things had been walking past
+ * rows that way, and both are guarded below: the escapes in the stored text,
+ * and how far the cursor is allowed to move.
  */
 
 import { Database } from "bun:sqlite";
@@ -47,8 +53,19 @@ const YIELD_EVERY = 20;
  *  longer token is not one; 7 is git's shortest abbreviation here. */
 const HEX_RUN = /\b[0-9a-f]{7,40}\b/g;
 
+/** A transcript row is stored as JSON text, so a newline in what `git commit`
+ *  printed arrives as the two characters `\` and `n`. That `n` is a word
+ *  character, and it closes the word edge the scan opens on, so a sha at the
+ *  start of a line was invisible while the same sha mid-line was not: which
+ *  one you got fell to where git happened to wrap. Turning each escape back
+ *  into a space restores the edge, and a space can only split a run, never
+ *  join two. */
+const JSON_ESCAPE = /\\./g;
+
 interface StoredIndex {
-	v: 1;
+	/** Bumped when the scan changes, so a stale index is re-read rather than
+	 *  believed: a row the old rule walked past is not read again otherwise. */
+	v: 2;
 	/** Full sha → the session that first said it. */
 	links: Record<string, { session: string; ts: number; at: number }>;
 	/** Session id → the last transcript seq read. */
@@ -56,7 +73,7 @@ interface StoredIndex {
 }
 
 function emptyIndex(): StoredIndex {
-	return { v: 1, links: {}, cursors: {} };
+	return { v: 2, links: {}, cursors: {} };
 }
 
 function indexFile(): string {
@@ -73,7 +90,7 @@ function load(): StoredIndex {
 		const file = indexFile();
 		if (!existsSync(file)) return (cached = emptyIndex());
 		const data = JSON.parse(readFileSync(file, "utf8")) as StoredIndex;
-		if (data?.v !== 1 || !data.links || !data.cursors) return (cached = emptyIndex());
+		if (data?.v !== 2 || !data.links || !data.cursors) return (cached = emptyIndex());
 		return (cached = data);
 	} catch {
 		return (cached = emptyIndex());
@@ -106,7 +123,7 @@ export function firstMentions(
 ): Map<string, { session: string; ts: number }> {
 	const best = new Map<string, { session: string; ts: number }>();
 	for (const row of rows) {
-		const runs = row.data.match(HEX_RUN);
+		const runs = row.data.replace(JSON_ESCAPE, " ").match(HEX_RUN);
 		if (!runs) continue;
 		for (const run of runs) {
 			const commit = wanted.get(run.slice(0, 7));
@@ -120,6 +137,27 @@ export function firstMentions(
 		}
 	}
 	return best;
+}
+
+/**
+ * How far a session's mark may move: the last row the commit list could
+ * already account for.
+ *
+ * Pure, and exported for the test, for the same reason `firstMentions` is.
+ * Reading a row is cheap and repeatable; moving the mark past it is the one
+ * irreversible thing a sweep does, so what bounds it is worth reading alone.
+ * Returns -1 when every row is too new to be marked yet.
+ */
+export function readableThrough(
+	rows: Array<{ seq: number; ts: number }>,
+	commitsReadAt: number,
+): number {
+	let read = -1;
+	for (const row of rows) {
+		if (row.ts > commitsReadAt) break;
+		read = row.seq;
+	}
+	return read;
 }
 
 let db: Database | null = null;
@@ -144,6 +182,12 @@ let sweeping: Promise<void> | null = null;
 async function sweep(
 	index: StoredIndex,
 	wanted: Map<string, { sha: string; at: number }>,
+	/** When the commit list was read. A row written after that may name a commit
+	 *  this sweep was never told to look for, so the mark stops there and the row
+	 *  is offered again once the list has caught up. Without it, a commit made
+	 *  inside the commit cache's own minute of staleness was read past and lost.
+	 *  A row written before it can only name commits the list already holds. */
+	commitsReadAt: number,
 ): Promise<void> {
 	const store = readDb();
 	if (!store) return;
@@ -177,10 +221,11 @@ async function sweep(
 						at: wanted.get(sha.slice(0, 7))?.at ?? hit.ts,
 					};
 			}
-			index.cursors[session] = {
-				seq: rows[rows.length - 1].seq,
-				at: Date.now(),
-			};
+			// Rows are still read whole: a mention found beyond the mark counts,
+			// and the next sweep finding it again is harmless, since the earliest
+			// one wins. Only the mark is held back.
+			const read = readableThrough(rows, commitsReadAt);
+			if (read >= 0) index.cursors[session] = { seq: read, at: Date.now() };
 		} else if (!index.cursors[session]) {
 			index.cursors[session] = { seq: cursor, at: Date.now() };
 		}
@@ -195,6 +240,7 @@ async function sweep(
  */
 export async function commitSessions(
 	commits: CommitRef[],
+	commitsReadAt: number = Date.now(),
 ): Promise<Map<string, string>> {
 	const wanted = new Map<string, { sha: string; at: number }>();
 	for (const commit of commits) {
@@ -205,7 +251,7 @@ export async function commitSessions(
 	if (wanted.size) {
 		// One sweep at a time: two feed loads at once would read the same rows
 		// twice and race the cursors they write.
-		sweeping ??= sweep(index, wanted)
+		sweeping ??= sweep(index, wanted, commitsReadAt)
 			.catch(() => {})
 			.finally(() => {
 				save(index);

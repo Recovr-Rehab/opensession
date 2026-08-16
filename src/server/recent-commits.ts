@@ -110,8 +110,15 @@ async function readRepoCommits(repo: {
 	return parseCommitLog(log.stdout.toString(), repo);
 }
 
-let cache: { data: RecentCommit[]; ts: number } | null = null;
-let inFlight: Promise<RecentCommit[]> | null = null;
+/** The deep read, and when `git log` ran. Callers need the second: it is the
+ *  instant this list is complete as of, and nothing later can be in it. */
+interface CommitRead {
+	data: RecentCommit[];
+	ts: number;
+}
+
+let cache: CommitRead | null = null;
+let inFlight: Promise<CommitRead> | null = null;
 
 export interface RecentCommitPage {
 	commits: RecentCommit[];
@@ -132,21 +139,23 @@ export interface RecentCommitPage {
  * of a busy repo small.
  */
 export async function getRecentCommits(days = DEFAULT_DAYS): Promise<RecentCommitPage> {
-	const all = await readAllCommits();
+	const { data: all, ts: readAt } = await readAllCommits();
 	// Name the session behind each one. Every commit read is offered, not just
 	// the window asked for: a transcript is read once, so a sha the sweep walks
-	// past without looking for is a link lost for good.
-	await linkSessions(all);
+	// past without looking for is a link lost for good. Which is also why the
+	// sweep is told when this list was read, since a cached list is a list that
+	// does not yet know about the last minute of commits.
+	await linkSessions(all, readAt);
 	const window = clampDays(days);
 	const cutoff = Date.now() - window * 86_400_000;
 	const commits = all.filter((commit) => new Date(commit.committedAt).getTime() >= cutoff);
 	return { commits, days: window, hasMore: commits.length < all.length };
 }
 
-async function linkSessions(commits: RecentCommit[]): Promise<void> {
+async function linkSessions(commits: RecentCommit[], readAt: number): Promise<void> {
 	try {
 		const { commitSessions } = await import("./commit-sessions");
-		const sessions = await commitSessions(commits);
+		const sessions = await commitSessions(commits, readAt);
 		for (const commit of commits) {
 			const session = sessions.get(commit.sha);
 			if (session) commit.sessionId = session;
@@ -162,10 +171,14 @@ export function clampDays(days: number): number {
 	return Math.min(READ_DAYS, Math.max(1, Math.floor(days)));
 }
 
-async function readAllCommits(): Promise<RecentCommit[]> {
-	if (cache && Date.now() - cache.ts < CACHE_TTL_MS) return cache.data;
+async function readAllCommits(): Promise<CommitRead> {
+	if (cache && Date.now() - cache.ts < CACHE_TTL_MS) return cache;
 	if (inFlight) return inFlight;
 	inFlight = (async () => {
+		// Stamped before the read, not after: a commit made while `git log` was
+		// running may or may not be in what it returned, and claiming otherwise
+		// is what would let the sweep walk past it.
+		const ts = Date.now();
 		const repos = Object.values(configuredRepos()).filter(
 			(repo) => repo.sharedCheckout && repo.repo,
 		);
@@ -173,8 +186,8 @@ async function readAllCommits(): Promise<RecentCommit[]> {
 		const data = perRepo
 			.flat()
 			.sort((a, b) => (b.committedAt || "").localeCompare(a.committedAt || ""));
-		cache = { data, ts: Date.now() };
-		return data;
+		cache = { data, ts };
+		return cache;
 	})().finally(() => {
 		inFlight = null;
 	});
