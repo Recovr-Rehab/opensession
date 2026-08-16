@@ -583,6 +583,14 @@ export function LineStats({
   );
 }
 
+// Keyed on the entry object, which mergeTranscriptEntries replaces rather than
+// mutates when an entry changes, so a hit can never be stale. Worth caching
+// because the work is repeated rather than one-off: a streaming transcript
+// re-collects every settled turn's files on each frame, and the diff text
+// below is built from whole files a Write wrote. mergeTouchedFiles copies
+// before it merges, so no caller writes through to a cached row.
+const touchedFilesByEntry = new WeakMap<TranscriptEntry, TouchedFile[]>();
+
 /**
  * Per-file line stats from one edit-family tool call, or null for tools that
  * don't write files. Line counts come from the tool inputs (old/new string
@@ -590,11 +598,24 @@ export function LineStats({
  * tools that only report paths, such as Bash and Codex FileChange.
  */
 export function touchedFilesFromTool(entry: TranscriptEntry): TouchedFile[] {
+  const hit = touchedFilesByEntry.get(entry);
+  if (hit) return hit;
+  const files = readTouchedFiles(entry);
+  touchedFilesByEntry.set(entry, files);
+  return files;
+}
+
+function readTouchedFiles(entry: TranscriptEntry): TouchedFile[] {
   const input = entry.toolInput;
   if (!input || typeof input !== "object") return [];
   const inp = input as Record<string, unknown>;
-  const lines = (v: unknown) =>
-    typeof v === "string" && v.length > 0 ? v.split("\n").length : 0;
+  // Counting separators rather than splitting: same number, no array per call.
+  const lines = (v: unknown) => {
+    if (typeof v !== "string" || v.length === 0) return 0;
+    let count = 1;
+    for (let at = v.indexOf("\n"); at >= 0; at = v.indexOf("\n", at + 1)) count++;
+    return count;
+  };
   // Engines disagree on casing: opencode writes `filePath`/`oldString`, the
   // Claude SDK `file_path`/`old_string`.
   const key = (...names: string[]) => {

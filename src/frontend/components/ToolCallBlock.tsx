@@ -273,7 +273,18 @@ function RunningToolDuration({ entry }: { entry: TranscriptEntry }) {
   );
 }
 
-export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionId }: Props) {
+// Memoized: a live turn re-renders on every stream event, and a turn holds
+// tens to hundreds of these rows. Every prop is identity-stable: the entries
+// themselves are (mergeTranscriptEntries replaces rather than mutates), and
+// TurnBlock's only caller passes a memoized onOpenSubagent. So a shallow
+// compare bails out for every row the event did not touch.
+export const ToolCallBlock = React.memo(function ToolCallBlock({
+  entry,
+  result,
+  pending,
+  onOpenSubagent,
+  sessionId,
+}: Props) {
   const entryNeedsHydration = entry.contentClamped || isBoundedToolInput(entry.toolInput);
   const resultNeedsHydration = Boolean(result?.contentClamped);
   // Default closed, and open only for media the agent asked to SHOW — an
@@ -600,7 +611,7 @@ export function ToolCallBlock({ entry, result, pending, onOpenSubagent, sessionI
       )}
     </div>
   );
-}
+});
 
 /** Drop engine acknowledgements when the media itself is the useful result. */
 export function visibleResultContent(

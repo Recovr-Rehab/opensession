@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import type { TranscriptEntry } from "../lib/types";
 import {
   assetToolPath,
@@ -112,7 +112,10 @@ export const TurnBlock = React.memo(function TurnBlock({
   ).length;
   const lastTool = tools[tools.length - 1];
 
-  const editedFiles = collectTouchedFiles(tools);
+  // Memoized against the house rule: a live turn re-renders on every stream
+  // event, and this walks every step it has taken so far (collectTouchedFiles
+  // skips non-tool entries itself, so `items` and `tools` give the same set).
+  const editedFiles = useMemo(() => collectTouchedFiles(items), [items]);
   // Change detail stays behind this disclosure. The Changes tab remains the
   // place for per-file diffs; this is only a compact turn-level summary.
   const additions = editedFiles.reduce((n, f) => n + f.additions, 0);
