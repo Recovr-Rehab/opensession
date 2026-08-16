@@ -536,6 +536,9 @@ const NO_WORKFLOW_RUNS: WorkflowRunSnapshot[] = [];
 // Same reason: the empty row is set on every stream_start, and a fresh array
 // each time would re-render the composer block for nothing.
 const EMPTY_SUGGESTIONS: ReplySuggestion[] = [];
+// And again for the Review tab's repo list, which a promoted PR replaces with
+// an empty one: PrPanel memoizes its targets on this array.
+const NO_REVIEW_REPOS: Array<{ repo: string; primary: boolean }> = [];
 
 // A two-item "plan" is ceremony, not a plan — below this the flap stays shut
 // and the checklist lives in the transcript like any other tool call.
@@ -823,13 +826,25 @@ export function SessionViewer({
 	onOpenSubagent,
 	onSubagentBack,
 }: Props) {
-	const reviewRepos = [
-		{ repo: session.repo || "repository", primary: true },
-		...(session.attachedRepos || []).map((repo) => ({
-			repo: repo.repo,
-			primary: false,
-		})),
-	];
+	// Repos the Review tab can target: the session's own, then each attached
+	// one. Keyed on the contents like the PR lists below, and for a sharper
+	// reason than they have — this was a bare literal, so it handed PrPanel a
+	// new array on every render, and its `targets` memo could never bail no
+	// matter what else downstream was stable.
+	const reviewReposKey = [
+		session.repo || "repository",
+		...(session.attachedRepos || []).map((repo) => repo.repo),
+	].join("\u0000");
+	const reviewRepos = useMemo(
+		() => [
+			{ repo: session.repo || "repository", primary: true },
+			...(session.attachedRepos || []).map((repo) => ({
+				repo: repo.repo,
+				primary: false,
+			})),
+		],
+		[reviewReposKey], // eslint-disable-line react-hooks/exhaustive-deps
+	);
 	const prPresentation = useMemo(
 		() => sessionPrPresentation(session.prs),
 		[session.prs],
@@ -911,6 +926,26 @@ export function SessionViewer({
 	// PRs the server matched to this session through their body's attribution
 	// footer — opened on a branch the session doesn't own, so they'd otherwise
 	// have no Review tab of their own.
+	//
+	// Keyed on the contents, the way mergedPr above is: the poll rebuilds
+	// session.prs on every tick that changed any session, so this list arrives
+	// as a new array with the same PRs in it. It is a dep of PrPanel's
+	// `targets` memo, which a fresh identity re-runs. Every field the
+	// projection carries is in the key, not only the three that memo reads:
+	// LinkedPrEntry is shared with the linked-PR path, so a reader of `title`
+	// or `url` should not be handed a stale one.
+	const discoveredPrsKey = (session.prs || [])
+		.filter((ref) => ref.source === "discovered")
+		.map((ref) =>
+			[
+				ref.repo,
+				ref.branch,
+				ref.number ?? "",
+				ref.url ?? "",
+				ref.title ?? "",
+			].join("\u0000"),
+		)
+		.join("\u0001");
 	const discoveredPrs = useMemo(
 		() =>
 			(session.prs || [])
@@ -922,7 +957,7 @@ export function SessionViewer({
 					url: ref.url,
 					title: ref.title,
 				})),
-		[session.prs],
+		[discoveredPrsKey], // eslint-disable-line react-hooks/exhaustive-deps
 	);
 	// Which PR the Review tab should open on, set by the PR chips in the
 	// Workspace strip (seq lets the same chip re-focus after a manual switch).
@@ -973,7 +1008,7 @@ export function SessionViewer({
 		[toolPathRootsKey], // eslint-disable-line react-hooks/exhaustive-deps
 	);
 	const githubReviewRepos = reviewRepos;
-	const panelReviewRepos = promotedPr ? [] : githubReviewRepos;
+	const panelReviewRepos = promotedPr ? NO_REVIEW_REPOS : githubReviewRepos;
 	const shellTimingRef = useRef({
 		sessionId: session.id,
 		startedAt: performance.now(),
