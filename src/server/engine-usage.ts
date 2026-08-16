@@ -63,7 +63,9 @@
  * written. A day older than the store's earliest row is therefore not zero
  * usage, it is NO DATA, and the two must never render the same way: a 90-day
  * range would otherwise draw 60 days of flat zero and read as "we started in
- * July". Such a day is marked `unmeasured` and the UI says so. The per-day
+ * July". Coverage is tracked per source: an OpenCode retention gap must not
+ * hide real usage from either direct engine. A merged day is only globally
+ * `unmeasured` when the missing source leaves no usage to display. The per-day
  * cache below is what makes history outlive the source, so a day measured once
  * stays measured: it is the durable record, and the prewarm is what keeps it
  * ahead of the pruning.
@@ -104,6 +106,9 @@ export interface ModelUsage {
 	costUsd: number;
 }
 
+export type EngineUsageSource = "opencode" | "claude-direct" | "codex-direct";
+export type EngineUsageCoverage = Record<EngineUsageSource, "measured" | "unmeasured">;
+
 export interface EngineUsageDay {
 	date: string;
 	byModel: ModelUsage[];
@@ -116,9 +121,15 @@ export interface EngineUsageDay {
 	costUsd: number;
 	/** Requests on a model with no catalog price, excluded from costUsd. */
 	unpricedRequests: number;
-	/** The day predates the store's earliest row, so its zeros mean "no data
-	 *  kept this far back", not "nothing ran". Never chart it as zero. */
+	/** Whether each source has complete data for this day. */
+	coverage: EngineUsageCoverage;
+	/** Every source with retained usage is empty, while at least one source is
+	 *  outside its retention horizon. Never chart this day as zero. */
 	unmeasured: boolean;
+}
+
+function measuredCoverage(): EngineUsageCoverage {
+	return { opencode: "measured", "claude-direct": "measured", "codex-direct": "measured" };
 }
 
 // ── Rates ──
@@ -489,7 +500,11 @@ export async function scanEngineUsage(fromDate: string): Promise<EngineUsageScan
 }
 
 /** Price one day's buckets. */
-export function priceDay(date: string, byModel: Map<string, Bucket>, unmeasured = false): EngineUsageDay {
+export function priceDay(
+	date: string,
+	byModel: Map<string, Bucket>,
+	coverage: EngineUsageCoverage = measuredCoverage(),
+): EngineUsageDay {
 	const rates = loadRates();
 	const day: EngineUsageDay = {
 		date,
@@ -502,7 +517,8 @@ export function priceDay(date: string, byModel: Map<string, Bucket>, unmeasured 
 		totalTokens: 0,
 		costUsd: 0,
 		unpricedRequests: 0,
-		unmeasured,
+		coverage,
+		unmeasured: false,
 	};
 	for (const [key, b] of byModel) {
 		const [provider, model] = key.split("|");
@@ -524,6 +540,7 @@ export function priceDay(date: string, byModel: Map<string, Bucket>, unmeasured 
 		day.costUsd += costUsd;
 	}
 	day.totalTokens = day.input + day.output + day.cacheRead + day.cacheWrite;
+	day.unmeasured = day.requests === 0 && Object.values(coverage).includes("unmeasured");
 	day.byModel.sort((a, b) => b.costUsd - a.costUsd || b.requests - a.requests);
 	return day;
 }
@@ -539,9 +556,8 @@ export function emptyEngineUsageDay(date: string): EngineUsageDay {
 // range costs one pass rather than one per day.
 
 // 2: days before the store's earliest row carry `unmeasured` instead of zeros.
-// 3: the two direct engines are counted. A day cached under 2 holds an
-//    opencode-only number, and a past day is never recomputed, so it would
-//    stay engine-blind forever.
+// 3: the two direct engines are counted. Version 3 is migrated in place below:
+//    its global `unmeasured` flag came from OpenCode but covered merged values.
 const CACHE_VERSION = 3;
 
 // Reuse the analytics cache directory so both rollups age together.
@@ -557,7 +573,22 @@ function readDay(date: string): EngineUsageDay | null {
 		if (!existsSync(p)) return null;
 		const parsed = JSON.parse(readFileSync(p, "utf-8"));
 		if (parsed?.v !== CACHE_VERSION) return null;
-		return parsed.day as EngineUsageDay;
+		const cached = parsed.day as EngineUsageDay & { coverage?: EngineUsageCoverage };
+		if (cached.coverage) return cached;
+		// Version 3 originally stored one flag derived from the OpenCode horizon
+		// alongside totals merged from all three sources. Preserve every cached
+		// value, attach the provenance that was implicit in that flag, and only
+		// leave the whole-day gap marker on a genuinely empty merged day.
+		const day: EngineUsageDay = {
+			...cached,
+			coverage: {
+				...measuredCoverage(),
+				opencode: cached.unmeasured ? "unmeasured" : "measured",
+			},
+			unmeasured: !!cached.unmeasured && cached.requests === 0,
+		};
+		writeDay(day);
+		return day;
 	} catch {
 		return null;
 	}
@@ -600,11 +631,11 @@ export async function engineUsageForDates(dates: string[]): Promise<Map<string, 
 		if (stillMissing.length) {
 			const { days: scanned, earliest } = await scanEngineUsage(from);
 			for (const date of missing) {
-				// Before the store's horizon there is nothing left to read, so
-				// the day is unmeasured rather than zero. Cached as such: the
-				// pruned rows are never coming back.
-				const unmeasured = !!earliest && date < earliest;
-				const day = priceDay(date, scanned.get(date) ?? new Map(), unmeasured);
+				// Only OpenCode prunes. Keep that source's gap separate from the
+				// direct-engine values merged into the same day.
+				const coverage = measuredCoverage();
+				if (earliest && date < earliest) coverage.opencode = "unmeasured";
+				const day = priceDay(date, scanned.get(date) ?? new Map(), coverage);
 				if (date < today) writeDay(day);
 				out.set(date, day);
 			}

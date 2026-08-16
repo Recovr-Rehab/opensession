@@ -719,9 +719,11 @@ export interface AnalyticsSummary {
 		/** input + output + cache read + cache write. */
 		totalTokens: number;
 		costUsd: number;
-		/** The engine store no longer reaches this day, so its token and cost
-		 *  zeros mean "unknown". Chart it as a gap, never as a zero. */
+		/** No retained source has usage for this day and at least one source no
+		 *  longer reaches it. Chart it as a gap, never as a zero. */
 		unmeasured?: boolean;
+		/** Per-source retention provenance for partial historical days. */
+		unmeasuredSources?: string[];
 		outputByModel: Record<string, number>;
 		costByModel: Record<string, number>;
 		prsOpened: number;
@@ -1044,6 +1046,11 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 		const dayPrs = allPrs.filter((pr) => pr.byOpensession);
 		const prsOpened = dayPrs.filter((pr) => pr.createdAt.slice(0, 10) === date).length;
 		const prsMerged = dayPrs.filter((pr) => pr.mergedAt?.slice(0, 10) === date).length;
+		const unmeasuredSources = engine
+			? Object.entries(engine.coverage)
+					.filter(([, coverage]) => coverage === "unmeasured")
+					.map(([source]) => source)
+			: [];
 		days.push({
 			date,
 			sessions: Object.keys(r.bySession).length,
@@ -1058,6 +1065,7 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 			totalTokens: engine?.totalTokens || 0,
 			costUsd: round2(engine?.costUsd || 0),
 			...(engine?.unmeasured ? { unmeasured: true as const } : {}),
+			...(unmeasuredSources.length ? { unmeasuredSources } : {}),
 			outputByModel,
 			costByModel: Object.fromEntries(Object.entries(costByModel).map(([m, c]) => [m, round2(c)])),
 			prsOpened,
