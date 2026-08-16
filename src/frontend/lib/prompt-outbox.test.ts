@@ -29,6 +29,48 @@ test("persists before returning and delivers each session in order", async () =>
 	outbox.dispose();
 });
 
+test("keeps the item state as the only in-tab send lock", async () => {
+	const storage = memoryStorage();
+	const delivered: string[] = [];
+	let releaseFirst!: () => void;
+	const firstDelivery = new Promise<void>((resolve) => {
+		releaseFirst = resolve;
+	});
+	let releaseSecond!: () => void;
+	const secondDelivery = new Promise<void>((resolve) => {
+		releaseSecond = resolve;
+	});
+	const outbox = new PromptOutbox({
+		storage,
+		scope: "send-lock",
+		deliver: async (_sessionId, body) => {
+			delivered.push(body.content);
+			if (body.content === "first") await firstDelivery;
+			if (body.content === "second") releaseSecond();
+			return { status: "started", message: "ok" };
+		},
+	});
+	outbox.enqueue({ sessionId: "s1", content: "first" });
+	await Promise.resolve();
+	expect(outbox.list("s1")[0]?.state).toBe("sending");
+
+	// enqueue reloads storage before appending. It must not rewind the active
+	// request to pending or let the second prompt overtake it.
+	outbox.enqueue({ sessionId: "s1", content: "second" });
+	expect(outbox.list("s1").map((item) => item.state)).toEqual([
+		"sending",
+		"pending",
+	]);
+	expect(delivered).toEqual(["first"]);
+
+	releaseFirst();
+	await secondDelivery;
+	await Promise.resolve();
+	expect(delivered).toEqual(["first", "second"]);
+	expect(outbox.list()).toEqual([]);
+	outbox.dispose();
+});
+
 test("keeps a retryable failed head item and exposes it for retry or editing", async () => {
 	const storage = memoryStorage();
 	let fail = true;
