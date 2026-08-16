@@ -38,9 +38,9 @@ function statusColor(session: UnifiedSession): string {
 	return meta?.dotColor ?? "var(--text-faint)";
 }
 
-// A 380px card nearly fills the phone at 1x. At 0.5x several cards become
-// visible together, so mounting their full transcript trees can exhaust WebKit.
-const COMPACT_ZOOM = 0.75;
+// Keep cards interactive at 0.5x. Farther out, mounting every visible
+// transcript tree can exhaust WebKit, so switch to the lightweight overview.
+const COMPACT_ZOOM = 0.4;
 
 function CanvasCardOverview({ session }: { session: UnifiedSession }) {
 	const unread = isUnread(session.id, session.lastActivity, getReads());
