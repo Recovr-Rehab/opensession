@@ -10,7 +10,11 @@ import { reviewRequestTargetsPerson } from "./lib/review-queue";
 import { repoLabel } from "./lib/repo-label";
 import { NO_REPO } from "./lib/session-repo";
 import { ASK_BAND } from "./lib/sidebar-workspaces";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
+
+// tldraw is heavy and only the Canvas tool needs it. Lazy so it lands in its
+// own chunk and loads on first open.
+const SessionCanvas = lazy(() => import("./components/Canvas"));
 import { createRoot } from "react-dom/client";
 import { MotionConfig } from "motion/react";
 import { MarkdownRepoProvider } from "./components/MarkdownBody";
@@ -242,6 +246,8 @@ type Route =
 	// Analytics — sessions/tokens/models/PRs over a date range.
 	| { view: "analytics" }
 	| { view: "tasks" }
+	// Canvas: sessions as cards on a zoomable tldraw canvas.
+	| { view: "canvas" }
 	| { view: "reviews"; id?: string }
 	// Support Tinder — one-at-a-time swipe triage of the Plain Todo queue.
 	| { view: "supporttinder" }
@@ -372,6 +378,7 @@ function parseRoute(pathname: string): Route {
 	// links and open tabs landing somewhere real.
 	if (pathname === "/feed" || pathname === "/people") return { view: "feed" };
 	if (pathname === "/tasks") return { view: "tasks" };
+	if (pathname === "/canvas") return { view: "canvas" };
 	if (pathname === "/new") return { view: "new" };
 	// <base>/automations/<id-or-name>: the automations page with one selected
 	// (its detail drawer open). The segment accepts the automation id or name —
@@ -444,6 +451,8 @@ function routePath(route: Route): string {
 			return `${BASE_PATH}/feed`;
 		case "tasks":
 			return `${BASE_PATH}/tasks`;
+		case "canvas":
+			return `${BASE_PATH}/canvas`;
 		case "new":
 			return route.prompt
 				? `${BASE_PATH}/new?prompt=${encodeURIComponent(route.prompt)}`
@@ -4068,6 +4077,8 @@ export function App(
 							onOpenFeed={() => navigate({ view: "feed" })}
 							tasksActive={route.view === "tasks"}
 							onOpenTasks={() => navigate({ view: "tasks" })}
+							canvasActive={route.view === "canvas"}
+							onOpenCanvas={() => navigate({ view: "canvas" })}
 							taskCount={taskCount}
 							onOpenAutomation={(name) =>
 								navigate({ view: "automations", id: name })
@@ -4438,6 +4449,15 @@ export function App(
 								addHandler={addHandler}
 								onOpenSession={(id) => navigate({ view: "session", id })}
 							/>
+						) : route.view === "canvas" ? (
+							<Suspense
+								fallback={<LoadingState>Opening canvas…</LoadingState>}
+							>
+								<SessionCanvas
+									sessions={sessions}
+									onOpenSession={(id) => navigate({ view: "session", id })}
+								/>
+							</Suspense>
 						) : route.view === "plain" ? (
 							<SupportInbox
 								threadId={route.threadId ?? null}

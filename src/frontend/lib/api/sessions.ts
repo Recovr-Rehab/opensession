@@ -164,9 +164,11 @@ export async function searchTranscripts(
 	return data?.matches ?? [];
 }
 
-export async function fetchTranscript(sessionId: string) {
+export async function fetchTranscript(sessionId: string, tail?: number) {
 	return request<any>(
-		`/sessions/${encodeURIComponent(sessionId)}/transcript`,
+		`/sessions/${encodeURIComponent(sessionId)}/transcript${
+			tail ? `?tail=${tail}` : ""
+		}`,
 		{ label: "Failed to fetch transcript" },
 	);
 }

@@ -146,6 +146,7 @@ import {
 	IconMessages,
 	IconFeed,
 	IconPullRequest,
+	IconCanvas,
 } from "./icons";
 import { Button } from "../ui/button";
 import { Tooltip } from "../ui/tooltip";
@@ -284,6 +285,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	onOpenFeed,
 	tasksActive,
 	onOpenTasks,
+	canvasActive,
+	onOpenCanvas,
 	taskCount = 0,
 	onOpenAutomation,
 	onOpenPrItem,
@@ -2489,6 +2492,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			onClick: onOpenTasks,
 			title: "Your open tasks",
 			count: taskCount,
+		},
+		{
+			id: "canvas",
+			label: SIDEBAR_TOOL_LABELS.canvas,
+			icon: <IconCanvas />,
+			active: canvasActive,
+			onClick: onOpenCanvas,
+			title: "Sessions as cards on a zoomable canvas",
 		},
 		{
 			id: "plain",

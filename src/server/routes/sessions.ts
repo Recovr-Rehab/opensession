@@ -588,12 +588,16 @@ export async function handleSessionsRoutes(
 		// sessions from before transcript persistence, and migrated
 		// sessions whose history spans engines). Classified on the way out,
 		// like every other send site — this is what the native clients read.
-		return Response.json(
-			withToolPresentations(
-				classifyEntries(
-					dropContextInjections(await mergedSessionTranscriptAsync(session)),
-				),
+		const entries = withToolPresentations(
+			classifyEntries(
+				dropContextInjections(await mergedSessionTranscriptAsync(session)),
 			),
+		);
+		// ?tail=N keeps surfaces that only want the recent conversation (the
+		// Canvas tool's cards) from pulling multi-megabyte transcripts.
+		const tail = Number(new URL(req.url).searchParams.get("tail") || "");
+		return Response.json(
+			Number.isInteger(tail) && tail > 0 ? entries.slice(-tail) : entries,
 		);
 	}
 

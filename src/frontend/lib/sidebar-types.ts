@@ -39,6 +39,10 @@ export interface Props {
 	tasksActive: boolean;
 	/** Open the current user's task list. */
 	onOpenTasks: () => void;
+	/** True while the Canvas tool (sessions on a zoomable canvas) is open. */
+	canvasActive: boolean;
+	/** Open the Canvas tool. */
+	onOpenCanvas: () => void;
 	/** Current open-task count. */
 	taskCount?: number;
 	/** Open one automation's settings (list + detail). Called with the
