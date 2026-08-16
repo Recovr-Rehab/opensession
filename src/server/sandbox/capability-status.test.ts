@@ -23,6 +23,7 @@ import {
   sandboxCapabilityStatus,
   sandboxModelFamilyFor,
   sandboxProviderConfigured,
+  sandboxProviderUsability,
   sandboxesEnabled,
   setWorkspaceSandboxDefault,
 } from "./config";
@@ -123,12 +124,18 @@ describe("sandboxCapabilityStatus (the /api/sandbox/status payload)", () => {
     expect(s.killSwitch).toBe(!sandboxesEnabled());
   });
 
-  test("a raw Docker block is not a workspace connection", () => {
+  test("a raw Docker block is not a usable workspace connection", () => {
     write({ provider: "docker", image: "opensession-runner:latest" });
     const s = sandboxCapabilityStatus();
     expect(s.enabled).toBe(true);
-    expect(s.defaultProvider).toBe("docker");
+    expect(s.defaultProvider).toBe("local");
     expect(s.providers.find((p) => p.id === "docker")?.configured).toBe(false);
+    expect(s.providers.find((p) => p.id === "docker")?.usability).toBe("not_configured");
+    expect(sandboxProviderUsability("docker")).toEqual({
+      state: "not_configured",
+      configured: false,
+      usable: false,
+    });
     expect(s.providers.find((p) => p.id === "daytona")?.configured).toBe(false);
     expect(s.providers.find((p) => p.id === "daytona")?.note).toBeUndefined();
     expect(s.providers.find((p) => p.id === "e2b")?.configured).toBe(false);
@@ -316,6 +323,11 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
     ready("docker");
     ready("daytona");
     ready("modal");
+    expect(sandboxProviderUsability("docker")).toEqual({
+      state: "usable",
+      configured: true,
+      usable: true,
+    });
     expect(resolveRequestedSandbox("docker")).toEqual({ ok: true, provider: "docker" });
     expect(resolveRequestedSandbox("daytona")).toEqual({ ok: true, provider: "daytona" });
     expect(resolveRequestedSandbox("modal")).toEqual({ ok: true, provider: "modal" });
@@ -336,6 +348,8 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
     for (const provider of ["e2b", "lambda-microvm"] as const) {
       const status = sandboxCapabilityStatus().providers.find((p) => p.id === provider)!;
       expect(status.configured).toBe(true);
+      expect(status.usability).toBe("unavailable");
+      expect(sandboxProviderUsability(provider).state).toBe("unavailable");
       expect(status.certified).toBe(false);
       expect(status.note).toContain("not available for new sessions");
       const resolved = resolveRequestedSandbox(provider);
@@ -355,6 +369,33 @@ describe("resolveRequestedSandbox (create-path validation)", () => {
     const e = resolveRequestedSandbox("e2b");
     expect(e.ok).toBe(false);
     if (!e.ok) expect(e.error).toContain("e2b");
+  });
+
+  test("failed qualification stays configured but cannot be selected by either create path", () => {
+    write({ provider: "docker" });
+    connectSandboxProvider("docker", {});
+    setSandboxConnectionQualification("docker", {
+      status: "failed",
+      failureCode: "DOCKER_DAEMON_UNAVAILABLE",
+      failureSummary: "Start Docker.",
+    });
+
+    expect(sandboxProviderConfigured("docker")).toBe(true);
+    expect(sandboxProviderUsability("docker")).toEqual({
+      state: "unqualified",
+      configured: true,
+      usable: false,
+    });
+    const status = sandboxCapabilityStatus().providers.find((provider) => provider.id === "docker")!;
+    expect(status.configured).toBe(true);
+    expect(status.usability).toBe("unqualified");
+
+    for (const requested of ["docker", true] as const) {
+      const resolved = resolveRequestedSandbox(requested);
+      expect(resolved.ok).toBe(false);
+      if (!resolved.ok) expect(resolved.error).toContain("has not passed workspace qualification");
+    }
+    expect(() => setWorkspaceSandboxDefault("docker")).toThrow("not currently available");
   });
 
   test("docker without any config file fails", () => {

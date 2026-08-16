@@ -21,7 +21,7 @@ import { getDefaultModel, providerFor, resolveModel } from "../models";
 import { OPENSESSION_SESSIONS_DIR } from "../paths";
 import { stateDir } from "../paths";
 import { writeJsonAtomic } from "../shared/atomic-write";
-import type { SandboxProviderId } from "./provider";
+import type { SandboxProviderId, SandboxProviderUsability } from "./provider";
 
 export const DEFAULT_SANDBOX_PREVIEW_PORTS = [3300, 3301, 3302] as const;
 
@@ -609,7 +609,7 @@ export function setWorkspaceSandboxDefault(
   }
   if (
     normalized !== "none" &&
-    (!sandboxProviderCertified(normalized) || !sandboxProviderConfigured(normalized))
+    sandboxProviderUsability(normalized).state !== "usable"
   ) {
     throw new Error(`Sandbox provider "${normalized}" is not currently available`);
   }
@@ -708,7 +708,14 @@ function sandboxConfigPresent(): boolean {
  * raw read here (rather than importing connections.ts) to avoid a config ↔
  * connection parsing cycle. Secret existence is enforced by the connection
  * API/default layer and again when an SDK client is constructed. */
-function normalizedConnectionConfigured(id: RunnableSandboxProviderId): boolean | undefined {
+interface NormalizedConnectionSelection {
+  enabled: boolean;
+  qualification?: "checking" | "ready" | "failed";
+}
+
+function normalizedConnectionSelection(
+  id: RunnableSandboxProviderId,
+): NormalizedConnectionSelection | undefined {
   try {
     const raw = JSON.parse(readFileSync(configPath(), "utf-8"));
     const values = Array.isArray(raw?.connections)
@@ -718,15 +725,27 @@ function normalizedConnectionConfigured(id: RunnableSandboxProviderId): boolean 
         : [];
     const connection = values.find((value: any) => value?.provider === id) as any;
     if (!connection) return undefined;
-    return connection.enabled !== false;
+    const qualification = connection.qualification?.status;
+    return {
+      enabled: connection.enabled !== false,
+      ...(qualification === "checking" || qualification === "ready" || qualification === "failed"
+        ? { qualification }
+        : {}),
+    };
   } catch {
     return undefined;
   }
 }
 
+function normalizedConnectionConfigured(id: RunnableSandboxProviderId): boolean | undefined {
+  return normalizedConnectionSelection(id)?.enabled;
+}
+
 export interface SandboxProviderStatusEntry {
   id: RunnableSandboxProviderId;
   configured: boolean;
+  /** Authoritative selection state for new sessions. */
+  usability: SandboxProviderUsability["state"];
   /** Only live-certified providers are selectable for new sessions. */
   certified: boolean;
   lastPassedAt?: string;
@@ -822,12 +841,37 @@ export interface SandboxCapabilityStatus {
   modelFamilies: SandboxModelFamily[];
 }
 
-/**
- * Whether an explicit per-session provider is currently usable. Kept simple
- * (docs: "Sandbox provider dropdown"): docker is available whenever a sandbox
- * config exists; daytona/e2b additionally need their API key (config block or
- * env). This is the same gate `maybeLaunchSandboxedRun` re-checks per run.
- */
+function sandboxProviderSelectionError(id: RunnableSandboxProviderId): string | undefined {
+  const usability = sandboxProviderUsability(id);
+  if (usability.state === "usable") return undefined;
+  if (usability.state === "unqualified") {
+    return `Sandbox provider "${id}" has not passed workspace qualification. Test it in Workspace > Sandboxes first.`;
+  }
+  if (usability.state === "unavailable") {
+    if (!sandboxProviderCertified(id)) {
+      const certification = SANDBOX_PROVIDER_CERTIFICATIONS[id];
+      return `Sandbox provider "${id}" is not live-certified and is unavailable for new sessions: ${certification.note || "run its complete live conformance matrix first"}.`;
+    }
+    return `Sandbox provider "${id}" is not currently available.`;
+  }
+  const hint =
+    id === "docker"
+      ? "run opensession sandbox enable docker"
+      : id === "daytona"
+        ? "connect Daytona in Workspace > Sandboxes"
+        : id === "box"
+          ? "connect Box in Workspace > Sandboxes"
+          : id === "modal"
+            ? "connect Modal in Workspace > Sandboxes"
+            : id === "microvm"
+              ? "run opensession sandbox enable microvm"
+              : id === "lambda-microvm"
+                ? 'set {"awsLambdaMicrovm":{"imageIdentifier":"arn:aws:lambda:...:microvm-image/..."}} in ~/.opensession-sandbox.json'
+                : 'set {"e2b":{"apiKey":"..."}} in ~/.opensession-sandbox.json (or E2B_API_KEY)';
+  return `Sandbox provider "${id}" is not configured: ${hint}.`;
+}
+
+/** Whether the provider has enabled connection configuration. */
 export function sandboxProviderConfigured(id: RunnableSandboxProviderId): boolean {
   if (!sandboxConfigPresent()) return false;
   const normalized = normalizedConnectionConfigured(id);
@@ -844,6 +888,26 @@ export function sandboxProviderConfigured(id: RunnableSandboxProviderId): boolea
   }
   if (id === "lambda-microvm") return Boolean(cfg.awsLambdaMicrovm?.imageIdentifier);
   return Boolean(cfg.e2b?.apiKey || process.env.E2B_API_KEY);
+}
+
+/** Single fail-closed authority for selecting a provider for new work. */
+export function sandboxProviderUsability(
+  id: RunnableSandboxProviderId,
+): SandboxProviderUsability {
+  const connection = normalizedConnectionSelection(id);
+  if (connection && !connection.enabled) {
+    return { state: "unavailable", configured: true, usable: false };
+  }
+  if (!sandboxProviderConfigured(id)) {
+    return { state: "not_configured", configured: false, usable: false };
+  }
+  if (!sandboxesEnabled() || !sandboxProviderCertified(id)) {
+    return { state: "unavailable", configured: true, usable: false };
+  }
+  if (connection && connection.qualification !== "ready") {
+    return { state: "unqualified", configured: true, usable: false };
+  }
+  return { state: "usable", configured: true, usable: true };
 }
 
 /** Full provider-capability snapshot, read fresh from config + kill switch. */
@@ -870,7 +934,9 @@ export function sandboxCapabilityStatus(): SandboxCapabilityStatus {
     : {
         note: "no dial-back URL configured — set publicIngress.publicBaseUrl (or callbackBaseUrl) so sandboxes can reach this server; see docs/self-hosting-sandboxes.md",
       };
-  const providersWithoutCertification: Array<Omit<SandboxProviderStatusEntry, "certified" | "lastPassedAt">> = [
+  const providersWithoutCertification: Array<
+    Omit<SandboxProviderStatusEntry, "certified" | "lastPassedAt" | "usability">
+  > = [
     {
       id: "docker",
       configured: enabled && normalizedConnectionConfigured("docker") === true,
@@ -907,14 +973,20 @@ export function sandboxCapabilityStatus(): SandboxCapabilityStatus {
   ];
   const providers = providersWithoutCertification.map((provider): SandboxProviderStatusEntry => {
     const certification = SANDBOX_PROVIDER_CERTIFICATIONS[provider.id];
+    const usability = sandboxProviderUsability(provider.id);
     const notes = [
       provider.note,
-      !certification.certified && provider.configured
+      usability.state === "unqualified"
+        ? "has not passed workspace qualification"
+        : undefined,
+      !certification.certified && usability.configured
         ? `not available for new sessions — ${certification.note || "live matrix has not passed"}`
         : undefined,
     ].filter((note): note is string => Boolean(note));
     return {
       ...provider,
+      configured: usability.configured,
+      usability: usability.state,
       certified: certification.certified,
       ...(certification.lastPassedAt ? { lastPassedAt: certification.lastPassedAt } : {}),
       ...(notes.length ? { note: notes.join("; ") } : {}),
@@ -924,7 +996,7 @@ export function sandboxCapabilityStatus(): SandboxCapabilityStatus {
   const defaultProvider =
     configuredDefault !== "local" &&
     isRunnableSandboxProvider(configuredDefault) &&
-    sandboxProviderCertified(configuredDefault)
+    sandboxProviderUsability(configuredDefault).state === "usable"
       ? configuredDefault
       : "local";
   return {
@@ -957,31 +1029,8 @@ export function resolveRequestedSandbox(
   ): { ok: true; provider: SandboxProviderId | null } | { ok: false; error: string } => {
     if (!provider || provider === "local") return { ok: true, provider };
     if (isRunnableSandboxProvider(provider)) {
-      const normalized = normalizedConnectionConfigured(provider);
-      if (normalized !== undefined) {
-        try {
-          const raw = JSON.parse(readFileSync(configPath(), "utf-8"));
-          const values = Array.isArray(raw?.connections)
-            ? raw.connections
-            : raw?.connections && typeof raw.connections === "object"
-              ? Object.values(raw.connections)
-              : [];
-          const connection = values.find((value: any) => value?.provider === provider) as any;
-          if (connection?.qualification?.status !== "ready") {
-            return {
-              ok: false,
-              error: `Sandbox provider "${provider}" has not passed workspace qualification. Test it in Workspace → Sandboxes first.`,
-            };
-          }
-        } catch {}
-      }
-    }
-    if (isRunnableSandboxProvider(provider) && !sandboxProviderCertified(provider)) {
-      const certification = SANDBOX_PROVIDER_CERTIFICATIONS[provider];
-      return {
-        ok: false,
-        error: `Sandbox provider "${provider}" is not live-certified and is unavailable for new sessions — ${certification.note || "run its complete live conformance matrix first"}.`,
-      };
+      const error = sandboxProviderSelectionError(provider);
+      if (error) return { ok: false, error };
     }
     const support = sandboxableModelFamily(model);
     return support.ok ? { ok: true, provider } : support;
@@ -995,26 +1044,6 @@ export function resolveRequestedSandbox(
     return {
       ok: false,
       error: `Unknown sandbox provider "${requested}" — valid values: docker, daytona, e2b, box, modal, microvm, lambda-microvm (or true for the configured default).`,
-    };
-  }
-  if (!sandboxProviderConfigured(id)) {
-    const hint =
-      id === "docker"
-        ? "run opensession sandbox enable docker"
-        : id === "daytona"
-          ? "connect Daytona in Workspace → Sandboxes"
-          : id === "box"
-            ? "connect Box in Workspace → Sandboxes"
-            : id === "modal"
-              ? "connect Modal in Workspace → Sandboxes"
-              : id === "microvm"
-                ? "run opensession sandbox enable microvm"
-              : id === "lambda-microvm"
-                ? 'set {"awsLambdaMicrovm":{"imageIdentifier":"arn:aws:lambda:…:microvm-image/…"}} in ~/.opensession-sandbox.json'
-                : 'set {"e2b":{"apiKey":"…"}} in ~/.opensession-sandbox.json (or E2B_API_KEY)';
-    return {
-      ok: false,
-      error: `Sandbox provider "${id}" is not configured — ${hint}.`,
     };
   }
   return withModelCheck(id);
