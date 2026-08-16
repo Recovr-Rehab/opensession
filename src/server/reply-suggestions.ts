@@ -173,18 +173,30 @@ export function maybeSuggestRepliesOnReturn(sessionId: string, user?: string): v
 	if (!session) return;
 	const endedAt = Date.parse(session.lastActivity);
 	if (!Number.isFinite(endedAt) || Date.now() - endedAt > RETURN_WINDOW_MS) return;
+	// Only reads the marker. It is stamped in `generate`, at the point a call is
+	// actually spent: opening a session that is mid-turn bails on the idle guard
+	// below, and stamping here would have burned the one attempt this turn gets
+	// without asking anything.
 	if (tried.get(sessionId) === session.lastActivity) return;
-	tried.set(sessionId, session.lastActivity);
+	void generate(sessionId, user);
+}
+
+/** Remember that this turn has had its one attempt, whichever hook spent it. */
+function markTried(sessionId: string): void {
+	const lastActivity = findSession(sessionId)?.lastActivity;
+	if (!lastActivity) return;
+	tried.set(sessionId, lastActivity);
 	if (tried.size > MAX_STORED) {
 		// Insertion order is close enough to least-recently-opened here, and the
 		// map only exists to stop a re-open buying the same answer twice.
 		for (const id of [...tried.keys()].slice(0, tried.size - MAX_STORED))
 			tried.delete(id);
 	}
-	void generate(sessionId, user);
 }
 
-const SYSTEM = [
+/** The generation contract. Exported so a scratch script can reproduce a real
+ *  call exactly rather than against a paraphrase of it. */
+export const SUGGESTION_SYSTEM = [
 	"You write quick-reply chips for Open Session, an agent-session dashboard.",
 	"An agent has just finished a turn. Your job is to offer the human the replies they are most likely to type next, as chips they can pick instead of typing.",
 	"",
@@ -287,8 +299,9 @@ async function generate(sessionId: string, user?: string): Promise<void> {
 			"</session_data>\n\n" +
 			"Return the JSON array now (or [] if the turn ended with nothing to decide).";
 
+		markTried(sessionId);
 		const raw = await opencodeOneShot(prompt, {
-			system: SYSTEM,
+			system: SUGGESTION_SYSTEM,
 			label: "reply-suggestions",
 			user,
 		});
