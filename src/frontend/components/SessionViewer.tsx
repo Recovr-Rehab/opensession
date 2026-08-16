@@ -126,6 +126,7 @@ import {
 	onHidesChanged,
 	unhideForSession,
 } from "../lib/hides";
+import { reconcilePending } from "../lib/pending-reconcile";
 import {
 	promptOutbox,
 	type PromptOutboxItem,
@@ -1192,11 +1193,31 @@ export function SessionViewer({
 			? [{ id: `pending-initial-${session.id}`, ...initialPending }]
 			: [],
 	);
+	// Read by the reconcile effect below, which must not re-run on every send.
+	const pendingRef = useRef(pending);
+	pendingRef.current = pending;
+	// Pending ids the server has CONFIRMED (transcript entry or queue/steer
+	// receipt). Their durable outbox row is hidden, so one message can't render
+	// as a transcript bubble and a "Sending" flap row at the same time.
+	const [landedOutboxIds, setLandedOutboxIds] = useState<Set<string>>(
+		() => new Set(),
+	);
 	const [outboxItems, setOutboxItems] = useState<PromptOutboxItem[]>(() =>
 		promptOutbox.list(session.id),
 	);
 	useEffect(() => {
-		const sync = () => setOutboxItems(promptOutbox.list(session.id));
+		const sync = () => {
+			const items = promptOutbox.list(session.id);
+			setOutboxItems(items);
+			// Forget claims the outbox no longer holds (delivered, discarded, or
+			// another session's), so the set can't grow for the life of the tab.
+			setLandedOutboxIds((prev) => {
+				if (prev.size === 0) return prev;
+				const live = new Set(items.map((i) => `outbox-${i.clientId}`));
+				const next = new Set([...prev].filter((id) => live.has(id)));
+				return next.size === prev.size ? prev : next;
+			});
+		};
 		sync();
 		const unsubscribe = promptOutbox.subscribe(sync);
 		void promptOutbox.flush();
@@ -2483,53 +2504,26 @@ export function SessionViewer({
 	// after we sent it, or by a server-confirmed queued entry (the busy path).
 	// A long-unmatched bubble is dropped so a dead send never sticks as "sending…".
 	useEffect(() => {
-		setPending((prev) => {
-			if (prev.length === 0) return prev;
-			const userPool = entries
-				.filter((e) => e.type === "user")
-				.map((e) => ({
-					c: e.content.trim(),
-					t: new Date(e.timestamp).getTime(),
-				}));
-			// A just-sent message is confirmed by a queued echo, a steer receipt
-			// (busy/fold-in path), or a real transcript user entry.
-			const echoPool = [...queued, ...steered].map((q) => q.content.trim());
-			const remaining = prev.filter((p) => {
-				const c = p.content.trim();
-				const qi = echoPool.indexOf(c);
-				if (qi >= 0) {
-					echoPool.splice(qi, 1);
-					return false;
-				}
-				// Interrupt/steer-path sends land in the transcript with a "[user] "
-				// attribution prefix (added server-side), while the optimistic bubble
-				// holds the raw text — accept either form so a redirected message's
-				// bubble reconciles instead of sticking as "redirecting…".
-				const attributed = p.user ? `[${p.user}] ${c}` : c;
-				const ui = userPool.findIndex(
-					(u) => (u.c === c || u.c === attributed) && u.t >= p.sentAt - 30_000,
-				);
-				if (ui >= 0) {
-					userPool.splice(ui, 1);
-					return false;
-				}
-				// Steers pending at the same turn boundary get joined into ONE user
-				// turn ("\n\n"-separated, each with its attribution prefix), possibly
-				// alongside a harness nudge — so the exact match above never fires.
-				// The "[user] " prefix is distinctive enough to claim by containment.
-				// Don't splice: the same joined entry may cover other bubbles too.
-				if (
-					p.user &&
-					userPool.some(
-						(u) => u.c.includes(attributed) && u.t >= p.sentAt - 30_000,
-					)
-				) {
-					return false;
-				}
-				return Date.now() - p.sentAt < 120_000;
+		const { landed, expired } = reconcilePending(
+			pendingRef.current,
+			entries,
+			[...queued, ...steered],
+			Date.now(),
+		);
+		if (landed.size === 0 && expired.size === 0) return;
+		setPending((prev) =>
+			prev.filter((p) => !landed.has(p.id) && !expired.has(p.id)),
+		);
+		// Only a CONFIRMED claim retires the durable outbox row below. An expired
+		// bubble is merely hidden: its prompt may still be in flight, and the
+		// outbox is localStorage-backed and shared across tabs, so anything that
+		// looks like a discard has to be earned by a real server confirmation.
+		if (landed.size > 0)
+			setLandedOutboxIds((prev) => {
+				const next = new Set(prev);
+				for (const id of landed) next.add(id);
+				return next;
 			});
-			return remaining.length === prev.length ? prev : remaining;
-		});
 	}, [entries, queued, steered]);
 
 	// A steer receipt is reconciled away once its message lands in the transcript
@@ -3537,10 +3531,18 @@ export function SessionViewer({
 	const pendingBubbles = visiblePending.filter(
 		(p) => !p.busyMode && !waitingForWorkspace,
 	);
+	// The durable row covers a prompt the store still holds: one this tab never
+	// showed a bubble for (another tab's send, or a reload), or one whose bubble
+	// is still up. A prompt already confirmed by the server is dropped from the
+	// row instead of rendering twice. Dropped, not discarded: the store is
+	// localStorage-backed and cross-tab, so a discard is durable and a wrong
+	// match would lose the message, while a wrong hide only costs a row until
+	// delivery removes the item itself.
 	const durableOutbox = outboxItems.filter(
 		(item) =>
 			item.state === "failed" ||
-			!pending.some((entry) => entry.id === `outbox-${item.clientId}`),
+			(!pending.some((entry) => entry.id === `outbox-${item.clientId}`) &&
+				!landedOutboxIds.has(`outbox-${item.clientId}`)),
 	);
 	const hasLiveConversation =
 		pendingBubbles.length > 0 || liveTurnStore.hasText() || isBusy || !!ask;
