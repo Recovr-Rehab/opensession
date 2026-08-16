@@ -130,7 +130,7 @@ export function useWebSocket(presenceActive = true) {
               feedEpoch: msg.feedEpoch,
               feedSeq: msg.feedSeq,
             });
-            delivered = msg.event as WSServerMessage;
+            delivered = msg.event;
           }
         } else if (msg.type === "feed_snapshot") {
           feedCursorsRef.current.set(msg.sessionId, {

@@ -115,9 +115,7 @@ export function broadcastToSession(
 	const set = sessionWatchers.get(sessionId);
 	// Advance feed state even with no viewers, so a backgrounded client can
 	// recover an active run on reconnect.
-	const feed = isFeedEvent(msg)
-		? appendSessionFeed(sessionId, msg as Record<string, unknown>)
-		: null;
+	const feed = isFeedEvent(msg) ? appendSessionFeed(sessionId, msg) : null;
 	if (!set) return;
 	const payload = JSON.stringify(msg);
 	const feedPayload = feed ? JSON.stringify(feed) : null;

@@ -1,3 +1,4 @@
+import type { SessionLiveEvent } from "@tellahq/opensession-protocol/session";
 import { emitSessionStateChange } from "./session-state-events";
 
 /**
@@ -19,7 +20,9 @@ export interface SessionFeedFrame {
 	turnId?: string;
 	entryId?: string;
 	phase: SessionFeedPhase;
-	event: Record<string, unknown>;
+	/** The wrapped live-turn frame, declared once in the protocol package: a
+	 *  client can hand `event` straight to its ordinary frame handler. */
+	event: SessionLiveEvent;
 }
 
 export interface SessionFeedSnapshot {
@@ -85,7 +88,7 @@ function stateFor(sessionId: string): FeedState {
 	return state;
 }
 
-function phaseFor(type: unknown): SessionFeedPhase {
+function phaseFor(type: SessionLiveEvent["type"]): SessionFeedPhase {
 	if (type === "transcript_append") return "committed";
 	if (type === "stream_text") return "delta";
 	return "status";
@@ -94,40 +97,31 @@ function phaseFor(type: unknown): SessionFeedPhase {
 /** Append one event exactly once, then fan the returned immutable frame out. */
 export function appendSessionFeed(
 	sessionId: string,
-	event: Record<string, unknown>,
+	event: SessionLiveEvent,
 ): SessionFeedFrame {
 	const state = stateFor(sessionId);
 	const type = event.type;
 
-	if (type === "stream_start") {
-		const runId =
-			typeof event.runId === "string" ? event.runId : crypto.randomUUID();
-		const turnId =
-			typeof event.turnId === "string" ? event.turnId : `turn:${runId}`;
+	if (event.type === "stream_start") {
+		const runId = crypto.randomUUID();
 		state.active = {
 			runId,
-			turnId,
+			turnId: `turn:${runId}`,
 			entryId: `stream:${runId}`,
-			...(typeof event.by === "string" ? { by: event.by } : {}),
+			...(event.by ? { by: event.by } : {}),
 			text: "",
 			startedAt: Date.now(),
 		};
 		state.landed = [];
-	} else if (type === "stream_text" && state.active) {
-		const text = typeof event.text === "string" ? event.text : "";
+	} else if (event.type === "stream_text" && state.active) {
+		const text = event.text ?? "";
 		const landedAt = state.landed.indexOf(text);
 		if (landedAt === -1) state.active.text += text;
 		else state.landed.splice(landedAt, 1);
-	} else if (type === "transcript_append" && state.active) {
-		const entries = Array.isArray(event.entries) ? event.entries : [];
-		for (const entry of entries) {
-			if (
-				entry &&
-				typeof entry === "object" &&
-				(entry as { type?: unknown }).type === "assistant" &&
-				typeof (entry as { content?: unknown }).content === "string"
-			) {
-				const content = (entry as { content: string }).content;
+	} else if (event.type === "transcript_append" && state.active) {
+		for (const entry of event.entries ?? []) {
+			if (entry.type === "assistant" && typeof entry.content === "string") {
+				const content = entry.content;
 				const before = state.active.text;
 				state.active.text = before.replace(content, "");
 				if (before === state.active.text) state.landed.push(content);
@@ -166,11 +160,11 @@ export function appendSessionFeed(
 		state.landed = [];
 	}
 	const running =
-		type === "stream_start"
+		event.type === "stream_start"
 			? true
-			: type === "stream_done"
+			: event.type === "stream_done"
 				? false
-				: type === "session_status" && typeof event.isRunning === "boolean"
+				: event.type === "session_status"
 					? event.isRunning
 					: undefined;
 	if (typeof running === "boolean") {
@@ -230,7 +224,7 @@ export function resumeSessionFeed(
 	};
 }
 
-export function isFeedEvent(msg: object): boolean {
+export function isFeedEvent(msg: object): msg is SessionLiveEvent {
 	const type = (msg as { type?: string }).type;
 	return (
 		type === "stream_start" ||
