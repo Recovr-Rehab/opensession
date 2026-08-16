@@ -132,7 +132,13 @@ export type NoticeKind =
    *  input is reconstructable from the log; NOT conversation, so servers drop
    *  it from the default projection (see dropContextInjections). The notice
    *  exists for the debug/replay reader that asks for them anyway. */
-  | "context-injection";
+  | "context-injection"
+  /** Model-visible input that STANDS between turns rather than riding one: the
+   *  run's tool surface, the engine's standing instructions. Recorded once per
+   *  session per source and again only when its content hash changes, so a
+   *  multi-KB blob is not copied onto every turn. Same "not conversation"
+   *  discipline as context-injection, and the same projections drop it. */
+  | "standing-context";
 
 /**
  * How a client renders the entry's `content` underneath the title:
@@ -397,13 +403,25 @@ const PARSED_NOTICES: Record<string, Omit<EntryNotice, "tone">> = {
     title: "Injected context",
     body: "collapsed",
   },
+  "standing-context": {
+    kind: "standing-context",
+    title: "Standing context",
+    body: "collapsed",
+  },
 };
 
-/** The transcript's record of a model-visible payload the harness injected
- *  into a prompt (context-log.ts). Not conversation: a durable audit row, so
- *  every client-bound projection drops it. */
+/** The transcript's record of model-visible input the harness gave the engine:
+ *  a payload injected into one prompt, or the standing context (tool surface,
+ *  instructions) a session runs under (context-log.ts). Not conversation: a
+ *  durable audit row, so every client-bound projection drops it. Both kinds
+ *  answer to this one predicate on purpose — a new record kind inherits every
+ *  exclusion instead of having to be added to each of them. */
 export function isContextInjection(entry: TranscriptEntry): boolean {
-  return entry.noticeKind === "context-injection" || !!entry.contextInjection;
+  return (
+    entry.noticeKind === "context-injection" ||
+    entry.noticeKind === "standing-context" ||
+    !!entry.contextInjection
+  );
 }
 
 /** Drop injection records on the way to a client. Same "on the way out"

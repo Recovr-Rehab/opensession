@@ -32,18 +32,48 @@
  * instead of duplicating it, and the in-process dedupe below usually skips the
  * write entirely.
  *
+ * ## Standing context
+ *
+ * Not every model-visible input rides a turn. A run's tool surface and its
+ * standing instructions are properties of the checkout and the run config: the
+ * model sees them on every turn, unchanged, for the life of a session. Copying
+ * a multi-KB blob onto each turn would bloat every transcript to say the same
+ * thing a hundred times, so `logStandingContext` records each source ONCE and
+ * again only when its content hash moves. A reader reconstructs a turn's
+ * standing input by taking the newest record of each source at or before it.
+ *
+ * The record is an ordinary entry again — same reasons, plus the store's
+ * blob-splitting, which matters more here (an instructions file is tens of KB).
+ * The hash rides as metadata and as the basis of the entry id rather than
+ * keying a separate content-addressed table: the store already dedupes by
+ * entry id, and a parallel store is the thing this design exists to avoid. The
+ * one cost is that a source that changes A → B → A stores A twice, which is
+ * the honest reading of the timeline anyway.
+ *
  * ## What is NOT covered
  *
- * The engine's own standing instructions (opencode's config instructions file,
- * AGENTS.md, the direct engines' system prompts) are model-visible too, but
- * they are properties of the checkout and the run config rather than per-turn
- * payloads; they are not recorded here. The repos/memory note IS, because it
- * is built per turn from mutable session state.
+ * The MCP tool SCHEMAS themselves — every mounted tool's name, description and
+ * JSON schema, the largest single input at roughly 104k tokens a run — are not
+ * recordable from here, and this is a limit of the engine rather than an
+ * omission. OpenCode fetches them from each MCP server at startup and neither
+ * persists nor exposes them: `/experimental/tool` returns only its own
+ * built-ins (12 tools, 23KB) and `/mcp` returns a connection status per server
+ * (verified against a live server, 2026-08-16). Obtaining them would mean
+ * connecting to every configured MCP server ourselves, per session, with the
+ * OAuth and subprocess cost that implies. So what is recorded is the tool
+ * SURFACE: which servers were mounted, which tools were stripped, what the run
+ * was scoped to. That reconstructs which tools the model had, not the wording
+ * of each schema.
+ *
+ * The direct engines' system prompts are likewise not recorded yet: they are
+ * assembled inside their own adapters, which do not call in here. The
+ * engine-neutral `tools` record covers every engine, including those two.
  */
 import { createHash } from "crypto";
 import {
 	storeAppendUserLineEarly,
 	transcriptLineContextInjection,
+	transcriptLineStandingContext,
 } from "./opencode-transcript";
 import {
 	parseContextBlocks,
@@ -149,4 +179,103 @@ export function logInjectedContext(input: InjectedContextInput): void {
 			),
 		);
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Standing context
+// ---------------------------------------------------------------------------
+
+/**
+ * What a standing record describes. A closed taxonomy for the same reason
+ * `ContextSource` is one: the log is only queryable if the labels are.
+ */
+export type StandingContextSource =
+	/** The run's tool scoping as the harness decided it, engine-neutral: the
+	 *  MCP allowlist, the in-process servers, the tool denials, the mode.
+	 *  Written at the runOnModel choke point, so every engine has one. */
+	| "tools"
+	/** The MCP servers an engine actually mounted for the run, plus the tool
+	 *  strips applied to them — the resolution of the scoping above, known
+	 *  only inside the runner. */
+	| "mcp-servers"
+	/** The standing instruction text the engine was given (opencode's
+	 *  instructions file, or the shared server's per-prompt `system`), which
+	 *  already folds in AGENTS.local.md / CLAUDE.local.md. */
+	| "instructions";
+
+export interface StandingContextInput {
+	/** Unified session id. No session ⇒ nothing to log against. */
+	sessionId?: string | null;
+	/** The turn that first saw this version, for grouping. */
+	turnId?: string | null;
+	source: StandingContextSource;
+	/** The full content, recorded verbatim. */
+	content?: string | null;
+}
+
+/**
+ * Content hash per (session, source) already recorded in this process. The
+ * whole point of the standing-context record: a source is written when it
+ * CHANGES, never per turn. A restart clears this, so the first turn after one
+ * re-records each source — which is exactly when the run config could have
+ * moved under the session, so it is a feature rather than a leak.
+ */
+const standing: Map<string, string> = ((globalThis as any).__osStandingContext ??=
+	new Map());
+const STANDING_MAX = 5_000;
+
+/** Stable JSON for hashing and for reading: keys sorted at every level, so a
+ *  record's hash tracks its content and not the order a producer built its
+ *  object in. Array order is left alone — the caller sorts where order carries
+ *  no meaning. */
+export function canonicalJson(value: unknown): string {
+	const sorted = (v: unknown): unknown => {
+		if (Array.isArray(v)) return v.map(sorted);
+		if (v && typeof v === "object") {
+			const out: Record<string, unknown> = {};
+			for (const k of Object.keys(v as Record<string, unknown>).sort())
+				out[k] = sorted((v as Record<string, unknown>)[k]);
+			return out;
+		}
+		return v;
+	};
+	return JSON.stringify(sorted(value), null, 2);
+}
+
+/**
+ * Record one standing model-visible input, if it changed. Never throws, for
+ * the same reason the injection logger doesn't: an audit write must not fail
+ * the turn it describes.
+ */
+export function logStandingContext(input: StandingContextInput): void {
+	const sessionId = input.sessionId || "";
+	const content = input.content?.trim();
+	if (!sessionId || !content) return;
+	const hash = createHash("sha256").update(content).digest("hex");
+	const key = `${sessionId}\u0000${input.source}`;
+	if (standing.get(key) === hash) return;
+	if (standing.size >= STANDING_MAX) standing.clear();
+	standing.set(key, hash);
+	const turnId = input.turnId || "";
+	// Content-derived like an injection id, but over the HASH plus the turn:
+	// re-recording the same version within a turn upserts one row, while a
+	// version that comes back in a later turn earns a new row at a new seq —
+	// which is what keeps "newest record at or before this turn" true.
+	const id = `std-${createHash("sha256")
+		.update(`${sessionId}\u0000${turnId}\u0000${input.source}\u0000${hash}`)
+		.digest("hex")
+		.slice(0, 32)}`;
+	storeAppendUserLineEarly(
+		sessionId,
+		transcriptLineStandingContext(
+			content,
+			{
+				source: input.source,
+				hash,
+				bytes: Buffer.byteLength(content, "utf8"),
+				...(turnId ? { turnId } : {}),
+			},
+			id,
+		),
+	);
 }

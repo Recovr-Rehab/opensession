@@ -670,6 +670,34 @@ export function transcriptLineContextInjection(
   );
 }
 
+/** Model-visible input that stands between turns rather than riding one: the
+ *  run's tool surface, the engine's standing instructions (context-log.ts).
+ *  Same user-role + harness-marker pattern as the injection line above; the
+ *  jsonl parser maps it to a system entry tagged `noticeKind:
+ *  "standing-context"`, which the same projections drop. `hash` is the sha256
+ *  of the body and `bytes` its length, so a reader can tell two records of one
+ *  source apart without re-hashing, and the close tag is matched greedily on
+ *  the read side — a recorded instructions file that quotes this very marker
+ *  must round-trip whole rather than truncate. */
+export function transcriptLineStandingContext(
+  body: string,
+  meta: { source: string; hash: string; bytes: number; turnId?: string },
+  id?: string,
+  ts?: string
+): JsonlLine {
+  const attrs = [
+    ` source="${meta.source}"`,
+    ` hash="${meta.hash}"`,
+    ` bytes="${meta.bytes}"`,
+    meta.turnId ? ` turn="${meta.turnId}"` : "",
+  ].join("");
+  return transcriptLineUser(
+    `<standing-context${attrs}>${body}</standing-context>`,
+    id,
+    ts
+  );
+}
+
 export function transcriptLineAssistantText(
   text: string,
   id?: string,

@@ -87,7 +87,7 @@ import {
 import { buildEngineSwitchHandoffNote } from "./fork-handoff";
 import { personaName } from "./config";
 import { wrapContext } from "./prompt-context";
-import { logInjectedContext } from "./context-log";
+import { canonicalJson, logInjectedContext, logStandingContext } from "./context-log";
 import {
   beginTurn,
   endTurn,
@@ -454,6 +454,29 @@ function runOnModel(opts: RunAgentOpts, model: string | undefined): AsyncIterabl
     prompt: opts.prompt,
     reposNote: opts.reposNote,
     model: mapped,
+  });
+  // Standing context, same choke point: the tool surface the run was scoped
+  // to. Model-visible on every turn and identical across them, so it is
+  // recorded once per session and again only when the scoping moves. Written
+  // here rather than in a runner because this is where the decision is final
+  // for EVERY engine — the direct SDK adapters assemble their own tool lists
+  // and would each need their own call otherwise. What the runner adds below
+  // it (`mcp-servers`) is the resolution of this scope, not a second copy.
+  logStandingContext({
+    sessionId: opts.journal?.osSessionId || opts.transcriptSessionId,
+    turnId: opts.promptEntryId || opts.startToken,
+    source: "tools",
+    content: canonicalJson({
+      mcpScope: opts.mcpServers === "all" ? "all" : [...opts.mcpServers].sort(),
+      inProcess: Object.keys(opts.inProcessMcp || {}).sort(),
+      // Names, not the refusal messages: those are model-visible through the
+      // instructions record, and folding them in here would churn this hash
+      // on a wording change that altered no tool.
+      deniedTools: Object.keys(opts.deniedTools || {}).sort(),
+      confirmTools: Object.keys(opts.confirmTools || {}).sort(),
+      mode: opts.mode || null,
+      localWorkspaceToolsDisabled: !!opts.disableLocalWorkspaceTools,
+    }),
   });
   if (engineForTest) return engineForTest(opts, mapped);
   const route = routeModel(requested, { interactive: isInteractiveRun(opts) });

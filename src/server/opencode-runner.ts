@@ -282,7 +282,7 @@ import { bashAskPolicyReply } from "./command-policy";
 import { buildEngineSwitchHandoffNote } from "./fork-handoff";
 import { recoverFreshEngineTranscript } from "./engine-handoff-transcript";
 import { wrapContext } from "./prompt-context";
-import { logInjectedContext } from "./context-log";
+import { canonicalJson, logInjectedContext, logStandingContext } from "./context-log";
 import { ensureAnthropicBridge } from "./anthropic-bridge";
 import { ensureAgentAwsCredsFile } from "./aws-creds";
 import {
@@ -3932,6 +3932,50 @@ async function* runOpencodeAttempt(
               }
             : {}),
         };
+
+    // Model-visible means logged (context-log.ts), standing half: the two
+    // inputs the model sees on EVERY turn of this session, recorded here
+    // because here is where they are final — and recorded once per session,
+    // then again only when their content hash moves, so a session does not
+    // carry a hundred copies of the same instructions file.
+    //
+    // `mcp-servers` is the resolution of the scope runOnModel already logged:
+    // the servers this run's config actually mounts (allowlist + allowedUsers
+    // gating applied), the strips that narrow them, and the subagents the
+    // `task` tool can reach. It stops short of the tool SCHEMAS — OpenCode
+    // fetches those from each server at startup and neither persists nor
+    // exposes them (see context-log.ts).
+    {
+      const standingSessionId = journal?.osSessionId || opts.transcriptSessionId;
+      const standingTurnId = opts.promptEntryId || opts.startToken;
+      logStandingContext({
+        sessionId: standingSessionId,
+        turnId: standingTurnId,
+        source: "mcp-servers",
+        content: canonicalJson({
+          shared,
+          mounted: Object.keys(externalMcp).sort(),
+          inProcess: Object.keys(opts.inProcessMcp || {}).sort(),
+          // Per-session servers bake the strips into the config; shared ones
+          // narrow per prompt so other sessions on the server are untouched.
+          strip: shared
+            ? promptTools
+            : ((ocConfig.tools as Record<string, boolean> | undefined) ?? {}),
+          agents: Object.keys((ocConfig.agent as Record<string, unknown>) || {}).sort(),
+          ...(promptAgent ? { promptAgent } : {}),
+        }),
+      });
+      // The standing instruction text itself: run guidance, the repos/PR flow
+      // notes, the denied-tool notes, and the checkout's own untracked
+      // AGENTS.local.md / CLAUDE.local.md, which reach the model through the
+      // instructions file (per-session) or the per-prompt `system` (shared).
+      logStandingContext({
+        sessionId: standingSessionId,
+        turnId: standingTurnId,
+        source: "instructions",
+        content: instructions,
+      });
+    }
 
     // A fresh OpenCode server discovers MCP tools as part of startup. Make the
     // shared proxy token routable before spawning it; otherwise that first

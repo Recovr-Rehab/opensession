@@ -125,6 +125,12 @@ export function transcriptEntryView(entry: TranscriptEntry) {
   return {
     seq: entry.seq,
     type: entry.type,
+    // What KIND of row this is, for the two the pipeline writes about itself:
+    // an injected payload and a standing-context record read as ordinary
+    // system entries otherwise, and a fixture that cannot tell them apart
+    // cannot show a regression in either.
+    ...(entry.noticeKind ? { noticeKind: entry.noticeKind } : {}),
+    ...(entry.contextInjection ? { contextSource: entry.contextInjection.source } : {}),
     content: entry.content,
     ...(entry.toolName ? { toolName: entry.toolName } : {}),
     ...(entry.toolInput !== undefined ? { toolInput: entry.toolInput } : {}),

@@ -8,6 +8,7 @@
  * split included) and the actual client projection, not a hand-built entry.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { createHash } from "crypto";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { __setEngineForTest, runAgent } from "./agent-runner";
@@ -21,6 +22,7 @@ import {
 import { wrapContext } from "./prompt-context";
 import { entriesForWire } from "./jsonl-parser";
 import { buildEngineSwitchHandoffNote } from "./fork-handoff";
+import { transcriptExcerpt } from "./transcript-excerpt";
 import type { TranscriptEntry } from "./types";
 
 const dir = mkdtempSync(`${tmpdir()}/context-log-test-`);
@@ -35,6 +37,7 @@ beforeEach(() => {
 	store = new TranscriptStore(`${dir}/transcripts-${++dbIndex}.db`);
 	prevStore = __setTranscriptStoreForTest(store) ?? prevStore;
 	(globalThis as any).__osContextLogged?.clear();
+	(globalThis as any).__osStandingContext?.clear();
 });
 
 afterEach(() => {
@@ -56,6 +59,16 @@ function injections(sessionId: string): TranscriptEntry[] {
 	return store
 		.readTail(sessionId, 100)
 		.entries.filter((e) => e.noticeKind === "context-injection");
+}
+
+function standing(sessionId: string, source?: string): TranscriptEntry[] {
+	return store
+		.readTail(sessionId, 100)
+		.entries.filter(
+			(e) =>
+				e.noticeKind === "standing-context" &&
+				(!source || e.contextInjection?.source === source),
+		);
 }
 
 describe("context-log: injected context round-trips into the store", () => {
@@ -214,9 +227,48 @@ describe("context-log: injection records are not conversation", () => {
 		);
 		const stored = store.readTail(sessionId, 100).entries;
 		expect(stored.some((e) => e.noticeKind === "context-injection")).toBe(true);
+		// The turn also stood up a standing record (the run's tool surface);
+		// both are audit rows, so both leave on the way to a client.
+		expect(stored.some((e) => e.noticeKind === "standing-context")).toBe(true);
+		const records = stored.filter(
+			(e) =>
+				e.noticeKind === "context-injection" || e.noticeKind === "standing-context",
+		);
 		const wire = entriesForWire(stored);
-		expect(wire.some((e) => e.noticeKind === "context-injection")).toBe(false);
-		expect(wire).toHaveLength(stored.length - 1);
+		expect(
+			wire.some(
+				(e) =>
+					e.noticeKind === "context-injection" ||
+					e.noticeKind === "standing-context",
+			),
+		).toBe(false);
+		expect(wire).toHaveLength(stored.length - records.length);
+	});
+
+	test("a transcript excerpt skips them", async () => {
+		const sessionId = "os-ctx-excerpt";
+		__setEngineForTest(makeFakeEngine([{ kind: "clean" }]).engine);
+		await drain(
+			runAgent({
+				prompt: `${wrapContext("## Engine handoff\nplumbing", "handoff")}\n\nvisible`,
+				cwd: dir,
+				mcpServers: [],
+				fallbackModel: "none",
+				journal: { osSessionId: sessionId, kind: "session" },
+			}),
+		);
+		// Both record kinds are in the store for this session…
+		expect(store.readTail(sessionId, 100).entries).not.toHaveLength(0);
+		expect(injections(sessionId)).toHaveLength(1);
+		expect(standing(sessionId)).toHaveLength(1);
+		// …and the excerpt loader, which a recap is built over, sees none of
+		// them: summarizing the harness's own plumbing back at the model is
+		// exactly the loop these records must not join.
+		const excerpt = await transcriptExcerpt(sessionId, {}, { store });
+		expect(excerpt.total).toBe(0);
+		expect(
+			excerpt.windows.flatMap((w) => w.entries.map((e) => e.noticeKind)),
+		).toEqual([]);
 	});
 
 	test("a handoff note built from history skips them", () => {
@@ -240,9 +292,155 @@ describe("context-log: injection records are not conversation", () => {
 					noticeKind: "context-injection",
 					contextInjection: { source: "handoff" },
 				}),
+				entry({
+					id: "c",
+					type: "system",
+					content: "STANDING PAYLOAD",
+					noticeKind: "standing-context",
+					contextInjection: { source: "instructions", hash: "abc", bytes: 16 },
+				}),
 			],
 		});
 		expect(note).toContain("real message");
 		expect(note).not.toContain("INJECTED PAYLOAD");
+		// The standing record is the run's own instructions: re-injecting it
+		// into the note that seeds the next engine would hand the model its
+		// own configuration as if a human had said it.
+		expect(note).not.toContain("STANDING PAYLOAD");
+	});
+});
+
+describe("context-log: standing context is recorded on change, not per turn", () => {
+	async function turn(
+		sessionId: string,
+		over: {
+			mcpServers?: string[] | "all";
+			deniedTools?: Record<string, string>;
+			promptEntryId?: string;
+		} = {},
+	): Promise<void> {
+		__setEngineForTest(makeFakeEngine([{ kind: "clean" }]).engine);
+		await drain(
+			runAgent({
+				prompt: "go",
+				cwd: dir,
+				mcpServers: over.mcpServers ?? [],
+				deniedTools: over.deniedTools,
+				fallbackModel: "none",
+				promptEntryId: over.promptEntryId,
+				journal: { osSessionId: sessionId, kind: "session" },
+			}),
+		);
+	}
+
+	test("the run's tool surface lands once, with its hash and size", async () => {
+		const sessionId = "os-std-tools";
+		await turn(sessionId, { promptEntryId: "turn-1" });
+		await turn(sessionId, { promptEntryId: "turn-2" });
+		await turn(sessionId, { promptEntryId: "turn-3" });
+
+		const rows = standing(sessionId, "tools");
+		// Three turns, one record: the whole point of a standing record.
+		expect(rows).toHaveLength(1);
+		const row = rows[0];
+		expect(row.type).toBe("system");
+		expect(row.contextInjection?.turnId).toBe("turn-1");
+		expect(row.contextInjection?.hash).toBe(
+			createHash("sha256").update(row.content).digest("hex"),
+		);
+		expect(row.contextInjection?.bytes).toBe(
+			Buffer.byteLength(row.content, "utf8"),
+		);
+		// The payload is the scoping decision itself, readable without a
+		// replay: what the model could reach, and what was taken away.
+		expect(JSON.parse(row.content)).toMatchObject({
+			mcpScope: [],
+			inProcess: [],
+			deniedTools: [],
+			confirmTools: [],
+			localWorkspaceToolsDisabled: false,
+		});
+	});
+
+	test("a changed surface earns a second record; an unchanged one does not", async () => {
+		const sessionId = "os-std-change";
+		await turn(sessionId, { promptEntryId: "turn-1" });
+		const denied = { mcp__stripe__create_refund: "not available" };
+		await turn(sessionId, { promptEntryId: "turn-2", deniedTools: denied });
+		await turn(sessionId, { promptEntryId: "turn-3", deniedTools: denied });
+
+		const rows = standing(sessionId, "tools");
+		expect(rows).toHaveLength(2);
+		// Each record is stamped with the turn that first saw it, so "what was
+		// in force at turn N" is the newest record at or before it.
+		expect(rows.map((r) => r.contextInjection?.turnId)).toEqual([
+			"turn-1",
+			"turn-2",
+		]);
+		expect(new Set(rows.map((r) => r.contextInjection?.hash)).size).toBe(2);
+		expect(JSON.parse(rows[1].content).deniedTools).toEqual([
+			"mcp__stripe__create_refund",
+		]);
+	});
+
+	test("a fallback hop reuses the record instead of writing a second", async () => {
+		const sessionId = "os-std-fallback";
+		__setEngineForTest(
+			makeFakeEngine([
+				{ kind: "usage_exhausted", engineSessionId: "ses_1" },
+				{ kind: "clean", text: ["done"] },
+			]).engine,
+		);
+		await drain(
+			runAgent({
+				prompt: "do the thing",
+				cwd: dir,
+				mcpServers: [],
+				model: "claude-fable-5",
+				fallbackModel: "gpt-5.6-sol",
+				promptEntryId: "turn-fb",
+				journal: { osSessionId: sessionId, kind: "session" },
+			}),
+		);
+		// Two dispatches through the choke point, one surface: the record
+		// tracks the scoping, not the number of engine calls.
+		expect(standing(sessionId, "tools")).toHaveLength(1);
+	});
+
+	test("an identical surface in another session is still that session's record", async () => {
+		await turn("os-std-a", { promptEntryId: "t" });
+		await turn("os-std-b", { promptEntryId: "t" });
+		expect(standing("os-std-a", "tools")).toHaveLength(1);
+		expect(standing("os-std-b", "tools")).toHaveLength(1);
+	});
+
+	test("an oversized record splits into a blob and rehydrates in full", async () => {
+		const sessionId = "os-std-big";
+		// A wide allowlist is the cheap way to a payload past the store's 32KB
+		// wire bound; a real instructions file gets there on its own.
+		const many = Array.from({ length: 4000 }, (_, i) => `srv-${i}`);
+		await turn(sessionId, { mcpServers: many, promptEntryId: "turn-big" });
+
+		const rows = standing(sessionId, "tools");
+		expect(rows).toHaveLength(1);
+		expect(rows[0].contentClamped).toBe(true);
+		const full = store.getFullEntry(sessionId, rows[0].id)!;
+		expect(JSON.parse(full.content).mcpScope).toHaveLength(4000);
+		// The hash and size describe the WHOLE record, not the clamped wire
+		// form — which is how a reader knows it is holding a truncated copy.
+		expect(rows[0].contextInjection?.hash).toBe(
+			createHash("sha256").update(full.content).digest("hex"),
+		);
+		expect(rows[0].contextInjection?.bytes).toBeGreaterThan(
+			rows[0].content.length,
+		);
+	});
+
+	test("nothing is recorded for a session-less run", async () => {
+		__setEngineForTest(makeFakeEngine([{ kind: "clean" }]).engine);
+		await drain(
+			runAgent({ prompt: "hi", cwd: dir, mcpServers: [], fallbackModel: "none" }),
+		);
+		expect(store.readTail("", 10).entries).toHaveLength(0);
 	});
 });

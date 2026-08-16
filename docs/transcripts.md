@@ -74,6 +74,45 @@ any other oversized entry, and the ws protocol needs no new frame.
   excerpts — an injection record must never be folded back into the next
   prompt, or into a recap.
 
+### Standing context
+
+Some model-visible input does not ride a turn. The run's tool surface and the
+engine's standing instructions are properties of the checkout and the run
+config: the model sees them on every turn, identical, for the life of the
+session. `logStandingContext` records each source **once**, and again only when
+its content hash moves — a near-identical multi-KB blob per turn would bloat
+every session to say the same thing a hundred times. A reader reconstructs a
+turn's standing input by taking the newest record of each source at or before
+it.
+
+The record is an ordinary entry again: a `system` entry tagged `noticeKind:
+"standing-context"`, carrying the content verbatim plus `contextInjection`
+metadata (`source`, `turnId`, `hash`, `bytes`). The same predicate
+(`isContextInjection`) covers both kinds, so a standing record inherits every
+exclusion an injection record has rather than needing to be added to each one.
+The hash rides as metadata and as the basis of the entry id instead of keying a
+separate content-addressed table — the store already dedupes by entry id, and
+a parallel store is what this design exists to avoid.
+
+Three sources today:
+
+| source | written at | content |
+| --- | --- | --- |
+| `tools` | `runOnModel` (every engine) | the run's tool scoping: MCP allowlist, in-process servers, tool denials, mode |
+| `mcp-servers` | the opencode runner | the servers that config actually mounts, the strips that narrow them, the subagents `task` can reach |
+| `instructions` | the opencode runner | the standing instruction text, which already folds in `AGENTS.local.md` / `CLAUDE.local.md` |
+
+**The tool schemas themselves are not recordable.** Every mounted tool's name,
+description and JSON schema is the largest single model input (roughly 104k
+tokens a run), and OpenCode neither persists nor exposes it: `/experimental/tool`
+returns only its own built-ins and `/mcp` returns a connection status per
+server. Capturing the schemas would mean connecting to every configured MCP
+server ourselves, per session. So what is recorded is the tool *surface* —
+which servers were mounted and which tools were taken away — not the wording of
+each schema. The direct engines' system prompts are likewise not recorded yet;
+their adapters assemble their own and do not call in. The `tools` record covers
+them, because it is written at the choke point.
+
 ## Imports and drift
 
 Legacy/external transcript files are imported into the store on first touch

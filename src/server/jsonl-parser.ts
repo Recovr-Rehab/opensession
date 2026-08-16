@@ -394,6 +394,39 @@ function harnessEntryFor(
       },
     ];
   }
+  // Model-visible input that stands between turns rather than riding one — the
+  // run's tool surface, the engine's standing instructions
+  // (transcriptLineStandingContext, written by context-log.ts). Tagged
+  // `standing-context`, which the same projections drop as an injection
+  // record. The close tag is matched GREEDILY: the body is a whole
+  // instructions file or config document, which may quote this marker, and an
+  // audit row that silently truncates is worse than one that is long.
+  if (t.startsWith("<standing-context")) {
+    const open = t.match(/^<standing-context([^>]*)>/)?.[1] || "";
+    const body = t
+      .match(/<standing-context[^>]*>([\s\S]*)<\/standing-context>/)?.[1]
+      ?.trim();
+    if (!body) return [];
+    const source = open.match(/source="([^"]*)"/)?.[1] || "unknown";
+    const turnId = open.match(/turn="([^"]*)"/)?.[1];
+    const hash = open.match(/hash="([^"]*)"/)?.[1];
+    const bytes = Number(open.match(/bytes="(\d+)"/)?.[1]);
+    return [
+      {
+        id,
+        type: "system",
+        content: body,
+        timestamp: ts,
+        noticeKind: "standing-context",
+        contextInjection: {
+          source,
+          ...(turnId ? { turnId } : {}),
+          ...(hash ? { hash } : {}),
+          ...(Number.isFinite(bytes) ? { bytes } : {}),
+        },
+      },
+    ];
+  }
   // The SDK writes this marker into the jsonl whenever a turn is interrupted
   // ("… for tool use" when the abort landed on a pending tool call).
   // Interrupt-and-redirect is the default send-while-busy now, so this would
