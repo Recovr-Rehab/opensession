@@ -48,6 +48,13 @@ function slashContextAt(value: string, caret: number): { start: number; query: s
   return { start: 0, query };
 }
 
+function sameTrigger(a: TriggerContext | null, b: TriggerContext | null): boolean {
+  if (!a || !b) return a === b;
+  return a.start === b.start && a.query === b.query && a.kind === b.kind;
+}
+
+const NO_SUGGESTIONS: FileMention[] = [];
+
 interface Options {
   value: string;
   /** Return a remapped caret when the host projects a different visible value. */
@@ -126,6 +133,15 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, sk
     }
   }, [value]);
 
+  // Every state write here keeps the previous value when nothing moved. sync()
+  // runs several times per keystroke by design (the value effect below, plus
+  // each caller's keyup/click), and a fresh object or a fresh empty array would
+  // make each of those a real state change, so a host as large as the
+  // new-session palette re-rendered three extra times per character typed.
+  function clearSuggestions() {
+    setSuggestions((prev) => (prev.length ? NO_SUGGESTIONS : prev));
+  }
+
   function sync() {
     if (!mentionFetch && !skillsFetch) return;
     const el = textareaRef.current;
@@ -138,8 +154,8 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, sk
       : at
         ? { ...at, kind: "file" }
         : null;
-    setMention(ctx);
-    if (!ctx) setSuggestions([]);
+    setMention((prev) => (sameTrigger(prev, ctx) ? prev : ctx));
+    if (!ctx) clearSuggestions();
   }
 
   // Controlled textarea updates are not guaranteed to commit before a caller's
@@ -154,12 +170,12 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, sk
   useEffect(() => {
     const fetcher = mention?.kind === "skill" ? skillsFetchRef.current : mentionFetchRef.current;
     if (!mention || !fetcher) {
-      setSuggestions([]);
+      clearSuggestions();
       return;
     }
     const seq = ++fetchSeq.current;
     // Never let Enter select rows belonging to the previous query.
-    setSuggestions([]);
+    clearSuggestions();
     void fetcher(mention.query)
       .then((files) => {
         if (seq === fetchSeq.current) {
@@ -168,7 +184,7 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, sk
         }
       })
       .catch(() => {
-        if (seq === fetchSeq.current) setSuggestions([]);
+        if (seq === fetchSeq.current) clearSuggestions();
       });
   }, [mention?.query, mention?.start, mention?.kind]);
 

@@ -14,7 +14,11 @@ import { useFileMentions } from "./useFileMentions";
 import { peopleMentionMatches } from "../lib/people";
 import { NO_REPO } from "../lib/session-repo";
 import { insertPastedSessionId } from "../lib/session-url";
-import { composerHighlightHtml, paintPillHover } from "../lib/composer-highlight";
+import {
+  COMPOSER_HIGHLIGHT_MAX_CHARS,
+  composerHighlightHtml,
+  paintPillHover,
+} from "../lib/composer-highlight";
 import { composerPillSpacing } from "../lib/composer-classes";
 import { useSessionNameProjection } from "../hooks/useSessionNameProjection";
 import {
@@ -635,7 +639,12 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   // text is not what will be sent, so it is the one thing that has to say so.
   const hlRef = useRef<HTMLDivElement>(null);
   const hoveredPill = useRef<HTMLElement | null>(null);
-  const sessionPill = sessionNames.sessions.length > 0;
+  // Same cap the session composer's mirror takes: this one is rebuilt and
+  // re-parsed on every keystroke too, so past that length the pill costs more
+  // than it is worth and the plain field takes over.
+  const sessionPill =
+    sessionNames.sessions.length > 0 &&
+    sessionNames.displayText.length <= COMPOSER_HIGHLIGHT_MAX_CHARS;
   const sessionHighlightHtml = sessionPill
     ? composerHighlightHtml(sessionNames.displayText, [], sessionNames.sessions)
     : "";
@@ -667,17 +676,10 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     promptRef.current?.focus();
   }, [inline, focusSeq, isPhone]);
 
-  // Auto-grow the prompt so a long draft isn't crammed into the resting height.
-  // CSS min-height/max-height clamp the field, so it rests tall, grows with the
-  // text, and only starts scrolling once it hits the cap.
-  useEffect(() => {
-    const el = promptRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-    // The displayed text, not the draft: a session named while this sits open
-    // swaps an id for a title and can change how many lines it takes.
-  }, [sessionNames.displayText]);
+  // (The prompt's auto-grow lives in the layout effect further down, next to
+  // the scroll-fade it feeds. A second copy of it here ran the same
+  // write-measure-write against the committed DOM after paint, so every
+  // keystroke measured the field twice and forced two layouts instead of one.)
 
   // Keep the draft store in sync so a dismissed palette can restore the work.
   useEffect(() => {
@@ -1185,8 +1187,10 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
             onChange={(e) => {
               // A token undo/redo is replayed against canonical state and the
               // caret is already placed, so nothing else is owed here.
-              if (sessionNames.handleChange(e)) return;
-              queueMicrotask(mentions.sync);
+              // The picker re-syncs from the committed value in its own effect,
+              // which is both later and more reliable than a microtask queued
+              // from here (see useFileMentions).
+              sessionNames.handleChange(e);
             }}
             onCopy={sessionNames.handleCopy}
             onCut={sessionNames.handleCut}

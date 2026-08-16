@@ -275,6 +275,19 @@ export function composerHighlightHtml(
 	return out + "​";
 }
 
+/** The frame each caller's hit test is waiting on, plus the point to run it
+ *  with. Keyed by the caller's `hovered` ref, which is per composer. */
+const pendingHover = new WeakMap<
+	object,
+	{
+		frame: number;
+		mirror: HTMLElement;
+		field: HTMLTextAreaElement;
+		x: number;
+		y: number;
+	}
+>();
+
 /**
  * A pill that can be pressed has to look it, and the field on top owns the
  * cursor, so hover is hit-tested against the mirror's own spans and painted
@@ -284,6 +297,13 @@ export function composerHighlightHtml(
  * `hovered` carries the span between calls; it belongs to the caller because
  * the mirror's innerHTML is rewritten on every keystroke, which leaves the
  * previous span dangling.
+ *
+ * The hit test reads every pill's rects and then writes an attribute and the
+ * field's cursor, so running it per `mousemove` forces a layout per event.
+ * Coalescing to one frame keeps it to one: the pointer only has one position
+ * per frame, and nothing here is painted before the frame anyway. The pending
+ * point is parked on the caller's own `hovered` ref so two composers on one
+ * page schedule independently.
  */
 export function paintPillHover(
 	mirror: HTMLElement | null,
@@ -293,6 +313,29 @@ export function paintPillHover(
 	hovered: { current: HTMLElement | null },
 ): void {
 	if (!mirror || !field) return;
+	const queued = pendingHover.get(hovered);
+	if (queued) {
+		queued.mirror = mirror;
+		queued.field = field;
+		queued.x = x;
+		queued.y = y;
+		return;
+	}
+	const next = { frame: 0, mirror, field, x, y };
+	next.frame = requestAnimationFrame(() => {
+		pendingHover.delete(hovered);
+		hitTestPillHover(next.mirror, next.field, next.x, next.y, hovered);
+	});
+	pendingHover.set(hovered, next);
+}
+
+function hitTestPillHover(
+	mirror: HTMLElement,
+	field: HTMLTextAreaElement,
+	x: number,
+	y: number,
+	hovered: { current: HTMLElement | null },
+): void {
 	let hit: HTMLElement | null = null;
 	for (const span of mirror.querySelectorAll<HTMLElement>(
 		".cmp-mention, .cmp-session",
@@ -310,6 +353,16 @@ export function paintPillHover(
 	field.style.cursor = hit ? "pointer" : "";
 }
 
+/**
+ * Where the mirror stops being worth it. Its whole innerHTML is rebuilt and
+ * re-parsed on every keystroke, and that cost is linear in the draft: measured
+ * in the app's own Chrome, the parse plus layout is 1.3ms at 1k characters,
+ * 3.6ms at 8k, 11.5ms at 32k and 22.5ms at 64k, against an 8.3ms frame. So a
+ * draft past this length keeps the plain opaque textarea instead: no tint and
+ * no pills, but a field that types at frame rate.
+ */
+export const COMPOSER_HIGHLIGHT_MAX_CHARS = 8000;
+
 /** Only mount the mirror when the draft has something to paint — code markup,
  * a finished mention, or a session id. Plain drafts keep the stock opaque
  * textarea (zero desync risk). */
@@ -318,6 +371,7 @@ export function needsComposerHighlight(
 	people: Person[] = [],
 	sessions: SessionRange[] = composerSessionRanges(text),
 ): boolean {
+	if (text.length > COMPOSER_HIGHLIGHT_MAX_CHARS) return false;
 	return (
 		text.includes("`") ||
 		composerMentionRanges(text, people).length > 0 ||

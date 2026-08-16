@@ -220,6 +220,14 @@ export function SessionTabs({
 	const justDragged = useRef(false);
 	const dragPoint = useRef<{ x: number; y: number } | null>(null);
 	const stopPointerTracking = useRef<(() => void) | null>(null);
+	// The frame the split preview is waiting on, so both ends of the drag can
+	// drop it: a queued preview must never land after the drag has cleared it.
+	const splitDragFrame = useRef(0);
+	function cancelSplitDragFrame() {
+		if (!splitDragFrame.current) return;
+		cancelAnimationFrame(splitDragFrame.current);
+		splitDragFrame.current = 0;
+	}
 	// A lone tab has nowhere to go WITHIN its own bar — but in a split it can
 	// still be dragged into the other column, so the count only gates a single
 	// unsplit strip.
@@ -286,11 +294,25 @@ export function SessionTabs({
 	function trackPointer(id: string, event: React.PointerEvent) {
 		stopPointerTracking.current?.();
 		dragPoint.current = { x: event.clientX, y: event.clientY };
+		// The ref follows every pointer event, because the drop reads it
+		// synchronously. The PREVIEW only needs the position the next frame is
+		// drawn with, and it costs a parent state update, so it takes one per
+		// frame and only when the point has actually moved.
+		let sent: { x: number; y: number } | null = null;
+		const flush = () => {
+			splitDragFrame.current = 0;
+			const point = dragPoint.current;
+			if (!point || (sent && sent.x === point.x && sent.y === point.y)) return;
+			sent = point;
+			onSplitDrag?.(id, point);
+		};
 		const move = (pointer: PointerEvent) => {
 			dragPoint.current = { x: pointer.clientX, y: pointer.clientY };
-			onSplitDrag?.(id, dragPoint.current);
+			if (!splitDragFrame.current)
+				splitDragFrame.current = requestAnimationFrame(flush);
 		};
 		const finish = () => {
+			cancelSplitDragFrame();
 			window.removeEventListener("pointermove", move);
 			window.removeEventListener("pointerup", up);
 			window.removeEventListener("pointercancel", cancel);
@@ -420,6 +442,7 @@ export function SessionTabs({
 			},
 			onDragStart: () => beginDrag(key),
 			onDragEnd: () => {
+				cancelSplitDragFrame();
 				onSplitDrag?.(null);
 				const point = dragPoint.current;
 				dragPoint.current = null;

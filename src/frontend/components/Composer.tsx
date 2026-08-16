@@ -757,22 +757,41 @@ export function Composer({
   // momentum scroll and reads as a flicker (or, if a scroll event coalesces,
   // never updates at all). They must track scrollTop exactly, so we set them in
   // the same handler that observes the scroll.
+  //
+  // Both are written from what was last applied: this runs on every scroll
+  // frame and every keystroke, and re-writing the same mask re-invalidates
+  // style for nothing. Every measurement is taken BEFORE the first write for
+  // the same reason: reading scrollTop after touching the mask forces the
+  // layout back out again mid-scroll.
   const FADE_PX = 26;
-  function updateScrollEdges(el: HTMLTextAreaElement) {
+  const appliedEdges = useRef<{
+    wrap: HTMLElement;
+    mask: string;
+    under: boolean;
+  } | null>(null);
+  /** Returns the scrollTop it measured, so a caller that has to write it
+   *  somewhere else (the mirror) doesn't read the field a second time. */
+  function updateScrollEdges(el: HTMLTextAreaElement): number {
     const wrap = el.parentElement; // .composer-input-wrap (masks textarea + hl mirror as one)
-    if (!wrap) return;
+    if (!wrap) return el.scrollTop;
     // Not `> 0`: scrollTop is fractional at fractional zoom, and an overscroll
     // bounce drives it past both ends.
-    const top = el.scrollTop > 1;
+    const scrollTop = el.scrollTop;
+    const top = scrollTop > 1;
+    const under = scrollTop + el.clientHeight < el.scrollHeight - 1;
     const mask = top
       ? `linear-gradient(to bottom, transparent 0, #000 ${FADE_PX}px, #000 100%)`
       : "";
-    wrap.style.setProperty("-webkit-mask-image", mask);
-    wrap.style.setProperty("mask-image", mask);
-    toolbarRef.current?.toggleAttribute(
-      "data-scroll-under",
-      el.scrollTop + el.clientHeight < el.scrollHeight - 1,
-    );
+    const applied =
+      appliedEdges.current?.wrap === wrap ? appliedEdges.current : null;
+    if (!applied || applied.mask !== mask) {
+      wrap.style.setProperty("-webkit-mask-image", mask);
+      wrap.style.setProperty("mask-image", mask);
+    }
+    if (!applied || applied.under !== under)
+      toolbarRef.current?.toggleAttribute("data-scroll-under", under);
+    appliedEdges.current = { wrap, mask, under };
+    return scrollTop;
   }
 
   // Auto-grow to fit the draft. Only a NON-EMPTY draft is measured; an empty
@@ -787,12 +806,20 @@ export function Composer({
   // (seen on the iOS PWA, never reproduced in Chrome): a `scrollHeight` read
   // that doesn't reflect the just-cleared value gets written straight back onto
   // the element. With nothing measured there's nothing stale to write.
+  //
+  // The reset before the measure is what lets the field shrink, so it can't be
+  // skipped while a height is applied. Everything around it is written from
+  // what was last applied, so a draft that isn't changing the field's height
+  // stops re-writing it.
+  const appliedHeight = useRef("");
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
-    el.style.height = "";
+    if (appliedHeight.current) el.style.height = "";
     // min-/max-height clamp this, so tall drafts scroll internally at the cap.
-    if (displayText) el.style.height = `${el.scrollHeight}px`;
+    const height = displayText ? `${el.scrollHeight}px` : "";
+    if (height) el.style.height = height;
+    appliedHeight.current = height;
     // Height (and thus clip state) just changed — re-evaluate both edges.
     updateScrollEdges(el);
   }, [displayText, isPhone, minimized]);
@@ -1224,9 +1251,10 @@ export function Composer({
             onChange={(e) => {
               // A token undo/redo is replayed against canonical state and the
               // caret is already placed, so nothing else is owed here.
-              if (sessionNames.handleChange(e)) return;
-              // Caret has moved to the new value; re-evaluate after React commits.
-              queueMicrotask(mentions.sync);
+              // The mention picker re-syncs from the committed value in its own
+              // effect, which is both later and more reliable than a microtask
+              // queued from here (see useFileMentions).
+              sessionNames.handleChange(e);
             }}
             onKeyDown={handleKeyDown}
             onKeyUp={mentions.sync}
@@ -1237,9 +1265,11 @@ export function Composer({
             onMouseMove={(e) => updatePillHover(e.clientX, e.clientY)}
             onMouseLeave={() => updatePillHover(-1, -1)}
             onScroll={(e) => {
-              if (hlRef.current)
-                hlRef.current.scrollTop = e.currentTarget.scrollTop;
-              updateScrollEdges(e.currentTarget);
+              // Measure first, then write: the mirror used to be scrolled
+              // before the edges were read, which forced the layout back out
+              // on every scroll frame.
+              const scrollTop = updateScrollEdges(e.currentTarget);
+              if (hlRef.current) hlRef.current.scrollTop = scrollTop;
             }}
             onFocus={() => setFocused(true)}
             onBlur={() => {
