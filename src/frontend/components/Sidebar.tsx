@@ -426,6 +426,29 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	);
 	const laneDropHoverRef = useRef<LaneDropTarget | null>(null);
 
+	// The lane rects, in DOM order, taken once per drag. Motion writes the
+	// dragged row's transform on every pointer frame, so measuring the 40-odd
+	// targets inside the move handler forced a fresh layout on each of them.
+	// Nothing under the pointer moves during a drag: the lanes materialize
+	// before it starts, and a hover only repaints (ring + fill).
+	type LaneDropRect = LaneDropTarget & { repo: string; rect: DOMRect };
+	const laneDropRectsRef = useRef<LaneDropRect[] | null>(null);
+	function measureLaneDropTargets() {
+		const targets =
+			sidebarScrollRef.current?.querySelectorAll<HTMLElement>(
+				"[data-lane-drop]",
+			) ?? [];
+		const rects: LaneDropRect[] = [];
+		for (const el of targets)
+			rects.push({
+				gkey: el.dataset.laneDrop!,
+				lane: el.dataset.laneStatus as MineStatus,
+				repo: el.dataset.laneRepo || "",
+				rect: el.getBoundingClientRect(),
+			});
+		laneDropRectsRef.current = rects;
+	}
+
 	// Hit-test the pointer against the lane drop targets below the Pinned band
 	// (they carry data-lane-* attributes while a drag is live). Geometric rect
 	// checks instead of elementFromPoint — the dragged row itself rides under
@@ -434,12 +457,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		const meta = pinDragMetaRef.current;
 		let next: LaneDropTarget | null = null;
 		if (meta && meta.sessions.length > 0) {
-			const targets =
-				sidebarScrollRef.current?.querySelectorAll<HTMLElement>(
-					"[data-lane-drop]",
-				) ?? [];
-			for (const el of targets) {
-				const r = el.getBoundingClientRect();
+			// Null only for a move that beat the snapshot effect below.
+			if (!laneDropRectsRef.current) measureLaneDropTargets();
+			for (const target of laneDropRectsRef.current ?? []) {
+				const r = target.rect;
 				const inside =
 					clientX >= r.left &&
 					clientX <= r.right &&
@@ -448,12 +469,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				if (!inside) continue;
 				// Per-repo lanes only take rows of their own repo; the global
 				// lanes (no data-lane-repo) take anything.
-				const laneRepo = el.dataset.laneRepo || "";
-				if (laneRepo && laneRepo !== meta.repo) continue;
-				next = {
-					gkey: el.dataset.laneDrop!,
-					lane: el.dataset.laneStatus as MineStatus,
-				};
+				if (target.repo && target.repo !== meta.repo) continue;
+				next = { gkey: target.gkey, lane: target.lane };
 				break;
 			}
 		}
@@ -462,6 +479,34 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			setLaneDropHover(next);
 		}
 	}
+	// The targets exist only once pinDragMeta has rendered them (empty lanes
+	// materialize with it), so the snapshot waits for that commit. Scrolling or
+	// resizing the rail underneath a live drag is what can move them.
+	useEffect(() => {
+		if (!pinDragMeta || pinDragMeta.sessions.length === 0) {
+			laneDropRectsRef.current = null;
+			return;
+		}
+		measureLaneDropTargets();
+		const root = sidebarScrollRef.current;
+		// Drop the snapshot rather than re-take it here: the next move re-takes
+		// it, so a burst of scrolling or row updates costs one measurement
+		// instead of one each. A poll landing mid-drag can move a row between
+		// lanes, which is why the rows are watched at all.
+		const invalidate = () => {
+			laneDropRectsRef.current = null;
+		};
+		root?.addEventListener("scroll", invalidate, { passive: true });
+		window.addEventListener("resize", invalidate);
+		const rowObserver = new MutationObserver(invalidate);
+		if (root) rowObserver.observe(root, { childList: true, subtree: true });
+		return () => {
+			root?.removeEventListener("scroll", invalidate);
+			window.removeEventListener("resize", invalidate);
+			rowObserver.disconnect();
+			laneDropRectsRef.current = null;
+		};
+	}, [pinDragMeta]);
 	const [recents, setRecents] = useState<string[]>(getRecents);
 	// Per-session last-read marks, driving the unread dot. Kept in sync via the
 	// same event the viewer fires when it marks a session read.
@@ -490,20 +535,53 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		// this listener never has to know which family it belongs to (band,
 		// lane, repo, status) — or survive the class names being restyled.
 		const selector = "[data-sticky-head]";
+		// What a header's own styles say: whether it pins at all, and the offset
+		// it pins at. A scroll frame cannot change either, and reading them is a
+		// style recalc per header, so they are cached here and re-read only when
+		// the list, the rail or the density actually changes. `stuck` is the
+		// class as last applied, so an unchanged header costs no write.
+		type StickyHead = {
+			el: HTMLElement;
+			parent: HTMLElement;
+			sticky: boolean;
+			top: number;
+			stuck: boolean;
+		};
+		let heads: StickyHead[] = [];
+		let stale = true;
+		const rescan = () => {
+			stale = false;
+			const applied = new Map(heads.map((h) => [h.el, h.stuck]));
+			heads = [];
+			for (const el of root.querySelectorAll<HTMLElement>(selector)) {
+				const style = getComputedStyle(el);
+				const parent = el.parentElement;
+				heads.push({
+					el,
+					parent: parent ?? el,
+					sticky: style.position === "sticky" && !!parent,
+					top: Number.parseFloat(style.top) || 0,
+					stuck: applied.get(el) ?? el.classList.contains("is-stuck"),
+				});
+			}
+		};
 
 		const update = () => {
 			frame = 0;
+			if (stale) rescan();
+			// One read pass, then one write pass. A toggle between two rect
+			// reads dirties layout for every header still to be measured, which
+			// is what made a scroll frame over ~80 headers cost as much as it
+			// did.
 			const rootTop = root.getBoundingClientRect().top;
-			root.querySelectorAll<HTMLElement>(selector).forEach((header) => {
-				const style = getComputedStyle(header);
-				const parent = header.parentElement;
-				if (style.position !== "sticky" || !parent) {
-					header.classList.remove("is-stuck");
-					return;
+			const next: boolean[] = [];
+			for (const head of heads) {
+				if (!head.sticky) {
+					next.push(false);
+					continue;
 				}
-				const stickyTop = Number.parseFloat(style.top) || 0;
-				const rect = header.getBoundingClientRect();
-				const pinned = rect.top <= rootTop + stickyTop + 0.5;
+				const rect = head.el.getBoundingClientRect();
+				const pinned = rect.top <= rootTop + head.top + 0.5;
 				// Pin-line position alone also matches a header that naturally
 				// RESTS at its sticky offset (the first section at scrollTop 0 —
 				// the solid-pill-while-unscrolled bug), so additionally require
@@ -513,28 +591,48 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				// try offsetTop for this: Chromium reports the displaced sticky
 				// position there, not static layout.)
 				const displaced =
-					rect.top - parent.getBoundingClientRect().top > 1.5;
-				const stuck = pinned && displaced;
-				header.classList.toggle("is-stuck", stuck);
-			});
+					rect.top - head.parent.getBoundingClientRect().top > 1.5;
+				next.push(pinned && displaced);
+			}
+			for (let i = 0; i < heads.length; i++) {
+				const head = heads[i]!;
+				const stuck = next[i]!;
+				if (head.stuck === stuck) continue;
+				head.stuck = stuck;
+				head.el.classList.toggle("is-stuck", stuck);
+			}
 		};
 		const schedule = () => {
 			if (!frame) frame = requestAnimationFrame(update);
 		};
+		// Mark rather than re-read: a burst of row updates in one frame then
+		// costs one scan at rAF time instead of one per mutation record.
+		const invalidate = () => {
+			stale = true;
+			schedule();
+		};
 
 		update();
 		root.addEventListener("scroll", schedule, { passive: true });
-		window.addEventListener("resize", schedule);
-		const resizeObserver = new ResizeObserver(schedule);
+		window.addEventListener("resize", invalidate);
+		const resizeObserver = new ResizeObserver(invalidate);
 		resizeObserver.observe(root);
-		const mutationObserver = new MutationObserver(schedule);
+		const mutationObserver = new MutationObserver(invalidate);
 		mutationObserver.observe(root, { childList: true, subtree: true });
+		// Density retunes the offsets these headers pin at (--sidebar-band-slot)
+		// without touching the list, so the cache has to be re-read for it too.
+		const densityObserver = new MutationObserver(invalidate);
+		densityObserver.observe(root, {
+			attributes: true,
+			attributeFilter: ["data-density"],
+		});
 
 		return () => {
 			root.removeEventListener("scroll", schedule);
-			window.removeEventListener("resize", schedule);
+			window.removeEventListener("resize", invalidate);
 			resizeObserver.disconnect();
 			mutationObserver.disconnect();
+			densityObserver.disconnect();
 			if (frame) cancelAnimationFrame(frame);
 		};
 	}, []);
