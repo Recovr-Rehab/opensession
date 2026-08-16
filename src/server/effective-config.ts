@@ -368,6 +368,11 @@ export async function buildSessionEffectiveConfig(
     unattendedKind: row(
       isUnattendedKind(baseJournalKind(journalKind)),
       "opencode-policy.ts isUnattendedKind",
+      {
+        note:
+          "the run KIND only. An interactive resume of an automation-owned session is " +
+          "kind \"prompt\" yet runs under the unattended tool policy — see tools.unattended",
+      },
     ),
     allowed: row(gateReason === null, "opencode-policy.ts opencodeGateReason (deny by default)"),
     reason: row(gateReason, "opencode-policy.ts opencodeGateReason"),
