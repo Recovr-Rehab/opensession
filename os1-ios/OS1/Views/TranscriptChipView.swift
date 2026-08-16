@@ -80,10 +80,28 @@ final class TranscriptChipViewProvider: NSTextAttachmentViewProvider {
     /// Where the chip sits on the line, and how big it is.
     ///
     /// Both answers need the surrounding font, which only arrives here — so
-    /// this is also where the view learns what size to draw at. The vertical
-    /// offset centres the pill on the x-height band the eye reads the line by,
-    /// the same correction the web makes with `vertical-align` on a chip whose
-    /// baseline would otherwise come from its glyph box.
+    /// this is also where the view learns what size to draw at.
+    ///
+    /// The chip hangs from its own LABEL's baseline, so that the words inside
+    /// the pill and the words beside it are set on one line — the only
+    /// alignment the eye reads a chip inside a sentence by, and the one the
+    /// web chips get from a zero-width text run at the head of the pill.
+    /// Centring the pill instead, on the line's x-height band as this did,
+    /// left every label a measured 5pt below the sentence it sat in: the
+    /// label is centred in the pill against its full line box, and a line box
+    /// carries descender room the ink never fills, so centring boxes cannot
+    /// line up ink.
+    ///
+    /// Two terms, and the second is not a fudge. `baselineFromBottom` is
+    /// where the label's baseline sits inside the pill. `font.descender` is
+    /// there because the rect this returns is NOT measured from the baseline,
+    /// whatever the coordinate space is called: the layout honours a change
+    /// in `y` one for one, but from an origin one descender below the
+    /// baseline. Measured on the simulator against a line of text with no
+    /// descenders in it — without the term the label lands 4.3pt low against
+    /// a 4.1pt descender, with it the two baselines agree to 0.0pt at every
+    /// pill on the screen — and no other quantity the layout offers is near
+    /// that number (the line fragment's own bottom is 6.9pt down).
     override func attachmentBounds(
         for attributes: [NSAttributedString.Key: Any],
         location: any NSTextLocation,
@@ -104,7 +122,7 @@ final class TranscriptChipViewProvider: NSTextAttachmentViewProvider {
         let size = chipView.prepare(font: font, maxWidth: available)
         return CGRect(
             x: 0,
-            y: (font.xHeight - size.height) / 2,
+            y: -chipView.baselineFromBottom - font.descender,
             width: size.width,
             height: size.height
         )
@@ -185,6 +203,11 @@ final class TranscriptChipView: ChipViewBase {
     private var font: ChipFont = .systemFont(ofSize: ChipMetrics.fallbackFontSize)
     private var maxWidth: CGFloat = .greatestFiniteMagnitude
     private var measured: CGSize = .zero
+    /// Where the label's top edge sits inside the pill. Measured once per
+    /// sizing pass because the sizing and the drawing have to agree about it:
+    /// it is what puts the baseline where the attachment promised the layout
+    /// it would be.
+    private var labelTop: CGFloat = 0
 
     init(chip: TranscriptChip.Rendered) {
         self.chip = chip
@@ -246,12 +269,20 @@ final class TranscriptChipView: ChipViewBase {
 
     override var intrinsicContentSize: CGSize { measured }
 
+    /// The label's baseline, measured up from the chip's bottom edge. This is
+    /// what the attachment hangs the pill from, so that the line's baseline
+    /// and the label's are the same line — see `attachmentBounds`.
+    var baselineFromBottom: CGFloat {
+        max(measured.height - labelTop - font.ascender, 0)
+    }
+
     private func measure() -> CGSize {
         let iconSide = (font.pointSize * ChipMetrics.iconScale).rounded()
         let chrome = ChipMetrics.leading + iconSide + ChipMetrics.iconGap + ChipMetrics.trailing
         let text = label.size()
         let height = (max(text.height, iconSide) + ChipMetrics.verticalPadding * 2).rounded(.up)
         let width = min((chrome + text.width).rounded(.up), maxWidth)
+        labelTop = ((height - text.height) / 2).rounded()
         return CGSize(width: width, height: height)
     }
 
@@ -282,9 +313,12 @@ final class TranscriptChipView: ChipViewBase {
         )
         icon(side: iconSide, color: palette.icon)?.draw(in: iconRect)
 
+        // `labelTop`, not a fresh calculation against these bounds: the
+        // attachment already told the layout where this label's baseline
+        // would fall, and drawing it anywhere else makes that a lie.
         let textOrigin = CGPoint(
             x: iconRect.maxX + ChipMetrics.iconGap,
-            y: ((bounds.height - label.size().height) / 2).rounded()
+            y: labelTop
         )
         let textWidth = max(bounds.width - textOrigin.x - ChipMetrics.trailing, 0)
         label.draw(
