@@ -60,7 +60,6 @@ export class PromptOutbox {
 	private listeners = new Set<Listener>();
 	private observers = new Set<DeliveryObserver>();
 	private timer: number | undefined;
-	private sendingSessions = new Set<string>();
 	private readonly key: string;
 	private readonly onStorage = (event: StorageEvent) => {
 		if (event.key === this.key) {
@@ -168,53 +167,52 @@ export class PromptOutbox {
 	async flush(): Promise<void> {
 		this.reload(false);
 		const now = this.now();
-		const sessions = [...new Set(this.items.filter((item) => item.state === "pending" && item.nextAttemptAt <= now).map((item) => item.sessionId))];
+		const sendingSessions = new Set(
+			this.items
+				.filter((item) => item.state === "sending")
+				.map((item) => item.sessionId),
+		);
+		const sessions = [...new Set(this.items.filter((item) => item.state === "pending" && item.nextAttemptAt <= now && !sendingSessions.has(item.sessionId)).map((item) => item.sessionId))];
 		await Promise.all(sessions.map((sessionId) => this.flushSession(sessionId)));
 		this.schedule();
 	}
 
 	private async flushSession(sessionId: string): Promise<void> {
-		if (this.sendingSessions.has(sessionId)) return;
-		this.sendingSessions.add(sessionId);
-		try {
-			while (true) {
-				const item = this.items.find((candidate) => candidate.sessionId === sessionId && candidate.state === "pending" && candidate.nextAttemptAt <= this.now());
-				if (!item) return;
-				try {
-					this.replace(item.clientId, { ...item, state: "sending" });
-				} catch {
-					// Storage is full. Leave the item pending rather than rejecting the
-					// flush; a later attempt runs once something has been discarded.
-					return;
-				}
-				try {
-					const result = await (this.opts.deliver ?? ((id, body) => deliverSessionPrompt(id, body)))(sessionId, this.body(item));
-					this.items = this.items.filter((candidate) => candidate.clientId !== item.clientId);
-					this.persist();
-					this.emit();
-					for (const observer of this.observers) observer(copy(item), result);
-				} catch (error) {
-					const attempts = item.attempts + 1;
-					const message = error instanceof Error ? error.message : "Prompt delivery failed";
-					const failed = !isRetryable(error);
-					try {
-						this.replace(item.clientId, {
-							...item,
-							attempts,
-							state: failed ? "failed" : "pending",
-							error: message,
-							nextAttemptAt: failed ? Number.POSITIVE_INFINITY : this.now() + retryDelay(attempts),
-						});
-					} catch {
-						// A full store can't record the failure either. `replace` rolled the
-						// item back to pending, which is the safe reading of an unknown
-						// outcome: the stable client id makes a replay idempotent.
-					}
-					return; // Preserve ordering within this session after a failed head item.
-				}
+		while (true) {
+			const item = this.items.find((candidate) => candidate.sessionId === sessionId && candidate.state === "pending" && candidate.nextAttemptAt <= this.now());
+			if (!item) return;
+			try {
+				this.replace(item.clientId, { ...item, state: "sending" });
+			} catch {
+				// Storage is full. Leave the item pending rather than rejecting the
+				// flush; a later attempt runs once something has been discarded.
+				return;
 			}
-		} finally {
-			this.sendingSessions.delete(sessionId);
+			try {
+				const result = await (this.opts.deliver ?? ((id, body) => deliverSessionPrompt(id, body)))(sessionId, this.body(item));
+				this.items = this.items.filter((candidate) => candidate.clientId !== item.clientId);
+				this.persist();
+				this.emit();
+				for (const observer of this.observers) observer(copy(item), result);
+			} catch (error) {
+				const attempts = item.attempts + 1;
+				const message = error instanceof Error ? error.message : "Prompt delivery failed";
+				const failed = !isRetryable(error);
+				try {
+					this.replace(item.clientId, {
+						...item,
+						attempts,
+						state: failed ? "failed" : "pending",
+						error: message,
+						nextAttemptAt: failed ? Number.POSITIVE_INFINITY : this.now() + retryDelay(attempts),
+					});
+				} catch {
+					// A full store can't record the failure either. `replace` rolled the
+					// item back to pending, which is the safe reading of an unknown
+					// outcome: the stable client id makes a replay idempotent.
+				}
+				return; // Preserve ordering within this session after a failed head item.
+			}
 		}
 	}
 
@@ -251,14 +249,23 @@ export class PromptOutbox {
 		try {
 			const parsed = JSON.parse(raw) as StoredOutbox;
 			if (parsed.version !== 1 || !Array.isArray(parsed.items)) return;
+			const sending = new Set(
+				this.items
+					.filter((item) => item.state === "sending")
+					.map((item) => item.clientId),
+			);
 			let resumed = false;
 			const now = this.now();
 			this.items = parsed.items
 				.filter(isItem)
 				.map((item) => {
+					// The item state is the in-tab send lock. Keep it across reloads
+					// triggered by another enqueue or a cross-tab storage event.
+					if (sending.has(item.clientId))
+						return { ...item, state: "sending" as const };
 					// A tab can close after recording `sending` but before receiving the
-					// response. Treat that process-local state as pending on every load;
-					// the stable client id makes a concurrent/replayed request safe.
+					// response. A different tab has no local sending owner, so it resumes
+					// the row as pending; the stable client id makes a replay safe.
 					if (item.state !== "sending") return item;
 					resumed = true;
 					return { ...item, state: "pending" as const, nextAttemptAt: now };
