@@ -97,6 +97,31 @@
       document.documentElement.dataset.platform = /win/i.test(platform)
         ? "windows" : /mac/i.test(platform) ? "mac" : "linux";
 
+      // iOS 26 can expose a standalone viewport shorter than the physical
+      // screen by exactly the status-bar inset. Viewport units inherit that
+      // bad height. Forcing the document-flow roots to screen.height makes
+      // WebKit recalculate the standalone window to the full device surface.
+      var iphoneStandalone = /iPhone|iPod/.test(navigator.userAgent)
+        && (matchMedia("(display-mode: standalone)").matches
+          || navigator.standalone === true);
+      if (iphoneStandalone) {
+        var fillStandaloneScreen = function () {
+          var height = window.screen.height;
+          if (!height) return;
+          document.documentElement.style.height = height + "px";
+          if (document.body) document.body.style.height = height + "px";
+        };
+        var resyncStandaloneScreen = function () {
+          fillStandaloneScreen();
+          requestAnimationFrame(fillStandaloneScreen);
+          setTimeout(fillStandaloneScreen, 250);
+        };
+        fillStandaloneScreen();
+        document.addEventListener("DOMContentLoaded", fillStandaloneScreen, { once: true });
+        window.addEventListener("resize", fillStandaloneScreen);
+        window.addEventListener("orientationchange", resyncStandaloneScreen);
+      }
+
       // Only updated desktop-shell builds provide a native visual-effect
       // backdrop. The capability check keeps the remotely served UI opaque in
       // older shells, which expose `desktop` but still use an opaque window.

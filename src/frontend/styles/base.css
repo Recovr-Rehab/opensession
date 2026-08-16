@@ -946,10 +946,9 @@ body {
 }
 
 #root {
-	/* The fixed body already is the viewport. Fill that parent instead of
-	   measuring the dynamic viewport again: Chrome on Android can report 100dvh
-	   above the navigation inset while the fixed containing block still reaches
-	   the device edge, leaving a strip of body background below the app. */
+	/* Fill the viewport-locked body instead of measuring another viewport unit.
+	   In standalone iPhone mode index.html corrects WebKit's short viewport by
+	   setting the document-flow roots to screen.height before the app mounts. */
 	height: 100%;
 	overflow: hidden;
 }

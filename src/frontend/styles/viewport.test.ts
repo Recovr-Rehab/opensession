@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 const CSS = new URL("./base.css", import.meta.url);
+const HTML = new URL("../index.html", import.meta.url);
 
 describe("app viewport", () => {
 	test("the app fills its viewport-locked body without remeasuring viewport units", async () => {
@@ -10,5 +11,14 @@ describe("app viewport", () => {
 		expect(css).toMatch(/body\s*\{\s*position:\s*fixed;\s*inset:\s*0;/);
 		expect(root).toMatch(/height:\s*100%/);
 		expect(root).not.toMatch(/height:\s*100(?:d|l|s)?vh/);
+	});
+
+	test("standalone iPhones expand both document roots to the physical screen", async () => {
+		const html = await Bun.file(HTML).text();
+
+		expect(html).toContain('matchMedia("(display-mode: standalone)").matches');
+		expect(html).toContain("document.documentElement.style.height = height");
+		expect(html).toContain("document.body.style.height = height");
+		expect(html).toContain("window.screen.height");
 	});
 });

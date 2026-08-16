@@ -27,8 +27,10 @@ export function pwaManifest(publicPrefix: string) {
 		start_url: `${publicPrefix}/`,
 		display: "standalone",
 		display_override: ["window-controls-overlay"],
-		background_color: "#0b0809",
-		theme_color: "#0b0809",
+		// Match the current dark page and chrome surfaces. WebKit exposes the
+		// manifest background if its standalone window is briefly letterboxed.
+		background_color: "#1c1c1c",
+		theme_color: "#222222",
 		icons: [
 			{ src: `${publicPrefix}/icon-192.png?v=5`, sizes: "192x192", type: "image/png", purpose: "any" },
 			{ src: `${publicPrefix}/icon.png?v=5`, sizes: "512x512", type: "image/png", purpose: "any" },
