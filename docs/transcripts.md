@@ -91,4 +91,9 @@ serving, not as an alternate store.
 - **Engine boundary**: `src/server/engine/` defines the `EngineAdapter`
   surface (`startTurn` as an event stream, plus steer/cancel/reattach) that
   the transcript pipeline consumes; OpenCode is the production adapter.
+- **Snapshot fixtures**: scripted sessions run through the real pipeline on a
+  fake engine, freezing both the entries written here and the prompt/config
+  the engine received. See [transcript-snapshots.md](transcript-snapshots.md);
+  a change to context fencing, MCP scoping or handoff notes shows up there as
+  a fixture diff.
 - Deleting a session purges its transcript rows and blobs.
