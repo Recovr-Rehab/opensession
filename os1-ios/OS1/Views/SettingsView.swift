@@ -70,6 +70,9 @@ struct SettingsView: View {
                 settingsLink("My accounts", icon: "person.crop.circle") {
                     MyAccountsSettingsView()
                 }
+                settingsLink("Keychain", icon: "key") {
+                    KeychainSettingsView()
+                }
                 settingsLink("Preferences", icon: "slider.horizontal.3") {
                     PreferencesSettingsView()
                 }
@@ -84,21 +87,38 @@ struct SettingsView: View {
                 }
             }
 
+            // Same order as the web's Workspace group: what an instance is set
+            // up with, then what a session runs on, then what it can reach.
+            // Identity, Members and Integrations are not rows of their own here
+            // — they live inside Setup, which is where a phone meets them.
             Section("Workspace") {
+                settingsLink("Setup", icon: "checklist") {
+                    SetupSettingsView()
+                }
+                settingsLink("Repositories", icon: "shippingbox") {
+                    RepositoriesSettingsView()
+                }
                 settingsLink("Models", icon: "square.grid.2x2") {
                     ModelsSettingsView()
+                }
+                settingsLink("Usage", icon: "gauge.with.needle") {
+                    UsageSettingsView()
+                }
+                // Not "cube": Repositories two rows up is a shipping box, and
+                // at 15pt the two solids are the same grey lozenge. The
+                // transparent one also says the thing a sandbox is — a box you
+                // can see into.
+                settingsLink("Sandboxes", icon: "cube.transparent") {
+                    SandboxesSettingsView()
+                }
+                settingsLink("Runners", icon: "desktopcomputer") {
+                    RunnersSettingsView()
                 }
                 settingsLink("Connections", icon: "point.3.connected.trianglepath.dotted") {
                     ConnectionsSettingsView()
                 }
                 settingsLink("Memory", icon: "brain") {
                     MemorySettingsView()
-                }
-                settingsLink("Setup", icon: "checklist") {
-                    SetupSettingsView()
-                }
-                settingsLink("Repositories", icon: "shippingbox") {
-                    RepositoriesSettingsView()
                 }
             }
 
@@ -117,12 +137,14 @@ struct SettingsView: View {
                 }
             }
 
+            // The machinery prepared ahead of a run, and what agents left
+            // running behind one.
             Section("Infrastructure") {
-                settingsLink("Runners", icon: "desktopcomputer") {
-                    RunnersSettingsView()
-                }
-                settingsLink("Prewarming", icon: "flame") {
+                settingsLink("Acceleration", icon: "flame") {
                     PrewarmingSettingsView()
+                }
+                settingsLink("Deploys", icon: "square.stack.3d.up") {
+                    DeploysSettingsView()
                 }
             }
 

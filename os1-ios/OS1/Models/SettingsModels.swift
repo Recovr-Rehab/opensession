@@ -183,6 +183,12 @@ struct ProviderAccount: Codable, Sendable, Identifiable {
     var email: String?
     var plan: String?
     var credentialsPath: String?
+    /// How full the subscription is, and when it frees up. Read on Settings →
+    /// Usage; `nil` from a server that cannot see the account's usage at all.
+    var usage: AccountUsage?
+    /// The token has no usage scope, so there is nothing to meter rather than
+    /// nothing spent. The two look identical without this.
+    var noUsageScope: Bool?
 }
 
 struct ProviderAccountsResponse: Codable, Sendable {

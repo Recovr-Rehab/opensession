@@ -463,6 +463,71 @@ enum SettingsAPI {
         return try await request("/api/audit", query: query)
     }
 
+    // MARK: - Keychain
+
+    static func keychain() async throws -> KeychainResponse {
+        try await request("/api/keychain")
+    }
+
+    static func addKeychainCredential(_ body: [String: Any]) async throws -> KeychainCredentialResponse {
+        try await request("/api/keychain/credentials", method: "POST", body: body)
+    }
+
+    static func deleteKeychainCredential(id: String) async throws -> SettingsOK {
+        try await request("/api/keychain/credentials/\(segment(id))", method: "DELETE")
+    }
+
+    static func revokeKeychainGrant(id: String) async throws -> SettingsOK {
+        try await request("/api/keychain/grants/\(segment(id))", method: "DELETE")
+    }
+
+    // MARK: - Deploys
+
+    static func deploys() async throws -> DeploysResponse {
+        try await request("/api/deploys")
+    }
+
+    /// Named by `name` rather than id: that is what the route resolves, and it
+    /// is what the path a deploy is served at already says.
+    static func setDeployRunning(name: String, running: Bool) async throws -> DeployResponse {
+        try await request(
+            "/api/deploys/\(segment(name))/\(running ? "start" : "stop")",
+            method: "POST"
+        )
+    }
+
+    static func rollbackDeploy(name: String, version: Int) async throws -> DeployResponse {
+        try await request(
+            "/api/deploys/\(segment(name))/rollback",
+            method: "POST",
+            body: ["version": version]
+        )
+    }
+
+    static func deleteDeploy(name: String) async throws -> SettingsOK {
+        try await request("/api/deploys/\(segment(name))", method: "DELETE")
+    }
+
+    // MARK: - Sandboxes
+
+    /// The user is passed explicitly: the personal default is per person, and
+    /// the payload's `defaults.effective` is resolved for whoever is asking.
+    static func sandboxStatus(user: String) async throws -> SandboxSettingsStatus {
+        try await request("/api/sandbox/status", query: user.isEmpty ? [:] : ["user": user])
+    }
+
+    static func setSandboxDefault(
+        scope: String,
+        value: String,
+        user: String
+    ) async throws -> SandboxDefaultsResponse {
+        try await request(
+            "/api/sandbox/defaults",
+            method: "PUT",
+            body: ["scope": scope, "value": value, "user": user]
+        )
+    }
+
     // MARK: - Transport
 
     private static func request<T: Decodable & Sendable>(

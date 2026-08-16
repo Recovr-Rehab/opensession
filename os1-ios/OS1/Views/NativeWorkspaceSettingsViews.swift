@@ -3,17 +3,19 @@ import SwiftUI
 // Native settings panels intentionally use only SettingsAPI. They can be hosted by
 // any settings navigation container without depending on the legacy web settings view.
 
-/// Settings → Models. The subscription pools and the bring-your-own-key
-/// providers are one screen, matching the web: they answer the same question
-/// ("where do the models come from?") and each half used to end by pointing at
-/// the other. Both halves render sections into this List rather than owning
-/// their own, so they read as one page.
+/// Settings → Models. Which model a session starts on, which engine carries
+/// it, and any provider someone brought a key for.
+///
+/// The subscription accounts those models run on live in Settings → Usage,
+/// as they do on the web (src/frontend/components/settings/ModelsPanel.tsx):
+/// their meters move hourly and get read far more often than any of this gets
+/// changed.
 struct ModelsSettingsView: View {
     @State private var reload = 0
 
     var body: some View {
         List {
-            ModelAccountsSections(reload: reload)
+            ModelDefaultsSections(reload: reload)
             ModelProvidersSections(reload: reload)
         }
         .insetGroupedListCompat()
@@ -22,67 +24,50 @@ struct ModelsSettingsView: View {
     }
 }
 
-struct ModelAccountsSections: View {
+/// The model a new session starts on, and whether a spent account falls back
+/// to another one.
+struct ModelDefaultsSections: View {
     /// Bumped by the enclosing pane's pull-to-refresh; re-runs `task`.
     var reload: Int
     @State private var catalog: ModelCatalogSettings?
-    @State private var claude: [ProviderAccount]
-    @State private var codex: [ProviderAccount]
     @State private var selectedModel: String
     @State private var autoFallback: Bool
     @State private var loading = true
     @State private var error: String?
-    @State private var showingAdd: AccountKind?
-    @State private var removal: AccountRemoval?
-    @State private var codexLoginSheet = false
 
     /// Seeded from the last answer this device saw, so re-entering Models shows
-    /// the pools straight away and the fetch behind it only corrects them. The
-    /// two controls are derived from the catalog rather than cached separately —
-    /// one payload, one source of truth.
+    /// the controls straight away and the fetch behind it only corrects them.
+    /// Both are derived from the catalog rather than cached separately — one
+    /// payload, one source of truth.
     init(reload: Int) {
         self.reload = reload
         let cached: ModelCatalogSettings? = SettingsCache.value("model-catalog")
         _catalog = State(initialValue: cached)
         _selectedModel = State(initialValue: cached?.default ?? "")
         _autoFallback = State(initialValue: cached?.autoFallback ?? false)
-        _claude = State(initialValue: SettingsCache.value("claude-accounts") ?? [])
-        _codex = State(initialValue: SettingsCache.value("codex-accounts") ?? [])
     }
 
     var body: some View {
-        Group {
-            // The `task` hangs off this section, which is rendered in every
-            // state. A `Group`'s modifiers apply to each child individually, so
-            // parking it on a conditional row would tear the task down the
-            // moment that row swapped out — cancelling the fetch mid-flight and
-            // leaving `loading` stuck true forever.
-            Section("Workspace defaults") {
-                // The spinner is only for having nothing to show at all: with a
-                // cached catalog the controls stay up and a failed refresh adds
-                // its row above them rather than replacing them.
-                if loading, catalog == nil {
-                    settingsLoadingRow
-                } else if let error, catalog == nil {
-                    settingsErrorRow(error) { Task { await load() } }
-                } else {
-                    if let error { settingsErrorRow(error) { Task { await load() } } }
-                    Picker("Default model", selection: $selectedModel) {
-                        Text("None").tag("")
-                        ForEach(validModels, id: \.id) { model in
-                            Text(model.label ?? model.id ?? "Model").tag(model.id ?? "")
-                        }
+        // The spinner is only for having nothing to show at all: with a cached
+        // catalog the controls stay up and a failed refresh adds its row above
+        // them rather than replacing them.
+        Section("Workspace defaults") {
+            if loading, catalog == nil {
+                settingsLoadingRow
+            } else if let error, catalog == nil {
+                settingsErrorRow(error) { Task { await load() } }
+            } else {
+                if let error { settingsErrorRow(error) { Task { await load() } } }
+                Picker("Default model", selection: $selectedModel) {
+                    Text("None").tag("")
+                    ForEach(validModels, id: \.id) { model in
+                        Text(model.label ?? model.id ?? "Model").tag(model.id ?? "")
                     }
-                    Toggle("Auto-fallback", isOn: $autoFallback)
                 }
-            }
-            .task(id: reload) { await load() }
-
-            if catalog != nil {
-                accountSection("Claude", accounts: validClaude, kind: .claude)
-                accountSection("Codex", accounts: validCodex, kind: .codex)
+                Toggle("Auto-fallback", isOn: $autoFallback)
             }
         }
+        .task(id: reload) { await load() }
         .onChange(of: selectedModel) { _, value in
             guard !loading else { return }
             Task { await saveDefault(value) }
@@ -91,112 +76,23 @@ struct ModelAccountsSections: View {
             guard !loading else { return }
             Task { await saveFallback(value) }
         }
-        .sheet(item: $showingAdd) { kind in
-            AccountEditor(kind: kind) { name, value, owner in
-                await addAccount(kind: kind, name: name, value: value, owner: owner)
-            }
-        }
-        .sheet(isPresented: $codexLoginSheet) {
-            CodexDeviceLoginView {
-                codexLoginSheet = false
-                await load()
-            }
-        }
-        .alert("Remove account?", isPresented: Binding(get: { removal != nil }, set: { if !$0 { removal = nil } }), presenting: removal) { target in
-            Button("Remove", role: .destructive) { Task { await remove(target) } }
-            Button("Cancel", role: .cancel) {}
-        } message: { target in
-            Text("Remove \(target.name) from the \(target.kind.rawValue) account pool?")
-        }
     }
 
     private var validModels: [SettingsModelOption] { (catalog?.models ?? []).filter { $0.id?.isEmpty == false } }
-    private var validClaude: [ProviderAccount] { claude.filter { $0.id?.isEmpty == false } }
-    private var validCodex: [ProviderAccount] { codex.filter { $0.id?.isEmpty == false } }
-
-    @ViewBuilder private func accountSection(_ title: String, accounts: [ProviderAccount], kind: AccountKind) -> some View {
-        Section(title) {
-            if accounts.isEmpty {
-                Text("No \(title) accounts configured.").foregroundStyle(.secondary)
-            }
-            ForEach(accounts, id: \.id) { account in
-                HStack {
-                    VStack(alignment: .leading) {
-                        Text(account.name ?? account.email ?? "Account")
-                        Text(account.owner?.isEmpty == false ? "Personal: \(account.owner!)" : "Shared pool")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    if account.usable == false { Text("Unavailable").foregroundStyle(.orange).font(.caption) }
-                    Button(account.owner?.isEmpty == false ? "Shared" : "Owner") {
-                        Task { await toggleOwnership(account, kind: kind) }
-                    }.buttonStyle(.borderless)
-                    Button(role: .destructive) {
-                        removal = AccountRemoval(id: account.id!, name: account.name ?? "this account", kind: kind)
-                    } label: { Image(systemName: "trash") }.buttonStyle(.borderless)
-                }
-            }
-            Button { showingAdd = kind } label: { Label("Add \(title) account", systemImage: "plus") }
-            if kind == .claude {
-                Button("Refresh account usage") { Task { await refreshClaude() } }
-            } else {
-                Button { codexLoginSheet = true } label: {
-                    Label("Sign in with ChatGPT", systemImage: "person.badge.key")
-                }
-            }
-        }
-    }
 
     private func load() async {
         loading = true; error = nil
         do {
-            async let fetchedCatalog = SettingsAPI.modelCatalog()
-            async let fetchedClaude = SettingsAPI.claudeAccounts()
-            async let fetchedCodex = SettingsAPI.codexAccounts()
-            let result = try await (fetchedCatalog, fetchedClaude, fetchedCodex)
-            catalog = result.0; claude = result.1; codex = result.2
-            selectedModel = result.0.default ?? ""
-            autoFallback = result.0.autoFallback ?? false
-            SettingsCache.save("model-catalog", result.0)
-            SettingsCache.save("claude-accounts", result.1)
-            SettingsCache.save("codex-accounts", result.2)
+            let fetched = try await SettingsAPI.modelCatalog()
+            catalog = fetched
+            selectedModel = fetched.default ?? ""
+            autoFallback = fetched.autoFallback ?? false
+            SettingsCache.save("model-catalog", fetched)
         } catch { self.error = error.localizedDescription }
         loading = false
     }
     private func saveDefault(_ value: String) async { do { _ = try await SettingsAPI.setDefaultModel(value.isEmpty ? nil : value) } catch { self.error = error.localizedDescription } }
     private func saveFallback(_ value: Bool) async { do { _ = try await SettingsAPI.setModelAutoFallback(value) } catch { self.error = error.localizedDescription } }
-    private func refreshClaude() async { do { claude = try await SettingsAPI.refreshClaudeAccounts() } catch { self.error = error.localizedDescription } }
-    private func addAccount(kind: AccountKind, name: String, value: String, owner: String?) async {
-        do {
-            if kind == .claude {
-                let body: [String: Any] = ["name": name, "token": value, "owner": owner ?? NSNull()]
-                claude.append(try await SettingsAPI.createClaudeAccount(body))
-            } else {
-                let body: [String: Any] = ["name": name, "kind": "api_key", "value": value, "owner": owner ?? NSNull()]
-                codex.append(try await SettingsAPI.createCodexAccount(body))
-            }
-            showingAdd = nil
-        } catch { self.error = error.localizedDescription }
-    }
-    private func toggleOwnership(_ account: ProviderAccount, kind: AccountKind) async {
-        guard let id = account.id else { return }
-        do {
-            let owner: String? = account.owner?.isEmpty == false ? nil : ServerConfig.shared.userName
-            let patch: [String: Any] = ["owner": owner ?? NSNull()]
-            let result: ProviderAccount
-            if kind == .claude { result = try await SettingsAPI.updateClaudeAccount(id: id, patch: patch) }
-            else { result = try await SettingsAPI.updateCodexAccount(id: id, patch: patch) }
-            if kind == .claude, let index = claude.firstIndex(where: { $0.id == id }) { claude[index] = result }
-            if kind == .codex, let index = codex.firstIndex(where: { $0.id == id }) { codex[index] = result }
-        } catch { self.error = error.localizedDescription }
-    }
-    private func remove(_ target: AccountRemoval) async {
-        do {
-            if target.kind == .claude { _ = try await SettingsAPI.deleteClaudeAccount(id: target.id); claude.removeAll { $0.id == target.id } }
-            else { _ = try await SettingsAPI.deleteCodexAccount(id: target.id); codex.removeAll { $0.id == target.id } }
-        } catch { self.error = error.localizedDescription }
-        removal = nil
-    }
 }
 
 struct ModelProvidersSections: View {
@@ -688,7 +584,7 @@ struct PrewarmingSettingsView: View {
             PreviewPoolSections(reload: reload)
         }
         .insetGroupedListCompat()
-        .navigationTitle("Prewarming")
+        .navigationTitle("Acceleration")
         .refreshable { reload += 1 }
     }
 }
@@ -867,18 +763,18 @@ struct AuditLogSettingsView: View {
     }
 }
 
-private enum AccountKind: String, Identifiable { case claude = "Claude", codex = "Codex"; var id: String { rawValue } }
-private struct AccountRemoval: Identifiable { let id: String; let name: String; let kind: AccountKind }
+enum AccountKind: String, Identifiable { case claude = "Claude", codex = "Codex"; var id: String { rawValue } }
+struct AccountRemoval: Identifiable { let id: String; let name: String; let kind: AccountKind }
 private struct MemoryEditTarget: Identifiable { let scope: MemoryScopeInfo; let entry: MemoryEntry?; var id: String { "\(scope.key ?? "")-\(entry?.id ?? "new")" } }
 
-private struct AccountEditor: View {
+struct AccountEditor: View {
     let kind: AccountKind; let onSave: (String, String, String?) async -> Void
     @Environment(\.dismiss) private var dismiss
     @State private var name = ""; @State private var credential = ""; @State private var shared = true; @State private var saving = false
     var body: some View { NavigationStack { Form { TextField("Account name", text: $name); SecureField("Credential", text: $credential); Toggle("Shared pool account", isOn: $shared); if !shared { Text("Personal accounts are assigned to the current person.").font(.footnote).foregroundStyle(.secondary) } } .navigationTitle("Add \(kind.rawValue)").toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button("Add") { saving = true; Task { await onSave(name, credential, shared ? nil : ServerConfig.shared.userName); saving = false } }.disabled(name.isEmpty || credential.isEmpty || saving) } } } }
 }
 
-private struct CodexDeviceLoginView: View {
+struct CodexDeviceLoginView: View {
     let onAdded: () async -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
@@ -1073,7 +969,9 @@ private struct MemoryEditor: View {
     var body: some View { NavigationStack { Form { TextEditor(text: $text).frame(minHeight: 150); if target.entry != nil { Button("Delete entry", role: .destructive) { Task { await onDelete(target) } } } } .navigationTitle(target.entry == nil ? "Add Memory" : "Edit Memory").onAppear { text = target.entry?.text ?? "" }.toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button("Save") { Task { await onSave(target, text) } }.disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) } } } }
 }
 
-private var settingsLoadingRow: some View { HStack { Spacer(); ProgressView("Loading…"); Spacer() } }
-private func settingsErrorRow(_ message: String, retry: @escaping () -> Void) -> some View { VStack(alignment: .leading, spacing: 8) { Text(message).foregroundStyle(.red); Button("Retry", action: retry) } }
+/// Shared settings vocabulary: every native settings page shows the same
+/// spinner and the same retryable error row, so they live once here.
+var settingsLoadingRow: some View { HStack { Spacer(); ProgressView("Loading…"); Spacer() } }
+func settingsErrorRow(_ message: String, retry: @escaping () -> Void) -> some View { VStack(alignment: .leading, spacing: 8) { Text(message).foregroundStyle(.red); Button("Retry", action: retry) } }
 
 private extension Optional where Wrapped == String { var orEmpty: String { self ?? "" } }
