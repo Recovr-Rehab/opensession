@@ -485,6 +485,22 @@ describe("TranscriptBlocks review loops", () => {
 		expect(html).not.toContain("border-l border-line pl-3");
 	});
 
+	test("keeps the verdict when a legacy user-shaped status notice follows", () => {
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks
+				entries={[
+					{ id: "review", type: "user", content: "[GitHub] <!--os:review-handoff-->\nReview PR #42", timestamp: "2026-08-12T12:00:00Z" },
+					{ id: "fix", type: "assistant", content: "Fixed the review finding.", timestamp: "2026-08-12T12:01:00Z" },
+					{ id: "deploy", type: "user", content: "[GitHub] Deployment finished for PR #42.", timestamp: "2026-08-12T12:02:00Z" },
+				]}
+				reviewResult={{ status: "passed", confidence: 5, checksPassed: 8 }}
+			/>,
+		);
+
+		expect(html).toContain('aria-label="Review loop, Ready to merge, PR #42"');
+		expect(html).toContain("Ready to merge");
+	});
+
 	test("opens to icon-led review steps and a final checked result", () => {
 		const html = renderToStaticMarkup(
 			<TranscriptBlocks
