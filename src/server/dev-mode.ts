@@ -1,5 +1,5 @@
 /**
- * Dev-instance mode — OPENSESSION_DEV=1 (alias OPENSESSION_DEV).
+ * Dev-instance mode — OPENSESSION_DEV=1.
  *
  * Historically the flag only swapped the frontend build pipeline
  * (frontend-build.ts IS_DEV, which stays self-contained) and enabled Bun HMR.
@@ -33,9 +33,9 @@ export function isDevInstance(): boolean {
 export function devInstanceBootError(
 	env: Record<string, string | undefined> = process.env,
 ): string | null {
-	if ((env.OPENSESSION_DEV || env.OPENSESSION_DEV) !== "1") return null;
+	if (env.OPENSESSION_DEV !== "1") return null;
 	if (env.OPENSESSION_STATE_DIR) return null;
-	if (env.OPENSESSION_SESSIONS_DIR || env.OPENSESSION_SESSIONS_DIR) return null;
+	if (env.OPENSESSION_SESSIONS_DIR) return null;
 	return (
 		"OPENSESSION_DEV=1 refuses to boot on the live state: set OPENSESSION_STATE_DIR " +
 		"(isolated state root; every ~/.opensession-* store resolves under it) or at " +
