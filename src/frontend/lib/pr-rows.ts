@@ -10,6 +10,7 @@
 import type { RecentPr } from "./api";
 import type { UnifiedSession } from "./types";
 import type { PrStatusInput } from "./pr-status";
+import { sessionPrRefs } from "./session-prs";
 import { cleanSessionTitle } from "./session-title";
 
 export interface WorktreeRow extends PrStatusInput {
@@ -33,60 +34,29 @@ export interface WorktreeRow extends PrStatusInput {
 function worktreesForSession(session: UnifiedSession): WorktreeRow[] {
   if (session.desk) return [];
 
-  if (session.prs?.some((pr) => pr.url)) {
-    return session.prs
-      .filter((pr) => pr.url)
-      .map((pr) => {
-        const primary = pr.source === "primary" || pr.url === session.prUrl;
-        return {
-          key: pr.url || `${pr.repo}:${pr.branch}`,
-          session,
-          title: cleanSessionTitle(pr.title || (primary ? session.prTitle : "") || session.title),
-          repo: pr.repo,
-          branch: pr.branch,
-          url: pr.url,
-          state: pr.state || "OPEN",
-          number: pr.number,
-          isDraft: pr.isDraft,
-          reviewDecision: pr.reviewDecision,
-          // Only the primary branch's PR carries a conflict probe.
-          mergeable: primary ? session.prMergeable : undefined,
-          checks: pr.checks,
-          additions: primary ? session.prAdditions : undefined,
-          deletions: primary ? session.prDeletions : undefined,
-          updatedAt: primary ? session.prUpdatedAt || session.lastActivity : session.lastActivity,
-          workspaceId: session.workspaceId,
-          archived: !!session.archived,
-          person: session.startedBy?.toLowerCase() || null,
-          author: primary ? session.prAuthor : undefined,
-        };
-      });
-  }
-
-  if (!session.prUrl) return [];
-  return [
-    {
-      key: session.prUrl,
+  return sessionPrRefs(session)
+    .filter((pr): pr is typeof pr & { url: string } => !!pr.url)
+    .map((pr) => ({
+      key: pr.url,
       session,
-      title: cleanSessionTitle(session.prTitle || session.title),
-      repo: session.repo || "repository",
-      branch: session.branch || "",
-      url: session.prUrl,
-      state: session.prState || "OPEN",
-      number: session.prNumber,
-      isDraft: session.prIsDraft,
-      reviewDecision: session.prReviewDecision,
-      mergeable: session.prMergeable,
-      checks: session.prChecks,
-      additions: session.prAdditions,
-      deletions: session.prDeletions,
-      updatedAt: session.prUpdatedAt || session.lastActivity,
+      title: cleanSessionTitle(pr.title || session.title),
+      repo: pr.repo,
+      branch: pr.branch,
+      url: pr.url,
+      state: pr.state || "OPEN",
+      number: pr.number,
+      isDraft: pr.isDraft,
+      reviewDecision: pr.reviewDecision,
+      mergeable: pr.mergeable,
+      checks: pr.checks,
+      additions: pr.additions,
+      deletions: pr.deletions,
+      updatedAt: pr.updatedAt || session.lastActivity,
       workspaceId: session.workspaceId,
       archived: !!session.archived,
       person: session.startedBy?.toLowerCase() || null,
-      author: session.prAuthor,
-    },
-  ];
+      author: pr.author,
+    }));
 }
 
 export function dateGroup(value: string): string {

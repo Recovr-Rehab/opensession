@@ -305,6 +305,23 @@ export interface SessionNote {
 	editedAt?: number;
 }
 
+export interface SessionPrRef {
+	repo: string;
+	branch: string;
+	/** "discovered" = found through the session link in the PR body's
+	 * attribution footer, for a PR opened on a branch the session does not own. */
+	source: "primary" | "attached" | "linked" | "discovered";
+	url?: string;
+	state?: "OPEN" | "MERGED" | "CLOSED";
+	number?: number;
+	title?: string;
+	isDraft?: boolean;
+	reviewDecision?: string;
+	additions?: number;
+	deletions?: number;
+	checks?: { total: number; passed: number; failed: number; pending: number };
+}
+
 export interface UnifiedSession {
 	id: string;
 	/** Historical marker retained while old session files age out. */
@@ -400,23 +417,7 @@ export interface UnifiedSession {
 	/** Every PR this session spans (primary + attached + linked), enriched from
 	 *  the server's bulk PR cache. The singular pr* fields above stay the
 	 *  primary branch's PR. */
-	prs?: Array<{
-		repo: string;
-		branch: string;
-		/** "discovered" = found through the session link in the PR body's
-		 *  attribution footer (a PR the agent opened on a branch this session
-		 *  doesn't own — another repo, or a second branch of its own). */
-		source: "primary" | "attached" | "linked" | "discovered";
-		url?: string;
-		state?: "OPEN" | "MERGED" | "CLOSED";
-		number?: number;
-		title?: string;
-		isDraft?: boolean;
-		reviewDecision?: string;
-		additions?: number;
-		deletions?: number;
-		checks?: { total: number; passed: number; failed: number; pending: number };
-	}>;
+	prs?: SessionPrRef[];
 	/** Route the session opens by default, set through opensession-portals. */
 	previewPath?: string;
 	/** Agent-published demo walkthrough (video + before/after + writeup),

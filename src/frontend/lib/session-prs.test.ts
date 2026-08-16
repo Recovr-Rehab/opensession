@@ -8,6 +8,7 @@ import {
 	sessionPrApproved,
 	sessionPrMerged,
 	sessionPrPresentation,
+	sessionPrRefs,
 	sessionUsesPrLink,
 } from "./session-prs";
 
@@ -177,6 +178,58 @@ describe("session PR presentation", () => {
 			primary,
 			additional: [linked],
 		});
+	});
+});
+
+describe("session PR projection", () => {
+	test("prefers prs values and fills missing primary values from legacy fields", () => {
+		const value = session({
+			repo: "opensession",
+			branch: "feature",
+			prUrl: "https://github.com/tellahq/opensession/pull/10",
+			prNumber: 10,
+			prAdditions: 40,
+			prDeletions: 5,
+			prChecks: { total: 3, passed: 3, failed: 0, pending: 0 },
+			prs: [
+				{
+					repo: "opensession",
+					branch: "feature",
+					source: "primary",
+					number: 10,
+					additions: 12,
+					deletions: 3,
+				},
+			],
+		});
+
+		expect(sessionPrRefs(value)).toEqual([
+			expect.objectContaining({
+				url: value.prUrl,
+				additions: 12,
+				deletions: 3,
+				checks: value.prChecks,
+			}),
+		]);
+	});
+
+	test("synthesizes the primary PR for persisted sessions without prs", () => {
+		const value = session({
+			repo: "opensession",
+			prUrl: "https://github.com/tellahq/opensession/pull/10",
+			prNumber: 10,
+			prAdditions: 7,
+			prDeletions: 2,
+		});
+
+		expect(sessionPrRefs(value)).toEqual([
+			expect.objectContaining({
+				source: "primary",
+				url: value.prUrl,
+				additions: 7,
+				deletions: 2,
+			}),
+		]);
 	});
 });
 

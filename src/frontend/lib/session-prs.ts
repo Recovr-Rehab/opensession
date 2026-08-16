@@ -1,7 +1,77 @@
-import type { UnifiedSession } from "./types";
+import type { SessionPrRef, UnifiedSession } from "./types";
 import { mainSession } from "./landing-session";
 
-export type SessionPrRef = NonNullable<UnifiedSession["prs"]>[number];
+export interface ProjectedSessionPr extends SessionPrRef {
+	/** Primary-only fields retained on the legacy flat session shape. */
+	mergeable?: string;
+	updatedAt?: string;
+	author?: string;
+}
+
+function flatPrimaryPr(session: UnifiedSession): ProjectedSessionPr | undefined {
+	if (session.prNumber === undefined && !session.prUrl) return undefined;
+
+	return {
+		repo: session.repo || "repository",
+		branch: session.branch || "",
+		source: "primary",
+		url: session.prUrl,
+		state: session.prState,
+		number: session.prNumber,
+		title: session.prTitle,
+		isDraft: session.prIsDraft,
+		reviewDecision: session.prReviewDecision,
+		mergeable: session.prMergeable,
+		checks: session.prChecks,
+		additions: session.prAdditions,
+		deletions: session.prDeletions,
+		updatedAt: session.prUpdatedAt,
+		author: session.prAuthor,
+	};
+}
+
+function mergePrimaryPr(
+	legacy: ProjectedSessionPr,
+	ref: SessionPrRef,
+): ProjectedSessionPr {
+	return {
+		...legacy,
+		...ref,
+		source: "primary",
+		url: ref.url ?? legacy.url,
+		state: ref.state ?? legacy.state,
+		number: ref.number ?? legacy.number,
+		title: ref.title ?? legacy.title,
+		isDraft: ref.isDraft ?? legacy.isDraft,
+		reviewDecision: ref.reviewDecision ?? legacy.reviewDecision,
+		checks: ref.checks ?? legacy.checks,
+		additions: ref.additions ?? legacy.additions,
+		deletions: ref.deletions ?? legacy.deletions,
+	};
+}
+
+/**
+ * One authoritative frontend projection of a session's PRs. New `prs[]` data
+ * wins; legacy flat fields only fill missing primary values or older sessions
+ * that have no primary entry in the list.
+ */
+export function sessionPrRefs(session: UnifiedSession): ProjectedSessionPr[] {
+	const refs = session.prs || [];
+	const legacy = flatPrimaryPr(session);
+	if (!legacy) return refs;
+
+	let foundPrimary = false;
+	const projected = refs.map((ref) => {
+		const primary =
+			ref.source === "primary" ||
+			(!!legacy.url && ref.url === legacy.url) ||
+			(ref.repo === legacy.repo && ref.branch === legacy.branch);
+		if (!primary) return ref;
+		foundPrimary = true;
+		return mergePrimaryPr(legacy, ref);
+	});
+	return foundPrimary ? projected : [legacy, ...projected];
+}
 
 function githubPrIdentity(
 	value: string | undefined,
@@ -52,8 +122,7 @@ export function prLinksMatch(
 /** Does a pasted PR link belong to any PR associated with this session? */
 export function sessionUsesPrLink(session: UnifiedSession, query: string): boolean {
 	const urls = [
-		session.prUrl,
-		...(session.prs || []).map((pr) => pr.url),
+		...sessionPrRefs(session).map((pr) => pr.url),
 		...(session.linkedPrs || []).map((pr) => pr.url),
 	];
 	if (urls.some((url) => prLinksMatch(query, url))) return true;
@@ -61,8 +130,7 @@ export function sessionUsesPrLink(session: UnifiedSession, query: string): boole
 	const target = githubPrIdentity(query);
 	if (!target) return false;
 	const refs = [
-		{ repo: session.repo, number: session.prNumber },
-		...(session.prs || []),
+		...sessionPrRefs(session),
 		...(session.linkedPrs || []),
 	];
 	return refs.some(
@@ -102,7 +170,7 @@ export function collapsePrLinkSessions(
 
 /** Bare attached branches are targets, not PRs; every explicit PR still counts. */
 function pullRequests(session: UnifiedSession) {
-	return (session.prs || []).filter(
+	return sessionPrRefs(session).filter(
 		(ref) =>
 			ref.source !== "attached" ||
 			ref.number != null ||
@@ -159,7 +227,7 @@ export function sessionCarriesPr(
 			branch: session.branch,
 			number: session.prNumber,
 		}) ||
-		(session.prs || []).some(same) ||
+		sessionPrRefs(session).some(same) ||
 		(session.linkedPrs || []).some(same) ||
 		(session.attachedRepos || []).some((r) =>
 			same({ repo: r.repo, branch: r.branch }),
@@ -173,33 +241,27 @@ export function sessionCarriesPr(
  * own (a discovered one) counts too — those still have a diff to review.
  */
 export function sessionHasPr(session: UnifiedSession): boolean {
-	return (
-		session.prNumber !== undefined ||
-		!!session.prUrl ||
-		pullRequests(session).length > 0
-	);
+	return pullRequests(session).length > 0;
 }
 
 /** A multi-PR session has landed once every actual PR is terminal and one merged. */
 export function sessionPrMerged(session: UnifiedSession): boolean {
 	const refs = pullRequests(session);
-	if (refs.length > 0)
-		return (
-			refs.every((ref) => ref.state === "MERGED" || ref.state === "CLOSED") &&
-			refs.some((ref) => ref.state === "MERGED")
-		);
-	return session.prState === "MERGED";
+	if (refs.length === 0) return session.prState === "MERGED";
+	return (
+		refs.every((ref) => ref.state === "MERGED" || ref.state === "CLOSED") &&
+		refs.some((ref) => ref.state === "MERGED")
+	);
 }
 
 /** A multi-PR session is reviewed once no actual PR is still awaiting review. */
 export function sessionPrApproved(session: UnifiedSession): boolean {
 	const refs = pullRequests(session);
-	if (refs.length > 0)
-		return refs.every(
-			(ref) =>
-				ref.state === "MERGED" ||
-				ref.state === "CLOSED" ||
-				ref.reviewDecision === "APPROVED",
-		);
-	return session.prReviewDecision === "APPROVED";
+	if (refs.length === 0) return session.prReviewDecision === "APPROVED";
+	return refs.every(
+		(ref) =>
+			ref.state === "MERGED" ||
+			ref.state === "CLOSED" ||
+			ref.reviewDecision === "APPROVED",
+	);
 }

@@ -37,3 +37,42 @@ test("keeps GitHub merged state authoritative over stale archived session data",
   expect(rows[0].archived).toBe(false);
   expect(rows[0].session).toBe(session);
 });
+
+test("keeps line stats for every projected session PR", () => {
+  const session = {
+    id: "bks-cross-repo",
+    title: "Cross-repo change",
+    lastActivity: "2026-07-16T13:00:00Z",
+    startedBy: "Kent",
+    prs: [
+      {
+        repo: "opensession",
+        branch: "feature",
+        source: "primary",
+        url: "https://github.com/tellahq/opensession/pull/59",
+        additions: 10,
+        deletions: 2,
+      },
+      {
+        repo: "shared-infra",
+        branch: "feature",
+        source: "attached",
+        url: "https://github.com/tellahq/shared-infra/pull/126",
+        additions: 25,
+        deletions: 4,
+      },
+    ],
+  } as UnifiedSession;
+
+  const rows = buildWorktreeRows([], [session]);
+  const stats = rows.map(({ repo, additions, deletions }) => ({
+    repo,
+    additions,
+    deletions,
+  }));
+
+  expect(stats).toEqual([
+    { repo: "opensession", additions: 10, deletions: 2 },
+    { repo: "shared-infra", additions: 25, deletions: 4 },
+  ]);
+});
