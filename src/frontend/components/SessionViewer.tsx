@@ -206,6 +206,7 @@ import { PageLoader } from "../ui/page-loader";
 import {
 	SOURCE_CHIP,
 	SOURCE_CHIP_ARCHIVED,
+	SOURCE_CHIP_ARCHIVED_LABEL,
 	sourceChipTone,
 } from "../lib/source-chip-classes";
 import { Button } from "../ui/button";
@@ -4965,10 +4966,10 @@ export function SessionViewer({
 							disabled={archiving}
 							title="Click to unarchive"
 						>
-							{/* The set's smallest step (MIN_ICON_SIZE); anything below it is
-							    clamped up to this anyway, so say so. */}
-							<IconArchive size={20} />
-							Archived
+							{/* `dense`: below the set's floor on purpose, so the word sets
+							    the chip's height and the glyph rides with it. */}
+							<IconArchive size={16} dense />
+							<span className={SOURCE_CHIP_ARCHIVED_LABEL}>Archived</span>
 						</button>
 					)}
 					{/* This workspace's own controls, at the end of its own cluster: the

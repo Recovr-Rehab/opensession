@@ -46,12 +46,24 @@ export function sourceChipTone(source: SessionSource | "ask" | string): string {
  * the way the automation and sandbox badges beside it name theirs.
  *
  * Medium, not bold: the glyph is a 1.5 stroke, and bold text next to it reads
- * as two weights in one chip. `rounded-[999px]`, not `rounded-full`, because
- * full is the one radius base.css excludes from `corner-shape: squircle`, and
- * a true capsule here is the only one on the row.
+ * as two weights in one chip.
+ *
+ * The two paddings are deliberately unequal, and the smaller one is on the
+ * glyph's side: a 24-grid glyph draws only ~60% of its box, so it brings ~3px
+ * of its own air, while a word ends on a stem with almost none. Equal numbers
+ * there measure equal and look lopsided — the eye compares the air at the two
+ * ENDS of the pill. Same rule the inline markdown chips follow in base.css.
  */
 export const SOURCE_CHIP_ARCHIVED =
-	"inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-[999px] bg-active px-2.5 py-[3px] " +
+	"inline-flex shrink-0 cursor-pointer items-center gap-[3px] rounded-full bg-active py-[3px] pl-[7px] pr-[9px] " +
 	"text-meta font-medium leading-[1.2] text-dim transition-[background,color] " +
 	"duration-[var(--dur-micro)] ease-[var(--ease)] [&:hover:not(:disabled)]:bg-hover " +
 	"[&:hover:not(:disabled)]:text-fg disabled:cursor-default disabled:opacity-60";
+
+/**
+ * The chip's label. `text-box` trims the line box to cap height + baseline, so
+ * the flex row centres the INK rather than the font's line box (which carries
+ * descender space the word never uses and lands it a pixel high). Chrome and
+ * Safari trim it; Firefox falls back to em-box centring, within a pixel.
+ */
+export const SOURCE_CHIP_ARCHIVED_LABEL = "[text-box:trim-both_cap_alphabetic]";

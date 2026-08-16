@@ -17,7 +17,17 @@ import React from "react";
  * than this 24-grid set, so their pixel sizes run smaller for the same visual
  * weight (a raw 17 ≈ iconic 20). Migrate them here when touched.
  */
-type IconProps = React.SVGProps<SVGSVGElement> & { size?: number };
+type IconProps = React.SVGProps<SVGSVGElement> & {
+  size?: number;
+  /**
+   * Opt out of MIN_ICON_SIZE. For a glyph riding INSIDE a small chip, the
+   * floor inverts its own reasoning: at 20 the icon, not the text, sets the
+   * chip's height, so the chip grows to fit the glyph instead of the glyph
+   * sitting with the word. Only for that case — a standalone icon that looks
+   * too big is a container to rework, not a size to shrink.
+   */
+  dense?: boolean;
+};
 
 // Hard floor at the scale's smallest step: these 24-grid glyphs only draw
 // ~60% of their box, so anything below 20px renders as a speck. Sub-20 sizes
@@ -33,8 +43,13 @@ type IconProps = React.SVGProps<SVGSVGElement> & { size?: number };
 export const MIN_ICON_SIZE = 20;
 const MIN_SIZE = MIN_ICON_SIZE;
 
-function Svg({ size = 22, children, ...rest }: IconProps & { children: React.ReactNode }) {
-  const px = Math.max(size, MIN_SIZE);
+function Svg({
+  size = 22,
+  dense,
+  children,
+  ...rest
+}: IconProps & { children: React.ReactNode }) {
+  const px = dense ? size : Math.max(size, MIN_SIZE);
   return (
     <svg
       width={px}
