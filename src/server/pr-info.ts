@@ -16,22 +16,37 @@ import { ghRateLimited, noteGhRateLimited, isGhRateLimitMsg } from "./github-lim
 import { serviceGithubCredential, type GithubCredential } from "./github-auth";
 import { githubAppEnv } from "./github-app";
 import { reviewRequestRemovalSpecs } from "./github-review-requests";
-import { getPrStack, unmergedLayersBelow, type PrStack } from "./pr-stack";
-// Type-only: pr-host.ts imports this module at runtime; the reverse edge must
-// stay erased or the two would cycle.
-import type { PrHostCapabilities } from "./pr-host";
-import type { OsReviewSummary, UnifiedSession } from "./types";
-
-export interface PrCheck {
-  name: string;
-  status: string; // COMPLETED, IN_PROGRESS, QUEUED…
-  conclusion: string; // SUCCESS, FAILURE, NEUTRAL, ""…
-  url?: string;
-  startedAt?: string;
-  completedAt?: string;
-  /** CheckRun workflow (e.g. "CI") — StatusContexts (Vercel deploys) have none. */
-  workflowName?: string;
-}
+import { getPrStack, unmergedLayersBelow } from "./pr-stack";
+import type {
+  MergeMethod,
+  MutationPrMeta,
+  PrCheck,
+  PrCommentInput,
+  PrDetails,
+  PrDiffData,
+  PrFile,
+  PrReviewInput,
+  PrReviewer,
+  PrStaging,
+} from "./pr-contract";
+import type { UnifiedSession } from "./types";
+export type {
+  MergeMethod,
+  MutationPrMeta,
+  PrCheck,
+  PrComment,
+  PrCommentInput,
+  PrCommit,
+  PrCommitNote,
+  PrDetails,
+  PrDiffData,
+  PrFile,
+  PrReviewComment,
+  PrReviewEvent,
+  PrReviewInput,
+  PrReviewer,
+  PrStaging,
+} from "./pr-contract";
 
 export function latestWorkflowChecks(checks: PrCheck[]): PrCheck[] {
   const latest = new Map<string, PrCheck>();
@@ -49,106 +64,6 @@ export function latestWorkflowChecks(checks: PrCheck[]): PrCheck[] {
   }
 
   return [...statusContexts, ...latest.values()];
-}
-
-export interface PrComment {
-  author: string;
-  body: string;
-  url?: string;
-  createdAt?: string;
-}
-
-export interface PrStaging {
-  /** Vercel branch-alias preview, e.g. https://tella-git-<branch>.tella.dev */
-  url: string;
-  /** Deploy status from the butler table, verbatim: Building | Ready | Error… */
-  status: string;
-  /**
-   * Whether this deploy opts into being embedded in the OS1 review iframe —
-   * true once its response CSP names os.tella.dev in frame-ancestors (the
-   * tella-fusion preview change). Probed out-of-band (see embeddableFor); a
-   * deploy predating that change reads back false and the UI shows the launch
-   * panel instead, so nothing regresses.
-   */
-  embeddable?: boolean;
-}
-
-export interface PrFile {
-  path: string;
-  additions: number;
-  deletions: number;
-}
-
-/**
- * A person on the PR's reviewer list. `state` is the review outcome
- * (APPROVED | CHANGES_REQUESTED | COMMENTED | DISMISSED) or PENDING for a
- * requested-but-not-yet-submitted review. `isTeam` marks a requested team
- * (login is the team slug) rather than an individual.
- */
-export interface PrReviewer {
-  login: string;
-  state: "APPROVED" | "CHANGES_REQUESTED" | "COMMENTED" | "DISMISSED" | "PENDING";
-  isTeam?: boolean;
-}
-
-/** A git note attached to a commit, labeled by its notes ref namespace. */
-export interface PrCommitNote {
-  /** Short ref name, e.g. "commits", "reviews", "ci". */
-  ref: string;
-  text: string;
-}
-
-export interface PrCommit {
-  oid: string;
-  messageHeadline: string;
-  messageBody?: string;
-  authoredDate?: string;
-  author: string;
-  /** Git notes on the commit in the common namespaces. Only populated by
-   *  hosts with `capabilities.commitNotes` (code.storage) — never GitHub. */
-  notes?: PrCommitNote[];
-}
-
-export interface PrDetails {
-  number: number;
-  title: string;
-  url: string;
-  state: "OPEN" | "MERGED" | "CLOSED";
-  isDraft: boolean;
-  baseRefName: string;
-  headRefName: string;
-  /** Current head commit, used by correctness-sensitive callers to reject stale data. */
-  headRefOid?: string;
-  additions: number;
-  deletions: number;
-  changedFiles: number;
-  reviewDecision: string;
-  author: string;
-  body: string;
-  checks: PrCheck[];
-  comments: PrComment[];
-  commits: PrCommit[];
-  /** Per-file line stats, sorted by churn (biggest first). */
-  files: PrFile[];
-  /** People/teams on the reviewer list, with their latest review state. */
-  reviewers: PrReviewer[];
-  /** MERGEABLE | CONFLICTING | UNKNOWN — the provider's conflict probe. */
-  mergeable: string;
-  /** CLEAN | BEHIND | BLOCKED | DIRTY | UNSTABLE | … — merge-box state. */
-  mergeStateStatus: string;
-  /** The PR's webapp preview environment (Vercel preview), when one exists. */
-  staging: PrStaging | null;
-  /** The GitHub stack this PR is a layer of, when it belongs to one. Read
-   *  best-effort (see pr-stack.ts) — null covers both "not stacked" and "the
-   *  stack read failed", which the UI treats identically. */
-  stack?: PrStack | null;
-  /** The latest automated agent review, enriched by the session PR route. */
-  osReview?: OsReviewSummary;
-  /** An automated review is currently running for this PR. */
-  reviewActive?: boolean;
-  /** What the repo's PR host supports (GitHub: everything) — set by the PR
-   *  routes so the frontend can hide surfaces a host has no concept of. */
-  capabilities?: PrHostCapabilities;
 }
 
 /**
@@ -375,17 +290,6 @@ function schedulePersist() {
 // repos (multi-repo sessions share a branch name) never collides.
 const cacheKey = (repo: string, branch: string) => `${repo}\u0000${branch}`;
 
-export interface PrDiffData {
-  number: number;
-  /** Base-branch tip used to produce this patch. Older demo fixtures omit it. */
-  baseRefOid?: string;
-  headRefOid: string;
-  patch: string;
-  diffVersion?: string;
-  /** Changed files omitted by the provider or an acquisition bound. */
-  skippedFiles?: number;
-}
-
 const diffCache = new Map<string, { data: PrDiffData | null; ts: number }>();
 
 /**
@@ -472,14 +376,6 @@ export function invalidatePrInfo(repo: string, branch: string): void {
   const key = cacheKey(repo, branch);
   cache.delete(key);
   diffCache.delete(key);
-}
-
-export interface MutationPrMeta {
-  number: number;
-  headRefOid: string;
-  state: "OPEN" | "MERGED" | "CLOSED";
-  isDraft: boolean;
-  url: string;
 }
 
 /**
@@ -632,15 +528,6 @@ async function localPrDiffPatch(
   };
 }
 
-export interface PrCommentInput {
-  body: string;
-  path?: string;
-  line?: number;
-  startLine?: number;
-  side?: "RIGHT" | "LEFT";
-  startSide?: "RIGHT" | "LEFT";
-}
-
 /** Post a PR comment — inline review comment when path+line given, else a general comment. */
 export async function postPrComment(
   branch: string,
@@ -698,24 +585,6 @@ export async function postPrComment(
   } catch (e: any) {
     return { error: e.message || String(e) };
   }
-}
-
-export interface PrReviewComment {
-  path: string;
-  /** Line in the file the comment anchors to (end line of a range). */
-  line: number;
-  side?: "RIGHT" | "LEFT";
-  startLine?: number;
-  startSide?: "RIGHT" | "LEFT";
-  body: string;
-}
-
-export type PrReviewEvent = "COMMENT" | "APPROVE" | "REQUEST_CHANGES";
-
-export interface PrReviewInput {
-  event: PrReviewEvent;
-  body?: string;
-  comments: PrReviewComment[];
 }
 
 /**
@@ -795,8 +664,6 @@ export async function submitPrReview(
     }
   );
 }
-
-export type MergeMethod = "squash" | "merge" | "rebase";
 
 /** Close an open PR without merging it. Human-triggered from the Reviews UI. */
 export async function closePr(
