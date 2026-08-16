@@ -225,10 +225,6 @@ function refreshLockHeld(repoId: string): boolean {
   }
 }
 
-function warmTemplateRefreshing(repoId: string): boolean {
-  return refreshing.has(repoId);
-}
-
 // ── Manifest ─────────────────────────────────────────────────────────────────
 
 /** Runtime junk that must never be seeded into a fresh worktree: per-worktree
@@ -264,6 +260,59 @@ export function isNodeModulesEntry(entry: string): boolean {
  *  Exported for tests. */
 export function seedableManifest(lines: string[]): string[] {
   return filterManifest(lines).filter(isNodeModulesEntry);
+}
+
+// ── Template status ──────────────────────────────────────────────────────────
+
+/**
+ * The one answer to "is this repo's template usable right now".
+ *
+ * `state.ok` alone was never enough: a recreated template worktree (an
+ * external cleanup deleted the original, which the hourly closed-worktree
+ * cron did 180 times until it learned to skip `-warm-template`) satisfies the
+ * sha check while carrying zero node_modules, and treating that as warm
+ * wedged the template empty forever and produced husk spares. So "warm" means
+ * state + manifest + every dep tree verified on disk, and it is the ONLY
+ * variant carrying the entry list: no caller can link from a template it did
+ * not verify.
+ *
+ * "refreshing" folds BOTH refresh guards: the in-memory map (this process)
+ * and the `*.refresh.lock` file (any process). A template being reset under
+ * us is neither warm nor stale, so callers must not link from it, and must
+ * not queue a second rebuild of it.
+ */
+export type TemplateStatus =
+  | { kind: "warm"; dir: string; sha: string; entries: string[] }
+  | { kind: "refreshing" }
+  | { kind: "stale"; reason: string }
+  | { kind: "absent" };
+
+export function templateStatus(repoId: string): TemplateStatus {
+  if (refreshing.has(repoId) || refreshLockHeld(repoId)) return { kind: "refreshing" };
+  return templateWarmth(repoId);
+}
+
+/** templateStatus minus the refresh guards, for doRefresh: it holds both of
+ *  them itself and still needs to know whether the tree is already warm. */
+function templateWarmth(repoId: string): Exclude<TemplateStatus, { kind: "refreshing" }> {
+  const state = warmTemplateState(repoId);
+  if (!state) return { kind: "absent" };
+  if (!state.ok || !state.sha) {
+    return { kind: "stale", reason: state.lastError || "last refresh did not complete" };
+  }
+  if (!existsSync(state.dir)) return { kind: "stale", reason: "template worktree missing" };
+  const mf = manifestFile(repoId);
+  if (!existsSync(mf)) return { kind: "stale", reason: "no manifest" };
+  let entries: string[];
+  try {
+    entries = seedableManifest(readFileSync(mf, "utf-8").split("\n"));
+  } catch (e) {
+    return { kind: "stale", reason: `manifest unreadable: ${String((e as any)?.message || e)}` };
+  }
+  if (!entries.length) return { kind: "stale", reason: "manifest lists no dep trees" };
+  const missing = entries.find((e) => !existsSync(join(state.dir, e.replace(/\/$/, ""))));
+  if (missing) return { kind: "stale", reason: `dep tree ${missing} missing on disk` };
+  return { kind: "warm", dir: state.dir, sha: state.sha, entries };
 }
 
 // ── Refresh ──────────────────────────────────────────────────────────────────
@@ -337,7 +386,8 @@ async function doRefresh(repoId: string, force: boolean): Promise<void> {
       await $`git -C ${dir} rev-parse --short origin/${repo.defaultBranch}`.nothrow().text()
     ).trim();
     if (!sha) return void (await fail(`can't resolve origin/${repo.defaultBranch}`));
-    if (!force && prev?.ok && prev.sha === sha && templateDepsPresent(repoId, dir)) {
+    const current = templateWarmth(repoId); // not templateStatus: we hold both guards
+    if (!force && current.kind === "warm" && current.sha === sha) {
       return; // already warm at this sha
     }
     console.log(`[warm-template] ${repoId}: refreshing template to ${sha} (${dir})`);
@@ -411,28 +461,6 @@ async function doRefresh(repoId: string, force: boolean): Promise<void> {
   }
 }
 
-/**
- * Do the template's manifest dep trees actually exist on disk? A recreated
- * template worktree (an external cleanup deleted the original — the hourly
- * closed-worktree cron did exactly that, 180 times, until it learned to skip
- * `-warm-template`) satisfies the sha check while carrying zero node_modules;
- * treating that as warm wedged the template empty forever and produced husk
- * spares. Never trust state.ok without the trees behind it.
- */
-function templateDepsPresent(repoId: string, dir: string): boolean {
-  const mf = manifestFile(repoId);
-  if (!existsSync(mf)) return false;
-  try {
-    const entries = seedableManifest(readFileSync(mf, "utf-8").split("\n"));
-    return (
-      entries.length > 0 &&
-      entries.every((e) => existsSync(join(dir, e.replace(/\/$/, ""))))
-    );
-  } catch {
-    return false;
-  }
-}
-
 // ── Seeding ──────────────────────────────────────────────────────────────────
 
 /**
@@ -447,10 +475,7 @@ export async function seedWorktreeFromWarmTemplate(repo: Repo, wtPath: string): 
   try {
     const cfg = warmTemplateConfig(repo.id);
     if (!cfg.enabled) return false;
-    const state = warmTemplateState(repo.id);
-    const mf = manifestFile(repo.id);
-    if (!state?.ok || !existsSync(mf) || !existsSync(state.dir)) return false;
-    if (wtPath === state.dir) return false; // never seed the template itself
+    if (wtPath === warmTemplateDir(repo)) return false; // never seed the template itself
 
     // One seed per worktree at a time: duplicate create paths racing two
     // seeds into the same node_modules produced "cannot create directory:
@@ -494,16 +519,20 @@ export async function seedWorktreeFromWarmTemplate(repo: Repo, wtPath: string): 
       // process is visible only via the lock file — wait briefly, then bail
       // to a cold install rather than link from a tree being reset (that
       // race aborted a seed live on 2026-07-09).
-      const inflight = refreshing.get(repo.id);
-      if (inflight) {
-        await Promise.race([inflight, Bun.sleep(60_000)]);
+      let status = templateStatus(repo.id);
+      if (status.kind === "refreshing") {
+        const inflight = refreshing.get(repo.id);
+        if (inflight) {
+          await Promise.race([inflight, Bun.sleep(60_000)]);
+        }
+        for (let waited = 0; refreshLockHeld(repo.id) && waited < 90_000; waited += 5000) {
+          await Bun.sleep(5000);
+        }
+        status = templateStatus(repo.id);
       }
-      for (let waited = 0; refreshLockHeld(repo.id) && waited < 90_000; waited += 5000) {
-        await Bun.sleep(5000);
-      }
-      if (refreshLockHeld(repo.id)) {
+      if (status.kind !== "warm") {
         console.log(
-          `[warm-template] ${repo.id} template is mid-refresh (another process) — ${wtPath} installs cold`,
+          `[warm-template] ${repo.id} template not usable (${status.kind === "stale" ? status.reason : status.kind}); ${wtPath} installs cold`,
         );
         return false;
       }
@@ -513,9 +542,8 @@ export async function seedWorktreeFromWarmTemplate(repo: Repo, wtPath: string): 
       // safe). Per-entry best-effort: a conflict with a concurrent writer
       // (e.g. an already-running bun install) must not abort the other
       // entries — bun install reconciles whatever landed.
-      const linkDirs = seedableManifest(readFileSync(mf, "utf-8").split("\n"));
-      for (const entry of linkDirs) {
-        const src = join(state.dir, entry).replace(/\/$/, "");
+      for (const entry of status.entries) {
+        const src = join(status.dir, entry).replace(/\/$/, "");
         const dst = join(wtPath, entry).replace(/\/$/, "");
         if (!existsSync(src) || existsSync(dst)) continue;
         mkdirSync(dirname(dst), { recursive: true });
@@ -529,7 +557,7 @@ export async function seedWorktreeFromWarmTemplate(repo: Repo, wtPath: string): 
       void replenishSpares(repo).catch(() => {});
 
       console.log(
-        `[warm-template] seeded ${wtPath} from ${repo.id} template (${state.sha}) in ${Math.round((Date.now() - started) / 1000)}s (no spare available)`,
+        `[warm-template] seeded ${wtPath} from ${repo.id} template (${status.sha}) in ${Math.round((Date.now() - started) / 1000)}s (no spare available)`,
       );
       return true;
     } finally {
@@ -623,46 +651,41 @@ async function doReplenish(repo: Repo): Promise<void> {
     } catch {}
   }
   for (;;) {
-    const state = warmTemplateState(repo.id);
-    if (!state?.ok || !state.sha || !existsSync(state.dir)) return;
-    // Template mid-rewrite: don't link from a tree being reset. The
-    // post-refresh rotate (or the next sweep tick) picks this back up.
-    if (refreshLockHeld(repo.id) || refreshing.has(repo.id)) return;
+    // One predicate for everything: last refresh good, trees actually there,
+    // and no refresh (this process or another) rewriting them under us — the
+    // post-refresh rotate, or the next sweep tick, picks that back up.
+    const status = templateStatus(repo.id);
+    if (status.kind !== "warm") return;
     // Unclaimed spares from an older template link outdated deps, and husk
     // spares (built while the template was missing its trees) seed nothing —
     // drop both so sessions start current; the loop below rebuilds fresh ones.
     for (const p of listSpares(repo)) {
-      if (!p.includes(`spare-${state.sha}-`) || !spareIntact(p)) {
+      if (!p.includes(`spare-${status.sha}-`) || !spareIntact(p)) {
         try {
           rmSync(p, { recursive: true, force: true });
         } catch {}
       }
     }
     if (listSpares(repo).length >= SPARE_TARGET) return;
-    const mf = manifestFile(repo.id);
-    if (!existsSync(mf)) return;
-    const entries = seedableManifest(readFileSync(mf, "utf-8").split("\n")).map((e) =>
-      e.replace(/\/$/, ""),
-    );
-    if (!entries.length) return;
+    const entries = status.entries.map((e) => e.replace(/\/$/, ""));
     const building = join(dir, `.building-${Math.random().toString(36).slice(2, 8)}`);
     const buildStarted = Date.now();
     try {
       mkdirSync(building, { recursive: true });
       for (const rel of entries) {
-        const src = join(state.dir, rel);
-        // A missing tree means the template is gutted despite state.ok —
-        // building a spare anyway ships an empty husk that seeds nothing.
-        // Abort; the sweep's templateDepsPresent check forces a re-refresh.
-        if (!existsSync(src)) {
-          throw new Error(`template tree ${rel} missing on disk — refresh required`);
-        }
+        // templateStatus verified every tree at the top of this iteration; a
+        // tree that vanishes mid-build fails its cp and aborts the spare, and
+        // the sweep's own templateStatus check forces a re-refresh.
+        const src = join(status.dir, rel);
         const dst = join(building, rel);
         mkdirSync(dirname(dst), { recursive: true });
         await $`cp -al ${src} ${dst}`.quiet();
       }
       writeFileSync(join(building, SPARE_PATHS_FILE), entries.join("\n") + "\n");
-      renameSync(building, join(dir, `spare-${state.sha}-${Math.random().toString(36).slice(2, 8)}`));
+      renameSync(
+        building,
+        join(dir, `spare-${status.sha}-${Math.random().toString(36).slice(2, 8)}`),
+      );
       console.log(
         `[warm-template] built ${repo.id} dep spare (${entries.length} trees) in ${Math.round((Date.now() - buildStarted) / 1000)}s`,
       );
@@ -683,14 +706,18 @@ async function sweepWarmTemplates(): Promise<void> {
     if (repo.sharedCheckout) continue;
     const cfg = warmTemplateConfig(repo.id);
     if (!cfg.enabled) continue;
-    const state = warmTemplateState(repo.id);
-    const ageMs = state?.refreshedAt ? Date.now() - Date.parse(state.refreshedAt) : Infinity;
+    const status = templateStatus(repo.id);
+    // Age is a freshness policy, not a usability question, so the state file
+    // owns it. Everything else (including ok-but-gutted, i.e. the template
+    // deleted/recreated externally) comes from templateStatus, so a gutted
+    // template refreshes now rather than serving cold seeds until the
+    // interval elapses. A refresh already in flight is left alone.
+    const refreshedAt = warmTemplateState(repo.id)?.refreshedAt;
+    const ageMs = refreshedAt ? Date.now() - Date.parse(refreshedAt) : Infinity;
     const due =
-      !state?.ok ||
-      ageMs > cfg.intervalHours * 3_600_000 ||
-      // ok-but-gutted (template deleted/recreated externally): refresh now
-      // rather than serving cold seeds until the interval elapses.
-      !templateDepsPresent(repo.id, state.dir);
+      status.kind === "absent" ||
+      status.kind === "stale" ||
+      (status.kind === "warm" && ageMs > cfg.intervalHours * 3_600_000);
     if (due) {
       // Serialized: one template rebuild at a time.
       await refreshWarmTemplate(repo.id).catch((e) =>
@@ -725,6 +752,9 @@ export interface WarmTemplateStatusEntry {
   enabled: boolean;
   intervalHours: number;
   refreshing: boolean;
+  /** Template verified usable right now (state + manifest + trees on disk).
+   *  `state.ok` on its own can be true for a gutted template. */
+  warm: boolean;
   /** Prebuilt dep spares ready for instant adoption. */
   spares: number;
   state: WarmTemplateState | null;
@@ -735,11 +765,13 @@ export function warmTemplateStatus(): WarmTemplateStatusEntry[] {
     .filter((r) => !r.sharedCheckout)
     .map((r) => {
       const cfg = warmTemplateConfig(r.id);
+      const status = templateStatus(r.id);
       return {
         repoId: r.id,
         enabled: cfg.enabled,
         intervalHours: cfg.intervalHours,
-        refreshing: warmTemplateRefreshing(r.id),
+        refreshing: status.kind === "refreshing",
+        warm: status.kind === "warm",
         spares: listSpares(r).length,
         state: warmTemplateState(r.id),
       };
