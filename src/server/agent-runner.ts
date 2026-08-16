@@ -34,6 +34,9 @@ import {
   transitionRunState,
 } from "./run-state";
 import type { StreamEvent, ImageInput } from "./run-events";
+// Type-only, so the direct engines stay lazily loaded (see the dispatch table
+// below): this pulls in the contract's signatures, never the SDKs.
+import type { EngineAdapter } from "./engine/adapter-types";
 import {
   runOpencode,
   isOpencodeSessionBusy,
@@ -329,16 +332,52 @@ function recordPoolDryShortCircuit(opts: RunAgentOpts, model: string, reason: st
 // loaded module is cached on globalThis, so the SYNC control ops below
 // (busy/steer/cancel/count) keep working across a hot reload — and an engine
 // that has never been loaded has no runs, so answering false/0 for it is exact
-// rather than a guess.
+// rather than a guess. The load is lazy for that reason alone: there is no
+// import cycle to dodge. So the capability names below are checked against
+// the adapters' real exports with type-only module references, which are
+// erased and leave the runtime import exactly as dynamic as it was.
 
+/**
+ * The control surface a direct engine hands the dispatchers below, typed off
+ * the EngineAdapter contract (engine/adapter-types.ts) so the two cannot
+ * drift. The adapters export free functions rather than the adapter object,
+ * so the names differ; the SIGNATURES are the contract's own.
+ *
+ * Every control op is required. An engine with no mid-turn input channel
+ * still exports a steer that returns false, rather than exporting nothing and
+ * leaving the caller to read `undefined` as "not steerable". gateReason is
+ * optional only because it is not part of the contract; the loader always
+ * fills it in.
+ */
 interface DirectEngineModule {
-  run: (opts: RunAgentOpts, model: string) => AsyncIterable<StreamEvent>;
-  isBusy?: (id: string) => boolean;
-  cancel?: (id: string) => boolean;
-  steer?: (id: string, text: string, images?: ImageInput[]) => boolean;
-  activeRunCount?: () => number;
+  /** EngineAdapter.startTurn, under the adapter's own export name. */
+  run: EngineAdapter["startTurn"];
+  isBusy: EngineAdapter["isBusy"];
+  cancel: EngineAdapter["cancel"];
+  steer: EngineAdapter["steer"];
+  activeRunCount: () => number;
+  /** Not part of EngineAdapter: the direct engines' own run-kind gate. */
   gateReason?: (opts: RunAgentOpts) => string | null;
 }
+
+/** The export names of `M` whose value satisfies `F`, so a name in the table
+ *  below that no longer names a matching export is a COMPILE error rather than
+ *  an undefined that degrades a control op in silence. */
+type ExportNameOf<M, F> = { [K in keyof M]: M[K] extends F ? K : never }[keyof M] & string;
+
+/** The table entry for one engine: a label, the runtime specifier, and one
+ *  compile-checked export name per capability. The module references are
+ *  type-only (erased), so the lazy runtime import is untouched. */
+type DirectEngineNames<M> = {
+  label: string;
+  module: string;
+  run: ExportNameOf<M, DirectEngineModule["run"]>;
+  isBusy: ExportNameOf<M, DirectEngineModule["isBusy"]>;
+  cancel: ExportNameOf<M, DirectEngineModule["cancel"]>;
+  steer: ExportNameOf<M, DirectEngineModule["steer"]>;
+  count: ExportNameOf<M, DirectEngineModule["activeRunCount"]>;
+  gate: ExportNameOf<M, NonNullable<DirectEngineModule["gateReason"]>>;
+};
 
 const DIRECT_ENGINE_ADAPTERS = {
   claude: {
@@ -361,7 +400,10 @@ const DIRECT_ENGINE_ADAPTERS = {
     count: "activeCodexDirectRunCount",
     gate: "codexDirectGateReason",
   },
-} as const satisfies Record<DirectEngine, { label: string; module: string } & Record<string, string>>;
+} as const satisfies Record<DirectEngine, { label: string; module: string }> & {
+  claude: DirectEngineNames<typeof import("./engine/claude-direct-adapter")>;
+  codex: DirectEngineNames<typeof import("./engine/codex-direct-adapter")>;
+};
 
 const directEngineModules: Map<DirectEngine, DirectEngineModule> = ((
   globalThis as any
@@ -380,13 +422,34 @@ async function loadDirectEngine(engine: DirectEngine): Promise<DirectEngineModul
     typeof mod[name] === "function" ? (mod[name] as T) : undefined;
   const run = fn<DirectEngineModule["run"]>(names.run);
   if (!run) throw new Error(`${names.module} does not export ${names.run}()`);
+  // The names are compile-checked against the adapter's exports, so a rename
+  // is a build error rather than a control op that silently reads undefined.
+  // A miss at RUNTIME (a stale adapter next to a fresh dispatcher) still
+  // degrades instead of taking the turn down, but it says so, and the
+  // fallback is written out rather than implied by an absent method.
+  const capability = <T extends (...args: never[]) => unknown>(
+    name: string,
+    consequence: string,
+    fallback: T
+  ): T => {
+    const found = fn<T>(name);
+    if (found) return found;
+    console.warn(
+      `[engine] ${names.module} does not export ${name}(): ${consequence}`
+    );
+    return fallback;
+  };
   const entry: DirectEngineModule = {
     run,
-    isBusy: fn(names.isBusy),
-    cancel: fn(names.cancel),
-    steer: fn(names.steer),
-    activeRunCount: fn(names.count),
-    gateReason: fn(names.gate),
+    isBusy: capability(names.isBusy, `${names.label} runs report as not busy`, () => false),
+    cancel: capability(names.cancel, `${names.label} runs cannot be cancelled`, () => false),
+    steer: capability(names.steer, `${names.label} steers fall back to queueing`, () => false),
+    activeRunCount: capability(
+      names.count,
+      `${names.label} runs are invisible to the shutdown drain`,
+      () => 0
+    ),
+    gateReason: capability(names.gate, `${names.label} runs are not gated by kind`, () => null),
   };
   directEngineModules.set(engine, entry);
   return entry;
@@ -1063,7 +1126,7 @@ export function isAgentLiveEngineBusy(...ids: Array<string | null | undefined>):
       activeSessionRunTokens.has(id) ||
       isOpencodeSessionBusy(id) ||
       isPiSessionBusy(id) ||
-      loadedDirectEngines().some((e) => e.isBusy?.(id) === true) ||
+      loadedDirectEngines().some((e) => e.isBusy(id)) ||
       hostRunBusy(id)
     )
       return true;
@@ -1096,7 +1159,7 @@ export function activeAgentRunCount(): number {
   return (
     activeOpencodeRunCount() +
     activePiRunCount() +
-    loadedDirectEngines().reduce((n, e) => n + (e.activeRunCount?.() ?? 0), 0)
+    loadedDirectEngines().reduce((n, e) => n + e.activeRunCount(), 0)
   );
 }
 
@@ -1126,9 +1189,9 @@ export function steerAgentRun(
     if (!id) continue;
     if (steerOpencodeRun(id, text, images)) return true;
     if (steerPiRun(id, text, images)) return true;
-    // A direct engine that has no mid-turn input channel simply exports no
-    // steer — the caller queues, which is the right fallback.
-    for (const e of loadedDirectEngines()) if (e.steer?.(id, text, images)) return true;
+    // A direct engine with no mid-turn input channel returns false from its
+    // own steer, and the caller queues, which is the right fallback.
+    for (const e of loadedDirectEngines()) if (e.steer(id, text, images)) return true;
     // Host-forward RPC is text-only: a send with images falls through
     // (caller queues it — the queue drain delivers images).
     if (!images?.length && hostSteer(id, text)) return true;
@@ -1181,7 +1244,7 @@ export function cancelAgentRun(...ids: Array<string | null | undefined>): boolea
     if (!id) continue;
     if (cancelOpencodeRun(id)) cancelled = true;
     if (cancelPiRun(id)) cancelled = true;
-    for (const e of loadedDirectEngines()) if (e.cancel?.(id)) cancelled = true;
+    for (const e of loadedDirectEngines()) if (e.cancel(id)) cancelled = true;
     if (hostCancel(id)) cancelled = true;
   }
   const wanted = new Set(ids.filter((id): id is string => !!id));
