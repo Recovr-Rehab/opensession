@@ -717,6 +717,19 @@ final class SessionViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.queuedCount, 1)
     }
 
+    /// The list count is only a pre-watch summary. Once the socket supplies
+    /// detailed state, an empty queue must stay empty rather than falling back
+    /// to the stale summary and showing a contradictory composer chip.
+    func testDetailedQueueReplacesStaleSummaryCount() {
+        let viewModel = SessionViewModel(session: Session(id: "bks-1", queuedCount: 2))
+        XCTAssertEqual(viewModel.queuedCount, 2)
+
+        viewModel.handle(.queueUpdate(sessionId: "bks-1", queued: [], steered: []))
+
+        XCTAssertTrue(viewModel.queuedItems.isEmpty)
+        XCTAssertEqual(viewModel.queuedCount, 0)
+    }
+
     func testAskQuestionLifecycle() {
         let viewModel = makeViewModel()
         let question = AskQuestion(id: "ask-1", questions: [])
