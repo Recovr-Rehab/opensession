@@ -41,7 +41,7 @@ export function assetPreviewKind(path: string): AssetPreviewKind {
  *
  * A picture or a recording is only useful once you can see it: a row saying
  * `options/1-push.mp4 · 159.0 KB` is five variants of a demo you have to open
- * one at a time. A page, a report or a data file is the opposite — its name and
+ * one at a time. A page, a report or a data file is the opposite: its name and
  * its description ARE the content, and a thumbnail of one is a grey rectangle.
  */
 export function isVisualAsset(path: string): boolean {

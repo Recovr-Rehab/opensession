@@ -1240,8 +1240,8 @@ type StripItem = {
 /**
  * A scrolling row of media frames, used twice in this panel: for the pictures
  * and recordings the workspace's sessions produced, and for the visual assets
- * this session wrote. Both are the same glance — a file you can only judge by
- * looking at it — so a recording an agent left behind gets a first frame rather
+ * this session wrote. Both are the same glance: a file you can only judge by
+ * looking at it. So a recording an agent left behind gets a first frame rather
  * than a list row saying `1-push.mp4 · 159 KB`, which is five variants you have
  * to open one at a time.
  */
@@ -1249,7 +1249,7 @@ function MediaStrip({ items }: { items: StripItem[] }) {
 	return (
 		<div
 			// The same card the neighbouring lists sit on (INFO_LIST_CLASS), laid
-			// out as a scroller — spelled out rather than composed, so its overflow
+			// out as a scroller, spelled out rather than composed so its overflow
 			// isn't fighting that constant's `overflow-hidden`. Frames scroll
 			// *inside* the card, so the panel's padding is there on both sides at
 			// rest; a sliver of the next frame at the trailing edge is what says it
@@ -1272,7 +1272,7 @@ function MediaStrip({ items }: { items: StripItem[] }) {
 							: items.length === 2
 								? "w-[calc((100%-8px)/2)]"
 								: // Two full frames + the 8px gap + a 22px sliver of the
-									// third, filling the card exactly — so the sliver sits
+									// third, filling the card exactly, so the sliver sits
 									// inside the card's own padding, not against the panel.
 									"w-[calc((100%-30px)/2)]",
 					)}
@@ -1280,8 +1280,8 @@ function MediaStrip({ items }: { items: StripItem[] }) {
 					<span
 						// Concentric with the card: inner = outer − padding, i.e.
 						// rounded-lg (14·rf) minus the card's 12px. No token lands
-						// there — the neighbouring lists' rows get away with
-						// rounded-control because they only sit 4px in — so it's
+						// there (the neighbouring lists' rows get away with
+						// rounded-control because they only sit 4px in), so it's
 						// spelled out, and it follows --rf like every other radius.
 						// border-line-strong, not border-line: a frame's own edge is
 						// whatever the capture happens to end on, so a dark screenshot
@@ -1305,7 +1305,7 @@ function MediaStrip({ items }: { items: StripItem[] }) {
 							<>
 								<video
 									// #t=0.1 makes the browser seek to the first frame and
-									// paint it as a poster — without it preload="metadata"
+									// paint it as a poster. Without it preload="metadata"
 									// leaves the tile blank.
 									src={`${item.src}#t=0.1`}
 									muted
@@ -1507,8 +1507,8 @@ export function WorkspaceInfo({
 	);
 
 	// A picture or a recording an agent wrote is shown, not listed: its name and
-	// size say nothing about it. Everything else — a page, a report, a data
-	// file — is the opposite, so it keeps the row, where the name and the
+	// size say nothing about it. Everything else (a page, a report, a data
+	// file) is the opposite, so it keeps the row, where the name and the
 	// description are the content.
 	const visualAssets = assets.filter((a) => isVisualAsset(a.path));
 	const fileAssets = assets.filter((a) => !isVisualAsset(a.path));
@@ -1657,7 +1657,7 @@ export function WorkspaceInfo({
 						<div className={INFO_SECTION_CLASS}>
 							{/* Not "screenshots": the strip has always shown recordings
 							    too. Naming the source instead is what separates this
-							    section from the assets below it — one is what appeared in
+							    section from the assets below it: one is what appeared in
 							    the conversation, the other is what the session wrote. */}
 							<div
 								className={cn(
@@ -1665,7 +1665,7 @@ export function WorkspaceInfo({
 									"flex items-center justify-between gap-2",
 								)}
 							>
-								<span>From the conversation</span>
+								<span>Conversation</span>
 								<span className="tabular-nums">{media.length}</span>
 							</div>
 							<MediaStrip
