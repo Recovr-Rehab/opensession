@@ -282,6 +282,7 @@ import { bashAskPolicyReply } from "./command-policy";
 import { buildEngineSwitchHandoffNote } from "./fork-handoff";
 import { recoverFreshEngineTranscript } from "./engine-handoff-transcript";
 import { wrapContext } from "./prompt-context";
+import { logInjectedContext } from "./context-log";
 import { ensureAnthropicBridge } from "./anthropic-bridge";
 import { ensureAgentAwsCredsFile } from "./aws-creds";
 import {
@@ -4108,9 +4109,21 @@ async function* runOpencodeAttempt(
             toProvider: "opencode",
             sameEngineRestart: true,
             entries: restartRecovered,
-          })
+          }),
+          "handoff"
         )}\n\n${attemptPrompt}`
       : attemptPrompt;
+    // Injected below runOnModel's choke point (context-log.ts), so this
+    // attempt's own handoff is logged here. Re-logging the blocks the choke
+    // point already recorded is free: entry ids are content-derived.
+    if (enginePrompt !== attemptPrompt) {
+      logInjectedContext({
+        sessionId: transcriptUnifiedId,
+        turnId: opts.promptEntryId || opts.startToken,
+        prompt: enginePrompt,
+        model,
+      });
+    }
     // Account-rotation retries rerun this whole attempt with the same prompt —
     // appending the user line again gave one send two or three identical
     // bubbles (3× "FINISH ITTT", doubled resume prompts, 2026-07-09). But a

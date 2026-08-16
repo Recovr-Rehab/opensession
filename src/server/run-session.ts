@@ -816,7 +816,7 @@ async function drainQueueInner(sessionId: string): Promise<void> {
 		// instead of acknowledge-and-parking. Fenced, so the transcript shows
 		// only the user's text.
 		if (consumeInterruptDrainMark(sessionId)) {
-			combined = `${combined}\n\n${wrapContext(INTERRUPT_STEER_NOTE)}`;
+			combined = `${combined}\n\n${wrapContext(INTERRUPT_STEER_NOTE, "steer-note")}`;
 		}
 		// Attachments queued alongside the text ride the drained turn: images are
 		// decoded to ImageInput, files handed through as staged/inline refs.
@@ -1386,7 +1386,7 @@ export function maybeQueueAutoContinue(opts: {
 				enqueuePrompt(
 					sessionId,
 					{
-						content: wrapContext(ORPHANED_STEER_PROMPT),
+						content: wrapContext(ORPHANED_STEER_PROMPT, "auto-continue"),
 						user: AUTO_CONTINUE_USER,
 					},
 					{ front: true },
@@ -1415,7 +1415,7 @@ export function maybeQueueAutoContinue(opts: {
 					enqueuePrompt(
 						sessionId,
 						{
-							content: wrapContext(WEDGE_RETRY_PROMPT),
+							content: wrapContext(WEDGE_RETRY_PROMPT, "auto-continue"),
 							user: AUTO_CONTINUE_USER,
 						},
 						{ front: true },
@@ -1461,6 +1461,7 @@ export function maybeQueueAutoContinue(opts: {
 		{
 			content: wrapContext(
 				endedOnFabricatedTranscript ? AUTO_CONTINUE_FABRICATED_PROMPT : AUTO_CONTINUE_PROMPT,
+				"auto-continue",
 			),
 			user: AUTO_CONTINUE_USER,
 		},
@@ -1773,7 +1774,7 @@ async function runSessionPromptInner(
 	// engine continues the conversation instead of starting blank. Fenced so the
 	// transcript shows only the human's message — the model-switch divider already
 	// marks the engine change; the handoff itself is plumbing (see prompt-context).
-	if (switchHandoff) prompt = `${wrapContext(switchHandoff)}\n\n${prompt}`;
+	if (switchHandoff) prompt = `${wrapContext(switchHandoff, "handoff")}\n\n${prompt}`;
 	// Bridge a Desk voice call into this text turn: the GPT Realtime turns are
 	// mirrored into the visible transcript, but the text engine's own
 	// conversation state never saw them — without this note the first text
@@ -1781,7 +1782,7 @@ async function runSessionPromptInner(
 	// it apparently just had (see desk-voice.ts).
 	if (session.desk) {
 		const voiceHandoff = takeVoiceHandoff(sessionId);
-		if (voiceHandoff) prompt = `${wrapContext(voiceHandoff)}\n\n${prompt}`;
+		if (voiceHandoff) prompt = `${wrapContext(voiceHandoff, "handoff")}\n\n${prompt}`;
 	}
 	// Sibling-session transcripts attached from the fresh-session "Add session
 	// transcripts" chips: inline a bounded digest of each, fenced so the rendered
@@ -1814,7 +1815,7 @@ async function runSessionPromptInner(
 		}
 		for (const c of attachedDigests) inlinedSessionIds.add(c.id);
 		if (attachedDigests.length)
-			prompt = `${wrapContext(buildSessionContextNote(attachedDigests))}\n\n${prompt}`;
+			prompt = `${wrapContext(buildSessionContextNote(attachedDigests), "attached-session-excerpt")}\n\n${prompt}`;
 	}
 	// Non-image attachments: stage to disk and tell the agent where they landed.
 	prompt = withUploadsNote(prompt, stageFileAttachments(sessionId, rawFiles));
@@ -1872,7 +1873,7 @@ async function runSessionPromptInner(
 					user: session.startedBy || user || undefined,
 				},
 			);
-			if (refsContext) prompt += `\n\n${wrapContext(refsContext)}`;
+			if (refsContext) prompt += `\n\n${wrapContext(refsContext, "external-refs")}`;
 		} catch (e) {
 			console.error("[run-session] externalRefs context failed:", e);
 		}

@@ -138,6 +138,7 @@ export async function forkHandoffContext(fork: ForkContext): Promise<string> {
 			messageId: fork.messageId,
 			entries,
 		}),
+		"handoff",
 	);
 }
 
@@ -1272,7 +1273,7 @@ export async function handleCreateSessionMessage(
 				user,
 			});
 			if (refsContext)
-				openingPrompt += `\n\n${wrapContext(refsContext)}`;
+				openingPrompt += `\n\n${wrapContext(refsContext, "external-refs")}`;
 		}
 		const plainThreadId = msgPlainThreadId || workspace?.plainThreadId;
 		if (plainThreadId) {
@@ -1282,6 +1283,7 @@ export async function handleCreateSessionMessage(
 				const thread = await getThreadWithMessages(plainThreadId);
 				openingPrompt += `\n\n${wrapContext(
 					`This session was opened from a Plain support ticket. Ticket context:\n\n${formatThreadContext(thread, true)}`,
+					"ticket",
 				)}`;
 			} catch (e) {
 				console.error(
@@ -1290,6 +1292,7 @@ export async function handleCreateSessionMessage(
 				);
 				openingPrompt += `\n\n${wrapContext(
 					`This session was opened from Plain support ticket ${plainThreadId} (the context lookup failed — use the plain MCP tools to fetch the thread).`,
+					"ticket",
 				)}`;
 			}
 		}

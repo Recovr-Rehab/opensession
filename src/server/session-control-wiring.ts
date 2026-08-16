@@ -535,7 +535,7 @@ registerSessionControl({
 					joinedWorkspace.externalRefs,
 					{ scratch: isScratch, user },
 				);
-				if (refsContext) openingPrompt += `\n\n${wrapContext(refsContext)}`;
+				if (refsContext) openingPrompt += `\n\n${wrapContext(refsContext, "external-refs")}`;
 			}
 			if (joinedWorkspace.plainThreadId) {
 				const threadId = joinedWorkspace.plainThreadId;
@@ -546,6 +546,7 @@ registerSessionControl({
 					const thread = await getThreadWithMessages(threadId);
 					openingPrompt += `\n\n${wrapContext(
 						`This session was opened from a Plain support ticket. Ticket context:\n\n${formatThreadContext(thread, true)}`,
+						"ticket",
 					)}`;
 				} catch (e) {
 					console.error(
@@ -554,6 +555,7 @@ registerSessionControl({
 					);
 					openingPrompt += `\n\n${wrapContext(
 						`This session was opened from Plain support ticket ${threadId} (the context lookup failed — use the plain MCP tools to fetch the thread).`,
+						"ticket",
 					)}`;
 				}
 			}

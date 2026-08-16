@@ -87,6 +87,7 @@ import {
 import { buildEngineSwitchHandoffNote } from "./fork-handoff";
 import { personaName } from "./config";
 import { wrapContext } from "./prompt-context";
+import { logInjectedContext } from "./context-log";
 import {
   beginTurn,
   endTurn,
@@ -442,6 +443,18 @@ function runOnModel(opts: RunAgentOpts, model: string | undefined): AsyncIterabl
   // engine intercepts every engine's turns (fake-engine.test.ts).
   const requested = model || getDefaultModel();
   const mapped = toOpencodeModel(requested) || requested;
+  // Model-visible means logged (context-log.ts). This is the single dispatch
+  // point for every engine and every hop of the fallback walk, so recording
+  // the injected context here covers all of them with the prompt each one
+  // actually receives — including the handoff the walk prepends on a
+  // cross-provider hop. Before the test seam, so fake-engine tests exercise it.
+  logInjectedContext({
+    sessionId: opts.journal?.osSessionId || opts.transcriptSessionId,
+    turnId: opts.promptEntryId || opts.startToken,
+    prompt: opts.prompt,
+    reposNote: opts.reposNote,
+    model: mapped,
+  });
   if (engineForTest) return engineForTest(opts, mapped);
   const route = routeModel(requested, { interactive: isInteractiveRun(opts) });
   if (route.engine === "pi") return runPi(opts, route.model);
@@ -797,7 +810,8 @@ async function* runAgentInner(opts: RunAgentOpts): AsyncGenerator<StreamEvent> {
               toProvider: familyLabel(toFamily),
               targetResuming: false,
               entries,
-            })
+            }),
+            "handoff"
           )}\n\n${prompt}`;
       } else {
         prompt +=

@@ -44,6 +44,36 @@ transcript files — are served by the legacy file-watcher + byte-offset
 protocol instead, and any seq-mode failure degrades to that same path. The
 client keeps both modes and picks by what the init frame carries.
 
+## Model-visible means logged
+
+A turn's model input is more than the message a human typed: an engine handoff
+transcript, the per-turn repos/memory note, an attached session's excerpt, a
+ticket's context. `src/server/prompt-context.ts` fences those payloads so the
+rendered conversation stays the human's own words — which used to mean they
+were written down nowhere, so a stored session could not reproduce the request
+that produced its answers.
+
+`src/server/context-log.ts` records each one as an ordinary entry: a `system`
+entry tagged `noticeKind: "context-injection"`, carrying the payload verbatim
+plus its `contextInjection` metadata (`source` — handoff, repos-note, memory,
+attached-session-excerpt, preamble… — and the `turnId` it rode with). Riding
+the normal entry path is the point: blob-splitting bounds a 180KB handoff like
+any other oversized entry, and the ws protocol needs no new frame.
+
+- **Choke point**: `runOnModel` (`src/server/agent-runner.ts`) — the single
+  dispatch for every engine (opencode, pi, claude-direct, codex-direct, the
+  test fake) and every model of a fallback walk. The opencode runner calls in
+  as well for the same-engine-restart handoff it prepends *below* that point;
+  entry ids are content-derived, so overlapping calls upsert one row.
+- **Attribution rides the fence**, not the call site: `wrapContext(body,
+  source)` writes `<opensession:context source="…">`, so a new injection site
+  is logged whether or not its author remembers this file (untagged blocks log
+  as `unknown`).
+- **Not conversation**: every client-bound projection drops them
+  (`dropContextInjections`), as do the handoff builders and transcript
+  excerpts — an injection record must never be folded back into the next
+  prompt, or into a recap.
+
 ## Imports and drift
 
 Legacy/external transcript files are imported into the store on first touch
