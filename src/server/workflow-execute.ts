@@ -32,6 +32,7 @@ import { createWorktree, getRepo, removeWorktree } from "./worktree";
 import { gitIdentityEnv, gitIdentityFor } from "./shared/user-mappings";
 import {
 	WORKFLOW_LIMITS,
+	type WorkflowAgentArtifact,
 	type WorkflowAgentOutcome,
 	type WorkflowAgentRequest,
 	type WorkflowExecCtx,
@@ -436,6 +437,15 @@ function addTokens(
 	return { input: total.input + add.input, output: total.output + add.output };
 }
 
+/** Attach a retained branch to an outcome. The artifact is the truth; the
+ *  top-level copies exist for journals and consumers written before it. */
+function withArtifact(
+	outcome: WorkflowAgentOutcome,
+	artifact: WorkflowAgentArtifact,
+): WorkflowAgentOutcome {
+	return { ...outcome, artifact, ...artifact };
+}
+
 export const workflowExecutor: WorkflowExecutor = {
 	async execute(req: WorkflowAgentRequest, ctx: WorkflowExecCtx): Promise<WorkflowAgentOutcome> {
 		const model = req.opts.model || ctx.defaultModel || getDefaultModel();
@@ -508,15 +518,17 @@ export const workflowExecutor: WorkflowExecutor = {
 				const label = req.opts.label || req.prompt.replace(/\s+/g, " ").trim().slice(0, 60);
 				if (!outcome.ok) {
 					// Failed/cancelled: only keep the worktree if the agent committed
-					// something itself (rare); otherwise leave nothing behind.
+					// something itself (rare); otherwise leave nothing behind. A kept
+					// branch is an artifact like any other — the turn failing doesn't
+					// make it invisible to the snapshot or to merge().
 					const head = await gitHead(worktree.dir);
 					keepWorktree = !!head && head !== worktree.baseCommit;
-					return {
-						...base,
-						branch: keepWorktree ? worktree.branch : undefined,
-						worktreeDir: keepWorktree ? worktree.dir : undefined,
-						changed: keepWorktree,
-					};
+					if (!keepWorktree) return { ...base, changed: false };
+					return withArtifact(base, {
+						branch: worktree.branch,
+						worktreeDir: worktree.dir,
+						changed: true,
+					});
 				}
 				// Hold the worktree across the commit: if committing throws, the
 				// agent's work stays on disk for a human instead of evaporating.
@@ -529,8 +541,7 @@ export const workflowExecutor: WorkflowExecutor = {
 				);
 				keepWorktree = committed.changed;
 				if (!committed.changed) return { ...base, changed: false };
-				return {
-					...base,
+				return withArtifact(base, {
 					branch: worktree.branch,
 					worktreeDir: worktree.dir,
 					changed: true,
@@ -538,7 +549,7 @@ export const workflowExecutor: WorkflowExecutor = {
 					files: committed.files,
 					insertions: committed.insertions,
 					deletions: committed.deletions,
-				};
+				});
 			};
 
 			if (req.opts.schema === undefined) {
