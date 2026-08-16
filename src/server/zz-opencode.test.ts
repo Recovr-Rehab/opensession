@@ -20,6 +20,7 @@ import {
   emptyCompletionRepairPrompt,
   meridianRequiredModels,
   buildTurnResultEvents,
+  openaiBridgeAccountState,
 } from "./opencode-runner";
 import { buildRunInstructions } from "./run-instructions";
 import { __setIdentitiesForTest } from "./shared/user-mappings";
@@ -187,6 +188,21 @@ describe("empty successful completion recovery", () => {
 });
 
 describe("transient bridge recovery", () => {
+  test("retains API-key accounts for rotation without enabling the OAuth liveness guard", () => {
+    const account = {
+      id: "acc-key-rotation",
+      name: "api-key-account",
+      kind: "api_key" as const,
+      value: "sk-test",
+      createdAt: "2026-08-16T00:00:00Z",
+    };
+
+    const state = openaiBridgeAccountState(account, "api-key");
+
+    expect(state.account).toBe(account);
+    expect(state.livenessGuard).toBe(false);
+  });
+
   test("classifies provider limits once while preserving the user-facing message", () => {
     const anthropicMessage = "Claude usage limit reached";
     const openaiMessage = "The usage limit has been reached";
