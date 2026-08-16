@@ -5,6 +5,7 @@ import {
 	assetPathForMediaSrc,
 	assetPreviewKind,
 	formatAssetSize,
+	isVisualAsset,
 	resolvedAssetPath,
 } from "./asset-preview";
 
@@ -15,6 +16,20 @@ describe("asset previews", () => {
 		expect(assetPreviewKind("notes.md")).toBe("markdown");
 		expect(assetPreviewKind("data.json")).toBe("text");
 		expect(assetPreviewKind("archive.zip")).toBe("binary");
+	});
+
+	test("shows pictures and recordings, lists everything else", () => {
+		// The Info panel frames these, because a name and a byte count say
+		// nothing about them.
+		expect(isVisualAsset("shots/before.png")).toBe(true);
+		expect(isVisualAsset("options/1-push.mp4")).toBe(true);
+		expect(isVisualAsset("loop.gif")).toBe(true);
+		// These keep their row, where the name and the description are the
+		// content — a thumbnail of one is a grey rectangle.
+		expect(isVisualAsset("report.html")).toBe(false);
+		expect(isVisualAsset("diagram.svg")).toBe(false);
+		expect(isVisualAsset("data.json")).toBe(false);
+		expect(isVisualAsset("notes.md")).toBe(false);
 	});
 
 	test("keeps a chip openable before the listing catches up", () => {

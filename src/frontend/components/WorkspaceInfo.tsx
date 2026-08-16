@@ -13,11 +13,13 @@ import {
 	setSessionReviewerApi,
 	acceptReviewApi,
 	triggerPrActionApi,
+	sessionAssetPreviewUrl,
 	type PrAgentAction,
 	type WorkspaceMediaItem,
 	type WorkspaceOverview,
 	type SessionAssetFile,
 } from "../lib/api";
+import { assetPreviewKind, isVisualAsset } from "../lib/asset-preview";
 import {
 	pollWhileVisible,
 	PR_WEBHOOK_FALLBACK_POLL_MS,
@@ -1222,6 +1224,116 @@ function GitStatusRows({
 	);
 }
 
+/** One frame in a media strip, and what clicking it opens. */
+type StripItem = {
+	key: string;
+	kind: "image" | "video";
+	src: string;
+	/** Native tooltip: where the frame came from, or what the file is. */
+	title?: string;
+	/** A name under the frame. An asset carries one because its name is how you
+	 refer to it ("use option 3"); conversation media has nothing to name. */
+	caption?: string;
+	onOpen: (from: HTMLElement) => void;
+};
+
+/**
+ * A scrolling row of media frames, used twice in this panel: for the pictures
+ * and recordings the workspace's sessions produced, and for the visual assets
+ * this session wrote. Both are the same glance — a file you can only judge by
+ * looking at it — so a recording an agent left behind gets a first frame rather
+ * than a list row saying `1-push.mp4 · 159 KB`, which is five variants you have
+ * to open one at a time.
+ */
+function MediaStrip({ items }: { items: StripItem[] }) {
+	return (
+		<div
+			// The same card the neighbouring lists sit on (INFO_LIST_CLASS), laid
+			// out as a scroller — spelled out rather than composed, so its overflow
+			// isn't fighting that constant's `overflow-hidden`. Frames scroll
+			// *inside* the card, so the panel's padding is there on both sides at
+			// rest; a sliver of the next frame at the trailing edge is what says it
+			// scrolls. `p-3` rather than the lists' `p-1`: their rows carry their
+			// own `px-2`, which puts row content 12px off the card edge. A frame is
+			// its own content, so the card holds all 12 itself and the frames line
+			// up with the rows and the label above them.
+			className="flex snap-x snap-mandatory gap-2 overflow-x-auto overflow-y-hidden rounded-lg bg-panel p-3 [scroll-padding-left:12px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+		>
+			{items.map((item) => (
+				<button
+					key={item.key}
+					type="button"
+					onClick={(event) => item.onOpen(event.currentTarget)}
+					title={item.title}
+					className={cn(
+						"focus-ring group/frame flex shrink-0 snap-start flex-col gap-1 rounded-[calc(14px*var(--rf)-12px)] text-left",
+						items.length === 1
+							? "w-full"
+							: items.length === 2
+								? "w-[calc((100%-8px)/2)]"
+								: // Two full frames + the 8px gap + a 22px sliver of the
+									// third, filling the card exactly — so the sliver sits
+									// inside the card's own padding, not against the panel.
+									"w-[calc((100%-30px)/2)]",
+					)}
+				>
+					<span
+						// Concentric with the card: inner = outer − padding, i.e.
+						// rounded-lg (14·rf) minus the card's 12px. No token lands
+						// there — the neighbouring lists' rows get away with
+						// rounded-control because they only sit 4px in — so it's
+						// spelled out, and it follows --rf like every other radius.
+						// border-line-strong, not border-line: a frame's own edge is
+						// whatever the capture happens to end on, so a dark screenshot
+						// on the dark panel has no edge at all and the tile dissolves
+						// into the card behind it. The frame supplies the edge instead,
+						// at the same step every other image in the app is outlined
+						// with (NoteBubble, the Slack composer's thumbnails). Hover is
+						// the fill alone: there is no line above strong to escalate to.
+						className="relative block aspect-video w-full overflow-hidden rounded-[calc(14px*var(--rf)-12px)] border border-line-strong bg-surface transition-colors group-hover/frame:bg-hover"
+					>
+						{item.kind === "image" ? (
+							<img
+								src={item.src}
+								alt=""
+								loading="lazy"
+								// contain, not cover: a screenshot is only worth showing
+								// if the whole frame is there.
+								className="h-full w-full object-contain"
+							/>
+						) : (
+							<>
+								<video
+									// #t=0.1 makes the browser seek to the first frame and
+									// paint it as a poster — without it preload="metadata"
+									// leaves the tile blank.
+									src={`${item.src}#t=0.1`}
+									muted
+									playsInline
+									preload="metadata"
+									className="h-full w-full object-contain"
+								/>
+								{/* Dark translucent disc so the wedge reads on any frame
+								    (a bare white glyph vanishes on light footage). */}
+								<span className="pointer-events-none absolute inset-0 grid place-items-center">
+									<span className="grid size-8 place-items-center rounded-full bg-black/45 text-white backdrop-blur-sm">
+										<IconPlay size={18} />
+									</span>
+								</span>
+							</>
+						)}
+					</span>
+					{item.caption && (
+						<span className="block w-full truncate text-meta text-dim">
+							{item.caption}
+						</span>
+					)}
+				</button>
+			))}
+		</div>
+	);
+}
+
 export function WorkspaceInfo({
 	sessionId,
 	workspaceId,
@@ -1394,6 +1506,13 @@ export function WorkspaceInfo({
 			) === i,
 	);
 
+	// A picture or a recording an agent wrote is shown, not listed: its name and
+	// size say nothing about it. Everything else — a page, a report, a data
+	// file — is the opposite, so it keeps the row, where the name and the
+	// description are the content.
+	const visualAssets = assets.filter((a) => isVisualAsset(a.path));
+	const fileAssets = assets.filter((a) => !isVisualAsset(a.path));
+
 	// Ahead, behind and the PR itself are the status strip's; this section is
 	// only the uncommitted work in the tree.
 	const showGit = Boolean(git && git.uncommittedFiles > 0);
@@ -1536,139 +1655,100 @@ export function WorkspaceInfo({
 					)}
 					{media.length > 0 && (
 						<div className={INFO_SECTION_CLASS}>
-							<div className={INFO_LABEL_CLASS}>
-								{media.length} screenshot{media.length === 1 ? "" : "s"}
-							</div>
+							{/* Not "screenshots": the strip has always shown recordings
+							    too. Naming the source instead is what separates this
+							    section from the assets below it — one is what appeared in
+							    the conversation, the other is what the session wrote. */}
 							<div
-								// The same card the neighbouring lists sit on
-								// (INFO_LIST_CLASS), laid out as a scroller — spelled
-								// out rather than composed, so its overflow isn't
-								// fighting that constant's `overflow-hidden`. Frames
-								// scroll *inside* the card, so the panel's padding is
-								// there on both sides at rest; a sliver of the next
-								// frame at the trailing edge is what says it scrolls.
-								// `p-3` rather than the lists' `p-1`: their rows carry
-								// their own `px-2`, which puts row content 12px off the
-								// card edge. A frame is its own content, so the card
-								// holds all 12 itself and the frames line up with the
-								// rows and the label above them.
-								className="flex snap-x snap-mandatory gap-2 overflow-x-auto overflow-y-hidden rounded-lg bg-panel p-3 [scroll-padding-left:12px] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+								className={cn(
+									INFO_LABEL_CLASS,
+									"flex items-center justify-between gap-2",
+								)}
 							>
-								{media.map((m, i) => (
-									<button
-										key={`${m.sessionId}:${m.at}:${i}`}
-										type="button"
-										onClick={(event) =>
-											openLightbox(media, i, event.currentTarget)
-										}
-										className={cn(
-											// Concentric with the card: inner = outer − padding,
-											// i.e. rounded-lg (14·rf) minus the card's 12px. No
-											// token lands there — the neighbouring lists' rows
-											// get away with rounded-control because they only
-											// sit 4px in — so it's spelled out, and it follows
-											// --rf like every other radius.
-											// border-line-strong, not border-line: a frame's own
-											// edge is whatever the capture happens to end on, so
-											// a dark screenshot on the dark panel has no edge at
-											// all and the tile dissolves into the card behind it.
-											// The frame supplies the edge instead, at the same
-											// step every other image in the app is outlined with
-											// (NoteBubble, the Slack composer's thumbnails).
-											// Hover is the fill alone: there is no line above
-											// strong to escalate to.
-											"relative aspect-video shrink-0 snap-start overflow-hidden rounded-[calc(14px*var(--rf)-12px)] border border-line-strong bg-surface transition-colors hover:bg-hover",
-											media.length === 1
-												? "w-full"
-												: media.length === 2
-													? "w-[calc((100%-8px)/2)]"
-													: // Two full frames + the 8px gap + a 22px
-														// sliver of the third, filling the card
-														// exactly — so the sliver sits inside the
-														// card's own padding, not against the panel.
-														"w-[calc((100%-30px)/2)]",
-										)}
-										title={[m.sessionTitle, fullTime(m.at)]
-											.filter(Boolean)
-											.join(" · ")}
-									>
-										{m.kind === "image" ? (
-											<img
-												src={m.src}
-												alt=""
-												loading="lazy"
-												// contain, not cover: a screenshot is only worth
-												// showing if the whole frame is there.
-												className="h-full w-full object-contain"
-											/>
-										) : (
-											<>
-												<video
-													// #t=0.1 makes the browser seek to the first
-													// frame and paint it as a poster — without it
-													// preload="metadata" leaves the tile blank.
-													src={`${m.src}#t=0.1`}
-													muted
-													playsInline
-													preload="metadata"
-													className="h-full w-full object-contain"
-												/>
-												{/* Dark translucent disc so the wedge reads on any
-												    frame (a bare white glyph vanishes on light
-												    footage). */}
-												<span className="pointer-events-none absolute inset-0 grid place-items-center">
-													<span className="grid size-8 place-items-center rounded-full bg-black/45 text-white backdrop-blur-sm">
-														<IconPlay size={18} />
-													</span>
-												</span>
-											</>
-										)}
-									</button>
-								))}
+								<span>From the conversation</span>
+								<span className="tabular-nums">{media.length}</span>
 							</div>
+							<MediaStrip
+								items={media.map((m, i) => ({
+									key: `${m.sessionId}:${m.at}:${i}`,
+									kind: m.kind,
+									src: m.src,
+									title: [m.sessionTitle, fullTime(m.at)]
+										.filter(Boolean)
+										.join(" · "),
+									onOpen: (from) => openLightbox(media, i, from),
+								}))}
+							/>
 						</div>
 					)}
 					{assets.length > 0 && (
 						<div className={INFO_SECTION_CLASS}>
-							<div className={INFO_LABEL_CLASS}>
-								{assets.length} asset{assets.length === 1 ? "" : "s"}
+							<div
+								className={cn(
+									INFO_LABEL_CLASS,
+									"flex items-center justify-between gap-2",
+								)}
+							>
+								<span>Assets</span>
+								<span className="tabular-nums">{assets.length}</span>
 							</div>
-							<div className={INFO_LIST_CLASS}>
-								{assets.map((a) => (
-									<button
-										key={a.path}
-										type="button"
-										onClick={() => onOpenAsset?.(a.path)}
-										title={`Open ${a.path}`}
-										className={cn(
-											"flex w-full min-w-0 gap-2 rounded-control px-2 py-[5px] text-left text-label text-fg transition-colors hover:bg-hover",
-											// With a description the row is two lines and the icon
-											// and size ride the first one; a bare filename is a
-											// single line, so centre everything on it instead.
-											a.description ? "items-start" : "items-center",
-										)}
-									>
-										<IconFile
-											size={14}
+							{visualAssets.length > 0 && (
+								<MediaStrip
+									items={visualAssets.map((a) => ({
+										key: a.path,
+										kind:
+											assetPreviewKind(a.path) === "video"
+												? ("video" as const)
+												: ("image" as const),
+										src: sessionAssetPreviewUrl(sessionId, a),
+										title: [`Open ${a.path}`, a.description]
+											.filter(Boolean)
+											.join(" · "),
+										// The folder is usually shared across a set of
+										// variants; the filename is what tells them apart.
+										caption: a.path.split("/").pop() || a.path,
+										onOpen: () => onOpenAsset?.(a.path),
+									}))}
+								/>
+							)}
+							{fileAssets.length > 0 && (
+								<div className={INFO_LIST_CLASS}>
+									{fileAssets.map((a) => (
+										<button
+											key={a.path}
+											type="button"
+											onClick={() => onOpenAsset?.(a.path)}
+											title={`Open ${a.path}`}
 											className={cn(
-												"shrink-0 text-faint",
-												a.description && "mt-0.5",
+												"flex w-full min-w-0 gap-2 rounded-control px-2 py-[5px] text-left text-label text-fg transition-colors hover:bg-hover",
+												// With a description the row is two lines and the icon
+												// and size ride the first one; a bare filename is a
+												// single line, so centre everything on it instead.
+												a.description ? "items-start" : "items-center",
 											)}
-										/>
-										<span className="min-w-0 flex-1">
-											<span className="block truncate">{a.path}</span>
-											{a.description && (
-												<span className="mt-0.5 line-clamp-2 text-meta leading-snug text-dim">
-													{a.description}
-												</span>
-											)}
-										</span>
-										<span className="shrink-0 text-meta text-faint">
-											{fmtBytes(a.size)}
-										</span>
-									</button>
-								))}
-							</div>
+										>
+											<IconFile
+												size={14}
+												className={cn(
+													"shrink-0 text-faint",
+													a.description && "mt-0.5",
+												)}
+											/>
+											<span className="min-w-0 flex-1">
+												<span className="block truncate">{a.path}</span>
+												{a.description && (
+													<span className="mt-0.5 line-clamp-2 text-meta leading-snug text-dim">
+														{a.description}
+													</span>
+												)}
+											</span>
+											<span className="shrink-0 text-meta text-faint">
+												{fmtBytes(a.size)}
+											</span>
+										</button>
+									))}
+								</div>
+							)}
 						</div>
 					)}
 				</div>

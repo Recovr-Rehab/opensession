@@ -36,6 +36,19 @@ export function assetPreviewKind(path: string): AssetPreviewKind {
 	return "binary";
 }
 
+/**
+ * Does this asset show as a frame rather than as a row?
+ *
+ * A picture or a recording is only useful once you can see it: a row saying
+ * `options/1-push.mp4 · 159.0 KB` is five variants of a demo you have to open
+ * one at a time. A page, a report or a data file is the opposite — its name and
+ * its description ARE the content, and a thumbnail of one is a grey rectangle.
+ */
+export function isVisualAsset(path: string): boolean {
+	const kind = assetPreviewKind(path);
+	return kind === "image" || kind === "video";
+}
+
 /** How much of a text asset a preview reads — a generated log can be huge, and
  *  the point of the preview is to see what the agent produced. */
 export const ASSET_TEXT_CAP = 256 * 1024;
