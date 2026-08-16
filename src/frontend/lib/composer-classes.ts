@@ -117,13 +117,24 @@ export const composerToolbar =
  *  to the text column it reads as a rule under a paragraph rather than as the
  *  floor of the scrolling region.
  *
+ *  It is hung at the FIELD's bottom edge (the toolbar's whole top margin,
+ *  negated) rather than at the toolbar's own top, so it lands on the floor of
+ *  the scrolling text and hands the entire gap to the controls below it. Sat
+ *  at the toolbar's edge instead, the gap was split: the line stood off the
+ *  text it belongs to and pressed against the send disc, whose fill reaches
+ *  much closer than the hairline glyphs beside it do. Where it is now the
+ *  toolbar keeps equal air above and below — the composer's own bottom padding
+ *  is the same 10px (9px on phones) — so the row reads as its own strip.
+ *
  *  `data-scroll-under` is written imperatively by the composer's scroll
- *  handler, for the reason the fade above it is: a state round-trip lands the
- *  line a frame late, which during momentum scroll reads as a flicker. */
+ *  handler, for the reason the fade at the other edge is: a state round-trip
+ *  lands the line a frame late, which during momentum scroll reads as a
+ *  flicker. */
 export const composerToolbarScrollDivider =
-	"before:pointer-events-none before:absolute before:-inset-x-3.5 before:top-0 " +
+	"before:pointer-events-none before:absolute before:-inset-x-3.5 before:-top-2.5 " +
 	"before:h-px before:bg-divider before:opacity-0 before:transition-opacity " +
-	"before:content-[''] data-[scroll-under]:before:opacity-100 phone:before:-inset-x-3";
+	"before:content-[''] data-[scroll-under]:before:opacity-100 " +
+	"phone:before:-inset-x-3 phone:before:-top-1.5";
 /** Resting phone pill: `display: contents` lifts the toolbar's buttons into
  *  the composer's own flex row, so the textarea can sit between the "+" and
  *  the mic/send and `order` can sequence them. Combine through `cn()` —
