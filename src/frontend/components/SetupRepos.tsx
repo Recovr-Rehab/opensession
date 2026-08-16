@@ -1,5 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "../ui/button";
+import { Modal } from "../ui/modal";
 import { Popover } from "../ui/popover";
 import { Switch } from "../ui/switch";
 import { cn } from "../ui/cn";
@@ -12,7 +13,6 @@ import {
 	SettingRowTitle,
 	SettingsGroupLabel,
 	SettingsHint,
-	SettingsSection,
 	settingsInputClass,
 } from "../ui/settings";
 import { toast } from "../ui/toast";
@@ -49,15 +49,14 @@ import { Badge } from "../ui/badge";
 export function ReposSection({
 	repos,
 	onChanged,
-	title,
 }: {
 	repos: SetupStatus["repos"];
 	onChanged: () => void | Promise<void>;
-	/** Group label above the list. Omitted when the page or wizard step is
-	 *  already titled "Repositories" — then the row carries only the button. */
-	title?: React.ReactNode;
 }) {
 	const [pickerOpen, setPickerOpen] = useState(false);
+	// Focused when the picker opens, so a long list is one keystroke from
+	// being filtered. Only one of the picker's two inputs renders at a time.
+	const pickerInput = useRef<HTMLInputElement>(null);
 	// Tile appearance rides on the repo list rather than the setup status: the
 	// same payload every tile in the app reads, so what this page shows and
 	// what the sidebar paints can't drift apart.
@@ -71,21 +70,39 @@ export function ReposSection({
 	}, [loadAppearance, repos]);
 	return (
 		<>
+			{/* The label is the count: the page and the wizard step are both
+			    already titled "Repositories", so repeating the word says
+			    nothing, while how many are registered is worth reading. */}
 			<SettingsGroupLabel
-				className={title ? undefined : "mt-0"}
+				className="mt-0"
 				actions={
 					<Button
 						size="sm"
 						icon={<IconPlus size={16} />}
-						onClick={() => setPickerOpen((o) => !o)}
+						onClick={() => setPickerOpen(true)}
 					>
-						{pickerOpen ? "Close" : "Add repository"}
+						Add repository
 					</Button>
 				}
 			>
-				{title}
+				{repos.length === 0
+					? "No repositories"
+					: repos.length === 1
+						? "1 repository"
+						: `${repos.length} repositories`}
 			</SettingsGroupLabel>
-			{pickerOpen && <AddRepoPicker onAdded={onChanged} />}
+			{/* On top rather than inline: the picker is a list of its own, and
+			    pushing the registered repos down the page to browse a second
+			    list made the two read as one. Adding stays a detour. */}
+			<Modal.Root open={pickerOpen} onOpenChange={setPickerOpen}>
+				<Modal.Content widthClassName="max-w-[34rem]" initialFocus={pickerInput}>
+					<Modal.Header
+						title="Add repository"
+						description="Clone a repository onto the server so sessions can work in it."
+					/>
+					<AddRepoPicker inputRef={pickerInput} onAdded={onChanged} />
+				</Modal.Content>
+			</Modal.Root>
 			<SettingCard>
 				{repos.length === 0 ? (
 					<EmptyState placement="row">
@@ -420,7 +437,15 @@ function RepoPickRow({
 	);
 }
 
-function AddRepoPicker({ onAdded }: { onAdded: () => void | Promise<void> }) {
+function AddRepoPicker({
+	inputRef,
+	onAdded,
+}: {
+	/** Focused once the list resolves. Which input exists depends on whether
+	 *  there's a credential to browse with, so both branches take it. */
+	inputRef?: React.RefObject<HTMLInputElement | null>;
+	onAdded: () => void | Promise<void>;
+}) {
 	const [browse, setBrowse] = useState<BrowseResult | null>(null);
 	const [browseFailed, setBrowseFailed] = useState(false);
 	// code.storage list, probed alongside GitHub. Stays null until the probe
@@ -465,6 +490,12 @@ function AddRepoPicker({ onAdded }: { onAdded: () => void | Promise<void> }) {
 		};
 	}, []);
 
+	// The list arrives after the dialog has opened, so the dialog's initial
+	// focus finds no field to land on. Focus it the moment it exists.
+	useEffect(() => {
+		if (browse || browseFailed) inputRef?.current?.focus();
+	}, [browse, browseFailed, inputRef]);
+
 	const filtered = useMemo(
 		() => filterRepos(browse?.repos ?? [], filter),
 		[browse, filter],
@@ -506,12 +537,14 @@ function AddRepoPicker({ onAdded }: { onAdded: () => void | Promise<void> }) {
 		(csConfigured ? (csBrowse?.repos.length ?? 0) : 0);
 
 	return (
-		<SettingsSection className="mb-3">
+		// No surface of its own: the dialog is already the card this sits on.
+		<div>
 			{!browse && !browseFailed ? (
 				<LoadingState placement="row">Looking up your GitHub repositories…</LoadingState>
 			) : browse && browse.source !== null ? (
 				<>
 					<input
+						ref={inputRef}
 						className={settingsInputClass}
 						value={filter}
 						onChange={(e) => setFilter(e.target.value)}
@@ -566,6 +599,7 @@ function AddRepoPicker({ onAdded }: { onAdded: () => void | Promise<void> }) {
 					</div>
 					<div className="mt-2.5 flex items-center gap-2">
 						<input
+							ref={inputRef}
 							className={cn(settingsInputClass, "flex-1 font-mono")}
 							value={manual}
 							onChange={(e) => setManual(e.target.value)}
@@ -624,6 +658,6 @@ function AddRepoPicker({ onAdded }: { onAdded: () => void | Promise<void> }) {
 				</>
 			)}
 			{error && <InlineAlert className="mt-2.5">{error}</InlineAlert>}
-		</SettingsSection>
+		</div>
 	);
 }
