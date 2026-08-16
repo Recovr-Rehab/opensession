@@ -19,44 +19,37 @@ import { Segmented, SegmentedOption } from "../ui/segmented";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { cn } from "../ui/cn";
-import { IconPlus } from "./icons";
+import { Menu } from "../ui/menu";
+import { Modal } from "../ui/modal";
+import { CheckStatusIcon } from "./CheckStatusIcon";
+import { IconDotsHorizontal, IconPencil, IconPlus, IconTrash } from "./icons";
 import { SOURCE_CHIP } from "../lib/source-chip-classes";
-import { Input, Select, Textarea } from "../ui/input";
-import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
+import { Field, Input, Select, Textarea } from "../ui/input";
+import {
+  SettingCard,
+  SettingRow,
+  SettingRowControl,
+  SettingRowDescription,
+  SettingRowText,
+  SettingRowTitle,
+  SettingsGroupLabel,
+  SettingsHeader,
+  SettingsPanel,
+  StatusChip,
+  rowMenuTriggerClasses,
+} from "../ui/settings";
 import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
 
-/* The old .automation-form / .automation-card families, as utilities (see
-   Automations.tsx — this page shares their shapes). The descendant variants
-   keep the two rules that reached in from the form to its fields: 16px on
-   phones, so iOS doesn't zoom a focused field, and paragraph leading in a
-   textarea. */
+/* Security is a tool surface hosted inside Settings, so it reads as one of its
+   pages: the settings reading column, a SettingsHeader on top, and each group
+   of rows on a SettingCard plate. Its two forms are real dialogs (ui/modal)
+   rather than hand-rolled overlays, which is what gets them a focus trap. */
+
+/** 16px on phones, so iOS doesn't zoom a focused field; paragraph leading in a
+    textarea. Both reach in from a dialog's body to its fields. */
 const FORM_FIELDS =
   "[&_textarea]:leading-normal phone:[&_input]:text-input-phone phone:[&_select]:text-input-phone phone:[&_textarea]:text-input-phone";
-/** .automation-form */
-const FORM_CARD = `flex flex-col gap-3.5 rounded-panel border border-line-strong bg-panel p-4.5 ${FORM_FIELDS}`;
-/** .automation-form label */
-const FIELD_LABEL = "flex flex-1 flex-col gap-1.5 text-label font-medium text-dim";
-/** .automation-form-title */
-const FORM_TITLE = "text-item-title font-semibold";
-/** .automation-form-actions */
-const FORM_ACTIONS = "flex justify-end gap-2.5";
-/** .automation-card */
-const CARD = "rounded-panel border border-line bg-panel px-4 py-3.5";
-/** .automation-top — one row on desktop; on phones the title takes the first
- *  line, chips flow after it and the actions drop to a row of their own. */
-const CARD_TOP = "flex min-w-0 items-center gap-2.5 phone:flex-wrap phone:gap-y-2";
-/** .automation-name */
-const CARD_NAME =
-  "truncate text-item-title font-semibold phone:min-w-0 phone:flex-[1_1_60%] phone:whitespace-normal phone:[overflow-wrap:anywhere]";
-/** .automation-actions */
-const CARD_ACTIONS = "ml-auto flex shrink-0 gap-1.5 phone:ml-0 phone:w-full";
-/** .automation-prompt */
-const CARD_PROMPT = "my-2.25 line-clamp-2 text-supporting leading-normal text-dim";
-/** .automation-meta */
-const CARD_META = "flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-meta text-faint";
-/** .automation-by — the trailing "by <person>", dropped on phones. */
-const CARD_BY = "ml-auto phone:hidden";
-/** .automation-session-link */
+/** A link inside a row: the session an entry points at, the page that owns it. */
 const LINK = "cursor-pointer text-link no-underline hover:underline";
 
 interface Props {
@@ -74,6 +67,29 @@ interface RecurringScan {
 }
 
 type Tab = "scans" | "profiles";
+
+/** A scan's state as the settings row reads it: a dot and a word. */
+function scanStatus(status: SecurityScan["status"]): { label: string; dot: string } {
+  if (status === "running") return { label: "Running", dot: "var(--yellow)" };
+  if (status === "done") return { label: "Done", dot: "var(--green)" };
+  if (status === "interactive") return { label: "Interactive", dot: "var(--accent)" };
+  return { label: "Error", dot: "var(--red)" };
+}
+
+/** The ✓/✗ a finished run carries, in the app's shared check glyph. */
+function RunGlyph({ ok, title }: { ok: boolean; title?: string }) {
+  return (
+    <span
+      className={cn(
+        "flex size-5 shrink-0 items-center justify-center [&_svg]:size-3.5",
+        ok ? "text-green" : "text-red",
+      )}
+      title={title}
+    >
+      <CheckStatusIcon kind={ok ? "success" : "failure"} />
+    </span>
+  );
+}
 
 export function Security({ onOpenSession }: Props) {
   const [scans, setScans] = useState<SecurityScan[]>([]);
@@ -124,287 +140,313 @@ export function Security({ onOpenSession }: Props) {
     }
   }
 
+  async function handleDeleteProfile(p: ScanProfile) {
+    if (!confirm(`Delete profile "${p.name}"?`)) return;
+    try {
+      await deleteScanProfileApi(p.id);
+      load();
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }
+
   return (
-    <div className="mx-auto min-h-0 w-full max-w-[860px] flex-1 overflow-y-auto px-6 pt-7 pb-15 phone:px-3.5 phone:pt-4.5 phone:pb-12">
-      <PageHeader>
-        <div>
-          <PageTitle>Security</PageTitle>
-          <PageDescription>
-            deepsec scans across the registered repos. Findings land as PRs, one per confirmed issue.
-          </PageDescription>
+    <div className="flex min-h-0 flex-1 justify-center overflow-y-auto px-8 pt-11 pb-22 phone:px-4 phone:pt-5 phone:pb-12">
+      <SettingsPanel className="self-start">
+        <SettingsHeader
+          title="Security"
+          description="deepsec scans across your repos. Every confirmed finding lands as its own PR."
+          className="phone:flex-col phone:items-start phone:gap-3"
+          actions={
+            tab === "profiles" ? (
+              <Button
+                variant="primary"
+                icon={<IconPlus size={16} />}
+                onClick={() => setEditProfile("new")}
+              >
+                New profile
+              </Button>
+            ) : (
+              <Button
+                variant="primary"
+                icon={<IconPlus size={16} />}
+                onClick={() => setShowNewScan(true)}
+              >
+                New scan
+              </Button>
+            )
+          }
+        />
+
+        {/* The tab bar takes the card's own inset, so it sits over the rows it
+            switches rather than over the page. */}
+        <div className="mb-4 px-5">
+          <Segmented
+            label="Security view"
+            value={tab}
+            onValueChange={(next) => setTab(next as Tab)}
+          >
+            <SegmentedOption value="scans">Scans {scans.length}</SegmentedOption>
+            <SegmentedOption value="profiles">Profiles {profiles.length}</SegmentedOption>
+          </Segmented>
         </div>
-        <Button
-					variant="primary"
-					size="lg"
-					icon={<IconPlus size={20} />}
-					className="text-control-label font-medium"
-					onClick={() => setShowNewScan(true)}
-				>
-					New scan
-				</Button>
-      </PageHeader>
 
-      <Segmented
-        className="mb-4"
-        label="Security view"
-        value={tab}
-        onValueChange={(next) => setTab(next as Tab)}
-      >
-        {(
-          [
-            ["scans", `Scans ${scans.length}`],
-            ["profiles", `Profiles ${profiles.length}`],
-          ] as Array<[Tab, string]>
-        ).map(([t, label]) => (
-          <SegmentedOption key={t} value={t}>
-            {label}
-          </SegmentedOption>
-        ))}
-      </Segmented>
+        {error && (
+          <InlineAlert className="mb-3" onDismiss={() => setError(null)}>
+            {error}
+          </InlineAlert>
+        )}
 
-      {error && (
-        <InlineAlert className="text-label" onDismiss={() => setError(null)}>
-          {error}
-        </InlineAlert>
-      )}
+        {loading ? (
+          <LoadingState>Loading…</LoadingState>
+        ) : tab === "profiles" ? (
+          <SettingCard>
+            {profiles.length === 0 ? (
+              <EmptyState placement="row" title="No scan profiles yet">
+                A profile tells a scan how to read your code: what to prioritize,
+                what is intentionally public, and where the severity bar sits.
+              </EmptyState>
+            ) : (
+              profiles.map((p) => (
+                <SettingRow key={p.id} className="items-start">
+                  <SettingRowText>
+                    <SettingRowTitle>{p.name}</SettingRowTitle>
+                    <SettingRowDescription className="line-clamp-2">
+                      {p.prompt}
+                    </SettingRowDescription>
+                    <div className="mt-1 text-meta text-faint">by {p.createdBy}</div>
+                  </SettingRowText>
+                  <SettingRowControl>
+                    <Menu.Root>
+                      <Menu.Trigger
+                        className={rowMenuTriggerClasses}
+                        aria-label={`Manage ${p.name}`}
+                      >
+                        <IconDotsHorizontal size={18} />
+                      </Menu.Trigger>
+                      <Menu.Popup align="end" sideOffset={4}>
+                        <Menu.Item onClick={() => setEditProfile(p)}>
+                          <IconPencil size={16} />
+                          Edit profile
+                        </Menu.Item>
+                        <Menu.Item
+                          onClick={() => handleDeleteProfile(p)}
+                          className="text-red data-[highlighted]:bg-red-soft"
+                        >
+                          <IconTrash size={16} />
+                          Delete profile
+                        </Menu.Item>
+                      </Menu.Popup>
+                    </Menu.Root>
+                  </SettingRowControl>
+                </SettingRow>
+              ))
+            )}
+          </SettingCard>
+        ) : (
+          <>
+            {recurring.length > 0 && (
+              <>
+                <SettingsGroupLabel className="mt-0">Recurring</SettingsGroupLabel>
+                <SettingCard>
+                  {recurring.map((r) => (
+                    <SettingRow key={r.id}>
+                      <SettingRowText>
+                        <SettingRowTitle>{r.name}</SettingRowTitle>
+                        <SettingRowDescription>
+                          {r.schedule}
+                          {r.lastRunAt ? ` · last run ${relativeTime(r.lastRunAt)}` : ""}
+                        </SettingRowDescription>
+                      </SettingRowText>
+                      <SettingRowControl className="flex items-center gap-3">
+                        {r.lastRunStatus === "ok" || r.lastRunStatus === "error" ? (
+                          <RunGlyph
+                            ok={r.lastRunStatus === "ok"}
+                            title={
+                              r.lastRunStatus === "ok" ? "Last run ok" : "Last run failed"
+                            }
+                          />
+                        ) : null}
+                        <StatusChip
+                          label={r.enabled ? "On" : "Off"}
+                          dot={r.enabled ? "var(--green)" : "var(--text-faint)"}
+                        />
+                        <a className={LINK} href={`${BASE_PATH}/automations`}>
+                          Manage
+                        </a>
+                      </SettingRowControl>
+                    </SettingRow>
+                  ))}
+                </SettingCard>
+                <SettingsGroupLabel>Scans</SettingsGroupLabel>
+              </>
+            )}
 
-      {showNewScan && (
+            <SettingCard>
+              {scans.length === 0 ? (
+                <EmptyState placement="row" title="No scans yet">
+                  Start a scan to search for findings across your repositories.
+                </EmptyState>
+              ) : (
+                scans.map((s) => (
+                  <SettingRow key={s.id} className="items-start">
+                    <SettingRowText>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <SettingRowTitle>
+                          {s.interactive ? "Interactive scan" : "Scan"} ·{" "}
+                          {s.repos.map(repoLabel).join(", ")}
+                        </SettingRowTitle>
+                        {s.profileName && (
+                          <span className={SOURCE_CHIP} title="Scan profile">
+                            {s.profileName}
+                          </span>
+                        )}
+                      </div>
+
+                      {s.instructions && (
+                        <SettingRowDescription className="line-clamp-2">
+                          {s.instructions}
+                        </SettingRowDescription>
+                      )}
+
+                      <div className="mt-2 flex flex-col gap-1">
+                        {s.sessions.map((ref) => (
+                          <div
+                            key={ref.repo + ref.sessionId}
+                            className="flex min-w-0 items-center gap-2 text-label text-dim"
+                          >
+                            {ref.status === "running" ? (
+                              <span
+                                className="size-2 shrink-0 rounded-full"
+                                style={{ background: "var(--yellow)" }}
+                                title="Running"
+                              />
+                            ) : (
+                              <RunGlyph ok={ref.status === "ok"} title={ref.error} />
+                            )}
+                            <span className="shrink-0 text-fg">{repoLabel(ref.repo)}</span>
+                            {ref.error && (
+                              <span className="truncate text-red" title={ref.error}>
+                                {ref.error}
+                              </span>
+                            )}
+                            {ref.sessionId && (
+                              <a
+                                className={cn(LINK, "ml-auto shrink-0")}
+                                href={`${BASE_PATH}/session/${ref.sessionId}`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  onOpenSession(ref.sessionId);
+                                }}
+                              >
+                                View session
+                              </a>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="mt-2 text-meta text-faint">
+                        started {relativeTime(s.createdAt)}
+                        {s.finishedAt && ` · finished ${relativeTime(s.finishedAt)}`}
+                        {` · by ${s.createdBy}`}
+                      </div>
+                    </SettingRowText>
+                    <SettingRowControl className="flex items-center gap-2">
+                      <StatusChip {...scanStatus(s.status)} />
+                      <Menu.Root>
+                        <Menu.Trigger className={rowMenuTriggerClasses} aria-label="Manage scan">
+                          <IconDotsHorizontal size={18} />
+                        </Menu.Trigger>
+                        <Menu.Popup align="end" sideOffset={4}>
+                          <Menu.Item
+                            onClick={() => handleDeleteScan(s)}
+                            className="text-red data-[highlighted]:bg-red-soft"
+                          >
+                            <IconTrash size={16} />
+                            Remove scan
+                          </Menu.Item>
+                        </Menu.Popup>
+                      </Menu.Root>
+                    </SettingRowControl>
+                  </SettingRow>
+                ))
+              )}
+            </SettingCard>
+          </>
+        )}
+
         <NewScanModal
+          open={showNewScan}
           repos={repos.map((r) => r.id)}
           profiles={profiles}
-          onClose={() => setShowNewScan(false)}
+          onOpenChange={setShowNewScan}
           onStarted={(sessionId) => {
             setShowNewScan(false);
             load();
             if (sessionId) onOpenSession(sessionId);
           }}
         />
-      )}
 
-      {editProfile && (
         <ProfileModal
-          initial={editProfile === "new" ? null : editProfile}
-          onClose={() => setEditProfile(null)}
+          open={!!editProfile}
+          initial={editProfile && editProfile !== "new" ? editProfile : null}
+          onOpenChange={(next) => {
+            if (!next) setEditProfile(null);
+          }}
           onSaved={() => {
             setEditProfile(null);
             load();
           }}
         />
-      )}
-
-      {loading ? (
-        <LoadingState>Loading…</LoadingState>
-      ) : tab === "profiles" ? (
-        <div className="flex flex-col gap-2.5">
-          <div>
-            <Button size="sm" onClick={() => setEditProfile("new")}>
-              + Create a profile
-            </Button>
-          </div>
-          {profiles.length === 0 ? (
-            <EmptyState title="No scan profiles yet">
-              Profiles customize how scans analyze your code: threat model
-              focus, known false positives, severity bar.
-            </EmptyState>
-          ) : (
-            profiles.map((p) => (
-              <div key={p.id} className={CARD}>
-                <div className={CARD_TOP}>
-                  <span className={CARD_NAME}>{p.name}</span>
-                  <div className={CARD_ACTIONS}>
-                    <Button size="sm" variant="soft" onClick={() => setEditProfile(p)}>
-                      Edit
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      onClick={async () => {
-                        if (!confirm(`Delete profile "${p.name}"?`)) return;
-                        try {
-                          await deleteScanProfileApi(p.id);
-                          load();
-                        } catch (e: any) {
-                          setError(e.message);
-                        }
-                      }}
-                    >
-                      Delete
-                    </Button>
-                  </div>
-                </div>
-                <div className={CARD_PROMPT}>{p.prompt}</div>
-                <div className={CARD_META}>
-                  <span className={CARD_BY}>by {p.createdBy}</span>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      ) : (
-        <div className="flex flex-col gap-2.5">
-          {recurring.length > 0 && (
-            <div className="bg-panel border border-line rounded-panel px-3.5 py-3">
-              <div className="text-fg text-label font-medium mb-1.5">Recurring</div>
-              <div className="flex flex-col gap-1">
-                {recurring.map((r) => (
-                  <div key={r.id} className="flex items-baseline gap-2 text-supporting text-dim min-w-0">
-                    <span className={r.enabled ? "text-green" : "text-faint"}>●</span>
-                    <span className="text-fg truncate">{r.name}</span>
-                    <span className="text-faint shrink-0">{r.schedule}</span>
-                    {r.lastRunAt && (
-                      <span className="shrink-0">
-                        last {relativeTime(r.lastRunAt)}
-                        {r.lastRunStatus === "ok" ? " ✓" : r.lastRunStatus === "error" ? " ✗" : ""}
-                      </span>
-                    )}
-                    <a className={cn(LINK, "ml-auto shrink-0")} href={`${BASE_PATH}/automations`}>
-                      manage
-                    </a>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {scans.length === 0 ? (
-            <EmptyState title="No scans yet">
-              Start a scan to search for findings across your repositories.
-            </EmptyState>
-          ) : (
-            scans.map((s) => (
-              <div key={s.id} className={CARD}>
-                <div className={CARD_TOP}>
-                  <StatusPill status={s.status} />
-                  <span className={CARD_NAME}>
-                    {s.interactive ? "Interactive scan" : "Scan"} ·{" "}
-                    {s.repos.map(repoLabel).join(", ")}
-                  </span>
-                  {s.profileName && (
-                    <span className={SOURCE_CHIP} title="Scan profile">
-                      {s.profileName}
-                    </span>
-                  )}
-                  <div className={CARD_ACTIONS}>
-                    <Button
-                      size="sm"
-                      variant="danger"
-                      onClick={() => handleDeleteScan(s)}
-                    >
-                      Remove
-                    </Button>
-                  </div>
-                </div>
-
-                {s.instructions && (
-                  <div className={CARD_PROMPT}>{s.instructions}</div>
-                )}
-
-                <div className="mt-1.5 flex flex-col gap-1">
-                  {s.sessions.map((ref) => (
-                    <div
-                      key={ref.repo + ref.sessionId}
-                      className="flex items-baseline gap-2 text-label text-dim min-w-0"
-                    >
-                      {ref.status === "running" ? (
-                        <span className="text-yellow shrink-0">●</span>
-                      ) : ref.status === "ok" ? (
-                        <span className="text-green shrink-0">✓</span>
-                      ) : (
-                        <span className="text-red shrink-0" title={ref.error}>✗</span>
-                      )}
-                      <span className="text-fg shrink-0">{repoLabel(ref.repo)}</span>
-                      {ref.error && (
-                        <span className="text-red truncate" title={ref.error}>
-                          {ref.error}
-                        </span>
-                      )}
-                      {ref.sessionId && (
-                        <a
-                          className={cn(LINK, "ml-auto shrink-0")}
-                          href={`${BASE_PATH}/session/${ref.sessionId}`}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            onOpenSession(ref.sessionId);
-                          }}
-                        >
-                          view session
-                        </a>
-                      )}
-                    </div>
-                  ))}
-                </div>
-
-                <div className={CARD_META}>
-                  <span>started {relativeTime(s.createdAt)}</span>
-                  {s.finishedAt && <span>finished {relativeTime(s.finishedAt)}</span>}
-                  <span className={CARD_BY}>by {s.createdBy}</span>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      )}
+      </SettingsPanel>
     </div>
   );
 }
 
-function StatusPill({ status }: { status: SecurityScan["status"] }) {
-  const cls =
-    status === "running"
-      ? "text-yellow"
-      : status === "done"
-        ? "text-green"
-        : status === "interactive"
-          ? "text-accent"
-          : "text-red";
-  const label =
-    status === "running"
-      ? "Running"
-      : status === "done"
-        ? "Done"
-        : status === "interactive"
-          ? "Interactive"
-          : "Error";
-  return (
-    <span className={`text-label font-medium shrink-0 ${cls}`}>
-      ● {label}
-    </span>
-  );
-}
-
-// ── New scan modal ───────────────────────────────────────────
+// ── New scan dialog ──────────────────────────────────────────
 
 function NewScanModal({
+  open,
   repos,
   profiles,
-  onClose,
+  onOpenChange,
   onStarted,
 }: {
+  open: boolean;
   repos: string[];
   profiles: ScanProfile[];
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
   onStarted: (sessionId?: string) => void;
 }) {
   const [scope, setScope] = useState<"single" | "all">("single");
-  const [repo, setRepo] = useState(repos[0] || "");
+  const [repo, setRepo] = useState("");
   const [profileId, setProfileId] = useState("");
   const [instructions, setInstructions] = useState("");
   const [recurrence, setRecurrence] = useState<"none" | "daily" | "weekly">("none");
   const [interactive, setInteractive] = useState(false);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Open with the caret in the first field rather than on the close button,
+  // which is where Base UI puts it by default.
+  const repoRef = React.useRef<HTMLSelectElement>(null);
 
   const singleRepo = scope === "single" && !!repo;
   const canRecur = singleRepo && !interactive;
   const canInteractive = singleRepo && recurrence === "none";
 
+  // The dialog stays mounted, so each opening starts from a clean draft.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+    if (!open) return;
+    setScope("single");
+    setRepo(repos[0] || "");
+    setProfileId("");
+    setInstructions("");
+    setRecurrence("none");
+    setInteractive(false);
+    setStarting(false);
+    setError(null);
+  }, [open, repos[0]]);
 
   async function handleStart() {
     setStarting(true);
@@ -426,127 +468,124 @@ function NewScanModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-[300] bg-black/45 flex items-start justify-center overflow-y-auto p-4 sm:p-8"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+    <Modal.Root
+      open={open}
+      onOpenChange={(next) => {
+        if (!starting) onOpenChange(next);
       }}
     >
-      <div className={cn(FORM_CARD, "my-auto w-full max-w-[560px] smooth-shadow-lg")}>
-        <div>
-          <div className={FORM_TITLE}>New scan</div>
-          <div className="text-dim text-label mt-0.5">
-            Start a search for findings across your repositories.
-          </div>
-        </div>
+      <Modal.Content
+        widthClassName="max-w-[34rem]"
+        className={FORM_FIELDS}
+        initialFocus={repoRef}
+      >
+        <Modal.Header
+          title="New scan"
+          description="Start a search for findings across your repositories."
+        />
 
-        <Segmented
-          label="Scan scope"
-          value={scope}
-          onValueChange={(next) => {
-            if (next === "all") {
-              setScope("all");
-              setInteractive(false);
-              setRecurrence("none");
-              return;
-            }
-            setScope("single");
-          }}
-        >
-          <SegmentedOption value="single">Single repo</SegmentedOption>
-          <SegmentedOption value="all">All repos</SegmentedOption>
-        </Segmented>
+        <div className="flex flex-col gap-3.5">
+          <Segmented
+            label="Scan scope"
+            value={scope}
+            onValueChange={(next) => {
+              if (next === "all") {
+                setScope("all");
+                setInteractive(false);
+                setRecurrence("none");
+                return;
+              }
+              setScope("single");
+            }}
+          >
+            <SegmentedOption value="single">Single repo</SegmentedOption>
+            <SegmentedOption value="all">All repos</SegmentedOption>
+          </Segmented>
 
-        {scope === "single" && (
-          <label className={FIELD_LABEL}>
-            Select repository
-            <Select value={repo} onChange={(e) => setRepo(e.target.value)}>
-              {repos.map((r) => (
-                <option key={r} value={r}>
-                  {repoLabel(r)}
+          {scope === "single" && (
+            <Field label="Repository">
+              <Select ref={repoRef} value={repo} onChange={(e) => setRepo(e.target.value)}>
+                {repos.map((r) => (
+                  <option key={r} value={r}>
+                    {repoLabel(r)}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          )}
+
+          <Field label="Scan profile">
+            <Select value={profileId} onChange={(e) => setProfileId(e.target.value)}>
+              <option value="">None · default threat model</option>
+              {profiles.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
                 </option>
               ))}
             </Select>
-          </label>
-        )}
+            {profiles.length === 0 && (
+              <span className="text-meta font-normal text-faint">
+                No profiles yet. A profile tells a scan how to read your code.
+              </span>
+            )}
+          </Field>
 
-        <label className={FIELD_LABEL}>
-          Scan profile
-          <Select value={profileId} onChange={(e) => setProfileId(e.target.value)}>
-            <option value="">None · default threat model</option>
-            {profiles.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </Select>
-          {profiles.length === 0 && (
-            <span className="mt-1 text-meta text-faint">
-              No scan profiles yet. Profiles customize how scans analyze your
-              code. Create one under Security → Profiles.
-            </span>
-          )}
-        </label>
+          <Field label="Instructions for this scan (optional)">
+            <Textarea
+              value={instructions}
+              onChange={(e) => setInstructions(e.target.value)}
+              rows={3}
+              placeholder="Focus or constrain the scan. e.g. “only the upload pipeline and its S3 handling”, “report only, no fix PRs”…"
+            />
+          </Field>
 
-        <label className={FIELD_LABEL}>
-          Instructions for this scan (optional)
-          <Textarea
-            value={instructions}
-            onChange={(e) => setInstructions(e.target.value)}
-            rows={3}
-            placeholder="Focus or constrain the scan. e.g. “only the upload pipeline and its S3 handling”, “report only, no fix PRs”…"
-          />
-        </label>
+          <Field label="Repeats">
+            <Select
+              value={canRecur ? recurrence : "none"}
+              onChange={(e) => setRecurrence(e.target.value as any)}
+              disabled={!canRecur}
+            >
+              <option value="none">Does not repeat</option>
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+            </Select>
+            {!singleRepo && (
+              <span className="text-meta font-normal text-faint">
+                Recurring and interactive scans take one repository at a time.
+              </span>
+            )}
+          </Field>
 
-        <label className={FIELD_LABEL}>
-          Repeats
-          <Select
-            value={canRecur ? recurrence : "none"}
-            onChange={(e) => setRecurrence(e.target.value as any)}
-            disabled={!canRecur}
+          <label
+            className={cn(
+              "flex flex-row items-start gap-2.5 text-label font-medium text-dim",
+              canInteractive ? "cursor-pointer" : "opacity-50",
+            )}
           >
-            <option value="none">Does not repeat</option>
-            <option value="daily">Daily</option>
-            <option value="weekly">Weekly</option>
-          </Select>
-          {!singleRepo && (
-            <span className="mt-1 text-meta text-faint">
-              Recurring and interactive scans support one repository at a time.
+            <Checkbox
+              className="mt-[3px]"
+              checked={canInteractive && interactive}
+              disabled={!canInteractive}
+              onCheckedChange={setInteractive}
+            />
+            <span>
+              Interactive mode
+              <span className="mt-0.5 block text-label font-normal text-faint">
+                Instead of scanning end to end, {AGENT_NAME} shapes the threat model
+                with you in a session first.
+              </span>
             </span>
-          )}
-        </label>
+          </label>
 
-        <label
-          className={cn(
-            "flex flex-row items-start gap-2.5 text-label font-medium text-dim",
-            canInteractive ? "cursor-pointer" : "opacity-50",
-          )}
-        >
-          <Checkbox
-            className="mt-[3px]"
-            checked={canInteractive && interactive}
-            disabled={!canInteractive}
-            onCheckedChange={setInteractive}
-          />
-          <span>
-            Interactive mode
-            <span className="block text-dim text-label font-medium mt-0.5">
-              Instead of scanning end to end, {AGENT_NAME} collaborates with you in a
-              session to tailor the threat model to your preferences before
-              running the scan.
-            </span>
-          </span>
-        </label>
+          {error && <InlineAlert>{error}</InlineAlert>}
+        </div>
 
-        {error && <InlineAlert className="text-label">{error}</InlineAlert>}
-
-        <div className={FORM_ACTIONS}>
-          <Button variant="soft" size="sm" onClick={onClose} disabled={starting}>
+        <Modal.Footer>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={starting}>
             Cancel
           </Button>
           <Button
             variant="primary"
-            className="px-[22px] py-2"
             onClick={handleStart}
             disabled={starting || (scope === "single" && !repo)}
           >
@@ -558,35 +597,38 @@ function NewScanModal({
                   ? "Start interactive session"
                   : "Start scan"}
           </Button>
-        </div>
-      </div>
-    </div>
+        </Modal.Footer>
+      </Modal.Content>
+    </Modal.Root>
   );
 }
 
-// ── Profile modal ────────────────────────────────────────────
+// ── Profile dialog ───────────────────────────────────────────
 
 function ProfileModal({
+  open,
   initial,
-  onClose,
+  onOpenChange,
   onSaved,
 }: {
+  open: boolean;
   initial: ScanProfile | null;
-  onClose: () => void;
+  onOpenChange: (open: boolean) => void;
   onSaved: () => void;
 }) {
-  const [name, setName] = useState(initial?.name || "");
-  const [prompt, setPrompt] = useState(initial?.prompt || "");
+  const [name, setName] = useState("");
+  const [prompt, setPrompt] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const nameRef = React.useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+    if (!open) return;
+    setName(initial?.name || "");
+    setPrompt(initial?.prompt || "");
+    setSaving(false);
+    setError(null);
+  }, [open, initial]);
 
   async function handleSave() {
     setSaving(true);
@@ -602,54 +644,59 @@ function ProfileModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-[300] bg-black/45 flex items-start justify-center overflow-y-auto p-4 sm:p-8"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+    <Modal.Root
+      open={open}
+      onOpenChange={(next) => {
+        if (!saving) onOpenChange(next);
       }}
     >
-      <div className={cn(FORM_CARD, "my-auto w-full max-w-[560px] smooth-shadow-lg")}>
-        <div className={FORM_TITLE}>
-          {initial ? `Edit "${initial.name}"` : "New scan profile"}
+      <Modal.Content
+        widthClassName="max-w-[34rem]"
+        className={FORM_FIELDS}
+        initialFocus={nameRef}
+      >
+        <Modal.Header
+          title={initial ? `Edit "${initial.name}"` : "New scan profile"}
+          description="A profile tells every scan that uses it how to read your code."
+        />
+
+        <div className="flex flex-col gap-3.5">
+          <Field label="Name">
+            <Input
+              ref={nameRef}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Payments-focused, strict"
+            />
+          </Field>
+
+          <Field label="Threat model">
+            <Textarea
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              rows={8}
+              placeholder={
+                "What to prioritize (auth, payments, uploads…), what's intentionally public, known accepted risks / false positives to skip, severity bar, PR-per-finding vs report-only…"
+              }
+            />
+          </Field>
+
+          {error && <InlineAlert>{error}</InlineAlert>}
         </div>
 
-        <label className={FIELD_LABEL}>
-          Name
-          <Input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Payments-focused, strict"
-          />
-        </label>
-
-        <label className={FIELD_LABEL}>
-          Threat model: how should scans analyze the code?
-          <Textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            rows={8}
-            placeholder={
-              "What to prioritize (auth, payments, uploads…), what's intentionally public, known accepted risks / false positives to skip, severity bar, PR-per-finding vs report-only…"
-            }
-          />
-        </label>
-
-        {error && <InlineAlert className="text-label">{error}</InlineAlert>}
-
-        <div className={FORM_ACTIONS}>
-          <Button variant="soft" size="sm" onClick={onClose} disabled={saving}>
+        <Modal.Footer>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancel
           </Button>
           <Button
             variant="primary"
-            className="px-[22px] py-2"
             onClick={handleSave}
             disabled={saving || !name.trim() || !prompt.trim()}
           >
             {saving ? "Saving…" : initial ? "Save changes" : "Create profile"}
           </Button>
-        </div>
-      </div>
-    </div>
+        </Modal.Footer>
+      </Modal.Content>
+    </Modal.Root>
   );
 }
