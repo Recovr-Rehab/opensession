@@ -105,6 +105,18 @@
 	   below — see the light block. */
 	--popup-surface: var(--control-surface);
 	--popup-ring: var(--smooth-ring-color);
+	/* A modal's edge, which is not a menu's. A menu floats over the page it
+	   came from, so the fill's step above --bg is what says it is in front. A
+	   dialog floats over a scrim that has already darkened everything around
+	   it: the fill's step shrinks to nothing, the cast shadow falls on ink it
+	   cannot darken further, and the shared hairline — 14% ink, painted at
+	   half strength by the ring utility — landed FAINTER than the dividers
+	   inside the dialog's own rows. A box whose interior lines are more
+	   definite than its outline reads as unfinished. 26% is the value that
+	   puts the outline level with those dividers (--border) once the utility
+	   has halved it. Light needs the firmer line for the opposite reason, the
+	   one --popup-surface gives below: a white box on white. */
+	--dialog-ring: color-mix(in srgb, var(--text) 26%, var(--bg));
 	/* Glass. The same fill, thinned so the page shows through, over a blur
 	   heavy enough that what shows through is colour and shape rather than
 	   somebody else's sentence — a popup you can read a row title through is
@@ -447,6 +459,10 @@ html[data-theme="light"] {
 	   holds an edge under a grey fill but disappears under a white one. */
 	--popup-surface: #ffffff;
 	--popup-ring: var(--composer-border);
+	/* See :root. Here a dialog is the white-box-on-white case in that same
+	   paragraph, so it takes the composer's line rather than a mix of its
+	   own — the palette already did, and the two shells are one surface. */
+	--dialog-ring: var(--popup-ring);
 	--composer-shadow: 0 2px 6px rgba(0, 0, 0, 0.04), 0 14px 36px rgba(0, 0, 0, 0.08);
 	/* See :root. Here the backdrop is silver and the card is white on top of
 	   it, so the cast is what says the card is in front. It is the scale's `lg`

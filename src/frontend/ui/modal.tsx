@@ -102,7 +102,10 @@ function Content({
 							// falls back to the opaque fill without backdrop-filter and
 							// under prefers-reduced-transparency (base.css).
 							"bg-palette-glass [backdrop-filter:var(--popup-blur)]",
-							"[--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-lg",
+							// --dialog-ring, not --popup-ring: a shell on a scrim needs a
+							// firmer hairline than a menu over the page (base.css). In
+							// light the two resolve to the same line.
+							"[--smooth-ring-color:var(--dialog-ring)] smooth-shadow-ring-lg",
 							// Drops in from just above its resting place, the way a
 							// palette summoned by a keystroke should.
 							"origin-top transition-[transform,opacity] duration-[var(--dur-micro)] ease-[var(--ease)]",
@@ -116,7 +119,11 @@ function Content({
 							"max-h-[85dvh] overflow-y-auto overscroll-contain outline-none",
 							// Match Tella's restrained Dialog2 shell: lifted surface, soft edge,
 							// and enough radius to read as a modal without becoming a card.
-							"rounded-[calc(22px*var(--rf))] bg-raised smooth-shadow-ring-lg",
+							// The edge is --dialog-ring rather than the shared hairline: on
+							// a scrim the fill's step above the page all but disappears, so
+							// the line is what holds the shape (base.css).
+							"rounded-[calc(22px*var(--rf))] bg-raised",
+							"[--smooth-ring-color:var(--dialog-ring)] smooth-shadow-ring-lg",
 							"p-6",
 							"flex flex-col gap-4",
 							"origin-center transition-[transform,opacity] duration-[var(--dur)] ease-[var(--ease)]",
