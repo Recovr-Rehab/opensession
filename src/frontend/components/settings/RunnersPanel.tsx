@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type FormEvent, type RefObject } from "react";
 import { bootstrapRunner, createRunnerPairing, fetchRunnerBootstrapTargets, fetchRunners, revokeRunner, updateRunner, type RunnerBootstrapTarget, type RunnerInfo } from "../../lib/api/runners";
 import { Button } from "../../ui/button";
 import { Field, Input } from "../../ui/input";
@@ -175,7 +175,7 @@ function RunnerRow({ runner, admin, busy, onChange, onRevoke }: { runner: Runner
 			{/* The form is a child so Base UI's portal remounts it on every open,
 			    which re-reads the current runner instead of showing edits staged
 			    against a Runner that has since reported new state. */}
-			<Modal.Content widthClassName="max-w-[34rem]" initialFocus={labelRef}>
+			<Modal.Content initialFocus={labelRef}>
 				<RunnerDetails runner={runner} busy={busy} labelRef={labelRef} onChange={onChange} onRevoke={onRevoke} onSaved={() => setEditing(false)} />
 			</Modal.Content>
 		</Modal.Root>}
@@ -195,7 +195,8 @@ function RunnerDetails({ runner, busy, labelRef, onChange, onRevoke, onSaved }: 
 	// Every field commits on Save, the switches included: a dialog with its own
 	// Save button that also applies two of its controls the moment they move
 	// leaves Cancel meaning different things in one form.
-	const save = async () => {
+	const save = async (event: FormEvent) => {
+		event.preventDefault();
 		const saved = await onChange(runner, {
 			label: label.trim() || undefined,
 			capabilities: { tags: list(tags) },
@@ -210,25 +211,49 @@ function RunnerDetails({ runner, busy, labelRef, onChange, onRevoke, onSaved }: 
 			title={runner.label || runner.name}
 			description={<><span className={`capitalize ${stateStyle[runner.state]}`}>{runner.state}</span> · {runner.platform} · {runner.arch} · {resourceSummary(runner)}</>}
 		/>
-		<div className="grid grid-cols-2 gap-3 phone:grid-cols-1">
-			<Field label="Label"><Input ref={labelRef} value={label} onChange={(event) => setLabel(event.target.value)} placeholder={runner.name} /></Field>
-			<Field label="Tags"><Input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="Comma-separated" /></Field>
-			<Field label="Allowed people"><Input value={users} onChange={(event) => setUsers(event.target.value)} placeholder="All workspace members" /></Field>
-			<Field label="Allowed repositories"><Input value={repos} onChange={(event) => setRepos(event.target.value)} placeholder="All repositories" /></Field>
-			{inference ? <Field label="Allowed local models" className="col-span-2 phone:col-span-1"><Input value={inferenceModels} onChange={(event) => setInferenceModels(event.target.value)} placeholder="Comma-separated model names" /></Field> : null}
-		</div>
-		<div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-label font-medium text-dim">
-			<label className="flex items-center gap-2">Maintenance <Switch checked={maintenance} onCheckedChange={setMaintenance} disabled={busy} /></label>
-			<label className="flex items-center gap-2">Commands <Switch checked={commands} onCheckedChange={setCommands} disabled={busy} /></label>
-			{inference ? <label className="flex items-center gap-2">Local inference <Switch checked={inferenceEnabled} onCheckedChange={setInferenceEnabled} disabled={busy} /></label> : null}
-		</div>
-		<Modal.Footer>
-			<Button variant="danger" onClick={() => onRevoke(runner)} disabled={busy}>Revoke</Button>
-			<span className="flex-1" />
-			<Modal.Close render={<Button variant="ghost" disabled={busy}>Cancel</Button>} />
-			<Button variant="primary" onClick={() => void save()} disabled={busy}>Save</Button>
-		</Modal.Footer>
+		{/* Every field here is a comma-separated LIST, and a list clips in a
+		    half-dialog column (the same reason SetupTeam runs its email and
+		    alias full width). So none of them pair up, and the dialog keeps the
+		    standard width rather than widening to fit a grid. */}
+		<form className="flex flex-col gap-3" onSubmit={(event) => void save(event)}>
+			<Field label="Label">
+				<Input ref={labelRef} value={label} onChange={(event) => setLabel(event.target.value)} placeholder={runner.name} spellCheck={false} />
+			</Field>
+			<Field label="Tags" title="Comma-separated.">
+				<Input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="No tags" autoCapitalize="none" spellCheck={false} />
+			</Field>
+			<Field label="Allowed people" title="Comma-separated. Blank means every workspace member.">
+				<Input value={users} onChange={(event) => setUsers(event.target.value)} placeholder="All workspace members" autoCapitalize="none" spellCheck={false} />
+			</Field>
+			<Field label="Allowed repositories" title="Comma-separated. Blank means every repository.">
+				<Input value={repos} onChange={(event) => setRepos(event.target.value)} placeholder="All repositories" autoCapitalize="none" spellCheck={false} />
+			</Field>
+			{inference ? <Field label="Allowed local models" title="Comma-separated.">
+				<Input value={inferenceModels} onChange={(event) => setInferenceModels(event.target.value)} placeholder="Model names" autoCapitalize="none" spellCheck={false} />
+			</Field> : null}
+			{/* Label left, control right: the shape every toggle in settings
+			    already has, so two of them read as a list rather than as pairs
+			    floating in a row. */}
+			<div className="mt-1 flex flex-col">
+				<SwitchRow label="Maintenance" checked={maintenance} onChange={setMaintenance} disabled={busy} />
+				<SwitchRow label="Commands" checked={commands} onChange={setCommands} disabled={busy} />
+				{inference ? <SwitchRow label="Local inference" checked={inferenceEnabled} onChange={setInferenceEnabled} disabled={busy} /> : null}
+			</div>
+			<Modal.Footer>
+				<Button variant="danger" onClick={() => onRevoke(runner)} disabled={busy}>Revoke</Button>
+				<span className="flex-1" />
+				<Modal.Close render={<Button variant="ghost" disabled={busy}>Cancel</Button>} />
+				<Button variant="primary" type="submit" disabled={busy}>Save</Button>
+			</Modal.Footer>
+		</form>
 	</>;
+}
+
+function SwitchRow({ label, checked, onChange, disabled }: { label: string; checked: boolean; onChange: (value: boolean) => void; disabled: boolean }) {
+	return <label className="flex min-h-9 items-center justify-between gap-4 text-label font-medium text-fg">
+		{label}
+		<Switch checked={checked} onCheckedChange={onChange} disabled={disabled} />
+	</label>;
 }
 
 function list(value: string): string[] {
