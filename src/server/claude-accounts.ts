@@ -28,6 +28,11 @@ function storePath(): string {
     stateDir("claude-accounts.json")
   );
 }
+// Sideline state lives beside the account store, in its own file so it can
+// never corrupt the accounts themselves.
+function sidelineStatePath(): string {
+  return storePath().replace(/\.json$/, "-state.json");
+}
 // Keep this conservative: the usage endpoint rate-limits per token with
 // ~hour-long lockouts (observed Retry-After of ~50m after 10-minute polling).
 const POLL_INTERVAL_MS = 60 * 60 * 1000;
@@ -121,8 +126,9 @@ export interface ClaudeAccountPublic {
 }
 
 const usageCache = new Map<string, AccountUsage>();
+// One map for both sideline scopes, keyed by exhaustionKey(id, model?): the
+// same shape as codex-accounts.ts.
 const exhaustedUntil = new Map<string, number>();
-const modelExhaustedUntil = new Map<string, number>();
 const lastPickedAt = new Map<string, number>();
 // After a 429 from the usage endpoint, don't hit that same account again until
 // this passes. The endpoint rate-limits per token; one account must not hide
@@ -133,6 +139,105 @@ const MAX_RATE_LIMIT_WAIT_MS = 60 * 60 * 1000;
 const DEFAULT_RATE_LIMIT_WAIT_MS = 10 * 60 * 1000;
 const FAILED_REFRESH_WAIT_MS = 60 * 60 * 1000;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+// ── Sidelines ────────────────────────────────────────────────────────────────
+// Sideline state is load-bearing for rotation (codex-accounts.ts learned this
+// on 2026-07-17: a restart cleared the in-memory map and the picker
+// immediately re-handed out an exhausted account), and this instance restarts
+// after every backend change, so it persists across restarts AND hot reloads.
+// Hydration is lazy and keyed on the resolved path because storePath() honours
+// a per-call env override; a module-load read would latch the wrong file.
+let sidelinesHydratedFrom: string | null = null;
+
+function sidelines(): Map<string, number> {
+  const path = sidelineStatePath();
+  if (sidelinesHydratedFrom === path) return exhaustedUntil;
+  sidelinesHydratedFrom = path;
+  exhaustedUntil.clear();
+  try {
+    if (existsSync(path)) {
+      const parsed = JSON.parse(readFileSync(path, "utf-8"));
+      const now = Date.now();
+      for (const [k, until] of Object.entries(parsed?.exhaustedUntil || {})) {
+        if (typeof until === "number" && until > now) exhaustedUntil.set(k, until);
+      }
+    }
+  } catch {}
+  return exhaustedUntil;
+}
+
+function persistSidelines(): void {
+  try {
+    const out: Record<string, number> = {};
+    const now = Date.now();
+    for (const [k, until] of sidelines()) if (until > now) out[k] = until;
+    const path = sidelineStatePath();
+    writeFileAtomic(path, JSON.stringify({ exhaustedUntil: out }) + "\n");
+    chmodSync(path, 0o600);
+  } catch (e) {
+    console.warn("[claude-accounts] sideline persist failed:", e);
+  }
+}
+
+/** Test seam: drop the in-memory sidelines and re-read them from disk, which
+ *  is what a process restart does. */
+export function __reloadSidelinesForTest(): void {
+  sidelinesHydratedFrom = null;
+  sidelines();
+}
+
+function exhaustionKey(id: string, model?: string): string {
+  return model ? `${id}:${model}` : id;
+}
+
+function isExhaustionKeyActive(key: string): boolean {
+  const map = sidelines();
+  const until = map.get(key);
+  if (until === undefined) return false;
+  if (Date.now() >= until) {
+    map.delete(key);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Fresh usage data can disprove a sideline before it times out, so a poll that
+ * shows headroom returns the account early. The two scopes need different
+ * evidence: the account-level entry answers to the 5-hour window, while a
+ * model-scoped entry answers to that model's own weekly cap, and 5-hour
+ * headroom says nothing about a spent Fable week.
+ */
+function releaseDisprovenSidelines(
+  account: ClaudeAccount,
+  usage: AccountUsage,
+  via = "",
+): void {
+  const map = sidelines();
+  let changed = false;
+  if (map.has(exhaustionKey(account.id))) {
+    const u = usage.fiveHour?.utilization;
+    if (u !== null && u !== undefined && u < EXHAUSTED_UTILIZATION) {
+      map.delete(exhaustionKey(account.id));
+      changed = true;
+      console.log(`[claude-accounts] ${account.name} usable again (5h at ${u}%${via})`);
+    }
+  }
+  const prefix = `${account.id}:`;
+  for (const key of [...map.keys()]) {
+    if (!key.startsWith(prefix)) continue;
+    const model = key.slice(prefix.length);
+    const scoped = scopedLimitForModel(usage, model);
+    if (scoped !== null && scoped < SCOPED_EXHAUSTED_UTILIZATION) {
+      map.delete(key);
+      changed = true;
+      console.log(
+        `[claude-accounts] ${account.name} usable again for ${model} (${scoped}%${via})`
+      );
+    }
+  }
+  if (changed) persistSidelines();
+}
 
 function fetchWithTimeout(
   url: string,
@@ -338,14 +443,7 @@ async function refreshMeridianUsage(
   const usage = await fetchMeridianUsage(account.id, signal);
   if (!usage) return;
   usageCache.set(account.id, usage);
-  const until = exhaustedUntil.get(account.id);
-  if (until !== undefined) {
-    const u = usage.fiveHour?.utilization;
-    if (u !== null && u !== undefined && u < EXHAUSTED_UTILIZATION) {
-      exhaustedUntil.delete(account.id);
-      console.log(`[claude-accounts] ${account.name} usable again (5h at ${u}% via meridian)`);
-    }
-  }
+  releaseDisprovenSidelines(account, usage, " via meridian");
 }
 
 async function fetchProfile(token: string): Promise<{ email?: string; plan?: string }> {
@@ -551,14 +649,7 @@ async function refreshAccountUsage(
   if (usage.error && cached && !cached.error) return cached;
   usageCache.set(account.id, usage);
 
-  const until = exhaustedUntil.get(account.id);
-  if (until !== undefined && !usage.error) {
-    const u = usage.fiveHour?.utilization;
-    if (u !== null && u !== undefined && u < EXHAUSTED_UTILIZATION) {
-      exhaustedUntil.delete(account.id);
-      console.log(`[claude-accounts] ${account.name} usable again (5h at ${u}%)`);
-    }
-  }
+  if (!usage.error) releaseDisprovenSidelines(account, usage);
   return usage;
 }
 
@@ -588,29 +679,12 @@ export function startUsagePoller(): void {
 }
 
 function isExhausted(id: string): boolean {
-  const until = exhaustedUntil.get(id);
-  if (until === undefined) return false;
-  if (Date.now() >= until) {
-    exhaustedUntil.delete(id);
-    return false;
-  }
-  return true;
-}
-
-function modelExhaustionKey(id: string, model?: string): string {
-  return model ? `${id}:${model}` : id;
+  return isExhaustionKeyActive(exhaustionKey(id));
 }
 
 function isModelExhausted(id: string, model?: string): boolean {
   if (!model) return false;
-  const key = modelExhaustionKey(id, model);
-  const until = modelExhaustedUntil.get(key);
-  if (until === undefined) return false;
-  if (Date.now() >= until) {
-    modelExhaustedUntil.delete(key);
-    return false;
-  }
-  return true;
+  return isExhaustionKeyActive(exhaustionKey(id, model));
 }
 
 /**
@@ -739,7 +813,7 @@ function isAccountUsableFor(
 
 function toPublic(a: ClaudeAccount): ClaudeAccountPublic {
   const usage = usageCache.get(a.id) || null;
-  const until = exhaustedUntil.get(a.id);
+  const until = sidelines().get(exhaustionKey(a.id));
   const fiveHour = usage?.fiveHour?.utilization ?? null;
   return {
     id: a.id,
@@ -912,10 +986,12 @@ export function removeAccount(id: string): boolean {
   if (next.length === accounts.length) return false;
   writeStore(next);
   usageCache.delete(id);
-  exhaustedUntil.delete(id);
-  for (const key of [...modelExhaustedUntil.keys()]) {
-    if (key.startsWith(`${id}:`)) modelExhaustedUntil.delete(key);
+  const map = sidelines();
+  map.delete(exhaustionKey(id));
+  for (const key of [...map.keys()]) {
+    if (key.startsWith(`${id}:`)) map.delete(key);
   }
+  persistSidelines();
   return true;
 }
 
@@ -1212,8 +1288,8 @@ export function markExhausted(id: string, model?: string): void {
   const until = Number.isFinite(resetsAt) && resetsAt > Date.now()
     ? resetsAt
     : Date.now() + DEFAULT_EXHAUST_MS;
-  if (scoped && model) modelExhaustedUntil.set(modelExhaustionKey(id, model), until);
-  else exhaustedUntil.set(id, until);
+  sidelines().set(exhaustionKey(id, scoped && model ? model : undefined), until);
+  persistSidelines();
   console.warn(
     `[claude-accounts] ${account?.name || id}${model ? ` (${model})` : ""} marked exhausted until ${new Date(until).toISOString()}`
   );
@@ -1230,10 +1306,12 @@ export function markExhausted(id: string, model?: string): void {
  */
 export function markWedged(id: string): boolean {
   const until = Date.now() + WEDGE_SIDELINE_MS;
-  const existing = exhaustedUntil.get(id);
+  const map = sidelines();
+  const existing = map.get(exhaustionKey(id));
   if (existing !== undefined && existing >= until) return false;
   const account = readStore().find((a) => a.id === id);
-  exhaustedUntil.set(id, until);
+  map.set(exhaustionKey(id), until);
+  persistSidelines();
   console.warn(
     `[claude-accounts] ${account?.name || id} sidelined until ${new Date(until).toISOString()} after a bridge wedge`
   );
@@ -1244,7 +1322,8 @@ export function markWedged(id: string): boolean {
  *  account to rotate to, a same-account respawn retry beats a dry pool. Only
  *  call after markWedged returned true. */
 export function clearWedge(id: string): void {
-  exhaustedUntil.delete(id);
+  sidelines().delete(exhaustionKey(id));
+  persistSidelines();
 }
 
 // ── Dry-pool backpressure ────────────────────────────────────────────────────
@@ -1282,10 +1361,10 @@ export function earliestPoolReset(
   };
   for (const a of candidates) {
     if (isAccountUsableFor(a, model, allowExtraUsage)) return now;
-    consider(exhaustedUntil.get(a.id));
+    consider(sidelines().get(exhaustionKey(a.id)));
     for (const required of requiredModels(model)) {
       if (required) {
-        consider(modelExhaustedUntil.get(modelExhaustionKey(a.id, required)));
+        consider(sidelines().get(exhaustionKey(a.id, required)));
       }
     }
     const usage = usageCache.get(a.id);

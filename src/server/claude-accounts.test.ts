@@ -1,5 +1,5 @@
 import { describe, expect, test, afterAll, beforeAll } from "bun:test";
-import { mkdtempSync, writeFileSync } from "fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 
@@ -473,5 +473,50 @@ describe("refreshUsageIfNearLimit", () => {
     arm();
     expect(await accounts.refreshUsageIfNearLimit("nope")).toBe(false);
     expect(refreshed).toEqual([]);
+  });
+});
+
+describe("sidelines survive a restart", () => {
+  // Both accounts are usageScope "missing" with no credentials file, so
+  // markExhausted's background usage refresh returns before any network call.
+  const blind = (id: string) => ({ ...mkAccount(id), usageScope: "missing" as const });
+  const originalStore = readFileSync(storePath, "utf-8");
+
+  beforeAll(() => {
+    const parsed = JSON.parse(originalStore);
+    writeFileSync(
+      storePath,
+      JSON.stringify({ accounts: [...parsed.accounts, blind("reboot"), blind("reboot-model")] })
+    );
+    const fableSpent = {
+      ...usage(10),
+      scopedLimits: [{ label: "Fable", utilization: 100, resetsAt: null }],
+    };
+    accounts.__setUsageCacheForTest("reboot", fableSpent);
+    accounts.__setUsageCacheForTest("reboot-model", fableSpent);
+    accounts.markExhausted("reboot");
+    accounts.markExhausted("reboot-model", "claude-fable-5");
+    // What a `systemctl restart opensession` does to the in-memory map.
+    accounts.__reloadSidelinesForTest();
+  });
+
+  afterAll(() => writeFileSync(storePath, originalStore));
+
+  test("an account-level sideline is still in force after a reload", () => {
+    const publics = accounts.listAccountsPublic();
+    const rebooted = publics.find((a) => a.id === "reboot");
+    expect(rebooted?.exhaustedUntil).not.toBeNull();
+    expect(rebooted?.usable).toBe(false);
+    expect(accounts.pickAccount(new Set(["fresh", "maxed", "reboot-model"]))).toBeUndefined();
+  });
+
+  test("a model-scoped sideline survives, and only for that model", () => {
+    const rebooted = accounts.listAccountsPublic().find((a) => a.id === "reboot-model");
+    expect(rebooted?.exhaustedUntil).toBeNull();
+    const fable = accounts.earliestPoolReset(undefined, "claude-fable-5", "reboot-model");
+    expect(fable).not.toBeNull();
+    expect((fable as number) - Date.now()).toBeGreaterThan(1000);
+    const sonnet = accounts.earliestPoolReset(undefined, "claude-sonnet-5", "reboot-model");
+    expect((sonnet as number) - Date.now()).toBeLessThan(1000);
   });
 });
