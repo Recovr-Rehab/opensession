@@ -22,8 +22,11 @@ import { broadcastToAll } from "./ws-hub";
 import { openDirectMessage, sendSlackMessage } from "../agents/slack/slack-api";
 import { personaName } from "./config";
 
-const TODOS_DIR = stateDir("todos");
-const TODOS_PATH = `${TODOS_DIR}/todos.json`;
+/** Resolved per call, not at load, so a dev instance or a test that repoints
+ *  the state root can never read or write the live list. */
+function todosPath(): string {
+	return `${stateDir("todos")}/todos.json`;
+}
 
 export type TodoStatus = "open" | "done" | "dropped";
 
@@ -65,8 +68,9 @@ const MAX_NOTE_CHARS = 500;
 
 function readStore(): TodoStore {
 	try {
-		if (existsSync(TODOS_PATH))
-			return JSON.parse(readFileSync(TODOS_PATH, "utf-8")) as TodoStore;
+		const path = todosPath();
+		if (existsSync(path))
+			return JSON.parse(readFileSync(path, "utf-8")) as TodoStore;
 	} catch (e) {
 		console.error("[todos] failed to read store:", e);
 	}
@@ -74,7 +78,7 @@ function readStore(): TodoStore {
 }
 
 function writeStore(store: TodoStore): void {
-	writeJsonAtomic(TODOS_PATH, store);
+	writeJsonAtomic(todosPath(), store);
 }
 
 function changed(user: string): void {

@@ -1,9 +1,10 @@
 /**
  * Per-user sidebar hides. Like snoozes.ts, each user (the self-selected
  * `backstage-user` name from the UserPicker — not an auth identity) gets one
- * JSON file `~/.opensession-hides/<user>.json` of shape
+ * JSON file under `~/.opensession-hides/` of shape
  * `{ hides: { [rowKey]: isoHiddenAt } }`, where `rowKey` is a sidebar row key
- * (`workspace:<id>` or a solo session id).
+ * (`workspace:<id>` or a solo session id). Filename, directory resolution and
+ * legacy-name fallback come from shared/user-store.ts.
  *
  * Hiding is the personal counterpart to archiving: archive.ts is a GLOBAL
  * registry, so archiving a session removes it for the whole team — wrong when a
@@ -16,38 +17,10 @@
  * you.
  */
 
-import { existsSync, mkdirSync, readFileSync } from "fs";
-import { writeJsonAtomic } from "./shared/atomic-write";
-import { stateDir } from "./paths";
-
-const HIDES_DIR = stateDir("hides");
-
-/** Map a free-form user name to a safe filename; empty/odd input → Anonymous. */
-function sanitizeUser(user: string): string {
-	const cleaned = (user || "")
-		.trim()
-		.replace(/[^A-Za-z0-9_-]/g, "_")
-		.slice(0, 64);
-	return cleaned || "Anonymous";
-}
-
-function fileFor(user: string): string {
-	return `${HIDES_DIR}/${sanitizeUser(user)}.json`;
-}
+import { userStore } from "./shared/user-store";
 
 /** Row key → ISO timestamp of when the user hid it. */
 export type Hides = Record<string, string>;
-
-export function getHides(user: string): Hides {
-	try {
-		const f = fileFor(user);
-		if (!existsSync(f)) return {};
-		const raw = JSON.parse(readFileSync(f, "utf8"));
-		return clean(raw?.hides);
-	} catch {
-		return {};
-	}
-}
 
 /** Keep only string-key entries whose value parses as a date. */
 function clean(input: unknown): Hides {
@@ -68,12 +41,13 @@ function clean(input: unknown): Hides {
 	return out;
 }
 
+const store = userStore<Hides>({ name: "hides", field: "hides", clean });
+
+export function getHides(user: string): Hides {
+	return store.get(user);
+}
+
 /** Replace a user's hides (validated). Returns the stored map. */
 export function setHides(user: string, hides: unknown): Hides {
-	const cleaned = clean(hides);
-	try {
-		if (!existsSync(HIDES_DIR)) mkdirSync(HIDES_DIR, { recursive: true });
-		writeJsonAtomic(fileFor(user), { hides: cleaned });
-	} catch {}
-	return cleaned;
+	return store.set(user, hides);
 }

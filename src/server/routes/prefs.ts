@@ -185,12 +185,18 @@ export async function handlePrefsRoutes(
 		}
 	}
 
+	// ── The per-user stores below (pins, personal prompt, read marks, drafts,
+	// UI prefs, lanes, snoozes, hides, tab colors) all resolve WHO through
+	// requestUser: the verified sign-in identity when web sign-in is active,
+	// the client-claimed name otherwise. They used to read the raw `user`
+	// param, which let a signed-in teammate read and overwrite another
+	// person's state by typing their name into the query string.
+
 	// ── Per-user pinned tabs ──
-	// Keyed on the self-selected `user` name (team-internal, not auth). GET reads
-	// a user's pins; PUT replaces them wholesale (the frontend sends the full list
-	// on every toggle and on first-load localStorage migration).
+	// GET reads a user's pins; PUT replaces them wholesale (the frontend sends
+	// the full list on every toggle and on first-load localStorage migration).
 	if (path === "/api/pins" && req.method === "GET") {
-		const user = url.searchParams.get("user") || "Anonymous";
+		const user = requestUser(ctx, url.searchParams.get("user")) || "Anonymous";
 		return Response.json({ pins: getUserPins(user) });
 	}
 
@@ -206,7 +212,8 @@ export async function handlePrefsRoutes(
 				{ status: 400 },
 			);
 		}
-		return Response.json({ pins: setUserPins(body.user, body.pins) });
+		const user = requestUser(ctx, body.user) || "Anonymous";
+		return Response.json({ pins: setUserPins(user, body.pins) });
 	}
 
 	// ── Per-user personal system prompt ──
@@ -215,7 +222,7 @@ export async function handlePrefsRoutes(
 	// table, so all of a teammate's surfaces share one prompt. GET reads it;
 	// PUT replaces it wholesale (empty string clears).
 	if (path === "/api/personal-prompt" && req.method === "GET") {
-		const user = url.searchParams.get("user") || "Anonymous";
+		const user = requestUser(ctx, url.searchParams.get("user")) || "Anonymous";
 		return Response.json({ prompt: getPersonalPrompt(user) });
 	}
 
@@ -231,8 +238,9 @@ export async function handlePrefsRoutes(
 				{ status: 400 },
 			);
 		}
+		const user = requestUser(ctx, body.user) || "Anonymous";
 		return Response.json({
-			prompt: setPersonalPrompt(body.user, body.prompt),
+			prompt: setPersonalPrompt(user, body.prompt),
 		});
 	}
 
@@ -243,7 +251,7 @@ export async function handlePrefsRoutes(
 	// unread activity. GET reads a user's marks; PUT replaces them wholesale
 	// (the frontend pushes its full map on every mark change), same shape as pins.
 	if (path === "/api/reads" && req.method === "GET") {
-		const user = url.searchParams.get("user") || "Anonymous";
+		const user = requestUser(ctx, url.searchParams.get("user")) || "Anonymous";
 		return Response.json({ reads: getUserReads(user) });
 	}
 
@@ -260,15 +268,16 @@ export async function handlePrefsRoutes(
 				{ status: 400 },
 			);
 		}
-		return Response.json({ reads: setUserReads(body.user, body.reads) });
+		const user = requestUser(ctx, body.user) || "Anonymous";
+		return Response.json({ reads: setUserReads(user, body.reads) });
 	}
 
 	// ── Per-user unsent composer drafts ──
 	// Text typed into a session's composer but not sent, so it follows you
-	// between the browser and the phone (src/server/drafts.ts). Unlike the
-	// stores above this is private writing, so the user comes from the
-	// verified sign-in identity when there is one and a `user` param claiming
-	// someone else is ignored. Writes are one session at a time: a whole-map
+	// between the browser and the phone (src/server/drafts.ts). This is a
+	// person's private writing, and it was the first store to take the user
+	// from the verified identity rather than the `user` param — the rest
+	// followed. Writes are one session at a time: a whole-map
 	// PUT from a client that hadn't loaded yet would wipe the other device's
 	// drafts.
 	if (path === "/api/drafts" && req.method === "GET") {
@@ -315,7 +324,7 @@ export async function handlePrefsRoutes(
 	// activity fold setting). GET reads a user's map; PUT merges a patch —
 	// merge, not replace, so one device can't clobber keys set on another.
 	if (path === "/api/ui-prefs" && req.method === "GET") {
-		const user = url.searchParams.get("user") || "Anonymous";
+		const user = requestUser(ctx, url.searchParams.get("user")) || "Anonymous";
 		return Response.json({ prefs: getUiPrefs(user) });
 	}
 
@@ -332,14 +341,15 @@ export async function handlePrefsRoutes(
 				{ status: 400 },
 			);
 		}
-		return Response.json({ prefs: patchUiPrefs(body.user, body.prefs) });
+		const user = requestUser(ctx, body.user) || "Anonymous";
+		return Response.json({ prefs: patchUiPrefs(user, body.prefs) });
 	}
 
 	// ── Per-user sidebar lanes ──
 	// Same per-user model as pins: GET reads a user's lane map; PUT replaces
 	// it wholesale (the frontend sends the full map on every lane change).
 	if (path === "/api/lanes" && req.method === "GET") {
-		const user = url.searchParams.get("user") || "Anonymous";
+		const user = requestUser(ctx, url.searchParams.get("user")) || "Anonymous";
 		return Response.json({ lanes: getUserLanes(user) });
 	}
 
@@ -356,14 +366,15 @@ export async function handlePrefsRoutes(
 				{ status: 400 },
 			);
 		}
-		return Response.json({ lanes: setUserLanes(body.user, body.lanes) });
+		const user = requestUser(ctx, body.user) || "Anonymous";
+		return Response.json({ lanes: setUserLanes(user, body.lanes) });
 	}
 
 	// ── Per-user workspace snoozes ──
 	// Same per-user model as pins: GET reads a user's snooze map; PUT replaces
 	// it wholesale (the frontend sends the full map on every snooze change).
 	if (path === "/api/snoozes" && req.method === "GET") {
-		const user = url.searchParams.get("user") || "Anonymous";
+		const user = requestUser(ctx, url.searchParams.get("user")) || "Anonymous";
 		return Response.json({ snoozes: getUserSnoozes(user) });
 	}
 
@@ -380,8 +391,9 @@ export async function handlePrefsRoutes(
 				{ status: 400 },
 			);
 		}
+		const user = requestUser(ctx, body.user) || "Anonymous";
 		return Response.json({
-			snoozes: setUserSnoozes(body.user, body.snoozes),
+			snoozes: setUserSnoozes(user, body.snoozes),
 		});
 	}
 
@@ -391,7 +403,7 @@ export async function handlePrefsRoutes(
 	// running for everyone else. Same per-user model as pins: GET reads a
 	// user's hide map; PUT replaces it wholesale.
 	if (path === "/api/hides" && req.method === "GET") {
-		const user = url.searchParams.get("user") || "Anonymous";
+		const user = requestUser(ctx, url.searchParams.get("user")) || "Anonymous";
 		return Response.json({ hides: getUserHides(user) });
 	}
 
@@ -408,14 +420,15 @@ export async function handlePrefsRoutes(
 				{ status: 400 },
 			);
 		}
-		return Response.json({ hides: setUserHides(body.user, body.hides) });
+		const user = requestUser(ctx, body.user) || "Anonymous";
+		return Response.json({ hides: setUserHides(user, body.hides) });
 	}
 
 	// ── Per-user session tab colors ──
 	// Same per-user model as pins: GET reads a user's tab colors; PUT replaces
 	// the whole map (the frontend sends the full map on every color change).
 	if (path === "/api/tab-colors" && req.method === "GET") {
-		const user = url.searchParams.get("user") || "Anonymous";
+		const user = requestUser(ctx, url.searchParams.get("user")) || "Anonymous";
 		return Response.json({ colors: getUserTabColors(user) });
 	}
 
@@ -432,8 +445,9 @@ export async function handlePrefsRoutes(
 				{ status: 400 },
 			);
 		}
+		const user = requestUser(ctx, body.user) || "Anonymous";
 		return Response.json({
-			colors: setUserTabColors(body.user, body.colors),
+			colors: setUserTabColors(user, body.colors),
 		});
 	}
 

@@ -24,12 +24,24 @@ import {
 	statSync,
 	writeFileSync,
 } from "fs";
-import { homedir } from "os";
 import { dirname, join, normalize, resolve } from "path";
+import { stateDir } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { broadcastToAll } from "./ws-hub";
 
-export const REPORTS_ROOT = join(homedir(), ".opensession-reports");
+/**
+ * The reports root, resolved per call. It used to be `homedir()/...`, which
+ * bypassed BOTH statePath() and $HOME: a dev instance with its own
+ * OPENSESSION_STATE_DIR published into the live operator's reports.
+ */
+function reportsRoot(): string {
+	return stateDir("reports");
+}
+
+/** The root at load time, for call sites that need it as a value (tests).
+ *  Everything in this module calls reportsRoot() instead, so a state root
+ *  repointed after load still wins. */
+export const REPORTS_ROOT = reportsRoot();
 
 /** Reports an automation may keep; older ones are pruned on publish. */
 const MAX_REPORTS_PER_GROUP = 100;
@@ -97,7 +109,7 @@ function safeSegment(s: string): boolean {
 }
 
 function groupDir(automationId: string): string {
-	return join(REPORTS_ROOT, automationId);
+	return join(reportsRoot(), automationId);
 }
 
 function reportAssetsDir(automationId: string, reportId: string): string {
@@ -333,9 +345,9 @@ export function publishReport(input: {
 
 /** One row per automation that has published at least one report. */
 export function listReportGroups(): ReportGroup[] {
-	if (!existsSync(REPORTS_ROOT)) return [];
+	if (!existsSync(reportsRoot())) return [];
 	const groups: ReportGroup[] = [];
-	for (const entry of readdirSync(REPORTS_ROOT, { withFileTypes: true })) {
+	for (const entry of readdirSync(reportsRoot(), { withFileTypes: true })) {
 		if (!entry.isDirectory() || !safeSegment(entry.name)) continue;
 		const sidecars = sidecarsFor(entry.name);
 		if (!sidecars.length) continue;
@@ -363,10 +375,10 @@ export function listReports(automationId: string): ReportMeta[] {
 
 /** Every report produced by one session, newest first. */
 export function listReportsForSession(sessionId: string): ReportMeta[] {
-	if (!safeSegment(sessionId) || !existsSync(REPORTS_ROOT)) return [];
+	if (!safeSegment(sessionId) || !existsSync(reportsRoot())) return [];
 	if (!sessionReportIndex) {
 		sessionReportIndex = new Map();
-		for (const entry of readdirSync(REPORTS_ROOT, { withFileTypes: true })) {
+		for (const entry of readdirSync(reportsRoot(), { withFileTypes: true })) {
 			if (!entry.isDirectory() || !safeSegment(entry.name)) continue;
 			for (const sidecar of sidecarsFor(entry.name)) {
 				const meta = readMeta(entry.name, sidecar);
