@@ -63,18 +63,23 @@ import { Switch } from "../../ui/switch";
 // Setup), and the card links into it. The one exception is a core tool, whose
 // switch is client state today; see the caveat rendered under that group. ──
 
-const TYPE_ORDER: LibraryEntryType[] = ["tool", "automation", "integration"];
+const TYPE_ORDER: LibraryEntryType[] = ["tool", "automation", "integration", "package"];
 
 const TYPE_LABELS: Record<LibraryEntryType, string> = {
 	tool: "Tools",
 	automation: "Automations",
 	integration: "Integrations",
+	package: "Packages",
 };
 
 const TYPE_BLURB: Record<LibraryEntryType, string> = {
 	tool: "Tools appear in your sidebar.",
 	automation: "A prompt and a trigger: a schedule, an event, or a webhook.",
 	integration: "Outside systems this instance can listen to and act in.",
+	// Listed once installed rather than browsed: installing a package mounts an
+	// MCP server and adds text an agent reads, so the review that gates it
+	// lives in the terminal. `opensession plugins add <owner/repo>`.
+	package: "Installed from a git repository with the CLI.",
 };
 
 const FILTERS: { key: "all" | LibraryEntryType; label: string }[] = [
@@ -82,6 +87,7 @@ const FILTERS: { key: "all" | LibraryEntryType; label: string }[] = [
 	{ key: "tool", label: "Tools" },
 	{ key: "automation", label: "Automations" },
 	{ key: "integration", label: "Integrations" },
+	{ key: "package", label: "Packages" },
 ];
 
 type Glyph = { icon: ComponentType<{ size?: number }>; tone: MarkTone };
@@ -121,6 +127,7 @@ const TYPE_GLYPHS: Record<LibraryEntryType, Glyph> = {
 	tool: { icon: IconStack, tone: "sky" },
 	automation: { icon: IconBolt, tone: "orange" },
 	integration: { icon: IconPlug, tone: "green" },
+	package: { icon: IconStack, tone: "indigo" },
 };
 
 /** A service named in the entry's own name, for the entries that carry no

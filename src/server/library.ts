@@ -18,6 +18,7 @@
  *   automation    recipes/automations/*.json          a config seed
  *                 AUTOMATION_TEMPLATES                a pre-filled create form
  *   integration   integrations/registry.ts            credentials + a restart
+ *   package       ~/.opensession-plugins.json         `opensession plugins add`
  *
  * The entries are DERIVED, never copied: adding a recipe file or a registry
  * entry puts it in the library with no edit here. That is the property worth
@@ -40,6 +41,12 @@
  *   right envelope for remote, hash-pinned entries when they arrive.
  * - **Feed projects.** Zero shipped descriptors; feeds are instance data.
  *
+ * Packages (adrs/publishable-packages.md) are the one type that is listed
+ * only once INSTALLED, because there is no catalog of published ones to read:
+ * they are discovered through a GitHub topic and installed from the CLI,
+ * which is where the review that gates the install lives. The card is a
+ * record of what is here and what it brought, not an install button.
+ *
  * The honest caveat about `installed`: for core tools it is `null`, because
  * the server has no truth to report. Tool visibility is localStorage, per
  * browser (`sidebar-tools.ts`), which means today's switch hides the sidebar
@@ -56,8 +63,9 @@ import { AUTOMATION_TEMPLATES } from "./automation-templates";
 import { listAutomations } from "./automations";
 import { INTEGRATIONS } from "./integrations/registry";
 import { isEnabled } from "./integrations/load";
+import { listInstalledPackages } from "./plugins";
 
-export type LibraryEntryType = "tool" | "automation" | "integration";
+export type LibraryEntryType = "tool" | "automation" | "integration" | "package";
 
 /**
  * How an entry gets installed — which decides what the card's button does and
@@ -268,6 +276,31 @@ function integrationDescription(id: string): string {
 	}
 }
 
+/**
+ * Installed packages, one card each. A package is a composite: wiring an MCP
+ * server, seeding an automation and dropping a skill in one act is what makes
+ * this a library rather than four settings pages with a search box, so the
+ * card names the package rather than listing its pieces separately.
+ */
+function packageEntries(): LibraryEntry[] {
+	try {
+		return listInstalledPackages().map((pkg) => ({
+			id: `package:${pkg.name}`,
+			type: "package" as const,
+			slug: pkg.name,
+			name: pkg.name,
+			description: pkg.description,
+			category: "Package",
+			install: "guided" as const,
+			installed: true,
+			href: "/settings/library",
+			source: "repo" as const,
+		}));
+	} catch {
+		return [];
+	}
+}
+
 /** The whole catalog, freshly derived. Cheap enough to skip caching. */
 export function listLibrary(): LibraryEntry[] {
 	const installedNames = installedAutomationNames();
@@ -275,5 +308,6 @@ export function listLibrary(): LibraryEntry[] {
 		...toolEntries(),
 		...automationEntries(installedNames),
 		...integrationEntries(),
+		...packageEntries(),
 	];
 }

@@ -2,7 +2,7 @@
 
 import { request } from "./request";
 
-export type LibraryEntryType = "tool" | "automation" | "integration";
+export type LibraryEntryType = "tool" | "automation" | "integration" | "package";
 export type LibraryInstallKind = "one-click" | "draft" | "guided" | "client";
 
 export interface LibraryEntry {
