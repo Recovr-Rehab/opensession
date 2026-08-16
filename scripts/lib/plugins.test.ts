@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
+import { tmpdir } from "os";
+import { join, resolve } from "path";
 import type { InstalledArtifact, PackageManifest } from "../../src/server/plugins";
 import {
 	applyPlan,
@@ -187,6 +190,28 @@ describe("planInstall", () => {
 		expect(lines).toContain("LOOM_TOKEN");
 		expect(lines).toContain("installs disabled");
 	});
+
+	test("a skill upstream rewrote is reported as a changed hash", () => {
+		// The ADR's promise: a SKILL.md is text an agent loads into context, so an
+		// upstream edit is a code change and the review has to say so rather than
+		// print the same line it prints for an untouched one.
+		const owned: InstalledArtifact[] = [{ kind: "skill", ref: "loom-editing", hash: "a".repeat(64) }];
+		const state = { ...empty, mcpServers: ["loom"], feeds: ["loom"], skills: ["loom-editing"] };
+		const changed = planInstall(MANIFEST, state, owned, () => "b".repeat(64));
+		const line = reviewLines(MANIFEST, changed).find((l) => l.includes("loom-editing"))!;
+		expect(line).toContain("content changed: aaaaaaaa to bbbbbbbb");
+		const action = changed.actions.find((a) => a.kind === "skill")!;
+		expect(action).toMatchObject({ hash: "b".repeat(64), previousHash: "a".repeat(64) });
+
+		const same = planInstall(MANIFEST, state, owned, () => "a".repeat(64));
+		expect(reviewLines(MANIFEST, same).find((l) => l.includes("loom-editing"))).toContain("(unchanged)");
+
+		// A first install has nothing to compare against and says nothing.
+		const fresh = planInstall(MANIFEST, empty, [], () => "b".repeat(64));
+		const freshLine = reviewLines(MANIFEST, fresh).find((l) => l.includes("loom-editing"))!;
+		expect(freshLine).not.toContain("changed");
+		expect(freshLine).not.toContain("unchanged");
+	});
 });
 
 describe("recipeFor", () => {
@@ -303,4 +328,134 @@ describe("install and remove", () => {
 		expect([...failing.mcp.keys()]).toEqual(["loom"]);
 		expect([...failing.feeds.keys()]).toEqual(["loom"]);
 	});
+});
+
+/**
+ * `update` against a real upstream, through the real CLI.
+ *
+ * Everything above runs against fakes, which is what keeps them fast and keeps
+ * them off the live stores. That leaves the verb itself untested: the git
+ * fetch, the ledger, the real writers, and the difference between what the
+ * first install wrote and what the second one has to reconcile. This drives all
+ * of it in a subprocess whose state dir, config, MCP config and skills dir are
+ * a temp directory, so it can use the real writers without being able to reach
+ * the instance running it.
+ */
+describe("plugins update, end to end", () => {
+	const CLI = join(resolve(import.meta.dir, "..", ".."), "scripts/cli.ts");
+
+	function manifest(version: string, servers: string[]): string {
+		return JSON.stringify({
+			name: "scratch-pkg",
+			version,
+			description: "Scratch package",
+			mcpServers: Object.fromEntries(
+				servers.map((s) => [s, { command: "/bin/true", args: [`--${s}`] }]),
+			),
+			skills: ["skills/scratch-demo"],
+			automations: [
+				{
+					id: "sweep",
+					automation: { name: "Scratch sweep", prompt: "Check it.", schedule: "0 9 * * *" },
+				},
+			],
+		});
+	}
+
+	test(
+		"a changed upstream is fetched, re-planned and reconciled",
+		async () => {
+			const root = mkdtempSync(join(tmpdir(), "plugins-update-"));
+			const upstream = join(root, "upstream");
+			const skill = join(upstream, "skills", "scratch-demo");
+			const ledgerPath = join(root, "state", ".opensession-plugins.json");
+			const mcpPath = join(root, "mcp-config.json");
+			const skillsDir = join(root, "skills");
+			const env = {
+				...process.env,
+				OPENSESSION_STATE_DIR: join(root, "state"),
+				OPENSESSION_CONFIG: join(root, "config.json"),
+				OPENSESSION_SKILLS_DIR: skillsDir,
+				OPENSESSION_MCP_CONFIG: mcpPath,
+				GIT_AUTHOR_NAME: "Scratch",
+				GIT_AUTHOR_EMAIL: "scratch@example.invalid",
+				GIT_COMMITTER_NAME: "Scratch",
+				GIT_COMMITTER_EMAIL: "scratch@example.invalid",
+			};
+			const git = (...args: string[]) =>
+				Bun.spawnSync(["git", "-C", upstream, ...args], { env, stdout: "pipe", stderr: "pipe" });
+			const cli = (...args: string[]) => {
+				const proc = Bun.spawnSync([process.execPath, CLI, "plugins", ...args], { env, stdout: "pipe", stderr: "pipe" });
+				return { code: proc.exitCode, out: proc.stdout.toString() + proc.stderr.toString() };
+			};
+			const ledger = () => JSON.parse(readFileSync(ledgerPath, "utf8")).packages[0];
+			const refs = (kind: string) =>
+				ledger().artifacts.filter((a: InstalledArtifact) => a.kind === kind).map((a: InstalledArtifact) => a.ref);
+
+			try {
+				mkdirSync(join(root, "state"), { recursive: true });
+				mkdirSync(skill, { recursive: true });
+				writeFileSync(join(upstream, "opensession-plugin.json"), manifest("0.1.0", ["alpha", "beta"]));
+				writeFileSync(join(skill, "SKILL.md"), "---\nname: scratch-demo\n---\n\nVersion one.\n");
+				git("init", "-q", "-b", "main");
+				git("add", "-A");
+				git("commit", "-qm", "v1");
+
+				const installed = cli("add", upstream, "--yes", "--users", "alice,bob");
+				expect(installed.code).toBe(0);
+				const before = ledger();
+				expect(before.version).toBe("0.1.0");
+				expect(refs("mcp")).toEqual(["alpha", "beta"]);
+
+				// Upstream: the skill is rewritten, one server is dropped, another added.
+				writeFileSync(join(upstream, "opensession-plugin.json"), manifest("0.2.0", ["alpha", "gamma"]));
+				writeFileSync(join(skill, "SKILL.md"), "---\nname: scratch-demo\n---\n\nVersion TWO.\n");
+				git("add", "-A");
+				git("commit", "-qm", "v2");
+				const head = Bun.spawnSync(["git", "-C", upstream, "rev-parse", "HEAD"], { env, stdout: "pipe" })
+					.stdout.toString().trim();
+
+				const updated = cli("update", "scratch-pkg", "--yes");
+				expect(updated.code).toBe(0);
+				// The rewrite is named in the review rather than swapped in quietly.
+				expect(updated.out).toContain("content changed:");
+				expect(updated.out).toContain("upstream rewrote scratch-demo");
+				expect(updated.out).toContain("removed (no longer in the manifest)");
+
+				const after = ledger();
+				expect(after.version).toBe("0.2.0");
+				expect(after.commit).toBe(head);
+				// The install date is the package's, not this fetch's.
+				expect(after.installedAt).toBe(before.installedAt);
+				expect(after.updatedAt).toBeTruthy();
+				// Scoping is the operator's, and an update must not widen it back.
+				expect(after.allowedUsers).toEqual(["alice", "bob"]);
+
+				expect(refs("mcp")).toEqual(["alpha", "gamma"]);
+				const servers = JSON.parse(readFileSync(mcpPath, "utf8")).mcpServers;
+				expect(Object.keys(servers).sort()).toEqual(["alpha", "gamma"]);
+				expect(servers.gamma.allowedUsers).toEqual(["alice", "bob"]);
+
+				// The skill's recorded hash tracks the new text, which is on disk.
+				const skillArtifact = ledger().artifacts.find((a: InstalledArtifact) => a.kind === "skill");
+				const oldHash = before.artifacts.find((a: InstalledArtifact) => a.kind === "skill").hash;
+				expect(skillArtifact.hash).not.toBe(oldHash);
+				expect(readFileSync(join(skillsDir, "scratch-demo", "SKILL.md"), "utf8")).toContain("Version TWO");
+
+				// A dropped skill is a removal too, and takes its directory with it.
+				writeFileSync(
+					join(upstream, "opensession-plugin.json"),
+					JSON.stringify({ ...JSON.parse(manifest("0.3.0", ["alpha"])), skills: undefined }),
+				);
+				git("add", "-A");
+				git("commit", "-qm", "v3");
+				expect(cli("update", "scratch-pkg", "--yes").code).toBe(0);
+				expect(refs("skill")).toEqual([]);
+				expect(existsSync(join(skillsDir, "scratch-demo"))).toBe(false);
+			} finally {
+				rmSync(root, { recursive: true, force: true });
+			}
+		},
+		120_000,
+	);
 });
