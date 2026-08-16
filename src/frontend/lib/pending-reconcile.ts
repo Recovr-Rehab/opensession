@@ -1,0 +1,92 @@
+/**
+ * Which optimistic "just sent" bubbles the server has accounted for.
+ *
+ * A bubble is CLAIMED when its message shows up for real: a queued entry or a
+ * steer receipt echoed back, or a transcript user entry recorded around or
+ * after the send. A bubble nothing claims within PENDING_GIVE_UP_MS is EXPIRED
+ * instead, which is a weaker statement: the prompt may still be in flight, so a
+ * caller may hide the bubble but must not treat the message as delivered.
+ */
+
+/** How far before a bubble's own send a transcript entry may be recorded and
+ *  still claim it. Clocks differ between this tab and the server. */
+export const PENDING_MATCH_WINDOW_MS = 30_000;
+/** After this long with nothing claiming it, stop showing a bubble so a dead
+ *  send never sticks as "sending…". */
+export const PENDING_GIVE_UP_MS = 120_000;
+
+export interface PendingPrompt {
+	id: string;
+	content: string;
+	user?: string;
+	sentAt: number;
+}
+
+export interface ReconcileResult {
+	/** Confirmed by the server. Safe to retire every optimistic record of it. */
+	landed: Set<string>;
+	/** Unclaimed for too long. Hide only — the send may still be in flight. */
+	expired: Set<string>;
+}
+
+export function reconcilePending(
+	pending: readonly PendingPrompt[],
+	entries: readonly { type: string; content: string; timestamp: string }[],
+	echoes: readonly { content: string }[],
+	now: number,
+): ReconcileResult {
+	const landed = new Set<string>();
+	const expired = new Set<string>();
+	if (pending.length === 0) return { landed, expired };
+	const userPool = entries
+		.filter((e) => e.type === "user")
+		.map((e) => ({
+			c: e.content.trim(),
+			t: new Date(e.timestamp).getTime(),
+		}));
+	// A just-sent message is confirmed by a queued echo, a steer receipt
+	// (busy/fold-in path), or a real transcript user entry.
+	const echoPool = echoes.map((q) => q.content.trim());
+	for (const p of pending) {
+		const c = p.content.trim();
+		const qi = echoPool.indexOf(c);
+		if (qi >= 0) {
+			echoPool.splice(qi, 1);
+			landed.add(p.id);
+			continue;
+		}
+		// Interrupt/steer-path sends land in the transcript with a "[user] "
+		// attribution prefix (added server-side), while the optimistic bubble
+		// holds the raw text — accept either form so a redirected message's
+		// bubble reconciles instead of sticking as "redirecting…".
+		const attributed = p.user ? `[${p.user}] ${c}` : c;
+		const ui = userPool.findIndex(
+			(u) =>
+				(u.c === c || u.c === attributed) &&
+				u.t >= p.sentAt - PENDING_MATCH_WINDOW_MS,
+		);
+		if (ui >= 0) {
+			userPool.splice(ui, 1);
+			landed.add(p.id);
+			continue;
+		}
+		// Steers pending at the same turn boundary get joined into ONE user
+		// turn ("\n\n"-separated, each with its attribution prefix), possibly
+		// alongside a harness nudge — so the exact match above never fires.
+		// The "[user] " prefix is distinctive enough to claim by containment.
+		// Don't splice: the same joined entry may cover other bubbles too.
+		if (
+			p.user &&
+			userPool.some(
+				(u) =>
+					u.c.includes(attributed) &&
+					u.t >= p.sentAt - PENDING_MATCH_WINDOW_MS,
+			)
+		) {
+			landed.add(p.id);
+			continue;
+		}
+		if (now - p.sentAt >= PENDING_GIVE_UP_MS) expired.add(p.id);
+	}
+	return { landed, expired };
+}
