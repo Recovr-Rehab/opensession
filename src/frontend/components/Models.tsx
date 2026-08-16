@@ -11,7 +11,10 @@ import {
 } from "../lib/model-engine";
 import { Select } from "../ui/select";
 import { Button } from "../ui/button";
-import { InlineAlert } from "../ui/state";
+import { cn } from "../ui/cn";
+import { Menu } from "../ui/menu";
+import { IconChevronRight, IconPlus } from "./icons";
+import { EmptyState, InlineAlert } from "../ui/state";
 import {
 	SettingCard,
 	SettingRow,
@@ -389,15 +392,17 @@ function EnginesSection() {
 /**
  * Per-model default engine. The engine a session runs on is the model id's
  * routing prefix, so this map only decides where a model goes when nobody has
- * picked: an explicit choice in the composer still wins, and Auto leaves the
- * model on the instance default engine.
+ * picked: an explicit choice in the composer still wins, and a model with no
+ * override runs on the instance default engine.
+ *
+ * It lists the OVERRIDES, not the catalog. A row per model was a wall of
+ * identical Auto selects between the page's two real settings, and every one
+ * of them said the same thing the absence of a row says. So the list is
+ * usually empty, an override is added from the group's own menu (model, then
+ * engine), and setting a row back to Auto removes it.
  *
  * Hidden unless the server offers more than one engine — with one engine there
  * is nothing to choose, and an older server sends no engine list at all.
- *
- * Lives at the foot of the page: it is a row per model and reads Auto on all
- * of them until someone deliberately pins one, so it was a wall between the
- * page's two settings and the account usage people came to read.
  */
 export function ModelEngineDefaultsSection() {
 	const [models, setModels] = useState<ModelInfo[] | null>(null);
@@ -440,6 +445,17 @@ export function ModelEngineDefaultsSection() {
 	if (engines.length < 2) return null;
 	const { opencode: engineModels } = splitModelOptions(models || []);
 	if (engineModels.length === 0) return null;
+	// One entry per stored key: modelEngineKey drops the provider segment, so
+	// two picker entries can land on the same key and only one row owns it.
+	const byKey = new Map<string, (typeof engineModels)[number]>();
+	for (const m of engineModels) {
+		const key = modelEngineKey(m.id);
+		if (!byKey.has(key)) byKey.set(key, m);
+	}
+	const entries = [...byKey];
+	const pinned = entries.filter(([key]) => defaults[key]);
+	const unpinned = entries.filter(([key]) => !defaults[key]);
+	const label = (m: (typeof engineModels)[number]) => shortModelLabel(m.id, models || []);
 	// "" is the real stored value for "no default engine", not a placeholder.
 	const engineItems = [
 		{ value: "", label: "Auto" },
@@ -448,49 +464,104 @@ export function ModelEngineDefaultsSection() {
 
 	return (
 		<>
-			<SettingsGroupLabel>Default engine per model</SettingsGroupLabel>
+			<SettingsGroupLabel
+				actions={
+					unpinned.length > 0 ? (
+						<Menu.Root>
+							<Menu.Trigger
+								render={
+									<Button size="sm" icon={<IconPlus size={16} />}>
+										Add override
+									</Button>
+								}
+							/>
+							<Menu.Popup align="end" className="max-w-[min(360px,calc(100vw-1rem))]">
+								{unpinned.map(([key, m]) => (
+									<Menu.SubmenuRoot key={key}>
+										<Menu.SubmenuTrigger className="justify-between gap-3">
+											<span className="min-w-0 truncate">{label(m)}</span>
+											<IconChevronRight className="shrink-0 text-dim" size={17} />
+										</Menu.SubmenuTrigger>
+										<Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
+											{engines.map((e) => {
+												// An engine that can't run the model stays visible
+												// but unpickable, the way the composer lists it —
+												// hiding it would read as "not configured".
+												const unavailable = !engineModelId(e.id, m.id);
+												return (
+													<Menu.Item
+														key={e.id}
+														disabled={unavailable}
+														title={
+															unavailable
+																? `${label(m)} isn't available on the ${e.label} engine`
+																: undefined
+														}
+														className={cn(unavailable && "opacity-55")}
+														onClick={() => void handleChange(key, e.id)}
+													>
+														<span className="flex size-4 shrink-0 items-center justify-center text-dim">
+															<BrandMark name={e.id} />
+														</span>
+														<span className="min-w-0 truncate">{e.label}</span>
+													</Menu.Item>
+												);
+											})}
+										</Menu.Popup>
+									</Menu.SubmenuRoot>
+								))}
+							</Menu.Popup>
+						</Menu.Root>
+					) : undefined
+				}
+			>
+				Default engine per model
+			</SettingsGroupLabel>
 			<SettingCard>
-				{engineModels.map((m) => {
-					const key = modelEngineKey(m.id);
-					const value = defaults[key] || "";
-					return (
-						<SettingRow key={m.id}>
-							<SettingRowText>
-								<SettingRowTitle>{shortModelLabel(m.id, models || [])}</SettingRowTitle>
-							</SettingRowText>
-							<SettingRowControl>
-								<Select.Root
-									items={engineItems}
-									value={value}
-									disabled={saving === key}
-									onValueChange={(engine) => handleChange(key, String(engine))}
-								>
-									<Select.Trigger
-										aria-label={`Default engine for ${shortModelLabel(m.id, models || [])}`}
-										icon={<BrandMark name={value} />}
-										sizeTo={engineItems.map((e) => e.label)}
-									/>
-									<Select.Popup align="end">
-										{engineItems.map((e) => (
-											<Select.Item
-												key={e.value}
-												value={e.value}
-												disabled={!!e.value && !engineModelId(e.value as EngineId, m.id)}
-												icon={<BrandMark name={e.value} />}
-											>
-												{e.label}
-											</Select.Item>
-										))}
-									</Select.Popup>
-								</Select.Root>
-							</SettingRowControl>
-						</SettingRow>
-					);
-				})}
+				{pinned.length === 0 ? (
+					<EmptyState placement="row">Every model runs on the default engine.</EmptyState>
+				) : (
+					pinned.map(([key, m]) => {
+						const value = defaults[key] || "";
+						return (
+							<SettingRow key={key}>
+								<SettingRowText>
+									<SettingRowTitle>{label(m)}</SettingRowTitle>
+								</SettingRowText>
+								<SettingRowControl>
+									<Select.Root
+										items={engineItems}
+										value={value}
+										disabled={saving === key}
+										onValueChange={(engine) => handleChange(key, String(engine))}
+									>
+										<Select.Trigger
+											aria-label={`Default engine for ${label(m)}`}
+											icon={<BrandMark name={value} />}
+											sizeTo={engineItems.map((e) => e.label)}
+										/>
+										<Select.Popup align="end">
+											{engineItems.map((e) => (
+												<Select.Item
+													key={e.value}
+													value={e.value}
+													disabled={!!e.value && !engineModelId(e.value as EngineId, m.id)}
+													icon={<BrandMark name={e.value} />}
+												>
+													{e.label}
+												</Select.Item>
+											))}
+										</Select.Popup>
+									</Select.Root>
+								</SettingRowControl>
+							</SettingRow>
+						);
+					})
+				)}
 			</SettingCard>
 			<SettingsHint>
-				Auto leaves a model on the default engine. A model an engine can't serve is not
-				offered for it.
+				An override pins one model to one engine. Set a row back to Auto to remove it. A
+				model an engine can't serve is not offered for it.
 			</SettingsHint>
 		</>
 	);
