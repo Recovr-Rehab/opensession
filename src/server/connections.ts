@@ -204,6 +204,38 @@ export function addMcpServer(input: AddMcpInput): { ok: true } | { error: string
 }
 
 /**
+ * Install a server entry that is already an entry: the installable-package
+ * path (src/server/plugins.ts, scripts/lib/plugins.ts).
+ *
+ * `addMcpServer` above is the Connections FORM: it builds the entry from
+ * typed fields and deliberately drops anything it was not asked for, headers
+ * included. A package's entry arrives whole and has already been validated to
+ * carry credential REFERENCES (`${NAME}`) rather than values, so it is
+ * written through as-is. `allowedUsers` is the installing operator's call and
+ * never the package's, so any allowlist on the incoming entry is discarded in
+ * favour of the one passed here.
+ */
+export function addMcpServerEntry(
+  name: string,
+  entry: Record<string, unknown>,
+  opts: { allowedUsers?: string[] } = {}
+): { ok: true } | { error: string } {
+  const clean = (name || "").trim();
+  if (!/^[a-z0-9][a-z0-9_-]{0,40}$/i.test(clean)) {
+    return { error: "Name must be alphanumeric (dashes/underscores allowed)" };
+  }
+  const config = readMcpConfig();
+  if (config.mcpServers[clean]) {
+    return { error: `Server "${clean}" already exists, remove it first` };
+  }
+  const { allowedUsers: _ignored, ...rest } = entry;
+  const allowedUsers = cleanAllowedUsers(opts.allowedUsers);
+  config.mcpServers[clean] = allowedUsers ? { ...rest, allowedUsers } : rest;
+  writeMcpConfig(config);
+  return { ok: true };
+}
+
+/**
  * Set (or clear, with an empty/undefined list) the per-user allowlist on an
  * existing MCP server. Lets you restrict a server after it's been added — e.g.
  * lock a sensitive server down to specific teammates — without re-entering its secrets.

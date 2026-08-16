@@ -25,6 +25,7 @@ import { update } from "./lib/update";
 import { bold, dim, fail, green, heading, info, ok, run, runInherit, warn } from "./lib/ui";
 import { INTEGRATIONS, findIntegration } from "../src/server/integrations/registry";
 import { findRecipe, installRecipe, installedKeys, listRecipes, removeRecipe } from "./lib/recipes";
+import { plugins } from "./lib/plugins";
 import { connect, installRunnerService, runnerRun, runnerStatus, runnersList, runnersPair, runnersRemove } from "./lib/connect";
 import { sandbox } from "./lib/sandbox";
 
@@ -77,6 +78,12 @@ ${bold("Maintenance")}
   automations              list bundled automation recipes
   automations add <id>     install one (takes effect on restart)
   automations remove <id>
+  plugins                  list installed packages
+  plugins add <owner/repo> review and install a package (a git repo with an
+         [--users a,b]     opensession-plugin.json: feeds, automations,
+         [--yes]           skills, MCP servers; never runtime code)
+  plugins update <name>
+  plugins remove <name>
   version
 
 ${bold("Runners")}           ${dim("trusted persistent machines for specialized work")}
@@ -327,6 +334,13 @@ async function main(): Promise<number> {
       if (positional[0] === "add") return await addAutomation(positional[1] ?? "");
       if (positional[0] === "remove") return await removeAutomation(positional[1] ?? "");
       return await listAutomations();
+
+    case "plugins":
+    case "packages":
+      return await plugins(positional, {
+        yes: flags.has("--yes") || flags.has("-y"),
+        users: flagValue("--users"),
+      });
 
     case "connect":
       return await connect({
