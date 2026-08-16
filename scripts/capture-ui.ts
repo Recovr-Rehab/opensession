@@ -4,6 +4,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import {
   acquireCdpBrowser,
+  cdpSender,
   closeCdpTarget,
   releaseCdpBrowser,
 } from "./lib/cdp-browser";
@@ -75,20 +76,7 @@ try {
     socket!.onerror = () => reject(new Error("CDP connection failed"));
   });
 
-  let commandId = 0;
-  const pending = new Map<number, (result: any) => void>();
-  socket.onmessage = (event) => {
-    const message = JSON.parse(String(event.data));
-    if (!message.id) return;
-    pending.get(message.id)?.(message.result);
-    pending.delete(message.id);
-  };
-  const send = (method: string, params: Record<string, unknown> = {}) =>
-    new Promise<any>((resolveResult) => {
-      const id = ++commandId;
-      pending.set(id, resolveResult);
-      socket!.send(JSON.stringify({ id, method, params }));
-    });
+  const send = cdpSender(socket);
 
   await send("Page.enable");
   await send("Network.enable");

@@ -53,7 +53,7 @@
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { acquireCdpBrowser, closeCdpTarget, releaseCdpBrowser } from "./lib/cdp-browser";
+import { acquireCdpBrowser, cdpSender, closeCdpTarget, releaseCdpBrowser } from "./lib/cdp-browser";
 import { localAutomationToken } from "./lib/local-auth";
 
 const ROOT = join(import.meta.dir, "..");
@@ -417,8 +417,6 @@ const VIEWS: [string, number, number][] = (flag("views") ?? "desktop:1440x1000,p
 	});
 const THEMES = ["dark", "light"];
 
-let id = 0;
-const pending = new Map<number, (v: any) => void>();
 const lease = await acquireCdpBrowser();
 const PORT = lease.port;
 let target: any;
@@ -429,18 +427,7 @@ target = await fetch(`http://127.0.0.1:${PORT}/json/new?url=about:blank`, {
 }).then((r) => r.json());
 ws = new WebSocket(target.webSocketDebuggerUrl);
 await new Promise((r) => (ws.onopen = r));
-ws.onmessage = (e) => {
-	const m = JSON.parse(e.data as string);
-	if (m.id && pending.has(m.id)) {
-		pending.get(m.id)!(m.result);
-		pending.delete(m.id);
-	}
-};
-const send = (method: string, params: any = {}) => {
-	const i = ++id;
-	ws.send(JSON.stringify({ id: i, method, params }));
-	return new Promise<any>((res) => pending.set(i, res));
-};
+const send = cdpSender(ws);
 const evaluate = async (expression: string) => {
 	const r = await send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true });
 	if (r?.exceptionDetails) throw new Error(JSON.stringify(r.exceptionDetails).slice(0, 1500));
