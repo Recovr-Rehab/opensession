@@ -74,3 +74,40 @@ describe("resolveLegacySessionsPath", () => {
     expect(resolveLegacySessionsPath(stored)).toContain("..");
   });
 });
+
+/**
+ * A dev/demo instance repoints OPENSESSION_STATE_DIR, and statePath reads it
+ * at call time, so the legacy remap has to land in THAT instance's store.
+ * Resolving the prefix live and the store from a load-time pin made the two
+ * halves belong to different instances.
+ */
+describe("resolveLegacySessionsPath under a repointed state root", () => {
+  let stateRoot = "";
+  let prevStateDir: string | undefined;
+
+  beforeAll(() => {
+    stateRoot = mkdtempSync(`${tmpdir()}/os-paths-state-`);
+    mkdirSync(`${stateRoot}/.opensession-sessions/uploads/walkthrough/os-2`, {
+      recursive: true,
+    });
+    writeFileSync(
+      `${stateRoot}/.opensession-sessions/uploads/walkthrough/os-2/after.png`,
+      "png",
+    );
+    prevStateDir = process.env.OPENSESSION_STATE_DIR;
+    process.env.OPENSESSION_STATE_DIR = stateRoot;
+  });
+
+  afterAll(() => {
+    if (prevStateDir === undefined) delete process.env.OPENSESSION_STATE_DIR;
+    else process.env.OPENSESSION_STATE_DIR = prevStateDir;
+    rmSync(stateRoot, { recursive: true, force: true });
+  });
+
+  it("remaps into the isolated store, not the load-time one", () => {
+    const stored = `${stateRoot}/.opensession-chats/uploads/walkthrough/os-2/after.png`;
+    expect(resolveLegacySessionsPath(stored)).toBe(
+      `${stateRoot}/.opensession-sessions/uploads/walkthrough/os-2/after.png`,
+    );
+  });
+});
