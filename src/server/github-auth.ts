@@ -493,18 +493,25 @@ export async function refreshExpiringGithubTokens(): Promise<void> {
  *  8h expiry; runs one sweep immediately for tokens that expired while the
  *  server was down (the refresh token lives ~6 months). */
 const REFRESH_TICK_MS = 20 * 60_000;
-function startGithubTokenRefresher(): void {
+/**
+ * Arm the refresher. Called once from opensession.ts's boot block.
+ *
+ * Never at module scope, and never from a second process: a refresh ROTATES
+ * the shared refresh-token string, so anything racing the server's ticker
+ * invalidates the user's grant (dead until they reconnect). This module is
+ * imported by opencode-runner, pi-runner, web-auth and half the routes, so at
+ * module scope every run host, script and one-off bun process rotated live
+ * grants the moment it started. Dev instances skip it for the same reason.
+ */
+export function startGithubTokenRefresher(): void {
   const g = globalThis as any;
+  if (isDevInstance()) return;
   if (g.__osGithubTokenRefresher) clearInterval(g.__osGithubTokenRefresher);
   g.__osGithubTokenRefresher = setInterval(() => {
     void refreshExpiringGithubTokens();
   }, REFRESH_TICK_MS);
   void refreshExpiringGithubTokens();
 }
-// Dev instances must never run the refresher: a refresh ROTATES the shared
-// refresh-token string, so a second instance racing production's ticker
-// invalidates production's grant (dead until the user reconnects).
-if (!isDevInstance()) startGithubTokenRefresher();
 
 // ── Redirect (authorization-code) flow ───────────────────────────────────────
 

@@ -36,7 +36,7 @@ import { createSelfDeployMcpServer } from "./self-deploy";
 import { papercutsEnabledForRepo } from "./papercuts";
 import { defaultRepo, productName } from "./config";
 import { REPOS, sessionRepoId } from "./worktree";
-import { registerInteractiveMcpBuilder, startMcpHttpServer, startRunRpcServer } from "./run-rpc";
+import { registerInteractiveMcpBuilder } from "./run-rpc";
 import { automationRunMcpForSession, selfImproveMcpForSession } from "./automations";
 import { findSession, touchNativeSession } from "./session-cache";
 import { attachRepo, linkPr, resolveSessionRepoContext, sessionRepoIds, switchPrimaryRepo } from "./session-repos";
@@ -334,5 +334,12 @@ registerInteractiveMcpBuilder((sessionId, user) => {
 			createGoalSelfMcpServer(goalId);
 	return servers;
 });
-startRunRpcServer();
-startMcpHttpServer();
+
+// NOTE: the run-rpc unix socket and the loopback MCP HTTP listener are NOT
+// started here. Registering a builder is a cheap in-memory assignment; binding
+// a socket is not, and this module sits on the import chain of most of
+// src/server — so a module-scope start meant any script, test or one-off bun
+// process that touched that chain bound (and unlinked) the LIVE server's
+// socket, killing every in-flight run's MCP calls until the heal ticker
+// rebound (2026-07-16, 2026-07-17, 2026-08-16). opensession.ts calls
+// startRunRpcServer() / startMcpHttpServer() explicitly instead.

@@ -33,8 +33,14 @@ import { startPlainArchiveSweep } from "./src/server/plain-archive";
 import { devInstanceBootError, isDevInstance } from "./src/server/dev-mode";
 import { startPrReviewNotificationTicker } from "./src/server/pr-review-notifications";
 import { startPublicIngress } from "./src/server/public-ingress";
-import { recordRecoveredRunEvent, restorePromptQueues, resumeDrainedSessions, snapshotActiveSessions } from "./src/server/run-session";
-import { handleSandboxWsUpgrade, timerPoisonRequestCheck } from "./src/server/run-ws";
+import { recordRecoveredRunEvent, restorePromptQueues, resumeDrainedSessions, snapshotActiveSessions, startLoopTicker } from "./src/server/run-session";
+import { startMcpHttpServer, startRunRpcServer } from "./src/server/run-rpc";
+import { handleSandboxWsUpgrade, startTimerPoisonHeartbeat, timerPoisonRequestCheck } from "./src/server/run-ws";
+import { startGithubTokenRefresher } from "./src/server/github-auth";
+import { startGoalTicker } from "./src/server/goal-runner";
+import { startSessionIndexSweeper } from "./src/server/session-index";
+import { ensurePreviewPoolScheduler } from "./src/server/preview-pool";
+import { ensureWarmTemplateScheduler } from "./src/server/warm-template";
 import { handleRunnerWsUpgrade } from "./src/server/runner-ws";
 import { handleSandboxPortalRelayUpgrade } from "./src/server/sandbox-portal-relay";
 import { handleWorkloadIdentityRequest } from "./src/server/workload-identity";
@@ -64,14 +70,14 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 // Side-effect modules: these must be loaded even when the entry references
-// nothing from them — they register builders/listeners and start tickers.
-import "./src/server/interactive-mcp"; // registerInteractiveMcpBuilder + run-rpc server
+// nothing from them — they register builders and listeners. Registration is a
+// cheap in-memory assignment and stays at module scope; anything that binds a
+// socket or arms a ticker is started explicitly instead (see the listener
+// block below and the boot block further down), so importing the server graph
+// from a script or a test never touches live resources.
+import "./src/server/interactive-mcp"; // registerInteractiveMcpBuilder
 import "./src/server/queue-state"; // steer-receipt transcript reconcile listener
-import "./src/server/run-session"; // /loop ticker
-import "./src/server/goal-runner"; // goals ticker
-import "./src/server/session-index"; // session search index sweeper
 import "./src/server/session-control-wiring"; // opensession-sessions MCP + Slack-link bridge
-import "./src/server/preview-pool"; // warm dev-server pool sweeper
 import "./src/server/keychain"; // registers the keychain human-ask domain handler
 import { websocketHandlers } from "./src/server/ws-handlers";
 import {
@@ -93,8 +99,9 @@ function isLoopbackHostname(hostname: string): boolean {
 // state is the fleet-outage class bug: the run-rpc unix socket lives under the
 // sessions dir, and a second instance would unlink and steal it from the
 // production process (2026-07-16/17). Refuse to boot without isolation.
-// Module-import side effects above run BEFORE this check, so run-rpc.ts
-// carries the same fail-closed guard around the socket bind itself.
+// This check now runs BEFORE any listener is bound (the binds moved out of
+// module scope, below), and run-rpc.ts still carries the same fail-closed
+// guard around the socket bind itself.
 {
 	const devBootError = devInstanceBootError();
 	if (devBootError) {
@@ -102,6 +109,19 @@ function isLoopbackHostname(hostname: string): boolean {
 		process.exit(1);
 	}
 }
+
+// Listeners the server owns. Deliberately started HERE and not as module side
+// effects: interactive-mcp.ts used to bind both at import, so any script, test
+// or one-off bun process reaching that import chain took the live server's
+// run-rpc socket out from under it (2026-07-16, 2026-07-17, 2026-08-16).
+// Outside the __opensessionBooted block on purpose — both are idempotent and
+// re-point their handler through globalThis, which is how a `bun --hot` reload
+// picks up new code without rebinding.
+startRunRpcServer();
+startMcpHttpServer();
+// Same reasoning for the timer-poison heartbeat: re-checked on every
+// evaluation, which is exactly when a hot reload may have killed the timers.
+startTimerPoisonHeartbeat();
 
 mkdirSync(SESSIONS_DIR, { recursive: true });
 
@@ -578,6 +598,24 @@ if (!g.__opensessionBooted) {
 
 	// Desk todo reminders: push + Slack DM when a remindAt passes (todos.ts)
 	startTodoReminderTicker();
+
+	// Keep per-user GitHub grants fresh (github-auth.ts). One process only: a
+	// refresh rotates the shared refresh token, so a second ticker anywhere
+	// invalidates the grant.
+	startGithubTokenRefresher();
+
+	// Warm dev-server pool + warm git templates: docker-level sweeps, so only
+	// the server that owns the daemon runs them.
+	ensurePreviewPoolScheduler();
+	ensureWarmTemplateScheduler();
+
+	// Fire due /loop self-prompts and wake due goals — both start real engine
+	// runs, so they belong to this process alone.
+	startLoopTicker();
+	startGoalTicker();
+
+	// Distil finished sessions into the search index (session-index.ts).
+	startSessionIndexSweeper();
 
 	// Re-try sidebar titles whose one-shot died in flight (a restart, or an
 	// engine-spawn outage) — without this they stay raw forever.

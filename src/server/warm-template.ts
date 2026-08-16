@@ -704,9 +704,11 @@ async function sweepWarmTemplates(): Promise<void> {
 }
 
 /** Arm the sweep once per process (globalThis-parked, unref'd — never keeps
- *  a test/CLI process alive). Cheap no-op every tick while nothing is
- *  enabled, so it's armed unconditionally at module load. */
-function ensureWarmTemplateScheduler(): void {
+ *  a test/CLI process alive). Cheap no-op every tick while nothing is enabled.
+ *  Called once from opensession.ts's boot block — never at module load: a due
+ *  sweep rebuilds docker templates and replenishes spares, which is the live
+ *  server's job, not that of every script that imports this graph. */
+export function ensureWarmTemplateScheduler(): void {
   if (g.__warmTemplateSweepTimer) return;
   const t = setInterval(() => {
     sweepWarmTemplates().catch((e) => console.warn("[warm-template] sweep failed:", e));
@@ -715,7 +717,6 @@ function ensureWarmTemplateScheduler(): void {
   g.__warmTemplateSweepTimer = t;
 }
 
-ensureWarmTemplateScheduler();
 
 // ── Status (Settings API) ────────────────────────────────────────────────────
 

@@ -285,11 +285,16 @@ export async function runGoal(goal: Goal): Promise<void> {
 	}
 }
 
-// Goals ticker: wake due goals (self-pacing, so this only fires them).
-// Guarded so a hot reload doesn't stack a second interval. Dev instances
-// never wake goals (real engine runs — see src/server/dev-mode.ts).
-if (!g.__opensessionBooted && !isDevInstance()) {
-	setInterval(() => {
+/**
+ * Goals ticker: wake due goals (self-pacing, so this only fires them).
+ * Called once from opensession.ts's boot block; idempotent, so a hot reload
+ * never stacks a second interval. Never arm this at module scope — a wake is
+ * a real engine run, so any script or test importing this module would start
+ * driving live goals. Dev instances skip it (see src/server/dev-mode.ts).
+ */
+export function startGoalTicker(): void {
+	if (g.__goalTicker || isDevInstance()) return;
+	g.__goalTicker = setInterval(() => {
 		const now = Date.now();
 		for (const goal of listGoals()) {
 			if (goal.status !== "active") continue;

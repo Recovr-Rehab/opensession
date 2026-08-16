@@ -2045,6 +2045,10 @@ async function reapOrphanGoldenbuilds(): Promise<void> {
   }
 }
 
+/** Arm the pool sweep. Called once from opensession.ts's boot block — never at
+ *  module scope: the sweep docker-rm's containers, and this module is reachable
+ *  from the routes graph, so arming it at import let any script or test reap
+ *  the live pool 20s later. */
 export function ensurePreviewPoolScheduler(): void {
   // Dev instances: the sweep docker-rm's os-preview-*/golden containers on
   // the shared docker daemon — it would reap production's warm pool.
@@ -2082,4 +2086,3 @@ export function previewPoolStatus(): PreviewPoolStatusEntry[] {
     });
 }
 
-ensurePreviewPoolScheduler();

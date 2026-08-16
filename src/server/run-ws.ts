@@ -672,7 +672,17 @@ function escalateTimerPoison(staleMs: number): void {
   }
 }
 
-{
+/**
+ * Arm the timer-poison heartbeat: a 5s stamp whose staleness tells a later
+ * request that this process's timers died (the bun --hot poisoning failure,
+ * where every timer stops while HTTP keeps serving).
+ *
+ * Called from opensession.ts on every evaluation of the entry — including a
+ * hot reload, which is when the staleness check below earns its keep. Not at
+ * module scope: this file is on the routes import chain, so a script or test
+ * would arm a heartbeat for a process that has no timers to watch.
+ */
+export function startTimerPoisonHeartbeat(): void {
   const hb = (g.__timerPoisonHeartbeat ??= { at: Date.now(), armed: false });
   if (hb.armed && Date.now() - hb.at > 15_000) {
     console.error(

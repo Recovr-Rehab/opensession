@@ -18,8 +18,9 @@
  *
  * The ticker sweeps every 10 minutes (first sweep ~90s after boot), bounded to
  * MECH_PER_SWEEP sessions per pass so the initial backfill spreads out instead
- * of stalling the event loop. Hot reloads keep the interval singleton via the
- * __opensessionBooted guard, same as goal-runner's ticker.
+ * of stalling the event loop. startSessionIndexSweeper() arms it from
+ * opensession.ts's boot block and is idempotent, so a hot reload keeps the one
+ * interval — same shape as goal-runner's ticker.
  */
 
 import { homeDir } from "./paths";
@@ -340,10 +341,19 @@ export async function sweepSessionIndex(): Promise<{
 	}
 }
 
-// Sweeper ticker — one interval process-wide; hot reloads must not stack a
-// second one (same guard as goal-runner's ticker). Dev instances skip it:
-// distillation runs engine one-shots and writes the search db.
-if (!g.__opensessionBooted && !isDevInstance()) {
+/**
+ * Start the sweeper ticker. Called once from opensession.ts's boot block —
+ * never at module scope: a sweep distills through the engine and WRITES
+ * ~/.opensession-search.db, and this module is on the import chain of the
+ * opensession-search MCP tools, so arming it at import meant any test or
+ * script that touched that chain swept the live index (interactive-mcp.test.ts
+ * did exactly that). Dev instances skip it for the same reason.
+ */
+export function startSessionIndexSweeper(): void {
+	if (g.__sessionIndexTicker || isDevInstance()) return;
 	setTimeout(() => void sweepSessionIndex().catch(() => {}), FIRST_SWEEP_DELAY_MS);
-	setInterval(() => void sweepSessionIndex().catch(() => {}), SWEEP_MS);
+	g.__sessionIndexTicker = setInterval(
+		() => void sweepSessionIndex().catch(() => {}),
+		SWEEP_MS,
+	);
 }

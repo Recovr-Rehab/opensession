@@ -321,49 +321,87 @@ async function handleRpc(req: Request): Promise<Response> {
   });
 }
 
-/** Boot the RPC socket once; safe to call on every reload (handler is
- *  re-pointed through globalThis so new code applies without a rebind). */
-export function startRunRpcServer(): void {
-  g.__runRpcHandler = handleRpc;
-  // `bun test` guard: this runs as a module side effect (interactive-mcp.ts),
-  // so ANY test whose import chain reaches this file would otherwise unlink
-  // and steal the LIVE server's socket, then exit and leave a dead inode at
-  // the path — every interactive run wedges in MCP init until a restart
-  // (2026-07-16 and again 2026-07-17, a fleet-wide outage). bun test sets
-  // NODE_ENV=test; the Bun.main check is a belt for suites that override it.
-  if (process.env.NODE_ENV === "test" || /\.test\.tsx?$/.test(Bun.main || "")) {
-    return;
-  }
-  // Fail-closed belt for the dev-instance refuse-to-boot guard in
-  // opensession.ts: module side effects (this call, via interactive-mcp.ts)
-  // run BEFORE the entry file's check, so an unisolated dev instance must be
-  // stopped HERE from unlinking the live socket. With isolation set
-  // (OPENSESSION_STATE_DIR / OPENSESSION_SESSIONS_DIR), the socket path derives
-  // from the isolated sessions dir and binding is safe.
-  if (devInstanceBootError()) return;
-  if (g.__runRpcServer) {
-    startRunRpcSocketHeal();
-    return;
-  }
+/**
+ * Bind the socket, but ONLY when the path is free or provably dead.
+ *
+ * A unix bind fails outright if the path exists, so the old code unlinked
+ * first — which made "take the socket" the default outcome for whoever ran
+ * last. Probe instead: a path that answers a connect belongs to a live
+ * process, and we decline rather than unlink it. Only a path nobody answers
+ * (the previous process exited, or a stray one unlinked and left a dead
+ * inode) is cleared and rebound. That makes stealing a HEALTHY server's
+ * socket impossible, whatever imports it.
+ *
+ * The probe → unlink → bind sequence is not atomic, but it does not have to
+ * be: if someone binds in between, our bind throws EADDRINUSE and we decline,
+ * so the loser never clobbers the winner.
+ */
+async function bindRunRpcSocket(): Promise<boolean> {
+  if (g.__runRpcServer) return true;
   const sock = rpcSocketPath(OPENSESSION_SESSIONS_DIR);
   mkdirSync(dirname(sock), { recursive: true });
+  if (existsSync(sock)) {
+    if (await rpcSocketPathAlive(sock)) {
+      console.error(
+        `[run-rpc] ${sock} is already served by a live process — not binding. ` +
+          "In-process MCP tools stay with that process; the heal ticker takes " +
+          "the path over if it ever goes dead.",
+      );
+      audit({ msg: "run_rpc_bind_declined", socket: sock });
+      return false;
+    }
+    try {
+      unlinkSync(sock);
+    } catch {}
+  }
   try {
-    if (existsSync(sock)) unlinkSync(sock);
-  } catch {}
-  g.__runRpcServer = Bun.serve({
-    unix: sock,
-    // Bun.serve's default idleTimeout (10s) closes the socket under any
-    // response slower than that — proxied tool calls routinely block longer
-    // (worktree prep, blocking human asks). 0 = no idle limit; the call-level
-    // timeout above is the real ceiling. (Supported at runtime on unix
-    // servers; Bun's types only allow it for TCP, hence the cast.)
-    idleTimeout: 0,
-    fetch: (req: Request) => (g.__runRpcHandler as typeof handleRpc)(req),
-  } as unknown as Parameters<typeof Bun.serve>[0]);
+    g.__runRpcServer = Bun.serve({
+      unix: sock,
+      // Bun.serve's default idleTimeout (10s) closes the socket under any
+      // response slower than that — proxied tool calls routinely block longer
+      // (worktree prep, blocking human asks). 0 = no idle limit; the call-level
+      // timeout above is the real ceiling. (Supported at runtime on unix
+      // servers; Bun's types only allow it for TCP, hence the cast.)
+      idleTimeout: 0,
+      fetch: (req: Request) => (g.__runRpcHandler as typeof handleRpc)(req),
+    } as unknown as Parameters<typeof Bun.serve>[0]);
+  } catch (e) {
+    // Lost the race, or the path is unusable. Never fatal: the heal ticker
+    // retries, and runs fall back to whatever the config already named.
+    console.error(`[run-rpc] bind on ${sock} failed:`, e);
+    audit({ msg: "run_rpc_bind_failed", socket: sock, error: String(e) });
+    return false;
+  }
   try {
     chmodSync(sock, 0o600);
   } catch {}
   console.log(`[run-rpc] listening on ${sock}`);
+  return true;
+}
+
+/** Boot the RPC socket once; safe to call on every reload (handler is
+ *  re-pointed through globalThis so new code applies without a rebind).
+ *
+ *  Call this from the ENTRY FILE only. It used to run as a module side effect
+ *  of interactive-mcp.ts, so any script or test whose import chain reached
+ *  that file bound the socket too (2026-07-16, 2026-07-17 and 2026-08-16 —
+ *  each time every interactive run's MCP calls died until the heal ticker
+ *  rebound). The guards below stay as belts; the fix is the missing call. */
+export function startRunRpcServer(): void {
+  g.__runRpcHandler = handleRpc;
+  // `bun test` belt: a suite that reaches this file must never touch the
+  // live socket. bun test sets NODE_ENV=test; the Bun.main check covers
+  // suites that override it.
+  if (process.env.NODE_ENV === "test" || /\.test\.tsx?$/.test(Bun.main || "")) {
+    return;
+  }
+  // Fail-closed belt for the dev-instance refuse-to-boot guard in
+  // opensession.ts: an unisolated dev instance must never take the live
+  // socket. With isolation set (OPENSESSION_STATE_DIR /
+  // OPENSESSION_SESSIONS_DIR), the socket path derives from the isolated
+  // sessions dir and binding is safe.
+  if (devInstanceBootError()) return;
+  if (!g.__runRpcServer) void bindRunRpcSocket();
   startRunRpcSocketHeal();
 }
 
@@ -583,21 +621,27 @@ async function rpcSocketPathAlive(sock: string): Promise<boolean> {
 /** Self-heal ticker: if the socket path stops answering (unlinked, or stolen
  *  by another process that then exited), drop the orphaned listener and
  *  rebind. Turns the stolen-socket incident class from "every interactive run
- *  wedges until a human restarts the service" into a ≤30s blip. */
+ *  wedges until a human restarts the service" into a ≤30s blip.
+ *
+ *  It only ever binds a path nobody answers, so it cannot take a healthy
+ *  socket either — which is also what lets it cover the declined-bind case: a
+ *  server that found the path already served picks it up as soon as the other
+ *  process lets go. */
 function startRunRpcSocketHeal(): void {
   if (g.__runRpcHealTicker) return;
   g.__runRpcHealTicker = setInterval(() => {
     void (async () => {
-      if (!g.__runRpcServer) return;
       const sock = rpcSocketPath(OPENSESSION_SESSIONS_DIR);
       if (await rpcSocketPathAlive(sock)) return;
-      console.warn(`[run-rpc] socket path dead or stolen — rebinding ${sock}`);
-      audit({ msg: "run_rpc_socket_heal", socket: sock });
-      try {
-        (g.__runRpcServer as { stop?: (force?: boolean) => void })?.stop?.(true);
-      } catch {}
-      g.__runRpcServer = undefined;
-      startRunRpcServer();
+      if (g.__runRpcServer) {
+        console.warn(`[run-rpc] socket path dead or stolen — rebinding ${sock}`);
+        audit({ msg: "run_rpc_socket_heal", socket: sock });
+        try {
+          (g.__runRpcServer as { stop?: (force?: boolean) => void })?.stop?.(true);
+        } catch {}
+        g.__runRpcServer = undefined;
+      }
+      await bindRunRpcSocket();
     })();
   }, 30_000);
   (g.__runRpcHealTicker as { unref?: () => void }).unref?.();

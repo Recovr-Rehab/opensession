@@ -2456,11 +2456,17 @@ export function sessionMentionsNote(
 	);
 }
 
-// Loop ticker: fire due session loops (skips busy/archived sessions).
-// Guarded so a hot reload doesn't stack a second interval. Dev instances
-// never fire loops (real engine runs — see src/server/dev-mode.ts).
-if (!g.__opensessionBooted && !isDevInstance()) {
-	setInterval(() => {
+/**
+ * Loop ticker: fire due session loops (skips busy/archived sessions).
+ * Called once from opensession.ts's boot block; idempotent, so a hot reload
+ * never stacks a second interval. Never arm this at module scope — a loop
+ * fires a real engine run, and this module is imported by most of the server
+ * graph, so any script or test that touched it would start prompting live
+ * sessions. Dev instances skip it (see src/server/dev-mode.ts).
+ */
+export function startLoopTicker(): void {
+	if (g.__loopTicker || isDevInstance()) return;
+	g.__loopTicker = setInterval(() => {
 		for (const session of getCachedSessions()) {
 			const loop = session.loop;
 			if (!loop || session.archived || session.source !== "opensession") continue;

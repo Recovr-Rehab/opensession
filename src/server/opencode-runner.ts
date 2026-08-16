@@ -1217,8 +1217,13 @@ function dbLastActivityMs(dbPath?: string): number | null {
 // Parked on globalThis so hot reloads don't stack intervals.
 // Dev instances skip the sweep: it only touches this process's OWN pool map
 // (benign), but a dev instance stays fully ticker-free by policy.
+// Armed lazily, the first time this process actually owns a pool entry
+// (ensureOpencodeIdleSweep below): a pool that was never filled has nothing to
+// sweep, and arming at module scope made every script and test that merely
+// imported this graph carry the ticker.
 const IDLE_SWEEP_MS = 10 * 60 * 1000;
-if (!g.__opencodeIdleSweep && !isDevInstance()) {
+function ensureOpencodeIdleSweep(): void {
+  if (g.__opencodeIdleSweep || isDevInstance()) return;
   g.__opencodeIdleSweep = setInterval(() => {
     for (const [key, entry] of servers) {
       if (entry.activeRuns > 0 || recoveringRunCount(entry) > 0 || entry.draining) continue;
@@ -1249,6 +1254,10 @@ if (!g.__opencodeIdleSweep && !isDevInstance()) {
 function scheduleIdleKill(key: string): void {
   const entry = servers.get(key);
   if (!entry) return;
+  // Every path that puts a server in the pool lands here, so this is where the
+  // backstop sweep gets armed — in the run host as well as in opensession,
+  // and in neither if the pool stayed empty.
+  ensureOpencodeIdleSweep();
   if (entry.idleTimer) clearTimeout(entry.idleTimer);
   const idleMs = idleKillMsFor(entry);
   entry.idleTimer = setTimeout(() => {

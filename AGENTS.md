@@ -117,9 +117,22 @@ entry file (that's what keeps parallel sessions from colliding):
   `frontend-build.ts` (in-process SPA rebuild), `uploads.ts`,
   `session-sandbox.ts`.
 
-Modules with module-scope side effects (listener/ticker registration guarded
-by `__opensessionBooted`) are explicitly side-effect-imported at the top of
-opensession.ts — if you add such a module, add it to that import list.
+**Nothing under `src/server/` may bind a socket, arm a ticker or spawn a
+process at module scope.** Importing a module must stay free of live effects,
+because half the graph is reachable from any script, test or `bun -e`: when
+interactive-mcp.ts bound the run-rpc socket at import, every such process
+unlinked the live server's socket and killed in-flight runs' MCP calls until
+the heal ticker noticed. Quieter versions of the same shape wrote the live
+search index from `bun test`, docker-rm'd the warm preview pool, rotated live
+GitHub grants from every run host, and hung scripts that only wanted to read a
+function. Registering a builder or a listener in memory is fine and stays at
+module scope; anything that acquires a resource goes behind an exported
+`start*`/`ensure*` function that opensession.ts calls (the boot block for
+tickers, the listener block near the top for binds), or is armed lazily on
+first real use (`ensureOpencodeIdleSweep`). Make every one idempotent — a
+`bun --hot` reload re-evaluates the entry. `bun scripts/check-module-side-effects.ts`
+imports every server module in an instrumented child process and fails on any
+resource created at import time; it runs as part of `bun test`.
 
 ## Open Session dev workflow (self-hosting — read this first)
 
