@@ -10,7 +10,6 @@
 
 import type { RecentCommit } from "./api";
 import { personLabel, type WorktreeRow } from "./pr-rows";
-import type { UnifiedSession } from "./types";
 
 /**
  * Who shipped it. Everything has an owner: a teammate, or the automation or
@@ -38,8 +37,17 @@ export interface FeedRow {
 	additions?: number;
 	deletions?: number;
 	shippedAt: string;
-	/** The workspace behind it, when there is one to open. */
-	session?: UnifiedSession;
+	/**
+	 * The session behind it, when there is one to open.
+	 *
+	 * An id rather than the session itself, because opening one only ever needs
+	 * its id, and holding the object made the row depend on the session still
+	 * being in the live list. Almost none of them are: a session is archived
+	 * when its work is done, which for a shipped commit is the normal case and
+	 * usually happened the same day. Every such row quietly left for the web
+	 * host instead, which is the one place the session is not.
+	 */
+	sessionId?: string;
 }
 
 export function shortSha(sha: string): string {
@@ -76,16 +84,15 @@ export function feedOwner(
 /**
  * Merged PRs and commits in one list, newest first.
  *
- * `sessionById` is what lets a commit row open the session that wrote it. A
- * merge carries its session already; a commit only carries an id, because the
- * server named it by reading transcripts (commit-sessions.ts) rather than by
- * knowing the session.
+ * A merge arrives already carrying its session; a commit carries only an id,
+ * because the server named it by reading transcripts (commit-sessions.ts)
+ * rather than by knowing the session. Both keep just the id from here, and
+ * neither is looked up: a lookup can only lose one.
  */
 export function buildFeedRows(
 	prRows: WorktreeRow[],
 	commits: RecentCommit[],
 	isTeammate?: (key: string) => boolean,
-	sessionById?: Map<string, UnifiedSession>,
 ): FeedRow[] {
 	const rows: FeedRow[] = [
 		...prRows.map((row) => ({
@@ -100,7 +107,7 @@ export function buildFeedRows(
 			additions: row.additions,
 			deletions: row.deletions,
 			shippedAt: row.updatedAt,
-			session: row.session,
+			sessionId: row.session?.id,
 		})),
 		...commits.map((commit) => ({
 			key: `${commit.repo}:${commit.sha}`,
@@ -114,9 +121,7 @@ export function buildFeedRows(
 			additions: commit.additions,
 			deletions: commit.deletions,
 			shippedAt: commit.committedAt,
-			...(commit.sessionId && sessionById?.get(commit.sessionId)
-				? { session: sessionById.get(commit.sessionId) }
-				: {}),
+			sessionId: commit.sessionId,
 		})),
 	];
 	return rows.sort(

@@ -61,7 +61,9 @@ interface Props {
 	sessions: UnifiedSession[];
 	/** Who's viewing what right now (global presence), for the face dots. */
 	teamViewing?: Array<{ user: string; sessionId: string }>;
-	onSelect: (session: UnifiedSession) => void;
+	/** By id, not by row: most of what the feed can open is archived, and an
+	 *  archived session is not in `sessions`. */
+	onSelect: (sessionId: string) => void;
 }
 
 /** How far back the feed reaches, in days, and the steps "Show more" walks.
@@ -219,15 +221,7 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 	// automation as often as a teammate. The roster decides which, so an
 	// automation is named rather than given a face.
 	const teammates = new Set(people.map((p) => p.name.toLowerCase()));
-	// A commit arrives with the id of the session that wrote it; this is what
-	// turns that id into the session a row can open.
-	const sessionById = new Map(sessions.map((session) => [session.id, session]));
-	const allShipped = buildFeedRows(
-		merged,
-		commits,
-		(key) => teammates.has(key),
-		sessionById,
-	);
+	const allShipped = buildFeedRows(merged, commits, (key) => teammates.has(key));
 	const repoOptions = [...new Set(allShipped.map((row) => row.repo).filter(Boolean))].sort();
 	const scoped = allShipped.filter(
 		(row) => inScope(row.person) && (repo === "all" || row.repo === repo),
@@ -401,8 +395,8 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 												key={row.key}
 												className={PR_FEED_ROW}
 												onClick={() =>
-													row.session
-														? onSelect(row.session)
+													row.sessionId
+														? onSelect(row.sessionId)
 														: row.url && window.open(row.url, "_blank", "noopener")
 												}
 												title={[

@@ -4401,7 +4401,7 @@ export function App(
 							<Feed
 								sessions={sessions}
 								teamViewing={teamViewing}
-								onSelect={(s) => navigate({ view: "session", id: s.id })}
+								onSelect={(id) => navigate({ view: "session", id })}
 							/>
 						) : route.view === "tasks" ? (
 							<Tasks

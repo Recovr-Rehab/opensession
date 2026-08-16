@@ -48,9 +48,8 @@ describe("buildFeedRows", () => {
 	});
 
 	it("keeps the workspace behind a merge so the row can open it", () => {
-		const session = { id: "os-1" } as any;
-		const [row] = buildFeedRows([pr({ session })], []);
-		expect(row.session).toBe(session);
+		const [row] = buildFeedRows([pr({ session: { id: "os-1" } as any })], []);
+		expect(row.sessionId).toBe("os-1");
 	});
 
 	it("gives a teammate a face and an automation its name", () => {
@@ -72,18 +71,19 @@ describe("buildFeedRows", () => {
 		expect(unsigned.owner).toBeNull();
 	});
 
-	it("keeps the session that wrote a commit, so the row can open it", () => {
-		const session = { id: "os-1" } as any;
-		const byId = new Map([["os-1", session]]);
-		const [row] = buildFeedRows([], [commit({ sessionId: "os-1" })], undefined, byId);
-		expect(row.session).toBe(session);
+	it("opens the session that wrote a commit even once it is archived", () => {
+		// The whole point of keeping the id: a session is archived when its work
+		// is done, so by the time anyone reads the feed almost none of what it
+		// can open is still in the live list. Nothing here consults one.
+		const [row] = buildFeedRows([], [commit({ sessionId: "os-1" })]);
+		expect(row.sessionId).toBe("os-1");
 	});
 
-	it("leaves a commit without a session when its own is gone", () => {
-		// Sessions age out of the list long before commits age out of the feed,
-		// and a row with nowhere to go still has GitHub.
-		const [row] = buildFeedRows([], [commit({ sessionId: "os-gone" })], undefined, new Map());
-		expect(row.session).toBeUndefined();
+	it("leaves a commit nobody wrote to its web host", () => {
+		// A commit made outside Open Session has no session to name, and a row
+		// with nowhere of ours to go still has GitHub.
+		const [row] = buildFeedRows([], [commit()]);
+		expect(row.sessionId).toBeUndefined();
 		expect(row.url).toContain("/commit/");
 	});
 
