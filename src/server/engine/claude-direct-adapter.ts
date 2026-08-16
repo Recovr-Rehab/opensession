@@ -21,8 +21,9 @@
  *    smoke bypass (kind "claude-direct-smoke", an armed counter incremented
  *    only inside runClaudeDirectSmokeTurn — request/automation data can name
  *    the kind but can never arm it).
- *  - Auth: a subscription account from claude-accounts (pickAccount /
- *    getUsableAccountById; strict pins never widen to the pool) delivered as
+ *  - Auth: a subscription account from claude-accounts (resolveAccount, so
+ *    strict pins never widen to the pool and another user's personal
+ *    subscription never serves this run) delivered as
  *    CLAUDE_CODE_OAUTH_TOKEN plus an ISOLATED per-account CLAUDE_CONFIG_DIR
  *    under ~/.opensession-claude-direct. The subprocess env is minimal —
  *    PATH/HOME/LANG, the git identity, the per-user GitHub token on eligible
@@ -89,9 +90,7 @@ import { existsSync, mkdirSync, readdirSync } from "fs";
 import { stateDir } from "../paths";
 import { audit, summarizeText } from "../audit";
 import {
-  pickAccount,
-  getUsableAccountById,
-  getAccountById,
+  resolveAccount,
   markExhausted,
   type ClaudeAccount,
 } from "../claude-accounts";
@@ -315,32 +314,31 @@ function accountOwningConversation(resumeId: string): string | null {
  *  widen to the pool — automation cost-cap semantics), then the account that
  *  OWNS the conversation being resumed (each account's config dir is
  *  isolated, so any other account resumes into "No conversation found"),
- *  else the normal personal-first pool pick. */
+ *  else the normal personal-first pool pick. resolveAccount owns that order
+ *  and the owner gate on every step of it: a pin or a resume owner that is
+ *  someone else's personal subscription is refused like any other ineligible
+ *  account. An owner that can't serve falls through to the pool — the resume
+ *  pre-flight in runClaudeDirect then starts fresh with a handoff note
+ *  instead of letting the SDK fail the turn. */
 function pickDirectAccount(
   opts: RunAgentOpts,
   model: string,
   resumeId?: string
 ): { account: ClaudeAccount } | { error: string } {
-  if (opts.accountId) {
-    const pinned = getUsableAccountById(opts.accountId, model, opts.usageCredits);
-    if (pinned) return { account: pinned };
-    if (opts.accountStrict) {
-      const name = getAccountById(opts.accountId)?.name || opts.accountId;
-      return {
-        error: `pinned account "${name}" is not usable right now (strict pin — not widening to the pool)`,
-      };
-    }
+  const resolved = resolveAccount({
+    user: opts.user,
+    model,
+    pinnedId: opts.accountId,
+    strictPin: opts.accountStrict,
+    stickyId: resumeId ? accountOwningConversation(resumeId) ?? undefined : undefined,
+    allowExtraUsage: opts.usageCredits,
+  });
+  if ("account" in resolved) return { account: resolved.account };
+  if (resolved.refusal.kind === "pin-unusable") {
+    return {
+      error: `pinned account "${resolved.refusal.pinName}" is not usable right now (strict pin — not widening to the pool)`,
+    };
   }
-  if (resumeId) {
-    const owner = accountOwningConversation(resumeId);
-    const usable = owner ? getUsableAccountById(owner, model, opts.usageCredits) : null;
-    // An unusable owner falls through to the pool: the resume pre-flight in
-    // runClaudeDirect then starts fresh with a handoff note instead of
-    // letting the SDK fail the turn.
-    if (usable) return { account: usable };
-  }
-  const picked = pickAccount(undefined, opts.user, model, opts.usageCredits);
-  if (picked) return { account: picked };
   return { error: "no usable Claude account in the pool" };
 }
 

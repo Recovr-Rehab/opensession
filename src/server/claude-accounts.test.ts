@@ -1,4 +1,4 @@
-import { describe, expect, test, beforeAll } from "bun:test";
+import { describe, expect, test, afterAll, beforeAll } from "bun:test";
 import { mkdtempSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
@@ -155,6 +155,107 @@ describe("pickAccount usage-credits policy", () => {
   });
 });
 
+describe("resolveAccount owner gate", () => {
+  // "Robin" owns nothing; the fixture's personal accounts belong to Alex and
+  // Jaap. Every account below is left usable on purpose, so a refusal can
+  // only come from the owner rule.
+  const seedUsable = () => {
+    accounts.__setUsageCacheForTest("fresh", usage(50));
+    accounts.__setUsageCacheForTest("maxed", usage(60));
+    accounts.__setUsageCacheForTest("personal", usage(0));
+  };
+
+  test("a pinned foreign personal account is refused in pool mode", () => {
+    seedUsable();
+    const soft = accounts.resolveAccount({ user: "Robin", pinnedId: "personal" });
+    expect(soft).not.toHaveProperty("refusal");
+    expect((soft as any).account.id).not.toBe("personal");
+    expect((soft as any).reason).toBe("pool");
+    // A strict pin refuses rather than silently borrowing the subscription.
+    const strict = accounts.resolveAccount({
+      user: "Robin",
+      pinnedId: "personal",
+      strictPin: true,
+    });
+    expect((strict as any).refusal).toEqual({
+      kind: "pin-unusable",
+      pinnedId: "personal",
+      pinName: "personal",
+    });
+  });
+
+  test("a pinned foreign personal account is refused in designated mode", () => {
+    seedUsable();
+    const soft = accounts.resolveAccount({
+      user: "Robin",
+      pinnedId: "personal",
+      designatedIds: ["personal", "fresh"],
+    });
+    expect((soft as any).account.id).toBe("fresh");
+    expect((soft as any).reason).toBe("designated");
+    const strict = accounts.resolveAccount({
+      user: "Robin",
+      pinnedId: "personal",
+      strictPin: true,
+      designatedIds: ["personal", "fresh"],
+    });
+    expect((strict as any).refusal.kind).toBe("pin-unusable");
+  });
+
+  test("a designated personal account serves its owner only", () => {
+    seedUsable();
+    const other = accounts.resolveAccount({
+      user: "Robin",
+      designatedIds: ["personal", "fresh"],
+    });
+    expect((other as any).account.id).toBe("fresh");
+    const owner = accounts.resolveAccount({
+      user: "Alex",
+      designatedIds: ["personal", "fresh"],
+    });
+    expect((owner as any).account.id).toBe("personal");
+    // An automation (no user) never reaches a personal account either — with
+    // nothing else designated there is simply nothing to serve on.
+    const automation = accounts.resolveAccount({ designatedIds: ["personal"] });
+    expect((automation as any).refusal).toEqual({
+      kind: "designated-dry",
+      tried: "personal",
+    });
+  });
+
+  test("a foreign sticky account falls through to the pool", () => {
+    seedUsable();
+    const resolved = accounts.resolveAccount({ user: "Robin", stickyId: "personal" });
+    expect((resolved as any).account.id).not.toBe("personal");
+    expect((resolved as any).reason).toBe("pool");
+    const owner = accounts.resolveAccount({ user: "Alex", stickyId: "personal" });
+    expect((owner as any).account.id).toBe("personal");
+    expect((owner as any).reason).toBe("sticky");
+  });
+
+  test("reports the reason for the path that produced the account", () => {
+    seedUsable();
+    expect((accounts.resolveAccount({ pinnedId: "fresh" }) as any).reason).toBe("pinned");
+    expect((accounts.resolveAccount({ stickyId: "maxed" }) as any).reason).toBe("sticky");
+    expect(
+      (accounts.resolveAccount({ designatedIds: ["maxed", "fresh"] }) as any).reason
+    ).toBe("designated");
+    expect((accounts.resolveAccount({ user: "Alex" }) as any).reason).toBe("personal");
+    expect((accounts.resolveAccount({}) as any).reason).toBe("pool");
+  });
+
+  test("peek does not consume the round-robin turn", () => {
+    seedUsable();
+    // Same utilization bucket: whoever was picked least recently wins, so a
+    // peek must leave the next pick's answer unchanged.
+    accounts.__setUsageCacheForTest("maxed", usage(50));
+    const first = (accounts.resolveAccount({}) as any).account.id;
+    const peeked = (accounts.resolveAccount({ recordPick: false }) as any).account.id;
+    expect((accounts.resolveAccount({ recordPick: false }) as any).account.id).toBe(peeked);
+    expect(first).not.toBe(peeked);
+  });
+});
+
 describe("dry-pool backpressure", () => {
   const maxedWindow = (resetsAt: string | null) => ({
     fetchedAt: new Date().toISOString(),
@@ -254,6 +355,62 @@ describe("dry-pool backpressure", () => {
     });
     expect(picked).toBeNull();
     expect(Date.now() - t0).toBeLessThan(500);
+  });
+});
+
+describe("pickBridgeAccount renders the owner-gate refusals", () => {
+  // The wordings are load-bearing: isPiUsageLimitShape (pi-runner.ts) decides
+  // whether the model-fallback walk engages by matching these substrings
+  // against the lowercased message, so resolveAccount hands back a structured
+  // refusal and each caller keeps its own text.
+  const ocConfig = join(dir, "opencode.json");
+  const saved = process.env.OPENSESSION_OPENCODE_CONFIG;
+  let bridge: typeof import("./anthropic-bridge");
+  const designate = (ids: string[]) =>
+    writeFileSync(ocConfig, JSON.stringify({ enabled: true, bridge: { accounts: ids } }));
+
+  beforeAll(async () => {
+    process.env.OPENSESSION_OPENCODE_CONFIG = ocConfig;
+    bridge = await import("./anthropic-bridge");
+  });
+
+  afterAll(() => {
+    if (saved === undefined) delete process.env.OPENSESSION_OPENCODE_CONFIG;
+    else process.env.OPENSESSION_OPENCODE_CONFIG = saved;
+  });
+
+  test("a designation of only someone else's personal account is dry", () => {
+    accounts.__setUsageCacheForTest("personal", usage(0));
+    designate(["personal"]);
+    const picked = bridge.pickBridgeAccount("claude-sonnet-5", { user: "Robin" });
+    const error = (picked as any).error as string;
+    expect(error).toBe("no designated bridge account is currently usable (tried: personal)");
+    expect(error.toLowerCase()).toContain("no designated bridge account");
+    // Its owner still gets served.
+    expect(
+      (bridge.pickBridgeAccount("claude-sonnet-5", { user: "Alex" }) as any).id
+    ).toBe("personal");
+  });
+
+  test("a strict pin on someone else's personal account is refused in pool mode", () => {
+    accounts.__setUsageCacheForTest("personal", usage(0));
+    accounts.__setUsageCacheForTest("fresh", usage(50));
+    accounts.__setUsageCacheForTest("maxed", usage(90));
+    designate([]);
+    const picked = bridge.pickBridgeAccount("claude-sonnet-5", {
+      user: "Robin",
+      accountId: "personal",
+      accountStrict: true,
+    });
+    const error = (picked as any).error as string;
+    expect(error).toContain('no usable Claude account (pinned "personal"');
+    expect(error.toLowerCase()).toContain("no usable claude account");
+    // Non-strict, the same pin falls through to the pool instead.
+    const widened = bridge.pickBridgeAccount("claude-sonnet-5", {
+      user: "Robin",
+      accountId: "personal",
+    });
+    expect((widened as any).id).toBe("fresh");
   });
 });
 

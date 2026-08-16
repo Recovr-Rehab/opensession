@@ -769,6 +769,11 @@ export function listAccountsPublic(): ClaudeAccountPublic[] {
  * Return it when it exists and is currently usable for `model`; undefined when
  * it's gone or exhausted, so the caller falls back to the normal pool pick
  * (a pin is a preference, never a hard requirement that could wedge a run).
+ *
+ * Owner-BLIND on purpose: this answers "is this account usable", not "may this
+ * run use it". Never compose it into a selector by itself — a personal
+ * subscription would then serve someone else's run. Selectors go through
+ * resolveAccount, which applies the owner gate on every path.
  */
 export function getUsableAccountById(
   id: string,
@@ -977,6 +982,111 @@ export function peekAccount(
   allowExtraUsage?: boolean,
 ): ClaudeAccount | undefined {
   return selectAccount(exclude, user, model, allowExtraUsage, false);
+}
+
+/** Which step of the ordered policy produced the account — for callers that
+ *  log or report the route a run authenticated by. */
+export type PickReason = "pinned" | "sticky" | "designated" | "personal" | "pool";
+
+/**
+ * Why nothing could serve, structured rather than worded. The engine runners
+ * classify usage-limit shapes by substring against their OWN messages
+ * (isPiUsageLimitShape in pi-runner.ts keys on "no designated bridge account"
+ * and "no usable claude account"), and a config problem must stay
+ * distinguishable from exhaustion, so the phrasing belongs to each caller and
+ * this layer must never normalize it.
+ */
+export type AccountRefusal =
+  | { kind: "none-configured" }
+  | { kind: "pool-dry" }
+  | { kind: "pin-unusable"; pinnedId: string; pinName: string }
+  | { kind: "pin-not-designated"; pinnedId: string; pinName: string }
+  | { kind: "designated-dry"; tried: string };
+
+export type AccountResolution =
+  | { account: ClaudeAccount; reason: PickReason }
+  | { refusal: AccountRefusal };
+
+export interface AccountRequest {
+  /** Run user, matched against `owner` through the same identity table as
+   *  commit attribution. Absent = an automation: pool accounts only. */
+  user?: string;
+  model?: ClaudeModelRequirement;
+  /** The session's pinned subscription (NativeSessionFile.accountId). */
+  pinnedId?: string;
+  /** Hard pin: refuse instead of continuing down the order. */
+  strictPin?: boolean;
+  /** The account this session is already on — its running engine server, or
+   *  the account whose isolated config dir owns the conversation being
+   *  resumed. Preferred so a turn doesn't respawn/replay for nothing. */
+  stickyId?: string;
+  /** When non-empty, ONLY these accounts may serve, walked in list order. */
+  designatedIds?: readonly string[];
+  allowExtraUsage?: boolean;
+  /** false = peek: judge eligibility without consuming the round-robin turn. */
+  recordPick?: boolean;
+}
+
+/**
+ * The ordered account policy, in one place: pin → sticky → designated → pool,
+ * with the owner gate on EVERY path. A personal subscription (`owner` set)
+ * only ever serves runs whose user resolves to that person — including when
+ * it is pinned, sticky, or named in `designatedIds` — and runs with no user
+ * (automations) only ever see shared pool accounts. Fail closed, the same
+ * rule accountsForRemoteUpload applies to off-box uploads.
+ */
+export function resolveAccount(req: AccountRequest): AccountResolution {
+  const { user, model, allowExtraUsage } = req;
+  const ids = req.designatedIds;
+  const ownedByUser = (a: ClaudeAccount) =>
+    !a.owner || (!!user && userMatchesAny(user, [a.owner]));
+  const designated = (id: string) => !ids?.length || ids.includes(id);
+  const nameOf = (id: string) => getAccountById(id)?.name || id;
+  const usableForRun = (id: string): ClaudeAccount | undefined => {
+    const a = getUsableAccountById(id, model, allowExtraUsage);
+    return a && ownedByUser(a) ? a : undefined;
+  };
+
+  if (req.pinnedId) {
+    if (!designated(req.pinnedId)) {
+      if (req.strictPin) {
+        return {
+          refusal: {
+            kind: "pin-not-designated",
+            pinnedId: req.pinnedId,
+            pinName: nameOf(req.pinnedId),
+          },
+        };
+      }
+      // Non-strict pin outside the designation: ignore it, walk the list.
+    } else {
+      const pinned = usableForRun(req.pinnedId);
+      if (pinned) return { account: pinned, reason: "pinned" };
+      if (req.strictPin) {
+        return {
+          refusal: {
+            kind: "pin-unusable",
+            pinnedId: req.pinnedId,
+            pinName: nameOf(req.pinnedId),
+          },
+        };
+      }
+    }
+  }
+  if (req.stickyId && designated(req.stickyId)) {
+    const sticky = usableForRun(req.stickyId);
+    if (sticky) return { account: sticky, reason: "sticky" };
+  }
+  if (ids?.length) {
+    for (const id of ids) {
+      const a = usableForRun(id);
+      if (a) return { account: a, reason: "designated" };
+    }
+    return { refusal: { kind: "designated-dry", tried: ids.map(nameOf).join(", ") } };
+  }
+  const picked = selectAccount(undefined, user, model, allowExtraUsage, req.recordPick ?? true);
+  if (picked) return { account: picked, reason: picked.owner ? "personal" : "pool" };
+  return { refusal: hasAccounts() ? { kind: "pool-dry" } : { kind: "none-configured" } };
 }
 
 /**
