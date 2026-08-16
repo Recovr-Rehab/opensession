@@ -714,6 +714,44 @@ function getFileMtime(path: string): string {
   }
 }
 
+/** The sidecar fields overlaySidecarExtras must NOT overlay, because the
+ *  scanned slack/linear source owns them. Each group says why. */
+const SIDECAR_SOURCE_OWNED = new Set<string>([
+  // The row's own identity. The unified id is minted by the scan
+  // ("slack-<file>" / "linear-<branch>"), and source/isRunning/transcriptPath
+  // are computed there — no stored file gets a say in them.
+  "id",
+  "source",
+  "isRunning",
+  "transcriptPath",
+  // Engine linkage and the model driving it. A run on a slack/linear session
+  // persists these back into the OWNING agent's session file
+  // (syncAgentSessionEngine, agent-session-sync.ts), which is exactly what the
+  // scans above read — so the scan already holds the current values and a
+  // sidecar copy can only be an older one, pointing resume and transcript
+  // resolution at a dead engine session.
+  "claudeSessionId",
+  "codexThreadId",
+  "opencodeSessionId",
+  "piSessionId",
+  "model",
+  // Where the session runs. The owning store decides that; a stale sidecar
+  // copy would send the next run to a worktree the session left behind.
+  "branch",
+  "worktreeDir",
+  // Who, what it's called, and when. The scan derives these from the owning
+  // file (the Slack user, the Linear participants and issue title), and
+  // touchNativeSession restamps lastActivity on EVERY sidecar write — so
+  // overlaying it would let bookkeeping writes rewrite the session's activity
+  // clock and reshuffle the sidebar. createdByLogin travels with createdBy so
+  // a row never mixes one source's name with another's verified login.
+  "createdBy",
+  "createdByLogin",
+  "title",
+  "createdAt",
+  "lastActivity",
+]);
+
 /**
  * Overlay natively-owned extras onto a slack/linear-scanned session.
  * touchNativeSession writes fields like walkthrough/linkedPrs keyed by the
@@ -722,21 +760,30 @@ function getFileMtime(path: string): string {
  * fields silently vanished from the unified view (publish_walkthrough on a
  * Slack session kept answering "no walkthrough on session" right after
  * persisting one — tellahq/tella-mac#71, 2026-07-26).
+ *
+ * Carry-by-default: everything in the sidecar lands on the row except the
+ * fields the scanned source owns (SIDECAR_SOURCE_OWNED, justified above). The
+ * other direction — a hand-kept allowlist — reintroduced the very bug this
+ * function exists to fix for each field nobody remembered to add: `slackThreads`
+ * was written on every captured Slack post and dropped on every read, so the
+ * dedup guard in run-session.ts always saw an empty list and rebuildIndex never
+ * restored a Slack session's thread links after a restart.
+ *
+ * One field worth naming, since it reads as native-only: `workspaceId`.
+ * Slack/Linear session files are read-only, so for those sources the workspace
+ * link lives here in the sidecar (written by session-workspace.ts) rather than
+ * in the session file itself.
  */
 function overlaySidecarExtras(session: UnifiedSession): UnifiedSession {
   const path = `${SESSIONS_DIR}/${session.id}.json`;
   if (!existsSync(path)) return session;
   const data = readJsonSafe<NativeSessionFile>(path);
   if (!data) return session;
-  if (data.walkthrough) session.walkthrough = data.walkthrough;
-  if (data.slackShares?.length) session.slackShares = data.slackShares;
-  if (data.linkedPrs?.length) session.linkedPrs = data.linkedPrs;
-  if (data.attachedRepos?.length) session.attachedRepos = data.attachedRepos;
-  if (data.previewPath) session.previewPath = data.previewPath;
-  // The workspace this session is filed under. Slack/Linear session files are
-  // read-only, so for those sources the link lives here in the sidecar (written
-  // by session-workspace.ts) rather than in the session file itself.
-  if (data.workspaceId) session.workspaceId = data.workspaceId;
+  const row = session as unknown as Record<string, unknown>;
+  for (const [key, value] of Object.entries(data)) {
+    if (value === undefined || SIDECAR_SOURCE_OWNED.has(key)) continue;
+    row[key] = value;
+  }
   return session;
 }
 

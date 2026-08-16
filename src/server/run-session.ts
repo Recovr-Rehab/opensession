@@ -169,38 +169,34 @@ const orphanRedeliveredTails: Map<string, string> = (g.__orphanRedeliveredTails 
 const wedgeRetriedFailures: Map<string, string> = (g.__wedgeRetriedFailures ??=
 	new Map());
 
-// Sessions whose current queue head was delivered by aborting the running
-// turn (busy-send interrupt). The next drain consumes the mark and appends
-// INTERRUPT_STEER_NOTE so the model treats the delivery as a mid-task steer
-// instead of a fresh turn it can acknowledge-and-park on. Timestamped so a
-// mark whose drain never happens (user Stop) expires instead of mislabeling
-// a much later, unrelated prompt.
-const interruptDrainMarks: Map<string, number> = (g.__interruptDrainMarks ??=
-	new Map());
-const INTERRUPT_DRAIN_MARK_TTL_MS = 5 * 60_000;
+// The session's pending interrupt: its current queue head was armed by
+// aborting the running turn (busy-send). ONE record with ONE ttl, taken once
+// per drain pass — the same mark both waves the batch past the queue hold and
+// appends INTERRUPT_STEER_NOTE, so the model treats the delivery as a mid-task
+// steer instead of a fresh turn it can acknowledge-and-park on. Reading those
+// two halves separately let an expired mark do one without the other: the hold
+// was bypassed (a held human send landed mid-task) and the note was then
+// refused as expired, so it landed unframed too.
+// `soloId` is set when the interrupt targeted a SPECIFIC queued item (the queue
+// chip's send/▲ button) rather than a fresh compose-send: only that item rides
+// this drain, and the rest of the queue stays put for the next natural stopping
+// point. Timestamped so a mark whose drain never happens (the user hits Stop
+// before it fires) expires instead of mislabeling — or solo-delivering — a much
+// later, unrelated prompt.
+const interruptMarks: Map<string, { at: number; soloId?: string }> =
+	(g.__interruptMarks ??= new Map());
+const INTERRUPT_MARK_TTL_MS = 5 * 60_000;
 
-function consumeInterruptDrainMark(sessionId: string): boolean {
-	const at = interruptDrainMarks.get(sessionId);
-	if (at === undefined) return false;
-	interruptDrainMarks.delete(sessionId);
-	return Date.now() - at < INTERRUPT_DRAIN_MARK_TTL_MS;
-}
-
-// When an interrupt targets a SPECIFIC queued item (the queue chip's send/▲
-// button) rather than a fresh compose-send, only that one item should be
-// delivered by the abort-driven drain — the rest of the queue stays put and
-// drains at the next natural stopping point. Keyed by item id; timestamped so a
-// marker whose drain never happens (e.g. the user hits Stop before it fires)
-// expires instead of solo-delivering a stale item much later.
-const interruptSoloItems: Map<string, { id: string; at: number }> =
-	(g.__interruptSoloItems ??= new Map());
-
-function consumeInterruptSoloItem(sessionId: string): string | undefined {
-	const mark = interruptSoloItems.get(sessionId);
+/** Take this session's pending interrupt. Always clears the record, so one
+ *  interrupt drives exactly one drain; an expired one reads as no interrupt. */
+function consumeInterruptMark(
+	sessionId: string,
+): { soloId?: string } | undefined {
+	const mark = interruptMarks.get(sessionId);
 	if (!mark) return undefined;
-	interruptSoloItems.delete(sessionId);
-	if (Date.now() - mark.at >= INTERRUPT_DRAIN_MARK_TTL_MS) return undefined;
-	return mark.id;
+	interruptMarks.delete(sessionId);
+	if (Date.now() - mark.at >= INTERRUPT_MARK_TTL_MS) return undefined;
+	return mark;
 }
 
 // One "queue held" notice per hold engagement (not one per watcher tick);
@@ -384,10 +380,9 @@ export function interruptQueuedPrompt(
 		const solo = queueItem(item);
 		queue.splice(index, 0, solo);
 		promptQueues.set(sessionId, queue);
-		interruptSoloItems.set(sessionId, { id: solo.id!, at: Date.now() });
 		persistQueues();
 		broadcastQueue(sessionId);
-		return abortTurnAndDrain(sessionId, session);
+		return abortTurnAndDrain(sessionId, session, solo.id);
 	}
 	// No steer receipt: an interrupt delivers almost immediately, so the
 	// transcript entry is the record (same treatment as a direct interrupt send).
@@ -779,9 +774,14 @@ async function drainQueueInner(sessionId: string): Promise<void> {
 		// composer sends (item.hold) stay parked until the agent FULLY
 		// completes. Orchestration traffic (worker reports, FYIs) keeps
 		// flowing so held items can't wedge the run.
+		//
+		// One read of the pending interrupt per pass: the same record decides
+		// both whether this batch skips the hold and whether it gets the steer
+		// note below, so an expired one can never do one without the other.
+		const interrupt = consumeInterruptMark(sessionId);
 		const plan = selectQueueBatch(queue, {
-			soloId: consumeInterruptSoloItem(sessionId),
-			interruptMark: interruptDrainMarks.has(sessionId),
+			soloId: interrupt?.soloId,
+			interruptMark: interrupt !== undefined,
 			stillWorking: runningChildCount(sessionId) > 0,
 		});
 		if (plan.kind === "hold") {
@@ -811,7 +811,7 @@ async function drainQueueInner(sessionId: string): Promise<void> {
 		// append the fenced steer note so the model resumes the interrupted work
 		// instead of acknowledge-and-parking. Fenced, so the transcript shows
 		// only the user's text.
-		if (consumeInterruptDrainMark(sessionId)) {
+		if (interrupt) {
 			combined = `${combined}\n\n${wrapContext(INTERRUPT_STEER_NOTE, "steer-note")}`;
 		}
 		// Attachments queued alongside the text ride the drained turn: images are
@@ -914,6 +914,9 @@ export function abortTurnAndDrain(
 		transcriptPath?: string | null;
 		id: string;
 	},
+	/** The one queued item this interrupt targeted (queue chip send/▲), when
+	 *  it targeted one — the rest of the queue stays put for this drain. */
+	soloId?: string,
 ): boolean {
 	const ids = [session.claudeSessionId, session.codexThreadId, session.id];
 	const aborted = stopAgentRunTurn(ids) || cancelAgentRun(...ids);
@@ -924,9 +927,12 @@ export function abortTurnAndDrain(
 	// them would deliver duplicates).
 	stoppedSessions.delete(sessionId);
 	requeueSteerReceipts(sessionId, engineUserTexts(session));
-	// The drained batch is an interrupt delivery: flag it so the drain frames
-	// it as a mid-task steer (see INTERRUPT_STEER_NOTE).
-	interruptDrainMarks.set(sessionId, Date.now());
+	// The drained batch is an interrupt delivery: record it so the next drain
+	// pass lets it past the queue hold and frames it as a mid-task steer (see
+	// INTERRUPT_STEER_NOTE). Only marked once the abort actually took — a
+	// message left queued for the run's natural stopping point was never
+	// interrupted into anything.
+	interruptMarks.set(sessionId, { at: Date.now(), soloId });
 	watchExternalRunAndDrain(sessionId);
 	return true;
 }
