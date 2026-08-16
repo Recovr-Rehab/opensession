@@ -163,13 +163,13 @@ import { PrRow } from "./PrRow";
 import {
 	buildReviewQueue,
 	personKey,
-	prReviewCompletion,
 	reviewAskerFor,
-	reviewRequestTargetsPerson,
-	reviewRowMatchesPersonFilter,
-	rowIsOwnWork,
 	wsPrRequestsReviewFrom,
 } from "../lib/review-queue";
+import {
+	placeSidebarRows,
+	rowsAtPlacement,
+} from "../lib/sidebar-placement";
 import { ReviewAskerFace } from "./ReviewAskerFace";
 import {
 	readHiddenSidebarTools,
@@ -216,8 +216,6 @@ import {
 	pinnedLane,
 	prLaneForSessions,
 	stripPrTitlePrefix,
-	wsPrApproved,
-	wsPrMerged,
 } from "../lib/sidebar-lanes";
 import { sessionHasPr } from "../lib/session-prs";
 import { sessionHasWorkspace } from "../lib/session-workspace";
@@ -1450,17 +1448,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				.map(([key]) => key),
 		);
 	}, [snoozes]);
-	const snoozedWsRows = useMemo(
-		() =>
-			wsRows
-				.filter((r) => activeSnoozeKeys.has(r.key))
-				.sort(
-					(a, b) =>
-						Date.parse(snoozes[a.key] || "") -
-						Date.parse(snoozes[b.key] || ""),
-				),
-		[wsRows, activeSnoozeKeys, snoozes],
-	);
 	useEffect(() => {
 		if (Object.keys(snoozes).length === 0) return;
 		const sweep = () => {
@@ -1477,155 +1464,71 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		return () => clearInterval(t);
 	}, [snoozes, wsRows]);
 
-	// Your person key ("Kent de Bruin" → "kent") — what GitHub's requested-reviewer
-	// and reviewed-by lists are keyed by, unlike the display name the info panel's
-	// own review requests carry.
+	// Your person key ("Kent de Bruin" → "kent") is what GitHub's reviewer
+	// lists use, unlike the display name used by the Reviewer picker.
 	const mePersonKey = personKey(currentUser);
-	// GitHub listing you as a reviewer on a row that is NOT your own work. The
-	// reviewer team a PR requests expands to its members server-side, and the
-	// author that expansion drops is the bot that opened the PR — so a PR your
-	// own workspace produced asks you to review it, and the row would leave
-	// your status lanes for Needs review the moment it opens (rowIsOwnWork).
-	const githubAsksMeToReview = (r: WsRow) =>
-		wsPrRequestsReviewFrom(r, mePersonKey) && !rowIsOwnWork(r, mePersonKey);
-	const reviewScopeRows = useMemo(() => {
-		return wsRows.filter(
-			(r) =>
-				!activeSnoozeKeys.has(r.key) &&
-				reviewRowMatchesPersonFilter(
-					r.owner,
-					r.sessions.map((session) => session.reviewRequest),
-					filter.person,
-					currentUser,
-					githubAsksMeToReview(r),
-				),
-		);
-	}, [wsRows, activeSnoozeKeys, filter.person, currentUser, mePersonKey]);
-	const needsReviewRows = useMemo(() => {
-		const me = currentUser.toLowerCase();
-		return reviewScopeRows.filter((r) => {
-			if (wsPrMerged(r)) return false;
-			// GitHub asking you to review is its own claim on your attention, and
-			// it clears itself the moment you submit a review. It therefore sits
-			// ahead of the approval guard below — another reviewer's approval does
-			// not answer a request GitHub is still making of you — and it is what
-			// keeps the row here after you click it: opening a PR mints its
-			// workspace row, which would otherwise cover the PR row and drop the
-			// whole thing out of the band before you had reviewed anything.
-			if (githubAsksMeToReview(r)) return true;
-			if (wsPrApproved(r)) return false;
-			// You already reviewed the PR on GitHub (approve/changes/comment,
-			// no re-request since) → your part is done, so hide the row.
-			return r.sessions.some(
-				(c) =>
-					reviewRequestTargetsPerson(c.reviewRequest, me) &&
-					!c.reviewRequest?.accepted &&
-					!prReviewCompletion(c.reviewRequest!, c),
-			);
-		});
-	}, [reviewScopeRows, currentUser, mePersonKey]);
-	// The mirror of "Needs review": workspaces where YOU asked a teammate to
-	// review (the info panel's Reviewer picker, `reviewRequest.by === me`). They
-	// get their own band so a session you've sent out for review moves out of the
-	// status lanes and into one place you can track what you're waiting on. A row
-	// where you're also the reviewer stays in Needs review (a direct ask of you
-	// wins), so we exclude those keys.
-	const awaitingReviewRows = useMemo(() => {
-		const me = currentUser.toLowerCase();
-		const needsKeys = new Set(needsReviewRows.map((r) => r.key));
-		return reviewScopeRows.filter(
-			(r) =>
-				!needsKeys.has(r.key) &&
-				!wsPrMerged(r) &&
-				!wsPrApproved(r) &&
-				r.sessions.some(
-					(c) =>
-						c.reviewRequest?.by?.toLowerCase() === me &&
-						!c.reviewRequest?.accepted &&
-						// The reviewer already gave their review on GitHub → the
-						// request landed, so it leaves the sidebar.
-						!prReviewCompletion(c.reviewRequest, c),
-				),
-		);
-	}, [reviewScopeRows, currentUser, needsReviewRows]);
-	// The end of that flow: you asked, a teammate approved, and the PR is still
-	// open, so the row is now yours to merge. It needs a band of its own because
-	// an approval otherwise takes the row OUT of the sidebar (it lands in
-	// completedReviewRows below, which the status lanes exclude too), so the one
-	// moment the work comes back to you is the moment it disappears.
-	// A row where GitHub still asks YOU to review stays in Needs review, the same
-	// exclusion Awaiting review makes above: a bot-owned row you sent out through
-	// the Reviewer picker, whose PR a teammate then approved, satisfies both
-	// predicates, and without this it renders in both bands at once.
-	const approvedReviewRows = useMemo(() => {
-		const me = currentUser.toLowerCase();
-		const needsKeys = new Set(needsReviewRows.map((r) => r.key));
-		return reviewScopeRows.filter(
-			// wsPrApproved already means "approved and not merged".
-			(r) =>
-				!needsKeys.has(r.key) &&
-				wsPrApproved(r) &&
-				r.sessions.some((c) => c.reviewRequest?.by?.toLowerCase() === me),
-		);
-	}, [reviewScopeRows, currentUser, needsReviewRows]);
-	// Completed reviews are hidden from the sidebar, but their keys still need to
-	// be excluded from the normal status lanes. A fresh or reopened request clears
-	// the completion state and makes the row actionable again. Completion can come
-	// from the info panel's "Mark as reviewed" (`reviewRequest.accepted`), approval
-	// on GitHub (`prReviewDecision === "APPROVED"`, wsPrApproved), or submitted
-	// their review on GitHub in any form (approve/changes/comment, no pending
-	// re-request — prReviewCompletion). A merged PR skips this hidden set because it
-	// belongs in the "Done" status lane.
-	const completedReviewRows = useMemo(() => {
-		const me = currentUser.toLowerCase();
-		return reviewScopeRows.filter((r) => {
-			if (wsPrMerged(r)) return false;
-			const mineRequest = r.sessions.some((c) => {
-				const rq = c.reviewRequest;
-				return (
-					rq &&
-					(rq.by.toLowerCase() === me || reviewRequestTargetsPerson(rq, me))
-				);
-			});
-			if (!mineRequest) return false;
-			return (
-				r.sessions.some((c) => c.reviewRequest?.accepted) ||
-				wsPrApproved(r) ||
-				r.sessions.some(
-					(c) =>
-						c.reviewRequest &&
-						prReviewCompletion(c.reviewRequest, c),
-				)
-			);
-		});
-	}, [reviewScopeRows, currentUser]);
-	// Every workspace with active or completed review state is excluded from the
-	// pinned/status lanes. Completed rows therefore disappear rather than falling
-	// back into Backlog.
-	const reviewBandKeys = useMemo(
-		() =>
-			new Set([
-				...needsReviewRows.map((r) => r.key),
-				...awaitingReviewRows.map((r) => r.key),
-				...approvedReviewRows.map((r) => r.key),
-				...completedReviewRows.map((r) => r.key),
-			]),
-		[
-			needsReviewRows,
-			awaitingReviewRows,
-			approvedReviewRows,
-			completedReviewRows,
-		],
+	// Feed workspaces only join status lanes when they demand attention. Idle
+	// rows are already represented by their feed band.
+	const feedRefKinds = useMemo(
+		() => new Set(feeds.map((f) => f.refKind)),
+		[feeds],
+	);
+	const rowIsFeedOnly = (r: WsRow) =>
+		!r.workspace?.repo &&
+		!!r.workspace?.externalRefs?.length &&
+		feedRefKinds.has(r.workspace.externalRefs[0].kind);
+
+	// Every row receives exactly one primary placement. Pinned remains an
+	// orthogonal quick-access facet and is derived separately below.
+	const placedWsRows = useMemo(() => {
+		const focus =
+			filter.person === "me" ? currentUser.toLowerCase() : filter.person;
+		return placeSidebarRows(wsRows, (r) => ({
+			currentUser,
+			personFilter: filter.person,
+			snoozed: activeSnoozeKeys.has(r.key),
+			inStatusScope:
+				(rowOwnsSelection(r) ||
+					focus === "everyone" ||
+					(focus === "unassigned"
+						? r.status === "pending"
+						: r.owner === focus ||
+							(!!r.mention && focus === currentUser.toLowerCase()) ||
+							r.sessions.some(
+								(c) =>
+									!c.automation &&
+									(c.startedBy || "").toLowerCase() === focus,
+							) ||
+							((r.owner === "" || focus === currentUser.toLowerCase()) &&
+								r.sessions.some((c) => getLane(c.id))))) &&
+				(!rowIsFeedOnly(r) || r.running || r.status === "needsinput"),
+		}));
+	}, [
+		wsRows,
+		activeSnoozeKeys,
+		filter.person,
+		currentUser,
+		selectedSession,
+		lanes,
+		feedRefKinds,
+	]);
+	const needsReviewRows = rowsAtPlacement(placedWsRows, "needs-review");
+	const approvedReviewRows = rowsAtPlacement(placedWsRows, "approved-review");
+	const awaitingReviewRows = rowsAtPlacement(placedWsRows, "awaiting-review");
+	const focusWsRows = rowsAtPlacement(placedWsRows, "status");
+	const snoozedWsRows = rowsAtPlacement(placedWsRows, "snoozed").sort(
+		(a, b) =>
+			Date.parse(snoozes[a.key] || "") - Date.parse(snoozes[b.key] || ""),
 	);
 	const pinnedWsRows = useMemo(() => {
 		const pinSet = new Set(pins);
 		const pinIdx = new Map(pins.map((p, i) => [p, i] as const));
 		// Pinned is quick access, not a status: review rows stay visible here as
-		// well as in Needs/Awaiting review. Snooze is the deliberate exception —
+		// well as in Needs/Awaiting review. Snooze is the deliberate exception,
 		// it temporarily removes a row from every active band.
 		// A row's slot in the band = its first matching key's position in the
 		// pins array (rows can be pinned via their workspace key or a legacy
-		// member-session pin) — pins order is user-controlled (drag-to-reorder), so
+		// member-session pin). Pins order is user-controlled (drag-to-reorder), so
 		// it wins over wsRows' recency order.
 		const rowIdx = (r: WsRow) => {
 			const hits = [r.key, ...r.sessions.map((c) => c.id)]
@@ -1641,73 +1544,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			)
 			.sort((a, b) => rowIdx(a) - rowIdx(b));
 	}, [wsRows, pins, activeSnoozeKeys]);
-	// Feed workspaces (repo-less, externalRefs — Tella videos, PostHog
-	// dashboards) are represented by their feed band's rows. They only join
-	// the status lanes when they demand attention (running / needs input) —
-	// an idle one in Backlog is a duplicate of its feed row.
-	const feedRefKinds = useMemo(
-		() => new Set(feeds.map((f) => f.refKind)),
-		[feeds],
-	);
-	const rowIsFeedOnly = (r: WsRow) =>
-		!r.workspace?.repo &&
-		!!r.workspace?.externalRefs?.length &&
-		feedRefKinds.has(r.workspace.externalRefs[0].kind);
-	const focusWsRows = useMemo(() => {
-		const focus =
-			filter.person === "me" ? currentUser.toLowerCase() : filter.person;
-		// Pinned rows are NOT excluded here: Pinned is quick access, not a
-		// status, so a pinned in-progress session still shows under In
-		// progress and Add-to-backlog on a pinned row still lands it in
-		// Backlog (with auto-pin-new on, hiding pinned rows emptied the lanes).
-		return wsRows.filter(
-			(r) =>
-				(rowOwnsSelection(r) ||
-					focus === "everyone" ||
-					(focus === "unassigned"
-						? r.status === "pending"
-						: // A row YOU lane-pinned belongs in your own lens no matter who
-							// owns it — lanes are per-user triage, so filing a teammate's
-							// PR workspace into your Backlog must show it in YOUR Backlog.
-							// Ownerless rows (automation runs with no startedBy) ride the
-							// same rule under any personal lens; a legacy global override
-							// still surfaces only under Everyone.
-							r.owner === focus ||
-							// Being @-mentioned is a claim on your attention, like a
-							// review request: the row comes into your lens whoever owns
-							// it, and leaves again when you open the session and the
-							// mention clears.
-							(!!r.mention && focus === currentUser.toLowerCase()) ||
-							// Ownership follows the people in the room, not whoever
-							// opened the door: a PR/ticket workspace is minted by an
-							// automation, so its creator is a bot even when the work
-							// inside is yours. Your own session in it makes the row yours.
-							r.sessions.some(
-								(c) =>
-									!c.automation &&
-									(c.startedBy || "").toLowerCase() === focus,
-							) ||
-							((r.owner === "" || focus === currentUser.toLowerCase()) &&
-								r.sessions.some((c) => getLane(c.id))))) &&
-				!reviewBandKeys.has(r.key) &&
-				!activeSnoozeKeys.has(r.key) &&
-				// Idle feed workspaces stay out of the lanes (their feed row is
-				// the representation); attention states still surface.
-				(!rowIsFeedOnly(r) || r.running || r.status === "needsinput"),
-		);
-	}, [
-		wsRows,
-		filter.person,
-		currentUser,
-		reviewBandKeys,
-		activeSnoozeKeys,
-		lanes,
-		// rowIsFeedOnly closes over this; the feed descriptors land after mount,
-		// so without it idle feed rows sit in the lanes until something else
-		// invalidates.
-		feedRefKinds,
-	]);
-
 	// ── PR rows in the project lanes ────────────────────────────────────────
 	// The retired standalone Pull-requests band dissolved into the project
 	// groups: every open PR classifies into a lane (ready → Ready to merge,
