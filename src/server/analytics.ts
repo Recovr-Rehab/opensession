@@ -1339,15 +1339,17 @@ export interface HomeStatsBucket {
 	cacheWriteTokens: number;
 }
 
-/** Cheap numbers for the Home overview strip: audit-rollup reads only — no
- *  session-store scan and no gh calls. Past days come straight from the disk
- *  cache; today's rollup recomputes only when its audit file has grown. */
-export function buildHomeStats(): {
+/** Compact numbers for the Home overview strip. Audit rollups supply activity;
+ *  engine usage supplies tokens. This avoids the session-store and gh scans. */
+export async function buildHomeStats(
+	now = Date.now(),
+	loadEngineUsage: typeof engineUsageForDates = engineUsageForDates,
+): Promise<{
 	today: HomeStatsBucket;
 	week: HomeStatsBucket;
 	completeWeek: HomeStatsBucket;
 	priorWeek: HomeStatsBucket;
-} {
+}> {
 	const empty = (): HomeStatsBucket => ({
 		sessions: 0,
 		turns: 0,
@@ -1360,23 +1362,35 @@ export function buildHomeStats(): {
 	});
 	// Fifteen days back: today, the seven whole days behind it, and the seven
 	// behind those, which is what a week-over-week comparison needs.
-	const days: { bucket: HomeStatsBucket; ids: string[] }[] = [];
+	const days: { date: string; bucket: HomeStatsBucket; ids: string[] }[] = [];
 	for (let back = 0; back <= 14; back++) {
-		const date = new Date(Date.now() - back * 86_400_000).toISOString().slice(0, 10);
+		const date = new Date(now - back * 86_400_000).toISOString().slice(0, 10);
 		const r = cachedRollup(date);
 		days.push({
+			date,
 			bucket: {
 				sessions: Object.keys(r.bySession).length,
 				turns: r.turns,
 				errors: r.errors,
 				durationMs: r.durationMs,
-				inputTokens: r.tokens.input,
-				outputTokens: r.tokens.output,
-				cacheReadTokens: r.tokens.cacheRead,
-				cacheWriteTokens: r.tokens.cacheWrite,
+				inputTokens: 0,
+				outputTokens: 0,
+				cacheReadTokens: 0,
+				cacheWriteTokens: 0,
 			},
 			ids: Object.keys(r.bySession),
 		});
+	}
+	// Audit owns activity, while the engine stores own usage. Reading tokens
+	// from audit result events here undercounts multi-step turns and omits every
+	// spawned sub-session, making Home disagree with the Analytics view.
+	const engineDays = await loadEngineUsage(days.map((day) => day.date));
+	for (const day of days) {
+		const usage = engineDays.get(day.date);
+		day.bucket.inputTokens = usage?.input || 0;
+		day.bucket.outputTokens = usage?.output || 0;
+		day.bucket.cacheReadTokens = usage?.cacheRead || 0;
+		day.bucket.cacheWriteTokens = usage?.cacheWrite || 0;
 	}
 	// Both ends inclusive, counted in days back from today. Sessions are the
 	// one field that can't be summed: a session that ran across three days is
