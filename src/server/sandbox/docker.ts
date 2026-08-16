@@ -1300,28 +1300,37 @@ function ensureIdleSweep(): void {
 const localResolver = new LocalProvider();
 
 /**
- * Serialize ensure() per session: two simultaneous ensures (e.g. a prompt and
- * a queued drain racing after a restart) would both see status "gone" and race
- * `docker create --name` — the loser errors and its turn falls back to the
- * host. Same in-process chain pattern as worktree.ts's withGitLock, parked on
- * globalThis so `bun --hot` reloads don't fork the chains.
+ * Serialize every lifecycle operation per sandbox. A separate ensure-only
+ * lock let destroy() remove a newly recreated container or its state file
+ * while ensure() was still setting it up. The sandbox id is the sole owner key
+ * for ensure, get/recreate, and destroy, parked on globalThis so `bun --hot`
+ * reloads do not fork the chains.
  */
-function withEnsureLock<T>(sessionId: string, fn: () => Promise<T>): Promise<T> {
+function withLifecycleLock<T>(sandboxId: string, fn: () => Promise<T>): Promise<T> {
   const g = globalThis as unknown as {
+    __sandboxLifecycleChains?: Map<string, Promise<unknown>>;
     __sandboxEnsureChains?: Map<string, Promise<unknown>>;
   };
-  const chains = (g.__sandboxEnsureChains ??= new Map());
-  const prev = chains.get(sessionId) ?? Promise.resolve();
+  const chains = (g.__sandboxLifecycleChains ??= g.__sandboxEnsureChains ?? new Map());
+  delete g.__sandboxEnsureChains;
+  const prev = chains.get(sandboxId) ?? Promise.resolve();
   const run = prev.then(fn, fn);
   const tail = run.then(
     () => {},
     () => {},
   );
-  chains.set(sessionId, tail);
+  chains.set(sandboxId, tail);
   void tail.finally(() => {
-    if (chains.get(sessionId) === tail) chains.delete(sessionId);
+    if (chains.get(sandboxId) === tail) chains.delete(sandboxId);
   });
   return run;
+}
+
+export function _withDockerLifecycleLockForTest<T>(
+  sandboxId: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  return withLifecycleLock(sandboxId, fn);
 }
 
 export class DockerProvider implements SandboxProvider {
@@ -1333,7 +1342,7 @@ export class DockerProvider implements SandboxProvider {
    * the host in Phase 1 — the container only ever sees the finished dir).
    */
   ensure(spec: SandboxSessionSpec): Promise<Sandbox> {
-    return withEnsureLock(spec.sessionId, () => this.ensureInner(spec));
+    return withLifecycleLock(containerNameFor(spec.sessionId), () => this.ensureInner(spec));
   }
 
   private async ensureInner(spec: SandboxSessionSpec): Promise<Sandbox> {
@@ -1502,13 +1511,17 @@ export class DockerProvider implements SandboxProvider {
    * state file when possible, since the volumes (engine state) outlive it.
    */
   async get(sandboxId: string): Promise<Sandbox | null> {
+    return withLifecycleLock(sandboxId, () => this.getInner(sandboxId));
+  }
+
+  private async getInner(sandboxId: string): Promise<Sandbox | null> {
     ensureIdleSweep();
     const state = readState(sandboxId);
     const status = await containerStatus(sandboxId);
     if (status === "gone") {
       if (!state) return null;
       try {
-        return await this.ensure({
+        return await this.ensureInner({
           sessionId: state.sessionId,
           cwd: state.cwd,
           repo: state.repoId,
@@ -1546,6 +1559,10 @@ export class DockerProvider implements SandboxProvider {
    *  volume — that data loss is the mode's documented contract (push your
    *  work). */
   async destroy(sandboxId: string): Promise<void> {
+    await withLifecycleLock(sandboxId, () => this.destroyInner(sandboxId));
+  }
+
+  private async destroyInner(sandboxId: string): Promise<void> {
     await docker(["rm", "-f", sandboxId]);
     await docker([
       "volume", "rm", "-f",
