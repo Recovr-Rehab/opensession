@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { bootstrapRunner, createRunnerPairing, fetchRunnerBootstrapTargets, fetchRunners, revokeRunner, updateRunner, type RunnerBootstrapTarget, type RunnerInfo } from "../../lib/api/runners";
 import { Button } from "../../ui/button";
-import { Input } from "../../ui/input";
+import { Field, Input } from "../../ui/input";
+import { Modal } from "../../ui/modal";
 import { OptionSelect } from "../../ui/select";
 import { Switch } from "../../ui/switch";
 import { toast } from "../../ui/toast";
@@ -80,7 +81,8 @@ export function RunnersPanel() {
 		try {
 			const next = await updateRunner(runner.id, patch);
 			setRunners((items) => items.map((item) => item.id === next.id ? next : item));
-		} catch (error) { toast(error instanceof Error ? error.message : "Could not update Runner", { variant: "error" }); }
+			return true;
+		} catch (error) { toast(error instanceof Error ? error.message : "Could not update Runner", { variant: "error" }); return false; }
 		finally { setBusyId(null); }
 	};
 	const revoke = async (runner: RunnerInfo) => {
@@ -148,14 +150,13 @@ export function RunnersPanel() {
 	</SettingsPanel>;
 }
 
-function RunnerRow({ runner, admin, busy, onChange, onRevoke }: { runner: RunnerInfo; admin: boolean; busy: boolean; onChange: (runner: RunnerInfo, patch: Parameters<typeof updateRunner>[1]) => void; onRevoke: (runner: RunnerInfo) => void }) {
+type RunnerChange = (runner: RunnerInfo, patch: Parameters<typeof updateRunner>[1]) => Promise<boolean>;
+
+function RunnerRow({ runner, admin, busy, onChange, onRevoke }: { runner: RunnerInfo; admin: boolean; busy: boolean; onChange: RunnerChange; onRevoke: (runner: RunnerInfo) => void }) {
 	const [editing, setEditing] = useState(false);
-	const [label, setLabel] = useState(runner.label || "");
-	const [tags, setTags] = useState(runner.capabilities.tags.join(", "));
-	const [users, setUsers] = useState(runner.allowedUsers.join(", "));
-	const [repos, setRepos] = useState(runner.allowedRepos.join(", "));
-	const [inferenceModels, setInferenceModels] = useState(runner.localInferencePolicy?.allowedModels.join(", ") || "");
-	const [inferenceEnabled, setInferenceEnabled] = useState(Boolean(runner.localInferencePolicy?.enabled));
+	// Focus the first field rather than letting Base UI land on the ✕, which
+	// opens the dialog with its close button ringed.
+	const labelRef = useRef<HTMLInputElement>(null);
 	return <>
 		<SettingRow className="items-start">
 			<div className="min-w-0">
@@ -167,29 +168,66 @@ function RunnerRow({ runner, admin, busy, onChange, onRevoke }: { runner: Runner
 				{runner.workload && <div className="mt-1 text-meta text-dim">Working: {runner.workload.operation || runner.workload.sessionId || "session work"}</div>}
 			</div>
 			<div className="flex shrink-0 items-center gap-2">
-				{admin && <Button size="sm" variant="ghost" onClick={() => setEditing((value) => !value)}>{editing ? "Close" : "Details"}</Button>}
+				{admin && <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>Details</Button>}
 			</div>
 		</SettingRow>
-		{editing && <div className="border-t border-line px-5 py-3">
-			<div className="grid gap-2 sm:grid-cols-2">
-				<label className="text-label text-dim">Label<Input value={label} onChange={(event) => setLabel(event.target.value)} /></label>
-				<label className="text-label text-dim">Tags<Input value={tags} onChange={(event) => setTags(event.target.value)} /></label>
-				<label className="text-label text-dim">Allowed people<Input value={users} onChange={(event) => setUsers(event.target.value)} placeholder="All workspace members" /></label>
-				<label className="text-label text-dim">Allowed repositories<Input value={repos} onChange={(event) => setRepos(event.target.value)} placeholder="All repositories" /></label>
-				{runner.resources?.localInference?.length ? <label className="text-label text-dim sm:col-span-2">Allowed local models<Input value={inferenceModels} onChange={(event) => setInferenceModels(event.target.value)} placeholder="Comma-separated model names" /></label> : null}
-			</div>
-			<div className="mt-3 flex flex-wrap items-center gap-4 text-label text-dim">
-				<label className="flex items-center gap-2">Maintenance <Switch checked={Boolean(runner.maintenance)} onCheckedChange={(maintenance) => onChange(runner, { maintenance })} disabled={busy} /></label>
-				<label className="flex items-center gap-2">Commands <Switch checked={runner.permissions.commands} onCheckedChange={(commands) => onChange(runner, { permissions: { commands } })} disabled={busy} /></label>
-				{runner.resources?.localInference?.length ? <label className="flex items-center gap-2">Local inference <Switch checked={inferenceEnabled} onCheckedChange={setInferenceEnabled} disabled={busy} /></label> : null}
-			</div>
-			<div className="mt-3 flex flex-wrap gap-2"><Button size="sm" onClick={() => onChange(runner, {
-				label: label.trim() || undefined,
-				capabilities: { tags: list(tags) },
-				allowedUsers: list(users), allowedRepos: list(repos),
-				...(runner.resources?.localInference?.length ? { localInferencePolicy: { enabled: inferenceEnabled, allowedUsers: list(users), allowedModels: list(inferenceModels), allowedTasks: ["chat", "embedding", "image", "video"] } } : {}),
-			})} disabled={busy}>Save</Button><Button size="sm" variant="danger" onClick={() => onRevoke(runner)} disabled={busy}>Revoke</Button></div>
-		</div>}
+		{admin && <Modal.Root open={editing} onOpenChange={setEditing}>
+			{/* The form is a child so Base UI's portal remounts it on every open,
+			    which re-reads the current runner instead of showing edits staged
+			    against a Runner that has since reported new state. */}
+			<Modal.Content widthClassName="max-w-[34rem]" initialFocus={labelRef}>
+				<RunnerDetails runner={runner} busy={busy} labelRef={labelRef} onChange={onChange} onRevoke={onRevoke} onSaved={() => setEditing(false)} />
+			</Modal.Content>
+		</Modal.Root>}
+	</>;
+}
+
+function RunnerDetails({ runner, busy, labelRef, onChange, onRevoke, onSaved }: { runner: RunnerInfo; busy: boolean; labelRef: RefObject<HTMLInputElement | null>; onChange: RunnerChange; onRevoke: (runner: RunnerInfo) => void; onSaved: () => void }) {
+	const [label, setLabel] = useState(runner.label || "");
+	const [tags, setTags] = useState(runner.capabilities.tags.join(", "));
+	const [users, setUsers] = useState(runner.allowedUsers.join(", "));
+	const [repos, setRepos] = useState(runner.allowedRepos.join(", "));
+	const [maintenance, setMaintenance] = useState(Boolean(runner.maintenance));
+	const [commands, setCommands] = useState(runner.permissions.commands);
+	const [inferenceModels, setInferenceModels] = useState(runner.localInferencePolicy?.allowedModels.join(", ") || "");
+	const [inferenceEnabled, setInferenceEnabled] = useState(Boolean(runner.localInferencePolicy?.enabled));
+	const inference = Boolean(runner.resources?.localInference?.length);
+	// Every field commits on Save, the switches included: a dialog with its own
+	// Save button that also applies two of its controls the moment they move
+	// leaves Cancel meaning different things in one form.
+	const save = async () => {
+		const saved = await onChange(runner, {
+			label: label.trim() || undefined,
+			capabilities: { tags: list(tags) },
+			allowedUsers: list(users), allowedRepos: list(repos),
+			maintenance, permissions: { commands },
+			...(inference ? { localInferencePolicy: { enabled: inferenceEnabled, allowedUsers: list(users), allowedModels: list(inferenceModels), allowedTasks: ["chat", "embedding", "image", "video"] } } : {}),
+		});
+		if (saved) onSaved();
+	};
+	return <>
+		<Modal.Header
+			title={runner.label || runner.name}
+			description={<><span className={`capitalize ${stateStyle[runner.state]}`}>{runner.state}</span> · {runner.platform} · {runner.arch} · {resourceSummary(runner)}</>}
+		/>
+		<div className="grid grid-cols-2 gap-3 phone:grid-cols-1">
+			<Field label="Label"><Input ref={labelRef} value={label} onChange={(event) => setLabel(event.target.value)} placeholder={runner.name} /></Field>
+			<Field label="Tags"><Input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="Comma-separated" /></Field>
+			<Field label="Allowed people"><Input value={users} onChange={(event) => setUsers(event.target.value)} placeholder="All workspace members" /></Field>
+			<Field label="Allowed repositories"><Input value={repos} onChange={(event) => setRepos(event.target.value)} placeholder="All repositories" /></Field>
+			{inference ? <Field label="Allowed local models" className="col-span-2 phone:col-span-1"><Input value={inferenceModels} onChange={(event) => setInferenceModels(event.target.value)} placeholder="Comma-separated model names" /></Field> : null}
+		</div>
+		<div className="flex flex-wrap items-center gap-x-6 gap-y-3 text-label font-medium text-dim">
+			<label className="flex items-center gap-2">Maintenance <Switch checked={maintenance} onCheckedChange={setMaintenance} disabled={busy} /></label>
+			<label className="flex items-center gap-2">Commands <Switch checked={commands} onCheckedChange={setCommands} disabled={busy} /></label>
+			{inference ? <label className="flex items-center gap-2">Local inference <Switch checked={inferenceEnabled} onCheckedChange={setInferenceEnabled} disabled={busy} /></label> : null}
+		</div>
+		<Modal.Footer>
+			<Button variant="danger" onClick={() => onRevoke(runner)} disabled={busy}>Revoke</Button>
+			<span className="flex-1" />
+			<Modal.Close render={<Button variant="ghost" disabled={busy}>Cancel</Button>} />
+			<Button variant="primary" onClick={() => void save()} disabled={busy}>Save</Button>
+		</Modal.Footer>
 	</>;
 }
 
