@@ -91,25 +91,36 @@ async function hydrate(user: string) {
 	}
 }
 
-void hydrate(getCurrentUser());
-window.addEventListener(USER_CHANGE_EVENT, () => {
-	writeStamp++;
-	window.dispatchEvent(new Event(CHANGE_EVENT));
+// Guarded the way sidebar-tools.ts guards the same pair: without it, importing
+// this module outside a browser (a test that only wants a pure helper from a
+// module that re-exports from here) throws on `localStorage` at import time,
+// before any test has had a chance to install a shim.
+if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
 	void hydrate(getCurrentUser());
-});
+	window.addEventListener(USER_CHANGE_EVENT, () => {
+		writeStamp++;
+		window.dispatchEvent(new Event(CHANGE_EVENT));
+		void hydrate(getCurrentUser());
+	});
+}
 
 export function onSidebarFeedsChanged(handler: () => void): () => void {
 	window.addEventListener(CHANGE_EVENT, handler);
 	return () => window.removeEventListener(CHANGE_EVENT, handler);
 }
 
-window.addEventListener("storage", (event) => {
-	if (event.key?.startsWith(LOCAL_KEY_PREFIX)) {
-		writeStamp++;
-		window.dispatchEvent(new Event(CHANGE_EVENT));
-	} else if (event.key === "opensession-user" || event.key === "backstage-user") {
-		writeStamp++;
-		window.dispatchEvent(new Event(CHANGE_EVENT));
-		void hydrate(getCurrentUser());
-	}
-});
+if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+	window.addEventListener("storage", (event) => {
+		if (event.key?.startsWith(LOCAL_KEY_PREFIX)) {
+			writeStamp++;
+			window.dispatchEvent(new Event(CHANGE_EVENT));
+		} else if (
+			event.key === "opensession-user" ||
+			event.key === "backstage-user"
+		) {
+			writeStamp++;
+			window.dispatchEvent(new Event(CHANGE_EVENT));
+			void hydrate(getCurrentUser());
+		}
+	});
+}

@@ -47,6 +47,13 @@ import {
 } from "../../lib/sidebar-density";
 import { Segmented, SegmentedOption } from "../../ui/segmented";
 import {
+	PLAIN_ID,
+	SUPPORT_SURFACE_OPTIONS,
+	setSupportSurface,
+	supportSurfaceOf,
+	type SupportSurface,
+} from "../../lib/support-surface";
+import {
 	SettingCard,
 	SettingsGroupLabel,
 	SettingsHeader,
@@ -350,8 +357,33 @@ export function AppearancePanel() {
 						/>
 					}
 				/>
-				{SIDEBAR_TOOL_IDS.filter((toolId) =>
-					toolFitsViewport(toolId, isPhone),
+				{/* Support is one decision, not two switches. Its tool and its
+				    sidebar band are the same queue reached two ways, so they are
+				    set together here and left out of the lists below. Only
+				    offered when Plain is actually connected: with no queue behind
+				    it there is nowhere for either surface to lead. */}
+				{sidebarFeeds.some((feed) => feed.id === PLAIN_ID) && (
+					<SettingRow
+						title="Support tickets"
+						desc="Where the Plain queue lives. The sidebar band opens a ticket's workspace, with a session and a transcript around it. Its own page opens the ticket next to the queue, with no chat."
+						control={
+							<Select
+								label="Where support tickets live"
+								value={supportSurfaceOf(
+									!hiddenSidebarTools.has(PLAIN_ID),
+									!hiddenSidebarFeeds.has(PLAIN_ID),
+								)}
+								options={SUPPORT_SURFACE_OPTIONS}
+								onChange={(value) =>
+									setSupportSurface(value as SupportSurface)
+								}
+							/>
+						}
+					/>
+				)}
+				{SIDEBAR_TOOL_IDS.filter(
+					(toolId) =>
+						toolFitsViewport(toolId, isPhone) && toolId !== PLAIN_ID,
 				).map((toolId) => (
 					<SettingRow
 						key={toolId}
@@ -368,22 +400,24 @@ export function AppearancePanel() {
 						}
 					/>
 				))}
-				{sidebarFeeds.map((feed) => (
-					<SettingRow
-						key={feed.id}
-						title={feed.title}
-						desc="Show this source in the sidebar. Hidden sources stop refreshing until shown again."
-						control={
-							<Switch
-								aria-label={`Show ${feed.title} in sidebar`}
-								checked={!hiddenSidebarFeeds.has(feed.id)}
-								onCheckedChange={(visible) =>
-									setSidebarFeedVisible(feed.id, visible)
-								}
-							/>
-						}
-					/>
-				))}
+				{sidebarFeeds
+					.filter((feed) => feed.id !== PLAIN_ID)
+					.map((feed) => (
+						<SettingRow
+							key={feed.id}
+							title={feed.title}
+							desc="Show this source in the sidebar. Hidden sources stop refreshing until shown again."
+							control={
+								<Switch
+									aria-label={`Show ${feed.title} in sidebar`}
+									checked={!hiddenSidebarFeeds.has(feed.id)}
+									onCheckedChange={(visible) =>
+										setSidebarFeedVisible(feed.id, visible)
+									}
+								/>
+							}
+						/>
+					))}
 			</SettingCard>
 		</SettingsPanel>
 	);
