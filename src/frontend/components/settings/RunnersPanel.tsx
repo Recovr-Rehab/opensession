@@ -215,26 +215,34 @@ function RunnerDetails({ runner, busy, labelRef, onChange, onRevoke, onSaved }: 
 		    half-dialog column (the same reason SetupTeam runs its email and
 		    alias full width). So none of them pair up, and the dialog keeps the
 		    standard width rather than widening to fit a grid. */}
-		<form className="flex flex-col gap-3" onSubmit={(event) => void save(event)}>
-			<Field label="Label">
-				<Input ref={labelRef} value={label} onChange={(event) => setLabel(event.target.value)} placeholder={runner.name} spellCheck={false} />
-			</Field>
-			<Field label="Tags" title="Comma-separated.">
-				<Input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="No tags" autoCapitalize="none" spellCheck={false} />
-			</Field>
-			<Field label="Allowed people" title="Comma-separated. Blank means every workspace member.">
-				<Input value={users} onChange={(event) => setUsers(event.target.value)} placeholder="All workspace members" autoCapitalize="none" spellCheck={false} />
-			</Field>
-			<Field label="Allowed repositories" title="Comma-separated. Blank means every repository.">
-				<Input value={repos} onChange={(event) => setRepos(event.target.value)} placeholder="All repositories" autoCapitalize="none" spellCheck={false} />
-			</Field>
-			{inference ? <Field label="Allowed local models" title="Comma-separated.">
-				<Input value={inferenceModels} onChange={(event) => setInferenceModels(event.target.value)} placeholder="Model names" autoCapitalize="none" spellCheck={false} />
-			</Field> : null}
+		{/* Below the title every line in this dialog is 13px, so hierarchy can
+		    only come from grouping. The three zones are what the fields
+		    actually are: what the Runner is called, who may use it, and what
+		    it is doing. 20px between them against 12px inside. */}
+		<form className="flex flex-col gap-5" onSubmit={(event) => void save(event)}>
+			<div className="flex flex-col gap-3">
+				<Field label="Label">
+					<Input ref={labelRef} value={label} onChange={(event) => setLabel(event.target.value)} placeholder={runner.name} spellCheck={false} />
+				</Field>
+				<Field label="Tags" title="Comma-separated.">
+					<Input value={tags} onChange={(event) => setTags(event.target.value)} placeholder="No tags" autoCapitalize="none" spellCheck={false} />
+				</Field>
+			</div>
+			<div className="flex flex-col gap-3">
+				<Field label="Allowed people" title="Comma-separated. Blank means every workspace member.">
+					<Input value={users} onChange={(event) => setUsers(event.target.value)} placeholder="All workspace members" autoCapitalize="none" spellCheck={false} />
+				</Field>
+				<Field label="Allowed repositories" title="Comma-separated. Blank means every repository.">
+					<Input value={repos} onChange={(event) => setRepos(event.target.value)} placeholder="All repositories" autoCapitalize="none" spellCheck={false} />
+				</Field>
+				{inference ? <Field label="Allowed local models" title="Comma-separated.">
+					<Input value={inferenceModels} onChange={(event) => setInferenceModels(event.target.value)} placeholder="Model names" autoCapitalize="none" spellCheck={false} />
+				</Field> : null}
+			</div>
 			{/* Label left, control right: the shape every toggle in settings
 			    already has, so two of them read as a list rather than as pairs
 			    floating in a row. */}
-			<div className="mt-1 flex flex-col">
+			<div className="flex flex-col">
 				<SwitchRow label="Maintenance" checked={maintenance} onChange={setMaintenance} disabled={busy} />
 				<SwitchRow label="Commands" checked={commands} onChange={setCommands} disabled={busy} />
 				{inference ? <SwitchRow label="Local inference" checked={inferenceEnabled} onChange={setInferenceEnabled} disabled={busy} /> : null}
@@ -250,7 +258,10 @@ function RunnerDetails({ runner, busy, labelRef, onChange, onRevoke, onSaved }: 
 }
 
 function SwitchRow({ label, checked, onChange, disabled }: { label: string; checked: boolean; onChange: (value: boolean) => void; disabled: boolean }) {
-	return <label className="flex min-h-9 items-center justify-between gap-4 text-label font-medium text-fg">
+	// `text-dim`, matching Field's label: both name a control, so both are
+	// chrome. Two label colours at one size in one dialog reads as arbitrary,
+	// and it is the values (the typed text, the lit switch) that should carry.
+	return <label className="flex min-h-9 items-center justify-between gap-4 text-label font-medium text-dim">
 		{label}
 		<Switch checked={checked} onCheckedChange={onChange} disabled={disabled} />
 	</label>;
