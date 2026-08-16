@@ -7,7 +7,7 @@
 import { personaName } from "../../server/config";
 import { getPrDetails } from "../../server/pr-info";
 import { createWorktreeForPrBranch } from "../../server/worktree";
-import { claimLock, releaseLock, getOrInitPrState, writePrState } from "./state";
+import { claimLock, releaseLock, readPrState, updatePrState, clearActiveRun } from "./state";
 import { announceGithubRun, runGithubAgent, authorForLogin, finalSummary, sessionUrl } from "./run";
 import { buildAdversarialPrompt } from "./prompts";
 import { postOrEditComment, removeLabel, ADVERSARIAL_MARKER } from "./github-rest";
@@ -46,16 +46,22 @@ export async function runAdversarial(
     });
     onSessionCreated?.(bksId);
 
-    const s = getOrInitPrState(pr.number, details.headRefName, pr.ghRepo);
-    const reuseId = s.activeRun?.kind === "adversarial" ? s.activeRun.progressCommentId : undefined;
+    const prior = readPrState(pr.number, pr.ghRepo);
+    const reuseId = prior?.activeRun?.kind === "adversarial" ? prior.activeRun.progressCommentId : undefined;
     const progressId = await postOrEditComment(
       pr.number,
       reuseId,
       `${ADVERSARIAL_MARKER}\n🔍 **${personaName()} adversarial review** — running two independent review passes on PR #${pr.number}… · ${link}`,
       pr.ghRepo,
     );
-    s.activeRun = { kind: "adversarial", requestedBy, startedAt, progressCommentId: progressId ?? undefined, steer };
-    writePrState(s);
+    updatePrState(
+      pr.number,
+      details.headRefName,
+      (s) => {
+        s.activeRun = { kind: "adversarial", requestedBy, startedAt, progressCommentId: progressId ?? undefined, steer };
+      },
+      pr.ghRepo,
+    );
 
     const worktreeDir = await createWorktreeForPrBranch(
       details.headRefName,
@@ -87,9 +93,7 @@ export async function runAdversarial(
   } finally {
     // Clear the recovery flag on completion; a killed process leaves it set so the
     // github agent re-runs it on startup.
-    const fin = getOrInitPrState(pr.number, pr.headRef, pr.ghRepo);
-    fin.activeRun = undefined;
-    writePrState(fin);
+    clearActiveRun(pr.number, pr.headRef, "adversarial", pr.ghRepo);
     for (const name of labelAliases(LABEL_ADVERSARIAL)) {
       await removeLabel(pr.number, name, pr.ghRepo).catch(() => {});
     }
