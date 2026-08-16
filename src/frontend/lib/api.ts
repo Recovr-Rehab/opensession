@@ -4,6 +4,7 @@
 export * from "./api/request";
 export * from "./api/reports";
 export * from "./api/sessions";
+export * from "./api/effective-config";
 export * from "./api/prs";
 export * from "./api/previews";
 export * from "./api/workspaces";

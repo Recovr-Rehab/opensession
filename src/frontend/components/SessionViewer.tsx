@@ -158,6 +158,7 @@ import {
 	SessionReportsPanel,
 	useSessionReports,
 } from "./SessionReportsPanel";
+import { SessionConfigPanel } from "./SessionConfigPanel";
 import type { NewSessionPrefill } from "../lib/new-session-link";
 import type { WorkflowRunSnapshot } from "../../server/workflow-types";
 import { PreviewButton } from "./PreviewButton";
@@ -5357,6 +5358,9 @@ export function SessionViewer({
 											/>
 										</div>
 									)}
+									<div className={INFO_SECTION}>
+										<SessionConfigPanel sessionId={session.id} />
+									</div>
 								</div>
 								</>
 								)}
@@ -6400,6 +6404,10 @@ export function SessionViewer({
 										onOpenNewSession={onOpenNewSession}
 									/>
 								)}
+								{/* Reference rather than reading, so it sits last and
+								    starts closed — and only then does it fetch, because
+								    the endpoint behind it runs the real resolvers. */}
+								<SessionConfigPanel sessionId={session.id} />
 							</div>
 							</>
 							)}
