@@ -454,12 +454,6 @@ async function main() {
   } finally {
     rmSync(sandbox, { recursive: true, force: true });
   }
-
-  // Exit explicitly. Some server modules register tickers at load (the
-  // session-index sweeper, for one), so the event loop never drains on its own
-  // and the process would hang after writing the files — which reads as a
-  // broken generator and, in the freshness test, as a timeout.
-  process.exit(0);
 }
 
 if (import.meta.main) {
