@@ -390,13 +390,24 @@ function applyCachedReview(
 function applyPrCloseTombstones(
 	data: Map<string, Map<string, PrInfo>>,
 	refreshGeneration: number,
+	authoritativeRepos: Set<string>,
 ): void {
 	for (const tombstones of [prCloseState.closed, prCloseState.merged])
 		for (const [key, generation] of tombstones) {
-			// A refresh that began after this close/merge is authoritative. Earlier
-			// refreshes retain the tombstone so their pre-close OPEN result cannot
-			// win the race.
-			if (generation <= refreshGeneration) tombstones.delete(key);
+			// A refresh that began after this close/merge AND actually re-queried
+			// the repo is authoritative. Earlier refreshes retain the tombstone so
+			// their pre-close OPEN result cannot win the race; so do sweeps that
+			// skipped this repo entirely (rate limit, unchanged probe, failed open
+			// query), which never observed the close at all. Same authority rule
+			// the review mutations below use.
+			const [ghRepo] = key.split("#");
+			const repoId = prRepos().find((repo) => repo.ghRepo === ghRepo)?.id;
+			if (
+				generation <= refreshGeneration &&
+				repoId &&
+				authoritativeRepos.has(repoId)
+			)
+				tombstones.delete(key);
 		}
 	for (const repo of prRepos()) {
 		const byBranch = data.get(repo.id);
@@ -473,10 +484,15 @@ export function applyPrWebhookToBulkCache(
 	event: string,
 	payload: any,
 ): void {
-	const repoId = prRepos().find(
+	const hookRepo = prRepos().find(
 		(repo) => repo.ghRepo.toLowerCase() === ghRepo.toLowerCase(),
-	)?.id;
-	if (!repoId) return;
+	);
+	if (!hookRepo) return;
+	const repoId = hookRepo.id;
+	// Tombstone keys are built from the configured spelling everywhere else
+	// (applyPrCloseTombstones reads them back off prRepos()), and a webhook
+	// delivery can carry a different casing.
+	const canonicalGhRepo = hookRepo.ghRepo;
 
 	if (event === "pull_request_review") {
 		const branch: string | undefined = payload?.pull_request?.head?.ref;
@@ -491,7 +507,7 @@ export function applyPrWebhookToBulkCache(
 						? ("COMMENT" as const)
 						: null;
 		if (branch && person && reviewEvent)
-			markCachedPrReviewed(ghRepo, branch, person, reviewEvent);
+			markCachedPrReviewed(canonicalGhRepo, branch, person, reviewEvent);
 		return;
 	}
 
@@ -521,14 +537,32 @@ export function applyPrWebhookToBulkCache(
 	const unresolvedTeam = requestedTeamSlugs.some(
 		(slug) => !teamLoginsBySlug.has(slug),
 	);
+	const state: PrInfo["state"] =
+		pr.merged || pr.merged_at
+			? "MERGED"
+			: pr.state === "closed"
+				? "CLOSED"
+				: "OPEN";
+	// Record the same close/merge overlay the OS1 write-throughs
+	// (markCachedPrClosed / markCachedPrMerged) register, so a bulk sweep
+	// already in flight when this delivery lands cannot revert the row to its
+	// pre-close OPEN state. An OPEN payload drops a standing CLOSED tombstone
+	// instead, since the PR is demonstrably open again, but never the MERGED
+	// one: GitHub cannot reopen a merged PR, so an OPEN delivery there is an
+	// out-of-order one that must not resurrect it.
+	const closeKey = closeTombstoneKey(canonicalGhRepo, pr.number);
+	if (state === "MERGED") {
+		prCloseState.generation++;
+		prCloseState.merged.set(closeKey, prCloseState.generation);
+	} else if (state === "CLOSED") {
+		prCloseState.generation++;
+		prCloseState.closed.set(closeKey, prCloseState.generation);
+	} else {
+		prCloseState.closed.delete(closeKey);
+	}
 	byBranch.set(branch, {
 		url: pr.html_url || prev?.url || "",
-		state:
-			pr.merged || pr.merged_at
-				? "MERGED"
-				: pr.state === "closed"
-					? "CLOSED"
-					: "OPEN",
+		state,
 		number: pr.number,
 		title: pr.title || prev?.title || "",
 		isDraft: !!pr.draft,
@@ -878,7 +912,7 @@ async function refreshPrCacheInner(): Promise<Set<string>> {
     }
     // A close can land while this slow GitHub sweep is in flight. Preserve the
     // mutation over any pre-close OPEN row the sweep already fetched.
-    applyPrCloseTombstones(next, refreshGeneration);
+    applyPrCloseTombstones(next, refreshGeneration, reviewAuthoritativeRepos);
     for (const [key, mutation] of prReviewState.reviews) {
       const [ghRepo, numberText] = key.split("#");
       const repoId = prRepos().find((repo) => repo.ghRepo === ghRepo)?.id;
