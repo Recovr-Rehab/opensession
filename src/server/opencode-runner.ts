@@ -915,6 +915,18 @@ function stickyAccountFromDbMap(ocSessionId: string): string | undefined {
   return db?.match(/\/shared_anthropic-([0-9a-f-]{36})_[^/]+\.db$/)?.[1];
 }
 
+/** The account id a next run on this session would stick to, resolved the same
+ *  way the run does: the in-memory map first, then the durable db-map (which
+ *  is the only answer that survives a restart). Read-only — for the
+ *  effective-config endpoint; the run itself still re-picks if it is not
+ *  usable. */
+export function stickyMeridianAccountFor(
+  sessionKey: string,
+  ocSessionId?: string | null
+): string | undefined {
+  return stickyMeridianAccounts.get(sessionKey) ?? stickyAccountFromDbMap(ocSessionId || "");
+}
+
 // ── OpenCode config generation ───────────────────────────────────────────────
 
 /** Ask-mode external_directory rules: composer attachments are staged under

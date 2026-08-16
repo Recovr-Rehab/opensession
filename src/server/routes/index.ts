@@ -17,6 +17,7 @@ import { handleSlackComposeRoutes } from "./slack-compose";
 import { handleSystemRoutes } from "./system";
 import { handleSessionAssetsRoutes } from "./session-assets";
 import { handleSessionNotesRoutes } from "./session-notes";
+import { handleEffectiveConfigRoutes } from "./effective-config";
 import { handleMentionsRoutes } from "./mentions";
 import { handleSandboxRoutes } from "./sandbox";
 import { handleSandboxesRoutes } from "./sandboxes";
@@ -71,6 +72,7 @@ export const routeHandlers: RouteHandler[] = [
 	// swallowed by broader matches.
 	handleSessionAssetsRoutes,
 	handleSessionNotesRoutes,
+	handleEffectiveConfigRoutes,
 	handleMentionsRoutes,
 	handleSandboxesRoutes,
 	handleSandboxRoutes,

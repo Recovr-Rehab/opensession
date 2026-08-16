@@ -28,12 +28,8 @@ import {
 } from "./agent-runner";
 import { syncAgentSessionEngine } from "./agent-session-sync";
 import { getRunState, transitionRunState } from "./run-state";
-import {
-	automationDeniedTools,
-	automationMcpServersByName,
-	getAutomation,
-	selfImproveMcpForSession,
-} from "./automations";
+import { getAutomation, selfImproveMcpForSession } from "./automations";
+import { resolveSessionRunInputs } from "./session-run-inputs";
 import { defaultRepo } from "./config";
 import { isDevInstance } from "./dev-mode";
 import {
@@ -1825,24 +1821,13 @@ async function runSessionPromptInner(
 
 	// Resuming an automation-owned session must keep that automation's scoping
 	// (MCP allowlist + tool denials) — otherwise a resume would silently hand it
-	// every MCP server and drop the customer/identity write denials.
-	const isAutomationSession = !!session.automation;
-	// No explicit allowlist → undefined, not []: an empty array is truthy, so
-	// sharedOpencodeEligible would kick every follow-up prompt off the shared
-	// server pool onto a dedicated server whose empty shard DB can't resume the
-	// engine session — turn 2 of every UI-created session started amnesiac
-	// while the seeded UI transcript looked continuous (bks-019f818d, 2026-07-20).
-	const mcpServers = isAutomationSession
-		? automationMcpServersByName(session.automation!)
-		: (session.mcpServers && session.mcpServers.length)
-			? session.mcpServers
-			: session.externalRefs?.length
-				? // Feed-workspace sessions are scoped to their feed's declared MCP
-					// servers even when the session file predates the stamping
-					// (least privilege — the feeds design).
-					await (await import("./feeds")).feedMcpServersForRefs(session.externalRefs)
-				: undefined;
-	const deniedTools = isAutomationSession ? automationDeniedTools() : undefined;
+	// every MCP server and drop the customer/identity write denials. The whole
+	// decision lives in session-run-inputs.ts so the effective-config endpoint
+	// reads the same answer this turn runs with.
+	const runInputs = await resolveSessionRunInputs(session, { user });
+	const isAutomationSession = runInputs.isAutomationSession;
+	const mcpServers = runInputs.mcpServers;
+	const deniedTools = runInputs.deniedTools;
 
 	// @session:<id> mentions → footer resolving them for the agent's
 	// opensession-sessions tools. Interactive sessions only (same gate as the tools).
@@ -2052,7 +2037,7 @@ async function runSessionPromptInner(
 		author: commitAuthorFor(user, session.startedBy),
 		// Gate per-user MCP servers (allowedUsers) to the prompt's author. Automation
 		// sessions pass no user, so they never see a user-restricted server.
-		user: isAutomationSession ? undefined : user,
+		user: runInputs.user,
 		journal: { osSessionId: session.id, kind: "prompt" },
 		startToken,
 		onAskUser: makeAskHandler(sessionId),
