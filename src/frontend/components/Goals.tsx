@@ -20,31 +20,31 @@ import { getCurrentUser } from "./UserPicker";
 import { docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { Button } from "../ui/button";
 import { cn } from "../ui/cn";
+import { CheckStatusIcon } from "./CheckStatusIcon";
 import { IconPlus } from "./icons";
 import { SOURCE_CHIP } from "../lib/source-chip-classes";
-import { Input, Select, Textarea } from "../ui/input";
-import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
+import { Field, FieldGrid, Input, Select, Textarea } from "../ui/input";
+import {
+  SettingCard,
+  SettingsForm,
+  SettingsFormActions,
+  SettingsFormTitle,
+  SettingsHeader,
+  SettingsPanel,
+} from "../ui/settings";
 import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
 import { WorkingPill } from "../ui/status";
 
-/* The old .automation-form family, as utilities (see Automations.tsx — this
-   page shares its list/drawer/form shapes). The descendant variants keep the
-   two rules that reached in from the form to its fields: 16px on phones, so
-   iOS doesn't zoom a focused field, and paragraph leading in a textarea. */
+/* Goals is a tool surface hosted inside Settings, so it reads as one of its
+   pages: the settings reading column, a SettingsHeader on top, the rows on a
+   SettingCard plate, and the form in the settings form shapes. What it keeps
+   of its own is the master/detail split — selecting a goal opens a drawer and
+   the list steps back to a rail (see Automations.tsx, same shape). */
+
+/** The two rules that reach in from the form to its fields: 16px on phones, so
+    iOS doesn't zoom a focused field, and paragraph leading in a textarea. */
 const FORM_FIELDS =
   "[&_textarea]:leading-normal phone:[&_input]:text-input-phone phone:[&_select]:text-input-phone phone:[&_textarea]:text-input-phone";
-/** .automation-form.automation-form-inline — the drawer body is the surface. */
-const FORM_INLINE = `flex flex-col gap-3.5 ${FORM_FIELDS}`;
-/** .automation-form */
-const FORM_CARD = `${FORM_INLINE} mb-4.5 rounded-panel border border-line-strong bg-panel p-4.5`;
-/** .automation-form label */
-const FIELD_LABEL = "flex flex-1 flex-col gap-1.5 text-label font-medium text-dim";
-/** .automation-form-title */
-const FORM_TITLE = "text-item-title font-semibold";
-/** .automation-form-actions */
-const FORM_ACTIONS = "flex justify-end gap-2.5";
-/** .automation-form-row */
-const FORM_ROW = "flex gap-3.5 phone:flex-col";
 /** .automations-drawer-section-label */
 const SECTION_LABEL = "mb-1.5 text-label font-semibold text-faint";
 /** .automation-session-link */
@@ -171,38 +171,37 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
         steps aside entirely — Back returns to it. */}
     <div
       className={cn(
-        "min-w-0 overflow-y-auto",
+        "flex min-w-0 justify-center overflow-y-auto",
         sel
-          ? "flex-[0_0_340px] border-r border-line px-3.5 pt-4 pb-10 max-[900px]:hidden"
-          : "flex-1 px-6 pt-7 pb-15 max-[560px]:px-4 max-[560px]:pt-5 max-[560px]:pb-12",
+          ? "flex-[0_0_340px] border-r border-line px-2.5 pt-4 pb-10 max-[900px]:hidden"
+          : "flex-1 px-8 pt-11 pb-22 phone:px-4 phone:pt-5 phone:pb-12",
       )}
     >
-    <div className={cn("mx-auto", !sel && "max-w-[860px]")}>
-      <PageHeader
-        className={`max-[560px]:mb-5 max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-3.5 ${
-          sel ? "mb-3.5 items-center" : ""
-        }`}
-      >
-        <div>
-          <PageTitle className={sel ? "text-item-title" : undefined}>Goals</PageTitle>
-          <PageDescription className={sel ? "hidden" : undefined}>
-            Long-running, self-pacing missions. One managed session that remembers its own
-            progress, paces itself, and stops when done.
-          </PageDescription>
-        </div>
-        <Button
-					variant="primary"
-					size="lg"
-					icon={<IconPlus size={20} />}
-					className="text-control-label font-medium"
-					onClick={() => setShowForm(true)}
-				>
-					New goal
-				</Button>
-      </PageHeader>
+    <SettingsPanel className={cn("self-start", sel && "max-w-none")}>
+      <SettingsHeader
+        title="Goals"
+        description={
+          sel
+            ? undefined
+            : "Long-running missions that pace themselves, keep a ledger, and stop when done."
+        }
+        className={cn(
+          "phone:flex-col phone:items-start phone:gap-3",
+          sel && "mb-3 px-2 [&_h1]:text-item-title",
+        )}
+        actions={
+          <Button
+            variant="primary"
+            icon={<IconPlus size={16} />}
+            onClick={() => setShowForm(true)}
+          >
+            New goal
+          </Button>
+        }
+      />
 
       {error && (
-        <InlineAlert onDismiss={() => setError(null)}>
+        <InlineAlert className="mb-3" onDismiss={() => setError(null)}>
           {error}
         </InlineAlert>
       )}
@@ -221,37 +220,38 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
       {loading ? (
         <LoadingState>Loading…</LoadingState>
       ) : goals.length === 0 && !showForm ? (
-        <EmptyState title="No goals yet.">
+        <EmptyState title="No goals yet">
           A goal pursues one mission over days or weeks. It wakes itself, reads its ledger,
           ships work via PRs, measures, and iterates until the objective is met.
         </EmptyState>
       ) : (
-        <div className="flex flex-col border-t border-line">
+        <SettingCard>
           {goals.map((g) => {
             const running = g.isRunning || g.lastRunStatus === "running";
             return (
               <button
                 key={g.id}
                 className={cn(
-                  "flex w-full min-w-0 items-center gap-3 border-b border-line px-2.5 py-2.75 text-left text-item-title text-fg",
-                  "max-[560px]:gap-2.5 max-[560px]:px-1 max-[560px]:py-3",
-                  sel?.id === g.id ? "bg-active" : "hover:bg-hover",
+                  "flex w-full min-w-0 items-center gap-3 px-5 py-3.5 text-left outline-none transition-colors",
+                  "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50",
+                  sel?.id === g.id ? "bg-selected" : "hover:bg-hover",
+                  sel && "gap-2.5 px-3 py-2.5",
                 )}
                 onClick={() => onSelect(g.id)}
               >
                 <span
-                  className="w-2 h-2 rounded-full shrink-0"
+                  className="size-2 shrink-0 rounded-full"
                   style={{ background: STATUS_COLOR[g.status] }}
                   title={g.pauseReason || g.doneReason || g.status}
                 />
                 <span
                   className={cn(
-                    "flex min-w-0 flex-1 flex-col gap-0.75 max-[560px]:-order-1",
+                    "flex min-w-0 flex-1 flex-col",
                     g.status !== "active" && "opacity-55",
                   )}
                 >
-                  <span className="truncate text-item-title font-semibold">{g.name}</span>
-                  <span className="truncate text-meta text-faint">
+                  <span className="truncate text-item-title font-medium text-fg">{g.name}</span>
+                  <span className="mt-0.5 truncate text-supporting text-dim">
                     {g.status}
                     {g.phase ? ` · ${g.phase}` : ""}
                     {` · wake #${g.wakeCount}${g.maxWakes ? ` / ${g.maxWakes}` : ""}`}
@@ -259,34 +259,38 @@ export function Goals({ onOpenSession, selectedId, onSelect }: Props) {
                 </span>
                 {running ? (
                   <WorkingPill />
-                ) : g.lastRunStatus === "ok" ? (
+                ) : g.lastRunStatus === "ok" || g.lastRunStatus === "error" ? (
                   <span
-                    className="text-green"
-                    title={`Last wake ok${g.lastRunAt ? ` · ${relativeTime(g.lastRunAt)}` : ""}`}
+                    className={cn(
+                      "flex size-5 shrink-0 items-center justify-center [&_svg]:size-3.5",
+                      g.lastRunStatus === "ok" ? "text-green" : "text-red",
+                    )}
+                    title={
+                      g.lastRunStatus === "ok"
+                        ? `Last wake ok${g.lastRunAt ? ` · ${relativeTime(g.lastRunAt)}` : ""}`
+                        : g.lastRunError || "Last wake failed"
+                    }
                   >
-                    ✓
-                  </span>
-                ) : g.lastRunStatus === "error" ? (
-                  <span className="text-red" title={g.lastRunError || "Last wake failed"}>
-                    ✗
+                    <CheckStatusIcon kind={g.lastRunStatus === "ok" ? "success" : "failure"} />
                   </span>
                 ) : null}
+                {/* Only the next wake: the status itself is already the first
+                    word of the line on the left, and saying it twice made a
+                    paused goal read as two different facts. */}
                 <span
                   className={cn(
                     "w-21 shrink-0 text-right text-meta text-faint",
-                    sel ? "hidden" : "max-[560px]:hidden",
+                    sel ? "hidden" : "phone:hidden",
                   )}
                 >
-                  {g.status === "active" && g.nextWakeAt
-                    ? `next ${formatNext(g.nextWakeAt)}`
-                    : g.status}
+                  {g.status === "active" && g.nextWakeAt ? `next ${formatNext(g.nextWakeAt)}` : ""}
                 </span>
               </button>
             );
           })}
-        </div>
+        </SettingCard>
       )}
-    </div>
+    </SettingsPanel>
     </div>
 
       {sel && (
@@ -620,44 +624,34 @@ function GoalForm({
     }
   }
 
-  return (
-    <div className={inline ? FORM_INLINE : FORM_CARD}>
-      {!inline && (
-        <div className={FORM_TITLE}>
-          {initial ? `Edit "${initial.name}"` : "New goal"}
-        </div>
-      )}
-
-      <label className={FIELD_LABEL}>
-        Name
+  const fields = (
+    <>
+      <Field label="Name">
         <Input
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Rank #1: screen recording software"
         />
-      </label>
+      </Field>
 
-      <label className={FIELD_LABEL}>
-        Mission
+      <Field label="Mission">
         <Textarea
           value={mission}
           onChange={(e) => setMission(e.target.value)}
           rows={12}
           placeholder="The full mission brief: objective, strategy, operating loop, hard rules. It's restated to the agent every wake."
         />
-      </label>
+      </Field>
 
-      <div className={FORM_ROW}>
-        <label className={FIELD_LABEL}>
-          Mode
+      <FieldGrid>
+        <Field label="Mode">
           <Select value={mode} onChange={(e) => setMode(e.target.value as "ask" | "code")}>
             <option value="ask">Ask · read-only research and measurement</option>
             <option value="code">Code · persistent worktree, can open PRs</option>
           </Select>
-        </label>
+        </Field>
 
-        <label className={FIELD_LABEL}>
-          Repo (code mode)
+        <Field label="Repository">
           <Select value={repo} onChange={(e) => setRepo(e.target.value)}>
             {repos.map((item) => (
               <option key={item.id} value={item.id}>
@@ -665,10 +659,9 @@ function GoalForm({
               </option>
             ))}
           </Select>
-        </label>
+        </Field>
 
-        <label className={FIELD_LABEL}>
-          Model
+        <Field label="Model">
           <Select value={model} onChange={(e) => setModel(e.target.value)}>
             <option value="">Default{defaultModel ? ` · ${defaultModel}` : ""}</option>
             {models.map((m) => (
@@ -678,10 +671,12 @@ function GoalForm({
               </option>
             ))}
           </Select>
-        </label>
+        </Field>
 
-        <label className={FIELD_LABEL}>
-          Fallback (all accounts hit limits)
+        <Field
+          label="Fallback model"
+          title="Used only when every account for the primary model has hit its usage limit"
+        >
           <Select value={fallbackModel} onChange={(e) => setFallbackModel(e.target.value)}>
             <option value="">None · fail instead</option>
             {models.map((m) => (
@@ -691,56 +686,65 @@ function GoalForm({
               </option>
             ))}
           </Select>
-        </label>
-      </div>
+        </Field>
+      </FieldGrid>
 
-      <div className={FORM_ROW}>
-        <label className={FIELD_LABEL}>
-          MCP servers (comma-separated; blank = all)
-          <Input
-            value={mcpServers}
-            onChange={(e) => setMcpServers(e.target.value)}
-            placeholder="ahrefs, slack"
-            className="mono-input"
-          />
-        </label>
+      <Field label="MCP servers" title="Comma-separated. Blank means every connector.">
+        <Input
+          value={mcpServers}
+          onChange={(e) => setMcpServers(e.target.value)}
+          placeholder="ahrefs, slack"
+          className="font-mono"
+        />
+      </Field>
 
-        <label className={FIELD_LABEL}>
-          Min minutes between wakes
+      <FieldGrid>
+        <Field label="Minutes between wakes" title="The goal never wakes sooner than this.">
           <Input
             type="number"
             value={minWakeMinutes}
             onChange={(e) => setMinWakeMinutes(e.target.value)}
             placeholder="30"
           />
-        </label>
+        </Field>
 
-        <label className={FIELD_LABEL}>
-          Max wakes (safety cap; blank = none)
+        <Field label="Max wakes" title="Safety cap. Blank means no limit.">
           <Input
             type="number"
             value={maxWakes}
             onChange={(e) => setMaxWakes(e.target.value)}
             placeholder="–"
           />
-        </label>
-      </div>
+        </Field>
+      </FieldGrid>
 
       {error && <InlineAlert>{error}</InlineAlert>}
 
-      <div className={FORM_ACTIONS}>
-        <Button variant="soft" size="md" onClick={onClose} disabled={saving}>
+      <SettingsFormActions>
+        <Button variant="soft" onClick={onClose} disabled={saving}>
           Cancel
         </Button>
         <Button
           variant="primary"
-          className="px-[22px] py-2"
           onClick={handleSave}
           disabled={saving || !name.trim() || !mission.trim()}
         >
           {saving ? "Saving…" : initial ? "Save changes" : "Create goal"}
         </Button>
-      </div>
-    </div>
+      </SettingsFormActions>
+    </>
+  );
+
+  // In the drawer the panel is already the surface, so the form drops the
+  // plate and the title the drawer's own header carries.
+  if (inline) return <div className={`flex flex-col gap-3.5 ${FORM_FIELDS}`}>{fields}</div>;
+
+  return (
+    <SettingsForm className={`mb-3 flex flex-col gap-3.5 ${FORM_FIELDS}`}>
+      <SettingsFormTitle className="mb-0">
+        {initial ? `Edit "${initial.name}"` : "New goal"}
+      </SettingsFormTitle>
+      {fields}
+    </SettingsForm>
   );
 }
