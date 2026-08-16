@@ -34,6 +34,8 @@ import {
   opencodePickerModels,
   bridgeEnabled,
   opencodeProviders,
+  waferModelEfforts,
+  waferModelName,
   BRIDGE_PROVIDER_IDS,
 } from "./opencode-config";
 import { stateDir } from "./paths";
@@ -107,6 +109,13 @@ export function modelEfforts(model: string): SessionEffort[] {
     if (/^claude-(?:fable|opus|sonnet)-/.test(slug)) return CLAUDE_EFFORTS;
   }
   if (provider === "cerebras" && slug === "gpt-oss-120b") return ["low", "medium", "high"];
+  // Wafer's ladder is per model (its catalog owns the table) and doubles as
+  // the thinking switch: Wafer serves every model with reasoning off until a
+  // request carries an effort.
+  if (provider === "wafer") {
+    const efforts = waferModelEfforts(slug);
+    if (efforts.length) return [...efforts];
+  }
   if (provider === "meta" && slug === "muse-spark-1.1") return OPENAI_EFFORTS;
   return [];
 }
@@ -449,6 +458,10 @@ function prettifyModelSlug(slug: string): string {
   if (slug === "gpt-oss-120b") return "GPT OSS 120B";
   if (slug === "gemma-4-31b") return "Gemma 4 31B";
   if (slug === "zai-glm-4.7") return "Z.ai GLM 4.7";
+  // Wafer's ids carry version and tier segments ("DeepSeek-V4-Flash-0731-Fast")
+  // that the word/number split below mangles; its catalog names them.
+  const wafer = waferModelName(slug);
+  if (wafer) return wafer;
   if (slug.startsWith("gpt-")) {
     const m = slug.slice(4).match(/^(\d+(?:[.-]\d+)*)(?:-(.+))?$/);
     if (m) return `GPT-${m[1].replace(/-/g, ".")}${m[2] ? ` ${m[2].replace(/-/g, " ")}` : ""}`;

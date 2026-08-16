@@ -105,8 +105,119 @@ export const CEREBRAS_PICKER_MODELS = [
   "zai-glm-4.7",
 ] as const;
 
+/** The reasoning levels Wafer's `reasoning_effort` accepts (docs.wafer.ai
+ *  /serverless/api-reference). A subset of models.ts' SessionEffort, spelled
+ *  out here so this module stays free of an import back into the registry. */
+export type WaferEffort = "low" | "medium" | "high" | "max";
+
+/** Wafer normalizes reasoning effort at its own edge rather than passing the
+ *  upstream model's levels through, so one ladder serves the whole catalog —
+ *  verified on the wire against every model here, including the DeepSeek and
+ *  Kimi routes whose upstream catalogs list only low/high/max. `none` is
+ *  omitted deliberately: it means "don't think", and these are coding models. */
+const WAFER_EFFORTS: readonly WaferEffort[] = ["low", "medium", "high", "max"];
+
+/** Wafer's catalog (docs.wafer.ai/wafer-pass) — one entry per `model` string
+ * the OpenAI-compatible endpoint serves. Held here for the same reason as
+ * Cerebras above: adding a key in Settings should be enough to make the
+ * provider useful. models.dev does carry a `wafer.ai` provider, but its
+ * catalog is missing the Kimi K3 and DeepSeek tiers, and the dot in its id is
+ * not a legal provider slug for us (PROVIDER_ID_RE) — so the models are
+ * injected explicitly under the plain `wafer` id instead.
+ *
+ * Every model gets the WAFER_EFFORTS variants above, which is also what turns
+ * thinking on: Wafer serves every model with reasoning OFF until a request
+ * carries an effort. */
+const WAFER_MODELS: Record<
+  string,
+  {
+    name: string;
+    context: number;
+    output: number;
+    cost: { input: number; output: number; cache_read: number };
+    /** Only where Wafer documents vision input; text-only otherwise. */
+    attachment?: boolean;
+    /** Wafer strips sampling params on the Moonshot-routed models. */
+    temperature?: boolean;
+  }
+> = {
+  "DeepSeek-V4-Flash-0731-Fast": {
+    name: "DeepSeek V4 Flash",
+    context: 1_048_576,
+    output: 384_000,
+    cost: { input: 0.28, output: 0.56, cache_read: 0.07 },
+  },
+  "GLM-5.2": {
+    name: "GLM 5.2",
+    context: 1_048_576,
+    output: 131_072,
+    cost: { input: 1.26, output: 3.96, cache_read: 0.23 },
+  },
+  "glm5.2-fast": {
+    name: "GLM 5.2 Fast",
+    context: 1_048_576,
+    output: 131_072,
+    cost: { input: 2.1, output: 6.6, cache_read: 0.21 },
+  },
+  "GLM-5.1": {
+    name: "GLM 5.1",
+    context: 202_752,
+    output: 131_072,
+    cost: { input: 1.0, output: 3.2, cache_read: 0.1 },
+  },
+  "Kimi-K3": {
+    name: "Kimi K3",
+    context: 1_048_576,
+    output: 131_072,
+    cost: { input: 3.0, output: 15.0, cache_read: 0.3 },
+    attachment: true,
+    temperature: false,
+  },
+  "kimi-k3-fast": {
+    name: "Kimi K3 Fast",
+    context: 1_048_576,
+    output: 131_072,
+    cost: { input: 4.5, output: 22.5, cache_read: 0.45 },
+    attachment: true,
+    temperature: false,
+  },
+  "Kimi-K2.6": {
+    name: "Kimi K2.6",
+    context: 262_144,
+    output: 65_536,
+    cost: { input: 1.14, output: 4.8, cache_read: 0.19 },
+    attachment: true,
+    temperature: false,
+  },
+};
+
+/** Wafer's model ids, in picker order. */
+export const WAFER_PICKER_MODELS: readonly string[] = Object.keys(WAFER_MODELS);
+
+/** Wafer treats model names as case-insensitive, so a hand-typed id resolves
+ *  to the same entry the picker uses. Undefined when it isn't a Wafer model. */
+function waferModel(model: string) {
+  const id = Object.keys(WAFER_MODELS).find(
+    (known) => known.toLowerCase() === model.toLowerCase()
+  );
+  return id ? WAFER_MODELS[id] : undefined;
+}
+
+/** The reasoning ladder for a Wafer model (empty when it isn't one). */
+export function waferModelEfforts(model: string): readonly WaferEffort[] {
+  return waferModel(model) ? WAFER_EFFORTS : [];
+}
+
+/** Display name for a Wafer model ("" when it isn't one) — the slugs carry
+ *  version and tier segments that the generic prettifier mangles. */
+export function waferModelName(model: string): string {
+  return waferModel(model)?.name || "";
+}
+
 export function defaultPickerModelsForProvider(id: string): readonly string[] {
-  return id === "cerebras" ? CEREBRAS_PICKER_MODELS : [];
+  if (id === "cerebras") return CEREBRAS_PICKER_MODELS;
+  if (id === "wafer") return WAFER_PICKER_MODELS;
+  return [];
 }
 
 /** Valid provider ids — matches opencode's own provider slugs. */
@@ -423,7 +534,35 @@ export function opencodeProviderOptions(): Record<string, Record<string, unknown
       ...(p.baseURL ? { baseURL: p.baseURL } : {}),
     };
     if (!Object.keys(options).length) continue;
-    if (id === "cerebras") {
+    if (id === "wafer") {
+      out[id] = {
+        npm: "@ai-sdk/openai-compatible",
+        name: "Wafer",
+        options: { ...options, baseURL: p.baseURL || "https://pass.wafer.ai/v1" },
+        models: Object.fromEntries(
+          Object.entries(WAFER_MODELS).map(([modelId, m]) => [
+            modelId,
+            {
+              name: m.name,
+              reasoning: true,
+              // Wafer returns the chain of thought in `reasoning_content` on
+              // every reasoning-capable model, which is also the
+              // openai-compatible default — stated here so the contract is
+              // visible next to the models it applies to.
+              interleaved: { field: "reasoning_content" },
+              tool_call: true,
+              ...(m.attachment ? { attachment: true } : {}),
+              ...(m.temperature === false ? { temperature: false } : {}),
+              limit: { context: m.context, output: m.output },
+              cost: m.cost,
+              variants: Object.fromEntries(
+                WAFER_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }])
+              ),
+            },
+          ])
+        ),
+      };
+    } else if (id === "cerebras") {
       out[id] = {
         npm: "@ai-sdk/openai-compatible",
         name: "Cerebras",
