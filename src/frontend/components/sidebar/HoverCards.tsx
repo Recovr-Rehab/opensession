@@ -901,7 +901,9 @@ export function WsMobileSheet({
 						>
 							<path d="M3 4.5h10M6.5 4.5V3.25a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1V4.5M4.25 4.5l.6 8.25a1 1 0 0 0 1 .93h4.3a1 1 0 0 0 1-.93l.6-8.25" />
 						</svg>
-						Delete workspace
+						{row.workspace?.draft && row.sessions.length === 0
+							? "Delete draft"
+							: "Delete workspace"}
 					</SheetItem>
 				)}
 				</SheetBody>

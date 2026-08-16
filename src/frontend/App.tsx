@@ -4137,13 +4137,16 @@ export function App(
 								}
 							}}
 							onDeleteWorkspace={async (id) => {
+								const wasOpen = route.view === "workspace" && route.id === id;
 								try {
 									await deleteWorkspaceApi(id);
-									refreshWorkspaces();
-									refresh();
 								} catch (e) {
 									console.error("Delete workspace failed:", e);
+									throw e;
 								}
+								refreshWorkspaces();
+								refresh();
+								if (wasOpen) navigate({ view: "prs" });
 							}}
 							onToast={showToast}
 							// Only hand the sidebar the top-bar actions slot on the root

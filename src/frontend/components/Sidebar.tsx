@@ -1901,6 +1901,25 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// `productEmpty` above cannot know); this decides where it can be shown.
 	const draftRow = !!showDraftRow && !isPhone && !sessionsError;
 
+	// A draft workspace row (the composer sitting there prefilled, no session
+	// yet) has nothing to archive: see mkRow's draft loop above, the only
+	// place a sessionless row is ever pushed. Its removal action is delete,
+	// not archive.
+	function isDraftWsRow(row: WsRow): boolean {
+		return !!row.workspace?.draft && row.sessions.length === 0;
+	}
+
+	function deleteDraftWsRow(row: WsRow) {
+		const ws = row.workspace;
+		if (!ws) return;
+		Promise.resolve(onDeleteWorkspace(ws.id)).catch(() => {
+			// Delete failed: bring the row back instead of leaving it slid
+			// off-screen and pointing at a workspace that is still there.
+			setWsSwipe(null);
+			wsSwipeOffset.current = 0;
+		});
+	}
+
 	function archiveWorkspaceWithNext(row: WsRow) {
 		// Sessionless rows can't be opened, so they're not "next" candidates.
 		const candidates = wsRowOrder.filter((r) => r.sessions.length > 0);
@@ -2294,8 +2313,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					action,
 				});
 				window.setTimeout(() => {
-					if (action === "archive") archiveWorkspaceWithNext(row);
-					else {
+					if (action === "archive") {
+						if (isDraftWsRow(row)) deleteDraftWsRow(row);
+						else archiveWorkspaceWithNext(row);
+					} else {
 						workspacePinState(row).toggle();
 						setWsSwipe({ key: row.key, offset: 0, action });
 						window.setTimeout(() => setWsSwipe(null), SWIPE_COMMIT_MS);
@@ -2730,6 +2751,30 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					>
 						<IconArchive size={22} />
 						<span>Archive</span>
+					</button>
+				)}
+				{/* A draft row's left swipe deletes instead of archiving: it has no
+				    session to archive, and the confirm-on-delete elsewhere (right-click,
+				    long-press sheet) would defeat the point of a swipe. Same red slot,
+				    same gesture, a trash glyph in place of the archive box. */}
+				{isPhone && isDraftWsRow(row) && (
+					<button
+						className={cn(
+							SIDEBAR_SWIPE_ACTION,
+							SIDEBAR_SWIPE_ACTION_ARCHIVE,
+							swipeSide === "archive" && SIDEBAR_SWIPE_ACTION_OPEN,
+							draggingRow ? "transition-none" : SIDEBAR_SWIPE_ACTION_TRANSITION,
+						)}
+						data-swipe-action="delete"
+						onClick={(e) => {
+							e.stopPropagation();
+							setWsSwipe(null);
+							deleteDraftWsRow(row);
+						}}
+						title="Delete draft"
+					>
+						<IconTrash size={22} />
+						<span>Delete</span>
 					</button>
 				)}
 				{isPhone && (
@@ -4893,13 +4938,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							kind: "item",
 							icon: <IconTrash size={20} />,
 							danger: true,
-							label: "Delete workspace",
+							label: "Delete draft",
 							onClick: () => {
-								if (
-									window.confirm(
-										`Delete workspace "${ws.name}"? Its sessions become standalone.`,
-									)
-								)
+								if (window.confirm(`Delete this draft?`))
 									onDeleteWorkspace(ws.id);
 							},
 						});
@@ -5738,12 +5779,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							onDelete={
 								ws
 									? () => {
-											if (
-												window.confirm(
-													`Delete workspace "${ws.name}"? Its sessions become standalone.`,
-												)
-											)
-												onDeleteWorkspace(ws.id);
+											const message =
+												row.sessions.length === 0
+													? `Delete this draft?`
+													: `Delete workspace "${ws.name}"? Its sessions become standalone.`;
+											if (window.confirm(message)) onDeleteWorkspace(ws.id);
 										}
 									: null
 							}
