@@ -3185,7 +3185,12 @@ function makePartMirror(ctx: {
   /** Type the reply out as it is generated instead of mirroring each text part
    * only once complete. Per-user opt-in — see stream-text.ts. */
   streamPartialText?: boolean;
-}): { mirrorTextPart: (part: any) => void; mirrorToolPart: (part: any) => void } {
+}): {
+  mirrorTextPart: (part: any) => void;
+  mirrorTextDelta: (props: any) => void;
+  mirrorToolPart: (part: any) => void;
+  textStream: TextPartStream;
+} {
   const {
     ocSessionId,
     model,
@@ -3205,6 +3210,21 @@ function makePartMirror(ctx: {
   const pushTextTail = (part: any) => {
     const tail = textStream.tail(part.id, part.text);
     if (tail) push({ type: "text_chunk", text: tail });
+  };
+  /**
+   * The engine's own token stream: `message.part.delta` carries the new
+   * characters of one field of one part, which is the only place partial text
+   * exists. `message.part.updated` publishes a text part exactly twice, empty
+   * at creation and complete at the end, so the delta feed is what makes a
+   * reply type out rather than appear all at once.
+   */
+  const mirrorTextDelta = (props: any) => {
+    if (!streamPartialText) return;
+    if (props?.field !== "text") return; // reasoning deltas are not the reply
+    const id = props?.partID;
+    if (!id || emittedText.has(id) || compactionMsgs.has(props?.messageID)) return;
+    const piece = textStream.advance(id, props?.delta);
+    if (piece) push({ type: "text_chunk", text: piece });
   };
   const mirrorTextPart = (part: any) => {
     if (part.type !== "text" || part.synthetic) return;
@@ -3299,7 +3319,7 @@ function makePartMirror(ctx: {
       });
     }
   };
-  return { mirrorTextPart, mirrorToolPart };
+  return { mirrorTextPart, mirrorTextDelta, mirrorToolPart, textStream };
 }
 
 /**
@@ -3345,9 +3365,13 @@ function collectFinalAssistantText(
     model: string;
     emittedText: Set<string>;
     pending: StreamEvent[];
+    /** The run's text ledger, when the mirror was streaming partial text: a
+     * part can have gone out in pieces without ever completing over SSE, and
+     * pushing its whole body here would say it all a second time. */
+    textStream?: TextPartStream;
   }
 ): { lastAssistant: { info: any; parts: any[] } | undefined; info: any; textOut: string } {
-  const { ocSessionId, model, emittedText, pending } = ctx;
+  const { ocSessionId, model, emittedText, pending, textStream } = ctx;
   const lastAssistant = latestTurnAssistant(list);
   const info = lastAssistant?.info;
   const parts = lastAssistant?.parts || [];
@@ -3365,7 +3389,10 @@ function collectFinalAssistantText(
             ? transcriptLineCompactionSummary(pt.text, pt.id)
             : transcriptLineAssistantText(pt.text, pt.id, undefined, model),
         ]);
-        if (!finalIsCompaction) pending.push({ type: "text_chunk", text: pt.text });
+        if (!finalIsCompaction) {
+          const tail = textStream ? textStream.tail(pt.id, pt.text) : pt.text;
+          if (tail) pending.push({ type: "text_chunk", text: tail });
+        }
       }
       return finalIsCompaction ? "" : pt.text;
     })
@@ -4860,7 +4887,7 @@ async function* runOpencodeAttempt(
       wake?.();
     };
     failRun = signalDone;
-    const { mirrorTextPart, mirrorToolPart } = makePartMirror({
+    const { mirrorTextPart, mirrorTextDelta, mirrorToolPart, textStream } = makePartMirror({
       ocSessionId,
       model,
       turnEvent,
@@ -5093,6 +5120,12 @@ async function* runOpencodeAttempt(
       const p = ev?.properties;
       stallGuard.noteEvent(ev);
       switch (ev?.type) {
+        case "message.part.delta": {
+          // The engine's token stream (see mirrorTextDelta).
+          if (p?.sessionID !== ocSessionId) return;
+          mirrorTextDelta(p);
+          return;
+        }
         case "message.part.updated": {
           const part = p?.part;
           if (!part) return;
@@ -5649,6 +5682,7 @@ async function* runOpencodeAttempt(
       model,
       emittedText,
       pending,
+      textStream,
     });
     while (pending.length) yield pending.shift()!;
 
@@ -6163,7 +6197,7 @@ export async function tryReattachOpencodeRun(
         idle = true;
         wake?.();
       };
-      const { mirrorTextPart, mirrorToolPart } = makePartMirror({
+      const { mirrorTextPart, mirrorTextDelta, mirrorToolPart, textStream } = makePartMirror({
         ocSessionId: ocSessionId!,
         model,
         turnEvent,
@@ -6360,6 +6394,12 @@ export async function tryReattachOpencodeRun(
         const p = ev?.properties;
         stallGuard.noteEvent(ev);
         switch (ev?.type) {
+          case "message.part.delta": {
+            // The engine's token stream (see mirrorTextDelta).
+            if (p?.sessionID !== ocSessionId) return;
+            mirrorTextDelta(p);
+            return;
+          }
           case "message.part.updated": {
             const part = p?.part;
             if (!part) return;
@@ -6562,6 +6602,7 @@ export async function tryReattachOpencodeRun(
         model,
         emittedText,
         pending,
+        textStream,
       });
       while (pending.length) yield pending.shift()!;
 

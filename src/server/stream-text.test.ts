@@ -55,6 +55,35 @@ describe("TextPartStream", () => {
     expect(emitted.join("")).toBe(final);
   });
 
+  test("counts engine deltas so completion only says the remainder", () => {
+    // The real shape of a turn: message.part.delta carries the text as it is
+    // written, then message.part.updated publishes the finished part. Saying
+    // the whole part again at the end would double the reply.
+    const stream = new TextPartStream();
+    const final = "Hello there, world";
+    const sent: string[] = [];
+    sent.push(stream.advance("p1", "Hello "));
+    sent.push(stream.advance("p1", "there, "));
+    sent.push(stream.tail("p1", final)); // the completion snapshot
+    expect(sent.join("")).toBe(final);
+    expect(sent.at(-1)).toBe("world");
+  });
+
+  test("a fully streamed part adds nothing at completion", () => {
+    const stream = new TextPartStream();
+    stream.advance("p1", "all of it");
+    expect(stream.tail("p1", "all of it")).toBe("");
+  });
+
+  test("ignores empty and non-string deltas", () => {
+    const stream = new TextPartStream();
+    expect(stream.advance("p1", "")).toBe("");
+    expect(stream.advance("p1", undefined)).toBe("");
+    expect(stream.advance("p1", 42)).toBe("");
+    // None of that counted, so the whole text still has to go out.
+    expect(stream.tail("p1", "real text")).toBe("real text");
+  });
+
   test("a part nobody streamed yields its whole text at completion", () => {
     // The pref-off path: the mirror calls tail() once, at part end.
     const stream = new TextPartStream();

@@ -61,6 +61,19 @@ export class TextPartStream {
     return body.slice(sent);
   }
 
+  /**
+   * Record a delta the engine emitted for this part (message.part.delta) and
+   * hand it back to be sent. The engine's deltas are a growing prefix of the
+   * part's final text, so counting them here is what lets the completion
+   * snapshot know it has only the remainder left to say.
+   */
+  advance(id: string, delta: unknown): string {
+    const piece = typeof delta === "string" ? delta : "";
+    if (!piece) return "";
+    this.sent.set(id, (this.sent.get(id) || 0) + piece.length);
+    return piece;
+  }
+
   /** Forget a completed part. The ledger is per-run, so a part that never
    * completes is released with the turn. */
   done(id: string): void {
