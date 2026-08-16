@@ -202,6 +202,31 @@ export const MINE_STATUS_META: Array<{
 	{ key: "merged", label: "Done", dotColor: "var(--purple)" },
 ];
 
+// ── Workspace rows ───────────────────────────────────────────────────────────
+// The sidebar's main list is Workspaces (not individual sessions): one row per
+// workspace, plus one implicit row per not-yet-wrapped standalone session (the
+// pre-migration case — the data migration wraps those 1:1). A row's status
+// dot is derived from its most urgent session; clicking opens the first session.
+// It lives here rather than inside Sidebar so the lib modules that take a row
+// (review-queue, hides, sidebar-lanes) can name the whole shape.
+export interface WsRow {
+	/** Pin/menu key: `workspace:<id>` for real workspaces, the session id solo. */
+	key: string;
+	/** Real workspace record, or null for an implicit single-session row. */
+	workspace: Workspace | null;
+	name: string;
+	sessions: UnifiedSession[]; // createdAt asc, so sessions[0] is "the first session"
+	status: MineStatus;
+	lastActivity: string;
+	createdAt: string;
+	unread: boolean;
+	/** Who tagged you in one of this row's sessions, if anyone. */
+	mention?: string;
+	running: boolean;
+	/** Lowercased owner (workspace creator, else the first session's starter). */
+	owner: string;
+}
+
 // ── Right-click context menu (workspace / session / PR rows) ──────────────────
 // A single presentational menu shared by every sidebar row that has one. Rows
 // pass a flat list of entries; a `status` entry renders the "Set status" row
