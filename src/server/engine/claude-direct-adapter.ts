@@ -124,6 +124,7 @@ import { gitIdentityEnv } from "../shared/user-mappings";
 import { githubAuthEnv, githubUserLoginForRun } from "../github-auth";
 import { ensureAgentAwsCredsFile } from "../aws-creds";
 import { directEngineEnabled } from "./engines-config";
+import { runDirectSmokeDriver, type DirectSmokeResult } from "./direct-smoke";
 import {
   addResultUsage,
   buildClaudeDirectMcpServers,
@@ -1172,30 +1173,7 @@ export interface ClaudeDirectSmokeOptions {
   model?: string;
 }
 
-export interface ClaudeDirectSmokeResult {
-  /** True only for a real turn that reached its terminal `done` in time — or
-   *  for an explicit dryRun probe with the engine enabled. */
-  ok: boolean;
-  enabled: boolean;
-  /** True when no real turn was executed (engine off, or dryRun requested). */
-  dryRun: boolean;
-  /** Human-readable explanation whenever ok is false or no turn ran. */
-  reason?: string;
-  /** Throwaway unified session id (`os-test-claude-direct-*`) — it never gets
-   *  a session file, so it can't appear in the UI session list. */
-  sessionId: string;
-  engineSessionId?: string;
-  model: string;
-  eventTypes: string[];
-  text: string;
-  error?: string;
-  usage?: TurnUsage;
-  timedOut: boolean;
-  durationMs: number;
-  /** transcript_events rows the store holds for the throwaway session after
-   *  the turn — proves the store-write path end to end; 0 on dry runs. */
-  storeRows: number;
-}
+export type ClaudeDirectSmokeResult = DirectSmokeResult;
 
 /**
  * One tiny scripted turn against a throwaway session id
@@ -1210,7 +1188,6 @@ export async function runClaudeDirectSmokeTurn(
   opts: ClaudeDirectSmokeOptions = {}
 ): Promise<ClaudeDirectSmokeResult> {
   const prompt = opts.prompt || "Reply with exactly the single word: ok";
-  const timeoutMs = Math.max(5_000, Math.min(opts.timeoutMs ?? 120_000, 600_000));
   const enabled = claudeDirectEnabled();
   const started = Date.now();
 
@@ -1231,101 +1208,43 @@ export async function runClaudeDirectSmokeTurn(
   }
   const smokeModel = opts.model || SMOKE_MODEL;
   const sessionId = `os-test-claude-direct-${Date.now().toString(36)}`;
-  const storeRowsFor = (id: string): number => {
-    try {
-      return transcriptStore().getLastSeq(id);
-    } catch {
-      return 0;
-    }
-  };
-
-  if (enabled && opts.dryRun) {
-    return {
-      ok: true,
+  const cwd = `${CLAUDE_DIRECT_STATE_DIR}/smoke`;
+  const runSmoke = () =>
+    runDirectSmokeDriver({
+      startedAt: started,
       enabled,
-      dryRun: true,
-      reason:
-        "dry run requested — the engine is enabled but no turn was executed (no account pick, no SDK spawn)",
+      dryRun: !!opts.dryRun,
+      timeoutMs: opts.timeoutMs,
       sessionId,
       model: smokeModel,
-      eventTypes: [],
-      text: "",
-      timedOut: false,
-      durationMs: Date.now() - started,
-      storeRows: 0,
-    };
-  }
+      cwd,
+      dryRunReason:
+        "dry run requested — the engine is enabled but no turn was executed (no account pick, no SDK spawn)",
+      disabledReason:
+        "the claude engine is disabled (~/.opensession-engines.json) — the gate error below is the expected dry-run result; no account or SDK use happened",
+      startTurn: () =>
+        runClaudeDirect(
+          {
+            prompt,
+            cwd,
+            mode: "ask",
+            mcpServers: [],
+            journal: { osSessionId: sessionId, kind: SMOKE_KIND },
+          },
+          smokeModel
+        ),
+      cancel: () => {
+        cancelClaudeDirectRun(sessionId);
+      },
+      storeRows: () => transcriptStore().getLastSeq(sessionId),
+    });
 
-  const cwd = `${CLAUDE_DIRECT_STATE_DIR}/smoke`;
-  if (enabled) {
-    try {
-      mkdirSync(cwd, { recursive: true });
-    } catch {}
-  }
-  const eventTypes: string[] = [];
-  let text = "";
-  let error: string | undefined;
-  let usage: TurnUsage | undefined;
-  let engineSessionId: string | undefined;
-  let done = false;
-  let timedOut = false;
-  // Wall clamp: runClaudeDirect registers the run under the unified session id
-  // before the SDK spawns, so cancelClaudeDirectRun reaches it. A cancel ends
-  // the turn quietly, so `done` stays false and `timedOut` is the signal.
-  const timer = setTimeout(() => {
-    timedOut = true;
-    cancelClaudeDirectRun(sessionId);
-  }, timeoutMs);
+  if (enabled && opts.dryRun) return runSmoke();
+
   smokeGateBypass++;
   try {
-    for await (const ev of runClaudeDirect(
-      {
-        prompt,
-        cwd,
-        mode: "ask",
-        // Smoke probe: no connectors needed to prove the engine answers.
-        mcpServers: [],
-        journal: { osSessionId: sessionId, kind: SMOKE_KIND },
-      },
-      smokeModel
-    )) {
-      eventTypes.push(ev.type);
-      if (ev.type === "init") engineSessionId = ev.sessionId;
-      if (ev.type === "text_chunk") text += ev.text || "";
-      if (ev.type === "error") error = ev.content;
-      if (ev.type === "done") {
-        usage = ev.usage;
-        done = true;
-      }
-    }
-  } catch (e) {
-    // runClaudeDirect yields errors rather than throwing; belt-and-braces so
-    // the in-process caller (admin route) can never blow up off this path.
-    error = String((e as Error)?.message || e);
+    return await runSmoke();
   } finally {
     smokeGateBypass--;
-    clearTimeout(timer);
   }
-  return {
-    ok: done && !timedOut && !error,
-    enabled,
-    dryRun: !enabled,
-    reason: !enabled
-      ? "the claude engine is disabled (~/.opensession-engines.json) — the gate error below is the expected dry-run result; no account or SDK use happened"
-      : timedOut
-        ? `smoke turn exceeded the ${timeoutMs}ms wall cap and was cancelled`
-        : undefined,
-    sessionId,
-    engineSessionId,
-    model: smokeModel,
-    eventTypes,
-    text,
-    error,
-    usage,
-    timedOut,
-    durationMs: Date.now() - started,
-    // Store rows prove the write path for REAL turns only; the disabled dry
-    // path must not open the transcript store at all.
-    storeRows: enabled ? storeRowsFor(sessionId) : 0,
-  };
 }

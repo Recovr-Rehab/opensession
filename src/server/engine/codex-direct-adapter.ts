@@ -86,7 +86,6 @@
  *    there is no api_key account in the pool to test against.
  */
 
-import { mkdirSync } from "fs";
 import { audit, summarizeText } from "../audit";
 import { bashAskPolicyReply } from "../command-policy";
 import { markCodexExhausted, type CodexAccount } from "../codex-accounts";
@@ -119,6 +118,7 @@ import { isCodexUsageLimitError, STRIPE_CONFIRM_TOOLS } from "../runner-shared";
 import { transcriptStore } from "../transcript-store";
 import type { TranscriptEntry } from "../types";
 import { directEngineEnabled } from "./engines-config";
+import { runDirectSmokeDriver, type DirectSmokeResult } from "./direct-smoke";
 import {
   CODEX_DIRECT_STATE_DIR,
   codexDirectEnv,
@@ -1306,22 +1306,7 @@ export interface CodexDirectSmokeOptions {
   model?: string;
 }
 
-export interface CodexDirectSmokeResult {
-  ok: boolean;
-  enabled: boolean;
-  dryRun: boolean;
-  reason?: string;
-  sessionId: string;
-  engineSessionId?: string;
-  model: string;
-  eventTypes: string[];
-  text: string;
-  error?: string;
-  usage?: TurnUsage;
-  timedOut: boolean;
-  durationMs: number;
-  storeRows: number;
-}
+export type CodexDirectSmokeResult = DirectSmokeResult;
 
 /**
  * One tiny scripted turn against a throwaway session id
@@ -1334,102 +1319,47 @@ export async function runCodexDirectSmokeTurn(
   opts: CodexDirectSmokeOptions = {}
 ): Promise<CodexDirectSmokeResult> {
   const prompt = opts.prompt || "Reply with exactly the single word: ok";
-  const timeoutMs = Math.max(5_000, Math.min(opts.timeoutMs ?? 120_000, 600_000));
   const model = opts.model || SMOKE_MODEL;
   const enabled = codexDirectEnabled();
   const sessionId = `os-test-codex-direct-${Date.now().toString(36)}`;
   const started = Date.now();
-  const storeRowsFor = (id: string): number => {
-    try {
-      return transcriptStore().getLastSeq(id);
-    } catch {
-      return 0;
-    }
-  };
-
-  if (enabled && opts.dryRun) {
-    return {
-      ok: true,
+  const cwd = `${CODEX_DIRECT_STATE_DIR}/smoke`;
+  const runSmoke = () =>
+    runDirectSmokeDriver({
+      startedAt: started,
       enabled,
-      dryRun: true,
-      reason:
-        "dry run requested — the engine is ON but no turn was executed (no account pick, no codex spawn)",
+      dryRun: !!opts.dryRun,
+      timeoutMs: opts.timeoutMs,
       sessionId,
       model,
-      eventTypes: [],
-      text: "",
-      timedOut: false,
-      durationMs: Date.now() - started,
-      storeRows: 0,
-    };
-  }
+      cwd,
+      dryRunReason:
+        "dry run requested — the engine is ON but no turn was executed (no account pick, no codex spawn)",
+      disabledReason:
+        "codex-direct is disabled in ~/.opensession-engines.json — the gate error below is the expected dry-run result; no account or codex use happened",
+      startTurn: () =>
+        runCodexDirect(
+          {
+            prompt,
+            cwd,
+            mode: "ask",
+            mcpServers: [],
+            journal: { osSessionId: sessionId, kind: CODEX_DIRECT_SMOKE_KIND },
+          },
+          model
+        ),
+      cancel: () => {
+        cancelCodexDirectRun(sessionId);
+      },
+      storeRows: () => transcriptStore().getLastSeq(sessionId),
+    });
 
-  const cwd = `${CODEX_DIRECT_STATE_DIR}/smoke`;
-  if (enabled) {
-    try {
-      mkdirSync(cwd, { recursive: true });
-    } catch {}
-  }
-
-  const eventTypes: string[] = [];
-  let text = "";
-  let error: string | undefined;
-  let usage: TurnUsage | undefined;
-  let engineSessionId: string | undefined;
-  let done = false;
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
-    cancelCodexDirectRun(sessionId);
-  }, timeoutMs);
+  if (enabled && opts.dryRun) return runSmoke();
 
   smokeGateBypass++;
   try {
-    for await (const event of runCodexDirect(
-      {
-        prompt,
-        cwd,
-        mode: "ask",
-        mcpServers: [],
-        journal: { osSessionId: sessionId, kind: CODEX_DIRECT_SMOKE_KIND },
-      },
-      model
-    )) {
-      eventTypes.push(event.type);
-      if (event.type === "init") engineSessionId = event.sessionId;
-      if (event.type === "text_chunk") text += event.text || "";
-      if (event.type === "error") error = event.content;
-      if (event.type === "done") {
-        usage = event.usage;
-        done = true;
-      }
-    }
-  } catch (e) {
-    error = String((e as Error)?.message || e);
+    return await runSmoke();
   } finally {
     smokeGateBypass--;
-    clearTimeout(timer);
   }
-
-  return {
-    ok: done && !timedOut && !error,
-    enabled,
-    dryRun: !enabled,
-    reason: !enabled
-      ? "codex-direct is disabled in ~/.opensession-engines.json — the gate error below is the " +
-        "expected dry-run result; no account or codex use happened"
-      : timedOut
-        ? `smoke turn exceeded the ${timeoutMs}ms wall cap and was cancelled`
-        : undefined,
-    sessionId,
-    engineSessionId,
-    model,
-    eventTypes,
-    text,
-    error,
-    usage,
-    timedOut,
-    durationMs: Date.now() - started,
-    storeRows: enabled ? storeRowsFor(sessionId) : 0,
-  };
 }
