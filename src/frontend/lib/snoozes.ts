@@ -4,69 +4,45 @@
 // is in the future the row parks in the Snoozed section; once lapsed the entry
 // is ignored (the row falls back to its derived lane) and the Sidebar prunes
 // it, marking the row unread so the wake is visible. The public API stays
-// synchronous (an in-memory cache) mirroring pins.ts: hydrated on load and on
-// user switch, writes are optimistic — update the cache + fire the change
-// event immediately, then PUT the full map.
+// synchronous (an in-memory cache): the store is a lib/user-map instance,
+// which owns the hydration and the optimistic whole-map PUT.
 import { fetchSnoozes, saveSnoozesApi } from "./api";
-import { getCurrentUser } from "../components/UserPicker";
+import { makeUserMap } from "./user-map";
 
 const CHANGE_EVENT = "opensession-snoozes-changed";
-const USER_CHANGE_EVENT = "opensession-user-changed";
 
-let cache: Record<string, string> = {};
-
-function emit() {
-	window.dispatchEvent(new Event(CHANGE_EVENT));
-}
-
-let loadedFor: string | null = null;
-
-async function load(user: string) {
-	loadedFor = user;
-	let snoozes: Record<string, string> = {};
-	try {
-		snoozes = await fetchSnoozes(user);
-	} catch {
-		snoozes = {};
-	}
-	// A newer load() (user switched mid-flight) wins.
-	if (loadedFor !== user) return;
-	cache = snoozes;
-	emit();
-}
-
-void load(getCurrentUser());
-window.addEventListener(USER_CHANGE_EVENT, () => void load(getCurrentUser()));
+const store = makeUserMap<string>({
+	changeEvent: CHANGE_EVENT,
+	fetchMap: fetchSnoozes,
+	saveMap: saveSnoozesApi,
+});
 
 export function getSnoozes(): Record<string, string> {
-	return cache;
+	return store.get();
 }
 
 /** The active snooze expiry for a row key, or null (lapsed entries excluded). */
 export function snoozeUntil(key: string): string | null {
-	const until = cache[key];
+	const until = store.get()[key];
 	if (!until) return null;
 	return Date.parse(until) > Date.now() ? until : null;
 }
 
 export function setSnooze(key: string, untilIso: string): void {
-	cache = { ...cache, [key]: untilIso };
-	emit();
-	void saveSnoozesApi(getCurrentUser(), cache).catch(() => {});
+	store.update((snoozes) => ({ ...snoozes, [key]: untilIso }));
 }
 
 export function clearSnooze(key: string): void {
-	if (!(key in cache)) return;
-	const next = { ...cache };
-	delete next[key];
-	cache = next;
-	emit();
-	void saveSnoozesApi(getCurrentUser(), cache).catch(() => {});
+	store.update((snoozes) => {
+		if (!(key in snoozes)) return null;
+		const next = { ...snoozes };
+		delete next[key];
+		return next;
+	});
 }
 
 export function onSnoozesChanged(handler: () => void): () => void {
-	window.addEventListener(CHANGE_EVENT, handler);
-	return () => window.removeEventListener(CHANGE_EVENT, handler);
+	return store.onChanged(handler);
 }
 
 // ── Snooze presets (the right-click flyout) ─────────────────────────────────

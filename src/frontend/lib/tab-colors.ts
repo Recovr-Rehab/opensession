@@ -1,13 +1,11 @@
 // Per-user session tab colors, stored server-side (keyed on the UserPicker
-// name) so they follow you across devices — same model as pins.ts. The public
-// API stays synchronous (an in-memory cache) so callers don't await: the cache
-// is hydrated from the server on load and on user switch, and writes are
-// optimistic — update the cache + fire the change event immediately, then PUT.
+// name) so they follow you across devices. The public API stays synchronous
+// (an in-memory cache) so callers don't await: the store is a lib/user-map
+// instance, which owns the hydration and the optimistic whole-map PUT.
 import { fetchTabColors, saveTabColorsApi } from "./api";
-import { getCurrentUser } from "../components/UserPicker";
+import { makeUserMap } from "./user-map";
 
 const CHANGE_EVENT = "opensession-tab-colors-changed";
-const USER_CHANGE_EVENT = "opensession-user-changed";
 
 /** The default swatch palette. Keys must stay in sync with server/tab-colors.ts. */
 export const TAB_COLORS: { key: string; label: string; hex: string }[] = [
@@ -24,32 +22,14 @@ export function colorHex(key: string | undefined): string | null {
 	return TAB_COLORS.find((c) => c.key === key)?.hex ?? null;
 }
 
-let cache: Record<string, string> = {};
-let loadedFor: string | null = null;
-
-function emit() {
-	window.dispatchEvent(new Event(CHANGE_EVENT));
-}
-
-async function load(user: string) {
-	loadedFor = user;
-	let colors: Record<string, string> = {};
-	try {
-		colors = await fetchTabColors(user);
-	} catch {
-		colors = {};
-	}
-	// A newer load() (user switched mid-flight) wins.
-	if (loadedFor !== user) return;
-	cache = colors;
-	emit();
-}
-
-void load(getCurrentUser());
-window.addEventListener(USER_CHANGE_EVENT, () => void load(getCurrentUser()));
+const store = makeUserMap<string>({
+	changeEvent: CHANGE_EVENT,
+	fetchMap: fetchTabColors,
+	saveMap: saveTabColorsApi,
+});
 
 export function getTabColors(): Record<string, string> {
-	return cache;
+	return store.get();
 }
 
 /** Set (or, with `null`/unknown key, clear) a session's tab color. */
@@ -57,19 +37,15 @@ export function setTabColor(
 	id: string,
 	color: string | null,
 ): Record<string, string> {
-	const next = { ...cache };
-	if (color && TAB_COLORS.some((c) => c.key === color)) {
-		next[id] = color;
-	} else {
-		delete next[id];
-	}
-	cache = next;
-	emit();
-	void saveTabColorsApi(getCurrentUser(), next).catch(() => {});
-	return next;
+	return store.update((colors) => {
+		const next = { ...colors };
+		if (color && TAB_COLORS.some((c) => c.key === color)) next[id] = color;
+		else if (id in next) delete next[id];
+		else return null;
+		return next;
+	});
 }
 
 export function onTabColorsChanged(handler: () => void): () => void {
-	window.addEventListener(CHANGE_EVENT, handler);
-	return () => window.removeEventListener(CHANGE_EVENT, handler);
+	return store.onChanged(handler);
 }
