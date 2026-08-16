@@ -37,7 +37,6 @@ import { createHumansMcpServer } from "../agents/slack/humans-tools";
 import { createKeychainMcpServer } from "../agents/slack/keychain-tools";
 import { createMemoryMcpServer } from "../agents/slack/memory-tools";
 import { createPapercutsMcpServer } from "../agents/slack/papercuts-tools";
-import { createPreviewMcpServer } from "../agents/slack/preview-tools";
 import { createPublishMcpServer } from "../agents/slack/publish-tools";
 import { createReportMcpServer } from "../agents/slack/report-tools";
 import { createReposMcpServer } from "../agents/slack/repos-tools";
@@ -165,7 +164,6 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
     source: "src/server/runners-mcp.ts",
     wiring: ["src/server/interactive-mcp.ts"],
     runClasses: ["interactive"],
-    note: "src/agents/slack/runners-tools.ts is an unreferenced duplicate of this module — nothing imports it.",
     build: () => createRunnersMcpServer({ user: USER, sessionId: SESSION_ID }),
   },
   {
@@ -411,23 +409,6 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
     condition: "codex-direct runs on a Dial preset that have a unified session id.",
     note: "Answers through the tool-less opencodeOneShot, so it cannot read a file, run a command or reach any MCP server.",
     build: () => createCodexDirectOracleServer({ oracleAgent: "oracle-fable" }),
-  },
-  {
-    name: "opensession-preview",
-    summary: "Start / stop / inspect a session's dev-server preview.",
-    source: "src/agents/slack/preview-tools.ts",
-    wiring: [],
-    runClasses: ["unwired"],
-    note: "Superseded by opensession-portals and left behind: nothing imports createPreviewMcpServer, so no run can reach these tools.",
-    build: () =>
-      createPreviewMcpServer({
-        sessionId: SESSION_ID,
-        setPreviewPath: () => undefined,
-        current: () => null,
-        start: () => unused("start"),
-        status: () => unused("status"),
-        stop: () => unused("stop"),
-      }),
   },
 ];
 

@@ -64,9 +64,8 @@ in-process tool (both name external MCP tools):
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | yes | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | no | Only on a session that carries a goalId. |
 | [`opensession-oracle`](#opensession-oracle) | 1 | codex Dial | no | codex-direct runs on a Dial preset that have a unified session id. |
-| [`opensession-preview`](#opensession-preview) | 4 | **unwired** | no | – |
 
-26 servers, 103 tools. "Shared server" is membership of
+25 servers, 99 tools. "Shared server" is membership of
 `SHARED_INPROCESS_SERVERS` (`src/server/opencode-policy.ts`): a run carrying
 any server outside that list falls back to a per-session engine server.
 
@@ -244,7 +243,6 @@ Run bounded commands on trusted persistent machines (Runners).
 - **Source** `src/server/runners-mcp.ts`
 - **Wired in** `src/server/interactive-mcp.ts`
 - **Runs** interactive
-- **Note** src/agents/slack/runners-tools.ts is an unreferenced duplicate of this module — nothing imports it.
 
 ### `list_runners`
 
@@ -897,36 +895,3 @@ The Dial's oracle as an MCP tool, for the codex engine.
 `mcp__opensession-oracle__oracle` · input: `prompt` (string, required)
 
 Consult Claude Fable 5 for a read-only senior-engineering second opinion. Use it for hard plans, significant reviews, architecture tradeoffs, or stubborn debugging, not routine searches or edits. The oracle sees none of your conversation and cannot read files or run commands, so put the relevant context, file paths, constraints and options in the question itself.
-
-## opensession-preview
-
-Start / stop / inspect a session's dev-server preview.
-
-- **Source** `src/agents/slack/preview-tools.ts`
-- **Wired in** nowhere
-- **Runs** **unwired**
-- **Note** Superseded by opensession-portals and left behind: nothing imports createPreviewMcpServer, so no run can reach these tools.
-
-### `set_preview_path`
-
-`mcp__opensession-preview__set_preview_path` · input: `path` (string, required)
-
-Set the route where this session's change should be tested, so the human's local Preview and Preview environment buttons open directly on that feature instead of the app root. Call this once you know which page exercises your change (e.g. a specific editor route). Pass a root-relative path like `/edit/abc123` or `/settings/tags`; the same path is appended to both the local Preview URL and the PR's preview environment. Pass an empty string to clear it.
-
-### `start_preview`
-
-`mcp__opensession-preview__start_preview` · input: none
-
-Start this session's dev-server preview (the same thing the human's Preview button does): a warm pre-booted container is claimed when available (serves in seconds) or a dev server boots for the worktree. Returns the preview URL once running — use it to verify your change in the real app, including headlessly via Chrome CDP. Combine with set_preview_path so humans land on the feature under test.
-
-### `preview_status`
-
-`mcp__opensession-preview__preview_status` · input: none
-
-Check whether this session's preview is running, starting, or stopped — and get its URL when live. Poll this after start_preview until it reports running.
-
-### `stop_preview`
-
-`mcp__opensession-preview__stop_preview` · input: none
-
-Stop this session's preview: releases the warm pool container (or kills the host dev server). Do this when you're done verifying — it frees the pool for other sessions.
