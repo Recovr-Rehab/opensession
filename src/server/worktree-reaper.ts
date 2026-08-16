@@ -42,7 +42,6 @@ import {
 	type Dirent,
 	existsSync,
 	readdirSync,
-	readFileSync,
 	readlinkSync,
 	statSync,
 } from "node:fs";
@@ -55,7 +54,7 @@ import type { Repo } from "./config";
 import { configuredPaths, configuredServer } from "./config";
 import { stopPreview } from "./preview";
 import type { UnifiedSession } from "./types";
-import { canonicalPath, REPOS } from "./worktree";
+import { canonicalPath, repoFromGitPointer } from "./worktree";
 
 const worktreesDir = () => configuredPaths().worktreesDir;
 
@@ -194,22 +193,6 @@ function worktreesWithProcesses(root: string): Set<string> | null {
 		if (name) inUse.add(join(root, name));
 	}
 	return inUse;
-}
-
-/** The registered repo owning this worktree, from its .git pointer. */
-function ownerRepo(dir: string): { repo: Repo; gitdir: string } | null {
-	let pointer: string;
-	try {
-		pointer = readFileSync(join(dir, ".git"), "utf8");
-	} catch {
-		return null;
-	}
-	const gitdir = pointer.replace(/^gitdir:\s*/, "").trim();
-	const ownerPath = canonicalPath(gitdir.split("/.git/worktrees/")[0] ?? "");
-	for (const repo of Object.values(REPOS)) {
-		if (canonicalPath(repo.repo) === ownerPath) return { repo, gitdir };
-	}
-	return null;
 }
 
 /** Negative-result cache for the PR fallback: a parked branch with no
@@ -364,7 +347,12 @@ export async function sweepWorktreeReaper(
 		} catch {}
 		if (gitEntry === "dir") continue;
 		const isWorktreePointer = gitEntry === "file";
-		const owner = ownerRepo(dir);
+		// Owner from the .git pointer, never from the dir name: the path
+		// convention is ambiguous between prefix-overlapping repo ids, and
+		// everything below (removal, the slug we archive/kill by) is
+		// irreversible. Shared with repoForPathOrNull, which owns the fallback
+		// for dirs that are gone.
+		const owner = repoFromGitPointer(dir);
 		const gitOk =
 			isWorktreePointer &&
 			(await $`git -C ${dir} rev-parse --is-inside-work-tree`.quiet().nothrow())
