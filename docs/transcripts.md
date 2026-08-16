@@ -105,7 +105,7 @@ Three sources today:
 | --- | --- | --- |
 | `tools` | `runOnModel` (every engine) | the run's tool scoping: MCP allowlist, in-process servers, tool denials, mode |
 | `mcp-servers` | the opencode runner | the servers that config actually mounts, the strips that narrow them, the subagents `task` can reach |
-| `instructions` | the opencode runner | the standing instruction text, which already folds in `AGENTS.local.md` / `CLAUDE.local.md` |
+| `instructions` | the opencode runner; each direct adapter for its own engine | the standing instruction text, which already folds in `AGENTS.local.md` / `CLAUDE.local.md` |
 
 **The tool schemas themselves are not recordable.** Every mounted tool's name,
 description and JSON schema is the largest single model input (roughly 104k
@@ -114,9 +114,13 @@ returns only its own built-ins and `/mcp` returns a connection status per
 server. Capturing the schemas would mean connecting to every configured MCP
 server ourselves, per session. So what is recorded is the tool *surface* —
 which servers were mounted and which tools were taken away — not the wording of
-each schema. The direct engines' system prompts are likewise not recorded yet;
-their adapters assemble their own and do not call in. The `tools` record covers
-them, because it is written at the choke point.
+each schema.
+
+The direct engines have no runner to log their `instructions` from — claude-direct
+and codex-direct assemble their own system prompt and never reach the opencode
+runner — so each adapter logs at the point its text is final: the append to the
+`claude_code` preset, and the thread's `developerInstructions`. The vendor
+preset each appends to stays outside the record; that text is the engine's own.
 
 ## Imports and drift
 

@@ -108,6 +108,7 @@ import {
   transcriptLineUser,
 } from "../opencode-transcript";
 import { buildRunInstructions } from "../run-instructions";
+import { logStandingContext } from "../context-log";
 import {
   buildRunJournalRecord,
   journalClear,
@@ -680,6 +681,25 @@ export async function* runCodexDirect(
         hasOracle: !!(oracleServer && rpcToken),
         hasSessionsMcp: !!(opts.inProcessMcp || {})["opensession-sessions"],
       }),
+    });
+
+    // Model-visible means logged (context-log.ts), standing half. The
+    // engine-neutral `tools` record is already written at the runOnModel choke
+    // point, but the instruction text is not: this adapter assembles its own
+    // and never reaches the opencode runner, which is where that source is
+    // written for every other run. So it is recorded HERE, the point where the
+    // text is final — the string goes to codex verbatim as the thread's
+    // `developerInstructions` below.
+    //
+    // Same content-addressed helper as the runner, so one version of one
+    // session's instructions is one row however many turns or restarts
+    // re-assert it — and it never throws: an audit record must not be able to
+    // kill the turn it only describes.
+    logStandingContext({
+      sessionId: unifiedSessionId,
+      turnId: opts.promptEntryId || opts.startToken,
+      source: "instructions",
+      content: instructions,
     });
 
     // ── Spawn ───────────────────────────────────────────────────────────────

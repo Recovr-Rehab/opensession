@@ -64,9 +64,13 @@
  * was scoped to. That reconstructs which tools the model had, not the wording
  * of each schema.
  *
- * The direct engines' system prompts are likewise not recorded yet: they are
- * assembled inside their own adapters, which do not call in here. The
- * engine-neutral `tools` record covers every engine, including those two.
+ * The direct engines' `instructions` records come from their own adapters
+ * rather than from a runner: claude-direct and codex-direct assemble their
+ * system prompt themselves and never reach the opencode runner, so each logs
+ * at the point its text is final (claude-direct's append to the claude_code
+ * preset, codex-direct's `developerInstructions`). What is still outside the
+ * record on those two is the vendor preset each appends to, which is the
+ * engine's own text and not ours to record.
  */
 import { createHash } from "crypto";
 import {
@@ -198,8 +202,11 @@ export type StandingContextSource =
 	 *  only inside the runner. */
 	| "mcp-servers"
 	/** The standing instruction text the engine was given (opencode's
-	 *  instructions file, or the shared server's per-prompt `system`), which
-	 *  already folds in AGENTS.local.md / CLAUDE.local.md. */
+	 *  instructions file or the shared server's per-prompt `system`;
+	 *  claude-direct's append to the claude_code preset; codex-direct's
+	 *  `developerInstructions`), which already folds in AGENTS.local.md /
+	 *  CLAUDE.local.md. Written wherever that text is final, which is a runner
+	 *  for opencode and the adapter itself for the two direct engines. */
 	| "instructions";
 
 export interface StandingContextInput {

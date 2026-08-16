@@ -12,6 +12,7 @@ import { createHash } from "crypto";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { __setEngineForTest, runAgent } from "./agent-runner";
+import { logStandingContext } from "./context-log";
 import { __setActiveRunsPathForTest } from "./run-journal";
 import type { StreamEvent } from "./run-events";
 import { makeFakeEngine } from "./testing/fake-engine";
@@ -470,6 +471,63 @@ describe("context-log: standing context is recorded on change, not per turn", ()
 		const rows = standing(sessionId, "tools");
 		expect(rows).toHaveLength(1);
 		expect(JSON.parse(rows[0].content).mcpScope).toBe("all");
+	});
+
+	test("a direct engine's instructions record rides the same helper, and leaves on the way out", () => {
+		const sessionId = "os-std-direct-instructions";
+		const text = "## Run policy\nnever push to main\n";
+		// What claude-direct and codex-direct call once their system prompt is
+		// final: they assemble their own and never reach the opencode runner,
+		// so the adapter is the call site. Same helper, so the same
+		// content-addressing — a second turn, and a restart that clears the
+		// in-process map, both land on the one row.
+		logStandingContext({
+			sessionId,
+			turnId: "turn-1",
+			source: "instructions",
+			content: text,
+		});
+		logStandingContext({
+			sessionId,
+			turnId: "turn-2",
+			source: "instructions",
+			content: text,
+		});
+		expect(standing(sessionId, "instructions")).toHaveLength(1);
+		expect(
+			standing(sessionId, "instructions")[0].contextInjection?.turnId,
+		).toBe("turn-1");
+
+		// A restart clears the in-process map, so the next turn re-records —
+		// onto the same content-addressed row, which keeps its place in the
+		// transcript and takes the re-asserting turn's id.
+		(globalThis as any).__osStandingContext?.clear();
+		logStandingContext({
+			sessionId,
+			turnId: "turn-3",
+			source: "instructions",
+			content: text,
+		});
+
+		const rows = standing(sessionId, "instructions");
+		expect(rows).toHaveLength(1);
+		expect(rows[0].content).toBe(text.trim());
+		expect(rows[0].contextInjection?.turnId).toBe("turn-3");
+
+		// Instructions that actually moved earn their own record.
+		logStandingContext({
+			sessionId,
+			turnId: "turn-4",
+			source: "instructions",
+			content: `${text}also: no force pushes\n`,
+		});
+		expect(standing(sessionId, "instructions")).toHaveLength(2);
+
+		// …and the same exclusion as every other record: this is the run's own
+		// configuration, never conversation.
+		expect(entriesForWire(store.readTail(sessionId, 10).entries)).toHaveLength(
+			0,
+		);
 	});
 
 	test("nothing is recorded for a session-less run", async () => {

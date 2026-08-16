@@ -582,6 +582,41 @@ export class TranscriptStore {
     this.importedCache.delete(sessionId);
   }
 
+  /**
+   * Every session the store holds a row for, with its last write and the seq
+   * high-water mark. Reads only transcript_sessions, so it stays a small-table
+   * scan on a multi-GB database; the high-water is an UPPER bound on the entry
+   * count (an upsert never advances it), which is enough to skip a session
+   * without counting its rows.
+   */
+  listStoredSessions(): Array<{
+    sessionId: string;
+    lastTs: number | null;
+    seqHighWater: number;
+  }> {
+    const rows = this.db
+      .query("SELECT session_id, last_ts, next_seq FROM transcript_sessions")
+      .all() as Array<{
+      session_id: string;
+      last_ts: number | null;
+      next_seq: number;
+    }>;
+    return rows.map((r) => ({
+      sessionId: r.session_id,
+      lastTs: r.last_ts ?? null,
+      seqHighWater: Math.max(0, (r.next_seq ?? 1) - 1),
+    }));
+  }
+
+  /** Exact event count for one session (the primary key leads on session_id). */
+  countEvents(sessionId: string): number {
+    return (
+      this.db
+        .query("SELECT COUNT(*) AS n FROM transcript_events WHERE session_id = ?")
+        .get(sessionId) as { n: number }
+    ).n;
+  }
+
   /** Cheap counters for the daily growth-metric audit line / backfill summary. */
   stats(): { sessions: number; events: number; blobs: number } {
     const count = (sql: string) =>

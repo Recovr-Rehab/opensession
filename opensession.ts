@@ -20,6 +20,7 @@ import { startTodoReminderTicker } from "./src/server/todos";
 import { startGeneratedTitleSweep } from "./src/server/generated-titles";
 import { startLiveActivitySync } from "./src/server/live-activities";
 import { kickTranscriptBackfillOnce } from "./src/server/transcript-backfill";
+import { kickOrphanTranscriptSweep } from "./src/server/transcript-orphan-sweep";
 import { makeAskHandler } from "./src/server/asks";
 import { automationResumeMcpForSession, ensureConfiguredAutomations, getWebhookRoutes, setEventSessionCallback, settleResumedAutomationRun, startScheduler } from "./src/server/automations";
 import { startUsagePoller } from "./src/server/claude-accounts";
@@ -636,6 +637,13 @@ if (!g.__opensessionBooted) {
 	// file once it completed — already done since 2026-07-23); the delay keeps
 	// its import chunks out of the restart-resume window below.
 	setTimeout(() => kickTranscriptBackfillOnce(), 15_000);
+
+	// Junk transcripts: rows written under session ids that never had a session
+	// behind them (test harnesses, before the store's per-pid scratch database).
+	// Deletes only what it can prove is bookkeeping — see the module doc — and
+	// is idempotent, so it runs every boot rather than once ever. Delayed past
+	// the restart-resume window so it never competes with a waking session.
+	setTimeout(() => kickOrphanTranscriptSweep(), 45_000);
 	} else {
 		agents = [];
 		g.__agents = agents;
