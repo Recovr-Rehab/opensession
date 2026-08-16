@@ -151,6 +151,14 @@ function closeTombstoneKey(ghRepo: string, number: number): string {
 	return `${ghRepo}#${number}`;
 }
 
+/** A merge tombstone for a branch whose PR number we don't know — the cache
+ *  had no row for it. Deliberately a different shape from closeTombstoneKey so
+ *  the two can share `prCloseState.merged`: a branch literally named "#123"
+ *  keys as `owner/repo@#123`, never as `owner/repo#123`. */
+function mergedBranchTombstoneKey(ghRepo: string, branch: string): string {
+	return `${ghRepo}@${branch}`;
+}
+
 function reviewMutationKey(
 	ghRepo: string,
 	number: number,
@@ -246,6 +254,9 @@ export function markCachedPrClosed(ghRepo: string, number: number): void {
 	if (!byBranch) return;
 	for (const [branch, pr] of byBranch) {
 		if (pr.number !== number) continue;
+		// In place, like every other write-through here: an in-flight sweep holds
+		// this inner Map as its `stale` reference and re-installs that same object
+		// on its skip paths, so the mutation reaches both. Never swap in a copy.
 		byBranch.set(branch, {
 			...pr,
 			state: "CLOSED",
@@ -266,16 +277,30 @@ export function markCachedPrClosed(ghRepo: string, number: number): void {
  * rebuilds the list off the same unrefreshed PR data.
  */
 export function markCachedPrMerged(ghRepo: string, branch: string): void {
+	// Record the overlay BEFORE any lookup can bail, exactly as the close path
+	// does: a merge on a branch the cache has no row for (the stack-merge loop
+	// in routes/pr.ts walks layers owned by other sessions, which are the ones
+	// most likely to be missing) must still beat an in-flight sweep's pre-merge
+	// OPEN row. Keyed by branch here because the PR number is only knowable
+	// from the cached row; applyPrCloseTombstones checks both key shapes.
+	prCloseState.generation++;
+	prCloseState.merged.set(
+		mergedBranchTombstoneKey(ghRepo, branch),
+		prCloseState.generation,
+	);
 	const repoId = prRepos().find((repo) => repo.ghRepo === ghRepo)?.id;
 	if (!repoId) return;
 	const byBranch = prCache.data.get(repoId);
 	const pr = byBranch?.get(branch);
 	if (!byBranch || !pr) return;
-	prCloseState.generation++;
 	prCloseState.merged.set(
 		closeTombstoneKey(ghRepo, pr.number),
 		prCloseState.generation,
 	);
+	// Mutates the LIVE inner Map in place, deliberately: a sweep already in
+	// flight holds this same object as its `stale` reference and re-installs it
+	// unchanged on its skip paths, so the write is visible through both. Never
+	// swap in a fresh Map here.
 	byBranch.set(branch, {
 		...pr,
 		state: "MERGED",
@@ -378,13 +403,30 @@ function applyPrCloseTombstones(
 		if (!byBranch) continue;
 		for (const [branch, pr] of byBranch) {
 			const key = closeTombstoneKey(repo.ghRepo, pr.number);
-			// Merged wins: GitHub reports a merged PR as closed too.
-			if (prCloseState.merged.has(key))
+			// Merged wins: GitHub reports a merged PR as closed too. A merge of a
+			// branch the cache had no row for is tombstoned by branch instead of
+			// number, so check that shape too — this sweep is the first to see
+			// which PR the branch had.
+			if (
+				prCloseState.merged.has(key) ||
+				prCloseState.merged.has(
+					mergedBranchTombstoneKey(repo.ghRepo, branch),
+				)
+			)
 				byBranch.set(branch, { ...pr, state: "MERGED", isDraft: false });
 			else if (prCloseState.closed.has(key))
 				byBranch.set(branch, { ...pr, state: "CLOSED" });
 		}
 	}
+}
+
+/** Test seam: the overlay pass a sweep applies to its freshly fetched rows,
+ *  without spending a real sweep to get there. */
+export function __applyPrCloseTombstonesForTest(
+	data: Map<string, Map<string, PrInfo>>,
+	refreshGeneration: number,
+): void {
+	applyPrCloseTombstones(data, refreshGeneration);
 }
 
 /** The cached head branch of an open PR, by number — lets webhook events that
@@ -673,6 +715,11 @@ async function refreshPrCacheInner(): Promise<Set<string>> {
       // nothing changed since the last full refresh (bounded by the safety-net
       // interval): an unchanged snapshot is by definition current, so the repo
       // still counts as fresh for notification consumers.
+      // `stale` ALIASES the live inner Map, and the skip paths below re-install
+      // that same object rather than a copy. That aliasing is load-bearing: a
+      // close/merge/review write-through landing while this sweep runs mutates
+      // the live Map in place, and only because the object is shared does the
+      // mutation survive into `next`. Don't clone it here or on the skips.
       const stale = prCache.data.get(repo.id);
       // The GitHub backoff is a GitHub-API concern: it must not stall
       // code.storage repos, whose calls never touch that quota.
