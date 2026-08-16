@@ -31,13 +31,8 @@ import { Database } from "bun:sqlite";
 import type { TranscriptEntry } from "./types";
 import type { ImageInput } from "./run-events";
 import { stripContext } from "./prompt-context";
-import {
-  extractAssistantVideos,
-  extractImageMarkers,
-  extractVideoMarkers,
-  extractImplicitMedia,
-  parseJsonlLines,
-} from "./jsonl-parser";
+import { parseJsonlLines } from "./jsonl-parser";
+import { extractAssistantVideos, toolResultMedia } from "./transcript-media";
 import { transcriptStore } from "./transcript-store";
 
 const HOME = homeDir();
@@ -1443,21 +1438,9 @@ export function readOpencodeTranscript(
                 : `Error: ${state.error || "tool failed"}`;
             // OPENSESSION_VIDEO/IMAGE markers printed by tools (echo after
             // ffmpeg etc.) must survive the refresh re-parse exactly like
-            // they do on the live stream (jsonl-parser does the same for
-            // the claude engine's tool results).
-            const markerVideos = extractVideoMarkers(resultText);
-            const markerImages = extractImageMarkers(resultText);
-            const implicit = extractImplicitMedia(resultText);
-            const allImages = [
-              ...new Set([...images, ...markerImages, ...implicit.images]),
-            ];
-            // Only the marked srcs are "show this" — the read attachment and
-            // any path that merely appears in the output stay folded away.
-            // Must match jsonl-parser's tool_result branch, or the same result
-            // would feature differently live vs. after a refresh re-parse.
-            const featuredMedia = [
-              ...new Set([...markerImages, ...markerVideos]),
-            ];
+            // they do on the live stream, so this is the one derivation every
+            // engine and the runner share.
+            const media = toolResultMedia(resultText, images);
             entries.push({
               id: `tr-${p.id}`,
               type: "tool_result",
@@ -1465,11 +1448,7 @@ export function readOpencodeTranscript(
               timestamp: ts,
               toolUseId: p.id,
               ...(state.status === "error" ? { isError: true } : {}),
-              ...(allImages.length ? { images: allImages } : {}),
-              ...(markerVideos.length || implicit.videos.length
-                ? { videos: [...new Set([...markerVideos, ...implicit.videos])] }
-                : {}),
-              ...(featuredMedia.length ? { featuredMedia } : {}),
+              ...media,
             });
           }
         }
