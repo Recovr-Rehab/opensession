@@ -48,6 +48,7 @@
 
 import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync } from "fs";
+import { tmpdir } from "os";
 import { dirname } from "path";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import {
@@ -133,9 +134,44 @@ export function transcriptDbPath(): string {
  * The process-wide singleton over the real transcripts.db. Lazy — importing
  * this module never opens the DB. Tests must NOT call this; they construct
  * `new TranscriptStore(tempPath)` instead (invariant 8: one writer).
+ *
+ * A test process that reaches this anyway gets a scratch database rather than
+ * the live one. That is not politeness: a run writes to the store for reasons
+ * a test never asked for (context-log records the standing context of every
+ * dispatch), so "the test didn't redirect the store" quietly meant "the test
+ * wrote rows into the operator's real transcripts.db" — 45 of them, under
+ * fixture session ids, within a day (2026-08-16). Redirecting still works and
+ * still wins; this only decides where an unredirected write lands.
  */
 export function transcriptStore(): TranscriptStore {
-  return (g.__osTranscriptStore ??= new TranscriptStore(transcriptDbPath()));
+  if (g.__osTranscriptStore) return g.__osTranscriptStore;
+  const path =
+    isTestRunner() && !sessionsDirRedirected()
+      ? scratchTranscriptDbPath()
+      : transcriptDbPath();
+  return (g.__osTranscriptStore = new TranscriptStore(path));
+}
+
+function isTestRunner(): boolean {
+  return (
+    process.env.NODE_ENV === "test" || /\.test\.tsx?$/.test(Bun.main || "")
+  );
+}
+
+/** A test that pointed the state or sessions dir at a fixture root of its own
+ *  keeps it: that redirect IS the isolation, and the snapshot harness depends
+ *  on this lazy singleton landing inside its root. Only a test that redirected
+ *  NOTHING gets the scratch DB. */
+function sessionsDirRedirected(): boolean {
+  return !!(
+    process.env.OPENSESSION_STATE_DIR || process.env.OPENSESSION_SESSIONS_DIR
+  );
+}
+
+/** One scratch DB per test process in the OS temp dir, so parallel test
+ *  processes never share a file. */
+function scratchTranscriptDbPath(): string {
+  return `${tmpdir()}/opensession-test-transcripts-${process.pid}.db`;
 }
 
 /**
