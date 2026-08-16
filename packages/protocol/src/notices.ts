@@ -126,7 +126,13 @@ export type NoticeKind =
   | "review-handoff"
   | "workflow"
   | "session-notice"
-  | "recovery";
+  | "recovery"
+  /** A model-visible payload the harness injected into a prompt (a handoff,
+   *  the repos note, an attached session's excerpt). Recorded so the model's
+   *  input is reconstructable from the log; NOT conversation, so servers drop
+   *  it from the default projection (see dropContextInjections). The notice
+   *  exists for the debug/replay reader that asks for them anyway. */
+  | "context-injection";
 
 /**
  * How a client renders the entry's `content` underneath the title:
@@ -386,7 +392,30 @@ const PARSED_NOTICES: Record<string, Omit<EntryNotice, "tone">> = {
     title: "Context compacted",
   },
   recap: { kind: "recap", title: "Recap", body: "inline" },
+  "context-injection": {
+    kind: "context-injection",
+    title: "Injected context",
+    body: "collapsed",
+  },
 };
+
+/** The transcript's record of a model-visible payload the harness injected
+ *  into a prompt (context-log.ts). Not conversation: a durable audit row, so
+ *  every client-bound projection drops it. */
+export function isContextInjection(entry: TranscriptEntry): boolean {
+  return entry.noticeKind === "context-injection" || !!entry.contextInjection;
+}
+
+/** Drop injection records on the way to a client. Same "on the way out"
+ *  discipline as classification: nothing is deleted, it just isn't
+ *  conversation. Returns the same array when there was nothing to drop. */
+export function dropContextInjections<T extends TranscriptEntry>(
+  entries: T[],
+): T[] {
+  return entries.some(isContextInjection)
+    ? entries.filter((e) => !isContextInjection(e))
+    : entries;
+}
 
 /**
  * A status line whose whole notice is its own text: the title IS the body, and

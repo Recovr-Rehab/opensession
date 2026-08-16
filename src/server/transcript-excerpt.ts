@@ -19,6 +19,7 @@
  * imported (plain-*, pre-v2 leftovers) fall back to the merged legacy read.
  */
 
+import { isContextInjection } from "@tellahq/opensession-protocol/notices";
 import type { TranscriptEntry } from "./types";
 import { transcriptStore } from "./transcript-store";
 
@@ -181,7 +182,10 @@ async function loadEntries(
 					if (!page.entries.length) break;
 					for (const e of page.entries) {
 						const seq = e.seq ?? out.length + from + 1;
-						out.push({ ...e, seq });
+						// The harness's own injection records (context-log.ts) are
+						// not conversation: an excerpt exists to show what was said,
+						// and a recap built over one must not summarize plumbing.
+						if (!isContextInjection(e)) out.push({ ...e, seq });
 						cursor = Math.max(cursor, seq);
 					}
 					if (page.entries.length < PAGE) break;
@@ -199,7 +203,8 @@ async function loadEntries(
 	const start = Math.max(0, legacy.length - MAX_SCAN);
 	const entries = legacy
 		.slice(start)
-		.map((e, i) => ({ ...e, seq: e.seq ?? start + i + 1 }) as ExcerptEntry);
+		.map((e, i) => ({ ...e, seq: e.seq ?? start + i + 1 }) as ExcerptEntry)
+		.filter((e) => !isContextInjection(e));
 	return {
 		entries,
 		source: "legacy",

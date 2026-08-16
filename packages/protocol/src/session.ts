@@ -87,6 +87,14 @@ export interface TranscriptEntry {
    *  and `content` as the body when `notice.body` says to. Absent on ordinary
    *  messages, which is the whole point: one branch, not nine. */
   notice?: EntryNotice;
+  /** Set on a `context-injection` entry: the injected model-visible payload's
+   *  provenance. `source` names what built it (a handoff, the repos note, an
+   *  attached session's excerpt…); `turnId` is the prompt entry — or run token
+   *  — the payload rode with, so a replay can group a turn's injections with
+   *  the message they were attached to. Servers keep these entries out of the
+   *  default projection (they're a debug/replay record, not conversation), so
+   *  a client only ever sees one if it asked for them. */
+  contextInjection?: { source: string; turnId?: string };
   /** Who sent this turn, when it wasn't the session's driver: a teammate who
    *  steered in, or one whose answer was routed back. The client credits them
    *  instead of the owner ("You" only when the sender is the viewer). */

@@ -30,7 +30,7 @@ import { handleSlashCommand } from "./slash-commands";
 import { maybeRecapOnReturn } from "./recap";
 import { maybeSuggestRepliesOnReturn, resendReplySuggestions } from "./reply-suggestions";
 import { resizeTerminal, startSessionTerminal, stopAllTerminals, stopTerminal, writeTerminal } from "./terminals";
-import { classifyEntries } from "@tellahq/opensession-protocol/notices";
+import { classifyEntries, dropContextInjections } from "@tellahq/opensession-protocol/notices";
 import { withToolPresentations } from "@tellahq/opensession-protocol/tool-presentation";
 import { subscribeTranscript } from "./transcript-bus";
 import { resumeSessionFeed } from "./session-feed";
@@ -184,7 +184,9 @@ const v2BgImports: Set<string> = ((globalThis as any).__osTranscriptV2BgImports 
  * measures the text a reader actually sees.
  */
 function classifyV2Entries(entries: SeqEntry[]): SeqEntry[] {
-	return withToolPresentations(classifyEntries(entries)) as SeqEntry[];
+	return withToolPresentations(
+		classifyEntries(dropContextInjections(entries)),
+	) as SeqEntry[];
 }
 
 /**

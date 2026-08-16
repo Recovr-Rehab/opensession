@@ -1,3 +1,4 @@
+import { isContextInjection } from "@tellahq/opensession-protocol/notices";
 import { productName } from "./config";
 import type { TranscriptEntry } from "./types";
 
@@ -43,7 +44,9 @@ export function buildForkHandoffNote(input: {
 	}
 
 	const useful = entries
-		.filter((e) => ["user", "assistant", "system"].includes(e.type))
+		.filter(
+			(e) => ["user", "assistant", "system"].includes(e.type) && !isContextInjection(e),
+		)
 		.slice(-maxEntries);
 	const lines = useful.map((e) => `- ${roleLabel(e.type)}: ${clip(e.content)}`);
 
@@ -77,7 +80,9 @@ export function buildSessionContextNote(
 ): string {
 	const sections = sessions.map((session) => {
 		const useful = session.entries
-			.filter((e) => ["user", "assistant", "system"].includes(e.type))
+			.filter(
+			(e) => ["user", "assistant", "system"].includes(e.type) && !isContextInjection(e),
+		)
 			.slice(-maxEntriesPerSession);
 		const lines = useful.map(
 			(e) => `- ${roleLabel(e.type)}: ${clip(e.content, 700)}`,
@@ -122,11 +127,13 @@ export function buildEngineSwitchHandoffNote(input: {
 	maxChars?: number;
 }): string {
 	const maxChars = input.maxChars ?? 180_000;
+	// An injection record is the harness's own audit row, not conversation:
+	// folding it into a handoff would re-inject a payload the new engine is
+	// about to be handed anyway, and grow it on every restart.
+	const entries = input.entries.filter((e) => !isContextInjection(e));
 	const conversational = input.sameEngineRestart
-		? input.entries
-		: input.entries.filter((e) =>
-				["user", "assistant", "system"].includes(e.type),
-			);
+		? entries
+		: entries.filter((e) => ["user", "assistant", "system"].includes(e.type));
 	const useful = input.maxEntries !== undefined
 		? conversational.slice(-input.maxEntries)
 		: conversational;

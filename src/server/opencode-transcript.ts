@@ -645,6 +645,31 @@ export function transcriptLineRecap(
   return transcriptLineUser(`<recap>${text}</recap>`, id, ts);
 }
 
+/** A model-visible payload the harness injected into a prompt — the
+ *  "model-visible means logged" record written by context-log.ts. Same
+ *  user-role + harness-marker pattern as runner notices; the jsonl parser maps
+ *  it to a system entry tagged `noticeKind: "context-injection"` carrying its
+ *  source and turn, which every client-bound projection then drops. Riding the
+ *  ordinary entry path is the point: blob-splitting bounds a 180KB handoff the
+ *  same way it bounds any other oversized entry, and the ws protocol needs no
+ *  new frame. */
+export function transcriptLineContextInjection(
+  body: string,
+  meta: { source: string; turnId?: string },
+  id?: string,
+  ts?: string
+): JsonlLine {
+  const attrs = [
+    ` source="${meta.source}"`,
+    meta.turnId ? ` turn="${meta.turnId}"` : "",
+  ].join("");
+  return transcriptLineUser(
+    `<context-injection${attrs}>${body}</context-injection>`,
+    id,
+    ts
+  );
+}
+
 export function transcriptLineAssistantText(
   text: string,
   id?: string,

@@ -2,7 +2,7 @@ import { readFileSync, statSync } from "fs";
 import { openSync, readSync, closeSync, fstatSync } from "fs";
 import { existsSync } from "fs";
 import type { TranscriptEntry } from "./types";
-import { classifyEntries } from "@tellahq/opensession-protocol/notices";
+import { classifyEntries, dropContextInjections } from "@tellahq/opensession-protocol/notices";
 import { withToolPresentations } from "@tellahq/opensession-protocol/tool-presentation";
 import { SLACK_ID_TO_NAME } from "./shared/user-mappings";
 import { stripContext } from "./prompt-context";
@@ -369,6 +369,30 @@ function harnessEntryFor(
     return body
       ? [{ id, type: "system", content: body, timestamp: ts, noticeKind: "recap" }]
       : [];
+  }
+  // A model-visible payload the harness injected into a prompt
+  // (transcriptLineContextInjection in opencode-transcript.ts, written by
+  // context-log.ts): the "model-visible means logged" record. A system entry
+  // tagged `context-injection`, which every client-bound projection drops —
+  // it exists for replay/eval/debugging, not for the conversation.
+  if (t.startsWith("<context-injection")) {
+    const open = t.match(/^<context-injection([^>]*)>/)?.[1] || "";
+    const body = t
+      .match(/<context-injection[^>]*>([\s\S]*?)<\/context-injection>/)?.[1]
+      ?.trim();
+    if (!body) return [];
+    const source = open.match(/source="([^"]*)"/)?.[1] || "unknown";
+    const turnId = open.match(/turn="([^"]*)"/)?.[1];
+    return [
+      {
+        id,
+        type: "system",
+        content: body,
+        timestamp: ts,
+        noticeKind: "context-injection",
+        contextInjection: { source, ...(turnId ? { turnId } : {}) },
+      },
+    ];
   }
   // The SDK writes this marker into the jsonl whenever a turn is interrupted
   // ("… for tool use" when the abort landed on a pending tool call).
@@ -1217,7 +1241,7 @@ export function entriesForWire(
   maxBytes: number = WIRE_CLAMP_BYTES
 ): TranscriptEntry[] {
   return clampEntriesForWire(
-    withToolPresentations(classifyEntries(entries)),
+    withToolPresentations(classifyEntries(dropContextInjections(entries))),
     maxBytes
   );
 }

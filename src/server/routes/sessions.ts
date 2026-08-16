@@ -12,7 +12,11 @@ import { archiveOlderThan, setArchived, unpinArchivedSessions } from "../archive
 import { audit } from "../audit";
 import { pendingAsks } from "../asks";
 import { transcriptMatchSnippet } from "../jsonl-parser";
-import { classifyEntries, classifyEntry } from "@tellahq/opensession-protocol/notices";
+import {
+	classifyEntries,
+	classifyEntry,
+	dropContextInjections,
+} from "@tellahq/opensession-protocol/notices";
 import {
 	inWorkspaceGroup,
 	type WorkspaceGroup,
@@ -586,7 +590,9 @@ export async function handleSessionsRoutes(
 		// like every other send site — this is what the native clients read.
 		return Response.json(
 			withToolPresentations(
-				classifyEntries(await mergedSessionTranscriptAsync(session)),
+				classifyEntries(
+					dropContextInjections(await mergedSessionTranscriptAsync(session)),
+				),
 			),
 		);
 	}
