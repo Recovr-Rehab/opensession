@@ -29,6 +29,7 @@
  * Kill switch: OPENSESSION_REPLY_SUGGESTIONS=0.
  */
 
+import { audit } from "./audit";
 import { opencodeOneShot } from "./opencode-oneshot";
 import { getRunState } from "./run-state";
 import { promptQueues } from "./queue-state";
@@ -306,6 +307,15 @@ async function generate(sessionId: string, user?: string): Promise<void> {
 			user,
 		});
 		const items = parseSuggestions(raw);
+		// Both outcomes are logged, because the interesting number is the RATIO:
+		// a row on most turns means the empty answer stopped being the common
+		// one, which is the failure mode this feature has.
+		audit({
+			msg: "reply_suggestions",
+			session_id: sessionId,
+			count: items.length,
+			...(items.length ? { labels: items.map((i) => i.label) } : {}),
+		});
 		if (!items.length) return;
 		// The viewer may have replied while we generated; chips answering a turn
 		// that has already been answered would paste a stale instruction.
