@@ -27,6 +27,7 @@ import {
   makePiBashTool,
   parsePiModel,
   piGateReason,
+  piToolNames,
   resolvePiRoutedModel,
   resolvePiDialModel,
   runPi,
@@ -132,6 +133,23 @@ describe("piGateReason", () => {
     // Request/automation data can NAME the kind, but only runPiSmokeTurn can
     // arm the module-scoped bypass — from out here it must stay refused.
     expect(piGateReason({ journal: { kind: "pi-smoke" } })).toContain('"pi-smoke"');
+  });
+});
+
+describe("piToolNames", () => {
+  test("activates only names backed by custom definitions", () => {
+    const definitions = [
+      { name: "read" },
+      { name: "mcp_search" },
+      { name: "oracle" },
+    ];
+
+    expect(piToolNames(definitions)).toEqual([
+      "read",
+      "mcp_search",
+      "oracle",
+    ]);
+    expect(piToolNames(definitions.slice(1))).not.toContain("read");
   });
 });
 

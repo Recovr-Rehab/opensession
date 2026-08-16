@@ -353,6 +353,15 @@ export function activePiRunCount(): number {
   return new Set(activeRuns.values()).size;
 }
 
+/** Activate exactly the tools backed by custom definitions. Pi falls back to
+ * its unrestricted built-ins for enabled names without a custom override, so
+ * the enabled-name list must never be maintained separately. */
+export function piToolNames(
+  customTools: readonly Pick<ToolDefinition<any, any, any>, "name">[]
+): string[] {
+  return customTools.map((tool) => tool.name);
+}
+
 export function cancelPiRun(id: string): boolean {
   const handle = activeRuns.get(id);
   if (!handle) return false;
@@ -1513,8 +1522,6 @@ export async function* runPi(
           ms: e.ms,
         }),
     });
-    const mcpToolNames = mcpBridge.discoveryTools.map((t) => t.name);
-
     // Tool policy: ask mode is read-only (no bash/edit/write — conservative
     // v0); code/scratch get the read set + edit/write + the custom bash.
     // disableLocalWorkspaceTools (engine-outside-sandbox) strips all local
@@ -1524,10 +1531,9 @@ export async function* runPi(
       : isAsk
         ? ["read", "grep", "find", "ls"]
         : ["read", "grep", "find", "ls", "edit", "write", "bash"];
-    // Every local name in `tools` is shadowed by a guarded customTools entry
-    // (same-name customs override built-ins in pi's registry), so the
-    // in-process built-ins with server-env/unconstrained-path reach are never
-    // activated. See the containment section above.
+    // Every enabled name is derived from a custom definition below. Pi falls
+    // back to its in-process built-ins for a name without an override, so a
+    // separately maintained enabled-name list would be a containment escape.
     const guardedOps = makeGuardedToolOps(cwd);
     const customTools: ToolDefinition<any, any, any>[] = [
       ...mcpBridge.discoveryTools,
@@ -1736,7 +1742,7 @@ export async function* runPi(
       modelRuntime: runtime,
       model: piModel,
       ...(thinkingLevel ? { thinkingLevel } : {}),
-      tools: [...localTools, ...mcpToolNames, ...(resolved?.dial ? ["oracle"] : [])],
+      tools: piToolNames(customTools),
       customTools,
       resourceLoader: loader,
       sessionManager,
