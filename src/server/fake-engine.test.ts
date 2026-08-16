@@ -222,7 +222,13 @@ describe("fake engine through runAgent", () => {
 		);
 		const last = events.at(-1)!;
 		expect(last.type).toBe("error");
-		expect(last.content).toContain("infrastructure problem");
+		// Match the diagnosis, not the sentence: the notice copy is rewritten
+		// from time to time (2353286f shortened this one, and this assertion
+		// went red for weeks). What has to hold is that the run stops blaming
+		// usage and names infrastructure, and still quotes the engine's error.
+		expect(last.content).toMatch(/infrastructure/i);
+		expect(last.content).toContain("fetch failed (socket hang up)");
+		expect(last.usageLimitExhausted).toBeFalsy();
 		// The walk stopped after the second transient death — no third model burned.
 		expect(fake.calls).toHaveLength(2);
 	});

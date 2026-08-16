@@ -94,17 +94,20 @@ describe("migrateSessionEngine", () => {
     expect(pi.ok).toBe(true);
     if (pi.ok) expect(pi.to).toBe("pi/anthropic/claude-opus-5");
 
-    const off = migrateSessionEngine("bks-mig-ok", "claude/anthropic/claude-opus-5");
-    expect(off.ok).toBe(false);
-    if (!off.ok) expect(off.error).toContain("engine is off");
-
+    // Both halves run against a scratch engines file. Reading the machine's own
+    // ~/.opensession-engines.json instead made the off-case assert that the
+    // person running the test had claude-direct switched off, which on a live
+    // instance is simply untrue.
+    const enginesConfig = join(scratch, "engines.json");
     const priorConfig = process.env.OPENSESSION_ENGINES_CONFIG;
-    process.env.OPENSESSION_ENGINES_CONFIG = join(scratch, "engines.json");
-    writeFileSync(
-      join(scratch, "engines.json"),
-      JSON.stringify({ claude: { enabled: true } })
-    );
+    process.env.OPENSESSION_ENGINES_CONFIG = enginesConfig;
     try {
+      writeFileSync(enginesConfig, JSON.stringify({ claude: { enabled: false } }));
+      const off = migrateSessionEngine("bks-mig-ok", "claude/anthropic/claude-opus-5");
+      expect(off.ok).toBe(false);
+      if (!off.ok) expect(off.error).toContain("engine is off");
+
+      writeFileSync(enginesConfig, JSON.stringify({ claude: { enabled: true } }));
       const on = migrateSessionEngine("bks-mig-ok", "claude/anthropic/claude-opus-5");
       expect(on.ok).toBe(true);
       if (on.ok) expect(on.to).toBe("claude/anthropic/claude-opus-5");

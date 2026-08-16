@@ -13,16 +13,24 @@ let dir = "";
 let sha = "";
 let blobSha = "";
 
+// The identity rides in the environment rather than `git config`: an agent run
+// exports GIT_AUTHOR_NAME/GIT_COMMITTER_NAME, and those outrank the repo's
+// config, so a fixture that only writes config records whoever ran the test.
+const identity = {
+	GIT_AUTHOR_NAME: "Kent de Bruin",
+	GIT_AUTHOR_EMAIL: "kent@tella.com",
+	GIT_COMMITTER_NAME: "Kent de Bruin",
+	GIT_COMMITTER_EMAIL: "kent@tella.com",
+};
+
 async function git(...args: string[]): Promise<string> {
-	return (await $`git -C ${dir} ${args}`.quiet().text()).trim();
+	return (await $`git -C ${dir} ${args}`.env({ ...process.env, ...identity }).quiet().text()).trim();
 }
 
 beforeAll(async () => {
 	root = mkdtempSync(join(tmpdir(), "opensession-commit-lookup-"));
 	dir = join(root, "repo");
 	await $`git init -b main ${dir}`.quiet();
-	await git("config", "user.email", "kent@tella.com");
-	await git("config", "user.name", "Kent de Bruin");
 	writeFileSync(join(dir, "one.txt"), "a\nb\nc\n");
 	writeFileSync(join(dir, "two.txt"), "x\n");
 	await git("add", ".");
