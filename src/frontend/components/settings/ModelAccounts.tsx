@@ -1,5 +1,5 @@
 import { BASE_PATH } from "../../lib/base";
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback, type RefObject } from "react";
 import { usePeople } from "../../lib/people";
 import { UserAvatar } from "../UserAvatar";
 import {
@@ -8,7 +8,9 @@ import {
 	type LimitWindow,
 	type UsageWindow,
 } from "../../lib/account-usage";
+import { Field, Input } from "../../ui/input";
 import { Menu } from "../../ui/menu";
+import { Modal } from "../../ui/modal";
 import { Select } from "../../ui/select";
 import { Button } from "../../ui/button";
 import { DeviceCode } from "../../ui/device-code";
@@ -20,14 +22,9 @@ import {
 	SettingRowDescription,
 	SettingRowText,
 	SettingRowTitle,
-	SettingsField,
-	SettingsForm,
-	SettingsFormActions,
-	SettingsFormTitle,
 	SettingsGroupLabel,
 	SettingsHint,
 	rowMenuTriggerClasses,
-	settingsInputClass,
 } from "../../ui/settings";
 import { cn } from "../../ui/cn";
 import { toast } from "../../ui/toast";
@@ -399,6 +396,7 @@ function ClaudeStatusPill({ a }: { a: ClaudeAccountInfo }) {
 export function ClaudeAccountsSection() {
 	const [accounts, setAccounts] = useState<ClaudeAccountInfo[] | null>(null);
 	const [showAdd, setShowAdd] = useState(false);
+	const addNameRef = useRef<HTMLInputElement>(null);
 	const [signIn, setSignIn] = useState<ClaudeAccountInfo | null>(null);
 	const [refreshing, setRefreshing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -501,15 +499,20 @@ export function ClaudeAccountsSection() {
 				</InlineAlert>
 			)}
 
-			{showAdd && (
-				<AddClaudeAccountForm
-					onClose={() => setShowAdd(false)}
-					onAdded={() => {
-						setShowAdd(false);
-						load();
-					}}
-				/>
-			)}
+			<Modal.Root open={showAdd} onOpenChange={setShowAdd}>
+				{/* The form is a child so the portal remounts it on every open,
+				    which clears the pasted token rather than leaving it in state
+				    after a dismissal. */}
+				<Modal.Content initialFocus={addNameRef}>
+					<AddClaudeAccountForm
+						nameRef={addNameRef}
+						onAdded={() => {
+							setShowAdd(false);
+							load();
+						}}
+					/>
+				</Modal.Content>
+			</Modal.Root>
 
 			<SettingCard>
 				{!accounts ? (
@@ -704,6 +707,7 @@ function CodexUsageMeters({ account }: { account: CodexAccountInfo }) {
 export function CodexAccountsSection() {
 	const [accounts, setAccounts] = useState<CodexAccountInfo[] | null>(null);
 	const [showAdd, setShowAdd] = useState(false);
+	const addNameRef = useRef<HTMLInputElement>(null);
 	const [refreshing, setRefreshing] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
@@ -782,15 +786,20 @@ export function CodexAccountsSection() {
 				</InlineAlert>
 			)}
 
-			{showAdd && (
-				<AddCodexAccountForm
-					onClose={() => setShowAdd(false)}
-					onAdded={() => {
-						setShowAdd(false);
-						load();
-					}}
-				/>
-			)}
+			<Modal.Root open={showAdd} onOpenChange={setShowAdd}>
+				{/* Same remount contract as the Claude dialog. It also drives the
+				    cleanup of a half-finished sign-in, which now hangs off the
+				    form's unmount so Escape and the backdrop release it too. */}
+				<Modal.Content initialFocus={addNameRef}>
+					<AddCodexAccountForm
+						nameRef={addNameRef}
+						onAdded={() => {
+							setShowAdd(false);
+							load();
+						}}
+					/>
+				</Modal.Content>
+			</Modal.Root>
 
 			<SettingCard>
 				{!accounts ? (
@@ -867,13 +876,20 @@ export function CodexAccountsSection() {
 
 // ── Add forms ──────────────────────────────────────────────────────────────
 
-function AddClaudeAccountForm({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
+function AddClaudeAccountForm({
+	nameRef,
+	onAdded,
+}: {
+	nameRef: RefObject<HTMLInputElement | null>;
+	onAdded: () => void;
+}) {
 	const [name, setName] = useState("");
 	const [token, setToken] = useState("");
 	const [owner, setOwner] = useState("");
 	const [credentialsPath, setCredentialsPath] = useState("");
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const ready = Boolean(name.trim() && token.trim());
 
 	async function handleAdd() {
 		setSaving(true);
@@ -900,60 +916,58 @@ function AddClaudeAccountForm({ onClose, onAdded }: { onClose: () => void; onAdd
 	}
 
 	return (
-		<SettingsForm className="mb-3 flex flex-col gap-3.5">
-			<SettingsFormTitle className="mb-0">Add Claude account</SettingsFormTitle>
-			<SettingRowDescription className="-mt-2">
-				On any machine, log into the Max account with <code>claude</code>, run{" "}
-				<code>claude setup-token</code>, and paste the one-year token here. It's stored on the
-				VPS (0600) and only ever shown masked. To show usage afterwards, use “Sign in with
-				Claude” from the account's menu.
-			</SettingRowDescription>
+		<>
+			<Modal.Header
+				title="Add Claude account"
+				description={
+					<>
+						On any machine, log into the Max account with <code>claude</code>, run{" "}
+						<code>claude setup-token</code>, and paste the one-year token. It is stored on
+						this server (0600) and only ever shown masked.
+					</>
+				}
+			/>
+			{/* Two zones: the credential itself, then the optional routing and
+			    usage wiring. These were four fields on one horizontal row, which
+			    left a path like ~/.claude/accounts/team/credentials.json in a
+			    quarter-width box. */}
+			<form
+				className="flex flex-col gap-5"
+				onSubmit={(event) => {
+					event.preventDefault();
+					if (ready && !saving) void handleAdd();
+				}}
+			>
+				<div className="flex flex-col gap-3">
+					<Field label="Name">
+						<Input ref={nameRef} value={name} onChange={(e) => setName(e.target.value)} placeholder="team" autoCapitalize="none" spellCheck={false} />
+					</Field>
+					<Field label="Token">
+						<Input type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} placeholder="sk-ant-oat01-…" />
+					</Field>
+				</div>
+				<div className="flex flex-col gap-3">
+					<Field label="Owner" title="Personal sub: this person's runs use the account first, with the shared pool as backup. Shared pool: used by everyone and by automations.">
+						<OwnerSelect value={owner} onChange={setOwner} label="Owner" />
+					</Field>
+					<Field label="Usage credentials path">
+						<Input value={credentialsPath} onChange={(e) => setCredentialsPath(e.target.value)} placeholder="Usage not tracked" autoCapitalize="none" spellCheck={false} />
+					</Field>
+					<p className="m-0 text-meta leading-relaxed text-faint">
+						To show usage afterwards, use “Sign in with Claude” from the account's menu.
+					</p>
+				</div>
 
-			<div className="flex gap-3.5 max-[700px]:flex-col">
-				<SettingsField className="mb-0 flex-1">
-					Name
-					<input className={settingsInputClass} value={name} onChange={(e) => setName(e.target.value)} placeholder="team" />
-				</SettingsField>
-				<SettingsField className="mb-0 flex-1">
-					Token
-					<input
-						className={settingsInputClass}
-						type="password"
-						value={token}
-						onChange={(e) => setToken(e.target.value)}
-						placeholder="sk-ant-oat01-…"
-					/>
-				</SettingsField>
-				<SettingsField className="mb-0 flex-1" title="Personal sub: this person's runs use the account first, with the shared pool as backup. Shared pool: used by everyone and by automations.">
-					Owner
-					<OwnerSelect value={owner} onChange={setOwner} label="Owner" />
-				</SettingsField>
-				<SettingsField className="mb-0 flex-1">
-					Usage credentials path
-					<input
-						className={settingsInputClass}
-						value={credentialsPath}
-						onChange={(e) => setCredentialsPath(e.target.value)}
-						placeholder="~/.claude/accounts/team/credentials.json"
-					/>
-				</SettingsField>
-			</div>
+				{error && <InlineAlert>{error}</InlineAlert>}
 
-			{error && <InlineAlert>{error}</InlineAlert>}
-
-			<SettingsFormActions className="mt-0 gap-2.5">
-				<Button variant="soft" onClick={onClose} disabled={saving}>
-					Cancel
-				</Button>
-				<Button
-					variant="primary"
-					onClick={handleAdd}
-					disabled={saving || !name.trim() || !token.trim()}
-				>
-					{saving ? "Validating…" : "Add account"}
-				</Button>
-			</SettingsFormActions>
-		</SettingsForm>
+				<Modal.Footer>
+					<Modal.Close render={<Button variant="ghost" disabled={saving}>Cancel</Button>} />
+					<Button variant="primary" type="submit" disabled={saving || !ready}>
+						{saving ? "Validating…" : "Add account"}
+					</Button>
+				</Modal.Footer>
+			</form>
+		</>
 	);
 }
 
@@ -1044,21 +1058,19 @@ function ClaudeSignInForm({
 			</SettingRowDescription>
 
 			{login ? (
-				<div className="flex gap-3.5 max-[700px]:flex-col">
-					<SettingsField className="mb-0 shrink-0 self-end">
-						<a href={login.url} target="_blank" rel="noreferrer">
-							<Button icon={<IconPlug size={16} />}>Open Claude sign-in</Button>
-						</a>
-					</SettingsField>
-					<SettingsField className="mb-0 flex-1">
-						Code
-						<input
-							className={settingsInputClass}
+				<div className="flex items-end gap-3.5 phone:flex-col phone:items-stretch">
+					<a className="shrink-0" href={login.url} target="_blank" rel="noreferrer">
+						<Button icon={<IconPlug size={16} />}>Open Claude sign-in</Button>
+					</a>
+					<Field className="flex-1" label="Code">
+						<Input
 							value={code}
 							onChange={(e) => setCode(e.target.value)}
 							placeholder="Paste the code from the sign-in page (…#…)"
+							autoCapitalize="none"
+							spellCheck={false}
 						/>
-					</SettingsField>
+					</Field>
 				</div>
 			) : !error ? (
 				<LoadingState placement="row">Preparing sign-in…</LoadingState>
@@ -1100,7 +1112,13 @@ const KIND_ITEMS = [
 	{ value: "api_key", label: "OpenAI API key" },
 ];
 
-function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
+function AddCodexAccountForm({
+	nameRef,
+	onAdded,
+}: {
+	nameRef: RefObject<HTMLInputElement | null>;
+	onAdded: () => void;
+}) {
 	const [name, setName] = useState("");
 	const [kind, setKind] = useState<"device" | "oauth" | "api_key" | "home">("device");
 	const [value, setValue] = useState("");
@@ -1124,7 +1142,10 @@ function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdde
 				if (!res.ok) return;
 				const next: CodexDeviceLogin = await res.json();
 				setLogin(next);
-				if (next.state === "done") onAdded();
+				if (next.state === "done") {
+					pending.current.done = true;
+					onAdded();
+				}
 			} catch {}
 		}, 2000);
 		return () => clearInterval(t);
@@ -1151,19 +1172,30 @@ function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdde
 		setSaving(false);
 	}
 
-	function handleCancel() {
-		if (login && (login.state === "starting" || login.state === "awaiting_code")) {
-			fetch(`${BASE_PATH}/api/codex-accounts/device-login/${encodeURIComponent(login.id)}`, {
-				method: "DELETE",
-			}).catch(() => {});
-		}
-		if (oauth) {
-			fetch(`${BASE_PATH}/api/codex-accounts/oauth-login/${encodeURIComponent(oauth.id)}`, {
-				method: "DELETE",
-			}).catch(() => {});
-		}
-		onClose();
-	}
+	// Abandoning a half-finished sign-in has to release it server-side, and the
+	// dialog can now be dismissed by Escape or the backdrop as well as by
+	// Cancel. So the cleanup hangs off unmount, which every one of those paths
+	// goes through, rather than off the Cancel handler alone the way it used to
+	// (dismissing any other way leaked the pending login).
+	const pending = useRef<{ login?: string; oauth?: string; done: boolean }>({ done: false });
+	pending.current.login =
+		login && (login.state === "starting" || login.state === "awaiting_code") ? login.id : undefined;
+	pending.current.oauth = oauth?.id;
+	useEffect(
+		() => () => {
+			const { login: loginId, oauth: oauthId, done } = pending.current;
+			if (done) return;
+			if (loginId)
+				fetch(`${BASE_PATH}/api/codex-accounts/device-login/${encodeURIComponent(loginId)}`, {
+					method: "DELETE",
+				}).catch(() => {});
+			if (oauthId)
+				fetch(`${BASE_PATH}/api/codex-accounts/oauth-login/${encodeURIComponent(oauthId)}`, {
+					method: "DELETE",
+				}).catch(() => {});
+		},
+		[],
+	);
 
 	async function handleStartOauth() {
 		setSaving(true);
@@ -1202,6 +1234,7 @@ function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdde
 			const body = await res.json();
 			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
 			toast(`Codex account "${name.trim()}" added to the pool`);
+			pending.current.done = true;
 			onAdded();
 			return;
 		} catch (e: any) {
@@ -1226,6 +1259,7 @@ function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdde
 			});
 			const body = await res.json();
 			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
+			pending.current.done = true;
 			onAdded();
 		} catch (e: any) {
 			setError(e.message);
@@ -1236,10 +1270,10 @@ function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdde
 	const loginPending = login && (login.state === "starting" || login.state === "awaiting_code");
 
 	return (
-		<SettingsForm className="mb-3 flex flex-col gap-3.5">
-			<SettingsFormTitle className="mb-0">Add Codex account</SettingsFormTitle>
-			<SettingRowDescription className="-mt-2">
-				{kind === "device" ? (
+		<>
+			<Modal.Header
+				title="Add Codex account"
+				description={kind === "device" ? (
 					<>
 						Sign in with ChatGPT from here, with no VPS access needed. You'll get a link and a
 						one-time code to enter on any device. (Device-code login must be enabled in the
@@ -1260,21 +1294,35 @@ function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdde
 				) : (
 					<>For platform billing, paste an OpenAI API key.</>
 				)}
-			</SettingRowDescription>
+			/>
 
-			<div className="flex gap-3.5 max-[700px]:flex-col">
-				<SettingsField className="mb-0 flex-1">
-					Name
-					<input
-						className={settingsInputClass}
+			<form
+				className="flex flex-col gap-5"
+				onSubmit={(event) => {
+					event.preventDefault();
+					if (saving) return;
+					if (kind === "device") {
+						if (name.trim() && !loginPending && login?.state !== "done") void handleStartDeviceLogin();
+					} else if (kind === "oauth") {
+						if (oauth) {
+							if (oauthCode.trim()) void handleCompleteOauth();
+						} else if (name.trim()) void handleStartOauth();
+					} else if (name.trim() && value.trim()) void handleAdd();
+				}}
+			>
+			<div className="flex flex-col gap-3">
+				<Field label="Name">
+					<Input
+						ref={nameRef}
 						value={name}
 						onChange={(e) => setName(e.target.value)}
 						placeholder="team"
 						disabled={!!login || !!oauth}
+						autoCapitalize="none"
+						spellCheck={false}
 					/>
-				</SettingsField>
-				<SettingsField className="mb-0 flex-1">
-					Kind
+				</Field>
+				<Field label="Kind">
 					<Select.Root
 						items={KIND_ITEMS}
 						value={kind}
@@ -1290,34 +1338,34 @@ function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdde
 							))}
 						</Select.Popup>
 					</Select.Root>
-				</SettingsField>
+				</Field>
 				{kind !== "device" && kind !== "oauth" && (
-					<SettingsField className="mb-0 flex-1">
-						{kind === "api_key" ? "API key" : "CODEX_HOME path"}
-						<input
-							className={settingsInputClass}
+					<Field label={kind === "api_key" ? "API key" : "CODEX_HOME path"}>
+						<Input
 							type={kind === "api_key" ? "password" : "text"}
+							autoComplete={kind === "api_key" ? "off" : undefined}
 							value={value}
 							onChange={(e) => setValue(e.target.value)}
 							placeholder={kind === "api_key" ? "sk-…" : "~/.codex-accounts/team"}
+							autoCapitalize="none"
+							spellCheck={false}
 						/>
-					</SettingsField>
+					</Field>
 				)}
-				<SettingsField className="mb-0 flex-1" title="Personal sub: this person's runs use the account first, with the shared pool as backup. Shared pool: used by everyone and by automations.">
-					Owner
+				<Field label="Owner" title="Personal sub: this person's runs use the account first, with the shared pool as backup. Shared pool: used by everyone and by automations.">
 					<OwnerSelect
 						value={owner}
 						onChange={setOwner}
 						label="Owner"
 						disabled={!!login || !!oauth}
 					/>
-				</SettingsField>
+				</Field>
 			</div>
 
 			{login && (
-				// A well inside the form (which is itself raised), so the live
-				// sign-in stands apart from the fields without another border.
-				<div className="mt-2 rounded-md bg-surface px-4 py-3 text-supporting">
+				// A well inside the dialog, so the live sign-in stands apart
+				// from the fields without another border.
+				<div className="rounded-md bg-surface px-4 py-3 text-supporting">
 					{login.state === "starting" && <div className="text-dim">Starting sign-in…</div>}
 					{login.state === "awaiting_code" && (
 						<>
@@ -1360,7 +1408,7 @@ function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdde
 			)}
 
 			{oauth && (
-				<div className="mt-2 rounded-md bg-surface px-4 py-3 text-supporting">
+				<div className="rounded-md bg-surface px-4 py-3 text-supporting">
 					<div>
 						1. Open{" "}
 						<a
@@ -1377,58 +1425,57 @@ function AddCodexAccountForm({ onClose, onAdded }: { onClose: () => void; onAdde
 						2. The browser lands on a <code>localhost</code> page that can't load. Copy its
 						full address (starts with <code>http://localhost:1455/…</code>) and paste it:
 					</div>
-					<input
-						className={cn(settingsInputClass, "mt-2 w-full")}
+					<Input
+						className="mt-2"
 						value={oauthCode}
 						onChange={(e) => setOauthCode(e.target.value)}
 						placeholder="http://localhost:1455/auth/callback?code=…"
 						aria-label="Pasted sign-in redirect URL"
+						autoCapitalize="none"
+						spellCheck={false}
 					/>
 				</div>
 			)}
 
 			{error && <InlineAlert>{error}</InlineAlert>}
 
-			<SettingsFormActions className="mt-0 gap-2.5">
-				<Button variant="soft" onClick={handleCancel} disabled={saving}>
-					{loginPending || oauth ? "Cancel sign-in" : "Cancel"}
-				</Button>
+			<Modal.Footer>
+				<Modal.Close
+					render={
+						<Button variant="ghost" disabled={saving}>
+							{loginPending || oauth ? "Cancel sign-in" : "Cancel"}
+						</Button>
+					}
+				/>
 				{kind === "device" ? (
 					<Button
 						variant="primary"
-						onClick={handleStartDeviceLogin}
+						type="submit"
 						disabled={saving || !name.trim() || !!loginPending || login?.state === "done"}
 					>
 						{saving ? "Starting…" : loginPending ? "Waiting for sign-in…" : "Start sign-in"}
 					</Button>
 				) : kind === "oauth" ? (
 					oauth ? (
-						<Button
-							variant="primary"
-							onClick={handleCompleteOauth}
-							disabled={saving || !oauthCode.trim()}
-						>
+						<Button variant="primary" type="submit" disabled={saving || !oauthCode.trim()}>
 							{saving ? "Connecting…" : "Connect"}
 						</Button>
 					) : (
-						<Button
-							variant="primary"
-							onClick={handleStartOauth}
-							disabled={saving || !name.trim()}
-						>
+						<Button variant="primary" type="submit" disabled={saving || !name.trim()}>
 							{saving ? "Starting…" : "Start sign-in"}
 						</Button>
 					)
 				) : (
 					<Button
 						variant="primary"
-						onClick={handleAdd}
+						type="submit"
 						disabled={saving || !name.trim() || !value.trim()}
 					>
 						{saving ? "Adding…" : "Add account"}
 					</Button>
 				)}
-			</SettingsFormActions>
-		</SettingsForm>
+			</Modal.Footer>
+			</form>
+		</>
 	);
 }
