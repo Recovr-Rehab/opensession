@@ -7,9 +7,7 @@ import { stateDir, statePath } from "./paths";
 
 const SAVED_KEYS = [
 	"OPENSESSION_DEV",
-	"OPENSESSION_DEV",
 	"OPENSESSION_STATE_DIR",
-	"OPENSESSION_SESSIONS_DIR",
 	"OPENSESSION_SESSIONS_DIR",
 	"HOME",
 ] as const;
@@ -49,9 +47,13 @@ describe("isDevInstance", () => {
 		}
 	});
 
-	test("legacy OPENSESSION_DEV alias still works", () => {
-		process.env.OPENSESSION_DEV = "1";
-		expect(isDevInstance()).toBe(true);
+	test("no legacy alias — BACKSTAGE_DEV is not read", () => {
+		process.env.BACKSTAGE_DEV = "1";
+		try {
+			expect(isDevInstance()).toBe(false);
+		} finally {
+			delete process.env.BACKSTAGE_DEV;
+		}
 	});
 });
 
@@ -75,9 +77,6 @@ describe("devInstanceBootError", () => {
 	test("accepts OPENSESSION_STATE_DIR or a sessions-dir override", () => {
 		expect(
 			devInstanceBootError({ OPENSESSION_DEV: "1", OPENSESSION_STATE_DIR: "/x" }),
-		).toBeNull();
-		expect(
-			devInstanceBootError({ OPENSESSION_DEV: "1", OPENSESSION_SESSIONS_DIR: "/x" }),
 		).toBeNull();
 		expect(
 			devInstanceBootError({ OPENSESSION_DEV: "1", OPENSESSION_SESSIONS_DIR: "/x" }),
