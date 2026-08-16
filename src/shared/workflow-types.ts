@@ -100,7 +100,7 @@ export interface WorkflowAgentOpts {
 export interface WorkflowAgentRequest {
 	prompt: string;
 	opts: WorkflowAgentOpts;
-	/** Sequential call index within the run (journal key half). */
+	/** Invocation ordinal within the run. Orders equal-hash replay records. */
 	seq: number;
 }
 
@@ -322,7 +322,7 @@ export interface WorkflowRunSnapshot {
  *  the UI's drill-in detail (full prompt/result, not previews). */
 export interface WorkflowJournalEntry {
 	seq: number;
-	/** Hash of (prompt + canonicalized opts); replay requires seq+hash match. */
+	/** Hash of (prompt + canonicalized opts); replay matches by hash, then seq order. */
 	hash: string;
 	/** Absent on entries written before mcp.* existed — those are all agents. */
 	kind?: "agent";
