@@ -104,9 +104,15 @@ function niceTicks(max: number, count = 3): number[] {
 	return ticks;
 }
 
-function roundedTopRect(x: number, y: number, w: number, h: number, r: number): string {
-	const rr = Math.min(r, h / 2, w / 2);
-	return `M${x},${y + h} L${x},${y + rr} Q${x},${y} ${x + rr},${y} L${x + w - rr},${y} Q${x + w},${y} ${x + w},${y + rr} L${x + w},${y + h} Z`;
+/** A bar with independently rounded ends. In a stack the top segment carries
+ *  the cap, the bottom one the foot, and a lone segment carries both, so the
+ *  silhouette is round at each end however many colors it is made of. Radii
+ *  clamp to the bar's own half-width and half-height, so a narrow bar or a
+ *  nearly-empty day goes fully domed rather than notched. */
+function roundedBar(x: number, y: number, w: number, h: number, rTop: number, rBottom: number): string {
+	const t = Math.min(rTop, w / 2, h / 2);
+	const b = Math.min(rBottom, w / 2, h / 2);
+	return `M${x},${y + h - b} L${x},${y + t} Q${x},${y} ${x + t},${y} L${x + w - t},${y} Q${x + w},${y} ${x + w},${y + t} L${x + w},${y + h - b} Q${x + w},${y + h} ${x + w - b},${y + h} L${x + b},${y + h} Q${x},${y + h} ${x},${y + h - b} Z`;
 }
 
 interface Series {
@@ -193,9 +199,14 @@ function BarChart({ labels, series, values, mode, height = 190, formatValue = fm
 					if (mode === "stacked") {
 						const barW = Math.max(2, Math.min(24, band * 0.72));
 						const x = x0 + (band - barW) / 2;
+						// Round both ends of the stack, not just its cap: a bar standing
+						// on square feet reads as a rectangle whatever its top does.
+						const r = Math.min(barW / 2, 8);
 						let yCursor = yOf(0);
 						let topIdx = -1;
+						let botIdx = -1;
 						for (let j = values[i].length - 1; j >= 0; j--) if (values[i][j] > 0) { topIdx = j; break; }
+						for (let j = 0; j < values[i].length; j++) if (values[i][j] > 0) { botIdx = j; break; }
 						values[i].forEach((v, j) => {
 							if (v <= 0) return;
 							const h = hOf(v);
@@ -203,11 +214,20 @@ function BarChart({ labels, series, values, mode, height = 190, formatValue = fm
 							// 2px surface gap between touching segments (shaved off
 							// every segment that has another stacked above it).
 							const gap = j === topIdx ? 0 : Math.min(2, h);
-							if (j === topIdx) {
-								marks.push(<path key={j} d={roundedTopRect(x, y, barW, h, 6)} fill={series[j].color} />);
-							} else {
-								marks.push(<rect key={j} x={x} y={y + gap} width={barW} height={Math.max(0, h - gap)} fill={series[j].color} />);
-							}
+							marks.push(
+								<path
+									key={j}
+									d={roundedBar(
+										x,
+										y + gap,
+										barW,
+										Math.max(0, h - gap),
+										j === topIdx ? r : 0,
+										j === botIdx ? r : 0,
+									)}
+									fill={series[j].color}
+								/>,
+							);
 							yCursor = y;
 						});
 					} else {
@@ -217,13 +237,12 @@ function BarChart({ labels, series, values, mode, height = 190, formatValue = fm
 						values[i].forEach((v, j) => {
 							if (v <= 0) return;
 							const h = hOf(v);
-							// A thin bar gets a fully capsuled cap. At 10px wide, a
-							// square-ish corner is the only thing left in the chart that
-							// still reads as a rectangle.
+							// These are never wider than 10px, so both ends go fully
+							// capsuled: at this width anything less reads as a rectangle.
 							marks.push(
 								<path
 									key={j}
-									d={roundedTopRect(x + j * (barW + 2), yOf(0) - h, barW, h, barW / 2)}
+									d={roundedBar(x + j * (barW + 2), yOf(0) - h, barW, h, barW / 2, barW / 2)}
 									fill={series[j].color}
 								/>,
 							);
