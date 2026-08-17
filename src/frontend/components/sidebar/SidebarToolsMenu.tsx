@@ -115,7 +115,11 @@ export function SidebarToolRows({
 								<Menu.Trigger
 									// A control on a row, not a row. It sits in the gap the
 									// row's `pr-16` keeps clear, just inside the tick.
-									className="absolute top-1/2 right-9 -translate-y-1/2 rounded-sm p-1 text-faint hover:bg-hover data-[popup-open]:bg-hover"
+									// Square, with the glyph centred in it: a block button around
+									// an inline SVG is 4px taller than it is wide, because the
+									// line box keeps room under the glyph for a descender, and
+									// the dots then sit 2px high of the box they light up.
+									className="absolute top-1/2 right-9 flex size-7 -translate-y-1/2 items-center justify-center rounded-sm p-0 text-faint hover:bg-hover data-[popup-open]:bg-hover"
 									aria-label="Where support tickets live"
 								>
 									<IconDotsHorizontal size={20} />
