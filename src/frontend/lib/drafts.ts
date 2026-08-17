@@ -24,14 +24,16 @@ import { fetchDrafts, saveDraftApi } from "./api";
 import { reconcileDrafts } from "./drafts-sync";
 import { getCurrentUser } from "../components/UserPicker";
 import type { FileAttachment } from "./images";
+import type { PastedTextAttachment } from "./pasted-text";
 
 export interface ComposerDraft {
   text: string;
   images: string[];
   files: FileAttachment[];
+  pastedTexts: PastedTextAttachment[];
 }
 
-const EMPTY: ComposerDraft = { text: "", images: [], files: [] };
+const EMPTY: ComposerDraft = { text: "", images: [], files: [], pastedTexts: [] };
 const drafts = new Map<string, ComposerDraft>();
 /** Text last confirmed by the server. Persisted beside each local draft so a
  * reload can distinguish offline typing from text already sent elsewhere. */
@@ -65,7 +67,12 @@ const PERSIST_DEBOUNCE_MS = 400;
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
 
 function isEmpty(d: ComposerDraft): boolean {
-  return !d.text.trim() && d.images.length === 0 && d.files.length === 0;
+  return (
+    !d.text.trim() &&
+    d.images.length === 0 &&
+    d.files.length === 0 &&
+    d.pastedTexts.length === 0
+  );
 }
 
 function persistNow(key: string) {
@@ -120,6 +127,15 @@ export function loadDraft(key: string): ComposerDraft {
         text: typeof parsed?.text === "string" ? parsed.text : "",
         images: Array.isArray(parsed?.images) ? parsed.images : [],
         files: Array.isArray(parsed?.files) ? parsed.files : [],
+        pastedTexts: Array.isArray(parsed?.pastedTexts)
+          ? parsed.pastedTexts.filter(
+              (item: unknown): item is PastedTextAttachment =>
+                !!item &&
+                typeof item === "object" &&
+                typeof (item as PastedTextAttachment).id === "string" &&
+                typeof (item as PastedTextAttachment).text === "string",
+            )
+          : [],
       };
       drafts.set(key, d);
       if (typeof parsed?.syncedText === "string") {

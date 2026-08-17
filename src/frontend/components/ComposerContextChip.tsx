@@ -18,6 +18,7 @@ import { IconX } from "./icons";
 export function ComposerContextChip({
 	icon,
 	label,
+	meta,
 	title,
 	tone = "neutral",
 	onRemove,
@@ -27,6 +28,8 @@ export function ComposerContextChip({
 	/** Leading glyph, sized by the caller (15px is the house size here). */
 	icon: React.ReactNode;
 	label: string;
+	/** Optional compact detail shown after the label, e.g. "+20 lines". */
+	meta?: string;
 	/** Hover text — the long version of whatever `label` compresses. */
 	title?: string;
 	/** `note` tints the pill, because it sits on a surface that is already
@@ -77,6 +80,9 @@ export function ComposerContextChip({
 						{icon}
 					</span>
 					<span className="truncate">{label}</span>
+					{meta && (
+						<span className="shrink-0 font-normal text-faint">{meta}</span>
+					)}
 					<button
 						type="button"
 						onClick={onRemove}

@@ -421,6 +421,22 @@ export function IconFile(p: IconProps) {
   );
 }
 
+/** File Text 2 — a folded page with readable text lines. */
+export function IconFileText2(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path
+        {...stroke}
+        d="M7.75 19.25H16.25C17.3546 19.25 18.25 18.3546 18.25 17.25V9L14 4.75H7.75C6.64543 4.75 5.75 5.64543 5.75 6.75V17.25C5.75 18.3546 6.64543 19.25 7.75 19.25Z"
+      />
+      <path {...stroke} d="M18 9.25H13.75V5" />
+      <path {...stroke} d="M8.25 12H15.75" />
+      <path {...stroke} d="M8.25 15.25H15.75" />
+      <path {...stroke} d="M8.25 8.75H10.25" />
+    </Svg>
+  );
+}
+
 /** A page with a folded corner — the composer's team-note mode. */
 export function IconNote(p: IconProps) {
   return (

@@ -22,8 +22,14 @@ import { usePeople } from "../lib/people";
 import { ImageThumbs } from "./ImageThumbs";
 import { FileChips } from "./FileChips";
 import { QuoteContext } from "./QuoteContext";
+import { PastedTextContext } from "./PastedTextContext";
 import { ComposerContextChip } from "./ComposerContextChip";
 import type { Quote } from "../lib/quotes";
+import {
+  composePastedText,
+  createPastedTextAttachment,
+  shouldCollapsePastedText,
+} from "../lib/pasted-text";
 import { useFileMentions } from "./useFileMentions";
 import {
   IconArrowUp,
@@ -441,6 +447,9 @@ export function Composer({
   const [innerValue, setInnerValue] = useState(() =>
     draftKey ? loadDraft(draftKey).text : "",
   );
+  const [pastedTexts, setPastedTexts] = useState(() =>
+    draftKey ? loadDraft(draftKey).pastedTexts : [],
+  );
   const isPhone = useIsPhone();
   const noteChord = useShortcutLabel("composer-note");
   const stopKeys = useShortcutKeys("run-stop");
@@ -484,8 +493,10 @@ export function Composer({
   const displayText = sessionNames.displayText;
   const setDisplayText = sessionNames.setDisplayText;
   useEffect(() => {
-    if (!isControlled && draftKey) saveDraft(draftKey, { text: innerValue });
-  }, [isControlled, draftKey, innerValue]);
+    if (!isControlled && draftKey) {
+      saveDraft(draftKey, { text: innerValue, pastedTexts });
+    }
+  }, [isControlled, draftKey, innerValue, pastedTexts]);
   // A draft can also arrive from elsewhere: typed on the phone, or sent there
   // and cleared. Take it while the field is unfocused, so text can appear (or
   // go) under someone who is not looking, but never under their cursor.
@@ -530,17 +541,25 @@ export function Composer({
     ) => boolean | void | Promise<boolean | void>,
     opts?: { steer?: boolean },
   ) {
-    const consumed = handler(text, opts);
+    const sentPastedIds = new Set(pastedTexts.map((attachment) => attachment.id));
+    const consume = () => {
+      if (!isControlled) setInnerValue("");
+      setPastedTexts((current) =>
+        current.filter((attachment) => !sentPastedIds.has(attachment.id)),
+      );
+    };
+    const consumed = handler(composePastedText(text, pastedTexts), opts);
     if (consumed instanceof Promise) {
       void consumed.then((result) => {
-        if (!isControlled && result === true) setInnerValue("");
+        if (result === true) consume();
       });
-    } else if (!isControlled && consumed === true) {
-      setInnerValue("");
+    } else if (consumed === true) {
+      consume();
     }
   }
+  const outgoingText = composePastedText(text, pastedTexts);
   const isSendDisabled =
-    typeof sendDisabled === "function" ? sendDisabled(text) : sendDisabled;
+    typeof sendDisabled === "function" ? sendDisabled(outgoingText) : sendDisabled;
   const imgs = images || [];
   const fls = files || [];
   // Notes accept images but not arbitrary files: images remain team-visible,
@@ -567,6 +586,7 @@ export function Composer({
     !!text.trim() ||
     imgs.length > 0 ||
     fls.length > 0 ||
+    pastedTexts.length > 0 ||
     !!quote ||
     hasAttached;
   const minimized = isPhone && !focused && !hasContent && !modelMenuOpen;
@@ -734,6 +754,15 @@ export function Composer({
     // A session link goes in as the id it carries, which is the same reference
     // in a third of the room and chips the same way (lib/session-url.ts).
     if (insertPastedSessionId(e)) return;
+    const pastedText = e.clipboardData?.getData("text/plain") ?? "";
+    if (shouldCollapsePastedText(pastedText)) {
+      e.preventDefault();
+      setPastedTexts((current) => [
+        ...current,
+        createPastedTextAttachment(pastedText),
+      ]);
+      return;
+    }
     if (!canAttach) return;
     const pasted = imageFilesFromPaste(e);
     if (pasted.length) {
@@ -1185,6 +1214,19 @@ export function Composer({
               disabled={disabled}
             />
           )}
+          {pastedTexts.map((attachment) => (
+            <PastedTextContext
+              key={attachment.id}
+              attachment={attachment}
+              onRemove={() => {
+                setPastedTexts((current) =>
+                  current.filter((item) => item.id !== attachment.id),
+                );
+                textareaRef.current?.focus({ preventScroll: true });
+              }}
+              disabled={disabled}
+            />
+          ))}
         </AnimatePresence>
         <ImageThumbs images={imgs} onRemove={removeImage} disabled={disabled} />
         <FileChips files={fls} onRemove={removeFile} disabled={disabled} />
@@ -1476,10 +1518,11 @@ export function Composer({
                   )}
                   {menuExtra?.({ close: () => setMenu(null) })}
                   {sendMenu?.({
-                    text,
+                    text: outgoingText,
                     disabled: !!(disabled || isSendDisabled),
                     onScheduled: () => {
                       if (!isControlled) setInnerValue("");
+                      setPastedTexts([]);
                       setMenu(null);
                     },
                   })}

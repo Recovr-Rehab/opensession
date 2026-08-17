@@ -3313,8 +3313,10 @@ export function SessionViewer({
 	};
 	const composerHasDraft = useCallback(() => {
 		const current = composerDraftRef.current;
+		const stored = loadDraft(current.draftKey);
 		return Boolean(
-			loadDraft(current.draftKey).text.trim() ||
+			stored.text.trim() ||
+				stored.pastedTexts.length ||
 				current.images.length ||
 				current.files.length ||
 				current.quote ||
