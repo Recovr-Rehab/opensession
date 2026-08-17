@@ -1506,6 +1506,9 @@ final class SessionViewModel {
     /// scroll pin follows its count — grouping alone would hold that count
     /// steady while a live turn grows, and new output would stop following.
     private(set) var displayBlocks: [TranscriptBlock] = []
+    /// The current person's visible prompts, prepared beside the transcript
+    /// blocks so a pointer moving over the rail never scans the conversation.
+    private(set) var sentMessageAnchors: [SentMessageAnchor] = []
     /// Hide entries at or before this instant from the transcript (the Desk's
     /// stale-conversation cutoff). Setting it re-groups immediately.
     var hideBefore: Date? {
@@ -1556,6 +1559,13 @@ final class SessionViewModel {
         var all = entries
         let knownIds = Set(entries.map(\.id))
         all.append(contentsOf: liveEntries.filter { !knownIds.contains($0.id) })
+
+        sentMessageAnchors = SentMessageIndex.collect(
+            from: all,
+            owner: session.transcriptOwner,
+            viewerName: ServerConfig.shared.userName,
+            viewerLogin: ServerConfig.shared.githubLogin
+        )
 
         let items = TranscriptGrouping.displayItems(
             from: all,

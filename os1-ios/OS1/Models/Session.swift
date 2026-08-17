@@ -110,6 +110,15 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
         automation?.isAutomation ?? (startedBy?.hasSuffix("(automation)") ?? false)
     }
 
+    /// The ordinary user entries belong to this person when they carry no
+    /// explicit sender. Stored sessions may have only the newer `createdBy`.
+    var transcriptOwner: String? {
+        guard !isAutomation else { return nil }
+        return [startedBy, createdBy]
+            .compactMap { $0?.isEmpty == false ? $0 : nil }
+            .first
+    }
+
     /// Whether this session earns a row of its own in the list.
     ///
     /// A session an agent started for its own purposes — a throwaway fixture,

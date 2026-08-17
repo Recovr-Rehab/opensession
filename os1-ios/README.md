@@ -91,7 +91,10 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
    Long answers clamp with `Show full message · 12 KB` (wire-clamped entries
    refetch on demand), system events are toned by severity, and a floating pill
    offers the way back down — reading `New messages` when output arrived while
-   you were scrolled up. A selected Markdown passage stays highlighted as
+   you were scrolled up. On wide pointer layouts, a native rail indexes the
+   current person's sent messages; hover previews one and activation jumps the
+   transcript to it. It stays hidden on iPhone and compact widths. A selected
+   Markdown passage stays highlighted as
    composer context, then rides with the next prompt, team note, or scheduled
    message as a block quote. Token-level streaming via `stream_text`, plus a
    horizontally scrollable session tab strip when a workspace/worktree contains

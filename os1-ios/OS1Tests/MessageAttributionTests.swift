@@ -59,4 +59,28 @@ final class MessageAttributionTests: XCTestCase {
         XCTAssertNil(credit())
         XCTAssertNil(credit(sender: "", owner: ""))
     }
+
+    func testViewerMessageUsesExplicitSenderBeforeOwner() {
+        XCTAssertTrue(MessageAttribution.isViewerMessage(
+            sender: "happylinks",
+            owner: "Kent",
+            viewerName: "Michiel",
+            viewerLogin: "happylinks"
+        ))
+        XCTAssertFalse(MessageAttribution.isViewerMessage(
+            sender: "Kent",
+            owner: "Michiel",
+            viewerName: "Michiel",
+            viewerLogin: "happylinks"
+        ))
+    }
+
+    func testViewerMessageNeedsAKnownAuthor() {
+        XCTAssertFalse(MessageAttribution.isViewerMessage(
+            sender: nil,
+            owner: nil,
+            viewerName: "Michiel",
+            viewerLogin: "happylinks"
+        ))
+    }
 }

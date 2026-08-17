@@ -33,13 +33,29 @@ enum MessageAttribution {
         viewerName: String,
         viewerLogin: String
     ) -> Credit? {
-        let author = (sender?.isEmpty == false ? sender : nil)
-            ?? (owner?.isEmpty == false ? owner : nil)
+        let author = author(sender: sender, owner: owner)
         guard let author else { return nil }
         if isViewer(author, viewerName: viewerName, viewerLogin: viewerLogin) {
             return nil
         }
         return Credit(name: author, viaSlack: senderVia == "slack")
+    }
+
+    /// The author of a person's turn. An explicit steer or routed reply wins;
+    /// otherwise the session owner wrote the ordinary prompt.
+    static func author(sender: String?, owner: String?) -> String? {
+        (sender?.isEmpty == false ? sender : nil)
+            ?? (owner?.isEmpty == false ? owner : nil)
+    }
+
+    static func isViewerMessage(
+        sender: String?,
+        owner: String?,
+        viewerName: String,
+        viewerLogin: String
+    ) -> Bool {
+        guard let author = author(sender: sender, owner: owner) else { return false }
+        return isViewer(author, viewerName: viewerName, viewerLogin: viewerLogin)
     }
 
     static func isViewer(

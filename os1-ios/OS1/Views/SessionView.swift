@@ -272,8 +272,7 @@ struct SessionView: View {
                                     // An automation's turns are not a person's
                                     // words, so they get no author fallback —
                                     // the web makes the same exception.
-                                    owner: viewModel.session.isAutomation
-                                        ? nil : viewModel.session.startedBy,
+                                    owner: viewModel.session.transcriptOwner,
                                     onEditMessage: { entry in
                                         viewModel.editSentMessageInComposer(entry)
                                     },
@@ -459,6 +458,35 @@ struct SessionView: View {
                             .transition(.opacity.combined(with: .move(edge: .bottom)))
                         }
                     }
+                    #if os(macOS)
+                    .overlay {
+                        GeometryReader { geometry in
+                            if horizontalSizeClass != .compact,
+                               geometry.size.width >= contentMaxWidth + 96,
+                               viewModel.sentMessageAnchors.count >= 2 {
+                                let availableHeight = max(44, geometry.size.height - 64)
+                                let idealHeight = max(
+                                    44,
+                                    CGFloat(viewModel.sentMessageAnchors.count - 1) * 10 + 20
+                                )
+                                let railHeight = min(
+                                    availableHeight,
+                                    idealHeight
+                                )
+                                SentMessageRail(
+                                    messages: viewModel.sentMessageAnchors,
+                                    height: railHeight
+                                ) { message in
+                                    jumpToSentMessage(message, proxy: proxy)
+                                }
+                                .position(
+                                    x: max(20, (geometry.size.width - contentMaxWidth) / 2 - 18),
+                                    y: geometry.size.height / 2
+                                )
+                            }
+                        }
+                    }
+                    #endif
                     .animation(.snappy(duration: 0.22, extraBounce: 0), value: pinnedToBottom)
                     // A scroll gesture is the reader taking over: the
                     // opening hold ends the moment they touch the transcript.
@@ -1160,6 +1188,19 @@ struct SessionView: View {
         } else {
             proxy.scrollTo(target, anchor: .bottom)
         }
+    }
+
+    private func jumpToSentMessage(
+        _ message: SentMessageAnchor,
+        proxy: ScrollViewProxy
+    ) {
+        guard let target = viewModel.blockId(containing: message.id) else { return }
+        endHold()
+        cancelPrependRestore()
+        pinnedToBottom = false
+        newBelow = false
+        viewModel.userDidInteract()
+        proxy.scrollTo(target, anchor: .top)
     }
 }
 

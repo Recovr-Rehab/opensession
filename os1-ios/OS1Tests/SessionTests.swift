@@ -373,6 +373,21 @@ final class SessionTests: XCTestCase {
         XCTAssertFalse(try session(#"{"id":"seven"}"#).isAutomation)
     }
 
+    func testTranscriptOwnerFallsBackToCreatedBy() throws {
+        XCTAssertEqual(
+            try session(#"{"id":"one","createdBy":"Michiel"}"#).transcriptOwner,
+            "Michiel"
+        )
+        XCTAssertEqual(
+            try session(#"{"id":"two","startedBy":"Kent","createdBy":"Michiel"}"#).transcriptOwner,
+            "Kent"
+        )
+        XCTAssertNil(
+            try session(#"{"id":"three","startedBy":"Plain (automation)","createdBy":"Michiel"}"#)
+                .transcriptOwner
+        )
+    }
+
     func testEmptyEngineIdStillCountsAsNeverRun() throws {
         let session = try JSONDecoder().decode(
             Session.self,
