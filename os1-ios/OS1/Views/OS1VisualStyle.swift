@@ -683,13 +683,16 @@ struct RepoTile: View {
     /// itself.
     @MainActor private static var letterIcons: [String: Image] = [:]
 
-    /// 20 points is the slot a menu row gives an image; at 3x it stays crisp
-    /// on every display without holding a full-size bitmap per repo.
+    /// A menu row scales an image DOWN into its glyph slot but draws a small
+    /// one at its own size, so the swatch has to be offered at least as large
+    /// as the art it sits beside or it lands a third smaller. The art arrives
+    /// as a 192-point thumbnail (`detachedDecode`), so 64 points at 3x clears
+    /// the slot with the same 192 pixels behind it.
     @MainActor
     private static func letterIcon(for name: String) -> Image? {
         let key = "\(name)|\(RepoTilePalette.shared.rgb(for: name))"
         if let cached = letterIcons[key] { return cached }
-        let renderer = ImageRenderer(content: RepoTile(name: name, size: 20))
+        let renderer = ImageRenderer(content: RepoTile(name: name, size: 64))
         renderer.scale = 3
         #if os(macOS)
         guard let rendered = renderer.nsImage else { return nil }
