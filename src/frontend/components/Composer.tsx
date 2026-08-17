@@ -1183,51 +1183,53 @@ export function Composer({
                 : "V-LINE"}
           </div>
         )}
-        <AnimatePresence initial={false}>
-          {/* Note mode is context attached to the next send, exactly like a
-              quoted selection, so it says so in the same place and the same
-              shape rather than as a marker down in the toolbar — where the ✕
-              had to be small enough to fit beside the "+" and the model pill,
-              which made it hard to read and hard to hit. */}
-          {noteMode && (
-            <ComposerContextChip
-              key="note-mode"
-              icon={<IconNote size={15} />}
-              label="Team note"
-              title="The agent won't read this. ⌘N to go back."
-              tone="note"
-              onRemove={() => onNoteModeChange?.(false)}
-              removeLabel="Leave note mode"
-              disabled={disabled}
-            />
-          )}
-          {quote && (
-            <QuoteContext
-              key={quote.id}
-              quote={quote}
-              // Detaching the passage leaves you in the message you were
-              // writing — the ✕ shouldn't cost you the caret as well.
-              onRemove={() => {
-                onQuoteClear?.();
-                textareaRef.current?.focus({ preventScroll: true });
-              }}
-              disabled={disabled}
-            />
-          )}
-          {pastedTexts.map((attachment) => (
-            <PastedTextContext
-              key={attachment.id}
-              attachment={attachment}
-              onRemove={() => {
-                setPastedTexts((current) =>
-                  current.filter((item) => item.id !== attachment.id),
-                );
-                textareaRef.current?.focus({ preventScroll: true });
-              }}
-              disabled={disabled}
-            />
-          ))}
-        </AnimatePresence>
+        <div className="flex flex-wrap items-start gap-x-1">
+          <AnimatePresence initial={false}>
+            {/* Note mode is context attached to the next send, exactly like a
+                quoted selection, so it says so in the same place and the same
+                shape rather than as a marker down in the toolbar — where the ✕
+                had to be small enough to fit beside the "+" and the model pill,
+                which made it hard to read and hard to hit. */}
+            {noteMode && (
+              <ComposerContextChip
+                key="note-mode"
+                icon={<IconNote size={15} />}
+                label="Team note"
+                title="The agent won't read this. ⌘N to go back."
+                tone="note"
+                onRemove={() => onNoteModeChange?.(false)}
+                removeLabel="Leave note mode"
+                disabled={disabled}
+              />
+            )}
+            {quote && (
+              <QuoteContext
+                key={quote.id}
+                quote={quote}
+                // Detaching the passage leaves you in the message you were
+                // writing — the ✕ shouldn't cost you the caret as well.
+                onRemove={() => {
+                  onQuoteClear?.();
+                  textareaRef.current?.focus({ preventScroll: true });
+                }}
+                disabled={disabled}
+              />
+            )}
+            {pastedTexts.map((attachment) => (
+              <PastedTextContext
+                key={attachment.id}
+                attachment={attachment}
+                onRemove={() => {
+                  setPastedTexts((current) =>
+                    current.filter((item) => item.id !== attachment.id),
+                  );
+                  textareaRef.current?.focus({ preventScroll: true });
+                }}
+                disabled={disabled}
+              />
+            ))}
+          </AnimatePresence>
+        </div>
         <ImageThumbs images={imgs} onRemove={removeImage} disabled={disabled} />
         <FileChips files={fls} onRemove={removeFile} disabled={disabled} />
         <motion.div
