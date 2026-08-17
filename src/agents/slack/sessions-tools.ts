@@ -33,6 +33,7 @@ import {
   type SessionSummary,
 } from "../../server/session-control";
 import { OPENSESSION_SESSIONS_DIR } from "../../server/paths";
+import { agentActor, isWorkerActor, workerActor } from "../../server/session-actors";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
 import { userMatchesAny } from "../../server/shared/user-mappings";
 import { migrateSessionEngine } from "../../server/migrate-engine";
@@ -223,7 +224,7 @@ export async function workerReportPayload(
   // the session inherited that human's display name.
   const fallback = {
     content: message,
-    user: me && me !== targetId ? `agent ${me}` : ctx.createdBy,
+    user: me && me !== targetId ? agentActor(me) : ctx.createdBy,
   };
   if (!me || me === targetId) return fallback;
   try {
@@ -262,7 +263,7 @@ export async function workerReportPayload(
     const body = block ? `${message}\n\n${block.slice(0, EVIDENCE_MAX_CHARS)}` : message;
     return {
       content: `${WORKER_REPORT_SENTINEL}\n${body}`,
-      user: `worker ${me}`,
+      user: workerActor(me),
     };
   } catch {
     return fallback;
@@ -632,7 +633,7 @@ export function createSessionsMcpServer(
           // attributed as a worker. Explicit heads-ups get a UI-only notice
           // marker; every other cross-session prompt is delivered as-is.
           const payload = await workerReportPayload(args.id, args.message, ctx);
-          const content = payload.user.startsWith("worker ")
+          const content = isWorkerActor(payload.user)
             ? payload.content
             : sessionNoticePayload(payload.content);
           const deliveryId = args.delivery_id?.trim() || crypto.randomUUID();
@@ -711,7 +712,7 @@ export function createSessionsMcpServer(
             const delivered = await ctrl.deliverToSession(
               to.id,
               notification,
-              `worker ${fromId}`,
+              workerActor(fromId),
               { deliveryId },
             );
             audit({

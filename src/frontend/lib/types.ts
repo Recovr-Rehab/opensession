@@ -914,6 +914,10 @@ export interface AnalyticsPerson {
 	sessionsActive: number;
 	turns: number;
 	outputTokens: number;
+	/** Human work that names no human — a row for the surface it arrived on
+	 *  (Slack, Linear) rather than for a person, and left out of the
+	 *  `activePeople` count. */
+	unattributed?: boolean;
 	/** Optional: absent from a not-yet-restarted server's payload. */
 	repos?: AnalyticsPersonRepo[];
 }

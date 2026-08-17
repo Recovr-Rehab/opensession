@@ -144,6 +144,7 @@ import {
 	ORPHANED_STEER_PROMPT,
 	WEDGE_RETRY_PROMPT,
 } from "./auto-continue";
+import { SYSTEM_RESTART_USER } from "./session-actors";
 import { selectQueueBatch } from "./queue-hold";
 
 const g = globalThis as any;
@@ -534,7 +535,7 @@ export function resumeDrainedSessions(alreadyResumed: Set<string>): void {
 		void runSessionPromptAndDrain(
 			id,
 			RESUME_CONTINUATION_PROMPT,
-			"system (restart)",
+			SYSTEM_RESTART_USER,
 		).catch((e) => console.error(`[resume] Wake failed for ${id}:`, e));
 	}
 	if (woken > 0)

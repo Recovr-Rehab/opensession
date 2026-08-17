@@ -26,6 +26,7 @@ import { readFeedback } from "../agents/github/feedback";
 import type { FeedbackRecord } from "../agents/github/feedback-gates";
 import { engineUsageForDates } from "./engine-usage";
 import { gitIdentityFor } from "./shared/user-mappings";
+import { delegatedActorParent, isMachineActor, machineActorLabel } from "./session-actors";
 
 const AUDIT_DIR = stateDir("audit");
 const CACHE_DIR = stateDir("analytics-cache");
@@ -355,7 +356,7 @@ function readDiskCache<T>(name: string): { at: number; data: T } | null {
 
 // ── Session store scan ──
 
-interface SessionMeta {
+export interface SessionMeta {
 	id: string;
 	createdAt: string;
 	createdBy: string;
@@ -366,6 +367,10 @@ interface SessionMeta {
 	repo: string | null;
 	/** Set (to the automation's display name) for automation-created sessions. */
 	automationName: string | null;
+	/** Set for sessions a goal started — unattended work, like an automation. */
+	goalId: string | null;
+	/** The session that spawned this one, when one did. */
+	parentSessionId: string | null;
 	isReview: boolean;
 }
 
@@ -415,6 +420,8 @@ function loadSessionMeta(): Map<string, SessionMeta> {
 					branch: String(s.branch || ""),
 					repo: analyticsRepo(String(s.repo || s.project || ""), String(s.worktreeDir || "")),
 					automationName: autoMatch ? autoMatch[1] : null,
+					goalId: s.goalId ? String(s.goalId) : null,
+					parentSessionId: s.parentSessionId ? String(s.parentSessionId) : null,
 					isReview: id.startsWith("bks-ghpr-") || createdBy === "GitHub (automation)",
 				});
 			} catch {}
@@ -795,6 +802,10 @@ export interface AnalyticsSummary {
 		sessionsActive: number;
 		turns: number;
 		outputTokens: number;
+		/** Human work that names no human: a session pruned from the store
+		 *  leaves only the surface it arrived on. Kept for its turns, left out
+		 *  of `activePeople` because a surface is not a person. */
+		unattributed?: boolean;
 		/** This person's activity split by repo ("" = not attributable). */
 		repos: Array<{ repo: string; sessions: number; turns: number; outputTokens: number }>;
 	}>;
@@ -849,6 +860,57 @@ function kindOwner(kind: string): string {
 	if (kind === "slack") return "Slack";
 	if (kind === "linear") return "Linear";
 	return "Other";
+}
+
+/** The kindOwner labels — surfaces work arrived on, not people. */
+const SURFACE_OWNERS = new Set(["Slack", "Linear", "Other", "Unknown"]);
+
+/** Owner label for the GitHub review agent's sessions. */
+const REVIEW_OWNER = "GitHub review";
+
+/** How far up a chain of machine-started sessions to look for the person who
+ *  began it. Deep enough for real delegation, bounded against a cycle. */
+const OWNER_CHAIN_MAX = 10;
+
+/** A goal's own name, from the `<goal name> (goal)` label it creates under. */
+function goalOwnerName(createdBy: string): string {
+	return createdBy.replace(/\s*\(goal\)$/, "").trim() || "Goal";
+}
+
+export type OwnerRef =
+	/** Unattended work: an automation, a goal, a review, a machine actor. */
+	| { kind: "automation"; name: string }
+	/** A person, described by the session they actually started. */
+	| { kind: "person"; meta: SessionMeta };
+
+/**
+ * Who a session's work belongs to.
+ *
+ * The `createdBy` on the file is not always an owner. A delegated worker, an
+ * auto-continue nudge and the wake after a restart all start sessions under a
+ * sentinel (see session-actors.ts), and counting those as people is what put
+ * 31 "humans" on a 7-person team. So walk up the chain those sentinels leave
+ * behind — the parent link, or the session id the `worker <id>` sender names —
+ * until a person is found, and credit them: a worker's turns belong to whoever
+ * delegated it. A chain that ends on a machine (the machine web identity, a
+ * parent we no longer keep) is unattended work, not a person.
+ */
+export function resolveOwnerRef(meta: Map<string, SessionMeta>, start: SessionMeta): OwnerRef {
+	const seen = new Set<string>([start.id]);
+	let cur: SessionMeta | undefined = start;
+	let last = start;
+	for (let depth = 0; cur && depth <= OWNER_CHAIN_MAX; depth++) {
+		last = cur;
+		if (cur.isReview) return { kind: "automation", name: REVIEW_OWNER };
+		if (cur.automationName) return { kind: "automation", name: cur.automationName };
+		if (cur.goalId) return { kind: "automation", name: goalOwnerName(cur.createdBy) };
+		if (!isMachineActor(cur.createdBy)) return { kind: "person", meta: cur };
+		const parentId = cur.parentSessionId || delegatedActorParent(cur.createdBy);
+		if (!parentId || seen.has(parentId)) break;
+		seen.add(parentId);
+		cur = meta.get(parentId);
+	}
+	return { kind: "automation", name: machineActorLabel(last.createdBy) };
 }
 
 /** Collapse the display name, short name, and verified login for one teammate
@@ -984,16 +1046,18 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 		return personDisplay.get(lower)!;
 	};
 
+	// Both attribution passes below resolve the owner the same way, or a
+	// session's created and active counts land on different rows.
+	const aggForOwner = (ref: OwnerRef): OwnerAgg =>
+		ref.kind === "automation"
+			? ownerAgg(automationAgg, ref.name)
+			: ownerAgg(peopleAgg, personKey(ref.meta.createdBy || "Unknown", ref.meta.createdByLogin));
+
 	// Sessions *created* in range, from the store (owner attribution).
 	for (const s of meta.values()) {
 		if (!inRange(s.createdAt)) continue;
 		totals.sessionsCreated++;
-		const agg = s.isReview
-			? ownerAgg(automationAgg, "GitHub review")
-			: s.automationName
-				? ownerAgg(automationAgg, s.automationName)
-				: ownerAgg(peopleAgg, personKey(s.createdBy || "Unknown", s.createdByLogin));
-		agg.sessionsCreated++;
+		aggForOwner(resolveOwnerRef(meta, s)).sessionsCreated++;
 	}
 
 	// Tokens and cost come from the engines' own message stores, not the audit
@@ -1043,14 +1107,12 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 			const kind = isReview ? "review" : m?.automationName || (!m && isUnattendedKind) ? "automation" : s.kind;
 			sessionsByKind[kind] = (sessionsByKind[kind] || 0) + 1;
 			const agg = isReview
-				? ownerAgg(automationAgg, "GitHub review")
-				: m?.automationName
-					? ownerAgg(automationAgg, m.automationName)
-					: m
-						? ownerAgg(peopleAgg, personKey(m.createdBy || "Unknown", m.createdByLogin))
-						: isUnattendedKind
-							? ownerAgg(automationAgg, "Removed automation sessions")
-							: ownerAgg(peopleAgg, kindOwner(s.kind));
+				? ownerAgg(automationAgg, REVIEW_OWNER)
+				: m
+					? aggForOwner(resolveOwnerRef(meta, m))
+					: isUnattendedKind
+						? ownerAgg(automationAgg, "Removed automation sessions")
+						: ownerAgg(peopleAgg, kindOwner(s.kind));
 			agg.sessionsActive.add(id);
 			agg.turns += s.turns;
 			agg.outputTokens += output;
@@ -1212,13 +1274,16 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 			sessionsActive: a.sessionsActive.size,
 			turns: a.turns,
 			outputTokens: a.outputTokens,
+			...(SURFACE_OWNERS.has(name) ? { unattributed: true as const } : {}),
 			repos: [...a.byRepo.entries()]
 				.map(([repo, r]) => ({ repo, sessions: r.sessions.size, turns: r.turns, outputTokens: r.outputTokens }))
 				.sort((x, y) => y.outputTokens - x.outputTokens),
 		}))
 		.filter((p) => p.sessionsCreated > 0 || p.sessionsActive > 0)
 		.sort((a, b) => b.sessionsActive - a.sessionsActive || b.sessionsCreated - a.sessionsCreated);
-	totals.activePeople = people.filter((p) => !["Slack", "Linear", "Other", "Unknown"].includes(p.name)).length;
+	// Machine actors never reach this list (resolveOwnerRef sends them to the
+	// automations bucket), so what is left to drop is the surface rows.
+	totals.activePeople = people.filter((p) => !p.unattributed).length;
 	const automations = [...automationAgg.entries()]
 		.map(([name, a]) => ({
 			name,
