@@ -249,7 +249,7 @@ struct NewSessionView: View {
     private func apply(_ entry: LibraryEntry) {
         prompt = entry.prompt ?? ""
         if let entryMode = entry.mode, entryMode == "ask" || entryMode == "code" {
-            mode = entryMode
+            selectMode(entryMode)
         }
         // Only a model this instance actually offers; a recipe naming one that
         // has since been retired keeps the composer's default instead.
@@ -299,6 +299,7 @@ struct NewSessionView: View {
     }
 
     private var repoLabel: String {
+        if repo == Session.noRepoID { return "No repo" }
         if let match = repos.first(where: { $0.id == repo }) {
             return match.label ?? match.id
         }
@@ -309,7 +310,7 @@ struct NewSessionView: View {
         Menu {
             ForEach(repos) { repoInfo in
                 Button {
-                    repo = repoInfo.id
+                    selectRepo(repoInfo.id)
                 } label: {
                     Label {
                         Text(repoInfo.label ?? repoInfo.id)
@@ -326,8 +327,28 @@ struct NewSessionView: View {
                     }
                 }
             }
+            if mode == "ask" {
+                Divider()
+                Button {
+                    selectRepo(Session.noRepoID)
+                } label: {
+                    Label {
+                        Text("No repo")
+                    } icon: {
+                        Image(systemName: repo == Session.noRepoID
+                              ? "checkmark"
+                              : "bubble.left.and.bubble.right")
+                    }
+                }
+            }
         } label: {
-            if repo.isEmpty {
+            if repo == Session.noRepoID {
+                chipLabel(
+                    icon: "bubble.left.and.bubble.right",
+                    text: repoLabel,
+                    strong: true
+                )
+            } else if repo.isEmpty {
                 chipLabel(icon: "folder", text: repoLabel, strong: true)
             } else {
                 chipLabel(text: repoLabel, strong: true) {
@@ -337,7 +358,7 @@ struct NewSessionView: View {
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
-        .disabled(repos.isEmpty)
+        .disabled(repos.isEmpty && mode != "ask")
     }
 
     /// Joining a workspace changes what code mode means: the session shares
@@ -354,7 +375,7 @@ struct NewSessionView: View {
     private var modeChip: some View {
         Menu {
             Button {
-                mode = "code"
+                selectMode("code")
             } label: {
                 Label {
                     Text(codeModeLabel)
@@ -368,11 +389,11 @@ struct NewSessionView: View {
                 }
             }
             Button {
-                mode = "ask"
+                selectMode("ask")
             } label: {
                 Label {
                     Text("Ask")
-                    Text("Read-only on the main checkout")
+                    Text("Read-only, no repo unless you pick one")
                 } icon: {
                     if mode == "ask" { Image(systemName: "checkmark") }
                 }
@@ -456,6 +477,7 @@ struct NewSessionView: View {
     /// instance that only runs on the host, and then the chip never appears:
     /// a picker with one entry is a label pretending to be a choice.
     private var sandboxChoices: [String] {
+        if repo == Session.noRepoID { return [] }
         SandboxOffering.choices(sandboxStatus)
     }
 
@@ -689,13 +711,16 @@ struct NewSessionView: View {
             Task { await dictation.start(base: prompt) { prompt = $0 } }
         }
         repo = initialRepo ?? lastRepo
+        if repo == Session.noRepoID { mode = "ask" }
         async let reposFetch = OS1API.repos()
         async let modelsFetch = OS1API.models(workspaceId: initialWorkspaceId)
         // A server without sandboxes, or one too old to answer, simply leaves
         // the chip off. It must never keep the composer from opening.
         async let sandboxFetch = OS1API.sandboxStatus()
         repos = (try? await reposFetch) ?? []
-        if !repos.isEmpty, !repos.contains(where: { $0.id == repo }) {
+        if repo != Session.noRepoID,
+           !repos.isEmpty,
+           !repos.contains(where: { $0.id == repo }) {
             repo = repos.first(where: { $0.isDefault == true })?.id ?? repos[0].id
         }
         // The picker's rows can only show an icon the cache already holds, so
@@ -737,6 +762,44 @@ struct NewSessionView: View {
         }
     }
 
+    /// Match the web palette's two-axis create: a universal Ask starts with no
+    /// repo, while a repo-scoped "+" keeps that repository. Switching back to
+    /// Code restores the most recent real repository.
+    private func selectMode(_ selected: String) {
+        mode = selected
+        repo = Self.repoAfterSelectingMode(
+            selected,
+            current: repo,
+            isRepoScoped: initialRepo != nil,
+            fallback: fallbackRepo
+        )
+    }
+
+    static func repoAfterSelectingMode(
+        _ mode: String,
+        current: String,
+        isRepoScoped: Bool,
+        fallback: String
+    ) -> String {
+        if mode == "ask", !isRepoScoped { return Session.noRepoID }
+        if mode == "code", current == Session.noRepoID { return fallback }
+        return current
+    }
+
+    private func selectRepo(_ selected: String) {
+        repo = selected
+        if selected == Session.noRepoID {
+            mode = "ask"
+        } else {
+            lastRepo = selected
+        }
+    }
+
+    private var fallbackRepo: String {
+        if repos.contains(where: { $0.id == lastRepo }) { return lastRepo }
+        return repos.first(where: { $0.isDefault == true })?.id ?? repos.first?.id ?? ""
+    }
+
     /// Optimistic create: the sheet closes immediately and the conversation
     /// opens seeded with the prompt under a temporary id, while the real
     /// create (worktree prep — seconds) runs in the background. The list
@@ -750,11 +813,12 @@ struct NewSessionView: View {
         dictation.stop()
         let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         let imageURLs = images.map(\.dataURL)
-        lastRepo = repo
+        if repo != Session.noRepoID { lastRepo = repo }
         let pending = Session.optimistic(
             id: "pending-\(UUID().uuidString)",
             title: String((text.components(separatedBy: "\n").first ?? text).prefix(80)),
             repo: repo,
+            repoLess: repo == Session.noRepoID,
             mode: mode,
             model: model.isEmpty ? nil : model,
             effort: effort.isEmpty ? nil : effort,
@@ -780,9 +844,14 @@ struct NewSessionView: View {
                     workspaceId: initialWorkspaceId,
                     // Only when the chip was on screen. Where it wasn't, the
                     // instance keeps deciding, exactly as before.
-                    sandbox: sandboxChoices.isEmpty
-                        ? nil
-                        : SandboxOffering.createValue(sandbox)
+                    // Remote providers materialize a repository workspace, so
+                    // an explicit no-repo Ask must stay on the host even when
+                    // the instance has a remote sandbox default.
+                    sandbox: repo == Session.noRepoID
+                        ? SandboxOffering.createValue(SandboxOffering.host)
+                        : (sandboxChoices.isEmpty
+                            ? nil
+                            : SandboxOffering.createValue(sandbox))
                 )
                 onResolved(pending.id, .success(id))
             } catch {

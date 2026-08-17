@@ -537,6 +537,7 @@ final class SessionsListViewModel {
             id: realId,
             title: old.title ?? "",
             repo: old.effectiveRepo,
+            repoLess: old.repoLess == true,
             mode: old.mode ?? "code",
             model: old.model,
             effort: old.effort,

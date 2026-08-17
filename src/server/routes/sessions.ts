@@ -77,7 +77,7 @@ import { setTitleOverride } from "../title-overrides";
 import { buildWorkspaceOverview, resolveTranscriptImage } from "../workspace-overview";
 import { type Workspace, deleteWorkspace, getWorkspace, workspaceName } from "../workspaces";
 import { prHostFor } from "../pr-host";
-import { getRepo, removeWorktree, repoForPath } from "../worktree";
+import { getRepo, NO_REPO, removeWorktree, repoForPath } from "../worktree";
 import { preparingWorkspaces } from "../ws-hub";
 import { existsSync } from "fs";
 import {
@@ -104,6 +104,12 @@ interface SessionsResponseSnapshot {
  * keeps churning on `isRunning` / `lastActivity`.
  */
 export type SessionsVariant = "include" | "exclude" | "only" | "only-slim";
+
+/** Translate the web create sentinel into the control path's explicit flag. */
+export function nativeCreateRepoOptions(mode: string, repo: unknown) {
+	if (mode === "ask" && repo === NO_REPO) return { repoLess: true as const };
+	return typeof repo === "string" && repo ? { repo } : {};
+}
 
 /** Read the requested slice off the query. Anything unrecognised means the
  *  whole list, so a typo degrades to today's behaviour rather than to an
@@ -245,6 +251,7 @@ export function archivedIndexRow(s: UnifiedSession): UnifiedSession {
 		// review and worker runs still reads as a list of what PEOPLE closed.
 		...(s.parentSessionId ? { parentSessionId: s.parentSessionId } : {}),
 		...(s.repo ? { repo: s.repo } : {}),
+		...(s.repoLess ? { repoLess: true } : {}),
 		...(s.workspaceId ? { workspaceId: s.workspaceId } : {}),
 		// sessionRepo() falls back to the first external ref's kind, so a
 		// repo-less feed session files under its feed rather than the default
@@ -345,9 +352,7 @@ export async function handleSessionsRoutes(
 				mode,
 				...(mode === "code" && branch ? { branch } : {}),
 				...(workspaceId ? { workspaceId } : {}),
-				...(typeof body?.repo === "string" && body.repo
-					? { repo: body.repo }
-					: {}),
+				...nativeCreateRepoOptions(mode, body?.repo),
 				...(typeof body?.model === "string" && body.model
 					? { model: body.model }
 					: {}),

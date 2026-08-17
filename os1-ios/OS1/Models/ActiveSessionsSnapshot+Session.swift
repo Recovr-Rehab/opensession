@@ -41,7 +41,9 @@ extension ActiveSessionsSnapshot {
                 ActiveSessionSummary(
                     id: $0.id,
                     title: String($0.displayTitle.prefix(80)),
-                    repo: String($0.effectiveRepo.prefix(40)),
+                    repo: String(
+                        ($0.repoLess == true ? "No repo" : $0.effectiveRepo).prefix(40)
+                    ),
                     startedAt: $0.runStartedDate?.timeIntervalSince1970
                 )
             },

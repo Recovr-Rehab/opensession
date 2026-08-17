@@ -11,7 +11,12 @@
 
 import { describe, expect, test } from "bun:test";
 import type { UnifiedSession } from "../types";
-import { archivedScope, archivedIndexRow, sessionsVariant } from "./sessions";
+import {
+	archivedScope,
+	archivedIndexRow,
+	nativeCreateRepoOptions,
+	sessionsVariant,
+} from "./sessions";
 
 function paramsOf(query: string) {
 	return new URL(`http://x/api/sessions${query}`).searchParams;
@@ -98,6 +103,12 @@ describe("archivedScope", () => {
 });
 
 describe("archivedIndexRow", () => {
+	test("keeps the positive repo-less marker", () => {
+		expect(archivedIndexRow(archivedSession({ repoLess: true }))).toMatchObject({
+			repoLess: true,
+		});
+	});
+
 	test("carries what the Archived surfaces render", () => {
 		const row = archivedIndexRow(archivedSession());
 		// Archived.tsx renders these; the sidebar badge filters on startedBy
@@ -222,5 +233,15 @@ describe("archivedIndexRow", () => {
 		expect(row.aliasIds).toEqual([
 			"bks-019f0000-0000-7000-0000-000000000000",
 		]);
+	});
+});
+
+describe("nativeCreateRepoOptions", () => {
+	test("translates only repo-less Ask into the explicit control flag", () => {
+		expect(nativeCreateRepoOptions("ask", "none")).toEqual({ repoLess: true });
+		expect(nativeCreateRepoOptions("ask", undefined)).toEqual({});
+		expect(nativeCreateRepoOptions("ask", "opensession")).toEqual({
+			repo: "opensession",
+		});
 	});
 });

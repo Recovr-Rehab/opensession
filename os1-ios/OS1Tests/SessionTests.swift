@@ -25,6 +25,77 @@ final class SessionTests: XCTestCase {
         XCTAssertEqual(session.effectiveRepo, "backstage")
     }
 
+    @MainActor
+    func testRepoLessMarkerWinsOverNormalizedDefaultRepo() throws {
+        let session = try session(
+            #"{"id":"os-1","repo":"opensession","repoLess":true,"mode":"ask"}"#
+        )
+
+        XCTAssertTrue(session.repoLess == true)
+        XCTAssertEqual(session.effectiveRepo, Session.noRepoID)
+        XCTAssertEqual(RepoTile.label(for: session.effectiveRepo), "No repo")
+    }
+
+    @MainActor
+    func testRepoLessAskCreationSendsExplicitServerSentinel() {
+        let body = OS1API.createSessionBody(
+            prompt: "Summarize the latest support themes",
+            repo: Session.noRepoID,
+            mode: "ask",
+            user: "Alice"
+        )
+
+        XCTAssertEqual(body["prompt"] as? String, "Summarize the latest support themes")
+        XCTAssertEqual(body["mode"] as? String, "ask")
+        XCTAssertEqual(body["repo"] as? String, "none")
+        XCTAssertEqual(body["user"] as? String, "Alice")
+        XCTAssertNil(body["repoLess"])
+    }
+
+    @MainActor
+    func testRepoLessAskPinsCreationToTheHost() {
+        let body = OS1API.createSessionBody(
+            prompt: "Check the incident queue",
+            repo: Session.noRepoID,
+            mode: "ask",
+            sandbox: SandboxOffering.createValue(SandboxOffering.host),
+            user: "Alice"
+        )
+
+        XCTAssertEqual(body["sandbox"] as? String, "local")
+    }
+
+    @MainActor
+    func testAskDefaultsToNoRepoUnlessCreationIsRepoScoped() {
+        XCTAssertEqual(
+            NewSessionView.repoAfterSelectingMode(
+                "ask",
+                current: "opensession",
+                isRepoScoped: false,
+                fallback: "opensession"
+            ),
+            Session.noRepoID
+        )
+        XCTAssertEqual(
+            NewSessionView.repoAfterSelectingMode(
+                "ask",
+                current: "tella-fusion",
+                isRepoScoped: true,
+                fallback: "opensession"
+            ),
+            "tella-fusion"
+        )
+        XCTAssertEqual(
+            NewSessionView.repoAfterSelectingMode(
+                "code",
+                current: Session.noRepoID,
+                isRepoScoped: false,
+                fallback: "opensession"
+            ),
+            "opensession"
+        )
+    }
+
     func testPullRequestContextStatePrioritizesBlockersBeforeMerge() throws {
         let conflicts = try session(
             #"{"id":"one","prNumber":42,"prState":"OPEN","prMergeable":"CONFLICTING","prChecks":{"failed":1,"pending":2}}"#

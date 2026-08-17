@@ -71,6 +71,20 @@ final class ActiveSessionsActivityTests: XCTestCase {
         XCTAssertEqual(snapshot.sessions[0].repo.count, 40)
     }
 
+    func testRepoLessSnapshotDoesNotShowTheDefaultRepo() {
+        var repoLess = session(
+            "os-repo-less", title: "Ask", owner: "Michiel", running: true,
+            at: "2026-08-11T10:00:00Z"
+        )
+        repoLess.repoLess = true
+
+        let snapshot = ActiveSessionsSnapshot.make(
+            from: [repoLess], userName: "Michiel", githubLogin: ""
+        )
+
+        XCTAssertEqual(snapshot.sessions.first?.repo, "No repo")
+    }
+
     private func session(
         _ id: String,
         title: String,

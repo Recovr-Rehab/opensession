@@ -76,6 +76,8 @@ export interface CreateSessionOpts {
   branch?: string;
   /** Registered repo id to run in. Defaults to tella-fusion. */
   repo?: string;
+  /** Explicitly run an Ask session without a repository checkout. */
+  repoLess?: boolean;
   /** "ask" (default) runs read-only on the main checkout; "code" gets a worktree. */
   mode?: "ask" | "code" | "scratch";
   /** Optional model id; invalid input falls back to the default. */

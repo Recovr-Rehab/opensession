@@ -587,7 +587,8 @@ struct RepoTile: View {
     var artScale: CGFloat = 1
 
     static func label(for name: String) -> String {
-        name == "backstage" ? "opensession" : name  // legacy repo id on older instances
+        if name == Session.noRepoID { return "No repo" }
+        return name == "backstage" ? "opensession" : name  // legacy id on older instances
     }
 
     static func usesBundledProductIcon(for name: String) -> Bool {
@@ -634,6 +635,7 @@ struct RepoTile: View {
 
     @MainActor
     private static func iconURL(for name: String) -> URL? {
+        if name == Session.noRepoID { return nil }
         var url = ServerConfig.shared.baseURL?
             .appendingPathComponent("repo-icon")
             .appendingPathComponent("\(name).png")
@@ -715,7 +717,13 @@ struct RepoTile: View {
             // can use its bundled app mark immediately instead. Nothing stays
             // underneath the eventual image: transparent icon margins would
             // otherwise reveal the fallback as a colored border.
-            if let image = displayedIcon {
+            if name == Session.noRepoID {
+                Image(systemName: "bubble.left.and.bubble.right")
+                    .font(.system(size: size * 0.48, weight: .semibold))
+                    .foregroundStyle(OS1VisualStyle.textDim)
+                    .frame(width: size, height: size)
+                    .background(OS1VisualStyle.hover)
+            } else if let image = displayedIcon {
                 image
                     .resizable()
                     .scaledToFill()

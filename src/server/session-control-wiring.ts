@@ -237,6 +237,7 @@ registerSessionControl({
 		prompt,
 		branch,
 		repo: repoInput,
+		repoLess,
 		mode,
 		model: modelInput,
 		effort: effortInput,
@@ -263,6 +264,9 @@ registerSessionControl({
 		const isAsk = fork
 			? !isScratch && fork.source.mode !== "code"
 			: !isScratch && mode !== "code";
+		const isRepoLess = fork
+			? isScratch || fork.source.repoLess === true
+			: isScratch || (isAsk && repoLess === true);
 		const model = fork
 			? fork.source.model
 			: (modelInput ? resolveModel(String(modelInput))?.id : undefined) ||
@@ -365,10 +369,10 @@ registerSessionControl({
 			// Share the source's cwd so the fork sees the same code state.
 			wtPath = fork.source.worktreeDir || repo.repo;
 			sessionBranch = fork.source.branch || "";
-		} else if (isScratch) {
-			// Scratch children share the parent workspace's scratch dir (so a
-			// child sees the parent's downloads); standalone scratch creates get
-			// a fresh one. Never a repo checkout (the feeds design).
+		} else if (isRepoLess) {
+			// Repo-less sessions share their workspace's scratch dir when there is
+			// one; standalone creates get a fresh directory. Ask remains read-only,
+			// while scratch keeps its normal write permissions.
 			wtPath = ensureScratchDir(
 				joinedWorkspace?.id || parentSession?.workspaceId || randomUUIDv7(),
 			);
@@ -510,7 +514,7 @@ registerSessionControl({
 					wsParent?.title || wsParent?.branch || title || "Workspace";
 				const ws = createWorkspace({
 					name: wsName,
-					...(isScratch ? {} : { repo: wsParent?.repo || repo.id }),
+					...(isRepoLess ? {} : { repo: wsParent?.repo || repo.id }),
 					createdBy:
 						creator || wsParent?.createdBy || wsParent?.startedBy || "Anonymous",
 					...(branchForWs ? { branch: branchForWs } : {}),
@@ -602,7 +606,7 @@ registerSessionControl({
 			// Repo-less sessions record none (wtPath is a plain dir no repo
 			// owns — scratch, or a repo-less ask session being forked). A
 			// fork's worktree names its repo: the source may live elsewhere.
-			repoId: isScratch
+			repoId: isRepoLess
 				? undefined
 				: fork
 					? repoForPathOrNull(wtPath)?.id

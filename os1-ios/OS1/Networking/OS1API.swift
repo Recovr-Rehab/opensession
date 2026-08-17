@@ -1421,6 +1421,37 @@ enum OS1API {
         sandbox: String? = nil
     ) async throws -> String {
         struct CreateResponse: Decodable { let id: String }
+        let body = createSessionBody(
+            prompt: prompt,
+            repo: repo,
+            mode: mode,
+            model: model,
+            effort: effort,
+            fastMode: fastMode,
+            images: images,
+            workspaceId: workspaceId,
+            sandbox: sandbox,
+            user: ServerConfig.shared.userName
+        )
+        let response: CreateResponse = try await post("/api/sessions", body: body)
+        return response.id
+    }
+
+    /// The native REST route accepts the same explicit no-repo sentinel as the
+    /// web socket create. Keep this builder visible to focused contract tests:
+    /// omitting `repo` means inherit-or-default and is not repo-less.
+    static func createSessionBody(
+        prompt: String,
+        repo: String,
+        mode: String,
+        model: String? = nil,
+        effort: String? = nil,
+        fastMode: Bool = false,
+        images: [String] = [],
+        workspaceId: String? = nil,
+        sandbox: String? = nil,
+        user: String
+    ) -> [String: Any] {
         var body: [String: Any] = ["prompt": prompt, "mode": mode]
         // Sent only when the composer actually offered the choice. Omitting it
         // lets the instance's own sandbox default decide, which is the right
@@ -1436,10 +1467,8 @@ enum OS1API {
         if let effort, !effort.isEmpty { body["effort"] = effort }
         if fastMode { body["fastMode"] = true }
         if !images.isEmpty { body["images"] = images }
-        let user = ServerConfig.shared.userName
         if !user.isEmpty { body["user"] = user }
-        let response: CreateResponse = try await post("/api/sessions", body: body)
-        return response.id
+        return body
     }
 
     /// Open an empty sibling session in a session's workspace — the tab strip's

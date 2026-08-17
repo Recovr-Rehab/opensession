@@ -12,6 +12,10 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     var titleOverridden: Bool?
     var source: String?
     var repo: String?
+    /// The server has deliberately given this session no repository. A
+    /// missing `repo` alone is not enough: older Ask sessions omit it while
+    /// still running in the instance's default checkout.
+    var repoLess: Bool?
     var branch: String?
     var worktreeDir: String?
     var workspaceId: String?
@@ -147,9 +151,16 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
         return id
     }
 
+    /// Reserved create value and display bucket for an explicit no-repo
+    /// session. The server distinguishes this from an omitted repo, which
+    /// still means inherit-or-default.
+    static let noRepoID = "none"
+
     /// Older/default-repo sessions may omit `repo` on the wire. Current
-    /// servers normalize it to the configured default repository.
+    /// servers normalize it to the configured default repository, including
+    /// on repo-less rows, so the positive marker must win.
     var effectiveRepo: String {
+        if repoLess == true { return Self.noRepoID }
         guard let repo, !repo.isEmpty else { return "opensession" }
         return repo
     }
@@ -314,6 +325,7 @@ extension Session {
         id: String,
         title: String,
         repo: String,
+        repoLess: Bool = false,
         mode: String,
         model: String?,
         effort: String?,
@@ -324,7 +336,8 @@ extension Session {
         var session = Session(id: id)
         session.title = title
         session.source = "opensession"
-        session.repo = repo
+        session.repo = repoLess ? nil : repo
+        session.repoLess = repoLess ? true : nil
         // A session created into an existing workspace carries its id from the
         // start, so the pending row joins that workspace's tab strip (and its
         // sidebar row) immediately instead of flashing as a separate session

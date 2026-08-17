@@ -1630,7 +1630,7 @@ struct SessionsListView: View {
             Picker("Repo", selection: $repoFilter) {
                 Text("All repos").tag("all")
                 ForEach(availableRepos, id: \.self) { repo in
-                    Text(repo).tag(repo)
+                    Text(RepoTile.label(for: repo)).tag(repo)
                 }
             }
             .pickerStyle(.menu)
