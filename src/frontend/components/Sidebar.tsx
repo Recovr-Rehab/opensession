@@ -1579,7 +1579,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 
 	// Every row receives exactly one primary placement. Pinned remains an
 	// orthogonal quick-access facet and is derived separately below.
-	const { placedWsRows, hiddenAutoCreatedRows } = useMemo(() => {
+	const { placedWsRows, autoCreatedRows } = useMemo(() => {
 		const focus =
 			filter.person === "me" ? currentUser.toLowerCase() : filter.person;
 		// Whether a row belongs in the lanes at all, asked twice: once as the
@@ -1617,20 +1617,21 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			snoozed: activeSnoozeKeys.has(r.key),
 			inStatusScope: inScope(r, showAutoCreated),
 		}));
-		// What the filter is holding back right now: an auto-created row that
-		// showing them would have put in a lane, and that nothing else (an open
-		// row, a review, a claim) has kept on screen. A filter that removes rows
-		// silently is one you forget you set, and on this instance the machine
-		// makes most of the work, so the number stays on the page.
-		const heldBack = showAutoCreated
-			? 0
-			: placed.filter(
-					(entry) =>
-						entry.placement === "outside" &&
-						rowWasAutoCreated(entry.row) &&
-						inScope(entry.row, true),
-				).length;
-		return { placedWsRows: placed, hiddenAutoCreatedRows: heldBack };
+		// How many rows the switch at the foot of the list moves: held back
+		// right now, or on the page and only there because the machine's work is
+		// shown. Only the status lanes can change. Every earlier branch of
+		// classifySidebarPlacement (snoozed, the review bands) ignores this
+		// scope, so a review being asked of you is counted by neither side.
+		// A filter that removes rows silently is one you forget you set, and on
+		// this instance the machine makes most of the work, so the number stays
+		// on the page either way.
+		const moved = placed.filter((entry) =>
+			rowWasAutoCreated(entry.row) &&
+			(showAutoCreated
+				? entry.placement === "status" && !inScope(entry.row, false)
+				: entry.placement === "outside" && inScope(entry.row, true)),
+		).length;
+		return { placedWsRows: placed, autoCreatedRows: moved };
 	}, [
 		wsRows,
 		activeSnoozeKeys,
@@ -5454,22 +5455,29 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							]}
 				</div>
 
-				{/* The hide filter, said out loud, at the foot of the list it is
-				    editing: it belongs after the rows it kept off the page, where
-				    the list runs out and you would wonder what is missing. Faint,
-				    and it is its own undo. */}
-				{hiddenAutoCreatedRows > 0 && (
+				{/* The machine's work, switched from the foot of the list it is
+				    adding to or taking from: after the rows it counts, where the
+				    list runs out and you would wonder what is missing. It says
+				    which way it goes, so it is always its own undo. Faint: it is
+				    a note about the list, not a row in it. */}
+				{autoCreatedRows > 0 && (
 					<button
 						className={cn(
 							"mb-1 flex w-full items-center gap-1.5 rounded-row px-4 py-1.5 text-left text-label text-faint",
 							SIDEBAR_HOVER_LAYER,
 							"hover:text-dim",
 						)}
-						onClick={() => setFilter({ autoCreated: "show" })}
+						onClick={() =>
+							setFilter({
+								autoCreated:
+									filter.autoCreated === "hide" ? "show" : "hide",
+							})
+						}
 					>
 						<IconRobot size={20} className="shrink-0" />
 						<span className="min-w-0 truncate">
-							Show {hiddenAutoCreatedRows} auto created
+							{filter.autoCreated === "hide" ? "Show" : "Hide"}{" "}
+							{autoCreatedRows} auto created
 						</span>
 					</button>
 				)}
