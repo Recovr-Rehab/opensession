@@ -48,6 +48,8 @@ import {
   findWorkspaceByBranch,
   findWorkspaceByWorktree,
   getWorkspace,
+  updateWorkspace,
+  workspaceName,
   type Workspace,
 } from "./workspaces";
 import { getRepo, isSharedCheckoutDir } from "./worktree";
@@ -107,6 +109,53 @@ function nameFor(sessions: UnifiedSession[], grouped: boolean): string {
   return (name || "Session").slice(0, 120);
 }
 
+/**
+ * How many provisional names to settle per scan. Each one is a read plus a
+ * write, and every workspace minted before this landed needs one (766 of the
+ * 4,886 on disk, 2026-08-17), so the back-fill drains over a few polls rather
+ * than in one long scan. New ones arrive at most one per created session.
+ */
+const NAME_BUDGET = 40;
+
+/**
+ * Settle a workspace still wearing the name it was minted with before its
+ * session had a real title.
+ *
+ * `nameFor`'s last resort is the session's `branch`, which for a Slack thread
+ * session is not a branch at all: it is the raw `<channel>-<threadTs>` key the
+ * session is keyed by. The Slack loop generates the proper title a second or
+ * two later (handlers.ts), by which time this workspace has already been
+ * minted at the read choke point — and that path only ever renamed the
+ * SESSION, so the workspace kept the key for life and the sidebar, the tab
+ * strip, the pickers and Slack's own unfurls all showed it.
+ *
+ * So the name follows the session's title until the title lands. The trigger
+ * is the workspace still being named after that raw key, which stops being
+ * true the moment either this or a person renames it — so it fires exactly
+ * once per workspace and a manual rename is never overwritten. A workspace
+ * named after a real git branch is untouched: the key is `<source>-<name>`
+ * matched against the session's own id, which no branch name can spell.
+ */
+export function settleProvisionalNames(sessions: UnifiedSession[]): void {
+  let budget = NAME_BUDGET;
+  for (const session of sessions) {
+    if (budget <= 0) return;
+    if (!session.workspaceId || !session.title) continue;
+    const name = workspaceName(session.workspaceId);
+    // The one name that can only have come from the fallback: this session's
+    // own key. A titleless session's title IS that key too (scanSlackSessions
+    // falls back to `branch` as well), so it reads as "no better name yet".
+    if (!name || session.id !== `${session.source}-${name}`) continue;
+    if (session.title === name) continue;
+    budget--;
+    try {
+      updateWorkspace(session.workspaceId, { name: session.title });
+    } catch (e) {
+      console.error(`[session-workspace] failed to name ${session.workspaceId}:`, e);
+    }
+  }
+}
+
 /** Persist the session → workspace link (create-if-absent; a concurrent filing wins). */
 function persist(sessionId: string, workspaceId: string): void {
   // Lazy import: session-cache imports sessions.ts, which imports this module.
@@ -135,6 +184,10 @@ export function ensureSessionWorkspaces(sessions: UnifiedSession[]): void {
   // guard shape as run-rpc.ts's test gate; prod never runs NODE_ENV=test.
   if (process.env.NODE_ENV === "test" || /\.test\.tsx?$/.test(Bun.main || ""))
     return;
+  // A workspace already filed may still be wearing the name it was minted
+  // with before its session had a title. Runs whether or not anything needs
+  // filing this scan.
+  settleProvisionalNames(sessions);
   // Archived sessions don't render, so they don't need one until they come back:
   // the same sweep files them on the scan right after an un-archive.
   const orphans = sessions.filter(
