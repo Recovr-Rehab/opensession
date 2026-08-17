@@ -5753,7 +5753,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			    after the workspaces (the Automations band) used to render past it,
 			    which read as "the sidebar ended, and then there was more". */}
 			{(!isPhone || !productEmpty || hasWorkspaceFilter) && (
-				<div className={cn(SIDEBAR_GROUP, "mt-1")} style={{ order: 99 }}>
+				<div
+					// It sits outside the workspace list, so it takes the same inset
+					// its other out-of-list siblings do. Without it the row is the one
+					// thing in the sidebar whose fill runs edge to edge.
+					className={cn(SIDEBAR_INDEPENDENT_SECTION, SIDEBAR_GROUP, "mt-1")}
+					style={{ order: 99 }}
+				>
 					{archivedLink}
 				</div>
 			)}
