@@ -1212,7 +1212,7 @@ export function Composer({
               <ComposerContextChip
                 key="ask-mode"
                 icon={<IconEye size={15} />}
-                label="Ask mode"
+                label="Ask"
                 title={
                   onAskModeExit
                     ? "This session can read the code but not change it. The ✕ switches to code mode."

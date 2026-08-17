@@ -32,7 +32,7 @@ const CHIP_TONE = {
  * pill naming something attached to the next send, with an ✕ that detaches it.
  *
  * Three things live here: the transcript selection ("Selected text"), note
- * mode ("Team note") and ask mode ("Ask mode"). They are the same object as
+ * mode ("Team note") and ask mode ("Ask"). They are the same object as
  * far as a reader is concerned, *this composer is not in its ordinary state,
  * and here is what that state is*, so they share one shape rather than each
  * inventing a marker. That is also what keeps two tinted surfaces apart: the
