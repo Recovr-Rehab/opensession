@@ -666,35 +666,42 @@ struct RepoTile: View {
         RepoImageCache.shared.ensureLoaded(url)
     }
 
-    /// What a menu row should draw for a repo: its own art when it has some,
-    /// and the lettered swatch rasterized when it does not. Most repos have
-    /// no icon uploaded, so `cachedIcon` alone left them with an empty glyph
-    /// slot beside the two that wear a mark. The swatch comes from this same
-    /// view rather than a second drawing of it, so the menu can't drift from
-    /// the tiles everywhere else.
+    /// What a menu row should draw for a repo. The whole tile is rasterized,
+    /// art and lettered swatch alike, because a row's label is handed to
+    /// UIKit where only an image survives: `cachedIcon` alone left the many
+    /// repos with no icon uploaded showing an empty glyph slot beside the few
+    /// wearing a mark. Rendering this same view rather than a second drawing
+    /// of it keeps the menu from drifting from the tiles everywhere else.
     @MainActor
     static func menuIcon(for name: String) -> Image? {
-        cachedIcon(for: name) ?? letterIcon(for: name)
+        // Art and no art are different pictures at the same name, so the key
+        // carries which one this is: a swatch cached before the icon loaded
+        // would otherwise outlive it. Color too, since the palette is
+        // assigned across the registered set and moves when one is added.
+        let key = [
+            name,
+            "\(RepoTilePalette.shared.rgb(for: name))",
+            cachedIcon(for: name) == nil ? "letter" : "art",
+        ].joined(separator: "|")
+        if let cached = menuIcons[key] { return cached }
+        return render(name: name, key: key)
     }
 
-    /// Rasterizing costs a render pass, so each swatch is kept. Keyed on the
-    /// color as well as the name: the palette is assigned across the whole
-    /// registered set, so a repo can be handed a different one when another
-    /// is added. This is a plain dictionary rather than observed state on
-    /// purpose: a body that wrote to an `@Observable` here would invalidate
-    /// itself.
-    @MainActor private static var letterIcons: [String: Image] = [:]
+    /// Rasterizing costs a render pass, so each mark is kept. A plain
+    /// dictionary rather than observed state on purpose: a body that wrote to
+    /// an `@Observable` here would invalidate itself.
+    @MainActor private static var menuIcons: [String: Image] = [:]
 
-    /// A menu row scales an image DOWN into its glyph slot but draws a small
-    /// one at its own size, so the swatch has to be offered at least as large
-    /// as the art it sits beside or it lands a third smaller. The art arrives
-    /// as a 192-point thumbnail (`detachedDecode`), so 64 points at 3x clears
-    /// the slot with the same 192 pixels behind it.
+    /// A menu row scales a large image DOWN into its glyph slot but draws a
+    /// small one at its own size, so this size is what actually decides how
+    /// big a repo mark reads there. The art used to arrive as a 192-point
+    /// thumbnail and filled the slot at 30 points, a step heavier than the
+    /// text beside it; 26 sits with the row instead. 3x keeps it crisp.
+    private static let menuIconSide: CGFloat = 26
+
     @MainActor
-    private static func letterIcon(for name: String) -> Image? {
-        let key = "\(name)|\(RepoTilePalette.shared.rgb(for: name))"
-        if let cached = letterIcons[key] { return cached }
-        let renderer = ImageRenderer(content: RepoTile(name: name, size: 64))
+    private static func render(name: String, key: String) -> Image? {
+        let renderer = ImageRenderer(content: RepoTile(name: name, size: menuIconSide))
         renderer.scale = 3
         #if os(macOS)
         guard let rendered = renderer.nsImage else { return nil }
@@ -707,7 +714,7 @@ struct RepoTile: View {
         else { return nil }
         let image = Image(uiImage: rendered)
         #endif
-        letterIcons[key] = image
+        menuIcons[key] = image
         return image
     }
 
