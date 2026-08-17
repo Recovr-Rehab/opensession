@@ -15,6 +15,7 @@ import {
 	STATUS_LABEL,
 } from "./PlainThreadPanel";
 import { cn } from "../ui/cn";
+import { IconArrowUpRight } from "./icons";
 
 interface Props {
 	/** The Plain thread id — the pane's key. */
@@ -149,13 +150,14 @@ export function ConversationPane({
 							</div>
 							{plainUrl && (
 								<a
-									className="shrink-0 whitespace-nowrap text-meta font-semibold text-link no-underline hover:underline"
+									className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-meta font-semibold text-link no-underline hover:underline"
 									href={plainUrl}
 									target="_blank"
 									rel="noreferrer"
 									title="Open this thread in Plain"
 								>
-									Open in Plain ↗
+									Open in Plain
+									<IconArrowUpRight size={13} />
 								</a>
 							)}
 						</>
@@ -195,15 +197,16 @@ export function ConversationPane({
 												{STATUS_LABEL[status] || status}
 											</span>
 										)}
-									<a
-										className="shrink-0 whitespace-nowrap text-meta font-semibold text-link no-underline hover:underline ml-auto"
-										href={plainUrl}
-										target="_blank"
-										rel="noreferrer"
-										title="Open this thread in Plain"
-									>
-										Open in Plain ↗
-									</a>
+										<a
+											className="ml-auto inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-meta font-semibold text-link no-underline hover:underline"
+											href={plainUrl}
+											target="_blank"
+											rel="noreferrer"
+											title="Open this thread in Plain"
+										>
+											Open in Plain
+											<IconArrowUpRight size={13} />
+										</a>
 									</div>
 									{thread?.title && (
 										<div className="mt-2 text-section-title font-semibold text-fg">
@@ -233,42 +236,45 @@ export function ConversationPane({
 							{/* The "do you want to triage this?" affordance: one click runs
 						    the Plain triage automation and lands in its session. */}
 							{!hideTriage && (
-								<div className="flex items-center gap-3 flex-wrap mt-4 p-3 rounded-lg border border-line bg-panel">
+								<div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl bg-panel px-4 py-3.5">
 									<div className="min-w-0 flex-1">
 										<div className="text-item-title font-semibold text-fg">
-											Triage this ticket?
+											Triage this ticket
 										</div>
-										<div className="text-dim text-label mt-0.5">
-											Runs the Plain triage automation: investigates, posts an
-											internal note, and can open a PR for review.
+										<div className="mt-0.5 text-label text-dim">
+											Investigates, posts an internal note, and can open a PR
+											for review.
 										</div>
 									</div>
 									<Button
 										variant="primary"
-										className="shrink-0 text-control-label"
+										className="shrink-0"
 										onClick={handleTriage}
 										disabled={triaging}
 									>
-										{triaging
-											? "Starting triage… (~30s)"
-											: "Triage this ticket"}
+										{triaging ? "Starting triage…" : "Triage"}
 									</Button>
 									{triageError && (
-										<div className="basis-full text-red text-label">
+										<div className="basis-full text-label text-red">
 											{triageError}
 										</div>
 									)}
 								</div>
 							)}
 
-							<div className="flex flex-col gap-3 mt-5">
+							<div className="mt-5 flex flex-col gap-3">
 								{thread && thread.entries.length === 0 ? (
 									<div className="mt-5 text-center text-label text-faint">
 										No messages in this thread yet.
 									</div>
 								) : (
 									thread?.entries.map((e) => (
-										<PlainEntryRow key={e.id} entry={e} threadId={threadId} />
+										<PlainEntryRow
+											key={e.id}
+											entry={e}
+											threadId={threadId}
+											threadTitle={thread?.title}
+										/>
 									))
 								)}
 							</div>

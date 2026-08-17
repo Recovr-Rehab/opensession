@@ -44,9 +44,28 @@ import {
 import { noAutofill } from "../lib/composer-autofill";
 import { noteSurface } from "../lib/tinted-surface";
 import { paletteIconBtn, palettePill } from "../lib/palette-classes";
+import {
+	plainEntryBody,
+	plainEntryHead,
+	plainEntryIn,
+	plainEntryMeta,
+	plainEntryName,
+	plainEntryNote,
+	plainEntryOut,
+} from "../lib/plain-classes";
+import { Button } from "../ui/button";
 import { Tooltip } from "../ui/tooltip";
-import { IconArrowUp, IconPencil, IconPlus } from "./icons";
+import {
+	IconArrowUp,
+	IconArrowUpRight,
+	IconCheck,
+	IconClock,
+	IconPaperclip,
+	IconPencil,
+	IconPlus,
+} from "./icons";
 import { FileChips } from "./FileChips";
+import { UserAvatar } from "./UserAvatar";
 
 interface Props {
 	sessionId: string;
@@ -156,13 +175,14 @@ export function PlainThreadPanel({ sessionId, threadId, plainUrl }: Props) {
 					)}
 				</div>
 				<a
-					className="shrink-0 whitespace-nowrap text-meta font-semibold text-link no-underline hover:underline"
+					className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-meta font-semibold text-link no-underline hover:underline"
 					href={plainUrl}
 					target="_blank"
 					rel="noreferrer"
 					title="Open this thread in Plain"
 				>
-					Open in Plain ↗
+					Open in Plain
+					<IconArrowUpRight size={13} />
 				</a>
 			</div>
 
@@ -193,7 +213,12 @@ export function PlainThreadPanel({ sessionId, threadId, plainUrl }: Props) {
 					<div className="mt-5 text-center text-label text-faint">No messages in this thread yet.</div>
 				) : (
 					thread?.entries.map((e) => (
-						<PlainEntryRow key={e.id} entry={e} threadId={threadId} />
+						<PlainEntryRow
+							key={e.id}
+							entry={e}
+							threadId={threadId}
+							threadTitle={thread?.title}
+						/>
 					))
 				)}
 			</div>
@@ -227,8 +252,14 @@ const SNOOZE_OPTIONS: { label: string; seconds: number }[] = [
 	{ label: "1 week", seconds: 7 * 86_400 },
 ];
 
-const actionPill =
-	"cursor-pointer rounded-full border border-line bg-transparent px-2 py-0.5 text-meta font-semibold text-dim hover:border-line-strong hover:text-fg disabled:cursor-default disabled:opacity-50";
+/** A checkmark on the current choice, at the trailing edge — the app's own menu
+ *  grammar (see Archived.tsx), where this row used to lead with a "✓" glyph in
+ *  a hand-measured 16px gutter. */
+function MenuTick({ on }: { on: boolean }) {
+	return on ? (
+		<IconCheck size={17} className="ml-auto shrink-0 text-accent" />
+	) : null;
+}
 
 /**
  * Quick thread actions mirroring Plain's own inbox: status (Todo / Snoozed /
@@ -306,47 +337,55 @@ export function PlainThreadActions({
 
 	return (
 		<div className={cn("flex flex-col gap-1", className)}>
-			<div className="flex items-center gap-1.5 flex-wrap">
+			<div className="flex flex-wrap items-center gap-1">
 				{status === "DONE" ? (
-					<button
-						type="button"
-						className={actionPill}
+					<Button
+						size="sm"
+						variant="ghost"
 						disabled={busy}
 						onClick={() => setStatus("todo")}
 						title="Reopen this thread (back to Todo)"
 					>
 						Reopen
-					</button>
+					</Button>
 				) : (
 					<>
-						<button
-							type="button"
-							className={cn(actionPill, "hover:text-green")}
+						<Button
+							size="sm"
+							variant="ghost"
+							icon={<IconCheck size={18} />}
+							className="hover:text-green"
 							disabled={busy}
 							onClick={() => setStatus("done")}
 							title="Mark this thread Done in Plain"
 						>
-							✓ Done
-						</button>
+							Done
+						</Button>
 						{status === "SNOOZED" ? (
-							<button
-								type="button"
-								className={actionPill}
+							<Button
+								size="sm"
+								variant="ghost"
 								disabled={busy}
 								onClick={() => setStatus("todo")}
 								title="Unsnooze, back to Todo"
 							>
 								Unsnooze
-							</button>
+							</Button>
 						) : (
 							<Menu.Root>
 								<Menu.Trigger
-									className={actionPill}
-									disabled={busy}
-									title="Snooze this thread"
-								>
-									Snooze ▾
-								</Menu.Trigger>
+									render={
+										<Button
+											size="sm"
+											variant="ghost"
+											caret
+											disabled={busy}
+											title="Snooze this thread"
+										>
+											Snooze
+										</Button>
+									}
+								/>
 								<Menu.Popup align="start">
 									{SNOOZE_OPTIONS.map((o) => (
 										<Menu.Item
@@ -363,15 +402,20 @@ export function PlainThreadActions({
 				)}
 				<Menu.Root>
 					<Menu.Trigger
-						className={actionPill}
-						disabled={busy}
-						title="Change priority in Plain"
-					>
-						{thread.priority != null
-							? (PRIORITY_LABEL[thread.priority] ?? `P${thread.priority}`)
-							: "Priority"}{" "}
-						▾
-					</Menu.Trigger>
+						render={
+							<Button
+								size="sm"
+								variant="ghost"
+								caret
+								disabled={busy}
+								title="Change priority in Plain"
+							>
+								{thread.priority != null
+									? (PRIORITY_LABEL[thread.priority] ?? `P${thread.priority}`)
+									: "Priority"}
+							</Button>
+						}
+					/>
 					<Menu.Popup align="start">
 						{([0, 1, 2, 3] as const).map((p) => (
 							<Menu.Item
@@ -382,25 +426,29 @@ export function PlainThreadActions({
 									)
 								}
 							>
-								<span className="w-4 shrink-0">
-									{thread.priority === p ? "✓" : ""}
-								</span>
-								{PRIORITY_LABEL[p]}
+								<span className="min-w-0 flex-1">{PRIORITY_LABEL[p]}</span>
+								<MenuTick on={thread.priority === p} />
 							</Menu.Item>
 						))}
 					</Menu.Popup>
 				</Menu.Root>
 				<Menu.Root>
 					<Menu.Trigger
-						className={actionPill}
-						disabled={busy}
-						title="Assign this thread to a teammate in Plain"
-					>
-						{thread.assignee ? `@ ${thread.assignee.name}` : "Assign"} ▾
-					</Menu.Trigger>
+						render={
+							<Button
+								size="sm"
+								variant="ghost"
+								caret
+								disabled={busy}
+								title="Assign this thread to a teammate in Plain"
+							>
+								{thread.assignee ? thread.assignee.name : "Assign"}
+							</Button>
+						}
+					/>
 					<Menu.Popup align="start">
 						{users === null ? (
-							<div className="px-2.5 py-1.5 text-faint text-label">
+							<div className="px-2.5 py-1.5 text-label text-faint">
 								Loading…
 							</div>
 						) : (
@@ -413,10 +461,9 @@ export function PlainThreadActions({
 										)
 									}
 								>
-									<span className="w-4 shrink-0">
-										{thread.assignee?.id === u.id ? "✓" : ""}
-									</span>
-									{u.name}
+									<UserAvatar name={u.name} size={18} />
+									<span className="min-w-0 flex-1 truncate">{u.name}</span>
+									<MenuTick on={thread.assignee?.id === u.id} />
 								</Menu.Item>
 							))
 						)}
@@ -430,7 +477,6 @@ export function PlainThreadActions({
 										)
 									}
 								>
-									<span className="w-4 shrink-0" />
 									Unassign
 								</Menu.Item>
 							</>
@@ -440,19 +486,24 @@ export function PlainThreadActions({
 				{(labelTypes?.length || 0) > 0 && (
 					<Menu.Root>
 						<Menu.Trigger
-							className={actionPill}
-							disabled={busy}
-							title="Labels on this thread in Plain"
-						>
-							{(thread.labels?.length || 0) > 0
-								? `${thread.labels![0].name}${
-										thread.labels!.length > 1
-											? ` +${thread.labels!.length - 1}`
-											: ""
-									}`
-								: "Labels"}{" "}
-							▾
-						</Menu.Trigger>
+							render={
+								<Button
+									size="sm"
+									variant="ghost"
+									caret
+									disabled={busy}
+									title="Labels on this thread in Plain"
+								>
+									{(thread.labels?.length || 0) > 0
+										? `${thread.labels![0].name}${
+												thread.labels!.length > 1
+													? ` +${thread.labels!.length - 1}`
+													: ""
+											}`
+										: "Labels"}
+								</Button>
+							}
+						/>
 						<Menu.Popup align="start">
 							{labelTypes!.map((lt) => {
 								const existing = (thread.labels || []).find(
@@ -475,19 +526,17 @@ export function PlainThreadActions({
 											)
 										}
 									>
-										<span className="w-4 shrink-0">
-											{existing ? "✓" : ""}
-										</span>
-										{lt.name}
+										<span className="min-w-0 flex-1">{lt.name}</span>
+										<MenuTick on={!!existing} />
 									</Menu.CheckboxItem>
 								);
 							})}
 						</Menu.Popup>
 					</Menu.Root>
 				)}
-				<button
-					type="button"
-					className={actionPill}
+				<Button
+					size="sm"
+					variant="ghost"
 					disabled={busy}
 					onClick={() => {
 						const next = window.prompt(
@@ -501,13 +550,11 @@ export function PlainThreadActions({
 					title="Rename this thread in Plain"
 				>
 					Rename
-				</button>
-				<button
-					type="button"
-					className={cn(
-						actionPill,
-						!isSpam && "hover:text-red hover:border-red",
-					)}
+				</Button>
+				<Button
+					size="sm"
+					variant="ghost"
+					className={cn(!isSpam && "hover:text-red")}
 					disabled={busy}
 					onClick={() => {
 						if (
@@ -527,7 +574,7 @@ export function PlainThreadActions({
 					}
 				>
 					{isSpam ? "Not spam" : "Spam"}
-				</button>
+				</Button>
 			</div>
 			{error && (
 				<span className="text-red text-label truncate" title={error}>
@@ -782,11 +829,11 @@ export function PlainWaitingBanner({
 	return (
 		<div
 			className={cn(
-				"flex items-center gap-2 rounded-md border border-yellow/40 bg-yellow/10 px-2.5 py-1.5 text-supporting text-fg",
+				"flex items-center gap-2 rounded-lg bg-yellow-soft px-3 py-1.5 text-supporting text-fg",
 				className,
 			)}
 		>
-			<span aria-hidden>⏳</span>
+			<IconClock size={16} className="shrink-0 text-yellow" />
 			<span className="min-w-0 truncate">
 				{thread.awaitingFirstResponse ? (
 					<>
@@ -837,8 +884,10 @@ function PlainAttachments({
 						rel="noreferrer"
 						title={`${a.fileName}${a.sizeBytes ? ` · ${fileSize(a.sizeBytes)}` : ""}`}
 						className={cn(
-							"block rounded-md border border-line overflow-hidden hover:border-line-strong",
-							!isImage && "px-2 py-1 text-label text-dim hover:text-fg",
+							"block overflow-hidden rounded-lg no-underline",
+							isImage
+								? "bg-surface"
+								: "inline-flex items-center gap-1.5 bg-active px-2.5 py-1.5 text-label text-dim hover:bg-hover hover:text-fg",
 						)}
 					>
 						{isImage ? (
@@ -849,15 +898,15 @@ function PlainAttachments({
 								onError={() =>
 									setFailed((f) => ({ ...f, [a.id]: true }))
 								}
-								className="block max-h-[220px] max-w-full object-contain bg-surface"
+								className="block max-h-[220px] max-w-full bg-surface object-contain"
 							/>
 						) : (
 							<>
-								📎 {a.fileName}
+								<IconPaperclip size={16} className="shrink-0 opacity-60" />
+								<span className="truncate">{a.fileName}</span>
 								{a.sizeBytes ? (
-									<span className="text-faint">
-										{" "}
-										· {fileSize(a.sizeBytes)}
+									<span className="shrink-0 text-faint">
+										{fileSize(a.sizeBytes)}
 									</span>
 								) : null}
 							</>
@@ -904,44 +953,72 @@ function noteAuthor(entry: PlainTimelineEntry): {
 	return { name: entry.actorName, isAgent: false, text: entry.text };
 }
 
+/**
+ * A message repeats the thread's own subject on almost every line ("Re: …"),
+ * which is the loudest thing in the timeline and the one fact the reader
+ * already has. Show it only where it says something new.
+ */
+function subjectWorthShowing(
+	subject: string | null | undefined,
+	threadTitle?: string | null,
+): string | null {
+	const s = subject?.trim();
+	if (!s) return null;
+	if (!threadTitle) return s;
+	const bare = (t: string) => t.replace(/^((re|fwd|fw)\s*:\s*)+/i, "").trim().toLowerCase();
+	return bare(s) === bare(threadTitle) ? null : s;
+}
+
 export function PlainEntryRow({
 	entry,
 	threadId,
+	threadTitle,
 }: {
 	entry: PlainTimelineEntry;
 	/** Enables the "open the triage session" link on agent notes. */
 	threadId?: string;
+	/** The thread's own subject, so a message that only echoes it stays quiet. */
+	threadTitle?: string | null;
 }) {
 	if (entry.kind === "note") {
 		const author = noteAuthor(entry);
 		return (
-			<div className="flex flex-col gap-1 rounded-lg border px-[11px] py-2 max-w-full self-stretch border-[color-mix(in_srgb,var(--yellow)_24%,var(--border))] bg-[color-mix(in_srgb,var(--yellow)_8%,var(--bg-panel))]">
-				<div className="flex flex-wrap items-baseline gap-[7px]">
-					<span className="rounded-sm border px-1 text-meta font-bold tracking-[-0.01em] border-[color-mix(in_srgb,var(--yellow)_40%,var(--border))] text-yellow">note</span>
-					<span className="text-label font-bold text-fg">{author.name}</span>
+			<div
+				className={plainEntryNote}
+				style={{ background: noteSurface("transparent") }}
+			>
+				<div className={plainEntryHead}>
+					<span className={plainEntryName}>{author.name}</span>
+					<span
+						className="text-meta font-semibold text-yellow"
+						title="Only the team sees this note"
+					>
+						Note
+					</span>
 					{author.isAgent && (
 						<span
-							className="rounded-sm border px-1 text-meta font-bold tracking-[-0.01em] border-line-strong text-faint"
+							className={plainEntryMeta}
 							title="Written by an agent run, not a teammate"
 						>
 							agent
 						</span>
 					)}
-					<span className="text-meta text-faint">{timeOf(entry.timestamp)}</span>
+					<span className={plainEntryMeta}>{timeOf(entry.timestamp)}</span>
 					{author.isAgent && threadId && (
 						<a
-							className="shrink-0 whitespace-nowrap text-meta font-semibold text-link no-underline hover:underline ml-auto"
+							className="ml-auto inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-meta font-semibold text-link no-underline hover:underline"
 							href={`${BASE_PATH}/plain-triage/${encodeURIComponent(threadId)}`}
 							target="_blank"
 							rel="noreferrer"
 							title="Open the triage session for this ticket"
 						>
-							Session ↗
+							Session
+							<IconArrowUpRight size={13} />
 						</a>
 					)}
 				</div>
 				<div
-					className="break-words text-label leading-[1.45] text-fg [&>:first-child]:mt-0 [&>:last-child]:mb-0 markdown"
+					className="markdown break-words text-body leading-relaxed text-fg [&>:first-child]:mt-0 [&>:last-child]:mb-0"
 					dangerouslySetInnerHTML={{ __html: renderMarkdown(author.text) }}
 				/>
 				{entry.attachments?.length ? (
@@ -951,16 +1028,20 @@ export function PlainEntryRow({
 		);
 	}
 
-	const side = entry.actorType === "customer" ? "in" : "out";
+	const ours = entry.actorType !== "customer";
+	const subject = subjectWorthShowing(entry.subject, threadTitle);
 	return (
-		<div className={side === "in" ? "flex flex-col gap-1 rounded-lg border px-[11px] py-2 max-w-[88%] self-start rounded-bl-[3px] border-line bg-panel" : "flex flex-col gap-1 rounded-lg border px-[11px] py-2 max-w-[88%] self-end rounded-br-[3px] border-[color-mix(in_srgb,var(--accent)_22%,var(--border))] bg-[color-mix(in_srgb,var(--accent)_9%,var(--bg-panel))]"}>
-			<div className="flex flex-wrap items-baseline gap-[7px]">
-				<span className="text-label font-bold text-fg">{entry.actorName}</span>
-				<span className="rounded-sm border px-1 text-meta font-bold tracking-[-0.01em] border-line-strong text-faint">{entry.kind}</span>
-				<span className="text-meta text-faint">{timeOf(entry.timestamp)}</span>
+		<div className={ours ? plainEntryOut : plainEntryIn}>
+			<div className={cn(plainEntryHead, ours && "flex-row-reverse")}>
+				<span className={plainEntryName}>{entry.actorName}</span>
+				<span className={plainEntryMeta}>
+					{entry.kind} · {timeOf(entry.timestamp)}
+				</span>
 			</div>
-			{entry.subject && <div className="text-label font-semibold text-fg">{entry.subject}</div>}
-			{entry.text && <div className="whitespace-pre-wrap break-words text-label leading-[1.45] text-fg">{entry.text}</div>}
+			{subject && (
+				<div className="text-body font-semibold text-fg">{subject}</div>
+			)}
+			{entry.text && <div className={plainEntryBody}>{entry.text}</div>}
 			{entry.attachments?.length ? (
 				<PlainAttachments attachments={entry.attachments} />
 			) : null}

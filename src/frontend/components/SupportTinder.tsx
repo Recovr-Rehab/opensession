@@ -44,12 +44,14 @@ interface Props {
 	onOpenSession: (id: string) => void;
 }
 
-/** Plain thread priorities, as Plain's own UI names them. */
+/** Plain thread priorities, as Plain's own UI names them. Filled, not drawn:
+ *  the app's chips are a wash of their own tone (lib/plain-status.ts, the
+ *  source chips), so an outlined one here read as a different family. */
 const PRIORITY: Record<number, { label: string; cls: string }> = {
-	0: { label: "Urgent", cls: "border-red/50 text-red" },
-	1: { label: "High", cls: "border-yellow/50 text-yellow" },
-	2: { label: "Normal", cls: "border-line text-dim" },
-	3: { label: "Low", cls: "border-line text-faint" },
+	0: { label: "Urgent", cls: "bg-red-soft text-red" },
+	1: { label: "High", cls: "bg-yellow-soft text-yellow" },
+	2: { label: "Normal", cls: "bg-active text-dim" },
+	3: { label: "Low", cls: "bg-active text-faint" },
 };
 
 /** The deck's action row keeps a 44px touch target: it is the phone's only
@@ -525,7 +527,7 @@ function TicketCard({
 					)}
 					{prio && (
 						<span
-							className={`rounded border px-1.5 py-px text-meta font-bold tracking-[-0.01em] ${prio.cls}`}
+							className={`shrink-0 rounded-full px-2 py-0.5 text-meta font-bold tracking-[-0.01em] ${prio.cls}`}
 						>
 							{prio.label}
 						</span>
