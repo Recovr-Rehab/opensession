@@ -176,6 +176,24 @@ export function formatDay(day: IsoDay, locale?: string): string {
 	}).format(new Date(utcMs(day)));
 }
 
+/**
+ * A range as one label: "May 20 – Aug 17, 2026". The near end drops the year
+ * whenever the far end already carries it, because a range inside one year
+ * says it once — spelled out twice it is the longest thing in the bar and the
+ * repetition is the least informative part of it.
+ */
+export function formatDayRange(from: IsoDay, to: IsoDay, locale?: string): string {
+	const sameYear = from.slice(0, 4) === to.slice(0, 4);
+	const start = sameYear
+		? new Intl.DateTimeFormat(locale, {
+				day: "numeric",
+				month: "short",
+				timeZone: "UTC",
+			}).format(new Date(utcMs(from)))
+		: formatDay(from, locale);
+	return `${start} – ${formatDay(to, locale)}`;
+}
+
 /** The full day, for the cell's accessible name. */
 export function formatDayLong(day: IsoDay, locale?: string): string {
 	return new Intl.DateTimeFormat(locale, {

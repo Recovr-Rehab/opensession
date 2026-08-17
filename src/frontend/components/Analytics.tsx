@@ -7,7 +7,7 @@ import { UserAvatar } from "./UserAvatar";
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
 import { Segmented, SegmentedOption } from "../ui/segmented";
-import { DateField } from "../ui/date-picker";
+import { DateRangeField } from "../ui/date-picker";
 import { PageTitle } from "../ui/page-header";
 import { cn } from "../ui/cn";
 import {
@@ -749,11 +749,6 @@ export function Analytics() {
 		};
 	}, [from, to]);
 
-	const activePresetDays = useMemo(() => {
-		const preset = PRESETS.find((p) => from === daysAgo(p.days - 1) && to === utcToday());
-		return preset?.days ?? null;
-	}, [from, to]);
-
 	const derived = useMemo(() => {
 		if (!data) return null;
 		const labels = data.days.map((d) => d.date);
@@ -960,51 +955,20 @@ export function Analytics() {
 					>
 						Analytics
 					</span>
-					{/* On a phone the two controls can't sit beside each other as one
-					    block, and stacking them would double the bar. `contents` hands
-					    them to the row's own wrap instead, so only the dates take a
-					    second row. */}
-					<div className="flex flex-wrap items-center gap-2 phone:contents">
-						{/* A custom range matches no preset, so the control can sit with
-						    nothing pressed — the dates beside it are the value then. */}
-						<Segmented
-							label="Date range"
-							value={activePresetDays === null ? null : String(activePresetDays)}
-							onValueChange={(v) => {
-								setFrom(daysAgo(Number(v) - 1));
-								setTo(utcToday());
-							}}
-						>
-							{PRESETS.map((p) => (
-								<SegmentedOption key={p.label} value={String(p.days)}>
-									{p.label}
-								</SegmentedOption>
-							))}
-						</Segmented>
-						{/* Both ends are told about the whole range, so opening either
-						    one shows the span that is currently charted rather than a
-						    lone day. */}
-						<div className="flex items-center gap-1.5">
-							<DateField
-								label="From date"
-								value={from}
-								max={to}
-								rangeStart={from}
-								rangeEnd={to}
-								onValueChange={setFrom}
-							/>
-							<span className="text-xs text-faint">–</span>
-							<DateField
-								label="To date"
-								value={to}
-								min={from}
-								max={utcToday()}
-								rangeStart={from}
-								rangeEnd={to}
-								onValueChange={setTo}
-							/>
-						</div>
-					</div>
+					{/* The presets and the span are one control: they set one value
+					    between them, and it carries the chrome tier the rest of the bar
+					    is on rather than a plate per end. */}
+					<DateRangeField
+						label="Date range"
+						from={from}
+						to={to}
+						max={utcToday()}
+						presets={PRESETS}
+						onRangeChange={(start, end) => {
+							setFrom(start);
+							setTo(end);
+						}}
+					/>
 				</div>
 			</header>
 

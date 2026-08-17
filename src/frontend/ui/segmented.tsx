@@ -29,7 +29,9 @@ import { duration, ease } from "./motion";
  * a background that blinks on and off, so the control says which way the value
  * went. Each mounted group gets its own id from `useId`, or two segmented
  * controls on one page would trade a single knob back and forth across the
- * screen.
+ * screen. Trading it IS right where a control beside the group holds the same
+ * value — the date range next to the presets in `ui/date-picker` — so `knobId`
+ * can be passed in and the knob rendered from `SegmentedKnob` out there.
  *
  * Built on Base UI's ToggleGroup, which is what makes the keyboard right:
  * arrow keys move between the options, the group is one tab stop, and each
@@ -69,6 +71,7 @@ export function Segmented({
 	value,
 	onValueChange,
 	size = "md",
+	knobId: knobIdProp,
 	className,
 	children,
 	...props
@@ -83,8 +86,13 @@ export function Segmented({
 	value: string | null;
 	onValueChange: (value: string) => void;
 	size?: Size;
+	/** Share the knob with a control outside the group that holds the same
+	 *  value, so it travels between the two instead of blinking across. Pass
+	 *  the same id to `SegmentedKnob` over there. */
+	knobId?: string;
 }) {
-	const knobId = React.useId();
+	const ownId = React.useId();
+	const knobId = knobIdProp ?? ownId;
 	return (
 		<SegmentedContext.Provider value={{ knobId, value, size }}>
 			<ToggleGroup
@@ -128,16 +136,29 @@ export function SegmentedOption({
 			)}
 			{...props}
 		>
-			{selected && (
-				<motion.span
-					layoutId={knobId}
-					aria-hidden
-					className="absolute inset-0 rounded-control border border-[var(--segmented-knob-edge)] bg-[var(--segmented-knob-surface)] smooth-shadow-sm"
-					transition={{ type: "tween", duration: duration.base, ease }}
-				/>
-			)}
+			{selected && <SegmentedKnob knobId={knobId} />}
 			{/* Above the knob, which is absolutely positioned over the option. */}
 			<span className="relative flex items-center gap-1.5">{children}</span>
 		</Toggle>
+	);
+}
+
+/**
+ * The knob itself. Rendered by whichever option is in effect, and exported so a
+ * control sitting on the same track outside the group can hold it too: one
+ * element with one `layoutId` means the knob travels to it rather than blinking
+ * off one plate and on to another.
+ *
+ * Its host needs `relative` and a `rounded-control` corner of its own, since
+ * the knob fills the box it is dropped into.
+ */
+export function SegmentedKnob({ knobId }: { knobId: string }) {
+	return (
+		<motion.span
+			layoutId={knobId}
+			aria-hidden
+			className="absolute inset-0 rounded-control border border-[var(--segmented-knob-edge)] bg-[var(--segmented-knob-surface)] smooth-shadow-sm"
+			transition={{ type: "tween", duration: duration.base, ease }}
+		/>
 	);
 }

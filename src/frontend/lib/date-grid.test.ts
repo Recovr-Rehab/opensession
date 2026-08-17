@@ -6,6 +6,7 @@ import {
 	dayInMonth,
 	daysInMonth,
 	formatDay,
+	formatDayRange,
 	isIsoDay,
 	isWithin,
 	monthGrid,
@@ -204,6 +205,18 @@ describe("labels", () => {
 
 	it("formats a day a field can read", () => {
 		expect(formatDay("2026-07-19", "en-US")).toBe("Jul 19, 2026");
+	});
+
+	it("says the year once in a range inside one year", () => {
+		expect(formatDayRange("2026-05-20", "2026-08-17", "en-US")).toBe(
+			"May 20 – Aug 17, 2026",
+		);
+	});
+
+	it("keeps both years when a range crosses one", () => {
+		expect(formatDayRange("2025-12-20", "2026-08-17", "en-US")).toBe(
+			"Dec 20, 2025 – Aug 17, 2026",
+		);
 	});
 
 	it("heads the columns in week order", () => {
