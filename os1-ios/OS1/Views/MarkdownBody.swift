@@ -7,6 +7,17 @@ import UIKit
 import AppKit
 #endif
 
+private struct TranscriptRepoKey: EnvironmentKey {
+    static let defaultValue: String? = nil
+}
+
+extension EnvironmentValues {
+    var transcriptRepo: String? {
+        get { self[TranscriptRepoKey.self] }
+        set { self[TranscriptRepoKey.self] = newValue }
+    }
+}
+
 /// CommonMark/GFM rendering for durable assistant messages. Parsing and
 /// renderable-document construction happen asynchronously inside the library.
 struct MarkdownBody: View {
@@ -21,6 +32,9 @@ struct MarkdownBody: View {
     /// surface with nowhere to push (the Mac app) has no id and gets no file
     /// links — which is right, since the push is the whole point of one.
     @Environment(\.openPanel) private var openPanel
+    /// Repo context exists on both native clients. The Mac has no pushable
+    /// `openPanel`, but its commit references still need the session's repo.
+    @Environment(\.transcriptRepo) private var transcriptRepo
     @Environment(\.transcriptQuoteSelection) private var quoteSelection
 
     init(_ text: String, dimmed: Bool = false) {
@@ -103,7 +117,7 @@ struct MarkdownBody: View {
         return out
     }
 
-    /// PR references, automation and session ids, file paths, scratch files and bare URLs
+    /// PR and commit references, automation and session ids, file paths, scratch files and bare URLs
     /// become links here rather than in the display pass: the entry's own text
     /// stays the raw markdown, so copying a message still yields what the
     /// agent actually wrote. `PrLinks` runs FIRST, because a pasted PR URL is
@@ -113,7 +127,9 @@ struct MarkdownBody: View {
     /// session URL is already a link target by the time `SessionLinks` looks
     /// for loose ids, and each rewrite after it leaves the links already there
     /// alone. `AssetLinks` runs last, so a name that is both a repo path and a
-    /// scratch file keeps its diff.
+    /// scratch file keeps its diff. `CommitLinks` also runs before autolinking:
+    /// a bare configured GitHub commit URL is the long form of the same
+    /// reference, not a generic browser link.
     private func linkified(_ value: String) -> String {
         // Subscribes this row to the registries the rewrites below read.
         // They are static tables rather than observable state, so without
@@ -126,7 +142,10 @@ struct MarkdownBody: View {
                 SessionLinks.linkify(
                     AutomationLinks.linkify(
                         MarkdownAutolink.linkify(
-                            PrLinks.linkify(value, sessionId: openPanel.sessionId)
+                            CommitLinks.linkify(
+                                PrLinks.linkify(value, sessionId: openPanel.sessionId),
+                                repo: transcriptRepo
+                            )
                         )
                     )
                 ),
