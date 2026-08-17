@@ -346,6 +346,7 @@ function ChartCard({
 	onSelect,
 	filterLabel,
 	clearLabel,
+	actions,
 	children,
 }: {
 	title: string;
@@ -356,11 +357,21 @@ function ChartCard({
 	onSelect?: (value: string) => void;
 	filterLabel?: string;
 	clearLabel?: string;
+	/** A control that belongs to this chart, on the title's line. */
+	actions?: React.ReactNode;
 	children: React.ReactNode;
 }) {
+	const heading = <h3 className="m-0 text-item-title font-semibold tracking-[-0.01em] text-fg">{title}</h3>;
 	return (
 		<Card as="section" className="min-w-0 p-5">
-			<h3 className="m-0 text-item-title font-semibold tracking-[-0.01em] text-fg">{title}</h3>
+			{actions ? (
+				<div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
+					{heading}
+					{actions}
+				</div>
+			) : (
+				heading
+			)}
 			{subtitle && <p className="m-0 mb-3 mt-1 text-supporting text-dim">{subtitle}</p>}
 			{series && (
 				<Legend
@@ -400,24 +411,50 @@ function StatTile({
 	);
 }
 
+/** What the per-person bars measure. Output tokens are the loudest of the
+ *  three and the least fair: how much a model writes per turn is mostly a
+ *  property of the model, so a person working on a terse one reads as a
+ *  fraction of a colleague doing the same work on a wordy one. Turns and
+ *  sessions count the work instead of its prose. */
+const REPO_METRICS = [
+	{ key: "outputTokens", label: "Output", noun: "Output tokens", rest: "sessions and turns" },
+	{ key: "turns", label: "Turns", noun: "Turns", rest: "sessions and output" },
+	{ key: "sessions", label: "Sessions", noun: "Sessions", rest: "turns and output" },
+] as const;
+type RepoMetric = (typeof REPO_METRICS)[number]["key"];
+
 interface PersonRepoRow {
 	name: string;
-	outputTokens: number;
+	total: number;
 	segments: AnalyticsPersonRepo[];
 }
 
-/** One repo's slice of each person's output, for the filtered per-person bars.
- *  People who never touched it drop out, and the rest rank by the length they
- *  are about to draw: isolated to one repo the question is who works on it,
- *  and the unfiltered order (each person's activity across everything) puts a
- *  one-session worker above the people who actually built it. */
-function repoOnlyRows(people: AnalyticsPerson[], repo: string): PersonRepoRow[] {
+/** One row per person, one segment per repo, measured in `metric`. `repo`
+ *  isolates a single series: people who never touched it drop out, and the
+ *  rest rank by the length they are about to draw, because isolated the
+ *  question is who works on this repo and the unfiltered order (each person's
+ *  activity across everything) puts a one-session worker above the people who
+ *  actually built it. Unfiltered, rows keep the people order the table above
+ *  uses, and reach further down the list than any single repo's dozen. */
+function personRepoRows(
+	people: AnalyticsPerson[],
+	order: string[],
+	metric: RepoMetric,
+	repo: string | null,
+): PersonRepoRow[] {
+	const segOrder = (r: string) => (r ? order.indexOf(r) : order.length);
 	const rows: PersonRepoRow[] = [];
 	for (const p of people) {
-		const seg = (p.repos || []).find((r) => r.repo === repo);
-		if (seg && seg.outputTokens > 0) rows.push({ name: p.name, outputTokens: seg.outputTokens, segments: [seg] });
+		const segments = (p.repos || []).filter((r) => (repo === null || r.repo === repo) && r[metric] > 0);
+		if (!segments.length) continue;
+		rows.push({
+			name: p.name,
+			total: segments.reduce((sum, s) => sum + s[metric], 0),
+			segments: repo === null ? [...segments].sort((a, b) => segOrder(a.repo) - segOrder(b.repo)) : segments,
+		});
 	}
-	return rows.sort((a, b) => b.outputTokens - a.outputTokens).slice(0, 12);
+	if (repo !== null) rows.sort((a, b) => b.total - a.total);
+	return rows.slice(0, 12);
 }
 
 const PRESETS = [
@@ -444,6 +481,7 @@ export function Analytics() {
 	// mix. `""` is a repo here (the "No repo" bucket), so this is never a
 	// falsy check.
 	const [repoFilter, setRepoFilter] = useState<string | null>(null);
+	const [repoMetric, setRepoMetric] = useState<RepoMetric>("outputTokens");
 	// The bar is a sibling above the scroller, so it can't know on its own when
 	// the charts have started travelling under it. The app's own chrome rows ask
 	// the same question the same way.
@@ -596,18 +634,6 @@ export function Analytics() {
 			const i = coloredRepos.indexOf(repo);
 			return repo && i >= 0 && i < 8 ? slot(i + 1) : OTHER_COLOR;
 		};
-		const segOrder = (repo: string) => (repo ? coloredRepos.indexOf(repo) : coloredRepos.length);
-		const personRepoRows = data.people
-			.filter((p) => p.outputTokens > 0 && (p.repos?.length || 0) > 0)
-			.slice(0, 12)
-			.map((p) => ({
-				name: p.name,
-				outputTokens: p.outputTokens,
-				segments: (p.repos || []).filter((r) => r.outputTokens > 0).sort((a, b) => segOrder(a.repo) - segOrder(b.repo)),
-			}));
-		const personRepoSeries: Series[] = [...coloredRepos, ""]
-			.filter((repo) => personRepoRows.some((p) => p.segments.some((s) => s.repo === repo)))
-			.map((repo) => ({ label: repo ? repoLabel(repo) : "No repo", color: repoColor(repo), value: repo }));
 
 		// Review finding outcomes, cohorted by the day the finding was posted.
 		// Guard: the live-rebuilt frontend can briefly run against a not-yet-
@@ -626,24 +652,37 @@ export function Analytics() {
 		});
 		const splitDate = labels[Math.floor(labels.length / 2)] || "";
 
-		return { labels, engineLabels, unmeasuredDays, kindSeries, kindValues, modelSeries, modelValues, tokenSeries, tokenValues, totalTokens, costSeries, costValues, costUsd, requests, hasCost, prSeries, prValues, turnSeries, turnValues, factorySeries, factoryValues, rq, reviewSeries, reviewValues, splitDate, repoColor, personRepoRows, personRepoSeries };
+		return { labels, engineLabels, unmeasuredDays, kindSeries, kindValues, modelSeries, modelValues, tokenSeries, tokenValues, totalTokens, costSeries, costValues, costUsd, requests, hasCost, prSeries, prValues, turnSeries, turnValues, factorySeries, factoryValues, rq, reviewSeries, reviewValues, splitDate, repoColor, coloredRepos };
 	}, [data]);
 
-	// A held filter outlives the range it was picked in, so it only counts
-	// while that repo is still one of the chart's own series.
+	// The per-person bars: rebuilt per metric and per filter rather than held
+	// in `derived`, so switching either does not rebuild every other chart.
+	const allRepoRows =
+		data && derived ? personRepoRows(data.people, derived.coloredRepos, repoMetric, null) : [];
+	// Colors and legend order follow the repos table; a repo only appears once
+	// somebody's bar carries it in the metric being shown.
+	const personRepoSeries: Series[] = !derived
+		? []
+		: [...derived.coloredRepos, ""]
+				.filter((repo) => allRepoRows.some((p) => p.segments.some((s) => s.repo === repo)))
+				.map((repo) => ({
+					label: repo ? repoLabel(repo) : "No repo",
+					color: derived.repoColor(repo),
+					value: repo,
+				}));
+	// A held filter outlives the range and the metric it was picked in, so it
+	// only counts while that repo is still one of the chart's own series.
 	const activeRepo =
-		derived && repoFilter !== null && derived.personRepoSeries.some((s) => s.value === repoFilter)
-			? repoFilter
-			: null;
+		repoFilter !== null && personRepoSeries.some((s) => s.value === repoFilter) ? repoFilter : null;
 	const repoRows =
-		!data || !derived
-			? []
-			: activeRepo === null
-				? derived.personRepoRows
-				: repoOnlyRows(data.people, activeRepo);
+		!data || !derived || activeRepo === null
+			? allRepoRows
+			: personRepoRows(data.people, derived.coloredRepos, repoMetric, activeRepo);
 	// Scale to the longest bar on screen: filtered to a small repo, every bar
 	// measured against the unfiltered leader would be a stub.
-	const maxRepoRow = Math.max(1, ...repoRows.map((r) => r.outputTokens));
+	const maxRepoRow = Math.max(1, ...repoRows.map((r) => r.total));
+	const metricMeta = REPO_METRICS.find((m) => m.key === repoMetric)!;
+	const fmtMetric = repoMetric === "outputTokens" ? fmt : fmtInt;
 
 	return (
 		<div className="analytics-viz flex min-h-0 flex-1 flex-col bg-bg">
@@ -1106,18 +1145,32 @@ export function Analytics() {
 								</ChartCard>
 							</div>
 
-							{derived.personRepoRows.length > 0 && (
+							{allRepoRows.length > 0 && (
 								<div className="mt-4">
 									<ChartCard
 										title="Repo activity per person"
 										subtitle={
 											activeRepo === null
-												? "Output tokens by repo. Hover a segment for sessions and turns."
-												: `Output tokens in ${
+												? `${metricMeta.noun} by repo. Hover a segment for ${metricMeta.rest}.`
+												: `${metricMeta.noun} in ${
 														activeRepo ? repoLabel(activeRepo) : "sessions with no repo"
-													}. Hover a bar for sessions and turns.`
+													}. Hover a bar for ${metricMeta.rest}.`
 										}
-										series={derived.personRepoSeries}
+										actions={
+											<Segmented
+												label="Measure"
+												size="sm"
+												value={repoMetric}
+												onValueChange={(v) => setRepoMetric(v as RepoMetric)}
+											>
+												{REPO_METRICS.map((m) => (
+													<SegmentedOption key={m.key} value={m.key}>
+														{m.label}
+													</SegmentedOption>
+												))}
+											</Segmented>
+										}
+										series={personRepoSeries}
 										selected={activeRepo}
 										onSelect={(repo) => setRepoFilter((cur) => (cur === repo ? null : repo))}
 										filterLabel="Filter by repo"
@@ -1132,14 +1185,14 @@ export function Analytics() {
 													<span className="h-3 min-w-0 flex-1">
 														<span
 															className="flex h-3 min-w-3 overflow-hidden rounded-[999px]"
-															style={{ width: `${Math.max(1.5, (100 * p.outputTokens) / maxRepoRow)}%` }}
+															style={{ width: `${Math.max(1.5, (100 * p.total) / maxRepoRow)}%` }}
 														>
 															{p.segments.map((s) => (
 																<span
 																	key={s.repo || "(none)"}
 																	className="block h-3"
 																	style={{
-																		width: `${(100 * s.outputTokens) / p.outputTokens}%`,
+																		width: `${(100 * s[repoMetric]) / p.total}%`,
 																		background: derived.repoColor(s.repo),
 																	}}
 																	title={`${s.repo ? repoLabel(s.repo) : "No repo"}: ${fmtInt(s.sessions)} sessions · ${fmtInt(s.turns)} turns · ${fmt(s.outputTokens)} output`}
@@ -1147,7 +1200,7 @@ export function Analytics() {
 															))}
 														</span>
 													</span>
-													<span className="w-14 shrink-0 text-right tabular-nums text-dim">{fmt(p.outputTokens)}</span>
+													<span className="w-14 shrink-0 text-right tabular-nums text-dim">{fmtMetric(p.total)}</span>
 												</div>
 											))}
 										</div>
