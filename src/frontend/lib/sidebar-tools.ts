@@ -205,10 +205,6 @@ export function setSidebarToolVisible(id: SidebarToolId, visible: boolean) {
 	commit(user, hidden);
 }
 
-export function hideAllSidebarTools() {
-	commit(getCurrentUser(), new Set(SIDEBAR_TOOL_IDS));
-}
-
 async function hydrate(user: string) {
 	const stampAtStart = writeStamp;
 	let prefs: Record<string, string>;
