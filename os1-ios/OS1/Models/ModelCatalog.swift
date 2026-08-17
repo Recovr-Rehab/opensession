@@ -2,7 +2,7 @@ import Foundation
 
 /// One row from `GET /api/models` — a pickable model or preset. Tolerant
 /// decoding (everything but `id` optional) so server additions never break us.
-struct ModelOption: Decodable, Identifiable, Hashable {
+struct ModelOption: Decodable, Identifiable, Hashable, Sendable {
     let id: String
     var label: String?
     var provider: String?
@@ -18,38 +18,113 @@ struct ModelOption: Decodable, Identifiable, Hashable {
     var isPreset: Bool { group != nil }
 }
 
-/// `GET /api/models`: the pickable catalog plus the interactive default id.
-struct ModelCatalog: Decodable {
+/// One execution engine from `GET /api/models`. `available` is optional so an
+/// older server that only sent an id and label still leaves the engine usable.
+struct ModelEngineOption: Decodable, Identifiable, Hashable, Sendable {
+    let id: String
+    var label: String
+    var available: Bool?
+
+    var isAvailable: Bool { available != false }
+}
+
+/// `GET /api/models`: the pickable catalog, interactive default, and the
+/// routing choices that can carry each model.
+struct ModelCatalog: Decodable, Sendable {
     var models: [ModelOption]
     var defaultModel: String?
+    var engines: [ModelEngineOption]?
+    var modelEngines: [String: String]?
 
     enum CodingKeys: String, CodingKey {
         case models
         case defaultModel = "default"
+        case engines
+        case modelEngines
     }
 
     var presets: [ModelOption] { models.filter(\.isPreset) }
     var regular: [ModelOption] { models.filter { !$0.isPreset } }
+    var availableEngines: [ModelEngineOption] {
+        guard let engines else {
+            return [ModelEngineOption(id: "opencode", label: "OpenCode", available: true)]
+        }
+        return engines.filter(\.isAvailable)
+    }
+
+    private static let routedEngines = ["pi", "claude", "codex"]
+    private static let presetHeads = ["dial/", "orchestrator/", "workspace-preset/"]
+
+    private static func isPresetID(_ id: String) -> Bool {
+        presetHeads.contains { id.hasPrefix($0) }
+    }
+
+    /// The engine named explicitly by an id. An unprefixed picker id runs on
+    /// OpenCode unless the server applies a per-model default at dispatch.
+    static func engine(_ id: String) -> String {
+        for engine in routedEngines where id.hasPrefix("\(engine)/") {
+            return engine
+        }
+        return "opencode"
+    }
 
     static func baseID(_ id: String) -> String {
-        guard id.hasPrefix("pi/") else { return id }
-        let tail = String(id.dropFirst(3))
-        if tail.hasPrefix("dial/") || tail.hasPrefix("orchestrator/") {
-            return tail
-        }
-        return "opencode/\(tail)"
+        let engine = engine(id)
+        guard engine != "opencode" else { return id }
+        let tail = String(id.dropFirst(engine.count + 1))
+        return isPresetID(tail) ? tail : "opencode/\(tail)"
     }
 
     static func routedID(_ id: String, engine: String) -> String? {
         let base = baseID(id)
-        guard engine == "pi" else { return base }
+        guard engine != "opencode" else { return base }
+        let tail: String
         if base.hasPrefix("opencode/") {
-            return "pi/\(base.dropFirst("opencode/".count))"
+            tail = String(base.dropFirst("opencode/".count))
+        } else if isPresetID(base) {
+            tail = base
+        } else {
+            return nil
         }
-        if base.hasPrefix("dial/") || base.hasPrefix("orchestrator/") {
-            return "pi/\(base)"
+        if engine == "claude" || engine == "codex",
+           let vendor = vendor(base),
+           vendor != (engine == "claude" ? "anthropic" : "openai") {
+            return nil
         }
-        return nil
+        guard routedEngines.contains(engine) else { return nil }
+        return "\(engine)/\(tail)"
+    }
+
+    /// The upstream provider segment in an OpenCode picker id. Presets name
+    /// their own models and therefore have no single vendor.
+    static func vendor(_ id: String) -> String? {
+        let base = baseID(id)
+        guard base.hasPrefix("opencode/") else { return nil }
+        let parts = base.split(separator: "/", maxSplits: 2)
+        return parts.count == 3 ? String(parts[1]) : nil
+    }
+
+    /// Key shape used by the server's `modelEngines` map: the model slug for
+    /// normal models, or the whole preset id.
+    static func engineKey(_ id: String) -> String {
+        let base = baseID(id)
+        guard base.hasPrefix("opencode/") else { return base }
+        let tail = String(base.dropFirst("opencode/".count))
+        guard let slash = tail.firstIndex(of: "/") else { return tail }
+        return String(tail[tail.index(after: slash)...])
+    }
+
+    /// Explicit prefixes win. Otherwise mirror the server's fail-soft
+    /// per-model default so an unavailable or incompatible preference still
+    /// reads as OpenCode in the picker.
+    func routingEngine(for id: String) -> String {
+        let explicit = Self.engine(id)
+        if explicit != "opencode" { return explicit }
+        guard let preferred = modelEngines?[Self.engineKey(id)],
+              availableEngines.contains(where: { $0.id == preferred }),
+              Self.routedID(id, engine: preferred) != nil
+        else { return "opencode" }
+        return preferred
     }
 
     func option(for id: String?) -> ModelOption? {

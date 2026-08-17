@@ -1345,9 +1345,20 @@ enum OS1API {
         throw APIError.http(http.statusCode)
     }
 
-    /// Models (and presets) a session can run on, plus the interactive default.
-    static func models() async throws -> ModelCatalog {
-        try await get("/api/models")
+    /// Models (and presets) a session can run on, plus the interactive default
+    /// and engine routing. A workspace replaces the global presets with its
+    /// own catalog, so every surface editing a workspace session must scope
+    /// this request.
+    static func models(workspaceId: String? = nil) async throws -> ModelCatalog {
+        try await get(modelsPath(workspaceId: workspaceId))
+    }
+
+    static func modelsPath(workspaceId: String?) -> String {
+        guard let workspaceId, !workspaceId.isEmpty else { return "/api/models" }
+        var components = URLComponents()
+        components.path = "/api/models"
+        components.queryItems = [URLQueryItem(name: "workspace", value: workspaceId)]
+        return components.string ?? "/api/models"
     }
 
     /// Create a session; returns the new session id. Code mode gets a

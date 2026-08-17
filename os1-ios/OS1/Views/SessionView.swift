@@ -834,7 +834,7 @@ struct SessionView: View {
             viewModel.start(owner: owner)
             defer { viewModel.stop(owner: owner) }
             if scenePhase != .active { viewModel.appDidEnterBackground() }
-            catalog = try? await OS1API.models()
+            catalog = try? await OS1API.models(workspaceId: viewModel.session.workspaceId)
             #if DEBUG && os(iOS)
             if ProcessInfo.processInfo.environment["OS1_OPEN_WORKTREE_INFO"] == "1" {
                 showWorktreeInfo = true

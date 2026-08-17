@@ -377,7 +377,7 @@ OS1/
     TranscriptEntry.swift    Transcript entry (REST + WS frames)
     AskQuestion.swift        Pending AskUserQuestion
     AttachedImage.swift      Composer image attachments
-    ModelCatalog.swift       Model/reasoning options from /api/models
+    ModelCatalog.swift       Workspace model catalog + engine routing
     ToolPresentation.swift   Canonical tool names, families, summaries, ±lines
     SubagentTranscript.swift A Task call's sub-agent conversation payload
     SessionWalkthrough.swift The published demo carried on the session row

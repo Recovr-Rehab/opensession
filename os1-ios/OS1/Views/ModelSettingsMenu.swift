@@ -27,18 +27,39 @@ struct ModelSettingsMenu: View {
         if let catalog {
             Menu {
                 ForEach(catalog.presets + catalog.regular) { option in
+                    let routed = ModelCatalog.routedID(option.id, engine: currentEngine)
                     Button {
-                        viewModel.changeModel(to: option.id)
+                        if let routed { viewModel.changeModel(to: routed) }
                     } label: {
-                        if option.id == currentModel {
+                        if option.id == ModelCatalog.baseID(currentModel) {
                             Label(option.displayLabel, systemImage: "checkmark")
                         } else {
                             Text(option.displayLabel)
                         }
                     }
+                    .disabled(routed == nil)
                 }
             } label: {
                 Label("Model · \(catalog.label(for: currentModel))", systemImage: "cpu")
+            }
+            if engineChoices.count > 1 {
+                Menu {
+                    ForEach(engineChoices) { engine in
+                        let routed = ModelCatalog.routedID(currentModel, engine: engine.id)
+                        Button {
+                            if let routed { viewModel.changeModel(to: routed) }
+                        } label: {
+                            if engine.id == currentEngine {
+                                Label(engine.label, systemImage: "checkmark")
+                            } else {
+                                Text(engine.label)
+                            }
+                        }
+                        .disabled(routed == nil)
+                    }
+                } label: {
+                    Label("Engine · \(currentEngineLabel)", systemImage: "gearshape.2")
+                }
             }
         }
         if !supportedEfforts.isEmpty {
@@ -98,6 +119,19 @@ struct ModelSettingsMenu: View {
 
     private var currentModel: String {
         viewModel.model.isEmpty ? (catalog?.defaultModel ?? "") : viewModel.model
+    }
+
+    private var engineChoices: [ModelEngineOption] {
+        catalog?.availableEngines ?? []
+    }
+
+    private var currentEngine: String {
+        catalog?.routingEngine(for: currentModel) ?? ModelCatalog.engine(currentModel)
+    }
+
+    private var currentEngineLabel: String {
+        engineChoices.first(where: { $0.id == currentEngine })?.label
+            ?? currentEngine.capitalized
     }
 
     private var supportedEfforts: [String] {

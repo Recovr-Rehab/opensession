@@ -825,15 +825,17 @@ struct WorktreeInfoView: View {
                 UsageMenuSection(usage: viewModel.usage)
                 if let catalog {
                     ForEach(catalog.presets + catalog.regular) { option in
+                        let routed = ModelCatalog.routedID(option.id, engine: currentEngine)
                         Button {
-                            viewModel.changeModel(to: option.id)
+                            if let routed { viewModel.changeModel(to: routed) }
                         } label: {
-                            if option.id == currentModel {
+                            if option.id == ModelCatalog.baseID(currentModel) {
                                 Label(option.displayLabel, systemImage: "checkmark")
                             } else {
                                 Text(option.displayLabel)
                             }
                         }
+                        .disabled(routed == nil)
                     }
                 }
             } label: {
@@ -844,6 +846,32 @@ struct WorktreeInfoView: View {
                 )
             }
             .buttonStyle(.plain)
+
+            if engineChoices.count > 1 {
+                Divider()
+                Menu {
+                    ForEach(engineChoices) { engine in
+                        let routed = ModelCatalog.routedID(currentModel, engine: engine.id)
+                        Button {
+                            if let routed { viewModel.changeModel(to: routed) }
+                        } label: {
+                            if engine.id == currentEngine {
+                                Label(engine.label, systemImage: "checkmark")
+                            } else {
+                                Text(engine.label)
+                            }
+                        }
+                        .disabled(routed == nil)
+                    }
+                } label: {
+                    SettingsRow(
+                        label: "Engine",
+                        value: currentEngineLabel,
+                        icon: "gearshape.2"
+                    )
+                }
+                .buttonStyle(.plain)
+            }
 
             if let efforts = catalog?.option(for: currentModel)?.efforts,
                !efforts.isEmpty {
@@ -895,6 +923,19 @@ struct WorktreeInfoView: View {
 
     private var currentModel: String {
         viewModel.model.isEmpty ? (catalog?.defaultModel ?? "") : viewModel.model
+    }
+
+    private var engineChoices: [ModelEngineOption] {
+        catalog?.availableEngines ?? []
+    }
+
+    private var currentEngine: String {
+        catalog?.routingEngine(for: currentModel) ?? ModelCatalog.engine(currentModel)
+    }
+
+    private var currentEngineLabel: String {
+        engineChoices.first(where: { $0.id == currentEngine })?.label
+            ?? currentEngine.capitalized
     }
 
     private var remoteSandbox: (provider: String, sandboxId: String?, workspace: String?)? {
@@ -1226,7 +1267,9 @@ struct WorktreeInfoSheet: View {
             .task {
                 viewModel.start()
                 if scenePhase != .active { viewModel.appDidEnterBackground() }
-                catalog = try? await OS1API.models()
+                catalog = try? await OS1API.models(
+                    workspaceId: viewModel.session.workspaceId
+                )
             }
             .onDisappear { viewModel.stop() }
             .onChange(of: scenePhase) { _, phase in
