@@ -248,185 +248,14 @@ struct SessionView: View {
     }
 
     var body: some View {
-        ScrollViewReader { proxy in
+        let transcriptContent = ScrollViewReader { proxy in
             Group {
                 if viewModel.isLoadingConversation {
                     conversationLoader
                 } else if let error = viewModel.conversationLoadError {
                     conversationLoadFailure(error)
                 } else {
-                    ScrollView {
-                        LazyVStack(spacing: 10) {
-                            if viewModel.canLoadEarlier || viewModel.loadingEarlier {
-                                historyLoader
-                            }
-                            // Nothing on screen: the caller may own this space
-                            // (the Desk puts its board here). Rendered inside
-                            // the transcript rather than in place of it, so the
-                            // composer, streaming and scroll behaviour are the
-                            // session's own.
-                            if let emptyContent,
-                               viewModel.displayBlocks.isEmpty,
-                               viewModel.liveText.isEmpty {
-                                emptyContent()
-                                    .id("empty-content")
-                            }
-                            ForEach(viewModel.displayBlocks) { block in
-                                TranscriptRow(
-                                    block: block,
-                                    sessionId: viewModel.session.id,
-                                    worktreeDir: viewModel.session.worktreeDir,
-                                    foldState: {
-                                        viewModel.foldState(
-                                            for: $0,
-                                            preference: turnActivity
-                                        )
-                                    },
-                                    expansionState: { viewModel.expansionState(id: $0, defaultExpanded: $1) },
-                                    showsMessagesWhenFolded: turnActivity == "messages",
-                                    // An automation's turns are not a person's
-                                    // words, so they get no author fallback —
-                                    // the web makes the same exception.
-                                    owner: viewModel.session.transcriptOwner,
-                                    onEditMessage: { entry in
-                                        viewModel.editSentMessageInComposer(entry)
-                                    },
-                                    onEditNote: { note, text in
-                                        try await viewModel.editSessionNote(note, text: text)
-                                    },
-                                    onDeleteNote: { note in
-                                        try await viewModel.deleteSessionNote(note)
-                                    },
-                                    failureContinuation: viewModel.failureContinuationEntryId(
-                                        catalog: catalog
-                                    ) == block.id
-                                        ? FailureContinuationAction(
-                                            viewModel: viewModel,
-                                            noticeId: block.id
-                                        )
-                                        : nil
-                                )
-                                .id(block.id)
-                                .transcriptTail(block.id == tailId)
-                            }
-                            if !viewModel.liveText.isEmpty {
-                                StreamingBubble(text: viewModel.liveText)
-                                    .id("live-stream")
-                                    .transcriptTail(tailId == "live-stream")
-                            }
-                            // The run clock closes the transcript while work
-                            // is in flight, under whatever the last message
-                            // is — a durable answer, a live stream, or a
-                            // working fold.
-                            if viewModel.isRunning {
-                                RunStatusFooter(since: viewModel.runStartedAt)
-                                    .id("run-status")
-                                    .transcriptTail(tailId == "run-status")
-                            }
-                            if let ask = viewModel.pendingQuestion {
-                                AskQuestionCard(ask: ask) { answers in
-                                    viewModel.answer(question: ask, answers: answers)
-                                }
-                                .id("ask-\(ask.id)")
-                                .transcriptTail(true)
-                            }
-                            if let receipt = viewModel.slackComposeReceipt {
-                                SlackComposeReceiptRow(receipt: receipt)
-                                    .id("slack-receipt-\(receipt.id)")
-                                    .transcriptTail(true)
-                            }
-                            // A small child at the very end, and the reason is
-                            // not spacing: a `LazyVStack` realizes the children
-                            // that intersect the visible window, and a session
-                            // opened mid-work groups its whole loaded transcript
-                            // into ONE block (a single long turn, whose opening
-                            // prompt has scrolled out of the loaded window). That
-                            // giant child is then the only thing in the stack,
-                            // and landing on the bottom anchor leaves it
-                            // unrealized: the scroll geometry is right —
-                            // measured on an iPhone 17 Pro, content 3022pt,
-                            // offset 2239, 9pt from the end — while the screen
-                            // stays BLANK until a touch forces a layout pass.
-                            // Something small down here always intersects the
-                            // window at the bottom, which keeps the stack
-                            // realizing its neighbour. (It is NOT what
-                            // `scrollToBottom` aims at, for the same reason —
-                            // see the note there.)
-                            Color.clear
-                                .frame(height: 1)
-                                .id("transcript-end")
-                        }
-                        .padding(.horizontal, contentInset)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: contentMaxWidth)
-                        // At least a screenful, filled from the TOP. A scroll
-                        // anchor also decides where content that is SHORTER
-                        // than the viewport sits, so under `.bottom` a brand
-                        // new session's first message hung off the composer
-                        // with the whole screen empty above it. Giving the
-                        // stack a floor of one viewport makes a short
-                        // transcript start at the top and grow downward, the
-                        // way the web viewer's does; once it outgrows the
-                        // viewport the floor stops binding and the bottom
-                        // anchor takes over again, unchanged.
-                        .frame(
-                            maxWidth: .infinity,
-                            minHeight: viewportHeight,
-                            alignment: .top
-                        )
-                    }
-                    // Initial render lands at the bottom and stays pinned while
-                    // lazy rows settle. The pin releases when the person scrolls
-                    // up to read, so new output does not yank them back.
-                    .softScrollEdges()
-                    .environment(\.transcriptQuoteSelection, viewModel.quoteSelection)
-                    .transcriptQuoteInteractions(viewModel.quoteSelection)
-                    .onKeyPress(.escape) {
-                        guard viewModel.quoteSelection.text != nil else { return .ignored }
-                        viewModel.quoteSelection.clear()
-                        return .handled
-                    }
-                    #if os(iOS)
-                    .transcriptTopWash()
-                    #endif
-                    // A transcript is read from the bottom; the Desk's board,
-                    // which stands in for an empty one, is read from the top —
-                    // anchoring it to the bottom opens the Desk halfway down
-                    // your own work.
-                    .defaultScrollAnchor(showingEmptyContent ? .top : .bottom)
-                    .defaultScrollAnchor(
-                        showingEmptyContent ? .top : .bottom,
-                        for: .sizeChanges
-                    )
-                    .scrollDismissesKeyboardCompat()
-                    // Pin state from real scroll geometry: pinned while the
-                    // visible bottom edge is within pinTolerance of the
-                    // content's end. Precise on release (unlike deriving it
-                    // from a sentinel row's `onAppear`, whose realization
-                    // window lags actual visibility — that's a different thing
-                    // from the `transcript-end` child above, which exists to
-                    // keep the lazy stack realizing and is never read here) and
-                    // it costs a state write only when the Bool flips, not per
-                    // scroll tick.
-                    .onScrollGeometryChange(for: Bool.self) { geometry in
-                        // The predicate itself lives in TranscriptScroll, which
-                        // documents why it reads `visibleRect` rather than
-                        // `contentOffset + containerSize` — and is tested
-                        // against the numbers a real iPhone reports.
-                        TranscriptScroll.isNearBottom(
-                            TranscriptScroll.Geometry(
-                                visibleMaxY: geometry.visibleRect.maxY,
-                                contentHeight: geometry.contentSize.height,
-                                insetBottom: geometry.contentInsets.bottom,
-                                containerHeight: geometry.containerSize.height
-                            ),
-                            tolerance: pinTolerance
-                        )
-                    } action: { _, isNearBottom in
-                        pinnedToBottom = isNearBottom
-                        if isNearBottom { newBelow = false }
-                    }
-                    .scrollPosition($scrollPosition)
+                    let measuredScroll = transcriptScrollBase
                     // The geometry the prepend restore works from. Reading
                     // `old` is the point: when a page of history lands, the
                     // first height change carries the transcript as it was
@@ -515,7 +344,11 @@ struct SessionView: View {
                         }
                     }
                     #endif
-                    .animation(.snappy(duration: 0.22, extraBounce: 0), value: pinnedToBottom)
+                    let interactiveScroll = measuredScroll
+                        .animation(
+                            .snappy(duration: 0.22, extraBounce: 0),
+                            value: pinnedToBottom
+                        )
                     // A scroll gesture is the reader taking over: the
                     // opening hold ends the moment they touch the transcript.
                     .onScrollPhaseChange { _, phase in
@@ -536,32 +369,37 @@ struct SessionView: View {
                     // cached one is already loaded when the view appears, so
                     // waiting on the loading flag alone would leave the hold
                     // armed forever and the return pill permanently hidden.
-                    .onAppear { beginHold(proxy) }
-                    // The transcript exists now: hold it at the latest
-                    // while its rows settle.
-                    .onChange(of: viewModel.isLoadingConversation) { _, loading in
-                        if !loading { beginHold(proxy) }
-                    }
-                    .onChange(of: viewModel.pendingQuestion) {
-                        // A question needs eyes even if they've scrolled away.
-                        scrollToBottom(proxy, animated: true)
-                    }
-                    .onChange(of: viewModel.slackComposeReceipt) {
-                        // The composer closes into this durable receipt.
-                        scrollToBottom(proxy, animated: true)
-                    }
-                    .onChange(of: viewModel.composeSeq) {
-                        // Typing a reply brings the end of the conversation
-                        // into view, so the message lands where you're looking.
-                        scrollToBottom(proxy, animated: true)
-                    }
-                    .onChange(of: viewModel.sendSeq) {
-                        // Your own send always lands in view. The bottom
-                        // size-change anchor alone doesn't re-pin once the
-                        // reader has scrolled up (or the keyboard resized the
-                        // viewport), leaving the just-sent bubble below the fold.
-                        scrollToBottom(proxy, animated: true)
-                    }
+                    let loadedScroll = interactiveScroll
+                        .onAppear { beginHold(proxy) }
+                        // The transcript exists now: hold it at the latest
+                        // while its rows settle.
+                        .onChange(of: viewModel.isLoadingConversation) { _, loading in
+                            if !loading { beginHold(proxy) }
+                        }
+
+                    let receivedScroll = loadedScroll
+                        .onChange(of: viewModel.pendingQuestion) {
+                            // A question needs eyes even if they've scrolled away.
+                            scrollToBottom(proxy, animated: true)
+                        }
+                        .onChange(of: viewModel.slackComposeReceipt) {
+                            // The composer closes into this durable receipt.
+                            scrollToBottom(proxy, animated: true)
+                        }
+
+                    let deliveryScroll = receivedScroll
+                        .onChange(of: viewModel.composeSeq) {
+                            // Typing a reply brings the end of the conversation
+                            // into view, so the message lands where you're looking.
+                            scrollToBottom(proxy, animated: true)
+                        }
+                        .onChange(of: viewModel.sendSeq) {
+                            // Your own send always lands in view. The bottom
+                            // size-change anchor alone doesn't re-pin once the
+                            // reader has scrolled up (or the keyboard resized the
+                            // viewport), leaving the sent bubble below the fold.
+                            scrollToBottom(proxy, animated: true)
+                        }
                     // The size-change anchor alone doesn't reliably hold the
                     // bottom while new output arrives (keyboard insets + lazy
                     // row settling knock it loose), so follow explicitly while
@@ -571,63 +409,37 @@ struct SessionView: View {
                     // precisely so this trigger keeps working: a tool call
                     // landing inside an existing turn leaves the BLOCK count
                     // unchanged, and following new output would stop.
-                    .onChange(of: viewModel.displayItems.count) {
-                        let isHistoryPrepend =
-                            lastDisplayHistoryPrependSeq != viewModel.historyPrependSeq
-                        lastDisplayHistoryPrependSeq = viewModel.historyPrependSeq
-                        if isHistoryPrepend { return }
-                        // A tail append during a restore breaks its pure-
-                        // prepend invariant, so the reader's current position
-                        // wins over a stale distance-from-end calculation.
-                        cancelPrependRestore()
-                        if pinnedToBottom || holdingAtLatest {
-                            scrollToBottom(proxy, animated: true)
-                        } else {
-                            newBelow = true
+                    let outputScroll = deliveryScroll
+                        .onChange(of: viewModel.displayItems.count) {
+                            displayItemsChanged(proxy)
                         }
-                    }
-                    // The clock arriving lengthens the transcript by a row;
-                    // follow it so it lands above the composer rather than
-                    // behind it.
-                    .onChange(of: viewModel.isRunning) { _, running in
-                        if running, pinnedToBottom || holdingAtLatest {
-                            scrollToBottom(proxy, animated: true)
+                        // The clock arriving lengthens the transcript by a row;
+                        // follow it so it lands above the composer rather than
+                        // behind it.
+                        .onChange(of: viewModel.isRunning) { _, running in
+                            runningChanged(running, proxy: proxy)
                         }
-                    }
-                    .onChange(of: viewModel.liveText) {
-                        cancelPrependRestore()
-                        if pinnedToBottom {
-                            scrollToBottom(proxy, animated: false)
-                        } else if !viewModel.liveText.isEmpty {
-                            newBelow = true
+                        .onChange(of: viewModel.liveText) {
+                            liveTextChanged(proxy)
                         }
-                    }
-                    .onChange(of: viewModel.historyPrependSeq) {
+
+                    outputScroll
+                        .onChange(of: viewModel.historyPrependSeq) {
                         // Keep the reader where they were. The rows land above
                         // everything on screen, so the geometry observer above
                         // takes the measurement and `restoreAfterPrepend` puts
                         // the position back. A "jump to the start" walk pages
                         // repeatedly on its way and ends with a scroll of its
                         // own, so it opts out.
-                        guard !viewModel.jumpingToStart,
-                              prependRequestInteraction == scrollInteractionGeneration
-                        else {
-                            cancelPrependRestore()
-                            return
+                        beginPrependRestoreIfPossible()
                         }
-                        prependRequestInteraction = nil
-                        awaitingPrepend = true
-                    }
-                    // A landed "jump to the start": the walk's last page is in
-                    // the transcript now, so take the reader to the oldest
-                    // block it reached — the first message, unless the walk
-                    // stopped at its ceiling.
-                    .onChange(of: viewModel.jumpLandedSeq) {
-                        cancelPrependRestore()
-                        if let first = viewModel.displayBlocks.first?.id {
-                            proxy.scrollTo(first, anchor: .top)
+                        // A landed "jump to the start": the walk's last page is
+                        // in the transcript now, so take the reader to the oldest
+                        // block it reached — the first message, unless the walk
+                        // stopped at its ceiling.
+                        .onChange(of: viewModel.jumpLandedSeq) {
+                            jumpToStartIfLanded(proxy)
                         }
-                    }
                 }
             }
             // Web links from the transcript open on top of it, not instead of
@@ -665,8 +477,9 @@ struct SessionView: View {
             }
             #endif
         }
-        .environment(\.transcriptRepo, viewModel.session.effectiveRepo)
-        .safeAreaInset(edge: .top, spacing: 0) {
+        let chromeContent = transcriptContent
+            .environment(\.transcriptRepo, viewModel.session.effectiveRepo)
+            .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
                 #if os(iOS)
                 if tabs.count > 1, let onSelectTab {
@@ -684,7 +497,10 @@ struct SessionView: View {
                             else { return }
                             onSelectTab(session)
                         },
-                        onClose: { _ in }
+                        onClose: { _ in },
+                        archived: [],
+                        restoringIds: [],
+                        onRestore: { _ in }
                     )
                 }
                 #endif
@@ -730,9 +546,11 @@ struct SessionView: View {
         // dynamic colours and materials against ITS trait collection, and
         // ignored the pinned environment entirely (measured — the pill stayed
         // black).
-        .toolbarColorScheme(appColorScheme, for: .navigationBar)
-        #endif
-        .toolbar {
+            .toolbarColorScheme(appColorScheme, for: .navigationBar)
+            #endif
+
+        let toolbarContent = chromeContent
+            .toolbar {
             #if os(iOS)
             ToolbarItem(placement: .principal) {
                 sessionIdentityButton
@@ -795,8 +613,10 @@ struct SessionView: View {
                     .help("Model and reasoning settings")
             }
             #endif
-        }
-        .sheet(isPresented: $showPrPanel) {
+            }
+
+        let presentedContent = toolbarContent
+            .sheet(isPresented: $showPrPanel) {
             PrPanelView(viewModel: viewModel)
         }
         .sheet(item: $slackShare) { request in
@@ -844,12 +664,14 @@ struct SessionView: View {
             .presentationDragIndicator(.visible)
         }
         #endif
-        #if os(macOS)
-        .task(id: workspaceHistoryWorkspaceId) {
-            await loadWorkspaceHistory()
-        }
-        #endif
-        .task {
+            #if os(macOS)
+            .task(id: workspaceHistoryWorkspaceId) {
+                await loadWorkspaceHistory()
+            }
+            #endif
+
+        presentedContent
+            .task {
             let owner = UUID()
             viewModel.start(owner: owner)
             defer { viewModel.stop(owner: owner) }
@@ -1241,6 +1063,185 @@ struct SessionView: View {
         prependDistanceFromEnd = nil
         prependBaselineContentHeight = nil
         scrollPosition.scrollTo(y: y)
+    }
+
+    @ViewBuilder private var transcriptRows: some View {
+        if viewModel.canLoadEarlier || viewModel.loadingEarlier {
+            historyLoader
+        }
+        // Nothing on screen: the caller may own this space (the Desk puts its
+        // board here). Keep it inside the transcript so composer and scrolling
+        // behavior remain the session's own.
+        if let emptyContent,
+           viewModel.displayBlocks.isEmpty,
+           viewModel.liveText.isEmpty {
+            emptyContent()
+                .id("empty-content")
+        }
+        ForEach(viewModel.displayBlocks) { block in
+            transcriptRow(block)
+        }
+        if !viewModel.liveText.isEmpty {
+            StreamingBubble(text: viewModel.liveText)
+                .id("live-stream")
+                .transcriptTail(tailId == "live-stream")
+        }
+        // The run clock closes the transcript while work is in flight, under
+        // the durable answer, live stream, or working fold.
+        if viewModel.isRunning {
+            RunStatusFooter(since: viewModel.runStartedAt)
+                .id("run-status")
+                .transcriptTail(tailId == "run-status")
+        }
+        if let ask = viewModel.pendingQuestion {
+            AskQuestionCard(ask: ask) { answers in
+                viewModel.answer(question: ask, answers: answers)
+            }
+            .id("ask-\(ask.id)")
+            .transcriptTail(true)
+        }
+        if let receipt = viewModel.slackComposeReceipt {
+            SlackComposeReceiptRow(receipt: receipt)
+                .id("slack-receipt-\(receipt.id)")
+                .transcriptTail(true)
+        }
+        // A small child at the end keeps a single giant lazy transcript block
+        // realized when the reader lands at the bottom. It is not the scroll
+        // target; `scrollToBottom` explains why it aims at a real row instead.
+        Color.clear
+            .frame(height: 1)
+            .id("transcript-end")
+    }
+
+    private var transcriptScrollBase: some View {
+        ScrollView {
+            LazyVStack(spacing: 10) {
+                transcriptRows
+            }
+            .padding(.horizontal, contentInset)
+            .padding(.vertical, 8)
+            .frame(maxWidth: contentMaxWidth)
+            // Fill at least one viewport from the top so short transcripts do
+            // not hang above the composer under the bottom scroll anchor.
+            .frame(
+                maxWidth: .infinity,
+                minHeight: viewportHeight,
+                alignment: .top
+            )
+        }
+        .softScrollEdges()
+        .environment(\.transcriptQuoteSelection, viewModel.quoteSelection)
+        .transcriptQuoteInteractions(viewModel.quoteSelection)
+        .onKeyPress(.escape) {
+            guard viewModel.quoteSelection.text != nil else { return .ignored }
+            viewModel.quoteSelection.clear()
+            return .handled
+        }
+        #if os(iOS)
+        .transcriptTopWash()
+        #endif
+        .defaultScrollAnchor(showingEmptyContent ? .top : .bottom)
+        .defaultScrollAnchor(
+            showingEmptyContent ? .top : .bottom,
+            for: .sizeChanges
+        )
+        .scrollDismissesKeyboardCompat()
+        .onScrollGeometryChange(for: Bool.self) { geometry in
+            TranscriptScroll.isNearBottom(
+                TranscriptScroll.Geometry(
+                    visibleMaxY: geometry.visibleRect.maxY,
+                    contentHeight: geometry.contentSize.height,
+                    insetBottom: geometry.contentInsets.bottom,
+                    containerHeight: geometry.containerSize.height
+                ),
+                tolerance: pinTolerance
+            )
+        } action: { _, isNearBottom in
+            pinnedToBottom = isNearBottom
+            if isNearBottom { newBelow = false }
+        }
+        .scrollPosition($scrollPosition)
+    }
+
+    private func transcriptRow(_ block: TranscriptBlock) -> some View {
+        let continuation = viewModel.failureContinuationEntryId(catalog: catalog) == block.id
+            ? FailureContinuationAction(viewModel: viewModel, noticeId: block.id)
+            : nil
+
+        return TranscriptRow(
+            block: block,
+            sessionId: viewModel.session.id,
+            worktreeDir: viewModel.session.worktreeDir,
+            foldState: {
+                viewModel.foldState(for: $0, preference: turnActivity)
+            },
+            expansionState: {
+                viewModel.expansionState(id: $0, defaultExpanded: $1)
+            },
+            showsMessagesWhenFolded: turnActivity == "messages",
+            // An automation's turns are not a person's words, so they get no
+            // author fallback. The web makes the same exception.
+            owner: viewModel.session.transcriptOwner,
+            onEditMessage: { entry in
+                viewModel.editSentMessageInComposer(entry)
+            },
+            onEditNote: { note, text in
+                try await viewModel.editSessionNote(note, text: text)
+            },
+            onDeleteNote: { note in
+                try await viewModel.deleteSessionNote(note)
+            },
+            failureContinuation: continuation
+        )
+        .id(block.id)
+        .transcriptTail(block.id == tailId)
+    }
+
+    private func beginPrependRestoreIfPossible() {
+        guard !viewModel.jumpingToStart,
+              prependRequestInteraction == scrollInteractionGeneration
+        else {
+            cancelPrependRestore()
+            return
+        }
+        prependRequestInteraction = nil
+        awaitingPrepend = true
+    }
+
+    private func displayItemsChanged(_ proxy: ScrollViewProxy) {
+        let isHistoryPrepend = lastDisplayHistoryPrependSeq != viewModel.historyPrependSeq
+        lastDisplayHistoryPrependSeq = viewModel.historyPrependSeq
+        if isHistoryPrepend { return }
+        // A tail append during a restore breaks its pure-prepend invariant, so
+        // the reader's current position wins over the stale distance from end.
+        cancelPrependRestore()
+        if pinnedToBottom || holdingAtLatest {
+            scrollToBottom(proxy, animated: true)
+        } else {
+            newBelow = true
+        }
+    }
+
+    private func runningChanged(_ running: Bool, proxy: ScrollViewProxy) {
+        if running, pinnedToBottom || holdingAtLatest {
+            scrollToBottom(proxy, animated: true)
+        }
+    }
+
+    private func liveTextChanged(_ proxy: ScrollViewProxy) {
+        cancelPrependRestore()
+        if pinnedToBottom {
+            scrollToBottom(proxy, animated: false)
+        } else if !viewModel.liveText.isEmpty {
+            newBelow = true
+        }
+    }
+
+    private func jumpToStartIfLanded(_ proxy: ScrollViewProxy) {
+        cancelPrependRestore()
+        if let first = viewModel.displayBlocks.first?.id {
+            proxy.scrollTo(first, anchor: .top)
+        }
     }
 
     private func cancelPrependRestore() {
@@ -1885,7 +1886,6 @@ struct SessionTabsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         // One level deeper than the conversation, on the stack that pushed it:
         // the strip goes with the conversation it belongs to, and the chevron
-            MentionStore.shared.open(session.id)
         // and the edge swipe come back to exactly where you were.
         .navigationDestination(item: $panel) { panel in
             panelContent(panel)
@@ -1930,6 +1930,7 @@ struct SessionTabsView: View {
         // its row behind you. Same rule as the web viewer's markRead tick.
         .onChange(of: activeSession, initial: true) { _, session in
             ReadsStore.shared.open(session)
+            MentionStore.shared.open(session.id)
         }
         .onDisappear {
             ReadsStore.shared.close(activeSession.id)

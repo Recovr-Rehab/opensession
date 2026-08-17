@@ -537,7 +537,7 @@ struct NewSessionView: View {
     /// a picker with one entry is a label pretending to be a choice.
     private var sandboxChoices: [String] {
         if repo == Session.noRepoID { return [] }
-        SandboxOffering.choices(sandboxStatus)
+        return SandboxOffering.choices(sandboxStatus)
     }
 
     /// Where the session runs. One chip, mirroring the server's own names for

@@ -167,6 +167,14 @@ final class ServerEventTests: XCTestCase {
     func testSlackComposerCancelledReceiptDecodesWithoutDestination() {
         guard case .slackComposerResolved(_, let receipt) = parse(
             #"{"type":"slack_composer_resolved","sessionId":"bks-1","requestId":"slack-2","status":"cancelled"}"#
+        ) else {
+            return XCTFail("expected .slackComposerResolved")
+        }
+        XCTAssertEqual(receipt.status, .cancelled)
+        XCTAssertNil(receipt.channel)
+        XCTAssertNil(receipt.permalink)
+    }
+
     func testMentionAndMentionClearFrames() {
         let json = #"{"type":"mention","user":"Michiel","mention":{"sessionId":"os-1","by":"Kent","source":"note","preview":"Please look","ts":1760000000000}}"#
         guard case .mention(let user, let mention) = parse(json) else {
@@ -187,14 +195,6 @@ final class ServerEventTests: XCTestCase {
         else { return XCTFail("expected all-session .mentionsCleared") }
         XCTAssertEqual(allUser, "Michiel")
         XCTAssertNil(allSessionId)
-    }
-
-        ) else {
-            return XCTFail("expected .slackComposerResolved")
-        }
-        XCTAssertEqual(receipt.status, .cancelled)
-        XCTAssertNil(receipt.channel)
-        XCTAssertNil(receipt.permalink)
     }
 
     func testReplySuggestionsDecodeAndNullClears() {
