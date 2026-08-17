@@ -22,12 +22,21 @@ import { fetchWorkspaces } from "../lib/api/workspaces";
 import type { Workspace } from "../lib/types";
 import { getCurrentUser } from "./UserPicker";
 import { CheckStatusIcon } from "./CheckStatusIcon";
-import { IconBolt, IconClock, IconHash, IconPlayOutline, IconPlug, IconPlus } from "./icons";
+import {
+  IconBolt,
+  IconChevronLeft,
+  IconClock,
+  IconHash,
+  IconPlayOutline,
+  IconPlug,
+  IconPlus,
+} from "./icons";
 import { AGENT_NAME, PUBLIC_BASE_URL, docTitle, DEFAULT_DOC_TITLE } from "../lib/brand";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
 import { cn } from "../ui/cn";
 import { Input, Select, Textarea } from "../ui/input";
+import { Modal, useEnterOnMount } from "../ui/modal";
 import { PageDescription, PageHeader, PageTitle } from "../ui/page-header";
 import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
 import { WorkingPill } from "../ui/status";
@@ -41,17 +50,13 @@ import { formatDuration } from "../lib/time";
    doesn't set. */
 const FORM_FIELDS =
   "[&_textarea]:leading-normal phone:[&_input]:text-input-phone phone:[&_select]:text-input-phone phone:[&_textarea]:text-input-phone";
-/** .automation-form.automation-form-inline — no card chrome; the drawer body
- *  already provides the surface and the padding. */
+/** The form's own layout, with no chrome of its own: whatever hosts it (the
+ *  detail drawer, the create dialog) already provides the surface, the padding
+ *  and the heading. */
 const FORM_INLINE = `flex flex-col gap-3.5 ${FORM_FIELDS}`;
-/** .automation-form */
-const FORM_CARD = `${FORM_INLINE} rounded-panel bg-panel p-4.5`;
 /** .automation-form label */
 const FIELD_LABEL = "flex flex-1 flex-col gap-1.5 text-label font-medium text-dim";
 
-
-/** .automation-form-title */
-const FORM_TITLE = "text-item-title font-semibold";
 /** .automation-form-actions */
 const FORM_ACTIONS = "flex justify-end gap-2.5";
 /** .automation-form-row */
@@ -473,7 +478,6 @@ export function Automations({ onOpenSession, selectedId, onSelect }: Props) {
                 <AutomationForm
                   key={sel.id}
                   kind={sel.slackWatch?.channel ? "watch" : "classic"}
-                  inline
                   initial={sel}
                   prefill={null}
                   onBack={null}
@@ -948,7 +952,7 @@ const CATEGORY_LABELS: Record<AutomationTemplate["category"], string> = {
   hygiene: "Hygiene",
 };
 
-/** Create-only — editing renders AutomationForm inline in the detail drawer. */
+/** Create-only: editing renders AutomationForm in the detail drawer instead. */
 function CreateAutomationModal({
   onClose,
   onSaved,
@@ -958,53 +962,103 @@ function CreateAutomationModal({
 }) {
   const [step, setStep] = useState<Step>("type");
   const [prefill, setPrefill] = useState<AutomationDraft | null>(null);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  // The page mounts this only while it should be open, so the enter animation
+  // needs one frame at open={false} first (see ui/modal.tsx).
+  const open = useEnterOnMount();
+  // Describing it is the first path on offer, so the caret starts there rather
+  // than on the close button Base UI would otherwise pick.
+  const describeRef = React.useRef<HTMLTextAreaElement>(null);
 
   return (
-    <div
-      className="fixed inset-0 z-[300] bg-black/45 flex items-start justify-center overflow-y-auto p-4 sm:p-8"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+    <Modal.Root
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) onClose();
       }}
     >
-      <div className={cn(FORM_CARD, "my-auto w-full max-w-[680px] smooth-shadow-lg")}>
+      <Modal.Content
+        widthClassName="max-w-[40rem]"
+        initialFocus={step === "type" ? describeRef : undefined}
+      >
         {step === "type" ? (
           <TypeChooser
+            describeRef={describeRef}
             onPick={(draft, s) => {
               setPrefill(draft);
               setStep(s);
             }}
-            onClose={onClose}
           />
         ) : (
-          <AutomationForm
-            kind={step}
-            initial={null}
-            prefill={prefill}
-            onBack={() => setStep("type")}
-            onClose={onClose}
-            onSaved={onSaved}
-          />
+          <>
+            <Modal.Header
+              title={step === "watch" ? "Watch a Slack channel" : "New automation"}
+              description={
+                step === "watch"
+                  ? `${AGENT_NAME} triages every new message in the channel.`
+                  : "Runs on a schedule, an internal event, or a webhook."
+              }
+            />
+            <div className={FORM_INLINE}>
+              <AutomationForm
+                kind={step}
+                initial={null}
+                prefill={prefill}
+                onBack={() => setStep("type")}
+                onClose={onClose}
+                onSaved={onSaved}
+              />
+            </div>
+          </>
         )}
-      </div>
-    </div>
+      </Modal.Content>
+    </Modal.Root>
   );
 }
 
-/** Step 1: choose the automation type (plus templates and the AI drafter). */
-function TypeChooser({
-  onPick,
-  onClose,
+/**
+ * One starting point: a blank type, or a template. Same anatomy as a row in
+ * the list this creates — trigger glyph, name, one line about it — so the
+ * choice looks like the thing it makes.
+ */
+function ChooserRow({
+  icon: Icon,
+  title,
+  description,
+  meta,
+  onClick,
 }: {
+  icon: (props: { size?: number; className?: string }) => React.ReactElement;
+  title: string;
+  description: string;
+  meta?: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="flex w-full cursor-pointer items-start gap-3 rounded-row px-2.5 py-2.25 text-left transition-colors hover:bg-hover"
+      onClick={onClick}
+    >
+      {/* Normalize the drawn height, not the SVG box, the way the list rows do. */}
+      <span className="flex size-5 shrink-0 items-center justify-center text-faint">
+        <Icon size={20} className="max-w-none scale-[1.15]" />
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.75">
+        <span className="text-item-title font-semibold leading-5 text-fg">{title}</span>
+        <span className="text-meta leading-normal text-faint">{description}</span>
+      </span>
+      {meta && <span className="mt-0.5 shrink-0 text-meta text-faint">{meta}</span>}
+    </button>
+  );
+}
+
+/** Step 1: describe it, start blank, or start from a template. */
+function TypeChooser({
+  describeRef,
+  onPick,
+}: {
+  describeRef: React.RefObject<HTMLTextAreaElement | null>;
   onPick: (prefill: AutomationDraft | null, step: Exclude<Step, "type">) => void;
-  onClose: () => void;
 }) {
   const [templates, setTemplates] = useState<AutomationTemplate[]>([]);
   const [description, setDescription] = useState("");
@@ -1029,88 +1083,72 @@ function TypeChooser({
 
   return (
     <>
-      <div>
-        <div className={FORM_TITLE}>Create automation</div>
-        <div className="text-dim text-label mt-0.5">
-          Choose the type of automation you want to create.
-        </div>
-      </div>
+      <Modal.Header
+        title="New automation"
+        description="Describe what you want, or start from a template. Everything stays editable."
+      />
 
-      <div className="grid gap-2 sm:grid-cols-2">
-        <button
-          className="text-left bg-surface rounded-panel px-4 py-3.5 cursor-pointer hover:bg-hover transition-colors"
-          onClick={() => onPick(null, "classic")}
-        >
-          <div className="text-fg text-item-title font-medium mb-1">Classical automation</div>
-          <div className="text-dim text-supporting leading-snug">
-            Trigger {AGENT_NAME} sessions based on schedules, internal events, and webhooks.
-          </div>
-        </button>
-        <button
-          className="text-left bg-surface rounded-panel px-4 py-3.5 cursor-pointer hover:bg-hover transition-colors"
-          onClick={() => onPick(null, "watch")}
-        >
-          <div className="text-fg text-item-title font-medium mb-1">Watch a channel</div>
-          <div className="text-dim text-supporting leading-snug">
-            {AGENT_NAME} triages every incoming message in a Slack channel, using the
-            channel's memory as standing context.
-          </div>
-        </button>
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <div className="text-dim text-label">Or describe it and {AGENT_NAME} drafts the automation:</div>
+      <div className="flex flex-col gap-2">
         <Textarea
+          ref={describeRef}
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleDraft();
           }}
           rows={2}
-          placeholder="“every weekday morning, check Sentry for new errors and rank them by impact”"
+          aria-label="Describe the automation"
+          placeholder="Every weekday morning, check Sentry for new errors and rank them by impact"
         />
-        <div className="flex items-center gap-2">
+        {error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
+        <div className="flex justify-end">
           <Button
             variant="primary"
-            size="sm"
-            className="px-4 py-1.5"
             onClick={handleDraft}
             disabled={drafting || description.trim().length < 10}
           >
             {drafting ? "Drafting…" : "Draft it"}
           </Button>
-          {error && <span className="text-red text-label">{error}</span>}
         </div>
       </div>
 
+      {/* Outdented by the rows' own padding, so each group's label shares an x
+          with the rows under it (see src/frontend/AGENTS.md). */}
+      <div className="-mx-2.5">
+        <div className={cn(SECTION_LABEL, "px-2.5")}>Start from scratch</div>
+        <ChooserRow
+          icon={IconClock}
+          title="Schedule, event or webhook"
+          description={`${AGENT_NAME} runs once each time the trigger fires.`}
+          onClick={() => onPick(null, "classic")}
+        />
+        <ChooserRow
+          icon={IconHash}
+          title="Slack channel watch"
+          description={`${AGENT_NAME} triages every new message, with the channel's memory as context.`}
+          onClick={() => onPick(null, "watch")}
+        />
+      </div>
+
       {templates.length > 0 && (
-        <div>
-          <div className="text-dim text-label mb-1.5">Or start from a template. Everything stays editable:</div>
-          <div className="grid gap-2 [grid-template-columns:repeat(auto-fill,minmax(200px,1fr))]">
+        <div className="-mx-2.5 flex min-h-0 flex-col">
+          <div className={cn(SECTION_LABEL, "px-2.5")}>Templates</div>
+          {/* The gallery scrolls inside the dialog rather than growing it, so
+              the describe field and the two blank starts stay on screen. */}
+          <div className="min-h-0 overflow-y-auto overscroll-contain phone:max-h-none desktop:max-h-[32dvh]">
             {templates.map((t) => (
-              <button
+              <ChooserRow
                 key={t.id}
-                className="text-left bg-surface rounded-panel px-3 py-2.5 cursor-pointer hover:bg-hover transition-colors"
+                icon={t.schedule ? IconClock : t.eventKey ? IconBolt : IconPlug}
+                title={t.name}
+                description={t.description}
+                meta={CATEGORY_LABELS[t.category] || t.category}
                 onClick={() => onPick(t, "classic")}
-              >
-                <div className="flex items-baseline gap-2 mb-1">
-                  <span className="text-fg text-label font-medium">{t.name}</span>
-                  <span className="ml-auto shrink-0 text-meta tracking-[-0.01em] text-faint">
-                    {CATEGORY_LABELS[t.category] || t.category}
-                  </span>
-                </div>
-                <div className="text-dim text-label leading-snug">{t.description}</div>
-              </button>
+              />
             ))}
           </div>
         </div>
       )}
-
-      <div className={FORM_ACTIONS}>
-        <Button variant="soft" size="sm" className="px-3 text-label" onClick={onClose}>
-          Cancel
-        </Button>
-      </div>
     </>
   );
 }
@@ -1615,6 +1653,9 @@ function DataFlowEditor({
   );
 }
 
+/** The fields themselves. Both hosts (the detail drawer and the create dialog)
+ *  already name the surface, so the form carries no heading of its own. It only
+ *  adds Back to its actions when there is a step to go back to. */
 function AutomationForm({
   kind,
   initial,
@@ -1622,7 +1663,6 @@ function AutomationForm({
   onBack,
   onClose,
   onSaved,
-  inline,
 }: {
   kind: "classic" | "watch";
   initial: Automation | null;
@@ -1630,9 +1670,6 @@ function AutomationForm({
   onBack: (() => void) | null;
   onClose: () => void;
   onSaved: () => void;
-  /** Hosted in the detail drawer (whose head already names the automation)
-   *  rather than the create modal — drop the form's own title row. */
-  inline?: boolean;
 }) {
   const startSchedule = initial ? initial.schedule : (prefill?.schedule ?? PRESETS[2].cron);
   const matchesPreset = PRESETS.some((p) => p.cron === startSchedule && p.cron !== CUSTOM);
@@ -1764,23 +1801,6 @@ function AutomationForm({
 
   return (
     <>
-      {!inline && (
-        <div className="flex items-center gap-2">
-          {onBack && (
-            <Button size="sm" variant="soft" onClick={onBack} title="Back to type chooser">
-              ←
-            </Button>
-          )}
-          <div className={FORM_TITLE}>
-            {initial
-              ? `Edit "${initial.name}"`
-              : isWatch
-                ? "Watch a channel"
-                : "New automation"}
-          </div>
-        </div>
-      )}
-
       <label className={FIELD_LABEL}>
         Automation name
         <Input
@@ -2031,13 +2051,22 @@ function AutomationForm({
       {error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
 
       <div className={FORM_ACTIONS}>
-        <Button variant="soft" size="sm" className="px-3 text-label" onClick={onClose} disabled={saving}>
+        {onBack && (
+          <Button
+            variant="ghost"
+            className="mr-auto"
+            icon={<IconChevronLeft size={20} />}
+            onClick={onBack}
+            disabled={saving}
+          >
+            Back
+          </Button>
+        )}
+        <Button variant="soft" onClick={onClose} disabled={saving}>
           Cancel
         </Button>
         <Button
           variant="primary"
-          size="md"
-          className="px-[22px] py-2"
           onClick={handleSave}
           disabled={
             saving ||
