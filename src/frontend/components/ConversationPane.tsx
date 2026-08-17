@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { PlainThread } from "../lib/types";
 import { fetchPlainThreadById, startPlainTriageApi } from "../lib/api";
+import { useIsPhone } from "../hooks/useIsPhone";
 import { Button } from "../ui/button";
 import { InlineAlert, LoadingState } from "../ui/state";
 import { plainStatusClass } from "../lib/plain-status";
+import { SUPPORT_COLUMN_BAR } from "../lib/support-classes";
 import {
 	PlainEntryRow,
 	PlainReplyBox,
@@ -22,6 +24,10 @@ interface Props {
 	/** Hide the "Triage this ticket" affordance (e.g. a triage session already exists). */
 	hideTriage?: boolean;
 	className?: string;
+	/** Put the ticket's identity — subject, status, customer, the Plain link —
+	 *  in a top bar of the pane's own instead of at the top of the thread. For
+	 *  the Support inbox, where the pane has that bar to itself. */
+	headerInBar?: boolean;
 }
 
 /**
@@ -37,8 +43,10 @@ export function ConversationPane({
 	onOpenSession,
 	hideTriage,
 	className,
+	headerInBar,
 }: Props) {
 	const [thread, setThread] = useState<PlainThread | null>(null);
+	const isPhone = useIsPhone();
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [triaging, setTriaging] = useState(false);
@@ -99,50 +107,110 @@ export function ConversationPane({
 	}
 
 	const status = thread?.status;
-	const customerLabel =
-		thread?.customer?.name || thread?.customer?.email || "Unknown customer";
+	const customerName = thread?.customer?.name || "";
+	const customerEmail = thread?.customer?.email || "";
+	const customerLabel = customerName || customerEmail || "Unknown customer";
+	const plainUrl = plainThreadUrl(threadId);
+	// Not on a phone: there the bar is where the app's own back control floats,
+	// so the ticket keeps its header at the top of the thread.
+	const headerInTopBar = !!headerInBar && !isPhone;
 
 	return (
 		<div className={cn("flex min-h-0 flex-1 flex-col", className)}>
 			<div className="min-h-0 flex-1 overflow-y-auto">
-				<div className="mx-auto w-full max-w-[760px] px-5 pt-6 pb-5">
-					{loading && !thread ? (
-						<LoadingState>Loading ticket…</LoadingState>
-					) : error && !thread ? (
-						<InlineAlert>Couldn't load this Plain thread: {error}</InlineAlert>
-					) : (
+			{headerInTopBar && (
+				<div className={SUPPORT_COLUMN_BAR}>
+					{/* Empty until the thread lands. The bar keeps its height, so
+					    nothing below it moves when the words arrive. */}
+					{thread && (
 						<>
-							<div className="flex items-center gap-2.5 min-w-0">
-								<span
-									className="truncate text-item-title font-semibold text-fg"
-									title={thread?.customer?.email || ""}
-								>
-									{customerLabel}
-								</span>
-								{thread?.customer?.name && thread?.customer?.email && (
-									<span className="text-faint text-label truncate">
-										{thread.customer.email}
-									</span>
-								)}
-								{status && (
-									<span className={plainStatusClass(status)}>
-										{STATUS_LABEL[status] || status}
-									</span>
-								)}
+							<div className="flex min-w-0 flex-1 flex-col justify-center">
+								<div className="flex min-w-0 items-center gap-2">
+									<h2 className="m-0 truncate text-item-title font-semibold text-fg">
+										{thread.title || "No subject"}
+									</h2>
+									{status && (
+										<span className={plainStatusClass(status)}>
+											{STATUS_LABEL[status] || status}
+										</span>
+									)}
+								</div>
+								<div className="flex min-w-0 items-center gap-1.5 text-meta">
+									<span className="truncate text-dim">{customerLabel}</span>
+									{customerName && customerEmail && (
+										<>
+											<span className="text-faint">·</span>
+											<span className="truncate text-faint">
+												{customerEmail}
+											</span>
+										</>
+									)}
+								</div>
+							</div>
+							{plainUrl && (
 								<a
-									className="shrink-0 whitespace-nowrap text-meta font-semibold text-link no-underline hover:underline ml-auto"
-									href={plainThreadUrl(threadId)}
+									className="shrink-0 whitespace-nowrap text-meta font-semibold text-link no-underline hover:underline"
+									href={plainUrl}
 									target="_blank"
 									rel="noreferrer"
 									title="Open this thread in Plain"
 								>
 									Open in Plain ↗
 								</a>
-							</div>
-							{thread?.title && (
-								<div className="mt-2 text-section-title font-semibold text-fg">
-									{thread.title}
-								</div>
+							)}
+						</>
+					)}
+				</div>
+			)}
+				<div
+					className={cn(
+						"mx-auto w-full max-w-[760px] px-5 pb-5",
+						// With the identity in the bar, the first block's own top
+						// margin is the whole gap under it.
+						headerInTopBar ? "pt-1" : "pt-6",
+					)}
+				>
+					{loading && !thread ? (
+						<LoadingState>Loading ticket…</LoadingState>
+					) : error && !thread ? (
+						<InlineAlert>Couldn't load this Plain thread: {error}</InlineAlert>
+					) : (
+						<>
+							{!headerInTopBar && (
+								<>
+									<div className="flex items-center gap-2.5 min-w-0">
+										<span
+											className="truncate text-item-title font-semibold text-fg"
+											title={customerEmail}
+										>
+											{customerLabel}
+										</span>
+										{customerName && customerEmail && (
+											<span className="text-faint text-label truncate">
+												{customerEmail}
+											</span>
+										)}
+										{status && (
+											<span className={plainStatusClass(status)}>
+												{STATUS_LABEL[status] || status}
+											</span>
+										)}
+									<a
+										className="shrink-0 whitespace-nowrap text-meta font-semibold text-link no-underline hover:underline ml-auto"
+										href={plainUrl}
+										target="_blank"
+										rel="noreferrer"
+										title="Open this thread in Plain"
+									>
+										Open in Plain ↗
+									</a>
+									</div>
+									{thread?.title && (
+										<div className="mt-2 text-section-title font-semibold text-fg">
+											{thread.title}
+										</div>
+									)}
+								</>
 							)}
 
 							{/* Is anyone still owed an answer? Plain leads with this;

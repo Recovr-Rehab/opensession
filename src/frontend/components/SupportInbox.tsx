@@ -13,6 +13,7 @@ import {
 	SIDEBAR_RAIL_GAP,
 } from "../lib/sidebar-classes";
 import { SUPPORT_PRIORITY_DOT, SUPPORT_PRIORITY_GROUPS } from "../lib/sidebar-filter";
+import { SUPPORT_COLUMN_BAR } from "../lib/support-classes";
 import { mineStatus } from "../lib/sidebar-lanes";
 import { MINE_STATUS_META } from "../lib/sidebar-types";
 import { shortTime } from "../lib/time";
@@ -46,13 +47,6 @@ const COLUMN =
 	"flex min-h-0 flex-col " +
 	"phone:w-full phone:flex-1 " +
 	"desktop:w-[320px] desktop:shrink-0 desktop:border-r desktop:border-divider";
-
-/** A bar across the top of each column, on the app's own bar height so the two
- *  line up with the sidebar's brand row. `wco-chrome` is what makes it a drag
- *  region in the desktop shell. */
-const COLUMN_BAR =
-	"wco-chrome flex h-[var(--desktop-header-h)] shrink-0 items-center gap-2 " +
-	"border-b border-divider px-4";
 
 const COLUMN_TITLE = "m-0 text-item-title font-semibold text-fg phone:text-section-title";
 
@@ -192,7 +186,7 @@ export function SupportInbox({
 		<div className="flex min-h-0 flex-1">
 			{showList && (
 				<aside className={COLUMN}>
-					<div className={COLUMN_BAR}>
+					<div className={SUPPORT_COLUMN_BAR}>
 						<h1 className={COLUMN_TITLE}>Support</h1>
 						{threads && (
 							<span className={COLUMN_COUNT}>{threads.length}</span>
@@ -249,16 +243,19 @@ export function SupportInbox({
 
 			{showTicket && (
 				<section className="flex min-w-0 flex-1 flex-col">
-					{/* Matches the list's bar so the two columns start on one line.
-					    Empty by design: on a phone the app's own floating back
-					    control sits here and pops history back to the queue, so a
-					    second back button would be the same gesture twice. */}
-					<div className={COLUMN_BAR} />
+					{/* An open ticket brings its own bar, with its subject and
+					    customer in it. This is the one for when nothing is open, and
+					    for phones, where the app's floating back control sits here
+					    and the ticket keeps its header inline — a second back button
+					    would be the same gesture twice. Either way the two columns
+					    start on one line. */}
+					{(!threadId || isPhone) && <div className={SUPPORT_COLUMN_BAR} />}
 					{threadId ? (
 						<ConversationPane
 							key={threadId}
 							threadId={threadId}
 							onOpenSession={onOpenSession}
+							headerInBar
 						/>
 					) : (
 						<div className="flex min-h-0 flex-1 items-center justify-center p-8">
