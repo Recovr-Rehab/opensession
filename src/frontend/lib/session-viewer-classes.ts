@@ -283,6 +283,11 @@ export const VIEWER_INPUT =
  * without moving the composer under your hands. The transcript pays for what it
  * covers in bottom padding instead (`--suggestions-under`, above).
  *
+ * It carries no margin of its own, so the only thing between a pill and the
+ * composer is the input's own 4px of top padding. The row is an offer about
+ * the message you are being invited to write, and a band of empty page between
+ * the two read as two separate pieces of chrome.
+ *
  * It repeats the input's own side padding rather than insetting by the 20px
  * that padding reads as, because the rail gutter widens it to 37px on a
  * pointer. Measured, a hand-written `inset-x-5` put the pills 17px outside the
@@ -290,7 +295,7 @@ export const VIEWER_INPUT =
  * of the band is transcript you should still be able to select.
  */
 export const VIEWER_SUGGESTIONS =
-	"pointer-events-none absolute inset-x-0 bottom-full mb-2 px-5 " +
+	"pointer-events-none absolute inset-x-0 bottom-full px-5 " +
 	`${RAIL_GUTTER_CLASS} phone:px-3`;
 
 /* ── Banners and the delete overlay ─────────────────────────────────────── */

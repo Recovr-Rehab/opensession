@@ -37,8 +37,8 @@ export const onReplySuggestionsChanged = pref.onChanged;
  * flow above the composer, so they cost the conversation no height while they
  * are up and none of it back when they retire. What they do cost is cover:
  * without this the answer's own last line ends underneath them, and no amount
- * of scrolling brings it out. 28px of chip plus the 8px it stands off the
- * composer, so the reading stops the same 16px clear of the row that it
- * normally stops clear of the input.
+ * of scrolling brings it out. One chip tall, since the row stands off the
+ * composer by the input's own padding and nothing more, so the reading stops
+ * the same 16px clear of the row that it normally stops clear of the input.
  */
-export const SUGGESTIONS_CLEARANCE = "36px";
+export const SUGGESTIONS_CLEARANCE = "28px";
