@@ -479,6 +479,14 @@ export const SIDEBAR_AUTO_COG =
  * than as two automations with their work under them. The step is what says
  * which rows belong to which heading.
  *
+ * It holds for a COLLAPSED group too, where the one row that can be there is
+ * an owned automation's latest report. The step says "belongs to the heading
+ * above", which is as true of a report as of a run; what says the group is
+ * closed is the heading's own chevron, which is why that chevron shows at rest
+ * rather than on hover (see {@link SIDEBAR_GROUP_CHEVRON_COLLAPSED}). Flatten
+ * the report onto the heading's rail instead and it stops reading as that
+ * automation's finding and starts reading as another automation.
+ *
  * It moves the CONTENT rail, not the row. `--sidebar-icon-left` is the column
  * every leading mark and every title lines up on, so overriding it here
  * indents the marks and the names together while the hover and selected fills

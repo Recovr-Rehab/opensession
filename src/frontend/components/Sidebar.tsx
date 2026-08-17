@@ -5546,8 +5546,16 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 											<span className={cn(SIDEBAR_GROUP_COUNT, "shrink-0")}>
 												{group.items.length}
 											</span>
+											{/* Collapsed, the chevron shows at rest, as it does
+											    on every other heading in the sidebar: a closed
+											    automation still lists its latest report, so
+											    without it nothing said whether the rows under
+											    the heading were all of them or one of eight. */}
 											<IconChevronDown
-												className={SIDEBAR_GROUP_CHEVRON}
+												className={cn(
+													SIDEBAR_GROUP_CHEVRON,
+													!open && SIDEBAR_GROUP_CHEVRON_COLLAPSED,
+												)}
 												size={22}
 												style={{
 													transform: open ? "none" : "rotate(-90deg)",
@@ -5571,7 +5579,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 											</span>
 										</button>
 										{/* The automation's own work, a step inside its
-										    heading. See SIDEBAR_AUTOMATION_RUNS. */}
+										    heading. See SIDEBAR_AUTOMATION_RUNS. The step
+										    means "belongs to the heading above", so it holds
+										    for a collapsed group's report too; what says the
+										    group is CLOSED is the heading's own chevron. */}
 										<div className={SIDEBAR_AUTOMATION_RUNS}>
 										{/* What the automation last concluded, above the runs
 										    that produced it: the runs are named by their
