@@ -665,7 +665,6 @@ struct SessionView: View {
             }
             #endif
         }
-        .environment(\.transcriptRepo, viewModel.session.effectiveRepo)
         .safeAreaInset(edge: .top, spacing: 0) {
             VStack(spacing: 0) {
                 #if os(iOS)

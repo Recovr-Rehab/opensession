@@ -168,6 +168,7 @@ import {
 } from "../lib/review-queue";
 import {
 	placeSidebarRows,
+	rowUsesAutoCreatedSection,
 	rowsAtPlacement,
 } from "../lib/sidebar-placement";
 import { ReviewAskerFace } from "./ReviewAskerFace";
@@ -1594,6 +1595,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			inStatusScope:
 				(rowOwnsSelection(r) ||
 					focus === "everyone" ||
+					rowUsesAutoCreatedSection(r, filter.person) ||
 					(focus === "unassigned"
 						? r.status === "pending"
 						: r.owner === focus ||
@@ -1619,6 +1621,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	const needsReviewRows = rowsAtPlacement(placedWsRows, "needs-review");
 	const approvedReviewRows = rowsAtPlacement(placedWsRows, "approved-review");
 	const awaitingReviewRows = rowsAtPlacement(placedWsRows, "awaiting-review");
+	const autoCreatedRows = rowsAtPlacement(placedWsRows, "auto-created");
 	const focusWsRows = rowsAtPlacement(placedWsRows, "status");
 	const snoozedWsRows = rowsAtPlacement(placedWsRows, "snoozed").sort(
 		(a, b) =>
@@ -1668,6 +1671,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		const covered = new Set<string>();
 		const rowsInView = [
 			...focusWsRows,
+			...autoCreatedRows,
 			...pinnedWsRows,
 			...snoozedWsRows,
 			...needsReviewRows,
@@ -1700,6 +1704,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		reviewQueueItems,
 		workspaceDataReady,
 		focusWsRows,
+		autoCreatedRows,
 		pinnedWsRows,
 		snoozedWsRows,
 		needsReviewRows,
@@ -1792,6 +1797,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				...approvedReviewRows,
 				...awaitingReviewRows,
 				...pinnedWsRows,
+				...autoCreatedRows,
 				...MINE_STATUS_META.flatMap((meta) =>
 					focusWsRows.filter((r) => r.status === meta.key),
 				),
@@ -1803,6 +1809,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			approvedReviewRows,
 			awaitingReviewRows,
 			pinnedWsRows,
+			autoCreatedRows,
 			focusWsRows,
 			snoozedWsRows,
 		],
@@ -1819,6 +1826,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		awaitingReviewRows.length === 0 &&
 		approvedReviewRows.length === 0 &&
 		pinnedWsRows.length === 0 &&
+		autoCreatedRows.length === 0 &&
 		focusWsRows.length === 0 &&
 		snoozedWsRows.length === 0 &&
 		prRowItems.length === 0;
@@ -2327,7 +2335,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// Collapsible bands are open by default, so — like
 	// repo groups — their *collapsed* state is what's persisted. Collapsing one
 	// hides every group within that band. Searching forces them open.
-	const bandOpen = (band: GroupBand | "workspaces") =>
+	const bandOpen = (
+		band: GroupBand | "workspaces" | "auto-created",
+	) =>
 		search.trim().length > 0 ? true : !expanded.has(`collapsed:band:${band}`);
 	// A borrowed sidebar is its workspaces list: the tools are gone and the
 	// heading is the strip that gets you back out, so there is no caption left
@@ -2381,8 +2391,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		return list;
 	}
 	const automationsOpen = bandOpen("automations");
+	const autoCreatedOpen = bandOpen("auto-created");
 	const visibleAutomationGroups = automationsOpen ? groups : [];
-	function toggleBand(band: GroupBand | "tools" | "workspaces") {
+	function toggleBand(
+		band: GroupBand | "tools" | "workspaces" | "auto-created",
+	) {
 		const key = `collapsed:band:${band}`;
 		setExpanded((prev) => {
 			const next = new Set(prev);
@@ -5475,6 +5488,61 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				</div>
 			)}
 			</div>
+
+				{/* Ordinary work created through the Automation machine identity.
+				    This section exists only under the default Me lens; Everyone and
+				    the Automation person lens place the same rows in Workspaces. */}
+				{autoCreatedRows.length > 0 && (
+					<div
+						className={cn(SIDEBAR_INDEPENDENT_SECTION, "mt-2")}
+						data-sidebar-section="auto-created"
+					>
+						<div
+							className={cn(
+								SIDEBAR_BAND_LABEL,
+								"py-0 pl-0 pr-2 desktop:pr-0",
+								SIDEBAR_STICKY_BAND,
+								SIDEBAR_STICKY_BAND_ROW,
+								SIDEBAR_STUCK_BACKING,
+							)}
+							data-sticky-head
+						>
+							<button
+								className={cn(
+									SIDEBAR_BAND_TOGGLE,
+									SIDEBAR_BAND_TOGGLE_INSET,
+								)}
+								onClick={() => toggleBand("auto-created")}
+								title={
+									autoCreatedOpen
+										? "Collapse auto-created workspaces"
+										: "Expand auto-created workspaces"
+								}
+							>
+								<span className="min-w-0 truncate">Auto created</span>
+								<span className={SIDEBAR_GROUP_COUNT}>
+									{autoCreatedRows.length}
+								</span>
+								<IconChevronDown
+									className={cn(
+										SIDEBAR_BAND_CHEVRON,
+										"group-hover/band:visible group-hover/band:text-dim",
+										!autoCreatedOpen && SIDEBAR_BAND_CHEVRON_COLLAPSED,
+									)}
+									size={18}
+									style={{
+										transform: autoCreatedOpen ? "none" : "rotate(-90deg)",
+									}}
+								/>
+							</button>
+						</div>
+						{autoCreatedOpen && (
+							<div className={SIDEBAR_INDEPENDENT_SCROLL}>
+								{renderStatusLanes(autoCreatedRows, "auto-created:")}
+							</div>
+						)}
+					</div>
+				)}
 
 				{/* ── Automations (one collapsible band, one group per automation) ── */}
 				{groups.length > 0 && (

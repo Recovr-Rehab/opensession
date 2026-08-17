@@ -15,6 +15,7 @@ export type SidebarPlacement =
 	| "approved-review"
 	| "awaiting-review"
 	| "completed-review"
+	| "auto-created"
 	| "status"
 	| "outside";
 
@@ -28,6 +29,41 @@ export interface SidebarPlacementContext {
 export interface PlacedSidebarRow<T extends WsRow = WsRow> {
 	row: T;
 	placement: SidebarPlacement;
+}
+
+const AUTOMATION_MACHINE_IDENTITY = "automation";
+
+/**
+ * A normal workspace or session created through the browser automation
+ * identity. Automation runs are a different product concept and keep their
+ * own `automation` field, so they never enter this section.
+ */
+export function rowWasAutoCreated(row: WsRow): boolean {
+	const ordinarySessions = row.sessions.filter((session) => !session.automation);
+	if (ordinarySessions.some(
+		(session) =>
+			[session.createdBy, session.startedBy].some(
+				(person) =>
+					person?.trim().toLowerCase() === AUTOMATION_MACHINE_IDENTITY,
+			),
+	))
+		return true;
+	// An automation-only row is still an automation run even if its container
+	// happened to be minted by the machine identity.
+	if (row.sessions.length > 0 && ordinarySessions.length === 0) return false;
+	return (
+		row.workspace?.createdBy.trim().toLowerCase() ===
+		AUTOMATION_MACHINE_IDENTITY
+	);
+}
+
+/** The dedicated section exists only in the default lens. Aggregate and
+ * machine-person lenses already include these rows in Workspaces. */
+export function rowUsesAutoCreatedSection(
+	row: WsRow,
+	personFilter: string,
+): boolean {
+	return personFilter === "me" && rowWasAutoCreated(row);
 }
 
 export function classifySidebarPlacement(
@@ -93,6 +129,12 @@ export function classifySidebarPlacement(
 			);
 		if (mineRequest && reviewCompleted) return "completed-review";
 	}
+
+	if (
+		context.inStatusScope &&
+		rowUsesAutoCreatedSection(row, context.personFilter)
+	)
+		return "auto-created";
 
 	return context.inStatusScope ? "status" : "outside";
 }

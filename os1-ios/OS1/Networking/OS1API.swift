@@ -119,14 +119,6 @@ enum OS1API {
         return "/api/sessions/\(session)/effective-config?user=\(encodedUser)"
     }
 
-    /// One SHA named in transcript prose. The repo is a hint: the server
-    /// searches it first, then returns the repository that actually owns the
-    /// commit so cross-repo references still reach the right GitHub page.
-    static func commit(sha: String, repo: String?) async throws -> CommitDetails? {
-        let result: CommitDetails? = try await get(CommitDetails.lookupPath(sha: sha, repo: repo))
-        return result
-    }
-
     private struct SessionNotesResponse: Decodable, Sendable {
         let notes: [SessionNote]
     }
@@ -1100,12 +1092,10 @@ enum OS1API {
         // Same deal for the transcript's PR chips: the ids decide which
         // qualified mentions (`opensession#128`) link at all, and the GitHub
         // names are where a chip goes when the app can't show the PR itself.
-        let transcriptRepos = Dictionary(
+        PrLinks.register(repos: Dictionary(
             response.repos.map { ($0.id, $0.ghRepo) },
             uniquingKeysWith: { first, _ in first }
-        )
-        PrLinks.register(repos: transcriptRepos)
-        CommitLinks.register(repos: transcriptRepos)
+        ))
         RepoCount.remember(response.repos.count)
         return response.repos
     }

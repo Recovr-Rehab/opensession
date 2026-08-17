@@ -4,6 +4,7 @@ import type { WsRow } from "./sidebar-types";
 import {
 	classifySidebarPlacement,
 	placeSidebarRows,
+	rowWasAutoCreated,
 	rowsAtPlacement,
 	type SidebarPlacement,
 } from "./sidebar-placement";
@@ -129,6 +130,7 @@ describe("sidebar row placement", () => {
 			"approved-review",
 			"awaiting-review",
 			"completed-review",
+			"auto-created",
 			"status",
 			"outside",
 		];
@@ -183,5 +185,86 @@ describe("sidebar row placement", () => {
 			"middle",
 			"oldest",
 		]);
+	});
+
+	test("gives ordinary machine-created work its own section under me", () => {
+		const candidate = row(
+			"native-parity",
+			[
+				session("native-parity", {
+					createdBy: "Automation",
+					startedBy: "Automation",
+				}),
+			],
+			{ owner: "automation" },
+		);
+
+		expect(classifySidebarPlacement(candidate, context)).toBe("auto-created");
+	});
+
+	test("renders machine-created rows once under aggregate and machine lenses", () => {
+		const candidate = row(
+			"native-parity",
+			[
+				session("native-parity", {
+					createdBy: "Automation",
+					startedBy: "Automation",
+				}),
+			],
+			{ owner: "automation" },
+		);
+
+		expect(
+			classifySidebarPlacement(candidate, {
+				...context,
+				personFilter: "everyone",
+			}),
+		).toBe("status");
+		expect(
+			classifySidebarPlacement(candidate, {
+				...context,
+				personFilter: "automation",
+			}),
+		).toBe("status");
+	});
+
+	test("never treats automation runs as auto-created work", () => {
+		const run = row(
+			"automation-run",
+			[
+				session("automation-run", {
+					createdBy: "Automation",
+					startedBy: "Automation",
+					automation: "iOS parity check",
+				}),
+			],
+			{
+				owner: "automation",
+				workspace: {
+					id: "ws-automation",
+					name: "Automation run",
+					createdBy: "Automation",
+					createdAt: "2026-08-16T00:00:00Z",
+				},
+			},
+		);
+
+		expect(rowWasAutoCreated(run)).toBe(false);
+		expect(classifySidebarPlacement(run, context)).toBe("status");
+	});
+
+	test("recognizes a sessionless workspace created by the machine", () => {
+		const draft = row("draft", [], {
+			owner: "automation",
+			workspace: {
+				id: "ws-draft",
+				name: "Draft",
+				createdBy: "Automation",
+				createdAt: "2026-08-16T00:00:00Z",
+			},
+		});
+
+		expect(rowWasAutoCreated(draft)).toBe(true);
+		expect(classifySidebarPlacement(draft, context)).toBe("auto-created");
 	});
 });
