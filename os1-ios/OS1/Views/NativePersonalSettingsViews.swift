@@ -93,6 +93,7 @@ struct PreferencesSettingsView: View {
     @AppStorage("os1.composer.busySend") private var nativeBusySend = "queue"
     @AppStorage("os1.composer.busySendMod") private var nativeBusySendMod = "steer"
     @AppStorage("os1.appearance.turnActivity") private var nativeTurnActivity = "auto"
+    @AppStorage("os1.composer.replySuggestions") private var nativeReplySuggestions = true
     @AppStorage("os1.desk.voice") private var deskVoice = "off"
     /// The one control on this screen that stays on the device — see the type
     /// note above. It is deliberately not in `seededPrefs`/`commit()`: those
@@ -105,6 +106,7 @@ struct PreferencesSettingsView: View {
     @State private var busySend: String
     @State private var busySendMod: String
     @State private var turnActivity: String
+    @State private var replySuggestions: Bool
     @State private var loading = true
     @State private var saving = false
     @State private var resaveNeeded = false
@@ -130,6 +132,7 @@ struct PreferencesSettingsView: View {
             "busy-send": defaults.string(forKey: "os1.composer.busySend") ?? "queue",
             "busy-send-mod": defaults.string(forKey: "os1.composer.busySendMod") ?? "steer",
             "turn-activity": defaults.string(forKey: "os1.appearance.turnActivity") ?? "auto",
+            "reply-suggestions": (defaults.object(forKey: "os1.composer.replySuggestions") as? Bool ?? true) ? "on" : "off",
         ]
         _seededPrefs = State(initialValue: seeded)
         _defaultModel = State(initialValue: seeded["default-model"] ?? "")
@@ -137,6 +140,7 @@ struct PreferencesSettingsView: View {
         _busySend = State(initialValue: seeded["busy-send"] ?? "queue")
         _busySendMod = State(initialValue: seeded["busy-send-mod"] ?? "steer")
         _turnActivity = State(initialValue: seeded["turn-activity"] ?? "auto")
+        _replySuggestions = State(initialValue: seeded["reply-suggestions"] != "off")
         _models = State(initialValue: SettingsCache.value("model-catalog", as: ModelCatalogSettings.self)?.models ?? [])
     }
 
@@ -211,6 +215,12 @@ struct PreferencesSettingsView: View {
                 #endif
             }
 
+            Section {
+                Toggle("Quick replies", isOn: $replySuggestions)
+            } footer: {
+                Text("Suggest replies when a turn ends on a choice. Picking one fills the draft.")
+            }
+
             #if os(iOS)
             // Directly under Sending, because sending is what it mostly
             // answers — and its own section rather than a row in there,
@@ -266,6 +276,7 @@ struct PreferencesSettingsView: View {
         .onChange(of: busySend) { _, _ in commit() }
         .onChange(of: busySendMod) { _, _ in commit() }
         .onChange(of: turnActivity) { _, _ in commit() }
+        .onChange(of: replySuggestions) { _, _ in commit() }
         .onDisappear { commit() }
     }
 
@@ -307,6 +318,10 @@ struct PreferencesSettingsView: View {
                 // whatever this device last saw rather than snapping the
                 // picker to a default the account never chose.
                 "turn-activity": Self.validTurnActivity(prefs["turn-activity"]) ?? nativeTurnActivity,
+                "reply-suggestions": (
+                    NativePreferences.replySuggestionsEnabled(prefs["reply-suggestions"])
+                        ?? replySuggestions
+                ) ? "on" : "off",
             ]
             // The screen was already usable while this was in flight, so a
             // control the reader moved in the meantime keeps their choice —
@@ -317,6 +332,9 @@ struct PreferencesSettingsView: View {
             if busySend == seededPrefs["busy-send"] { busySend = server["busy-send"] ?? busySend }
             if busySendMod == seededPrefs["busy-send-mod"] { busySendMod = server["busy-send-mod"] ?? busySendMod }
             if turnActivity == seededPrefs["turn-activity"] { turnActivity = server["turn-activity"] ?? turnActivity }
+            if (replySuggestions ? "on" : "off") == seededPrefs["reply-suggestions"] {
+                replySuggestions = server["reply-suggestions"] != "off"
+            }
             seededPrefs = server
             #if os(macOS)
             nativeSendKey = sendKey
@@ -324,6 +342,7 @@ struct PreferencesSettingsView: View {
             nativeBusySend = busySend
             nativeBusySendMod = busySendMod
             nativeTurnActivity = turnActivity
+            nativeReplySuggestions = replySuggestions
             savedPrefs = server
             prefsLoaded = true
         } catch {
@@ -365,6 +384,9 @@ struct PreferencesSettingsView: View {
             busySend = confirmed["busy-send"] == "steer" ? "steer" : "queue"
             busySendMod = confirmed["busy-send-mod"] == "queue" ? "queue" : "steer"
             turnActivity = Self.validTurnActivity(confirmed["turn-activity"]) ?? turnActivity
+            replySuggestions = NativePreferences.replySuggestionsEnabled(
+                confirmed["reply-suggestions"]
+            ) ?? replySuggestions
             nativeDefaultModel = defaultModel
             #if os(macOS)
             nativeSendKey = sendKey
@@ -372,6 +394,7 @@ struct PreferencesSettingsView: View {
             nativeBusySend = busySend
             nativeBusySendMod = busySendMod
             nativeTurnActivity = turnActivity
+            nativeReplySuggestions = replySuggestions
             savedPrefs = confirmed
         } catch {
             self.error = error.localizedDescription
@@ -390,6 +413,7 @@ struct PreferencesSettingsView: View {
             "busy-send": busySend,
             "busy-send-mod": busySendMod,
             "turn-activity": turnActivity,
+            "reply-suggestions": replySuggestions ? "on" : "off",
         ]
     }
 

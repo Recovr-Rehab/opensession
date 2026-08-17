@@ -103,16 +103,19 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
    transcript to it. It stays hidden on iPhone and compact widths. A selected
    Markdown passage stays highlighted as
    composer context, then rides with the next prompt, team note, or scheduled
-   message as a block quote. Token-level streaming via `stream_text`, plus a
-   horizontally scrollable session tab strip when a workspace/worktree contains
-   multiple sessions. Its history menu queries only that workspace's closed
-   siblings and restores one directly into the strip. On macOS, where the
-   sidebar is the live-session switcher, the same scoped history lives in the
-   selected session's toolbar instead. On iOS the trailing nav-bar control is
-   a native overflow menu carrying this worktree's actions — new session,
-   worktree details, its pull request panel, rename, share link, hide/restore,
-   and archive (which pops back to the list) — the same set the sidebar row
-   offers under long press. A
+   message as a block quote. When the server offers `reply_suggestions`, the
+   idle composer shows optional quick-reply chips; choosing one adds its full
+   text to the draft for editing rather than sending it. The Personal setting
+   shares the web client's `reply-suggestions` account preference. Token-level
+   streaming via `stream_text`, plus a horizontally scrollable session tab
+   strip when a workspace/worktree contains multiple sessions. Its history menu
+   queries only that workspace's closed siblings and restores one directly into
+   the strip. On macOS, where the sidebar is the live-session switcher, the same
+   scoped history lives in the selected session's toolbar instead. On iOS the
+   trailing nav-bar control is a native overflow menu carrying this worktree's
+   actions — new session, worktree details, its pull request panel, rename,
+   share link, hide/restore, and archive (which pops back to the list) — the same
+   set the sidebar row offers under long press. A
   bounded cache keeps recently visited conversations loaded while their
   off-screen sockets remain disconnected, so returning to a page does not show
   a loading screen. Fenced Markdown, expanded tool inputs and code assets use
@@ -455,6 +458,9 @@ OS1/
 - `stream_text` deltas render immediately; the durable assistant entry arrives
   via `transcript_append` after `stream_done`, at which point the live bubble
   is dropped.
+- `reply_suggestions` carries a session id and optional `{label,text}` choices.
+  A JSON `null` suggestion payload clears the current row; a new stream or send
+  clears it locally so stale replies cannot follow the next turn.
 - Entries can arrive clamped (`contentClamped`); full content is at
   `GET /api/sessions/:id/entry/:entryId` (not wired into the UI yet).
 - `presence` lists everyone watching the session, one name per socket. The

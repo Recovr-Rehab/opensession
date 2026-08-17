@@ -2358,6 +2358,7 @@ private struct SessionInputBar: View {
     @AppStorage("os1.composer.busySend") private var busySend = "queue"
     /// Read for the Mac send menu's key hints only. See `BusySendHints`.
     @AppStorage("os1.composer.busySendMod") private var busySendMod = "steer"
+    @AppStorage("os1.composer.replySuggestions") private var showReplySuggestions = true
     /// Matches the transcript column cap so the bar centers with it.
     let contentMaxWidth: CGFloat
     let horizontalInset: CGFloat
@@ -2437,6 +2438,15 @@ private struct SessionInputBar: View {
                     )
             }
 
+            if showReplySuggestions,
+               !viewModel.isRunning,
+               viewModel.pendingQuestion == nil,
+               !noteMode,
+               !viewModel.replySuggestions.isEmpty {
+                replySuggestionRow
+                    .transition(.opacity.combined(with: .scale(scale: 0.96, anchor: .bottomLeading)))
+            }
+
             if viewModel.quoteSelection.text != nil {
                 selectedTextChip
                     .transition(
@@ -2487,6 +2497,7 @@ private struct SessionInputBar: View {
         .padding(.bottom, 8)
         .animation(.smooth(duration: 0.22), value: visibleNotice)
         .animation(.smooth(duration: 0.18), value: noteMode)
+        .animation(.smooth(duration: 0.2), value: viewModel.replySuggestions)
         .animation(.smooth(duration: 0.18), value: viewModel.quoteSelection.text)
         // Stopping a turn is the one thing in the composer you can't take
         // back, and the stop disc sits a thumb's width from send — so it asks
@@ -2603,6 +2614,35 @@ private struct SessionInputBar: View {
         .onDisappear { removeShiftReturnMonitor() }
         #endif
         .transcriptQuoteComposerRegion(viewModel.quoteSelection)
+    }
+
+    /// The same quiet, horizontally scrolling pills as the web and Desk
+    /// composers. The visible shape is compact; each button keeps a 44pt hit
+    /// target for touch. A tap only fills the field and returns focus to it.
+    private var replySuggestionRow: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 6) {
+                ForEach(Array(viewModel.replySuggestions.enumerated()), id: \.offset) { _, suggestion in
+                    Button {
+                        viewModel.pickReplySuggestion(suggestion)
+                        inputFocused = true
+                    } label: {
+                        Text(suggestion.label)
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(OS1VisualStyle.textDim)
+                            .lineLimit(1)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 7)
+                            .background(Capsule().fill(OS1VisualStyle.hover))
+                            .frame(minHeight: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(suggestion.text)
+                    .help(suggestion.text)
+                }
+            }
+        }
+        .scrollIndicators(.hidden)
     }
 
     /// Messages this app is still holding for the server. Read here, in the

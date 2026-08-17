@@ -847,6 +847,60 @@ final class SessionViewModelTests: XCTestCase {
         viewModel.handle(.notice(""))
         XCTAssertEqual(viewModel.entries.count, 1)
     }
+
+    func testReplySuggestionFillsDraftWithoutSendingAndRetiresRow() {
+        let viewModel = makeViewModel()
+        let suggestions = [
+            ReplySuggestion(label: "Fix both", text: "Fix both issues, then run the tests."),
+            ReplySuggestion(label: "Only cache", text: "Fix only the stale cache read."),
+        ]
+        viewModel.handle(.replySuggestions(sessionId: "bks-1", suggestions: suggestions))
+        XCTAssertEqual(viewModel.replySuggestions, suggestions)
+
+        viewModel.draft = "Keep this context   \n"
+        viewModel.pickReplySuggestion(suggestions[0])
+
+        XCTAssertEqual(viewModel.draft, "Keep this context\nFix both issues, then run the tests.")
+        XCTAssertTrue(viewModel.replySuggestions.isEmpty)
+        XCTAssertEqual(viewModel.sendSeq, 0, "picking a suggestion must not send it")
+    }
+
+    func testReplySuggestionsClearFromServerAndWhenANewTurnStarts() {
+        let viewModel = makeViewModel()
+        let suggestions = [ReplySuggestion(label: "Ship it", text: "Ship the completed change.")]
+        viewModel.handle(.replySuggestions(sessionId: "other", suggestions: suggestions))
+        XCTAssertTrue(viewModel.replySuggestions.isEmpty)
+
+        viewModel.handle(.replySuggestions(sessionId: "bks-1", suggestions: suggestions))
+        viewModel.handle(.replySuggestions(sessionId: "bks-1", suggestions: []))
+        XCTAssertTrue(viewModel.replySuggestions.isEmpty)
+
+        viewModel.handle(.replySuggestions(sessionId: "bks-1", suggestions: suggestions))
+        viewModel.handle(.streamStart(sessionId: "bks-1"))
+        XCTAssertTrue(viewModel.replySuggestions.isEmpty)
+
+        viewModel.handle(.replySuggestions(sessionId: "bks-1", suggestions: suggestions))
+        viewModel.stop()
+        XCTAssertTrue(viewModel.replySuggestions.isEmpty)
+    }
+
+    func testReplySuggestionsClearWhenTheSocketDrops() {
+        let socket = MockSocket()
+        let viewModel = SessionViewModel(
+            session: Session(id: "bks-1"),
+            socketFactory: { socket }
+        )
+        viewModel.start()
+        viewModel.handle(.replySuggestions(
+            sessionId: "bks-1",
+            suggestions: [ReplySuggestion(label: "Retry", text: "Retry the request.")]
+        ))
+
+        socket.onClose?("connection lost")
+
+        XCTAssertTrue(viewModel.replySuggestions.isEmpty)
+        viewModel.stop()
+    }
 }
 
 /// `sendDraft` composer semantics. Sending is a two-step now: the draft goes

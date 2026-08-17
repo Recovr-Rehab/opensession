@@ -3,6 +3,13 @@ import XCTest
 
 @MainActor
 final class PreferenceHydrationTests: XCTestCase {
+    func testReplySuggestionsPreferenceUsesWebValues() {
+        XCTAssertEqual(NativePreferences.replySuggestionsEnabled("on"), true)
+        XCTAssertEqual(NativePreferences.replySuggestionsEnabled("off"), false)
+        XCTAssertNil(NativePreferences.replySuggestionsEnabled(nil))
+        XCTAssertNil(NativePreferences.replySuggestionsEnabled("future-value"))
+    }
+
     func testReadBeforeHydrationWinsOverOlderRemoteMark() {
         let store = ReadsStore()
         let session = Session(

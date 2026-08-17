@@ -100,6 +100,13 @@ enum NativePreferences {
             resetMissing: changedIdentity,
             in: defaults
         )
+        setBool(
+            replySuggestionsEnabled(prefs["reply-suggestions"]),
+            default: true,
+            key: "os1.composer.replySuggestions",
+            resetMissing: changedIdentity,
+            in: defaults
+        )
         set(
             validatedIdList(prefs["repo-order"]),
             default: "[]",
@@ -161,6 +168,16 @@ enum NativePreferences {
         return value
     }
 
+    /// The web stores this boolean as "on"/"off" in ui-prefs. Unknown values
+    /// are ignored so a newer client cannot accidentally disable the feature.
+    static func replySuggestionsEnabled(_ value: String?) -> Bool? {
+        switch value {
+        case "on": true
+        case "off": false
+        default: nil
+        }
+    }
+
     /// The shape both list-valued prefs share (repo order, hidden sources): a
     /// JSON array of ids, trimmed, blanks and duplicates dropped, order kept.
     private static func validatedIdList(_ value: String?) -> String? {
@@ -181,6 +198,20 @@ enum NativePreferences {
     private static func set(
         _ value: String?,
         default defaultValue: String,
+        key: String,
+        resetMissing: Bool,
+        in defaults: UserDefaults
+    ) {
+        if let value {
+            defaults.set(value, forKey: key)
+        } else if resetMissing {
+            defaults.set(defaultValue, forKey: key)
+        }
+    }
+
+    private static func setBool(
+        _ value: Bool?,
+        default defaultValue: Bool,
         key: String,
         resetMissing: Bool,
         in defaults: UserDefaults

@@ -197,6 +197,25 @@ final class ServerEventTests: XCTestCase {
         XCTAssertNil(receipt.permalink)
     }
 
+    func testReplySuggestionsDecodeAndNullClears() {
+        let json = #"{"type":"reply_suggestions","sessionId":"bks-1","suggestions":[{"label":"Fix both","text":"Fix both issues, then run the tests."},{"label":"Only cache","text":"Fix only the stale cache read."}]}"#
+        guard case .replySuggestions(let id, let suggestions) = parse(json) else {
+            return XCTFail("expected .replySuggestions")
+        }
+        XCTAssertEqual(id, "bks-1")
+        XCTAssertEqual(suggestions.map(\.label), ["Fix both", "Only cache"])
+        XCTAssertEqual(suggestions.first?.text, "Fix both issues, then run the tests.")
+
+        guard case .replySuggestions(_, let cleared) =
+            parse(#"{"type":"reply_suggestions","sessionId":"bks-1","suggestions":null}"#)
+        else { return XCTFail("expected a clear event") }
+        XCTAssertTrue(cleared.isEmpty)
+
+        guard case .ignored = parse(#"{"type":"reply_suggestions","suggestions":[]}"#) else {
+            return XCTFail("reply_suggestions without sessionId should be .ignored")
+        }
+    }
+
     func testSessionNotesDecodeAndADeletedNoteCarriesItsId() {
         let note = #"{"type":"session_note","sessionId":"bks-1","note":{"id":"note-1","user":"Kent","text":"Check this","ts":1760000000000}}"#
         guard case .sessionNote(let sessionId, let decoded) = parse(note) else {

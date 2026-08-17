@@ -33,6 +33,7 @@ enum ServerEvent: Sendable {
     case askResolved(sessionId: String, questionId: String)
     case mention(user: String, mention: MentionRecord)
     case mentionsCleared(user: String, sessionId: String?)
+    case replySuggestions(sessionId: String, suggestions: [ReplySuggestion])
     case slackComposer(sessionId: String, request: SlackComposeRequest?)
     case slackComposerResolved(sessionId: String, receipt: SlackComposeReceipt)
     case notice(String)
@@ -136,6 +137,11 @@ enum ServerEvent: Sendable {
         case "mentions_cleared":
             guard let user = frame.user else { return .ignored }
             return .mentionsCleared(user: user, sessionId: frame.sessionId)
+        case "reply_suggestions":
+            guard let id = frame.sessionId else { return .ignored }
+            // The server sends null to retire the row. Treat it as an empty
+            // collection so state handling has one clear path.
+            return .replySuggestions(sessionId: id, suggestions: frame.suggestions ?? [])
         case "slack_composer":
             guard let id = frame.sessionId else { return .ignored }
             return .slackComposer(sessionId: id, request: frame.request)
@@ -215,6 +221,13 @@ struct SlackComposeReceipt: Equatable, Sendable, Identifiable {
     let permalink: String?
 
     var id: String { requestId }
+}
+
+/// One server-generated quick reply. The short label is the chip; the full
+/// text is what a tap puts in the composer for review.
+struct ReplySuggestion: Decodable, Equatable, Sendable {
+    let label: String
+    let text: String
 }
 
 /// Pagination cursor carried by transcript_init / transcript_history frames.
@@ -349,6 +362,7 @@ private struct RawFrame: Decodable {
     let questions: [AskQuestion.Question]?
     let user: String?
     let mention: MentionRecord?
+    let suggestions: [ReplySuggestion]?
     let request: SlackComposeRequest?
     let requestId: String?
     let status: String?

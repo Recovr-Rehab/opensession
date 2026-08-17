@@ -75,6 +75,9 @@ final class SessionViewModel {
     /// once, since presence carries one name per socket.
     private(set) var otherViewers: [String] = []
     private(set) var pendingQuestion: AskQuestion?
+    /// Quick replies for the last settled turn. A pick fills the draft; it
+    /// never sends, because the server's suggestion is still only a guess.
+    private(set) var replySuggestions: [ReplySuggestion] = []
     private(set) var pendingSlackComposer: SlackComposeRequest?
     private(set) var slackComposeReceipt: SlackComposeReceipt?
     private(set) var connectionState: ConnectionState = .connecting
@@ -490,6 +493,7 @@ final class SessionViewModel {
 
     private func stopConnection() {
         stopped = true
+        replySuggestions = []
         outbox.stopObserving(sessionId: session.id)
         reconnectTask?.cancel()
         conversationLoadTask?.cancel()
@@ -784,6 +788,7 @@ final class SessionViewModel {
         // You can't be done with a session you're actively working in: prompting
         // clears any sidebar hide covering it (opening it deliberately doesn't).
         HideStore.shared.unhide(for: session)
+        replySuggestions = []
         draft = ""
         attachedImages = []
         quoteSelection.clear()
@@ -876,6 +881,21 @@ final class SessionViewModel {
     func insertMention(_ insert: String) {
         if !draft.isEmpty, !draft.hasSuffix(" "), !draft.hasSuffix("\n") { draft += " " }
         draft += "@\(insert) "
+    }
+
+    /// Append a quick reply to any text already in the composer, matching the
+    /// web client. Retire the row after one pick so contradictory suggestions
+    /// cannot be folded into the same draft.
+    func pickReplySuggestion(_ suggestion: ReplySuggestion) {
+        let existing = draft.replacingOccurrences(
+            of: #"\s+$"#,
+            with: "",
+            options: .regularExpression
+        )
+        draft = existing.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? suggestion.text
+            : "\(existing)\n\(suggestion.text)"
+        replySuggestions = []
     }
 
     /// Hold the draft until `at` — the server sends it then, whether or not
@@ -1165,6 +1185,7 @@ final class SessionViewModel {
     private func scheduleReconnect(_ reason: String?) {
         guard !stopped else { return }
         if conversationLoadError == nil { connectionState = .reconnecting(reason) }
+        replySuggestions = []
         // A history page died with the socket; the watch's fresh
         // transcript_init is what unblocks paging again, so don't leave the
         // control spinning on a request nobody will answer.
@@ -1351,6 +1372,7 @@ final class SessionViewModel {
             liveEntries = []
             landedStreamTexts = []
             resyncAssistantCandidates = []
+            replySuggestions = []
             isStreaming = true
             streamEnded = false
             rebuildDisplayItems()
@@ -1493,6 +1515,9 @@ final class SessionViewModel {
 
         case .askResolved(let id, let questionId) where id == session.id:
             if pendingQuestion?.id == questionId { pendingQuestion = nil }
+
+        case .replySuggestions(let id, let suggestions) where id == session.id:
+            replySuggestions = suggestions
 
         case .slackComposer(let id, let request) where id == session.id:
             if let request, request.id == slackComposeReceipt?.requestId { break }
