@@ -170,6 +170,7 @@ import {
 import {
 	placeSidebarRows,
 	rowUsesAutoCreatedSection,
+	rowWasAutoCreated,
 	rowsAtPlacement,
 } from "../lib/sidebar-placement";
 import { ReviewAskerFace } from "./ReviewAskerFace";
@@ -262,6 +263,7 @@ import {
 	WsPrStatusMark,
 	WsStatusMark,
 } from "./sidebar/HoverCards";
+import { AutoCreatedMark } from "./sidebar/AutoCreatedMark";
 import { AutomationReportRow } from "./sidebar/AutomationReportRow";
 import { DraftRow } from "./sidebar/DraftRow";
 import { SidebarCtxMenu } from "./sidebar/SidebarCtxMenu";
@@ -2963,6 +2965,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						{stripPrTitlePrefix(row.name)}
 					</span>
 				)}
+				{/* Auto-created work reads as an ordinary workspace, so it says so
+				    beside its own name. The separated section only holds while the
+				    default lens and grouping do. */}
+				{!editing && rowWasAutoCreated(row) && <AutoCreatedMark />}
 				{row.mention && !editing && (
 					// Same badge as a session row (SidebarItem): the face of whoever
 					// tagged you, with an accent @ so it can't read as a viewer.

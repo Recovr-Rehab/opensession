@@ -19,6 +19,7 @@ import {
 	SIDEBAR_WS_DRAFT,
 } from "../../lib/sidebar-classes";
 import { isClaimed, pinnedLane, runNeedsAttention, stripPrTitlePrefix } from "../../lib/sidebar-lanes";
+import { sessionWasAutoCreated } from "../../lib/sidebar-placement";
 import { LONG_PRESS_MS, LONG_PRESS_SLOP, SWIPE_AXIS_LOCK_PX, SWIPE_COMMIT_MS, SWIPE_OPEN_THRESHOLD, SWIPE_REVEAL_PX, clampSwipe, fullSwipeThreshold, swipeCommitOffset, type SwipeAction } from "../../lib/sidebar-swipe";
 import { MINE_STATUS_META, type LaneChoice } from "../../lib/sidebar-types";
 import type { UnifiedSession } from "../../lib/types";
@@ -28,6 +29,7 @@ import { Popover } from "../../ui/popover";
 import { BottomSheet, SheetBody, SheetItem, SheetSeparator, SheetTitle } from "../../ui/sheet";
 import { Tooltip } from "../../ui/tooltip";
 import { RowCardPopup, useRowHoverCard } from "../SidebarRowCards";
+import { AutoCreatedMark } from "./AutoCreatedMark";
 import { IconArchive, IconInbox, IconMail, IconPencil, IconPin } from "../icons";
 import { SessionCardBody, WsPrStatusMark } from "../sidebar/HoverCards";
 import { SidebarCtxMenu } from "../sidebar/SidebarCtxMenu";
@@ -505,6 +507,11 @@ export function SidebarItem({
 					>
 						{stripPrTitlePrefix(session.title)}
 					</span>
+				)}
+				{/* Nobody started this one by hand. An automation RUN is a different
+				    concept with a band of its own, so it is not marked here. */}
+				{!editing && !session.automation && sessionWasAutoCreated(session) && (
+					<AutoCreatedMark />
 				)}
 				{mention && !editing && (
 					// Somebody tagged you here. It takes the slot the unread dot would

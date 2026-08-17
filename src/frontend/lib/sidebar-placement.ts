@@ -34,20 +34,28 @@ export interface PlacedSidebarRow<T extends WsRow = WsRow> {
 const AUTOMATION_MACHINE_IDENTITY = "automation";
 
 /**
+ * One session minted through the browser automation identity rather than by a
+ * person. An automation RUN is a different product concept: it keeps its own
+ * `automation` field and its own band, so callers that mark ordinary work
+ * exclude those themselves, the way `rowWasAutoCreated` does below.
+ */
+export function sessionWasAutoCreated(session: {
+	createdBy?: string | null;
+	startedBy?: string | null;
+}): boolean {
+	return [session.createdBy, session.startedBy].some(
+		(person) => person?.trim().toLowerCase() === AUTOMATION_MACHINE_IDENTITY,
+	);
+}
+
+/**
  * A normal workspace or session created through the browser automation
  * identity. Automation runs are a different product concept and keep their
  * own `automation` field, so they never enter this section.
  */
 export function rowWasAutoCreated(row: WsRow): boolean {
 	const ordinarySessions = row.sessions.filter((session) => !session.automation);
-	if (ordinarySessions.some(
-		(session) =>
-			[session.createdBy, session.startedBy].some(
-				(person) =>
-					person?.trim().toLowerCase() === AUTOMATION_MACHINE_IDENTITY,
-			),
-	))
-		return true;
+	if (ordinarySessions.some(sessionWasAutoCreated)) return true;
 	// An automation-only row is still an automation run even if its container
 	// happened to be minted by the machine identity.
 	if (row.sessions.length > 0 && ordinarySessions.length === 0) return false;

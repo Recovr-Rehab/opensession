@@ -6,6 +6,7 @@ import {
 	placeSidebarRows,
 	rowWasAutoCreated,
 	rowsAtPlacement,
+	sessionWasAutoCreated,
 	type SidebarPlacement,
 } from "./sidebar-placement";
 
@@ -266,5 +267,22 @@ describe("sidebar row placement", () => {
 
 		expect(rowWasAutoCreated(draft)).toBe(true);
 		expect(classifySidebarPlacement(draft, context)).toBe("auto-created");
+	});
+
+	// The row mark reads the same fact the section does, so a row keeps saying
+	// it was automatic once a grouping moves it in beside human work.
+	test("marks a session the machine identity created", () => {
+		expect(
+			sessionWasAutoCreated(session("auto", { createdBy: "Automation" })),
+		).toBe(true);
+		expect(
+			sessionWasAutoCreated(
+				session("auto-started", { startedBy: " automation " }),
+			),
+		).toBe(true);
+		expect(sessionWasAutoCreated(session("mine"))).toBe(false);
+		expect(
+			sessionWasAutoCreated(session("theirs", { createdBy: "Kent" })),
+		).toBe(false);
 	});
 });
