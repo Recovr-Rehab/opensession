@@ -445,6 +445,7 @@ enum TranscriptGrouping {
                     presentation: ToolPresentation.make(
                         toolName: use.toolName,
                         input: use.toolInput,
+                        server: use.presentation,
                         worktreeDir: worktreeDir
                     )
                 )))
@@ -460,6 +461,7 @@ enum TranscriptGrouping {
                     presentation: ToolPresentation.make(
                         toolName: entry.toolName,
                         input: entry.toolInput,
+                        server: entry.presentation,
                         worktreeDir: worktreeDir
                     )
                 )))

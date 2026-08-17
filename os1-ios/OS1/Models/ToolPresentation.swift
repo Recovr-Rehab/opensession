@@ -1,9 +1,8 @@
 import Foundation
 
-/// Canonical tool identity for the transcript, mirroring the web viewer's
-/// `ToolCallBlock`: engine dialects fold onto one canonical name, MCP names
-/// split into server + tool, every tool lands in a family (which picks the
-/// icon), and each gets a bespoke one-line summary.
+/// Canonical tool identity for the transcript. Current servers provide these
+/// facts on `TranscriptEntry.presentation`; the local derivation below remains
+/// the tolerant compatibility path for older servers and unknown metadata.
 ///
 /// Built once per entry in the view model's display pass — never inside a
 /// view `body`, where it would re-run for every visible row on each update.
@@ -14,7 +13,8 @@ struct ToolPresentation: Equatable, Sendable {
     /// MCP server for `mcp__linear__list_issues` style names ("linear").
     var mcpServer: String?
     /// What the row labels the call: the bare tool name for MCP calls (the
-    /// server rides in its own pill), else the canonical name.
+    /// server rides beside it), else the canonical name. This stays raw for
+    /// behavioral checks; `label` is the human-facing form.
     var name: String
     var family: ToolFamily
     /// One-line description of what the call is doing. May be empty.
@@ -26,11 +26,19 @@ struct ToolPresentation: Equatable, Sendable {
     /// Files this call touched, for the turn footer's chips.
     var touchedFiles: [TouchedFile]
 
-    /// Full label used in the collapsed fold's live preview: MCP calls read
-    /// "linear · list_issues", everything else is just the canonical name.
+    var serverLabel: String? {
+        mcpServer.map(Self.mcpServerDisplayName)
+    }
+
+    var label: String {
+        mcpServer == nil ? name : Self.mcpToolDisplayName(name)
+    }
+
+    /// Full label used in rows and collapsed previews: MCP calls read
+    /// "Linear · List issues", everything else is just the canonical name.
     var displayName: String {
-        guard let mcpServer else { return name }
-        return "\(mcpServer) · \(name)"
+        guard let serverLabel else { return label }
+        return "\(serverLabel) · \(label)"
     }
 }
 
@@ -135,23 +143,46 @@ extension ToolPresentation {
     /// Server-internal input keys the transcript never shows.
     private static let hiddenInputKeys: Set<String> = ["__bks_oc_session"]
 
+    private static let identifierNames: [String: String] = [
+        "api": "API",
+        "github": "GitHub",
+        "ios": "iOS",
+        "mcp": "MCP",
+        "opensession": "Open Session",
+        "posthog": "PostHog",
+        "sql": "SQL",
+        "tella": "Tella",
+        "url": "URL",
+        "workos": "WorkOS",
+    ]
+
     static func make(
         toolName: String?,
         input: JSONValue?,
+        server: TranscriptToolPresentation? = nil,
         worktreeDir: String? = nil
     ) -> ToolPresentation {
         let raw = (toolName ?? "tool").trimmingCharacters(in: .whitespaces)
-        let mcp = parseMcpTool(raw)
-        let canonical = mcp == nil ? canonicalName(raw) : raw
-        let family: ToolFamily = mcp != nil
+        let fallbackMcp = parseMcpTool(raw)
+        let fallbackCanonical = fallbackMcp == nil ? canonicalName(raw) : raw
+        let canonical = nonempty(server?.canonical) ?? fallbackCanonical
+        let mcpServer = nonempty(server?.mcpServer) ?? fallbackMcp?.server
+        let name = nonempty(server?.name) ?? fallbackMcp?.tool ?? canonical
+        let fallbackFamily: ToolFamily = mcpServer != nil
             ? .mcp
             : (families[canonical] ?? .other)
-        let (summary, isPath) = summarize(
+        let family = server?.family.flatMap(ToolFamily.init(rawValue:)) ?? fallbackFamily
+        let localSummary = summarize(
             canonical: canonical,
-            isMcp: mcp != nil,
+            isMcp: mcpServer != nil,
             input: input,
             worktreeDir: worktreeDir
         )
+        let (summary, isPath) = serverSummary(
+            server?.detail,
+            textIsPath: mcpServer == "opensession-assets" && name == "write_asset",
+            worktreeDir: worktreeDir
+        ) ?? localSummary
         let files = touchedFiles(
             canonical: canonical,
             input: input,
@@ -160,16 +191,97 @@ extension ToolPresentation {
         let stats = files.reduce(into: ToolLineStats()) {
             $0 = $0 + ToolLineStats(additions: $1.additions, deletions: $1.deletions)
         }
+        let serverStats = server?.lineStats.flatMap { value -> ToolLineStats? in
+            guard value.additions != nil || value.deletions != nil else { return nil }
+            return ToolLineStats(
+                additions: value.additions ?? 0,
+                deletions: value.deletions ?? 0
+            )
+        }
         return ToolPresentation(
             canonical: canonical,
-            mcpServer: mcp?.server,
-            name: mcp?.tool ?? canonical,
+            mcpServer: mcpServer,
+            name: name,
             family: family,
             summary: summary,
             summaryIsPath: isPath,
-            lineStats: stats.isEmpty ? nil : stats,
+            lineStats: serverStats ?? (stats.isEmpty ? nil : stats),
             touchedFiles: files
         )
+    }
+
+    private static func serverSummary(
+        _ detail: TranscriptToolDetail?,
+        textIsPath: Bool,
+        worktreeDir: String?
+    ) -> (String, Bool)? {
+        guard let detail, let kind = detail.kind else { return nil }
+        switch kind {
+        case "path":
+            guard let path = nonempty(detail.path) else { return nil }
+            return (tidyPath(path, worktreeDir: worktreeDir), true)
+        case "paths":
+            guard let paths = detail.paths else { return nil }
+            let values = paths.enumerated().compactMap { index, path -> String? in
+                let label = detail.labels.flatMap { labels in
+                    labels.indices.contains(index) ? labels[index] : nil
+                } ?? ""
+                let tidy = path.isEmpty ? "" : tidyPath(path, worktreeDir: worktreeDir)
+                let value = [label, tidy].filter { !$0.isEmpty }.joined(separator: " ")
+                return value.isEmpty ? nil : value
+            }
+            var summary = values.joined(separator: "  ·  ")
+            if let more = detail.more, more > 0 {
+                summary += summary.isEmpty ? "+\(more)" : "  ·  +\(more)"
+            }
+            guard !summary.isEmpty else { return nil }
+            return (summary, false)
+        case "command":
+            guard let command = nonempty(detail.command) else { return nil }
+            return (command, false)
+        case "text":
+            let text = detail.text ?? ""
+            let path = detail.path.map { tidyPath($0, worktreeDir: worktreeDir) } ?? ""
+            let summary = [text, path].filter { !$0.isEmpty }.joined(separator: " ")
+            return summary.isEmpty ? nil : (summary, textIsPath)
+        case "todo":
+            guard let total = detail.total, let done = detail.done else { return nil }
+            let progress = "\(done)/\(total) done"
+            return ([detail.current, progress].compactMap { $0 }.filter { !$0.isEmpty }
+                .joined(separator: "  ·  "), false)
+        case "none":
+            return ("", false)
+        default:
+            return nil
+        }
+    }
+
+    private static func identifierWords(_ value: String) -> [String] {
+        value
+            .replacingOccurrences(
+                of: "([a-z0-9])([A-Z])",
+                with: "$1 $2",
+                options: .regularExpression
+            )
+            .components(separatedBy: CharacterSet(charactersIn: " _-"))
+            .filter { !$0.isEmpty }
+    }
+
+    static func mcpServerDisplayName(_ name: String) -> String {
+        identifierWords(name).map { word in
+            let lower = word.lowercased()
+            return identifierNames[lower]
+                ?? lower.prefix(1).uppercased() + String(lower.dropFirst())
+        }.joined(separator: " ")
+    }
+
+    static func mcpToolDisplayName(_ name: String) -> String {
+        let words = identifierWords(name).map { word in
+            identifierNames[word.lowercased()] ?? word.lowercased()
+        }
+        guard let first = words.first else { return name }
+        return (first.prefix(1).uppercased() + String(first.dropFirst())
+            + (words.count > 1 ? " " + words.dropFirst().joined(separator: " ") : ""))
     }
 
     /// "mcp__oc__linear_list_issues" and "linear_list_issues" both resolve to
@@ -477,6 +589,11 @@ extension ToolPresentation {
             return nil
         }
         return text
+    }
+
+    private static func nonempty(_ value: String?) -> String? {
+        guard let value, !value.isEmpty else { return nil }
+        return value
     }
 
     /// Scalars render as themselves; containers are skipped (their shape is

@@ -182,12 +182,12 @@ struct ToolCallRow: View {
     }
 
     private var nameText: Text {
-        guard let server = presentation.mcpServer else {
-            return Text(presentation.name).foregroundStyle(OS1VisualStyle.textDim)
+        guard let server = presentation.serverLabel else {
+            return Text(presentation.label).foregroundStyle(OS1VisualStyle.textDim)
         }
         return Text(server).foregroundStyle(OS1VisualStyle.textDim)
             + Text(verbatim: " · ").foregroundStyle(OS1VisualStyle.textFaint)
-            + Text(presentation.name).foregroundStyle(OS1VisualStyle.textDim)
+            + Text(presentation.label).foregroundStyle(OS1VisualStyle.textDim)
     }
 
     private var summaryText: some View {

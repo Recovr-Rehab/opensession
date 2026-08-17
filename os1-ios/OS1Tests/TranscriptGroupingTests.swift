@@ -668,6 +668,191 @@ final class SessionLinkTests: XCTestCase {
 /// Tool identity: the collapsed summary line is what people read 95% of the
 /// time, so its naming and truncation rules are worth pinning.
 final class ToolPresentationTests: XCTestCase {
+    func testTranscriptEntryDecodesServerPresentation() throws {
+        let data = Data(#"""
+        {
+          "id": "tu-1",
+          "type": "tool_use",
+          "toolName": "mcp__legacy__raw_tool",
+          "presentation": {
+            "canonical": "mcp__opensession-portals__start_portal",
+            "mcpServer": "opensession-portals",
+            "name": "start_portal",
+            "family": "mcp",
+            "detail": { "kind": "text", "text": "Start the preview" },
+            "lineStats": { "additions": 4, "deletions": 1 },
+            "futureField": true
+          }
+        }
+        """#.utf8)
+        let entry = try JSONDecoder().decode(TranscriptEntry.self, from: data)
+        XCTAssertEqual(entry.presentation?.canonical, "mcp__opensession-portals__start_portal")
+        XCTAssertEqual(entry.presentation?.mcpServer, "opensession-portals")
+        XCTAssertEqual(entry.presentation?.detail?.text, "Start the preview")
+        XCTAssertEqual(entry.presentation?.lineStats?.additions, 4)
+    }
+
+    func testServerPresentationWinsAndHumanizesMcpLabels() throws {
+        let data = Data(#"""
+        {
+          "id": "tu-1",
+          "type": "tool_use",
+          "toolName": "mcp__legacy__raw_tool",
+          "toolInput": { "wrong": "local fallback" },
+          "presentation": {
+            "canonical": "mcp__opensession-portals__start_portal",
+            "mcpServer": "opensession-portals",
+            "name": "start_portal",
+            "family": "mcp",
+            "detail": { "kind": "text", "text": "Start the preview" },
+            "lineStats": { "additions": 4, "deletions": 1 }
+          }
+        }
+        """#.utf8)
+        let entry = try JSONDecoder().decode(TranscriptEntry.self, from: data)
+        let presentation = ToolPresentation.make(
+            toolName: entry.toolName,
+            input: entry.toolInput,
+            server: entry.presentation
+        )
+        XCTAssertEqual(presentation.serverLabel, "Open Session Portals")
+        XCTAssertEqual(presentation.label, "Start portal")
+        XCTAssertEqual(presentation.displayName, "Open Session Portals · Start portal")
+        XCTAssertEqual(presentation.summary, "Start the preview")
+        XCTAssertEqual(presentation.lineStats, ToolLineStats(additions: 4, deletions: 1))
+    }
+
+    func testUnknownServerPresentationFallsBackWithoutBreakingDecode() throws {
+        let data = Data(#"""
+        {
+          "id": "tu-1",
+          "type": "tool_use",
+          "toolName": "Bash",
+          "toolInput": { "command": "bun test" },
+          "presentation": {
+            "family": "future-family",
+            "detail": { "kind": "future-detail", "chart": [1, 2, 3] }
+          }
+        }
+        """#.utf8)
+        let entry = try JSONDecoder().decode(TranscriptEntry.self, from: data)
+        let presentation = ToolPresentation.make(
+            toolName: entry.toolName,
+            input: entry.toolInput,
+            server: entry.presentation
+        )
+        XCTAssertEqual(presentation.canonical, "Bash")
+        XCTAssertEqual(presentation.family, .run)
+        XCTAssertEqual(presentation.summary, "bun test")
+    }
+
+    @MainActor
+    func testGroupingUsesDecodedServerPresentation() throws {
+        let data = Data(#"""
+        {
+          "id": "tu-1",
+          "type": "tool_use",
+          "toolName": "mcp__legacy__raw_tool",
+          "toolInput": { "wrong": "local fallback" },
+          "presentation": {
+            "canonical": "mcp__posthog__query_trends",
+            "mcpServer": "posthog",
+            "name": "query_trends",
+            "family": "mcp",
+            "detail": { "kind": "text", "text": "Weekly active people" }
+          }
+        }
+        """#.utf8)
+        let entry = try JSONDecoder().decode(TranscriptEntry.self, from: data)
+        let blocks = TranscriptGrouping.blocks(
+            from: TranscriptGrouping.displayItems(from: [entry]),
+            live: false,
+            worktreeDir: nil
+        )
+        guard case .work(let turn)? = blocks.first,
+              case .tool(let item)? = turn.items.first else {
+            return XCTFail("expected the tool call inside a work turn")
+        }
+        XCTAssertEqual(item.presentation.displayName, "PostHog · Query trends")
+        XCTAssertEqual(item.presentation.summary, "Weekly active people")
+    }
+
+    func testOlderEntryWithoutPresentationKeepsNativeFallback() throws {
+        let data = Data(#"""
+        {
+          "id": "tu-1",
+          "type": "tool_use",
+          "toolName": "Read",
+          "toolInput": { "file_path": "/wt/src/App.swift" }
+        }
+        """#.utf8)
+        let entry = try JSONDecoder().decode(TranscriptEntry.self, from: data)
+        let presentation = ToolPresentation.make(
+            toolName: entry.toolName,
+            input: entry.toolInput,
+            server: entry.presentation,
+            worktreeDir: "/wt"
+        )
+        XCTAssertNil(entry.presentation)
+        XCTAssertEqual(presentation.canonical, "Read")
+        XCTAssertEqual(presentation.summary, "src/App.swift")
+    }
+
+    func testServerAssetSummaryKeepsPathPresentation() throws {
+        let data = Data(#"""
+        {
+          "id": "tu-1",
+          "type": "tool_use",
+          "toolName": "mcp__opensession-assets__write_asset",
+          "presentation": {
+            "canonical": "mcp__opensession-assets__write_asset",
+            "mcpServer": "opensession-assets",
+            "name": "write_asset",
+            "family": "mcp",
+            "detail": { "kind": "text", "text": "reports/summary.html" }
+          }
+        }
+        """#.utf8)
+        let entry = try JSONDecoder().decode(TranscriptEntry.self, from: data)
+        let presentation = ToolPresentation.make(
+            toolName: entry.toolName,
+            input: entry.toolInput,
+            server: entry.presentation
+        )
+        XCTAssertEqual(presentation.summary, "reports/summary.html")
+        XCTAssertTrue(presentation.summaryIsPath)
+    }
+
+    func testServerPathsSummaryFormatsLabelsAndRemainingCount() throws {
+        let data = Data(#"""
+        {
+          "id": "tu-1",
+          "type": "tool_use",
+          "toolName": "apply_patch",
+          "presentation": {
+            "canonical": "Edit",
+            "name": "Edit",
+            "family": "edit",
+            "detail": {
+              "kind": "paths",
+              "paths": ["/wt/a.swift", "/wt/b.swift"],
+              "labels": ["Update", "Add"],
+              "more": 2
+            }
+          }
+        }
+        """#.utf8)
+        let entry = try JSONDecoder().decode(TranscriptEntry.self, from: data)
+        let presentation = ToolPresentation.make(
+            toolName: entry.toolName,
+            input: entry.toolInput,
+            server: entry.presentation,
+            worktreeDir: "/wt"
+        )
+        XCTAssertEqual(presentation.summary, "Update a.swift  ·  Add b.swift  ·  +2")
+        XCTAssertFalse(presentation.summaryIsPath)
+    }
+
     func testEngineDialectsFoldOntoOneName() {
         for raw in ["bash", "shell", "exec_command"] {
             XCTAssertEqual(
@@ -690,7 +875,7 @@ final class ToolPresentationTests: XCTestCase {
         XCTAssertEqual(presentation.mcpServer, "linear")
         XCTAssertEqual(presentation.name, "list_issues")
         XCTAssertEqual(presentation.family, .mcp)
-        XCTAssertEqual(presentation.displayName, "linear · list_issues")
+        XCTAssertEqual(presentation.displayName, "Linear · List issues")
     }
 
     /// The generic MCP summary lists inputs alphabetically, which for an

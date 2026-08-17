@@ -97,6 +97,10 @@ struct TranscriptEntry: Identifiable, Decodable, Equatable, Sendable {
     /// steered in, or one whose answer was routed back from `senderVia`.
     var sender: String?
     var senderVia: String?
+    /// Server-derived tool identity and summary data. Optional because older
+    /// servers do not send it; `ToolPresentation` keeps the native derivation
+    /// as the compatibility path.
+    var presentation: TranscriptToolPresentation?
 
     var text: String { content ?? "" }
 
@@ -108,6 +112,38 @@ struct TranscriptEntry: Identifiable, Decodable, Equatable, Sendable {
     var isAssistant: Bool { type == "assistant" }
     var isTool: Bool { type == "tool_use" || type == "tool_result" }
     var isSystem: Bool { type == "system" }
+}
+
+/// Tolerant subset of the protocol's `ToolPresentation`. Every field stays
+/// optional so one newer or incomplete presentation cannot make the enclosing
+/// transcript entry fail to decode.
+struct TranscriptToolPresentation: Decodable, Equatable, Sendable {
+    let canonical: String?
+    let mcpServer: String?
+    let name: String?
+    let family: String?
+    let detail: TranscriptToolDetail?
+    let lineStats: TranscriptToolLineStats?
+}
+
+/// Structured one-line summary from the server. Unknown `kind` values decode
+/// successfully and fall back to the native summary formatter.
+struct TranscriptToolDetail: Decodable, Equatable, Sendable {
+    let kind: String?
+    let path: String?
+    let paths: [String]?
+    let labels: [String]?
+    let more: Int?
+    let command: String?
+    let text: String?
+    let total: Int?
+    let done: Int?
+    let current: String?
+}
+
+struct TranscriptToolLineStats: Decodable, Equatable, Sendable {
+    let additions: Int?
+    let deletions: Int?
 }
 
 /// How an entry that isn't a message reads. One shape for all of them: a

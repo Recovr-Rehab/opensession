@@ -557,7 +557,7 @@ private struct ToolRunView: View {
         var order: [String] = []
         var counts: [String: Int] = [:]
         for item in items {
-            let name = item.presentation.name
+            let name = item.presentation.label
             if counts[name] == nil { order.append(name) }
             counts[name, default: 0] += 1
         }
@@ -637,7 +637,7 @@ private struct EditRunView: View {
 
             // Ranked above the path beside it, but not rigid — see the note
             // on the same line in `ToolCallRow`.
-            Text(presentation.name)
+            Text(presentation.label)
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(OS1VisualStyle.textDim)
                 .lineLimit(1)
@@ -690,7 +690,7 @@ private struct EditRunView: View {
     private var failureCount: Int { items.filter(\.isError).count }
 
     private var accessibilityLabel: String {
-        var parts = ["\(items.count) \(presentation.name) steps", presentation.summary]
+        var parts = ["\(items.count) \(presentation.label) steps", presentation.summary]
         if failureCount > 0 { parts.append("\(failureCount) failed") }
         return parts.filter { !$0.isEmpty }.joined(separator: ", ")
     }
