@@ -296,6 +296,7 @@ import {
 	VIEWER_PRESENCE_AVATAR,
 	VIEWER_REVIEW_MAIN,
 	VIEWER_SUGGESTIONS,
+	VIEWER_SUGGESTIONS_ROW,
 	VIEWER_TITLE,
 	INFO_CONTENT,
 	INFO_HERO,
@@ -6263,7 +6264,7 @@ export function SessionViewer({
 								{quickReplies && (
 									<div className={VIEWER_SUGGESTIONS}>
 										<ReplySuggestions
-											className="mx-auto w-full max-w-[calc(var(--session-col)+40px)]"
+											className={VIEWER_SUGGESTIONS_ROW}
 											suggestions={replySuggestions}
 											onPick={(text) => {
 												setComposerPrefill((current) => ({

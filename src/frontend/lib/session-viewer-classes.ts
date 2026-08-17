@@ -295,8 +295,21 @@ export const VIEWER_INPUT =
  * of the band is transcript you should still be able to select.
  */
 export const VIEWER_SUGGESTIONS =
-	"pointer-events-none absolute inset-x-0 bottom-full px-5 " +
+	"pointer-events-none absolute inset-x-0 bottom-full flex justify-center px-5 " +
 	`${RAIL_GUTTER_CLASS} phone:px-3`;
+
+/**
+ * The row inside it, on the composer's own width.
+ *
+ * The 4px of padding, and the +8px on both widths that pays it back, are for
+ * the pills' cast shadow. The row scrolls sideways, and a scroll container
+ * clips: `overflow-x: auto` forces the other axis to `auto` too, so at the
+ * row's own height the lift under each pill was cut off square, and the first
+ * pill lost the left edge of its hairline. Centring is the flex parent's job
+ * rather than `mx-auto`, since the negative margins want that side of the box.
+ */
+export const VIEWER_SUGGESTIONS_ROW =
+	"w-[calc(100%+8px)] max-w-[calc(var(--session-col)+48px)] p-1 -m-1";
 
 /* ── Banners and the delete overlay ─────────────────────────────────────── */
 

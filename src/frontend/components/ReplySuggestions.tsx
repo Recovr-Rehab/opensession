@@ -30,27 +30,26 @@ import { cn } from "../ui/cn";
  */
 
 /**
- * The same quiet grey shape as before, a thing you can skip rather than a
- * control asking to be pressed, but a lid now instead of a wash. The row lies
- * ON the transcript, and at the wash's own weight the sentence underneath read
- * straight through the label sitting on it. So the fill goes nearly opaque and
- * takes the popups' blur behind it, which turns whatever it covers into colour
- * and shape rather than somebody else's words: the argument --popup-glass
- * makes for menus, at a grey that can be seen on a white page. The popup
- * surface itself is no use here, because it goes white in light, and a white
- * pill on white needs the ring and cast shadow that a pill this quiet should
- * not have.
+ * A lid, not a wash. The row lies ON the transcript, and at a wash's weight
+ * the sentence underneath read straight through the label sitting on it.
  *
- * `rounded-[999px]` is the squircle the transcript's own floating pills take
- * (TRANSCRIPT_PILL), not `rounded-full`: two pills 40px apart with different
- * corners read as two ideas. The 28px height is fixed rather than left to the
- * label, because the transcript pads for exactly that (SUGGESTIONS_CLEARANCE)
- * and inherited leading would otherwise decide how much of the answer the row
- * covers.
+ * So it is the material the transcript's other floating pills are already made
+ * of (TRANSCRIPT_PILL: "New messages", "Load all"): paper over the popups'
+ * blur, which turns whatever it covers into colour and shape rather than
+ * somebody else's words, with the hairline and cast shadow that let a white
+ * pill be seen on a white page. Two pills 40px apart made of different things
+ * read as two ideas, so they are made of one, down to the `rounded-[999px]`
+ * squircle. What keeps this row the quieter of the two is its ink: dim at
+ * medium weight against the pill's near-black semibold, and no icon.
+ *
+ * The 28px height is fixed rather than left to the label, because the
+ * transcript pads for exactly that (SUGGESTIONS_CLEARANCE) and inherited
+ * leading would otherwise decide how much of the answer the row covers.
  */
 const chip =
 	"relative inline-flex h-7 w-full items-center whitespace-nowrap rounded-[999px] px-3 " +
-	"bg-[color-mix(in_srgb,var(--bg-hover)_88%,transparent)] [backdrop-filter:var(--popup-blur)] " +
+	"bg-popup-glass [backdrop-filter:var(--popup-blur)] " +
+	"[--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm " +
 	"text-label font-medium text-dim transition-[color,scale] " +
 	"hover:text-fg focus-visible:text-fg active:scale-[0.96] " +
 	// The hover wash layers over the lid rather than replacing it, so it paints
