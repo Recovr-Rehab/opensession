@@ -269,7 +269,7 @@ import { AutoCreatedMark } from "./sidebar/AutoCreatedMark";
 import { AutomationReportRow } from "./sidebar/AutomationReportRow";
 import { DraftRow } from "./sidebar/DraftRow";
 import { SidebarCtxMenu } from "./sidebar/SidebarCtxMenu";
-import { SidebarToolsMenu } from "./sidebar/SidebarToolsMenu";
+import { SidebarToolRows, SidebarToolsMenu } from "./sidebar/SidebarToolsMenu";
 import { EmptyState, ListSkeleton } from "../ui/state";
 import {
 	SIDEBAR_ROW,
@@ -4399,39 +4399,16 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 										<ContextMenu.GroupLabel>
 											Show in toolbar
 										</ContextMenu.GroupLabel>
-										{/* Each row wears the mark it wears in the sidebar, the
-										    way the sidebar's own right-click menu lists them, so
-										    the menu reads as the strip it edits rather than as a
-										    form. That spends the leading slot, so the tick moves
-										    to the trailing edge. The glyphs are drawn at the
-										    rail's 22px; the menu's icon column is 20. */}
-										{fittingTools.map((t) => {
-											const shown = !hiddenTools.has(t.id);
-											return (
-												<ContextMenu.CheckboxItem
-													key={t.id}
-													checked={shown}
-													onCheckedChange={(checked) =>
-														setToolVisible(t.id, checked)
-													}
-												>
-													<span
-														className={cn(
-															"inline-flex shrink-0 [&_svg]:size-[20px]",
-															MENU_ICON,
-														)}
-													>
-														{t.icon}
-													</span>
-													<span className="min-w-0 flex-1 truncate">
-														{t.label}
-													</span>
-													{shown && (
-														<IconCheck size={20} className="shrink-0 text-dim" />
-													)}
-												</ContextMenu.CheckboxItem>
-											);
-										})}
+										{/* The same rows the sidebar's own right-click menu lists
+										    (SidebarToolRows), so the two menus cannot drift: each
+										    wears the mark it wears in the sidebar, the tick sits
+										    at the trailing edge, and Support stays a submenu of
+										    surfaces rather than a tick. */}
+										<SidebarToolRows
+											tools={sidebarMenuTools}
+											onToggleTool={setToolVisible}
+											onSetSupport={setSupportSurface}
+										/>
 									</ContextMenu.Group>
 									<ContextMenu.Separator />
 									<ContextMenu.Item onClick={hideAllSidebarTools}>

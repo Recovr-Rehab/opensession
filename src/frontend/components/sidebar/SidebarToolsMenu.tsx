@@ -47,25 +47,26 @@ export type SidebarMenuSource = {
 	shown: boolean;
 };
 
-export function SidebarToolsMenu({
+const check = <IconCheck size={20} className="shrink-0 text-dim" />;
+
+/**
+ * The tool list itself, shared by the two menus that offer it: this one and
+ * the one on a tool row in the rail. They are different menus around the same
+ * decision, and when each drew its own rows they drifted — the row menu ticked
+ * Support like an ordinary tool, which it is not.
+ */
+export function SidebarToolRows({
 	tools,
-	sources,
 	onToggleTool,
 	onSetSupport,
-	onToggleSource,
 }: {
 	tools: SidebarMenuTool[];
-	sources: SidebarMenuSource[];
 	onToggleTool: (id: SidebarToolId, shown: boolean) => void;
 	onSetSupport: (surface: SupportSurface) => void;
-	onToggleSource: (id: string, shown: boolean) => void;
 }) {
-	const check = <IconCheck size={20} className="shrink-0 text-dim" />;
 	return (
-		<ContextMenu.Popup>
-			<ContextMenu.Group>
-				<ContextMenu.GroupLabel>Tools</ContextMenu.GroupLabel>
-				{tools.map((tool) =>
+		<>
+			{tools.map((tool) =>
 					tool.surface ? (
 						<ContextMenu.SubmenuRoot key={tool.id}>
 							<ContextMenu.SubmenuTrigger>
@@ -114,7 +115,33 @@ export function SidebarToolsMenu({
 							{tool.shown && check}
 						</ContextMenu.CheckboxItem>
 					),
-				)}
+			)}
+		</>
+	);
+}
+
+export function SidebarToolsMenu({
+	tools,
+	sources,
+	onToggleTool,
+	onSetSupport,
+	onToggleSource,
+}: {
+	tools: SidebarMenuTool[];
+	sources: SidebarMenuSource[];
+	onToggleTool: (id: SidebarToolId, shown: boolean) => void;
+	onSetSupport: (surface: SupportSurface) => void;
+	onToggleSource: (id: string, shown: boolean) => void;
+}) {
+	return (
+		<ContextMenu.Popup>
+			<ContextMenu.Group>
+				<ContextMenu.GroupLabel>Tools</ContextMenu.GroupLabel>
+				<SidebarToolRows
+					tools={tools}
+					onToggleTool={onToggleTool}
+					onSetSupport={onSetSupport}
+				/>
 			</ContextMenu.Group>
 			{sources.length > 0 && (
 				<>
