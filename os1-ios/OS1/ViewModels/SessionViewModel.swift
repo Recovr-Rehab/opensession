@@ -6,6 +6,9 @@ import Observation
 @Observable
 @MainActor
 final class SessionViewModel {
+    static let continueAfterFailurePrompt =
+        "Continue where you left off and finish the task. If the work was already done, post the final summary."
+
     enum ConnectionState: Equatable {
         case connecting
         case connected
@@ -198,6 +201,10 @@ final class SessionViewModel {
     /// message was written, so an old identical message ("continue") can never
     /// swallow a fresh bubble.
     private var landedUserEntries: [(id: String, text: String, at: Date)] = []
+    /// A delivered continuation normally removes its own failure row as the
+    /// new turn lands. Keep the press latched until then, matching the web
+    /// notice component and closing the delivery/append race.
+    private var continuedFailureNoticeIds: Set<String> = []
     /// Ids for client-side transcript notices (see `noteLocally`).
     private var localNoticeSeq = 0
     /// Chip ids whose message text landed in a user entry that arrived AFTER
@@ -705,6 +712,51 @@ final class SessionViewModel {
         return hasText || !attachedImages.isEmpty
     }
 
+    enum FailureContinuationStatus: Equatable {
+        case available
+        case sending
+        case failed(String)
+    }
+
+    func failureContinuationStatus(for noticeId: String) -> FailureContinuationStatus {
+        guard let item = outbox.items(for: session.id).first(where: {
+            $0.purpose == "failure:\(noticeId)"
+        }) else {
+            return continuedFailureNoticeIds.contains(noticeId) ? .sending : .available
+        }
+        if item.failed {
+            return .failed(item.lastError ?? "Couldn't continue this run.")
+        }
+        return .sending
+    }
+
+    /// Send the same ordinary prompt as the web failure action without
+    /// disturbing text already waiting in the composer. A rejected delivery
+    /// retries its original outbox item, preserving the server's idempotency
+    /// key rather than creating a second continuation.
+    func continueAfterFailure(noticeId: String) {
+        if let item = outbox.items(for: session.id).first(where: {
+            $0.purpose == "failure:\(noticeId)"
+        }) {
+            guard item.failed else { return }
+            outbox.retry(id: item.id)
+            return
+        }
+
+        guard outbox.enqueue(
+            sessionId: session.id,
+            content: Self.continueAfterFailurePrompt,
+            busyMode: "default",
+            purpose: "failure:\(noticeId)",
+            user: ServerConfig.shared.userName
+        ) != nil else {
+            notice = "Too many unsent messages — send or delete some first."
+            return
+        }
+        HideStore.shared.unhide(for: session)
+        sendSeq += 1
+    }
+
     /// Hand the draft to the outbox. It's on disk before the composer clears,
     /// and it stays there until the server says it has it — so a send made in
     /// a tunnel arrives when the signal does, in the order it was written.
@@ -743,6 +795,9 @@ final class SessionViewModel {
     /// offline has no idea whether a run started meanwhile, and a bubble in
     /// the wrong place blinks out at the next resync.
     private func acceptDelivery(_ item: Outbox.Item, _ delivery: Outbox.Delivery) {
+        if let purpose = item.purpose, purpose.hasPrefix("failure:") {
+            continuedFailureNoticeIds.insert(String(purpose.dropFirst("failure:".count)))
+        }
         switch delivery.status {
         case "queued", "steered":
             // Held server-side; it enters the transcript when the queue
@@ -1522,6 +1577,23 @@ final class SessionViewModel {
     /// The current person's visible prompts, prepared beside the transcript
     /// blocks so a pointer moving over the rail never scans the conversation.
     private(set) var sentMessageAnchors: [SentMessageAnchor] = []
+
+    /// The web offers Continue only when the final rendered block is an error
+    /// notice. Keep that rule here so a later message, warning, footer, note,
+    /// or review loop makes an older failure inert on every native surface.
+    func failureContinuationEntryId(catalog: ModelCatalog?) -> String? {
+        let nativeSource = session.source == "opensession" || session.source == "backstage"
+        let hasEngine = [session.claudeSessionId, session.codexThreadId, session.opencodeSessionId]
+            .contains { $0?.isEmpty == false }
+        let effectiveModel = model.isEmpty ? (catalog?.defaultModel ?? "") : model
+        let codexCanStartFresh = catalog?.option(for: effectiveModel)?.provider == "codex"
+            || effectiveModel.hasPrefix("gpt") || effectiveModel.hasPrefix("codex")
+        guard !isRunning, nativeSource || hasEngine || codexCanStartFresh,
+              case .message(let entry)? = displayBlocks.last,
+              entry.notice?.tone == NoticeTone.error.rawValue
+        else { return nil }
+        return entry.id
+    }
     /// Hide entries at or before this instant from the transcript (the Desk's
     /// stale-conversation cutoff). Setting it re-groups immediately.
     var hideBefore: Date? {

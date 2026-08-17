@@ -22,6 +22,7 @@ struct TranscriptRow: View {
     var onEditMessage: ((TranscriptEntry) -> Void)?
     var onEditNote: ((SessionNote, String) async throws -> Void)?
     var onDeleteNote: ((SessionNote) async throws -> Void)?
+    var failureContinuation: FailureContinuationAction? = nil
 
     @AppStorage("os1.appearance.turnActivity") private var turnActivity = "auto"
 
@@ -34,7 +35,8 @@ struct TranscriptRow: View {
                 NoticeRow(
                     entry: entry,
                     notice: notice,
-                    state: expansionState("notice-\(entry.id)", false)
+                    state: expansionState("notice-\(entry.id)", false),
+                    failureContinuation: failureContinuation
                 )
             } else if entry.isUser {
                 UserBubble(
@@ -560,6 +562,7 @@ struct NoticeRow: View {
     let entry: TranscriptEntry
     let notice: EntryNotice
     let state: TurnFoldState
+    var failureContinuation: FailureContinuationAction? = nil
 
     private var tone: NoticeTone { NoticeTone(rawValue: notice.tone) ?? .info }
     private var showsBody: Bool {
@@ -571,8 +574,17 @@ struct NoticeRow: View {
     private var hasBackground: Bool { tone == .error }
 
     var body: some View {
-        content
-            .padding(.horizontal, hasBackground ? 12 : 0)
+        Group {
+            if tone == .error, let failureContinuation {
+                VStack(spacing: 8) {
+                    content
+                    FailureContinuationButton(action: failureContinuation)
+                }
+            } else {
+                content
+            }
+        }
+        .padding(.horizontal, hasBackground ? 12 : 0)
         .padding(.vertical, 7)
         .frame(maxWidth: 520)
         .background(
@@ -585,7 +597,9 @@ struct NoticeRow: View {
             guard notice.isCollapsible else { return }
             withAnimation(.snappy(duration: 0.2, extraBounce: 0)) { state.toggle() }
         }
-        .accessibilityAddTraits(tone == .error ? .isStaticText : [])
+        .accessibilityAddTraits(
+            tone == .error && failureContinuation == nil ? .isStaticText : []
+        )
     }
 
     /// A title-only notice is a short centered pill — the shape every
@@ -637,6 +651,52 @@ struct NoticeRow: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
+        }
+    }
+}
+
+struct FailureContinuationAction {
+    let viewModel: SessionViewModel
+    let noticeId: String
+}
+
+private struct FailureContinuationButton: View {
+    let action: FailureContinuationAction
+
+    private var status: SessionViewModel.FailureContinuationStatus {
+        action.viewModel.failureContinuationStatus(for: action.noticeId)
+    }
+
+    var body: some View {
+        VStack(spacing: 5) {
+            Button {
+                action.viewModel.continueAfterFailure(noticeId: action.noticeId)
+            } label: {
+                HStack(spacing: 6) {
+                    if status == .sending {
+                        ProgressView().controlSize(.small)
+                    }
+                    Text(label)
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .disabled(status == .sending)
+
+            if case .failed(let message) = status {
+                Text(message)
+                    .font(.caption2)
+                    .foregroundStyle(OS1VisualStyle.red)
+                    .multilineTextAlignment(.center)
+            }
+        }
+    }
+
+    private var label: String {
+        switch status {
+        case .available: "Continue"
+        case .sending: "Continuing…"
+        case .failed: "Try again"
         }
     }
 }

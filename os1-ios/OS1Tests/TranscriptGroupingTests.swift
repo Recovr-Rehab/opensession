@@ -126,6 +126,68 @@ final class TranscriptGroupingTests: XCTestCase {
         }.allSatisfy(\.hasFeaturedMedia))
     }
 
+    func testOnlyFinalErrorNoticeOffersFailureContinuation() {
+        let errorNotice = EntryNotice(
+            kind: "system", title: "Run failed", tone: "error",
+            body: nil, link: nil, icon: nil
+        )
+        append([
+            TranscriptEntry(
+                id: "failed", type: "system", content: "Run failed",
+                notice: errorNotice
+            )
+        ])
+        viewModel.updateSessionSnapshot(Session(id: "bks-1", source: "opensession"))
+        XCTAssertEqual(viewModel.failureContinuationEntryId(catalog: nil), "failed")
+
+        append([TranscriptEntry(id: "later", type: "assistant", content: "Recovered")])
+        XCTAssertNil(viewModel.failureContinuationEntryId(catalog: nil))
+    }
+
+    func testWarningsRunningSessionsAndExternalSessionsWithoutAnEngineCannotContinueFailure() {
+        func notice(_ tone: String) -> TranscriptEntry {
+            TranscriptEntry(
+                id: tone, type: "system", content: "Stopped",
+                notice: EntryNotice(
+                    kind: "system", title: "Stopped", tone: tone,
+                    body: nil, link: nil, icon: nil
+                )
+            )
+        }
+
+        append([notice("warn")])
+        viewModel.updateSessionSnapshot(Session(id: "bks-1", source: "opensession"))
+        XCTAssertNil(viewModel.failureContinuationEntryId(catalog: nil))
+
+        viewModel.handle(.transcriptInit(
+            sessionId: "bks-1", entries: [notice("error")], cursor: .empty
+        ))
+        viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
+        XCTAssertNil(viewModel.failureContinuationEntryId(catalog: nil))
+
+        viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: false))
+        viewModel.updateSessionSnapshot(Session(id: "bks-1", source: "slack"))
+        XCTAssertNil(viewModel.failureContinuationEntryId(catalog: nil))
+
+        viewModel.updateSessionSnapshot(Session(
+            id: "bks-1", claudeSessionId: "claude-1", source: "slack"
+        ))
+        XCTAssertEqual(viewModel.failureContinuationEntryId(catalog: nil), "error")
+
+        viewModel.updateSessionSnapshot(Session(id: "bks-1", source: "slack", model: "alias"))
+        let codexCatalog = ModelCatalog(
+            models: [ModelOption(
+                id: "alias", label: nil, provider: "codex", group: nil,
+                description: nil, efforts: nil, fastModeSupported: nil
+            )],
+            defaultModel: "alias"
+        )
+        XCTAssertEqual(viewModel.failureContinuationEntryId(catalog: codexCatalog), "error")
+
+        viewModel.updateSessionSnapshot(Session(id: "bks-1", source: "slack", model: nil))
+        XCTAssertEqual(viewModel.failureContinuationEntryId(catalog: codexCatalog), "error")
+    }
+
     func testTurnStillRunningFoldsEntirelyAndSkipsItsFooter() {
         viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
         append([

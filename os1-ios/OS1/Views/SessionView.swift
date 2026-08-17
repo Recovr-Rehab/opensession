@@ -296,7 +296,15 @@ struct SessionView: View {
                                     },
                                     onDeleteNote: { note in
                                         try await viewModel.deleteSessionNote(note)
-                                    }
+                                    },
+                                    failureContinuation: viewModel.failureContinuationEntryId(
+                                        catalog: catalog
+                                    ) == block.id
+                                        ? FailureContinuationAction(
+                                            viewModel: viewModel,
+                                            noticeId: block.id
+                                        )
+                                        : nil
                                 )
                                 .id(block.id)
                                 .transcriptTail(block.id == tailId)

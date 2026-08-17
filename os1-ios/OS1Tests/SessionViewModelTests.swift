@@ -1162,6 +1162,59 @@ final class SendDraftTests: XCTestCase {
         XCTAssertEqual(viewModel.entries.map(\.text), ["nope"])
     }
 
+    func testFailureContinuationUsesWebPromptWithoutChangingDraft() async {
+        stubbedOutcome = .unavailable("offline")
+        viewModel.draft = "Keep this draft"
+        viewModel.continueAfterFailure(noticeId: "failure-1")
+        await outbox.flushNow()
+
+        XCTAssertEqual(viewModel.draft, "Keep this draft")
+        XCTAssertEqual(unsent.map(\.content), [SessionViewModel.continueAfterFailurePrompt])
+        XCTAssertNil(deliveries.first?.item.effort)
+        XCTAssertNil(deliveries.first?.item.fastMode)
+        XCTAssertEqual(deliveries.map(\.item.busyMode), ["default"])
+        XCTAssertEqual(deliveries.map(\.item.purpose), ["failure:failure-1"])
+        XCTAssertEqual(viewModel.failureContinuationStatus(for: "failure-1"), .sending)
+    }
+
+    func testRejectedFailureContinuationShowsErrorAndRetriesSameItem() async {
+        stubbedOutcome = .rejected("Session has no engine to resume yet.")
+        viewModel.continueAfterFailure(noticeId: "failure-1")
+        await outbox.flushNow()
+
+        guard let original = unsent.first else {
+            return XCTFail("the refused continuation should stay in the outbox")
+        }
+        XCTAssertEqual(
+            viewModel.failureContinuationStatus(for: "failure-1"),
+            .failed("Session has no engine to resume yet.")
+        )
+
+        stubbedOutcome = nil
+        viewModel.continueAfterFailure(noticeId: "failure-1")
+        await outbox.flushNow()
+
+        XCTAssertEqual(deliveries.map(\.item.id), [original.id, original.id])
+        XCTAssertTrue(unsent.isEmpty)
+        XCTAssertEqual(viewModel.entries.last?.text, SessionViewModel.continueAfterFailurePrompt)
+        XCTAssertEqual(
+            viewModel.failureContinuationStatus(for: "failure-1"),
+            .sending,
+            "an accepted continuation stays latched until its failure row is replaced"
+        )
+    }
+
+    func testDeletingRejectedFailureContinuationReenablesAction() async {
+        stubbedOutcome = .rejected("No engine")
+        viewModel.continueAfterFailure(noticeId: "failure-1")
+        await outbox.flushNow()
+
+        guard let item = unsent.first else { return XCTFail("expected a refused item") }
+        outbox.delete(id: item.id)
+
+        XCTAssertEqual(viewModel.failureContinuationStatus(for: "failure-1"), .available)
+    }
+
     /// Discarding is the one way a message leaves unsent — and it has to be
     /// the person's choice.
     func testDiscardingAnUnsentMessageRemovesIt() async {

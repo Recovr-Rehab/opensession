@@ -1464,11 +1464,8 @@ enum OS1API {
             return .rejected(APIError.badURL.localizedDescription)
         }
 
-        var body: [String: Any] = [
-            "content": content,
-            "busy": busyMode == "steer" ? "steer" : "queue",
-            "clientId": clientId,
-        ]
+        var body: [String: Any] = ["content": content, "clientId": clientId]
+        if busyMode == "queue" || busyMode == "steer" { body["busy"] = busyMode }
         if !user.isEmpty { body["user"] = user }
         if !images.isEmpty { body["images"] = images }
         if let effort, !effort.isEmpty { body["effort"] = effort }

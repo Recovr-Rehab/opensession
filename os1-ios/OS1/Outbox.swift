@@ -45,6 +45,9 @@ final class Outbox {
         let fastMode: Bool?
         /// "queue" | "steer" — what to do if a run is in flight on arrival.
         let busyMode: String
+        /// Optional origin for a non-composer action. Failure continuations
+        /// use the notice id so a durable retry cannot attach to a later error.
+        let purpose: String?
         let user: String
         let createdAt: Date
         var attempts: Int
@@ -135,6 +138,7 @@ final class Outbox {
         effort: String? = nil,
         fastMode: Bool? = nil,
         busyMode: String,
+        purpose: String? = nil,
         user: String
     ) -> Item? {
         guard items.count < Self.maxItems else { return nil }
@@ -151,6 +155,7 @@ final class Outbox {
             effort: effort,
             fastMode: fastMode,
             busyMode: busyMode,
+            purpose: purpose,
             user: user,
             createdAt: .now,
             attempts: 0,
