@@ -525,6 +525,48 @@ export function IconPeople(p: IconProps) {
   );
 }
 
+// One person rather than IconPeople's group: a single owner, as on a support
+// ticket's assignee.
+export function IconPerson(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path
+        {...stroke}
+        d="M14.25 7C14.25 8.24264 13.2426 9.25 12 9.25C10.7574 9.25 9.75 8.24264 9.75 7C9.75 5.75736 10.7574 4.75 12 4.75C13.2426 4.75 14.25 5.75736 14.25 7Z"
+      />
+      <path
+        {...stroke}
+        d="M12 9.75C8.6 9.75 7.75 11.5 7.75 14.25H9.75V17.25C9.75 18.3546 10.6454 19.25 11.75 19.25H12.25C13.3546 19.25 14.25 18.3546 14.25 17.25V14.25H16.25C16.25 11.5 15.4 9.75 12 9.75Z"
+      />
+    </Svg>
+  );
+}
+
+// Flag on a pole: priority, the way every ticket tool draws it.
+export function IconFlag(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path {...stroke} d="M4.75 5.75V19.25" />
+      <path
+        {...stroke}
+        d="M19.25 15.25V5.75C19.25 5.75 18.5 6.25 16 6.25C13.5 6.25 12 4.75 9 4.75C6 4.75 4.75 5.75 4.75 5.75V15.25C4.75 15.25 6.5 14.25 9 14.25C11.5 14.25 13.5 16.25 16 16.25C18.5 16.25 19.25 15.25 19.25 15.25Z"
+      />
+    </Svg>
+  );
+}
+
+export function IconTag(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <circle cx="15" cy="9" r="1" fill="currentColor" />
+      <path
+        {...stroke}
+        d="M12 4.75H19.25V12L12.5535 18.6708C11.7544 19.4668 10.4556 19.445 9.68369 18.6226L5.28993 13.941C4.54041 13.1424 4.57265 11.8895 5.36226 11.1305L12 4.75Z"
+      />
+    </Svg>
+  );
+}
+
 export function IconGlobe(p: IconProps) {
   return (
     <Svg {...p}>
@@ -739,6 +781,17 @@ export function IconX(p: IconProps) {
     <Svg {...p}>
       <path {...stroke} d="M17.25 6.75L6.75 17.25" />
       <path {...stroke} d="M6.75 6.75L17.25 17.25" />
+    </Svg>
+  );
+}
+
+// Circle-slash: blocked, as in a customer marked spam. Distinct from IconX,
+// which dismisses the thing in front of you.
+export function IconForbid(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <circle {...stroke} cx="12" cy="12" r="7.25" />
+      <path {...stroke} d="M7 7L17 17" />
     </Svg>
   );
 }

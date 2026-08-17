@@ -61,9 +61,14 @@ import {
 	IconCheck,
 	IconDotsHorizontal,
 	IconClock,
+	IconFlag,
+	IconForbid,
 	IconPaperclip,
 	IconPencil,
+	IconPerson,
 	IconPlus,
+	IconRestore,
+	IconTag,
 } from "./icons";
 import { FileChips } from "./FileChips";
 import { UserAvatar } from "./UserAvatar";
@@ -273,9 +278,10 @@ function MenuTick({ on }: { on: boolean }) {
  * when it runs out of width, and reports a failure underneath. `bar` is the
  * Support inbox's top bar, where there is one line and no room to grow, so the
  * row cannot wrap, a failure reads beside the controls instead of below them,
- * and the two rarely-used actions (rename, spam) fold into an overflow menu.
- * That fold is what makes the set fit next to a subject: it is ~130px narrower,
- * which is the difference between a readable ticket title and an ellipsis.
+ * the two rarely-used actions (rename, spam) fold into an overflow menu, and
+ * Done and Snooze drop to their glyphs. Those folds are what make the set fit
+ * next to a subject, which is the difference between a readable ticket title
+ * and an ellipsis.
  */
 export function PlainThreadActions({
 	threadId,
@@ -370,6 +376,16 @@ export function PlainThreadActions({
 		? "This customer is marked as spam in Plain. Click to undo."
 		: "Mark this customer as spam in Plain (also closes the thread)";
 
+	// Every control carries its field's glyph, so the row reads as icons first:
+	// what "Low", "Johnny" and "Mac App +2" each MEAN is otherwise something you
+	// work out from the words. That costs the bar 96px it does not have (see
+	// ACTIONS_IN_BAR_MIN in ConversationPane), and the ticket's subject is what
+	// pays. So in the bar the two verbs go glyph-only and hand the width back:
+	// a check and a clock say Done and Snooze on their own, where a flag or a
+	// tag without its value would say nothing. The thread's own row has space
+	// for both, and keeps the words.
+	const verbLabel = (text: string) => (inBar ? false : text);
+
 	return (
 		<div
 			className={cn(
@@ -388,34 +404,39 @@ export function PlainThreadActions({
 					<Button
 						size="sm"
 						variant="ghost"
+						icon={<IconRestore size={20} />}
 						disabled={busy}
 						onClick={() => setStatus("todo")}
+						aria-label="Reopen this thread (back to Todo)"
 						title="Reopen this thread (back to Todo)"
 					>
-						Reopen
+						{verbLabel("Reopen")}
 					</Button>
 				) : (
 					<>
 						<Button
 							size="sm"
 							variant="ghost"
-							icon={<IconCheck size={18} />}
+							icon={<IconCheck size={20} />}
 							className="hover:text-green"
 							disabled={busy}
 							onClick={() => setStatus("done")}
+							aria-label="Mark this thread Done in Plain"
 							title="Mark this thread Done in Plain"
 						>
-							Done
+							{verbLabel("Done")}
 						</Button>
 						{status === "SNOOZED" ? (
 							<Button
 								size="sm"
 								variant="ghost"
+								icon={<IconRestore size={20} />}
 								disabled={busy}
 								onClick={() => setStatus("todo")}
+								aria-label="Unsnooze, back to Todo"
 								title="Unsnooze, back to Todo"
 							>
-								Unsnooze
+								{verbLabel("Unsnooze")}
 							</Button>
 						) : (
 							<Menu.Root>
@@ -424,11 +445,14 @@ export function PlainThreadActions({
 										<Button
 											size="sm"
 											variant="ghost"
+											icon={<IconClock size={20} />}
 											caret
+											className={cn(inBar && "w-auto px-2")}
 											disabled={busy}
+											aria-label="Snooze this thread"
 											title="Snooze this thread"
 										>
-											Snooze
+											{verbLabel("Snooze")}
 										</Button>
 									}
 								/>
@@ -452,6 +476,7 @@ export function PlainThreadActions({
 							<Button
 								size="sm"
 								variant="ghost"
+								icon={<IconFlag size={20} />}
 								caret
 								disabled={busy}
 								title="Change priority in Plain"
@@ -484,6 +509,7 @@ export function PlainThreadActions({
 							<Button
 								size="sm"
 								variant="ghost"
+								icon={<IconPerson size={20} />}
 								caret
 								disabled={busy}
 								title="Assign this thread to a teammate in Plain"
@@ -536,6 +562,7 @@ export function PlainThreadActions({
 								<Button
 									size="sm"
 									variant="ghost"
+									icon={<IconTag size={20} />}
 									caret
 									disabled={busy}
 									title="Labels on this thread in Plain"
@@ -587,7 +614,7 @@ export function PlainThreadActions({
 								<Button
 									size="sm"
 									variant="ghost"
-									icon={<IconDotsHorizontal size={18} />}
+									icon={<IconDotsHorizontal size={20} />}
 									disabled={busy}
 									aria-label="More ticket actions"
 									title="More actions"
@@ -606,6 +633,7 @@ export function PlainThreadActions({
 						<Button
 							size="sm"
 							variant="ghost"
+							icon={<IconPencil size={20} />}
 							disabled={busy}
 							onClick={renameThread}
 							title="Rename this thread in Plain"
@@ -615,6 +643,7 @@ export function PlainThreadActions({
 						<Button
 							size="sm"
 							variant="ghost"
+							icon={<IconForbid size={20} />}
 							className={cn(!isSpam && "hover:text-red")}
 							disabled={busy}
 							onClick={toggleSpam}
