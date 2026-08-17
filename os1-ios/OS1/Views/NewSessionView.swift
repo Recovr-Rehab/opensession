@@ -83,6 +83,7 @@ struct NewSessionView: View {
     /// Owned here, like the session composer's: the button reads it, this view
     /// keeps it alive across the layout changes a long dictation causes.
     @State private var dictation = Dictation()
+    @State private var sessionProjection = ComposerSessionProjectionState()
     @FocusState private var promptFocused: Bool
 
     /// The universal "+" reopens on whatever repo was used last.
@@ -234,7 +235,11 @@ struct NewSessionView: View {
 
     private var editor: some View {
         ZStack(alignment: .topLeading) {
-            TextEditor(text: $prompt)
+            TextEditor(text: sessionProjection.binding(
+                $prompt,
+                titleGeneration: TranscriptLinks.shared.generation,
+                refreshTitles: !promptFocused
+            ))
                 .font(.body)
                 .scrollContentBackground(.hidden)
                 .padding(.horizontal, 11)

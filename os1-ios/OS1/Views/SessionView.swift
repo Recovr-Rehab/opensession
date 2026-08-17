@@ -2396,6 +2396,7 @@ private struct SessionInputBar: View {
     /// one-row and two-row layouts as the draft grows, which is exactly what
     /// a long dictation does — state living in the button would die mid-word.
     @State private var dictation = Dictation()
+    @State private var sessionProjection = ComposerSessionProjectionState()
     /// Whether the outbox's pending rows have earned their place in the flap.
     /// EVERY send lands in the outbox first, so rendering those rows the
     /// instant they appear made the flap blink open and shut on ordinary
@@ -3012,7 +3013,11 @@ private struct SessionInputBar: View {
                 }
 
                 TextField(
-                    text: $viewModel.draft,
+                    text: sessionProjection.binding(
+                        $viewModel.draft,
+                        titleGeneration: TranscriptLinks.shared.generation,
+                        refreshTitles: !inputFocused
+                    ),
                     prompt: Text(composerPlaceholder).foregroundStyle(
                         noteMode ? OS1VisualStyle.notePlaceholder : OS1VisualStyle.textFaint
                     )
