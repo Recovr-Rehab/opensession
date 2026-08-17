@@ -1,12 +1,14 @@
 import React from "react";
 import type { SidebarToolId } from "../../lib/sidebar-tools";
 import {
+	DEFAULT_SUPPORT_PLACEMENT,
+	SUPPORT_PLACEMENT_OPTIONS,
 	SUPPORT_SURFACE_OPTIONS,
 	type SupportSurface,
 } from "../../lib/support-surface";
 import { ContextMenu, Menu, MENU_ICON } from "../../ui/menu";
 import { cn } from "../../ui/cn";
-import { IconCheck, IconChevronRight } from "../icons";
+import { IconCheck, IconDotsHorizontal } from "../icons";
 
 /**
  * The sidebar's own right-click menu: every tool and every source, ticked when
@@ -68,46 +70,81 @@ export function SidebarToolRows({
 		<>
 			{tools.map((tool) =>
 					tool.surface ? (
-						<ContextMenu.SubmenuRoot key={tool.id}>
-							<ContextMenu.SubmenuTrigger>
+						// Support switches on and off from the row like every other tool.
+						// It is the one tool with somewhere to be, so where it goes is a ⋯
+						// on the row rather than a third row of the same switch.
+						//
+						// The ⋯ is a SIBLING of the row, laid over it, not a control
+						// inside it: a press inside a menu item is that item's press, so
+						// nested it opened the placement menu and switched Support off in
+						// the same click. Out here each is its own target, and the row
+						// keeps its tick at the trailing edge, in the column every other
+						// row ticks in.
+						<div key={tool.id} className="relative">
+							<ContextMenu.CheckboxItem
+								checked={tool.surface !== "off"}
+								onCheckedChange={(shown) =>
+									onSetSupport(shown ? DEFAULT_SUPPORT_PLACEMENT : "off")
+								}
+							>
 								<span className={cn(ICON_SLOT, MENU_ICON)}>{tool.icon}</span>
 								<span className="grow truncate">{tool.label}</span>
-								{/* Which surface it is on, then the way in, then the tick —
-								    the tick last so it lands in the same column as every
-								    other row's, which is the column the eye reads to see
-								    what is showing. Off is the unticked state, exactly as a
-								    tool switched off has no tick. */}
-								<span className="shrink-0 text-faint">
-									{
-										SUPPORT_SURFACE_OPTIONS.find(
-											(option) => option.value === tool.surface,
-										)?.label
-									}
-								</span>
-								<IconChevronRight size={16} className="shrink-0 text-faint" />
+								{tool.surface !== "off" && (
+									<span className="shrink-0 truncate text-faint">
+										{
+											SUPPORT_SURFACE_OPTIONS.find(
+												(option) => option.value === tool.surface,
+											)?.label
+										}
+									</span>
+								)}
+								{/* The gap the ⋯ is drawn in. It is not in the row's flow —
+								    a control inside a menu item eats that item's click — so
+								    the row holds a place for it, and the tick keeps the
+								    trailing edge, in the column every other row ticks in. */}
+								<span className="w-7 shrink-0" aria-hidden="true" />
 								{tool.surface !== "off" && check}
-							</ContextMenu.SubmenuTrigger>
-							<Menu.Popup>
-								{/* One queue, one decision: the band and the page are
-								    alternatives, so these are three answers to one question
-								    rather than ticks that could leave the same tickets on
-								    screen twice. Same wording and order as Settings >
-								    Appearance. */}
-								<Menu.RadioGroup
-									value={tool.surface}
-									onValueChange={(value) =>
-										onSetSupport(value as SupportSurface)
-									}
+							</ContextMenu.CheckboxItem>
+							{/* A menu of its own rather than a submenu of this row: Base UI
+							    submenus open on hover and IGNORE a mouse click
+							    (`ignoreMouse: openOnHover` in MenuSubmenuTrigger), and a ⋯
+							    is a thing you click. Nested inside the popup it still
+							    registers as a child menu, so opening it leaves the menu it
+							    sits in up. */}
+							<Menu.Root>
+								<Menu.Trigger
+									// A control on a row, not a row. It sits in the gap the
+									// row's `pr-16` keeps clear, just inside the tick.
+									className="absolute top-1/2 right-9 -translate-y-1/2 rounded-sm p-1 text-faint hover:bg-hover data-[popup-open]:bg-hover"
+									aria-label="Where support tickets live"
 								>
-									{SUPPORT_SURFACE_OPTIONS.map((option) => (
-										<Menu.RadioItem key={option.value} value={option.value}>
-											<span className="grow truncate">{option.label}</span>
-											<Menu.RadioItemIndicator render={check} />
-										</Menu.RadioItem>
-									))}
-								</Menu.RadioGroup>
-							</Menu.Popup>
-						</ContextMenu.SubmenuRoot>
+									<IconDotsHorizontal size={20} />
+								</Menu.Trigger>
+								{/* The ⋯ is inset from the popup's right edge by `right-9`, so
+									    the offset clears the popup rather than the button:
+									    36px of inset plus the 4px gap. Any less and this menu
+									    opens over the tick it is about. */}
+									<Menu.Popup side="right" align="start" sideOffset={40}>
+									{/* One queue, one place: the band and the tool are two
+									    doors onto the same tickets, and both at once would
+									    list them twice. Off is not here — that is the row's
+									    own tick. */}
+									<Menu.RadioGroup
+										value={tool.surface}
+										onValueChange={(value) =>
+											onSetSupport(value as SupportSurface)
+										}
+									>
+										{SUPPORT_PLACEMENT_OPTIONS.map((option) => (
+											<Menu.RadioItem key={option.value} value={option.value}>
+												<span className="grow truncate">{option.label}</span>
+												<Menu.RadioItemIndicator render={check} />
+											</Menu.RadioItem>
+										))}
+									</Menu.RadioGroup>
+								</Menu.Popup>
+							</Menu.Root>
+						</div>
 					) : (
 						<ContextMenu.CheckboxItem
 							key={tool.id}

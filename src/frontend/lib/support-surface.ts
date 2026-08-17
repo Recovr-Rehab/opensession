@@ -31,9 +31,21 @@ export type SupportSurface = "sidebar" | "page" | "off";
 export const SUPPORT_SURFACE_OPTIONS: { value: SupportSurface; label: string }[] =
 	[
 		{ value: "sidebar", label: "In the sidebar" },
-		{ value: "page", label: "Its own page" },
+		{ value: "page", label: "As a tool" },
 		{ value: "off", label: "Off" },
 	];
+
+/** The two places it can live, without the off state. For surfaces that show
+ *  on/off some other way — a tick on the row it sits in — where a third
+ *  "Off" row would be the same switch twice. */
+export const SUPPORT_PLACEMENT_OPTIONS = SUPPORT_SURFACE_OPTIONS.filter(
+	(option) => option.value !== "off",
+);
+
+/** Where it goes when switched back on. Nothing records the placement it had
+ *  before it went off (the two lists this is derived from only say what is
+ *  showing), and the band is where the queue lived before the tool existed. */
+export const DEFAULT_SUPPORT_PLACEMENT: SupportSurface = "sidebar";
 
 /**
  * Which surface is on, as one choice.
