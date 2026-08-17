@@ -59,6 +59,63 @@ function CtxItem({
 	);
 }
 
+/** A row that opens a hover flyout: the leading glyph, the label, what the
+ *  choice currently says, and the chevron every submenu trigger wears. */
+function CtxFlyoutRow({
+	icon,
+	label,
+	value,
+	onOpen,
+	onLeave,
+}: {
+	icon?: React.ReactNode;
+	label: string;
+	value?: string;
+	onOpen: (rect: DOMRect) => void;
+	onLeave: () => void;
+}) {
+	return (
+		<button
+			type="button"
+			style={{
+				...CTX_ITEM_STYLE,
+				display: "flex",
+				alignItems: "center",
+				gap: 11,
+			}}
+			onMouseEnter={(e) => onOpen(e.currentTarget.getBoundingClientRect())}
+			onMouseLeave={onLeave}
+			onClick={(e) => onOpen(e.currentTarget.getBoundingClientRect())}
+		>
+			<span
+				style={{
+					width: 20,
+					display: "inline-flex",
+					justifyContent: "center",
+					flexShrink: 0,
+					color: "var(--text-dim)",
+				}}
+			>
+				{icon}
+			</span>
+			<span style={{ flex: 1 }}>{label}</span>
+			{value && (
+				<span className="text-faint" style={{ flexShrink: 0 }}>
+					{value}
+				</span>
+			)}
+			<IconChevronRight
+				size={16}
+				style={{ color: "var(--text-faint)", flexShrink: 0 }}
+			/>
+		</button>
+	);
+}
+
+// The popup surface, worn by the menu and by every flyout it opens.
+const POPUP_CLASS =
+	"smooth-shadow-ring-md [--smooth-ring-color:var(--popup-ring)] [corner-shape:squircle] [&_button:not(.tab-color-swatch):hover]:bg-hover!";
+
 export function SidebarCtxMenu({
 	x,
 	y,
@@ -86,7 +143,9 @@ export function SidebarCtxMenu({
 	// Flyout state + hover grace so the pointer can
 	// cross the gap between the menu and the panel.
 	const [sub, setSub] = useState<{
-		kind: "status" | "snooze";
+		kind: "status" | "snooze" | "submenu";
+		/** Which entry opened it — a menu can carry several submenu rows. */
+		index?: number;
 		rect: DOMRect;
 	} | null>(null);
 	const closeT = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -106,6 +165,12 @@ export function SidebarCtxMenu({
 	const snoozeEntry = entries.find(
 		(e): e is Extract<CtxEntry, { kind: "snooze" }> => e.kind === "snooze",
 	);
+	const openSubmenu =
+		sub?.kind === "submenu" && sub.index !== undefined
+			? entries[sub.index]
+			: undefined;
+	const submenuEntry =
+		openSubmenu?.kind === "submenu" ? openSubmenu : undefined;
 	const check = (on: boolean) =>
 		on ? <IconCheck size={20} style={{ color: "var(--text-dim)" }} /> : undefined;
 
@@ -115,15 +180,26 @@ export function SidebarCtxMenu({
 			? sub.rect.left - SUB_W - 4
 			: sub.rect.right + 4
 		: 0;
+	// Rough panel height, so a flyout opened low in the window is nudged up
+	// rather than clipped. Rows are ~30px, plus the popup's own padding.
+	const subRows =
+		sub?.kind === "status"
+			? MINE_STATUS_META.length + 1
+			: sub?.kind === "snooze"
+				? snoozePresets().length + (snoozeEntry?.until ? 1 : 0)
+				: (submenuEntry?.items.length ?? 0);
 	const subTop = sub
-		? Math.min(sub.rect.top - 6, window.innerHeight - 280)
+		? Math.max(
+				8,
+				Math.min(sub.rect.top - 6, window.innerHeight - (subRows * 30 + 16) - 8),
+			)
 		: 0;
 
 	return createPortal(
 		<>
 			<div
 				ref={menuRef}
-				className="smooth-shadow-ring-md [--smooth-ring-color:var(--popup-ring)] [corner-shape:squircle] [&_button:not(.tab-color-swatch):hover]:bg-hover!"
+				className={POPUP_CLASS}
 				style={{ ...CTX_MENU_STYLE, ...menuPosition }}
 				onClick={(e) => e.stopPropagation()}
 			>
@@ -143,94 +219,45 @@ export function SidebarCtxMenu({
 						);
 					if (entry.kind === "status") {
 						return (
-							<button
+							<CtxFlyoutRow
 								key={i}
-								type="button"
-								style={{
-									...CTX_ITEM_STYLE,
-									display: "flex",
-									alignItems: "center",
-									gap: 11,
-								}}
-								onMouseEnter={(e) => {
+								icon={<IconStatusRing size={20} />}
+								label="Set status"
+								onOpen={(rect) => {
 									cancelClose();
-									setSub({
-										kind: "status",
-										rect: e.currentTarget.getBoundingClientRect(),
-									});
+									setSub({ kind: "status", rect });
 								}}
-								onMouseLeave={scheduleClose}
-								onClick={(e) => {
-									cancelClose();
-									setSub({
-										kind: "status",
-										rect: e.currentTarget.getBoundingClientRect(),
-									});
-								}}
-							>
-								<span
-									style={{
-										width: 20,
-										display: "inline-flex",
-										justifyContent: "center",
-										flexShrink: 0,
-										color: "var(--text-dim)",
-									}}
-								>
-									<IconStatusRing size={20} />
-								</span>
-								<span style={{ flex: 1 }}>Set status</span>
-								<IconChevronRight
-									size={16}
-									style={{ color: "var(--text-faint)", flexShrink: 0 }}
-								/>
-							</button>
+								onLeave={scheduleClose}
+							/>
 						);
 					}
 					if (entry.kind === "snooze") {
 						return (
-							<button
+							<CtxFlyoutRow
 								key={i}
-								type="button"
-								style={{
-									...CTX_ITEM_STYLE,
-									display: "flex",
-									alignItems: "center",
-									gap: 11,
-								}}
-								onMouseEnter={(e) => {
+								icon={<IconMoon size={20} />}
+								label="Snooze"
+								onOpen={(rect) => {
 									cancelClose();
-									setSub({
-										kind: "snooze",
-										rect: e.currentTarget.getBoundingClientRect(),
-									});
+									setSub({ kind: "snooze", rect });
 								}}
-								onMouseLeave={scheduleClose}
-								onClick={(e) => {
+								onLeave={scheduleClose}
+							/>
+						);
+					}
+					if (entry.kind === "submenu") {
+						return (
+							<CtxFlyoutRow
+								key={i}
+								icon={entry.icon}
+								label={entry.label}
+								value={entry.value}
+								onOpen={(rect) => {
 									cancelClose();
-									setSub({
-										kind: "snooze",
-										rect: e.currentTarget.getBoundingClientRect(),
-									});
+									setSub({ kind: "submenu", index: i, rect });
 								}}
-							>
-								<span
-									style={{
-										width: 20,
-										display: "inline-flex",
-										justifyContent: "center",
-										flexShrink: 0,
-										color: "var(--text-dim)",
-									}}
-								>
-									<IconMoon size={20} />
-								</span>
-								<span style={{ flex: 1 }}>Snooze</span>
-								<IconChevronRight
-									size={16}
-									style={{ color: "var(--text-faint)", flexShrink: 0 }}
-								/>
-							</button>
+								onLeave={scheduleClose}
+							/>
 						);
 					}
 					return (
@@ -252,7 +279,7 @@ export function SidebarCtxMenu({
 			</div>
 			{sub?.kind === "status" && statusEntry && (
 				<div
-					className="smooth-shadow-ring-md [--smooth-ring-color:var(--popup-ring)] [corner-shape:squircle] [&_button:not(.tab-color-swatch):hover]:bg-hover!"
+					className={POPUP_CLASS}
 					style={{
 						...CTX_MENU_STYLE,
 						left: subLeft,
@@ -291,7 +318,7 @@ export function SidebarCtxMenu({
 			)}
 			{sub?.kind === "snooze" && snoozeEntry && (
 				<div
-					className="smooth-shadow-ring-md [--smooth-ring-color:var(--popup-ring)] [corner-shape:squircle] [&_button:not(.tab-color-swatch):hover]:bg-hover!"
+					className={POPUP_CLASS}
 					style={{
 						...CTX_MENU_STYLE,
 						left: subLeft,
@@ -324,6 +351,32 @@ export function SidebarCtxMenu({
 							/>
 						</>
 					)}
+				</div>
+			)}
+			{submenuEntry && (
+				<div
+					className={POPUP_CLASS}
+					style={{
+						...CTX_MENU_STYLE,
+						left: subLeft,
+						top: subTop,
+						minWidth: SUB_W,
+					}}
+					onClick={(e) => e.stopPropagation()}
+					onMouseEnter={cancelClose}
+					onMouseLeave={scheduleClose}
+				>
+					{submenuEntry.items.map((item) => (
+						<CtxItem
+							key={item.label}
+							label={item.label}
+							trailing={check(item.selected)}
+							onClick={() => {
+								item.onClick();
+								onClose();
+							}}
+						/>
+					))}
 				</div>
 			)}
 		</>,

@@ -2538,52 +2538,52 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// than as seven words. That spends the leading slot, so the tick moves to
 	// the trailing edge, where the status flyout already puts its own.
 	//
-	// Support is the exception: it is a choice of surface rather than a tool to
-	// tick, so it gets its own group of three and appears in neither list.
+	// Support is the exception: where the others tick on or off, it names which
+	// of two surfaces its queue lives on, so its row opens a submenu of the
+	// three states rather than a tick, and stays among the tools it belongs
+	// with. Same wording and same order as Settings > Appearance.
 	const sidebarMenuEntries: CtxEntry[] = [
 		{ kind: "label", label: "Tools" },
-		...fittingTools
-			.filter((tool) => tool.id !== PLAIN_ID)
-			.map((tool): CtxEntry => {
-				const shown = !hiddenTools.has(tool.id);
-				return {
+		...fittingTools.flatMap((tool): CtxEntry[] => {
+			// The glyphs are drawn at the sidebar's 22px rail size; the menu's
+			// icon column is 20, the size every other row here uses.
+			const icon = (
+				<span className="inline-flex [&_svg]:size-[20px]">{tool.icon}</span>
+			);
+			if (tool.id === PLAIN_ID) {
+				// No Plain feed, no queue to place: the choice would be between
+				// two empty surfaces.
+				if (!feeds.some((feed) => feed.id === PLAIN_ID)) return [];
+				return [
+					{
+						kind: "submenu",
+						icon,
+						label: tool.label,
+						value: SUPPORT_SURFACE_OPTIONS.find(
+							(option) => option.value === supportSurface,
+						)?.label,
+						items: SUPPORT_SURFACE_OPTIONS.map(({ value, label }) => ({
+							label,
+							selected: supportSurface === value,
+							onClick: () => setSupportSurface(value),
+						})),
+					},
+				];
+			}
+			const shown = !hiddenTools.has(tool.id);
+			return [
+				{
 					kind: "item",
-					// The glyphs are drawn at the sidebar's 22px rail size; the
-					// menu's icon column is 20, the size every other row here uses.
-					icon: (
-						<span className="inline-flex [&_svg]:size-[20px]">{tool.icon}</span>
-					),
+					icon,
 					label: tool.label,
 					trailing: shown ? (
 						<IconCheck size={20} style={{ color: "var(--text-dim)" }} />
 					) : undefined,
 					keepOpen: true,
 					onClick: () => setToolVisible(tool.id, !shown),
-				};
-			}),
-		// One queue, one decision: the band and the page are alternatives, so
-		// they are three rows of a choice here rather than two independent ticks
-		// that could leave the same tickets on screen twice. Same wording and
-		// same order as Settings > Appearance.
-		...(feeds.some((feed) => feed.id === PLAIN_ID)
-			? ([
-					{ kind: "sep" },
-					{ kind: "label", label: "Support tickets" },
-					...SUPPORT_SURFACE_OPTIONS.map(
-						({ value, label }): CtxEntry => ({
-							kind: "item",
-							icon: <span className="inline-flex [&_svg]:size-[20px]" />,
-							label,
-							trailing:
-								supportSurface === value ? (
-									<IconCheck size={20} style={{ color: "var(--text-dim)" }} />
-								) : undefined,
-							keepOpen: true,
-							onClick: () => setSupportSurface(value),
-						}),
-					),
-				] as CtxEntry[])
-			: []),
+				},
+			];
+		}),
 		...(feeds.filter((feed) => feed.id !== PLAIN_ID).length > 0
 			? ([
 					{ kind: "sep" },
