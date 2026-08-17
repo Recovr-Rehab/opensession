@@ -32,6 +32,18 @@ interface Props {
 }
 
 /**
+ * The pane width at which the ticket's actions fit in the bar beside the
+ * subject. The bar layout runs to about 440px and the Plain link takes another
+ * 110, so this leaves the subject and the customer under it around 240px, which
+ * is a readable title rather than an ellipsis. A 1440pt window clears it; the
+ * app sidebar and the queue column take about 600 of whatever is left.
+ *
+ * Narrower than this the actions stay at the top of the thread, where they have
+ * a whole row to wrap into.
+ */
+const ACTIONS_IN_BAR_MIN = 790;
+
+/**
  * The support-ticket Conversation surface: the full thread straight from Plain
  * (no LLM involved) with ticket admin (status/priority/assign/labels/spam), a
  * customer-reply / internal-note box, and the one-click triage affordance.
@@ -52,6 +64,13 @@ export function ConversationPane({
 	const [error, setError] = useState<string | null>(null);
 	const [triaging, setTriaging] = useState(false);
 	const [triageError, setTriageError] = useState<string | null>(null);
+	// The pane is much narrower than the window, because the app sidebar and the
+	// queue column take most of it, so a viewport query cannot say whether the
+	// actions fit in the bar beside the subject. Measure the pane instead. The
+	// node is held in state rather than a ref so the effect re-runs once it is
+	// attached.
+	const [paneEl, setPaneEl] = useState<HTMLDivElement | null>(null);
+	const [paneWidth, setPaneWidth] = useState(0);
 	const aliveRef = useRef(true);
 
 	useEffect(() => {
@@ -60,6 +79,16 @@ export function ConversationPane({
 			aliveRef.current = false;
 		};
 	}, []);
+
+	useEffect(() => {
+		if (!paneEl) return;
+		setPaneWidth(paneEl.getBoundingClientRect().width);
+		const ro = new ResizeObserver(([entry]) => {
+			setPaneWidth(entry.contentRect.width);
+		});
+		ro.observe(paneEl);
+		return () => ro.disconnect();
+	}, [paneEl]);
 
 	// Load on mount / thread change, then poll — the customer can reply while
 	// the ticket is being read and there's no live push for Plain.
@@ -115,10 +144,13 @@ export function ConversationPane({
 	// Not on a phone: there the bar is where the app's own back control floats,
 	// so the ticket keeps its header at the top of the thread.
 	const headerInTopBar = !!headerInBar && !isPhone;
+	const actionsInBar = headerInTopBar && paneWidth >= ACTIONS_IN_BAR_MIN;
 
 	return (
-		<div className={cn("flex min-h-0 flex-1 flex-col", className)}>
-			<div className="min-h-0 flex-1 overflow-y-auto">
+		<div
+			ref={setPaneEl}
+			className={cn("flex min-h-0 flex-1 flex-col", className)}
+		>
 			{headerInTopBar && (
 				<div className={SUPPORT_COLUMN_BAR}>
 					{/* Empty until the thread lands. The bar keeps its height, so
@@ -127,7 +159,12 @@ export function ConversationPane({
 						<>
 							<div className="flex min-w-0 flex-1 flex-col justify-center">
 								<div className="flex min-w-0 items-center gap-2">
-									<h2 className="m-0 truncate text-item-title font-semibold text-fg">
+									{/* The actions beside it can leave this 200px on a
+									    laptop, so the full subject stays on hover. */}
+									<h2
+										className="m-0 truncate text-item-title font-semibold text-fg"
+										title={thread.title || undefined}
+									>
 										{thread.title || "No subject"}
 									</h2>
 									{status && (
@@ -148,9 +185,18 @@ export function ConversationPane({
 									)}
 								</div>
 							</div>
+							{actionsInBar && (
+								<PlainThreadActions
+									threadId={threadId}
+									thread={thread}
+									onChanged={load}
+									layout="bar"
+									className="shrink-0"
+								/>
+							)}
 							{plainUrl && (
 								<a
-									className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-meta font-semibold text-link no-underline hover:underline"
+									className="ml-2 inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-meta font-semibold text-link no-underline hover:underline"
 									href={plainUrl}
 									target="_blank"
 									rel="noreferrer"
@@ -164,6 +210,7 @@ export function ConversationPane({
 					)}
 				</div>
 			)}
+			<div className="min-h-0 flex-1 overflow-y-auto">
 				<div
 					className={cn(
 						"mx-auto w-full max-w-[760px] px-5 pb-5",
@@ -223,43 +270,15 @@ export function ConversationPane({
 							)}
 
 							{/* One-click ticket admin, straight from here: status,
-						    priority, spam — no need to jump into Plain. */}
-							{thread && (
+						    priority, spam — no need to jump into Plain. Only when the
+						    bar could not take it. */}
+							{thread && !actionsInBar && (
 								<PlainThreadActions
 									threadId={threadId}
 									thread={thread}
 									onChanged={load}
 									className="mt-3"
 								/>
-							)}
-
-							{/* The "do you want to triage this?" affordance: one click runs
-						    the Plain triage automation and lands in its session. */}
-							{!hideTriage && (
-								<div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl bg-panel px-4 py-3.5">
-									<div className="min-w-0 flex-1">
-										<div className="text-item-title font-semibold text-fg">
-											Triage this ticket
-										</div>
-										<div className="mt-0.5 text-label text-dim">
-											Investigates, posts an internal note, and can open a PR
-											for review.
-										</div>
-									</div>
-									<Button
-										variant="primary"
-										className="shrink-0"
-										onClick={handleTriage}
-										disabled={triaging}
-									>
-										{triaging ? "Starting triage…" : "Triage"}
-									</Button>
-									{triageError && (
-										<div className="basis-full text-label text-red">
-											{triageError}
-										</div>
-									)}
-								</div>
 							)}
 
 							<div className="mt-5 flex flex-col gap-3">
@@ -286,6 +305,35 @@ export function ConversationPane({
 			{/* Keep the customer reply available while the ticket scrolls. */}
 			{thread && (
 				<div className="mx-auto w-full max-w-[760px] shrink-0 px-5 pb-5">
+					{/* Answering and handing it to the agent first are the same
+					    decision, so the offer sits with the reply box instead of
+					    scrolling away at the top of the thread. */}
+					{!hideTriage && (
+						<div className="mb-2 flex flex-wrap items-center gap-3 rounded-2xl bg-panel px-4 py-3.5">
+							<div className="min-w-0 flex-1">
+								<div className="text-item-title font-semibold text-fg">
+									Triage this ticket
+								</div>
+								<div className="mt-0.5 text-label text-dim">
+									Investigates, posts an internal note, and can open a PR for
+									review.
+								</div>
+							</div>
+							<Button
+								variant="primary"
+								className="shrink-0"
+								onClick={handleTriage}
+								disabled={triaging}
+							>
+								{triaging ? "Starting triage…" : "Triage"}
+							</Button>
+							{triageError && (
+								<div className="basis-full text-label text-red">
+									{triageError}
+								</div>
+							)}
+						</div>
+					)}
 					<PlainReplyBox
 						key={threadId}
 						threadId={threadId}

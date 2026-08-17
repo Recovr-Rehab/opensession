@@ -59,6 +59,7 @@ import {
 	IconArrowUp,
 	IconArrowUpRight,
 	IconCheck,
+	IconDotsHorizontal,
 	IconClock,
 	IconPaperclip,
 	IconPencil,
@@ -267,19 +268,30 @@ function MenuTick({ on }: { on: boolean }) {
  * marking spam also closes the thread. Shared by the session viewer's Plain
  * tab and the Support ticket preview — like the reply box, these are the
  * human gate: agent runs never get Plain writes as tools.
+ *
+ * Two layouts. `stack` is the row above a thread: it wraps onto a second line
+ * when it runs out of width, and reports a failure underneath. `bar` is the
+ * Support inbox's top bar, where there is one line and no room to grow, so the
+ * row cannot wrap, a failure reads beside the controls instead of below them,
+ * and the two rarely-used actions (rename, spam) fold into an overflow menu.
+ * That fold is what makes the set fit next to a subject: it is ~130px narrower,
+ * which is the difference between a readable ticket title and an ellipsis.
  */
 export function PlainThreadActions({
 	threadId,
 	thread,
 	onChanged,
+	layout = "stack",
 	className,
 }: {
 	threadId: string;
 	thread: PlainThread;
 	/** Called after any successful action so the owner can refresh. */
 	onChanged: () => void;
+	layout?: "stack" | "bar";
 	className?: string;
 }) {
+	const inBar = layout === "bar";
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const currentUser = useCurrentUser();
@@ -335,9 +347,43 @@ export function PlainThreadActions({
 		thread.customer?.name || thread.customer?.email || "this customer";
 	const isSpam = !!thread.customer?.isSpam;
 
+	// Shared by the visible buttons and their overflow-menu twins.
+	const renameThread = () => {
+		const next = window.prompt(
+			"Rename this thread in Plain:",
+			thread.title || "",
+		);
+		const t = next?.trim();
+		if (t && t !== thread.title)
+			run(() => setPlainThreadTitleApi(threadId, t, currentUser));
+	};
+	const toggleSpam = () => {
+		if (
+			isSpam ||
+			window.confirm(
+				`Mark ${customerLabel} as spam?\n\nPlain filters all their threads and this one is closed right away. Reversible via “Not spam”.`,
+			)
+		)
+			run(() => setPlainThreadSpamApi(threadId, !isSpam, currentUser));
+	};
+	const spamTitle = isSpam
+		? "This customer is marked as spam in Plain. Click to undo."
+		: "Mark this customer as spam in Plain (also closes the thread)";
+
 	return (
-		<div className={cn("flex flex-col gap-1", className)}>
-			<div className="flex flex-wrap items-center gap-1">
+		<div
+			className={cn(
+				"flex gap-1",
+				inBar ? "min-w-0 items-center" : "flex-col",
+				className,
+			)}
+		>
+			<div
+				className={cn(
+					"flex items-center gap-1",
+					inBar ? "flex-nowrap" : "flex-wrap",
+				)}
+			>
 				{status === "DONE" ? (
 					<Button
 						size="sm"
@@ -534,50 +580,59 @@ export function PlainThreadActions({
 						</Menu.Popup>
 					</Menu.Root>
 				)}
-				<Button
-					size="sm"
-					variant="ghost"
-					disabled={busy}
-					onClick={() => {
-						const next = window.prompt(
-							"Rename this thread in Plain:",
-							thread.title || "",
-						);
-						const t = next?.trim();
-						if (t && t !== thread.title)
-							run(() => setPlainThreadTitleApi(threadId, t, currentUser));
-					}}
-					title="Rename this thread in Plain"
-				>
-					Rename
-				</Button>
-				<Button
-					size="sm"
-					variant="ghost"
-					className={cn(!isSpam && "hover:text-red")}
-					disabled={busy}
-					onClick={() => {
-						if (
-							isSpam ||
-							window.confirm(
-								`Mark ${customerLabel} as spam?\n\nPlain filters all their threads and this one is closed right away. Reversible via “Not spam”.`,
-							)
-						)
-							run(() =>
-								setPlainThreadSpamApi(threadId, !isSpam, currentUser),
-							);
-					}}
-					title={
-						isSpam
-							? "This customer is marked as spam in Plain. Click to undo."
-							: "Mark this customer as spam in Plain (also closes the thread)"
-					}
-				>
-					{isSpam ? "Not spam" : "Spam"}
-				</Button>
+				{inBar ? (
+					<Menu.Root>
+						<Menu.Trigger
+							render={
+								<Button
+									size="sm"
+									variant="ghost"
+									icon={<IconDotsHorizontal size={18} />}
+									disabled={busy}
+									aria-label="More ticket actions"
+									title="More actions"
+								/>
+							}
+						/>
+						<Menu.Popup align="end">
+							<Menu.Item onClick={renameThread}>Rename</Menu.Item>
+							<Menu.Item onClick={toggleSpam}>
+								{isSpam ? "Not spam" : "Mark as spam"}
+							</Menu.Item>
+						</Menu.Popup>
+					</Menu.Root>
+				) : (
+					<>
+						<Button
+							size="sm"
+							variant="ghost"
+							disabled={busy}
+							onClick={renameThread}
+							title="Rename this thread in Plain"
+						>
+							Rename
+						</Button>
+						<Button
+							size="sm"
+							variant="ghost"
+							className={cn(!isSpam && "hover:text-red")}
+							disabled={busy}
+							onClick={toggleSpam}
+							title={spamTitle}
+						>
+							{isSpam ? "Not spam" : "Spam"}
+						</Button>
+					</>
+				)}
 			</div>
 			{error && (
-				<span className="text-red text-label truncate" title={error}>
+				<span
+					className={cn(
+						"text-red text-label truncate",
+						inBar && "max-w-[160px] shrink-0",
+					)}
+					title={error}
+				>
 					{error}
 				</span>
 			)}
