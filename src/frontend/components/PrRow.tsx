@@ -178,7 +178,7 @@ export function PrRow({
 							}
 						}}
 					>
-						<IconPin size={21} fill={pinned ? "currentColor" : "none"} />
+						<IconPin size={19} fill={pinned ? "currentColor" : "none"} />
 					</span>
 				</Tooltip>
 				<Tooltip label="Close pull request">
@@ -199,7 +199,7 @@ export function PrRow({
 							}
 						}}
 					>
-						<IconX size={21} />
+						<IconX size={19} />
 					</span>
 				</Tooltip>
 			</span>

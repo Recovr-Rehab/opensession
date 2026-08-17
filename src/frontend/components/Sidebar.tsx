@@ -3087,7 +3087,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							}
 						}}
 					>
-						<IconPin size={21} fill={pinned ? "currentColor" : "none"} />
+						<IconPin size={19} fill={pinned ? "currentColor" : "none"} />
 					</span>
 					{row.sessions.length > 0 && (
 						<Tooltip
@@ -3123,7 +3123,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									}
 								}}
 							>
-								<IconArchive size={21} />
+								<IconArchive size={19} />
 							</span>
 						</Tooltip>
 					)}

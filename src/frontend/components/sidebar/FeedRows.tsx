@@ -128,7 +128,7 @@ export function SupportRow({
 							}
 						}}
 					>
-						<IconPin size={21} fill={pinned ? "currentColor" : "none"} />
+						<IconPin size={19} fill={pinned ? "currentColor" : "none"} />
 					</span>
 					<Tooltip label="Mark done in Plain">
 						<span
@@ -147,7 +147,7 @@ export function SupportRow({
 								}
 							}}
 						>
-							<IconCheck size={21} />
+							<IconCheck size={19} />
 						</span>
 					</Tooltip>
 				</span>
@@ -287,7 +287,7 @@ export function FeedRow({
 							}
 						}}
 					>
-						<IconPin size={21} fill={pinned ? "currentColor" : "none"} />
+						<IconPin size={19} fill={pinned ? "currentColor" : "none"} />
 					</span>
 				</span>
 			</Popover.Trigger>

@@ -79,6 +79,7 @@
  *   caption       28px      24px   band headings and status lanes
  *   band slot     32px      28px   the tier-1 sticky slot
  *   group gap     14px       8px   the air after a top-level group
+ *   row action    26px      24px   the pin/archive chip inside a row
  *
  * The 22px leading rail does NOT move. Its marks are 18px (a repo tile, a
  * status mark), so a narrower slot would leave them 1px of margin, and the
@@ -86,6 +87,11 @@
  * not touch — a compact list that also re-rags the titles reads as a different
  * sidebar rather than a tighter one. 30px around a 22px rail is 4px of margin,
  * the tool row's own margin today.
+ *
+ * The row action is the one box that HAS to follow the line height, because it
+ * is painted inside it: it is a hover wash sitting on the row's own hover pill,
+ * so anything at or above the line height reads as a second row rather than a
+ * button on one. It stays 5px inside a full line and 3px inside a compact one.
  *
  * Two rules ride on this. Compact is gated on `desktop:`, because a phone row
  * is a tap target and its `phone:` padding is deliberately off this scale.
@@ -95,8 +101,8 @@
  * otherwise be settled by.
  */
 export const SIDEBAR_DENSITY_VARS =
-	"[--sidebar-row-pad:7px] [--sidebar-tool-pad:5px] [--sidebar-line-h:36px] [--sidebar-cap-h:28px] [--sidebar-band-slot:32px] [--sidebar-group-gap:14px] " +
-	"desktop:data-[density=compact]:[--sidebar-row-pad:4px] desktop:data-[density=compact]:[--sidebar-tool-pad:4px] desktop:data-[density=compact]:[--sidebar-line-h:30px] desktop:data-[density=compact]:[--sidebar-cap-h:24px] desktop:data-[density=compact]:[--sidebar-band-slot:28px] desktop:data-[density=compact]:[--sidebar-group-gap:8px]";
+	"[--sidebar-row-pad:7px] [--sidebar-tool-pad:5px] [--sidebar-line-h:36px] [--sidebar-cap-h:28px] [--sidebar-band-slot:32px] [--sidebar-group-gap:14px] [--sidebar-row-action:26px] " +
+	"desktop:data-[density=compact]:[--sidebar-row-pad:4px] desktop:data-[density=compact]:[--sidebar-tool-pad:4px] desktop:data-[density=compact]:[--sidebar-line-h:30px] desktop:data-[density=compact]:[--sidebar-cap-h:24px] desktop:data-[density=compact]:[--sidebar-band-slot:28px] desktop:data-[density=compact]:[--sidebar-group-gap:8px] desktop:data-[density=compact]:[--sidebar-row-action:24px]";
 
 /**
  * The sidebar's leading column. Every row and group header opens with one of
@@ -670,8 +676,13 @@ export const SIDEBAR_ATTN_COUNT =
  * Spelled `hover:`, not `group-hover:`: the row IS the `group`, and Tailwind's
  * group variant only matches a group's DESCENDANTS. Either way it is
  * hover-device-only, so touch layouts never pay for it.
+ *
+ * 68px is the cluster (7px right edge + two chips + the 4px between them) plus
+ * a little air, and it is the number the session rows reserve for the same
+ * pair — so a title truncates at one place in the rail rather than 12px
+ * earlier on the families that share this row.
  */
-export const SIDEBAR_WS_ROW = `flex items-center ${SIDEBAR_RAIL_GAP} hover:pr-20`;
+export const SIDEBAR_WS_ROW = `flex items-center ${SIDEBAR_RAIL_GAP} hover:pr-[68px]`;
 
 /**
  * Pin + archive, floated over the row's right edge so revealing them can never
@@ -706,13 +717,26 @@ export const SIDEBAR_WS_ACTIONS_HOVER = "hidden group-hover:inline-flex";
 export const SIDEBAR_WS_ACTIONS_TOUCH = "[@media(hover:none)]:inline-flex";
 
 /**
- * One icon button in that cluster. Its colour is the call site's: a pinned
- * action stays accent even under the pointer, and a Support row's "mark done"
- * tints green rather than plain — three `color` declarations that used to be
- * settled by where their rules sat in the sheet relative to each other.
+ * One icon button in that cluster — the same box the session rows' pin and
+ * archive wear (ROW_ACTION in sidebar/SidebarItem.tsx), so one hover chip
+ * covers the whole rail. It was a flat 32px here while the session rows next
+ * to it painted 26, which showed as two different chip heights on one column;
+ * at the compact density 32 was also TALLER than the 30px row, so the chip
+ * overhung the row's own hover pill by a pixel at each edge and read as a
+ * second, competing pill rather than a button inside one.
+ *
+ * The size is {@link SIDEBAR_DENSITY_VARS}'s, so it steps down with the line
+ * height and keeps its 5px / 3px margin inside the row at either setting.
+ * `rounded-md` against the row's `rounded-row` is roughly concentric at both:
+ * the chip's corner plus the air around it lands on the row's own.
+ *
+ * Its colour is the call site's: a pinned action stays accent even under the
+ * pointer, and a Support row's "mark done" tints green rather than plain —
+ * three `color` declarations that used to be settled by where their rules sat
+ * in the sheet relative to each other.
  */
 export const SIDEBAR_WS_ACTION =
-	`inline-flex size-8 cursor-pointer items-center justify-center rounded-md ${SIDEBAR_ROW_CHIP}`;
+	`inline-flex size-[var(--sidebar-row-action,26px)] cursor-pointer items-center justify-center rounded-md ${SIDEBAR_ROW_CHIP}`;
 
 /**
  * Compact last-activity time. It has no `display` of its own on purpose: as a

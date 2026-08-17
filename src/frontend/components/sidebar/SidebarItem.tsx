@@ -71,7 +71,7 @@ export const SIDEBAR_ROW =
    us; on touch these actions live behind the swipe gesture and the long-press
    sheet. */
 const ROW_ACTION = cn(
-	"absolute top-1/2 hidden size-[26px] -translate-y-1/2 items-center justify-center rounded-md text-[15px] leading-none text-faint group-hover:flex hover:text-fg",
+	"absolute top-1/2 hidden size-[var(--sidebar-row-action,26px)] -translate-y-1/2 items-center justify-center rounded-md text-[15px] leading-none text-faint group-hover:flex hover:text-fg",
 	// Not a wash — a lid. See SIDEBAR_ROW_CHIP.
 	SIDEBAR_ROW_CHIP,
 );
@@ -573,7 +573,11 @@ export function SidebarItem({
 				<span
 					className={cn(
 						ROW_ACTION,
-						"right-[35px] data-[on]:bg-pressed data-[on]:text-fg",
+						// One chip's width plus the archive's 7px edge and the 4px
+						// between them — the ws rows' `gap-1` cluster, spelled as an
+						// offset because these two are positioned rather than laid out.
+						// It has to be a calc: the chip narrows with the density.
+						"right-[calc(var(--sidebar-row-action,26px)_+_11px)] data-[on]:bg-pressed data-[on]:text-fg",
 					)}
 					data-on={pinned || undefined}
 					role="button"
