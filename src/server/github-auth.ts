@@ -62,8 +62,8 @@ export interface GithubUserAuthSettings {
   enabled: boolean;
   /** App client id; null = not configured. */
   clientId: string | null;
-  /** App client secret. Signing in never needs it — the device flow is a
-   *  public client — but the refresh grant does, so without it a GitHub App's
+  /** App client secret. Signing in never needs it (the device flow is a
+   *  public client), but the refresh grant does, so without it a GitHub App's
    *  user tokens stop at their ~8h expiry and everyone reconnects by hand. */
   clientSecret: string | null;
 }
@@ -160,6 +160,17 @@ export interface DeviceFlowStart {
   expiresIn: number;
 }
 
+/**
+ * GitHub refuses the whole flow when the app doesn't have "Enable Device Flow"
+ * ticked, and answers with the bare code `device_flow_disabled`. That is the
+ * one setup mistake that locks everyone out at once, since the device flow is
+ * the only sign-in there is, so it gets a sentence naming the switch and where
+ * it lives rather than GitHub's word for its own error.
+ */
+const DEVICE_FLOW_DISABLED =
+  'This GitHub app does not have Device Flow enabled, so nobody can sign in. ' +
+  'Tick "Enable Device Flow" in the app\'s settings on GitHub, then try again.';
+
 export async function startGithubDeviceFlow(): Promise<DeviceFlowStart | { error: string }> {
   const { enabled, clientId } = githubUserAuthSettings();
   if (!enabled) return { error: "GitHub user auth is not enabled (config integrations.github.userPrAuth)" };
@@ -171,6 +182,7 @@ export async function startGithubDeviceFlow(): Promise<DeviceFlowStart | { error
   });
   const body: any = await res.json().catch(() => null);
   if (!res.ok || !body?.device_code) {
+    if (body?.error === "device_flow_disabled") return { error: DEVICE_FLOW_DISABLED };
     return { error: body?.error_description || body?.error || `GitHub device flow failed (${res.status})` };
   }
   return {

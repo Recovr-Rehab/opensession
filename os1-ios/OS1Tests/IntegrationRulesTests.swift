@@ -89,7 +89,7 @@ final class IntegrationRulesTests: XCTestCase {
         XCTAssertTrue(
             IntegrationRules.githubDetail(
                 GithubSignInSettings(userPrAuth: true, clientIdConfigured: true, clientSecretConfigured: false)
-            ).contains("Device-code")
+            ).contains("client secret")
         )
         XCTAssertTrue(
             IntegrationRules.githubDetail(

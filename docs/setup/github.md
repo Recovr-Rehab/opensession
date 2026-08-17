@@ -182,9 +182,12 @@ story.
 
 1. Create one **OAuth App** in your org (Settings → Developer settings →
    OAuth Apps): tick **"Enable Device Flow"** and generate a client secret. If
-   the org restricts third-party OAuth apps, approve it. Sign-in is a device
-   code and never redirects, so the callback URL is unused — put your
-   instance's URL in if GitHub insists on the field.
+   the org restricts third-party OAuth apps, approve it.
+
+   Device Flow is not an option here. It is the only sign-in there is, so an
+   app without it refuses every attempt (`device_flow_disabled`) and nobody
+   can get in. The callback URL, by contrast, is unused, because sign-in never
+   redirects; put your instance's URL in if GitHub insists on the field.
 2. Configure `~/.opensession/config.json`:
 
    ```json
@@ -206,7 +209,7 @@ story.
 What turns on (`src/server/github-auth.ts`, `web-auth.ts`, `routes/auth.ts`):
 
 - **Sign-in required**: the UI shows "Continue with GitHub", which starts the
-  device flow — the one sign-in every client uses; only logins on
+  device flow, the one sign-in every client uses; only logins on
   `identity.team[].github` may sign in. Every `/api/*` call and the UI WebSocket are 401-gated on the HttpOnly
   session cookie; non-browser callers use `Authorization: Bearer <token>`
   with a token from `~/.opensession-web-sessions.json`. The verified

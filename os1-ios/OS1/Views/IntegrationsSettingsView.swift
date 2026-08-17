@@ -368,9 +368,15 @@ private struct GithubSignInDetailView: View {
         guard github.clientIdConfigured ?? false else {
             return "It needs a GitHub App first. Create one, then add its client id on the web."
         }
-        return (github.clientSecretConfigured ?? false)
-            ? "Teammates connect their own account under Personal → My accounts. Takes effect when the server restarts."
-            : "Device-code sign-in is ready. Add a client secret on the web so tokens renew. Takes effect when the server restarts."
+        // The Device Flow switch is GitHub's, so this cannot report whether it
+        // is on. It is also the only way in, so the requirement is said here
+        // rather than discovered by a teammate who cannot sign in.
+        let secret = (github.clientSecretConfigured ?? false)
+            ? "Teammates connect their own account under Personal → My accounts."
+            : "Add a client secret on the web so teammates' tokens renew."
+        return "Signing in is a device code, so the app needs Device Flow enabled on GitHub. "
+            + secret
+            + " Takes effect when the server restarts."
     }
 
     private func setEnabled(_ next: Bool) async {

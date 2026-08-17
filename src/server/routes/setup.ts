@@ -359,7 +359,7 @@ export async function handleSetupRoutes(
       });
       // githubUserAuthSettings() reads getConfig() per call (mtime-guarded
       // re-read), and the web-auth gate calls webAuthRequired() →
-      // githubUserAuthActive() on every request — so the sign-in gate and the
+      // githubUserAuthActive() on every request, so the sign-in gate and the
       // device flow pick this up live. No restart needed. (Only the one-time
       // createdByLogin boot migration waits for the next restart.)
       return Response.json({

@@ -38,7 +38,7 @@ const CLOUD_ORIGIN = new URL(CLOUD_URL).origin;
 let APP_URL = process.env.OS1_URL || CLOUD_URL;
 let APP_ORIGIN = new URL(APP_URL).origin;
 // Only the app itself. Sign-in is a device code entered on github.com, and
-// that belongs in the browser the person is already signed into GitHub in —
+// that belongs in the browser the person is already signed into GitHub in,
 // not in this window, where it would navigate the app away from the screen
 // that is waiting for the code.
 let IN_WINDOW_ORIGINS = [APP_ORIGIN];

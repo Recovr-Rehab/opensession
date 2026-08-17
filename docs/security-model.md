@@ -176,12 +176,18 @@ tokens are what scopes teammates' tokens to your org (see the previous
 section): they can't reach public/third-party repos, they expire ~8h, and
 github-auth.ts refreshes them via a rotating refresh token (20-min ticker
 parked on globalThis + refresh-on-boot; getters never hand out an expired
-token — runs fall back to the bot credential, web mutations 403 to "connect
+token: runs fall back to the bot credential, web mutations 403 to "connect
 your account"). A refresh rotates the token string, which changes the
 shared-server config hash → drain-respawn at next run start, by design.
-`oauthClientSecret` is what that refresh grant needs — signing in never uses
+`oauthClientSecret` is what that refresh grant needs. Signing in never uses
 it, so an instance without one signs people in and then drops them at the
 first expiry.
+
+"Enable Device Flow" is not optional on the GitHub side. It is the only
+sign-in there is, so an app without it refuses every attempt with
+`device_flow_disabled`, and nobody can get in. `startGithubDeviceFlow` maps
+that one code to a sentence naming the switch, since it is the failure that
+locks out a whole instance at once.
 
 ## Self-management tools (Slack + interactive Open Session sessions)
 

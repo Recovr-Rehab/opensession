@@ -1,7 +1,8 @@
 /**
  * Per-user GitHub auth: config gating, token store lookups, runner env
- * building, and the web sign-in resolution — the pure/local parts (device
- * flow itself needs GitHub and is not tested here). Store paths are pointed
+ * building, the web sign-in resolution, and how the device flow's start reads
+ * back what GitHub answered (against a stubbed fetch; nothing here talks to
+ * GitHub). Store paths are pointed
  * at temp files via their env overrides; audit-emitting mutations
  * (connect/disconnect/sign-in) are exercised only where they don't fire.
  */
@@ -19,6 +20,7 @@ import {
   githubUserAuthSettings,
   githubUserLoginForRun,
   removeGithubAccount,
+  startGithubDeviceFlow,
   validateGithubTokenLogin,
 } from "./github-auth";
 import {
@@ -282,6 +284,60 @@ describe("token lookups + runner env", () => {
 
   test("removeGithubAccount on an unknown login is a no-op", () => {
     expect(removeGithubAccount("nobody")).toBe(false);
+  });
+});
+
+describe("starting the device flow", () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = realFetch;
+  });
+
+  function githubAnswers(status: number, body: unknown): void {
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
+  }
+
+  test("an app without Device Flow enabled says which switch to tick", async () => {
+    // GitHub's own answer is the bare code `device_flow_disabled`, which names
+    // the setting only if you already know the setting. This is the one
+    // misconfiguration that locks the whole team out, so the sentence has to
+    // carry the fix: every client shows this string verbatim.
+    enableFeature();
+    githubAnswers(400, {
+      error: "device_flow_disabled",
+      error_description: "Device flow is disabled.",
+    });
+    const result = await startGithubDeviceFlow();
+    expect(result).toHaveProperty("error");
+    const error = (result as { error: string }).error;
+    expect(error).toContain("Enable Device Flow");
+    expect(error).toContain("nobody can sign in");
+    expect(error).not.toContain("device_flow_disabled");
+  });
+
+  test("any other GitHub failure keeps GitHub's own description", async () => {
+    enableFeature();
+    githubAnswers(404, { error: "not_found", error_description: "Not Found" });
+    expect(await startGithubDeviceFlow()).toEqual({ error: "Not Found" });
+  });
+
+  test("a configured app gets its code back", async () => {
+    enableFeature();
+    githubAnswers(200, {
+      device_code: "dev-code",
+      user_code: "ABCD-1234",
+      verification_uri: "https://github.com/login/device",
+      interval: 5,
+      expires_in: 900,
+    });
+    expect(await startGithubDeviceFlow()).toEqual({
+      deviceCode: "dev-code",
+      userCode: "ABCD-1234",
+      verificationUri: "https://github.com/login/device",
+      interval: 5,
+      expiresIn: 900,
+    });
   });
 });
 

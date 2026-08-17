@@ -102,7 +102,7 @@ enum IntegrationRules {
     /// What GitHub sign-in is doing for people right now, in one sentence.
     ///
     /// Signing in is a device code and needs no client secret, but renewing a
-    /// token does — so an instance without one signs people in and then drops
+    /// token does, so an instance without one signs people in and then drops
     /// them a few hours later. That is worth saying on the row.
     static func githubDetail(_ github: GithubSignInSettings) -> String {
         guard (github.userPrAuth ?? false) && (github.clientIdConfigured ?? false) else {
@@ -110,7 +110,7 @@ enum IntegrationRules {
         }
         return (github.clientSecretConfigured ?? false)
             ? "Teammates sign in with GitHub and open pull requests as themselves."
-            : "Device-code sign-in is ready. Add a client secret so tokens renew."
+            : "Teammates sign in with GitHub. Add a client secret so their tokens renew."
     }
 }
 

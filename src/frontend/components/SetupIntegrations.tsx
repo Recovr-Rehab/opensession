@@ -200,7 +200,9 @@ function GithubAuthSetupDialog({
 						<SetupSteps
 							steps={[
 								<>Create an organization-owned GitHub App.</>,
-								<>Enable Device Flow on the app.</>,
+								<>
+									Tick <strong>Enable Device Flow</strong>. Signing in is a device code, so without it nobody can sign in at all.
+								</>,
 								<>
 									Under Repository permissions, grant <strong>Contents: read and write</strong>, <strong>Pull requests: read and write</strong>, and <strong>Issues: read and write</strong>. Metadata remains read-only.
 								</>,
@@ -345,11 +347,16 @@ export function GithubAuthCard({
 						<p className="m-0 mt-1 text-supporting leading-relaxed text-dim">
 							Interactive sessions open PRs as their connected owner instead of the bot.
 						</p>
+						{/* The Device Flow switch lives on GitHub, so nothing here can
+						    report whether it is on. It is also the only way in now, so
+						    the requirement is stated wherever the connection is set up
+						    rather than left to the moment a teammate is locked out. */}
 						{active && (
 							<div className="mt-2 text-meta text-dim">
-								{secretConfigured
-									? "Device-code sign-in is ready."
-									: "Device-code sign-in is ready. Add a client secret so teammates' tokens renew."}
+								{"Signing in is a device code, so the GitHub app needs Device Flow enabled." +
+									(secretConfigured
+										? ""
+										: " Add a client secret so teammates' tokens renew.")}
 							</div>
 						)}
 					</div>
