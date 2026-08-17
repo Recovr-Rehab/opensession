@@ -102,6 +102,11 @@ export type SortBy = "updated" | "created";
 // "all" widens to everyone's open PRs (incl. automation output), "none" hides
 // PR rows entirely.
 export type PrsFilter = "default" | "all" | "none";
+// Workspaces an agent started for itself through the automation machine
+// identity. They sit in the ordinary lanes and say so with a robot beside the
+// name (components/sidebar/AutoCreatedMark), so this is the way to get them out
+// of the list on a day when there are more of them than you can read.
+export type AutoCreatedFilter = "show" | "hide";
 export const DEFAULT_PROJECT = DEFAULT_REPO_ID;
 export const FILTER_KEY = "opensession-sidebar-filter";
 // Bumped when the default grouping changes. Because setFilter persists the
@@ -145,6 +150,7 @@ export interface FilterState {
 	person: string;
 	sort: SortBy;
 	prs: PrsFilter;
+	autoCreated: AutoCreatedFilter;
 }
 
 /** What a grouping can be on disk: a pick, or "auto" for nobody's pick. */
@@ -297,6 +303,7 @@ export function readStoredFilter(): StoredFilterState {
 					: "me",
 			sort: v.sort === "created" ? "created" : "updated",
 			prs: v.prs === "all" || v.prs === "none" ? v.prs : "default",
+			autoCreated: v.autoCreated === "hide" ? "hide" : "show",
 		};
 	} catch {
 		return {
@@ -305,6 +312,7 @@ export function readStoredFilter(): StoredFilterState {
 			person: "me",
 			sort: "updated",
 			prs: "default",
+			autoCreated: "show",
 		};
 	}
 }

@@ -1,4 +1,10 @@
-import type { FilterState, GroupBy, PrsFilter, SortBy } from "../../lib/sidebar-filter";
+import type {
+	AutoCreatedFilter,
+	FilterState,
+	GroupBy,
+	PrsFilter,
+	SortBy,
+} from "../../lib/sidebar-filter";
 import { SIDEBAR_HOVER_LAYER } from "../../lib/sidebar-classes";
 import {
 	DENSITY_OPTIONS,
@@ -168,6 +174,25 @@ export function FilterPopover({
 							{ value: "none", label: "Hidden" },
 						]}
 						onSelect={(v) => onChange({ prs: v as PrsFilter })}
+					/>
+				</div>
+				{/* Workspaces an agent started for itself. They sit in the ordinary
+				    lanes wearing a robot, so this is how you get a day's worth of
+				    them out of the way. A row you have open, one you pinned, and one
+				    asking for your review stay whatever this says. */}
+				<div className={FILTER_ROW}>
+					<span className={FILTER_ROW_LABEL}>Auto created</span>
+					<MiniSelect
+						value={filter.autoCreated}
+						options={[
+							{
+								value: "show",
+								label: "Shown",
+								icon: <IconRobot size={20} className="shrink-0 text-dim" />,
+							},
+							{ value: "hide", label: "Hidden" },
+						]}
+						onSelect={(v) => onChange({ autoCreated: v as AutoCreatedFilter })}
 					/>
 				</div>
 				<div className={FILTER_ROW}>

@@ -133,6 +133,7 @@ import {
 	IconInbox,
 	IconPencil,
 	IconPlus,
+	IconRobot,
 	IconEye,
 	IconEyeOff,
 	IconStack,
@@ -169,7 +170,7 @@ import {
 } from "../lib/review-queue";
 import {
 	placeSidebarRows,
-	rowUsesAutoCreatedSection,
+	rowAutoCreatedInLens,
 	rowWasAutoCreated,
 	rowsAtPlacement,
 } from "../lib/sidebar-placement";
@@ -1588,34 +1589,63 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 
 	// Every row receives exactly one primary placement. Pinned remains an
 	// orthogonal quick-access facet and is derived separately below.
-	const placedWsRows = useMemo(() => {
+	const { placedWsRows, hiddenAutoCreatedRows } = useMemo(() => {
 		const focus =
 			filter.person === "me" ? currentUser.toLowerCase() : filter.person;
-		return placeSidebarRows(wsRows, (r) => ({
+		// Whether a row belongs in the lanes at all, asked twice: once as the
+		// filter has it, and once as if machine-started work were shown, which is
+		// what the count of what is being held back is measured against.
+		//
+		// "Hide" only ever removes a row that is here BECAUSE the machine made
+		// it. The row you have open still shows, whatever the filter says: the
+		// sidebar has to keep showing where you are. A review being asked of you
+		// survives too, in classifySidebarPlacement, which reads the review
+		// bands before it reads this scope: an ask is not something you were
+		// browsing. And a run you claimed into your own lanes stays, because
+		// `getLane` below is your own explicit act.
+		const inScope = (r: WsRow, showAutoCreated: boolean) =>
+			(rowOwnsSelection(r) ||
+				(focus === "everyone" && (showAutoCreated || !rowWasAutoCreated(r))) ||
+				(showAutoCreated && rowAutoCreatedInLens(r, filter.person)) ||
+				(focus === "unassigned"
+					? r.status === "pending"
+					: (r.owner === focus &&
+							(showAutoCreated || !rowWasAutoCreated(r))) ||
+						(!!r.mention && focus === currentUser.toLowerCase()) ||
+						r.sessions.some(
+							(c) =>
+								!c.automation &&
+								(c.startedBy || "").toLowerCase() === focus,
+						) ||
+						((r.owner === "" || focus === currentUser.toLowerCase()) &&
+							r.sessions.some((c) => getLane(c.id))))) &&
+			(!rowIsFeedOnly(r) || r.running || r.status === "needsinput");
+		const showAutoCreated = filter.autoCreated !== "hide";
+		const placed = placeSidebarRows(wsRows, (r) => ({
 			currentUser,
 			personFilter: filter.person,
 			snoozed: activeSnoozeKeys.has(r.key),
-			inStatusScope:
-				(rowOwnsSelection(r) ||
-					focus === "everyone" ||
-					rowUsesAutoCreatedSection(r, filter.person) ||
-					(focus === "unassigned"
-						? r.status === "pending"
-						: r.owner === focus ||
-							(!!r.mention && focus === currentUser.toLowerCase()) ||
-							r.sessions.some(
-								(c) =>
-									!c.automation &&
-									(c.startedBy || "").toLowerCase() === focus,
-							) ||
-							((r.owner === "" || focus === currentUser.toLowerCase()) &&
-								r.sessions.some((c) => getLane(c.id))))) &&
-				(!rowIsFeedOnly(r) || r.running || r.status === "needsinput"),
+			inStatusScope: inScope(r, showAutoCreated),
 		}));
+		// What the filter is holding back right now: an auto-created row that
+		// showing them would have put in a lane, and that nothing else (an open
+		// row, a review, a claim) has kept on screen. A filter that removes rows
+		// silently is one you forget you set, and on this instance the machine
+		// makes most of the work, so the number stays on the page.
+		const heldBack = showAutoCreated
+			? 0
+			: placed.filter(
+					(entry) =>
+						entry.placement === "outside" &&
+						rowWasAutoCreated(entry.row) &&
+						inScope(entry.row, true),
+				).length;
+		return { placedWsRows: placed, hiddenAutoCreatedRows: heldBack };
 	}, [
 		wsRows,
 		activeSnoozeKeys,
 		filter.person,
+		filter.autoCreated,
 		currentUser,
 		selectedSession,
 		lanes,
@@ -1624,7 +1654,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	const needsReviewRows = rowsAtPlacement(placedWsRows, "needs-review");
 	const approvedReviewRows = rowsAtPlacement(placedWsRows, "approved-review");
 	const awaitingReviewRows = rowsAtPlacement(placedWsRows, "awaiting-review");
-	const autoCreatedRows = rowsAtPlacement(placedWsRows, "auto-created");
 	const focusWsRows = rowsAtPlacement(placedWsRows, "status");
 	const snoozedWsRows = rowsAtPlacement(placedWsRows, "snoozed").sort(
 		(a, b) =>
@@ -1674,7 +1703,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		const covered = new Set<string>();
 		const rowsInView = [
 			...focusWsRows,
-			...autoCreatedRows,
 			...pinnedWsRows,
 			...snoozedWsRows,
 			...needsReviewRows,
@@ -1707,7 +1735,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		reviewQueueItems,
 		workspaceDataReady,
 		focusWsRows,
-		autoCreatedRows,
 		pinnedWsRows,
 		snoozedWsRows,
 		needsReviewRows,
@@ -1800,7 +1827,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				...approvedReviewRows,
 				...awaitingReviewRows,
 				...pinnedWsRows,
-				...autoCreatedRows,
 				...MINE_STATUS_META.flatMap((meta) =>
 					focusWsRows.filter((r) => r.status === meta.key),
 				),
@@ -1812,7 +1838,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			approvedReviewRows,
 			awaitingReviewRows,
 			pinnedWsRows,
-			autoCreatedRows,
 			focusWsRows,
 			snoozedWsRows,
 		],
@@ -1823,13 +1848,18 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		filter.groupBy === "repo-status" ||
 		filter.groupBy === "repo-inbox";
 	const hasWorkspaceFilter =
-		!!search || filter.repo !== "all" || filter.person !== "me";
+		!!search ||
+		filter.repo !== "all" ||
+		filter.person !== "me" ||
+		// Hiding auto-created work can empty the list on an instance where most
+		// of the work is the agent's, and "no matching workspaces" is the honest
+		// thing to say then. "Nothing here yet" would not be.
+		filter.autoCreated === "hide";
 	const workspaceListEmpty =
 		needsReviewRows.length === 0 &&
 		awaitingReviewRows.length === 0 &&
 		approvedReviewRows.length === 0 &&
 		pinnedWsRows.length === 0 &&
-		autoCreatedRows.length === 0 &&
 		focusWsRows.length === 0 &&
 		snoozedWsRows.length === 0 &&
 		prRowItems.length === 0;
@@ -2338,9 +2368,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// Collapsible bands are open by default, so — like
 	// repo groups — their *collapsed* state is what's persisted. Collapsing one
 	// hides every group within that band. Searching forces them open.
-	const bandOpen = (
-		band: GroupBand | "workspaces" | "auto-created",
-	) =>
+	const bandOpen = (band: GroupBand | "workspaces") =>
 		search.trim().length > 0 ? true : !expanded.has(`collapsed:band:${band}`);
 	// A borrowed sidebar is its workspaces list: the tools are gone and the
 	// heading is the strip that gets you back out, so there is no caption left
@@ -2394,11 +2422,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		return list;
 	}
 	const automationsOpen = bandOpen("automations");
-	const autoCreatedOpen = bandOpen("auto-created");
 	const visibleAutomationGroups = automationsOpen ? groups : [];
-	function toggleBand(
-		band: GroupBand | "tools" | "workspaces" | "auto-created",
-	) {
+	function toggleBand(band: GroupBand | "tools" | "workspaces") {
 		const key = `collapsed:band:${band}`;
 		setExpanded((prev) => {
 			const next = new Set(prev);
@@ -3238,12 +3263,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		!rowIsFeedOnly(row) && !rowIsScratch(row);
 	const topBandRows = (rows: WsRow[]) =>
 		groupsByRepo ? rows.filter((row) => !rowNestsInRepoBand(row)) : rows;
-	// Auto created is the same story as the review lanes: under a repo grouping
-	// each project's machine-started work rides that project's own band
-	// (renderRepoGroups), and the section at the bottom of the sidebar keeps
-	// only the rows no band can hold. The repo-less groupings have no band, so
-	// there it still holds everything.
-	const autoCreatedTopRows = topBandRows(autoCreatedRows);
 
 	// The Snoozed group — the quiet zone, shared by the status lanes (slotted
 	// just above Backlog) and the inbox bands (appended last, after Earlier).
@@ -3285,7 +3304,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	}
 
 	// A labeled flat lane: a caption, a count, its rows. The review lanes
-	// (Needs review, Approved, Awaiting review) and Auto created. Under a repo
+	// (Needs review, Approved, Awaiting review). Under a repo
 	// grouping each one rides inside its project's band, beside that project's
 	// status lanes, rather than stacked above every band, so the work sits with
 	// the rest of the project it belongs to. The repo-less groupings have no
@@ -3649,11 +3668,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		const needsReviewByRepo = reviewByRepo(needsReviewRows);
 		const approvedByRepo = reviewByRepo(approvedReviewRows);
 		const awaitingReviewByRepo = reviewByRepo(awaitingReviewRows);
-		// Work the machine identity started files under its project too, as one
-		// more lane at the end of that project's band. It is bucketed the same
-		// way the review rows are: an auto-created row carries its own
-		// placement, so focusWsRows never held it.
-		const autoCreatedByRepo = reviewByRepo(autoCreatedRows);
 		// The GitHub requests pointed at you ride the Needs review lane, keyed by
 		// the PR's own repo. They stay out of prByRepo, which files its rows into
 		// the status lanes by prItemLane.
@@ -3669,7 +3683,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			...needsReviewByRepo.keys(),
 			...approvedByRepo.keys(),
 			...awaitingReviewByRepo.keys(),
-			...autoCreatedByRepo.keys(),
 			...prByRepo.keys(),
 			...requestedPrByRepo.keys(),
 		]);
@@ -3766,20 +3779,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				const awaitingRepoRows = awaitingReviewByRepo.get(repo) || [];
 				const prs = prByRepo.get(repo) || [];
 				const requestedPrs = requestedPrByRepo.get(repo) || [];
-				// The Auto created lane keeps the status-lane ordering it lost by
-				// becoming one lane, so a run waiting on you sits at the top of it
-				// rather than wherever its activity landed.
-				const autoRows = [...(autoCreatedByRepo.get(repo) || [])].sort(
-					(a, b) => laneRank(a.status) - laneRank(b.status),
-				);
 				// What a collapsed band must not swallow. A row waiting for input
 				// and a review being asked of you are both blocked on you, and
 				// neither is visible once the band is shut. A question is a
-				// question whoever minted the session, so the auto-created rows
-				// count here too.
+				// question whoever minted the session, so machine-started rows
+				// count here too, which they now do by sitting in `rows`.
 				const urgent =
-					[...rows, ...autoRows].filter((r) => r.status === "needsinput")
-						.length +
+					rows.filter((r) => r.status === "needsinput").length +
 					needsReviewRepoRows.length +
 					requestedPrs.length;
 				// Flat mode: rows keep the status-lane ordering (needs input, then
@@ -3798,7 +3804,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				// tab rather than the session.
 				const selectedRows = open
 					? []
-					: [...rows, ...snoozedRows, ...awaitingRepoRows, ...autoRows].filter(
+					: [...rows, ...snoozedRows, ...awaitingRepoRows].filter(
 							rowOwnsSelection,
 						);
 				const selectedReviewRows = open
@@ -3881,7 +3887,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 										needsReviewRepoRows.length +
 										approvedRows.length +
 										awaitingRepoRows.length +
-										autoRows.length +
 										prs.length +
 										requestedPrs.length}
 								</span>
@@ -3982,19 +3987,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 												)
 												.map(renderPrRow),
 										]}
-								{/* Last in the band: your own work reads first, then what
-								    the machine started in this project. Its key sits in
-								    the `auto-created:` namespace rather than the band's
-								    own `repo:` one, which is what keeps it CLOSED by
-								    default (collapseKey / isOpen): every other lane in a
-								    band opens with it, and this one is an annex: a count
-								    you can open, not fifty rows in front of your work. */}
-								{renderLabeledLane({
-									label: "Auto created",
-									name: "autocreated",
-									rows: autoRows,
-									ns: `auto-created:repo:${repo}::`,
-								})}
 							</div>
 						) : (
 							(selectedReviewRows.length > 0 ||
@@ -4711,6 +4703,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								// glyph: full contrast under the pointer or while open.
 								filterOpen ? "text-fg" : "text-dim hover:text-fg",
 							)}
+							// A Base UI tooltip is a DESCRIPTION, not a name, so an
+							// icon-only trigger still needs one of its own. The phone twin
+							// below always carried this; the desktop button did not.
+							aria-label="Group, filter & sort"
 							onClick={() => setFilterOpen((o) => !o)}
 						>
 							{/* 22, the scale's standalone step: these are section-header
@@ -5536,63 +5532,21 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			)}
 			</div>
 
-				{/* Ordinary work created through the Automation machine identity.
-				    This section exists only under the default Me lens; Everyone and
-				    the Automation person lens place the same rows in Workspaces.
-				    Under a repo grouping the rows sit in their project's band as an
-				    Auto created lane, so what is left here is the handful that
-				    belongs to no project (autoCreatedTopRows) and usually nothing,
-				    which renders no section at all. */}
-				{autoCreatedTopRows.length > 0 && (
-					<div
-						className={cn(SIDEBAR_INDEPENDENT_SECTION, "mt-2")}
-						data-sidebar-section="auto-created"
-					>
-						<div
-							className={cn(
-								SIDEBAR_BAND_LABEL,
-								"py-0 pl-0 pr-2 desktop:pr-0",
-								SIDEBAR_STICKY_BAND,
-								SIDEBAR_STICKY_BAND_ROW,
-								SIDEBAR_STUCK_BACKING,
-							)}
-							data-sticky-head
-						>
-							<button
-								className={cn(
-									SIDEBAR_BAND_TOGGLE,
-									SIDEBAR_BAND_TOGGLE_INSET,
-								)}
-								onClick={() => toggleBand("auto-created")}
-								title={
-									autoCreatedOpen
-										? "Collapse auto-created workspaces"
-										: "Expand auto-created workspaces"
-								}
-							>
-								<span className="min-w-0 truncate">Auto created</span>
-								<span className={SIDEBAR_GROUP_COUNT}>
-									{autoCreatedTopRows.length}
-								</span>
-								<IconChevronDown
-									className={cn(
-										SIDEBAR_BAND_CHEVRON,
-										"group-hover/band:visible group-hover/band:text-dim",
-										!autoCreatedOpen && SIDEBAR_BAND_CHEVRON_COLLAPSED,
-									)}
-									size={18}
-									style={{
-										transform: autoCreatedOpen ? "none" : "rotate(-90deg)",
-									}}
-								/>
-							</button>
-						</div>
-						{autoCreatedOpen && (
-							<div className={SIDEBAR_INDEPENDENT_SCROLL}>
-								{renderStatusLanes(autoCreatedTopRows, "auto-created:")}
-							</div>
+				{/* The hide filter, said out loud. Faint, and it is its own undo. */}
+				{hiddenAutoCreatedRows > 0 && (
+					<button
+						className={cn(
+							"mt-1.5 flex w-full items-center gap-1.5 rounded-row px-4 py-1.5 text-left text-label text-faint",
+							SIDEBAR_HOVER_LAYER,
+							"hover:text-dim",
 						)}
-					</div>
+						onClick={() => setFilter({ autoCreated: "show" })}
+					>
+						<IconRobot size={20} className="shrink-0" />
+						<span className="min-w-0 truncate">
+							Show {hiddenAutoCreatedRows} auto created
+						</span>
+					</button>
 				)}
 
 				{/* ── Automations (one collapsible band, one group per automation) ── */}

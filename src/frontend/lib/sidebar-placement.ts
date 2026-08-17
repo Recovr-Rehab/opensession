@@ -15,7 +15,6 @@ export type SidebarPlacement =
 	| "approved-review"
 	| "awaiting-review"
 	| "completed-review"
-	| "auto-created"
 	| "status"
 	| "outside";
 
@@ -65,9 +64,17 @@ export function rowWasAutoCreated(row: WsRow): boolean {
 	);
 }
 
-/** The dedicated section exists only in the default lens. Aggregate and
- * machine-person lenses already include these rows in Workspaces. */
-export function rowUsesAutoCreatedSection(
+/**
+ * Whether an auto-created row belongs in the list the person lens is showing.
+ * The machine is not a teammate, so its work joins YOUR list (the default
+ * lens) rather than some named person's; the aggregate and machine-person
+ * lenses reach these rows through their own scope rules.
+ *
+ * Only the lens question lives here. Whether you want to see them at all is
+ * the `autoCreated` filter, and it is the caller's to apply, because a row you
+ * hid can still be one GitHub is asking you to review.
+ */
+export function rowAutoCreatedInLens(
 	row: WsRow,
 	personFilter: string,
 ): boolean {
@@ -138,12 +145,11 @@ export function classifySidebarPlacement(
 		if (mineRequest && reviewCompleted) return "completed-review";
 	}
 
-	if (
-		context.inStatusScope &&
-		rowUsesAutoCreatedSection(row, context.personFilter)
-	)
-		return "auto-created";
-
+	// Auto-created work has no band of its own: it files into the ordinary
+	// lanes with everything else and identifies itself with a robot beside the
+	// name. Kent's call, 2026-08-17, replacing the separate "Auto created"
+	// section: a row you have to go and find in an annex is not part of the
+	// list, and the filter is what handles there being a lot of them.
 	return context.inStatusScope ? "status" : "outside";
 }
 

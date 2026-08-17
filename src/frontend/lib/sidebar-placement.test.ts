@@ -4,6 +4,7 @@ import type { WsRow } from "./sidebar-types";
 import {
 	classifySidebarPlacement,
 	placeSidebarRows,
+	rowAutoCreatedInLens,
 	rowWasAutoCreated,
 	rowsAtPlacement,
 	sessionWasAutoCreated,
@@ -131,7 +132,6 @@ describe("sidebar row placement", () => {
 			"approved-review",
 			"awaiting-review",
 			"completed-review",
-			"auto-created",
 			"status",
 			"outside",
 		];
@@ -188,7 +188,10 @@ describe("sidebar row placement", () => {
 		]);
 	});
 
-	test("gives ordinary machine-created work its own section under me", () => {
+	// Machine-started work has no band of its own: it lands in the ordinary
+	// lanes wearing a robot, and the `autoCreated` filter is what removes it.
+	// The lens still has to admit it, since its owner is nobody.
+	test("files ordinary machine-created work into the status lanes", () => {
 		const candidate = row(
 			"native-parity",
 			[
@@ -200,7 +203,37 @@ describe("sidebar row placement", () => {
 			{ owner: "automation" },
 		);
 
-		expect(classifySidebarPlacement(candidate, context)).toBe("auto-created");
+		expect(classifySidebarPlacement(candidate, context)).toBe("status");
+		expect(rowAutoCreatedInLens(candidate, "me")).toBe(true);
+		expect(rowAutoCreatedInLens(candidate, "kent")).toBe(false);
+		// Out of scope is what the caller's hide filter produces.
+		expect(
+			classifySidebarPlacement(candidate, { ...context, inStatusScope: false }),
+		).toBe("outside");
+	});
+
+	// A review being asked of you outranks the hide filter: the caller drops a
+	// hidden row out of status scope, and this row still lands in Needs review.
+	test("keeps a review request on a machine-created row out of scope's reach", () => {
+		const candidate = row(
+			"native-parity",
+			[
+				session("native-parity", {
+					createdBy: "Automation",
+					startedBy: "Automation",
+					reviewRequest: {
+						to: "Michiel",
+						by: "Automation",
+						at: "2026-08-16T00:00:00Z",
+					},
+				}),
+			],
+			{ owner: "automation" },
+		);
+
+		expect(
+			classifySidebarPlacement(candidate, { ...context, inStatusScope: false }),
+		).toBe("needs-review");
 	});
 
 	test("renders machine-created rows once under aggregate and machine lenses", () => {
@@ -266,11 +299,12 @@ describe("sidebar row placement", () => {
 		});
 
 		expect(rowWasAutoCreated(draft)).toBe(true);
-		expect(classifySidebarPlacement(draft, context)).toBe("auto-created");
+		expect(rowAutoCreatedInLens(draft, "me")).toBe(true);
+		expect(classifySidebarPlacement(draft, context)).toBe("status");
 	});
 
-	// The row mark reads the same fact the section does, so a row keeps saying
-	// it was automatic once a grouping moves it in beside human work.
+	// The row mark and the filter read one fact, so what a row says about
+	// itself and what the filter removes cannot drift apart.
 	test("marks a session the machine identity created", () => {
 		expect(
 			sessionWasAutoCreated(session("auto", { createdBy: "Automation" })),
