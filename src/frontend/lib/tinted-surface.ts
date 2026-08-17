@@ -1,14 +1,23 @@
 /**
  * The writing surface for an input that is not in its ordinary state.
  *
- * It is a wash of the mode's ink and nothing else — the shape a team note
+ * It is a wash of the mode's ink and nothing else, the shape a team note
  * already takes in the transcript (components/NoteBubble.tsx). No hatch, no
- * coloured edge: a mode that lasts the whole session has to sit under text you
- * are reading and writing all day, and texture at that duty cycle reads as
- * damage to the box rather than as a state. The surfaces differ only in ink, in
- * strength, and in what they are painted on. Ask mode is ambient, on for the
- * session's whole life, so it is the lighter of the two; note mode is one
- * message, so it is allowed to be louder.
+ * coloured edge: a surface you read and write over all day cannot carry a
+ * texture, which at that duty cycle lands as damage to the box rather than as
+ * a state.
+ *
+ * Read "not in its ordinary state" strictly. A wash marks an ACT that differs
+ * from the default: this one message is a note, this session is being created
+ * read-only. It is not for a condition that holds for a surface's whole life,
+ * and the session composer in ask mode was exactly that. Painting it anyway
+ * spent the box's loudest signal on something that never changes, and left the
+ * two washes one faint tint apart (7% green under note's 10% yellow, 8.6 dE in
+ * light and less in dark) on the only surface where both can appear. Worse,
+ * the transition that has to be unmistakable, ⌘N inside an ask session, was a
+ * crossfade from green to yellow instead of from plain to yellow. Ask mode
+ * names itself with a chip and a placeholder in the composer instead, so a
+ * washed composer means a team note and nothing else.
  *
  * The base is the surface the wash actually covers, and it matters:
  *
@@ -30,7 +39,10 @@ function tint(ink: string, percent: number, base: string): string {
 	return `color-mix(in srgb, ${ink} ${percent}%, ${base})`;
 }
 
-/** Read-only mode, wherever you meet it: the session composer, the palette. */
+/** Read-only as a choice being made: the new-session palette, where ask is
+ *  picked against a default with the mode control right beside it and the
+ *  surface is on screen for seconds. Not the session composer, which lives in
+ *  the mode rather than choosing it. */
 export function askSurface(base: string): string {
 	return tint("var(--green)", 7, base);
 }

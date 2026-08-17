@@ -6308,9 +6308,8 @@ export function SessionViewer({
 										(noteMode || files.length === 0) &&
 										!forkFrom
 									}
-									// Ask mode lost its chip when the toolbar collapsed into
-									// the "+", so the writing surface carries the state
-									// instead — tinted and hatched.
+									// Draws the "Ask" marker in the toolbar. It does not tint
+									// the writing surface: that is note mode's signal alone.
 									askMode={isAsk}
 									// Team notes: the send posts to the transcript for the
 									// humans reading it, never to the agent (⌘N, or the "+").

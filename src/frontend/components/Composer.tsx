@@ -74,7 +74,7 @@ import {
   paletteIconBtnRound,
   palettePill,
 } from "../lib/palette-classes";
-import { askSurface, noteSurface } from "../lib/tinted-surface";
+import { noteSurface } from "../lib/tinted-surface";
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
 import { ContextMenu, MenuShortcut } from "../ui/menu";
@@ -234,10 +234,18 @@ interface Props {
   noteMode?: boolean;
   onNoteModeChange?: (on: boolean) => void;
   /**
-   * Ask mode: this session can read the checkout but not change it. Tints the
-   * writing surface the way note mode does — the state has no chip of its own,
-   * so the surface is what says it. Note mode wins while it's on: ask mode is
-   * ambient for the session's whole life, note mode is one message.
+   * Ask mode: this session can read the checkout but not change it. It names
+   * itself with a chip in the toolbar and in the field's placeholder, and
+   * deliberately does NOT wash the writing surface: that channel belongs to
+   * note mode.
+   *
+   * A state that holds for the session's whole life says nothing in the
+   * loudest signal the box has, and it costs the one-message state the
+   * contrast that state needs. Painted at 7% green under note mode's 10%
+   * yellow, the two washes were one faint tint apart (8.6 dE in light, less in
+   * dark), and turning note mode on inside an ask session crossfaded green to
+   * yellow rather than plain to yellow, which is the one moment the note has
+   * to be unmistakable.
    */
   askMode?: boolean;
 }
@@ -1097,10 +1105,9 @@ export function Composer({
   }
 
   const effectiveModel = model || defaultModel;
+  // The one wash this box paints. Ask mode deliberately has none: see the
+  // `askMode` prop above.
   const surfaceStyle = {
-    ...(askMode
-      ? { backgroundColor: askSurface("var(--composer-surface)") }
-      : {}),
     "--composer-note-bg": noteSurface("var(--composer-surface)"),
   } as React.CSSProperties;
 
@@ -1558,11 +1565,13 @@ export function Composer({
           )}
 
           {/* Ask mode's marker. Nothing renders in the ordinary state; when ask
-              mode is on it names itself next to the "+", so the tinted surface
-              isn't the only thing saying so. Ask mode's only exit cuts a
-              worktree, so clicking the marker opens the menu and lets you pick
-              the labelled row instead. Note mode is not here: it is a chip
-              above the field, with a real ✕ (see ComposerContextChip). */}
+              mode is on it names itself next to the "+", and with the field's
+              placeholder that is the whole of how the composer says so. The
+              writing surface stays ordinary on purpose, because a wash there
+              means a team note (see the `askMode` prop). Ask mode's only exit
+              cuts a worktree, so clicking the marker opens the menu and lets
+              you pick the labelled row instead. Note mode is not here: it is a
+              chip above the field, with a real ✕ (see ComposerContextChip). */}
           <AnimatePresence initial={false}>
             {!minimized && askMode && (
               <motion.div
@@ -1580,12 +1589,11 @@ export function Composer({
                   <button
                     type="button"
                     // Same "on" language as paletteIconBtnOn: the state
-                    // lives in a filled wash, not a ring — a full-strength
-                    // border reads as a validation outline, and it's the one
-                    // thing that survives when the fill lands on the tinted
-                    // surface this marker always sits on. Slightly stronger
-                    // than that rule's 16/24 for exactly that reason: here the
-                    // wash is the same ink as the surface under it.
+                    // lives in a filled wash, not a ring. A full-strength
+                    // border reads as a validation outline. Slightly stronger
+                    // than that rule's 16/24 because this chip is now the only
+                    // mark the composer carries for the mode, and it has to
+                    // hold its own beside a model pill and a filled send disc.
                     // `rounded-control`, not the pill it used to be: this chip
                     // stands next to the model pill and the icon buttons, and
                     // three different corners in one 88px row is what made the
