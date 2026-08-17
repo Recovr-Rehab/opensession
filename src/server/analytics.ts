@@ -19,13 +19,13 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { $ } from "bun";
-import { stateDir , isNativeSessionId} from "./paths";
-import { OPENSESSION_SESSIONS_DIR } from "./paths";
+import { isNativeSessionId, OPENSESSION_SESSIONS_DIR, stateDir } from "./paths";
 import { configuredRepos, defaultRepo, githubBotLogins } from "./config";
 import { ghRateLimited, isGhRateLimitMsg, noteGhRateLimited } from "./github-limit";
 import { readFeedback } from "../agents/github/feedback";
 import type { FeedbackRecord } from "../agents/github/feedback-gates";
 import { engineUsageForDates } from "./engine-usage";
+import { gitIdentityFor } from "./shared/user-mappings";
 
 const AUDIT_DIR = stateDir("audit");
 const CACHE_DIR = stateDir("analytics-cache");
@@ -352,6 +352,7 @@ interface SessionMeta {
 	id: string;
 	createdAt: string;
 	createdBy: string;
+	createdByLogin: string;
 	mode: string;
 	model: string;
 	branch: string;
@@ -388,6 +389,7 @@ function loadSessionMeta(): Map<string, SessionMeta> {
 					id,
 					createdAt: String(s.createdAt || ""),
 					createdBy,
+					createdByLogin: String(s.createdByLogin || ""),
 					mode: String(s.mode || ""),
 					model: String(s.model || ""),
 					branch: String(s.branch || ""),
@@ -829,6 +831,13 @@ function kindOwner(kind: string): string {
 	return "Other";
 }
 
+/** Collapse the display name, short name, and verified login for one teammate
+ *  onto the first-name label used by the rest of the people UI. */
+export function analyticsPersonName(name: string, login = ""): string {
+	const identity = gitIdentityFor(login) || gitIdentityFor(name);
+	return identity?.name.split(" ")[0] || name;
+}
+
 export async function buildAnalytics(from: string, to: string): Promise<AnalyticsSummary> {
 	const dates = utcDatesBetween(from, to);
 	const meta = loadSessionMeta();
@@ -942,11 +951,15 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 	// People arrive as free-text createdBy strings with inconsistent casing —
 	// merge case variants, preferring a variant that carries real capitals.
 	const personDisplay = new Map<string, string>();
-	const personKey = (name: string): string => {
-		const lower = name.toLowerCase();
+	const personKey = (name: string, login = ""): string => {
+		const canonical = analyticsPersonName(name, login);
+		const lower = canonical.toLowerCase();
 		const stored = personDisplay.get(lower);
-		if (!stored || (stored === stored.toLowerCase() && name !== lower)) {
-			personDisplay.set(lower, name === lower ? name.charAt(0).toUpperCase() + name.slice(1) : name);
+		if (!stored || (stored === stored.toLowerCase() && canonical !== lower)) {
+			personDisplay.set(
+				lower,
+				canonical === lower ? canonical.charAt(0).toUpperCase() + canonical.slice(1) : canonical,
+			);
 		}
 		return personDisplay.get(lower)!;
 	};
@@ -959,7 +972,7 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 			? ownerAgg(automationAgg, "GitHub review")
 			: s.automationName
 				? ownerAgg(automationAgg, s.automationName)
-				: ownerAgg(peopleAgg, personKey(s.createdBy || "Unknown"));
+				: ownerAgg(peopleAgg, personKey(s.createdBy || "Unknown", s.createdByLogin));
 		agg.sessionsCreated++;
 	}
 
@@ -993,7 +1006,7 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 				: m?.automationName
 					? ownerAgg(automationAgg, m.automationName)
 					: m
-						? ownerAgg(peopleAgg, personKey(m.createdBy || "Unknown"))
+						? ownerAgg(peopleAgg, personKey(m.createdBy || "Unknown", m.createdByLogin))
 						: isUnattendedKind
 							? ownerAgg(automationAgg, "Removed automation sessions")
 							: ownerAgg(peopleAgg, kindOwner(s.kind));
@@ -1257,13 +1270,20 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 const SUMMARY_FRESH_MS = 5 * 60 * 1000;
 /** Older than this and we'd rather make the user wait than show it. */
 const SUMMARY_STALE_SERVE_MS = 24 * 60 * 60 * 1000;
+// Bump when composition semantics change so a restart cannot serve a fresh but
+// obsolete disk summary before the background prewarm replaces it.
+const SUMMARY_VERSION = 2;
 const summaryCache = new Map<string, { at: number; summary: AnalyticsSummary }>();
 const summaryInflight = new Map<string, Promise<AnalyticsSummary>>();
+
+function summaryDiskName(from: string, to: string): string {
+	return `summary-v${SUMMARY_VERSION}-${from}-${to}`;
+}
 
 async function buildAndStore(key: string, from: string, to: string): Promise<AnalyticsSummary> {
 	const summary = await buildAnalytics(from, to);
 	summaryCache.set(key, { at: Date.now(), summary });
-	writeDiskCache(`summary-${from}-${to}`, summary);
+	writeDiskCache(summaryDiskName(from, to), summary);
 	// Bound the map under arbitrary custom ranges (entries are ~100KB).
 	if (summaryCache.size > 24) {
 		const oldest = [...summaryCache.entries()].sort((a, b) => a[1].at - b[1].at)[0];
@@ -1276,7 +1296,7 @@ export async function getAnalytics(from: string, to: string): Promise<AnalyticsS
 	const key = `${from}:${to}`;
 	let cached = summaryCache.get(key);
 	if (!cached) {
-		const disk = readDiskCache<AnalyticsSummary>(`summary-${from}-${to}`);
+		const disk = readDiskCache<AnalyticsSummary>(summaryDiskName(from, to));
 		if (disk) summaryCache.set(key, (cached = { at: disk.at, summary: disk.data }));
 	}
 	const age = cached ? Date.now() - cached.at : Infinity;
