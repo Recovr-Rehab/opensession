@@ -476,6 +476,22 @@ enum TranscriptGrouping {
         )
     }
 
+    private enum ReviewBlockRole {
+        case handoff(prNumber: Int?)
+        case userMessage
+        case other
+    }
+
+    /// Operational notices can retain the legacy `user` wire type. Match the
+    /// message presentation rule so only an actual person's message ends a loop.
+    private static func reviewBlockRole(_ block: TranscriptBlock) -> ReviewBlockRole {
+        guard case .message(let entry) = block else { return .other }
+        if entry.notice?.kind == "review-handoff" {
+            return .handoff(prNumber: handoffPrNumber(block))
+        }
+        return entry.isUser && entry.notice == nil ? .userMessage : .other
+    }
+
     /// A review handoff and the work it triggers form one quiet phase. A real
     /// user message always ends it, so people never lose their own request in
     /// a collapsed automation trail. Mirrors the web's `groupReviewLoops`.
@@ -489,30 +505,29 @@ enum TranscriptGrouping {
         var index = 0
         while index < blocks.count {
             let first = blocks[index]
-            guard isReviewHandoff(first) else {
+            guard case .handoff(let firstPrNumber) = reviewBlockRole(first) else {
                 grouped.append(first)
                 index += 1
                 continue
             }
             var loop: [TranscriptBlock] = [first]
             var rounds = 1
-            var prNumber = handoffPrNumber(first)
+            var prNumber = firstPrNumber
             while index + 1 < blocks.count {
                 let next = blocks[index + 1]
+                let nextRole = reviewBlockRole(next)
                 // Notes and walkthroughs have their own placement and must
                 // never vanish inside an automation disclosure.
                 if case .note = next { break }
                 if case .walkthrough = next { break }
                 // A normal user message is a new conversation phase. A second
                 // review handoff belongs to this loop and starts its next round.
-                if case .message(let entry) = next, entry.isUser, !isReviewHandoff(next) {
-                    break
-                }
+                if case .userMessage = nextRole { break }
                 index += 1
                 loop.append(next)
-                if isReviewHandoff(next) {
+                if case .handoff(let nextPrNumber) = nextRole {
                     rounds += 1
-                    prNumber = prNumber ?? handoffPrNumber(next)
+                    prNumber = prNumber ?? nextPrNumber
                 }
             }
             grouped.append(.reviewLoop(ReviewLoop(
@@ -532,7 +547,7 @@ enum TranscriptGrouping {
         let lastLoop = grouped.lastIndex { if case .reviewLoop = $0 { true } else { false } }
         guard let lastLoop else { return grouped }
         let interrupted = grouped[(lastLoop + 1)...].contains { block in
-            if case .message(let entry) = block { return entry.isUser }
+            if case .userMessage = reviewBlockRole(block) { return true }
             return false
         }
         guard case .reviewLoop(var loop) = grouped[lastLoop] else { return grouped }
@@ -546,8 +561,8 @@ enum TranscriptGrouping {
     /// loop. The server classifies it (protocol `notices.ts`), so nothing here
     /// re-derives it from the message text.
     private static func isReviewHandoff(_ block: TranscriptBlock) -> Bool {
-        guard case .message(let entry) = block else { return false }
-        return entry.notice?.kind == "review-handoff"
+        if case .handoff = reviewBlockRole(block) { return true }
+        return false
     }
 
     /// The PR the handoff's title names ("PR #128 review feedback"), when it

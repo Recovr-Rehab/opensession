@@ -395,6 +395,24 @@ final class TranscriptGroupingTests: XCTestCase {
         )
     }
 
+    /// Classified operational notices can retain the legacy user wire type
+    /// even though they are not a person's message.
+    private func legacyStatusNotice(_ id: String) -> TranscriptEntry {
+        TranscriptEntry(
+            id: id,
+            type: "user",
+            content: "Deployment finished for PR #128.",
+            notice: EntryNotice(
+                kind: "system",
+                title: "Deployment finished for PR #128",
+                tone: "info",
+                body: nil,
+                link: nil,
+                icon: "deploy"
+            )
+        )
+    }
+
     private func firstLoop(in blocks: [TranscriptBlock]) -> ReviewLoop? {
         for block in blocks {
             if case .reviewLoop(let loop) = block { return loop }
@@ -472,6 +490,19 @@ final class TranscriptGroupingTests: XCTestCase {
         }
     }
 
+    func testLegacyUserShapedStatusNoticeStaysInsideTheLoop() {
+        append([
+            handoff("h1", pr: 128),
+            TranscriptEntry(id: "a1", type: "assistant", content: "Fixed."),
+            legacyStatusNotice("deploy"),
+        ])
+
+        let blocks = viewModel.displayBlocks
+        XCTAssertEqual(blocks.count, 1, "an operational notice remains part of the review phase")
+        guard let loop = firstLoop(in: blocks) else { return XCTFail("expected a loop") }
+        XCTAssertTrue(loop.blocks.flatMap(\.entryIds).contains("deploy"))
+    }
+
     func testNotesStayOutsideTheLoop() {
         let entries = [handoff("h1", pr: 7)]
         let blocks = TranscriptGrouping.blocks(
@@ -542,6 +573,20 @@ final class TranscriptGroupingTests: XCTestCase {
             reviewResult: result
         )
         XCTAssertNil(firstLoop(in: interrupted)?.result)
+
+        let statusAfterReview = TranscriptGrouping.blocks(
+            from: TranscriptGrouping.displayItems(
+                from: entries + [legacyStatusNotice("deploy")]
+            ),
+            live: false,
+            worktreeDir: nil,
+            reviewResult: result
+        )
+        XCTAssertEqual(
+            firstLoop(in: statusAfterReview)?.result?.status,
+            .passed,
+            "an operational notice must not invalidate the review verdict"
+        )
     }
 
     func testAReviewIsPendingWhileItIsStaleOrChecksAreRunning() {
