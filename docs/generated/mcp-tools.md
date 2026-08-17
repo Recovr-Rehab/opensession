@@ -755,7 +755,7 @@ Publish this run's durable HTML report into the Reports view.
 
 ### `publish_report`
 
-`mcp__opensession-report__publish_report` · input: `title` (string, required), `html` (string, required), `assets` (string[]), `summary` (string), `urgency` ("low" | "medium" | "high" | "critical"), `confidence` ("low" | "medium" | "high"), `highlights` (object[])
+`mcp__opensession-report__publish_report` · input: `title` (string, required), `html` (string, required), `assets` (string[]), `summary` (string), `urgency` ("low" | "medium" | "high" | "critical"), `confidence` ("low" | "medium" | "high"), `highlights` (object[]), `tasks` (object[])
 
 Publish this run's HTML report with optional durable assets shown in the Reports view — latest per automation, with history. Store image/media evidence as assets instead of base64 data URLs. Use it when the task's outcome is a recurring readable report; each publish adds a new entry, so publish once per run with the final document.
 
