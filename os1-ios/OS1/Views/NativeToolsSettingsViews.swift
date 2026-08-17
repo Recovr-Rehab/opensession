@@ -3,6 +3,47 @@ import SwiftUI
 // Native settings for operational tools. These views intentionally use only
 // SettingsAPI so they can be embedded in the existing Settings navigation.
 
+func automationFormBody(
+    isEditing: Bool,
+    name: String,
+    prompt: String,
+    schedule: String,
+    mode: String,
+    model: String,
+    owner: String,
+    workspaceId: String,
+    mcpAccess: String,
+    mcpServers: String,
+    createdBy: String
+) -> [String: Any] {
+    let servers = mcpServers
+        .split(separator: ",")
+        .map { $0.trimmingCharacters(in: .whitespaces) }
+        .filter { !$0.isEmpty }
+    let trimmedOwner = owner.trimmingCharacters(in: .whitespacesAndNewlines)
+    var body: [String: Any] = [
+        "name": name,
+        "prompt": prompt,
+        "schedule": schedule,
+        "mode": mode,
+        "model": model,
+    ]
+    if isEditing {
+        // Empty strings deliberately clear these optional fields. Everything
+        // outside this form stays absent, so the server's PATCH-like PUT keeps it.
+        body["owner"] = trimmedOwner
+        body["workspaceId"] = workspaceId
+    } else {
+        body["createdBy"] = createdBy
+        if !trimmedOwner.isEmpty { body["owner"] = trimmedOwner }
+        if !workspaceId.isEmpty { body["workspaceId"] = workspaceId }
+    }
+    if mcpAccess == "none" { body["mcpServers"] = [] }
+    if mcpAccess == "selected" { body["mcpServers"] = servers }
+    if mcpAccess == "all", isEditing { body["mcpServers"] = NSNull() }
+    return body
+}
+
 struct AutomationSettingsView: View {
     var initialAutomationId: String? = nil
     @State private var automations: [Automation] = SettingsCache.value("automations") ?? []
@@ -108,6 +149,7 @@ private struct AutomationDetailView: View {
     @State private var showingEditor = false
     @State private var confirmingDelete = false
     @State private var error: String?
+    @State private var workspaces: [OS1API.WorkspaceSummary] = []
 
     init(automation: Automation, onChanged: @escaping () async -> Void) {
         self.automation = automation
@@ -126,6 +168,8 @@ private struct AutomationDetailView: View {
             Section("Configuration") {
                 LabeledContent("Schedule", value: current.schedule?.isEmpty == false ? current.schedule! : "Manual")
                 LabeledContent("Mode", value: current.mode ?? "ask")
+                LabeledContent("Owner", value: current.owner?.isEmpty == false ? current.owner! : "Unassigned")
+                LabeledContent("Workspace", value: workspaceLabel)
                 if let model = current.model { LabeledContent("Model", value: model) }
                 if let servers = current.mcpServers, !servers.isEmpty { LabeledContent("MCP servers", value: servers.joined(separator: ", ")) }
             }
@@ -151,6 +195,12 @@ private struct AutomationDetailView: View {
         .confirmationDialog("Delete this automation?", isPresented: $confirmingDelete, titleVisibility: .visible) {
             Button("Delete", role: .destructive) { Task { await delete() } }
         } message: { Text("This permanently removes its configuration and schedule.") }
+        .task { workspaces = (try? await OS1API.workspaces()) ?? [] }
+    }
+
+    private var workspaceLabel: String {
+        guard let id = current.workspaceId, !id.isEmpty else { return "None" }
+        return workspaces.first { $0.id == id }?.name ?? id
     }
 
     private func update(_ body: [String: Any]) async -> String? {
@@ -180,8 +230,11 @@ private struct AutomationEditorView: View {
     @State private var schedule: String
     @State private var mode: String
     @State private var model: String
+    @State private var owner: String
+    @State private var workspaceId: String
     @State private var mcpAccess: String
     @State private var mcpServers: String
+    @State private var workspaces: [OS1API.WorkspaceSummary] = []
     @State private var saving = false
     @State private var error: String?
 
@@ -193,6 +246,8 @@ private struct AutomationEditorView: View {
         _schedule = State(initialValue: automation?.schedule ?? "")
         _mode = State(initialValue: automation?.mode ?? "ask")
         _model = State(initialValue: automation?.model ?? "")
+        _owner = State(initialValue: automation?.owner ?? "")
+        _workspaceId = State(initialValue: automation?.workspaceId ?? "")
         _mcpAccess = State(initialValue: automation?.mcpServers == nil ? "all" : (automation?.mcpServers?.isEmpty == true ? "none" : "selected"))
         _mcpServers = State(initialValue: automation?.mcpServers?.joined(separator: ", ") ?? "")
     }
@@ -204,6 +259,25 @@ private struct AutomationEditorView: View {
                 TextEditor(text: $prompt).frame(minHeight: 140).overlay(alignment: .topLeading) { if prompt.isEmpty { Text("Prompt").foregroundStyle(.tertiary).padding(.top, 8).allowsHitTesting(false) } }
             }
             Section("Schedule") { TextField("Cron expression (leave blank for manual)", text: $schedule).fontDesign(.monospaced) }
+            Section("Responsibility") {
+                TextField("Owner (optional)", text: $owner)
+                    .autocorrectionDisabled()
+                Text("Who reviews what it does. It appears in their sidebar.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Picker("Workspace", selection: $workspaceId) {
+                    Text("No workspace").tag("")
+                    if !workspaceId.isEmpty, !workspaces.contains(where: { $0.id == workspaceId }) {
+                        Text(workspaceId).tag(workspaceId)
+                    }
+                    ForEach(workspaces, id: \.id) { workspace in
+                        Text(workspace.name).tag(workspace.id)
+                    }
+                }
+                Text("Files the automation under a workspace. Its runs stay in Automations.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             Section("Execution") {
                 Picker("Mode", selection: $mode) { Text("Ask").tag("ask"); Text("Code").tag("code") }.pickerStyle(.segmented)
                 TextField("Model (optional)", text: $model).autocorrectionDisabled().noAutocapitalizationCompat()
@@ -223,14 +297,23 @@ private struct AutomationEditorView: View {
             ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
             ToolbarItem(placement: .confirmationAction) { Button(saving ? "Saving…" : "Save") { Task { await submit() } }.disabled(saving || name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) }
         }
+        .task { workspaces = (try? await OS1API.workspaces()) ?? [] }
     }
     private func submit() async {
         saving = true; defer { saving = false }
-        let servers = mcpServers.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        var body: [String: Any] = ["name": name, "prompt": prompt, "schedule": schedule, "mode": mode, "model": model, "createdBy": ServerConfig.shared.userName]
-        if mcpAccess == "none" { body["mcpServers"] = [] }
-        if mcpAccess == "selected" { body["mcpServers"] = servers }
-        if mcpAccess == "all", automation != nil { body["mcpServers"] = NSNull() }
+        let body = automationFormBody(
+            isEditing: automation != nil,
+            name: name,
+            prompt: prompt,
+            schedule: schedule,
+            mode: mode,
+            model: model,
+            owner: owner,
+            workspaceId: workspaceId,
+            mcpAccess: mcpAccess,
+            mcpServers: mcpServers,
+            createdBy: ServerConfig.shared.userName
+        )
         if let message = await save(body) { error = message } else { dismiss() }
     }
 }

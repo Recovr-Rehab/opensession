@@ -20,6 +20,8 @@ struct Automation: Codable, Sendable, Identifiable {
     var accountStrict: Bool?
     var usageCredits: Bool?
     var mcpServers: [String]?
+    var owner: String?
+    var workspaceId: String?
     var eventKey: String?
     var createdBy: String?
     var createdAt: String?
