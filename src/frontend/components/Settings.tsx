@@ -19,7 +19,6 @@ import {
 	SETTINGS_NAV_ICON,
 	SETTINGS_NAV_LIST,
 	SETTINGS_NAV_ROW,
-	settingsSeamStyle,
 } from "../lib/settings-classes";
 import { matchSections, type SectionHit } from "../lib/settings-search";
 import { Input } from "../ui/input";
@@ -758,7 +757,6 @@ export function Settings({
 	onSelect,
 	onShowRoot,
 	workspace,
-	railWidth,
 	children,
 }: {
 	onBack: () => void;
@@ -771,11 +769,6 @@ export function Settings({
 	/** Phone sheet's back-to-root (navigate to sectionless /settings). */
 	onShowRoot?: () => void;
 	workspace?: Workspace;
-	/** Width of the app rail this page replaces, in px, and 0 when it is
-	 * collapsed. The desktop entrance starts the content column at that seam
-	 * so the rail narrows into this nav instead of jumping (settingsSeamStyle).
-	 * App owns the number: the rail is resizable. */
-	railWidth: number;
 	/** The active tool's panel (App owns the tool components and their props). */
 	children?: React.ReactNode;
 }) {
@@ -822,7 +815,7 @@ export function Settings({
 	const firstHit = shown[0]?.hits[0]?.item;
 
 	return (
-		<div className={SETTINGS_PAGE} style={settingsSeamStyle(railWidth)}>
+		<div className={SETTINGS_PAGE}>
 			{/* Back and search stay put; only the section list scrolls, so neither
 			    they nor the account footer are lost once the list outgrows the nav. */}
 			<aside className={SETTINGS_NAV}>

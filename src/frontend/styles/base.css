@@ -2670,34 +2670,3 @@ html[data-theme="light"] span.commit-ref:hover {
 		transform: translateY(0) scale(1);
 	}
 }
-
-/* Settings arriving over the app on desktop (see lib/settings-classes.ts).
-   The page replaces the whole app body in one frame, and the two layouts do
-   not line up: the app's rail is resizable and 280px by default, the settings
-   nav is 232px, so the seam between chrome and content teleports 48px left at
-   the instant of the click. That jump is the reason the page reads as "where
-   am I" rather than "here is settings", and no amount of fading fixes it,
-   because the fade happens somewhere the seam has already left.
-
-   So the seam is what animates. The content column starts at
-   `--settings-seam`, the app rail's own edge measured at the moment Settings
-   mounts, and glides to where the settings seam belongs, carrying its hairline
-   and edge shadow with it. The rail you clicked in narrows into the nav.
-   Nothing on screen jumps, and nothing has to be recognised twice.
-
-   Two things this deliberately does NOT do. It does not fade: the page is
-   fully legible in the first frame, which is the half of "know where you got
-   to" that motion cannot do. And the nav does not animate at all. Fading the
-   nav in alongside was tried and is wrong: with both columns starting at zero
-   the window is briefly EMPTY, and a blank flash is a worse thing to have
-   added than the hard cut it was meant to soften. An entrance needs something
-   to enter over.
-
-   Only the `from` step is written, so the column settles at whatever its own
-   rules say instead of at a resting value copied in here. The fallback in the
-   var is the default rail's 48px, for a render that has no measurement yet. */
-@keyframes settings-paper-in {
-	from {
-		transform: translateX(var(--settings-seam, 48px));
-	}
-}
