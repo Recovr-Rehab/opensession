@@ -112,6 +112,9 @@ struct SessionsListView: View {
     /// The session the deck asked to open. Pushed only once the cover is gone:
     /// appending to `path` while it is still dismissing loses the push.
     @State private var pendingCatchUpOpen: Session?
+    /// A SHA followed from transcript prose. The sheet resolves it lazily
+    /// through `/api/commit`, on both the touch and pointer clients.
+    @State private var commitReference: CommitLinks.Reference?
     /// A tapped "Try again" on the unreachable screen, until it lands.
     @State private var isRetrying = false
     #if os(iOS)
@@ -279,6 +282,10 @@ struct SessionsListView: View {
             // the navigation container — is what lets a transcript push the
             // worker it spawned instead of leaving the id as dead text.
             .environment(\.openURL, OpenURLAction { url in
+                if let reference = CommitLinks.reference(from: url) {
+                    commitReference = reference
+                    return .handled
+                }
                 // A PR chip that reached this far is one no transcript claimed
                 // — the Mac app, or a card outside a session. There is no
                 // review panel to push without a session, so it opens on
@@ -381,6 +388,9 @@ struct SessionsListView: View {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(createError ?? "")
+            }
+            .sheet(item: $commitReference) { reference in
+                CommitDetailView(reference: reference)
             }
             #if os(iOS)
             .alert(
