@@ -394,10 +394,23 @@ export function PlainThreadActions({
 				className,
 			)}
 		>
+			{/* One hairline around the set. This is a control's own edge, not a
+			    frame around a section: the ghost buttons have no shape of their
+			    own, so beside a subject they read as loose words trailing off it
+			    rather than as the ticket's controls. The line gives the cluster
+			    one, the way a segmented control has one.
+
+			    `rounded-lg` (14) is `rounded-control` (12) plus the 2px inset,
+			    so the box stays concentric with the buttons sitting in it. */}
 			<div
 				className={cn(
-					"flex items-center gap-1",
-					inBar ? "flex-nowrap" : "flex-wrap",
+					"flex items-center gap-1 rounded-lg border border-line p-0.5",
+					// In the thread the group is a column item, so without this the
+					// box stretches the width of the message list and trails off
+					// into nothing after the last button. It hugs whenever the row
+					// fits on one line; a row that wraps still fills the width,
+					// which is what a shrink-to-fit box does.
+					inBar ? "flex-nowrap" : "flex-wrap self-start",
 				)}
 			>
 				{status === "DONE" ? (
