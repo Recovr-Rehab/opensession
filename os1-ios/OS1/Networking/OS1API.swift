@@ -970,14 +970,21 @@ enum OS1API {
     }
 
     struct AuthStatus: Decodable {
+        /// The server requires sign-in at all. Absent on servers that predate
+        /// it, which is why `AuthGate` treats "not true" as "don't judge".
+        let required: Bool?
         let authenticated: Bool?
+        /// Signed out because GitHub ended this person's grant, not because
+        /// they never signed in, so `login` is still theirs.
+        let reconnectRequired: Bool?
         let login: String?
         let name: String?
     }
 
     /// Signed-in identity for the current bearer token. Used to backfill
     /// `githubLogin` on devices whose token predates the app storing the
-    /// login at sign-in time (the avatar needs it).
+    /// login at sign-in time (the avatar needs it), and to confirm a 401
+    /// before the app puts a reconnect in front of anyone (`AuthGate`).
     static func authStatus() async throws -> AuthStatus {
         try await get("/api/auth/status")
     }
@@ -1092,6 +1099,16 @@ enum OS1API {
     // MARK: - Session creation
 
     private struct ServerErrorBody: Decodable { let error: String? }
+
+    /// Every request's non-2xx tail reports its status here, so the one that
+    /// means "this token is finished" is noticed in a single place rather than
+    /// at each of the tails that could see it. The gate confirms before it acts
+    /// (`AuthGate`), so a route answering 401 on its own account costs nothing
+    /// more than one extra call to /api/auth/status.
+    private static func noteStatus(_ status: Int) {
+        guard status == 401 else { return }
+        AuthGate.shared.noteUnauthorized()
+    }
 
     struct RepoInfo: Codable, Identifiable, Hashable {
         let id: String
@@ -1947,6 +1964,7 @@ enum OS1API {
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, response) = try await URLSession.shared.data(for: request)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            noteStatus(http.statusCode)
             if let serverError = try? JSONDecoder().decode(ServerErrorBody.self, from: data),
                let message = serverError.error {
                 throw APIError.server(message)
@@ -1978,6 +1996,7 @@ enum OS1API {
         request.httpBody = data
         let (body, response) = try await URLSession.shared.data(for: request)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            noteStatus(http.statusCode)
             if let serverError = try? JSONDecoder().decode(ServerErrorBody.self, from: body),
                let message = serverError.error {
                 throw APIError.server(message)
@@ -2005,6 +2024,7 @@ enum OS1API {
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, response) = try await URLSession.shared.data(for: request)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            noteStatus(http.statusCode)
             if let serverError = try? JSONDecoder().decode(ServerErrorBody.self, from: data),
                let message = serverError.error {
                 throw APIError.server(message)
@@ -2057,6 +2077,7 @@ enum OS1API {
             return try await get(path, authorized: authorized, revalidating: revalidating)
         }
         if let http, !(200..<300).contains(http.statusCode) {
+            noteStatus(http.statusCode)
             throw APIError.http(http.statusCode)
         }
         let decoded = try await decodeDetached(T.self, from: data)
@@ -2098,6 +2119,7 @@ enum OS1API {
     private static func responseData(for request: URLRequest) async throws -> Data {
         let (data, response) = try await imageSession.data(for: request)
         if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            noteStatus(http.statusCode)
             throw APIError.http(http.statusCode)
         }
         return data

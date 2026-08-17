@@ -62,6 +62,10 @@ export interface AuthStatus {
   admin?: boolean;
   /** Server supports the redirect (authorization-code) sign-in. */
   redirect?: boolean;
+  /** Signed out because GitHub permanently rejected this person's grant, not
+   *  because they never signed in: `login` is still theirs, and the way back
+   *  in is the same authorize. */
+  reconnectRequired?: boolean;
   login?: string;
   name?: string;
 }
@@ -321,6 +325,8 @@ export function UserGate({ children }: { children: React.ReactNode }) {
     return (
       <GithubSignIn
         redirect={auth.redirect === true}
+        reconnect={auth.reconnectRequired === true}
+        login={auth.login}
         onSignedIn={(status) => {
           setAuth(status);
           setAuthStatusCache(status);
@@ -371,9 +377,15 @@ export function UserGate({ children }: { children: React.ReactNode }) {
 
 function GithubSignIn({
   redirect,
+  reconnect = false,
+  login,
   onSignedIn,
 }: {
   redirect: boolean;
+  /** The grant behind an existing session died; this is the same screen and
+   *  the same flow, saying which of the two happened. */
+  reconnect?: boolean;
+  login?: string;
   onSignedIn: (status: AuthStatus) => void;
 }) {
   const [flow, setFlow] = useState<{
@@ -436,12 +448,30 @@ function GithubSignIn({
   }
 
   return (
-    <AuthCard title={flow ? "Enter this code" : `Sign in to ${PRODUCT_NAME}`}>
+    <AuthCard
+      title={
+        flow
+          ? "Enter this code"
+          : reconnect
+            ? "Reconnect GitHub"
+            : `Sign in to ${PRODUCT_NAME}`
+      }
+    >
       {!flow ? (
         <>
           <AuthCopy>
-            Sessions act as your own GitHub account, so pull requests are
-            authored by you.
+            {reconnect ? (
+              <>
+                GitHub's authorization
+                {login ? <> for @{login}</> : null} expired. Sign in again to
+                continue.
+              </>
+            ) : (
+              <>
+                Sessions act as your own GitHub account, so pull requests are
+                authored by you.
+              </>
+            )}
           </AuthCopy>
           <Button
             variant="primary"
@@ -454,7 +484,11 @@ function GithubSignIn({
               else void start();
             }}
           >
-            {!redirect && starting ? "Starting…" : "Continue with GitHub"}
+            {!redirect && starting
+              ? "Starting…"
+              : reconnect
+                ? "Reconnect with GitHub"
+                : "Continue with GitHub"}
           </Button>
           {redirect && (
             <Button

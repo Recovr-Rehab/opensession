@@ -38,7 +38,7 @@
 
 import { homeDir } from "./paths";
 import { isDevInstance } from "./dev-mode";
-import { chmodSync, readFileSync } from "fs";
+import { chmodSync, readFileSync, statSync } from "fs";
 import { audit } from "./audit";
 import { configuredIdentity, getConfig } from "./config";
 import { writeJsonAtomic } from "./shared/atomic-write";
@@ -140,6 +140,7 @@ function readStore(): Store {
 
 function writeStore(store: Store): void {
   writeJsonAtomic(storePath(), store);
+  invalidateReconnectCache();
   try {
     chmodSync(storePath(), 0o600);
   } catch {}
@@ -572,6 +573,60 @@ export function connectedGithubAccounts(): GithubConnectedAccount[] {
   return Object.values(readStore().users)
     .map(stripStoredAccount)
     .sort((a, b) => a.login.localeCompare(b.login));
+}
+
+// ── The reconnect gate ───────────────────────────────────────────────────────
+
+/** Cached because the sign-in gate asks on EVERY request (opensession.ts) and
+ *  the store is a file read and a JSON parse. Validated by the store's path and
+ *  mtime rather than by a TTL, so it is never stale by a window: a `stat` is
+ *  what a request pays, and `writeStore` clears it outright, which is what
+ *  makes a reconnect take effect in the same breath rather than a beat later. */
+let reconnectCache: { path: string; stamp: number; logins: Set<string> } | null =
+  null;
+
+function invalidateReconnectCache(): void {
+  reconnectCache = null;
+}
+
+function refreshDeadLogins(): Set<string> {
+  const path = storePath();
+  let stamp = 0;
+  try {
+    stamp = statSync(path).mtimeMs;
+  } catch {} // no store yet: nobody has connected, so nobody is dead
+  if (reconnectCache?.path === path && reconnectCache.stamp === stamp) {
+    return reconnectCache.logins;
+  }
+  const logins = new Set<string>();
+  for (const account of Object.values(readStore().users)) {
+    if (account.refreshFailedAt) logins.add(account.login.toLowerCase());
+  }
+  reconnectCache = { path, stamp, logins };
+  return logins;
+}
+
+/**
+ * This person has to authorize GitHub again before anything can act as them.
+ *
+ * A web session is not an independent credential: it is a 90-day cache of one
+ * GitHub authorize (routes/auth.ts: "one authorize covers both"), and the
+ * sign-in screen's promise is that pull requests are authored by you. Once
+ * GitHub permanently rejects the refresh grant, the thing the session attests
+ * to is gone, so the sign-in gate refuses it and the person goes back through
+ * the flow that repairs both halves at once.
+ *
+ * Two limits are deliberate. Only a grant that WAS connected and is now dead
+ * counts (`refreshFailedAt`); never-connected and deliberately-disconnected
+ * people are a different state and are not worth blocking the app over. And it
+ * fails open by construction, because `readStore` swallows an unreadable file
+ * and returns no users. A GitHub outage must not lock the team out of reading
+ * their own sessions. The security boundary stays downstream, where the getters
+ * refuse to hand out a token that has expired.
+ */
+export function githubReconnectRequired(login: string | null | undefined): boolean {
+  if (!login || !githubUserAuthActive()) return false;
+  return refreshDeadLogins().has(login.toLowerCase());
 }
 
 export function removeGithubAccount(login: string): boolean {

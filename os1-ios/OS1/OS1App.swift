@@ -86,6 +86,7 @@ struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("os1.appearance") private var appearance = "system"
     @State private var config = ServerConfig.shared
+    @State private var authGate = AuthGate.shared
     @State private var showedInitialSettings = false
     @State private var showSettings = false
     #if os(iOS)
@@ -97,6 +98,15 @@ struct RootView: View {
             .tint(OS1VisualStyle.accentInk)
             .os1AccentToggles()
             .background(OS1VisualStyle.background.ignoresSafeArea())
+            // An overlay, not a sheet: the server is refusing this session, so
+            // everything underneath is answering 401 and there is nothing to
+            // swipe back to. It clears itself when the sign-in lands.
+            .overlay {
+                if let reason = authGate.blocked {
+                    ReconnectCover(reason: reason)
+                        .transition(.opacity)
+                }
+            }
             .preferredColorScheme(preferredColorScheme)
             .sheet(isPresented: $showSettings) {
                 #if os(macOS)
@@ -156,6 +166,9 @@ struct RootView: View {
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active {
                     GitHubSignIn.shared.nudge()
+                    // A grant can die while the app is in the background, and
+                    // polls that fail quietly are exactly what this replaces.
+                    AuthGate.shared.confirm()
                 } else {
                     DraftsStore.shared.flushAll()
                 }

@@ -53,6 +53,12 @@ export function useWebSocket(presenceActive = true) {
   // Flipped true by ANY inbound message (pong or otherwise); the heartbeat
   // flips it false after each ping. Still false at the next beat = dead socket.
   const aliveRef = useRef(true);
+  // Whether this socket has ever been accepted in this page's life. It is what
+  // separates "the session died under an open tab" from "we are sitting on the
+  // sign-in screen": this hook mounts ABOVE UserGate, so on the gate the socket
+  // never opens and the upgrade 401s for ever. Reloading on that would be an
+  // endless refresh of the sign-in card.
+  const everOpenRef = useRef(false);
   // Presence, tracked separately from the watch: a hidden or unfocused tab keeps
   // streaming its session (unread counts, notifications) but must stop telling
   // teammates its owner is looking at that session.
@@ -87,6 +93,7 @@ export function useWebSocket(presenceActive = true) {
     ws.onopen = () => {
       if (wsRef.current !== ws) return;
       setConnected(true);
+      everOpenRef.current = true;
       // Flush anything queued while we were down. FIFO preserves the order the
       // user issued them; skip messages that have gone stale.
       const now = Date.now();
@@ -181,6 +188,14 @@ export function useWebSocket(presenceActive = true) {
           const response = await fetch(`${API_BASE}/auth/status`);
           const status = response.ok ? await response.json() : null;
           if (status?.local && !status.authenticated) return;
+          // The session stopped being accepted while this tab stayed open:
+          // it expired, or the GitHub grant behind it died. Retrying every 2s
+          // for ever leaves a live-looking app that can reach nothing, so
+          // reload into the gate, which asks for the sign-in that repairs it.
+          if (everOpenRef.current && status?.required && !status.authenticated) {
+            window.location.reload();
+            return;
+          }
         } catch {}
       }
       if (disposedRef.current || wsRef.current !== ws) return;

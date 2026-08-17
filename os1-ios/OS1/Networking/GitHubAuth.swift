@@ -99,6 +99,10 @@ enum GitHubAuth {
                 }
                 ServerConfig.shared.token = token
                 ServerConfig.shared.githubLogin = poll.login ?? ""
+                // This authorize repaired both halves (the server's own
+                // comment: "one authorize covers both"), so a reconnect cover
+                // waiting on it comes down here.
+                AuthGate.shared.cleared()
                 if let name = poll.name?.trimmingCharacters(in: .whitespacesAndNewlines),
                    !name.isEmpty {
                     // First name only, like the web picker — sessions store

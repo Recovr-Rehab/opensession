@@ -14,6 +14,7 @@ import {
   connectedGithubAccounts,
   githubAuthEnv,
   githubCredentialForLogin,
+  githubReconnectRequired,
   githubUserAuthActive,
   githubUserAuthSettings,
   githubUserLoginForRun,
@@ -204,6 +205,60 @@ describe("token lookups + runner env", () => {
     expect(account.needsReconnect).toBe(true);
     // The marker itself is internal — only the derived flag is public.
     expect((account as any).refreshFailedAt).toBeUndefined();
+  });
+
+  test("a dead grant is what the sign-in gate refuses, and only that", () => {
+    // The gate blocks the whole app, so what it does NOT fire on matters as
+    // much as what it does: a healthy grant, someone who never connected, and
+    // an instance with the feature off all have to walk straight through.
+    enableFeature();
+    seedToken();
+    expect(githubReconnectRequired("alice")).toBe(false);
+    expect(githubReconnectRequired("bob")).toBe(false);
+    expect(githubReconnectRequired(null)).toBe(false);
+
+    writeFileSync(
+      process.env.OPENSESSION_GITHUB_AUTH_STORE!,
+      JSON.stringify({
+        users: {
+          alice: {
+            login: "alice",
+            token: "gho_test123",
+            refreshToken: "ghr_dead",
+            refreshFailedAt: "2026-08-04T10:00:00.000Z",
+            connectedAt: "2026-07-18T00:00:00.000Z",
+          },
+        },
+      }),
+    );
+    expect(githubReconnectRequired("alice")).toBe(true);
+    expect(githubReconnectRequired("ALICE")).toBe(true); // logins are casefolded
+    expect(githubReconnectRequired("bob")).toBe(false);
+
+    // Reconnecting is the way out, and it works by replacing the row: the
+    // fresh record carries no refreshFailedAt, so the gate opens again.
+    removeGithubAccount("alice");
+    seedToken();
+    expect(githubReconnectRequired("alice")).toBe(false);
+  });
+
+  test("nobody is gated when the feature is off, or when the store is unreadable", () => {
+    // Fail-open, deliberately. A GitHub outage or a garbled store must not
+    // lock the team out of reading their own sessions; the credential getters
+    // are where this fails closed.
+    writeFileSync(
+      process.env.OPENSESSION_GITHUB_AUTH_STORE!,
+      JSON.stringify({
+        users: {
+          alice: { login: "alice", token: "t", refreshFailedAt: "2026-08-04T10:00:00.000Z", connectedAt: "x" },
+        },
+      }),
+    );
+    expect(githubReconnectRequired("alice")).toBe(false); // feature off
+    enableFeature();
+    expect(githubReconnectRequired("alice")).toBe(true);
+    writeFileSync(process.env.OPENSESSION_GITHUB_AUTH_STORE!, "{ not json");
+    expect(githubReconnectRequired("alice")).toBe(false);
   });
 
   test("builds a credential only for the exact connected login", () => {

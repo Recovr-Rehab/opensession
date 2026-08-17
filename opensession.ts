@@ -38,7 +38,10 @@ import { startPublicIngress } from "./src/server/public-ingress";
 import { recordRecoveredRunEvent, restorePromptQueues, resumeDrainedSessions, snapshotActiveSessions, startLoopTicker } from "./src/server/run-session";
 import { startMcpHttpServer, startRunRpcServer } from "./src/server/run-rpc";
 import { handleSandboxWsUpgrade, startTimerPoisonHeartbeat, timerPoisonRequestCheck } from "./src/server/run-ws";
-import { startGithubTokenRefresher } from "./src/server/github-auth";
+import {
+	githubReconnectRequired,
+	startGithubTokenRefresher,
+} from "./src/server/github-auth";
 import { startGoalTicker } from "./src/server/goal-runner";
 import { startSessionIndexSweeper } from "./src/server/session-index";
 import { ensurePreviewPoolScheduler } from "./src/server/preview-pool";
@@ -297,11 +300,26 @@ const server: import("bun").Server<WSClientData> = hotServe({
 			// overrides any client-claimed user name.
 			const hostedLoopback = isLoopbackHostname(url.hostname);
 			let authUser: WebIdentity | null = null;
+			// A dead GitHub grant is a dead session, and the 401 says so rather
+			// than pretending the cookie went missing: the client then asks for a
+			// reconnect instead of a sign-in it thinks it already did.
+			let reconnectRequired = false;
 			if (webAuthRequired()) {
 				authUser = resolveWebAuth(req);
 				// Server-local CDP/CLI traffic has its own machine principal. A
 				// teammate's cookie must never let automation act as that person.
 				if (hostedLoopback && authUser?.automation !== true) authUser = null;
+				// Refused, never destroyed (githubReconnectRequired): the person
+				// re-authorizes and both halves are repaired, and if GitHub itself
+				// is the problem, turning userPrAuth off restores everyone.
+				if (
+					authUser &&
+					authUser.automation !== true &&
+					githubReconnectRequired(authUser.login)
+				) {
+					reconnectRequired = true;
+					authUser = null;
+				}
 				// GET /api/health stays open: it's the liveness signal for
 				// deploy.sh's post-restart poll, monitors, and the client's
 				// bootId-change detection — all pre-auth by nature.
@@ -355,7 +373,15 @@ const server: import("bun").Server<WSClientData> = hotServe({
 						// wider one.
 						/^\/(?:opensession\/)?d\//.test(path))
 				) {
-					return Response.json({ error: "Sign in required" }, { status: 401 });
+					return Response.json(
+						reconnectRequired
+							? {
+									error: "Reconnect your GitHub account to continue.",
+									reconnectRequired: true,
+								}
+							: { error: "Sign in required" },
+						{ status: 401 },
+					);
 				}
 			}
 

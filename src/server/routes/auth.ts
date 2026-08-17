@@ -21,8 +21,9 @@ import {
 import {
   exchangeGithubOauthCode,
   githubAuthorizeUrl,
-  githubDeviceFlowResult,
-  githubRedirectFlowAvailable,
+	githubDeviceFlowResult,
+	githubReconnectRequired,
+	githubRedirectFlowAvailable,
   pollGithubDeviceFlow,
   removeGithubAccount,
   startGithubDeviceFlow,
@@ -59,13 +60,27 @@ export async function handleAuthRoutes(
 
 	if (path === "/api/auth/status" && req.method === "GET") {
 		const identity = resolveWebAuth(req);
+		// GitHub has permanently rejected this person's grant, so the sign-in
+		// gate is already refusing their session (opensession.ts). Report them
+		// as signed out, which is what every client's gate keys on, but say
+		// which of the two it is, so the screen can ask for a reconnect and
+		// name the account instead of offering a plain sign-in.
+		const reconnect =
+			!!identity &&
+			!identity.automation &&
+			githubReconnectRequired(identity.login);
+		const signedIn = !!identity && !reconnect;
 		return Response.json({
 			required: webAuthRequired(),
-			authenticated: !!identity,
-			admin: workspaceAdminAuthorized({ authUser: identity }),
+			authenticated: signedIn,
+			admin: signedIn ? workspaceAdminAuthorized({ authUser: identity }) : false,
 			/** Redirect (authorization-code) flow available — the UI's primary
 			 *  sign-in when true; device flow is always there as fallback. */
 			redirect: githubRedirectFlowAvailable(),
+			...(reconnect ? { reconnectRequired: true } : {}),
+			// The login rides along even for a reconnect: the card names the
+			// account whose authorization lapsed, which is the whole difference
+			// between "sign in" and "sign in again as you".
 			...(identity ? { login: identity.login, name: identity.name } : {}),
 		});
 	}
