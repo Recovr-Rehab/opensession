@@ -1213,6 +1213,12 @@ export async function handleSessionsRoutes(
 					session.branch,
 					repoForPath(session.worktreeDir).id,
 				);
+				// A session can span repos, and each one it spans has a checkout
+				// of its own — cleaning up only the first would leave the rest on
+				// disk for the reaper to find days later.
+				for (const attached of session.attachedRepos || [])
+					if (attached.branch)
+						await removeWorktree(attached.branch, attached.repo);
 			}
 			return Response.json({ ok: true });
 		} catch (e: any) {
