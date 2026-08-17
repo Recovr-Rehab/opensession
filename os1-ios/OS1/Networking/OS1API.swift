@@ -373,6 +373,14 @@ enum OS1API {
         let path: String
         let size: Int
         let mtime: String
+        let description: String?
+
+        init(path: String, size: Int, mtime: String, description: String? = nil) {
+            self.path = path
+            self.size = size
+            self.mtime = mtime
+            self.description = description
+        }
 
         var id: String { path }
 
@@ -751,8 +759,36 @@ enum OS1API {
             let at: String
         }
 
+        struct Media: Decodable, Sendable, Equatable, Identifiable {
+            let kind: String
+            let src: String
+            let sessionId: String
+            let sessionTitle: String?
+            let at: String
+
+            var id: String { "\(kind)|\(sessionId)|\(at)|\(src)" }
+        }
+
         let prompt: Message?
         let lastMessage: Message?
+        let media: [Media]
+
+        init(prompt: Message?, lastMessage: Message?, media: [Media] = []) {
+            self.prompt = prompt
+            self.lastMessage = lastMessage
+            self.media = media
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case prompt, lastMessage, media
+        }
+
+        init(from decoder: Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            prompt = try values.decodeIfPresent(Message.self, forKey: .prompt)
+            lastMessage = try values.decodeIfPresent(Message.self, forKey: .lastMessage)
+            media = try values.decodeIfPresent([Media].self, forKey: .media) ?? []
+        }
     }
 
     static func gitStatus(sessionId: String, repo: String) async throws -> GitStatus? {

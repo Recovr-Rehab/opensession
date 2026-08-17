@@ -433,6 +433,22 @@ enum AssetKind {
     }
 }
 
+/// The assets whose contents are the useful label: pictures and recordings.
+/// Workspace Info shows these as frames; pages, documents, audio, and data keep
+/// their filename rows because their names and descriptions carry the meaning.
+enum AssetVisualKind: Equatable {
+    case image
+    case video
+
+    static func of(_ asset: OS1API.SessionAsset) -> AssetVisualKind? {
+        switch asset.ext {
+        case "png", "jpg", "jpeg", "gif", "webp", "ico": .image
+        case "mp4", "webm", "mov": .video
+        default: nil
+        }
+    }
+}
+
 #if os(iOS)
 /// One asset, rendered.
 private struct AssetPreview: View {

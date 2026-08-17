@@ -1,6 +1,11 @@
 import SwiftUI
 
 #if os(iOS)
+import AVFoundation
+import AVKit
+import ImageIO
+import UIKit
+
 /// Native counterpart of mobile web's title-opened workspace info page.
 struct WorktreeInfoView: View {
     @Bindable var viewModel: SessionViewModel
@@ -18,6 +23,8 @@ struct WorktreeInfoView: View {
     @State private var diff: OS1API.SessionDiff?
     @State private var assets: [OS1API.SessionAsset] = []
     @State private var overview: OS1API.WorkspaceOverview?
+    @State private var conversationImage: WorkspaceImageSelection?
+    @State private var conversationVideo: OS1API.WorkspaceOverview.Media?
     @State private var sandboxStatus: SessionSandboxStatus?
     @State private var sandboxLoading = false
     @State private var sandboxAction: SessionSandboxAction?
@@ -48,6 +55,7 @@ struct WorktreeInfoView: View {
                 LazyVStack(alignment: .leading, spacing: 22) {
                     hero
                     overviewSection
+                    conversationSection
                     reviewSection
                     pullRequestSection
                     workSection
@@ -80,11 +88,19 @@ struct WorktreeInfoView: View {
             .refreshable { await refresh() }
             .onChange(of: viewModel.isRunning) { wasRunning, isRunning in
                 if wasRunning && !isRunning {
-                    Task { await loadGitDetails() }
+                    // The completed turn may have produced conversation media
+                    // and assets as well as worktree changes.
+                    Task { await load() }
                 }
             }
             .navigationDestination(item: $panel) { panel in
                 SessionPanelView(panel: panel, viewModel: viewModel)
+            }
+            .fullScreenCover(item: $conversationImage) { selection in
+                FullScreenImagePreview(items: conversationImageGallery, index: selection.index)
+            }
+            .fullScreenCover(item: $conversationVideo) { media in
+                WorkspaceVideoPreview(media: media)
             }
             .confirmationDialog(
                 "Recreate this sandbox?",
@@ -575,23 +591,52 @@ struct WorktreeInfoView: View {
     @ViewBuilder
     private var assetsSection: some View {
         if !assets.isEmpty {
-            InfoSection(title: "\(assets.count) asset\(assets.count == 1 ? "" : "s")") {
-                let shown = Array(assets.prefix(8))
+            InfoSection(
+                title: "Assets",
+                trailing: AnyView(
+                    Text(verbatim: "\(assets.count)")
+                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                )
+            ) {
+                if !visualAssets.isEmpty {
+                    WorkspaceMediaStrip(
+                        items: visualAssets.map {
+                            WorkspaceMediaItem.asset($0, sessionId: currentSession.id)
+                        },
+                        onOpen: { item in
+                            guard case .asset(let asset) = item.source else { return }
+                            panel = .asset(sessionId: currentSession.id, path: asset.path)
+                        }
+                    )
+                }
+                let shown = Array(fileAssets.prefix(8))
+                if !visualAssets.isEmpty, !shown.isEmpty { Divider() }
                 ForEach(shown) { asset in
                     Button {
                         panel = .asset(sessionId: currentSession.id, path: asset.path)
                     } label: {
-                        HStack(spacing: 10) {
+                        HStack(alignment: asset.description == nil ? .center : .top, spacing: 10) {
                             Image(systemName: AssetKind.of(asset).symbol)
                                 .symbolRenderingMode(.hierarchical)
                                 .font(.system(size: 13))
                                 .foregroundStyle(OS1VisualStyle.textDim)
                                 .frame(width: 20)
-                            Text(asset.path)
-                                .font(.footnote.monospaced())
-                                .foregroundStyle(OS1VisualStyle.text)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
+                                .padding(.top, asset.description == nil ? 0 : 2)
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(asset.path)
+                                    .font(.footnote.monospaced())
+                                    .foregroundStyle(OS1VisualStyle.text)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                if let description = asset.description, !description.isEmpty {
+                                    Text(description)
+                                        .font(.caption)
+                                        .foregroundStyle(OS1VisualStyle.textDim)
+                                        .lineLimit(2)
+                                        .multilineTextAlignment(.leading)
+                                }
+                            }
                             Spacer(minLength: 8)
                             Text(ByteCountFormatter.string(
                                 fromByteCount: Int64(asset.size),
@@ -610,8 +655,8 @@ struct WorktreeInfoView: View {
                     .buttonStyle(.plain)
                     if asset.id != shown.last?.id { Divider() }
                 }
-                if assets.count > shown.count {
-                    Text("\(assets.count - shown.count) more in the Assets tab.")
+                if fileAssets.count > shown.count {
+                    Text("\(fileAssets.count - shown.count) more in the Assets tab.")
                         .font(.caption)
                         .foregroundStyle(OS1VisualStyle.textDim)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -619,6 +664,14 @@ struct WorktreeInfoView: View {
                 }
             }
         }
+    }
+
+    private var visualAssets: [OS1API.SessionAsset] {
+        assets.filter { AssetVisualKind.of($0) != nil }
+    }
+
+    private var fileAssets: [OS1API.SessionAsset] {
+        assets.filter { AssetVisualKind.of($0) == nil }
     }
 
     /// Both reviewers of this change in one section, above the pull request
@@ -815,6 +868,67 @@ struct WorktreeInfoView: View {
                     .padding(12)
             }
         }
+    }
+
+    @ViewBuilder
+    private var conversationSection: some View {
+        let media = conversationMedia
+        if !media.isEmpty {
+            InfoSection(
+                title: "Conversation",
+                trailing: AnyView(
+                    Text(verbatim: "\(media.count)")
+                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                )
+            ) {
+                WorkspaceMediaStrip(
+                    items: media.map {
+                        WorkspaceMediaItem.conversation($0, label: mediaLabel($0))
+                    },
+                    onOpen: openConversationMedia
+                )
+            }
+        }
+    }
+
+    /// Exact repeats carry no additional information and cannot safely share a
+    /// SwiftUI identity. Keep the server's newest-first order while dropping
+    /// only byte-for-byte duplicate references.
+    private var conversationMedia: [OS1API.WorkspaceOverview.Media] {
+        var seen: Set<String> = []
+        return (overview?.media ?? []).filter { media in
+            guard media.kind == "image" || media.kind == "video" else { return false }
+            return seen.insert(media.id).inserted
+        }
+    }
+
+    private var conversationImageGallery: [PreviewImage] {
+        conversationMedia.filter { $0.kind == "image" }.map { media in
+            PreviewImage(
+                id: media.id,
+                source: .conversation(source: media.src, sessionId: media.sessionId),
+                label: mediaLabel(media)
+            )
+        }
+    }
+
+    private func openConversationMedia(_ item: WorkspaceMediaItem) {
+        guard case .conversation(let media) = item.source else { return }
+        if media.kind == "video" {
+            conversationVideo = media
+        } else if let index = conversationImageGallery.firstIndex(where: { $0.id == media.id }) {
+            conversationImage = WorkspaceImageSelection(index: index)
+        }
+    }
+
+    private func mediaLabel(_ media: OS1API.WorkspaceOverview.Media) -> String? {
+        var parts: [String] = []
+        if let title = media.sessionTitle, !title.isEmpty { parts.append(title) }
+        if let date = Session.parseISO(media.at) {
+            parts.append(date.formatted(date: .abbreviated, time: .shortened))
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     private var runSettingsSection: some View {
@@ -1301,6 +1415,260 @@ private struct InfoSection<Content: View>: View {
                     OS1VisualStyle.raised,
                     in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                 )
+        }
+    }
+}
+
+private struct WorkspaceImageSelection: Identifiable {
+    let index: Int
+    var id: Int { index }
+}
+
+private struct WorkspaceMediaItem: Identifiable {
+    enum Source {
+        case conversation(OS1API.WorkspaceOverview.Media)
+        case asset(OS1API.SessionAsset)
+    }
+
+    let id: String
+    let source: Source
+    let kind: AssetVisualKind
+    let sessionId: String
+    let src: String
+    let caption: String?
+    let accessibilityLabel: String
+
+    static func conversation(
+        _ media: OS1API.WorkspaceOverview.Media,
+        label: String?
+    ) -> WorkspaceMediaItem {
+        let kind = media.kind == "video" ? "recording" : "image"
+        return WorkspaceMediaItem(
+            id: media.id,
+            source: .conversation(media),
+            kind: media.kind == "video" ? .video : .image,
+            sessionId: media.sessionId,
+            src: media.src,
+            caption: nil,
+            accessibilityLabel: ["Open conversation \(kind)", label]
+                .compactMap { $0 }
+                .joined(separator: ", ")
+        )
+    }
+
+    static func asset(
+        _ asset: OS1API.SessionAsset,
+        sessionId: String
+    ) -> WorkspaceMediaItem {
+        WorkspaceMediaItem(
+            id: "asset|\(asset.path)|\(asset.mtime)",
+            source: .asset(asset),
+            kind: AssetVisualKind.of(asset) ?? .image,
+            sessionId: sessionId,
+            src: asset.path,
+            caption: asset.name,
+            accessibilityLabel: ["Open \(asset.name)", asset.description]
+                .compactMap { $0 }
+                .joined(separator: ", ")
+        )
+    }
+}
+
+/// A glanceable row of pictures and recordings in the workspace sheet. This
+/// follows native canvas grammar rather than copying the browser's responsive
+/// arithmetic: stable touch-sized cards, view-aligned horizontal scrolling,
+/// and a clipped next card that leaves the continuation discoverable.
+private struct WorkspaceMediaStrip: View {
+    let items: [WorkspaceMediaItem]
+    let onOpen: (WorkspaceMediaItem) -> Void
+
+    private let frameWidth: CGFloat = 152
+    private let frameHeight: CGFloat = 96
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            LazyHStack(alignment: .top, spacing: 10) {
+                ForEach(items) { item in
+                    Button { onOpen(item) } label: {
+                        VStack(alignment: .leading, spacing: 6) {
+                            WorkspaceMediaFrame(item: item)
+                                .frame(width: frameWidth, height: frameHeight)
+                            if let caption = item.caption {
+                                Text(caption)
+                                    .font(.caption)
+                                    .foregroundStyle(OS1VisualStyle.textDim)
+                                    .lineLimit(1)
+                                    .frame(width: frameWidth, alignment: .leading)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(item.accessibilityLabel)
+                }
+            }
+            .scrollTargetLayout()
+        }
+        .contentMargins(.horizontal, 12, for: .scrollContent)
+        .contentMargins(.vertical, 12, for: .scrollContent)
+        .scrollTargetBehavior(.viewAligned(limitBehavior: .always))
+    }
+}
+
+private struct WorkspaceMediaFrame: View {
+    let item: WorkspaceMediaItem
+
+    @State private var image: UIImage?
+    @State private var failed = false
+
+    private static let cache = NSCache<NSString, UIImage>()
+    private static let maximumVideoDownload = 32 * 1024 * 1024
+
+    var body: some View {
+        ZStack {
+            OS1VisualStyle.background
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .padding(4)
+            } else if failed {
+                Image(systemName: item.kind == .video ? "play.rectangle" : "photo")
+                    .font(.title3)
+                    .foregroundStyle(OS1VisualStyle.textFaint)
+            } else {
+                ProgressView().controlSize(.small)
+            }
+            if item.kind == .video {
+                Image(systemName: "play.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 34, height: 34)
+                    .background(.black.opacity(0.55), in: Circle())
+                    .offset(x: 1)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(OS1VisualStyle.border, lineWidth: 0.5)
+        }
+        .task(id: item.id) { await load() }
+    }
+
+    private func load() async {
+        if let cached = Self.cache.object(forKey: item.id as NSString) {
+            image = cached
+            failed = false
+            return
+        }
+        image = nil
+        failed = false
+        do {
+            switch item.kind {
+            case .image:
+                let data = try await imageData()
+                guard !Task.isCancelled else { return }
+                image = Self.thumbnail(from: data)
+            case .video:
+                image = try await videoFrame()
+            }
+            if let image { Self.cache.setObject(image, forKey: item.id as NSString) }
+            failed = image == nil
+        } catch {
+            guard !Task.isCancelled else { return }
+            failed = true
+        }
+    }
+
+    private func imageData() async throws -> Data {
+        switch item.source {
+        case .conversation:
+            return try await OS1API.conversationImage(source: item.src, sessionId: item.sessionId)
+        case .asset:
+            return try await OS1API.assetData(sessionId: item.sessionId, path: item.src)
+        }
+    }
+
+    private func videoFrame() async throws -> UIImage? {
+        let asset: AVURLAsset
+        switch item.source {
+        case .conversation:
+            guard let url = OS1API.conversationImageURL(
+                source: item.src,
+                base: ServerConfig.shared.baseURL
+            ) else { return nil }
+            asset = AVURLAsset(url: url)
+        case .asset:
+            if case .asset(let asset) = item.source,
+               asset.size > Self.maximumVideoDownload {
+                return nil
+            }
+            guard let url = OS1API.assetURL(sessionId: item.sessionId, path: item.src)
+            else { return nil }
+            let request = ServerConfig.shared.authorizedRequest(url)
+            let (temporaryURL, response) = try await URLSession.shared.download(for: request)
+            defer { try? FileManager.default.removeItem(at: temporaryURL) }
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode)
+            else { return nil }
+            asset = AVURLAsset(url: temporaryURL)
+        }
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 608, height: 384)
+        let result = try await generator.image(at: CMTime(seconds: 0.1, preferredTimescale: 600))
+        return UIImage(cgImage: result.image)
+    }
+
+    private static func thumbnail(from data: Data) -> UIImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let image = CGImageSourceCreateThumbnailAtIndex(
+                  source,
+                  0,
+                  [
+                      kCGImageSourceCreateThumbnailFromImageAlways: true,
+                      kCGImageSourceCreateThumbnailWithTransform: true,
+                      kCGImageSourceThumbnailMaxPixelSize: 608,
+                  ] as CFDictionary
+              )
+        else { return nil }
+        return UIImage(cgImage: image)
+    }
+}
+
+private struct WorkspaceVideoPreview: View {
+    let media: OS1API.WorkspaceOverview.Media
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var player: AVPlayer?
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if let player {
+                    VideoPlayer(player: player)
+                        .background(.black)
+                        .onDisappear { player.pause() }
+                } else {
+                    ProgressView().controlSize(.large)
+                }
+            }
+            .navigationTitle(media.sessionTitle ?? "Recording")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+            .task {
+                guard player == nil,
+                      let url = OS1API.conversationImageURL(
+                          source: media.src,
+                          base: ServerConfig.shared.baseURL
+                      )
+                else { return }
+                player = AVPlayer(url: url)
+            }
         }
     }
 }

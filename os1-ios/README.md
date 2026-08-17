@@ -133,7 +133,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
 - **Workspace details** — tapping the session title opens a native worktree sheet
   with repository and branch metadata, local git status, changed files, a
   color-coded pull request card for checks, review state and conflicts,
-  workspace context, model/reasoning controls, and live remote
+  workspace context, a Conversation filmstrip for pictures and recordings,
+  native preview frames for visual session assets while documents and data keep
+  their file rows, model/reasoning controls, and live remote
   sandbox status. Sandboxed workspaces expose explicit pause, wake, and
   confirmed recreate controls without embedding the web client. Its Effective
   config section resolves the next turn's model, engine, account, MCP access,
