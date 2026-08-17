@@ -72,6 +72,11 @@ export function SidebarToolRows({
 							<ContextMenu.SubmenuTrigger>
 								<span className={cn(ICON_SLOT, MENU_ICON)}>{tool.icon}</span>
 								<span className="grow truncate">{tool.label}</span>
+								{/* Which surface it is on, then the way in, then the tick —
+								    the tick last so it lands in the same column as every
+								    other row's, which is the column the eye reads to see
+								    what is showing. Off is the unticked state, exactly as a
+								    tool switched off has no tick. */}
 								<span className="shrink-0 text-faint">
 									{
 										SUPPORT_SURFACE_OPTIONS.find(
@@ -80,6 +85,7 @@ export function SidebarToolRows({
 									}
 								</span>
 								<IconChevronRight size={16} className="shrink-0 text-faint" />
+								{tool.surface !== "off" && check}
 							</ContextMenu.SubmenuTrigger>
 							<Menu.Popup>
 								{/* One queue, one decision: the band and the page are
