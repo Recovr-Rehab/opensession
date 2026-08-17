@@ -37,6 +37,7 @@ import {
 	SIDEBAR_LANE_DROP_HOVER,
 	SIDEBAR_LANE_EMPTY,
 	SIDEBAR_LIST,
+	SIDEBAR_NAV_X,
 	SIDEBAR_PIN_DRAG_ACTIVE,
 	SIDEBAR_PIN_ENTRY,
 	SIDEBAR_PIN_ENTRY_DRAGGING,
@@ -4276,6 +4277,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			className={cn(
 				"flex w-full min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
 				SIDEBAR_DENSITY_VARS,
+				SIDEBAR_NAV_X,
 				// The whole sidebar scrolls as one on phones, so the tool cards (and
 				// the Workspaces header) scroll away with the list instead of staying
 				// pinned above a separately-scrolling list. The top bar floats over
@@ -4325,7 +4327,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			{visibleTools.length > 0 && (
 				<nav
 					className={cn(
-						"flex [--sidebar-nav-x:6px]",
+						// `--sidebar-nav-x` is the sidebar's own (SIDEBAR_NAV_X); the strip
+						// reads it rather than setting one, so the tools sit on the same
+						// edges as the lists under them.
+						"flex",
 						isPhone
 							? // One horizontally-scrollable line of tap cards (Slack-home
 								// style) rather than a wrapping grid, so all the tools sit on

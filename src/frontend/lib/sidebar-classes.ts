@@ -105,6 +105,46 @@ export const SIDEBAR_DENSITY_VARS =
 	"desktop:data-[density=compact]:[--sidebar-row-pad:4px] desktop:data-[density=compact]:[--sidebar-tool-pad:4px] desktop:data-[density=compact]:[--sidebar-line-h:30px] desktop:data-[density=compact]:[--sidebar-cap-h:24px] desktop:data-[density=compact]:[--sidebar-band-slot:28px] desktop:data-[density=compact]:[--sidebar-group-gap:8px] desktop:data-[density=compact]:[--sidebar-row-action:24px]";
 
 /**
+ * The rail's HORIZONTAL scale, the counterpart to the vertical one above, on
+ * the same element.
+ *
+ * `--sidebar-nav-x` is the air between the column's own edges and the boxes
+ * inside it: the hover/selected pill, the tool rows, the band sections. It is
+ * not the text's inset — that is `--sidebar-icon-left` (16px, set on the
+ * sidebar container), the rail every leading mark and every title after it
+ * lines up on, at both densities and in every family.
+ *
+ * The two were previously one hand-summed pair per family (list 6 + row 10,
+ * list 6 + heading 10, section 6 + band 10, and the tool row's calc), so the
+ * outer air could not be changed without re-deriving four inner values and
+ * getting the shared rail wrong in whichever one was missed. Only the tool row
+ * ever expressed it as the subtraction it is; now they all do, through
+ * {@link SIDEBAR_RAIL_PAD}, and the air is one number.
+ *
+ * 10px, not the 6 it was. At 6 the pill sat all but against both edges of the
+ * column — a window edge on one side, the seam with the reading pane on the
+ * other — and a truncating title faded out 14px short of that seam, which read
+ * as the sidebar running out of room rather than as a margin.
+ */
+export const SIDEBAR_NAV_X = "[--sidebar-nav-x:6px] desktop:[--sidebar-nav-x:10px]";
+
+/**
+ * The left padding a box inside that inset takes to put its leading mark back
+ * on the shared rail. Fallbacks are today's numbers, so a row rendered outside
+ * the sidebar's own root still lands where it always did.
+ *
+ * Two spellings of one value, both written out: Tailwind compiles the class
+ * names it can FIND, variant and all, so a `desktop:` prefix glued on at a
+ * call site would compile to nothing. Rows take the bare one (their phone
+ * padding overrides it); the headings, which only re-inset on desktop, take
+ * the prefixed one.
+ */
+export const SIDEBAR_RAIL_PAD =
+	"pl-[calc(var(--sidebar-icon-left,16px)-var(--sidebar-nav-x,6px))]";
+export const SIDEBAR_RAIL_PAD_DESKTOP =
+	"desktop:pl-[calc(var(--sidebar-icon-left,16px)-var(--sidebar-nav-x,6px))]";
+
+/**
  * The sidebar's leading column. Every row and group header opens with one of
  * these, whatever it holds — a 22px glyph, a 20px one, a 7px status dot, a
  * repo tile — so the marks share a centre line AND the text after them shares
@@ -154,7 +194,7 @@ export const SIDEBAR_RAIL_GAP = "gap-[7px]";
  * class name would read as styling.
  */
 export const SIDEBAR_LIST =
-	"flex-none overflow-y-visible px-3 pt-px pb-0 desktop:px-1.5";
+	"flex-none overflow-y-visible px-3 pt-px pb-0 desktop:px-[var(--sidebar-nav-x)]";
 
 /**
  * Bands that are siblings of the workspace list (Automations, People) but
@@ -162,7 +202,7 @@ export const SIDEBAR_LIST =
  * scroll panes.
  */
 export const SIDEBAR_INDEPENDENT_SECTION =
-	"block min-w-0 flex-none mx-3 desktop:mx-1.5";
+	"block min-w-0 flex-none mx-3 desktop:mx-[var(--sidebar-nav-x)]";
 
 /** The scroll flow inside one of those bands — visible, not a nested pane. */
 export const SIDEBAR_INDEPENDENT_SCROLL = "min-w-0 overflow-y-visible pb-1.5";
@@ -308,9 +348,9 @@ export const SIDEBAR_GROUP_HEADER =
 export const SIDEBAR_HEADER_ROW =
 	"text-body desktop:h-[var(--sidebar-line-h)] desktop:min-h-[var(--sidebar-line-h)] desktop:text-item-title";
 
-/** Left pad aligns the icon with a base row (list 6 + header 10 = 16). */
+/** Left pad puts the icon on the shared rail, whatever the list's inset is. */
 export const SIDEBAR_GROUP_HEADER_INSET =
-	"pt-[11px] pr-1 pb-[11px] pl-1 desktop:pt-1 desktop:pr-1.5 desktop:pb-1 desktop:pl-2.5";
+	`pt-[11px] pr-1 pb-[11px] pl-1 desktop:pt-1 desktop:pr-1.5 desktop:pb-1 ${SIDEBAR_RAIL_PAD_DESKTOP}`;
 
 /**
  * Status lanes, inbox bands and Snoozed — the groups nested inside a list or a
@@ -538,8 +578,7 @@ export const SIDEBAR_BAND_TOGGLE =
  * the glyphless labels on the same 16px rail as Tools, Workspaces and lane
  * captions. The phone layout keeps its tighter base inset.
  */
-export const SIDEBAR_BAND_TOGGLE_INSET =
-	"pr-1 pl-2 desktop:pr-2 desktop:pl-[10px]";
+export const SIDEBAR_BAND_TOGGLE_INSET = `pr-1 pl-2 desktop:pr-2 ${SIDEBAR_RAIL_PAD_DESKTOP}`;
 
 /**
  * The chevron reveals on hover but stays IN LAYOUT at all times (visibility,

@@ -6,6 +6,7 @@ import {
 	SIDEBAR_HOVER_LAYER,
 	SIDEBAR_RAIL,
 	SIDEBAR_RAIL_GAP,
+	SIDEBAR_RAIL_PAD,
 	SIDEBAR_ROW_CHIP,
 	SIDEBAR_STATUS_DOT,
 	SIDEBAR_SWIPE_ACTION,
@@ -55,7 +56,7 @@ import React, { useEffect, useRef, useState } from "react";
  *  Phones keep `py-[13px]` at both densities: 36px is a reading height, not a
  *  tap target, so the compact values are gated to desktop where they are set. */
 export const SIDEBAR_ROW =
-	"group relative mt-0.5 w-full rounded-row border-0 bg-transparent py-[var(--sidebar-row-pad)] pr-2 pl-2.5 text-left text-fg phone:px-2 phone:py-[13px]";
+	`group relative mt-0.5 w-full rounded-row border-0 bg-transparent py-[var(--sidebar-row-pad)] pr-2 ${SIDEBAR_RAIL_PAD} text-left text-fg phone:px-2 phone:py-[13px]`;
 
 /** A row's title: one line that fades smoothly at the available edge instead
  *  of ending in an ellipsis. Read conversations stay quiet; unread ones
