@@ -7,6 +7,12 @@
  */
 import type { AgentModule } from "../types";
 import { verifyStripeSignature } from "../../server/shared/signature";
+import {
+  MAX_WEBHOOK_BODY_BYTES,
+  RequestBodyTooLargeError,
+  readRequestTextWithinLimit,
+  webhookBodyTooLargeResponse,
+} from "../../server/shared/bounded-body";
 import { handleStripeEvent } from "./handlers";
 
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || "";
@@ -18,7 +24,13 @@ export class StripeAgent implements AgentModule {
     const routes = new Map<string, (req: Request, url: URL) => Promise<Response>>();
 
     routes.set("POST /stripe/webhook", async (req) => {
-      const body = await req.text();
+      let body: string;
+      try {
+        body = await readRequestTextWithinLimit(req, MAX_WEBHOOK_BODY_BYTES);
+      } catch (error) {
+        if (error instanceof RequestBodyTooLargeError) return webhookBodyTooLargeResponse(MAX_WEBHOOK_BODY_BYTES);
+        throw error;
+      }
       const signature = req.headers.get("stripe-signature") || "";
 
       if (!verifyStripeSignature(body, signature, STRIPE_WEBHOOK_SECRET)) {

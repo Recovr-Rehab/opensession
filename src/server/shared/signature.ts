@@ -14,9 +14,12 @@ export function verifySlackSignature(
   signature: string,
   secret: string
 ): boolean {
+  // An absent secret must never turn into a known, forgeable HMAC key.
+  if (!secret) return false;
+
   // Reject requests older than 5 minutes
-  const ts = parseInt(timestamp, 10);
-  if (Math.abs(Date.now() / 1000 - ts) > 300) return false;
+  const ts = Number(timestamp);
+  if (!Number.isSafeInteger(ts) || Math.abs(Date.now() / 1000 - ts) > 300) return false;
 
   const sigBasestring = `v0:${timestamp}:${body}`;
   const expected =
@@ -39,6 +42,9 @@ export function verifyGitHubSignature(
   signature: string,
   secret: string
 ): boolean {
+  // An absent secret must never turn into a known, forgeable HMAC key.
+  if (!secret) return false;
+
   const expected =
     "sha256=" + createHmac("sha256", secret).update(body, "utf8").digest("hex");
 

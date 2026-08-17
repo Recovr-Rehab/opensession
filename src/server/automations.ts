@@ -7,6 +7,11 @@ import { randomUUIDv7 } from "bun";
 import { OPENSESSION_SESSIONS_DIR , newSessionId} from "./paths";
 import { mkdirSync, readdirSync, readFileSync, unlinkSync, existsSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
+import {
+  RequestBodyTooLargeError,
+  readRequestTextWithinLimit,
+  webhookBodyTooLargeResponse,
+} from "./shared/bounded-body";
 import { labelIdentity } from "./shared/user-mappings";
 import { parseCron, cronMatches, nextRun } from "./cron";
 import {
@@ -1710,8 +1715,11 @@ export function getWebhookRoutes(
 
     let payload = "";
     try {
-      payload = (await req.text()).slice(0, 10_000);
-    } catch {}
+      payload = await readRequestTextWithinLimit(req, 10_000);
+    } catch (error) {
+      if (error instanceof RequestBodyTooLargeError) return webhookBodyTooLargeResponse(10_000);
+      throw error;
+    }
 
     console.log(`[automations] Webhook trigger: "${automation.name}"`);
     void runAutomation(automation, onSessionCreated, {

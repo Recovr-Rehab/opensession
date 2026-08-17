@@ -4,6 +4,7 @@
 import { connectResultPage } from "../../server/connect-result-page";
 import { fetchWithTimeout } from "../../server/shared/fetch-with-timeout";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
+import { randomBytes, timingSafeEqual } from "crypto";
 import {
   configuredIntegration,
   configuredServer,
@@ -13,6 +14,8 @@ import {
 const LINEAR_CLIENT_ID = process.env.LINEAR_CLIENT_ID || "";
 const LINEAR_CLIENT_SECRET = process.env.LINEAR_CLIENT_SECRET || "";
 const TOKENS_FILE = `${process.env.HOME}/.linear-agent-tokens.json`;
+const STATE_COOKIE = "__Host-linear-oauth-state";
+const STATE_TTL_SECONDS = 10 * 60;
 
 function redirectUri(): string {
   const configured = configuredIntegration("linear").oauthRedirectUrl;
@@ -99,15 +102,49 @@ export async function getValidToken(orgId: string, tokens: LinearTokens): Promis
   return tokens[orgId]?.accessToken || null;
 }
 
+function cookieValue(req: Request, name: string): string | null {
+  const cookie = req.headers.get("cookie");
+  if (!cookie) return null;
+  for (const part of cookie.split(";")) {
+    const [key, ...value] = part.trim().split("=");
+    if (key === name && value.length) return value.join("=");
+  }
+  return null;
+}
+
+function stateCookie(state: string, maxAge: number): string {
+  return `${STATE_COOKIE}=${state}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAge}`;
+}
+
+function statesMatch(actual: string | null, expected: string | null): boolean {
+  if (!actual || !expected) return false;
+  const actualBytes = Buffer.from(actual);
+  const expectedBytes = Buffer.from(expected);
+  return actualBytes.length === expectedBytes.length && timingSafeEqual(actualBytes, expectedBytes);
+}
+
+function consumeState(response: Response): Response {
+  response.headers.append("Set-Cookie", stateCookie("", 0));
+  return response;
+}
+
 export function handleAuthorize(): Response {
+  const state = randomBytes(32).toString("base64url");
   const params = new URLSearchParams({
     client_id: LINEAR_CLIENT_ID,
     redirect_uri: redirectUri(),
     response_type: "code",
     scope: "app:assignable read write",
     actor: "app",
+    state,
   });
-  return Response.redirect(`https://linear.app/oauth/authorize?${params}`, 302);
+  return new Response(null, {
+    status: 302,
+    headers: {
+      Location: `https://linear.app/oauth/authorize?${params}`,
+      "Set-Cookie": stateCookie(state, STATE_TTL_SECONDS),
+    },
+  });
 }
 
 // Every exit here lands in a person's browser, so they all render the shared
@@ -124,10 +161,15 @@ function failed(message: string): Response {
   });
 }
 
-export async function handleCallback(url: URL, tokens: LinearTokens): Promise<Response> {
+export async function handleCallback(req: Request, url: URL, tokens: LinearTokens): Promise<Response> {
   const code = url.searchParams.get("code");
+  const state = url.searchParams.get("state");
+  const expectedState = cookieValue(req, STATE_COOKIE);
+  if (!statesMatch(state, expectedState)) {
+    return consumeState(failed("The authorization could not be verified. Start again."));
+  }
   if (!code) {
-    return failed("The redirect came back without a code, so nothing was authorized.");
+    return consumeState(failed("The redirect came back without a code, so nothing was authorized."));
   }
 
   const response = await fetchWithTimeout("https://api.linear.app/oauth/token", {
@@ -163,20 +205,20 @@ export async function handleCallback(url: URL, tokens: LinearTokens): Promise<Re
         expiresAt: Date.now() + (data.expires_in || 3600) * 1000,
       };
       await saveTokens(tokens);
-      return connectResultPage({
+      return consumeState(connectResultPage({
         ok: true,
         server: "linear",
         title: "Linear authorized",
         message: `${personaName()} can pick up tickets in ${orgName} now.`,
         action: { close: true },
-      });
+      }));
     }
-    return failed("Linear authorized, but did not say which workspace. Try again.");
+    return consumeState(failed("Linear authorized, but did not say which workspace. Try again."));
   }
 
-  return failed(
+  return consumeState(failed(
     data?.error_description ||
       data?.error ||
       "Linear did not return an access token.",
-  );
+  ));
 }

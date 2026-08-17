@@ -21,6 +21,12 @@
  */
 
 import { createHmac, timingSafeEqual } from "crypto";
+import {
+  MAX_WEBHOOK_BODY_BYTES,
+  RequestBodyTooLargeError,
+  readRequestTextWithinLimit,
+  webhookBodyTooLargeResponse,
+} from "../shared/bounded-body";
 import { codeStorageConfig, configuredRepos } from "../config";
 import { prHostFor } from "../pr-host";
 import { invalidateSessionsCache } from "../session-cache";
@@ -140,7 +146,13 @@ export async function handleCsWebhook(req: Request): Promise<Response> {
       { status: 503 },
     );
   }
-  const body = await req.text();
+  let body: string;
+  try {
+    body = await readRequestTextWithinLimit(req, MAX_WEBHOOK_BODY_BYTES);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) return webhookBodyTooLargeResponse(MAX_WEBHOOK_BODY_BYTES);
+    throw error;
+  }
   const signature = req.headers.get("x-pierre-signature") || "";
   if (!verifyCsWebhookSignature(body, signature, secret)) {
     console.error("[codestorage] Invalid webhook signature");

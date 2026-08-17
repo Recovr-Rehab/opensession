@@ -10,6 +10,11 @@
 import { configuredIntegration, defaultRepo, personaName } from "../../server/config";
 import type { AgentModule } from "../types";
 import {
+  RequestBodyTooLargeError,
+  readRequestTextWithinLimit,
+  webhookBodyTooLargeResponse,
+} from "../../server/shared/bounded-body";
+import {
   listAutomations,
   createAutomation,
   saveAutomation,
@@ -202,8 +207,10 @@ export class GithubAgent implements AgentModule {
       }
       let body: any = {};
       try {
-        body = await req.json();
-      } catch {}
+        body = JSON.parse(await readRequestTextWithinLimit(req, 64 * 1024));
+      } catch (error) {
+        if (error instanceof RequestBodyTooLargeError) return webhookBodyTooLargeResponse(64 * 1024);
+      }
       const prNumber = Number(body?.prNumber);
       const headRef = String(body?.headRef || "").trim();
       const behavior = String(body?.behavior || "review");

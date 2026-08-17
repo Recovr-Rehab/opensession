@@ -14,6 +14,12 @@ import {
   verifySlackSignature,
   verifyGitHubSignature,
 } from "../../server/shared/signature";
+import {
+  MAX_WEBHOOK_BODY_BYTES,
+  RequestBodyTooLargeError,
+  readRequestTextWithinLimit,
+  webhookBodyTooLargeResponse,
+} from "../../server/shared/bounded-body";
 import { handleMessageEvent, handleMentionEvent } from "./handlers";
 import {
   shouldHandleAppMention,
@@ -70,6 +76,9 @@ import {
   isEventProcessed,
   markEventProcessed,
   loadProcessedEvents,
+  isGithubDeliveryProcessed,
+  markGithubDeliveryProcessed,
+  loadGithubDeliveries,
   pendingAnswers,
   slackTeamId,
   slackBotUserId,
@@ -83,6 +92,15 @@ import {
 const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
 const SLACK_SIGNING_SECRET = process.env.SLACK_SIGNING_SECRET || "";
 const GITHUB_WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET || "";
+
+async function readWebhookBody(req: Request, maxBytes = MAX_WEBHOOK_BODY_BYTES): Promise<string | Response> {
+  try {
+    return await readRequestTextWithinLimit(req, maxBytes);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError) return webhookBodyTooLargeResponse(maxBytes);
+    throw error;
+  }
+}
 
 /**
  * Shared-secret gate for the /worktree/* hooks. A reverse proxy fronts this
@@ -103,23 +121,6 @@ function verifyWorktreeSecret(req: Request): boolean {
     return timingSafeEqual(secretBuf, givenBuf);
   } catch {
     return false;
-  }
-}
-
-// Bounded dedup of GitHub webhook delivery ids (x-github-delivery) — GitHub
-// redeliveries (manual or automatic) would otherwise re-trigger reviews and
-// PR-event automations. In-memory ring of the last ~500 ids, parked on
-// globalThis so a hot reload doesn't forget recent deliveries.
-const seenGithubDeliveries: Set<string> = ((globalThis as any).__githubDeliveryIds ??=
-  new Set<string>());
-
-function markGithubDelivery(id: string): void {
-  seenGithubDeliveries.add(id);
-  // Oldest-first eviction — Sets iterate in insertion order.
-  while (seenGithubDeliveries.size > 500) {
-    const oldest = seenGithubDeliveries.values().next().value;
-    if (oldest === undefined) break;
-    seenGithubDeliveries.delete(oldest);
   }
 }
 
@@ -148,7 +149,8 @@ export class SlackAgent implements AgentModule {
         );
       }
 
-      const body = await req.text();
+      const body = await readWebhookBody(req);
+      if (body instanceof Response) return body;
       const timestamp = req.headers.get("x-slack-request-timestamp") || "";
       const signature = req.headers.get("x-slack-signature") || "";
 
@@ -293,7 +295,8 @@ export class SlackAgent implements AgentModule {
 
     // ----- POST /slack/actions (Block Kit interactions) -----
     routes.set("POST /slack/actions", async (req) => {
-      const body = await req.text();
+      const body = await readWebhookBody(req);
+      if (body instanceof Response) return body;
       const timestamp = req.headers.get("x-slack-request-timestamp") || "";
       const signature = req.headers.get("x-slack-signature") || "";
 
@@ -584,7 +587,8 @@ Please address this feedback:
 
     // ----- POST /github/webhook -----
     routes.set("POST /github/webhook", async (req) => {
-      const body = await req.text();
+      const body = await readWebhookBody(req);
+      if (body instanceof Response) return body;
       const signature = req.headers.get("x-hub-signature-256") || "";
 
       if (!verifyGitHubSignature(body, signature, GITHUB_WEBHOOK_SECRET)) {
@@ -595,11 +599,11 @@ Please address this feedback:
       // Reject replayed/redelivered webhooks by delivery id.
       const deliveryId = req.headers.get("x-github-delivery");
       if (deliveryId) {
-        if (seenGithubDeliveries.has(deliveryId)) {
+        if (isGithubDeliveryProcessed(deliveryId)) {
           console.log(`[slack] Duplicate GitHub delivery ${deliveryId} — skipping`);
           return Response.json({ ok: true, duplicate: true });
         }
-        markGithubDelivery(deliveryId);
+        markGithubDeliveryProcessed(deliveryId);
       }
 
       incrementGithubWebhooks();
@@ -649,7 +653,9 @@ Please address this feedback:
         return Response.json({ error: "Forbidden" }, { status: 403 });
       }
       try {
-        const body = (await req.json()) as { branch: string };
+        const rawBody = await readWebhookBody(req, 64 * 1024);
+        if (rawBody instanceof Response) return rawBody;
+        const body = JSON.parse(rawBody) as { branch: string };
         const { branch } = body;
         if (!branch) {
           return Response.json(
@@ -738,7 +744,9 @@ Please address this feedback:
         return Response.json({ error: "Forbidden" }, { status: 403 });
       }
       try {
-        const body = (await req.json()) as { branch: string };
+        const rawBody = await readWebhookBody(req, 64 * 1024);
+        if (rawBody instanceof Response) return rawBody;
+        const body = JSON.parse(rawBody) as { branch: string };
         const { branch } = body;
         if (!branch) {
           return Response.json(
@@ -810,6 +818,7 @@ Please address this feedback:
     await loadWorktreeChannels();
     await loadQueueFromDisk();
     loadProcessedEvents();
+    loadGithubDeliveries();
 
     // Fetch team ID and bot user ID for streaming APIs
     try {

@@ -25,6 +25,11 @@ import { stateDir } from "../../server/paths";
 import { randomUUIDv7 } from "bun";
 import { mkdirSync, readFileSync, existsSync, unlinkSync } from "fs";
 import { writeJsonAtomic } from "../../server/shared/atomic-write";
+import {
+  RequestBodyTooLargeError,
+  readRequestTextWithinLimit,
+  webhookBodyTooLargeResponse,
+} from "../../server/shared/bounded-body";
 import type { AgentModule } from "../types";
 import {
   listAutomations,
@@ -380,8 +385,10 @@ export class GrafanaPollerAgent implements AgentModule {
 
       let body: any = {};
       try {
-        body = await req.json();
-      } catch {}
+        body = JSON.parse(await readRequestTextWithinLimit(req, 64 * 1024));
+      } catch (error) {
+        if (error instanceof RequestBodyTooLargeError) return webhookBodyTooLargeResponse(64 * 1024);
+      }
       const value = typeof body?.value === "string" ? body.value.trim() : "";
       if (!value) return Response.json({ error: "value required" }, { status: 400 });
 

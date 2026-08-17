@@ -3,6 +3,12 @@
  */
 import type { AgentModule } from "../types";
 import { verifyLinearSignature } from "../../server/shared/signature";
+import {
+  MAX_WEBHOOK_BODY_BYTES,
+  RequestBodyTooLargeError,
+  readRequestTextWithinLimit,
+  webhookBodyTooLargeResponse,
+} from "../../server/shared/bounded-body";
 import { loadTokens, handleAuthorize, handleCallback } from "./oauth";
 import type { LinearTokens } from "./oauth";
 import { handleAgentSession, handleIssueUpdate } from "./handlers";
@@ -21,7 +27,13 @@ export class LinearAgent implements AgentModule {
 
     // Webhook endpoint
     routes.set("POST /webhook", async (req) => {
-      const body = await req.text();
+      let body: string;
+      try {
+        body = await readRequestTextWithinLimit(req, MAX_WEBHOOK_BODY_BYTES);
+      } catch (error) {
+        if (error instanceof RequestBodyTooLargeError) return webhookBodyTooLargeResponse(MAX_WEBHOOK_BODY_BYTES);
+        throw error;
+      }
       const signature = req.headers.get("linear-signature") || "";
 
       if (!verifyLinearSignature(body, signature, LINEAR_WEBHOOK_SECRET)) {
@@ -48,8 +60,8 @@ export class LinearAgent implements AgentModule {
       return handleAuthorize();
     });
 
-    routes.set("GET /oauth/callback", async (_req, url) => {
-      return handleCallback(url, tokens);
+    routes.set("GET /oauth/callback", async (req, url) => {
+      return handleCallback(req, url, tokens);
     });
 
     return routes;

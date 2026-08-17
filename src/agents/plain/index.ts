@@ -4,6 +4,12 @@
 import type { AgentModule } from "../types";
 import type { FeedProvider } from "../../server/feeds";
 import { verifyPlainSignature } from "../../server/shared/signature";
+import {
+  MAX_WEBHOOK_BODY_BYTES,
+  RequestBodyTooLargeError,
+  readRequestTextWithinLimit,
+  webhookBodyTooLargeResponse,
+} from "../../server/shared/bounded-body";
 import { handleWebhook, activeSessions, pendingConfirmations } from "./handlers";
 import type { PlainWebhookPayload } from "./handlers";
 import { configuredIntegration } from "../../server/config";
@@ -79,7 +85,13 @@ export class PlainAgent implements AgentModule {
     const routes = new Map<string, (req: Request, url: URL) => Promise<Response>>();
 
     routes.set("POST /plain/webhook", async (req) => {
-      const body = await req.text();
+      let body: string;
+      try {
+        body = await readRequestTextWithinLimit(req, MAX_WEBHOOK_BODY_BYTES);
+      } catch (error) {
+        if (error instanceof RequestBodyTooLargeError) return webhookBodyTooLargeResponse(MAX_WEBHOOK_BODY_BYTES);
+        throw error;
+      }
       const signature = req.headers.get("plain-request-signature") || "";
 
       if (!verifyPlainSignature(body, signature, PLAIN_WEBHOOK_SECRET)) {

@@ -55,6 +55,21 @@ describe("verifySlackSignature", () => {
     expect(verifySlackSignature(BODY, ts, "garbage", SECRET)).toBe(false);
     expect(verifySlackSignature(BODY, ts, sign(BODY, ts) + "00", SECRET)).toBe(false);
   });
+
+  it("rejects a non-numeric timestamp", () => {
+    const timestamp = "not-a-timestamp";
+    expect(verifySlackSignature(BODY, timestamp, sign(BODY, timestamp), SECRET)).toBe(false);
+  });
+
+  it("rejects a timestamp with trailing non-numeric content", () => {
+    const timestamp = `${freshTs()}seconds`;
+    expect(verifySlackSignature(BODY, timestamp, sign(BODY, timestamp), SECRET)).toBe(false);
+  });
+
+  it("rejects signatures made with an empty secret", () => {
+    const ts = freshTs();
+    expect(verifySlackSignature(BODY, ts, sign(BODY, ts, ""), "")).toBe(false);
+  });
 });
 
 describe("verifyGitHubSignature", () => {
@@ -77,6 +92,10 @@ describe("verifyGitHubSignature", () => {
     expect(verifyGitHubSignature(BODY, "sha256=", SECRET)).toBe(false);
     expect(verifyGitHubSignature(BODY, "sha256=deadbeef", SECRET)).toBe(false);
     expect(verifyGitHubSignature(BODY, sign(BODY).slice(0, -2), SECRET)).toBe(false);
+  });
+
+  it("rejects signatures made with an empty secret", () => {
+    expect(verifyGitHubSignature(BODY, sign(BODY, ""), "")).toBe(false);
   });
 });
 

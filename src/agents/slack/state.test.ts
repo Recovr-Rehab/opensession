@@ -9,7 +9,15 @@ const scratch = mkdtempSync(join(tmpdir(), "opensession-slack-state-"));
 const previousStateDir = process.env.OPENSESSION_STATE_DIR;
 process.env.OPENSESSION_STATE_DIR = scratch;
 
-const { SESSION_DIR, loadSession, saveSession, getSessionKey } = await import("./state");
+const {
+	SESSION_DIR,
+	loadSession,
+	saveSession,
+	getSessionKey,
+	loadGithubDeliveries,
+	isGithubDeliveryProcessed,
+	markGithubDeliveryProcessed,
+} = await import("./state");
 const { writeJsonAtomic } = await import("../../server/shared/atomic-write");
 
 afterAll(() => {
@@ -67,5 +75,23 @@ describe("saveSession", () => {
 		const loaded = await loadSession(key);
 		expect(loaded?.model).toBe("opencode/anthropic/claude-opus-5");
 		expect(loaded?.claudeSessionId).toBeNull();
+	});
+});
+
+describe("GitHub delivery replay protection", () => {
+	test("persists delivery ids and restores them after a reload", () => {
+		const deliveryId = "github-delivery-persists";
+		markGithubDeliveryProcessed(deliveryId);
+		expect(isGithubDeliveryProcessed(deliveryId)).toBe(true);
+
+		// loadGithubDeliveries clears the in-memory map first, mirroring a restart.
+		loadGithubDeliveries();
+		expect(isGithubDeliveryProcessed(deliveryId)).toBe(true);
+	});
+
+	test("drops expired delivery ids when restoring the persistent store", () => {
+		writeJsonAtomic(`${SESSION_DIR}/github-deliveries.json`, [["expired-delivery", 0]], false);
+		loadGithubDeliveries();
+		expect(isGithubDeliveryProcessed("expired-delivery")).toBe(false);
 	});
 });
