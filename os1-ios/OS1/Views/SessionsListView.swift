@@ -321,17 +321,16 @@ struct SessionsListView: View {
                 // hash, which is exactly where two repos can collide.
                 _ = try? await OS1API.repos()
             }
-            #if os(iOS)
-            // Keyed on the row's visibility so hiding Plain stops the poll and
-            // showing it again starts one: a source you asked not to see
-            // shouldn't keep spending the radio in the background.
-            .task(id: isPlainHidden) {
-                guard !isPlainHidden else { return }
+            // Keyed on the shared location so turning Support off stops the
+            // poll. Both visible locations use the count in their native row.
+            .task(id: supportLocation) {
+                guard supportLocation != .off else { return }
                 while !Task.isCancelled {
                     await supportQueue.load()
                     try? await Task.sleep(for: .seconds(60))
                 }
             }
+            #if os(iOS)
             // Once, not on a clock. Reports are published every few hours at
             // most, and this only decides whether a row is drawn and what
             // number it carries — the screen behind it loads its own.
@@ -343,6 +342,12 @@ struct SessionsListView: View {
             #endif
             .onDisappear {
                 viewModel.stopPolling()
+            }
+            .onChange(of: supportLocation) { _, _ in
+                // The old page or ticket cannot remain on screen after its
+                // entry point moved, including page ↔ sidebar changes on Mac.
+                openTicket = nil
+                showSupport = false
             }
             .onChange(of: sessionCacheScope) {
                 sessionPageCache.removeAll()
@@ -668,7 +673,7 @@ struct SessionsListView: View {
             )
         }
 
-        items.append(contentsOf: [
+        items.append(
             CommandPaletteItem(
                 entry: CommandPaletteEntry(
                     id: "command:desk",
@@ -678,17 +683,25 @@ struct SessionsListView: View {
                     symbol: "lamp.desk"
                 ),
                 run: { showDesk = true }
-            ),
-            CommandPaletteItem(
-                entry: CommandPaletteEntry(
-                    id: "command:support",
-                    title: "Support queue",
-                    subtitle: "Customer tickets waiting for a reply",
-                    keywords: ["plain", "tickets", "inbox"],
-                    symbol: "lifepreserver"
-                ),
-                run: { showSupport = true }
-            ),
+            )
+        )
+
+        if supportLocation.showsPage {
+            items.append(
+                CommandPaletteItem(
+                    entry: CommandPaletteEntry(
+                        id: "command:support",
+                        title: "Support queue",
+                        subtitle: "Customer tickets waiting for a reply",
+                        keywords: ["plain", "tickets", "inbox"],
+                        symbol: "lifepreserver"
+                    ),
+                    run: openSupport
+                )
+            )
+        }
+
+        items.append(contentsOf: [
             CommandPaletteItem(
                 entry: CommandPaletteEntry(
                     id: "command:archived",
@@ -817,13 +830,13 @@ struct SessionsListView: View {
                     .menuIndicator(.hidden)
                     .controlSize(.small)
                     .help("Filter, group, and sort sessions")
-                Button {
-                    showSupport = true
-                } label: {
-                    Image(systemName: "lifepreserver")
+                if supportLocation.showsPage {
+                    Button(action: openSupport) {
+                        Image(systemName: "lifepreserver")
+                    }
+                    .controlSize(.small)
+                    .help("Open the support queue")
                 }
-                .controlSize(.small)
-                .help("Open the support queue")
                 Button {
                     showDesk = true
                 } label: {
@@ -1033,8 +1046,8 @@ struct SessionsListView: View {
                     if env["OS1_OPEN_NEW"] != nil {
                         newSessionRequest = NewSessionRequest()
                     }
-                    if env["OS1_OPEN_SUPPORT"] != nil {
-                        showSupport = true
+                    if env["OS1_OPEN_SUPPORT"] != nil, supportLocation != .off {
+                        openSupport()
                     }
                     // Same reason again: Reports is a row a scripted run
                     // would have to find and scroll to before it could tap it.
@@ -2299,8 +2312,9 @@ struct SessionsListView: View {
                 }
             }
 
+            if supportLocation.showsSidebar { plainSidebarRow }
             #if os(iOS)
-            if !isPlainHidden { mobilePlainRow }
+            if supportLocation.showsPage { mobileSupportToolRow }
             if !isReportsHidden && reportGroupCount > 0 { mobileReportsRow }
             #endif
 
@@ -2465,17 +2479,92 @@ struct SessionsListView: View {
         #endif
     }
 
-    #if os(iOS)
     /// Plain is a project feed on the web, so it sits after the worktree/session
     /// sections and before Archived in the same ordinary row shape.
-    private var mobilePlainRow: some View {
+    private var plainSidebarRow: some View {
         Section {
-            Button {
-                showSupport = true
-            } label: {
+            Button(action: openSupport) {
                 HStack(spacing: 9) {
-                    RepoTile(name: "plain", size: 22)
+                    RepoTile(name: "plain", size: plainRowTileSize)
                     Text("Plain")
+                        #if os(iOS)
+                        .font(.callout.weight(.medium))
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                        #else
+                        .font(.body)
+                        #endif
+                    Text("\(supportQueue.threads.count)")
+                        .font(.footnote.weight(.medium))
+                        .foregroundStyle(OS1VisualStyle.textFaint)
+                    Spacer()
+                    if urgentPlainTicketCount > 0 {
+                        Text("\(urgentPlainTicketCount)")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(OS1VisualStyle.redInk)
+                    }
+                }
+                .padding(.vertical, plainRowVerticalPadding)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(
+                urgentPlainTicketCount > 0
+                    ? "Open Plain, \(supportQueue.threads.count) tickets, \(urgentPlainTicketCount) urgent"
+                    : "Open Plain, \(supportQueue.threads.count) tickets"
+            )
+            // The long press the web sidebar answers with a right-click on the
+            // same band. One item, like that menu: this row leads somewhere
+            // rather than holding state, so there is nothing else to offer.
+            // Not destructive-styled — the queue keeps running for everyone
+            // else, and Settings → Appearance brings the row back.
+            .contextMenu {
+                Button {
+                    withAnimation(.snappy(duration: 0.28)) {
+                        SupportLocation.set(.off)
+                    }
+                } label: {
+                    Label("Hide from sidebar", systemImage: "eye.slash")
+                }
+            }
+        }
+        #if os(iOS)
+        .listRowInsets(EdgeInsets(
+            top: 2, leading: sidebarMargin, bottom: 2, trailing: sidebarMargin
+        ))
+        .listRowSeparator(.hidden)
+        .listRowBackground(Color.clear)
+        #endif
+    }
+
+    private var plainRowTileSize: CGFloat {
+        #if os(iOS)
+        22
+        #else
+        16
+        #endif
+    }
+
+    private var plainRowVerticalPadding: CGFloat {
+        #if os(iOS)
+        11
+        #else
+        3
+        #endif
+    }
+
+    #if os(iOS)
+    /// Support as a tool: the direct queue page, separate from the Plain feed
+    /// row above. `supportLocation` makes the two mutually exclusive.
+    private var mobileSupportToolRow: some View {
+        Section {
+            Button(action: openSupport) {
+                HStack(spacing: 9) {
+                    Image(systemName: "lifepreserver")
+                        .font(.callout)
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                        .frame(width: 22, height: 22)
+                        .offset(x: 1)
+                    Text("Support")
                         .font(.callout.weight(.medium))
                         .foregroundStyle(OS1VisualStyle.textDim)
                     Text("\(supportQueue.threads.count)")
@@ -2494,18 +2583,13 @@ struct SessionsListView: View {
             .buttonStyle(.plain)
             .accessibilityLabel(
                 urgentPlainTicketCount > 0
-                    ? "Open Plain, \(supportQueue.threads.count) tickets, \(urgentPlainTicketCount) urgent"
-                    : "Open Plain, \(supportQueue.threads.count) tickets"
+                    ? "Open Support, \(supportQueue.threads.count) tickets, \(urgentPlainTicketCount) urgent"
+                    : "Open Support, \(supportQueue.threads.count) tickets"
             )
-            // The long press the web sidebar answers with a right-click on the
-            // same band. One item, like that menu: this row leads somewhere
-            // rather than holding state, so there is nothing else to offer.
-            // Not destructive-styled — the queue keeps running for everyone
-            // else, and Settings → Appearance brings the row back.
             .contextMenu {
                 Button {
                     withAnimation(.snappy(duration: 0.28)) {
-                        SidebarFeeds.setVisible(SidebarFeeds.plain, false)
+                        SupportLocation.set(.off)
                     }
                 } label: {
                     Label("Hide from sidebar", systemImage: "eye.slash")
@@ -2573,16 +2657,8 @@ struct SessionsListView: View {
         .listRowBackground(Color.clear)
     }
 
-    private var urgentPlainTicketCount: Int {
-        supportQueue.threads.lazy.filter { $0.lane == .urgent }.count
-    }
-
     /// Read off `@AppStorage` rather than `UserDefaults` so hiding the row
     /// redraws the list — the same value either way.
-    private var isPlainHidden: Bool {
-        SidebarFeeds.isHidden(SidebarFeeds.plain, in: hiddenFeedsRaw)
-    }
-
     private var isReportsHidden: Bool {
         SidebarTools.isHidden(SidebarTools.reports, in: hiddenToolsRaw)
     }
@@ -2602,6 +2678,23 @@ struct SessionsListView: View {
         selectedSessionID = nil
         openTicket = nil
         showSupport = false
+        openedArchivedSession = nil
+        #endif
+    }
+
+    private var supportLocation: SupportLocation {
+        SupportLocation.current(hiddenTools: hiddenToolsRaw, hiddenFeeds: hiddenFeedsRaw)
+    }
+
+    private var urgentPlainTicketCount: Int {
+        supportQueue.threads.lazy.filter { $0.lane == .urgent }.count
+    }
+
+    private func openSupport() {
+        openTicket = nil
+        showSupport = true
+        #if os(macOS)
+        showCanvas = false
         openedArchivedSession = nil
         #endif
     }

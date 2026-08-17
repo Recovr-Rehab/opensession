@@ -67,12 +67,13 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   automations publish, as a row above Archived when there are any. One row per
   automation, opening its newest document with the older ones in that
   document's own bar.
-- **Tool visibility** (`SidebarTools.swift`) — Canvas, Catch up, and Reports are
-  the TOOLS this app draws, and all answer to the account's `sidebar-hidden-tools`
-  ui-pref, which the web sidebar's Tools band writes as well. A missing value
-  means the shared defaults, so a tool nobody has switched on is off here too
-  rather than appearing only on the phone. Long-press Reports to hide it;
-  Appearance → Tools switches either back on.
+- **Tool visibility** (`SidebarTools.swift`, `SupportLocation.swift`) — Canvas,
+  Catch up, Reports and Support use the account's `sidebar-hidden-tools` ui-pref,
+  which the web sidebar writes as well. Support jointly reads and writes its
+  tool entry and the Plain feed entry as one sidebar / page / off choice, with
+  the sidebar winning any older state where both are visible. A missing tools
+  value means the shared defaults. Long-press a visible row to hide it;
+  Appearance restores it.
 - **Session view** — live transcript over the `/ws` WebSocket, grouped into
   turns the way the web viewer groups them: **question → folded work → answer →
   footer**. A turn's tool calls and the narration between them collapse behind
@@ -293,12 +294,12 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   the app never holds an OpenAI key, and the call is torn down whenever the
   app leaves the foreground.
 - **Support** (`SupportView.swift`, `SupportViewModel.swift`) — the Plain
-  queue (iOS: a `Plain` project row below worktrees and above Archived, with
-  total and red urgent counts refreshed every minute; long-press it to hide
-  the row, which also stops the poll — the account's `sidebar-hidden-feeds`
-  ui-pref, written by the web sidebar's own band menu too (`SidebarFeeds`),
-  and switched back on under Appearance → Sources.
-  macOS: the sidebar header). Two screens: the Todo queue in Plain's four
+  queue lives in exactly one chosen location. `In the sidebar` draws a `Plain`
+  source row on iOS and macOS; `Its own page` draws the iOS `Support` tool row
+  and the macOS header/palette entry; `Off` draws neither and stops polling.
+  Appearance writes both `sidebar-hidden-tools` and `sidebar-hidden-feeds` in
+  one update so the web and native clients stay on the same choice. Two
+  screens: the Todo queue in Plain's four
   priority lanes (`GET /api/plain/threads`), and one ticket's timeline
   (`GET /api/plain/threads/:id`) with the customer on the left, us on the
   right, and notes full-width in between. The composer's Reply / Internal note

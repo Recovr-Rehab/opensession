@@ -12,6 +12,7 @@ enum NativePreferences {
     }
 
     private static var generation = 0
+    private static var pendingLocalWrites = 0
     private static let identityKey = "os1.preferences.identity"
     private static let bucketKey = "os1.preferences.bucket"
 
@@ -27,12 +28,13 @@ enum NativePreferences {
 
     static func hydrate() async {
         let config = ServerConfig.shared
-        guard config.isConfigured else { return }
+        guard config.isConfigured, pendingLocalWrites == 0 else { return }
         let requestContext = context()
         generation += 1
         let requestGeneration = generation
         guard let prefs = try? await SettingsAPI.uiPrefs(user: requestContext.user) else { return }
-        guard requestGeneration == generation,
+        guard pendingLocalWrites == 0,
+              requestGeneration == generation,
               context() == requestContext
         else { return }
 
@@ -41,6 +43,19 @@ enum NativePreferences {
             identity: identity(for: requestContext),
             bucket: bucket(for: requestContext)
         )
+    }
+
+    /// Suspend periodic hydration while an optimistic cross-device preference
+    /// write is queued or in flight. Otherwise a fresh hydrate can read the old
+    /// server value before the PUT lands and repaint the local choice backward.
+    static func beginLocalWrite() {
+        generation += 1
+        pendingLocalWrites += 1
+    }
+
+    static func endLocalWrite() {
+        pendingLocalWrites = max(0, pendingLocalWrites - 1)
+        generation += 1
     }
 
     @discardableResult
@@ -56,11 +71,22 @@ enum NativePreferences {
     }
 
     private static func apply(
-        _ prefs: [String: String],
+        _ response: [String: String],
         identity: String,
         bucket: String
     ) {
         let defaults = UserDefaults.standard
+        var prefs = response
+        // Other settings endpoints return the whole preference map. While a
+        // Support location PUT is pending, that map can still contain the old
+        // pair; preserve the optimistic local pair while applying everything
+        // else from the response.
+        if pendingLocalWrites > 0 {
+            prefs[SidebarTools.prefKey] = defaults.string(forKey: SidebarTools.storageKey)
+                ?? SidebarTools.defaultHiddenJSON
+            prefs[SidebarFeeds.prefKey] = defaults.string(forKey: SidebarFeeds.storageKey)
+                ?? "[]"
+        }
         let previousIdentity = defaults.string(forKey: identityKey)
         let previousBucket = defaults.string(forKey: bucketKey)
         let changedIdentity = previousIdentity != identity || previousBucket != bucket

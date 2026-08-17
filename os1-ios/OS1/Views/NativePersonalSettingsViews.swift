@@ -546,6 +546,20 @@ struct AppearanceSettingsView: View {
             // ids are a fixed list the web owns, so one it does not draw is
             // never stranded here, and a switch for a screen the phone does
             // not have would be a preference with nothing behind it.
+            if hasPlainSupport {
+                Section {
+                    Picker("Support tickets", selection: supportLocationBinding) {
+                        ForEach(SupportLocation.allCases) { location in
+                            Text(location.label).tag(location)
+                        }
+                    }
+                } header: {
+                    Text("Support tickets")
+                } footer: {
+                    Text("Choose where the Plain queue lives. This setting follows your account across the web and native apps.")
+                }
+            }
+
             Section {
                 ForEach(SidebarTools.surfaced) { tool in
                     Toggle(isOn: Binding(
@@ -574,9 +588,9 @@ struct AppearanceSettingsView: View {
             // rows today — a Mac that hid a feed in a browser would otherwise
             // have to go back to that browser to undo it, which is the
             // one-way hiding this section exists to prevent.
-            if !sources.isEmpty {
+            if !otherSources.isEmpty {
                 Section {
-                    ForEach(sources) { source in
+                    ForEach(otherSources) { source in
                         Toggle(isOn: Binding(
                             get: { !SidebarFeeds.isHidden(source.id, in: hiddenFeeds) },
                             set: { SidebarFeeds.setVisible(source.id, $0) }
@@ -600,6 +614,23 @@ struct AppearanceSettingsView: View {
 
     private var sources: [SidebarFeeds.Source] {
         SidebarFeeds.sources(known: feeds, hidden: hiddenFeeds)
+    }
+
+    private var hasPlainSupport: Bool {
+        sources.contains { $0.id == SidebarFeeds.plain }
+    }
+
+    private var otherSources: [SidebarFeeds.Source] {
+        sources.filter { $0.id != SidebarFeeds.plain }
+    }
+
+    private var supportLocationBinding: Binding<SupportLocation> {
+        Binding(
+            get: {
+                SupportLocation.current(hiddenTools: hiddenTools, hiddenFeeds: hiddenFeeds)
+            },
+            set: { SupportLocation.set($0) }
+        )
     }
 
     /// Cached like the repo list: the switches have to be right on the screen

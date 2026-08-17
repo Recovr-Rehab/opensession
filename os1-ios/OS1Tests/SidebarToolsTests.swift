@@ -92,10 +92,17 @@ final class SidebarToolsTests: XCTestCase {
     }
 
     func testDefaultsMatchTheWebsOwnList() {
+        XCTAssertEqual(
+            SidebarTools.allIds,
+            [
+                "feed", "prs", "tasks", "canvas", "plain", "catchup", "supporttinder",
+                "reports", "analytics",
+            ]
+        )
         XCTAssertEqual(SidebarTools.defaultVisible, ["feed", "prs", "catchup"])
         XCTAssertEqual(
             SidebarTools.defaultHidden.sorted(),
-            ["analytics", "canvas", "reports", "supporttinder", "tasks"]
+            ["analytics", "canvas", "plain", "reports", "supporttinder", "tasks"]
         )
         XCTAssertFalse(SidebarTools.isHidden(SidebarTools.catchUp, in: SidebarTools.defaultHiddenJSON))
         XCTAssertTrue(SidebarTools.isHidden(SidebarTools.reports, in: SidebarTools.defaultHiddenJSON))
@@ -118,5 +125,8 @@ final class SidebarToolsTests: XCTestCase {
             XCTAssertTrue(SidebarTools.allIds.contains(tool.id), tool.id)
             XCTAssertFalse(tool.title.isEmpty, tool.id)
         }
+        XCTAssertTrue(SidebarTools.allIds.contains(SidebarTools.plain))
+        XCTAssertTrue(SidebarTools.defaultHidden.contains(SidebarTools.plain))
+        XCTAssertFalse(SidebarTools.surfaced.map(\.id).contains(SidebarTools.plain))
     }
 }

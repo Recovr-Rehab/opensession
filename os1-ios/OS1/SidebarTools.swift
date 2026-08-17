@@ -1,7 +1,7 @@
 import Foundation
 
 /// Per-user visibility for the TOOLS: the destinations that are not sessions.
-/// The web sidebar owns the ids; this app draws Canvas, Catch up, and Reports.
+/// The web sidebar owns the ids; this app draws Canvas, Catch up, Reports, and Support.
 ///
 /// This is the same account-level preference the web's Tools band writes
 /// (`sidebar-hidden-tools`, see `src/frontend/lib/sidebar-tools.ts`), so a tool
@@ -17,6 +17,7 @@ enum SidebarTools {
     /// The tools this app has a destination for. They are named here
     /// because the surfaces are built in Swift; the ids are the web's.
     static let canvas = "canvas"
+    static let plain = "plain"
     static let catchUp = "catchup"
     static let reports = "reports"
 
@@ -26,16 +27,15 @@ enum SidebarTools {
     /// web: absent means exactly this, on both clients. Keep it in step with
     /// DEFAULT_VISIBLE_TOOLS in src/frontend/lib/sidebar-tools.ts.
     static let allIds = [
-        "feed", "prs", "tasks", canvas, "catchup", "supporttinder", "reports", "analytics",
+        "feed", "prs", "tasks", canvas, plain, "catchup", "supporttinder", "reports",
+        "analytics",
     ]
     static let defaultVisible = ["feed", "prs", "catchup"]
     static var defaultHidden: [String] { allIds.filter { !defaultVisible.contains($0) } }
     static var defaultHiddenJSON: String { encode(defaultHidden) }
 
-    /// One switch in Settings → Appearance. Only the tools this app can
-    /// actually open: a switch for a screen the phone does not have would be
-    /// a preference with nothing behind it, and the browser can reach the
-    /// rest.
+    /// One switch in Settings → Appearance. Support is intentionally absent:
+    /// its tool and feed are one three-way location choice (`SupportLocation`).
     struct Tool: Identifiable, Hashable, Sendable {
         let id: String
         let title: String
