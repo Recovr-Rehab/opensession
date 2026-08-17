@@ -74,7 +74,7 @@ import {
   paletteIconBtnRound,
   palettePill,
 } from "../lib/palette-classes";
-import { noteSurface } from "../lib/tinted-surface";
+import { askSurface, noteSurface } from "../lib/tinted-surface";
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
 import { ContextMenu, MenuShortcut } from "../ui/menu";
@@ -234,20 +234,26 @@ interface Props {
   noteMode?: boolean;
   onNoteModeChange?: (on: boolean) => void;
   /**
-   * Ask mode: this session can read the checkout but not change it. It names
-   * itself with a chip in the toolbar and in the field's placeholder, and
-   * deliberately does NOT wash the writing surface: that channel belongs to
-   * note mode.
+   * Ask mode: this session can read the checkout but not change it. Washes the
+   * writing surface green and names itself in a chip above the field, which is
+   * the same pair note mode takes.
    *
-   * A state that holds for the session's whole life says nothing in the
-   * loudest signal the box has, and it costs the one-message state the
-   * contrast that state needs. Painted at 7% green under note mode's 10%
-   * yellow, the two washes were one faint tint apart (8.6 dE in light, less in
-   * dark), and turning note mode on inside an ask session crossfaded green to
-   * yellow rather than plain to yellow, which is the one moment the note has
-   * to be unmistakable.
+   * The pair is the point. The wash alone could not carry the state: at 7%
+   * green under note mode's 10% yellow the two surfaces were one faint tint
+   * apart (8.6 dE in light, less in dark), and you never see them side by side
+   * to compare, so a tinted composer stopped saying WHICH mode you were in.
+   * With a named chip on both, the wash says something is different and the
+   * chip says what, so neither state can be mistaken for the other.
    */
   askMode?: boolean;
+  /**
+   * Leaves ask mode, from the chip's ✕. Cutting a worktree is the server's
+   * call and not every session may promote, so when this is omitted the chip
+   * renders without an exit rather than offering one that fails.
+   */
+  onAskModeExit?: () => void;
+  /** The exit is in flight: the chip says so and its ✕ stops taking clicks. */
+  askExitPending?: boolean;
 }
 
 /**
@@ -443,6 +449,8 @@ export function Composer({
   noteMode,
   onNoteModeChange,
   askMode,
+  onAskModeExit,
+  askExitPending,
 }: Props) {
   const internalRef = useRef<HTMLTextAreaElement>(null);
   const textareaRef = externalRef ?? internalRef;
@@ -1105,9 +1113,13 @@ export function Composer({
   }
 
   const effectiveModel = model || defaultModel;
-  // The one wash this box paints. Ask mode deliberately has none: see the
-  // `askMode` prop above.
+  // Ask mode paints the box itself; note mode paints the `before:` layer over
+  // it, so note wins for the message you are writing while ask keeps the
+  // session's own colour underneath.
   const surfaceStyle = {
+    ...(askMode
+      ? { backgroundColor: askSurface("var(--composer-surface)") }
+      : {}),
     "--composer-note-bg": noteSurface("var(--composer-surface)"),
   } as React.CSSProperties;
 
@@ -1191,6 +1203,30 @@ export function Composer({
         )}
         <div className="flex flex-wrap items-start gap-x-1">
           <AnimatePresence initial={false}>
+            {/* Ask mode first: it encloses everything else in the row, being
+                the session's own state rather than something attached to the
+                next send, so the row reads outside-in. Hidden in the phone's
+                resting pill, which is one line tall and has no room for a
+                chip above the field. */}
+            {!minimized && askMode && (
+              <ComposerContextChip
+                key="ask-mode"
+                icon={<IconEye size={15} />}
+                label="Ask mode"
+                title={
+                  onAskModeExit
+                    ? "This session can read the code but not change it. The ✕ switches to code mode."
+                    : "This session can read the code but not change it."
+                }
+                meta={askExitPending ? "Switching…" : undefined}
+                tone="ask"
+                // Leaving cuts a worktree, which the server may refuse or take
+                // a moment over, so the ✕ only appears where it is real.
+                onRemove={onAskModeExit}
+                removeLabel="Switch to code mode"
+                disabled={disabled || askExitPending}
+              />
+            )}
             {/* Note mode is context attached to the next send, exactly like a
                 quoted selection, so it says so in the same place and the same
                 shape rather than as a marker down in the toolbar — where the ✕
@@ -1564,61 +1600,11 @@ export function Composer({
             </motion.div>
           )}
 
-          {/* Ask mode's marker. Nothing renders in the ordinary state; when ask
-              mode is on it names itself next to the "+", and with the field's
-              placeholder that is the whole of how the composer says so. The
-              writing surface stays ordinary on purpose, because a wash there
-              means a team note (see the `askMode` prop). Ask mode's only exit
-              cuts a worktree, so clicking the marker opens the menu and lets
-              you pick the labelled row instead. Note mode is not here: it is a
-              chip above the field, with a real ✕ (see ComposerContextChip). */}
-          <AnimatePresence initial={false}>
-            {!minimized && askMode && (
-              <motion.div
-                key="mode-marker"
-                layout="position"
-                {...composerChipMotion}
-                // Phones pull the model pill to the front of the toolbar (see
-                // composerToolbarSelect), which would otherwise wedge it
-                // between the "+" and this marker. Same order as the "+" wrap
-                // keeps the pair together — equal order falls back to DOM
-                // order, and the "+" is rendered first.
-                className="composer-pop-wrap relative inline-flex shrink-0 phone:order-[-2]"
-              >
-                <Tooltip label="Ask mode: this session can read the code but not change it">
-                  <button
-                    type="button"
-                    // Same "on" language as paletteIconBtnOn: the state
-                    // lives in a filled wash, not a ring. A full-strength
-                    // border reads as a validation outline. Slightly stronger
-                    // than that rule's 16/24 because this chip is now the only
-                    // mark the composer carries for the mode, and it has to
-                    // hold its own beside a model pill and a filled send disc.
-                    // `rounded-control`, not the pill it used to be: this chip
-                    // stands next to the model pill and the icon buttons, and
-                    // three different corners in one 88px row is what made the
-                    // toolbar read as assembled rather than designed.
-                    className={cn(
-                      // 12px copy against a 14px glyph, matching the model pill
-                      // beside it: at 11px-against-15px the label read as a
-                      // caption hung off an icon rather than the mode's name.
-                      "inline-flex min-h-8 items-center gap-1.5 rounded-control px-2.5 text-label font-medium transition-colors",
-                      "bg-[color-mix(in_srgb,var(--green)_18%,transparent)] text-green hover:bg-[color-mix(in_srgb,var(--green)_26%,transparent)]",
-                    )}
-                    // Ask mode has no one-click exit — leaving it cuts a
-                    // worktree — so the marker opens the menu and lets you pick
-                    // the labelled row. (Note mode, which does, says so with a
-                    // dismissible chip above the field instead.)
-                    {...tapProps(() => setMenu("add"))}
-                    disabled={disabled}
-                  >
-                    <IconEye size={14} />
-                    Ask
-                  </button>
-                </Tooltip>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {/* Ask mode used to keep a marker here, next to the "+". It says
+              itself in a chip above the field now, with the ✕ that leaves it
+              (see ComposerContextChip), which is where note mode already
+              said itself: two states that both wash the box now name
+              themselves in the same place and the same shape. */}
           {/* `grow basis-0 shrink-0` rather than `flex-1`: every direct child of
               the toolbar is pinned at flex-shrink 0 so the model pill is the
               only thing that gives way, and a shorthand would take that back. */}

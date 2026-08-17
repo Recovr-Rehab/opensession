@@ -6309,9 +6309,17 @@ export function SessionViewer({
 										(noteMode || files.length === 0) &&
 										!forkFrom
 									}
-									// Draws the "Ask" marker in the toolbar. It does not tint
-									// the writing surface: that is note mode's signal alone.
+									// Tints the composer green and names the mode in a chip above
+									// the field. Only opensession sessions can promote (the
+									// server owns that rule), so elsewhere the chip keeps the
+									// label and drops the ✕ rather than offering a dead end.
 									askMode={isAsk}
+									onAskModeExit={
+										isAsk && session.source === "opensession"
+											? () => void handlePromote()
+											: undefined
+									}
+									askExitPending={promoting}
 									// Team notes: the send posts to the transcript for the
 									// humans reading it, never to the agent (⌘N, or the "+").
 									noteMode={noteMode}
