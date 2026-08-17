@@ -5455,11 +5455,17 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							]}
 				</div>
 
-				{/* The machine's work, switched from the foot of the list it is
-				    adding to or taking from: after the rows it counts, where the
-				    list runs out and you would wonder what is missing. It says
+				{/* The agent's own workspaces, switched from the foot of the list
+				    it is adding to or taking from: after the rows it counts, where
+				    the list runs out and you would wonder what is missing. It says
 				    which way it goes, so it is always its own undo. Faint: it is
-				    a note about the list, not a row in it. */}
+				    a note about the list, not a row in it.
+
+				    It does not say "auto created". The Automations band sits
+				    directly under this switch, and one word for two different
+				    things reads as though this controls that: an automation is a
+				    job somebody configured, while these are one-off workspaces an
+				    agent opened for itself with no automation behind them. */}
 				{autoCreatedRows > 0 && (
 					<button
 						className={cn(
@@ -5477,7 +5483,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						<IconRobot size={20} className="shrink-0" />
 						<span className="min-w-0 truncate">
 							{filter.autoCreated === "hide" ? "Show" : "Hide"}{" "}
-							{autoCreatedRows} auto created
+							{autoCreatedRows} started by an agent
 						</span>
 					</button>
 				)}
