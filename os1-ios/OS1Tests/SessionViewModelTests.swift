@@ -768,6 +768,7 @@ final class SendDraftTests: XCTestCase {
     private var outbox: Outbox!
     private var outboxDirectory: URL!
     private var savedBusySend: String?
+    private var savedUserName: String?
 
     /// Stub for the fake server's answer. nil = behave like the real one:
     /// queue a send that arrives mid-run, start a turn when idle.
@@ -783,6 +784,14 @@ final class SendDraftTests: XCTestCase {
         // real defaults domain.
         savedBusySend = UserDefaults.standard.string(forKey: "os1.composer.busySend")
         UserDefaults.standard.set("queue", forKey: "os1.composer.busySend")
+        // Editing a queued message is only offered for one you wrote yourself,
+        // and `MessageAttribution` deliberately refuses to match ServerConfig's
+        // "ios" placeholder, which is a stand-in rather than a name. A box that has
+        // never signed in holds exactly that, so the viewer check failed and
+        // the edit silently did nothing: green on a developer's Mac, red on
+        // every clean CI runner. Pin a real name, and put the person's own back.
+        savedUserName = ServerConfig.shared.userName
+        ServerConfig.shared.userName = "Tester"
         socket = MockSocket()
         // Its own scratch store: the real one is the person's undelivered mail.
         outboxDirectory = URL(fileURLWithPath: NSTemporaryDirectory())
@@ -814,6 +823,7 @@ final class SendDraftTests: XCTestCase {
         } else {
             UserDefaults.standard.removeObject(forKey: "os1.composer.busySend")
         }
+        if let savedUserName { ServerConfig.shared.userName = savedUserName }
     }
 
     private func entry(_ id: String, _ type: String, text: String? = nil) -> TranscriptEntry {

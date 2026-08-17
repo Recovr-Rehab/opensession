@@ -181,6 +181,145 @@ final class CatchUpQueueTests: XCTestCase {
     }
 }
 
+/// The deck's own rules, once the queue is frozen: what the repo filter hides,
+/// what a decision removes, and what undo puts back.
+///
+/// Decisions are made with `.keep` throughout. It moves the deck exactly like
+/// the other two, and it is the one that touches nothing outside the model.
+/// `.read` writes to the real `ReadsStore`, which is the person's own read
+/// marks on whichever machine runs the suite.
+@MainActor
+final class CatchUpDeckTests: XCTestCase {
+    private func card(_ id: String, repo: String) -> CatchUpCard {
+        CatchUpCard(
+            id: id,
+            title: id,
+            repo: repo,
+            sessions: [Session(id: id)],
+            target: Session(id: id),
+            lane: .inReview,
+            isRunning: false,
+            runStartedAt: nil,
+            lastActivity: Date(timeIntervalSince1970: 0)
+        )
+    }
+
+    /// Two repos interleaved, which is what makes the filter worth having.
+    private func loaded() -> CatchUpViewModel {
+        let model = CatchUpViewModel()
+        model.load([
+            card("a1", repo: "tella-fusion"),
+            card("b1", repo: "opensession"),
+            card("a2", repo: "tella-fusion"),
+            card("b2", repo: "opensession"),
+        ])
+        return model
+    }
+
+    func testFilterNarrowsTheDeckToOneRepo() {
+        let model = loaded()
+        XCTAssertEqual(model.deck.map(\.id), ["a1", "b1", "a2", "b2"])
+
+        model.setRepoFilter("tella-fusion")
+
+        XCTAssertEqual(model.deck.map(\.id), ["a1", "a2"])
+        XCTAssertEqual(model.remaining, 2)
+        XCTAssertEqual(model.current?.id, "a1")
+        XCTAssertEqual(model.next?.id, "a2")
+    }
+
+    func testWideningRestoresTheRestOfTheQueueInItsOriginalOrder() {
+        let model = loaded()
+        model.setRepoFilter("opensession")
+        model.setRepoFilter(nil)
+
+        XCTAssertEqual(model.deck.map(\.id), ["a1", "b1", "a2", "b2"])
+    }
+
+    /// The point of filtering the frozen queue rather than rebuilding it: work
+    /// done under one filter is still done under the next.
+    func testDecisionsSurviveAFilterChange() {
+        let model = loaded()
+        model.setRepoFilter("tella-fusion")
+        model.act(.keep)
+        XCTAssertEqual(model.deck.map(\.id), ["a2"])
+
+        model.setRepoFilter(nil)
+
+        XCTAssertEqual(model.deck.map(\.id), ["b1", "a2", "b2"])
+    }
+
+    /// Undo returns a card to where it was, not to the end of the queue.
+    func testUndoPutsACardBackInItsOriginalPlace() {
+        let model = loaded()
+        model.act(.keep)
+        XCTAssertEqual(model.deck.map(\.id), ["b1", "a2", "b2"])
+
+        model.undo()
+
+        XCTAssertEqual(model.deck.map(\.id), ["a1", "b1", "a2", "b2"])
+        XCTAssertEqual(model.handled, 0)
+    }
+
+    /// A filter change is a change of subject, so the undo it was offering
+    /// goes with it. A button that would put a card back somewhere you are no
+    /// longer looking does nothing you can see.
+    func testChangingTheFilterDropsThePendingUndo() {
+        let model = loaded()
+        model.act(.keep)
+        XCTAssertNotNil(model.undoable)
+
+        model.setRepoFilter("opensession")
+
+        XCTAssertNil(model.undoable)
+    }
+
+    /// The menu is built from the queue the deck started with, so a repo holds
+    /// its place while you empty it instead of vanishing under your finger.
+    func testRepoOptionsHoldTheirPlaceAndCountWhatIsLeft() {
+        let model = loaded()
+        XCTAssertEqual(model.repoOptions.map(\.repo), ["tella-fusion", "opensession"])
+        XCTAssertEqual(model.repoOptions.map(\.remaining), [2, 2])
+
+        model.setRepoFilter("tella-fusion")
+        model.act(.keep)
+        model.act(.keep)
+
+        XCTAssertEqual(model.repoOptions.map(\.repo), ["tella-fusion", "opensession"])
+        XCTAssertEqual(model.repoOptions.map(\.remaining), [0, 2])
+    }
+
+    /// Clearing the repo you narrowed to finishes THAT repo. Saying "all caught
+    /// up" here would send you away from work you only meant to set aside.
+    func testClearingAFilteredRepoIsNotBeingCaughtUp() {
+        let model = loaded()
+        model.setRepoFilter("tella-fusion")
+        model.act(.keep)
+        model.act(.keep)
+
+        XCTAssertTrue(model.isDone)
+        XCTAssertFalse(model.isEmpty)
+        XCTAssertEqual(model.remainingElsewhere, 2)
+
+        model.setRepoFilter(nil)
+
+        XCTAssertFalse(model.isDone)
+        XCTAssertEqual(model.deck.map(\.id), ["b1", "b2"])
+        XCTAssertEqual(model.remainingElsewhere, 0)
+    }
+
+    /// The progress bar's denominator follows the filter; without that it would
+    /// sit still while you cleared everything in front of you.
+    func testScopeTotalFollowsTheFilter() {
+        let model = loaded()
+        XCTAssertEqual(model.scopeTotal, 4)
+
+        model.setRepoFilter("opensession")
+
+        XCTAssertEqual(model.scopeTotal, 2)
+    }
+}
+
 @MainActor
 final class CatchUpConversationTests: XCTestCase {
     private func entry(_ id: String, _ type: String, _ content: String) -> TranscriptEntry {

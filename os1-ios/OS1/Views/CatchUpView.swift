@@ -65,6 +65,7 @@ struct CatchUpView: View {
                 .opacity(model.undoable == nil ? 0 : 1)
                 .disabled(model.undoable == nil)
                 .buttonStyle(.plain)
+            repoFilterMenu
         }
         .overlay {
             Text(counterLabel)
@@ -93,6 +94,57 @@ struct CatchUpView: View {
         .zIndex(1)
     }
 
+    /// Narrow the deck to one repo.
+    ///
+    /// Catching up is not one queue in practice: the work you can act on
+    /// depends on which codebase you have in your head right now, and a deck
+    /// that interleaves three of them makes you switch on every card. Offered
+    /// only when there is genuinely more than one repo waiting, because a
+    /// filter over a single repo is a control that cannot do anything.
+    ///
+    /// It filters the frozen queue rather than rebuilding it, so decisions
+    /// already made stay made and nothing you have passed comes back.
+    @ViewBuilder
+    private var repoFilterMenu: some View {
+        let options = model.repoOptions
+        if options.count > 1 {
+            Menu {
+                Picker("Repo", selection: repoSelection) {
+                    Text("All repos").tag(String?.none)
+                    ForEach(options) { option in
+                        // The count is what makes this a decision rather than a
+                        // guess: it says how much is waiting behind each name.
+                        Text("\(RepoTile.label(for: option.repo)) (\(option.remaining))")
+                            .tag(String?.some(option.repo))
+                    }
+                }
+                .pickerStyle(.inline)
+            } label: {
+                Image(
+                    systemName: model.repoFilter == nil
+                        ? "line.3.horizontal.decrease"
+                        : "line.3.horizontal.decrease.circle.fill"
+                )
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(
+                    model.repoFilter == nil ? OS1VisualStyle.textDim : OS1VisualStyle.accent
+                )
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+            }
+            .menuIndicator(.hidden)
+            .buttonStyle(.plain)
+            .accessibilityLabel(
+                model.repoFilter.map { "Showing \(RepoTile.label(for: $0)) only" }
+                    ?? "Filter by repo"
+            )
+        }
+    }
+
+    private var repoSelection: Binding<String?> {
+        Binding(get: { model.repoFilter }, set: { model.setRepoFilter($0) })
+    }
+
     /// How far through the deck you are. A finish line is most of what makes a
     /// queue feel finishable.
     private var progressBar: some View {
@@ -111,14 +163,24 @@ struct CatchUpView: View {
         .accessibilityHidden(true)
     }
 
+    /// Measured against the CURRENT scope, not the whole queue: filtered to one
+    /// repo, a bar that counted the others would sit still while you cleared
+    /// everything in front of you.
     private var fractionDone: Double {
-        guard !model.cards.isEmpty else { return 0 }
-        return Double(model.cards.count - model.remaining) / Double(model.cards.count)
+        let total = model.scopeTotal
+        guard total > 0 else { return 0 }
+        return Double(total - model.remaining) / Double(total)
     }
 
     private var counterLabel: String {
         if model.isSettling && model.isEmpty { return "Catch up" }
-        if model.isEmpty || model.isDone { return "All caught up" }
+        if model.isEmpty { return "All caught up" }
+        if model.isDone {
+            // Name the repo rather than claiming the queue: filtered, the only
+            // thing that is finished is the thing you narrowed to.
+            guard let repo = model.repoFilter else { return "All caught up" }
+            return "\(RepoTile.label(for: repo)) clear"
+        }
         return "\(model.remaining) left"
     }
 
@@ -132,7 +194,13 @@ struct CatchUpView: View {
             CatchUpLoadingCard()
                 .transition(.opacity)
         } else if model.isEmpty || model.isDone {
-            CatchUpFinishedView(handled: model.handled, onDone: { dismiss() })
+            CatchUpFinishedView(
+                handled: model.handled,
+                scopeRepo: model.repoFilter,
+                remainingElsewhere: model.remainingElsewhere,
+                onWiden: { model.setRepoFilter(nil) },
+                onDone: { dismiss() }
+            )
                 .transition(
                     reduceMotion
                         ? .opacity
@@ -196,6 +264,11 @@ private struct CatchUpLoadingCard: View {
 /// is the empty queue, not a firework.
 private struct CatchUpFinishedView: View {
     let handled: Int
+    /// The repo the deck was narrowed to, if any: what was actually finished.
+    let scopeRepo: String?
+    /// Cards still waiting in the repos the filter is hiding.
+    let remainingElsewhere: Int
+    let onWiden: () -> Void
     let onDone: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -220,7 +293,7 @@ private struct CatchUpFinishedView: View {
                     .scaleEffect(landed ? 1 : 0.6)
                     .opacity(landed ? 1 : 0)
             }
-            Text("All caught up")
+            Text(title)
                 .font(.title2.weight(.semibold))
                 .foregroundStyle(OS1VisualStyle.text)
             Text(subtitle)
@@ -229,6 +302,16 @@ private struct CatchUpFinishedView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
             Spacer()
+            // The way back to the rest of the queue, offered where you are
+            // standing. Otherwise finishing a filtered repo hands you a Done
+            // button over work you never saw.
+            if remainingElsewhere > 0 {
+                Button("Show the other repos", action: onWiden)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(OS1VisualStyle.accent)
+                    .buttonStyle(.plain)
+                    .padding(.bottom, 4)
+            }
             Button(action: onDone) {
                 Text("Done")
                     .font(.body.weight(.semibold))
@@ -254,11 +337,20 @@ private struct CatchUpFinishedView: View {
         }
     }
 
+    private var title: String {
+        guard let scopeRepo else { return "All caught up" }
+        return "\(RepoTile.label(for: scopeRepo)) is clear"
+    }
+
     private var subtitle: String {
+        if remainingElsewhere > 0 {
+            let workspaces = remainingElsewhere == 1 ? "workspace" : "workspaces"
+            return "\(remainingElsewhere) more \(workspaces) waiting in your other repos."
+        }
         switch handled {
-        case 0: "Nothing unread right now."
-        case 1: "You went through one workspace."
-        default: "You went through \(handled) workspaces."
+        case 0: return "Nothing unread right now."
+        case 1: return "You went through one workspace."
+        default: return "You went through \(handled) workspaces."
         }
     }
 }

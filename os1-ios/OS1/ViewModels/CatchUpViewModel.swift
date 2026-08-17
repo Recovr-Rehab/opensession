@@ -30,12 +30,28 @@ final class CatchUpViewModel {
     struct Undoable: Equatable, Sendable {
         let card: CatchUpCard
         let action: Action
-        /// Where the card sat, so undo puts it back rather than on the end.
-        let index: Int
+    }
+
+    /// One repo the deck can be narrowed to, and how much of it is left.
+    struct RepoOption: Identifiable, Equatable, Sendable {
+        let repo: String
+        let remaining: Int
+
+        var id: String { repo }
     }
 
     private(set) var cards: [CatchUpCard] = []
-    private(set) var index = 0
+    /// The cards actually on screen: the frozen queue, minus the ones already
+    /// decided, narrowed to the chosen repo. Stored rather than computed so a
+    /// drag, which re-reads it every frame, costs one property read.
+    private(set) var deck: [CatchUpCard] = []
+    /// The repo the deck is narrowed to, or nil for all of them.
+    private(set) var repoFilter: String?
+    /// Cards decided this run. Holding decisions as a SET rather than walking
+    /// an index is what lets the filter change which cards are visible without
+    /// losing what you have already done. It is also what lets undo put a card
+    /// back in its original place rather than on the end of the queue.
+    private var decided: Set<String> = []
     private(set) var conversations: [String: Conversation] = [:]
     private(set) var undoable: Undoable?
     /// How many decisions this run — what the finish screen reports.
@@ -58,21 +74,75 @@ final class CatchUpViewModel {
     private var undoExpiry: Task<Void, Never>?
     private weak var list: SessionsListViewModel?
 
-    var current: CatchUpCard? { card(at: index) }
-    var next: CatchUpCard? { card(at: index + 1) }
-    var following: CatchUpCard? { card(at: index + 2) }
-    var remaining: Int { max(0, cards.count - index) }
-    var isDone: Bool { !cards.isEmpty && index >= cards.count }
+    var current: CatchUpCard? { card(atOffset: 0) }
+    var next: CatchUpCard? { card(atOffset: 1) }
+    var following: CatchUpCard? { card(atOffset: 2) }
+    var remaining: Int { deck.count }
+    /// Nothing unread at all: the deck never had a card, filter or no filter.
     var isEmpty: Bool { cards.isEmpty }
+    /// Everything in the current scope is decided. Scoped, so clearing the one
+    /// repo you filtered to finishes that repo rather than claiming the whole
+    /// queue is done; the header stays up, so the filter can be widened again.
+    var isDone: Bool { scopeTotal > 0 && deck.isEmpty }
 
-    private func card(at position: Int) -> CatchUpCard? {
-        cards.indices.contains(position) ? cards[position] : nil
+    /// How many cards the current filter covers, decided or not. This is the
+    /// denominator of the progress bar.
+    var scopeTotal: Int { cards.filter { matchesFilter($0) }.count }
+
+    /// What is still waiting OUTSIDE the current filter. Clearing one repo is
+    /// not being caught up, and a finish screen that says it is sends you away
+    /// from work you asked to set aside for a moment, not to skip.
+    var remainingElsewhere: Int {
+        cards.filter { !decided.contains($0.id) }.count - deck.count
     }
 
     /// The card `offset` places behind the current one. The deck renders one
     /// slot deeper than it shows, so a card fades in while the swipe in front
     /// of it is still happening.
-    func card(atOffset offset: Int) -> CatchUpCard? { card(at: index + offset) }
+    func card(atOffset offset: Int) -> CatchUpCard? {
+        deck.indices.contains(offset) ? deck[offset] : nil
+    }
+
+    // MARK: - Repo filter
+
+    /// Every repo the queue STARTED with, each with what is left in it.
+    ///
+    /// Built from the frozen queue rather than from what is left, so the menu
+    /// holds still while you work: a repo whose last card you just cleared
+    /// reads "0" for the rest of the run instead of vanishing under the finger
+    /// on its way to the next item.
+    var repoOptions: [RepoOption] {
+        var order: [String] = []
+        var left: [String: Int] = [:]
+        for card in cards {
+            if left[card.repo] == nil {
+                order.append(card.repo)
+                left[card.repo] = 0
+            }
+            if !decided.contains(card.id) { left[card.repo]! += 1 }
+        }
+        return order.map { RepoOption(repo: $0, remaining: left[$0] ?? 0) }
+    }
+
+    /// Narrow the deck to one repo, or widen it back with nil.
+    func setRepoFilter(_ repo: String?) {
+        guard repo != repoFilter else { return }
+        repoFilter = repo
+        // A filter change is a change of subject, and the undo it offered
+        // belonged to the last one. A card put back into a scope you are no
+        // longer looking at is a button that does nothing you can see.
+        dismissUndo()
+        refreshDeck()
+        prefetch()
+    }
+
+    private func matchesFilter(_ card: CatchUpCard) -> Bool {
+        repoFilter == nil || card.repo == repoFilter
+    }
+
+    private func refreshDeck() {
+        deck = cards.filter { !decided.contains($0.id) && matchesFilter($0) }
+    }
 
     // MARK: - Building
 
@@ -108,9 +178,22 @@ final class CatchUpViewModel {
             viewerLogin: config.githubLogin,
             isUnread: { reads.isUnread($0) }
         )
+        load(built)
+        prefetch()
+    }
+
+    /// Install a freshly built queue, freezing it once it has anything in it.
+    ///
+    /// Split out of `rebuild` because the deck's own rules are worth testing
+    /// without a sessions list, a reads store and a server standing behind
+    /// them: what the filter hides, what a decision removes, what undo puts
+    /// back. It deliberately does not prefetch, because loading transcripts is
+    /// `rebuild`'s business rather than the queue's.
+    func load(_ built: [CatchUpCard]) {
+        guard !frozen else { return }
         cards = built
         if !built.isEmpty { frozen = true }
-        prefetch()
+        refreshDeck()
     }
 
     // MARK: - Decisions
@@ -128,9 +211,10 @@ final class CatchUpViewModel {
         case .keep:
             break
         }
-        undoable = Undoable(card: card, action: action, index: index)
-        index += 1
+        undoable = Undoable(card: card, action: action)
+        decided.insert(card.id)
         handled += 1
+        refreshDeck()
         scheduleUndoExpiry()
         prefetch()
     }
@@ -150,8 +234,12 @@ final class CatchUpViewModel {
         case .keep:
             break
         }
-        index = entry.index
+        // Dropping the id is enough to put the card back where it was: the
+        // deck is the frozen queue minus what has been decided, so its
+        // original neighbours are still on either side of it.
+        decided.remove(entry.card.id)
         handled = max(0, handled - 1)
+        refreshDeck()
     }
 
     func dismissUndo() {
