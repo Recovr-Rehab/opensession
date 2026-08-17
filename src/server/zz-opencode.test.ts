@@ -804,6 +804,19 @@ describe("buildRunInstructions", () => {
     expect(s).toContain("why it matters");
     expect(s).toContain("deliberate Share to Slack action");
   });
+  // Native changes shipped without walkthroughs while web changes got them:
+  // the instruction named only the web capture script, so an os1-ios run faced
+  // an undocumented Mac-node chain and skipping looked reasonable every time.
+  test("the walkthrough instruction names the native capture script too", () => {
+    const s = buildRunInstructions({
+      isAsk: false,
+      inProcessMcp: { "opensession-walkthrough": {} },
+    });
+    expect(s).toContain("`bun scripts/capture-ios.ts`");
+    expect(s).toContain("os1-ios/");
+    expect(s).toContain("--platform mac");
+    expect(s).toContain("deliberate Share to Slack action");
+  });
   // Kent kept waiting for walkthroughs on design work that never came: the old
   // copy read as a judgement call and demanded a screen-recording, which is
   // absurd for a spacing fix, so runs skipped publishing entirely.

@@ -72,6 +72,41 @@ ssh tella-mac-node '
 - The Linux host can't catch Swift compile errors; never declare a change done
   without a real xcodebuild run.
 
+## Screenshots
+
+`bun scripts/capture-ios.ts <out.png>` is the whole chain in one command: it
+syncs this directory to the Mac node, regenerates the project, builds, boots a
+simulator of its own, installs, launches against the live server, screenshots
+at device resolution and copies the PNG back. Use it for the walkthrough every
+user-visible change here is expected to publish — a native change is the one
+that gets skipped because capturing it *looks* expensive.
+
+```sh
+bun scripts/capture-ios.ts /tmp/after.png
+bun scripts/capture-ios.ts /tmp/after.png --session os-… --theme dark
+bun scripts/capture-ios.ts /tmp/before.png --source /tmp/wt-x/os1-ios   # a detached worktree
+```
+
+- **`--platform mac` is a first-class surface, not a consolation prize.** It
+  builds `OS1Mac` and captures the window — the same SwiftUI views with no
+  simulator underneath, so it costs a fraction of the load and renders when
+  the box is too busy for a device. For a transcript row, a chip, a colour or
+  a layout fix it is the better picture. Reach for the simulator when the
+  change is about a *phone*: safe areas, the keyboard, sheets, Dynamic Type.
+- **The first build is 5-8 minutes; later ones are ~90 seconds.** The build
+  tree is keyed on your session and reused, so take the second screenshot.
+- **It talks to the server over the tailnet, never a reverse tunnel.** Tunnels
+  are the historic source of silent failure here (colliding ports, stale
+  listeners, and loopback rejecting human tokens while `/api/auth/status` still
+  answers 200, so the app looks signed in while every poll 401s).
+- **A Swift error in a file you did not touch is usually another session
+  mid-edit** in this shared checkout, not your change — the failure says so and
+  prints the errors. Capture from a detached worktree with `--source`
+  meanwhile.
+- **Raise `--wait` for a long transcript.** The default 45s catches the app
+  signed in with its list rendered, but a big session can still be showing
+  skeleton rows.
+
 ## Using the Mac node beyond builds
 
 A build node with a logged-in GUI session is a full Mac — use it whenever

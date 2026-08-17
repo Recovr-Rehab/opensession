@@ -46,6 +46,7 @@ are ambiguous between them:
 - **Native Swift app** — `os1-ios/` (one SwiftUI codebase, iOS + macOS targets,
   bundle id `dev.tella.os1`). Read `os1-ios/AGENTS.md` before touching it —
   build/verify workflow, release trigger, and performance invariants live there.
+  Screenshots are one command: `bun scripts/capture-ios.ts <out.png>`.
 - **Chrome extension** — `os1-chrome/` (MV3 side panel; captures page context —
   screenshot, element pick with React fiber info — and starts sessions via the
   REST surface with Bearer auth; loaded unpacked, never the Web Store; see

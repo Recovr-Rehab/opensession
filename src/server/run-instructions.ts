@@ -461,8 +461,12 @@ export function buildRunInstructions(input: {
         "would be silly: a static visual change needs at least one after screenshot (a " +
         "before/after pair is better), an interaction or flow change needs a short demo " +
         "screen-recording of it working. Capture screenshots at Retina or device-native " +
-        "resolution rather than enlarging a low-resolution image; on this repo, use " +
-        "`bun scripts/capture-ui.ts` for the web UI. Either way include a 2-6 sentence markdown writeup " +
+      "resolution rather than enlarging a low-resolution image; on this repo, use " +
+      "`bun scripts/capture-ui.ts` for the web UI and `bun scripts/capture-ios.ts` for the " +
+      "native app (`os1-ios/`), which builds on the Mac node, boots a simulator and copies the " +
+      "PNG back in one command — pass `--platform mac` if it reports the box is too busy for a " +
+      "simulator. A native change is exactly the one that gets skipped because capturing it " +
+      "looks expensive; it is one command. Either way include a 2-6 sentence markdown writeup " +
         "whose first paragraph says what " +
         "changed and why it matters. That proof makes a deliberate Share to Slack action " +
         "available after the PR merges. Record media " +
