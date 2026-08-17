@@ -1963,6 +1963,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	const archiveKeys = useShortcutKeys("session-archive");
 	const newSessionKeys = useShortcutKeys("session-new");
 	const archiveWsKeys = useShortcutKeys("workspace-archive");
+	const pinShortcutKeys = useShortcutKeys("session-pin");
 
 	// ⌘E (or the legacy ⌘⇧A) archives the open session and lands on the next entry
 	// in the sidebar, rather than dropping back to Home. This lives here (not in
@@ -2012,6 +2013,37 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		window.addEventListener("keydown", onKeyDown);
 		return () => window.removeEventListener("keydown", onKeyDown);
 	}, [wsRowOrder, selectedId, onArchiveWorkspace]);
+
+	// ⌘P pins the open session's workspace ROW, so the chord and the row's own
+	// pin button move the same pin. They used to move different ones: the button
+	// pins the workspace key (plus any legacy member-session pins), the viewer's
+	// chord pins the session id, so a row pinned by click and then unpinned by
+	// chord stayed pinned and the keypress looked dead.
+	// The viewer keeps the chord for sessions this list doesn't render — an
+	// archived one, or one the current lens filters out. Capture phase, so this
+	// runs before the viewer's window listener whatever order they mounted in,
+	// and `preventDefault` is what tells it we took the key.
+	useEffect(() => {
+		function onKeyDown(e: KeyboardEvent) {
+			if (e.defaultPrevented || !matchesShortcut(e, "session-pin")) return;
+			if (
+				document.querySelector(
+					".palette-backdrop, .composer-schedule-modal-backdrop, .session-delete-overlay",
+				)
+			)
+				return;
+			// Decline inside a text field rather than swallowing the key: the
+			// viewer's own handler still sees it, so this only ever adds row
+			// semantics, never removes the chord from where it worked before.
+			if (editableSwallowsArchiveChord(e.target)) return;
+			const row = wsRowOrder.find(rowOwnsSelection);
+			if (!row) return;
+			e.preventDefault();
+			workspacePinState(row).toggle();
+		}
+		window.addEventListener("keydown", onKeyDown, true);
+		return () => window.removeEventListener("keydown", onKeyDown, true);
+	}, [wsRowOrder, selectedSession, pins]);
 
 	// ⌘↓/⌘↑ cycle through the sidebar's rendered items in visual order (down =
 	// next row), wrapping at the ends. Reading the DOM here is intentional: each
@@ -3046,29 +3078,37 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					)}
 					data-ws-actions=""
 				>
-					<span
-						role="button"
-						tabIndex={0}
-						className={cn(
-							SIDEBAR_WS_ACTION,
-							// One colour, picked here rather than stacking two `text-*`
-							// utilities, whose winner would be Tailwind's ordering.
-							pinned ? "text-accent" : "text-faint hover:text-fg",
-						)}
-						aria-label={pinned ? "Unpin workspace" : "Pin workspace"}
-						onClick={(e) => {
-							e.stopPropagation();
-							toggleRowPin();
-						}}
-						onKeyDown={(e) => {
-							if (e.key === "Enter" || e.key === " ") {
+					<Tooltip
+						label={pinned ? "Unpin workspace" : "Pin workspace"}
+						// Only on the row the chord would actually hit: ⌘P pins the
+						// workspace holding the OPEN session, so advertising it on
+						// every row would promise a key that lands elsewhere.
+						shortcut={active ? (pinShortcutKeys ?? undefined) : undefined}
+					>
+						<span
+							role="button"
+							tabIndex={0}
+							className={cn(
+								SIDEBAR_WS_ACTION,
+								// One colour, picked here rather than stacking two `text-*`
+								// utilities, whose winner would be Tailwind's ordering.
+								pinned ? "text-accent" : "text-faint hover:text-fg",
+							)}
+							aria-label={pinned ? "Unpin workspace" : "Pin workspace"}
+							onClick={(e) => {
 								e.stopPropagation();
 								toggleRowPin();
-							}
-						}}
-					>
-						<IconPin size={19} fill={pinned ? "currentColor" : "none"} />
-					</span>
+							}}
+							onKeyDown={(e) => {
+								if (e.key === "Enter" || e.key === " ") {
+									e.stopPropagation();
+									toggleRowPin();
+								}
+							}}
+						>
+							<IconPin size={19} fill={pinned ? "currentColor" : "none"} />
+						</span>
+					</Tooltip>
 					{row.sessions.length > 0 && (
 						<Tooltip
 							label={
