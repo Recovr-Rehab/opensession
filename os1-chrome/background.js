@@ -3,7 +3,7 @@
 // Deliberately tiny: the side panel (sidepanel.js) drives captures itself via
 // chrome.scripting/chrome.tabs (extension pages have full API access). The
 // worker only owns the bits that need a persistent-ish registration: opening
-// the panel from the toolbar icon, and the right-click "Send to Open Session"
+// the panel from the toolbar icon, and the right-click "Send to OS"
 // entry that seeds the composer with the page/selection context.
 
 chrome.sidePanel
@@ -14,7 +14,7 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
       id: "os1-send",
-      title: "Send to Open Session",
+      title: "Send to OS",
       contexts: ["page", "selection", "image"],
     });
   });

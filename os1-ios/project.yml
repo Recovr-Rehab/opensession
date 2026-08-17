@@ -48,14 +48,17 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
-        # The name on the Home Screen, in Siri, Spotlight and the Shortcuts
-        # picker. PRODUCT_NAME deliberately stays OS1: it names the bundle,
-        # the archive and the .ipa that CI refers to, and nothing on iOS shows
-        # it. (CFBundleName cannot be set this way. The generated Info.plist
-        # always takes it from PRODUCT_NAME, and an INFOPLIST_KEY_CFBundleName
-        # is silently dropped, which is why the Mac target below renames
-        # PRODUCT_NAME instead of adding a key here.)
-        INFOPLIST_KEY_CFBundleDisplayName: Open Session
+        # The app's LABEL, as the system shows it: Home Screen, Siri, Spotlight
+        # and the Shortcuts picker. Two letters on purpose. The FULL name stays
+        # Open Session and lives in AppBrand.productName, for prose the app
+        # writes; the App Store record keeps it too. PRODUCT_NAME deliberately
+        # stays OS1: it names the bundle, the archive and the .ipa that CI
+        # refers to, and nothing on iOS shows it. (CFBundleName cannot be set
+        # this way. The generated Info.plist always takes it from PRODUCT_NAME,
+        # and an INFOPLIST_KEY_CFBundleName is silently dropped, which is why
+        # the Mac target below renames PRODUCT_NAME instead of adding a key
+        # here.)
+        INFOPLIST_KEY_CFBundleDisplayName: OS
         INFOPLIST_KEY_OS1DefaultServerURL: http://127.0.0.1:3850
         # "Take a photo" in the composer's + menu. The photo library needs no
         # string: PhotosPicker runs out of process.
@@ -158,8 +161,8 @@ targets:
         INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: NO
         # The Finder and Dock label. The app MENU title is CFBundleName, which
         # only PRODUCT_NAME below can set, so the Mac target is the one place
-        # the product name reaches the bundle and executable names too.
-        INFOPLIST_KEY_CFBundleDisplayName: Open Session
+        # the label reaches the bundle and executable names too.
+        INFOPLIST_KEY_CFBundleDisplayName: OS
         INFOPLIST_KEY_OS1DefaultServerURL: http://127.0.0.1:3850
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.developer-tools
         # Mic capture for two features: composer dictation and the Desk's
@@ -169,10 +172,15 @@ targets:
         # supports it, but the permission is required either way.
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: Turn what you say into text in the message box.
         # Drives CFBundleName (the app menu title) as well as the .app and
-        # executable names, so the whole Mac bundle reads Open Session. The
-        # export step's .pkg is named from this, which is why the TestFlight
-        # workflow globs for it rather than naming OS1.pkg.
-        PRODUCT_NAME: Open Session
+        # executable names, so the whole Mac bundle reads OS. Renaming this is
+        # free: everything this app stores is keyed on
+        # PRODUCT_BUNDLE_IDENTIFIER (sandbox container, defaults domain,
+        # keychain items), never on the name. The Electron shell is the
+        # opposite case, where the name IS the storage key — see
+        # os1-mac/src/main.js. The export step's .pkg is named from this, which
+        # is why the TestFlight workflow globs for it rather than naming
+        # OS1.pkg.
+        PRODUCT_NAME: OS
         # PRODUCT_MODULE_NAME defaults to PRODUCT_NAME, so without this the
         # Swift module became `Open_Session` and OS1Tests' `@testable import
         # OS1` stopped resolving. The module is an identifier: it stays OS1.
@@ -213,5 +221,5 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         PRODUCT_BUNDLE_IDENTIFIER: dev.tella.os1.tests
         SWIFT_VERSION: "5.9"
-        # Follows OS1Mac's PRODUCT_NAME, spaces and all.
-        TEST_HOST: $(BUILT_PRODUCTS_DIR)/Open Session.app/Contents/MacOS/Open Session
+        # Follows OS1Mac's PRODUCT_NAME.
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/OS.app/Contents/MacOS/OS

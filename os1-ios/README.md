@@ -217,9 +217,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   sheet's footer — it only auto-starts when speech + mic permission already
   exist, so a first press isn't two system prompts stacked over the composer.
   `AgentShortcuts` registers it with no setup: Siri phrases ("Start an agent
-  in Open Session"), Spotlight, and the Action Button's shortcut picker
-  (iPhone Settings > Action Button > Shortcut > Open Session > Start an
-  Agent). Settings >
+  in OS"), Spotlight, and the Action Button's shortcut picker
+  (iPhone Settings > Action Button > Shortcut > OS > Start an
+  Agent) — those all read the app's label, which is OS. Settings >
   Shortcuts inside the app signposts all of it.
 - **Widgets** (`OS1Widgets/`, its own iOS app-extension target) — the same
   press from three more places: a Home Screen widget (systemSmall), a Lock

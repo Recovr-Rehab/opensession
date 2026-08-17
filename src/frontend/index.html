@@ -6,7 +6,12 @@
   <meta name="theme-color" content="#222222" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Open Session" />
+  <!-- The label under the icon once iOS installs this to the Home Screen. It is
+       the short mark, not the full name: iOS truncates at about 12 characters,
+       and the app's own label is OS on every other client too. The manifest's
+       short_name (routes/static-assets.ts) follows branding.productMark; this
+       file is built, so it carries the default. -->
+  <meta name="apple-mobile-web-app-title" content="OS" />
   <link rel="icon" type="image/png" href="/mac-app-icon.png?v=7" />
   <title>Open Session</title>
   <!-- OpenGraph / Twitter link-preview image — the new Open Session mark, same asset as

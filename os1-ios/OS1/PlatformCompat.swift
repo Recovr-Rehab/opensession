@@ -162,7 +162,7 @@ private struct MacSettingsWindowConfigurator: NSViewRepresentable {
     private func configureWhenAttached(_ view: NSView) {
         DispatchQueue.main.async {
             guard let window = view.window else { return }
-            window.title = "\(AppBrand.productName) Settings"
+            window.title = "\(AppBrand.appName) Settings"
             window.styleMask.formUnion([.resizable, .miniaturizable])
             window.standardWindowButton(.miniaturizeButton)?.isEnabled = true
             window.standardWindowButton(.zoomButton)?.isHidden = true

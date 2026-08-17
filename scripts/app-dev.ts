@@ -6,15 +6,21 @@
  *
  * Ctrl+C (or either child exiting) shuts down both processes.
  */
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const MAC_APP_ROOT = join(ROOT, "os1-mac");
+// electron-builder names the bundle and its executable after productName, so
+// read that rather than repeating a label here: it is the app's visible name,
+// and it moves.
+const MAC_APP_LABEL = JSON.parse(
+	readFileSync(join(MAC_APP_ROOT, "package.json"), "utf8"),
+).productName as string;
 const MAC_APP_EXECUTABLE = join(
 	MAC_APP_ROOT,
-	"dist/mac-arm64/Open Session.app/Contents/MacOS/Open Session",
+	`dist/mac-arm64/${MAC_APP_LABEL}.app/Contents/MacOS/${MAC_APP_LABEL}`,
 );
 const PORT = Number(process.env.PORT || 3851);
 const APP_URL = `http://127.0.0.1:${PORT}`;

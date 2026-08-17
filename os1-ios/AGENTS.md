@@ -16,15 +16,26 @@ WS protocol notes) — keep it updated alongside changes.
   truth — `OS1.xcodeproj` is not checked in and must never be hand-edited.
   New/removed Swift files under `OS1/` are picked up by `xcodegen generate`.
 - Deployment targets live in `project.yml` (iOS 26.0; don't trust stale docs).
-- The app is called **Open Session**. Three places carry that name and have to
-  move together: `INFOPLIST_KEY_CFBundleDisplayName` (Home Screen, Dock,
-  Finder, Siri, the Shortcuts picker) and `INFOPLIST_KEY_CFBundleName` (the
-  macOS app menu) in `project.yml`, `CFBundleDisplayName` in
-  `OS1Widgets/Info.plist`, and `AppBrand.productName` for the name in prose the
-  app shows a person. Never hardcode the product name in a view. Siri phrases
-  interpolate `\(.applicationName)` and follow the display name for free.
-  `AppBrand` is the product; `Brand` in `Views/BrandLogos.swift` is the
-  third-party service marks on the Connections screen. They are not the same.
+- The app has two names, and they are not interchangeable. Its **label** is
+  **OS**: that is what the system shows, on the Home Screen, in the Dock and
+  Finder, in Spotlight, Siri, Shortcuts, and on the Settings screens that list
+  installed apps. Its **full name** is **Open Session**, which the App Store
+  record keeps and which prose the app writes uses. Four places carry the label
+  and have to move together: `INFOPLIST_KEY_CFBundleDisplayName` in
+  `project.yml` (both targets), `PRODUCT_NAME` on the Mac target (the app menu
+  is `CFBundleName`, and only `PRODUCT_NAME` can set it, so it also renames the
+  `.app` and executable — keep `TEST_HOST` in step), `CFBundleDisplayName` in
+  `OS1Widgets/Info.plist`, and `AppBrand.appName`. The full name lives once, in
+  `AppBrand.productName`. Never hardcode either in a view. Which one a string
+  takes: a sentence that sends a person somewhere outside the app ("turn it on
+  for OS in Settings") takes the label, because that is what they will read
+  when they get there; prose about the product takes the full name. Siri
+  phrases interpolate `\(.applicationName)` and follow the display name for
+  free. Renaming is free on this side — every byte the app stores is keyed on
+  the bundle id, not the name. The Electron shell is the opposite (see
+  `os1-mac/src/main.js`). `AppBrand` is the product; `Brand` in
+  `Views/BrandLogos.swift` is the third-party service marks on the Connections
+  screen. They are not the same.
 - Pure SwiftUI. SwiftStreamingMarkdown is the deliberate exception to the
   no-third-party-dependencies default; discuss any additional dependency first.
 - Both targets share one bundle id (one App Store Connect record, universal

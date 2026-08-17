@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Open Session",
+  "name": "OS",
   "version": "0.1.0",
   "description": "Capture page context and start Open Session agent sessions.",
   "minimum_chrome_version": "116",
@@ -9,7 +9,7 @@
     "128": "icons/icon.png"
   },
   "action": {
-    "default_title": "Open Session"
+    "default_title": "OS"
   },
   "side_panel": {
     "default_path": "sidepanel.html"

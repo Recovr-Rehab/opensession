@@ -228,7 +228,7 @@ jobs:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
         run: |
-          # Named from OS1Mac's PRODUCT_NAME ("Open Session.pkg"), so glob for
+          # Named from OS1Mac's PRODUCT_NAME ("OS.pkg"), so glob for
           # it: a rename should not be able to break the upload silently.
           shopt -s nullglob
           PKGS=("$RUNNER_TEMP"/export/*.pkg)

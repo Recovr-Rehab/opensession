@@ -3,14 +3,23 @@
 # different Mac apps must never share a bundle id, so the Electron shell has
 # its own.
 #
-# Chromium names its keychain item after productName, so the release that
-# renames the app to Open Session prompts once for a new "Open Session Safe
-# Storage" item. Saved sessions survive one "Always Allow".
+# productName is the app's LABEL, and on macOS it is one knob for four things:
+# the .app and executable names, CFBundleName (the menu-bar title), Electron's
+# child-process lookup ("<CFBundleName> Helper.app" — a mismatch is a fatal
+# "Unable to find helper app"), and Chromium's Keychain item ("<name> Safe
+# Storage"). So it cannot be split: renaming the app means a new Keychain item,
+# and everyone signs in once. The user-data folder is the exception, pinned in
+# src/main.js so the profile no longer follows the label.
+#
+# The FULL name stays Open Session: the App Store record, the download, the
+# website and prose all keep it. This is only the label.
 appId: dev.tella.os1.shell
-productName: Open Session
-# Space-free on purpose: this is a URL path segment in the update feed. The
-# matching pattern in src/server/routes/os1-update.ts still accepts the old
-# OS1-* assets, so the feed keeps serving across the renaming release.
+productName: OS
+# Deliberately NOT renamed with the app: this is a URL path segment in the
+# update feed, and isMacReleaseAsset in src/server/routes/os1-update.ts matches
+# `OpenSession-*-arm64.zip` (and the older `OS1-*`). Leaving it alone is what
+# keeps every installed copy updating across this rename. It reads as the full
+# product name, which is also what a downloaded file should say.
 artifactName: OpenSession-${version}-${arch}.${ext}
 directories:
   buildResources: build
@@ -56,7 +65,7 @@ mac:
     # dictation fails as "denied" on the first try. This string is what the
     # system prompt shows. Pairs with com.apple.security.device.audio-input in
     # the entitlements.
-    NSMicrophoneUsageDescription: Open Session uses the microphone to dictate prompts into the composer.
+    NSMicrophoneUsageDescription: Dictate prompts into the composer.
     CFBundleURLTypes:
       - CFBundleURLName: Open Session deep link
         CFBundleURLSchemes: [os1]

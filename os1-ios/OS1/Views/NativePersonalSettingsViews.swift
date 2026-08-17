@@ -74,7 +74,7 @@ struct NotificationsSettingsView: View {
     private var liveActivityFooter: String {
         LiveActivityCoordinator.shared.areActivitiesAvailable
             ? "Shows your running sessions on the Lock Screen and Dynamic Island. Session titles follow your Lock Screen privacy settings."
-            : "Live Activities are disabled for \(AppBrand.productName) in iPhone Settings."
+            : "Live Activities are disabled for \(AppBrand.appName) in iPhone Settings."
     }
     #endif
 }
@@ -1017,7 +1017,7 @@ struct ShortcutsSettingsView: View {
             } footer: {
                 // No section header: the navigation title above already says
                 // "Shortcuts", and repeating it just pushed the first row down.
-                Text("Installed with the app. Ask Siri for it by name, or find it under \(AppBrand.productName) in Shortcuts.")
+                Text("Installed with the app. Ask Siri for it by name, or find it under \(AppBrand.appName) in Shortcuts.")
             }
 
             #if os(iOS)
@@ -1026,7 +1026,7 @@ struct ShortcutsSettingsView: View {
                     icon: "square.grid.2x2",
                     title: "Home Screen and Lock Screen",
                     detail: """
-                    Add the \(AppBrand.productName) widget and the whole tile \
+                    Add the \(AppBrand.appName) widget and the whole tile \
                     becomes the same press.
                     """
                 )
@@ -1034,7 +1034,7 @@ struct ShortcutsSettingsView: View {
                     icon: "switch.2",
                     title: "Control Centre",
                     detail: """
-                    Swipe down, +, Add a Control, then \(AppBrand.productName). \
+                    Swipe down, +, Add a Control, then \(AppBrand.appName). \
                     The Action Button's picker lists it under Controls too.
                     """
                 )
@@ -1063,7 +1063,7 @@ struct ShortcutsSettingsView: View {
                 #endif
             } footer: {
                 #if os(iOS)
-                Text("To put it on the Action Button: iPhone Settings → Action Button → swipe to Shortcut → Choose a Shortcut → \(AppBrand.productName) → Start an Agent.")
+                Text("To put it on the Action Button: iPhone Settings → Action Button → swipe to Shortcut → Choose a Shortcut → \(AppBrand.appName) → Start an Agent.")
                 #else
                 Text("Run it from Spotlight, or say it to Siri.")
                 #endif

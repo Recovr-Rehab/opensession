@@ -86,7 +86,7 @@ jobs:
 
       - name: Verify universal-link signing
         run: |
-          APP='dist/mac-arm64/Open Session.app'
+          APP="dist/mac-arm64/$(jq -r .productName package.json).app"
           test -f "$APP/Contents/embedded.provisionprofile" || { echo '::error::Signed app has no embedded provisioning profile'; ls -la "$APP/Contents"; exit 1; }
           codesign -d --entitlements :- "$APP" > /tmp/os1-entitlements.plist
           /usr/libexec/PlistBuddy -c 'Print :com.apple.developer.associated-domains' /tmp/os1-entitlements.plist | grep -q 'applinks:os.tella.dev'
@@ -106,13 +106,13 @@ jobs:
 
       - name: Verify packaged signature
         run: |
-          APP='dist/mac-arm64/Open Session.app'
+          APP="dist/mac-arm64/$(jq -r .productName package.json).app"
           codesign --verify --deep --strict --verbose=2 "$APP" ||
             { echo '::error::Packaged app failed deep signature verification'; exit 1; }
 
       - name: Verify packaged locales and report size
         run: |
-          APP='dist/mac-arm64/Open Session.app'
+          APP="dist/mac-arm64/$(jq -r .productName package.json).app"
           NON_ENGLISH_LOCALES=$(find "$APP/Contents" -type d -name '*.lproj' ! -name 'en.lproj' -print)
           if [[ -n "$NON_ENGLISH_LOCALES" ]]; then
             echo '::error::Non-English Electron locales were packaged:'

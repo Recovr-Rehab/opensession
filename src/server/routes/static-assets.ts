@@ -8,7 +8,7 @@
 
 import { existsSync, readFileSync, statSync } from "fs";
 import type { RouteContext } from "./context";
-import { configuredIntegration, configuredRepos, productName } from "../config";
+import { configuredIntegration, configuredRepos, productMark, productName } from "../config";
 import { FRONTEND_DIST, FRONTEND_SRC, devTailwindCss, frontend } from "../frontend-build";
 import { trimIconMargin } from "../png-trim";
 import { resolveRepoIcon } from "../repo-appearance";
@@ -23,7 +23,11 @@ const trimmedIcons = new Map<string, { mtimeMs: number; bytes: Uint8Array }>();
 export function pwaManifest(publicPrefix: string) {
 	return {
 		name: productName(),
-		short_name: productName(),
+		// The label under the icon once the web app is installed, where there is
+		// room for about 12 characters before iOS and Android truncate it. That is
+		// what the short mark is for; `name` keeps the full product name for the
+		// install prompt and the app list.
+		short_name: productMark(),
 		start_url: `${publicPrefix}/`,
 		display: "standalone",
 		display_override: ["window-controls-overlay"],

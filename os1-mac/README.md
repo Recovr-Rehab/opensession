@@ -6,6 +6,31 @@ the window, navigation policy, notifications, dock badge and deep links.
 The shell lives in `os1-mac/` inside the Open Session repository so native
 window changes and their frontend counterparts can ship together.
 
+## Its name, and what a rename costs
+
+The app's label is **OS** (`productName`), the full product name is **Open
+Session**. On macOS that label is one knob for four things, and they cannot be
+separated:
+
+| Follows `productName` | Why it matters |
+| --- | --- |
+| `OS.app` and its executable | what Finder and the Dock show |
+| `CFBundleName` | the menu-bar title |
+| `OS Helper.app` (and friends) | Electron looks child processes up by `CFBundleName`; a mismatch is a fatal "Unable to find helper app" |
+| Keychain item `OS Safe Storage` | the key Chromium encrypts the cookie jar with |
+
+So each rename costs one sign-in: Electron resolves the Keychain name from the
+bundle before `src/main.js` is loaded, and the new key cannot read what the old
+one wrote. Nothing else has to move, because the profile folder no longer
+follows the label — `src/main.js` pins `userData` (and `sessionData`) to a
+fixed name, so window bounds, zoom, notification grant, preferences and drafts
+stay put. The release artifacts keep the full name (`OpenSession-<version>-arm64.zip`)
+because the update feed matches on it.
+
+Fresh installs from the DMG land as `OS.app`; copies that auto-update keep
+whatever filename they already had, because Squirrel replaces the bundle in
+place. Both are the same app.
+
 ## Development
 
 ```sh

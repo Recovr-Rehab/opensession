@@ -11,9 +11,20 @@
 /// marks and colors of THIRD-PARTY services on the Connections screen.
 ///
 /// The Home Screen, Dock and app menu labels do NOT come from here. Those are
-/// `INFOPLIST_KEY_CFBundleDisplayName` and `INFOPLIST_KEY_CFBundleName` in
-/// `project.yml`, and have to be kept in step with this by hand.
+/// `INFOPLIST_KEY_CFBundleDisplayName` and `PRODUCT_NAME` in `project.yml`, and
+/// have to be kept in step with `appName` below by hand.
 enum AppBrand {
-    /// The full wordmark, as it appears in prose the app shows a person.
+    /// The full wordmark, as it appears in prose the app shows a person, and on
+    /// the App Store record.
     static let productName = "Open Session"
+
+    /// The app's label, as the SYSTEM shows it: Home Screen, Dock, app menu,
+    /// Spotlight, Siri, Shortcuts, and the Settings and privacy screens that
+    /// list installed apps.
+    ///
+    /// Use this, not `productName`, whenever a sentence points a person at a
+    /// place outside the app ("turn it on for OS in Settings"): what they will
+    /// be reading there is this label. Prose about the product itself keeps the
+    /// full name.
+    static let appName = "OS"
 }

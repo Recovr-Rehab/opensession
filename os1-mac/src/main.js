@@ -42,17 +42,31 @@ let IN_WINDOW_ORIGINS = [APP_ORIGIN, "https://github.com"];
 
 const stateFile = () => path.join(app.getPath("userData"), "window-state.json");
 
-// Electron names the user-data folder after the app, so renaming the app to
-// Open Session in 0.3.13 pointed every install at an empty folder and left its
-// window bounds and local preferences behind in the old one. Carry those across
-// on the first launch that finds nothing in their place. Caches stay behind:
-// they rebuild themselves, and copying them would only slow the launch.
+// The profile folder is this shell's storage identity, and it is deliberately
+// NOT the app's name. Electron derives the user-data folder from CFBundleName
+// (GetApplicationName reads it straight out of the Info.plist), so every rename
+// otherwise points the app at an empty folder and orphans everything a person
+// had set up: window bounds, zoom, notification grant, preferences, drafts.
+// That is what the 0.3.13 rename cost. Pin it here instead — the label on the
+// app can change as often as design likes, and the profile stays put.
 //
-// The sign-in cookie cannot come along. macOS encrypts the cookie jar with a
-// Keychain key named after the app ("<name> Safe Storage"), which Electron
-// derives from the bundle name before this file is loaded, so the renamed app
-// has no way to read what the old one wrote. Signing in once is the cost of the
-// rename.
+// `sessionData` is pinned too. It defaults to userData but is a separate path
+// key, so overriding userData alone would leave cookies, localStorage and the
+// disk cache behind in a second folder named after the current label.
+const PROFILE_DIR_NAME = "Open Session";
+app.setPath("userData", path.join(app.getPath("appData"), PROFILE_DIR_NAME));
+app.setPath("sessionData", app.getPath("userData"));
+
+// One thing a rename still costs, and no code here can avoid it: macOS
+// encrypts the cookie jar with a Keychain key named after the app ("<name> Safe
+// Storage"), which Electron resolves from the bundle name before this file is
+// loaded. A renamed app cannot read what the old name wrote, so signing in
+// again once is the price of each rename.
+//
+// Installs that never reached 0.3.13 still have their state under the original
+// name. Carry it across on the first launch that finds nothing in its place.
+// Caches stay behind: they rebuild themselves, and copying them would only slow
+// the launch.
 const LEGACY_APP_NAME = "OS\u00b9";
 // The entries that are state rather than cache: this shell's bounds and zoom,
 // the web app's per-user preferences and unsent drafts, and Chromium's own
@@ -381,10 +395,12 @@ async function explainMicDenied() {
     const { response } = await dialog.showMessageBox(win && !win.isDestroyed() ? win : null, {
       type: "info",
       message: "macOS is blocking the microphone",
+      // app.getName() rather than the product name: what System Settings lists
+      // is the bundle's label, so this text has to follow the label.
       detail:
-        "Dictation needs microphone access, and macOS has it turned off for Open Session.\n\n" +
-        "Open System Settings → Privacy & Security → Microphone, switch Open Session on, " +
-        "then quit and reopen Open Session.",
+        `Dictation needs microphone access, and macOS has it turned off for ${app.getName()}.\n\n` +
+        `Open System Settings → Privacy & Security → Microphone, switch ${app.getName()} on, ` +
+        "then quit and reopen it.",
       buttons: ["Open System Settings", "Not now"],
       defaultId: 0,
       cancelId: 1,
