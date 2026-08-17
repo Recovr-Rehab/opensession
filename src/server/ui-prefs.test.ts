@@ -12,6 +12,19 @@ describe("UI preference limits", () => {
 		expect(order.length).toBeLessThanOrEqual(maxValueLength("repo-order"));
 	});
 
+	test("keyboard shortcut maps can hold account bindings", () => {
+		const shortcuts = JSON.stringify(
+			Object.fromEntries(
+				Array.from({ length: 25 }, (_, index) => [
+					`command-${index}`,
+					[`mod+shift+f${(index % 24) + 1}`],
+				]),
+			),
+		);
+		expect(shortcuts.length).toBeGreaterThan(200);
+		expect(shortcuts.length).toBeLessThanOrEqual(maxValueLength("shortcuts"));
+	});
+
 	test("ordinary scalar preferences remain tightly bounded", () => {
 		expect(maxValueLength("turn-activity")).toBe(200);
 	});

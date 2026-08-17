@@ -163,6 +163,13 @@ struct SessionsListView: View {
     /// until the first `NativePreferences.hydrate`, so a fresh install offers
     /// the same tools the browser would.
     @AppStorage(SidebarTools.storageKey) private var hiddenToolsRaw = SidebarTools.defaultHiddenJSON
+    #if os(macOS)
+    @AppStorage(AccountShortcuts.storageKey) private var rawShortcuts = AccountShortcuts.emptyRawValue
+    #endif
+
+    #if os(macOS)
+    private var accountShortcuts: AccountShortcuts { AccountShortcuts(rawValue: rawShortcuts) }
+    #endif
 
     private var groupBy: GroupBy {
         GroupBy(rawValue: groupByRaw) ?? Self.defaultGroupBy(repoCount: knownRepoCount)
@@ -333,18 +340,18 @@ struct SessionsListView: View {
                 sessionPageCache.removeAll()
             }
             #if os(macOS)
-            // File > New Session (Cmd+N) from the app's menu commands.
+            // File > New Session from the app's account-bound menu command.
             .onReceive(NotificationCenter.default.publisher(for: .os1NewSession)) { _ in
                 newSessionRequest = NewSessionRequest()
             }
-            // File > New Session in This Workspace (Cmd+Option+N).
+            // File > New Session in This Workspace.
             .onReceive(
                 NotificationCenter.default.publisher(for: .os1NewSessionInWorkspace)
             ) { _ in
                 newSessionInCurrentWorkspace()
             }
-            // View > Command Palette (Cmd+K), which toggles: the same press
-            // that opened it puts it away.
+            // View > Command Palette toggles: the same press that opened it
+            // puts it away.
             .onReceive(
                 NotificationCenter.default.publisher(for: .os1CommandPalette)
             ) { _ in
@@ -603,6 +610,9 @@ struct SessionsListView: View {
     /// filtered sidebar, which is half the point: the palette finds the
     /// session a repo filter or the "My sessions" lens is hiding.
     private var paletteItems: [CommandPaletteItem] {
+        #if os(macOS)
+        let shortcuts = accountShortcuts
+        #endif
         var items: [CommandPaletteItem] = [
             CommandPaletteItem(
                 entry: CommandPaletteEntry(
@@ -610,7 +620,7 @@ struct SessionsListView: View {
                     title: "New session",
                     subtitle: "Start a session in any repo",
                     keywords: ["create", "start", "compose"],
-                    shortcut: ["⌘", "N"],
+                    shortcut: shortcuts.primaryBinding(for: .newSession)?.glyphs ?? [],
                     symbol: "plus"
                 ),
                 run: { newSessionRequest = NewSessionRequest() }
@@ -625,7 +635,7 @@ struct SessionsListView: View {
                         title: "New session in this workspace",
                         subtitle: "Share the open session's worktree and branch",
                         keywords: ["sibling", "tab", "workspace"],
-                        shortcut: ["⌘", "⌥", "N"],
+                        shortcut: shortcuts.primaryBinding(for: .newSessionInWorkspace)?.glyphs ?? [],
                         symbol: "plus.rectangle.on.rectangle"
                     ),
                     run: { newSessionInCurrentWorkspace() }
@@ -803,7 +813,11 @@ struct SessionsListView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
-                .help("New session (Command-N)")
+                .help(
+                    accountShortcuts.primaryBinding(for: .newSession).map {
+                        "New session (\($0.label))"
+                    } ?? "New session"
+                )
             }
 
             HStack(spacing: 7) {

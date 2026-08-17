@@ -136,6 +136,13 @@ enum NativePreferences {
             resetMissing: changedIdentity,
             in: defaults
         )
+        set(
+            AccountShortcuts.validatedRawValue(prefs["shortcuts"]),
+            default: AccountShortcuts.emptyRawValue,
+            key: AccountShortcuts.storageKey,
+            resetMissing: true,
+            in: defaults
+        )
         defaults.set(identity, forKey: identityKey)
         defaults.set(bucket, forKey: bucketKey)
     }

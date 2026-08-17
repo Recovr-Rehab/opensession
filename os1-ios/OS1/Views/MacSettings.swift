@@ -33,7 +33,7 @@ struct MacSettingsView: View {
             case .connection: "Connection"
             case .preferences: "Preferences"
             case .notifications: "Notifications"
-            case .shortcuts: "Shortcuts"
+            case .shortcuts: "Keyboard shortcuts"
             case .appearance: "Appearance"
             case .models: "Models"
             case .connections: "Connections"
@@ -54,7 +54,7 @@ struct MacSettingsView: View {
             case .connection: "server.rack"
             case .preferences: "slider.horizontal.3"
             case .notifications: "bell.badge"
-            case .shortcuts: "sparkles"
+            case .shortcuts: "keyboard"
             case .appearance: "circle.lefthalf.filled"
             case .models: "square.grid.2x2"
             case .connections: "point.3.connected.trianglepath.dotted"
@@ -158,7 +158,7 @@ struct MacSettingsView: View {
         case .connection: MacConnectionSettingsView(authenticationMessage: authenticationMessage)
         case .preferences: PreferencesSettingsView()
         case .notifications: NotificationsSettingsView()
-        case .shortcuts: ShortcutsSettingsView()
+        case .shortcuts: MacKeyboardShortcutsSettingsView()
         case .appearance: AppearanceSettingsView()
         case .models: ModelsSettingsView()
         case .connections: ConnectionsSettingsView()

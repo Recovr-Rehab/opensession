@@ -2,19 +2,23 @@ import SwiftUI
 
 #if os(macOS)
 extension Notification.Name {
-    /// Posted by the File > New Session menu command (Cmd+N); the sessions
-    /// list opens its new-session sheet in response.
+    /// Posted by the File > New Session menu command; the sessions list opens
+    /// its new-session sheet in response.
     static let os1NewSession = Notification.Name("os1.newSession")
-    /// File > New Session in This Workspace (Cmd+Option+N): a sibling of the
-    /// open session, sharing its workspace, worktree and branch.
+    /// File > New Session in This Workspace: a sibling of the open session,
+    /// sharing its workspace, worktree and branch.
     static let os1NewSessionInWorkspace = Notification.Name("os1.newSessionInWorkspace")
-    /// View > Command Palette (Cmd+K). Toggles, like the web's own Cmd+K.
+    /// View > Command Palette. Toggles like the web command does.
     static let os1CommandPalette = Notification.Name("os1.commandPalette")
 }
 #endif
 
 @main
 struct OS1App: App {
+    #if os(macOS)
+    @AppStorage(AccountShortcuts.storageKey) private var rawShortcuts = AccountShortcuts.emptyRawValue
+    #endif
+
     init() {
         // The shared cache is what carries repo icons across launches (see
         // `RepoImageCache`), and its stock disk budget is small enough that a
@@ -27,21 +31,24 @@ struct OS1App: App {
     }
 
     var body: some Scene {
+        #if os(macOS)
+        let shortcuts = AccountShortcuts(rawValue: rawShortcuts)
+        #endif
         WindowGroup {
             RootView()
         }
         #if os(macOS)
         .defaultSize(width: 920, height: 720)
         .commands {
-            // Cmd+N composes a new session instead of opening a new window.
+            // New session composes in this window instead of opening another.
             CommandGroup(replacing: .newItem) {
                 Button("New Session") {
                     NotificationCenter.default.post(name: .os1NewSession, object: nil)
                 }
-                .keyboardShortcut("n", modifiers: .command)
-                // The sibling variant, matching the web's own Cmd+Option+N: a
-                // second conversation on the workspace you are already in,
-                // sharing its worktree and branch. Never a dead key — with
+                .keyboardShortcut(shortcuts.keyboardShortcut(for: .newSession))
+                // The sibling variant starts a second conversation on the
+                // workspace you are already in, sharing its worktree and
+                // branch. Never a dead key: with
                 // nothing selected, or on a session too old to have a
                 // workspace, the sessions list falls back to the composer.
                 Button("New Session in This Workspace") {
@@ -49,7 +56,7 @@ struct OS1App: App {
                         name: .os1NewSessionInWorkspace, object: nil
                     )
                 }
-                .keyboardShortcut("n", modifiers: [.command, .option])
+                .keyboardShortcut(shortcuts.keyboardShortcut(for: .newSessionInWorkspace))
             }
             CommandGroup(after: .sidebar) {
                 Button("Command Palette…") {
@@ -57,7 +64,7 @@ struct OS1App: App {
                         name: .os1CommandPalette, object: nil
                     )
                 }
-                .keyboardShortcut("k", modifiers: .command)
+                .keyboardShortcut(shortcuts.keyboardShortcut(for: .commandMenu))
             }
         }
         #endif

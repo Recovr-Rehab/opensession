@@ -257,6 +257,8 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
 - **Settings** — native SwiftUI Tools, Personal, and Workspace administration,
   plus server/GitHub/token configuration and a connection test. Cross-device
   composer and session preferences refresh at launch and when the app foregrounds.
+  On macOS, custom account keyboard bindings drive the supported app commands and
+  their command-menu hints; iOS keeps its system shortcut and widget guide.
   Infrastructure → **Runners** lists the machines this instance trusts, read
   only: each one's status, hardware, workspace roots, toolchains and what it is
   working on. Connecting, revoking and permissions stay in the web settings —
