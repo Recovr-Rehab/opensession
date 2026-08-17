@@ -69,6 +69,11 @@ export function useSessions({
   const [archivedIndex, setArchivedIndex] = useState<UnifiedSession[] | null>(
     null,
   );
+  // When the archived index last came back, with the same split as `liveAt`
+  // above: the archived poll runs every few seconds for as long as the
+  // Archived screen is open, and its 304s carried no new rows but re-rendered
+  // the app anyway. The ref is the value; the state is only the trigger.
+  const archivedIndexAtRef = useRef(0);
   const [archivedIndexAt, setArchivedIndexAt] = useState(0);
   const [locallyArchived, setLocallyArchived] = useState<
     Map<string, LocalArchiveOverride>
@@ -225,7 +230,12 @@ export function useSessions({
             setArchivedIndex(JSON.parse(snapshot.text));
           }
         }
-        setArchivedIndexAt(startedAt);
+        archivedIndexAtRef.current = startedAt;
+        if (
+          locallyArchivedRef.current.size > 0 ||
+          locallyUnarchivedRef.current.size > 0
+        )
+          setArchivedIndexAt(startedAt);
       } catch {
         // Never surfaced as the app's error: the live list is what the app is
         // for, and a failed index just leaves Archived showing what it had.
@@ -287,7 +297,7 @@ export function useSessions({
       live,
       liveAt: liveAtRef.current,
       archivedIndex,
-      archivedIndexAt,
+      archivedIndexAt: archivedIndexAtRef.current,
       locallyArchived,
       locallyUnarchived,
     });
@@ -303,9 +313,9 @@ export function useSessions({
         for (const id of settled.unarchived) next.delete(id);
         return next;
       });
-    // `liveAt` is here as the trigger for a poll that landed with an override
-    // pending; the value the settle reads is the ref above, which every poll
-    // updates.
+    // `liveAt` and `archivedIndexAt` are here as the trigger for a poll that
+    // landed with an override pending; the values the settle reads are the refs
+    // above, which every poll updates.
   }, [
     live,
     liveAt,

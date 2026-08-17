@@ -4777,9 +4777,9 @@ export function SessionViewer({
 				// disturbing this transcript. Forking from a specific message stays on
 				// that message's own menu; this is the "from here" case, which is what
 				// people mean from the header. Both land in the same composer mode.
-				const lastAssistantId = [...entries]
-					.reverse()
-					.find((e) => e.type === "assistant")?.id;
+				const lastAssistantId = entries.findLast(
+					(e) => e.type === "assistant",
+				)?.id;
 				const forkAction = canForkSession && lastAssistantId && (
 					<Menu.Item
 						onClick={() => {

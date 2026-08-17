@@ -344,39 +344,15 @@ function ToolRunBlock({
   // run flat instead, so there is no group row to be open.
   const [expanded, setExpanded] = useState(false);
 
-  const label = groupedToolLabel(items);
-  let failures = 0;
-  let pending = 0;
-  let images = 0;
-  let videos = 0;
-  let additions = 0;
-  let deletions = 0;
-  for (const entry of items) {
-    const result = entry.toolUseId ? toolResults.get(entry.toolUseId) : undefined;
-    if (result?.isError) failures++;
-    if (live && entry.toolUseId && !result) pending++;
-    images += result?.images?.length ?? 0;
-    videos += result?.videos?.length ?? 0;
-    // Summed from what the rows themselves show, so opening the fold adds up
-    // to the number that was on it.
-    const stats = toolLineStats(entry.toolName || "Tool", entry.toolInput);
-    additions += stats?.additions ?? 0;
-    deletions += stats?.deletions ?? 0;
-  }
-  const mediaCount = images + videos;
-  const statusLabel = [
-    failures > 0 ? `${failures} failed` : "",
-    mediaCount > 0 ? `${mediaCount} media` : "",
-    pending > 0 ? "running" : "",
-  ].filter(Boolean).join(", ");
-  const mediaLabel =
-    mediaCount === 0
-      ? ""
-      : videos === 0
-        ? `${images} image${images === 1 ? "" : "s"}`
-        : images === 0
-          ? `${videos} video${videos === 1 ? "" : "s"}`
-          : `${mediaCount} media`;
+  const {
+    label,
+    failures,
+    pending,
+    additions,
+    deletions,
+    statusLabel,
+    mediaLabel,
+  } = toolRunAggregate(items, toolResults, live);
 
   return (
     <div data-tool-run="true" data-eid={`${items[items.length - 1].id}#run`}>
@@ -488,6 +464,116 @@ function groupedToolLabel(items: TranscriptEntry[]): string {
   return groupedTools(items)
     .map(({ name, count }) => groupedToolName(name, count))
     .join(" · ");
+}
+
+/** Everything the folded run's row says, derived once per run. */
+interface ToolRunAggregate {
+  label: string;
+  failures: number;
+  pending: number;
+  additions: number;
+  deletions: number;
+  statusLabel: string;
+  mediaLabel: string;
+}
+
+// Keyed on the run's LAST entry, the way turnTouchedFiles is, because the
+// caller has no stable array to key on: ToolSection rebuilds its runs in its
+// render body, so a useMemo inside the block could never hit. Entries are
+// replaced rather than mutated when they change (mergeTranscriptEntries), so
+// identity is a sound key. But a call earlier in the run can be replaced while
+// the last one stands, and so can the RESULT a call is waiting on, which is
+// what decides pending, failures and the media counts. Both are compared on a
+// hit, and `live` with them.
+//
+// Worth caching because the work is repeated rather than one-off: a live turn
+// re-renders on every stream event and this walks every step it has taken so
+// far, where toolLineStats splits a whole apply_patch body per edit call and
+// groupedToolLabel builds a Map and two arrays.
+const aggregateByRun = new WeakMap<
+  TranscriptEntry,
+  {
+    items: TranscriptEntry[];
+    results: Array<TranscriptEntry | undefined>;
+    live: boolean;
+    value: ToolRunAggregate;
+  }
+>();
+
+function toolRunAggregate(
+  items: TranscriptEntry[],
+  toolResults: Map<string, TranscriptEntry>,
+  live: boolean
+): ToolRunAggregate {
+  const key = items[items.length - 1];
+  const hit = key ? aggregateByRun.get(key) : undefined;
+  if (hit && hit.live === live && sameRunInputs(hit, items, toolResults))
+    return hit.value;
+
+  const results = items.map((entry) =>
+    entry.toolUseId ? toolResults.get(entry.toolUseId) : undefined
+  );
+  let failures = 0;
+  let pending = 0;
+  let images = 0;
+  let videos = 0;
+  let additions = 0;
+  let deletions = 0;
+  for (let i = 0; i < items.length; i++) {
+    const entry = items[i];
+    const result = results[i];
+    if (result?.isError) failures++;
+    if (live && entry.toolUseId && !result) pending++;
+    images += result?.images?.length ?? 0;
+    videos += result?.videos?.length ?? 0;
+    // Summed from what the rows themselves show, so opening the fold adds up
+    // to the number that was on it.
+    const stats = toolLineStats(entry.toolName || "Tool", entry.toolInput);
+    additions += stats?.additions ?? 0;
+    deletions += stats?.deletions ?? 0;
+  }
+  const mediaCount = images + videos;
+  const value: ToolRunAggregate = {
+    label: groupedToolLabel(items),
+    failures,
+    pending,
+    additions,
+    deletions,
+    statusLabel: [
+      failures > 0 ? `${failures} failed` : "",
+      mediaCount > 0 ? `${mediaCount} media` : "",
+      pending > 0 ? "running" : "",
+    ].filter(Boolean).join(", "),
+    mediaLabel:
+      mediaCount === 0
+        ? ""
+        : videos === 0
+          ? `${images} image${images === 1 ? "" : "s"}`
+          : images === 0
+            ? `${videos} video${videos === 1 ? "" : "s"}`
+            : `${mediaCount} media`,
+  };
+  if (key) aggregateByRun.set(key, { items: items.slice(), results, live, value });
+  return value;
+}
+
+function sameRunInputs(
+  cached: {
+    items: TranscriptEntry[];
+    results: Array<TranscriptEntry | undefined>;
+  },
+  items: TranscriptEntry[],
+  toolResults: Map<string, TranscriptEntry>
+): boolean {
+  if (cached.items.length !== items.length) return false;
+  for (let i = 0; i < items.length; i++) {
+    const entry = items[i];
+    if (cached.items[i] !== entry) return false;
+    const id = entry.toolUseId;
+    if (cached.results[i] !== (id ? toolResults.get(id) : undefined))
+      return false;
+  }
+  return true;
 }
 
 /** Intermediate reasoning stays readable while the turn itself provides the fold. */

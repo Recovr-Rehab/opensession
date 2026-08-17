@@ -108,6 +108,51 @@ function haystack(s: UnifiedSession): string {
 		.toLowerCase();
 }
 
+/** The two per-session values the result list reads, derived once per pool. */
+export interface SessionSearchIndex {
+	hay: Map<UnifiedSession, string>;
+	activityAt: Map<UnifiedSession, number>;
+}
+
+/**
+ * Both of these used to be derived inside the results memo, so every keystroke
+ * walked the whole live pool re-joining and re-lowercasing each session's
+ * metadata (twice, since the snippet check called haystack again), and the
+ * sort allocated two Date objects per comparison on top.
+ *
+ * Keyed on the session objects, which the sessions poll replaces rather than
+ * mutates, and rebuilt only when the pool array itself changes.
+ */
+export function sessionSearchIndex(
+	pool: UnifiedSession[],
+): SessionSearchIndex {
+	const hay = new Map<UnifiedSession, string>();
+	const activityAt = new Map<UnifiedSession, number>();
+	for (const session of pool) {
+		hay.set(session, haystack(session));
+		activityAt.set(session, new Date(session.lastActivity).getTime());
+	}
+	return { hay, activityAt };
+}
+
+/**
+ * Most-recently-active first: the same order the sidebar defaults to.
+ *
+ * Reads the precomputed key instead of allocating two Dates per comparison.
+ * The numbers are identical, so the order is too, ties included: sort is
+ * stable, so equal timestamps keep pool order. A session the index has never
+ * seen falls back to deriving its key, which keeps this correct for any input
+ * rather than ordering it as if it were epoch.
+ */
+export function sortByRecentActivity(
+	rows: UnifiedSession[],
+	index: SessionSearchIndex,
+): UnifiedSession[] {
+	const at = (s: UnifiedSession) =>
+		index.activityAt.get(s) ?? new Date(s.lastActivity).getTime();
+	return rows.sort((a, b) => at(b) - at(a));
+}
+
 function prStatus(pr: OpenPr): string {
 	if (pr.isDraft) return "Draft";
 	if (pr.checks.failed > 0)
@@ -255,6 +300,8 @@ export function SessionSearch({
 		[sessions],
 	);
 
+	const searchIndex = useMemo(() => sessionSearchIndex(pool), [pool]);
+
 	const personOptions = useMemo(() => {
 		const seen = new Map<string, string>();
 		for (const session of pool) {
@@ -329,6 +376,9 @@ export function SessionSearch({
 			.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
 			.slice(0, 40)
 			.map((pr) => ({ type: "pr", category: "Pull requests", pr }));
+		// Falls back to deriving the text for a session the index hasn't seen, so
+		// a pool and an index that are momentarily out of step still search.
+		const hayOf = (s: UnifiedSession) => searchIndex.hay.get(s) ?? haystack(s);
 		let sessionResults = pool.filter((s) => {
 			if (person !== "all" && (s.startedBy || "").toLowerCase() !== person)
 				return false;
@@ -337,19 +387,14 @@ export function SessionSearch({
 			if (terms.length === 0) return true;
 			// A session shows if its metadata matches every term OR the query turned
 			// up inside its conversation, or the pasted PR link belongs to it.
-			const hay = haystack(s);
+			const hay = hayOf(s);
 			return (
 				terms.every((t) => hay.includes(t)) ||
 				sessionUsesPrLink(s, q) ||
 				snippets.has(s.id)
 			);
 		});
-		// Most-recently-active first — the same order the sidebar defaults to.
-		sessionResults = sessionResults.sort(
-			(a, b) =>
-				new Date(b.lastActivity).getTime() -
-				new Date(a.lastActivity).getTime(),
-		);
+		sessionResults = sortByRecentActivity(sessionResults, searchIndex);
 		if (sessionResults.some((session) => sessionUsesPrLink(session, q))) {
 			sessionResults = collapsePrLinkSessions(sessionResults);
 		}
@@ -358,7 +403,7 @@ export function SessionSearch({
 			// otherwise the row explains itself.
 			const metaMatch =
 				terms.length > 0 &&
-				(terms.every((t) => haystack(s).includes(t)) ||
+				(terms.every((t) => hayOf(s).includes(t)) ||
 					sessionUsesPrLink(s, q));
 			return {
 				type: "session",
@@ -368,7 +413,18 @@ export function SessionSearch({
 			};
 		});
 		return [...actionResults, ...prResults, ...sessionRows];
-	}, [actions, hasSessionFilter, openPrs, person, pool, query, repo, snippets, status]);
+	}, [
+		actions,
+		hasSessionFilter,
+		openPrs,
+		person,
+		pool,
+		query,
+		repo,
+		searchIndex,
+		snippets,
+		status,
+	]);
 	const keyedActive = results.findIndex((result) => resultKey(result) === activeKey);
 	const active = keyedActive >= 0 ? keyedActive : 0;
 
