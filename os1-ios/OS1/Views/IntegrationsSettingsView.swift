@@ -324,7 +324,6 @@ private struct GithubSignInDetailView: View {
     @Environment(\.openURL) private var openURL
     @State private var saving = false
     @State private var error: String?
-    @State private var copied = false
 
     init(github: GithubSignInSettings, onUpdated: @escaping (GithubSignInSettings) -> Void) {
         _github = State(initialValue: github)
@@ -348,40 +347,6 @@ private struct GithubSignInDetailView: View {
                 Text(footer)
             }
 
-            if let callback = github.callbackUrl, !callback.isEmpty {
-                Section {
-                    Button {
-                        copyToPasteboard(callback)
-                        copied = true
-                    } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack {
-                                Text("Callback URL")
-                                    .foregroundStyle(OS1VisualStyle.text)
-                                Spacer(minLength: 8)
-                                Label(
-                                    copied ? "Copied" : "Copy",
-                                    systemImage: copied ? "checkmark" : "doc.on.clipboard"
-                                )
-                                .font(.footnote)
-                                .foregroundStyle(OS1VisualStyle.accentInk)
-                            }
-                            Text(callback)
-                                // Explicit inside a button: `.secondary`
-                                // there resolves against the tint and the URL
-                                // would read as a link to somewhere.
-                                .foregroundStyle(Color.secondary)
-                                .font(.footnote.monospaced())
-                                .lineLimit(2)
-                                .truncationMode(.middle)
-                        }
-                    }
-                    .padding(.vertical, 2)
-                } footer: {
-                    Text("The GitHub App's callback must match this exactly.")
-                }
-            }
-
             if let create = github.appCreateUrl, !create.isEmpty {
                 Section {
                     Button {
@@ -403,9 +368,9 @@ private struct GithubSignInDetailView: View {
         guard github.clientIdConfigured ?? false else {
             return "It needs a GitHub App first. Create one, then add its client id on the web."
         }
-        return (github.redirectFlowAvailable ?? false)
+        return (github.clientSecretConfigured ?? false)
             ? "Teammates connect their own account under Personal → My accounts. Takes effect when the server restarts."
-            : "Device-code sign-in is ready. A client secret adds browser redirect. Takes effect when the server restarts."
+            : "Device-code sign-in is ready. Add a client secret on the web so tokens renew. Takes effect when the server restarts."
     }
 
     private func setEnabled(_ next: Bool) async {

@@ -103,17 +103,14 @@ async function primaryGithubOrg(): Promise<string | undefined> {
   return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
 }
 
-async function githubSnapshot(publicBaseUrl: string) {
-  const { githubUserAuthSettings, githubRedirectFlowAvailable } =
-    await import("../github-auth");
+async function githubSnapshot() {
+  const { githubUserAuthSettings } = await import("../github-auth");
   const github = githubUserAuthSettings();
   const org = await primaryGithubOrg();
   return {
     userPrAuth: github.enabled,
     clientIdConfigured: !!github.clientId,
     clientSecretConfigured: !!github.clientSecret,
-    redirectFlowAvailable: githubRedirectFlowAvailable(),
-    callbackUrl: `${publicBaseUrl}/api/auth/callback`,
     botTokenPresent: !!process.env.GITHUB_API_TOKEN,
     appCreateUrl: org
       ? `https://github.com/organizations/${org}/settings/apps/new`
@@ -193,7 +190,7 @@ export async function handleSetupRoutes(
       // The only non-optional component, and the one this page used to omit —
       // a checklist that went all-green on an instance that couldn't run a turn.
       engine: engineStatus(),
-      github: await githubSnapshot(publicBaseUrl),
+      github: await githubSnapshot(),
       // `always` entries self-gate and need no setup, so they are not
       // presented as onboarding steps.
       integrations: await Promise.all(
@@ -329,7 +326,6 @@ export async function handleSetupRoutes(
 
     const { rawConfig, persistRawConfig, withConfigMutationLock } =
       await import("../config-mutation");
-    const { configuredServer } = await import("../config");
 
     return withConfigMutationLock(async () => {
       const config = rawConfig();
@@ -363,12 +359,11 @@ export async function handleSetupRoutes(
       });
       // githubUserAuthSettings() reads getConfig() per call (mtime-guarded
       // re-read), and the web-auth gate calls webAuthRequired() →
-      // githubUserAuthActive() on every request — so the sign-in gate and
-      // both OAuth flows pick this up live. No restart needed. (Only the
-      // one-time createdByLogin boot migration waits for the next restart.)
-      const publicBaseUrl = configuredServer().publicBaseUrl.replace(/\/$/, "");
+      // githubUserAuthActive() on every request — so the sign-in gate and the
+      // device flow pick this up live. No restart needed. (Only the one-time
+      // createdByLogin boot migration waits for the next restart.)
       return Response.json({
-        github: await githubSnapshot(publicBaseUrl),
+        github: await githubSnapshot(),
         restartRequired: false,
       });
     });

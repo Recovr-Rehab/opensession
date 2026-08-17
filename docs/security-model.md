@@ -163,23 +163,25 @@ wins over the config id) activates BOTH halves at once:
   (curl/CDP recipes) authenticate with `Authorization: Bearer <token>` using a
   token from the web-sessions file.
 
-Two sign-in flows, both backed by the same token store: the **redirect
-(authorization-code) flow** is primary when `oauthClientSecret` is configured
-(`/api/auth/login` → GitHub authorize → `/api/auth/callback`, CSRF state
-cookie; the app's registered callback URL must literally be
-`<publicBaseUrl>/api/auth/callback`), and the **device flow** stays as the
-fallback (the "use a device code" link — needed on the iOS PWA, where a
-redirect can return into Safari instead of the PWA, and works without the
-secret). GitHub side: one org-owned **GitHub App** with "Enable Device Flow"
-checked, the callback URL set, and installed on your org → All repositories,
-installable only on that account. GitHub App user tokens are what scopes
-teammates' tokens to your org (see the previous section): they can't reach
-public/third-party repos, they expire ~8h, and github-auth.ts refreshes them
-via a rotating refresh token (20-min ticker parked on globalThis +
-refresh-on-boot; getters never hand out an expired token — runs fall back to
-the bot credential, web mutations 403 to "connect your account"). A refresh
-rotates the token string, which changes the shared-server config hash →
-drain-respawn at next run start, by design.
+One sign-in flow, for every client: the **device flow** (`POST
+/api/auth/device` → the person enters the code on github.com →
+`/api/auth/device/poll`, which the server also polls to completion itself so a
+suspended phone doesn't lose the outcome). There is deliberately no
+authorization-code redirect. A redirect has to return to the exact origin it
+left, and on the iOS PWA it comes back in Safari rather than the installed
+app; the native and terminal clients can't take one at all. GitHub side: one
+org-owned **GitHub App** with "Enable Device Flow" checked, installed on your
+org → All repositories, installable only on that account. GitHub App user
+tokens are what scopes teammates' tokens to your org (see the previous
+section): they can't reach public/third-party repos, they expire ~8h, and
+github-auth.ts refreshes them via a rotating refresh token (20-min ticker
+parked on globalThis + refresh-on-boot; getters never hand out an expired
+token — runs fall back to the bot credential, web mutations 403 to "connect
+your account"). A refresh rotates the token string, which changes the
+shared-server config hash → drain-respawn at next run start, by design.
+`oauthClientSecret` is what that refresh grant needs — signing in never uses
+it, so an instance without one signs people in and then drops them at the
+first expiry.
 
 ## Self-management tools (Slack + interactive Open Session sessions)
 

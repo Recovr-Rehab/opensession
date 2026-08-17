@@ -70,9 +70,9 @@ empty local state, optionally rsync'd from prod.
 
 - `src/main.js` — a single sandboxed `BrowserWindow` loading the configured
   server (`contextIsolation`, no Node in the renderer). In-window
-  navigation is limited to the active app origin plus
-  `github.com` (the OAuth redirect flow); everything else opens in the default
-  browser. Window close hides to the dock; state persists across launches.
+  navigation is limited to the active app origin; everything else opens in the
+  default browser. Window close hides to the dock; state persists across
+  launches.
 - `src/preload.js` — exposes `window.os1` (`desktop`, `setBadge`, `clearBadge`)
   for the frontend to feature-detect and mirror its app badge to the dock.
 - `src/offline.html` — retry screen for when the configured server is
@@ -93,9 +93,10 @@ empty local state, optionally rsync'd from prod.
 
 ## Auth
 
-GitHub web sign-in works in-window via the redirect flow (github.com is an
-allowed navigation origin); the device-flow fallback link works too. The
-`opensession_auth` cookie persists in Electron's default session.
+GitHub web sign-in is the device flow: the sign-in screen shows a code, "Open
+GitHub" hands github.com to the default browser, and this window stays on the
+waiting screen until the poll comes back. The `opensession_auth` cookie
+persists in Electron's default session.
 
 ## Deep links
 

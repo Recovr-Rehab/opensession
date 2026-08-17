@@ -37,8 +37,11 @@ const CLOUD_URL =
 const CLOUD_ORIGIN = new URL(CLOUD_URL).origin;
 let APP_URL = process.env.OS1_URL || CLOUD_URL;
 let APP_ORIGIN = new URL(APP_URL).origin;
-// github.com stays in-window for the OAuth redirect flow (authorize → callback).
-let IN_WINDOW_ORIGINS = [APP_ORIGIN, "https://github.com"];
+// Only the app itself. Sign-in is a device code entered on github.com, and
+// that belongs in the browser the person is already signed into GitHub in —
+// not in this window, where it would navigate the app away from the screen
+// that is waiting for the code.
+let IN_WINDOW_ORIGINS = [APP_ORIGIN];
 
 const stateFile = () => path.join(app.getPath("userData"), "window-state.json");
 
@@ -356,8 +359,9 @@ function inWindow(url) {
 // Sign-in pages for external services (e.g. the ChatGPT device-code sign-in
 // from Settings → Models). The default browser is often not where you're
 // logged into these accounts, so prefer Chrome and fall back to the default
-// browser when it isn't installed. The app's own GitHub OAuth is NOT in this
-// list — it must stay in-window so the session cookie lands in the app.
+// browser when it isn't installed. github.com is NOT in this list: it is also
+// where every PR and docs link goes, and those belong in whichever browser
+// the person actually uses.
 const CHROME_AUTH_HOSTS = ["auth.openai.com"];
 
 function openExternal(url) {
@@ -592,8 +596,8 @@ function createWindow() {
     win = null;
   });
 
-  // Keep app navigation + the GitHub OAuth redirect in-window; everything else
-  // (PR links, docs, …) goes to the default browser.
+  // Keep app navigation in-window; everything else (the device-code page, PR
+  // links, docs, …) goes to the default browser.
   win.webContents.on("will-navigate", (e, url) => {
     if (!inWindow(url)) {
       e.preventDefault();

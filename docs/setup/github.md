@@ -181,9 +181,10 @@ GitHub sign-in. Off by default — without it everything above is the whole
 story.
 
 1. Create one **OAuth App** in your org (Settings → Developer settings →
-   OAuth Apps): tick **"Enable Device Flow"**, set the callback URL to
-   `<publicBaseUrl>/api/auth/callback`, and generate a client secret. If the
-   org restricts third-party OAuth apps, approve it.
+   OAuth Apps): tick **"Enable Device Flow"** and generate a client secret. If
+   the org restricts third-party OAuth apps, approve it. Sign-in is a device
+   code and never redirects, so the callback URL is unused — put your
+   instance's URL in if GitHub insists on the field.
 2. Configure `~/.opensession/config.json`:
 
    ```json
@@ -197,14 +198,16 @@ story.
    ```
 
    (env `OPENSESSION_GITHUB_CLIENT_ID` / `OPENSESSION_GITHUB_CLIENT_SECRET`
-   win over config; secret omitted = device-flow-only sign-in.)
+   win over config. Signing in needs only the client id; the secret is what
+   renews a GitHub App's user tokens, and without it everyone is dropped at
+   the first ~8h expiry.)
 3. Restart the service to load the runner-internal token injection.
 
 What turns on (`src/server/github-auth.ts`, `web-auth.ts`, `routes/auth.ts`):
 
-- **Sign-in required**: the UI shows "Sign in with GitHub" (redirect flow,
-  device-code fallback); only logins on `identity.team[].github` may sign
-  in. Every `/api/*` call and the UI WebSocket are 401-gated on the HttpOnly
+- **Sign-in required**: the UI shows "Continue with GitHub", which starts the
+  device flow — the one sign-in every client uses; only logins on
+  `identity.team[].github` may sign in. Every `/api/*` call and the UI WebSocket are 401-gated on the HttpOnly
   session cookie; non-browser callers use `Authorization: Bearer <token>`
   with a token from `~/.opensession-web-sessions.json`. The verified
   identity overrides client-claimed user names (WS and HTTP), stamps

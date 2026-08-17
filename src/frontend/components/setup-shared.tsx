@@ -38,8 +38,6 @@ export interface SetupGithub {
 	userPrAuth: boolean;
 	clientIdConfigured: boolean;
 	clientSecretConfigured: boolean;
-	redirectFlowAvailable: boolean;
-	callbackUrl: string;
 	botTokenPresent: boolean;
 	appCreateUrl: string;
 }
@@ -169,11 +167,7 @@ export function integrationState(i: SetupIntegration): {
 }
 
 export function githubAuthState(g: SetupGithub): { tone: ChipTone; label: string } {
-	if (g.userPrAuth && g.clientIdConfigured)
-		return {
-			tone: "on",
-			label: g.redirectFlowAvailable ? "Active" : "Active · device flow only",
-		};
+	if (g.userPrAuth && g.clientIdConfigured) return { tone: "on", label: "Active" };
 	if (g.userPrAuth) return { tone: "warn", label: "Missing client id" };
 	return { tone: "off", label: "Off" };
 }

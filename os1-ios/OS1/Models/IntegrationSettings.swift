@@ -47,8 +47,6 @@ struct GithubSignInSettings: Codable, Sendable, Equatable {
     var userPrAuth: Bool?
     var clientIdConfigured: Bool?
     var clientSecretConfigured: Bool?
-    var redirectFlowAvailable: Bool?
-    var callbackUrl: String?
     var botTokenPresent: Bool?
     var appCreateUrl: String?
 }
@@ -96,21 +94,23 @@ enum IntegrationRules {
 
     static func githubState(_ github: GithubSignInSettings) -> (tone: SetupTone, label: String) {
         let userPrAuth = github.userPrAuth ?? false
-        if userPrAuth && (github.clientIdConfigured ?? false) {
-            return (.on, (github.redirectFlowAvailable ?? false) ? "Active" : "Device flow only")
-        }
+        if userPrAuth && (github.clientIdConfigured ?? false) { return (.on, "Active") }
         if userPrAuth { return (.warn, "Missing client id") }
         return (.off, "Off")
     }
 
     /// What GitHub sign-in is doing for people right now, in one sentence.
+    ///
+    /// Signing in is a device code and needs no client secret, but renewing a
+    /// token does — so an instance without one signs people in and then drops
+    /// them a few hours later. That is worth saying on the row.
     static func githubDetail(_ github: GithubSignInSettings) -> String {
         guard (github.userPrAuth ?? false) && (github.clientIdConfigured ?? false) else {
             return "Off, so sessions open pull requests from the workspace account."
         }
-        return (github.redirectFlowAvailable ?? false)
+        return (github.clientSecretConfigured ?? false)
             ? "Teammates sign in with GitHub and open pull requests as themselves."
-            : "Device-code sign-in is ready. A client secret adds browser redirect."
+            : "Device-code sign-in is ready. Add a client secret so tokens renew."
     }
 }
 

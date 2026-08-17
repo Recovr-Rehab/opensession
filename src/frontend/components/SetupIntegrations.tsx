@@ -7,7 +7,6 @@ import { InlineAlert } from "../ui/state";
 import { Switch } from "../ui/switch";
 import { toast } from "../ui/toast";
 import {
-	CopyableCode,
 	GuideBlock,
 	LinkChips,
 	SecretField,
@@ -206,16 +205,10 @@ function GithubAuthSetupDialog({
 									Under Repository permissions, grant <strong>Contents: read and write</strong>, <strong>Pull requests: read and write</strong>, and <strong>Issues: read and write</strong>. Metadata remains read-only.
 								</>,
 								<>
-									Set the callback URL to exactly:
-									<span className="mt-1.5 block">
-										<CopyableCode value={github.callbackUrl} />
-									</span>
-								</>,
-								<>
 									Install the app only on your organization. Choose all repositories, or select only the repositories Open Session should work in.
 								</>,
 								<>
-									Paste the client id above. Add the client secret to enable browser redirect sign-in; device-code sign-in works without it.
+									Paste the client id and the client secret above. Sign-in is a device code and needs no secret, but renewing a teammate&rsquo;s token does, and without it their access stops after a few hours.
 								</>,
 								<>
 									Enable GitHub sign-in, save, restart Open Session, then have each teammate connect under Personal → My accounts.
@@ -354,9 +347,9 @@ export function GithubAuthCard({
 						</p>
 						{active && (
 							<div className="mt-2 text-meta text-dim">
-								{github.redirectFlowAvailable
-									? "Browser redirect and device-code sign-in are ready."
-									: "Device-code sign-in is ready; add a client secret for browser redirect."}
+								{secretConfigured
+									? "Device-code sign-in is ready."
+									: "Device-code sign-in is ready. Add a client secret so teammates' tokens renew."}
 							</div>
 						)}
 					</div>
@@ -426,7 +419,7 @@ export function GithubAuthCard({
 							/>
 							<SecretField
 								name="Client secret"
-								description="Enables browser redirect sign-in. Device-code sign-in works without it."
+								description="Renews teammates' tokens before they expire. Signing in works without it; staying signed in does not."
 								present={secretConfigured}
 								cleared={secretCleared}
 								value={clientSecret}

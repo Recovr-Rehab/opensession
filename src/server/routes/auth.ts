@@ -5,6 +5,12 @@
  * when per-user GitHub auth is opted in (web-auth.ts / github-auth.ts);
  * otherwise /auth/status just reports `required: false` and the UI keeps
  * the local name picker.
+ *
+ * The device flow is the only way in, for every client. An
+ * authorization-code redirect has to return to the exact origin it left, and
+ * on the iOS PWA it comes back in Safari rather than the installed app; the
+ * native clients can't take a browser redirect at all. One flow also means
+ * one path to keep honest, rather than a fallback nobody exercises.
  */
 
 import type { RouteContext } from "./context";
@@ -19,38 +25,14 @@ import {
   webAuthToken,
 } from "../web-auth";
 import {
-  exchangeGithubOauthCode,
-  githubAuthorizeUrl,
 	githubDeviceFlowResult,
 	githubReconnectRequired,
-	githubRedirectFlowAvailable,
   pollGithubDeviceFlow,
   removeGithubAccount,
   startGithubDeviceFlow,
   watchGithubDeviceFlow,
 } from "../github-auth";
-import { configuredServer } from "../config";
-import { randomBytes } from "crypto";
 import { workspaceAdminAuthorized } from "../workspace-auth";
-
-const STATE_COOKIE = "opensession_oauth_state";
-
-function cookieValue(req: Request, name: string): string | null {
-	const cookie = req.headers.get("cookie");
-	if (!cookie) return null;
-	for (const part of cookie.split(";")) {
-		const [k, ...v] = part.trim().split("=");
-		if (k === name && v.length) return v.join("=");
-	}
-	return null;
-}
-
-/** The redirect_uri — must literally match the OAuth app's registered
- *  callback URL (publicBaseUrl is prefix-less, e.g.
- *  https://os.tella.dev/api/auth/callback). */
-function callbackUri(): string {
-	return `${configuredServer().publicBaseUrl.replace(/\/$/, "")}/api/auth/callback`;
-}
 
 export async function handleAuthRoutes(
 	ctx: RouteContext,
@@ -74,77 +56,12 @@ export async function handleAuthRoutes(
 			required: webAuthRequired(),
 			authenticated: signedIn,
 			admin: signedIn ? workspaceAdminAuthorized({ authUser: identity }) : false,
-			/** Redirect (authorization-code) flow available — the UI's primary
-			 *  sign-in when true; device flow is always there as fallback. */
-			redirect: githubRedirectFlowAvailable(),
 			...(reconnect ? { reconnectRequired: true } : {}),
 			// The login rides along even for a reconnect: the card names the
 			// account whose authorization lapsed, which is the whole difference
 			// between "sign in" and "sign in again as you".
 			...(identity ? { login: identity.login, name: identity.name } : {}),
 		});
-	}
-
-	// ── Redirect (authorization-code) flow ──
-	// GET /api/auth/login → 302 to GitHub authorize, with a CSRF state nonce
-	// mirrored in a short-lived cookie. GET /api/auth/callback comes back with
-	// ?code&state → exchange (client secret), team gate, session cookie, and a
-	// redirect into the app. Sign-in errors land on /?auth_error=… so the
-	// sign-in screen can show them.
-	if (path === "/api/auth/login" && req.method === "GET") {
-		if (!githubRedirectFlowAvailable())
-			return Response.json(
-				{ error: "Redirect sign-in is not configured" },
-				{ status: 400 },
-			);
-		const state = randomBytes(16).toString("hex");
-		const authorize = githubAuthorizeUrl(callbackUri(), state);
-		if (!authorize)
-			return Response.json({ error: "Sign-in is not enabled" }, { status: 400 });
-		return new Response(null, {
-			status: 302,
-			headers: {
-				Location: authorize,
-				"Set-Cookie": `${STATE_COOKIE}=${state}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600`,
-			},
-		});
-	}
-
-	if (path === "/api/auth/callback" && req.method === "GET") {
-		const fail = (msg: string) =>
-			new Response(null, {
-				status: 302,
-				headers: {
-					Location: `/?auth_error=${encodeURIComponent(msg)}`,
-					"Set-Cookie": `${STATE_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
-				},
-			});
-		if (!githubRedirectFlowAvailable())
-			return fail("Redirect sign-in is not configured");
-		const code = ctx.url.searchParams.get("code");
-		const state = ctx.url.searchParams.get("state");
-		const expected = cookieValue(req, STATE_COOKIE);
-		if (!code) return fail(ctx.url.searchParams.get("error_description") || "GitHub returned no code");
-		if (!state || !expected || state !== expected)
-			return fail("State mismatch. Start the sign-in again.");
-		const result = await exchangeGithubOauthCode(code, callbackUri());
-		if (result.status !== "ok")
-			return fail(result.status === "error" ? result.error : "Sign-in did not complete");
-		if (!teamMemberForLogin(result.login)) {
-			removeGithubAccount(result.login);
-			return fail(
-				`GitHub account @${result.login} is not on the configured team`,
-			);
-		}
-		const session = createWebSession(result.login);
-		if (!session) return fail("Could not create a session");
-		const headers = new Headers({ Location: "/" });
-		headers.append("Set-Cookie", webAuthSetCookie(session.token));
-		headers.append(
-			"Set-Cookie",
-			`${STATE_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
-		);
-		return new Response(null, { status: 302, headers });
 	}
 
 	if (path === "/api/auth/device" && req.method === "POST") {

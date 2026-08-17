@@ -60,8 +60,6 @@ export interface AuthStatus {
   required: boolean;
   authenticated: boolean;
   admin?: boolean;
-  /** Server supports the redirect (authorization-code) sign-in. */
-  redirect?: boolean;
   /** Signed out because GitHub permanently rejected this person's grant, not
    *  because they never signed in: `login` is still theirs, and the way back
    *  in is the same authorize. */
@@ -100,30 +98,6 @@ export async function signOut(): Promise<void> {
   } catch {}
   window.location.reload();
 }
-
-/**
- * A failed redirect sign-in lands back on `/?auth_error=…`. Read at module
- * load, not when the sign-in screen mounts: App's route state stamps the root
- * history entry with `replaceState(…, location.pathname)` on its very first
- * render, so by the time this screen exists the query is already gone and the
- * message never appeared. A module body runs during import, which is before
- * any of that. Keep the entry's own state when clearing the query. It carries
- * the router's depth, and blanking it costs Back the root it counts down to.
- */
-const REDIRECT_ERROR: string | null = (() => {
-	try {
-		const err = new URLSearchParams(window.location.search).get("auth_error");
-		if (!err) return null;
-		window.history.replaceState(
-			window.history.state,
-			"",
-			window.location.pathname,
-		);
-		return err;
-	} catch {
-		return null;
-	}
-})();
 
 /**
  * The backdrop behind every gate screen: the same "Silver Silk" loop the
@@ -324,7 +298,6 @@ export function UserGate({ children }: { children: React.ReactNode }) {
     if (auth.authenticated) return <>{children}</>;
     return (
       <GithubSignIn
-        redirect={auth.redirect === true}
         reconnect={auth.reconnectRequired === true}
         login={auth.login}
         onSignedIn={(status) => {
@@ -375,13 +348,21 @@ export function UserGate({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * Sign in with GitHub's device flow: the code is entered on github.com in
+ * whatever browser the person already trusts, and this screen waits.
+ *
+ * It is the only flow, deliberately. An authorization-code redirect has to
+ * come back to the exact origin it left, and on the iOS PWA it returns into
+ * Safari instead of the installed app, stranding the person one tab away from
+ * the thing they were signing in to. Entering a code is one step longer and
+ * lands everywhere.
+ */
 function GithubSignIn({
-  redirect,
   reconnect = false,
   login,
   onSignedIn,
 }: {
-  redirect: boolean;
   /** The grant behind an existing session died; this is the same screen and
    *  the same flow, saying which of the two happened. */
   reconnect?: boolean;
@@ -395,7 +376,7 @@ function GithubSignIn({
     interval: number;
   } | null>(null);
   const [starting, setStarting] = useState(false);
-  const [error, setError] = useState<string | null>(REDIRECT_ERROR);
+  const [error, setError] = useState<string | null>(null);
 
   // Poll GitHub (via the server) until the device code is authorized.
   useEffect(() => {
@@ -478,29 +459,15 @@ function GithubSignIn({
             size="lg"
             className="min-h-10 w-full"
             icon={<BrandMark name="github" size={20} />}
-            disabled={starting && !redirect}
-            onClick={() => {
-              if (redirect) window.location.href = `${BASE_PATH}/api/auth/login`;
-              else void start();
-            }}
+            disabled={starting}
+            onClick={() => void start()}
           >
-            {!redirect && starting
+            {starting
               ? "Starting…"
               : reconnect
                 ? "Reconnect with GitHub"
                 : "Continue with GitHub"}
           </Button>
-          {redirect && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="mt-2.5"
-              onClick={start}
-              disabled={starting}
-            >
-              {starting ? "Starting…" : "Use a device code instead"}
-            </Button>
-          )}
         </>
       ) : (
         <div className="flex flex-col items-center">

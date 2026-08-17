@@ -58,19 +58,22 @@ final class IntegrationRulesTests: XCTestCase {
     // MARK: - GitHub sign-in
 
     func testGithubSignInNeedsBothTheFlagAndTheApp() {
+        // A client secret is not part of being active: sign-in is a device
+        // code either way, and the secret only decides whether the token that
+        // sign-in returns can be renewed.
         let active = GithubSignInSettings(
             userPrAuth: true,
             clientIdConfigured: true,
-            redirectFlowAvailable: true
+            clientSecretConfigured: true
         )
         XCTAssertEqual(IntegrationRules.githubState(active).label, "Active")
 
-        let deviceOnly = GithubSignInSettings(
+        let noSecret = GithubSignInSettings(
             userPrAuth: true,
             clientIdConfigured: true,
-            redirectFlowAvailable: false
+            clientSecretConfigured: false
         )
-        XCTAssertEqual(IntegrationRules.githubState(deviceOnly).label, "Device flow only")
+        XCTAssertEqual(IntegrationRules.githubState(noSecret).label, "Active")
 
         let noApp = GithubSignInSettings(userPrAuth: true, clientIdConfigured: false)
         XCTAssertEqual(IntegrationRules.githubState(noApp).tone, .warn)
@@ -85,8 +88,13 @@ final class IntegrationRulesTests: XCTestCase {
         )
         XCTAssertTrue(
             IntegrationRules.githubDetail(
-                GithubSignInSettings(userPrAuth: true, clientIdConfigured: true, redirectFlowAvailable: false)
+                GithubSignInSettings(userPrAuth: true, clientIdConfigured: true, clientSecretConfigured: false)
             ).contains("Device-code")
+        )
+        XCTAssertTrue(
+            IntegrationRules.githubDetail(
+                GithubSignInSettings(userPrAuth: true, clientIdConfigured: true, clientSecretConfigured: true)
+            ).contains("as themselves")
         )
     }
 
