@@ -1378,7 +1378,7 @@ const SUMMARY_FRESH_MS = 5 * 60 * 1000;
 const SUMMARY_STALE_SERVE_MS = 24 * 60 * 60 * 1000;
 // Bump when composition semantics change so a restart cannot serve a fresh but
 // obsolete disk summary before the background prewarm replaces it.
-const SUMMARY_VERSION = 6;
+const SUMMARY_VERSION = 7;
 const summaryCache = new Map<string, { at: number; summary: AnalyticsSummary }>();
 const summaryInflight = new Map<string, Promise<AnalyticsSummary>>();
 
