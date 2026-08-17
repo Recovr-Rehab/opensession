@@ -1,68 +1,43 @@
 /**
- * The writing surface for an input that is not in its ordinary state: a flat
- * tint plus a 45° hatch that fades out downwards, so the box settles into its
- * toolbar instead of hatching all the way to the edge.
+ * The writing surface for an input that is not in its ordinary state.
  *
- * One shape for every such state. The states differ only in ink, in strength,
- * and in what they are painted on. Ask mode is ambient, on for the session's
- * whole life, so it is painted lighter than the transient modes; note mode is
- * one message, so it is the loudest of them.
+ * It is a wash of the mode's ink and nothing else — the shape a team note
+ * already takes in the transcript (components/NoteBubble.tsx). No hatch, no
+ * coloured edge: a mode that lasts the whole session has to sit under text you
+ * are reading and writing all day, and texture at that duty cycle reads as
+ * damage to the box rather than as a state. The surfaces differ only in ink, in
+ * strength, and in what they are painted on. Ask mode is ambient, on for the
+ * session's whole life, so it is the lighter of the two; note mode is one
+ * message, so it is allowed to be louder.
  *
- * Two callers, two shapes of the same recipe:
+ * The base is the surface the wash actually covers, and it matters:
  *
- * · The session composer sits on an opaque control surface, so its flat tint
- *   mixes into that and is painted OVER the hatch — which is what makes the
- *   texture fade out downwards, and why `tintedSurface` returns one style bag.
- * · The new-session palette is glass over a dimmed page. Its tint has to mix
- *   into `transparent` or it would paint the blur out, and a translucent flat
- *   cannot cover anything, so the hatch has to be its own layer with its own
- *   mask. That caller composes from `tintedSurfaceParts` instead.
+ * · The composer and the Plain reply box pass `--composer-surface`, which is
+ *   white in light mode. `--control-surface` is a grey there, so mixing into it
+ *   sank the box a step darker than its resting state and the tint read as
+ *   dirt rather than as colour.
+ * · The new-session palette is glass over a dimmed page, so it mixes into
+ *   `transparent` — an opaque tint would paint the blur out.
+ * · A note bubble in the transcript is also `transparent`: it tints the page it
+ *   sits on.
  *
- * Returned as inline style / raw strings rather than utilities because both
- * callers hand the values to a pseudo-element through custom properties, and
- * Tailwind cannot compile a colour it only sees at runtime.
+ * Returned as a raw colour rather than a utility because every caller hands the
+ * value to inline style or a custom property, and Tailwind cannot compile a
+ * colour it only sees at runtime.
  */
 
-export interface TintedSurfaceParts {
-	/** The flat tint: `background-color` of the surface. */
-	flat: string;
-	/** The 1px edge, a stronger mix of the same ink. */
-	border: string;
-	/** The 45° hatch alone, as a `background-image`. */
-	hatch: string;
-	/** The wash that buries the hatch towards the bottom. Only does anything
-	 *  over an opaque `base` — see the note about the palette above. */
-	fade: string;
+function tint(ink: string, percent: number, base: string): string {
+	return `color-mix(in srgb, ${ink} ${percent}%, ${base})`;
 }
 
-export function tintedSurfaceParts(
-	ink: string,
-	tint: number,
-	hatch: number,
-	edge: number,
-	base = "var(--control-surface)",
-): TintedSurfaceParts {
-	const flat = `color-mix(in srgb, ${ink} ${tint}%, ${base})`;
-	const stripe = `color-mix(in srgb, ${ink} ${hatch}%, transparent)`;
-	return {
-		flat,
-		border: `color-mix(in srgb, ${ink} ${edge}%, transparent)`,
-		hatch: `repeating-linear-gradient(45deg, ${stripe} 0, ${stripe} 12px, transparent 12px, transparent 24px)`,
-		fade: `linear-gradient(to bottom, transparent 15%, ${flat} 72%)`,
-	};
+/** Read-only mode, wherever you meet it: the session composer, the palette. */
+export function askSurface(base: string): string {
+	return tint("var(--green)", 7, base);
 }
 
-export function tintedSurface(
-	ink: string,
-	tint: number,
-	hatch: number,
-	edge: number,
-	base = "var(--control-surface)",
-): React.CSSProperties {
-	const parts = tintedSurfaceParts(ink, tint, hatch, edge, base);
-	return {
-		borderColor: parts.border,
-		backgroundColor: parts.flat,
-		backgroundImage: `${parts.fade}, ${parts.hatch}`,
-	};
+/** A message the agent never sees: the note bubble, the composer in note mode,
+ *  a Plain internal note. `--yellow-tint`, not `--yellow` — the ink is a dark
+ *  ochre in light mode and turns warm grey at these percentages (base.css). */
+export function noteSurface(base: string): string {
+	return tint("var(--yellow-tint)", 10, base);
 }

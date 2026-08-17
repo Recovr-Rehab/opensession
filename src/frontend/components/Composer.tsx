@@ -74,7 +74,7 @@ import {
   paletteIconBtnRound,
   palettePill,
 } from "../lib/palette-classes";
-import { tintedSurface } from "../lib/tinted-surface";
+import { askSurface, noteSurface } from "../lib/tinted-surface";
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
 import { ContextMenu, MenuShortcut } from "../ui/menu";
@@ -1097,12 +1097,11 @@ export function Composer({
   }
 
   const effectiveModel = model || defaultModel;
-  const noteSurface = tintedSurface("var(--yellow-tint)", 10, 6, 45);
   const surfaceStyle = {
-    ...(askMode ? tintedSurface("var(--green)", 7, 4, 30) : {}),
-    "--composer-note-bg": noteSurface.backgroundColor,
-    "--composer-note-image": noteSurface.backgroundImage,
-    "--composer-note-border": noteSurface.borderColor,
+    ...(askMode
+      ? { backgroundColor: askSurface("var(--composer-surface)") }
+      : {}),
+    "--composer-note-bg": noteSurface("var(--composer-surface)"),
   } as React.CSSProperties;
 
   return (
@@ -1163,7 +1162,7 @@ export function Composer({
           minimized && "composer-min",
           composerBox,
           minimized ? composerBoxMinimized : composerBoxExpanded,
-          "isolate before:pointer-events-none before:absolute before:inset-0 before:z-0 before:rounded-[inherit] before:[corner-shape:inherit] before:border before:border-[var(--composer-note-border)] before:bg-[var(--composer-note-bg)] before:[background-image:var(--composer-note-image)] before:opacity-0 before:transition-opacity before:duration-150 before:ease-[cubic-bezier(0.32,0.72,0,1)] [&>*]:relative [&>*]:z-[1]",
+          "isolate before:pointer-events-none before:absolute before:inset-0 before:z-0 before:rounded-[inherit] before:[corner-shape:inherit] before:bg-[var(--composer-note-bg)] before:opacity-0 before:transition-opacity before:duration-150 before:ease-[cubic-bezier(0.32,0.72,0,1)] [&>*]:relative [&>*]:z-[1]",
           noteMode && "before:opacity-100",
           disabled && "opacity-60",
         )}

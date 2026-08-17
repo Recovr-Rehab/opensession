@@ -39,7 +39,7 @@ import { IconTile } from "./BrandTile";
 import { Tooltip } from "../ui/tooltip";
 import { Modal, useEnterOnMount } from "../ui/modal";
 import { composerBox } from "../lib/composer-classes";
-import { tintedSurfaceParts } from "../lib/tinted-surface";
+import { askSurface } from "../lib/tinted-surface";
 import { cn } from "../ui/cn";
 import {
 	paletteIconBtn,
@@ -183,19 +183,13 @@ const ASK_BTN_ON =
  *  session composer does for ask and for note mode, because the mode governs
  *  everything you are about to type rather than one control in the corner.
  *
- *  Two pseudo-elements rather than one background on the card: the palette is
- *  glass over a dimmed page, so the tint has to sit ON the blur and fade in and
- *  out with it intact. `::before` is the flat tint and the edge; `::after` is
- *  the hatch, masked so it dissolves before it reaches the toolbar. The
- *  composer gets that dissolve for free by painting its flat tint over the
- *  stripes, which a translucent tint cannot do. At this card's size the hatch
- *  would otherwise run edge to edge and read as a barber pole rather than as
- *  texture. Children are lifted above both layers, and the shell's own
- *  `overflow-hidden` clips them to the rounded corner. */
+ *  A pseudo-element rather than a background on the card, because the palette
+ *  is glass over a dimmed page: the tint has to sit ON the blur and fade in and
+ *  out with it intact. Children are lifted above it, and the shell's own
+ *  `overflow-hidden` clips it to the rounded corner. */
 const ASK_SURFACE =
 	"isolate " +
-	"before:pointer-events-none before:absolute before:inset-0 before:z-0 before:rounded-[inherit] before:[corner-shape:inherit] before:border before:border-[var(--palette-ask-border)] before:bg-[var(--palette-ask-bg)] before:opacity-0 before:transition-opacity before:duration-150 before:ease-[cubic-bezier(0.32,0.72,0,1)] " +
-	"after:pointer-events-none after:absolute after:inset-0 after:z-0 after:rounded-[inherit] after:[corner-shape:inherit] after:[background-image:var(--palette-ask-hatch)] after:[mask-image:linear-gradient(to_bottom,#000_0,transparent_62%)] after:[-webkit-mask-image:linear-gradient(to_bottom,#000_0,transparent_62%)] after:opacity-0 after:transition-opacity after:duration-150 after:ease-[cubic-bezier(0.32,0.72,0,1)] " +
+	"before:pointer-events-none before:absolute before:inset-0 before:z-0 before:rounded-[inherit] before:[corner-shape:inherit] before:bg-[var(--palette-ask-bg)] before:opacity-0 before:transition-opacity before:duration-150 before:ease-[cubic-bezier(0.32,0.72,0,1)] " +
 	"[&>*]:relative [&>*]:z-[1]";
 /** The one flexible footer item. `[&_[data-effort]]` reaches the effort suffix
  *  inside ModelEffortSelect: on ultra-narrow screens it cedes its space to the
@@ -935,16 +929,12 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   // One frame closed so the palette animates in; App mounts us already-open.
   const open = useEnterOnMount();
 
-  // Ask mode's surface: the session composer's own ask numbers, so one mode is
-  // one strength wherever you meet it. Only the base differs — mixed into
+  // Ask mode's surface, shared with the session composer so one mode is one
+  // strength wherever you meet it. Only the base differs: mixed into
   // `transparent` rather than an opaque colour, because the palette is glass
-  // and an opaque tint would paint the blur out. The parts are handed to the
-  // two pseudo-element layers as custom properties.
-  const askSurface = tintedSurfaceParts("var(--green)", 7, 6, 30, "transparent");
+  // and an opaque tint would paint the blur out.
   const askSurfaceStyle = {
-    "--palette-ask-bg": askSurface.flat,
-    "--palette-ask-hatch": askSurface.hatch,
-    "--palette-ask-border": askSurface.border,
+    "--palette-ask-bg": askSurface("transparent"),
   } as React.CSSProperties;
 
   // The card itself: the same rows whether it floats over the page as a

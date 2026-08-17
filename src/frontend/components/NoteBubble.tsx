@@ -10,6 +10,7 @@ import { UserAvatar } from "./UserAvatar";
 import { getCurrentUser } from "./UserPicker";
 import { openLightbox } from "./MediaLightbox";
 import { noAutofill } from "../lib/composer-autofill";
+import { noteSurface } from "../lib/tinted-surface";
 
 /**
  * A team note interleaved into the session transcript — a human-to-human
@@ -95,9 +96,7 @@ export function NoteBubble({
 			//
 			// `group` so the actions can stay quiet until the note is hovered.
 			className="group relative mx-auto mb-6 mt-2 w-full max-w-[var(--session-col)] rounded-2xl px-4 py-3.5"
-			style={{
-				background: "color-mix(in srgb, var(--yellow-tint) 10%, transparent)",
-			}}
+			style={{ background: noteSurface("transparent") }}
 		>
 			<div className="mb-1 flex items-center gap-2">
 				<UserAvatar name={note.user} size={18} />

@@ -42,6 +42,7 @@ import {
 	composerToolbar,
 } from "../lib/composer-classes";
 import { noAutofill } from "../lib/composer-autofill";
+import { noteSurface } from "../lib/tinted-surface";
 import { paletteIconBtn, palettePill } from "../lib/palette-classes";
 import { Tooltip } from "../ui/tooltip";
 import { IconArrowUp, IconPencil, IconPlus } from "./icons";
@@ -613,16 +614,10 @@ export function PlainReplyBox({
 		}
 	}
 
-	// `--yellow-tint`, not `--yellow`: the ink is a dark ochre in light mode and
-	// turns warm grey at these percentages (see base.css).
-	const noteFill = "color-mix(in srgb, var(--composer-surface) 90%, var(--yellow-tint))";
-	const noteSurface: React.CSSProperties | undefined =
+	// The same wash a team note takes in a session transcript (lib/tinted-surface).
+	const noteStyle: React.CSSProperties | undefined =
 		kind === "note"
-			? {
-					borderColor: "color-mix(in srgb, var(--yellow-tint) 45%, transparent)",
-					backgroundColor: noteFill,
-					backgroundImage: `linear-gradient(to bottom, transparent 15%, ${noteFill} 72%), repeating-linear-gradient(45deg, color-mix(in srgb, var(--yellow-tint) 10%, transparent) 0, color-mix(in srgb, var(--yellow-tint) 10%, transparent) 12px, transparent 12px, transparent 24px)`,
-				}
+			? { backgroundColor: noteSurface("var(--composer-surface)") }
 			: undefined;
 
 	return (
@@ -633,7 +628,7 @@ export function PlainReplyBox({
 				composerBoxExpanded,
 				className,
 			)}
-			style={noteSurface}
+			style={noteStyle}
 		>
 			<FileChips
 				files={attachments.map((file) => ({ name: file.name, type: file.type }))}
