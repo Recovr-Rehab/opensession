@@ -4,13 +4,16 @@ import Foundation
 ///
 /// The web reads this on its own page (Settings → Usage, and
 /// `src/frontend/lib/account-usage.ts`) because the meters move hourly while
-/// everything else about an account is set once. The reduction rule below is a
-/// port of that file: an account reports three or four limits and only the
-/// fullest one decides whether a run can start, so a row shows that one and
-/// leaves the rest to the detail line.
+/// everything else about an account is set once. The reading rules below are a
+/// port of that file: an account reports three or four limits, any of them can
+/// be the one that stops a run, and they free up at different times, so a row
+/// draws them all.
 struct UsageWindow: Codable, Sendable, Equatable {
     var utilization: Double?
     var resetsAt: String?
+    /// How long the window is. It is what tells one Codex bucket's two limits
+    /// apart, since both carry the bucket's name.
+    var windowDurationMins: Double?
 }
 
 struct ScopedUsageLimit: Codable, Sendable, Equatable {
@@ -81,23 +84,24 @@ enum AccountUsageReading {
         return utilization
     }
 
-    /// The fullest window: the one the account is up against. A window
-    /// reporting no number is skipped rather than read as empty — "unknown" and
-    /// "nothing used" are different states, and a token that cannot see usage
-    /// at all has no binding limit to show.
-    static func bindingLimit(_ windows: [LimitWindow], now: Date = Date()) -> LimitWindow? {
-        var binding: LimitWindow?
-        var fullest = -1.0
+    /// Every limit the account reports a number for, account-wide windows
+    /// first and per-model caps after. A window reporting no number is left
+    /// out rather than drawn empty — "unknown" and "nothing used" are
+    /// different states, and an empty bar claims the second.
+    static func liveLimits(_ windows: [LimitWindow], now: Date = Date()) -> [LimitWindow] {
+        var accountWide: [LimitWindow] = []
+        var perModel: [LimitWindow] = []
         for window in windows {
             guard let pct = liveUtilization(window, now: now) else { continue }
-            if pct > fullest || (pct == fullest && window.scoped && binding?.scoped != true) {
-                var resolved = window
-                resolved.utilization = pct
-                binding = resolved
-                fullest = pct
+            var resolved = window
+            resolved.utilization = pct
+            if window.scoped {
+                perModel.append(resolved)
+            } else {
+                accountWide.append(resolved)
             }
         }
-        return binding
+        return accountWide + perModel
     }
 
     /// Every limit a Claude account reports: the two rolling windows, plus the
@@ -121,25 +125,40 @@ enum AccountUsageReading {
         return windows
     }
 
-    /// A Codex account reports one or two windows per model bucket. Each is
-    /// named for its bucket, so a full one says which model it holds up.
+    /// A Codex account reports one or two windows per model bucket, so a label
+    /// is the window's length ("1w") and, when the account has more than one
+    /// bucket, the model it belongs to. A bucket the account names is a
+    /// per-model budget rather than the plan's own window.
     static func codexLimits(_ usage: AccountUsage?) -> [LimitWindow] {
         guard let usage else { return [] }
+        let buckets = usage.buckets ?? []
+        let manyBuckets = buckets.count > 1
         var windows: [LimitWindow] = []
-        for bucket in usage.buckets ?? [] {
+        for bucket in buckets {
             let name = bucket.label ?? bucket.plan ?? bucket.id ?? "Limit"
-            if let primary = bucket.primary {
+            for window in [bucket.primary, bucket.secondary].compactMap({ $0 }) {
+                let duration = windowLength(window.windowDurationMins)
                 windows.append(
-                    LimitWindow(label: name, utilization: primary.utilization, resetsAt: primary.resetsAt)
-                )
-            }
-            if let secondary = bucket.secondary {
-                windows.append(
-                    LimitWindow(label: name, utilization: secondary.utilization, resetsAt: secondary.resetsAt)
+                    LimitWindow(
+                        label: manyBuckets ? "\(name) \(duration)" : duration,
+                        utilization: window.utilization,
+                        resetsAt: window.resetsAt,
+                        scoped: bucket.label != nil
+                    )
                 )
             }
         }
         return windows
+    }
+
+    /// A window's length, in the unit it divides evenly into: "1w", "7d", "5h".
+    static func windowLength(_ minutes: Double?) -> String {
+        guard let minutes, minutes > 0 else { return "Usage" }
+        let mins = Int(minutes.rounded())
+        if mins % 10_080 == 0 { return "\(mins / 10_080)w" }
+        if mins % 1_440 == 0 { return "\(mins / 1_440)d" }
+        if mins % 60 == 0 { return "\(mins / 60)h" }
+        return "\(mins)m"
     }
 
     /// What a person wants from a limit is how long until it frees up, not the
@@ -175,8 +194,8 @@ enum AccountUsageReading {
     static func isNearLimit(_ utilization: Double?) -> Bool { (utilization ?? 0) >= 90 }
     static func isWarning(_ utilization: Double?) -> Bool { (utilization ?? 0) >= 70 }
 
-    // Formatters are cached: this runs inside list rows and, for
-    // `bindingLimit`, inside a comparison loop.
+    // Formatters are cached: this runs inside list rows, several times per
+    // account, and again for every limit `liveLimits` reads.
     private static let withFractional: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

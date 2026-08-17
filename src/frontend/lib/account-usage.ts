@@ -1,11 +1,11 @@
 /**
- * Reading an account's usage down to the one number that decides anything.
+ * Reading the limits an account runs against.
  *
- * A Claude account reports three or four limits (a 5-hour window, a 7-day
- * window, and a per-model weekly cap the provider names, today "Fable"); a
- * Codex account reports one per model bucket. Only the fullest of them decides
- * whether a run can start, so the accounts list shows that one and keeps the
- * rest in its tooltip.
+ * A Claude account reports three or four (a 5-hour window, a 7-day window, and
+ * per-model weekly caps the provider names, today "Fable"); a Codex account
+ * reports one or two per model bucket. Any of them can be the one that stops a
+ * run, and they run out at different times, so the accounts page draws them
+ * all. This module decides which of them are real numbers.
  */
 
 export interface UsageWindow {
@@ -16,8 +16,8 @@ export interface UsageWindow {
 /** One limit an account runs against, named for how it reads in the list. */
 export interface LimitWindow extends UsageWindow {
 	label: string;
-	/** A per-model cap rather than an account-wide window. Wins a tie, because
-	 *  a spent one sidelines the account for that model specifically. */
+	/** A cap on one model rather than an account-wide window, so it sidelines
+	 *  the account for that model alone. Listed after the windows. */
 	scoped?: boolean;
 }
 
@@ -44,24 +44,26 @@ export function liveUtilization(w: LimitWindow, now = Date.now()): number | null
 	return w.utilization;
 }
 
+/** A limit that reports a number, so a meter can draw it. */
+export interface LiveLimit extends LimitWindow {
+	utilization: number;
+}
+
 /**
- * The fullest window: the one an account is up against. Windows it reports no
- * number for are skipped rather than read as empty. "Unknown" and "nothing
- * used" are different states, and a token that can't see usage at all has no
- * binding limit to show.
+ * Every limit an account reports a number for, account-wide windows first and
+ * per-model caps after. A window the account reports nothing for is left out
+ * rather than drawn empty: "unknown" and "nothing used" are different states,
+ * and an empty bar claims the second.
  */
-export function bindingLimit(windows: LimitWindow[], now = Date.now()): LimitWindow | null {
-	let binding: LimitWindow | null = null;
-	let fullest = -1;
+export function liveLimits(windows: LimitWindow[], now = Date.now()): LiveLimit[] {
+	const accountWide: LiveLimit[] = [];
+	const perModel: LiveLimit[] = [];
 	for (const w of windows) {
-		const pct = liveUtilization(w, now);
-		if (pct === null) continue;
-		if (pct > fullest || (pct === fullest && w.scoped && !binding?.scoped)) {
-			binding = { ...w, utilization: pct };
-			fullest = pct;
-		}
+		const utilization = liveUtilization(w, now);
+		if (utilization === null) continue;
+		(w.scoped ? perModel : accountWide).push({ ...w, utilization });
 	}
-	return binding;
+	return [...accountWide, ...perModel];
 }
 
 /** Every limit a Claude account reports: the two rolling windows, plus the

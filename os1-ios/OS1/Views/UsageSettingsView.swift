@@ -225,8 +225,9 @@ private struct AccountUsageRow: View {
         return "Shared pool"
     }
 
-    /// An account reports three or four limits and only the fullest decides
-    /// whether a run can start, so the bar shows that one and names it.
+    /// Every limit the account is running against: the rolling windows and any
+    /// per-model cap. Which one is full changes what you do about it, and they
+    /// free up at different times, so all of them are on the screen.
     private var limits: [LimitWindow] {
         kind == .claude
             ? AccountUsageReading.claudeLimits(account.usage)
@@ -239,28 +240,43 @@ private struct AccountUsageRow: View {
             Text(message)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-        } else if let binding = AccountUsageReading.bindingLimit(limits) {
+        } else {
             VStack(alignment: .leading, spacing: 4) {
-                // A neutral fill, not green: an account with headroom is the
-                // normal case and should not draw the eye. Only one near its
-                // limit does.
-                ProgressView(value: AccountUsageReading.fraction(binding.utilization))
-                    .tint(meterTint(binding.utilization))
-                HStack(spacing: 4) {
-                    Text(binding.label)
-                    if let percent = AccountUsageReading.percentLabel(binding.utilization) {
-                        Text("·")
-                        Text(percent)
-                    }
-                    if let reset = AccountUsageReading.formatReset(binding.resetsAt) {
-                        Text("·")
-                        Text(reset)
-                    }
+                ForEach(Array(AccountUsageReading.liveLimits(limits).enumerated()), id: \.offset) {
+                    _, limit in
+                    meterRow(limit)
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// One limit: what it is and when it frees up, how full it is, and the
+    /// number. The columns line up down the account so the bars can be read as
+    /// a group rather than one at a time.
+    private func meterRow(_ limit: LimitWindow) -> some View {
+        let reset = AccountUsageReading.formatReset(limit.resetsAt)
+        // One Text, so the reset time is part of the label's line and truncates
+        // with it rather than pushing the bar off the row.
+        let label =
+            Text(limit.label)
+            + Text(reset.map { " · \($0)" } ?? "").foregroundStyle(.tertiary)
+        return HStack(spacing: 8) {
+            label
+                .lineLimit(1)
+                .truncationMode(.tail)
+            Spacer(minLength: 8)
+            // A neutral fill, not green: an account with headroom is the
+            // normal case and should not draw the eye. Only one near its
+            // limit does.
+            ProgressView(value: AccountUsageReading.fraction(limit.utilization))
+                .tint(meterTint(limit.utilization))
+                .frame(width: 88)
+            Text(AccountUsageReading.percentLabel(limit.utilization) ?? "–")
+                .monospacedDigit()
+                .frame(width: 40, alignment: .trailing)
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
     }
 
     /// Why there is no meter. "Cannot see the usage" and "nothing spent" look

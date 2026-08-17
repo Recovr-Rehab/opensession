@@ -1,10 +1,9 @@
 import XCTest
 @testable import OS1
 
-/// The Usage page reduces three or four limits per account to the one that
-/// decides anything. Getting that wrong is invisible in a screenshot — a wrong
-/// window still draws a plausible bar — so the rule is tested rather than
-/// eyeballed.
+/// The Usage page reads three or four limits per account and draws each one.
+/// Getting the reading wrong is invisible in a screenshot — a stale window
+/// still draws a plausible bar — so the rules are tested rather than eyeballed.
 final class AccountUsageTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_700_000_000)
 
@@ -17,34 +16,31 @@ final class AccountUsageTests: XCTestCase {
         )
     }
 
-    func testBindingLimitPicksTheFullestWindow() {
-        let binding = AccountUsageReading.bindingLimit(
+    func testEveryLimitWithANumberIsDrawn() {
+        let live = AccountUsageReading.liveLimits(
             [window("5h", 12), window("7d", 84), window("Fable", 40, scoped: true)],
             now: now
         )
-        XCTAssertEqual(binding?.label, "7d")
-        XCTAssertEqual(binding?.utilization, 84)
+        XCTAssertEqual(live.map(\.label), ["5h", "7d", "Fable"])
+        XCTAssertEqual(live.map(\.utilization), [12, 84, 40])
+    }
+
+    /// A per-model cap holds up one model rather than the account, so it reads
+    /// after the account's own windows.
+    func testPerModelCapsComeAfterTheAccountsOwnWindows() {
+        let live = AccountUsageReading.liveLimits(
+            [window("Spark 1w", 0, scoped: true), window("Codex 1w", 82)],
+            now: now
+        )
+        XCTAssertEqual(live.map(\.label), ["Codex 1w", "Spark 1w"])
     }
 
     /// "Unknown" and "nothing used" are different states: a token that cannot
-    /// read usage must not read as an empty account.
-    func testWindowsWithoutANumberAreSkippedRatherThanReadAsEmpty() {
-        let binding = AccountUsageReading.bindingLimit(
-            [window("5h", nil), window("7d", 3)],
-            now: now
-        )
-        XCTAssertEqual(binding?.label, "7d")
-        XCTAssertNil(AccountUsageReading.bindingLimit([window("5h", nil)], now: now))
-    }
-
-    /// A scoped cap sidelines the account for one model specifically, so it
-    /// wins a tie against an account-wide window.
-    func testAScopedLimitWinsATie() {
-        let binding = AccountUsageReading.bindingLimit(
-            [window("7d", 50), window("Fable", 50, scoped: true)],
-            now: now
-        )
-        XCTAssertEqual(binding?.label, "Fable")
+    /// read usage must not draw an empty bar.
+    func testWindowsWithoutANumberAreLeftOutRatherThanDrawnEmpty() {
+        let live = AccountUsageReading.liveLimits([window("5h", nil), window("7d", 3)], now: now)
+        XCTAssertEqual(live.map(\.label), ["7d"])
+        XCTAssertTrue(AccountUsageReading.liveLimits([window("5h", nil)], now: now).isEmpty)
     }
 
     /// A window whose reset has already passed is provably stale. Counting it
@@ -54,8 +50,8 @@ final class AccountUsageTests: XCTestCase {
         let stale = window("5h", 100, resets: -60)
         XCTAssertEqual(AccountUsageReading.liveUtilization(stale, now: now), 0)
 
-        let binding = AccountUsageReading.bindingLimit([stale, window("7d", 20)], now: now)
-        XCTAssertEqual(binding?.label, "7d")
+        let live = AccountUsageReading.liveLimits([stale, window("7d", 20)], now: now)
+        XCTAssertEqual(live.map(\.utilization), [0, 20])
     }
 
     /// Utilization arrives as 0-100, the same scale the web meter takes.
@@ -94,22 +90,39 @@ final class AccountUsageTests: XCTestCase {
         XCTAssertEqual(limits.filter(\.scoped).map(\.label), ["Fable"])
     }
 
-    /// A Codex bucket names its window, so a full one says which model it holds
-    /// up rather than just "primary".
-    func testCodexLimitsAreNamedForTheirBucket() {
-        let usage = AccountUsage(
+    /// Both of a bucket's windows carry its name, so the length is what tells
+    /// them apart. With one bucket the name adds nothing and the length stands
+    /// alone, as it does on the web.
+    func testCodexLimitsAreNamedForTheirWindowLength() {
+        let oneBucket = AccountUsage(
             buckets: [
                 CodexUsageBucket(
-                    id: "gpt",
-                    label: "GPT-5.6",
-                    primary: UsageWindow(utilization: 40, resetsAt: nil),
-                    secondary: UsageWindow(utilization: 90, resetsAt: nil)
+                    id: "codex",
+                    primary: UsageWindow(utilization: 40, resetsAt: nil, windowDurationMins: 300),
+                    secondary: UsageWindow(utilization: 90, resetsAt: nil, windowDurationMins: 10_080)
                 )
             ]
         )
-        let limits = AccountUsageReading.codexLimits(usage)
-        XCTAssertEqual(limits.map(\.label), ["GPT-5.6", "GPT-5.6"])
-        XCTAssertEqual(AccountUsageReading.bindingLimit(limits, now: now)?.utilization, 90)
+        XCTAssertEqual(AccountUsageReading.codexLimits(oneBucket).map(\.label), ["5h", "1w"])
+
+        let twoBuckets = AccountUsage(
+            buckets: [
+                CodexUsageBucket(
+                    id: "codex",
+                    primary: UsageWindow(utilization: 82, resetsAt: nil, windowDurationMins: 10_080)
+                ),
+                CodexUsageBucket(
+                    id: "spark",
+                    label: "GPT-5.3-Codex-Spark",
+                    primary: UsageWindow(utilization: 0, resetsAt: nil, windowDurationMins: 10_080)
+                ),
+            ]
+        )
+        let limits = AccountUsageReading.codexLimits(twoBuckets)
+        XCTAssertEqual(limits.map(\.label), ["codex 1w", "GPT-5.3-Codex-Spark 1w"])
+        // The named bucket is a per-model budget, so it sorts after the plan's
+        // own window even though both windows are the same length.
+        XCTAssertEqual(limits.filter(\.scoped).map(\.label), ["GPT-5.3-Codex-Spark 1w"])
     }
 
     /// Every field is optional, as everywhere else in this client: a server

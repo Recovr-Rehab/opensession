@@ -3,8 +3,8 @@ import React, { useEffect, useRef, useState, useCallback, type RefObject } from 
 import { usePeople } from "../../lib/people";
 import { UserAvatar } from "../UserAvatar";
 import {
-	bindingLimit,
 	claudeLimits,
+	liveLimits,
 	type LimitWindow,
 	type UsageWindow,
 } from "../../lib/account-usage";
@@ -294,37 +294,28 @@ function Meter({
 }
 
 /**
- * An account's usage, as the one limit it is closest to. Accounts report three
- * or four windows and only the fullest of them decides anything, so a bar each
- * was three-quarters noise down a page of fourteen accounts. The
- * per-model rows ("Fable", "GPT-5.3-Codex-Spark", the latter at 0% on every
- * account) read as separate budgets when they are one subscription seen from
- * another angle. The rest stay one hover away.
+ * Every limit an account is running against, one row each: the 5-hour window,
+ * the 7-day window, and any per-model weekly cap. They free up at different
+ * times, so which one is full changes what you do about it — a spent 5h clears
+ * this afternoon, a spent Fable cap holds that model for days. Showing only the
+ * fullest of them put the rest a hover away, which is no place for a fact
+ * someone came to this page to read. Quiet ink keeps a page of accounts calm;
+ * colour still means one thing, that this limit is running out.
  */
-function UsageMeter({ windows }: { windows: LimitWindow[] }) {
-	const binding = bindingLimit(windows);
-	if (!binding) return null;
-	const pct = binding.utilization;
+function UsageMeters({ windows }: { windows: LimitWindow[] }) {
 	return (
-		<Meter
-			label={binding.label}
-			labelTitle={
-				windows.length > 1
-					? windows
-							.map(
-								(w) =>
-									`${w.label}: ${w.utilization === null ? "unknown" : `${Math.round(w.utilization)}%`}${
-										w.resetsAt ? `, ${formatReset(w.resetsAt)}` : ""
-									}`,
-							)
-							.join("\n")
-					: undefined
-			}
-			pct={pct}
-			value={pct === null ? "–" : `${Math.round(pct)}%`}
-			note={formatReset(binding.resetsAt)}
-			noteTitle={absoluteReset(binding.resetsAt)}
-		/>
+		<>
+			{liveLimits(windows).map((w, i) => (
+				<Meter
+					key={`${w.label}-${i}`}
+					label={w.label}
+					pct={w.utilization}
+					value={`${Math.round(w.utilization)}%`}
+					note={formatReset(w.resetsAt)}
+					noteTitle={absoluteReset(w.resetsAt)}
+				/>
+			))}
+		</>
 	);
 }
 
@@ -553,7 +544,7 @@ export function ClaudeAccountsSection() {
 								) : (
 									<>
 										<MeterGroup>
-											<UsageMeter windows={claudeLimits(a.usage)} />
+											<UsageMeters windows={claudeLimits(a.usage)} />
 											<ExtraUsageRow extra={a.usage?.extraUsage} />
 										</MeterGroup>
 										{a.usage?.source === "meridian" && (
@@ -669,8 +660,8 @@ function CodexUsageMeters({ account }: { account: CodexAccountInfo }) {
 		return `${minutes}m`;
 	};
 	// A bucket the account names is a per-model budget (GPT-5.3-Codex-Spark)
-	// rather than the plan's own window, so it only surfaces when it is the
-	// limit actually being hit.
+	// rather than the plan's own window, so it is listed after the plan's and
+	// carries the model's name.
 	const multipleBuckets = account.usage.buckets.length > 1;
 	const windows: LimitWindow[] = account.usage.buckets.flatMap((bucket) =>
 		[bucket.primary, bucket.secondary].flatMap((window) => {
@@ -690,7 +681,7 @@ function CodexUsageMeters({ account }: { account: CodexAccountInfo }) {
 		<>
 			{windows.length > 0 && (
 				<MeterGroup>
-					<UsageMeter windows={windows} />
+					<UsageMeters windows={windows} />
 				</MeterGroup>
 			)}
 			{account.usage.resetCreditsAvailable !== null &&

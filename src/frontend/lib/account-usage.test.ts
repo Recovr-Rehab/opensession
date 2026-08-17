@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { bindingLimit, claudeLimits, liveUtilization } from "./account-usage";
+import { claudeLimits, liveLimits, liveUtilization } from "./account-usage";
 
 const NOW = Date.parse("2026-08-15T12:00:00Z");
 const inHours = (h: number) => new Date(NOW + h * 3_600_000).toISOString();
@@ -20,9 +20,9 @@ describe("liveUtilization", () => {
 	});
 });
 
-describe("bindingLimit", () => {
-	test("picks the fullest window and reports which one it is", () => {
-		const binding = bindingLimit(
+describe("liveLimits", () => {
+	test("keeps every window the account reports a number for", () => {
+		const limits = liveLimits(
 			[
 				{ label: "5h", utilization: 4, resetsAt: inHours(3) },
 				{ label: "7d", utilization: 92, resetsAt: inHours(96) },
@@ -30,70 +30,60 @@ describe("bindingLimit", () => {
 			],
 			NOW,
 		);
-		expect(binding?.label).toBe("7d");
-		expect(binding?.utilization).toBe(92);
-		expect(binding?.resetsAt).toBe(inHours(96));
+		expect(limits.map((w) => [w.label, w.utilization])).toEqual([
+			["5h", 4],
+			["7d", 92],
+			["Fable", 89],
+		]);
 	});
 
-	test("a spent per-model cap wins a tie, because that is what sidelines the account", () => {
-		const binding = bindingLimit(
+	test("lists per-model caps after the account's own windows", () => {
+		const limits = liveLimits(
 			[
-				{ label: "7d", utilization: 100, resetsAt: inHours(24) },
-				{ label: "Fable", utilization: 100, resetsAt: inHours(24), scoped: true },
+				{ label: "Spark 7d", utilization: 0, resetsAt: inHours(96), scoped: true },
+				{ label: "Codex 5h", utilization: 12, resetsAt: inHours(2) },
 			],
 			NOW,
 		);
-		expect(binding?.label).toBe("Fable");
+		expect(limits.map((w) => w.label)).toEqual(["Codex 5h", "Spark 7d"]);
 	});
 
-	test("surfaces a transient window when it is the one being hit", () => {
-		const binding = bindingLimit(
-			[
-				{ label: "5h", utilization: 98, resetsAt: inHours(2) },
-				{ label: "7d", utilization: 10, resetsAt: inHours(96) },
-			],
-			NOW,
-		);
-		expect(binding?.label).toBe("5h");
-		expect(binding?.utilization).toBe(98);
-	});
-
-	test("ignores a stale window even when its stored number is the highest", () => {
-		const binding = bindingLimit(
+	test("reads a stale window as empty rather than at its stored number", () => {
+		const limits = liveLimits(
 			[
 				{ label: "5h", utilization: 100, resetsAt: inHours(-1) },
 				{ label: "7d", utilization: 40, resetsAt: inHours(96) },
 			],
 			NOW,
 		);
-		expect(binding?.label).toBe("7d");
+		expect(limits.map((w) => w.utilization)).toEqual([0, 40]);
 	});
 
-	test("skips windows with no number rather than reading them as empty", () => {
-		const binding = bindingLimit(
+	test("leaves out a window with no number rather than drawing it empty", () => {
+		const limits = liveLimits(
 			[
 				{ label: "5h", utilization: null, resetsAt: null },
 				{ label: "7d", utilization: 3, resetsAt: inHours(96) },
 			],
 			NOW,
 		);
-		expect(binding?.label).toBe("7d");
+		expect(limits.map((w) => w.label)).toEqual(["7d"]);
 	});
 
-	test("has no binding limit when the account reports no numbers at all", () => {
+	test("has nothing to draw when the account reports no numbers at all", () => {
 		expect(
-			bindingLimit(
+			liveLimits(
 				[
 					{ label: "5h", utilization: null, resetsAt: null },
 					{ label: "7d", utilization: null, resetsAt: null },
 				],
 				NOW,
 			),
-		).toBeNull();
+		).toEqual([]);
 	});
 
-	test("has no binding limit for an empty list", () => {
-		expect(bindingLimit([], NOW)).toBeNull();
+	test("has nothing to draw for an empty list", () => {
+		expect(liveLimits([], NOW)).toEqual([]);
 	});
 });
 
@@ -115,7 +105,7 @@ describe("claudeLimits", () => {
 	test("keeps the windows an account omits, so they read as unknown not zero", () => {
 		const limits = claudeLimits({ fiveHour: null, sevenDay: null });
 		expect(limits.map((w) => w.label)).toEqual(["5h", "7d"]);
-		expect(bindingLimit(limits, NOW)).toBeNull();
+		expect(liveLimits(limits, NOW)).toEqual([]);
 	});
 
 	test("has nothing to show for an account with no usage", () => {
