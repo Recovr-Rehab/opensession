@@ -30,7 +30,7 @@ import { gitIdentityFor } from "./shared/user-mappings";
 const AUDIT_DIR = stateDir("audit");
 const CACHE_DIR = stateDir("analytics-cache");
 // Bump when the rollup shape changes — stale disk caches recompute.
-const ROLLUP_VERSION = 7;
+const ROLLUP_VERSION = 8;
 
 interface TokenTotals {
 	input: number;
@@ -52,6 +52,9 @@ interface SessionAgg {
 	kind: string;
 	turns: number;
 	output: number;
+	/** Output from engines other than OpenCode. OpenCode's aggregate is
+	 *  replaced from its request store at compose time without overlap. */
+	nonOpencodeOutput: number;
 	/** input + output + cache read + cache write. */
 	tokens: number;
 	costUsd: number;
@@ -163,6 +166,7 @@ function rollupAuditDay(date: string): DayRollup {
 			kind: String(e.run_kind || "?").replace(/-reattach$/, ""),
 			turns: 0,
 			output: 0,
+			nonOpencodeOutput: 0,
 			tokens: 0,
 			costUsd: 0,
 			errors: 0,
@@ -267,6 +271,9 @@ function rollupAuditDay(date: string): DayRollup {
 				if (s) {
 					s.turns++;
 					s.output += output;
+					if (e.provider !== "opencode" && !String(e.model || "").startsWith("opencode/")) {
+						s.nonOpencodeOutput += output;
+					}
 					s.tokens += input + output + cacheRead + cacheWrite;
 					s.costUsd += cost;
 				}
@@ -375,6 +382,14 @@ export function analyticsRepo(
 		if (base.startsWith(`${repo.wtPrefix}-`)) return repo.id;
 	}
 	return null;
+}
+
+export function attributedSessionOutput(
+	auditOutput: number,
+	nonOpencodeOutput: number,
+	engineOutput: number | undefined,
+): number {
+	return engineOutput === undefined ? auditOutput : engineOutput + nonOpencodeOutput;
 }
 
 let sessionMetaCache: { at: number; map: Map<string, SessionMeta> } | null = null;
@@ -993,7 +1008,28 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 		const engine = engineDays.get(date);
 		reviewByDate.set(date, r.review || emptyReviewAgg());
 		const sessionsByKind: Record<string, number> = {};
-		for (const [id, s] of Object.entries(r.bySession)) {
+		// Audit supplies turns/errors; the engine store supplies every model
+		// request's output, including tool rounds and spawned sessions that never
+		// emitted one of our result events. Walk the union so those sessions still
+		// reach their owner and repo.
+		const sessionIds = new Set([...Object.keys(r.bySession), ...Object.keys(engine?.bySession || {})]);
+		for (const id of sessionIds) {
+			const s = r.bySession[id] || {
+				kind: "prompt",
+				turns: 0,
+				output: 0,
+				nonOpencodeOutput: 0,
+				tokens: 0,
+				costUsd: 0,
+				errors: 0,
+			};
+			// Historical audit rows kept only the final request in an OpenCode turn,
+			// while retained engine rows include every tool round and inherited task.
+			// Direct engines have no equivalent native-session index, so add only
+			// their explicitly separated audit output to avoid overlap.
+			const engineOutput =
+				engine?.sessionAttribution === "measured" ? engine.bySession?.[id]?.output : undefined;
+			const output = attributedSessionOutput(s.output, s.nonOpencodeOutput, engineOutput);
 			allSessions.add(id);
 			const m = meta.get(id);
 			// Review sessions run with run_kind "prompt"; give them their own
@@ -1017,19 +1053,19 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 							: ownerAgg(peopleAgg, kindOwner(s.kind));
 			agg.sessionsActive.add(id);
 			agg.turns += s.turns;
-			agg.outputTokens += s.output;
+			agg.outputTokens += output;
 			agg.errors += s.errors;
 			const repoKey = m?.repo || "";
 			const ra = repoActivityOf(repoKey);
 			ra.sessions.add(id);
 			ra.turns += s.turns;
-			ra.outputTokens += s.output;
+			ra.outputTokens += output;
 			ra.errors += s.errors;
 			let orr = agg.byRepo.get(repoKey);
 			if (!orr) agg.byRepo.set(repoKey, (orr = { sessions: new Set(), turns: 0, outputTokens: 0 }));
 			orr.sessions.add(id);
 			orr.turns += s.turns;
-			orr.outputTokens += s.output;
+			orr.outputTokens += output;
 		}
 		const outputByModel: Record<string, number> = {};
 		const costByModel: Record<string, number> = {};
@@ -1071,7 +1107,7 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 			: [];
 		days.push({
 			date,
-			sessions: Object.keys(r.bySession).length,
+			sessions: sessionIds.size,
 			sessionsByKind,
 			turns: r.turns,
 			errors: r.errors,
@@ -1277,7 +1313,7 @@ const SUMMARY_FRESH_MS = 5 * 60 * 1000;
 const SUMMARY_STALE_SERVE_MS = 24 * 60 * 60 * 1000;
 // Bump when composition semantics change so a restart cannot serve a fresh but
 // obsolete disk summary before the background prewarm replaces it.
-const SUMMARY_VERSION = 3;
+const SUMMARY_VERSION = 6;
 const summaryCache = new Map<string, { at: number; summary: AnalyticsSummary }>();
 const summaryInflight = new Map<string, Promise<AnalyticsSummary>>();
 

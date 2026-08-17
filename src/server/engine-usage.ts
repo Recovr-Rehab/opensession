@@ -82,7 +82,7 @@ import type { Dirent } from "node:fs";
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { Database } from "bun:sqlite";
 import { homedir } from "node:os";
-import { OPENSESSION_SESSIONS_DIR, stateDir } from "./paths";
+import { isNativeSessionId, OPENSESSION_SESSIONS_DIR, stateDir } from "./paths";
 
 const SHARD_DIR = `${OPENSESSION_SESSIONS_DIR}/opencode/db`;
 
@@ -112,6 +112,13 @@ export type EngineUsageCoverage = Record<EngineUsageSource, "measured" | "unmeas
 export interface EngineUsageDay {
 	date: string;
 	byModel: ModelUsage[];
+	/** OpenCode requests attributed to their native Open Session session. Direct
+	 *  engines do not currently expose this link, so callers fall back to audit
+	 *  output for sessions absent from this map. */
+	bySession?: Record<string, { requests: number; output: number }>;
+	/** Whether the OpenCode store still retained enough history to build
+	 *  `bySession` for this day. */
+	sessionAttribution?: "measured" | "unmeasured";
 	requests: number;
 	input: number;
 	output: number;
@@ -208,11 +215,69 @@ function utcDate(ms: number): string {
 
 export interface EngineUsageScan {
 	days: Map<string, Map<string, Bucket>>;
+	sessions: Map<string, Map<string, { requests: number; output: number }>>;
+	/** False when a relevant OpenCode shard could not be read. Partial session
+	 *  attribution must never be cached as complete. */
+	sessionAttributionComplete: boolean;
 	/** UTC date of the earliest surviving row in the OPENCODE store, or null if
 	 *  it is empty. That store prunes, so a day before this one has nothing left
 	 *  to read and is unmeasured rather than zero. The direct-engine stores
 	 *  deliberately do not bound this — see the retention note up top. */
 	earliest: string | null;
+}
+
+/** The runner names engine sessions `opensession <native-id>` (historically
+ *  `backstage <native-id>`). Keep the prefix opaque and accept both native ID
+ *  generations through the shared predicate. */
+export function nativeSessionIdFromEngineTitle(title: string): string | null {
+	for (const part of title.trim().split(/\s+/)) {
+		if (isNativeSessionId(part)) return part;
+	}
+	return null;
+}
+
+interface EngineSessionRow {
+	id: string;
+	parent_id: string | null;
+	title: string;
+}
+
+/** OpenCode's internal task/oracle sessions have descriptive titles and point
+ *  at the owning engine session through parent_id. Resolve that chain to the
+ *  nearest native Open Session id so their requests stay with the person and
+ *  repo that spawned them. */
+export function nativeSessionIdsForEngineSessions(rows: EngineSessionRow[]): Map<string, string> {
+	const sessions = new Map(rows.map((row) => [row.id, row]));
+	const resolved = new Map<string, string>();
+	const resolving = new Set<string>();
+	const resolve = (id: string): string | null => {
+		const cached = resolved.get(id);
+		if (cached) return cached;
+		if (resolving.has(id)) return null;
+		const row = sessions.get(id);
+		if (!row) return null;
+		resolving.add(id);
+		const native = (row.parent_id ? resolve(row.parent_id) : null) || nativeSessionIdFromEngineTitle(row.title);
+		resolving.delete(id);
+		if (native) resolved.set(id, native);
+		return native;
+	};
+	for (const id of sessions.keys()) resolve(id);
+	return resolved;
+}
+
+function addSessionUsage(
+	sessions: EngineUsageScan["sessions"],
+	date: string,
+	sessionId: string,
+	output: number,
+): void {
+	let bySession = sessions.get(date);
+	if (!bySession) sessions.set(date, (bySession = new Map()));
+	const bucket = bySession.get(sessionId) || { requests: 0, output: 0 };
+	bucket.requests++;
+	bucket.output += output;
+	bySession.set(sessionId, bucket);
 }
 
 /** Bucket one model request into a day. */
@@ -263,38 +328,57 @@ function filesUnder(root: string, match: (name: string) => boolean): string[] {
  * Yields to the event loop between databases: a full scan is ~4k files and
  * about a minute of CPU, and the server serves HTTP throughout.
  */
-async function scanOpencodeShards(
+export async function scanOpencodeShards(
 	days: Map<string, Map<string, Bucket>>,
+	sessions: EngineUsageScan["sessions"],
 	cutoff: number,
-): Promise<string | null> {
+	root: string = SHARD_DIR,
+): Promise<{ earliest: string | null; complete: boolean }> {
 	let earliestMs = Number.POSITIVE_INFINITY;
+	let complete = true;
 	let files: string[];
 	try {
-		files = readdirSync(SHARD_DIR).filter((f) => f.endsWith(".db"));
+		files = readdirSync(root).filter((f) => f.endsWith(".db"));
 	} catch (e) {
 		console.error("[engine-usage] shard dir unreadable:", e);
-		return null;
+		return { earliest: null, complete: false };
 	}
 	let scanned = 0;
 	for (const file of files) {
-		const path = `${SHARD_DIR}/${file}`;
+		const path = `${root}/${file}`;
 		// A DB last written before the cutoff cannot hold rows after it.
 		try {
 			if (statSync(path).mtimeMs < cutoff) continue;
 		} catch {
+			complete = false;
 			continue;
 		}
 		let db: Database | undefined;
 		try {
 			db = new Database(path, { readonly: true });
+			const tables = new Set(
+				db
+					.query<{ name: string }, []>("select name from sqlite_master where type = 'table'")
+					.all()
+					.map((row) => row.name),
+			);
+			// OpenCode can leave a valid but uninitialized SQLite file behind when
+			// startup stops before migrations. It contains no usage to lose.
+			if (!tables.has("session") && !tables.has("message")) continue;
+			if (!tables.has("session") || !tables.has("message")) {
+				throw new Error("OpenCode shard is missing the session or message table");
+			}
+			const nativeSessionIds = nativeSessionIdsForEngineSessions(
+				db.query<EngineSessionRow, []>("select id, parent_id, title from session").all(),
+			);
 			// How far back the store still reaches. A DB skipped above cannot
 			// lower this into the requested range: every row in it predates the
 			// cutoff, which is the range's own start.
 			const first = db.query<{ t: number | null }, []>("select min(time_created) t from message").get();
 			if (first?.t) earliestMs = Math.min(earliestMs, first.t);
 			const rows = db
-				.query<{ time_created: number; data: string }, [number]>(
-					"select time_created, data from message where time_created >= ?",
+				.query<{ time_created: number; data: string; session_id: string }, [number]>(
+					"select time_created, data, session_id from message where time_created >= ?",
 				)
 				.all(cutoff);
 			for (const row of rows) {
@@ -309,15 +393,20 @@ async function scanOpencodeShards(
 				const cache = tokens.cache || {};
 				const provider = String(d.providerID || d.model?.providerID || "?");
 				const model = String(d.modelID || d.model?.modelID || "?").split("/").pop() || "?";
-				addUsage(days, utcDate(row.time_created), provider, model, {
+				const date = utcDate(row.time_created);
+				addUsage(days, date, provider, model, {
 					input: tokens.input || 0,
 					output: tokens.output || 0,
 					cacheRead: cache.read || 0,
 					cacheWrite: cache.write || 0,
 				});
+				const sessionId = nativeSessionIds.get(row.session_id);
+				if (sessionId) addSessionUsage(sessions, date, sessionId, tokens.output || 0);
 			}
-		} catch {
+		} catch (error) {
 			// A shard mid-write or half-deleted is skipped, not fatal.
+			console.error(`[engine-usage] shard unreadable: ${path}`, error);
+			complete = false;
 		} finally {
 			try {
 				db?.close();
@@ -325,7 +414,10 @@ async function scanOpencodeShards(
 		}
 		if (++scanned % 25 === 0) await new Promise((r) => setTimeout(r, 0));
 	}
-	return Number.isFinite(earliestMs) ? utcDate(earliestMs) : null;
+	return {
+		earliest: Number.isFinite(earliestMs) ? utcDate(earliestMs) : null,
+		complete,
+	};
 }
 
 /**
@@ -491,12 +583,18 @@ export async function scanCodexDirect(
  */
 export async function scanEngineUsage(fromDate: string): Promise<EngineUsageScan> {
 	const days = new Map<string, Map<string, Bucket>>();
+	const sessions: EngineUsageScan["sessions"] = new Map();
 	const cutoff = Date.parse(`${fromDate}T00:00:00Z`);
-	if (!Number.isFinite(cutoff)) return { days, earliest: null };
-	const earliest = await scanOpencodeShards(days, cutoff);
+	if (!Number.isFinite(cutoff)) return { days, sessions, earliest: null, sessionAttributionComplete: false };
+	const opencode = await scanOpencodeShards(days, sessions, cutoff);
 	await scanClaudeDirect(days, cutoff);
 	await scanCodexDirect(days, cutoff);
-	return { days, earliest };
+	return {
+		days,
+		sessions,
+		earliest: opencode.earliest,
+		sessionAttributionComplete: opencode.complete,
+	};
 }
 
 /** Price one day's buckets. */
@@ -504,11 +602,14 @@ export function priceDay(
 	date: string,
 	byModel: Map<string, Bucket>,
 	coverage: EngineUsageCoverage = measuredCoverage(),
+	bySession: Map<string, { requests: number; output: number }> = new Map(),
 ): EngineUsageDay {
 	const rates = loadRates();
 	const day: EngineUsageDay = {
 		date,
 		byModel: [],
+		bySession: Object.fromEntries(bySession),
+		sessionAttribution: coverage.opencode === "unmeasured" ? "unmeasured" : "measured",
 		requests: 0,
 		input: 0,
 		output: 0,
@@ -556,9 +657,12 @@ export function emptyEngineUsageDay(date: string): EngineUsageDay {
 // range costs one pass rather than one per day.
 
 // 2: days before the store's earliest row carry `unmeasured` instead of zeros.
-// 3: the two direct engines are counted. Version 3 is migrated in place below:
-//    its global `unmeasured` flag came from OpenCode but covered merged values.
-const CACHE_VERSION = 3;
+// 3: the two direct engines are counted.
+// 4: OpenCode requests carry direct native-session attribution.
+// 5: Internal OpenCode task sessions inherit attribution through parent_id.
+// 6: Parent ownership wins when a task title happens to mention another id.
+//    Version 3/4 totals are preserved while retained days are rescanned once.
+const CACHE_VERSION = 6;
 
 // Reuse the analytics cache directory so both rollups age together.
 const stateCacheDir = () => stateDir("analytics-cache");
@@ -567,28 +671,31 @@ function cachePath(date: string): string {
 	return `${stateCacheDir()}/engine-day-${date}.json`;
 }
 
+/** Decode the current cache shape and older aggregate-compatible shapes. Old
+ *  versions leave sessionAttribution absent so retained days are rescanned. */
+export function decodeEngineUsageCache(parsed: unknown): EngineUsageDay | null {
+	const value = parsed as { v?: number; day?: EngineUsageDay & { coverage?: EngineUsageCoverage } };
+	if ((value?.v !== CACHE_VERSION && value?.v !== 4 && value?.v !== 3) || !value.day) return null;
+	const cached = value.day;
+	if (value.v === CACHE_VERSION) return cached;
+	return {
+		...cached,
+		coverage:
+			cached.coverage || {
+				...measuredCoverage(),
+				opencode: cached.unmeasured ? "unmeasured" : "measured",
+			},
+		unmeasured: !!cached.unmeasured && cached.requests === 0,
+		bySession: undefined,
+		sessionAttribution: undefined,
+	};
+}
+
 function readDay(date: string): EngineUsageDay | null {
 	try {
 		const p = cachePath(date);
 		if (!existsSync(p)) return null;
-		const parsed = JSON.parse(readFileSync(p, "utf-8"));
-		if (parsed?.v !== CACHE_VERSION) return null;
-		const cached = parsed.day as EngineUsageDay & { coverage?: EngineUsageCoverage };
-		if (cached.coverage) return cached;
-		// Version 3 originally stored one flag derived from the OpenCode horizon
-		// alongside totals merged from all three sources. Preserve every cached
-		// value, attach the provenance that was implicit in that flag, and only
-		// leave the whole-day gap marker on a genuinely empty merged day.
-		const day: EngineUsageDay = {
-			...cached,
-			coverage: {
-				...measuredCoverage(),
-				opencode: cached.unmeasured ? "unmeasured" : "measured",
-			},
-			unmeasured: !!cached.unmeasured && cached.requests === 0,
-		};
-		writeDay(day);
-		return day;
+		return decodeEngineUsageCache(JSON.parse(readFileSync(p, "utf-8")));
 	} catch {
 		return null;
 	}
@@ -604,6 +711,14 @@ function writeDay(day: EngineUsageDay): void {
 }
 
 let inflight: Promise<void> | null = null;
+const VOLATILE_DAY_TTL_MS = 60_000;
+const volatileDays = new Map<string, { at: number; day: EngineUsageDay }>();
+
+function cachedUsageDay(date: string, today: string): EngineUsageDay | null {
+	if (date < today) return readDay(date);
+	const cached = volatileDays.get(date);
+	return cached && Date.now() - cached.at < VOLATILE_DAY_TTL_MS ? cached.day : null;
+}
 
 /**
  * Usage for each of `dates`, cached per day. Today is always rescanned; a past
@@ -614,33 +729,57 @@ export async function engineUsageForDates(dates: string[]): Promise<Map<string, 
 	const out = new Map<string, EngineUsageDay>();
 	const missing: string[] = [];
 	for (const date of dates) {
-		const cached = date < today ? readDay(date) : null;
+		const cached = cachedUsageDay(date, today);
 		if (cached) out.set(date, cached);
-		else missing.push(date);
+		if (!cached || !cached.sessionAttribution) missing.push(date);
 	}
 	if (!missing.length) return out;
 
 	// One scan from the earliest missing day fills all of them.
-	const from = missing.reduce((a, b) => (a < b ? a : b));
 	while (inflight) await inflight;
 	let resolveInflight!: () => void;
 	inflight = new Promise<void>((r) => (resolveInflight = r));
 	try {
 		// Re-check: a concurrent scan may have filled these while we waited.
-		const stillMissing = missing.filter((d) => d >= today || !readDay(d));
+		const stillMissing = missing.filter((d) => {
+			const cached = cachedUsageDay(d, today);
+			return !cached?.sessionAttribution;
+		});
 		if (stillMissing.length) {
-			const { days: scanned, earliest } = await scanEngineUsage(from);
-			for (const date of missing) {
+			const scanFrom = stillMissing.reduce((a, b) => (a < b ? a : b));
+			const { days: scanned, sessions, earliest, sessionAttributionComplete } = await scanEngineUsage(scanFrom);
+			for (const date of stillMissing) {
 				// Only OpenCode prunes. Keep that source's gap separate from the
 				// direct-engine values merged into the same day.
 				const coverage = measuredCoverage();
 				if (earliest && date < earliest) coverage.opencode = "unmeasured";
-				const day = priceDay(date, scanned.get(date) ?? new Map(), coverage);
-				if (date < today) writeDay(day);
+				const existing = cachedUsageDay(date, today);
+				const canAttribute = sessionAttributionComplete && coverage.opencode === "measured";
+				const bySession = sessions.get(date) ?? new Map();
+				const day = existing
+					? {
+							...existing,
+							...(canAttribute ? { bySession: Object.fromEntries(bySession) } : {}),
+							sessionAttribution: canAttribute ? ("measured" as const) : ("unmeasured" as const),
+						}
+					: priceDay(date, scanned.get(date) ?? new Map(), coverage, bySession);
+				if (!canAttribute) {
+					delete day.bySession;
+					day.sessionAttribution = "unmeasured";
+				}
+				if (date < today) {
+					// A partial scan stays eligible for another attribution attempt.
+					if (sessionAttributionComplete) writeDay(day);
+				} else {
+					volatileDays.set(date, { at: Date.now(), day });
+				}
 				out.set(date, day);
 			}
+			for (const date of missing) {
+				if (!out.has(date)) out.set(date, cachedUsageDay(date, today) ?? emptyEngineUsageDay(date));
+			}
 		} else {
-			for (const date of missing) out.set(date, readDay(date) ?? emptyEngineUsageDay(date));
+			for (const date of missing) out.set(date, cachedUsageDay(date, today) ?? emptyEngineUsageDay(date));
 		}
 	} finally {
 		resolveInflight();

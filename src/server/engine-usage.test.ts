@@ -2,13 +2,19 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Database } from "bun:sqlite";
 import {
+	type EngineUsageDay,
+	decodeEngineUsageCache,
 	engineUsageForDates,
 	loadRates,
+	nativeSessionIdFromEngineTitle,
+	nativeSessionIdsForEngineSessions,
 	priceDay,
 	resetRatesForTest,
 	scanClaudeDirect,
 	scanCodexDirect,
+	scanOpencodeShards,
 } from "./engine-usage";
 
 /**
@@ -130,18 +136,18 @@ describe("engine usage pricing", () => {
 	});
 });
 
-describe("engine usage day cache migration", () => {
-	const cacheFixture = (date: string, day: Record<string, unknown>) => {
+describe("engine usage day cache", () => {
+	const cacheFixture = (date: string, day: EngineUsageDay) => {
 		const cacheDir = join(dir, ".opensession-analytics-cache");
 		mkdirSync(cacheDir, { recursive: true });
 		const path = join(cacheDir, `engine-day-${date}.json`);
-		writeFileSync(path, JSON.stringify({ v: 3, day }));
+		writeFileSync(path, JSON.stringify({ v: 6, day }));
 		return path;
 	};
 
-	test("preserves nonzero merged history when migrating the old OpenCode horizon flag", async () => {
+	test("preserves nonzero merged history with session-attribution provenance", async () => {
 		const date = "2001-02-03";
-		const legacyDay = {
+		const legacyDay: EngineUsageDay = {
 			date,
 			byModel: [
 				{
@@ -163,23 +169,22 @@ describe("engine usage day cache migration", () => {
 			totalTokens: 60,
 			costUsd: 23,
 			unpricedRequests: 5,
-			unmeasured: true,
+			coverage: { opencode: "measured", "claude-direct": "measured", "codex-direct": "measured" },
+			unmeasured: false,
+			bySession: { "os-example": { requests: 2, output: 13 } },
+			sessionAttribution: "measured",
 		};
 		const path = cacheFixture(date, legacyDay);
 
 		const day = (await engineUsageForDates([date])).get(date)!;
 
-		expect(day).toEqual({
-			...legacyDay,
-			coverage: { opencode: "unmeasured", "claude-direct": "measured", "codex-direct": "measured" },
-			unmeasured: false,
-		});
-		expect(JSON.parse(readFileSync(path, "utf-8"))).toEqual({ v: 3, day });
+		expect(day).toEqual(legacyDay);
+		expect(JSON.parse(readFileSync(path, "utf-8"))).toEqual({ v: 6, day });
 	});
 
 	test("keeps an empty legacy retention gap unmeasured", async () => {
 		const date = "2001-02-04";
-		const legacyDay = {
+		const legacyDay: EngineUsageDay = {
 			date,
 			byModel: [],
 			requests: 0,
@@ -190,7 +195,9 @@ describe("engine usage day cache migration", () => {
 			totalTokens: 0,
 			costUsd: 0,
 			unpricedRequests: 0,
+			coverage: { opencode: "unmeasured", "claude-direct": "measured", "codex-direct": "measured" },
 			unmeasured: true,
+			sessionAttribution: "unmeasured",
 		};
 		cacheFixture(date, legacyDay);
 
@@ -202,6 +209,104 @@ describe("engine usage day cache migration", () => {
 			"claude-direct": "measured",
 			"codex-direct": "measured",
 		});
+	});
+
+	test("preserves v3/v4 totals but requires a session-attribution rescan", () => {
+		for (const version of [3, 4]) {
+			const day = decodeEngineUsageCache({
+				v: version,
+				day: {
+					date: "2026-08-01",
+					byModel: [],
+					requests: 2,
+					input: 10,
+					output: 20,
+					cacheRead: 30,
+					cacheWrite: 40,
+					totalTokens: 100,
+					costUsd: 1,
+					unpricedRequests: 0,
+					unmeasured: false,
+				},
+			});
+
+			expect(day).toMatchObject({ output: 20, totalTokens: 100, unmeasured: false });
+			expect(day?.coverage).toEqual({
+				opencode: "measured",
+				"claude-direct": "measured",
+				"codex-direct": "measured",
+			});
+			expect(day?.sessionAttribution).toBeUndefined();
+			expect(day?.bySession).toBeUndefined();
+		}
+	});
+});
+
+describe("OpenCode session attribution", () => {
+	test("extracts both generations of native session title", () => {
+		expect(nativeSessionIdFromEngineTitle("backstage bks-019fa8ad-bbdd-7000-8481-be3f03496e34")).toBe(
+			"bks-019fa8ad-bbdd-7000-8481-be3f03496e34",
+		);
+		expect(nativeSessionIdFromEngineTitle("opensession os-01a00f25-bdc6-7000-8066-8f36942aa807")).toBe(
+			"os-01a00f25-bdc6-7000-8066-8f36942aa807",
+		);
+		expect(nativeSessionIdFromEngineTitle("unrelated smoke test")).toBeNull();
+	});
+
+	test("inherits native attribution through internal task parents", () => {
+		const ids = nativeSessionIdsForEngineSessions([
+			{
+				id: "parent",
+				parent_id: null,
+				title: "opensession os-01a00f25-bdc6-7000-8066-8f36942aa807",
+			},
+			{ id: "task", parent_id: "parent", title: "Review os-019ff721-ccbf-7001-9b8d-a16afb94670e" },
+			{ id: "oracle", parent_id: "task", title: "Oracle" },
+		]);
+
+		expect(ids.get("oracle")).toBe("os-01a00f25-bdc6-7000-8066-8f36942aa807");
+	});
+
+	test("attributes every assistant request in a shard to its native session", async () => {
+		const root = join(dir, "opencode-shards");
+		mkdirSync(root, { recursive: true });
+		const db = new Database(join(root, "fixture.db"), { create: true });
+		db.exec("create table session (id text primary key, parent_id text, title text not null)");
+		db.exec("create table message (id text primary key, session_id text not null, time_created integer not null, data text not null)");
+		db.query("insert into session (id, title) values (?, ?)").run(
+			"engine-session",
+			"opensession os-01a00f25-bdc6-7000-8066-8f36942aa807",
+		);
+		db.query("insert into session (id, parent_id, title) values (?, ?, ?)").run(
+			"task-session",
+			"engine-session",
+			"Review the implementation",
+		);
+		const insert = db.query("insert into message (id, session_id, time_created, data) values (?, ?, ?, ?)");
+		for (const [id, at, output] of [
+			["m1", "2026-08-14T10:00:00Z", 20],
+			["m2", "2026-08-14T10:01:00Z", 30],
+			["m3", "2026-08-14T10:02:00Z", 40],
+		] as const) {
+			insert.run(
+				id,
+				id === "m3" ? "task-session" : "engine-session",
+				Date.parse(at),
+				JSON.stringify({ role: "assistant", providerID: "openai", modelID: "gpt-5.6-sol", tokens: { output } }),
+			);
+		}
+		db.close();
+
+		const days = new Map();
+		const sessions = new Map();
+		const scan = await scanOpencodeShards(days, sessions, CUTOFF, root);
+
+		expect(sessions.get("2026-08-14")?.get("os-01a00f25-bdc6-7000-8066-8f36942aa807")).toEqual({
+			requests: 3,
+			output: 90,
+		});
+		expect(days.get("2026-08-14")?.get("openai|gpt-5.6-sol")?.output).toBe(90);
+		expect(scan.complete).toBe(true);
 	});
 });
 
