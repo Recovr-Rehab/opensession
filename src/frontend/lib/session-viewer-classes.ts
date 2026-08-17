@@ -211,11 +211,17 @@ export const VIEWER_MESSAGES_REGION = "relative flex min-h-0 flex-1 flex-col";
  * Bottom padding pays for the composer's overlap plus 16px of clear resting
  * space. Older rows can still scroll directly underneath the input instead of
  * stopping above it.
+ *
+ * `--suggestions-under` is the third term, and it is 0 almost always: the
+ * quick-reply row floats on these last rows instead of taking flow height, so
+ * while it is up the transcript keeps its own height clear of it (set on the
+ * session column by SessionViewer, sized by SUGGESTIONS_CLEARANCE).
  */
 export const VIEWER_MESSAGES =
 	"viewer-messages flex min-h-0 flex-1 flex-col overflow-x-hidden overflow-y-auto overscroll-contain " +
 	// Keep the reader's place when content loads or expands above them.
-	"[overflow-anchor:auto] px-5 pt-0 pb-[calc(var(--session-under)_+_16px)] " +
+	"[overflow-anchor:auto] px-5 pt-0 " +
+	"pb-[calc(var(--session-under)_+_var(--suggestions-under,0px)_+_16px)] " +
 	// Wider side padding where the message rail lives, so its ticks have a
 	// gutter of their own instead of sitting on the bubbles (lib/message-rail.ts).
 	`${RAIL_GUTTER_CLASS} ` +
@@ -268,6 +274,24 @@ export const VIEWER_INPUT =
 	// covers that area. Scoped to the EXPANDED composer — the resting pill only
 	// shows while the field is unfocused, so it must keep the full gap.
 	"phone:[body.kb-open_&:has(.composer:not(.composer-min))]:pb-0";
+
+/**
+ * Where the quick-reply row hangs (components/ReplySuggestions).
+ *
+ * `bottom-full` lifts it off the top of the input box, so the row lies on the
+ * transcript's last rows and costs the input no height: it arrives and retires
+ * without moving the composer under your hands. The transcript pays for what it
+ * covers in bottom padding instead (`--suggestions-under`, above).
+ *
+ * It repeats the input's own side padding rather than insetting by the 20px
+ * that padding reads as, because the rail gutter widens it to 37px on a
+ * pointer. Measured, a hand-written `inset-x-5` put the pills 17px outside the
+ * composer's left edge. Nothing here may take a click but the pills: the rest
+ * of the band is transcript you should still be able to select.
+ */
+export const VIEWER_SUGGESTIONS =
+	"pointer-events-none absolute inset-x-0 bottom-full mb-2 px-5 " +
+	`${RAIL_GUTTER_CLASS} phone:px-3`;
 
 /* ── Banners and the delete overlay ─────────────────────────────────────── */
 

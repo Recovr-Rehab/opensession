@@ -57,6 +57,7 @@ import {
 	getReplySuggestionsPref,
 	onReplySuggestionsChanged,
 	type ReplySuggestion,
+	SUGGESTIONS_CLEARANCE,
 } from "../lib/reply-suggestions";
 import { MarkdownBody, useMarkdownRepo } from "./MarkdownBody";
 import {
@@ -294,6 +295,7 @@ import {
 	VIEWER_PRESENCE,
 	VIEWER_PRESENCE_AVATAR,
 	VIEWER_REVIEW_MAIN,
+	VIEWER_SUGGESTIONS,
 	VIEWER_TITLE,
 	INFO_CONTENT,
 	INFO_HERO,
@@ -4552,6 +4554,21 @@ export function SessionViewer({
 		return () => window.removeEventListener("keydown", onKeyDown);
 	}, [focused, isBusy, forkFrom]);
 
+	/* Quick replies for the turn that just ended. Off while a run is live (they
+	   answer a finished turn), while an ask card is up (that card already offers
+	   the choices, in the agent's own wording), and while forking (the point
+	   there is a new direction, not a follow-up).
+
+	   The row floats on the transcript rather than sitting between it and the
+	   composer, so it is also what the transcript pads for and what the
+	   scroll-to-bottom pill has to clear. One flag, read in three places. */
+	const quickReplies =
+		showReplySuggestions &&
+		!isBusy &&
+		!ask &&
+		!forkFrom &&
+		replySuggestions.length > 0;
+
 	return (
 		<div className="relative flex h-full min-h-0 flex-col">
 			{deleting && (
@@ -5667,7 +5684,19 @@ export function SessionViewer({
 			)}
 
 			<div className="flex min-h-0 flex-1">
-				<div className="flex min-h-0 min-w-0 flex-1 flex-col [--session-under:16px]">
+				<div
+					className="flex min-h-0 min-w-0 flex-1 flex-col [--session-under:16px]"
+					/* What the floating quick-reply row covers, paid for by the
+					   transcript's bottom padding and by the scroll-to-bottom pill's
+					   offset. Set here so both read one value. */
+					style={
+						quickReplies
+							? ({
+									"--suggestions-under": SUGGESTIONS_CLEARANCE,
+								} as React.CSSProperties)
+							: undefined
+					}
+				>
 					{showPortal && portalTarget ? (
 						<div className={VIEWER_REVIEW_MAIN}>
 							<PortalPane target={portalTarget} />
@@ -6178,7 +6207,12 @@ export function SessionViewer({
 										<button
 											className={cn(
 												TRANSCRIPT_PILL_BUTTON,
-												"absolute bottom-6 left-1/2 z-[5] -translate-x-1/2",
+												// Rides up over the quick-reply row when there is
+												// one: both float in this same band, and the pill
+												// is centred while the chips run from the left, so
+												// on a narrow column they otherwise land on top of
+												// each other.
+												"absolute bottom-[calc(24px+var(--suggestions-under,0px))] left-1/2 z-[5] -translate-x-1/2",
 											)}
 											onClick={() => scrollToLatest("smooth")}
 										>
@@ -6221,17 +6255,13 @@ export function SessionViewer({
 										</button>
 									</div>
 								)}
-								{/* Quick replies for the turn that just ended. Off while a
-								    run is live (they answer a finished turn), while an ask
-								    card is up (that card already offers the choices, with
-								    the agent's own wording), and while forking (the point
-								    there is a new direction, not a follow-up). Same width
-								    as the composer box so the pills line up with its edge. */}
-								{showReplySuggestions &&
-									!isBusy &&
-									!ask &&
-									!forkFrom &&
-									replySuggestions.length > 0 && (
+								{/* Quick replies (see `quickReplies` above for when they
+								    show). Hung off the top of this box rather than laid out
+								    in it, for the reason VIEWER_SUGGESTIONS gives, and given
+								    the composer's own max width inside it so the pills start
+								    on its left edge. */}
+								{quickReplies && (
+									<div className={VIEWER_SUGGESTIONS}>
 										<ReplySuggestions
 											className="mx-auto w-full max-w-[calc(var(--session-col)+40px)]"
 											suggestions={replySuggestions}
@@ -6245,7 +6275,8 @@ export function SessionViewer({
 												if (!isPhone) composerRef.current?.focus();
 											}}
 										/>
-									)}
+									</div>
+								)}
 								<Composer
 									// Uncontrolled: the draft lives in the Composer (persisted
 									// per session via draftKey). Remount on the tab-bar +

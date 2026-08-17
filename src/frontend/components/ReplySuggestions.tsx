@@ -11,6 +11,13 @@ import { cn } from "../ui/cn";
  * typing them out. The server generates them (server/reply-suggestions.ts) and
  * only when the turn actually ended on a choice, so most turns show no row.
  *
+ * The row floats over the tail of the transcript rather than sitting in flow
+ * between it and the composer. In flow it opened a band of empty page every
+ * time a turn ended and closed it again the moment you picked a chip, which
+ * moved the composer under your hands for something optional. So it lies on
+ * the conversation instead, as glass, and the transcript pays for the rows it
+ * covers in bottom padding (SUGGESTIONS_CLEARANCE).
+ *
  * Picking one FILLS the composer, it never sends. Two reasons, and neither is
  * timidity: the chip is a guess about what you meant, and the full sentence is
  * the thing you are agreeing to, so you should read it before it becomes your
@@ -22,15 +29,38 @@ import { cn } from "../ui/cn";
  * 1"), and replacing instead of appending would eat whatever you had typed.
  */
 
-/** Matches the Desk's starter pills exactly: a grey shape you can skip, not a
- *  control asking to be pressed. No border, and a fill below the panel rather
- *  than above it, so a row you may never take stays quiet. `rounded-full` is
- *  the Desk pill's own corner, kept so the two suggestion rows read as one
- *  thing rather than as two similar ideas. */
+/**
+ * The same quiet grey shape as before, a thing you can skip rather than a
+ * control asking to be pressed, but a lid now instead of a wash. The row lies
+ * ON the transcript, and at the wash's own weight the sentence underneath read
+ * straight through the label sitting on it. So the fill goes nearly opaque and
+ * takes the popups' blur behind it, which turns whatever it covers into colour
+ * and shape rather than somebody else's words: the argument --popup-glass
+ * makes for menus, at a grey that can be seen on a white page. The popup
+ * surface itself is no use here, because it goes white in light, and a white
+ * pill on white needs the ring and cast shadow that a pill this quiet should
+ * not have.
+ *
+ * `rounded-[999px]` is the squircle the transcript's own floating pills take
+ * (TRANSCRIPT_PILL), not `rounded-full`: two pills 40px apart with different
+ * corners read as two ideas. The 28px height is fixed rather than left to the
+ * label, because the transcript pads for exactly that (SUGGESTIONS_CLEARANCE)
+ * and inherited leading would otherwise decide how much of the answer the row
+ * covers.
+ */
 const chip =
-	"w-full whitespace-nowrap rounded-full bg-hover px-3 py-1.5 text-label " +
-	"font-medium text-dim transition-[background,color] hover:bg-active hover:text-fg " +
-	"focus-visible:bg-active focus-visible:text-fg";
+	"relative inline-flex h-7 w-full items-center whitespace-nowrap rounded-[999px] px-3 " +
+	"bg-[color-mix(in_srgb,var(--bg-hover)_88%,transparent)] [backdrop-filter:var(--popup-blur)] " +
+	"text-label font-medium text-dim transition-[color,scale] " +
+	"hover:text-fg focus-visible:text-fg active:scale-[0.96] " +
+	// The hover wash layers over the lid rather than replacing it, so it paints
+	// on a pseudo-element, which needs the pill's corner treatment of its own:
+	// base.css grants `corner-shape` by matching `rounded-*` on an ELEMENT, and
+	// a pseudo-element matches no selector.
+	"before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] " +
+	"before:[corner-shape:inherit] before:bg-transparent before:transition-colors " +
+	"before:content-[''] hover:before:bg-hover focus-visible:before:bg-hover " +
+	"focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg";
 
 interface Props {
 	suggestions: ReplySuggestion[];
@@ -45,9 +75,13 @@ export function ReplySuggestions({ suggestions, onPick, className }: Props) {
 		<div
 			className={cn(
 				// One row that scrolls sideways rather than wrapping: a second line
-				// above the composer costs the transcript real height, and these are
-				// optional.
-				"mb-2 flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+				// costs the transcript real height, and these are optional.
+				"flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
+				// The caller floats this over the transcript, so the row spans the
+				// whole column while the chips fill only part of it. Nothing but the
+				// chips may take a click: the rest of that band is transcript you
+				// should still be able to select and reach.
+				"pointer-events-none",
 				className,
 			)}
 		>
@@ -58,7 +92,7 @@ export function ReplySuggestions({ suggestions, onPick, className }: Props) {
 				// injected props are known to get lost.
 				<motion.div
 					key={`${s.label}-${i}`}
-					className="shrink-0"
+					className="pointer-events-auto shrink-0"
 					// The row arrives seconds after the turn ends, so it fades in from
 					// its own size rather than sliding: something appearing above the
 					// composer while you are reading should not also move. The small

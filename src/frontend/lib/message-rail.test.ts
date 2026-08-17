@@ -5,7 +5,11 @@ import {
 	RAIL_GUTTER_CLASS,
 	RAIL_W,
 } from "./message-rail";
-import { VIEWER_INPUT, VIEWER_MESSAGES } from "./session-viewer-classes";
+import {
+	VIEWER_INPUT,
+	VIEWER_MESSAGES,
+	VIEWER_SUGGESTIONS,
+} from "./session-viewer-classes";
 
 describe("message rail gutter", () => {
 	test("the reserved padding is the room the rail actually needs", () => {
@@ -22,5 +26,10 @@ describe("message rail gutter", () => {
 		// Different edges would put the input past the column it belongs to.
 		expect(VIEWER_MESSAGES).toContain(RAIL_GUTTER_CLASS);
 		expect(VIEWER_INPUT).toContain(RAIL_GUTTER_CLASS);
+		// The quick-reply row floats over the transcript on the composer's own
+		// edge, so it repeats the input's padding rather than the 20px that
+		// padding reads as. Measured without the gutter, the pills sat 17px
+		// outside the composer.
+		expect(VIEWER_SUGGESTIONS).toContain(RAIL_GUTTER_CLASS);
 	});
 });
