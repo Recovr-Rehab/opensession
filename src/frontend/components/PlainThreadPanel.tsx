@@ -394,29 +394,22 @@ export function PlainThreadActions({
 				className,
 			)}
 		>
-			{/* One hairline around the set. This is a control's own edge, not a
-			    frame around a section: the ghost buttons have no shape of their
-			    own, so beside a subject they read as loose words trailing off it
-			    rather than as the ticket's controls. The line gives the cluster
-			    one, the way a segmented control has one.
-
-			    `rounded-lg` (14) is `rounded-control` (12) plus the 2px inset,
-			    so the box stays concentric with the buttons sitting in it. */}
+			{/* Each action draws its own edge (`default`, the raised control),
+			    rather than the set sharing one box. A ghost has no shape until
+			    you hover it, so beside a subject these read as loose words
+			    trailing off it; giving each one a hairline says where a control
+			    starts and ends, and keeps them separable: they are six unrelated
+			    fields, not one segmented choice. */}
 			<div
 				className={cn(
-					"flex items-center gap-1 rounded-lg border border-line p-0.5",
-					// In the thread the group is a column item, so without this the
-					// box stretches the width of the message list and trails off
-					// into nothing after the last button. It hugs whenever the row
-					// fits on one line; a row that wraps still fills the width,
-					// which is what a shrink-to-fit box does.
-					inBar ? "flex-nowrap" : "flex-wrap self-start",
+					"flex items-center gap-1",
+					inBar ? "flex-nowrap" : "flex-wrap",
 				)}
 			>
 				{status === "DONE" ? (
 					<Button
 						size="sm"
-						variant="ghost"
+						variant="default"
 						icon={<IconRestore size={20} />}
 						disabled={busy}
 						onClick={() => setStatus("todo")}
@@ -429,7 +422,7 @@ export function PlainThreadActions({
 					<>
 						<Button
 							size="sm"
-							variant="ghost"
+							variant="default"
 							icon={<IconCheck size={20} />}
 							className="hover:text-green"
 							disabled={busy}
@@ -442,7 +435,7 @@ export function PlainThreadActions({
 						{status === "SNOOZED" ? (
 							<Button
 								size="sm"
-								variant="ghost"
+								variant="default"
 								icon={<IconRestore size={20} />}
 								disabled={busy}
 								onClick={() => setStatus("todo")}
@@ -457,7 +450,7 @@ export function PlainThreadActions({
 									render={
 										<Button
 											size="sm"
-											variant="ghost"
+											variant="default"
 											icon={<IconClock size={20} />}
 											caret
 											className={cn(inBar && "w-auto px-2")}
@@ -488,7 +481,7 @@ export function PlainThreadActions({
 						render={
 							<Button
 								size="sm"
-								variant="ghost"
+								variant="default"
 								icon={<IconFlag size={20} />}
 								caret
 								disabled={busy}
@@ -521,7 +514,7 @@ export function PlainThreadActions({
 						render={
 							<Button
 								size="sm"
-								variant="ghost"
+								variant="default"
 								icon={<IconPerson size={20} />}
 								caret
 								disabled={busy}
@@ -574,7 +567,7 @@ export function PlainThreadActions({
 							render={
 								<Button
 									size="sm"
-									variant="ghost"
+									variant="default"
 									icon={<IconTag size={20} />}
 									caret
 									disabled={busy}
@@ -626,7 +619,7 @@ export function PlainThreadActions({
 							render={
 								<Button
 									size="sm"
-									variant="ghost"
+									variant="default"
 									icon={<IconDotsHorizontal size={20} />}
 									disabled={busy}
 									aria-label="More ticket actions"
@@ -645,7 +638,7 @@ export function PlainThreadActions({
 					<>
 						<Button
 							size="sm"
-							variant="ghost"
+							variant="default"
 							icon={<IconPencil size={20} />}
 							disabled={busy}
 							onClick={renameThread}
@@ -655,7 +648,7 @@ export function PlainThreadActions({
 						</Button>
 						<Button
 							size="sm"
-							variant="ghost"
+							variant="default"
 							icon={<IconForbid size={20} />}
 							className={cn(!isSpam && "hover:text-red")}
 							disabled={busy}
