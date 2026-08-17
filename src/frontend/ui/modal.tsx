@@ -217,12 +217,16 @@ function useScrolledUnder(node: HTMLElement | null): boolean {
  * Title with a close (✕) beside it, and the description on its own full-width
  * line underneath: the standard dialog header.
  *
- * It is a top bar, not a heading that scrolls away. A tall dialog scrolls
- * inside its own shell, so the header sticks to the top of it and bleeds out
- * to the shell's edges to carry the fill that hides the content passing under
- * it. The negative margins cancel the shell's `p-6` and its `gap-4`, so
- * nothing moves at rest and a dialog short enough not to scroll looks exactly
- * as it did. The hairline only appears once there is something underneath.
+ * The TITLE ROW is a top bar, not a heading that scrolls away. A tall dialog
+ * scrolls inside its own shell, so that row sticks to the top of it and bleeds
+ * out to the shell's edges to carry the fill that hides what passes under it.
+ * The negative margins cancel the shell's `p-6`, so nothing moves at rest and
+ * a dialog short enough not to scroll looks exactly as it did. The hairline
+ * only appears once there is something underneath.
+ *
+ * The description is NOT in the bar. It scrolls away with the content it
+ * describes: it is read once, on arrival, and a bar is for what you still need
+ * on the twentieth field, which is the title you are in and the way out.
  *
  * Two things it deliberately does NOT do. It carries no tinted icon badge: the
  * glyph repeated what the title already said, and the 54px it indented the
@@ -247,25 +251,35 @@ function Header({
 	const [node, setNode] = React.useState<HTMLDivElement | null>(null);
 	const scrolled = useScrolledUnder(node);
 	return (
-		<div
-			ref={setNode}
-			className={cn(
-				// `-top-6` cancels `-mt-6`, and the two must stay a pair: sticky pins
-				// the MARGIN box, so with `top-0` the negative margin lands the bar
-				// 24px down the shell and leaves a strip of content sliding past
-				// above it (measured). Both numbers are the shell's own `p-6`.
-				"sticky -top-6 z-10 flex flex-col bg-raised",
-				"-mx-6 -mb-4 -mt-6 px-6 pb-4 pt-6",
-				// The seam is an inset shadow rather than a border, the way the
-				// other sticky bars in the app draw theirs (PrPanel's file strip):
-				// it costs no layout, so a dialog that never scrolls is not 1px
-				// taller than it was for the sake of a line it will never show.
-				"transition-[box-shadow] duration-[var(--dur-micro)]",
-				scrolled && "shadow-[inset_0_-1px_0_var(--divider)]",
-				className,
-			)}
-		>
-			<div className="flex items-start gap-3">
+		// Two children of the shell rather than a wrapper around both: a sticky
+		// box only sticks while its PARENT is in view, so a bar nested in a
+		// header wrapper leaves with it after ~60px of scrolling (measured). The
+		// scroll container has to be the parent, which means the shell's `gap-4`
+		// now falls between the bar and the description, and the description
+		// pulls 10px of it back to keep its own 6px.
+		<>
+			<div
+				ref={setNode}
+				className={cn(
+					// `-top-6` cancels `-mt-6`, and the two must stay a pair: sticky
+					// pins the MARGIN box, so with `top-0` the negative margin lands
+					// the bar 24px down the shell and leaves a strip of content
+					// sliding past above it (measured). Both are the shell's `p-6`.
+					"sticky -top-6 z-10 flex items-start gap-3 bg-raised",
+					// `pb-3` is the air the bar keeps under the title, so text
+					// passing beneath disappears with a gap rather than touching it.
+					// `-mb-3` hands it straight back, leaving the resting header the
+					// height it has always had.
+					"-mx-6 -mb-3 -mt-6 px-6 pb-3 pt-6",
+					// The seam is an inset shadow rather than a border, the way the
+					// other sticky bars in the app draw theirs (PrPanel's file strip):
+					// it costs no layout, so a dialog that never scrolls is not 1px
+					// taller than it was for the sake of a line it will never show.
+					"transition-[box-shadow] duration-[var(--dur-micro)]",
+					scrolled && "shadow-[inset_0_-1px_0_var(--divider)]",
+					className,
+				)}
+			>
 				{/* Base UI renders Title as <h2> and Description as <p>; preflight
 				    isn't imported (base.css owns resets), so zero their UA margins
 				    or the <h2> top margin reads as phantom padding above the head. */}
@@ -281,13 +295,15 @@ function Header({
 			</div>
 			{/* `font-normal` is load-bearing, not decoration: base.css runs the app
 			    at weight 500, so a description that merely drops `font-medium`
-			    still renders at the field labels' exact size, weight and colour. */}
+			    still renders at the field labels' exact size, weight and colour.
+			    `-mt-2.5` is the shell's `gap-4` minus the 6px this line has always
+			    sat below the title. */}
 			{description && (
-				<BaseDialog.Description className="m-0 mt-1.5 text-pretty text-supporting font-normal leading-relaxed text-dim">
+				<BaseDialog.Description className="m-0 -mt-2.5 text-pretty text-supporting font-normal leading-relaxed text-dim">
 					{description}
 				</BaseDialog.Description>
 			)}
-		</div>
+		</>
 	);
 }
 
