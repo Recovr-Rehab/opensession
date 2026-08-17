@@ -3,6 +3,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "re
 import { PRODUCT_NAME, docTitle } from "../lib/brand";
 import { fetchAnalytics } from "../lib/api";
 import type { AnalyticsPerson, AnalyticsPersonRepo, AnalyticsSummary } from "../lib/types";
+import { UserAvatar } from "./UserAvatar";
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
 import { Segmented, SegmentedOption } from "../ui/segmented";
@@ -134,6 +135,36 @@ interface BarChartProps {
 	/** Axis ticks live in a 34px gutter, so a format that reads fine in the
 	 *  tooltip ($612.15) can overflow it. Defaults to `formatValue`. */
 	formatTick?: (n: number) => string;
+}
+
+/** The numbers a chart raises under the pointer. Opaque, unlike the app's
+ *  other popups: it floats directly over the densest, most colourful thing on
+ *  the page, and a translucent surface there tints every row with the bars
+ *  behind it. Placement belongs to the chart, which knows its own box. */
+function ChartTooltip({
+	className,
+	style,
+	ref,
+	children,
+}: {
+	className?: string;
+	style?: React.CSSProperties;
+	ref?: React.Ref<HTMLDivElement>;
+	children: React.ReactNode;
+}) {
+	return (
+		<div
+			ref={ref}
+			className={cn(
+				"pointer-events-none absolute z-10 rounded-popup [corner-shape:squircle] bg-popup",
+				"px-3 py-2.5 [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-md",
+				className,
+			)}
+			style={style}
+		>
+			{children}
+		</div>
+	);
 }
 
 /** Stacked/grouped bar chart: hairline gridlines, clean ticks, 2px surface
@@ -273,13 +304,7 @@ function BarChart({ labels, series, values, mode, height = 190, formatValue = fm
 				})}
 			</svg>
 			{hover !== null && tooltipRows.length > 0 && (
-				<div
-					// Opaque, unlike the app's other popups: this one floats directly
-					// over the densest, most colourful thing on the page, and a
-					// translucent surface there tints every row with the bars behind it.
-					className="pointer-events-none absolute top-1 z-10 -translate-x-1/2 rounded-popup [corner-shape:squircle] bg-popup [--smooth-ring-color:var(--popup-ring)] px-3 py-2.5 smooth-shadow-ring-md"
-					style={{ left: tooltipLeft }}
-				>
+				<ChartTooltip className="top-1 -translate-x-1/2" style={{ left: tooltipLeft }}>
 					<div className="mb-1 text-meta font-semibold text-fg">{shortDate(labels[hover])}</div>
 					{tooltipRows.map((r) => (
 						<div key={r.label} className="flex items-center gap-1.5 whitespace-nowrap text-meta leading-4.5">
@@ -288,7 +313,7 @@ function BarChart({ labels, series, values, mode, height = 190, formatValue = fm
 							<span className="ml-auto pl-3 font-medium tabular-nums text-fg">{formatValue(r.value)}</span>
 						</div>
 					))}
-				</div>
+				</ChartTooltip>
 			)}
 		</div>
 	);
@@ -436,11 +461,12 @@ function StatTile({
  *  fraction of a colleague doing the same work on a wordy one. Turns and
  *  sessions count the work instead of its prose. */
 const REPO_METRICS = [
-	{ key: "outputTokens", label: "Output", noun: "Output tokens", rest: "sessions and turns" },
-	{ key: "turns", label: "Turns", noun: "Turns", rest: "sessions and output" },
-	{ key: "sessions", label: "Sessions", noun: "Sessions", rest: "turns and output" },
+	{ key: "outputTokens", label: "Output", noun: "Output tokens", format: fmt },
+	{ key: "turns", label: "Turns", noun: "Turns", format: fmtInt },
+	{ key: "sessions", label: "Sessions", noun: "Sessions", format: fmtInt },
 ] as const;
 type RepoMetric = (typeof REPO_METRICS)[number]["key"];
+type RepoMetricMeta = (typeof REPO_METRICS)[number];
 
 interface PersonRepoRow {
 	name: string;
@@ -474,6 +500,192 @@ function personRepoRows(
 	}
 	if (repo !== null) rows.sort((a, b) => b.total - a.total);
 	return rows.slice(0, 12);
+}
+
+/** One row per person: their picture and name, a bar split by repo, and the
+ *  total in the metric being measured. A segment can be two pixels wide, so
+ *  the hover target is the whole row: pointing anywhere on it raises the
+ *  breakdown, and a segment under the pointer is the line that readout marks.
+ *  Tapping a row does the same, which is the only way in on touch. */
+function PersonRepoBars({
+	rows,
+	metric,
+	maxTotal,
+	colorOf,
+}: {
+	rows: PersonRepoRow[];
+	metric: RepoMetricMeta;
+	maxTotal: number;
+	colorOf: (repo: string) => string;
+}) {
+	const wrapRef = useRef<HTMLDivElement>(null);
+	const tipRef = useRef<HTMLDivElement>(null);
+	// The row under the pointer, with the geometry the readout is placed
+	// against. Measured off the row itself, so it survives any row height.
+	const [hover, setHover] = useState<{ index: number; x: number; width: number; top: number; bottom: number } | null>(
+		null,
+	);
+	// The segment under the pointer, when there is one. Separate state: the
+	// row's own mousemove keeps firing over a segment, so folding the two
+	// together would clear the segment on the next pixel of travel.
+	const [segment, setSegment] = useState<string | null>(null);
+	// The readout is placed against its own size, which changes with the
+	// number of repos in the row. Measured after layout, before paint.
+	const [tip, setTip] = useState({ w: 0, h: 0 });
+	useLayoutEffect(() => {
+		const el = tipRef.current;
+		if (!el) return;
+		const w = el.offsetWidth;
+		const h = el.offsetHeight;
+		setTip((cur) => (cur.w === w && cur.h === h ? cur : { w, h }));
+	});
+
+	const show = (index: number, e: React.MouseEvent<HTMLDivElement>) => {
+		const wrap = wrapRef.current;
+		if (!wrap) return;
+		const box = wrap.getBoundingClientRect();
+		const row = e.currentTarget;
+		setHover({
+			index,
+			x: e.clientX - box.left,
+			width: box.width,
+			top: row.offsetTop,
+			bottom: row.offsetTop + row.offsetHeight,
+		});
+	};
+	const clear = () => {
+		setHover(null);
+		setSegment(null);
+	};
+	// A tap has no way out of its own accord: there is no pointer to leave the
+	// row with, so the next touch anywhere else is what closes the readout.
+	const open = hover !== null;
+	useEffect(() => {
+		if (!open) return;
+		const onDown = (e: PointerEvent) => {
+			if (!wrapRef.current?.contains(e.target as Node)) clear();
+		};
+		document.addEventListener("pointerdown", onDown);
+		return () => document.removeEventListener("pointerdown", onDown);
+	}, [open]);
+
+	const row = hover ? rows[hover.index] : null;
+	// Above the row when it fits, below otherwise, so the readout never covers
+	// the row it describes. Horizontally centred on the pointer, clamped to the
+	// chart's own width.
+	const above = hover ? hover.top - tip.h - 8 >= 0 : true;
+	const half = tip.w / 2;
+	const left = hover ? Math.min(Math.max(hover.x, half), Math.max(half, hover.width - half)) : 0;
+
+	return (
+		<div ref={wrapRef} className="relative flex flex-col gap-1">
+			{rows.map((p, i) => (
+				<div
+					key={p.name}
+					className={cn(
+						"-mx-2 flex items-center gap-3 rounded-row px-2 py-1 text-label",
+						hover?.index === i && "bg-hover",
+					)}
+					onMouseMove={(e) => show(i, e)}
+					onClick={(e) => show(i, e)}
+					onMouseLeave={clear}
+				>
+					<span className="flex w-[20%] min-w-28 items-center gap-2">
+						<UserAvatar name={p.name} size={18} />
+						<span className="min-w-0 truncate text-fg">{p.name}</span>
+					</span>
+					<span className="h-3 min-w-0 flex-1">
+						<span
+							className="flex h-3 min-w-3 overflow-hidden rounded-[999px]"
+							style={{ width: `${Math.max(1.5, (100 * p.total) / maxTotal)}%` }}
+							onMouseLeave={() => setSegment(null)}
+						>
+							{p.segments.map((s) => (
+								<span
+									key={s.repo || "(none)"}
+									className="block h-3"
+									style={{
+										width: `${(100 * s[metric.key]) / p.total}%`,
+										background: colorOf(s.repo),
+									}}
+									onMouseEnter={() => setSegment(s.repo)}
+								/>
+							))}
+						</span>
+					</span>
+					<span className="w-14 shrink-0 text-right tabular-nums text-dim">{metric.format(p.total)}</span>
+				</div>
+			))}
+			{hover && row && (
+				<ChartTooltip
+					ref={tipRef}
+					className="-translate-x-1/2"
+					style={{ left, top: above ? hover.top - tip.h - 8 : hover.bottom + 8 }}
+				>
+					<div className="mb-1.5 flex items-center gap-1.5">
+						<UserAvatar name={row.name} size={16} />
+						<span className="text-meta font-semibold text-fg">{row.name}</span>
+					</div>
+					<table className="border-collapse text-meta">
+						<thead>
+							<tr className="text-faint">
+								<th />
+								{REPO_METRICS.map((m) => (
+									// The column the bars are drawn in reads a step up from
+									// the two that are along for the ride.
+									<th
+										key={m.key}
+										className={cn("pb-0.5 pl-3 text-right font-medium", m.key === metric.key && "text-dim")}
+									>
+										{m.label}
+									</th>
+								))}
+							</tr>
+						</thead>
+						<tbody>
+							{row.segments.map((s) => (
+								<tr key={s.repo || "(none)"} className={segment !== null && segment !== s.repo ? "opacity-40" : undefined}>
+									<td>
+										<span className="flex items-center gap-1.5 whitespace-nowrap text-dim">
+											<span className="size-2 shrink-0 rounded-full" style={{ background: colorOf(s.repo) }} />
+											{s.repo ? repoLabel(s.repo) : "No repo"}
+										</span>
+									</td>
+									{REPO_METRICS.map((m) => (
+										<td
+											key={m.key}
+											className={cn(
+												"pl-3 text-right tabular-nums leading-4.5",
+												m.key === metric.key ? "font-medium text-fg" : "text-dim",
+											)}
+										>
+											{m.format(s[m.key])}
+										</td>
+									))}
+								</tr>
+							))}
+							{row.segments.length > 1 && (
+								<tr className="border-t border-line">
+									<td className="pt-1 pr-2 text-faint">All repos</td>
+									{REPO_METRICS.map((m) => (
+										<td
+											key={m.key}
+											className={cn(
+												"pt-1 pl-3 text-right tabular-nums",
+												m.key === metric.key ? "font-medium text-fg" : "text-dim",
+											)}
+										>
+											{m.format(row.segments.reduce((sum, s) => sum + s[m.key], 0))}
+										</td>
+									))}
+								</tr>
+							)}
+						</tbody>
+					</table>
+				</ChartTooltip>
+			)}
+		</div>
+	);
 }
 
 const PRESETS = [
@@ -701,7 +913,6 @@ export function Analytics() {
 	// measured against the unfiltered leader would be a stub.
 	const maxRepoRow = Math.max(1, ...repoRows.map((r) => r.total));
 	const metricMeta = REPO_METRICS.find((m) => m.key === repoMetric)!;
-	const fmtMetric = repoMetric === "outputTokens" ? fmt : fmtInt;
 
 	return (
 		<div className="analytics-viz flex min-h-0 flex-1 flex-col bg-bg">
@@ -1124,7 +1335,18 @@ export function Analytics() {
 											<tbody>
 												{data.people.slice(0, 12).map((p) => (
 													<tr key={p.name} className="border-t border-line">
-														<td className="max-w-40 truncate py-1.5 text-fg">{p.name}</td>
+														{/* A surface row carries real work but names nobody, so it is
+														    left out of the People active count. Dim it, or the table
+														    and that number look like they disagree. */}
+														<td
+															className={`max-w-40 py-1.5 ${p.unattributed ? "text-faint" : "text-fg"}`}
+															title={p.unattributed ? `Sessions from ${p.name} with no person recorded` : undefined}
+														>
+															<span className="flex items-center gap-2">
+																{p.unattributed ? null : <UserAvatar name={p.name} size={18} />}
+																<span className="min-w-0 truncate">{p.name}</span>
+															</span>
+														</td>
 														<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(p.sessionsCreated)}</td>
 														<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(p.sessionsActive)}</td>
 														<td className="py-1.5 text-right tabular-nums text-dim">{fmtInt(p.turns)}</td>
@@ -1170,10 +1392,10 @@ export function Analytics() {
 										title="Repo activity per person"
 										subtitle={
 											activeRepo === null
-												? `${metricMeta.noun} by repo. Hover a segment for ${metricMeta.rest}.`
+												? `${metricMeta.noun} by repo. Hover a row for sessions, turns and output.`
 												: `${metricMeta.noun} in ${
 														activeRepo ? repoLabel(activeRepo) : "sessions with no repo"
-													}. Hover a bar for ${metricMeta.rest}.`
+													}. Hover a row for sessions, turns and output.`
 										}
 										actions={
 											<Segmented
@@ -1195,34 +1417,12 @@ export function Analytics() {
 										filterLabel="Filter by repo"
 										clearLabel="Show all repos"
 									>
-										<div className="flex flex-col gap-2">
-											{repoRows.map((p) => (
-												<div key={p.name} className="flex items-center gap-3 text-label">
-													<span className="w-[18%] min-w-24 truncate text-fg" title={p.name}>
-														{p.name}
-													</span>
-													<span className="h-3 min-w-0 flex-1">
-														<span
-															className="flex h-3 min-w-3 overflow-hidden rounded-[999px]"
-															style={{ width: `${Math.max(1.5, (100 * p.total) / maxRepoRow)}%` }}
-														>
-															{p.segments.map((s) => (
-																<span
-																	key={s.repo || "(none)"}
-																	className="block h-3"
-																	style={{
-																		width: `${(100 * s[repoMetric]) / p.total}%`,
-																		background: derived.repoColor(s.repo),
-																	}}
-																	title={`${s.repo ? repoLabel(s.repo) : "No repo"}: ${fmtInt(s.sessions)} sessions · ${fmtInt(s.turns)} turns · ${fmt(s.outputTokens)} output`}
-																/>
-															))}
-														</span>
-													</span>
-													<span className="w-14 shrink-0 text-right tabular-nums text-dim">{fmtMetric(p.total)}</span>
-												</div>
-											))}
-										</div>
+										<PersonRepoBars
+											rows={repoRows}
+											metric={metricMeta}
+											maxTotal={maxRepoRow}
+											colorOf={derived.repoColor}
+										/>
 									</ChartCard>
 								</div>
 							)}
