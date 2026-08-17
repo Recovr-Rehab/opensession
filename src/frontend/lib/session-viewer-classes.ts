@@ -307,9 +307,22 @@ export const VIEWER_SUGGESTIONS =
  * row's own height the lift under each pill was cut off square, and the first
  * pill lost the left edge of its hairline. Centring is the flex parent's job
  * rather than `mx-auto`, since the negative margins want that side of the box.
+ *
+ * The left side carries that allowance plus an indent, so the first pill
+ * starts on the composer's own content rail rather than on its outer edge:
+ * 15px in, where the draft you are being offered starts (13px on a phone).
+ * Flush with the box, the row read as another edge of the input. Only the
+ * left: the pills are a short row that never reaches the other side, so
+ * padding that one too would just take room off the end of the scroll.
+ *
+ * 19 and 17 rather than the sum spelled out: Tailwind compiles the class names
+ * it can find written out, and `--composer-inset-left` is declared on the
+ * composer box itself, so it is not in scope here. ReplySuggestions.test.tsx
+ * holds the two together.
  */
 export const VIEWER_SUGGESTIONS_ROW =
-	"w-[calc(100%+8px)] max-w-[calc(var(--session-col)+48px)] p-1 -m-1";
+	"w-[calc(100%+8px)] max-w-[calc(var(--session-col)+48px)] " +
+	"-m-1 py-1 pr-1 pl-[19px] phone:pl-[17px]";
 
 /* ── Banners and the delete overlay ─────────────────────────────────────── */
 
