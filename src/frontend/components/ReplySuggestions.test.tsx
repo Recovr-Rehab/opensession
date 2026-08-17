@@ -3,7 +3,11 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { composerBoxExpanded } from "../lib/composer-classes";
 import type { ReplySuggestion } from "../lib/reply-suggestions";
-import { VIEWER_SUGGESTIONS_ROW } from "../lib/session-viewer-classes";
+import {
+	SUGGESTIONS_CLEARANCE,
+	VIEWER_SUGGESTIONS,
+	VIEWER_SUGGESTIONS_ROW,
+} from "../lib/session-viewer-classes";
 
 const { ReplySuggestions } = await import("./ReplySuggestions");
 
@@ -56,6 +60,21 @@ describe("ReplySuggestions", () => {
 		expect(px(VIEWER_SUGGESTIONS_ROW, /\sphone:pl-\[(\d+)px\]/)).toBe(
 			SHADOW_PAD + px(composerBoxExpanded, /\sphone:\[--composer-inset-left:(\d+)px\]/),
 		);
+	});
+
+	test("the transcript keeps clear of the pills, not just of the row", () => {
+		// The row floats on the transcript, so the only thing holding the last
+		// line of an answer out from under it is this padding. It has to cover
+		// the pills' own height plus however far they stand off the composer, or
+		// the standoff eats into the 16px the reading is supposed to end on.
+		const PILL_HEIGHT = 28; // `h-7` on the chip in ReplySuggestions.
+		const SPACING_STEP = 4; // Tailwind's px-anchored scale (styles/tailwind.css).
+		const standoff =
+			Number(/\spb-(\d+(?:\.\d+)?)\s/.exec(VIEWER_SUGGESTIONS)?.[1]) *
+			SPACING_STEP;
+
+		expect(standoff).toBeGreaterThan(0);
+		expect(SUGGESTIONS_CLEARANCE).toBe(`${PILL_HEIGHT + standoff}px`);
 	});
 
 	test("renders nothing at all when there is nothing to suggest", () => {

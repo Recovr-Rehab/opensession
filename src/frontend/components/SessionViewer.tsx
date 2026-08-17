@@ -57,7 +57,6 @@ import {
 	getReplySuggestionsPref,
 	onReplySuggestionsChanged,
 	type ReplySuggestion,
-	SUGGESTIONS_CLEARANCE,
 } from "../lib/reply-suggestions";
 import { MarkdownBody, useMarkdownRepo } from "./MarkdownBody";
 import {
@@ -277,6 +276,7 @@ import {
 	SESSION_LINK,
 	SESSION_LINK_LINEAR,
 	SESSION_LINK_PLAIN,
+	SUGGESTIONS_CLEARANCE,
 	TRANSCRIPT_PILL_BUTTON,
 	TRANSCRIPT_PILL_LOADING,
 	TRANSCRIPT_PILL_SPINNER,

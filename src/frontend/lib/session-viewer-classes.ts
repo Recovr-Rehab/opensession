@@ -283,10 +283,13 @@ export const VIEWER_INPUT =
  * without moving the composer under your hands. The transcript pays for what it
  * covers in bottom padding instead (`--suggestions-under`, above).
  *
- * It carries no margin of its own, so the only thing between a pill and the
- * composer is the input's own 4px of top padding. The row is an offer about
- * the message you are being invited to write, and a band of empty page between
- * the two read as two separate pieces of chrome.
+ * It stands off the composer by 10px: 6px of its own plus the input's 4px of
+ * top padding. The row is an offer about the message you are being invited to
+ * write, so it stays close enough to belong to it rather than opening a band
+ * of empty page between the two. On the input's padding alone, though, the
+ * pills' cast shadow landed on the composer's own top edge and the two rounded
+ * shapes read as one stuck to the other. `--suggestions-under` pays the
+ * transcript back for this standoff as well as for the row.
  *
  * It repeats the input's own side padding rather than insetting by the 20px
  * that padding reads as, because the rail gutter widens it to 37px on a
@@ -295,8 +298,22 @@ export const VIEWER_INPUT =
  * of the band is transcript you should still be able to select.
  */
 export const VIEWER_SUGGESTIONS =
-	"pointer-events-none absolute inset-x-0 bottom-full flex justify-center px-5 " +
+	"pointer-events-none absolute inset-x-0 bottom-full flex justify-center px-5 pb-1.5 " +
 	`${RAIL_GUTTER_CLASS} phone:px-3`;
+
+/**
+ * The room the transcript keeps clear while that row is up, set on the session
+ * column as `--suggestions-under` and 0 the rest of the time.
+ *
+ * The pills float ON the last rows of the transcript rather than sitting in
+ * flow above the composer, so they cost the conversation no height while they
+ * are up and none of it back when they retire. What they do cost is cover:
+ * without this the answer's own last line ends underneath them, and no amount
+ * of scrolling brings it out. One pill tall (28px) plus the row's standoff, so
+ * the reading stops the same 16px clear of the pills that it normally stops
+ * clear of the input. ReplySuggestions.test.tsx holds the two together.
+ */
+export const SUGGESTIONS_CLEARANCE = "34px";
 
 /**
  * The row inside it, on the composer's own width.
