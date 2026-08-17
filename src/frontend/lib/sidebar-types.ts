@@ -268,16 +268,4 @@ export type CtxEntry =
 			until: string | null;
 			/** ISO until to snooze, or null to unsnooze. */
 			onPick: (until: string | null) => void;
-	  }
-	/** A row that opens a flyout of mutually exclusive options: one decision
-	 *  with three answers, rather than three ticks that could contradict each
-	 *  other. The chosen one's label rides the row, so the menu says where
-	 *  things stand without being opened. */
-	| {
-			kind: "submenu";
-			icon?: React.ReactNode;
-			label: string;
-			/** The chosen option's label, shown dim on the row. */
-			value?: string;
-			items: { label: string; selected: boolean; onClick: () => void }[];
 	  };

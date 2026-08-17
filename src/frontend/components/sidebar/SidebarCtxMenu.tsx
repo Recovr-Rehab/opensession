@@ -143,9 +143,7 @@ export function SidebarCtxMenu({
 	// Flyout state + hover grace so the pointer can
 	// cross the gap between the menu and the panel.
 	const [sub, setSub] = useState<{
-		kind: "status" | "snooze" | "submenu";
-		/** Which entry opened it — a menu can carry several submenu rows. */
-		index?: number;
+		kind: "status" | "snooze";
 		rect: DOMRect;
 	} | null>(null);
 	const closeT = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -165,12 +163,6 @@ export function SidebarCtxMenu({
 	const snoozeEntry = entries.find(
 		(e): e is Extract<CtxEntry, { kind: "snooze" }> => e.kind === "snooze",
 	);
-	const openSubmenu =
-		sub?.kind === "submenu" && sub.index !== undefined
-			? entries[sub.index]
-			: undefined;
-	const submenuEntry =
-		openSubmenu?.kind === "submenu" ? openSubmenu : undefined;
 	const check = (on: boolean) =>
 		on ? <IconCheck size={20} style={{ color: "var(--text-dim)" }} /> : undefined;
 
@@ -185,9 +177,7 @@ export function SidebarCtxMenu({
 	const subRows =
 		sub?.kind === "status"
 			? MINE_STATUS_META.length + 1
-			: sub?.kind === "snooze"
-				? snoozePresets().length + (snoozeEntry?.until ? 1 : 0)
-				: (submenuEntry?.items.length ?? 0);
+			: snoozePresets().length + (snoozeEntry?.until ? 1 : 0);
 	const subTop = sub
 		? Math.max(
 				8,
@@ -245,21 +235,7 @@ export function SidebarCtxMenu({
 							/>
 						);
 					}
-					if (entry.kind === "submenu") {
-						return (
-							<CtxFlyoutRow
-								key={i}
-								icon={entry.icon}
-								label={entry.label}
-								value={entry.value}
-								onOpen={(rect) => {
-									cancelClose();
-									setSub({ kind: "submenu", index: i, rect });
-								}}
-								onLeave={scheduleClose}
-							/>
-						);
-					}
+
 					return (
 						<CtxItem
 							key={i}
@@ -351,32 +327,6 @@ export function SidebarCtxMenu({
 							/>
 						</>
 					)}
-				</div>
-			)}
-			{submenuEntry && (
-				<div
-					className={POPUP_CLASS}
-					style={{
-						...CTX_MENU_STYLE,
-						left: subLeft,
-						top: subTop,
-						minWidth: SUB_W,
-					}}
-					onClick={(e) => e.stopPropagation()}
-					onMouseEnter={cancelClose}
-					onMouseLeave={scheduleClose}
-				>
-					{submenuEntry.items.map((item) => (
-						<CtxItem
-							key={item.label}
-							label={item.label}
-							trailing={check(item.selected)}
-							onClick={() => {
-								item.onClick();
-								onClose();
-							}}
-						/>
-					))}
 				</div>
 			)}
 		</>,

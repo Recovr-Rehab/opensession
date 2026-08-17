@@ -268,6 +268,7 @@ import { AutoCreatedMark } from "./sidebar/AutoCreatedMark";
 import { AutomationReportRow } from "./sidebar/AutomationReportRow";
 import { DraftRow } from "./sidebar/DraftRow";
 import { SidebarCtxMenu } from "./sidebar/SidebarCtxMenu";
+import { SidebarToolsMenu } from "./sidebar/SidebarToolsMenu";
 import { EmptyState, ListSkeleton } from "../ui/state";
 import {
 	SIDEBAR_ROW,
@@ -782,21 +783,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// hidden one can come back. Rows own their own menus and stop the event
 	// before it gets here. Without this, hiding the last tool takes the Tools
 	// band and its ••• menu off screen with it, and Settings is the only way
-	// back.
-	const [sidebarMenu, setSidebarMenu] = useState<{
-		x: number;
-		y: number;
-	} | null>(null);
-	useEffect(() => {
-		if (!sidebarMenu) return;
-		const close = () => setSidebarMenu(null);
-		window.addEventListener("click", close);
-		window.addEventListener("scroll", close, true);
-		return () => {
-			window.removeEventListener("click", close);
-			window.removeEventListener("scroll", close, true);
-		};
-	}, [sidebarMenu]);
+	// back. It is a Base UI ContextMenu around the scrollport (SidebarToolsMenu
+	// is its popup), so opening, dismissal and the Support submenu are the
+	// primitive's rather than a hand-written pair of window listeners.
 
 	// Catch-up badge: how many of *my* unread workspaces the deck would walk
 	// through (distinct workspace groups, same grouping the deck uses) — so the
@@ -2554,87 +2543,31 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 
 	const setToolVisible = setSidebarToolVisible;
 
-	// What the sidebar's own right-click menu offers: every tool and every
-	// source, ticked when it's showing. Hidden entries are the point — this is
-	// the only place a tool or source that took itself off the sidebar can be
-	// put back without going to Settings. The rows stay open on click so
-	// turning three of them on is one gesture, not three.
+	// What the sidebar's own right-click menu offers (SidebarToolsMenu): every
+	// tool and every source, ticked when it's showing.
 	//
-	// Each row wears the same mark it wears in the sidebar — the tool's glyph,
-	// the source's brand tile — so the menu reads as the list it edits rather
-	// than as seven words. That spends the leading slot, so the tick moves to
-	// the trailing edge, where the status flyout already puts its own.
-	//
-	// Support is the exception: where the others tick on or off, it names which
-	// of two surfaces its queue lives on, so its row opens a submenu of the
-	// three states rather than a tick, and stays among the tools it belongs
-	// with. Same wording and same order as Settings > Appearance.
-	const sidebarMenuEntries: CtxEntry[] = [
-		{ kind: "label", label: "Tools" },
-		...fittingTools.flatMap((tool): CtxEntry[] => {
-			// The glyphs are drawn at the sidebar's 22px rail size; the menu's
-			// icon column is 20, the size every other row here uses.
-			const icon = (
-				<span className="inline-flex [&_svg]:size-[20px]">{tool.icon}</span>
-			);
-			if (tool.id === PLAIN_ID) {
-				// No Plain feed, no queue to place: the choice would be between
-				// two empty surfaces.
-				if (!feeds.some((feed) => feed.id === PLAIN_ID)) return [];
-				return [
-					{
-						kind: "submenu",
-						icon,
-						label: tool.label,
-						value: SUPPORT_SURFACE_OPTIONS.find(
-							(option) => option.value === supportSurface,
-						)?.label,
-						items: SUPPORT_SURFACE_OPTIONS.map(({ value, label }) => ({
-							label,
-							selected: supportSurface === value,
-							onClick: () => setSupportSurface(value),
-						})),
-					},
-				];
-			}
-			const shown = !hiddenTools.has(tool.id);
-			return [
-				{
-					kind: "item",
-					icon,
-					label: tool.label,
-					trailing: shown ? (
-						<IconCheck size={20} style={{ color: "var(--text-dim)" }} />
-					) : undefined,
-					keepOpen: true,
-					onClick: () => setToolVisible(tool.id, !shown),
-				},
-			];
-		}),
-		...(feeds.filter((feed) => feed.id !== PLAIN_ID).length > 0
-			? ([
-					{ kind: "sep" },
-					{ kind: "label", label: "Sources" },
-					...feeds
-						.filter((feed) => feed.id !== PLAIN_ID)
-						.map((feed): CtxEntry => {
-							const shown = !hiddenFeeds.has(feed.id);
-							return {
-								kind: "item",
-								icon: (
-									<RepoTile name={feed.id} className={SIDEBAR_REPO_TILE} />
-								),
-								label: feed.title,
-								trailing: shown ? (
-									<IconCheck size={20} style={{ color: "var(--text-dim)" }} />
-								) : undefined,
-								keepOpen: true,
-								onClick: () => setSidebarFeedVisible(feed.id, !shown),
-							};
-						}),
-				] as CtxEntry[])
-			: []),
-	];
+	// Support is the exception, and the reason that menu is a real one: where
+	// the others tick on or off, it names which of two surfaces its queue lives
+	// on, so it is a submenu of three states rather than a tick. No Plain feed
+	// means no queue to place, so the row drops out entirely.
+	const plainQueueExists = feeds.some((feed) => feed.id === PLAIN_ID);
+	const sidebarMenuTools = fittingTools
+		.filter((tool) => tool.id !== PLAIN_ID || plainQueueExists)
+		.map((tool) => ({
+			id: tool.id,
+			label: tool.label,
+			icon: tool.icon,
+			shown: !hiddenTools.has(tool.id),
+			...(tool.id === PLAIN_ID ? { surface: supportSurface } : {}),
+		}));
+	const sidebarMenuSources = feeds
+		.filter((feed) => feed.id !== PLAIN_ID)
+		.map((feed) => ({
+			id: feed.id,
+			label: feed.title,
+			icon: <RepoTile name={feed.id} className={SIDEBAR_REPO_TILE} />,
+			shown: !hiddenFeeds.has(feed.id),
+		}));
 
 	// Archived is a destination, not another live workspace group. Keeping it to
 	// one row means the sidebar never needs the archive index or its inline rows.
@@ -4263,6 +4196,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	}
 
 	return (
+		// The scrollport is the right-click target for the sidebar's own menu:
+		// only the background reaches it, since every row stops the event on its
+		// way up to open its own menu. Phones are left alone — the gesture there
+		// is a long-press, which the row sheets own.
+		<ContextMenu.Root disabled={isPhone}>
+		<ContextMenu.Trigger
+			render={
 		<div
 			// One element sets the rail's whole vertical scale and carries the
 			// attribute the compact values key off, so density is a property the
@@ -4292,14 +4232,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				if (!event.currentTarget.contains(event.relatedTarget as Node | null))
 					stopRepoAutoScroll();
 			}}
-			onContextMenu={(event) => {
-				// Only the background reaches this: every row stops the event on
-				// its way up to open its own menu. Phones are left alone — the
-				// gesture there is a long-press, which the row sheets own.
-				if (isPhone) return;
-				event.preventDefault();
-				setSidebarMenu({ x: event.clientX, y: event.clientY });
-			}}
+		/>
+			}
 		>
 			{/* The strip that says whose sidebar this is used to sit here, above
 			    the tools, with the workspaces heading repeating the name a row
@@ -4792,15 +4726,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					currentUser={currentUser}
 					onChange={setFilter}
 					onClose={() => setFilterOpen(false)}
-				/>
-			)}
-
-			{sidebarMenu && (
-				<SidebarCtxMenu
-					x={sidebarMenu.x}
-					y={sidebarMenu.y}
-					entries={sidebarMenuEntries}
-					onClose={() => setSidebarMenu(null)}
 				/>
 			)}
 
@@ -5850,6 +5775,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						/>
 					);
 				})()}
-		</div>
+		</ContextMenu.Trigger>
+		<SidebarToolsMenu
+			tools={sidebarMenuTools}
+			sources={sidebarMenuSources}
+			onToggleTool={setToolVisible}
+			onSetSupport={setSupportSurface}
+			onToggleSource={setSidebarFeedVisible}
+		/>
+		</ContextMenu.Root>
 	);
 });
