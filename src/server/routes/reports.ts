@@ -95,21 +95,34 @@ export async function handleReportsRoutes(
 			id?: string;
 			error?: string;
 		}> = [];
+		console.log(
+			`[reports] fan-out: ${wanted.length} session(s) from "${report.title}" (repo ${repo || "default"})`,
+		);
 		for (const index of wanted) {
 			const task = tasks[index];
+			const startedAt = Date.now();
 			try {
+				const branch = await branchForTask(task, repo);
+				console.log(`[reports] fan-out: creating ${branch}`);
 				const { id } = await getSessionControl().createSession({
 					prompt: fanOutPrompt(task, report, wanted.length),
 					mode: "code",
-					branch: await branchForTask(task, repo),
+					branch,
 					// The whole point of the batch: one workspace each, and on a
 					// shared-checkout repo that needs asking for.
 					isolatedWorktree: true,
 					...(repo ? { repo } : {}),
 					...(user ? { user } : {}),
 				});
+				console.log(
+					`[reports] fan-out: ${branch} → ${id} in ${Date.now() - startedAt}ms`,
+				);
 				started.push({ task: index, title: task.title, id });
 			} catch (e) {
+				console.warn(
+					`[reports] fan-out: task ${index} failed after ${Date.now() - startedAt}ms:`,
+					e,
+				);
 				started.push({
 					task: index,
 					title: task.title,
