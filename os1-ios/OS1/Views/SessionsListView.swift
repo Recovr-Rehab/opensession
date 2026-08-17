@@ -457,10 +457,19 @@ struct SessionsListView: View {
             } else if let archivedSession = openedArchivedSession {
                 SessionView(
                     session: archivedSession,
+                    tabs: SessionsListViewModel.tabSessions(
+                        in: viewModel.sessions + [archivedSession],
+                        containing: archivedSession
+                    ),
                     workspaceNames: viewModel.workspaceNames,
                     composerDraft: storedDraft(for: archivedSession.id),
                     onSaveComposerDraft: { draft in
                         saveComposerDraft(draft, for: archivedSession.id)
+                    },
+                    onRestoreArchivedSession: { archived in
+                        let restored = await restoreArchived(archived)
+                        openedArchivedSession = nil
+                        selectedSessionID = restored.id
                     }
                 )
                     .id(archivedSession.id)
@@ -468,19 +477,28 @@ struct SessionsListView: View {
                         ReadsStore.shared.open(open)
                     }
                     .onDisappear { ReadsStore.shared.close(archivedSession.id) }
-            } else if let selectedSessionID,
-               let session = viewModel.sessions.first(where: { $0.id == selectedSessionID }) {
+            } else if let selectedID = selectedSessionID,
+               let session = viewModel.sessions.first(where: { $0.id == selectedID }) {
                 SessionView(
                     session: session,
                     seed: optimisticSeeds[session.id],
+                    tabs: SessionsListViewModel.tabSessions(
+                        in: viewModel.sessions,
+                        containing: session
+                    ),
                     workspaceNames: viewModel.workspaceNames,
                     composerDraft: storedDraft(for: session.id),
                     onSaveComposerDraft: { draft in
                         saveComposerDraft(draft, for: session.id)
+                    },
+                    onRestoreArchivedSession: { archived in
+                        let restored = await restoreArchived(archived)
+                        openedArchivedSession = nil
+                        selectedSessionID = restored.id
                     }
                 )
                     // Fresh view (and socket) per session, not a reused one.
-                    .id(selectedSessionID)
+                    .id(selectedID)
                     // The selected session reads as read, and keeps re-marking as
                     // the poll hands it fresher activity — see SessionTabsView
                     // for the same rule on the iOS stack.
@@ -1648,12 +1666,24 @@ struct SessionsListView: View {
                 onCloseTab: { closed in
                     sessionPageCache.remove(sessionId: closed.id)
                     viewModel.archive(closed)
+                },
+                onRestoreTab: { archived in
+                    await restoreArchived(archived)
                 }
             )
             .id(session.id)
         }
     }
     #endif
+
+    /// A scoped history row is deliberately slim. Restore the whole session so
+    /// selecting it immediately has its model, walkthrough and PR rather than
+    /// waiting for the next live-list poll to replace the summary.
+    private func restoreArchived(_ session: Session) async -> Session {
+        let restored = await viewModel.hydrated(session)
+        viewModel.unarchive(restored)
+        return restored
+    }
 
     /// The repo an Inbox row wears on its tile — nothing above it says which
     /// repo it belongs to, since the flat list has no repo bands. Every other

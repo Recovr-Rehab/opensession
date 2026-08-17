@@ -101,10 +101,14 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
    composer context, then rides with the next prompt, team note, or scheduled
    message as a block quote. Token-level streaming via `stream_text`, plus a
    horizontally scrollable session tab strip when a workspace/worktree contains
-  multiple sessions. On iOS the trailing nav-bar control is a native overflow
-  menu carrying this worktree's actions — new session, worktree details, its pull
-  request panel, rename, share link, hide/restore, and archive (which pops back
-  to the list) — the same set the sidebar row offers under long press. A
+   multiple sessions. Its history menu queries only that workspace's closed
+   siblings and restores one directly into the strip. On macOS, where the
+   sidebar is the live-session switcher, the same scoped history lives in the
+   selected session's toolbar instead. On iOS the trailing nav-bar control is
+   a native overflow menu carrying this worktree's actions — new session,
+   worktree details, its pull request panel, rename, share link, hide/restore,
+   and archive (which pops back to the list) — the same set the sidebar row
+   offers under long press. A
   bounded cache keeps recently visited conversations loaded while their
   off-screen sockets remain disconnected, so returning to a page does not show
   a loading screen. Fenced Markdown, expanded tool inputs and code assets use

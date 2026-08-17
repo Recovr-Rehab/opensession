@@ -105,4 +105,60 @@ final class ArchivedSliceTests: XCTestCase {
             ["newer", "older", "undated"]
         )
     }
+
+    func testWorkspaceArchiveQueryScopesAndEscapesTheWorkspaceId() {
+        XCTAssertEqual(
+            OS1API.archivedSessionsPath(workspaceId: "ws/one two"),
+            "/api/sessions?archived=only&slim=1&workspace=ws/one%20two"
+        )
+    }
+
+    /// Native history uses the same grouping as the server and web: workspace
+    /// id OR a shared isolated worktree. That second arm joins the historical
+    /// ghpr workspace record, while a shared repo checkout joins nothing.
+    func testWorkspaceHistoryMatchesIdOrIsolatedWorktree() throws {
+        let current = try sessions(
+            #"[{"id":"current","workspaceId":"ws-person","worktreeDir":"/home/u/worktrees/feature"}]"#
+        )[0]
+        let fetched = try sessions(
+            """
+            [{"id":"same-id","workspaceId":"ws-person","archived":true,
+              "lastActivity":"2026-08-01T10:00:00Z"},
+             {"id":"same-tree","workspaceId":"ghpr-42","archived":true,
+              "worktreeDir":"/home/u/worktrees/feature","lastActivity":"2026-08-03T10:00:00Z"},
+             {"id":"other","workspaceId":"ws-other","archived":true,
+              "worktreeDir":"/home/u/worktrees/other"},
+             {"id":"shared-checkout","workspaceId":"ws-other","archived":true,
+              "worktreeDir":"/home/u/projects/opensession"}]
+            """
+        )
+
+        XCTAssertEqual(
+            SessionsListViewModel.workspaceArchivedSessions(
+                known: [current], fetched: fetched, containing: current
+            ).map(\.id),
+            ["same-tree", "same-id"]
+        )
+    }
+
+    /// A restore made here is newer than the scoped response. Its live row must
+    /// suppress the stale archived summary or the menu immediately resurrects
+    /// the item that was just removed.
+    func testKnownLiveSessionSuppressesStaleFetchedArchive() throws {
+        let rows = try sessions(
+            """
+            [{"id":"current","workspaceId":"ws-1"},
+             {"id":"restored","workspaceId":"ws-1"}]
+            """
+        )
+        let stale = try sessions(
+            #"[{"id":"restored","workspaceId":"ws-1","archived":true}]"#
+        )
+
+        XCTAssertTrue(
+            SessionsListViewModel.workspaceArchivedSessions(
+                known: rows, fetched: stale, containing: rows[0]
+            ).isEmpty
+        )
+    }
 }

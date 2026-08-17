@@ -232,21 +232,12 @@ final class SessionsListViewModel {
         // Prefer the latest polled copy so a newly filed optimistic session
         // joins its workspace without requiring the conversation to reopen.
         let current = sessions.first { $0.id == current.id } ?? current
-        let belongs: (Session) -> Bool
-        if let workspaceId = current.workspaceId, !workspaceId.isEmpty {
-            let dir = isolatedWorktree(for: current)
-            belongs = {
-                $0.workspaceId == workspaceId
-                    || (dir != nil && $0.workspaceId?.isEmpty != false
-                        && isolatedWorktree(for: $0) == dir)
-            }
-        } else if let dir = isolatedWorktree(for: current) {
-            belongs = { isolatedWorktree(for: $0) == dir }
-        } else {
+        guard hasWorkspaceGroup(current) else {
             return [current]
         }
         var tabs = sessions.filter {
-            belongs($0) && ($0.archived != true || $0.id == current.id)
+            inWorkspaceGroup($0, containing: current)
+                && ($0.archived != true || $0.id == current.id)
         }
         if !tabs.contains(where: { $0.id == current.id }) {
             tabs.append(current)
@@ -259,6 +250,39 @@ final class SessionsListViewModel {
         let main = mainSession(in: tabs)
         guard let main else { return [] }
         return [main] + tabs.filter { $0.id != main.id }
+    }
+
+    /// Closed siblings shown by a workspace's history menu.
+    ///
+    /// This mirrors the protocol's shared rule: a matching workspace id OR the
+    /// same isolated worktree. The second half joins older duplicate workspace
+    /// records without grouping unrelated sessions in a shared checkout.
+    ///
+    /// `known` wins over `fetched`: it contains the local close/restore that may
+    /// not have reached the scoped archive response yet. A known live row also
+    /// suppresses its stale archived summary.
+    nonisolated static func workspaceArchivedSessions(
+        known: [Session],
+        fetched: [Session],
+        containing current: Session
+    ) -> [Session] {
+        let current = known.last { $0.id == current.id } ?? current
+        guard hasWorkspaceGroup(current) else { return [] }
+
+        var knownById: [String: Session] = [:]
+        for session in known { knownById[session.id] = session }
+        var rows = knownById.values.filter {
+            $0.archived == true
+                && $0.id != current.id
+                && inWorkspaceGroup($0, containing: current)
+        }
+        for session in fetched where knownById[session.id] == nil {
+            if session.id != current.id,
+               inWorkspaceGroup(session, containing: current) {
+                rows.append(session)
+            }
+        }
+        return byRecency(rows)
     }
 
     /// The session that takes over the strip when `closed` is closed from it: the
@@ -454,6 +478,21 @@ final class SessionsListViewModel {
         guard let dir = session.worktreeDir,
               dir.contains("/worktrees/") else { return nil }
         return dir
+    }
+
+    nonisolated private static func hasWorkspaceGroup(_ session: Session) -> Bool {
+        session.workspaceId?.isEmpty == false || isolatedWorktree(for: session) != nil
+    }
+
+    nonisolated private static func inWorkspaceGroup(
+        _ session: Session, containing current: Session
+    ) -> Bool {
+        if let workspaceId = current.workspaceId, !workspaceId.isEmpty,
+           session.workspaceId == workspaceId {
+            return true
+        }
+        guard let worktree = isolatedWorktree(for: current) else { return false }
+        return session.worktreeDir == worktree
     }
 
     nonisolated private static func sessionNaturalOrder(_ left: Session, _ right: Session) -> Bool {

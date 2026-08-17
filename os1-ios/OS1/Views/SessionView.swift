@@ -20,6 +20,10 @@ struct SessionView: View {
     /// that follows — nil simply leaves those entries out of the menu.
     private let onRenameWorkspace: ((String) -> Void)?
     private let onArchiveWorkspace: (() -> Void)?
+    /// macOS has no sibling strip: its sidebar is the live-session switcher.
+    /// The selected session's toolbar still offers the workspace's closed
+    /// siblings, and hands restoration back to that sidebar's owner.
+    private let onRestoreArchivedSession: ((Session) async -> Void)?
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -116,6 +120,12 @@ struct SessionView: View {
     @State private var showWorktreeInfo = false
     @State private var slackShare: PrSlackShareRequest?
 
+    #if os(macOS)
+    /// Workspace-scoped archived summaries. Kept out of the global archived
+    /// index so opening one session never downloads the whole server history.
+    @State private var workspaceArchiveRows: [Session] = []
+    #endif
+
     #if os(iOS)
     /// Rename prompt, raised from the overflow menu.
     @State private var renamingWorkspace = false
@@ -197,7 +207,8 @@ struct SessionView: View {
         onSaveComposerDraft: ((SessionViewModel.ComposerDraft) -> Void)? = nil,
         onNewSession: (() -> Void)? = nil,
         onRenameWorkspace: ((String) -> Void)? = nil,
-        onArchiveWorkspace: (() -> Void)? = nil
+        onArchiveWorkspace: (() -> Void)? = nil,
+        onRestoreArchivedSession: ((Session) async -> Void)? = nil
     ) {
         _viewModel = State(initialValue: SessionViewModel(
             session: session,
@@ -211,6 +222,7 @@ struct SessionView: View {
         self.onNewSession = onNewSession
         self.onRenameWorkspace = onRenameWorkspace
         self.onArchiveWorkspace = onArchiveWorkspace
+        self.onRestoreArchivedSession = onRestoreArchivedSession
     }
 
     init(
@@ -220,7 +232,8 @@ struct SessionView: View {
         onSaveComposerDraft: ((SessionViewModel.ComposerDraft) -> Void)? = nil,
         onNewSession: (() -> Void)? = nil,
         onRenameWorkspace: ((String) -> Void)? = nil,
-        onArchiveWorkspace: (() -> Void)? = nil
+        onArchiveWorkspace: (() -> Void)? = nil,
+        onRestoreArchivedSession: ((Session) async -> Void)? = nil
     ) {
         _viewModel = State(initialValue: viewModel)
         self.tabs = tabs
@@ -230,6 +243,7 @@ struct SessionView: View {
         self.onNewSession = onNewSession
         self.onRenameWorkspace = onRenameWorkspace
         self.onArchiveWorkspace = onArchiveWorkspace
+        self.onRestoreArchivedSession = onRestoreArchivedSession
     }
 
     var body: some View {
@@ -748,6 +762,15 @@ struct SessionView: View {
             #endif
             #if os(macOS)
             ToolbarItem(placement: .principal) { macSessionTitle }
+            if !workspaceHistoryRows.isEmpty, onRestoreArchivedSession != nil {
+                ToolbarItem(placement: .topTrailingCompat) {
+                    SessionHistoryMenu(
+                        sessions: workspaceHistoryRows,
+                        onRestore: restoreArchivedSession
+                    )
+                    .help("Closed sessions in this workspace")
+                }
+            }
             ToolbarItem(placement: .topTrailingCompat) {
                 modelMenu
                     .help("Model and reasoning settings")
@@ -799,6 +822,11 @@ struct SessionView: View {
             )
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
+        }
+        #endif
+        #if os(macOS)
+        .task(id: workspaceHistoryWorkspaceId) {
+            await loadWorkspaceHistory()
         }
         #endif
         .task {
@@ -990,6 +1018,39 @@ struct SessionView: View {
     }
 
     #if os(macOS)
+    private var workspaceHistoryWorkspaceId: String? {
+        guard onRestoreArchivedSession != nil,
+              let workspaceId = viewModel.session.workspaceId,
+              !workspaceId.isEmpty
+        else { return nil }
+        return workspaceId
+    }
+
+    private var workspaceHistoryRows: [Session] {
+        SessionsListViewModel.workspaceArchivedSessions(
+            known: tabs,
+            fetched: workspaceArchiveRows,
+            containing: viewModel.session
+        )
+    }
+
+    private func loadWorkspaceHistory() async {
+        guard let workspaceId = workspaceHistoryWorkspaceId else {
+            workspaceArchiveRows = []
+            return
+        }
+        guard let rows = try? await OS1API.archivedSessions(workspaceId: workspaceId),
+              workspaceId == workspaceHistoryWorkspaceId
+        else { return }
+        workspaceArchiveRows = rows
+    }
+
+    private func restoreArchivedSession(_ session: Session) {
+        guard let onRestoreArchivedSession else { return }
+        workspaceArchiveRows.removeAll { $0.id == session.id }
+        Task { await onRestoreArchivedSession(session) }
+    }
+
     /// Own the detail title instead of accepting NavigationSplitView's
     /// automatic circular title-menu control, which had no useful action.
     private var macSessionTitle: some View {
@@ -1602,6 +1663,9 @@ struct SessionTabsView: View {
     let onArchiveWorkspace: () -> Void
     /// Close (archive) a session closed from the tab strip.
     let onCloseTab: (Session) -> Void
+    /// Hydrate and restore a closed sibling. The returned whole session becomes
+    /// the active tab immediately while the live sessions poll catches up.
+    let onRestoreTab: (Session) async -> Session?
 
     @State private var activeId: String
     @State private var transitionEdge = Edge.trailing
@@ -1621,6 +1685,13 @@ struct SessionTabsView: View {
     @State private var assetOverlay: AssetOverlayItem?
     /// A "+" that hasn't answered yet, so a second tap can't mint a second tab.
     @State private var openingTab = false
+    /// The scoped archive response, plus the two short-lived overlays needed
+    /// while a close or restore made here is ahead of that response.
+    @State private var fetchedArchivedTabs: [Session] = []
+    @State private var locallyArchivedTabs: [Session] = []
+    @State private var locallyRestoredTabs: [Session] = []
+    @State private var restoringTabIds: Set<String> = []
+    @State private var archiveRevision = 0
     /// The link handler INSTALLED ABOVE this view (the sessions list's, which
     /// follows session-id links). Reading it here is safe and is the point:
     /// `.environment` applies to descendants, so this property still holds the
@@ -1641,7 +1712,8 @@ struct SessionTabsView: View {
         onNewSession: @escaping () async -> Session?,
         onRenameWorkspace: @escaping (String) -> Void,
         onArchiveWorkspace: @escaping () -> Void,
-        onCloseTab: @escaping (Session) -> Void
+        onCloseTab: @escaping (Session) -> Void,
+        onRestoreTab: @escaping (Session) async -> Session?
     ) {
         initialSession = session
         self.tabs = tabs
@@ -1652,17 +1724,46 @@ struct SessionTabsView: View {
         self.onRenameWorkspace = onRenameWorkspace
         self.onArchiveWorkspace = onArchiveWorkspace
         self.onCloseTab = onCloseTab
+        self.onRestoreTab = onRestoreTab
         _activeId = State(initialValue: session.id)
     }
 
+    private var knownTabs: [Session] {
+        tabs + locallyRestoredTabs + locallyArchivedTabs
+    }
+
     private var visibleTabs: [Session] {
-        tabs.filter { !closedIds.contains($0.id) }
+        var byId: [String: Session] = [:]
+        for session in tabs + locallyRestoredTabs { byId[session.id] = session }
+        let candidates = byId.values.filter { !closedIds.contains($0.id) }
+        let current = candidates.first { $0.id == activeId }
+            ?? candidates.first { $0.id == initialSession.id }
+            ?? initialSession
+        return SessionsListViewModel.tabSessions(in: candidates, containing: current)
     }
 
     private var activeSession: Session {
         visibleTabs.first(where: { $0.id == activeId })
             ?? visibleTabs.first
             ?? initialSession
+    }
+
+    private var archivedTabs: [Session] {
+        SessionsListViewModel.workspaceArchivedSessions(
+            known: knownTabs,
+            fetched: fetchedArchivedTabs,
+            containing: activeSession
+        )
+    }
+
+    private var historyWorkspaceId: String? {
+        let current = knownTabs.last { $0.id == activeSession.id } ?? activeSession
+        guard let workspaceId = current.workspaceId, !workspaceId.isEmpty else { return nil }
+        return workspaceId
+    }
+
+    private var historyRequestKey: String {
+        "\(historyWorkspaceId ?? "none"):\(archiveRevision)"
     }
 
     private var conversationTransition: AnyTransition {
@@ -1753,12 +1854,15 @@ struct SessionTabsView: View {
         // over the transcript and draws the soft scroll edge effect there. With
         // a plain inset the transcript simply started below an opaque band.
         .safeAreaBar(edge: .top, spacing: 0) {
-            if visibleTabs.count > 1 {
+            if visibleTabs.count > 1 || !archivedTabs.isEmpty {
                 SessionTabBar(
                     tabs: visibleTabs.map(TabPill.init),
                     activeId: activeId,
                     onSelect: select,
-                    onClose: close
+                    onClose: close,
+                    archived: archivedTabs,
+                    restoringIds: restoringTabIds,
+                    onRestore: restore
                 )
                 // Same reason the composer bar is pinned (see
                 // SessionView.inputBar): a `safeAreaBar` is adaptive chrome,
@@ -1792,6 +1896,13 @@ struct SessionTabsView: View {
                 activeId = fallback.id
             }
         }
+        .onChange(of: tabs) { _, serverTabs in
+            let serverIds = Set(serverTabs.map(\.id))
+            locallyRestoredTabs.removeAll { serverIds.contains($0.id) }
+        }
+        .task(id: historyRequestKey) {
+            await loadWorkspaceHistory()
+        }
     }
 
     private func close(_ id: String) {
@@ -1806,6 +1917,11 @@ struct SessionTabsView: View {
     private func closeSession(_ session: Session) {
         let strip = visibleTabs
         let next = SessionsListViewModel.tabAfterClosing(session, in: strip)
+        var archived = session
+        archived.archived = true
+        locallyArchivedTabs.removeAll { $0.id == session.id }
+        locallyArchivedTabs.append(archived)
+        locallyRestoredTabs.removeAll { $0.id == session.id }
         onCloseTab(session)
 
         guard let next else {
@@ -1824,6 +1940,7 @@ struct SessionTabsView: View {
             }
             _ = closedIds.insert(session.id)
         }
+        archiveRevision += 1
     }
 
     /// One conversation giving way to another: a tab closed, tapped, or newly
@@ -1864,6 +1981,39 @@ struct SessionTabsView: View {
             transitionEdge = targetIndex > currentIndex ? .trailing : .leading
             activeId = id
         }
+    }
+
+    private func restore(_ id: String) {
+        guard !restoringTabIds.contains(id),
+              let archived = archivedTabs.first(where: { $0.id == id })
+        else { return }
+        restoringTabIds.insert(id)
+        Task {
+            defer { restoringTabIds.remove(id) }
+            guard var restored = await onRestoreTab(archived) else { return }
+            restored.archived = false
+            fetchedArchivedTabs.removeAll { $0.id == id }
+            locallyArchivedTabs.removeAll { $0.id == id }
+            locallyRestoredTabs.removeAll { $0.id == id }
+            locallyRestoredTabs.append(restored)
+            closedIds.remove(id)
+            archiveRevision += 1
+            withAnimation(tabSwitchAnimation) {
+                transitionEdge = .trailing
+                activeId = id
+            }
+        }
+    }
+
+    private func loadWorkspaceHistory() async {
+        guard let workspaceId = historyWorkspaceId else {
+            fetchedArchivedTabs = []
+            return
+        }
+        guard let rows = try? await OS1API.archivedSessions(workspaceId: workspaceId),
+              workspaceId == historyWorkspaceId
+        else { return }
+        fetchedArchivedTabs = rows
     }
 
     private func panelContent(_ panel: SessionPanel) -> some View {
@@ -1920,6 +2070,9 @@ private struct SessionTabBar: View {
     let onSelect: (String) -> Void
     /// Close a tab from the strip — archiving, for the ones that are sessions.
     let onClose: (String) -> Void
+    let archived: [Session]
+    let restoringIds: Set<String>
+    let onRestore: (String) -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Namespace private var activeTabIndicator
@@ -1934,6 +2087,20 @@ private struct SessionTabBar: View {
                 HStack(spacing: 6) {
                     ForEach(tabs) { pill in
                         tab(pill)
+                    }
+                    if !archived.isEmpty {
+                        SessionHistoryMenu(
+                            sessions: archived,
+                            restoringIds: restoringIds,
+                            onRestore: { onRestore($0.id) }
+                        )
+                        .frame(width: 44, height: 44)
+                        .background(
+                            OS1VisualStyle.background.opacity(0.3),
+                            in: pillShape
+                        )
+                        .background(.thickMaterial, in: pillShape)
+                        .glassSurface(in: pillShape, interactive: true)
                     }
                 }
                 // The rail lives on the CONTENT, not the scroll view: pills
@@ -2095,6 +2262,32 @@ private struct SessionTabBar: View {
     }
 }
 #endif
+
+/// The closed sessions of one workspace. Selecting a row restores it rather
+/// than merely opening a read-only archived conversation, matching the web tab
+/// strip. iOS places this beside its tab pills; macOS puts it in the detail
+/// toolbar because the sidebar already serves as that platform's live tab list.
+private struct SessionHistoryMenu: View {
+    let sessions: [Session]
+    var restoringIds: Set<String> = []
+    let onRestore: (Session) -> Void
+
+    var body: some View {
+        Menu {
+            ForEach(sessions) { session in
+                Button {
+                    onRestore(session)
+                } label: {
+                    Label(session.displayTitle, systemImage: "arrow.uturn.backward")
+                }
+                .disabled(restoringIds.contains(session.id))
+            }
+        } label: {
+            Image(systemName: "clock.arrow.trianglehead.counterclockwise.rotate.90")
+        }
+        .accessibilityLabel("Closed sessions")
+    }
+}
 
 /// The bottom input area: queue/steer/delivering chips, the run-status chip,
 /// staged images, and the composer. A SEPARATE view struct on purpose — its

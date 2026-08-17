@@ -70,6 +70,23 @@ enum OS1API {
         try await get("/api/sessions?archived=only&slim=1", revalidating: true)
     }
 
+    /// Closed sessions in one workspace group, for the native tab-history
+    /// menus. The server also includes sessions filed under a second workspace
+    /// record when both records own the same isolated worktree.
+    static func archivedSessions(workspaceId: String) async throws -> [Session] {
+        try await get(archivedSessionsPath(workspaceId: workspaceId), revalidating: true)
+    }
+
+    nonisolated static func archivedSessionsPath(workspaceId: String) -> String {
+        var components = URLComponents()
+        components.queryItems = [
+            URLQueryItem(name: "archived", value: "only"),
+            URLQueryItem(name: "slim", value: "1"),
+            URLQueryItem(name: "workspace", value: workspaceId),
+        ]
+        return "/api/sessions?\(components.percentEncodedQuery ?? "")"
+    }
+
     /// One session, whole. The list used to be the only source of a session
     /// object; this is what lets a client stop carrying every archived row
     /// and still open one.
