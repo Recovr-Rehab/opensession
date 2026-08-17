@@ -3231,12 +3231,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		!rowIsFeedOnly(row) && !rowIsScratch(row);
 	const topBandRows = (rows: WsRow[]) =>
 		groupsByRepo ? rows.filter((row) => !rowNestsInRepoBand(row)) : rows;
-	// Auto created is the same story as the review lanes: under a repo grouping
-	// each project's machine-started work rides that project's own band
-	// (renderRepoGroups), and the section at the bottom of the sidebar keeps
-	// only the rows no band can hold. The repo-less groupings have no band, so
-	// there it still holds everything.
-	const autoCreatedTopRows = topBandRows(autoCreatedRows);
 
 	// The Snoozed group — the quiet zone, shared by the status lanes (slotted
 	// just above Backlog) and the inbox bands (appended last, after Earlier).
@@ -3277,17 +3271,16 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		);
 	}
 
-	// A labeled flat lane: a caption, a count, its rows. The review lanes
-	// (Needs review, Approved, Awaiting review) and Auto created. Under a repo
+	// A review lane: Needs review, Approved, Awaiting review. Under a repo
 	// grouping each one rides inside its project's band, beside that project's
-	// status lanes, rather than stacked above every band, so the work sits with
-	// the rest of the project it belongs to. The repo-less groupings have no
-	// band to nest in, so there the same lane stands on its own
-	// (renderLabeledBand). `ns` keeps each repo's copy collapsible on its own.
-	// Needs review draws its rows with renderReviewWsRow, whose click opens the
-	// Review tab, and is the only lane that also carries session-less PR rows:
-	// the GitHub review requests pointed at you.
-	function renderLabeledLane({
+	// status lanes, rather than stacked above every band, so a review sits with
+	// the rest of the work it belongs to. The repo-less groupings have no band
+	// to nest in, so there the same lane stands on its own (renderReviewBand).
+	// `ns` keeps each repo's copy collapsible on its own. Needs review draws its
+	// rows with renderReviewWsRow, whose click opens the Review tab, and is the
+	// only lane that also carries session-less PR rows: the GitHub review
+	// requests pointed at you.
+	function renderReviewLane({
 		label,
 		name,
 		rows,
@@ -3344,8 +3337,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// The same lane standing on its own above the project bands: the shape the
 	// repo-less groupings use, and what holds the rows no band can (topBandRows).
 	// Renders nothing when empty, so a group's gap never opens on an absent band.
-	function renderLabeledBand(params: Parameters<typeof renderLabeledLane>[0]) {
-		const lane = renderLabeledLane(params);
+	function renderReviewBand(params: Parameters<typeof renderReviewLane>[0]) {
+		const lane = renderReviewLane(params);
 		return lane && <div className={SIDEBAR_GROUP}>{lane}</div>;
 	}
 
@@ -3642,11 +3635,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		const needsReviewByRepo = reviewByRepo(needsReviewRows);
 		const approvedByRepo = reviewByRepo(approvedReviewRows);
 		const awaitingReviewByRepo = reviewByRepo(awaitingReviewRows);
-		// Work the machine identity started files under its project too, as one
-		// more lane at the end of that project's band. It is bucketed the same
-		// way the review rows are: an auto-created row carries its own
-		// placement, so focusWsRows never held it.
-		const autoCreatedByRepo = reviewByRepo(autoCreatedRows);
 		// The GitHub requests pointed at you ride the Needs review lane, keyed by
 		// the PR's own repo. They stay out of prByRepo, which files its rows into
 		// the status lanes by prItemLane.
@@ -3662,7 +3650,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			...needsReviewByRepo.keys(),
 			...approvedByRepo.keys(),
 			...awaitingReviewByRepo.keys(),
-			...autoCreatedByRepo.keys(),
 			...prByRepo.keys(),
 			...requestedPrByRepo.keys(),
 		]);
@@ -3759,20 +3746,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				const awaitingRepoRows = awaitingReviewByRepo.get(repo) || [];
 				const prs = prByRepo.get(repo) || [];
 				const requestedPrs = requestedPrByRepo.get(repo) || [];
-				// The Auto created lane keeps the status-lane ordering it lost by
-				// becoming one lane, so a run waiting on you sits at the top of it
-				// rather than wherever its activity landed.
-				const autoRows = [...(autoCreatedByRepo.get(repo) || [])].sort(
-					(a, b) => laneRank(a.status) - laneRank(b.status),
-				);
 				// What a collapsed band must not swallow. A row waiting for input
 				// and a review being asked of you are both blocked on you, and
-				// neither is visible once the band is shut. A question is a
-				// question whoever minted the session, so the auto-created rows
-				// count here too.
+				// neither is visible once the band is shut.
 				const urgent =
-					[...rows, ...autoRows].filter((r) => r.status === "needsinput")
-						.length +
+					rows.filter((r) => r.status === "needsinput").length +
 					needsReviewRepoRows.length +
 					requestedPrs.length;
 				// Flat mode: rows keep the status-lane ordering (needs input, then
@@ -3791,7 +3769,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				// tab rather than the session.
 				const selectedRows = open
 					? []
-					: [...rows, ...snoozedRows, ...awaitingRepoRows, ...autoRows].filter(
+					: [...rows, ...snoozedRows, ...awaitingRepoRows].filter(
 							rowOwnsSelection,
 						);
 				const selectedReviewRows = open
@@ -3874,7 +3852,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 										needsReviewRepoRows.length +
 										approvedRows.length +
 										awaitingRepoRows.length +
-										autoRows.length +
 										prs.length +
 										requestedPrs.length}
 								</span>
@@ -3932,7 +3909,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						</button>
 						{open ? (
 							<div className="mt-0.5">
-								{renderLabeledLane({
+								{renderReviewLane({
 									label: "Needs review",
 									name: "needsreview",
 									rows: needsReviewRepoRows,
@@ -3940,14 +3917,14 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									ns: `repo:${repo}::`,
 									renderRow: renderReviewWsRow,
 								})}
-								{renderLabeledLane({
+								{renderReviewLane({
 									label: "Approved",
 									name: "approvedreview",
 									rows: approvedRows,
 									ns: `repo:${repo}::`,
 									renderRow: renderReviewWsRow,
 								})}
-								{renderLabeledLane({
+								{renderReviewLane({
 									label: "Awaiting review",
 									name: "awaitingreview",
 									rows: awaitingRepoRows,
@@ -3975,19 +3952,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 												)
 												.map(renderPrRow),
 										]}
-								{/* Last in the band: your own work reads first, then what
-								    the machine started in this project. Its key sits in
-								    the `auto-created:` namespace rather than the band's
-								    own `repo:` one, which is what keeps it CLOSED by
-								    default (collapseKey / isOpen): every other lane in a
-								    band opens with it, and this one is an annex: a count
-								    you can open, not fifty rows in front of your work. */}
-								{renderLabeledLane({
-									label: "Auto created",
-									name: "autocreated",
-									rows: autoRows,
-									ns: `auto-created:repo:${repo}::`,
-								})}
 							</div>
 						) : (
 							(selectedReviewRows.length > 0 ||
@@ -5085,7 +5049,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				    (renderRepoGroups); what stays here is the rows no band can hold.
 				    PRs already covered by a workspace row in view are filtered out
 				    of prRowItems, so nothing appears twice. ── */}
-				{renderLabeledBand({
+				{renderReviewBand({
 					label: "Needs review",
 					name: "needsreview",
 					rows: topBandRows(needsReviewRows),
@@ -5097,7 +5061,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				    are still open. An approval belongs with the rest of that
 				    project's work rather than stacked above every band, so under a
 				    repo grouping it rides its repo's band as a lane. ── */}
-				{renderLabeledBand({
+				{renderReviewBand({
 					label: "Approved",
 					name: "approvedreview",
 					rows: topBandRows(approvedReviewRows),
@@ -5107,7 +5071,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				{/* ── Awaiting review: sessions YOU asked a teammate to review (the
 				    mirror of Needs review). Grouped so a session you've sent out for
 				    review moves out of the status lanes into one place. ── */}
-				{renderLabeledBand({
+				{renderReviewBand({
 					label: "Awaiting review",
 					name: "awaitingreview",
 					rows: topBandRows(awaitingReviewRows),
@@ -5527,12 +5491,8 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 
 				{/* Ordinary work created through the Automation machine identity.
 				    This section exists only under the default Me lens; Everyone and
-				    the Automation person lens place the same rows in Workspaces.
-				    Under a repo grouping the rows sit in their project's band as an
-				    Auto created lane, so what is left here is the handful that
-				    belongs to no project (autoCreatedTopRows) and usually nothing,
-				    which renders no section at all. */}
-				{autoCreatedTopRows.length > 0 && (
+				    the Automation person lens place the same rows in Workspaces. */}
+				{autoCreatedRows.length > 0 && (
 					<div
 						className={cn(SIDEBAR_INDEPENDENT_SECTION, "mt-2")}
 						data-sidebar-section="auto-created"
@@ -5561,7 +5521,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							>
 								<span className="min-w-0 truncate">Auto created</span>
 								<span className={SIDEBAR_GROUP_COUNT}>
-									{autoCreatedTopRows.length}
+									{autoCreatedRows.length}
 								</span>
 								<IconChevronDown
 									className={cn(
@@ -5578,7 +5538,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						</div>
 						{autoCreatedOpen && (
 							<div className={SIDEBAR_INDEPENDENT_SCROLL}>
-								{renderStatusLanes(autoCreatedTopRows, "auto-created:")}
+								{renderStatusLanes(autoCreatedRows, "auto-created:")}
 							</div>
 						)}
 					</div>
