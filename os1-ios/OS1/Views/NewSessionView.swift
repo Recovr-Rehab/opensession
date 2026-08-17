@@ -24,6 +24,10 @@ struct NewSessionView: View {
     /// workspace.
     var initialWorkspaceId: String?
 
+    /// A parked prompt on that workspace. Opening its sessionless row feeds
+    /// the same New Session surface rather than inventing a second composer.
+    var initialDraft: OS1API.WorkspaceDraft?
+
     /// Open with the mic already listening — the Action Button's "Start an
     /// Agent" (see `StartAgentIntent`), where the whole point is to speak
     /// before you have found the keyboard.
@@ -37,6 +41,27 @@ struct NewSessionView: View {
     /// Called when the background create finishes: the temp id and either
     /// the server's real session id or the error to surface.
     let onResolved: (String, Result<String, Error>) -> Void
+
+    /// The unsent prompt was parked without creating a session.
+    let onDraftSaved: (OS1API.WorkspaceSummary) -> Void
+
+    init(
+        initialRepo: String? = nil,
+        initialWorkspaceId: String? = nil,
+        initialDraft: OS1API.WorkspaceDraft? = nil,
+        autoDictate: Bool = false,
+        onCreated: @escaping (Session, SessionViewModel.OptimisticSeed) -> Void,
+        onResolved: @escaping (String, Result<String, Error>) -> Void,
+        onDraftSaved: @escaping (OS1API.WorkspaceSummary) -> Void = { _ in }
+    ) {
+        self.initialRepo = initialRepo
+        self.initialWorkspaceId = initialWorkspaceId
+        self.initialDraft = initialDraft
+        self.autoDictate = autoDictate
+        self.onCreated = onCreated
+        self.onResolved = onResolved
+        self.onDraftSaved = onDraftSaved
+    }
 
     @State private var prompt = ""
     @State private var mode = "code"
@@ -53,6 +78,8 @@ struct NewSessionView: View {
     @State private var sandbox = SandboxOffering.host
     @State private var sandboxStatus: InstanceSandboxStatus?
     @State private var showLibrary = false
+    @State private var savingDraft = false
+    @State private var draftSaveError: String?
     /// Owned here, like the session composer's: the button reads it, this view
     /// keeps it alive across the layout changes a long dictation causes.
     @State private var dictation = Dictation()
@@ -113,6 +140,17 @@ struct NewSessionView: View {
             // Swiping the sheet away is as much a "never mind" as Cancel; the
             // mic must not outlive either.
             .onDisappear { dictation.stop() }
+            .alert(
+                "Couldn't save draft",
+                isPresented: Binding(
+                    get: { draftSaveError != nil },
+                    set: { if !$0 { draftSaveError = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(draftSaveError ?? "")
+            }
         }
         // The floor belongs to the stack, not to its first screen. A macOS
         // sheet sizes to its content, so applied inside, a push replaced it
@@ -127,7 +165,8 @@ struct NewSessionView: View {
     // ── Prompt editor ─────────────────────────────────────────────────────
 
     private var startDisabled: Bool {
-        prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && images.isEmpty
+        savingDraft
+            || (prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && images.isEmpty)
     }
 
     /// Starting a session is the same gesture as sending a message, so on iOS
@@ -451,6 +490,9 @@ struct NewSessionView: View {
         HStack(spacing: 8) {
             AttachImagesButton(images: $images)
             ComposerDictationButton(dictation: dictation, draft: $prompt)
+            if !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                saveDraftButton
+            }
             Spacer(minLength: 8)
             #if os(macOS)
             if !availableEfforts.isEmpty { effortChip }
@@ -461,6 +503,18 @@ struct NewSessionView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, controlsVerticalPadding)
+    }
+
+    private var saveDraftButton: some View {
+        Button { saveDraft() } label: {
+            chipLabel(
+                icon: "square.and.arrow.down",
+                text: savingDraft ? "Saving" : "Save draft"
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(savingDraft)
+        .accessibilityLabel(savingDraft ? "Saving draft" : "Save as draft")
     }
 
     /// The iOS attach button carries its own 44pt tap target, so the row only
@@ -701,6 +755,7 @@ struct NewSessionView: View {
     // ── Data ──────────────────────────────────────────────────────────────
 
     private func load() async {
+        if prompt.isEmpty, let initialDraft { prompt = initialDraft.text }
         promptFocused = true
         // Opened from the Action Button: the mic goes hot with the sheet, so
         // speaking is the first thing that works. Everything else below still
@@ -800,11 +855,34 @@ struct NewSessionView: View {
         return repos.first(where: { $0.isDefault == true })?.id ?? repos.first?.id ?? ""
     }
 
+    private func saveDraft() {
+        let text = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !savingDraft else { return }
+        dictation.stop()
+        savingDraft = true
+        Task {
+            defer { savingDraft = false }
+            do {
+                let workspace = try await OS1API.saveWorkspaceDraft(
+                    text: text,
+                    repo: repo,
+                    workspaceId: initialWorkspaceId,
+                    autoName: initialDraft?.autoName
+                )
+                onDraftSaved(workspace)
+                dismiss()
+            } catch {
+                draftSaveError = error.localizedDescription
+            }
+        }
+    }
+
     /// Optimistic create: the sheet closes immediately and the conversation
     /// opens seeded with the prompt under a temporary id, while the real
     /// create (worktree prep — seconds) runs in the background. The list
     /// swaps the temp id for the server's when it resolves.
     private func create() {
+        guard !savingDraft else { return }
         // Played here rather than from a trigger on the view: the sheet
         // dismisses two lines down, and a dismissed view never observes its
         // own state change. Starting a session is the same gesture as sending

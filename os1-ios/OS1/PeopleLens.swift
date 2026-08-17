@@ -18,11 +18,10 @@ import Foundation
 /// started by you, it was opened by the machine identity, and the claim that
 /// made it yours was invisible here.
 ///
-/// The web's rule has one additional clause this deliberately leaves out — a
-/// workspace whose `createdBy` is you, even with no session of yours in it.
-/// Measured against the live list it more than tripled one person's sidebar
-/// (31 rows to 96), which is a different product decision from fixing a
-/// missing row, so it stays a known difference rather than a quiet change.
+/// The web's rule has a third clause this deliberately limits to a parked
+/// draft: a workspace whose `createdBy` is you. Applying it to every regular
+/// workspace more than tripled one person's sidebar (31 rows to 96), while a
+/// sessionless draft has no other owner signal at all.
 ///
 /// One rule for every surface that asks the question — the live list, its
 /// archived slice, and the Archived sheet — because three spellings of "mine"
@@ -68,6 +67,10 @@ struct PeopleLens {
     /// A sidebar row under the lens. A row is yours as soon as ONE of its
     /// sessions is — a workspace is shared work, not a possession.
     func owns(_ workspace: SidebarWorkspace) -> Bool {
-        workspace.sessions.contains { isMine($0) || mentions.contains($0.id) }
+        if workspace.isDraftWorkspace,
+           let owner = workspace.workspace?.createdBy?.lowercased() {
+            return names.contains(owner)
+        }
+        return workspace.sessions.contains { isMine($0) || mentions.contains($0.id) }
     }
 }

@@ -197,9 +197,27 @@ enum OS1API {
         )
     }
 
-    struct WorkspaceSummary: Decodable, Sendable {
+    struct WorkspaceDraft: Decodable, Equatable, Sendable {
+        let text: String
+        let updatedAt: String
+        let by: String?
+        let autoName: Bool?
+
+        static func workspaceName(for text: String) -> String {
+            let first = text.split(whereSeparator: \.isNewline)
+                .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+                .first { !$0.isEmpty }
+            return String((first ?? "Draft").prefix(80))
+        }
+    }
+
+    struct WorkspaceSummary: Decodable, Equatable, Sendable {
         let id: String
         let name: String
+        let repo: String?
+        let createdBy: String?
+        let createdAt: String?
+        let draft: WorkspaceDraft?
     }
 
     /// Canonical workspace names for collapsing sibling sessions into one row.
@@ -891,6 +909,55 @@ enum OS1API {
         let _: RenameResponse = try await patch(
             "/api/workspaces/\(workspaceId)",
             body: ["name": name]
+        )
+    }
+
+    /// Park an unsent New Session prompt on a workspace. A fresh draft gets a
+    /// fresh sessionless workspace; resuming one updates that same row.
+    static func saveWorkspaceDraft(
+        text: String,
+        repo: String,
+        workspaceId: String? = nil,
+        autoName: Bool? = nil
+    ) async throws -> WorkspaceSummary {
+        struct WorkspaceResponse: Decodable { let workspace: WorkspaceSummary }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        var draft: [String: Any] = [
+            "text": trimmed,
+            "updatedAt": ISO8601DateFormatter.draftStamp.string(from: Date()),
+            "by": ServerConfig.shared.userName,
+        ]
+        if let autoName { draft["autoName"] = autoName }
+
+        let response: WorkspaceResponse
+        if let workspaceId, !workspaceId.isEmpty {
+            let encoded = workspaceId.addingPercentEncoding(
+                withAllowedCharacters: .urlPathAllowed
+            ) ?? workspaceId
+            response = try await patch(
+                "/api/workspaces/\(encoded)", body: ["draft": draft]
+            )
+        } else {
+            var newDraft = draft
+            newDraft["autoName"] = true
+            var body: [String: Any] = [
+                "name": WorkspaceDraft.workspaceName(for: trimmed),
+                "draft": newDraft,
+                "user": ServerConfig.shared.userName,
+            ]
+            if !repo.isEmpty { body["repo"] = repo }
+            response = try await post("/api/workspaces", body: body)
+        }
+        return response.workspace
+    }
+
+    static func deleteWorkspace(workspaceId: String) async throws {
+        struct DeleteResponse: Decodable { let ok: Bool? }
+        let encoded = workspaceId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? workspaceId
+        let _: DeleteResponse = try await mutate(
+            "/api/workspaces/\(encoded)", method: "DELETE", body: [:]
         )
     }
 

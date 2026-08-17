@@ -141,6 +141,8 @@ struct SessionsListView: View {
         /// Set when the create joins an existing workspace as a new tab (the
         /// session's ⋯ menu); nil starts a standalone session.
         var workspaceId: String?
+        /// A sessionless workspace's parked prompt, reopened in New Session.
+        var draft: OS1API.WorkspaceDraft?
     }
 
     // Empty until the person picks a grouping, so the default can stay a
@@ -553,6 +555,14 @@ struct SessionsListView: View {
         // otherwise the detail column would keep showing it while the sidebar
         // says something else is selected.
         .onChange(of: selectedSessionID) { _, id in
+            if let id,
+               let draft = allSidebarWorkspaces.first(where: {
+                   $0.id == id && $0.isDraftWorkspace
+               }) {
+                resumeDraft(draft)
+                selectedSessionID = nil
+                return
+            }
             if id != nil {
                 openTicket = nil
                 showSupport = false
@@ -564,11 +574,14 @@ struct SessionsListView: View {
             NewSessionView(
                 initialRepo: request.repo,
                 initialWorkspaceId: request.workspaceId,
+                initialDraft: request.draft,
                 autoDictate: request.dictate
             ) { session, seed in
                 openOptimistic(session, seed: seed)
             } onResolved: { tempId, result in
                 resolveCreate(tempId: tempId, result: result)
+            } onDraftSaved: { _ in
+                Task { await viewModel.refresh() }
             }
         }
         .sheet(isPresented: $showArchived) {
@@ -1072,11 +1085,14 @@ struct SessionsListView: View {
                     NewSessionView(
                         initialRepo: request.repo,
                         initialWorkspaceId: request.workspaceId,
+                        initialDraft: request.draft,
                         autoDictate: request.dictate
                     ) { session, seed in
                         openOptimistic(session, seed: seed)
                     } onResolved: { tempId, result in
                         resolveCreate(tempId: tempId, result: result)
+                    } onDraftSaved: { _ in
+                        Task { await viewModel.refresh() }
                     }
                 }
                 .sheet(isPresented: $showArchived) {
@@ -1143,7 +1159,7 @@ struct SessionsListView: View {
     }
 
     private var hasNoRows: Bool {
-        viewModel.sessions.isEmpty && viewModel.archivedSessions.isEmpty
+        viewModel.sidebarWorkspaces.isEmpty && viewModel.archivedSessions.isEmpty
     }
 
     /// True while the whole screen is given over to a failed load — which is
@@ -1254,6 +1270,16 @@ struct SessionsListView: View {
     private func openRequestedSession() {
         guard viewModel.hasLoaded, let request = requestedSession.take() else { return }
         _ = openSessionLink(id: request.sessionId)
+    }
+
+    private func resumeDraft(_ workspace: SidebarWorkspace) {
+        guard let workspaceId = workspace.workspaceId,
+              let draft = workspace.workspace?.draft else { return }
+        newSessionRequest = NewSessionRequest(
+            repo: workspace.effectiveRepo,
+            workspaceId: workspaceId,
+            draft: draft
+        )
     }
 
     /// Dev convenience for simulator runs: OS1_OPEN_SESSION=<id> jumps straight
@@ -1382,6 +1408,9 @@ struct SessionsListView: View {
     private var availableRepos: [String] {
         SessionsListViewModel.repositoryOrder(
             in: viewModel.sessions,
+            workspaceRepos: viewModel.workspaces.compactMap {
+                $0.draft == nil ? nil : $0.repo
+            },
             preferredOrderJSON: preferredRepoOrder
         )
     }
@@ -1662,9 +1691,15 @@ struct SessionsListView: View {
         .onDeleteCommand {
             if let selectedSessionID,
                let workspace = allSidebarWorkspaces.first(where: {
-                   $0.sessions.contains { $0.id == selectedSessionID }
+                   $0.id == selectedSessionID
+                       || $0.sessions.contains { $0.id == selectedSessionID }
                }) {
-                archive(workspace)
+                if workspace.isDraftWorkspace {
+                    viewModel.deleteDraftWorkspace(workspace)
+                    self.selectedSessionID = nil
+                } else {
+                    archive(workspace)
+                }
             }
         }
     }
@@ -1777,7 +1812,7 @@ struct SessionsListView: View {
     @ViewBuilder
     private func sessionRow(_ workspace: SidebarWorkspace) -> some View {
         let session = workspace.mainSession
-        let canArchive = !workspace.isOptimistic
+        let canArchive = !workspace.isOptimistic && !workspace.isDraftWorkspace
         let repo = inboxRowRepo(workspace)
         #if os(macOS)
         // Selection drives the detail column; select by id so rows replaced
@@ -1789,21 +1824,39 @@ struct SessionsListView: View {
             title: workspace.title,
             sessions: workspace.sessions,
             repo: repo,
+            isWorkspaceDraft: workspace.isDraftWorkspace,
             onArchive: canArchive ? { archive(workspace) } : nil
         )
-        .tag(session.id)
-        .swipeActions(edge: .trailing) { archiveButton(workspace, viaSwipe: true) }
-        .contextMenu { archiveButton(workspace) }
+        .tag(workspace.isDraftWorkspace ? workspace.id : session.id)
+        .swipeActions(edge: .trailing) {
+            if workspace.isDraftWorkspace {
+                deleteDraftButton(workspace, viaSwipe: true)
+            } else {
+                archiveButton(workspace, viaSwipe: true)
+            }
+        }
+        .contextMenu {
+            if workspace.isDraftWorkspace {
+                deleteDraftButton(workspace)
+            } else {
+                archiveButton(workspace)
+            }
+        }
         #else
         Button {
-            path.append(session)
+            if workspace.isDraftWorkspace {
+                resumeDraft(workspace)
+            } else {
+                path.append(session)
+            }
         } label: {
             SessionRow(
                 session: workspace.statusSession,
                 title: workspace.title,
                 sessions: workspace.sessions,
                 repo: repo,
-                highlighted: isLastOpened(workspace)
+                highlighted: isLastOpened(workspace),
+                isWorkspaceDraft: workspace.isDraftWorkspace
             )
         }
         .buttonStyle(.plain)
@@ -1812,7 +1865,13 @@ struct SessionsListView: View {
         ))
         .listRowSeparator(.hidden)
         .listRowBackground(Color.clear)
-        .swipeActions(edge: .trailing) { archiveButton(workspace, viaSwipe: true) }
+        .swipeActions(edge: .trailing) {
+            if workspace.isDraftWorkspace {
+                deleteDraftButton(workspace, viaSwipe: true)
+            } else {
+                archiveButton(workspace, viaSwipe: true)
+            }
+        }
         // Swipe right to pin, left to archive: the pin is the reversible one,
         // so it takes the leading edge (and its full swipe just toggles).
         // The tint rides on the swipe, not on the button: it paints the swipe
@@ -1831,7 +1890,11 @@ struct SessionsListView: View {
         // details in the very menu underneath opens all of it. A thin card is
         // worse than none: it costs the gesture a beat and answers nothing.
         .modifier(SessionRowMenu(workspace: workspace) {
-            if canArchive { workspaceMenu(workspace) }
+            if workspace.isDraftWorkspace {
+                draftWorkspaceMenu(workspace)
+            } else if canArchive {
+                workspaceMenu(workspace)
+            }
         })
         #endif
     }
@@ -1875,7 +1938,7 @@ struct SessionsListView: View {
         _ workspace: SidebarWorkspace,
         filled: Bool = false
     ) -> some View {
-        if !workspace.isOptimistic {
+        if !workspace.isOptimistic && !workspace.isDraftWorkspace {
             let pinned = PinStore.shared.isPinned(workspace)
             let symbol = pinned ? "pin.slash" : "pin"
             Button {
@@ -2015,6 +2078,11 @@ struct SessionsListView: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func draftWorkspaceMenu(_ workspace: SidebarWorkspace) -> some View {
+        deleteDraftButton(workspace)
     }
 
     @ViewBuilder
@@ -2187,6 +2255,21 @@ struct SessionsListView: View {
             // (.sidebar-swipe-action--archive, var(--red)): the same gesture on
             // the same row should not change colour between the two clients.
             // Our own palette rather than stock .red — see OS1VisualStyle.
+            .tint(OS1VisualStyle.red)
+        }
+    }
+
+    @ViewBuilder
+    private func deleteDraftButton(
+        _ workspace: SidebarWorkspace,
+        viaSwipe: Bool = false
+    ) -> some View {
+        if workspace.isDraftWorkspace {
+            Button(role: .destructive) {
+                viewModel.deleteDraftWorkspace(workspace)
+            } label: {
+                Label("Delete", systemImage: viaSwipe ? "trash.fill" : "trash")
+            }
             .tint(OS1VisualStyle.red)
         }
     }
@@ -3290,6 +3373,9 @@ struct SessionRow: View {
     /// rather than the `hover` fill: it has to be legible at a glance while
     /// scrolling past, which the faintest step is not.
     var highlighted: Bool = false
+    /// A parked workspace prompt has no session yet. It reuses the row's
+    /// layout, but its pencil is the state mark rather than a session status.
+    var isWorkspaceDraft = false
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// Settings → Appearance → Show last used time. Off by default, like the
     /// web's resting sidebar, and per device like the web's own copy of it.
@@ -3358,7 +3444,7 @@ struct SessionRow: View {
                 #endif
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            if hasDraft {
+            if hasDraft && !isWorkspaceDraft {
                 Image(systemName: "pencil")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(OS1VisualStyle.textDim)
@@ -3458,7 +3544,8 @@ struct SessionRow: View {
     /// `@Observable`, so a mark landing invalidates the rows that read it
     /// instead of the whole list body.
     private var unread: Bool {
-        ReadsStore.shared.isUnread(sessions.isEmpty ? [session] : sessions)
+        if isWorkspaceDraft { return false }
+        return ReadsStore.shared.isUnread(sessions.isEmpty ? [session] : sessions)
     }
 
     private var hasDraft: Bool {
@@ -3475,7 +3562,8 @@ struct SessionRow: View {
     /// Read here rather than at the call site because `PresenceStore` is
     /// `@Observable`: a global-presence frame invalidates only rows using it.
     private var rowViewers: [String] {
-        PresenceStore.shared.viewers(of: sessions.isEmpty ? [session] : sessions)
+        if isWorkspaceDraft { return [] }
+        return PresenceStore.shared.viewers(of: sessions.isEmpty ? [session] : sessions)
     }
 
     private var markSize: CGFloat {
@@ -3551,7 +3639,11 @@ struct SessionRow: View {
 
     @ViewBuilder
     private var statusMark: some View {
-        if session.lane == .needsInput {
+        if isWorkspaceDraft {
+            Image(systemName: "pencil")
+                .font(.system(size: markSize * 0.62, weight: .semibold))
+                .foregroundStyle(OS1VisualStyle.textFaint)
+        } else if session.lane == .needsInput {
             PulsingDot(color: OS1VisualStyle.blue, active: animatesStatus)
         } else if reviewWaitsOnMe {
             // Blocked on you, like an unanswered question, so it takes the same
@@ -3609,6 +3701,9 @@ struct SessionRow: View {
     }
 
     private var accessibilityStatus: String {
+        if isWorkspaceDraft {
+            return "Draft, \(RepoTile.label(for: session.effectiveRepo))"
+        }
         var parts = [session.lane.label, RepoTile.label(for: session.effectiveRepo)]
         // The robot is the only sighted cue that a machine owns this row.
         if session.isAutomation { parts.append("automation") }

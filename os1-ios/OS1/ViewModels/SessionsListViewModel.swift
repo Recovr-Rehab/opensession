@@ -9,6 +9,7 @@ final class SessionsListViewModel {
     private(set) var sessions: [Session] = []
     private(set) var archivedSessions: [Session] = []
     private(set) var workspaceNames: [String: String] = [:]
+    private(set) var workspaces: [OS1API.WorkspaceSummary] = []
     private(set) var error: String?
     /// Why the list has nothing in it, when the reason is a failed load
     /// rather than a server with nothing on it.
@@ -36,9 +37,7 @@ final class SessionsListViewModel {
     @ObservationIgnored private var serverArchived: [Session] = []
     @ObservationIgnored private var archivedFetchedAt: Date?
     @ObservationIgnored private var archivedFetchInFlight = false
-    #if os(iOS)
     @ObservationIgnored private var liveActivityConnection: OS1API.LiveActivityConnection?
-    #endif
 
     /// Memoized sidebar rows for the current list — see `sidebarRows`.
     ///
@@ -71,10 +70,14 @@ final class SessionsListViewModel {
         // would silently stop re-rendering when the list changes.
         let sessions = self.sessions
         let names = workspaceNames
+        let workspaces = self.workspaces
         let claimed = claimedSessionIds
         if let cached = sidebarRowsCache { return cached }
         let rows = Self.sidebarRows(
-            in: Self.listedSessions(in: sessions, claimed: claimed), workspaceNames: names
+            in: Self.listedSessions(in: sessions, claimed: claimed),
+            workspaceNames: names,
+            workspaces: workspaces,
+            occupiedWorkspaceIds: Set(sessions.compactMap(\.workspaceId))
         )
         sidebarRowsCache = rows
         return rows
@@ -109,6 +112,19 @@ final class SessionsListViewModel {
     private func rowsInserting(
         _ session: Session, into rows: [SidebarWorkspace]
     ) -> [SidebarWorkspace]? {
+        // A parked draft row is the one workspace row the Mac list carries.
+        // Starting it replaces that placeholder on either platform.
+        if let workspaceId = session.workspaceId, !workspaceId.isEmpty,
+           let index = rows.firstIndex(where: {
+               $0.workspaceId == workspaceId && $0.isDraftWorkspace
+           }),
+           let row = Self.sidebarRows(
+               in: [session], workspaceNames: workspaceNames
+           ).first {
+            var next = rows
+            next[index] = row
+            return next
+        }
         #if !os(macOS)
         // A session started inside a workspace joins that workspace's row rather
         // than opening one of its own: rebuild the one row from its sessions plus
@@ -172,6 +188,7 @@ final class SessionsListViewModel {
     private static func groupedOffMain(
         _ sessions: [Session],
         workspaceNames names: [String: String],
+        workspaces: [OS1API.WorkspaceSummary],
         claimed: Set<String>
     ) async -> (rows: [SidebarWorkspace], titles: [String: String], prs: PrLinks.Index) {
         await Task.detached(priority: .userInitiated) {
@@ -184,7 +201,9 @@ final class SessionsListViewModel {
             return (
                 sidebarRows(
                     in: listedSessions(in: sessions, claimed: claimed),
-                    workspaceNames: names
+                    workspaceNames: names,
+                    workspaces: workspaces,
+                    occupiedWorkspaceIds: Set(sessions.compactMap(\.workspaceId))
                 ),
                 titles,
                 // What tints a `#5528` chip in a transcript, and what tells a
@@ -202,11 +221,15 @@ final class SessionsListViewModel {
     /// by frequency with a stable alphabetical tie-breaker.
     nonisolated static func repositoryOrder(
         in sessions: [Session],
+        workspaceRepos: [String] = [],
         preferredOrderJSON: String = "[]"
     ) -> [String] {
         var counts: [String: Int] = [:]
         for session in sessions where session.archived != true {
             counts[session.effectiveRepo, default: 0] += 1
+        }
+        for repo in workspaceRepos where !repo.isEmpty {
+            counts[repo, default: 0] += 1
         }
         let discovered = counts.keys.sorted {
             let left = counts[$0, default: 0]
@@ -301,10 +324,12 @@ final class SessionsListViewModel {
     /// row per session on the Mac, whose detail has no sibling-tab strip yet.
     nonisolated static func sidebarRows(
         in sessions: [Session],
-        workspaceNames: [String: String]
+        workspaceNames: [String: String],
+        workspaces: [OS1API.WorkspaceSummary] = [],
+        occupiedWorkspaceIds: Set<String>? = nil
     ) -> [SidebarWorkspace] {
         #if os(macOS)
-        return sessions.map {
+        let rows = sessions.map {
             SidebarWorkspace(
                 id: "session:\($0.id)",
                 title: $0.displayTitle,
@@ -312,8 +337,18 @@ final class SessionsListViewModel {
                 mainSession: $0
             )
         }
+        return rows + draftWorkspaceRows(
+            in: workspaces,
+            occupiedWorkspaceIds: occupiedWorkspaceIds
+                ?? Set(sessions.compactMap(\.workspaceId))
+        )
         #else
-        return sidebarWorkspaces(in: sessions, workspaceNames: workspaceNames)
+        return sidebarWorkspaces(
+            in: sessions,
+            workspaceNames: workspaceNames,
+            workspaces: workspaces,
+            occupiedWorkspaceIds: occupiedWorkspaceIds
+        )
         #endif
     }
 
@@ -333,7 +368,9 @@ final class SessionsListViewModel {
     /// merely because their paths happen to match.
     nonisolated static func sidebarWorkspaces(
         in sessions: [Session],
-        workspaceNames: [String: String] = [:]
+        workspaceNames: [String: String] = [:],
+        workspaces: [OS1API.WorkspaceSummary] = [],
+        occupiedWorkspaceIds: Set<String>? = nil
     ) -> [SidebarWorkspace] {
         let workspaceKeyByWorktree = Dictionary(grouping: sessions.filter {
             $0.workspaceId?.isEmpty == false && isolatedWorktree(for: $0) != nil
@@ -355,7 +392,7 @@ final class SessionsListViewModel {
             if grouped[key] == nil { order.append(key) }
             grouped[key, default: []].append(session)
         }
-        return order.compactMap { key in
+        let rows: [SidebarWorkspace] = order.compactMap { key in
             guard var rowSessions = grouped[key] else { return nil }
             rowSessions.sort(by: sessionNaturalOrder)
             guard let main = mainSession(in: rowSessions) else { return nil }
@@ -392,6 +429,30 @@ final class SessionsListViewModel {
                 title: title,
                 sessions: rowSessions,
                 mainSession: main
+            )
+        }
+        return rows + draftWorkspaceRows(
+            in: workspaces,
+            occupiedWorkspaceIds: occupiedWorkspaceIds
+                ?? Set(sessions.compactMap(\.workspaceId))
+        )
+    }
+
+    /// A parked prompt is the one sessionless workspace that earns a row. A
+    /// leftover empty workspace does not: it has nothing a person can resume.
+    nonisolated private static func draftWorkspaceRows(
+        in workspaces: [OS1API.WorkspaceSummary],
+        occupiedWorkspaceIds: Set<String>
+    ) -> [SidebarWorkspace] {
+        return workspaces.compactMap { workspace in
+            guard workspace.draft != nil,
+                  !occupiedWorkspaceIds.contains(workspace.id) else { return nil }
+            return SidebarWorkspace(
+                id: "workspace:\(workspace.id)",
+                title: workspace.name,
+                sessions: [],
+                mainSession: workspace.draftSession,
+                workspace: workspace
             )
         }
     }
@@ -560,10 +621,15 @@ final class SessionsListViewModel {
 
     /// Roll back a pending row whose create failed.
     func removeOptimistic(_ id: String) {
-        optimistic.removeValue(forKey: id)
+        let removed = optimistic.removeValue(forKey: id)?.session
+        let restoresDraft = removed?.workspaceId.flatMap { workspaceId in
+            workspaces.first { $0.id == workspaceId }?.draft
+        } != nil
         setSessions(
             sessions.filter { $0.id != id },
-            rows: sidebarRowsCache.flatMap { rowsRemoving(sessionId: id, from: $0) }
+            rows: restoresDraft
+                ? nil
+                : sidebarRowsCache.flatMap { rowsRemoving(sessionId: id, from: $0) }
         )
     }
 
@@ -675,6 +741,18 @@ final class SessionsListViewModel {
         }
     }
 
+    func deleteDraftWorkspace(_ workspace: SidebarWorkspace) {
+        guard workspace.isDraftWorkspace, let workspaceId = workspace.workspaceId else { return }
+        Task {
+            do {
+                try await OS1API.deleteWorkspace(workspaceId: workspaceId)
+                await refresh()
+            } catch {
+                self.error = "Couldn't delete draft: \(error.localizedDescription)"
+            }
+        }
+    }
+
     private func isLocallyArchived(_ id: String) -> Bool {
         guard let entry = locallyArchived[id] else { return false }
         if Date().timeIntervalSince(entry.added) > 30 {
@@ -735,27 +813,30 @@ final class SessionsListViewModel {
         // first request instead of after its timeout — the banner is up in
         // milliseconds, and a request that lands clears it.
         if !hasLoaded { diagnoseUnreachableServer() }
-        #if os(iOS)
         let requestConnection = OS1API.LiveActivityConnection.current()
-        #endif
         do {
             async let workspaceRequest = try? OS1API.workspaces()
             let all = try await OS1API.sessions()
-            #if os(iOS)
             // A server or account can change while this request is in flight.
             // Never publish the old account's rows into its replacement.
             guard requestConnection == OS1API.LiveActivityConnection.current() else { return }
             let connectionChanged = requestConnection != liveActivityConnection
-            #endif
-            // Renames are held back rather than published on arrival: names
-            // feed every row's title, so publishing them on their own would
-            // strand the grouping cache and leave the next body to rebuild it
-            // on the main actor. They go out below, with rows already built
-            // from them.
+            // Workspace metadata is held back rather than published on arrival:
+            // names feed every row's title, and draft-only workspaces create
+            // rows of their own. Publish both with an already-built grouping.
             var renamed: [String: String]?
-            if let workspaces = await workspaceRequest {
-                let nextNames = Dictionary(uniqueKeysWithValues: workspaces.map { ($0.id, $0.name) })
+            var refreshedWorkspaces: [OS1API.WorkspaceSummary]?
+            let fetchedWorkspaces = await workspaceRequest
+            if let fetched = fetchedWorkspaces {
+                let nextNames = Dictionary(uniqueKeysWithValues: fetched.map { ($0.id, $0.name) })
                 if nextNames != workspaceNames { renamed = nextNames }
+                if fetched != workspaces { refreshedWorkspaces = fetched }
+            }
+            // A failed metadata request on a newly selected connection must
+            // clear the previous account's resumable prompt text.
+            if connectionChanged, fetchedWorkspaces == nil {
+                refreshedWorkspaces = []
+                renamed = [:]
             }
             // Snapshot the main-actor state the filter needs, then do the
             // heavy pass (thousands of rows) off the main thread — inline it
@@ -795,29 +876,26 @@ final class SessionsListViewModel {
             // Most 5s polls change nothing — skip the assignment so the whole
             // list doesn't re-diff (grouping, sorting, row rebuilds) for a
             // byte-identical result.
-            #if os(iOS)
             let shouldPublish =
-                next != sessions || renamed != nil || connectionChanged || claimsChanged
-            #else
-            let shouldPublish = next != sessions || renamed != nil || claimsChanged
-            #endif
+                next != sessions || refreshedWorkspaces != nil || connectionChanged || claimsChanged
             if shouldPublish {
                 // Group before publishing, not after: the assignment wakes
                 // every observing view, so a grouping that starts afterwards
                 // always loses the race to the body that needs it.
                 let names = renamed ?? workspaceNames
+                let nextWorkspaces = refreshedWorkspaces ?? workspaces
                 let grouped = await Self.groupedOffMain(
-                    next, workspaceNames: names, claimed: claimed
+                    next,
+                    workspaceNames: names,
+                    workspaces: nextWorkspaces,
+                    claimed: claimed
                 )
-                #if os(iOS)
                 guard requestConnection == OS1API.LiveActivityConnection.current() else { return }
-                #endif
                 SessionLinks.register(titles: grouped.titles)
                 PrLinks.register(index: grouped.prs)
                 if let renamed { workspaceNames = renamed }
-                #if os(iOS)
+                if let refreshedWorkspaces { workspaces = refreshedWorkspaces }
                 liveActivityConnection = requestConnection
-                #endif
                 setSessions(next, rows: grouped.rows)
             }
             #if os(iOS)
@@ -998,11 +1076,29 @@ enum InboxBand: String, CaseIterable {
     }
 }
 
+private extension OS1API.WorkspaceSummary {
+    /// Session-shaped presentation data for the existing row component. The
+    /// workspace remains sessionless (`SidebarWorkspace.sessions` is empty);
+    /// this only supplies dates, repo and owner to shared row rendering.
+    var draftSession: Session {
+        var session = Session(id: "workspace-draft:\(id)")
+        session.title = name
+        session.repo = repo
+        session.workspaceId = id
+        session.workspaceName = name
+        session.createdAt = createdAt
+        session.lastActivity = draft?.updatedAt
+        session.startedBy = createdBy
+        return session
+    }
+}
+
 struct SidebarWorkspace: Identifiable, Equatable, Sendable {
     let id: String
     let title: String
     let sessions: [Session]
     let mainSession: Session
+    var workspace: OS1API.WorkspaceSummary? = nil
 
     var statusSession: Session {
         let humanSessions = sessions.filter { !$0.isAutomation }
@@ -1012,12 +1108,14 @@ struct SidebarWorkspace: Identifiable, Equatable, Sendable {
 
     var lane: Session.Lane { statusSession.lane }
     var workspaceId: String? {
-        sessions.compactMap(\.workspaceId).first { !$0.isEmpty }
+        if let workspace { return workspace.id }
+        return sessions.compactMap(\.workspaceId).first { !$0.isEmpty }
     }
+    var isDraftWorkspace: Bool { sessions.isEmpty && workspace?.draft != nil }
     var isOptimistic: Bool {
         sessions.contains(where: \.isOptimistic)
     }
-    var effectiveRepo: String { mainSession.effectiveRepo }
+    var effectiveRepo: String { workspace?.repo ?? mainSession.effectiveRepo }
 
     /// The open PR is the actionable one when sibling tabs have several. Once
     /// none are open, keep a merged/closed PR so the menu can suggest Archive.
@@ -1030,10 +1128,12 @@ struct SidebarWorkspace: Identifiable, Equatable, Sendable {
     /// when the row is a real workspace, the bare session URL otherwise.
     @MainActor var shareURL: URL? {
         guard let base = ServerConfig.shared.baseURL else { return nil }
-        if let workspaceId = mainSession.workspaceId, !workspaceId.isEmpty {
-            return base
+        if let workspaceId, !workspaceId.isEmpty {
+            let workspaceURL = base
                 .appendingPathComponent("workspace")
                 .appendingPathComponent(workspaceId)
+            if isDraftWorkspace { return workspaceURL }
+            return workspaceURL
                 .appendingPathComponent("session")
                 .appendingPathComponent(mainSession.id)
         }
@@ -1045,10 +1145,13 @@ struct SidebarWorkspace: Identifiable, Equatable, Sendable {
     /// blocked sibling owns its lane.
     var isRunning: Bool { sessions.contains { $0.isRunning == true } }
     var lastActivityDate: Date {
-        sessions.compactMap(\.lastActivityDate).max() ?? .distantPast
+        if let draft = workspace?.draft,
+           let date = Session.parseISO(draft.updatedAt) { return date }
+        return sessions.compactMap(\.lastActivityDate).max() ?? .distantPast
     }
     var createdDate: Date {
-        sessions.compactMap { Session.parseISO($0.createdAt) }.min() ?? .distantPast
+        if let date = Session.parseISO(workspace?.createdAt) { return date }
+        return sessions.compactMap { Session.parseISO($0.createdAt) }.min() ?? .distantPast
     }
 
     private func statusRank(_ session: Session) -> Int {
