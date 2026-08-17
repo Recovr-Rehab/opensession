@@ -1,3 +1,7 @@
+// First on purpose: canvas-cards.tsx pulls in the tldraw runtime, which dies
+// at module scope on the one-key `window` stub other test files leak. See the
+// shim's module doc.
+import "./tldraw-test-window";
 import { describe, expect, it } from "bun:test";
 import { CARD_GAP, CARD_H, CARD_W } from "./canvas-cards";
 import { reflowColumns, reflowSlot } from "./canvas-reflow";
