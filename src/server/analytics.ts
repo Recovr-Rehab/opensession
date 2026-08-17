@@ -362,10 +362,15 @@ interface SessionMeta {
 	isReview: boolean;
 }
 
-function repoOfWorktree(worktreeDir: string): string | null {
+export function analyticsRepo(
+	explicitRepo: string,
+	worktreeDir: string,
+	repos: Record<string, { id: string; repo: string; wtPrefix: string }> = configuredRepos(),
+): string | null {
+	if (explicitRepo && repos[explicitRepo]) return explicitRepo;
 	if (!worktreeDir) return null;
 	const base = worktreeDir.split("/").pop() || "";
-	for (const repo of Object.values(configuredRepos())) {
+	for (const repo of Object.values(repos)) {
 		if (worktreeDir === repo.repo || worktreeDir.startsWith(`${repo.repo}/`)) return repo.id;
 		if (base.startsWith(`${repo.wtPrefix}-`)) return repo.id;
 	}
@@ -393,7 +398,7 @@ function loadSessionMeta(): Map<string, SessionMeta> {
 					mode: String(s.mode || ""),
 					model: String(s.model || ""),
 					branch: String(s.branch || ""),
-					repo: repoOfWorktree(String(s.worktreeDir || "")),
+					repo: analyticsRepo(String(s.repo || s.project || ""), String(s.worktreeDir || "")),
 					automationName: autoMatch ? autoMatch[1] : null,
 					isReview: id.startsWith("bks-ghpr-") || createdBy === "GitHub (automation)",
 				});
@@ -1272,7 +1277,7 @@ const SUMMARY_FRESH_MS = 5 * 60 * 1000;
 const SUMMARY_STALE_SERVE_MS = 24 * 60 * 60 * 1000;
 // Bump when composition semantics change so a restart cannot serve a fresh but
 // obsolete disk summary before the background prewarm replaces it.
-const SUMMARY_VERSION = 2;
+const SUMMARY_VERSION = 3;
 const summaryCache = new Map<string, { at: number; summary: AnalyticsSummary }>();
 const summaryInflight = new Map<string, Promise<AnalyticsSummary>>();
 
