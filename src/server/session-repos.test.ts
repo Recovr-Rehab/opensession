@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+	planCreateAttachRepos,
 	resolvePrTarget,
 	resolveSessionRepoContext,
 	resolveWorktreeTarget,
@@ -181,5 +182,65 @@ describe("resolvePrTarget", () => {
 		expect(
 			resolvePrTarget(legacy, "opensession", "legacy-follow-up")?.branch,
 		).toBe("legacy-follow-up");
+	});
+});
+
+describe("planCreateAttachRepos", () => {
+	// A fixture registry rather than the real one: what is registered depends on
+	// the instance's config, and this is a rule about repos, not about ours.
+	const registry: Record<
+		string,
+		{ id: string; defaultBranch: string; sharedCheckout: boolean }
+	> = {
+		app: { id: "app", defaultBranch: "main", sharedCheckout: false },
+		infra: { id: "infra", defaultBranch: "master", sharedCheckout: false },
+		docs: { id: "docs", defaultBranch: "main", sharedCheckout: false },
+		itself: { id: "itself", defaultBranch: "main", sharedCheckout: true },
+	};
+	const lookup = (id: string) => registry[id] ?? null;
+
+	test("keeps pick order, drops duplicates and the session's own repo", () => {
+		expect(
+			planCreateAttachRepos(
+				["infra", "app", "infra", "docs"],
+				"app",
+				"multi-repo-task",
+				lookup,
+			),
+		).toEqual(["infra", "docs"]);
+	});
+
+	test("nothing asked for is not an error", () => {
+		expect(planCreateAttachRepos(undefined, "app", "", lookup)).toEqual([]);
+		expect(planCreateAttachRepos([], "app", "", lookup)).toEqual([]);
+		expect(planCreateAttachRepos(["app"], "app", "", lookup)).toEqual([]);
+	});
+
+	test("refuses a repo that has no isolated worktree to attach", () => {
+		expect(() =>
+			planCreateAttachRepos(["itself"], "app", "multi-repo-task", lookup),
+		).toThrow(/only be a session's own repo/);
+	});
+
+	test("refuses an unknown repo", () => {
+		expect(() =>
+			planCreateAttachRepos(["nope"], "app", "multi-repo-task", lookup),
+		).toThrow(/Unknown repo/);
+	});
+
+	test("refuses to check a repo out on its own mainline", () => {
+		expect(() =>
+			planCreateAttachRepos(["infra"], "app", "master", lookup),
+		).toThrow(/its own mainline/);
+		// …and the mainline is per repo, not one shared name.
+		expect(planCreateAttachRepos(["docs"], "app", "master", lookup)).toEqual([
+			"docs",
+		]);
+	});
+
+	test("refuses without a branch to check them out on", () => {
+		expect(() => planCreateAttachRepos(["docs"], "app", "", lookup)).toThrow(
+			/needs a branch/,
+		);
 	});
 });

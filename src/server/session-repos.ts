@@ -38,6 +38,7 @@ import {
 	findSession,
 	getCachedSessions,
 	touchNativeSession,
+	updateSessionFile,
 } from "./session-cache";
 import type { AttachedRepo, LinkedPr, StackedOn, UnifiedSession } from "./types";
 import { defaultRepo } from "./config";
@@ -450,12 +451,88 @@ export async function attachRepo(
 	}
 
 	const attached = await prepareAttachedWorktree(repoId, effectiveBranch);
-	const existing = (session.attachedRepos || []).filter(
-		(r) => r.repo !== repoId,
-	);
-	const all = [...existing, attached];
-	touchNativeSession(sessionId, { attachedRepos: all });
+	// Read-modify-write inside the session-file lock rather than from the
+	// snapshot above: cutting the worktree takes as long as a fetch, and a
+	// create attaching several repos in a row must not have the last one's list
+	// overwrite the ones before it.
+	let all: AttachedRepo[] = [];
+	await updateSessionFile(sessionId, (data) => {
+		all = [
+			...(data.attachedRepos || []).filter((r) => r.repo !== repoId),
+			attached,
+		];
+		return {
+			...data,
+			attachedRepos: all,
+			lastActivity: new Date().toISOString(),
+		};
+	});
 	return { attached, all };
+}
+
+/**
+ * The repos a create asked to work in BESIDES its own — the New-session repo
+ * picker's ⌘-click. Validated up front, before anything is persisted, so a
+ * pick that can't work fails on the sender's transport instead of birthing a
+ * session that quietly does less than it was asked for.
+ *
+ * Returns the ids in pick order, deduped, with the session's own repo dropped
+ * (picking it again is a no-op, not an error). Everything else throws with a
+ * message a person can act on. The preparation itself is `attachRepo`, once
+ * the session file exists.
+ */
+export function planCreateAttachRepos(
+	requested: unknown,
+	primary: string,
+	branch: string,
+	lookup: (id: string) => AttachCandidate | null = registeredAttachCandidate,
+): string[] {
+	const wanted = [
+		...new Set(
+			(Array.isArray(requested) ? requested : [])
+				.map((id) => String(id).trim())
+				.filter((id) => id && id !== primary),
+		),
+	];
+	if (!wanted.length) return [];
+	if (!branch)
+		throw new Error(
+			"A session that spans repos needs a branch: each extra repo is checked out on it.",
+		);
+	for (const id of wanted) {
+		const candidate = lookup(id);
+		if (!candidate) throw new Error(`Unknown repo "${id}"`);
+		// Same refusal prepareAttachedWorktree makes, made early: there is no
+		// isolated worktree to hand out, only the live checkout every session
+		// of that repo is already working in.
+		if (candidate.sharedCheckout)
+			throw new Error(
+				`${candidate.id} shares one checkout, so it can only be a session's own repo — not a second one.`,
+			);
+		if (branch === candidate.defaultBranch)
+			throw new Error(
+				`${candidate.id} can't be checked out on ${branch}: that is its own mainline. Give this session a branch name of its own.`,
+			);
+	}
+	return wanted;
+}
+
+/** What the plan above needs to know about a repo someone asked to add. */
+export interface AttachCandidate {
+	id: string;
+	defaultBranch: string;
+	/** One live checkout shared by every session, so nothing to attach. */
+	sharedCheckout: boolean;
+}
+
+function registeredAttachCandidate(id: string): AttachCandidate | null {
+	if (!REPOS[id]) return null;
+	const repo = getRepo(id);
+	return {
+		id: repo.id,
+		defaultBranch: repo.defaultBranch,
+		sharedCheckout: sharedCheckoutForNewSessions(repo),
+	};
 }
 
 /**

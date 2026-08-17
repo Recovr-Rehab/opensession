@@ -51,7 +51,7 @@ type ResolvedSandboxProvider = Extract<
 	{ ok: true }
 >["provider"];
 import { SESSION_EFFORTS, findSession, invalidateSessionsCache, recordRunOutcome, touchNativeSession, updateSessionFile } from "./session-cache";
-import { buildBranchNote, memoryNoteFor, workspaceOwningWorktree } from "./session-repos";
+import { attachRepo, buildBranchNote, buildReposNote, memoryNoteFor, planCreateAttachRepos, workspaceOwningWorktree } from "./session-repos";
 import { ownedWorktree } from "./session-workspace";
 import { engineSessionPatch } from "./sessions";
 import { commitAuthorFor, userMatchesAny } from "./shared/user-mappings";
@@ -83,6 +83,8 @@ export interface CreateSessionMessage {
 	accountId?: string;
 	mcpServers?: unknown;
 	repo?: unknown;
+	/** Repos to work in beside `repo` (the palette's multi-select picker). */
+	attachRepos?: unknown;
 	sandbox?: unknown;
 	runner?: unknown;
 	worktreeMode?: unknown;
@@ -197,6 +199,12 @@ export interface ResolvedCreate {
 	repoId?: string;
 	/** Repos whose memory notes ride the opening prompt. */
 	memoryRepoIds: string[];
+	/**
+	 * Repos to work in beside the session's own: an isolated worktree each, on
+	 * one shared branch, prepared after the announce and BEFORE the opening run
+	 * so its system note and any sandbox mounts already know about them.
+	 */
+	attachRepos?: { repos: string[]; branch: string };
 	stackedOn?: { repo: string; branch: string };
 	/** Workspace recorded on the session file. */
 	workspaceId?: string;
@@ -276,6 +284,37 @@ export interface CreateSessionIO {
  * look inexplicably empty — bks-019f472f, 2026-07-09); failures before it go
  * to io.fail.
  */
+/**
+ * Cut a worktree for each repo the create asked to work in beside its own, and
+ * record it on the session. Best-effort per repo: one that can't be checked
+ * out (a branch collision in that repo, a fetch that failed) is reported as a
+ * notice and the session goes on without it, rather than taking down a create
+ * whose real subject is the other repos. Returns the ones that landed — which
+ * is what the opening run is then told about, so the agent is never pointed at
+ * a worktree that isn't there.
+ */
+async function attachCreateRepos(
+	sessionId: string,
+	plan: { repos: string[]; branch: string },
+	io: CreateSessionIO,
+): Promise<string[]> {
+	const attached: string[] = [];
+	for (const repoId of plan.repos) {
+		try {
+			await attachRepo(sessionId, repoId, plan.branch);
+			attached.push(repoId);
+		} catch (e) {
+			io.emit({
+				type: "notice",
+				message: `Couldn't add ${repoId} to this session: ${
+					e instanceof Error ? e.message : String(e)
+				}. The other repos are ready; add this one from the repo menu when it is.`,
+			});
+		}
+	}
+	return attached;
+}
+
 export async function openCreatedSession(
 	spec: ResolvedCreate,
 	io: CreateSessionIO,
@@ -309,6 +348,9 @@ export async function openCreatedSession(
 	let persisted = false;
 	// Cumulative token/cost for this new session's opening run.
 	let latestUsage: SessionUsage | undefined;
+	// Extra repos that actually got a worktree (see attachCreateRepos) — what
+	// the opening run's repos note and memory scopes are built from.
+	let attachedRepoIds: string[] = [];
 	// Terminal failure the opening run died on — recorded after the loop so
 	// the fresh session surfaces as "Needs input".
 	let runFailure: string | null = null;
@@ -418,7 +460,10 @@ export async function openCreatedSession(
 		// window from double-starting a run (same race as
 		// runSessionPrompt).
 		const startToken = markSessionStarting(bksId);
-		const preparingEnvironment = spec.needsWorktree || Boolean(spec.sandboxProvider) || Boolean(spec.runnerTarget);
+		const pendingAttach = spec.attachRepos?.repos.length
+			? spec.attachRepos
+			: null;
+		const preparingEnvironment = spec.needsWorktree || Boolean(pendingAttach) || Boolean(spec.sandboxProvider) || Boolean(spec.runnerTarget);
 		if (preparingEnvironment) preparingWorkspaces.add(bksId);
 		try {
 			await persist();
@@ -451,16 +496,28 @@ export async function openCreatedSession(
 				spec.title || "a session",
 			);
 
-			if (spec.needsWorktree && spec.materializeWorktree) {
+			// Every worktree this session works in, its own first. The extra
+			// repos are cut inside the same gate: they are git work of the same
+			// order, and flipping the viewer to ready before them would tell the
+			// reader the workspace was up while it was still being assembled.
+			if ((spec.needsWorktree && spec.materializeWorktree) || pendingAttach) {
 				try {
-					await spec.materializeWorktree();
-					// Deps install runs in the background (worktree.ts) — say
-					// so, since builds/tests may not be ready for a beat.
-					io.emit({
-						type: "notice",
-						message:
-							"Workspace ready — installing dependencies in the background.",
-					});
+					if (spec.needsWorktree && spec.materializeWorktree) {
+						await spec.materializeWorktree();
+						// Deps install runs in the background (worktree.ts) — say
+						// so, since builds/tests may not be ready for a beat.
+						io.emit({
+							type: "notice",
+							message:
+								"Workspace ready — installing dependencies in the background.",
+						});
+					}
+					if (pendingAttach)
+						attachedRepoIds = await attachCreateRepos(
+							bksId,
+							pendingAttach,
+							io,
+						);
 				} finally {
 					// Ready (or failed — the error surfaces separately): flip the
 					// viewer out of "Waiting for workspace" and let the queue go.
@@ -536,6 +593,10 @@ export async function openCreatedSession(
 				io.emit({ type: "workspace_status", ready: true });
 			}
 
+			// The session as persisted, once it spans repos: the map the agent
+			// gets is read back rather than reassembled, so it can only name
+			// worktrees that were actually cut.
+			const spanning = attachedRepoIds.length ? findSession(bksId) : null;
 			for await (const event of sandboxOpeningRun ?? runnerOpeningRun ?? runAgent({
 				prompt: spec.openingPrompt,
 				cwd: spec.wtPath,
@@ -552,12 +613,20 @@ export async function openCreatedSession(
 				reposNote:
 					[
 						spec.presetNote || "",
-						buildBranchNote({
-							mode: spec.mode,
-							branch: spec.branch,
-							worktreeDir: spec.wtPath,
-						}),
-						await memoryNoteFor(spec.user, spec.memoryRepoIds),
+						// A session that spans repos is handed the map of them
+						// (which repo is where, on which branch) in place of the
+						// branch note — buildReposNote carries that note inside it.
+						spanning
+							? buildReposNote(spanning)
+							: buildBranchNote({
+									mode: spec.mode,
+									branch: spec.branch,
+									worktreeDir: spec.wtPath,
+								}),
+						await memoryNoteFor(spec.user, [
+							...spec.memoryRepoIds,
+							...attachedRepoIds,
+						]),
 					]
 						.filter(Boolean)
 						.join("\n\n") || undefined,
@@ -1193,6 +1262,34 @@ export async function handleCreateSessionMessage(
 							? workspace.branch || branch
 							: branch;
 
+		// Repos to work in beside this one (the palette's ⌘-click). Each gets an
+		// isolated worktree on the session's own branch, so the branches — and
+		// the PRs that follow them — line up across repos. A session whose repo
+		// is a shared checkout works on that repo's mainline, which is no name
+		// to give another repo, so the create's requested branch stands in.
+		const attachBranch =
+			sessionBranch && sessionBranch !== repo.defaultBranch
+				? sessionBranch
+				: (branch || "").trim();
+		if (Array.isArray(msg.attachRepos) && msg.attachRepos.length) {
+			const unsupported =
+				isAsk || isScratch || isRepoLess
+					? "Only a Code session with a repo can work in more than one repo."
+					: forkSource || fromPr
+						? "A session started from a fork or a pull request works in the repo it came from."
+						: selectedRunner
+							? "Runner sessions work in one repo."
+							: volumeWorkspace || remoteSandbox
+								? "This sandbox keeps the workspace inside the container, which can't hold a second repo yet. Choose This machine, or a sandbox that mounts the worktree."
+								: "";
+			if (unsupported) throw new Error(unsupported);
+		}
+		const attachRepoIds = planCreateAttachRepos(
+			msg.attachRepos,
+			repo.id,
+			attachBranch,
+		);
+
 		const title = prompt.trim().split("\n")[0].slice(0, 80);
 		// Every session lives in a workspace (session-workspace.ts). A create
 		// that resolved none — no picker choice, no fork parent, no
@@ -1325,6 +1422,9 @@ export async function handleCreateSessionMessage(
 					? repo.id
 					: repoForPathOrNull(wtPath)?.id,
 			memoryRepoIds: [repo.id],
+			...(attachRepoIds.length
+				? { attachRepos: { repos: attachRepoIds, branch: attachBranch } }
+				: {}),
 			stackedOn: stackBase
 				? { repo: repoForPath(wtPath).id, branch: stackBase }
 				: undefined,

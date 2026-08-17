@@ -9,6 +9,7 @@ import { getSendKeyPref, onSendKeyChanged } from "../lib/send-key-pref";
 import { MOD_ENTER_GLYPH } from "../lib/send-key";
 import { isApple } from "../lib/platform";
 import { NO_REPO } from "../lib/session-repo";
+import { repoSelectionHint, toggleRepoSelection } from "../lib/repo-selection";
 import {
   NewSessionPrompt,
   type NewSessionPromptHandle,
@@ -100,6 +101,9 @@ interface RepoOption {
   id: string;
   label: string;
   default?: boolean;
+  /** A repo whose sessions share one live checkout can be the session's own
+   *  repo, but never a second one: there is no isolated worktree to attach. */
+  sharedCheckout?: boolean;
 }
 
 const LAST_REPO_KEY = "opensession-new-session-repo";
@@ -218,6 +222,8 @@ type CreateStatus =
 /** ⌘⌥↓ / ⌘⌥↑ (Ctrl+Alt elsewhere). Vertical rather than horizontal because
  *  Chrome and Safari own ⌘⌥← / ⌘⌥→ for tab switching. */
 const CYCLE_SHORTCUT = isApple ? ["⌘", "⌥", "↓"] : ["Ctrl", "Alt", "↓"];
+/** Held while picking a repo, it adds one instead of replacing the choice. */
+const MULTI_MODIFIER = isApple ? "⌘" : "Ctrl";
 
 const CREATE_LABELS: Record<CreateAction, string> = {
 	open: "Create",
@@ -365,6 +371,13 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     forceMode === "scratch" ? NO_REPO : forceRepo || prefill.repo,
   );
   /**
+   * Repos the session works in BESIDES `repo`, in the order they were added
+   * (the picker's ⌘-click). Each becomes an attached worktree on the session's
+   * branch, so the agent can read and edit across them from its first turn.
+   * Only a Code session with a repo can carry them — see `canAddRepos`.
+   */
+  const [extraRepos, setExtraRepos] = useState<string[]>([]);
+  /**
    * Flipping Ask moves the repo with it: Ask means "no repo" unless you go and
    * pick one, and Code goes back to the repo you were last working in. Most
    * asking is not about a checkout, and the pair that stayed pointed at a repo
@@ -376,6 +389,10 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   function togglePermission() {
     const next = permission === "ask" ? "code" : "ask";
     setPermissionState(next);
+    // An Ask session reads one pinned checkout and cuts no worktree, so it has
+    // nowhere to put a second repo. Drop them on the way in rather than
+    // carrying a selection the create would have to refuse.
+    if (next === "ask") setExtraRepos([]);
     if (forceRepo) return;
     if (next === "ask") setRepo(NO_REPO);
     else if (repo === NO_REPO)
@@ -393,6 +410,10 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   // plain scratch dir when it doesn't.
   const mode: "ask" | "code" | "scratch" =
     permission === "ask" ? "ask" : repo === NO_REPO ? "scratch" : "code";
+  // A second repo is an isolated worktree on this session's branch, which only
+  // a Code session with a repo has. Ask reads one pinned checkout and Scratch
+  // has no checkout at all, so neither can carry one.
+  const canAddRepos = mode === "code";
   const [repos, setRepos] = useState<RepoOption[]>([]);
   const [configuredDefaultRepo, setConfiguredDefaultRepo] = useState("");
   useEffect(() => {
@@ -403,6 +424,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
         id: item.id,
         label: item.label || item.id,
         default: item.default,
+        sharedCheckout: item.sharedCheckout,
       }));
       setRepos(options);
       setConfiguredDefaultRepo(
@@ -427,6 +449,9 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       return configuredDefaultRepo;
     });
   }, [configuredDefaultRepo, forceRepo, repos]);
+  /** A repo's picker label, falling back to its id before `/repos` lands. */
+  const repoOptionLabel = (id: string) =>
+    repos.find((item) => item.id === id)?.label || id;
   const [worktrees, setWorktrees] = useState<Worktree[]>([]);
   // In a workspace, default to a sibling's branch so the new session reuses its
   // worktree; the user can still switch to "New branch" to fork a fresh one.
@@ -842,6 +867,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       selectedWorktree === "__new__"
         ? newBranch.trim() || slugifyBranch(prompt)
         : selectedWorktree;
+    const attachRepos = extraRepos.filter((id) => id !== repo);
 
     // With "Create more" off, App tears down the palette when the
     // session_created event arrives (and drops us into the new session).
@@ -868,6 +894,10 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       type: "create_session",
       mode,
       repo,
+      // Repos to work in beside `repo`. The server cuts each an isolated
+      // worktree on this session's branch before the first turn runs, so the
+      // agent is told about them in the same breath as its own checkout.
+      ...(canAddRepos && attachRepos.length ? { attachRepos } : {}),
       ...(workspaceId
         ? { workspaceId: workspaceId, worktreeMode }
         : { createWorkspace: {} }),
@@ -962,6 +992,9 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                 value: p.id,
                 label: p.label,
                 icon: <RepoTile name={p.id} />,
+                // A shared-checkout repo has no isolated worktree to attach,
+                // so it can be the session's repo but never a second one.
+                singleOnly: p.sharedCheckout,
               })),
               // Either mode can run without a repo, and the Ask toggle in the
               // footer says which one you get: Ask reads nothing, Code writes
@@ -970,12 +1003,31 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                 value: NO_REPO,
                 label: "No repo",
                 icon: <IconMessage size={20} />,
+                singleOnly: true,
               },
             ]}
             onChange={(nextRepo) => {
               setRepo(nextRepo);
+              // A plain pick is "work here", not "and here too": it replaces
+              // the whole selection, which is what it did before any of this.
+              setExtraRepos([]);
               if (nextRepo !== NO_REPO) rememberSelectedRepo(nextRepo);
             }}
+            extraValues={extraRepos}
+            onToggleExtra={
+              canAddRepos
+                ? (id) => {
+                    const next = toggleRepoSelection(
+                      { repo, extras: extraRepos },
+                      id,
+                    );
+                    setRepo(next.repo);
+                    setExtraRepos(next.extras);
+                    rememberSelectedRepo(next.repo);
+                  }
+                : undefined
+            }
+            multiHint={repoSelectionHint(extraRepos, repoOptionLabel, MULTI_MODIFIER)}
             // A feed workspace is repo-less by construction (its subject is a
             // Tella video, not a checkout), so its create doesn't offer one.
             disabled={busy || forceMode === "scratch"}
@@ -990,8 +1042,18 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
             <span className="truncate">
               {repo === NO_REPO
                 ? "No repo"
-                : repos.find((p) => p.id === repo)?.label || repo || "No repositories"}
+                : repoOptionLabel(repo) || repo || "No repositories"}
             </span>
+            {/* The trigger has room for one repo, so the rest ride as a count —
+                the same shorthand the session header's repo pill uses. */}
+            {extraRepos.length > 0 && (
+              <span
+                className="shrink-0 text-label font-medium text-dim"
+                title={extraRepos.map(repoOptionLabel).join(", ")}
+              >
+                +{extraRepos.length}
+              </span>
+            )}
             {forceMode !== "scratch" && (
               <IconChevronDown className={CHEVRON} size={22} />
             )}
