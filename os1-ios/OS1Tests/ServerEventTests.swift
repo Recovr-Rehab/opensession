@@ -149,6 +149,32 @@ final class ServerEventTests: XCTestCase {
         XCTAssertEqual(questionId, "ask-1")
     }
 
+    func testSlackComposerSentReceiptDecodesDestinationAndPermalink() {
+        let json = #"{"type":"slack_composer_resolved","sessionId":"bks-1","requestId":"slack-1","status":"sent","channel":{"id":"C123","name":"shipping"},"permalink":"https://tella.slack.com/archives/C123/p1700000000000000"}"#
+        guard case .slackComposerResolved(let sessionId, let receipt) = parse(json) else {
+            return XCTFail("expected .slackComposerResolved")
+        }
+        XCTAssertEqual(sessionId, "bks-1")
+        XCTAssertEqual(receipt.requestId, "slack-1")
+        XCTAssertEqual(receipt.status, .sent)
+        XCTAssertEqual(receipt.channel, .init(id: "C123", name: "shipping"))
+        XCTAssertEqual(
+            receipt.permalink,
+            "https://tella.slack.com/archives/C123/p1700000000000000"
+        )
+    }
+
+    func testSlackComposerCancelledReceiptDecodesWithoutDestination() {
+        guard case .slackComposerResolved(_, let receipt) = parse(
+            #"{"type":"slack_composer_resolved","sessionId":"bks-1","requestId":"slack-2","status":"cancelled"}"#
+        ) else {
+            return XCTFail("expected .slackComposerResolved")
+        }
+        XCTAssertEqual(receipt.status, .cancelled)
+        XCTAssertNil(receipt.channel)
+        XCTAssertNil(receipt.permalink)
+    }
+
     func testSessionNotesDecodeAndADeletedNoteCarriesItsId() {
         let note = #"{"type":"session_note","sessionId":"bks-1","note":{"id":"note-1","user":"Kent","text":"Check this","ts":1760000000000}}"#
         guard case .sessionNote(let sessionId, let decoded) = parse(note) else {

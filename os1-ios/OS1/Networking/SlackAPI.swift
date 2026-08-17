@@ -19,6 +19,8 @@ enum SlackAPI {
 
     struct ComposerResponse: Decodable, Sendable {
         let status: String
+        let channel: Channel?
+        let permalink: String?
     }
 
     private struct UploadResponse: Decodable, Sendable {

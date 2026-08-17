@@ -73,6 +73,7 @@ final class SessionViewModel {
     private(set) var otherViewers: [String] = []
     private(set) var pendingQuestion: AskQuestion?
     private(set) var pendingSlackComposer: SlackComposeRequest?
+    private(set) var slackComposeReceipt: SlackComposeReceipt?
     private(set) var connectionState: ConnectionState = .connecting
     private(set) var isLoadingConversation = true
     /// A watch that never receives transcript_init is not a loading state
@@ -100,6 +101,16 @@ final class SessionViewModel {
 
     /// Called by the composer on the first character of a new draft.
     func draftStarted() { composeSeq += 1 }
+
+    func resolveSlackComposer(_ receipt: SlackComposeReceipt) {
+        if let pendingSlackComposer {
+            guard pendingSlackComposer.id == receipt.requestId else { return }
+        } else if let slackComposeReceipt {
+            guard slackComposeReceipt.requestId == receipt.requestId else { return }
+        }
+        pendingSlackComposer = nil
+        slackComposeReceipt = receipt
+    }
 
     // ── Pull request ──
     /// PR details for the session's branch (toolbar chip + PR panel).
@@ -1429,10 +1440,12 @@ final class SessionViewModel {
             if pendingQuestion?.id == questionId { pendingQuestion = nil }
 
         case .slackComposer(let id, let request) where id == session.id:
+            if let request, request.id == slackComposeReceipt?.requestId { break }
             pendingSlackComposer = request
+            if request != nil { slackComposeReceipt = nil }
 
-        case .slackComposerResolved(let id, let requestId) where id == session.id:
-            if pendingSlackComposer?.id == requestId { pendingSlackComposer = nil }
+        case .slackComposerResolved(let id, let receipt) where id == session.id:
+            resolveSlackComposer(receipt)
 
         case .serverError(let message)
         where awaitingCreation && message == "Session not found":

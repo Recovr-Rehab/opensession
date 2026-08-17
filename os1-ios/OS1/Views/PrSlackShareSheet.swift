@@ -13,6 +13,7 @@ struct PrSlackShareRequest: Identifiable {
     var composerRequestId: String?
     var initialImages: [String] = []
     var preferredChannel: String? = nil
+    var onComposerResolved: ((SlackComposeReceipt) -> Void)? = nil
 }
 
 enum ShippedChangeCopy {
@@ -361,13 +362,21 @@ struct PrSlackShareSheet: View {
                     for (index, image) in images.enumerated() {
                         screenshots.append(try await SlackAPI.uploadImage(image, index: index + 1))
                     }
-                    _ = try await SlackAPI.sendComposer(
+                    let response = try await SlackAPI.sendComposer(
                         sessionId: request.sessionId,
                         requestId: composerRequestId,
                         channelId: selectedChannel,
                         message: trimmedDescription,
                         screenshots: screenshots
                     )
+                    request.onComposerResolved?(SlackComposeReceipt(
+                        requestId: composerRequestId,
+                        status: .sent,
+                        channel: response.channel.map {
+                            .init(id: $0.id, name: $0.name)
+                        },
+                        permalink: response.permalink
+                    ))
                 } else if request.merged {
                     var screenshots: [String] = []
                     for (index, image) in images.enumerated() {
@@ -435,6 +444,12 @@ struct PrSlackShareSheet: View {
                     sessionId: request.sessionId,
                     requestId: composerRequestId
                 )
+                request.onComposerResolved?(SlackComposeReceipt(
+                    requestId: composerRequestId,
+                    status: .cancelled,
+                    channel: nil,
+                    permalink: nil
+                ))
                 dismiss()
             } catch {
                 sending = false

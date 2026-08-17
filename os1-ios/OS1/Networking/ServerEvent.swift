@@ -32,7 +32,7 @@ enum ServerEvent: Sendable {
     case askQuestion(sessionId: String, question: AskQuestion)
     case askResolved(sessionId: String, questionId: String)
     case slackComposer(sessionId: String, request: SlackComposeRequest?)
-    case slackComposerResolved(sessionId: String, requestId: String)
+    case slackComposerResolved(sessionId: String, receipt: SlackComposeReceipt)
     case notice(String)
     case serverError(String)
     // Shell output, for the session's terminal panel. Each frame carries the
@@ -132,8 +132,25 @@ enum ServerEvent: Sendable {
             guard let id = frame.sessionId else { return .ignored }
             return .slackComposer(sessionId: id, request: frame.request)
         case "slack_composer_resolved":
-            guard let id = frame.sessionId, let requestId = frame.requestId else { return .ignored }
-            return .slackComposerResolved(sessionId: id, requestId: requestId)
+            guard let id = frame.sessionId,
+                  let requestId = frame.requestId,
+                  let status = frame.status.flatMap(SlackComposeReceipt.Status.init(rawValue:))
+            else { return .ignored }
+            let channel: SlackComposeReceipt.Channel?
+            if let wire = frame.channel, let id = wire.id, let name = wire.name {
+                channel = SlackComposeReceipt.Channel(id: id, name: name)
+            } else {
+                channel = nil
+            }
+            return .slackComposerResolved(
+                sessionId: id,
+                receipt: SlackComposeReceipt(
+                    requestId: requestId,
+                    status: status,
+                    channel: channel,
+                    permalink: frame.permalink
+                )
+            )
         case "notice":
             return .notice(frame.message ?? "")
         case "error":
@@ -171,6 +188,25 @@ struct SlackComposeRequest: Decodable, Equatable, Sendable, Identifiable {
     let message: String
     let channel: String?
     let images: [String]
+}
+
+struct SlackComposeReceipt: Equatable, Sendable, Identifiable {
+    enum Status: String, Equatable, Sendable {
+        case sent
+        case cancelled
+    }
+
+    struct Channel: Equatable, Sendable {
+        let id: String
+        let name: String
+    }
+
+    let requestId: String
+    let status: Status
+    let channel: Channel?
+    let permalink: String?
+
+    var id: String { requestId }
 }
 
 /// Pagination cursor carried by transcript_init / transcript_history frames.
@@ -276,6 +312,11 @@ private struct RawFrame: Decodable {
         let contextSessions: [String]?
     }
 
+    struct WireSlackChannel: Decodable {
+        let id: String?
+        let name: String?
+    }
+
     let type: String
     let sessionId: String?
     let bootId: String?
@@ -300,6 +341,9 @@ private struct RawFrame: Decodable {
     let questions: [AskQuestion.Question]?
     let request: SlackComposeRequest?
     let requestId: String?
+    let status: String?
+    let channel: WireSlackChannel?
+    let permalink: String?
     let message: String?
     let queueId: String?
     let truncated: Bool?

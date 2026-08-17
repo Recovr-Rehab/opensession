@@ -172,6 +172,7 @@ struct SessionView: View {
     /// that space belongs to whatever the caller put in its place (the Desk's
     /// board), and it reads from the top.
     private var tailId: String? {
+        if let receipt = viewModel.slackComposeReceipt { return "slack-receipt-\(receipt.id)" }
         if let ask = viewModel.pendingQuestion { return "ask-\(ask.id)" }
         // While work is in flight the run clock IS the last row.
         if viewModel.isRunning { return "run-status" }
@@ -320,6 +321,11 @@ struct SessionView: View {
                                 }
                                 .id("ask-\(ask.id)")
                                 .transcriptTail(true)
+                            }
+                            if let receipt = viewModel.slackComposeReceipt {
+                                SlackComposeReceiptRow(receipt: receipt)
+                                    .id("slack-receipt-\(receipt.id)")
+                                    .transcriptTail(true)
                             }
                             // A small child at the very end, and the reason is
                             // not spacing: a `LazyVStack` realizes the children
@@ -530,6 +536,10 @@ struct SessionView: View {
                     }
                     .onChange(of: viewModel.pendingQuestion) {
                         // A question needs eyes even if they've scrolled away.
+                        scrollToBottom(proxy, animated: true)
+                    }
+                    .onChange(of: viewModel.slackComposeReceipt) {
+                        // The composer closes into this durable receipt.
                         scrollToBottom(proxy, animated: true)
                     }
                     .onChange(of: viewModel.composeSeq) {
@@ -799,7 +809,8 @@ struct SessionView: View {
                 suggestedScreenshot: nil,
                 composerRequestId: request.id,
                 initialImages: request.images,
-                preferredChannel: request.channel
+                preferredChannel: request.channel,
+                onComposerResolved: { viewModel.resolveSlackComposer($0) }
             )
         }
         #if os(iOS)
@@ -1270,6 +1281,38 @@ private extension View {
     /// it out of the composer's fade — see `SessionView.tailClearance`.
     func transcriptTail(_ isTail: Bool) -> some View {
         padding(.bottom, isTail ? SessionView.tailClearance : 0)
+    }
+}
+
+private struct SlackComposeReceiptRow: View {
+    let receipt: SlackComposeReceipt
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if let logo = Brand.logo(for: "slack") {
+                BrandLogoShape(logo: logo)
+                    .fill(Brand.colors(for: "slack")?.background ?? .secondary)
+                    .frame(width: 12, height: 12)
+            }
+            if receipt.status == .sent {
+                if let channel = receipt.channel {
+                    Text("Sent to \(Text("#\(channel.name)").fontWeight(.semibold))")
+                } else {
+                    Text("Sent to Slack")
+                }
+                if let value = receipt.permalink, let url = URL(string: value) {
+                    Text("·").foregroundStyle(OS1VisualStyle.textFaint)
+                    Link("Open in Slack", destination: url)
+                        .underline()
+                }
+            } else {
+                Text("Slack message cancelled")
+            }
+        }
+        .font(.footnote)
+        .foregroundStyle(OS1VisualStyle.textDim)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
     }
 }
 

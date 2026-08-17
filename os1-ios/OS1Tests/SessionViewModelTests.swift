@@ -147,6 +147,100 @@ final class SessionViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.entries.map(\.id), ["e1"])
     }
 
+    func testSlackComposerResolutionClearsTheMatchingRequestAndKeepsItsReceipt() {
+        let viewModel = makeViewModel()
+        let request = SlackComposeRequest(
+            id: "slack-1", message: "Shipped", channel: "shipping", images: []
+        )
+        let receipt = SlackComposeReceipt(
+            requestId: request.id,
+            status: .sent,
+            channel: .init(id: "C123", name: "shipping"),
+            permalink: "https://tella.slack.com/archives/C123/p1700000000000000"
+        )
+        viewModel.handle(.slackComposer(sessionId: "bks-1", request: request))
+
+        viewModel.handle(.slackComposerResolved(sessionId: "bks-1", receipt: receipt))
+
+        XCTAssertNil(viewModel.pendingSlackComposer)
+        XCTAssertEqual(viewModel.slackComposeReceipt, receipt)
+
+        // Reconnect snapshots report that nothing is pending. They must not
+        // erase the receipt the resolved event just made durable in the page.
+        viewModel.handle(.slackComposer(sessionId: "bks-1", request: nil))
+        XCTAssertEqual(viewModel.slackComposeReceipt, receipt)
+    }
+
+    func testNewSlackComposerReplacesAReceiptAndIgnoresAStaleResolution() {
+        let viewModel = makeViewModel()
+        let oldReceipt = SlackComposeReceipt(
+            requestId: "slack-old", status: .cancelled, channel: nil, permalink: nil
+        )
+        viewModel.handle(.slackComposerResolved(sessionId: "bks-1", receipt: oldReceipt))
+
+        let current = SlackComposeRequest(
+            id: "slack-current", message: "Another update", channel: nil, images: []
+        )
+        viewModel.handle(.slackComposer(sessionId: "bks-1", request: current))
+        XCTAssertNil(viewModel.slackComposeReceipt)
+
+        viewModel.handle(.slackComposerResolved(sessionId: "bks-1", receipt: oldReceipt))
+        XCTAssertEqual(viewModel.pendingSlackComposer, current)
+        XCTAssertNil(viewModel.slackComposeReceipt)
+    }
+
+    func testSuccessfulComposerPostCanResolveLocallyBeforeTheSocketEcho() {
+        let viewModel = makeViewModel()
+        let request = SlackComposeRequest(
+            id: "slack-local", message: "Shipped", channel: "shipping", images: []
+        )
+        let receipt = SlackComposeReceipt(
+            requestId: request.id,
+            status: .sent,
+            channel: .init(id: "C123", name: "shipping"),
+            permalink: "https://tella.slack.com/archives/C123/p1700000000000000"
+        )
+        viewModel.handle(.slackComposer(sessionId: "bks-1", request: request))
+
+        viewModel.resolveSlackComposer(receipt)
+
+        XCTAssertNil(viewModel.pendingSlackComposer)
+        XCTAssertEqual(viewModel.slackComposeReceipt, receipt)
+        // A reconnect snapshot captured before the POST settled must not
+        // reopen the same sheet after its local receipt already landed.
+        viewModel.handle(.slackComposer(sessionId: "bks-1", request: request))
+        XCTAssertNil(viewModel.pendingSlackComposer)
+        XCTAssertEqual(viewModel.slackComposeReceipt, receipt)
+        // The broadcast may arrive after the HTTP response; applying it again
+        // is idempotent rather than reviving or clearing anything.
+        viewModel.handle(.slackComposerResolved(sessionId: "bks-1", receipt: receipt))
+        XCTAssertEqual(viewModel.slackComposeReceipt, receipt)
+    }
+
+    func testDelayedOlderSlackReceiptCannotOverwriteTheLatestReceipt() {
+        let viewModel = makeViewModel()
+        let old = SlackComposeReceipt(
+            requestId: "slack-old", status: .cancelled, channel: nil, permalink: nil
+        )
+        let currentRequest = SlackComposeRequest(
+            id: "slack-current", message: "Current", channel: nil, images: []
+        )
+        let current = SlackComposeReceipt(
+            requestId: currentRequest.id,
+            status: .sent,
+            channel: .init(id: "C123", name: "shipping"),
+            permalink: "https://tella.slack.com/archives/C123/p1700000000000000"
+        )
+        viewModel.handle(.slackComposerResolved(sessionId: "bks-1", receipt: old))
+        viewModel.handle(.slackComposer(sessionId: "bks-1", request: currentRequest))
+        viewModel.resolveSlackComposer(current)
+
+        viewModel.handle(.slackComposerResolved(sessionId: "bks-1", receipt: old))
+
+        XCTAssertNil(viewModel.pendingSlackComposer)
+        XCTAssertEqual(viewModel.slackComposeReceipt, current)
+    }
+
     func testResyncDropsCachedPartialPrefixOfOffscreenCompletion() {
         let viewModel = makeViewModel()
         viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
