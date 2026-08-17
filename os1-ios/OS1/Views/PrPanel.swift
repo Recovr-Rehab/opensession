@@ -640,7 +640,7 @@ struct PrPanelView: View {
                     .font(.footnote)
                     .foregroundStyle(OS1VisualStyle.textDim)
             } else {
-                MarkdownBody(body)
+                PrMarkdownBody(text: body, repo: viewModel.session.repo)
             }
         }
     }
@@ -651,7 +651,7 @@ struct PrPanelView: View {
             subtitle: nil,
             when: Session.parseISO(comment.createdAt)
         ) {
-            MarkdownBody(comment.discussionBody)
+            PrMarkdownBody(text: comment.discussionBody, repo: viewModel.session.repo)
         }
     }
 
