@@ -30,17 +30,29 @@ import { cn } from "../ui/cn";
  */
 
 /**
- * A lid, not a wash. The row lies ON the transcript, and at a wash's weight
- * the sentence underneath read straight through the label sitting on it.
+ * The composer's own material, at the composer's own height off the page.
  *
- * So it is the material the transcript's other floating pills are already made
- * of (TRANSCRIPT_PILL: "New messages", "Load all"): paper over the popups'
- * blur, which turns whatever it covers into colour and shape rather than
- * somebody else's words, with the hairline and cast shadow that let a white
- * pill be seen on a white page. Two pills 40px apart made of different things
- * read as two ideas, so they are made of one, down to the `rounded-[999px]`
- * squircle. What keeps this row the quieter of the two is its ink: dim at
- * medium weight against the pill's near-black semibold, and no icon.
+ * The row sits just above the input and belongs to it, so the two are read
+ * together and any difference between them is read as depth. Glass over a blur
+ * was that difference: translucent against the input's solid paper, and a
+ * tight `sm` cast against its wide `soft` one, which put the pills on a lower
+ * plane than the box they lead into. They wear its fill, its edge colour and
+ * the same cast at half the scale instead. `md` IS `soft` halved (10/28
+ * against 20/56, 10% ink against 12%), which is what a smaller object on the
+ * same plane throws: `soft`'s own 20px offset under a 28px pill would put the
+ * cast's core below the pill and read as a grey underline rather than a lift.
+ *
+ * The one thing it does not take from the composer is how faint the hairline
+ * is (65% of the edge colour against the composer's 35%). That is the argument
+ * `--dialog-ring` makes in base.css: the smaller the box, the more of its
+ * shape the outline has to hold, and at the composer's weight a 28px pill on a
+ * white page loses its ends.
+ *
+ * Solid rather than glass also means the answer underneath is covered rather
+ * than blurred, so no `backdrop-filter` is needed to keep the label legible.
+ *
+ * What keeps the row quiet is its ink, not its surface: dim at medium weight,
+ * no icon, against the near-black semibold of the transcript's own pills.
  *
  * The 28px height is fixed rather than left to the label, because the
  * transcript pads for exactly that (SUGGESTIONS_CLEARANCE) and inherited
@@ -48,8 +60,8 @@ import { cn } from "../ui/cn";
  */
 const chip =
 	"relative inline-flex h-7 w-full items-center whitespace-nowrap rounded-[999px] px-3 " +
-	"bg-popup-glass [backdrop-filter:var(--popup-blur)] " +
-	"[--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm " +
+	"bg-[var(--composer-surface)] " +
+	"[--smooth-ring-color:var(--composer-border)] smooth-shadow-ring-md " +
 	"text-label font-medium text-dim transition-[color,scale] " +
 	"hover:text-fg focus-visible:text-fg active:scale-[0.96] " +
 	// The hover wash layers over the lid rather than replacing it, so it paints
