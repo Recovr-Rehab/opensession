@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import { IconChevronLeft, IconChevronRight, IconSearch } from "./icons";
 import { Tooltip } from "../ui/tooltip";
 import { useShortcutKeys } from "../hooks/useShortcutBindings";
+import { matchesShortcut } from "../lib/shortcuts";
 
 /**
  * Back/forward cluster for Window Controls Overlay mode.
@@ -28,9 +30,31 @@ export function TitleBar({
 	onSearch?: () => void;
 }) {
 	const commandMenuKeys = useShortcutKeys("command-menu");
+	const backKeys = useShortcutKeys("history-back");
+	const forwardKeys = useShortcutKeys("history-forward");
+
+	useEffect(() => {
+		// App renders a second, pane-positioned copy for a collapsed sidebar. The
+		// primary instance owns the listener so one keypress moves one history entry.
+		if (pane) return;
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (matchesShortcut(event, "history-back")) {
+				event.preventDefault();
+				history.back();
+				return;
+			}
+			if (matchesShortcut(event, "history-forward")) {
+				event.preventDefault();
+				history.forward();
+			}
+		};
+		window.addEventListener("keydown", onKeyDown);
+		return () => window.removeEventListener("keydown", onKeyDown);
+	}, [pane]);
+
 	return (
 		<div className={pane ? "wco-nav wco-nav-pane" : "wco-nav"}>
-			<Tooltip label="Back" side="bottom">
+			<Tooltip label="Back" side="bottom" shortcut={backKeys ?? undefined}>
 				<button
 					className="inline-flex size-[30px] cursor-pointer items-center justify-center rounded-md border-none bg-transparent p-0 text-dim hover:bg-hover hover:text-fg [-webkit-app-region:no-drag] [app-region:no-drag]"
 					onClick={() => history.back()}
@@ -39,7 +63,7 @@ export function TitleBar({
 					<IconChevronLeft size={24} />
 				</button>
 			</Tooltip>
-			<Tooltip label="Forward" side="bottom">
+			<Tooltip label="Forward" side="bottom" shortcut={forwardKeys ?? undefined}>
 				<button
 					className="inline-flex size-[30px] cursor-pointer items-center justify-center rounded-md border-none bg-transparent p-0 text-dim hover:bg-hover hover:text-fg [-webkit-app-region:no-drag] [app-region:no-drag]"
 					onClick={() => history.forward()}

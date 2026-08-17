@@ -39,6 +39,8 @@ export type { Chord } from "./shortcut-chord";
 export type ShortcutId =
 	| "command-menu"
 	| "desk"
+	| "history-back"
+	| "history-forward"
 	| "sidebar-toggle"
 	| "sidebar-next"
 	| "sidebar-prev"
@@ -97,6 +99,20 @@ export const SHORTCUT_COMMANDS: ShortcutCommand[] = [
 		description: "Open the desk overlay",
 		group: "Navigation",
 		defaults: ["mod+j"],
+	},
+	{
+		id: "history-back",
+		title: "Go back",
+		description: "Return to the previous page",
+		group: "Navigation",
+		defaults: ["mod+["],
+	},
+	{
+		id: "history-forward",
+		title: "Go forward",
+		description: "Return to the next page",
+		group: "Navigation",
+		defaults: ["mod+]"],
 	},
 	{
 		id: "sidebar-toggle",

@@ -143,6 +143,21 @@ describe("shortcut registry", () => {
 		).toBe(false);
 	});
 
+	test("history shortcuts match the bracket keys", () => {
+		expect(
+			mod.matchesShortcut(
+				modEvent({ key: "[", code: "BracketLeft" }),
+				"history-back",
+			),
+		).toBe(true);
+		expect(
+			mod.matchesShortcut(
+				modEvent({ key: "]", code: "BracketRight" }),
+				"history-forward",
+			),
+		).toBe(true);
+	});
+
 	test("a rebound chord is what fires", () => {
 		expect(mod.matchesShortcut(modEvent({ key: "y", code: "KeyY" }), "desk")).toBe(
 			false,
