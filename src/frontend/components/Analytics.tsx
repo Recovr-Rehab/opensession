@@ -2,7 +2,7 @@ import { repoLabel } from "../lib/repo-label";
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { PRODUCT_NAME, docTitle } from "../lib/brand";
 import { fetchAnalytics } from "../lib/api";
-import type { AnalyticsSummary } from "../lib/types";
+import type { AnalyticsPerson, AnalyticsPersonRepo, AnalyticsSummary } from "../lib/types";
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
 import { Segmented, SegmentedOption } from "../ui/segmented";
@@ -111,6 +111,9 @@ function roundedTopRect(x: number, y: number, w: number, h: number, r: number): 
 interface Series {
 	label: string;
 	color: string;
+	/** Identity behind the label, for a legend that also filters the chart.
+	 *  Defaults to the label. */
+	value?: string;
 }
 
 interface BarChartProps {
@@ -271,16 +274,65 @@ function BarChart({ labels, series, values, mode, height = 190, formatValue = fm
 	);
 }
 
-function Legend({ series }: { series: Series[] }) {
+/** The chart's key, and its filter when the card hands it an `onSelect`.
+ *  A legend already names every series and colors it, so isolating one is a
+ *  press on the entry rather than a second control listing the same things.
+ *  The pressed entry is the way back out, which is what its title says. */
+function Legend({
+	series,
+	selected = null,
+	onSelect,
+	filterLabel = "Filter",
+	clearLabel = "Show all",
+}: {
+	series: Series[];
+	selected?: string | null;
+	onSelect?: (value: string) => void;
+	/** Names the group of toggles, and each one's "show only X" title. */
+	filterLabel?: string;
+	clearLabel?: string;
+}) {
 	if (series.length < 2) return null;
 	return (
-		<div className="mb-3 flex flex-wrap gap-x-3.5 gap-y-1">
-			{series.map((s) => (
-				<span key={s.label} className="flex items-center gap-1.5 text-meta text-dim">
-					<span className="size-2 rounded-full" style={{ background: s.color }} />
-					{s.label}
-				</span>
-			))}
+		<div
+			className={cn("mb-3 flex flex-wrap gap-y-1", onSelect ? "-mx-1.5 gap-x-0.5" : "gap-x-3.5")}
+			role={onSelect ? "group" : undefined}
+			aria-label={onSelect ? filterLabel : undefined}
+		>
+			{series.map((s) => {
+				const value = s.value ?? s.label;
+				const active = selected !== null && selected === value;
+				// One series isolated leaves the rest as context, not as noise:
+				// they stay readable, a step back in ink and dot.
+				const muted = selected !== null && !active;
+				const swatch = (
+					<span className="size-2 rounded-full" style={{ background: s.color, opacity: muted ? 0.4 : 1 }} />
+				);
+				if (!onSelect) {
+					return (
+						<span key={value} className="flex items-center gap-1.5 text-meta text-dim">
+							{swatch}
+							{s.label}
+						</span>
+					);
+				}
+				return (
+					<button
+						key={value}
+						type="button"
+						aria-pressed={active}
+						onClick={() => onSelect(value)}
+						title={active ? clearLabel : `Show only ${s.label}`}
+						className={cn(
+							"flex items-center gap-1.5 rounded-[999px] px-1.5 py-1 text-meta hover:bg-hover",
+							active ? "bg-active text-fg" : muted ? "text-faint" : "text-dim",
+						)}
+					>
+						{swatch}
+						{s.label}
+					</button>
+				);
+			})}
 		</div>
 	);
 }
@@ -289,18 +341,35 @@ function ChartCard({
 	title,
 	subtitle,
 	series,
+	selected,
+	onSelect,
+	filterLabel,
+	clearLabel,
 	children,
 }: {
 	title: string;
 	subtitle?: string;
 	series?: Series[];
+	/** Pass both to make the legend filter the chart it labels. */
+	selected?: string | null;
+	onSelect?: (value: string) => void;
+	filterLabel?: string;
+	clearLabel?: string;
 	children: React.ReactNode;
 }) {
 	return (
 		<Card as="section" className="min-w-0 p-5">
 			<h3 className="m-0 text-item-title font-semibold tracking-[-0.01em] text-fg">{title}</h3>
 			{subtitle && <p className="m-0 mb-3 mt-1 text-supporting text-dim">{subtitle}</p>}
-			{series && <Legend series={series} />}
+			{series && (
+				<Legend
+					series={series}
+					selected={selected}
+					onSelect={onSelect}
+					filterLabel={filterLabel}
+					clearLabel={clearLabel}
+				/>
+			)}
 			{children}
 		</Card>
 	);
@@ -330,6 +399,26 @@ function StatTile({
 	);
 }
 
+interface PersonRepoRow {
+	name: string;
+	outputTokens: number;
+	segments: AnalyticsPersonRepo[];
+}
+
+/** One repo's slice of each person's output, for the filtered per-person bars.
+ *  People who never touched it drop out, and the rest rank by the length they
+ *  are about to draw: isolated to one repo the question is who works on it,
+ *  and the unfiltered order (each person's activity across everything) puts a
+ *  one-session worker above the people who actually built it. */
+function repoOnlyRows(people: AnalyticsPerson[], repo: string): PersonRepoRow[] {
+	const rows: PersonRepoRow[] = [];
+	for (const p of people) {
+		const seg = (p.repos || []).find((r) => r.repo === repo);
+		if (seg && seg.outputTokens > 0) rows.push({ name: p.name, outputTokens: seg.outputTokens, segments: [seg] });
+	}
+	return rows.sort((a, b) => b.outputTokens - a.outputTokens).slice(0, 12);
+}
+
 const PRESETS = [
 	{ label: "7d", days: 7 },
 	{ label: "14d", days: 14 },
@@ -350,6 +439,10 @@ export function Analytics() {
 	const [error, setError] = useState("");
 	const [loading, setLoading] = useState(true);
 	const [showAllPrs, setShowAllPrs] = useState(false);
+	// Which repo the per-person bars are isolated to, or null for the whole
+	// mix. `""` is a repo here (the "No repo" bucket), so this is never a
+	// falsy check.
+	const [repoFilter, setRepoFilter] = useState<string | null>(null);
 	// The bar is a sibling above the scroller, so it can't know on its own when
 	// the charts have started travelling under it. The app's own chrome rows ask
 	// the same question the same way.
@@ -511,10 +604,9 @@ export function Analytics() {
 				outputTokens: p.outputTokens,
 				segments: (p.repos || []).filter((r) => r.outputTokens > 0).sort((a, b) => segOrder(a.repo) - segOrder(b.repo)),
 			}));
-		const maxPersonOutput = Math.max(1, ...personRepoRows.map((p) => p.outputTokens));
 		const personRepoSeries: Series[] = [...coloredRepos, ""]
 			.filter((repo) => personRepoRows.some((p) => p.segments.some((s) => s.repo === repo)))
-			.map((repo) => ({ label: repo ? repoLabel(repo) : "No repo", color: repoColor(repo) }));
+			.map((repo) => ({ label: repo ? repoLabel(repo) : "No repo", color: repoColor(repo), value: repo }));
 
 		// Review finding outcomes, cohorted by the day the finding was posted.
 		// Guard: the live-rebuilt frontend can briefly run against a not-yet-
@@ -533,7 +625,7 @@ export function Analytics() {
 		});
 		const splitDate = labels[Math.floor(labels.length / 2)] || "";
 
-		return { labels, engineLabels, unmeasuredDays, kindSeries, kindValues, modelSeries, modelValues, tokenSeries, tokenValues, totalTokens, costSeries, costValues, costUsd, requests, hasCost, prSeries, prValues, turnSeries, turnValues, factorySeries, factoryValues, rq, reviewSeries, reviewValues, splitDate, repoColor, personRepoRows, maxPersonOutput, personRepoSeries };
+		return { labels, engineLabels, unmeasuredDays, kindSeries, kindValues, modelSeries, modelValues, tokenSeries, tokenValues, totalTokens, costSeries, costValues, costUsd, requests, hasCost, prSeries, prValues, turnSeries, turnValues, factorySeries, factoryValues, rq, reviewSeries, reviewValues, splitDate, repoColor, personRepoRows, personRepoSeries };
 	}, [data]);
 
 	// Deliberately NOT ui/input's field: these two sit inside the range row
@@ -543,6 +635,22 @@ export function Analytics() {
 	// genuinely a line), so this is the one bordered thing left in the header.
 	const dateInput =
 		"rounded-control border border-line bg-control px-2.5 py-1.5 text-control-label text-fg [color-scheme:inherit]";
+
+	// A held filter outlives the range it was picked in, so it only counts
+	// while that repo is still one of the chart's own series.
+	const activeRepo =
+		derived && repoFilter !== null && derived.personRepoSeries.some((s) => s.value === repoFilter)
+			? repoFilter
+			: null;
+	const repoRows =
+		!data || !derived
+			? []
+			: activeRepo === null
+				? derived.personRepoRows
+				: repoOnlyRows(data.people, activeRepo);
+	// Scale to the longest bar on screen: filtered to a small repo, every bar
+	// measured against the unfiltered leader would be a stub.
+	const maxRepoRow = Math.max(1, ...repoRows.map((r) => r.outputTokens));
 
 	return (
 		<div className="analytics-viz flex min-h-0 flex-1 flex-col bg-bg">
@@ -1006,11 +1114,21 @@ export function Analytics() {
 								<div className="mt-4">
 									<ChartCard
 										title="Repo activity per person"
-										subtitle="Output tokens by repo. Hover a segment for sessions and turns."
+										subtitle={
+											activeRepo === null
+												? "Output tokens by repo. Hover a segment for sessions and turns."
+												: `Output tokens in ${
+														activeRepo ? repoLabel(activeRepo) : "sessions with no repo"
+													}. Hover a bar for sessions and turns.`
+										}
 										series={derived.personRepoSeries}
+										selected={activeRepo}
+										onSelect={(repo) => setRepoFilter((cur) => (cur === repo ? null : repo))}
+										filterLabel="Filter by repo"
+										clearLabel="Show all repos"
 									>
 										<div className="flex flex-col gap-2">
-											{derived.personRepoRows.map((p) => (
+											{repoRows.map((p) => (
 												<div key={p.name} className="flex items-center gap-3 text-label">
 													<span className="w-[18%] min-w-24 truncate text-fg" title={p.name}>
 														{p.name}
@@ -1018,7 +1136,7 @@ export function Analytics() {
 													<span className="h-3 min-w-0 flex-1">
 														<span
 															className="flex h-3 min-w-3 overflow-hidden rounded-[999px]"
-															style={{ width: `${Math.max(1.5, (100 * p.outputTokens) / derived.maxPersonOutput)}%` }}
+															style={{ width: `${Math.max(1.5, (100 * p.outputTokens) / maxRepoRow)}%` }}
 														>
 															{p.segments.map((s) => (
 																<span
