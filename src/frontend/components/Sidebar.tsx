@@ -5384,24 +5384,6 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				{/* ── Workspaces: status lanes live directly under the Workspaces
 				    header above (which carries the filter, new-workspace and
 				    new-session actions) — no second in-list heading. ── */}
-				{/* The hide filter, said out loud, at the head of the list it is
-				    editing: a filter whose only evidence is at the bottom of ninety
-				    rows is one you forget you set. Faint, and it is its own undo. */}
-				{hiddenAutoCreatedRows > 0 && (
-					<button
-						className={cn(
-							"mb-0.5 flex w-full items-center gap-1.5 rounded-row px-4 py-1.5 text-left text-label text-faint",
-							SIDEBAR_HOVER_LAYER,
-							"hover:text-dim",
-						)}
-						onClick={() => setFilter({ autoCreated: "show" })}
-					>
-						<IconRobot size={20} className="shrink-0" />
-						<span className="min-w-0 truncate">
-							Show {hiddenAutoCreatedRows} auto created
-						</span>
-					</button>
-				)}
 				<div className={SIDEBAR_GROUP}>
 					{/* Status groups over the focus person's workspaces. The Person
 					    filter defaults to you; picking a teammate shows all their groups,
@@ -5471,6 +5453,26 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									.map((d) => renderFeedBand(d, false)),
 							]}
 				</div>
+
+				{/* The hide filter, said out loud, at the foot of the list it is
+				    editing: it belongs after the rows it kept off the page, where
+				    the list runs out and you would wonder what is missing. Faint,
+				    and it is its own undo. */}
+				{hiddenAutoCreatedRows > 0 && (
+					<button
+						className={cn(
+							"mb-1 flex w-full items-center gap-1.5 rounded-row px-4 py-1.5 text-left text-label text-faint",
+							SIDEBAR_HOVER_LAYER,
+							"hover:text-dim",
+						)}
+						onClick={() => setFilter({ autoCreated: "show" })}
+					>
+						<IconRobot size={20} className="shrink-0" />
+						<span className="min-w-0 truncate">
+							Show {hiddenAutoCreatedRows} auto created
+						</span>
+					</button>
+				)}
 
 				</div>
 			)}
