@@ -472,6 +472,23 @@ export const SIDEBAR_AUTO_COG =
 	"[&>svg]:relative [&>svg]:z-[1]";
 
 /**
+ * What sits under an automation heading: its latest report, then its runs.
+ *
+ * A run is named after the automation that produced it, then the time it ran,
+ * so on one rail the band read as a column of rows repeating two names rather
+ * than as two automations with their work under them. The step is what says
+ * which rows belong to which heading.
+ *
+ * It moves the CONTENT rail, not the row. `--sidebar-icon-left` is the column
+ * every leading mark and every title lines up on, so overriding it here
+ * indents the marks and the names together while the hover and selected fills
+ * keep the sidebar's own edges, the way they do in every other family. That is
+ * also how a nested row reads in Finder and the Xcode navigator. Indenting the
+ * row box instead would leave one ragged left edge in a column of pills.
+ */
+export const SIDEBAR_AUTOMATION_RUNS = "[--sidebar-icon-left:28px]";
+
+/**
  * ── Sticky machinery ────────────────────────────────────────────────────────
  * The desktop sidebar is ONE scroll rail, and two tiers of heading pin inside
  * it: a band heading (Tools / Workspaces / Automations / People) holds the top

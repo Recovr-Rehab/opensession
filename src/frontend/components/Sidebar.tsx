@@ -15,6 +15,7 @@ import {
 	SIDEBAR_BAND_TOGGLE,
 	SIDEBAR_BAND_TOGGLE_INSET,
 	SIDEBAR_AUTO_COG,
+	SIDEBAR_AUTOMATION_RUNS,
 	SIDEBAR_GROUP,
 	SIDEBAR_GROUP_CHEVRON,
 	SIDEBAR_GROUP_CHEVRON_COLLAPSED,
@@ -5576,6 +5577,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 												<IconSliders size={20} />
 											</span>
 										</button>
+										{/* The automation's own work, a step inside its
+										    heading. See SIDEBAR_AUTOMATION_RUNS. */}
+										<div className={SIDEBAR_AUTOMATION_RUNS}>
 										{/* What the automation last concluded, above the runs
 										    that produced it: the runs are named by their
 										    timestamp, so without this the band says an
@@ -5632,6 +5636,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 													/>
 												);
 											})}
+										</div>
 									</React.Fragment>
 									);
 								})}

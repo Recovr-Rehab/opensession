@@ -47,6 +47,10 @@ import React, { useEffect, useRef, useState } from "react";
  *  for them — plus the swipe transform; bare rows keep the margin. On phones,
  *  row content sits one 4px step inside the repo and lane headings, matching
  *  the native list hierarchy instead of flattening every label onto one rail.
+ *  That step is written against `--sidebar-icon-left` (8px at its default 16)
+ *  rather than as a flat 8, so a family that nests by overriding that variable,
+ *  today the runs under an automation, indents at phone width too and not only
+ *  on desktop, where the rail pad already reads it.
  *
  *  `--sidebar-row-pad` around the 22px rail is the sidebar's ITEM height (see
  *  the height scale in lib/sidebar-classes.ts): 7px for a 36px box, and 4px
@@ -58,7 +62,7 @@ import React, { useEffect, useRef, useState } from "react";
  *  Phones keep `py-[13px]` at both densities: 36px is a reading height, not a
  *  tap target, so the compact values are gated to desktop where they are set. */
 export const SIDEBAR_ROW =
-	`group relative mt-0.5 w-full rounded-row border-0 bg-transparent py-[var(--sidebar-row-pad)] pr-2 ${SIDEBAR_RAIL_PAD} text-left text-fg phone:px-2 phone:py-[13px]`;
+	`group relative mt-0.5 w-full rounded-row border-0 bg-transparent py-[var(--sidebar-row-pad)] pr-2 ${SIDEBAR_RAIL_PAD} text-left text-fg phone:pr-2 phone:pl-[calc(var(--sidebar-icon-left,16px)-8px)] phone:py-[13px]`;
 
 /** A row's title: one line that fades smoothly at the available edge instead
  *  of ending in an ellipsis. Read conversations stay quiet; unread ones
