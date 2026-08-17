@@ -22,7 +22,9 @@ import {
 	canvasFilterOptions,
 	setCanvasFilter,
 	useCanvasFilter,
+	type CanvasFilter,
 } from "../lib/canvas-filter";
+import { CanvasReflow } from "../lib/canvas-reflow";
 import { useCanvasStore } from "../lib/canvas-sync";
 import { usePeople } from "../lib/people";
 import { isClaimed } from "../lib/sidebar-lanes";
@@ -55,7 +57,7 @@ function cardShapes(editor: Editor): SessionCardShape[] {
  * or a card someone parked far out, and either one shrinks the cards you asked
  * for into specks in a corner.
  */
-function fitCards(editor: Editor) {
+function fitCards(editor: Editor, duration = 320) {
 	const boxes = cardShapes(editor)
 		.filter((card) => !editor.isShapeHidden(card))
 		.map((card) => editor.getShapePageBounds(card))
@@ -72,7 +74,7 @@ function fitCards(editor: Editor) {
 		inset,
 		// One card left over is a card, not a poster: stop at full size.
 		targetZoom: Math.min(fit, 1),
-		animation: { duration: 320 },
+		animation: { duration },
 	});
 }
 
@@ -153,17 +155,32 @@ function SyncedSessionCanvas({
 		[hidden],
 	);
 
-	// Reframe on what is left, so filtering reads as a camera move rather than
-	// as holes punched in the grid. Only when the filter itself changed: the
-	// hidden set also moves when a session lands, and that must not pull the
-	// camera out from under someone who is arranging cards.
-	const lastFilter = useRef(filter);
+	// Hiding alone leaves the cards you kept scattered across the holes the rest
+	// used to fill, and the camera has to pull back to hold them all. So a
+	// filtered board also packs what is left into a compact grid, for you
+	// alone (see lib/canvas-reflow), and then frames it. Reframing happens only
+	// when the filter itself changed: the shown set also moves when a session
+	// lands, and that must not pull the camera out from under someone who is
+	// reading a card.
+	const reflow = useMemo(() => (editor ? new CanvasReflow(editor) : null), [editor]);
+	useEffect(() => () => reflow?.dispose(), [reflow]);
+	const framedFor = useRef<CanvasFilter | null>(null);
 	useEffect(() => {
 		hidden.set(hiddenIds);
-		const changed = lastFilter.current !== filter;
-		lastFilter.current = filter;
-		if (changed && editor) fitCards(editor);
-	}, [editor, filter, hidden, hiddenIds]);
+		if (!editor || !reflow) return;
+		const active = canvasFilterActive(filter);
+		const packed = active ? reflow.apply(shown.map((s) => s.id)) : 0;
+		if (!active) reflow.clear();
+		if (framedFor.current === filter) return;
+		// Once per filter, and not before there is something to frame: on a
+		// reload the board arrives over the sync socket after this first runs.
+		// An unfiltered first render is left alone: the camera is where the
+		// person left it, and nobody asked for it to move.
+		if (active ? packed > 0 : framedFor.current !== null) {
+			framedFor.current = filter;
+			fitCards(editor);
+		}
+	}, [editor, filter, hidden, hiddenIds, reflow, shown]);
 
 	// The app themes via html[data-theme]; tldraw needs to be told.
 	useEffect(() => {
@@ -201,7 +218,16 @@ function SyncedSessionCanvas({
 		const have = new Set(live.map((s) => s.props.sessionId));
 		const toAdd = relevant.filter((s) => !have.has(s.id));
 		if (toAdd.length) {
-			const occupied = new Set(live.map((s) => slotKey(s.x, s.y)));
+			// Through the projection: a filtered board stands its cards somewhere
+			// only this browser can see, and a slot picked against that fiction
+			// would be pushed to the whole team (creating a shape is a real,
+			// shared write, unlike the packing itself).
+			const occupied = new Set(
+				live.map((s) => {
+					const at = reflow?.truePosition(s) ?? s;
+					return slotKey(at.x, at.y);
+				}),
+			);
 			const slots: Array<{ x: number; y: number }> = [];
 			for (let i = 0; slots.length < toAdd.length && i < CARD_LIMIT * 4; i++) {
 				const p = cardSlot(i);
@@ -220,19 +246,29 @@ function SyncedSessionCanvas({
 					}))
 					.reverse(),
 			);
-			if (live.length === 0)
-				editor.zoomToFit({ animation: { duration: 0 } });
+			// A card created under an active filter lands in its shared slot, so
+			// pack it in before anyone sees it out there on its own.
+			reflow?.refresh();
+			if (live.length === 0) {
+				if (reflow?.active) fitCards(editor, 0);
+				else editor.zoomToFit({ animation: { duration: 0 } });
+			}
 		}
-	}, [editor, relevant, sessions]);
+	}, [editor, reflow, relevant, sessions]);
 
 	function sortByActivity() {
 		if (!editor) return;
+		// This one is real: it writes the arrangement the whole team gets. So it
+		// runs against the board's own coordinates, not the packed ones a filter
+		// is showing you, and re-packs afterwards.
+		const wasPacked = reflow?.active ?? false;
+		reflow?.clear();
 		const order = new Map(relevant.map((s, i) => [s.id, i]));
-		// A filter alone never moves a card — the arrangement is shared, so it
-		// would move on everyone's screen. It can therefore leave the grid full
-		// of holes, and this is where you close them: laying the board out is
-		// already a deliberate, shared act, so it packs what you are looking at
-		// into the first slots and continues with the rest behind it.
+		// A filter packs cards for you alone, so the team still sees whatever
+		// holes it left behind. This is where you close them for everyone:
+		// laying the board out is already a deliberate, shared act, so it packs
+		// what you are looking at into the first slots and continues with the
+		// rest behind it.
 		const rank = (card: SessionCardShape) =>
 			(hiddenIds.has(card.props.sessionId) ? CARD_LIMIT * 2 : 0) +
 			(order.get(card.props.sessionId) ?? CARD_LIMIT);
@@ -245,6 +281,7 @@ function SyncedSessionCanvas({
 				y: cardSlot(i).y,
 			})),
 		);
+		if (wasPacked) reflow?.apply(shown.map((s) => s.id));
 		fitCards(editor);
 	}
 

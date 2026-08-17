@@ -6,9 +6,14 @@
 import React from "react";
 import { AGENT_PERSON_KEY } from "../lib/automation-audience";
 import { AGENT_NAME } from "../lib/brand";
-import type { CanvasFilter, CanvasFilterOptions } from "../lib/canvas-filter";
+import {
+	canvasFilterActive,
+	type CanvasFilter,
+	type CanvasFilterOptions,
+} from "../lib/canvas-filter";
 import { personKey } from "../lib/review-queue";
 import { Select } from "../ui/select";
+import { Tooltip } from "../ui/tooltip";
 import { IconPeople, IconRobot } from "./icons";
 import { RepoTile, repoLabel } from "./RepoTile";
 import { UserAvatar } from "./UserAvatar";
@@ -127,6 +132,20 @@ export function CanvasFilters({
 				items={repos}
 				onChange={(repo) => onChange({ repo })}
 			/>
+			{/* Filtered cards visibly close ranks, which looks like the board just
+			    rearranged itself for the whole team. Say that it didn't. */}
+			{canvasFilterActive(filter) && (
+				<Tooltip
+					side="bottom"
+					align="start"
+					multiline
+					label="The team's board keeps its own arrangement, so cards cannot be moved until you clear the filter."
+				>
+					<span className="inline-flex min-h-[26px] cursor-default items-center rounded-control bg-panel px-2.5 text-xs text-dim shadow-md">
+						Packed for you
+					</span>
+				</Tooltip>
+			)}
 		</div>
 	);
 }

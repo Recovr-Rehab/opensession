@@ -171,6 +171,13 @@ export class SessionCardUtil extends ShapeUtil<SessionCardShape> {
 		return false;
 	}
 
+	// A filtered board locks the cards it packs (lib/canvas-reflow) so that a
+	// drag cannot push a for-your-eyes-only coordinate to the team. Locking is
+	// tldraw's arrangement gate; the card stays a live card either way.
+	override canEditWhileLocked() {
+		return true;
+	}
+
 	override canResize() {
 		return true;
 	}

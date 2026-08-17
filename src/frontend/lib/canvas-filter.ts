@@ -6,11 +6,11 @@
  * (src/server/canvas-room.ts), so the arrangement belongs to the team: a
  * filter that deleted the cards it hides would rearrange everyone else's
  * board, and one that seeded cards for a quiet teammate would grow the shared
- * board out of one person's browsing. Matching cards therefore stay exactly
- * where they are and the rest are hidden for you alone, through tldraw's
- * per-user `getShapeVisibility`. A filter can leave gaps in the grid, and that
- * is the honest picture: those cards are still on the board, on everyone
- * else's screen.
+ * board out of one person's browsing. The rest are therefore hidden for you
+ * alone, through tldraw's per-user `getShapeVisibility`, and the ones that
+ * match are packed into a compact grid for you alone too, a local-only
+ * projection the team never sees (lib/canvas-reflow). Nothing a filter does
+ * reaches the room.
  *
  * The words are the sidebar's (lib/sidebar-filter): "all" for every repo, and
  * "everyone" / "me" / a lowercased person key for the person. The value is
