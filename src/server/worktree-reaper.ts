@@ -36,22 +36,34 @@
  *    so it kept losing node_modules between turns). The /proc check does not
  *    cover this: a session sitting between turns holds no cwd.
  *  - Husks are only swept when no nested repo inside has dirty/unpushed work.
+ *  - Dirty/unpushed trees are never removed with their work: the work is
+ *    BANKED first (diff + untracked files + a bundle of unpushed commits into
+ *    ~/.opensession-parked-work), and any banking failure keeps the tree.
+ *    Before banking existed those trees were immortal and dominated the disk
+ *    (2026-08-17: 116 of 490 standing worktrees were dirty/unpushed skips).
+ *
+ * Automation worktrees (every owning session is an automation run) park on a
+ * much shorter idle horizon: automation branches rarely merge, so the normal
+ * done-signals never fire for them and the 7-day horizon let hundreds of
+ * one-shot run checkouts stand at ~2-3G each.
  */
 
 import {
 	type Dirent,
 	existsSync,
+	lstatSync,
 	readdirSync,
 	readlinkSync,
 	statSync,
 } from "node:fs";
-import { rm } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { $ } from "bun";
 import { githubRequest } from "../agents/github/github-rest";
 import { audit } from "./audit";
 import type { Repo } from "./config";
 import { configuredPaths, configuredServer } from "./config";
+import { stateDir } from "./paths";
 import { stopPreview } from "./preview";
 import type { UnifiedSession } from "./types";
 import { canonicalPath, repoFromGitPointer } from "./worktree";
@@ -86,6 +98,27 @@ const ACTIVE_HOURS = positiveNumber(
 	6,
 );
 
+/** Park a checkout owned ONLY by automation runs after this much inactivity.
+ *  Automation branches rarely merge, so without this they only age out on the
+ *  general IDLE_DAYS horizon. */
+const AUTOMATION_IDLE_HOURS = positiveNumber(
+	process.env.OPENSESSION_WORKTREE_AUTOMATION_IDLE_HOURS,
+	24,
+);
+
+/** Refuse to bank a tree whose untracked payload exceeds this — moving the
+ *  bytes into the archive would not reclaim anything. */
+const BANK_MAX_BYTES =
+	positiveNumber(process.env.OPENSESSION_WORKTREE_BANK_MAX_MB, 1024) * 2 ** 20;
+
+/** Banked work older than this is dropped by the sweep. */
+const PARKED_WORK_RETENTION_DAYS = positiveNumber(
+	process.env.OPENSESSION_PARKED_WORK_RETENTION_DAYS,
+	90,
+);
+
+const parkedWorkDir = () => stateDir("parked-work");
+
 /** Infrastructure worktrees, never session trees (same set as disk-gc). */
 const PROTECTED_SUFFIXES = ["-warm-template", "-ask-checkout"];
 
@@ -93,6 +126,8 @@ export interface ReapResult {
 	removed: string[];
 	/** Subset of removed whose session was merely idle, not known done. */
 	parked: string[];
+	/** Subset of removed whose dirty/unpushed work was archived first. */
+	banked: string[];
 	husksSwept: string[];
 	skipped: {
 		inUse: number;
@@ -105,7 +140,7 @@ export interface ReapResult {
 
 export type WorktreeActivitySession = Pick<
 	UnifiedSession,
-	"worktreeDir" | "attachedRepos" | "lastActivity" | "isRunning"
+	"worktreeDir" | "attachedRepos" | "lastActivity" | "isRunning" | "automation"
 >;
 
 /**
@@ -117,10 +152,13 @@ export type WorktreeActivitySession = Pick<
  */
 function worktreeActivity(
 	sessions: readonly WorktreeActivitySession[],
-): Map<string, { latestMs: number; protected: boolean }> {
+): Map<
+	string,
+	{ latestMs: number; protected: boolean; automationOnly: boolean }
+> {
 	const activity = new Map<
 		string,
-		{ latestMs: number; protected: boolean }
+		{ latestMs: number; protected: boolean; automationOnly: boolean }
 	>();
 	for (const session of sessions) {
 		const dirs = [
@@ -133,7 +171,9 @@ function worktreeActivity(
 			const current = activity.get(dir) ?? {
 				latestMs: Number.NEGATIVE_INFINITY,
 				protected: false,
+				automationOnly: true,
 			};
+			if (!session.automation) current.automationOnly = false;
 			if (!Number.isFinite(lastActivityMs) || session.isRunning) {
 				current.protected = true;
 			} else {
@@ -145,14 +185,17 @@ function worktreeActivity(
 	return activity;
 }
 
-/** Session-owned worktrees whose every owner has been idle since `cutoffMs`. */
+/** Session-owned worktrees whose every owner has been idle since `cutoffMs`
+ *  (`automationCutoffMs` instead when every owner is an automation run). */
 export function idleSessionWorktrees(
 	sessions: readonly WorktreeActivitySession[],
 	cutoffMs: number,
+	automationCutoffMs: number = cutoffMs,
 ): Set<string> {
 	const idle = new Set<string>();
 	for (const [dir, state] of worktreeActivity(sessions)) {
-		if (!state.protected && state.latestMs < cutoffMs) idle.add(dir);
+		const cutoff = state.automationOnly ? automationCutoffMs : cutoffMs;
+		if (!state.protected && state.latestMs < cutoff) idle.add(dir);
 	}
 	return idle;
 }
@@ -272,6 +315,120 @@ async function archiveSlackChannel(slug: string): Promise<void> {
 	} catch {}
 }
 
+/** Archive a blocked tree's work so the tree itself can go: `git diff` of
+ *  tracked changes, a tarball of untracked files (gitignore-filtered, so no
+ *  node_modules or build output), and a bundle of unpushed commits. Returns
+ *  the bank directory, or null on ANY failure or an oversized payload —
+ *  fail closed, the caller keeps the tree. Restore by applying the patch and
+ *  unpacking the tarball onto a fresh checkout of `metadata.json`'s head.
+ *  Exported for its integration test only. */
+export async function bankWorkingState(
+	repo: Repo,
+	dir: string,
+	branch: string,
+	reason: string,
+	work: { dirty: string; unpushed: string },
+): Promise<string | null> {
+	const listed = await $`git -C ${dir} ls-files --others --exclude-standard -z`
+		.quiet()
+		.nothrow();
+	if (listed.exitCode !== 0) return null;
+	const untracked = listed.text().split("\0").filter(Boolean);
+	let untrackedBytes = 0;
+	for (const f of untracked) {
+		try {
+			untrackedBytes += lstatSync(join(dir, f)).size;
+		} catch {
+			return null; // unreadable (e.g. root-owned build output) — keep the tree
+		}
+	}
+	if (untrackedBytes > BANK_MAX_BYTES) {
+		console.log(
+			`[worktree-reaper] SKIP bank ${branch}: untracked payload ${Math.round(untrackedBytes / 2 ** 20)}M over cap`,
+		);
+		return null;
+	}
+	const bankDir = join(
+		parkedWorkDir(),
+		`${repo.id}-${branch.replace(/\//g, "-")}-${Date.now()}`,
+	);
+	try {
+		await mkdir(bankDir, { recursive: true });
+		const head = (await $`git -C ${dir} rev-parse HEAD`.quiet()).text().trim();
+		const hasTracked = work.dirty
+			.split("\n")
+			.some((l) => l && !l.startsWith("??"));
+		if (hasTracked) {
+			const patch = await $`git -C ${dir} diff --binary HEAD`.quiet().nothrow();
+			if (patch.exitCode !== 0) throw new Error("git diff failed");
+			if (patch.stdout.length === 0)
+				throw new Error("empty patch despite tracked changes");
+			await writeFile(join(bankDir, "tracked.patch"), patch.stdout);
+		}
+		if (untracked.length) {
+			const tar = join(bankDir, "untracked.tar.gz");
+			const tarred =
+				await $`git -C ${dir} ls-files --others --exclude-standard -z | tar --null -C ${dir} -T - -czf ${tar}`
+					.quiet()
+					.nothrow();
+			if (tarred.exitCode !== 0 || !existsSync(tar))
+				throw new Error("untracked tar failed");
+		}
+		if (work.unpushed) {
+			const bundle = join(bankDir, "unpushed.bundle");
+			const bundled =
+				await $`git -C ${dir} bundle create ${bundle} HEAD --not --remotes`
+					.quiet()
+					.nothrow();
+			if (bundled.exitCode !== 0 || !existsSync(bundle))
+				throw new Error("git bundle failed");
+		}
+		await writeFile(
+			join(bankDir, "metadata.json"),
+			JSON.stringify(
+				{
+					repo: repo.id,
+					branch,
+					dir,
+					reason,
+					head,
+					untrackedFiles: untracked.length,
+					untrackedBytes,
+					bankedAt: new Date().toISOString(),
+				},
+				null,
+				2,
+			),
+		);
+		return bankDir;
+	} catch (e) {
+		console.warn(`[worktree-reaper] bank failed for ${branch} (tree kept):`, e);
+		await rm(bankDir, { recursive: true, force: true }).catch(() => {});
+		return null;
+	}
+}
+
+/** Drop banked work past its retention window. */
+function pruneParkedWork(nowMs: number): void {
+	let entries: Dirent[];
+	try {
+		entries = readdirSync(parkedWorkDir(), { withFileTypes: true });
+	} catch {
+		return;
+	}
+	for (const e of entries) {
+		const p = join(parkedWorkDir(), e.name);
+		try {
+			if (nowMs - statSync(p).mtimeMs > PARKED_WORK_RETENTION_DAYS * DAY) {
+				void rm(p, { recursive: true, force: true });
+				console.log(
+					`[worktree-reaper] pruned banked work ${e.name} (>${PARKED_WORK_RETENTION_DAYS}d)`,
+				);
+			}
+		} catch {}
+	}
+}
+
 async function removeDir(repo: Repo, dir: string): Promise<boolean> {
 	try {
 		await stopPreview(dir);
@@ -297,13 +454,16 @@ export async function sweepWorktreeReaper(
 	const result: ReapResult = {
 		removed: [],
 		parked: [],
+		banked: [],
 		husksSwept: [],
 		skipped: { inUse: 0, sessionActive: 0, dirty: 0, unpushed: 0, huskWithWork: 0 },
 	};
 	const nowMs = opts.nowMs ?? Date.now();
+	if (!opts.dryRun) pruneParkedWork(nowMs);
 	const idleWorktrees = idleSessionWorktrees(
 		opts.sessions ?? [],
 		nowMs - IDLE_DAYS * DAY,
+		nowMs - AUTOMATION_IDLE_HOURS * HOUR,
 	);
 	const activeWorktrees = activeSessionWorktrees(
 		opts.sessions ?? [],
@@ -434,13 +594,6 @@ export async function sweepWorktreeReaper(
 		const dirty = (await $`git -C ${dir} status --porcelain`.quiet().nothrow())
 			.text()
 			.trim();
-		if (dirty) {
-			result.skipped.dirty++;
-			console.log(
-				`[worktree-reaper] SKIP ${e.name} (${reason}): uncommitted changes`,
-			);
-			continue;
-		}
 		const unpushed = (
 			await $`git -C ${dir} log --oneline HEAD --not --remotes`
 				.quiet()
@@ -448,24 +601,42 @@ export async function sweepWorktreeReaper(
 		)
 			.text()
 			.trim();
-		if (unpushed) {
-			result.skipped.unpushed++;
-			console.log(
-				`[worktree-reaper] SKIP ${e.name} (${reason}): unpushed commits`,
-			);
-			continue;
-		}
 
 		const parking = idle && !reason.startsWith("tip in ") && !reason.startsWith("PR #");
 		const verb = parking ? "park" : "reap";
 		if (opts.dryRun) {
-			console.log(`[worktree-reaper] would ${verb} ${e.name} (${reason})`);
+			if (dirty || unpushed) {
+				console.log(
+					`[worktree-reaper] would bank+${verb} ${e.name} (${reason}; ${[dirty && "dirty", unpushed && "unpushed"].filter(Boolean).join("+")})`,
+				);
+				result.banked.push(e.name);
+			} else {
+				console.log(`[worktree-reaper] would ${verb} ${e.name} (${reason})`);
+			}
 			result.removed.push(e.name);
 			if (parking) result.parked.push(e.name);
 			continue;
 		}
 
-		console.log(`[worktree-reaper] ${parking ? "parking" : "reaping"} ${e.name} (${reason})`);
+		let bankDir: string | null = null;
+		if (dirty || unpushed) {
+			bankDir = await bankWorkingState(repo, dir, branch, reason, {
+				dirty,
+				unpushed,
+			});
+			if (!bankDir) {
+				if (dirty) result.skipped.dirty++;
+				else result.skipped.unpushed++;
+				console.log(
+					`[worktree-reaper] SKIP ${e.name} (${reason}): ${dirty ? "uncommitted changes" : "unpushed commits"} and banking refused`,
+				);
+				continue;
+			}
+		}
+
+		console.log(
+			`[worktree-reaper] ${parking ? "parking" : "reaping"} ${e.name} (${reason})${bankDir ? ` [work banked: ${bankDir}]` : ""}`,
+		);
 		const slug = e.name.startsWith(`${repo.wtPrefix}-`)
 			? e.name.slice(repo.wtPrefix.length + 1)
 			: branch;
@@ -479,12 +650,14 @@ export async function sweepWorktreeReaper(
 		if (await removeDir(repo, dir)) {
 			result.removed.push(e.name);
 			if (parking) result.parked.push(e.name);
+			if (bankDir) result.banked.push(e.name);
 			audit({
 				event: parking ? "worktree_park" : "worktree_reap",
 				dir,
 				branch,
 				repo: repo.id,
 				reason,
+				...(bankDir ? { banked: bankDir } : {}),
 			});
 		} else {
 			console.warn(`[worktree-reaper] could not fully remove ${dir}`);
@@ -496,12 +669,13 @@ export async function sweepWorktreeReaper(
 			event: "worktree_reap_sweep",
 			removed: result.removed.length,
 			parked: result.parked.length,
+			banked: result.banked.length,
 			husks: result.husksSwept.length,
 			skipped: result.skipped,
 		});
 		console.log(
 			`[worktree-reaper] sweep done: ${result.removed.length} removed ` +
-				`(${result.parked.length} idle parked), ` +
+				`(${result.parked.length} idle parked, ${result.banked.length} work-banked), ` +
 				`${result.husksSwept.length} husk(s) swept ` +
 				`(skipped: ${result.skipped.inUse} in-use, ${result.skipped.sessionActive} session-active, ${result.skipped.dirty} dirty, ${result.skipped.unpushed} unpushed)`,
 		);
@@ -535,6 +709,6 @@ export function startWorktreeReaper(
 	setTimeout(run, FIRST_SWEEP_DELAY_MS);
 	sweepTimer = setInterval(run, SWEEP_INTERVAL_MS);
 	console.log(
-		`[worktree-reaper] started (every ${Math.round(SWEEP_INTERVAL_MS / MINUTE)}m; idle park>${IDLE_DAYS}d; spare sessions active<${ACTIVE_HOURS}h)`,
+		`[worktree-reaper] started (every ${Math.round(SWEEP_INTERVAL_MS / MINUTE)}m; idle park>${IDLE_DAYS}d, automation>${AUTOMATION_IDLE_HOURS}h; spare sessions active<${ACTIVE_HOURS}h; bank cap ${Math.round(BANK_MAX_BYTES / 2 ** 20)}M)`,
 	);
 }
