@@ -80,6 +80,28 @@ enum OS1API {
         return try await get("/api/sessions/\(encoded)")
     }
 
+    /// The fully resolved configuration the session's next turn would use.
+    /// This is fetched only when Workspace Info opens: resolving it peeks at
+    /// account availability and applies the live MCP and permission gates.
+    static func effectiveConfig(sessionId: String) async throws -> SessionEffectiveConfig {
+        try await get(effectiveConfigPath(
+            sessionId: sessionId,
+            user: ServerConfig.shared.userName
+        ))
+    }
+
+    nonisolated static func effectiveConfigPath(sessionId: String, user: String) -> String {
+        let session = sessionId.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? sessionId
+        guard !user.isEmpty else { return "/api/sessions/\(session)/effective-config" }
+        let allowed = CharacterSet.urlQueryAllowed.subtracting(
+            CharacterSet(charactersIn: "&+")
+        )
+        let encodedUser = user.addingPercentEncoding(withAllowedCharacters: allowed) ?? user
+        return "/api/sessions/\(session)/effective-config?user=\(encodedUser)"
+    }
+
     private struct SessionNotesResponse: Decodable, Sendable {
         let notes: [SessionNote]
     }

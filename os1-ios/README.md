@@ -116,7 +116,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   color-coded pull request card for checks, review state and conflicts,
   workspace context, model/reasoning controls, and live remote
   sandbox status. Sandboxed workspaces expose explicit pause, wake, and
-  confirmed recreate controls without embedding the web client.
+  confirmed recreate controls without embedding the web client. Its Effective
+  config section resolves the next turn's model, engine, account, MCP access,
+  instructions, and permissions, with the source under every displayed value.
 - **Session panels** — details of a session (its assets, one of those files,
   its pull request) open ONE LEVEL DEEPER on the stack that is already there,
   not as tabs and not as sheets: the chevron and the edge swipe are the way

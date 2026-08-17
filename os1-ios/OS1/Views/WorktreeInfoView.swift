@@ -35,6 +35,7 @@ struct WorktreeInfoView: View {
     /// answer is held here and read through `currentSession` until the polled
     /// row agrees. Without it the sheet keeps showing the repo just left.
     @State private var switchedRepo: OS1API.SwitchedRepo?
+    @State private var effectiveConfig = EffectiveConfigViewModel()
 
     var body: some View {
         NavigationStack {
@@ -55,6 +56,7 @@ struct WorktreeInfoView: View {
                     sandboxSection
                     runnerSection
                     runSettingsSection
+                    effectiveConfigSection
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 28)
@@ -68,7 +70,14 @@ struct WorktreeInfoView: View {
                 }
             }
             .task(id: loadIdentity) { await load() }
-            .refreshable { await load() }
+            .task(id: effectiveConfigIdentity) {
+                // Model controls update the session optimistically, then send
+                // over the socket. Let that write land before forecasting it.
+                try? await Task.sleep(for: .milliseconds(150))
+                guard !Task.isCancelled else { return }
+                await effectiveConfig.load(sessionId: currentSession.id)
+            }
+            .refreshable { await refresh() }
             .onChange(of: viewModel.isRunning) { wasRunning, isRunning in
                 if wasRunning && !isRunning {
                     Task { await loadGitDetails() }
@@ -873,6 +882,17 @@ struct WorktreeInfoView: View {
         }
     }
 
+    private var effectiveConfigSection: some View {
+        InfoSection(title: "Effective config") {
+            EffectiveConfigInfoContent(
+                model: effectiveConfig,
+                retry: {
+                    Task { await effectiveConfig.load(sessionId: currentSession.id) }
+                }
+            )
+        }
+    }
+
     private var currentModel: String {
         viewModel.model.isEmpty ? (catalog?.defaultModel ?? "") : viewModel.model
     }
@@ -1028,6 +1048,13 @@ struct WorktreeInfoView: View {
         }
     }
 
+    private func refresh() async {
+        async let details: Void = load()
+        async let config: Void = effectiveConfig.load(sessionId: currentSession.id)
+        await details
+        await config
+    }
+
     private func applySandboxResult(_ result: Result<SessionSandboxStatus?, Error>) {
         switch result {
         case .success(let status):
@@ -1143,6 +1170,15 @@ struct WorktreeInfoView: View {
             currentSession.worktreeDir ?? "",
             currentSession.branch ?? "",
             String(currentSession.attachedRepos?.count ?? 0),
+        ].joined(separator: "|")
+    }
+
+    private var effectiveConfigIdentity: String {
+        [
+            currentSession.id,
+            currentModel,
+            viewModel.effort,
+            String(viewModel.fastMode),
         ].joined(separator: "|")
     }
 
