@@ -447,6 +447,8 @@ export interface UnifiedSession {
 	/** Generic feed-item linkage (Tella videos, …) — the feeds design. */
 	externalRefs?: ExternalRef[];
 	goal?: string;
+	/** The Goal record driving this session, when a goal woke it. */
+	goalId?: string;
 	loop?: {
 		prompt: string;
 		intervalMinutes: number;
