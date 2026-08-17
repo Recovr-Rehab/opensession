@@ -46,10 +46,18 @@ describe("report asset routes", () => {
 describe("fanOutPrompt", () => {
 	const report = { title: "21 native parity gaps", automationName: "iOS parity check" };
 
-	test("hands a single task its prompt untouched", () => {
-		expect(
-			fanOutPrompt({ title: "Decode the frame", prompt: "Add the case." }, report, 1),
-		).toBe("Add the case.");
+	test("points a single task at its own worktree and says where it came from", () => {
+		const prompt = fanOutPrompt(
+			{ title: "Decode the frame", prompt: "Add the case." },
+			report,
+			1,
+		);
+		expect(prompt.startsWith("Add the case.")).toBe(true);
+		expect(prompt).toContain("21 native parity gaps");
+		// A report names the checkout its own run used; followed literally that
+		// puts the session back in the shared checkout.
+		expect(prompt).toContain("ignore it and use your own worktree");
+		expect(prompt).not.toContain("one of");
 	});
 
 	test("tells a batched session that the rest of the report is not its job", () => {
@@ -59,9 +67,8 @@ describe("fanOutPrompt", () => {
 			6,
 		);
 		expect(prompt.startsWith("Add the case.")).toBe(true);
-		expect(prompt).toContain("one of 6 items");
-		expect(prompt).toContain("21 native parity gaps");
-		expect(prompt).toContain("Do this one only.");
+		expect(prompt).toContain("one of 6 started together");
+		expect(prompt).toContain("do this item only");
 	});
 });
 
@@ -130,7 +137,7 @@ describe("starting a session per task", () => {
 			expect(opts.branch).toMatch(/^report-fix-thing-[13]/);
 		}
 		expect(created[0].prompt.startsWith("Do thing 1.")).toBe(true);
-		expect(created[0].prompt).toContain("one of 2 items");
+		expect(created[0].prompt).toContain("one of 2 started together");
 	});
 
 	test("defaults to every task when none are named", async () => {

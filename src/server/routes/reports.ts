@@ -26,23 +26,32 @@ import { resolveUniqueBranch } from "../worktree";
 /**
  * The opening prompt for one task's session.
  *
- * The task prompt stands alone by contract, so all this adds is the one thing
- * the agent cannot know from it: that it is part of a batch, and that the rest
- * of the report is somebody else's job. Without that line a session handed
- * "fix the reply_suggestions decoder" reads the report it came from and fixes
- * six more things, which is the single-big-branch outcome the fan-out exists
- * to avoid.
+ * The task prompt stands alone by contract, so all this adds is what the agent
+ * cannot know from it. Two things, and both are load-bearing.
+ *
+ * That it is one of a batch: without it a session handed "fix the
+ * reply_suggestions decoder" reads the report it came from and fixes six more
+ * things, which is the single-big-branch outcome the fan-out exists to avoid.
+ *
+ * And that its worktree is the one to work in. A report is written by an agent
+ * that ran somewhere else, and it will happily name that absolute path in a
+ * task ("In /home/ubuntu/projects/opensession, implement…"). Followed
+ * literally on a shared-checkout repo that lands every session back in the one
+ * live checkout, which is precisely what the isolated worktree just bought.
  */
 export function fanOutPrompt(
 	task: ReportTask,
 	report: { title: string; automationName: string },
 	batchSize: number,
 ): string {
-	if (batchSize <= 1) return task.prompt;
+	const batch =
+		batchSize > 1
+			? ` It is one of ${batchSize} started together from that report, each in its own session and worktree: do this item only, leave the others alone even where the report describes them, and keep your commits scoped to this change.`
+			: "";
 	return `${task.prompt}
 
 ---
-This is one of ${batchSize} items from the "${report.automationName}" report "${report.title}", and each is being fixed in its own session and its own worktree. Do this one only. Leave the others alone even where the report describes them, and keep your commits scoped to this change.`;
+This task comes from the "${report.automationName}" report "${report.title}".${batch} Work in the checkout you are already in, which is yours alone. If the task text names an absolute path for this repository, ignore it and use your own worktree.`;
 }
 
 /** A stable, readable branch per task: `report-<slug of the title>`. */

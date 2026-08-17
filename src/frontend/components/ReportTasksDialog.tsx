@@ -103,7 +103,9 @@ export function ReportTasksDialog({
 								<span className="block text-sm leading-snug text-fg">
 									{task.title}
 								</span>
-								<span className="mt-0.5 block line-clamp-2 text-meta leading-normal text-faint">
+								{/* No `block` beside the clamp: both set `display`, and the
+								    plain one wins, which silently unclamps the preview. */}
+								<span className="mt-0.5 line-clamp-2 text-meta leading-normal text-faint">
 									{task.prompt}
 								</span>
 							</span>
