@@ -456,7 +456,6 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   // auto-suggesting so we never clobber what they typed. A prefilled branch
   // (deep link) counts as already-owned.
   const [branchEdited, setBranchEdited] = useState(!!prefill.branch);
-  const [suggestingBranch, setSuggestingBranch] = useState(false);
   const [images, setImages] = useState<string[]>(() => loadDraft("new-session").images);
   const [files, setFiles] = useState<FileAttachment[]>(() => loadDraft("new-session").files);
   // One status for both completion protocols: "savingDraft" resolves through a
@@ -716,9 +715,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     if (settledPrompt.trim().length < 10) return;
     const seq = ++suggestSeqRef.current;
     void (async () => {
-      setSuggestingBranch(true);
       const branch = await suggestBranch(settledPrompt.trim());
-      setSuggestingBranch(false);
       // Drop if superseded by a newer prompt or the user grabbed the field.
       if (seq !== suggestSeqRef.current || branchEditedRef.current) return;
       if (branch) setNewBranch(branch);
@@ -747,7 +744,12 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
         setStatus({ kind: "failed", message: msg.message });
       } else if (msg.type === "session_created") {
         creatingRef.current = false;
-        // The prompt was consumed — drop the stored draft either way.
+        // The prompt was consumed — drop the stored draft either way, and the
+        // field's pending write with it: the draft is written on a debounce, so
+        // a write still in flight would land after this and restore the prompt
+        // for a session that already has it (a "Create" closes the palette, and
+        // the field flushes on the way out).
+        promptHandle.current?.dropPendingDraftWrite();
         clearDraft("new-session");
         // "Create more" stays in the palette and resets for the next task (App
         // still navigates into the created session behind the overlay). The
@@ -814,6 +816,9 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
             ...(repo && repo !== NO_REPO ? { repo } : {}),
             draft: { ...draft, autoName: true },
           });
+      // Same as a create: the text now lives on the workspace, so the field's
+      // pending write must not put it back in the palette's draft.
+      promptHandle.current?.dropPendingDraftWrite();
       clearDraft("new-session");
       setStatus({ kind: "idle" });
       window.dispatchEvent(new Event("opensession:workspaces-changed"));

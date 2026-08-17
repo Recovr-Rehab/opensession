@@ -43,11 +43,21 @@ const TEXTAREA =
  *  told once, when typing stops, rather than on every character. */
 const SETTLE_MS = 700;
 
+/** How long the draft has to hold still before it is written to the store.
+ *  Short enough that it is never the reason a draft is lost — every way out of
+ *  the palette flushes it first — and long enough that a burst of typing costs
+ *  one write instead of one per character. */
+const DRAFT_MS = 300;
+
 export interface NewSessionPromptHandle {
 	/** Replace the draft — the reset after a create. */
 	setText: (next: string) => void;
 	/** Add dictated text to the end of the draft. */
 	appendText: (add: string) => void;
+	/** Throw away a pending draft write. The create paths clear the stored
+	 *  draft once the prompt has been consumed, and a debounced write landing
+	 *  after that would put the whole thing straight back. */
+	dropPendingDraftWrite: () => void;
 }
 
 interface Props {
@@ -141,6 +151,60 @@ export function NewSessionPrompt({
 		onMentionOpenChange,
 	};
 
+	// The draft store, so a dismissed palette can restore the work. Written on a
+	// debounce rather than per character, and flushed by every way out of the
+	// palette, so what the store misses is only ever the last few hundred
+	// milliseconds of a burst that is still being typed.
+	//
+	// A pending write always reads from this ref, never from a captured value:
+	// a flush that landed a keystroke behind would be worse than no flush.
+	const draft = useRef({ text, images, files });
+	draft.current = { text, images, files };
+	// Non-null exactly while the store is behind the field, which is what makes
+	// "nothing pending" a safe reason for a flush to do nothing.
+	const draftTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const writeDraftNow = useCallback(() => {
+		if (draftTimer.current == null) return;
+		clearTimeout(draftTimer.current);
+		draftTimer.current = null;
+		saveDraft("new-session", draft.current);
+	}, []);
+	const dropPendingDraftWrite = useCallback(() => {
+		if (draftTimer.current == null) return;
+		clearTimeout(draftTimer.current);
+		draftTimer.current = null;
+	}, []);
+
+	useEffect(() => {
+		if (draftTimer.current != null) clearTimeout(draftTimer.current);
+		draftTimer.current = setTimeout(() => {
+			draftTimer.current = null;
+			saveDraft("new-session", draft.current);
+		}, DRAFT_MS);
+	}, [text, images, files]);
+
+	// Every exit that is not a create: the palette being dismissed or navigated
+	// away from (the cleanup), the tab being closed, reloaded or backgrounded.
+	//
+	// `visibilitychange` is the one that carries a tab close, not `pagehide`:
+	// lib/drafts mirrors its own map to sessionStorage on pagehide, and that
+	// listener is registered at import time, so it runs before this one and
+	// would mirror a draft this write had not reached yet. Browsers turn the
+	// page hidden before they fire pagehide, so writing there puts the text in
+	// the map in time. pagehide stays as the backstop for the memory copy.
+	useEffect(() => {
+		const onHidden = () => {
+			if (document.visibilityState === "hidden") writeDraftNow();
+		};
+		window.addEventListener("pagehide", writeDraftNow);
+		document.addEventListener("visibilitychange", onHidden);
+		return () => {
+			window.removeEventListener("pagehide", writeDraftNow);
+			document.removeEventListener("visibilitychange", onHidden);
+			writeDraftNow();
+		};
+	}, [writeDraftNow]);
+
 	useImperativeHandle(
 		handle,
 		() => ({
@@ -149,8 +213,9 @@ export function NewSessionPrompt({
 				setText((prev) =>
 					prev.trim() ? `${prev.replace(/\s+$/, "")} ${add}` : add,
 				),
+			dropPendingDraftWrite,
 		}),
-		[],
+		[dropPendingDraftWrite],
 	);
 
 	// A pasted session link is stored as its id and shown as that session's
@@ -212,11 +277,6 @@ export function NewSessionPrompt({
 	useEffect(() => {
 		callbacks.current.onMentionOpenChange(mentions.open);
 	}, [mentions.open]);
-
-	// Keep the draft store in sync so a dismissed palette can restore the work.
-	useEffect(() => {
-		saveDraft("new-session", { text, images, files });
-	}, [text, images, files]);
 
 	// The prompt grows naturally; once the palette reaches its viewport cap the
 	// BODY becomes the single scroller, carrying attachments with the text. Each

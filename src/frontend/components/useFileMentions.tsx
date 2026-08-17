@@ -109,6 +109,10 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, sk
   const pendingCaret = useRef<number | null>(null);
   // Guards against a stale async fetch overwriting a newer query's results.
   const fetchSeq = useRef(0);
+  // The trigger token Escape dismissed, held until the caret moves off it or
+  // its query changes. A ref rather than state: it must be readable by the
+  // sync() that the very same key's keyup runs, before any re-render.
+  const dismissed = useRef<TriggerContext | null>(null);
   // Latest fetchers in refs: callers pass inline closures, so depending on
   // them directly would re-run the fetch effect on every render — which loops
   // (fetch → setSuggestions → render → new closure → fetch) while open.
@@ -154,6 +158,17 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, sk
       : at
         ? { ...at, kind: "file" }
         : null;
+    // Escape dismissed this exact token, and the caret has not left it since.
+    // sync() runs on keyup, so without this the picker reopened between the
+    // keydown that closed it and the release of the same key — Escape looked
+    // like it did nothing at all. Typing on (or moving off the token) makes a
+    // different context and the suggestions come back.
+    if (ctx && sameTrigger(dismissed.current, ctx)) {
+      setMention((prev) => (prev === null ? prev : null));
+      clearSuggestions();
+      return;
+    }
+    dismissed.current = null;
     setMention((prev) => (sameTrigger(prev, ctx) ? prev : ctx));
     if (!ctx) clearSuggestions();
   }
@@ -262,7 +277,21 @@ export function useFileMentions({ value, onChange, textareaRef, mentionFetch, sk
       return true;
     }
     if (e.key === "Escape") {
+      // The picker is its own layer, so closing it must not also close what
+      // hosts the field. Base UI's dialog watches for Escape twice — an
+      // onKeyDown on the popup and a keydown listener on the document
+      // (floating-ui's useDismiss) — and both sit above this handler, so the
+      // whole new-session palette used to go with the picker. Stopping
+      // propagation here settles both, because React dispatches from its root
+      // container and the native event never reaches the document either.
+      //
+      // Only ever reached while the picker is open (`open` is checked above),
+      // so every host's own Escape is untouched when it is closed: the session
+      // composer still asks to stop a running turn, and a second press in
+      // either host still reaches the layer above.
       e.preventDefault();
+      e.stopPropagation();
+      dismissed.current = mention;
       setMention(null);
       setSuggestions([]);
       return true;
