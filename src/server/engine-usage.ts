@@ -376,32 +376,48 @@ export async function scanOpencodeShards(
 			// cutoff, which is the range's own start.
 			const first = db.query<{ t: number | null }, []>("select min(time_created) t from message").get();
 			if (first?.t) earliestMs = Math.min(earliestMs, first.t);
-			const rows = db
-				.query<{ time_created: number; data: string; session_id: string }, [number]>(
-					"select time_created, data, session_id from message where time_created >= ?",
-				)
-				.all(cutoff);
-			for (const row of rows) {
-				let d: Record<string, any>;
-				try {
-					d = JSON.parse(row.data);
-				} catch {
-					continue;
+			const page = db.query<
+				{ id: string; time_created: number; data: string; session_id: string },
+				[number, number, number, string, number]
+			>(
+				"select id, time_created, data, session_id from message " +
+					"where time_created >= ? and (time_created > ? or (time_created = ? and id > ?)) " +
+					"order by time_created, id limit ?",
+			);
+			let cursorTime = cutoff;
+			let cursorId = "";
+			while (true) {
+				// Shared-pool shards can hold hundreds of thousands of requests. Read
+				// bounded pages so one synchronous SQLite call cannot starve the
+				// server's timers or retain the whole range in memory.
+				const rows = page.all(cutoff, cursorTime, cursorTime, cursorId, 2_000);
+				for (const row of rows) {
+					let d: Record<string, any>;
+					try {
+						d = JSON.parse(row.data);
+					} catch {
+						continue;
+					}
+					if (d.role !== "assistant") continue;
+					const tokens = d.tokens || {};
+					const cache = tokens.cache || {};
+					const provider = String(d.providerID || d.model?.providerID || "?");
+					const model = String(d.modelID || d.model?.modelID || "?").split("/").pop() || "?";
+					const date = utcDate(row.time_created);
+					addUsage(days, date, provider, model, {
+						input: tokens.input || 0,
+						output: tokens.output || 0,
+						cacheRead: cache.read || 0,
+						cacheWrite: cache.write || 0,
+					});
+					const sessionId = nativeSessionIds.get(row.session_id);
+					if (sessionId) addSessionUsage(sessions, date, sessionId, tokens.output || 0);
 				}
-				if (d.role !== "assistant") continue;
-				const tokens = d.tokens || {};
-				const cache = tokens.cache || {};
-				const provider = String(d.providerID || d.model?.providerID || "?");
-				const model = String(d.modelID || d.model?.modelID || "?").split("/").pop() || "?";
-				const date = utcDate(row.time_created);
-				addUsage(days, date, provider, model, {
-					input: tokens.input || 0,
-					output: tokens.output || 0,
-					cacheRead: cache.read || 0,
-					cacheWrite: cache.write || 0,
-				});
-				const sessionId = nativeSessionIds.get(row.session_id);
-				if (sessionId) addSessionUsage(sessions, date, sessionId, tokens.output || 0);
+				if (rows.length < 2_000) break;
+				const last = rows[rows.length - 1]!;
+				cursorTime = last.time_created;
+				cursorId = last.id;
+				await new Promise((resolve) => setTimeout(resolve, 0));
 			}
 		} catch (error) {
 			// A shard mid-write or half-deleted is skipped, not fatal.
