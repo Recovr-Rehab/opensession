@@ -193,9 +193,36 @@ export function useEnterOnMount(): boolean {
 	return open;
 }
 
+/** True once the dialog's own scroll container has moved off the top, so a
+ *  sticky header can take the hairline that separates a bar from its content.
+ *  Takes the header NODE rather than a ref: Base UI mounts a popup's children
+ *  in a later commit than the one that opens it, so a ref-based effect has
+ *  already run and bailed on null by the time the DOM exists. */
+function useScrolledUnder(node: HTMLElement | null): boolean {
+	const [scrolled, setScrolled] = React.useState(false);
+	React.useEffect(() => {
+		// The popup itself is the scroller (`overflow-y-auto` on Modal.Content),
+		// and the header is its first child.
+		const scroller = node?.parentElement;
+		if (!scroller) return;
+		const read = () => setScrolled(scroller.scrollTop > 1);
+		read();
+		scroller.addEventListener("scroll", read, { passive: true });
+		return () => scroller.removeEventListener("scroll", read);
+	}, [node]);
+	return scrolled;
+}
+
 /**
  * Title with a close (✕) beside it, and the description on its own full-width
- * line underneath — the standard dialog header.
+ * line underneath: the standard dialog header.
+ *
+ * It is a top bar, not a heading that scrolls away. A tall dialog scrolls
+ * inside its own shell, so the header sticks to the top of it and bleeds out
+ * to the shell's edges to carry the fill that hides the content passing under
+ * it. The negative margins cancel the shell's `p-6` and its `gap-4`, so
+ * nothing moves at rest and a dialog short enough not to scroll looks exactly
+ * as it did. The hairline only appears once there is something underneath.
  *
  * Two things it deliberately does NOT do. It carries no tinted icon badge: the
  * glyph repeated what the title already said, and the 54px it indented the
@@ -217,8 +244,27 @@ function Header({
 	description?: React.ReactNode;
 	className?: string;
 }) {
+	const [node, setNode] = React.useState<HTMLDivElement | null>(null);
+	const scrolled = useScrolledUnder(node);
 	return (
-		<div className={cn("flex flex-col", className)}>
+		<div
+			ref={setNode}
+			className={cn(
+				// `-top-6` cancels `-mt-6`, and the two must stay a pair: sticky pins
+				// the MARGIN box, so with `top-0` the negative margin lands the bar
+				// 24px down the shell and leaves a strip of content sliding past
+				// above it (measured). Both numbers are the shell's own `p-6`.
+				"sticky -top-6 z-10 flex flex-col bg-raised",
+				"-mx-6 -mb-4 -mt-6 px-6 pb-4 pt-6",
+				// The seam is an inset shadow rather than a border, the way the
+				// other sticky bars in the app draw theirs (PrPanel's file strip):
+				// it costs no layout, so a dialog that never scrolls is not 1px
+				// taller than it was for the sake of a line it will never show.
+				"transition-[box-shadow] duration-[var(--dur-micro)]",
+				scrolled && "shadow-[inset_0_-1px_0_var(--divider)]",
+				className,
+			)}
+		>
 			<div className="flex items-start gap-3">
 				{/* Base UI renders Title as <h2> and Description as <p>; preflight
 				    isn't imported (base.css owns resets), so zero their UA margins
