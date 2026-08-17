@@ -1334,6 +1334,11 @@ function MediaStrip({ items }: { items: StripItem[] }) {
 	);
 }
 
+/** Stable identity for the optional live-media prop: a `= []` default mints a
+ *  fresh array on every render, which would defeat the media memo below on any
+ *  caller that leaves the prop off. */
+const NO_LIVE_MEDIA: WorkspaceMediaItem[] = [];
+
 export function WorkspaceInfo({
 	sessionId,
 	workspaceId,
@@ -1352,7 +1357,7 @@ export function WorkspaceInfo({
 	onOpenSession,
 	send,
 	liveMediaCount,
-	liveMedia = [],
+	liveMedia = NO_LIVE_MEDIA,
 	assets = [],
 	onOpenAsset,
 }: Props) {
@@ -1476,11 +1481,19 @@ export function WorkspaceInfo({
 	// card above already carries in full. Also drop anything that reduces to
 	// nothing (link-ref markers, pure HTML-comment bot pings) so no blank cards
 	// show. The Review tab keeps the whole conversation.
-	const comments = (pr?.comments ?? [])
-		.filter((c) => !isMachinePrComment(c))
-		.filter((c) => !isOutdatedReviewComment(c.body))
-		.map((c) => ({ ...c, preview: plainComment(c.body) }))
-		.filter((c) => c.preview.length > 0);
+	// Keyed on the comment list alone: `plainComment` runs a long chain of
+	// regex passes per comment, and this component re-renders on every live
+	// media frame while a session streams, which is not a reason to flatten
+	// the same markdown again.
+	const comments = useMemo(
+		() =>
+			(pr?.comments ?? [])
+				.filter((c) => !isMachinePrComment(c))
+				.filter((c) => !isOutdatedReviewComment(c.body))
+				.map((c) => ({ ...c, preview: plainComment(c.body) }))
+				.filter((c) => c.preview.length > 0),
+		[pr?.comments],
+	);
 	const changed = files ?? [];
 	const totalAdd = changed.reduce((n, f) => n + (f.additions || 0), 0);
 	const totalDel = changed.reduce((n, f) => n + (f.deletions || 0), 0);
@@ -1498,13 +1511,23 @@ export function WorkspaceInfo({
 		}
 		return m;
 	}, [rawPatch]);
-	const media = [...liveMedia, ...(data?.media || [])].filter(
-		(m, i, all) =>
-			all.findIndex(
-				(x) =>
-					x.kind === m.kind && x.src === m.src && x.sessionId === m.sessionId,
-			) === i,
-	);
+	// Live media leads, so a frame the overview has since caught up on keeps its
+	// first (live) position. One pass over a seen-set rather than a findIndex
+	// per item: this list runs to the hundreds on a long workspace, and it was
+	// rebuilt quadratically on every frame of a streaming run.
+	const media = useMemo(() => {
+		const seen = new Set<string>();
+		const out: WorkspaceMediaItem[] = [];
+		for (const m of [...liveMedia, ...(data?.media || [])]) {
+			// NUL-joined: a src is a path or URL and may hold any printable
+			// character, so a printable separator could alias two distinct items.
+			const key = `${m.kind}\u0000${m.src}\u0000${m.sessionId}`;
+			if (seen.has(key)) continue;
+			seen.add(key);
+			out.push(m);
+		}
+		return out;
+	}, [liveMedia, data?.media]);
 
 	// A picture or a recording an agent wrote is shown, not listed: its name and
 	// size say nothing about it. Everything else (a page, a report, a data
