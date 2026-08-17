@@ -14,17 +14,21 @@ import { Modal } from "../../ui/modal";
 import {
 	SettingCard,
 	SettingsGroupLabel,
-	SettingsHeader,
 	SettingsHint,
-	SettingsPanel,
 } from "../../ui/settings";
 import { EmptyState, InlineAlert, LoadingState } from "../../ui/state";
 import { SettingRow } from "./shared";
 
 // ── Keychain: per-person credentials sessions can BORROW with your approval
 // (src/server/keychain.ts). Registration lives here rather than in a tool
-// because a secret pasted into a session prompt is a secret in the transcript. ──
-export function KeychainPanel() {
+// because a secret pasted into a session prompt is a secret in the transcript.
+//
+// It renders as a section of Settings → My accounts rather than a page of its
+// own: a credential you lend to a session is the same kind of thing as an
+// account a session acts as, and it was one thin page in a nav that is already
+// 22 entries deep. Old /settings/keychain links redirect there (App.tsx's
+// LEGACY_SETTINGS_SECTIONS). ──
+export function KeychainSection() {
 	const [data, setData] = useState<{
 		credentials: KeychainCredentialDto[];
 		grants: KeychainGrantDto[];
@@ -41,19 +45,12 @@ export function KeychainPanel() {
 	}, []);
 	useEffect(reload, [reload]);
 
-	const panelHeader = (
-		<SettingsHeader
-			title="Keychain"
-			description="Credentials a session can borrow with the owner's approval. The secret is injected server-side, so the agent never sees it, and every grant is scoped to one session and expires."
-		/>
-	);
-
 	if (!data)
 		return (
-			<SettingsPanel>
-				{panelHeader}
+			<>
+				<SettingsGroupLabel>Keychain</SettingsGroupLabel>
 				{error ? <InlineAlert>{error}</InlineAlert> : <LoadingState>Loading keychain…</LoadingState>}
-			</SettingsPanel>
+			</>
 		);
 
 	const byId = new Map(data.credentials.map((c) => [c.id, c]));
@@ -61,15 +58,17 @@ export function KeychainPanel() {
 	const pendingAsks = data.asks.filter((a) => a.status === "pending");
 
 	return (
-		<SettingsPanel>
-			{panelHeader}
+		<>
 			{error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
 
-			<SettingsGroupLabel className="flex items-center justify-between gap-2">
-				Credentials
-				<Button size="sm" variant="ghost" onClick={() => setAdding(true)}>
-					Add credential
-				</Button>
+			<SettingsGroupLabel
+				actions={
+					<Button size="sm" variant="ghost" onClick={() => setAdding(true)}>
+						Add credential
+					</Button>
+				}
+			>
+				Keychain
 			</SettingsGroupLabel>
 
 			<Modal.Root open={adding} onOpenChange={setAdding}>
@@ -128,6 +127,11 @@ export function KeychainPanel() {
 					))}
 				</SettingCard>
 			)}
+			<SettingsHint>
+				A session can borrow a credential with your approval. The secret is injected
+				server-side, so the agent never sees it, and every grant is scoped to one session and
+				expires.
+			</SettingsHint>
 
 			{pendingAsks.length > 0 && (
 				<>
@@ -148,34 +152,37 @@ export function KeychainPanel() {
 				</>
 			)}
 
-			<SettingsGroupLabel>Active grants</SettingsGroupLabel>
-			{activeGrants.length === 0 ? (
-				<EmptyState placement="card">No session currently holds a keychain grant.</EmptyState>
-			) : (
-				<SettingCard>
-					{activeGrants.map((g) => (
-						<SettingRow
-							key={g.id}
-							title={`${byId.get(g.credentialId)?.service ?? g.credentialId} → ${g.requestedBy}`}
-							desc={`${g.mode} · expires ${new Date(g.expiresAt).toLocaleString()} · ${g.purpose}`}
-							control={
-								<Button
-									size="sm"
-									variant="ghost"
-									onClick={() =>
-										revokeKeychainGrant(g.id)
-											.then(reload)
-											.catch((e) => setError(e.message))
-									}
-								>
-									Revoke
-								</Button>
-							}
-						/>
-					))}
-				</SettingCard>
+			{/* Only when there is one. As a page this group carried an empty
+			    state; as a section it would be a second empty block under a
+			    list most people never populate. */}
+			{activeGrants.length > 0 && (
+				<>
+					<SettingsGroupLabel>Active grants</SettingsGroupLabel>
+					<SettingCard>
+							{activeGrants.map((g) => (
+							<SettingRow
+								key={g.id}
+								title={`${byId.get(g.credentialId)?.service ?? g.credentialId} → ${g.requestedBy}`}
+								desc={`${g.mode} · expires ${new Date(g.expiresAt).toLocaleString()} · ${g.purpose}`}
+								control={
+									<Button
+										size="sm"
+										variant="ghost"
+										onClick={() =>
+											revokeKeychainGrant(g.id)
+												.then(reload)
+												.catch((e) => setError(e.message))
+										}
+									>
+										Revoke
+									</Button>
+								}
+							/>
+						))}
+					</SettingCard>
+				</>
 			)}
-		</SettingsPanel>
+		</>
 	);
 }
 

@@ -22,6 +22,7 @@ import { displayName } from "../brand-logos";
 import { IconTile } from "./BrandTile";
 import { useCurrentUser } from "./UserPicker";
 import { GithubAccounts } from "./Connections";
+import { KeychainSection } from "./settings/KeychainPanel";
 
 interface OauthStatus {
 	shared?: { connectedBy?: string };
@@ -34,9 +35,10 @@ interface OauthStatus {
 /**
  * Settings → Personal → My accounts: every per-user sign-in in one place —
  * OAuth-capable MCP servers (connect as yourself; your sessions then use
- * YOUR account, falling back to the workspace grant — src/server/mcp-oauth.ts)
- * plus the per-user GitHub auth section (PRs as yourself). Workspace-wide
- * MCP grants stay on the Connections page's server cards (admin surface).
+ * YOUR account, falling back to the workspace grant — src/server/mcp-oauth.ts),
+ * the per-user GitHub auth section (PRs as yourself), and your keychain (the
+ * credentials a session can borrow from you). Workspace-wide MCP grants stay
+ * on the Connections page's server cards (admin surface).
  */
 export function MyAccountsPanel() {
 	const currentUser = useCurrentUser();
@@ -226,6 +228,7 @@ export function MyAccountsPanel() {
 				</SettingsHint>
 			)}
 			<GithubAccounts personal />
+			<KeychainSection />
 		</SettingsPanel>
 	);
 }

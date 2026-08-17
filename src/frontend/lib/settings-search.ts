@@ -1,8 +1,8 @@
 /**
  * Search over the Settings nav.
  *
- * Settings is 22 sections deep and their names are the *place* a setting
- * lives, not the words anyone arrives with: "vim mode" is in Preferences,
+ * Settings is a couple of dozen sections deep and their names are the *place*
+ * a setting lives, not the words anyone arrives with: "vim mode" is in Preferences,
  * "dark mode" in Appearance, "cron" in Automations. So each section carries a
  * few aliases — the notable settings inside it plus the words people reach for
  * — and a query matches a section's label, its group, or one of those.
@@ -22,8 +22,14 @@ export const SETTINGS_KEYWORDS: Record<string, string[]> = {
 		"act as me",
 		"personal token",
 		"github account",
+		// The keychain is a section of this page, so its words have to find it
+		// here — nothing else in Settings answers "secrets".
+		"keychain",
+		"credentials",
+		"secrets",
+		"grants",
+		"access request",
 	],
-	keychain: ["credentials", "secrets", "grants", "access request", "api key"],
 	preferences: [
 		"default model",
 		"send messages with",

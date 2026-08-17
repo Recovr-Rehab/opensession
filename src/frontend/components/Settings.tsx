@@ -37,7 +37,6 @@ import { DeploysPanel } from "./settings/DeploysPanel";
 import { IdentityPanel } from "./settings/IdentityPanel";
 import { IntegrationsPanel } from "./settings/IntegrationsPanel";
 import { LibraryPanel } from "./settings/LibraryPanel";
-import { KeychainPanel } from "./settings/KeychainPanel";
 import { MembersPanel } from "./settings/MembersPanel";
 import { MemoryPanel } from "./settings/MemoryPanel";
 import { ModelsPanel } from "./settings/ModelsPanel";
@@ -76,7 +75,6 @@ export type ToolSectionKey = "automations" | "goals" | "security";
 /** Listed in nav order (SECTIONS below). */
 export type SettingsSectionKey =
 	| "myAccounts"
-	| "keychain"
 	| "preferences"
 	| "notifications"
 	| "appearance"
@@ -131,24 +129,6 @@ const SECTIONS: {
 			>
 				<circle cx="8" cy="5.2" r="2.7" />
 				<path d="M2.8 13.5a5.2 5.2 0 0 1 10.4 0" strokeLinecap="round" />
-			</svg>
-		),
-	},
-	{
-		key: "keychain",
-		label: "Keychain",
-		group: "Personal",
-		icon: (
-			<svg
-				width="20"
-				height="20"
-				viewBox="0 0 16 16"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="1.4"
-			>
-				<circle cx="5.4" cy="8" r="2.6" />
-				<path d="M8 8h6M12 8v2.2M10 8v1.6" strokeLinecap="round" />
 			</svg>
 		),
 	},
@@ -745,7 +725,6 @@ function SectionPanel({
 			{section === "memory" && <MemoryPanel />}
 			{section === "prewarming" && <PrewarmingPanel />}
 			{section === "papercuts" && <PapercutsPanel />}
-			{section === "keychain" && <KeychainPanel />}
 			{section === "deploys" && <DeploysPanel />}
 		</>
 	);

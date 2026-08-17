@@ -72,7 +72,7 @@ export async function setPapercutsRepoEnabled(
 	});
 }
 
-// ── Keychain (Settings → Keychain: per-person credentials + grants) ──
+// ── Keychain (Settings → My accounts: per-person credentials + grants) ──
 
 export interface KeychainCredentialDto {
 	id: string;
