@@ -279,13 +279,19 @@ function SyncedSessionCanvas({
 					</div>
 				</div>
 			)}
-			<div className="absolute bottom-3 left-3 z-10 flex flex-col items-start gap-1.5 phone:bottom-[calc(12px+env(safe-area-inset-bottom))]">
+			{/* Who is on the board is the first question, so it reads at the top;
+			    the view controls stay at the bottom where they were. Both are
+			    positioned against the canvas pane, which starts below the app
+			    header on a phone too, so neither needs chrome clearance. */}
+			<div className="absolute left-3 top-3 z-10">
 				<CanvasFilters
 					filter={filter}
 					options={filterOptions}
 					currentUser={user}
 					onChange={setCanvasFilter}
 				/>
+			</div>
+			<div className="absolute bottom-3 left-3 z-10 phone:bottom-[calc(12px+env(safe-area-inset-bottom))]">
 				<div className="flex gap-1">
 					<Button
 						size="sm"

@@ -50,7 +50,7 @@ function CanvasFilterSelect({
 				className={TRIGGER}
 				icon={current?.icon ?? null}
 			/>
-			<Select.Popup align="start" side="top">
+			<Select.Popup align="start">
 				{options.map((item) => (
 					<Select.Item key={item.value} value={item.value} icon={item.icon}>
 						{item.label}
