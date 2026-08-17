@@ -576,3 +576,70 @@ describe("TranscriptBlocks review loops", () => {
 		expect(html).not.toContain("1 check failed");
 	});
 });
+
+describe("TranscriptBlocks turn windowing", () => {
+	// A review loop swallows the blocks it contains, so the rendered array is
+	// shorter than the flat one. The trailing window has to be measured against
+	// what is rendered, or the loops' absorbed rows come out of it.
+	const windowed = (html: string) =>
+		html.split("[content-visibility:auto]").length - 1;
+
+	/** A review loop that swallows `absorbed` agent answers, then `tail` turns. */
+	function transcriptWithReviewLoop(
+		absorbed: number,
+		tail: number,
+	): TranscriptEntry[] {
+		const at = (minute: number) =>
+			`2026-08-12T${String(12 + Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}:00Z`;
+		const built: TranscriptEntry[] = [
+			{
+				id: "handoff",
+				type: "user",
+				content: "[GitHub] <!--os:review-handoff-->\nReview PR #42",
+				timestamp: at(0),
+			},
+		];
+		// Absorbed by the loop: agent answers, none of them a human turn.
+		for (let i = 0; i < absorbed; i++)
+			built.push({
+				id: `loop-answer-${i}`,
+				type: "assistant",
+				content: `Fixed finding ${i}.`,
+				timestamp: at(1 + i),
+			});
+		// A human turn ends the loop, then ordinary exchanges after it.
+		for (let i = 0; i < tail; i++)
+			built.push({
+				id: `tail-${i}`,
+				type: i % 2 === 0 ? "user" : "assistant",
+				content: `Tail message ${i}.`,
+				timestamp: at(20 + i),
+			});
+		return built;
+	}
+
+	const windowedFor = (absorbed: number, tail: number) =>
+		windowed(
+			renderToStaticMarkup(
+				<TranscriptBlocks entries={transcriptWithReviewLoop(absorbed, tail)} />,
+			),
+		);
+
+	test("windows the same blocks however many a review loop absorbed", () => {
+		// One loop plus the same tail either way, so the same rows render and the
+		// same rows may be windowed. Measured against the flat array instead, a
+		// loop that swallowed ten blocks took ten off the trailing window: 32 and
+		// 24 windowed here rather than 21.
+		expect(windowedFor(10, 30)).toBe(windowedFor(2, 30));
+		expect(windowedFor(10, 30)).toBe(windowedFor(0, 30));
+		expect(windowedFor(10, 30)).toBeGreaterThan(0);
+	});
+
+	test("windows nothing while the whole transcript fits the trailing window", () => {
+		const html = renderToStaticMarkup(
+			<TranscriptBlocks entries={transcriptWithReviewLoop(10, 12)} />,
+		);
+		expect(html).toContain('aria-label="Review loop, 1 round, PR #42"');
+		expect(windowed(html)).toBe(0);
+	});
+});

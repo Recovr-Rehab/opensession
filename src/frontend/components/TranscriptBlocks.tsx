@@ -134,6 +134,17 @@ function mergedNoticePrNumber(entry: TranscriptEntry): number | null {
 	return match ? Number(match[1]) : null;
 }
 
+// How many blocks at the end of the transcript are never windowed. The reader
+// lands here on open and stays here while a turn runs, so these keep their real
+// content and their real height rather than a measured placeholder.
+//
+// It counts GROUPED blocks, which is the array actually rendered: a review loop
+// swallows the blocks it contains, so measuring the window against the flat
+// `blocks` array shrank it by however many rows those loops absorbed. Measured
+// on the biggest session in the store (9,689 entries, 3 review loops), the
+// trailing window came out as 1 block instead of 24.
+const TRAILING_MOUNTED_BLOCKS = 24;
+
 /**
  * Groups a flat transcript into per-turn fold blocks and message bubbles, then
  * renders them. A turn's working (tool calls + intermediate assistant notes)
@@ -398,7 +409,7 @@ export const TranscriptBlocks = React.memo(function TranscriptBlocks({
 					<React.Fragment key={key}>
 						<VirtualTranscriptBlock
 							anchorId={anchorId}
-							enabled={!isLiveTail && i < blocks.length - 24}
+							enabled={!isLiveTail && i < groupedBlocks.length - TRAILING_MOUNTED_BLOCKS}
 							// A footer overlaps the answer block above it, and only the
 							// wrapper can: the windowed branch contains its contents.
 							className={block.kind === "footer" ? TURN_FOOTER_LIFT : undefined}
