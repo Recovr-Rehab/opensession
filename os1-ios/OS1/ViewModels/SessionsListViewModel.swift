@@ -403,6 +403,7 @@ final class SessionsListViewModel {
     /// moved last. Empty bands are dropped.
     nonisolated static func inboxBands(
         _ workspaces: [SidebarWorkspace],
+        mentionedSessionIds: Set<String> = [],
         now: Date = Date(),
         calendar: Calendar = .current
     ) -> [(band: InboxBand, workspaces: [SidebarWorkspace])] {
@@ -415,7 +416,8 @@ final class SessionsListViewModel {
         for workspace in workspaces {
             let date = workspace.lastActivityDate
             let band: InboxBand
-            if workspace.lane == .needsInput {
+            if workspace.lane == .needsInput
+                || workspace.sessions.contains(where: { mentionedSessionIds.contains($0.id) }) {
                 band = .needsAction
             } else if workspace.lane == .done {
                 // Landed work leaves the day bands and settles at the bottom,

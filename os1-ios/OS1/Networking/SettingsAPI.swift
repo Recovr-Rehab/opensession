@@ -160,6 +160,28 @@ enum SettingsAPI {
         return response.lanes ?? [:]
     }
 
+    /// Sessions where a teammate tagged this person. Unlike reads and hides,
+    /// this store is append/clear server state rather than a whole-map PUT.
+    static func mentions(user: String) async throws -> [MentionRecord] {
+        struct Response: Decodable, Sendable { var mentions: [MentionRecord]? }
+        let response: Response = try await request("/api/mentions", query: ["user": user])
+        return response.mentions ?? []
+    }
+
+    @discardableResult
+    static func clearMention(
+        user: String,
+        sessionId: String,
+        connection: Connection? = nil
+    ) async throws -> SettingsOK {
+        try await request(
+            "/api/mentions/clear",
+            method: "POST",
+            body: ["user": user, "sessionId": sessionId],
+            connection: connection
+        )
+    }
+
     /// Per-user pinned rows, shared with the web sidebar's Pinned band (row
     /// keys, in the user's own band order). PUT replaces the whole list.
     static func pins(user: String) async throws -> [String] {

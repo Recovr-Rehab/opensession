@@ -33,6 +33,10 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   strength instead of the usual dimmed medium, and reading a session here clears
   it in the browser too. Only sessions you have opened can be unread — the mark
   means "new since you read it", not "never seen".
+  Teammate @-mentions use the server's durable `/api/mentions` store: they admit
+  cross-owner work to My sessions, lift its workspace into Needs action in Inbox
+  mode, and show the sender's face with an @ badge. Opening the session clears
+  the mention across the native and web clients.
 - **Catch up** (`CatchUpView`, `CatchUpDeckView`, `CatchUpCardView`,
   `CatchUpQueue`, `CatchUpViewModel`) — a card deck over everything unread,
   opened from the bottom toolbar beside the Desk; an unread queue uses the

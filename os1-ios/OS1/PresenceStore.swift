@@ -40,8 +40,16 @@ final class PresenceStore {
         connectedScope = scope
         let socket = OS1Socket()
         socket.onEvent = { [weak self] event in
-            guard case .globalPresence(let viewing) = event else { return }
-            self?.apply(viewing)
+            switch event {
+            case .globalPresence(let viewing):
+                self?.apply(viewing)
+            case .mention(let user, let mention):
+                MentionStore.shared.receive(user: user, mention: mention)
+            case .mentionsCleared(let user, let sessionId):
+                MentionStore.shared.receiveCleared(user: user, sessionId: sessionId)
+            default:
+                break
+            }
         }
         socket.onClose = { [weak self] _ in self?.scheduleReconnect() }
         self.socket = socket

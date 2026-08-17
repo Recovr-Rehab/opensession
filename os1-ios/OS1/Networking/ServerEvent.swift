@@ -31,6 +31,8 @@ enum ServerEvent: Sendable {
     case usageUpdate(sessionId: String?, usage: SessionUsage)
     case askQuestion(sessionId: String, question: AskQuestion)
     case askResolved(sessionId: String, questionId: String)
+    case mention(user: String, mention: MentionRecord)
+    case mentionsCleared(user: String, sessionId: String?)
     case slackComposer(sessionId: String, request: SlackComposeRequest?)
     case slackComposerResolved(sessionId: String, receipt: SlackComposeReceipt)
     case notice(String)
@@ -128,6 +130,12 @@ enum ServerEvent: Sendable {
                 return .ignored
             }
             return .askResolved(sessionId: id, questionId: questionId)
+        case "mention":
+            guard let user = frame.user, let mention = frame.mention else { return .ignored }
+            return .mention(user: user, mention: mention)
+        case "mentions_cleared":
+            guard let user = frame.user else { return .ignored }
+            return .mentionsCleared(user: user, sessionId: frame.sessionId)
         case "slack_composer":
             guard let id = frame.sessionId else { return .ignored }
             return .slackComposer(sessionId: id, request: frame.request)
@@ -339,6 +347,8 @@ private struct RawFrame: Decodable {
     let usage: SessionUsage?
     let questionId: String?
     let questions: [AskQuestion.Question]?
+    let user: String?
+    let mention: MentionRecord?
     let request: SlackComposeRequest?
     let requestId: String?
     let status: String?

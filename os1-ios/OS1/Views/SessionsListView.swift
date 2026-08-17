@@ -482,8 +482,12 @@ struct SessionsListView: View {
                     .id(archivedSession.id)
                     .onChange(of: archivedSession, initial: true) { _, open in
                         ReadsStore.shared.open(open)
+                        MentionStore.shared.open(open.id)
                     }
-                    .onDisappear { ReadsStore.shared.close(archivedSession.id) }
+                    .onDisappear {
+                        ReadsStore.shared.close(archivedSession.id)
+                        MentionStore.shared.close(archivedSession.id)
+                    }
             } else if let selectedID = selectedSessionID,
                let session = viewModel.sessions.first(where: { $0.id == selectedID }) {
                 SessionView(
@@ -511,8 +515,12 @@ struct SessionsListView: View {
                     // for the same rule on the iOS stack.
                     .onChange(of: session, initial: true) { _, open in
                         ReadsStore.shared.open(open)
+                        MentionStore.shared.open(open.id)
                     }
-                    .onDisappear { ReadsStore.shared.close(session.id) }
+                    .onDisappear {
+                        ReadsStore.shared.close(session.id)
+                        MentionStore.shared.close(session.id)
+                    }
             } else {
                 ContentUnavailableView(
                     "Select a session",
@@ -1466,7 +1474,10 @@ struct SessionsListView: View {
             // One flat list across every repo, banded like an email inbox:
             // Needs action first, then by when the row last moved. Repo
             // identity moves onto the rows themselves (see `sessionRow`).
-            return SessionsListViewModel.inboxBands(workspaces).map { band in
+            return SessionsListViewModel.inboxBands(
+                workspaces,
+                mentionedSessionIds: MentionStore.shared.sessionIds
+            ).map { band in
                 SessionGroup(
                     id: "inbox-\(band.band.rawValue)",
                     title: band.band.label,
@@ -1518,7 +1529,10 @@ struct SessionsListView: View {
         let byRepo = Dictionary(grouping: filteredWorkspaces, by: \.effectiveRepo)
         return availableRepos.compactMap { repo in
             guard let workspaces = byRepo[repo] else { return nil }
-            let bands = SessionsListViewModel.inboxBands(workspaces).map { band in
+            let bands = SessionsListViewModel.inboxBands(
+                workspaces,
+                mentionedSessionIds: MentionStore.shared.sessionIds
+            ).map { band in
                 SessionGroup(
                     id: "repo-\(repo)-band-\(band.band.rawValue)",
                     title: band.band.label,
@@ -3140,6 +3154,22 @@ struct SessionRow: View {
                     .foregroundStyle(OS1VisualStyle.textDim)
                     .accessibilityLabel("Unsent draft")
             }
+            if let mention {
+                UserAvatar(person: mention.by, size: faceSize)
+                    .overlay(alignment: .bottomTrailing) {
+                        Text("@")
+                            .font(.system(size: faceSize * 0.42, weight: .bold))
+                            .foregroundStyle(OS1VisualStyle.onAccent)
+                            .frame(width: faceSize * 0.6, height: faceSize * 0.6)
+                            .background(OS1VisualStyle.accent, in: Circle())
+                            .background(
+                                OS1VisualStyle.chatCanvas,
+                                in: Circle().inset(by: -1.5)
+                            )
+                            .offset(x: faceSize * 0.1, y: faceSize * 0.1)
+                    }
+                    .accessibilityLabel("\(mention.by) mentioned you")
+            }
             // Whose review request this is. Badged, because the presence faces
             // immediately after it are the same size and shape, and "someone is
             // in here" and "someone is waiting on you" must not look alike.
@@ -3223,6 +3253,13 @@ struct SessionRow: View {
 
     private var hasDraft: Bool {
         DraftsStore.shared.hasDraft(sessions.isEmpty ? [session] : sessions)
+    }
+
+    /// The newest tag on any session behind this workspace row. Read here so
+    /// MentionStore observation invalidates the row without rebuilding every
+    /// unrelated row in the list.
+    private var mention: MentionRecord? {
+        MentionStore.shared.mention(for: rowSessions)
     }
 
     /// Read here rather than at the call site because `PresenceStore` is
@@ -3367,6 +3404,7 @@ struct SessionRow: View {
         if session.isAutomation { parts.append("automation") }
         // The bold title is the only sighted cue for unread; say it out loud.
         if unread { parts.insert("unread", at: 0) }
+        if let mention { parts.insert("\(mention.by) mentioned you", at: 0) }
         // Same for the plate: colour alone never carries meaning.
         if highlighted { parts.insert("last opened", at: 0) }
         if let prState = session.prState?.lowercased() {

@@ -1876,6 +1876,7 @@ struct SessionTabsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         // One level deeper than the conversation, on the stack that pushed it:
         // the strip goes with the conversation it belongs to, and the chevron
+            MentionStore.shared.open(session.id)
         // and the edge swipe come back to exactly where you were.
         .navigationDestination(item: $panel) { panel in
             panelContent(panel)
@@ -1921,7 +1922,10 @@ struct SessionTabsView: View {
         .onChange(of: activeSession, initial: true) { _, session in
             ReadsStore.shared.open(session)
         }
-        .onDisappear { ReadsStore.shared.close(activeSession.id) }
+        .onDisappear {
+            ReadsStore.shared.close(activeSession.id)
+            MentionStore.shared.close(activeSession.id)
+        }
         .onChange(of: visibleTabs) { _, updatedTabs in
             // A conversation whose detail is open can be archived from
             // elsewhere; that panel goes with it.

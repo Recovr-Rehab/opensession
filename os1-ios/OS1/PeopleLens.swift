@@ -2,21 +2,23 @@ import Foundation
 
 /// Who a row belongs to under the list's "My sessions" lens.
 ///
-/// Two things make a row yours:
+/// Three things make a row yours:
 ///
 /// - a session of yours in it (automation runs never count as anyone's — they
 ///   carry their creator, not a person), or
 /// - a CLAIM. Claiming is the per-user triage that pulls an automation's run,
 ///   or work someone else started, into your own list, and the web sidebar has
 ///   honored it since lanes went per-user (`focusWsRows` in
-///   src/frontend/components/Sidebar.tsx). See `LaneStore`.
+///   src/frontend/components/Sidebar.tsx). See `LaneStore`, or
+/// - an outstanding @-mention on one of its sessions. A teammate explicitly
+///   asking for you admits their row to the default "My sessions" lens.
 ///
 /// The app used to test only the first, which is how a workspace claimed in
 /// the browser could be missing from the phone entirely: nothing in it was
 /// started by you, it was opened by the machine identity, and the claim that
 /// made it yours was invisible here.
 ///
-/// The web's rule has a third clause this deliberately leaves out — a
+/// The web's rule has one additional clause this deliberately leaves out — a
 /// workspace whose `createdBy` is you, even with no session of yours in it.
 /// Measured against the live list it more than tripled one person's sidebar
 /// (31 rows to 96), which is a different product decision from fixing a
@@ -31,6 +33,8 @@ struct PeopleLens {
     let names: Set<String>
     /// Session ids you have claimed (`LaneStore`).
     let claims: Set<String>
+    /// Session ids where a teammate tagged you (`MentionStore`).
+    var mentions: Set<String> = []
 
     @MainActor
     static func current() -> PeopleLens {
@@ -45,7 +49,11 @@ struct PeopleLens {
         }
         let login = config.githubLogin
         if !login.isEmpty { names.insert(login.lowercased()) }
-        return PeopleLens(names: names, claims: LaneStore.shared.claims)
+        return PeopleLens(
+            names: names,
+            claims: LaneStore.shared.claims,
+            mentions: MentionStore.shared.sessionIds
+        )
     }
 
     /// A single session under the lens: yours to start with, or claimed.
@@ -60,6 +68,6 @@ struct PeopleLens {
     /// A sidebar row under the lens. A row is yours as soon as ONE of its
     /// sessions is — a workspace is shared work, not a possession.
     func owns(_ workspace: SidebarWorkspace) -> Bool {
-        workspace.sessions.contains(where: isMine)
+        workspace.sessions.contains { isMine($0) || mentions.contains($0.id) }
     }
 }
