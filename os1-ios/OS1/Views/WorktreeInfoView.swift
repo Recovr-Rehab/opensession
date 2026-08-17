@@ -25,6 +25,16 @@ struct WorktreeInfoView: View {
     @State private var confirmingSandboxRecreate = false
     @State private var loading = true
     @State private var loadFailed = false
+    @State private var repos: [OS1API.RepoInfo] = []
+    @State private var repoSwitchable = false
+    @State private var repoHasWork = false
+    @State private var switchingRepo: String?
+    @State private var confirmRepoTarget: String?
+    @State private var switchError: String?
+    /// A switch lands before the 5s sessions poll carries it back, so the
+    /// answer is held here and read through `currentSession` until the polled
+    /// row agrees. Without it the sheet keeps showing the repo just left.
+    @State private var switchedRepo: OS1API.SwitchedRepo?
 
     var body: some View {
         NavigationStack {
@@ -89,6 +99,33 @@ struct WorktreeInfoView: View {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(sandboxError ?? "Please try again.")
+            }
+            .confirmationDialog(
+                "Switch repository?",
+                isPresented: Binding(
+                    get: { confirmRepoTarget != nil },
+                    set: { if !$0 { confirmRepoTarget = nil } }
+                ),
+                titleVisibility: .visible,
+                presenting: confirmRepoTarget
+            ) { target in
+                Button("Switch to \(RepoTile.label(for: target))") {
+                    Task { await switchRepo(to: target) }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { target in
+                Text(repoSwitchWarning(target: target))
+            }
+            .alert(
+                "Couldn't switch repository",
+                isPresented: Binding(
+                    get: { switchError != nil },
+                    set: { if !$0 { switchError = nil } }
+                )
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(switchError ?? "Please try again.")
             }
         }
     }
@@ -162,10 +199,12 @@ struct WorktreeInfoView: View {
     }
 
     private var worktreeSection: some View {
-        // No Repository row: the hero already reads "<repo> · <model>", and a
-        // card that repeats the line above it is what pushed the worktree's
-        // own details off the screen.
+        // The Repository row is here as a CONTROL, not as a label: the hero
+        // already reads "<repo> · <model>", so a row that only repeated it
+        // would push the worktree's own details off the screen. It appears
+        // only where the repo can still be changed.
         InfoSection(title: "Worktree") {
+            repositoryRow
             if let branch = gitStatus?.branch ?? currentSession.branch, !branch.isEmpty {
                 InfoRow(label: "Branch", value: branch, icon: "arrow.triangle.branch")
             }
@@ -187,6 +226,85 @@ struct WorktreeInfoView: View {
                     icon: "link"
                 )
             }
+        }
+    }
+
+    /// Change the repo a session works in, for the wrong one picked at
+    /// creation. Offered only where there is a worktree to repoint: an Ask
+    /// session reads the main checkout, so it has no primary repo to move.
+    @ViewBuilder
+    private var repositoryRow: some View {
+        if repoSwitchable && !repos.isEmpty {
+            Menu {
+                ForEach(repos) { option in
+                    Button {
+                        chooseRepo(option.id)
+                    } label: {
+                        Label {
+                            Text(option.label ?? option.id)
+                        } icon: {
+                            // Same rule as the new-session chip: a menu row
+                            // has one glyph, and which repo this session is
+                            // in outranks drawing its icon twice.
+                            if option.id == currentSession.effectiveRepo {
+                                Image(systemName: "checkmark")
+                            } else if let icon = RepoTile.cachedIcon(for: option.id) {
+                                icon
+                            }
+                        }
+                    }
+                }
+            } label: {
+                SettingsRow(
+                    label: "Repository",
+                    value: switchingRepo == nil
+                        ? RepoTile.label(for: currentSession.effectiveRepo)
+                        : "Switching…",
+                    icon: "folder"
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(switchingRepo != nil)
+        }
+    }
+
+    /// Says what the switch costs, in the terms the person is about to lose
+    /// track of: the work is not deleted, it is left where it is.
+    private func repoSwitchWarning(target: String) -> String {
+        let branch = currentSession.branch.map { " (branch \($0))" } ?? ""
+        return """
+        Your changes stay in the \(RepoTile.label(for: currentSession.effectiveRepo)) worktree\(branch). \
+        They won't move to \(RepoTile.label(for: target)).
+        """
+    }
+
+    private func chooseRepo(_ repo: String) {
+        guard repo != currentSession.effectiveRepo, switchingRepo == nil else { return }
+        // Switching repoints the session at another worktree; the one it is
+        // in now keeps its branch, commits and edits on disk. Confirm when
+        // there is something to leave behind, go straight through when the
+        // worktree is still clean.
+        if repoHasWork {
+            confirmRepoTarget = repo
+        } else {
+            Task { await switchRepo(to: repo) }
+        }
+    }
+
+    private func switchRepo(to repo: String) async {
+        switchingRepo = repo
+        defer { switchingRepo = nil }
+        do {
+            // The reload this triggers (`loadIdentity` carries the worktree)
+            // re-reads git status and the switchable answer for the new
+            // worktree, so nothing here has to guess them.
+            switchedRepo = try await OS1API.switchPrimaryRepo(
+                sessionId: currentSession.id,
+                repo: repo,
+                force: repoHasWork
+            )
+        } catch {
+            switchError = error.localizedDescription
         }
     }
 
@@ -831,7 +949,7 @@ struct WorktreeInfoView: View {
     }
 
     private var repoLabel: String {
-        var label = RepoTile.label(for: viewModel.session.effectiveRepo)
+        var label = RepoTile.label(for: currentSession.effectiveRepo)
         let attached = currentSession.attachedRepos?.count ?? 0
         if attached > 0 { label += " +\(attached)" }
         return label
@@ -869,6 +987,8 @@ struct WorktreeInfoView: View {
         async let assetsResult = try? OS1API.assets(sessionId: currentSession.id)
         async let overviewResult = loadOverview()
         async let sandboxResult = loadSandboxResult()
+        async let reposResult = try? OS1API.repos()
+        async let switchableResult = try? OS1API.repoSwitchable(sessionId: currentSession.id)
         let (nextGit, nextDiffResponse, nextAssets, nextOverview, nextSandbox) = await (
             gitResult,
             diffResult,
@@ -876,7 +996,11 @@ struct WorktreeInfoView: View {
             overviewResult,
             sandboxResult
         )
+        let (nextRepos, nextSwitchable) = await (reposResult, switchableResult)
         guard !Task.isCancelled else { return }
+        if let nextRepos { repos = nextRepos }
+        repoSwitchable = nextSwitchable?.switchable ?? false
+        repoHasWork = nextSwitchable?.hasWork ?? false
         if let nextGit { gitStatus = nextGit }
         if let nextDiffResponse {
             diff = nextDiffResponse.repos.first(where: \.primary)?.diff
@@ -994,7 +1118,17 @@ struct WorktreeInfoView: View {
     /// The navigation value is a snapshot. Prefer the latest polled row so an
     /// optimistic session gains its worktree metadata without being reopened.
     private var currentSession: Session {
-        sessions.first(where: { $0.id == viewModel.session.id }) ?? viewModel.session
+        var session = sessions.first(where: { $0.id == viewModel.session.id }) ?? viewModel.session
+        // Carry a switch that the sessions poll hasn't returned yet. Every
+        // part of this sheet reads the session (the hero tile, the branch and
+        // path rows, the git status keyed on `loadIdentity`), so the whole
+        // page moves to the new worktree at once rather than in pieces.
+        if let switchedRepo, session.repo != switchedRepo.repo {
+            session.repo = switchedRepo.repo
+            session.branch = switchedRepo.branch
+            session.worktreeDir = switchedRepo.worktreeDir
+        }
+        return session
     }
 
     private var loadIdentity: String {

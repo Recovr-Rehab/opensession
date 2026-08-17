@@ -1057,6 +1057,42 @@ enum OS1API {
         return response.repos
     }
 
+    /// What the repo switcher needs before it offers the list. `switchable`
+    /// is false for the session kinds that have no worktree of their own to
+    /// repoint (Ask reads the main checkout, scratch has no repo at all);
+    /// `hasWork` means the switch is confirmed first, because the current
+    /// changes stay behind in the old worktree.
+    struct RepoSwitchable: Decodable, Sendable {
+        let switchable: Bool?
+        let hasWork: Bool?
+    }
+
+    static func repoSwitchable(sessionId: String) async throws -> RepoSwitchable {
+        try await get("/api/sessions/\(sessionId)/repo-switchable")
+    }
+
+    struct SwitchedRepo: Decodable, Sendable {
+        let repo: String
+        let branch: String
+        let worktreeDir: String
+    }
+
+    /// Point a session at a different repo, for the wrong one picked at
+    /// creation. Nothing is destroyed: the old worktree keeps its branch,
+    /// commits and edits on disk, which is why a session that already has
+    /// work has to pass `force`. The next prompt runs from the new worktree.
+    @discardableResult
+    static func switchPrimaryRepo(
+        sessionId: String,
+        repo: String,
+        force: Bool
+    ) async throws -> SwitchedRepo {
+        try await post(
+            "/api/sessions/\(sessionId)/switch-primary-repo",
+            body: ["repo": repo, "force": force]
+        )
+    }
+
     /// The instance library: everything this instance can be extended with.
     /// Read-only, and small enough to fetch whole (the automation rows carry
     /// their prompts, which is most of the payload and the reason the phone
