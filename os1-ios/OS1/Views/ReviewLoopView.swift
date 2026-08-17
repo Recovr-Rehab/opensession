@@ -72,7 +72,7 @@ struct ReviewLoopView: View {
                 item: item,
                 sessionId: sessionId,
                 worktreeDir: worktreeDir,
-                state: expansionState(item.id, false)
+                state: expansionState(item.id, item.hasFeaturedMedia)
             )
         case .footer(let footer):
             TurnFooterView(footer: footer, sessionId: sessionId)

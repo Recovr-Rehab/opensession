@@ -207,8 +207,7 @@ final class FoldStateTests: XCTestCase {
             toolCount: tools,
             failureCount: 0,
             touchedFiles: [],
-            lineStats: ToolLineStats(),
-            hasMedia: false
+            lineStats: ToolLineStats()
         )
     }
 
@@ -258,16 +257,14 @@ final class FoldStateTests: XCTestCase {
         XCTAssertFalse(state.expanded, "a manual nested toggle still wins")
     }
 
-    func testFailuresAndMediaOnlyPullShortTurnsOpen() {
-        var short = turn("t1", tools: 4)
-        short.failureCount = 1
-        XCTAssertTrue(short.defaultExpanded(preference: "collapsed"))
+    func testFoldDefaultFollowsOnlyThePreference() {
+        var settled = turn("t1", tools: 4)
+        settled.failureCount = 1
+        settled.featuredMedia = TranscriptMedia(videos: ["/media?path=demo.mp4"])
 
-        var long = turn("t2", tools: 40)
-        long.failureCount = 1
-        XCTAssertFalse(
-            long.defaultExpanded(preference: "collapsed"),
-            "a 40-step fold is a wall on a phone; its header carries the signal"
-        )
+        XCTAssertFalse(settled.defaultExpanded(preference: "collapsed"))
+        XCTAssertFalse(settled.defaultExpanded(preference: "auto"))
+        XCTAssertTrue(settled.defaultExpanded(preference: "expanded"))
+        XCTAssertTrue(turn("t2", live: true).defaultExpanded(preference: "auto"))
     }
 }

@@ -89,6 +89,43 @@ final class TranscriptGroupingTests: XCTestCase {
         }
     }
 
+    func testTranscriptEntryDecodesVideos() throws {
+        let data = Data(#"{"id":"a1","type":"assistant","videos":["/media?path=demo.mp4"]}"#.utf8)
+        let entry = try JSONDecoder().decode(TranscriptEntry.self, from: data)
+        XCTAssertEqual(entry.videos, ["/media?path=demo.mp4"])
+        XCTAssertEqual(entry.media.label, "1 video")
+    }
+
+    func testFoldProjectsOnlyExplicitlyFeaturedMediaAndDeduplicatesIt() {
+        var first = toolResult("t1", text: "captured")
+        first.images = ["/media?path=incidental.png", "/media?path=after.png"]
+        first.videos = ["/media?path=demo.mp4"]
+        first.featuredMedia = ["/media?path=after.png", "/media?path=demo.mp4"]
+        var second = toolResult("t2", text: "captured again")
+        second.videos = ["/media?path=demo.mp4"]
+        second.featuredMedia = ["/media?path=demo.mp4"]
+
+        append([
+            TranscriptEntry(id: "u1", type: "user", content: "show it"),
+            toolUse("t1", name: "Bash"),
+            first,
+            toolUse("t2", name: "Bash"),
+            second,
+            TranscriptEntry(id: "a1", type: "assistant", content: "Here it is."),
+        ])
+
+        guard case .work(let turn) = viewModel.displayBlocks[1] else {
+            return XCTFail("the tool calls should fold")
+        }
+        XCTAssertEqual(turn.featuredMedia.images, ["/media?path=after.png"])
+        XCTAssertEqual(turn.featuredMedia.videos, ["/media?path=demo.mp4"])
+        XCTAssertEqual(turn.featuredMedia.label, "2 media")
+        XCTAssertTrue(turn.items.compactMap { item -> ToolCallItem? in
+            if case .tool(let tool) = item { return tool }
+            return nil
+        }.allSatisfy(\.hasFeaturedMedia))
+    }
+
     func testTurnStillRunningFoldsEntirelyAndSkipsItsFooter() {
         viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
         append([

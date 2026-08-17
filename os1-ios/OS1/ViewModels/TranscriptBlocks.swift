@@ -193,8 +193,12 @@ struct ToolCallItem: Identifiable, Equatable {
         guard elapsed >= 1.5 else { return nil }
         return TranscriptFormat.duration(elapsed)
     }
-    var mediaSources: [String] { result?.images ?? [] }
-    var hasMedia: Bool { !mediaSources.isEmpty }
+    var media: TranscriptMedia { result?.media ?? TranscriptMedia() }
+    var featuredMedia: TranscriptMedia {
+        result?.explicitlyFeaturedMedia ?? TranscriptMedia()
+    }
+    var hasMedia: Bool { !media.isEmpty }
+    var hasFeaturedMedia: Bool { !featuredMedia.isEmpty }
 
     /// The scratch file this call wrote, when it was an assets write — the key
     /// that opens it. Session assets live outside every worktree, so the path
@@ -263,24 +267,15 @@ struct WorkTurn: Identifiable, Equatable {
     var failureCount: Int
     var touchedFiles: [TouchedFile]
     var lineStats: ToolLineStats
-    /// A result carried an image — the fold opens so it isn't hidden.
-    var hasMedia: Bool
+    /// Media the agent explicitly surfaced. Closed folds keep this visible;
+    /// open folds render it in the tool row that produced it.
+    var featuredMedia: TranscriptMedia = TranscriptMedia()
     /// "Bash: bun test" — what the fold is doing right now, shown while it is
     /// live and collapsed so the work never looks stalled.
     var livePreview: String?
 
-    var hasFailure: Bool { failureCount > 0 }
-
-    /// A fold this long is a wall on a phone. Media and failures still pull a
-    /// short turn open — that's how you see a screenshot or a stack trace
-    /// without hunting — but past this many steps the header's own signals
-    /// (the failure count, the edited files) carry it instead, and opening
-    /// stays the reader's choice.
-    private static let pinOpenStepLimit = 8
-
     /// How the fold should start out, before any manual toggle.
     func defaultExpanded(preference: String) -> Bool {
-        if hasMedia || hasFailure, toolCount <= Self.pinOpenStepLimit { return true }
         switch preference {
         case "expanded": return true
         // "auto" is the default: open while the work is happening, folded the
@@ -700,9 +695,25 @@ enum TranscriptGrouping {
             failureCount: tools.filter(\.isError).count,
             touchedFiles: files,
             lineStats: stats,
-            hasMedia: tools.contains(where: \.hasMedia),
+            featuredMedia: featuredMedia(from: tools),
             livePreview: preview
         )
+    }
+
+    /// Explicitly surfaced media in tool order, with repeated captures to the
+    /// same source shown once.
+    private static func featuredMedia(from tools: [ToolCallItem]) -> TranscriptMedia {
+        var media = TranscriptMedia()
+        var seen: Set<String> = []
+        for tool in tools {
+            for source in tool.featuredMedia.images where seen.insert(source).inserted {
+                media.images.append(source)
+            }
+            for source in tool.featuredMedia.videos where seen.insert(source).inserted {
+                media.videos.append(source)
+            }
+        }
+        return media
     }
 
     /// Same path touched twice keeps its first position and sums its counts.

@@ -80,6 +80,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   Routine calls fold into one `N steps` run, and consecutive edits to the same
   file into one row — the path once, the summed ±lines, and a `×3` count —
   both opening to the individual calls.
+  Transcript videos stream inline on both platforms. Tool-result screenshots
+  and recordings marked as featured stay visible when their work fold closes,
+  while incidental media remains inside the producing tool row.
   A `Task` row opens the sub-agent's own transcript in a sheet (polled while
   the worker runs, via `GET /api/sessions/:id/subagent/:agentId`), and a
   footer's file chip opens that file's diff for the turn. A published

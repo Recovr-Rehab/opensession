@@ -75,6 +75,23 @@ struct TurnBlockView: View {
                     touchedFileSummary
                 }
             }
+
+            // A marked screenshot or recording is the result, not the work.
+            // Closing the fold hides the steps and leaves that result visible.
+            if !state.expanded, !turn.featuredMedia.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    ConversationImageStrip(
+                        sources: turn.featuredMedia.images,
+                        sessionId: sessionId
+                    )
+                    ConversationVideoStrip(
+                        sources: turn.featuredMedia.videos,
+                        sessionId: sessionId
+                    )
+                }
+                .padding(.leading, 6)
+                .padding(.top, 8)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -535,7 +552,7 @@ private struct ToolRunView: View {
                                 item: item,
                                 sessionId: sessionId,
                                 worktreeDir: worktreeDir,
-                                state: expansionState(item.id, false)
+                                state: expansionState(item.id, item.hasFeaturedMedia)
                             )
                         }
                     }
@@ -548,7 +565,7 @@ private struct ToolRunView: View {
                 item: item,
                 sessionId: sessionId,
                 worktreeDir: worktreeDir,
-                state: expansionState(item.id, false)
+                state: expansionState(item.id, item.hasFeaturedMedia)
             )
         }
     }
@@ -568,8 +585,15 @@ private struct ToolRunView: View {
     }
 
     private var failureCount: Int { items.filter(\.isError).count }
-    private var mediaCount: Int { items.reduce(0) { $0 + $1.mediaSources.count } }
-    private var mediaLabel: String { "\(mediaCount) image\(mediaCount == 1 ? "" : "s")" }
+    private var mediaCount: Int { items.reduce(0) { $0 + $1.media.count } }
+    private var mediaLabel: String {
+        var media = TranscriptMedia()
+        for item in items {
+            media.images.append(contentsOf: item.media.images)
+            media.videos.append(contentsOf: item.media.videos)
+        }
+        return media.label
+    }
     private var accessibilityLabel: String {
         var parts = ["\(items.count) grouped steps", label]
         if failureCount > 0 { parts.append("\(failureCount) failed") }
@@ -616,7 +640,7 @@ private struct EditRunView: View {
                             item: item,
                             sessionId: sessionId,
                             worktreeDir: worktreeDir,
-                            state: expansionState(item.id, false)
+                            state: expansionState(item.id, item.hasFeaturedMedia)
                         )
                     }
                 }

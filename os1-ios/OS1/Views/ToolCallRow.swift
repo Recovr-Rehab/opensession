@@ -235,9 +235,15 @@ struct ToolCallRow: View {
                     }
                 }
                 ConversationImageStrip(
-                    sources: item.mediaSources,
+                    sources: item.media.images,
                     sessionId: sessionId,
                     size: 120,
+                    cornerRadius: 10
+                )
+                ConversationVideoStrip(
+                    sources: item.media.videos,
+                    sessionId: sessionId,
+                    maxWidth: 480,
                     cornerRadius: 10
                 )
                 if let result = detail.resultText {

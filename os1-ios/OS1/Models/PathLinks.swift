@@ -89,6 +89,12 @@ final class PathLinks {
         return path.isEmpty ? nil : path
     }
 
+    /// Return an exact registered path. Media URLs use this to prove that an
+    /// absolute file under the assets root is one of this session's files.
+    func registeredPath(_ path: String, for sessionId: String) -> String? {
+        registries[sessionId]?.paths.contains(path) == true ? path : nil
+    }
+
     /// Markdown with every registered path rewritten as a link. Returns the
     /// input unchanged when there is nothing to do, which is most text.
     func linkify(_ markdown: String, sessionId: String?) -> String {

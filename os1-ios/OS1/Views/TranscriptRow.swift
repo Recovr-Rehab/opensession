@@ -69,7 +69,7 @@ struct TranscriptRow: View {
                 item: item,
                 sessionId: sessionId,
                 worktreeDir: worktreeDir,
-                state: expansionState(item.id, false)
+                state: expansionState(item.id, item.hasFeaturedMedia)
             )
         case .work(let turn):
             TurnBlockView(
@@ -348,6 +348,11 @@ struct UserBubble: View {
                     sessionId: sessionId,
                     alignment: .trailing
                 )
+                ConversationVideoStrip(
+                    sources: entry.videos ?? [],
+                    sessionId: sessionId,
+                    alignment: .trailing
+                )
                 if !entry.text.isEmpty {
                     let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
                     Text(entry.text)
@@ -421,6 +426,7 @@ struct AssistantMessage: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             ConversationImageStrip(sources: entry.images ?? [], sessionId: sessionId)
+            ConversationVideoStrip(sources: entry.videos ?? [], sessionId: sessionId)
             if !entry.text.isEmpty || state.expanded {
                 bodyContent
             }

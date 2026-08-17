@@ -403,12 +403,16 @@ enum OS1API {
     /// have to be joined to the configured server: `URL(string:)` happily
     /// returns a scheme-less relative URL, `URLRequest` can't fetch one, and
     /// every such picture came out as the grey retry tile.
-    nonisolated static func conversationImageURL(source: String, base: URL?) -> URL? {
+    nonisolated static func conversationMediaURL(source: String, base: URL?) -> URL? {
         if source.hasPrefix("/") {
             guard let base else { return nil }
             return URL(string: source, relativeTo: base)?.absoluteURL
         }
         return URL(string: source)
+    }
+
+    nonisolated static func conversationImageURL(source: String, base: URL?) -> URL? {
+        conversationMediaURL(source: source, base: base)
     }
 
     /// Resolve an image from a bounded transcript entry. Large inline images
@@ -426,7 +430,7 @@ enum OS1API {
 
         let config = ServerConfig.shared
         let base = config.baseURL
-        guard let url = conversationImageURL(source: source, base: base) else {
+        guard let url = conversationMediaURL(source: source, base: base) else {
             throw APIError.badURL
         }
         let sameOrigin = url.scheme == base?.scheme

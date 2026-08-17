@@ -19,6 +19,17 @@ final class ConversationImageURLTests: XCTestCase {
         )
     }
 
+    func testRelativeVideoPathUsesTheSameMediaResolver() {
+        let url = OS1API.conversationMediaURL(
+            source: "/media?path=%2Fhome%2Fubuntu%2Fdemo.mp4",
+            base: base
+        )
+        XCTAssertEqual(
+            url?.absoluteString,
+            "https://os.example.dev/media?path=%2Fhome%2Fubuntu%2Fdemo.mp4"
+        )
+    }
+
     func testRelativeApiPathJoinsTheServer() {
         let url = OS1API.conversationImageURL(
             source: "/api/sessions/os-1/transcript-image/e-1/0",

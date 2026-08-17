@@ -92,6 +92,32 @@ final class AssetLinksTests: XCTestCase {
         XCTAssertNil(AssetLinks.path(from: URL(string: "https://os.tella.dev/x")!))
     }
 
+    func testMediaSourceResolvesToARegisteredAsset() {
+        let absolute = "/home/ubuntu/.opensession-assets/os-old/viz/index.html"
+        let encoded = absolute.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)!
+        XCTAssertEqual(
+            AssetLinks.path(
+                forMediaSource: "https://os.tella.dev/media?path=\(encoded)#t=0.1",
+                sessionId: session
+            ),
+            "viz/index.html"
+        )
+    }
+
+    func testMediaSourceNeverGuessesAnUnregisteredAsset() {
+        let other = "/home/ubuntu/.opensession-assets/os-old/demo.mov"
+        let ordinary = "/tmp/demo.mov"
+        XCTAssertNil(AssetLinks.path(
+            forMediaSource: "/media?path=\(other)",
+            sessionId: session
+        ))
+        XCTAssertNil(AssetLinks.path(
+            forMediaSource: "/media?path=\(ordinary)",
+            sessionId: session
+        ))
+        XCTAssertNil(AssetLinks.path(forMediaSource: "blob:video", sessionId: session))
+    }
+
     /// The two schemes are separate registries: an asset link is not a file
     /// link, whatever the paths happen to be called.
     func testSchemesDoNotCross() {

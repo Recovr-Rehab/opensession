@@ -84,7 +84,10 @@ struct TranscriptEntry: Identifiable, Decodable, Equatable, Sendable {
     /// Image attachments on conversation messages: `data:` URLs or bounded
     /// transcript `os-blob:` references resolved through the image endpoint.
     var images: [String]?
-    /// Images an agent marked as the visual result of its work. A merged-change
+    /// Video attachments and tool-result recordings, served through the media
+    /// endpoint and streamed by the native player.
+    var videos: [String]?
+    /// Media an agent marked as the visual result of its work. A merged-change
     /// share uses the newest local screenshot when no walkthrough still exists.
     var featuredMedia: [String]?
     /// Set when this entry is an operational notice rather than a message —
@@ -112,6 +115,40 @@ struct TranscriptEntry: Identifiable, Decodable, Equatable, Sendable {
     var isAssistant: Bool { type == "assistant" }
     var isTool: Bool { type == "tool_use" || type == "tool_result" }
     var isSystem: Bool { type == "system" }
+
+    var media: TranscriptMedia {
+        TranscriptMedia(images: images ?? [], videos: videos ?? [])
+    }
+
+    /// Resolve the provenance list against the renderable sources. The server
+    /// can retain an original path in `featuredMedia` while bounding or
+    /// rewriting another source, so only exact renderable matches survive.
+    var explicitlyFeaturedMedia: TranscriptMedia {
+        let featured = Set(featuredMedia ?? [])
+        return TranscriptMedia(
+            images: (images ?? []).filter(featured.contains),
+            videos: (videos ?? []).filter(featured.contains)
+        )
+    }
+}
+
+/// Renderable media carried by one entry or projected out of a folded turn.
+struct TranscriptMedia: Equatable, Sendable {
+    var images: [String] = []
+    var videos: [String] = []
+
+    var count: Int { images.count + videos.count }
+    var isEmpty: Bool { count == 0 }
+
+    var label: String {
+        if videos.isEmpty {
+            return "\(images.count) image\(images.count == 1 ? "" : "s")"
+        }
+        if images.isEmpty {
+            return "\(videos.count) video\(videos.count == 1 ? "" : "s")"
+        }
+        return "\(count) media"
+    }
 }
 
 /// Tolerant subset of the protocol's `ToolPresentation`. Every field stays

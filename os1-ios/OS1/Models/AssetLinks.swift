@@ -34,6 +34,22 @@ enum AssetLinks {
         links.path(from: url)
     }
 
+    /// The scratch asset an inline media URL streams, when the relative path
+    /// is registered for this session. The absolute folder may use a historical
+    /// session id, so the listing-backed relative path is the authority.
+    static func path(forMediaSource source: String, sessionId: String) -> String? {
+        guard let mediaPath = URLComponents(string: source)?.queryItems?
+            .first(where: { $0.name == "path" })?.value,
+              let root = mediaPath.range(of: "/.opensession-assets/")
+        else { return nil }
+
+        let afterRoot = mediaPath[root.upperBound...]
+        guard let separator = afterRoot.firstIndex(of: "/") else { return nil }
+        let relative = String(afterRoot[afterRoot.index(after: separator)...])
+        guard !relative.isEmpty else { return nil }
+        return links.registeredPath(relative, for: sessionId)
+    }
+
     /// Markdown with every asset this session wrote rewritten as a link.
     static func linkify(_ markdown: String, sessionId: String?) -> String {
         links.linkify(markdown, sessionId: sessionId)
