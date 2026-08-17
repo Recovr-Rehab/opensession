@@ -244,6 +244,7 @@ registerSessionControl({
 		images: imageUrls,
 		mcpServers,
 		workspaceId,
+		isolatedWorktree,
 		parentSessionId,
 		spawnedBy: spawnedByInput,
 		reportBack,
@@ -416,7 +417,13 @@ registerSessionControl({
 				}
 				const worktrees = await listWorktrees(repo.id);
 				wtPath = worktrees.find((w) => w.branch === sessionBranch)?.path || "";
-				if (!wtPath) wtPath = await createWorktree(sessionBranch, repo.id);
+				// `isolated` only says anything on a shared-checkout repo, where it
+				// is the difference between this session getting a tree of its own
+				// and joining every other session in the live main checkout.
+				if (!wtPath)
+					wtPath = await createWorktree(sessionBranch, repo.id, {
+						...(isolatedWorktree ? { isolated: true } : {}),
+					});
 			}
 		}
 		// The first code session in a joined workspace that owns no worktree yet (an

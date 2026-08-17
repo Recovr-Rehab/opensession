@@ -97,6 +97,16 @@ export interface CreateSessionOpts {
    * silently starting a standalone session.
    */
   workspaceId?: string;
+  /**
+   * Force a per-branch worktree even on a shared-checkout repo, the way the
+   * automation and from-PR paths already do. Without it a code session on a
+   * repo like Open Session's own lands in the live main checkout, so a batch
+   * of sessions started together would all edit one tree and produce one
+   * mingled diff — which is exactly what a caller fanning work out across
+   * separate workspaces is trying to avoid. Ignored in ask/scratch mode, and
+   * by a session joining a workspace that already owns a worktree.
+   */
+  isolatedWorktree?: boolean;
   /** Parent/orchestrator session id when this is a worker sub-session. */
   parentSessionId?: string;
   /**

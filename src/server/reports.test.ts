@@ -10,7 +10,10 @@ import {
 import { join } from "path";
 import {
 	__resetReportIndexForTest,
+	getReport,
 	listReports,
+	MAX_REPORT_TASK_PROMPT,
+	MAX_REPORT_TASKS,
 	listReportsForSession,
 	publishReport,
 	readReportAsset,
@@ -200,5 +203,65 @@ describe("report signals", () => {
 				})),
 			}),
 		).toThrow("Too many report highlights");
+	});
+});
+
+describe("report tasks", () => {
+	test("persists the work a report proposes, separately from its findings", () => {
+		const report = publishReport({
+			automationId,
+			automationName: "Test",
+			title: "21 native parity gaps",
+			html: "<p>gaps</p>",
+			highlights: [
+				{
+					title: "Quick replies are dropped",
+					summary: "The decoder ignores the frame.",
+					urgency: "high",
+					confidence: "high",
+				},
+			],
+			tasks: [
+				{ title: " Decode reply_suggestions ", prompt: " Add the case. " },
+				{ title: "Show the mentions badge", prompt: "Read /api/mentions." },
+			],
+		});
+
+		// A report may rank three findings and still propose twenty tasks, so
+		// neither list is derived from the other.
+		expect(report.highlights).toHaveLength(1);
+		expect(report.tasks).toEqual([
+			{ title: "Decode reply_suggestions", prompt: "Add the case." },
+			{ title: "Show the mentions badge", prompt: "Read /api/mentions." },
+		]);
+		expect(getReport(automationId, report.id)?.tasks).toEqual(report.tasks);
+	});
+
+	test("rejects a task that could not be handed to a session on its own", () => {
+		const base = {
+			automationId,
+			automationName: "Test",
+			title: "Invalid task report",
+			html: "<p>tasks</p>",
+		};
+		expect(() =>
+			publishReport({ ...base, tasks: [{ title: "No prompt", prompt: "  " }] }),
+		).toThrow("Report task 1 needs a title and a prompt");
+		expect(() =>
+			publishReport({
+				...base,
+				tasks: Array.from({ length: MAX_REPORT_TASKS + 1 }, () => ({
+					title: "Task",
+					prompt: "Do it.",
+				})),
+			}),
+		).toThrow("Too many report tasks");
+		// Truncating would hand an agent an instruction that stops mid-sentence.
+		expect(() =>
+			publishReport({
+				...base,
+				tasks: [{ title: "Long", prompt: "x".repeat(MAX_REPORT_TASK_PROMPT + 1) }],
+			}),
+		).toThrow("prompt is too long");
 	});
 });

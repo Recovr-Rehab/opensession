@@ -20,6 +20,31 @@ export async function fetchReports(automationId: string): Promise<ReportMeta[]> 
 	return result.reports;
 }
 
+export interface StartedReportSession {
+	task: number;
+	title: string;
+	id?: string;
+	error?: string;
+}
+
+/**
+ * Start one session per selected task, each in its own workspace. `tasks` are
+ * indexes into the report's own task list; the prompts stay server-side, so
+ * nothing here can put words into a session the report did not publish.
+ * Resolves once every session exists, which is a few seconds per worktree.
+ */
+export async function startReportSessions(
+	automationId: string,
+	reportId: string,
+	tasks: number[],
+): Promise<StartedReportSession[]> {
+	const result = await request<{ sessions: StartedReportSession[] }>(
+		`/reports/${encodeURIComponent(automationId)}/${encodeURIComponent(reportId)}/sessions`,
+		{ method: "POST", body: { tasks }, label: "Failed to start sessions" },
+	);
+	return result.sessions;
+}
+
 export async function fetchSessionReports(
 	sessionId: string,
 ): Promise<ReportMeta[]> {

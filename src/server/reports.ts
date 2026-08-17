@@ -68,6 +68,27 @@ export interface ReportHighlight {
 	sourceRefs?: string[];
 }
 
+/** Tasks a report may carry, and so the most sessions one fan-out can start. */
+export const MAX_REPORT_TASKS = 30;
+export const MAX_REPORT_TASK_PROMPT = 4000;
+
+/**
+ * One unit of work the report proposes, sized to be done on its own.
+ *
+ * Deliberately not a highlight. A highlight is a ranked FINDING — it carries
+ * urgency and confidence because its job is to be read and triaged. A task is
+ * a piece of WORK: a self-contained prompt an agent can be handed with nothing
+ * else for context. A report of 21 gaps may want three highlights for the
+ * digest and all 21 as tasks, so the two lists are separate and neither is
+ * derived from the other.
+ */
+export interface ReportTask {
+	/** Short label, what the row in the picker says. */
+	title: string;
+	/** The opening prompt for the session that does it. Must stand alone. */
+	prompt: string;
+}
+
 export interface ReportMeta {
 	/** Timestamp-prefixed id, unique within the group (= the filename stem). */
 	id: string;
@@ -87,6 +108,8 @@ export interface ReportMeta {
 	confidence?: ReportConfidence;
 	/** Structured findings for history inputs and optional notification sinks. */
 	highlights?: ReportHighlight[];
+	/** Follow-up work the report proposes, one session each (see ReportTask). */
+	tasks?: ReportTask[];
 }
 
 export interface ReportGroup {
@@ -203,6 +226,7 @@ export function publishReport(input: {
 	urgency?: ReportUrgency;
 	confidence?: ReportConfidence;
 	highlights?: ReportHighlight[];
+	tasks?: ReportTask[];
 	assets?: ReportAsset[];
 }): ReportMeta {
 	if (!safeSegment(input.automationId)) {
@@ -270,6 +294,23 @@ export function publishReport(input: {
 			...(sourceRefs?.length ? { sourceRefs } : {}),
 		};
 	});
+	if ((input.tasks?.length || 0) > MAX_REPORT_TASKS)
+		throw new Error(`Too many report tasks (${MAX_REPORT_TASKS} max)`);
+	const tasks = input.tasks?.map((task, index) => {
+		if (!task || typeof task !== "object")
+			throw new Error(`Invalid report task ${index + 1}`);
+		const title = String(task.title || "").trim().slice(0, 200);
+		// Truncating a prompt would hand an agent a sentence that stops
+		// mid-instruction, so an over-long one is refused instead.
+		const prompt = String(task.prompt || "").trim();
+		if (!title || !prompt)
+			throw new Error(`Report task ${index + 1} needs a title and a prompt`);
+		if (prompt.length > MAX_REPORT_TASK_PROMPT)
+			throw new Error(
+				`Report task ${index + 1} prompt is too long (${prompt.length} > ${MAX_REPORT_TASK_PROMPT})`,
+			);
+		return { title, prompt };
+	});
 	// 2026-07-12-060002-4f3a: lexicographic = chronological, readable on disk.
 	const stamp = now
 		.toISOString()
@@ -290,6 +331,7 @@ export function publishReport(input: {
 		...(input.urgency ? { urgency: input.urgency } : {}),
 		...(input.confidence ? { confidence: input.confidence } : {}),
 		...(highlights?.length ? { highlights } : {}),
+		...(tasks?.length ? { tasks } : {}),
 	};
 	const dir = groupDir(input.automationId);
 	mkdirSync(dir, { recursive: true });
@@ -363,6 +405,15 @@ export function listReportGroups(): ReportGroup[] {
 	return groups.sort((a, b) =>
 		b.latest.createdAt.localeCompare(a.latest.createdAt),
 	);
+}
+
+/** One report's metadata, or null when it doesn't exist. */
+export function getReport(
+	automationId: string,
+	reportId: string,
+): ReportMeta | null {
+	if (!safeSegment(automationId) || !safeSegment(reportId)) return null;
+	return readMeta(automationId, `${reportId}.json`);
 }
 
 /** A group's full history, newest first. */

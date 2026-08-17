@@ -7,6 +7,7 @@ import { BASE_PATH } from "../lib/base";
 import { absoluteLink } from "../lib/share-link";
 import { type NewSessionPrefill } from "../lib/new-session-link";
 import { ReportFrame } from "./ReportFrame";
+import { ReportTasksDialog } from "./ReportTasksDialog";
 import { Button } from "../ui/button";
 import { CopyCheck, useCopy } from "../ui/copy";
 import { IconChevronLeft, IconChevronRight, IconFile, IconLink } from "./icons";
@@ -127,6 +128,11 @@ export function Reports({
 		value: report.id,
 		label: formatDate(report.createdAt),
 	}));
+	// The report a fan-out is being picked from. Held by id rather than by
+	// value so a `reports_changed` refresh mid-pick cannot swap the list under
+	// the checkboxes.
+	const [fanOutId, setFanOutId] = useState("");
+	const fanOut = history.find((report) => report.id === fanOutId);
 	const { copied, share } = useCopy();
 	const shareSelected = () => {
 		if (!selected) return;
@@ -258,6 +264,16 @@ export function Reports({
 											options={historyOptions}
 											onChange={(id) => onSelect(selected.automationId, id)}
 										/>
+										{!!selected.tasks?.length && (
+											<Button
+												size="md"
+												variant="primary"
+												className="shrink-0"
+												onClick={() => setFanOutId(selected.id)}
+											>
+												Fix each
+											</Button>
+										)}
 										{selected.sessionId && <Button size="md" className="shrink-0" onClick={() => onOpenSession(selected.sessionId!)}>Open run</Button>}
 										<Button size="md" className="shrink-0" icon={<CopyCheck copied={copied} size={20} idle={<IconLink size={20} />} />} aria-label="Share report" onClick={shareSelected} />
 									</div>
@@ -286,6 +302,19 @@ export function Reports({
 								    the two seams meet across the window instead of stepping
 								    down by the height of a line this no longer draws. */}
 								<h2 className="m-0 min-w-0 flex-1 truncate text-item-title font-medium text-dim">{selected.title}</h2>
+								{/* The report's own proposal, so it sits with the actions
+								    rather than inside the document: a report is read in a
+								    sandboxed frame that cannot start anything itself. */}
+								{!!selected.tasks?.length && (
+									<Button
+										size="md"
+										variant="primary"
+										className="shrink-0"
+										onClick={() => setFanOutId(selected.id)}
+									>
+										Fix each
+									</Button>
+								)}
 								{/* No hand-set box on any of the three. They were pinned to
 								    30px, which is off the control scale in both directions:
 								    the buttons kept `size="sm"`'s 26px padding inside a 30px
@@ -310,6 +339,12 @@ export function Reports({
 							title={selected.title}
 							onOpenNewSession={onOpenNewSession}
 							onOpenSupport={onOpenSupport}
+						/>
+					)}
+					{fanOut && (
+						<ReportTasksDialog
+							report={fanOut}
+							onClose={() => setFanOutId("")}
 						/>
 					)}
 				</section>

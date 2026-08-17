@@ -247,6 +247,8 @@ export interface ReportMeta {
 		confidence: "low" | "medium" | "high";
 		sourceRefs?: string[];
 	}>;
+	/** Follow-up work the report proposes, one session each. */
+	tasks?: Array<{ title: string; prompt: string }>;
 }
 
 export interface ReportGroup {

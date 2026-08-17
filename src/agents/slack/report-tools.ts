@@ -20,6 +20,8 @@ import {
 	MAX_REPORT_ASSETS,
 	MAX_REPORT_ASSET_BYTES,
 	MAX_REPORT_BYTES,
+	MAX_REPORT_TASK_PROMPT,
+	MAX_REPORT_TASKS,
 } from "../../server/reports";
 import { assetsDirFor, resolveAssetPath } from "../../server/session-assets";
 import { lstatSync, readFileSync, realpathSync, statSync } from "fs";
@@ -91,6 +93,16 @@ Write plain semantic HTML and set no colours. Readers view reports in a light or
 					.describe(
 						"Machine-readable findings used by report history and optional notification outputs. Every finding needs its own urgency, confidence, and evidence references when available.",
 					),
+				tasks: z
+					.array(z.object({ title: z.string(), prompt: z.string() }))
+					.max(MAX_REPORT_TASKS)
+					.optional()
+					.describe(
+						`Follow-up work this report proposes, one per unit of work (max ${MAX_REPORT_TASKS}). A reader can start a session per task from the report, each in its own workspace, so split the work the way you would want it reviewed: one task per independent change, and findings that touch the same code in one task rather than several. This is not the findings list — publish every piece of work, not just the top few.
+
+title: a short label for the picker row.
+prompt: the whole opening prompt for that session (max ${MAX_REPORT_TASK_PROMPT} characters). It is all the agent gets, so it must stand alone: what is wrong, the files to touch, what done looks like, and how to verify. Name no other task.`,
+					),
 			},
 			async (args: {
 				title: string;
@@ -106,6 +118,7 @@ Write plain semantic HTML and set no colours. Readers view reports in a light or
 					confidence: (typeof REPORT_CONFIDENCES)[number];
 					sourceRefs?: string[];
 				}>;
+				tasks?: Array<{ title: string; prompt: string }>;
 			}) => {
 				try {
 					if (args.assets?.length && !ctx.sessionId)
@@ -146,10 +159,15 @@ Write plain semantic HTML and set no colours. Readers view reports in a light or
 						urgency: args.urgency,
 						confidence: args.confidence,
 						highlights: args.highlights,
+						tasks: args.tasks,
 						assets,
 					});
 					return text(
-						`Published report "${meta.title}" (${meta.id}). It's now the latest report for "${ctx.automationName}" in the Reports view.`,
+						`Published report "${meta.title}" (${meta.id}). It's now the latest report for "${ctx.automationName}" in the Reports view.${
+							meta.tasks?.length
+								? ` A reader can start ${meta.tasks.length} session${meta.tasks.length === 1 ? "" : "s"} from it, one per task.`
+								: ""
+						}`,
 					);
 				} catch (e: any) {
 					return text(`Failed to publish report: ${e?.message || e}`);
