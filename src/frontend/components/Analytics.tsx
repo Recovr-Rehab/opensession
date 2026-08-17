@@ -6,6 +6,7 @@ import type { AnalyticsPerson, AnalyticsPersonRepo, AnalyticsSummary } from "../
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
 import { Segmented, SegmentedOption } from "../ui/segmented";
+import { DateField } from "../ui/date-picker";
 import { PageTitle } from "../ui/page-header";
 import { cn } from "../ui/cn";
 import {
@@ -628,14 +629,6 @@ export function Analytics() {
 		return { labels, engineLabels, unmeasuredDays, kindSeries, kindValues, modelSeries, modelValues, tokenSeries, tokenValues, totalTokens, costSeries, costValues, costUsd, requests, hasCost, prSeries, prValues, turnSeries, turnValues, factorySeries, factoryValues, rq, reviewSeries, reviewValues, splitDate, repoColor, personRepoRows, personRepoSeries };
 	}, [data]);
 
-	// Deliberately NOT ui/input's field: these two sit inside the range row
-	// beside the 7d/14d/30d/90d segmented control, and they match its knob:
-	// same `rounded-control` corner, same hairline. An input keeps its border
-	// (a card doesn't; the edge of a field is one of the things that is
-	// genuinely a line), so this is the one bordered thing left in the header.
-	const dateInput =
-		"rounded-control border border-line bg-control px-2.5 py-1.5 text-control-label text-fg [color-scheme:inherit]";
-
 	// A held filter outlives the range it was picked in, so it only counts
 	// while that repo is still one of the chart's own series.
 	const activeRepo =
@@ -713,24 +706,27 @@ export function Analytics() {
 								</SegmentedOption>
 							))}
 						</Segmented>
+						{/* Both ends are told about the whole range, so opening either
+						    one shows the span that is currently charted rather than a
+						    lone day. */}
 						<div className="flex items-center gap-1.5">
-							<input
-								type="date"
-								aria-label="From date"
-								className={dateInput}
+							<DateField
+								label="From date"
 								value={from}
 								max={to}
-								onChange={(e) => e.target.value && setFrom(e.target.value)}
+								rangeStart={from}
+								rangeEnd={to}
+								onValueChange={setFrom}
 							/>
 							<span className="text-xs text-faint">–</span>
-							<input
-								type="date"
-								aria-label="To date"
-								className={dateInput}
+							<DateField
+								label="To date"
 								value={to}
 								min={from}
 								max={utcToday()}
-								onChange={(e) => e.target.value && setTo(e.target.value)}
+								rangeStart={from}
+								rangeEnd={to}
+								onValueChange={setTo}
 							/>
 						</div>
 					</div>
