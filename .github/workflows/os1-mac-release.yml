@@ -138,7 +138,30 @@ jobs:
 
       - name: Publish GitHub Release
         if: github.ref_type == 'tag'
-        run: gh release create "$GITHUB_REF_NAME" dist/*.dmg dist/*.zip --generate-notes
+        # Everything above this point is ours and deterministic; this step is the
+        # one call to a service we do not control, and it arrives after ~90s of
+        # signing and a notarisation round trip. A partial GitHub API outage
+        # (2026-08-17) failed it three times on identical, notarised builds, once
+        # while creating the release and once while uploading to a release it had
+        # just created. So retry, and treat an existing release as something to
+        # finish rather than a collision: upload --clobber repairs a half-done
+        # attempt, which is also what makes a re-run of this job safe.
+        run: |
+          for attempt in 1 2 3 4 5; do
+            if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+              if gh release upload "$GITHUB_REF_NAME" dist/*.dmg dist/*.zip --clobber; then
+                echo "uploaded assets to the existing $GITHUB_REF_NAME release"
+                exit 0
+              fi
+            elif gh release create "$GITHUB_REF_NAME" dist/*.dmg dist/*.zip --generate-notes; then
+              echo "created release $GITHUB_REF_NAME"
+              exit 0
+            fi
+            echo "::warning::publishing $GITHUB_REF_NAME failed (attempt $attempt/5), retrying"
+            sleep $((attempt * 30))
+          done
+          echo "::error::could not publish $GITHUB_REF_NAME after 5 attempts"
+          exit 1
         env:
           GH_TOKEN: ${{ github.token }}
 
