@@ -56,12 +56,19 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   spring. Every decision is undoable for six seconds from the top bar. The queue is frozen
   once built, and `settle` waits for both the sessions list and the read marks
   before it is willing to say "All caught up".
+- **Canvas** (`SessionCanvasView`, `CanvasSyncClient`, `CanvasWire`) — the
+  instance's shared spatial session board, rendered in SwiftUI on iOS and
+  macOS. Drag cards to arrange them, drag the background to pan, pinch to
+  zoom, fit the board, or sort the working set by activity. Card geometry,
+  selection, and collaborator presence share the web Canvas's authenticated
+  `/canvas-ws?room=main` tldraw room; native preserves web-authored records it
+  does not render rather than replacing the document.
 - **Reports** (`ReportsView.swift`, `Report.swift`) — the recurring documents
   automations publish, as a row above Archived when there are any. One row per
   automation, opening its newest document with the older ones in that
   document's own bar.
-- **Tool visibility** (`SidebarTools.swift`) — Catch up and Reports are the two
-  TOOLS this app draws, and both answer to the account's `sidebar-hidden-tools`
+- **Tool visibility** (`SidebarTools.swift`) — Canvas, Catch up, and Reports are
+  the TOOLS this app draws, and all answer to the account's `sidebar-hidden-tools`
   ui-pref, which the web sidebar's Tools band writes as well. A missing value
   means the shared defaults, so a tool nobody has switched on is off here too
   rather than appearing only on the phone. Long-press Reports to hide it;
@@ -385,6 +392,7 @@ OS1/
   PlatformCompat.swift       iOS/macOS API bridging shims
   Models/
     Session.swift            Tolerant subset of the server's UnifiedSession
+    CanvasSync.swift         tldraw protocol values, schema, diffs, card geometry
     TranscriptEntry.swift    Transcript entry (REST + WS frames)
     AskQuestion.swift        Pending AskUserQuestion
     AttachedImage.swift      Composer image attachments
@@ -411,6 +419,7 @@ OS1/
     SettingsAPI.swift        Settings reads/writes
     ServerEvent.swift        WS frame parsing (unknown types -> .ignored)
     OS1Socket.swift          WebSocket: bearer auth, ping loop, typed events
+    CanvasSyncClient.swift   Shared Canvas room, records, presence, reconnect
   ViewModels/
     SessionsListViewModel.swift  5s polling + memoized sidebar grouping
     SessionViewModel.swift       watch/stream/prompt/ask state machine
@@ -420,6 +429,7 @@ OS1/
     OS1VisualStyle.swift      Shared web palette, session width, and repo tile
                               (`accent`/`onAccent` come from `AccentTheme`)
     SessionsListView.swift   List + status rows + settings sheet
+    CanvasView.swift         Native pan/zoom board and draggable session cards
     SessionView.swift        Transcript, streaming bubble, ask card, input bar
     NewSessionView.swift     Full-height create-session editor
     TranscriptRow.swift      Per-block rendering: bubbles, notices, clamping
@@ -451,6 +461,10 @@ OS1/
 ## Protocol notes (from the server source)
 
 - Public paths are prefix-less: REST at `/api/...`, WebSocket at `/ws`.
+- Canvas uses a separate authenticated WebSocket at `/canvas-ws?room=main`.
+  It speaks tldraw sync protocol 8 with the serialized schema in
+  `src/shared/canvas-schema.ts`; native keeps the complete record map while
+  drawing and editing only `session-card` shapes.
 - WS handshake: server sends `{"type":"hello","bootId":...}` first; the client
   sends `watch` only after that, so it can't race the upgrade.
 - `transcript_init` replaces the tail, `transcript_history` prepends,

@@ -67,6 +67,19 @@ final class SidebarToolsTests: XCTestCase {
     func testAnEmptyListMeansEverythingIsShown() {
         XCTAssertEqual(SidebarTools.decode("[]"), [])
         XCTAssertFalse(SidebarTools.isHidden(SidebarTools.reports, in: "[]"))
+        XCTAssertFalse(SidebarTools.isHidden(SidebarTools.canvas, in: "[]"))
+    }
+
+    // Existing account values predate new tools. Their absence from an
+    // explicit hidden list means visible; only a missing preference receives
+    // the newer shared defaults.
+    func testAddingCanvasDoesNotRewriteAnExplicitAccountChoice() {
+        let stored = #"["reports","analytics"]"#
+        XCTAssertFalse(SidebarTools.isHidden(SidebarTools.canvas, in: stored))
+        XCTAssertEqual(
+            SidebarTools.setting(SidebarTools.canvas, hidden: false, in: stored),
+            stored
+        )
     }
 
     // Toggling out of a never-set value has to start from the defaults, or the
@@ -82,7 +95,7 @@ final class SidebarToolsTests: XCTestCase {
         XCTAssertEqual(SidebarTools.defaultVisible, ["feed", "prs", "catchup"])
         XCTAssertEqual(
             SidebarTools.defaultHidden.sorted(),
-            ["analytics", "reports", "supporttinder", "tasks"]
+            ["analytics", "canvas", "reports", "supporttinder", "tasks"]
         )
         XCTAssertFalse(SidebarTools.isHidden(SidebarTools.catchUp, in: SidebarTools.defaultHiddenJSON))
         XCTAssertTrue(SidebarTools.isHidden(SidebarTools.reports, in: SidebarTools.defaultHiddenJSON))
@@ -99,7 +112,7 @@ final class SidebarToolsTests: XCTestCase {
     func testSurfacedToolsAreOnesThisAppDraws() {
         XCTAssertEqual(
             SidebarTools.surfaced.map(\.id),
-            [SidebarTools.catchUp, SidebarTools.reports]
+            [SidebarTools.canvas, SidebarTools.catchUp, SidebarTools.reports]
         )
         for tool in SidebarTools.surfaced {
             XCTAssertTrue(SidebarTools.allIds.contains(tool.id), tool.id)

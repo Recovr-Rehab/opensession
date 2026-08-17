@@ -1,8 +1,7 @@
 import Foundation
 
 /// Per-user visibility for the TOOLS: the destinations that are not sessions.
-/// The web sidebar lists seven of them; this app draws two, Catch up in the
-/// bottom bar and Reports as a row above Archived.
+/// The web sidebar owns the ids; this app draws Canvas, Catch up, and Reports.
 ///
 /// This is the same account-level preference the web's Tools band writes
 /// (`sidebar-hidden-tools`, see `src/frontend/lib/sidebar-tools.ts`), so a tool
@@ -15,8 +14,9 @@ import Foundation
 /// id this build never renders still belongs to the account, and dropping it
 /// would silently restore a tool the person hid in the browser.
 enum SidebarTools {
-    /// The two tools this app has a destination for. Both are named here
+    /// The tools this app has a destination for. They are named here
     /// because the surfaces are built in Swift; the ids are the web's.
+    static let canvas = "canvas"
     static let catchUp = "catchup"
     static let reports = "reports"
 
@@ -25,7 +25,9 @@ enum SidebarTools {
     /// but the whole list is mirrored because it is the agreement with the
     /// web: absent means exactly this, on both clients. Keep it in step with
     /// DEFAULT_VISIBLE_TOOLS in src/frontend/lib/sidebar-tools.ts.
-    static let allIds = ["feed", "prs", "tasks", "catchup", "supporttinder", "reports", "analytics"]
+    static let allIds = [
+        "feed", "prs", "tasks", canvas, "catchup", "supporttinder", "reports", "analytics",
+    ]
     static let defaultVisible = ["feed", "prs", "catchup"]
     static var defaultHidden: [String] { allIds.filter { !defaultVisible.contains($0) } }
     static var defaultHiddenJSON: String { encode(defaultHidden) }
@@ -40,6 +42,7 @@ enum SidebarTools {
     }
 
     static let surfaced: [Tool] = [
+        Tool(id: canvas, title: "Canvas"),
         Tool(id: catchUp, title: "Catch up"),
         Tool(id: reports, title: "Reports"),
     ]
