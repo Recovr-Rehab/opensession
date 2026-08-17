@@ -19,7 +19,7 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { $ } from "bun";
-import { isNativeSessionId, OPENSESSION_SESSIONS_DIR, stateDir } from "./paths";
+import { isNativeSessionId, OPENSESSION_SESSIONS_DIR, stateDir, statePath } from "./paths";
 import { configuredRepos, defaultRepo, githubBotLogins } from "./config";
 import { ghRateLimited, isGhRateLimitMsg, noteGhRateLimited } from "./github-limit";
 import { readFeedback } from "../agents/github/feedback";
@@ -431,6 +431,42 @@ function loadSessionMeta(): Map<string, SessionMeta> {
 	}
 	sessionMetaCache = { at: Date.now(), map };
 	return map;
+}
+
+// The Slack agent keeps its threads in its own store, so they never reach
+// loadSessionMeta and used to land in an anonymous "Slack" row. They do record
+// who wrote the message: read that (read-only, per AGENTS.md) and credit them.
+const SLACK_SESSIONS_DIR = statePath(".slack-sessions");
+const SLACK_STORE_SKIP = new Set(["processed-events.json", "github-deliveries.json"]);
+let slackOwnerCache: { at: number; map: Map<string, string> } | null = null;
+
+/** Audit session id (`slack-<thread key>`) to the raw user the thread names. */
+function loadSlackSessionOwners(): Map<string, string> {
+	if (slackOwnerCache && Date.now() - slackOwnerCache.at < 60_000) return slackOwnerCache.map;
+	const map = new Map<string, string>();
+	try {
+		for (const file of readdirSync(SLACK_SESSIONS_DIR)) {
+			if (!file.endsWith(".json") || SLACK_STORE_SKIP.has(file)) continue;
+			try {
+				const s = JSON.parse(readFileSync(`${SLACK_SESSIONS_DIR}/${file}`, "utf-8"));
+				const user = String(s?.userId || "").trim();
+				if (user) map.set(`slack-${file.slice(0, -5)}`, user);
+			} catch {}
+		}
+	} catch {}
+	slackOwnerCache = { at: Date.now(), map };
+	return map;
+}
+
+/**
+ * The person a Slack thread belongs to, or null to leave it on the surface
+ * row. A thread names whoever wrote the message, which is usually a teammate
+ * but can be a bot or a guest — and an unrecognized name must not become a
+ * person, or the count is back to inventing humans.
+ */
+export function slackThreadOwner(owners: Map<string, string>, sessionId: string): string | null {
+	const user = owners.get(sessionId);
+	return user && gitIdentityFor(user) ? user : null;
 }
 
 // ── PRs via gh ──
@@ -923,6 +959,7 @@ export function analyticsPersonName(name: string, login = ""): string {
 export async function buildAnalytics(from: string, to: string): Promise<AnalyticsSummary> {
 	const dates = utcDatesBetween(from, to);
 	const meta = loadSessionMeta();
+	const slackOwners = loadSlackSessionOwners();
 
 	// PRs: query every repo that has ever hosted a code-mode session, and
 	// attribute by head branch against those sessions' branches.
@@ -1112,7 +1149,11 @@ export async function buildAnalytics(from: string, to: string): Promise<Analytic
 					? aggForOwner(resolveOwnerRef(meta, m))
 					: isUnattendedKind
 						? ownerAgg(automationAgg, "Removed automation sessions")
-						: ownerAgg(peopleAgg, kindOwner(s.kind));
+						: // A Slack thread names its author, so credit them rather than
+							// the surface the message arrived on.
+							slackThreadOwner(slackOwners, id)
+							? ownerAgg(peopleAgg, personKey(slackThreadOwner(slackOwners, id)!))
+							: ownerAgg(peopleAgg, kindOwner(s.kind));
 			agg.sessionsActive.add(id);
 			agg.turns += s.turns;
 			agg.outputTokens += output;

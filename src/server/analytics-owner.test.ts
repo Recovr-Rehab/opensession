@@ -1,5 +1,7 @@
-import { describe, expect, test } from "bun:test";
-import { resolveOwnerRef, type SessionMeta } from "./analytics";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import type { TeamMember } from "./config";
+import { __setIdentitiesForTest } from "./shared/user-mappings";
+import { resolveOwnerRef, slackThreadOwner, type SessionMeta } from "./analytics";
 import { agentActor, workerActor } from "./session-actors";
 
 function session(id: string, createdBy: string, extra: Partial<SessionMeta> = {}): SessionMeta {
@@ -103,5 +105,47 @@ describe("session owner attribution", () => {
 		const kent = session(HUMAN, "Kent");
 		const child = session(CHILD, "Kent", { parentSessionId: HUMAN });
 		expect(resolveOwnerRef(store(kent, child), child)).toEqual({ kind: "person", meta: child });
+	});
+});
+
+describe("Slack thread attribution", () => {
+	const TEAM: TeamMember[] = [
+		{
+			name: "Johnny Lin",
+			email: "johnny@example.com",
+			aliases: ["johnny"],
+			github: "johnnylinsf",
+			slackId: "U08S8B3P83X",
+		},
+	];
+	let restore: (() => void) | undefined;
+	beforeAll(() => {
+		restore = __setIdentitiesForTest(TEAM);
+	});
+	afterAll(() => restore?.());
+
+	const owners = new Map([
+		["slack-C1-1", "U08S8B3P83X"],
+		["slack-C1-2", "Johnny Lin"],
+		["slack-C1-3", "USLACKBOT"],
+		["slack-C1-4", "Slack"],
+	]);
+
+	test("credits the teammate a thread names, by Slack id or display name", () => {
+		// A thread lives in the Slack agent's own store, so it never reaches
+		// the session store and used to land in an anonymous "Slack" row.
+		expect(slackThreadOwner(owners, "slack-C1-1")).toBe("U08S8B3P83X");
+		expect(slackThreadOwner(owners, "slack-C1-2")).toBe("Johnny Lin");
+	});
+
+	test("a name that is not a teammate stays on the surface row", () => {
+		// A bot or a guest must not become a person, or the count is back to
+		// inventing humans.
+		expect(slackThreadOwner(owners, "slack-C1-3")).toBe(null);
+		expect(slackThreadOwner(owners, "slack-C1-4")).toBe(null);
+	});
+
+	test("a thread with no recorded user stays on the surface row", () => {
+		expect(slackThreadOwner(owners, "slack-C1-99")).toBe(null);
 	});
 });
