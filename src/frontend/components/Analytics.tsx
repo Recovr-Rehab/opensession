@@ -578,12 +578,15 @@ function PersonRepoBars({
 	const left = hover ? Math.min(Math.max(hover.x, half), Math.max(half, hover.width - half)) : 0;
 
 	return (
-		<div ref={wrapRef} className="relative flex flex-col gap-1">
+		// Rows are contiguous rather than spaced: their padding is the rhythm, so
+		// travelling down the list never crosses a gap that would drop the
+		// readout and raise it again.
+		<div ref={wrapRef} className="relative flex flex-col">
 			{rows.map((p, i) => (
 				<div
 					key={p.name}
 					className={cn(
-						"-mx-2 flex items-center gap-3 rounded-row px-2 py-1 text-label",
+						"-mx-2 flex items-center gap-3 rounded-row px-2 py-1.5 text-label",
 						hover?.index === i && "bg-hover",
 					)}
 					onMouseMove={(e) => show(i, e)}
@@ -622,8 +625,11 @@ function PersonRepoBars({
 					className="-translate-x-1/2"
 					style={{ left, top: above ? hover.top - tip.h - 8 : hover.bottom + 8 }}
 				>
+					{/* Same size as the row's own picture, so the readout draws the
+					    image the row already fetched instead of asking GitHub for a
+					    second size and opening on a blank tile. */}
 					<div className="mb-1.5 flex items-center gap-1.5">
-						<UserAvatar name={row.name} size={16} />
+						<UserAvatar name={row.name} size={18} />
 						<span className="text-meta font-semibold text-fg">{row.name}</span>
 					</div>
 					<table className="border-collapse text-meta">
