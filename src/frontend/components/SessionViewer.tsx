@@ -159,7 +159,6 @@ import {
 	SessionReportsPanel,
 	useSessionReports,
 } from "./SessionReportsPanel";
-import { SessionConfigPanel } from "./SessionConfigPanel";
 import type { NewSessionPrefill } from "../lib/new-session-link";
 import type { WorkflowRunSnapshot } from "../../server/workflow-types";
 import { PreviewButton } from "./PreviewButton";
@@ -5546,9 +5545,6 @@ export function SessionViewer({
 											/>
 										</div>
 									)}
-									<div className={INFO_SECTION}>
-										<SessionConfigPanel sessionId={session.id} />
-									</div>
 								</div>
 								</>
 								)}
@@ -6609,25 +6605,20 @@ export function SessionViewer({
 									liveMedia={liveOverviewMedia}
 								/>
 							</div>
-							{/* Everything below is a section of this same panel, in the
-							    panel's own grammar: a faint label over a borderless plate,
-							    lining up with Git status and the changed files above.
-							    Agents is not one of them any more: it is a place the
-							    bottom bar opens, like Portals, so its empty state has
-							    somewhere to live and a long run cannot bury the
-							    overview. */}
-							<div className="flex flex-col gap-4 px-2 pb-[22px]">
-								{sessionReports.length > 0 && (
+							{/* Reports are a section of this same panel, in the panel's
+							    own grammar: a faint label over a borderless plate, lining
+							    up with Git status and the changed files above. Agents is
+							    not one of them: it is a place the bottom bar opens, like
+							    Portals, so its empty state has somewhere to live and a
+							    long run cannot bury the overview. */}
+							{sessionReports.length > 0 && (
+								<div className="flex flex-col gap-4 px-2 pb-[22px]">
 									<SessionReportsPanel
 										reports={sessionReports}
 										onOpenNewSession={onOpenNewSession}
 									/>
-								)}
-								{/* Reference rather than reading, so it sits last and
-								    starts closed — and only then does it fetch, because
-								    the endpoint behind it runs the real resolvers. */}
-								<SessionConfigPanel sessionId={session.id} />
-							</div>
+								</div>
+							)}
 							</>
 							)}
 						</div>
