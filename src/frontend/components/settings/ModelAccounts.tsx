@@ -526,9 +526,13 @@ export function ClaudeAccountsSection() {
 								</div>
 								{/* One line that identifies the account. The masked token only
 								    earns its place when there is no email to name it by; it
-								    stays in the tooltip either way. */}
+								    stays in the tooltip either way. It takes the meters' size
+								    rather than the settings row's default: at 13px against a
+								    14px name the two read as one block, and an address nobody
+								    needs to read was holding the same weight as the name you
+								    scan the page by. */}
 								<SettingRowDescription
-									className="truncate"
+									className="truncate text-meta"
 									title={[a.email, a.plan?.replace("default_claude_", ""), a.tokenMasked]
 										.filter(Boolean)
 										.join(" · ")}
@@ -814,7 +818,7 @@ export function CodexAccountsSection() {
 								    lives at is the longest string on the row and identifies
 								    nothing the account name doesn't, so it moves to the tooltip.
 								    An API key has no plan, so its masked key stays visible. */}
-								<SettingRowDescription className="truncate" title={a.valueMasked}>
+								<SettingRowDescription className="truncate text-meta" title={a.valueMasked}>
 									{a.kind === "api_key" ? "API key" : "ChatGPT login"}
 									{a.usage?.buckets.find((bucket) => bucket.plan)?.plan
 										? ` · ${a.usage.buckets.find((bucket) => bucket.plan)!.plan}`
