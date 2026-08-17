@@ -664,6 +664,48 @@ struct RepoTile: View {
         RepoImageCache.shared.ensureLoaded(url)
     }
 
+    /// What a menu row should draw for a repo: its own art when it has some,
+    /// and the lettered swatch rasterized when it does not. Most repos have
+    /// no icon uploaded, so `cachedIcon` alone left them with an empty glyph
+    /// slot beside the two that wear a mark. The swatch comes from this same
+    /// view rather than a second drawing of it, so the menu can't drift from
+    /// the tiles everywhere else.
+    @MainActor
+    static func menuIcon(for name: String) -> Image? {
+        cachedIcon(for: name) ?? letterIcon(for: name)
+    }
+
+    /// Rasterizing costs a render pass, so each swatch is kept. Keyed on the
+    /// color as well as the name: the palette is assigned across the whole
+    /// registered set, so a repo can be handed a different one when another
+    /// is added. This is a plain dictionary rather than observed state on
+    /// purpose: a body that wrote to an `@Observable` here would invalidate
+    /// itself.
+    @MainActor private static var letterIcons: [String: Image] = [:]
+
+    /// 20 points is the slot a menu row gives an image; at 3x it stays crisp
+    /// on every display without holding a full-size bitmap per repo.
+    @MainActor
+    private static func letterIcon(for name: String) -> Image? {
+        let key = "\(name)|\(RepoTilePalette.shared.rgb(for: name))"
+        if let cached = letterIcons[key] { return cached }
+        let renderer = ImageRenderer(content: RepoTile(name: name, size: 20))
+        renderer.scale = 3
+        #if os(macOS)
+        guard let rendered = renderer.nsImage else { return nil }
+        rendered.isTemplate = false
+        let image = Image(nsImage: rendered)
+        #else
+        // Original, not template: a menu tints a template image flat, which
+        // would throw away the one thing the swatch carries.
+        guard let rendered = renderer.uiImage?.withRenderingMode(.alwaysOriginal)
+        else { return nil }
+        let image = Image(uiImage: rendered)
+        #endif
+        letterIcons[key] = image
+        return image
+    }
+
     var body: some View {
         ZStack {
             // A letter swatch stands in while a repo's icon loads; Open Session

@@ -321,7 +321,7 @@ struct NewSessionView: View {
                         // above the menu already wears it).
                         if repo == repoInfo.id {
                             Image(systemName: "checkmark")
-                        } else if let icon = RepoTile.cachedIcon(for: repoInfo.id) {
+                        } else if let icon = RepoTile.menuIcon(for: repoInfo.id) {
                             icon
                         }
                     }

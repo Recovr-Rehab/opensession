@@ -248,7 +248,7 @@ struct WorktreeInfoView: View {
                             // in outranks drawing its icon twice.
                             if option.id == currentSession.effectiveRepo {
                                 Image(systemName: "checkmark")
-                            } else if let icon = RepoTile.cachedIcon(for: option.id) {
+                            } else if let icon = RepoTile.menuIcon(for: option.id) {
                                 icon
                             }
                         }
@@ -998,7 +998,12 @@ struct WorktreeInfoView: View {
         )
         let (nextRepos, nextSwitchable) = await (reposResult, switchableResult)
         guard !Task.isCancelled else { return }
-        if let nextRepos { repos = nextRepos }
+        if let nextRepos {
+            repos = nextRepos
+            // A row can only draw art the cache already holds, so ask for it
+            // now rather than when the menu opens.
+            for repo in nextRepos { RepoTile.prefetchIcon(for: repo.id) }
+        }
         repoSwitchable = nextSwitchable?.switchable ?? false
         repoHasWork = nextSwitchable?.hasWork ?? false
         if let nextGit { gitStatus = nextGit }
