@@ -66,13 +66,10 @@ export const TAB_STRIP =
 	// above carries no border of its own, and a top inset here would put a
 	// second line across a top region meant to read as one surface.
 	//
-	// The band is pulled 8px up into the header. The tabs name the session the
-	// header just named, so they should read as part of that title block rather
-	// than a row below it, and the space between the two is the header's own
-	// bottom air: its title is centred in 48px, so the band overlaps padding
-	// and never the text. Taking it here rather than from either box keeps the
-	// header level with the sidebar's brand row and the tabs at full size.
-	"desktop:-mt-2 desktop:h-10 desktop:items-stretch desktop:py-0 " +
+	// The non-split bar takes its 8px header overlap at the call site. Split bars
+	// start at the top of an overflow-clipped column, so their full box stays in
+	// flow instead of losing its top edge outside that column.
+	"desktop:h-10 desktop:items-stretch desktop:py-0 " +
 	"desktop:shadow-[inset_0_-1px_0_var(--border)] " +
 	// Phone: pulled out of flow and pinned flush under the header's bottom edge,
 	// so it reads as fixed chrome rather than a strip the transcript scrolls by.
