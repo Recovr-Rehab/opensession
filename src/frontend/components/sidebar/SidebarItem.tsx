@@ -30,6 +30,7 @@ import { BottomSheet, SheetBody, SheetItem, SheetSeparator, SheetTitle } from ".
 import { Tooltip } from "../../ui/tooltip";
 import { RowCardPopup, useRowHoverCard } from "../SidebarRowCards";
 import { AutoCreatedMark } from "./AutoCreatedMark";
+import { OriginMark } from "./OriginMark";
 import { IconArchive, IconInbox, IconMail, IconPencil, IconPin } from "../icons";
 import { SessionCardBody, WsPrStatusMark } from "../sidebar/HoverCards";
 import { SidebarCtxMenu } from "../sidebar/SidebarCtxMenu";
@@ -517,6 +518,10 @@ export function SidebarItem({
 				{!editing && !session.automation && sessionWasAutoCreated(session) && (
 					<AutoCreatedMark />
 				)}
+				{/* Started somewhere else: a Slack thread, a Linear issue. Same slot
+				    and ink as the mark above, since both answer "where did this row
+				    come from" for a list that mixes origins. */}
+				{!editing && <OriginMark source={session.source} />}
 				{mention && !editing && (
 					// Somebody tagged you here. It takes the slot the unread dot would
 					// use and wins over it, because "you were asked" is the stronger

@@ -65,6 +65,22 @@ export function rowWasAutoCreated(row: WsRow): boolean {
 }
 
 /**
+ * The origin a whole row can claim, for the mark beside its name: the source
+ * every session in it shares. A row is a workspace, and a workspace can hold
+ * sessions from more than one place — one Slack thread that grew a session
+ * you started here is no longer "a Slack workspace", so it gets no mark
+ * rather than a misleading one. Empty for the default origin.
+ */
+export function rowOriginSource(row: WsRow): string {
+	const sources = new Set(row.sessions.map((session) => session.source));
+	if (sources.size !== 1) return "";
+	// `backstage` is the pre-rename id older stored sessions still carry, so it
+	// is a runtime value the union no longer names.
+	const source: string = [...sources][0];
+	return source === "opensession" || source === "backstage" ? "" : source;
+}
+
+/**
  * Whether an auto-created row belongs in the list the person lens is showing.
  * The machine is not a teammate, so its work joins YOUR list (the default
  * lens) rather than some named person's; the aggregate and machine-person
