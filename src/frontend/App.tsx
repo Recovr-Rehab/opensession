@@ -3309,9 +3309,9 @@ export function App(
 	// ⌘⌥←/→ walk the workspace's tab strip (⌃⌥ on Chromium, which takes the ⌘⌥
 	// pair for its own tabs), and ⌥1…⌥9 jump straight to one. Both read the
 	// strip's left-to-right order, panes included, so what the keyboard
-	// reaches is what the eye reads. They fire with the composer focused, the
-	// same trade the sidebar's ⌘↑/⌘↓ cycling already makes: moving between
-	// tabs without leaving the keyboard is the whole point.
+	// reaches is what the eye reads. They fire with the composer focused:
+	// moving between tabs without leaving the keyboard is the whole point, and
+	// unlike the sidebar's ⌘↑/⌘↓ these chords take no caret move from a draft.
 	//
 	// The digits are hard-coded rather than nine registry commands. Matching
 	// is exact on the whole chord, so a command per digit is the only shape
