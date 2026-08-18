@@ -26,16 +26,25 @@ struct GeneralSettingsView: View {
             } else {
                 if let error { settingsErrorRow(error) { Task { await load() } } }
                 Section {
-                    HStack(spacing: 12) {
-                        organizationIcon
-                        VStack(alignment: .leading, spacing: 4) {
-                            uploadButton
-                            if settings?.organizationIconUrl != nil {
-                                Button("Remove icon", role: .destructive) {
-                                    Task { await removeIcon() }
+                    LabeledContent {
+                        HStack(spacing: 12) {
+                            VStack(alignment: .trailing, spacing: 4) {
+                                uploadButton
+                                if settings?.organizationIconUrl != nil {
+                                    Button("Remove icon", role: .destructive) {
+                                        Task { await removeIcon() }
+                                    }
+                                    .disabled(saving)
                                 }
-                                .disabled(saving)
                             }
+                            organizationIcon
+                        }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Organization icon")
+                            Text("Choose a square image that represents your organization.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
                     LabeledContent("Organization name") {

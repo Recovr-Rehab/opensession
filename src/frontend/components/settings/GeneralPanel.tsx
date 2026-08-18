@@ -112,25 +112,13 @@ export function GeneralPanel() {
 				<>
 					<SettingCard>
 						<SettingRow className="items-center">
-							<div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-active text-section-title font-semibold text-dim outline outline-1 outline-divider">
-								{showIcon ? (
-									<img
-										src={settings.organizationIconUrl || undefined}
-										alt=""
-										className="size-full object-cover"
-										onError={() => setIconFailed(true)}
-									/>
-								) : (
-									initial
-								)}
-							</div>
 							<SettingRowText>
 								<SettingRowTitle>Organization icon</SettingRowTitle>
 								<SettingRowDescription>
 									Choose a square image that represents your organization.
 								</SettingRowDescription>
 							</SettingRowText>
-							<SettingRowControl className="flex flex-wrap justify-end gap-2">
+							<SettingRowControl className="flex flex-wrap items-center justify-end gap-2">
 								<Button
 									variant="soft"
 									icon={<IconArrowUpToLine size={20} />}
@@ -151,6 +139,21 @@ export function GeneralPanel() {
 										Remove
 									</Button>
 								)}
+								<div
+									aria-hidden="true"
+									className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-active text-section-title font-semibold text-dim outline outline-1 outline-divider"
+								>
+									{showIcon ? (
+										<img
+											src={settings.organizationIconUrl || undefined}
+											alt=""
+											className="size-full object-cover"
+											onError={() => setIconFailed(true)}
+										/>
+									) : (
+										initial
+									)}
+								</div>
 								<input
 									ref={fileInput}
 									type="file"
