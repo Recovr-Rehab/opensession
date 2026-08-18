@@ -72,6 +72,20 @@ export const sessionSourceLabel = (source: string) =>
 		? PRODUCT_NAME.toLowerCase()
 		: source;
 
+/**
+ * The same origin written for prose — a tooltip or a sentence, where the
+ * lowercase chip id reads as a typo ("From slack"). Unknown origins fall back
+ * to the chip label, which is the id itself.
+ */
+const SOURCE_NAMES: Record<string, string> = {
+	slack: "Slack",
+	linear: "Linear",
+	cli: "the CLI",
+};
+
+export const sessionSourceName = (source: string) =>
+	SOURCE_NAMES[source] ?? sessionSourceLabel(source);
+
 /** Default document.title when no view-specific title applies. */
 export const DEFAULT_DOC_TITLE = PRODUCT_NAME;
 

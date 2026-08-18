@@ -308,6 +308,12 @@ export interface SlackSessionFile {
   branch?: string | null;
   userId?: string;
   message?: string;
+  /** Provisional session name: the first line of the Slack message that
+   *  started it. The generated summary title replaces it in the UI ~15s later
+   *  (generated-titles.ts); without it the session wears its raw
+   *  `<channel>-<threadTs>` key until then, which is what scanSlackSessions
+   *  falls back to. */
+  title?: string;
   worktreeDir?: string | null;
   claudeSessionId?: string | null;
   createdAt?: string;

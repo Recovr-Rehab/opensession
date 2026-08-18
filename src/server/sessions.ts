@@ -852,7 +852,10 @@ function scanSlackSessions(): UnifiedSession[] {
       worktreeDir: data.worktreeDir || null,
       createdBy: startedBy,
       startedBy,
-      title: branch,
+      // The message that started the thread, when the loop recorded one.
+      // `branch` is the last resort: for a thread/DM session it is the raw
+      // `<channel>-<threadTs>` key, which is not a name anyone can read.
+      title: data.title?.trim() || branch,
       lastActivity:
         data.lastActivity ||
         data.createdAt ||

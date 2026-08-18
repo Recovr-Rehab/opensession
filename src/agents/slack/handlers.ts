@@ -625,6 +625,24 @@ function normalizeToolName(name: string): string {
 // processMessage — core: runs a queued message through runAgent
 // ---------------------------------------------------------------------------
 
+/**
+ * A readable provisional name for a session started from Slack: the first line
+ * of what the person actually wrote, with the bot mention and any leading
+ * whitespace stripped. Takes the card title (the clean Slack text) over the
+ * prompt, which by this point may carry an intro and mode instructions the
+ * person never typed. "" when nothing usable survives, so the caller keeps its
+ * own fallback.
+ */
+function provisionalTitle(text: string): string {
+  return text
+    .replace(/<@[A-Z0-9]+>/g, " ")
+    .trim()
+    .split("\n")[0]
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+}
+
 export async function processMessage(
   sessionKey: string,
   msg: QueuedMessage
@@ -651,6 +669,10 @@ export async function processMessage(
       worktreeDir: msg.worktreeDir || null,
       branch: msg.branch || null,
       repoId: msg.repoId || null,
+      // Name it after the message now. The generated summary title below
+      // takes ~15s to land, and until it does the UI falls back to the
+      // session key — a session called "C0BE8KVFBEX-1787038283.876079".
+      title: provisionalTitle(msg.cardTitle || prompt) || undefined,
       createdAt: new Date().toISOString(),
       lastActivity: new Date().toISOString(),
     };

@@ -20,7 +20,8 @@ import {
 	measureSessionPerf,
 	recordSessionPerf,
 } from "../lib/session-performance";
-import { AGENT_NAME, DEFAULT_DOC_TITLE } from "../lib/brand";
+import { AGENT_NAME, DEFAULT_DOC_TITLE, sessionSourceName } from "../lib/brand";
+import { brandLogo } from "../brand-logos";
 import { withQuotes, type Quote } from "../lib/quotes";
 import { markNotesRead } from "../lib/note-reads";
 import { clearMention, onMentionsChanged } from "../lib/mentions";
@@ -5034,18 +5035,6 @@ export function SessionViewer({
 						ref={headerRef}
 					>
 						<div className={VIEWER_TITLE}>
-					{/* This slot says where a session came FROM. Ask mode isn't an
-					    origin — it's a mode you can change — so it rides the composer
-					    toolbar next to the model pill instead, where the switch is one
-					    click from where you're typing. "opensession" is the default
-					    origin (web UI): as a chip it's noise, and for backstage-repo
-					    sessions it read as the repo said twice. Only the unusual
-					    origins (slack/linear/cli) surface here. */}
-					{session.source !== "opensession" && (
-						<span className={cn(SOURCE_CHIP, sourceChipTone(session.source))}>
-							{session.source}
-						</span>
-					)}
 					{session.worktreeDir &&
 						hasWorkspace &&
 						// Repo-less sessions get a static tile instead of the repo
@@ -5120,6 +5109,33 @@ export function SessionViewer({
 							{workspaceName || session.title}
 						</span>
 					)}
+					{/* Where the session came FROM, as a quiet mark AFTER the name. It
+					    used to be a tinted pill at the head of the row, which made the
+					    loudest thing in the bar a fact you read once — and put it in
+					    front of the repo, where it read as part of the path. Origins
+					    with a brand mark draw it in the same faint ink as the
+					    automation and sandbox glyphs beside it; the rest keep the
+					    worded chip. Ask mode isn't an origin — it's a mode you can
+					    change — so it rides the composer toolbar next to the model
+					    pill instead, where the switch is one click from where you're
+					    typing. "opensession" is the default origin (web UI): as a chip
+					    it's noise, and for backstage-repo sessions it read as the repo
+					    said twice. */}
+					{session.source !== "opensession" &&
+						(brandLogo(session.source) ? (
+							<span
+								className="flex shrink-0 items-center text-faint"
+								title={`From ${sessionSourceName(session.source)}`}
+								aria-label={`From ${sessionSourceName(session.source)}`}
+								role="img"
+							>
+								<BrandMark name={session.source} size={14} />
+							</span>
+						) : (
+							<span className={cn(SOURCE_CHIP, sourceChipTone(session.source))}>
+								{session.source}
+							</span>
+						))}
 					{/* Automation runs already live under the Automations band, so repeating
 					    their slug here competes with the workspace title. A quiet recurring
 					    clock keeps the origin visible; its tooltip carries the exact name. */}
