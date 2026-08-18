@@ -95,14 +95,14 @@ final class SidebarToolsTests: XCTestCase {
         XCTAssertEqual(
             SidebarTools.allIds,
             [
-                "feed", "prs", "tasks", "canvas", "plain", "catchup", "supporttinder",
+                "feed", "prs", "tasks", "plain", "catchup", "supporttinder",
                 "reports", "analytics",
             ]
         )
         XCTAssertEqual(SidebarTools.defaultVisible, ["feed", "prs", "catchup"])
         XCTAssertEqual(
             SidebarTools.defaultHidden.sorted(),
-            ["analytics", "canvas", "plain", "reports", "supporttinder", "tasks"]
+            ["analytics", "plain", "reports", "supporttinder", "tasks"]
         )
         XCTAssertFalse(SidebarTools.isHidden(SidebarTools.catchUp, in: SidebarTools.defaultHiddenJSON))
         XCTAssertTrue(SidebarTools.isHidden(SidebarTools.reports, in: SidebarTools.defaultHiddenJSON))
@@ -128,9 +128,5 @@ final class SidebarToolsTests: XCTestCase {
         XCTAssertTrue(SidebarTools.allIds.contains(SidebarTools.plain))
         XCTAssertTrue(SidebarTools.defaultHidden.contains(SidebarTools.plain))
         XCTAssertFalse(SidebarTools.surfaced.map(\.id).contains(SidebarTools.plain))
-        // Canvas is web-only. Its id stays in the mirrored list so a write
-        // here never restores it in the browser, but nothing surfaces it.
-        XCTAssertTrue(SidebarTools.allIds.contains("canvas"))
-        XCTAssertFalse(SidebarTools.surfaced.map(\.id).contains("canvas"))
     }
 }

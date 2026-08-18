@@ -26,7 +26,7 @@ enum SidebarTools {
     /// web: absent means exactly this, on both clients. Keep it in step with
     /// DEFAULT_VISIBLE_TOOLS in src/frontend/lib/sidebar-tools.ts.
     static let allIds = [
-        "feed", "prs", "tasks", "canvas", plain, "catchup", "supporttinder", "reports",
+        "feed", "prs", "tasks", plain, "catchup", "supporttinder", "reports",
         "analytics",
     ]
     static let defaultVisible = ["feed", "prs", "catchup"]
@@ -35,8 +35,6 @@ enum SidebarTools {
 
     /// One switch in Settings → Appearance. Support is intentionally absent:
     /// its tool and feed are one three-way location choice (`SupportLocation`).
-    /// Canvas is absent because it is a web-only surface; its id still rides
-    /// `allIds` so a write here never disturbs what the browser shows.
     struct Tool: Identifiable, Hashable, Sendable {
         let id: String
         let title: String

@@ -65,9 +65,9 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
   which the web sidebar writes as well. Support jointly reads and writes its
   tool entry and the Plain feed entry as one sidebar / page / off choice, with
   the sidebar winning any older state where both are visible. A missing tools
-  value means the shared defaults. Ids this app has no screen for, Canvas
-  among them, ride the value untouched so a change here never disturbs the
-  browser. Long-press a visible row to hide it; Appearance restores it.
+  value means the shared defaults. Ids this app has no screen for ride the
+  value untouched so a change here never disturbs the browser. Long-press a
+  visible row to hide it; Appearance restores it.
 - **Session view** — live transcript over the `/ws` WebSocket, grouped into
   turns the way the web viewer groups them: **question → folded work → answer →
   footer**. A turn's tool calls and the narration between them collapse behind

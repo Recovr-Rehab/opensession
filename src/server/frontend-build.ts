@@ -107,11 +107,6 @@ export async function buildFrontend(): Promise<string> {
 	const result = await Bun.build({
 		entrypoints: [`${FRONTEND_SRC}/App.tsx`],
 		outdir: FRONTEND_DIST,
-		define: {
-			"process.env.TLDRAW_LICENSE_KEY": JSON.stringify(
-				process.env.TLDRAW_LICENSE_KEY ?? "",
-			),
-		},
 		minify: true,
 		splitting: true,
 		sourcemap: "none",
@@ -159,15 +154,6 @@ export async function buildFrontend(): Promise<string> {
 			`${REPO_ROOT}/node_modules/@xterm/xterm/css/xterm.css`,
 		).text();
 		cssSrc += `\n\n/* ── vendored @xterm/xterm/css/xterm.css (Shell tab) ── */\n${xtermCss}`;
-	} catch {}
-	// tldraw's stylesheet (the Canvas tool) rides along the same way. Bun's
-	// emitted CSS is never linked (see above), so a JS-side `import ".css"`
-	// would silently vanish; vendoring here is the one path that ships.
-	try {
-		const tldrawCss = await Bun.file(
-			`${REPO_ROOT}/node_modules/tldraw/tldraw.css`,
-		).text();
-		cssSrc += `\n\n/* ── vendored tldraw/tldraw.css (Canvas tool) ── */\n${tldrawCss}`;
 	} catch {}
 	const cssHash = Bun.hash(cssSrc).toString(36);
 	const cssName = `global-${cssHash}.css`;

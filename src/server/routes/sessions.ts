@@ -598,12 +598,7 @@ export async function handleSessionsRoutes(
 				dropContextInjections(await mergedSessionTranscriptAsync(session)),
 			),
 		);
-		// ?tail=N keeps surfaces that only want the recent conversation (the
-		// Canvas tool's cards) from pulling multi-megabyte transcripts.
-		const tail = Number(new URL(req.url).searchParams.get("tail") || "");
-		return Response.json(
-			Number.isInteger(tail) && tail > 0 ? entries.slice(-tail) : entries,
-		);
+		return Response.json(entries);
 	}
 
 	// One transcript entry, unclamped. The WS wire clamps giant entry contents

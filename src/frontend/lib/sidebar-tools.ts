@@ -15,7 +15,6 @@ export const SIDEBAR_TOOL_IDS = [
 	"feed",
 	"prs",
 	"tasks",
-	"canvas",
 	"plain",
 	"catchup",
 	"supporttinder",
@@ -29,8 +28,6 @@ export const SIDEBAR_TOOL_LABELS: Record<SidebarToolId, string> = {
 	feed: "Feed",
 	prs: "Pull requests",
 	tasks: "Tasks",
-	// Sessions as cards on a zoomable spatial canvas.
-	canvas: "Canvas",
 	// The Plain queue as a destination. It is the second way into the same
 	// tickets the Plain band at the bottom of the sidebar already lists: the
 	// band opens a ticket's workspace, this opens the ticket. Both are on

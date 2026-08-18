@@ -500,17 +500,6 @@ export function IconFeed(p: IconProps) {
   );
 }
 
-/** The Canvas tool: cards arranged freely on an infinite surface. */
-export function IconCanvas(p: IconProps) {
-  return (
-    <Svg {...p}>
-      <rect {...stroke} x="4.75" y="4.75" width="14.5" height="14.5" rx="3" />
-      <rect {...stroke} x="8" y="8" width="4.5" height="3.75" rx="1.25" />
-      <rect {...stroke} x="11.5" y="12.5" width="4.5" height="3.75" rx="1.25" />
-    </Svg>
-  );
-}
-
 export function IconPeople(p: IconProps) {
   return (
     <Svg {...p}>

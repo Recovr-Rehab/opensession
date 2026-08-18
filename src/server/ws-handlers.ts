@@ -6,7 +6,6 @@
  */
 
 import type { WebSocketHandler } from "bun";
-import { canvasWsClose, canvasWsMessage, canvasWsOpen } from "./canvas-room";
 import type { WSClientData } from "./ws-hub";
 import { cancelAgentRun, interruptAndSteerAgentRun, isAgentSessionBusy, steerAgentRun, stopAgentRunTurn } from "./agent-runner";
 import { audit } from "./audit";
@@ -399,7 +398,6 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 	// which would otherwise drop the frame (close 1009) before staging. See above.
 	maxPayloadLength: WS_MAX_PAYLOAD_BYTES,
 	open(ws) {
-		if (canvasWsOpen(ws)) return;
 		// Sandbox transport sockets (run hosts / MCP proxies dialing back)
 		// are not UI clients — run-ws.ts owns them entirely.
 		if (sandboxWsOpen(ws)) return;
@@ -433,7 +431,6 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 	},
 
 	async message(ws, message) {
-		if (canvasWsMessage(ws, message as any)) return;
 		if (sandboxWsMessage(ws, message as any)) return;
 		if (runnerWsMessage(ws, message as any)) return;
 		if (sandboxPortalRelayMessage(ws, message as any)) return;
@@ -1240,7 +1237,6 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 	},
 
 	close(ws) {
-		if (canvasWsClose(ws)) return;
 		if (sandboxWsClose(ws)) return;
 		if (runnerWsClose(ws)) return;
 		if (sandboxPortalRelayClose(ws)) return;
