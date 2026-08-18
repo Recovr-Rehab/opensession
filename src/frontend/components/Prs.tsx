@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Workspace, UnifiedSession } from "../lib/types";
 import { fetchHomeStats, fetchRecentPrs, type HomeStats, type RecentPr } from "../lib/api";
 import { prStatusMark } from "../lib/pr-status";
@@ -16,7 +17,6 @@ import { UserAvatar } from "./UserAvatar";
 import { RepoTile, repoLabel } from "./RepoTile";
 import { usePeople } from "../lib/people";
 import { Menu } from "../ui/menu";
-import { Tooltip } from "../ui/tooltip";
 import { Input } from "../ui/input";
 import { PageHeader, PageTitle } from "../ui/page-header";
 import { EmptyState } from "../ui/state";
@@ -28,14 +28,10 @@ import {
 } from "../lib/pr-list-classes";
 import {
   IconArchive,
-  IconCheck,
-  IconDotsHorizontal,
-  IconFolder,
+  IconFilter,
   IconGitMerge,
-  IconPeople,
   IconPlus,
   IconPullRequest,
-  IconRepo,
 } from "./icons";
 
 interface Props {
@@ -45,6 +41,8 @@ interface Props {
   onNewSession: () => void;
   onShowArchived: () => void;
   onOpenAnalytics?: () => void;
+  /** The pane's top bar, where this page's controls go. */
+  topbarActionsEl?: HTMLElement | null;
 }
 
 const compactFmt = new Intl.NumberFormat("en", {
@@ -115,6 +113,10 @@ function Separator() {
 // The three kept are the ones you act on: what is live now, and how much
 // happened today. Turns, tokens, errors and the week are a click away in
 // Analytics, which this line opens and the sidebar also lists.
+//
+// One figure per clause. Sessions and agent time used to share one, joined by
+// a comma, which made the line read as a sentence with a list in the middle of
+// it rather than as four numbers.
 function OverviewLine({
   running,
   stats,
@@ -161,11 +163,16 @@ function OverviewLine({
         {today ? <Separator /> : null}
       </span>
       {today ? (
-        <span>
-          {fmtCompact(today.sessions)} sessions,{" "}
-          {fmtAgentTime(today.durationMs)} of agent time today
-          {trend ? <Separator /> : null}
-        </span>
+        <>
+          <span>
+            {fmtCompact(today.sessions)} sessions today
+            <Separator />
+          </span>
+          <span>
+            {fmtAgentTime(today.durationMs)} of agent time
+            {trend ? <Separator /> : null}
+          </span>
+        </>
       ) : null}
       {trend ? (
         <span className="text-faint transition-colors group-hover:text-dim">
@@ -192,6 +199,7 @@ export function Prs({
   onNewSession,
   onShowArchived,
   onOpenAnalytics,
+  topbarActionsEl,
 }: Props) {
   const currentUser = useCurrentUser();
   const [query, setQuery] = useState("");
@@ -314,12 +322,185 @@ export function Prs({
     [allWorktrees],
   );
 
+  const activeFilterCount =
+    (person !== "all" ? 1 : 0) +
+    (workspaceId !== "all" ? 1 : 0) +
+    (repo !== "all" ? 1 : 0) +
+    (showArchived ? 1 : 0);
+
+  // The page's controls, in the window's top bar rather than in a strip of
+  // their own. That bar spans the pane and was empty until the heading below
+  // scrolled under it, while this page spent three rows on chrome before its
+  // first pull request. Search, one Filters menu and the one CTA go up there,
+  // and the body keeps the title and the day's numbers.
+  //
+  // Three labelled menus became one because a bar of them does not fit beside a
+  // title, and because that is what the archived page already does. The count on
+  // the button is what the words used to say: it is only there when the list is
+  // actually narrowed.
+  const actions = (
+    <>
+      <Input
+        className="w-[220px]"
+        type="search"
+        aria-label="Search pull requests"
+        placeholder="Search pull requests…"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        spellCheck={false}
+      />
+      <Menu.Root>
+        <Menu.Trigger
+          render={
+            <Button
+              icon={<IconFilter size={18} />}
+              aria-label={`Filters, ${activeFilterCount} active`}
+              className={activeFilterCount > 0 ? "text-fg" : undefined}
+            >
+              Filters{activeFilterCount > 0 ? ` ${activeFilterCount}` : ""}
+            </Button>
+          }
+        />
+        {/* Capped, because a workspace is named after the pull request it was
+            opened for and those names run long. Uncapped, one of them sets the
+            width of the whole popup and the menu spans half the page. */}
+        <Menu.Popup align="end" className="min-w-[220px] max-w-[320px]">
+          {people.length > 0 && (
+            <Menu.Group>
+              <Menu.GroupLabel>Person</Menu.GroupLabel>
+              <Menu.RadioGroup
+                value={person}
+                onValueChange={(value) => setPerson(String(value))}
+              >
+                <Menu.RadioItem value="all" closeOnClick>
+                  {/* Sized to the faces below so every label shares one edge. */}
+                  <span className="size-[18px] shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">Anyone</span>
+                  <Menu.Check on={person === "all"} />
+                </Menu.RadioItem>
+                {people.map((who) => {
+                  const key = who.name.toLowerCase();
+                  return (
+                    <Menu.RadioItem key={key} value={key} closeOnClick>
+                      <UserAvatar name={who.name} size={18} />
+                      <span className="min-w-0 flex-1 truncate">
+                        {key === currentUser.toLowerCase()
+                          ? `${who.fullName} (you)`
+                          : who.fullName}
+                      </span>
+                      <Menu.Check on={person === key} />
+                    </Menu.RadioItem>
+                  );
+                })}
+              </Menu.RadioGroup>
+            </Menu.Group>
+          )}
+
+          {people.length > 0 && <Menu.Separator />}
+          <Menu.Group>
+            <Menu.GroupLabel>Workspace</Menu.GroupLabel>
+            <Menu.RadioGroup
+              value={workspaceId}
+              onValueChange={(value) => setWorkspaceId(String(value))}
+            >
+              {/* These rows carry no glyph of their own, but they share a popup
+                  with rows that do, so they keep the same leading column. One
+                  text edge down the menu, rather than a group that starts 18px
+                  to the left of the two around it. */}
+              <Menu.RadioItem value="all" closeOnClick>
+                <span className="size-[18px] shrink-0" />
+                <span className="min-w-0 flex-1 truncate">All workspaces</span>
+                <Menu.Check on={workspaceId === "all"} />
+              </Menu.RadioItem>
+              {workspaceOptions.map((workspace) => (
+                <Menu.RadioItem key={workspace.id} value={workspace.id} closeOnClick>
+                  <span className="size-[18px] shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">{workspace.name}</span>
+                  <Menu.Check on={workspaceId === workspace.id} />
+                </Menu.RadioItem>
+              ))}
+              <Menu.RadioItem value="standalone" closeOnClick>
+                <span className="size-[18px] shrink-0" />
+                <span className="min-w-0 flex-1 truncate">Standalone</span>
+                <Menu.Check on={workspaceId === "standalone"} />
+              </Menu.RadioItem>
+            </Menu.RadioGroup>
+          </Menu.Group>
+
+          {repoOptions.length > 1 && (
+            <>
+              <Menu.Separator />
+              <Menu.Group>
+                <Menu.GroupLabel>Repository</Menu.GroupLabel>
+                <Menu.RadioGroup value={repo} onValueChange={(value) => setRepo(String(value))}>
+                  <Menu.RadioItem value="all" closeOnClick>
+                    {/* Sized to the tiles below so every label shares one edge. */}
+                    <span className="size-[18px] shrink-0" />
+                    <span className="min-w-0 flex-1 truncate">All repos</span>
+                    <Menu.Check on={repo === "all"} />
+                  </Menu.RadioItem>
+                  {repoOptions.map((name) => (
+                    <Menu.RadioItem key={name} value={name} closeOnClick>
+                      <RepoTile name={name} size={18} />
+                      <span className="min-w-0 flex-1 truncate">{repoLabel(name)}</span>
+                      <Menu.Check on={repo === name} />
+                    </Menu.RadioItem>
+                  ))}
+                </Menu.RadioGroup>
+              </Menu.Group>
+            </>
+          )}
+
+          <Menu.Separator />
+          <Menu.CheckboxItem
+            checked={showArchived}
+            onCheckedChange={(next) => {
+              setShowArchived(next);
+              if (next) onShowArchived();
+            }}
+            closeOnClick
+          >
+            <IconArchive size={18} />
+            <span className="min-w-0 flex-1 truncate">Show archived</span>
+            <Menu.Check on={showArchived} />
+          </Menu.CheckboxItem>
+
+          {activeFilterCount > 0 && (
+            <>
+              <Menu.Separator />
+              <Menu.Item
+                onClick={() => {
+                  setPerson("all");
+                  setWorkspaceId("all");
+                  setRepo("all");
+                  setShowArchived(false);
+                }}
+              >
+                Clear filters
+              </Menu.Item>
+            </>
+          )}
+        </Menu.Popup>
+      </Menu.Root>
+      {/* The page's one CTA carries its verb as a glyph as well as a word: at
+          this size a label alone is a coloured rectangle you read, and the plus
+          is what makes it scan as the button that makes something. */}
+      <Button variant="primary" icon={<IconPlus size={18} />} onClick={onNewSession}>
+        New session
+      </Button>
+    </>
+  );
+
   return (
     // The page frame every other list page in the app uses: one centred
     // column at the shared width and padding, a PageHeader on top.
     <div data-page-scroll className="min-h-0 w-full flex-1 overflow-y-auto bg-surface">
+      {topbarActionsEl ? createPortal(actions, topbarActionsEl) : null}
       <div className="mx-auto w-full max-w-[920px] px-6 pb-15 pt-7 max-[560px]:px-4 max-[560px]:pb-12 max-[560px]:pt-[18px]">
-        <PageHeader className="items-center max-[560px]:flex-col max-[560px]:items-start max-[560px]:gap-3.5">
+        <PageHeader>
+          {/* `flex-1` even as an only child: the day's line wraps, and a
+              wrapping flex box asked for its content size takes the width of
+              one clause rather than of the row. */}
           <div className="min-w-0 flex-1">
             <PageTitle>Pull requests</PageTitle>
             <OverviewLine
@@ -328,186 +509,7 @@ export function Prs({
               onOpenAnalytics={onOpenAnalytics}
             />
           </div>
-          <div className="flex min-w-0 shrink-0 items-center gap-3 max-[560px]:w-full max-[560px]:justify-end">
-            {/* The page's one CTA carries its verb as a glyph as well as a
-                word: at this size a label alone is a coloured rectangle you
-                read, and the plus is what makes it scan as the button that
-                makes something. */}
-            <Button
-              variant="primary"
-              size="lg"
-              icon={<IconPlus size={20} />}
-              className="text-control-label font-medium"
-              onClick={onNewSession}
-            >
-              New session
-            </Button>
-          </div>
         </PageHeader>
-        {/* Search and the two scopes, in the app's field-and-button vocabulary:
-            a filter here is the same control it is on the archived page, not a
-            line of bare text that only looks like one. */}
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <Input
-            className="w-[260px] phone:min-w-0 phone:flex-1"
-            type="search"
-            aria-label="Search pull requests"
-            placeholder="Search pull requests…"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            spellCheck={false}
-          />
-
-          <div className="ml-auto flex items-center gap-2">
-            {people.length > 0 && (
-              <Menu.Root>
-                <Menu.Trigger
-                  render={
-                    <Button variant="ghost" icon={<IconPeople size={18} />} caret>
-                      <span className="max-w-[150px] truncate">
-                        {person === "all" ? "From anyone" : `From ${personLabel(person)}`}
-                      </span>
-                    </Button>
-                  }
-                />
-                <Menu.Popup align="end" className="min-w-[200px]">
-                  <Menu.RadioGroup
-                    value={person}
-                    onValueChange={(value) => setPerson(String(value))}
-                  >
-                    <Menu.RadioItem value="all" closeOnClick>
-                      {/* Sized to the faces below so every label shares one edge. */}
-                      <span className="size-[18px] shrink-0" />
-                      <span className="min-w-0 flex-1 truncate">Anyone</span>
-                      {person === "all" && <IconCheck className="shrink-0 text-accent" size={17} />}
-                    </Menu.RadioItem>
-                    {people.map((who) => {
-                      const key = who.name.toLowerCase();
-                      return (
-                        <Menu.RadioItem key={key} value={key} closeOnClick>
-                          <UserAvatar name={who.name} size={18} />
-                          <span className="min-w-0 flex-1 truncate">
-                            {key === currentUser.toLowerCase()
-                              ? `${who.fullName} (you)`
-                              : who.fullName}
-                          </span>
-                          {person === key && (
-                            <IconCheck className="shrink-0 text-accent" size={17} />
-                          )}
-                        </Menu.RadioItem>
-                      );
-                    })}
-                  </Menu.RadioGroup>
-                </Menu.Popup>
-              </Menu.Root>
-            )}
-
-            <Menu.Root>
-              <Menu.Trigger
-                render={
-                  <Button variant="ghost" icon={<IconFolder size={18} />} caret>
-                    <span className="max-w-[150px] truncate">
-                      {workspaceId === "all"
-                        ? "In all workspaces"
-                        : workspaceId === "standalone"
-                          ? "Standalone"
-                          : `In ${workspaceOptions.find((w) => w.id === workspaceId)?.name ?? "workspace"}`}
-                    </span>
-                  </Button>
-                }
-              />
-              <Menu.Popup align="end" className="min-w-[200px]">
-                <Menu.RadioGroup
-                  value={workspaceId}
-                  onValueChange={(value) => setWorkspaceId(String(value))}
-                >
-                  <Menu.RadioItem value="all" closeOnClick>
-                    <span className="min-w-0 flex-1 truncate">All workspaces</span>
-                    {workspaceId === "all" && <IconCheck className="shrink-0 text-accent" size={17} />}
-                  </Menu.RadioItem>
-                  {workspaceOptions.map((workspace) => (
-                    <Menu.RadioItem key={workspace.id} value={workspace.id} closeOnClick>
-                      <span className="min-w-0 flex-1 truncate">{workspace.name}</span>
-                      {workspaceId === workspace.id && (
-                        <IconCheck className="shrink-0 text-accent" size={17} />
-                      )}
-                    </Menu.RadioItem>
-                  ))}
-                  <Menu.RadioItem value="standalone" closeOnClick>
-                    <span className="min-w-0 flex-1 truncate">Standalone</span>
-                    {workspaceId === "standalone" && (
-                      <IconCheck className="shrink-0 text-accent" size={17} />
-                    )}
-                  </Menu.RadioItem>
-                </Menu.RadioGroup>
-              </Menu.Popup>
-            </Menu.Root>
-
-            {repoOptions.length > 1 && (
-              <Menu.Root>
-                <Menu.Trigger
-                  render={
-                    <Button variant="ghost" icon={<IconRepo size={18} />} caret>
-                      <span className="max-w-[150px] truncate">
-                        {repo === "all" ? "In all repos" : `In ${repoLabel(repo)}`}
-                      </span>
-                    </Button>
-                  }
-                />
-                <Menu.Popup align="end" className="min-w-[200px]">
-                  <Menu.RadioGroup value={repo} onValueChange={(value) => setRepo(String(value))}>
-                    <Menu.RadioItem value="all" closeOnClick>
-                      {/* Sized to the tiles below so every label shares one edge. */}
-                      <span className="size-[18px] shrink-0" />
-                      <span className="min-w-0 flex-1 truncate">All repos</span>
-                      {repo === "all" && <IconCheck className="shrink-0 text-accent" size={17} />}
-                    </Menu.RadioItem>
-                    {repoOptions.map((name) => (
-                      <Menu.RadioItem key={name} value={name} closeOnClick>
-                        <RepoTile name={name} size={18} />
-                        <span className="min-w-0 flex-1 truncate">{repoLabel(name)}</span>
-                        {repo === name && <IconCheck className="shrink-0 text-accent" size={17} />}
-                      </Menu.RadioItem>
-                    ))}
-                  </Menu.RadioGroup>
-                </Menu.Popup>
-              </Menu.Root>
-            )}
-
-            {/* Archived is a rarely-flipped switch, so it lives behind the
-                overflow menu rather than spending a slot in the bar. It keeps
-                its own colour when on, so the bar still says it's narrowed. */}
-            <Menu.Root>
-              <Tooltip label="More filters">
-                <Menu.Trigger
-                  render={
-                    <Button
-                      variant="ghost"
-                      aria-label="More filters"
-                      icon={<IconDotsHorizontal size={18} />}
-                      className={showArchived ? "text-fg" : undefined}
-                    />
-                  }
-                />
-              </Tooltip>
-              <Menu.Popup align="end">
-                <Menu.CheckboxItem
-                  checked={showArchived}
-                  onCheckedChange={(next) => {
-                    setShowArchived(next);
-                    if (next) onShowArchived();
-                  }}
-                  closeOnClick
-                >
-                  <IconArchive size={18} />
-                  <span className="min-w-0 flex-1 truncate">Show archived</span>
-                  {showArchived && <IconCheck className="shrink-0 text-accent" size={17} />}
-                </Menu.CheckboxItem>
-              </Menu.Popup>
-            </Menu.Root>
-          </div>
-        </div>
-
         {sections.length === 0 ? (
           <EmptyState
             title={

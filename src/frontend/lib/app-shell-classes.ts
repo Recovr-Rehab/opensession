@@ -207,6 +207,24 @@ export const DETAIL_TOPBAR_TITLE =
 	"phone:hidden";
 
 /**
+ * The trailing slot of that row: a page's own controls, portaled up out of its
+ * column so the bar naming the page also holds what you do to it.
+ *
+ * The bar spans the pane and holds nothing at rest, since the name only arrives
+ * once the page's heading has gone under it, while the page below could be
+ * paying two or three rows of its own before its first item. A page with
+ * controls puts them here instead (Pull requests does), and what is left in the
+ * body is the title and its one line of numbers.
+ *
+ * `font-normal` because the row is a heading: without it a search field in this
+ * slot renders its placeholder semibold. `empty:hidden` because the slot is on
+ * every named route and only one page fills it, and an empty box still spends
+ * its own padding in the row.
+ */
+export const DETAIL_TOPBAR_ACTIONS =
+	"ml-auto flex shrink-0 items-center gap-2 pl-4 font-normal empty:hidden";
+
+/**
  * The word inside that row, which is only there once the page's own heading has
  * gone. `data-shown` is set by hooks/useLargeTitle.ts.
  *

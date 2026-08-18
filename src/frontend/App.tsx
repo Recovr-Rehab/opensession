@@ -21,6 +21,7 @@ import {
 	APP_BODY,
 	DETAIL_PANE,
 	DETAIL_TOPBAR,
+	DETAIL_TOPBAR_ACTIONS,
 	DETAIL_TOPBAR_TITLE,
 	DETAIL_TOPBAR_TITLE_TEXT,
 	RIGHT_PANEL_SLOT,
@@ -676,6 +677,13 @@ export function App(
 	// (session name + actions, incl. the workspace-panel toggle) into this slot so
 	// the layout reads name-on-top / tabs-below; other views render a plain title.
 	const [topbarEl, setTopbarEl] = useState<HTMLDivElement | null>(null);
+	// Trailing slot of that same bar, for a page whose controls belong in the
+	// window's chrome rather than in a strip above its own list. Pull requests
+	// portals its search, filters and CTA here, so the bar holds the page's
+	// controls at rest and its name once the heading has scrolled under it.
+	const [topbarActionsEl, setTopbarActionsEl] = useState<HTMLElement | null>(
+		null,
+	);
 	// The phone's own top bar, held for the same reason the pane's is: its title
 	// pill waits for the page's heading to scroll under it, and where that edge
 	// falls is this row's own bottom, which on the routes whose header floats
@@ -4356,6 +4364,11 @@ export function App(
 									>
 										{topbarTitle}
 									</span>
+									{/* Filled by the page, if it has controls to put here. */}
+									<span
+										className={DETAIL_TOPBAR_ACTIONS}
+										ref={setTopbarActionsEl}
+									/>
 								</span>
 							)}
 						</div>
@@ -4665,6 +4678,7 @@ export function App(
 								onNewSession={() => openPalette()}
 								onShowArchived={refreshArchived}
 								onOpenAnalytics={() => navigate({ view: "analytics" })}
+								topbarActionsEl={topbarActionsEl}
 							/>
 						) : null}
 						</main>
