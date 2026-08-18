@@ -67,17 +67,17 @@ final class SidebarToolsTests: XCTestCase {
     func testAnEmptyListMeansEverythingIsShown() {
         XCTAssertEqual(SidebarTools.decode("[]"), [])
         XCTAssertFalse(SidebarTools.isHidden(SidebarTools.reports, in: "[]"))
-        XCTAssertFalse(SidebarTools.isHidden(SidebarTools.canvas, in: "[]"))
+        XCTAssertFalse(SidebarTools.isHidden(SidebarTools.plain, in: "[]"))
     }
 
     // Existing account values predate new tools. Their absence from an
     // explicit hidden list means visible; only a missing preference receives
     // the newer shared defaults.
-    func testAddingCanvasDoesNotRewriteAnExplicitAccountChoice() {
+    func testAddingAToolDoesNotRewriteAnExplicitAccountChoice() {
         let stored = #"["reports","analytics"]"#
-        XCTAssertFalse(SidebarTools.isHidden(SidebarTools.canvas, in: stored))
+        XCTAssertFalse(SidebarTools.isHidden(SidebarTools.plain, in: stored))
         XCTAssertEqual(
-            SidebarTools.setting(SidebarTools.canvas, hidden: false, in: stored),
+            SidebarTools.setting(SidebarTools.plain, hidden: false, in: stored),
             stored
         )
     }
@@ -119,7 +119,7 @@ final class SidebarToolsTests: XCTestCase {
     func testSurfacedToolsAreOnesThisAppDraws() {
         XCTAssertEqual(
             SidebarTools.surfaced.map(\.id),
-            [SidebarTools.canvas, SidebarTools.catchUp, SidebarTools.reports]
+            [SidebarTools.catchUp, SidebarTools.reports]
         )
         for tool in SidebarTools.surfaced {
             XCTAssertTrue(SidebarTools.allIds.contains(tool.id), tool.id)
@@ -128,5 +128,9 @@ final class SidebarToolsTests: XCTestCase {
         XCTAssertTrue(SidebarTools.allIds.contains(SidebarTools.plain))
         XCTAssertTrue(SidebarTools.defaultHidden.contains(SidebarTools.plain))
         XCTAssertFalse(SidebarTools.surfaced.map(\.id).contains(SidebarTools.plain))
+        // Canvas is web-only. Its id stays in the mirrored list so a write
+        // here never restores it in the browser, but nothing surfaces it.
+        XCTAssertTrue(SidebarTools.allIds.contains("canvas"))
+        XCTAssertFalse(SidebarTools.surfaced.map(\.id).contains("canvas"))
     }
 }

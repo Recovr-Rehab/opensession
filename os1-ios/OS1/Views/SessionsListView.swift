@@ -55,7 +55,6 @@ struct SessionsListView: View {
     @State private var showSettings = false
     @State private var settingsAutomationId: String?
     @State private var showDesk = false
-    @State private var showCanvas = false
     /// The Plain support queue. iOS reaches it from the Support card at the
     /// bottom of the sessions sidebar; Mac keeps it in the sidebar header.
     @State private var showSupport = false
@@ -479,11 +478,6 @@ struct SessionsListView: View {
                 SupportQueueView(model: supportQueue) { row in
                     openTicket = row
                 }
-            } else if showCanvas {
-                SessionCanvasView(
-                    sessions: viewModel.sessions,
-                    onOpenSession: openFromCanvas
-                )
             } else if let archivedSession = openedArchivedSession {
                 SessionView(
                     session: archivedSession,
@@ -566,7 +560,6 @@ struct SessionsListView: View {
             if id != nil {
                 openTicket = nil
                 showSupport = false
-                showCanvas = false
                 openedArchivedSession = nil
             }
         }
@@ -1026,12 +1019,6 @@ struct SessionsListView: View {
                 .navigationDestination(isPresented: $showReports) {
                     ReportsListView()
                 }
-                .navigationDestination(isPresented: $showCanvas) {
-                    SessionCanvasView(
-                        sessions: viewModel.sessions,
-                        onOpenSession: openFromCanvas
-                    )
-                }
                 // Pushed onto this stack, not thrown over it: a ticket is
                 // somewhere you go from the list, the same as a session, and
                 // a sheet would have covered the list you came from. It can't
@@ -1075,9 +1062,6 @@ struct SessionsListView: View {
                     // scripted run can't rely on being there.
                     if env["OS1_OPEN_CATCHUP"] != nil {
                         showCatchUp = true
-                    }
-                    if env["OS1_OPEN_CANVAS"] != nil {
-                        showCanvas = true
                     }
                     #endif
                 }
@@ -1173,7 +1157,6 @@ struct SessionsListView: View {
     /// nothing — so the diagnosis joins it as soon as there is one.
     private var loadingState: some View {
         VStack(spacing: 14) {
-            if !isCanvasHidden { canvasToolRow }
             #if os(iOS)
             // The spinner is for the failure case only: once there is a
             // diagnosis to read, rows that will never arrive would be a lie.
@@ -2495,73 +2478,6 @@ struct SessionsListView: View {
         }
     }
 
-    private var canvasToolRow: some View {
-        Section {
-            Button(action: openCanvas) {
-                HStack(spacing: 9) {
-                    Image(systemName: "square.grid.2x2")
-                        .font(canvasRowIconFont)
-                        .foregroundStyle(OS1VisualStyle.textDim)
-                        .frame(width: canvasRowIconSize, height: canvasRowIconSize)
-                        #if os(iOS)
-                        .offset(x: 1)
-                        #endif
-                    Text("Canvas")
-                        #if os(iOS)
-                        .font(.callout.weight(.medium))
-                        #else
-                        .font(.body)
-                        #endif
-                        .foregroundStyle(OS1VisualStyle.textDim)
-                    Spacer()
-                }
-                .padding(.vertical, canvasRowVerticalPadding)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .contextMenu {
-                Button {
-                    withAnimation(.snappy(duration: 0.28)) {
-                        SidebarTools.setVisible(SidebarTools.canvas, false)
-                    }
-                } label: {
-                    Label("Hide from sidebar", systemImage: "eye.slash")
-                }
-            }
-        }
-        #if os(iOS)
-        .listRowInsets(EdgeInsets(
-            top: 2, leading: sidebarMargin, bottom: 2, trailing: sidebarMargin
-        ))
-        .listRowSeparator(.hidden)
-        .listRowBackground(Color.clear)
-        #endif
-    }
-
-    private var canvasRowIconFont: Font {
-        #if os(iOS)
-        .callout
-        #else
-        .body
-        #endif
-    }
-
-    private var canvasRowIconSize: CGFloat {
-        #if os(iOS)
-        22
-        #else
-        16
-        #endif
-    }
-
-    private var canvasRowVerticalPadding: CGFloat {
-        #if os(iOS)
-        11
-        #else
-        3
-        #endif
-    }
-
     /// Plain is a project feed on the web, so it sits after the worktree/session
     /// sections and before Archived in the same ordinary row shape.
     private var plainSidebarRow: some View {
@@ -2751,20 +2667,6 @@ struct SessionsListView: View {
     }
     #endif
 
-    private var isCanvasHidden: Bool {
-        SidebarTools.isHidden(SidebarTools.canvas, in: hiddenToolsRaw)
-    }
-
-    private func openCanvas() {
-        showCanvas = true
-        #if os(macOS)
-        selectedSessionID = nil
-        openTicket = nil
-        showSupport = false
-        openedArchivedSession = nil
-        #endif
-    }
-
     private var supportLocation: SupportLocation {
         SupportLocation.current(hiddenTools: hiddenToolsRaw, hiddenFeeds: hiddenFeedsRaw)
     }
@@ -2777,17 +2679,7 @@ struct SessionsListView: View {
         openTicket = nil
         showSupport = true
         #if os(macOS)
-        showCanvas = false
         openedArchivedSession = nil
-        #endif
-    }
-
-    private func openFromCanvas(_ session: Session) {
-        #if os(macOS)
-        showCanvas = false
-        selectedSessionID = session.id
-        #else
-        path.append(session)
         #endif
     }
 

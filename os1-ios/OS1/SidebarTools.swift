@@ -1,7 +1,7 @@
 import Foundation
 
 /// Per-user visibility for the TOOLS: the destinations that are not sessions.
-/// The web sidebar owns the ids; this app draws Canvas, Catch up, Reports, and Support.
+/// The web sidebar owns the ids; this app draws Catch up, Reports, and Support.
 ///
 /// This is the same account-level preference the web's Tools band writes
 /// (`sidebar-hidden-tools`, see `src/frontend/lib/sidebar-tools.ts`), so a tool
@@ -16,7 +16,6 @@ import Foundation
 enum SidebarTools {
     /// The tools this app has a destination for. They are named here
     /// because the surfaces are built in Swift; the ids are the web's.
-    static let canvas = "canvas"
     static let plain = "plain"
     static let catchUp = "catchup"
     static let reports = "reports"
@@ -27,7 +26,7 @@ enum SidebarTools {
     /// web: absent means exactly this, on both clients. Keep it in step with
     /// DEFAULT_VISIBLE_TOOLS in src/frontend/lib/sidebar-tools.ts.
     static let allIds = [
-        "feed", "prs", "tasks", canvas, plain, "catchup", "supporttinder", "reports",
+        "feed", "prs", "tasks", "canvas", plain, "catchup", "supporttinder", "reports",
         "analytics",
     ]
     static let defaultVisible = ["feed", "prs", "catchup"]
@@ -36,13 +35,14 @@ enum SidebarTools {
 
     /// One switch in Settings → Appearance. Support is intentionally absent:
     /// its tool and feed are one three-way location choice (`SupportLocation`).
+    /// Canvas is absent because it is a web-only surface; its id still rides
+    /// `allIds` so a write here never disturbs what the browser shows.
     struct Tool: Identifiable, Hashable, Sendable {
         let id: String
         let title: String
     }
 
     static let surfaced: [Tool] = [
-        Tool(id: canvas, title: "Canvas"),
         Tool(id: catchUp, title: "Catch up"),
         Tool(id: reports, title: "Reports"),
     ]
