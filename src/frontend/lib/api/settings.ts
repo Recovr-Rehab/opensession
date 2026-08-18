@@ -72,6 +72,66 @@ export async function setPapercutsRepoEnabled(
 	});
 }
 
+// ── Tool accounts (Settings → My accounts: personal sign-in per MCP tool) ──
+
+export interface ToolAccountDto {
+	name: string;
+	/** null = no probe has finished for this tool yet, so whether it offers a
+	 *  personal sign-in is still unknown. Not the same as false. */
+	capable: boolean | null;
+	/** The workspace-wide grant, when one exists. */
+	shared?: { connectedBy?: string };
+	/** Team members who have connected their own account. */
+	users: string[];
+}
+
+/**
+ * The last list the server handed us, so re-opening settings paints the tools
+ * at once instead of showing a placeholder where a list already exists. Every
+ * mount still fetches and replaces this, so the only thing ever shown ahead of
+ * the server is a list that was right a moment ago. Page-lifetime only, so a
+ * reload starts from the server.
+ */
+let lastToolAccounts: ToolAccountDto[] | null = null;
+
+export function knownToolAccounts(): ToolAccountDto[] | null {
+	return lastToolAccounts;
+}
+
+export async function fetchToolAccounts(): Promise<{
+	servers: ToolAccountDto[];
+	pending: boolean;
+}> {
+	const body = await request<{ servers: ToolAccountDto[]; pending: boolean }>(
+		"/connections/mcp-oauth",
+		{ label: "Failed to fetch tools" },
+	);
+	lastToolAccounts = body.servers;
+	return body;
+}
+
+/** Returns the tool's consent URL; the grant lands via the OAuth callback. */
+export async function startToolConnect(
+	name: string,
+	scope: "me" | "shared" = "me",
+): Promise<{ url: string }> {
+	return request(`/connections/mcp/${encodeURIComponent(name)}/oauth/start`, {
+		method: "POST",
+		body: { scope },
+		label: "Failed to start sign-in",
+	});
+}
+
+export async function disconnectTool(
+	name: string,
+	scope: "me" | "shared" = "me",
+): Promise<{ ok: true }> {
+	return request(
+		`/connections/mcp/${encodeURIComponent(name)}/oauth${scope === "me" ? "?scope=me" : ""}`,
+		{ method: "DELETE", label: "Failed to disconnect" },
+	);
+}
+
 // ── Keychain (Settings → My accounts: per-person credentials + grants) ──
 
 export interface KeychainCredentialDto {

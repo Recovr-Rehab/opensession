@@ -1,7 +1,13 @@
-import { BASE_PATH } from "../lib/base";
 import React, { useCallback, useEffect, useState } from "react";
 import { Button } from "../ui/button";
-import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
+import { EmptyState, InlineAlert, ListSkeleton } from "../ui/state";
+import {
+	disconnectTool,
+	fetchToolAccounts,
+	knownToolAccounts,
+	startToolConnect,
+	type ToolAccountDto,
+} from "../lib/api/settings";
 import {
 	SettingCard,
 	SettingRow,
@@ -24,14 +30,6 @@ import { useCurrentUser } from "./UserPicker";
 import { GithubAccounts } from "./Connections";
 import { KeychainSection } from "./settings/KeychainPanel";
 
-interface OauthStatus {
-	shared?: { connectedBy?: string };
-	users: string[];
-	/** Server publishes OAuth metadata (connectable even if it runs on a
-	 *  workspace API key today, e.g. posthog). */
-	capable?: boolean;
-}
-
 /**
  * Settings → Personal → My accounts: every per-user sign-in in one place —
  * OAuth-capable MCP servers (connect as yourself; your sessions then use
@@ -42,36 +40,18 @@ interface OauthStatus {
  */
 export function MyAccountsPanel() {
 	const currentUser = useCurrentUser();
-	const [servers, setServers] = useState<
-		{ name: string; transport: string; status: string }[] | null
-	>(null);
-	const [oauthByName, setOauthByName] = useState<Record<string, OauthStatus>>(
-		{},
-	);
+	// Seeded from the last list this page session saw, so re-opening settings
+	// shows the tools rather than a placeholder standing in for a list we
+	// already know. The fetch below replaces it either way.
+	const [tools, setTools] = useState<ToolAccountDto[] | null>(knownToolAccounts);
+	const [checking, setChecking] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
 	const load = useCallback(async () => {
 		try {
-			const res = await fetch(`${BASE_PATH}/api/connections`);
-			if (!res.ok) return;
-			const body = await res.json();
-			// All servers — stdio ones can be OAuth-capable too via presets
-			// (Slack user tokens); the status endpoint's `capable` decides.
-			const mcp = body.mcpServers || [];
-			setServers(mcp);
-			const entries = await Promise.all(
-				mcp.map(async (s: { name: string }) => {
-					try {
-						const r = await fetch(
-							`${BASE_PATH}/api/connections/mcp/${encodeURIComponent(s.name)}/oauth`,
-						);
-						return r.ok ? ([s.name, await r.json()] as const) : null;
-					} catch {
-						return null;
-					}
-				}),
-			);
-			setOauthByName(Object.fromEntries(entries.filter(Boolean) as any));
+			const body = await fetchToolAccounts();
+			setTools(body.servers);
+			setChecking(body.pending);
 		} catch {}
 	}, []);
 
@@ -79,19 +59,23 @@ export function MyAccountsPanel() {
 		void load();
 	}, [load]);
 
+	// A tool the server has never probed (one just added to the config)
+	// resolves in the background there. Ask again a few times rather than
+	// leaving it out of the list until someone reopens the page.
+	useEffect(() => {
+		if (!checking) return;
+		let tries = 0;
+		const t = setInterval(() => {
+			if (++tries >= 4) clearInterval(t);
+			void load();
+		}, 1500);
+		return () => clearInterval(t);
+	}, [checking, load]);
+
 	async function connect(name: string) {
 		try {
-			const res = await fetch(
-				`${BASE_PATH}/api/connections/mcp/${encodeURIComponent(name)}/oauth/start`,
-				{
-					method: "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ scope: "me" }),
-				},
-			);
-			const body = await res.json();
-			if (!res.ok) throw new Error(body.error || `Failed: ${res.status}`);
-			window.open(body.url, "_blank", "noopener");
+			const { url } = await startToolConnect(name);
+			window.open(url, "_blank", "noopener");
 			// Re-poll for a while so the row flips once they approve the consent.
 			let polls = 0;
 			const t = setInterval(() => {
@@ -105,12 +89,7 @@ export function MyAccountsPanel() {
 
 	async function disconnect(name: string) {
 		try {
-			const res = await fetch(
-				`${BASE_PATH}/api/connections/mcp/${encodeURIComponent(name)}/oauth?scope=me`,
-				{ method: "DELETE" },
-			);
-			if (!res.ok)
-				throw new Error((await res.json()).error || `Failed: ${res.status}`);
+			await disconnectTool(name);
 			void load();
 		} catch (e: any) {
 			setError(e.message);
@@ -123,14 +102,9 @@ export function MyAccountsPanel() {
 		return !!b && (a === b || a.startsWith(b) || b.startsWith(a));
 	};
 	// OAuth-capable = the server publishes OAuth metadata (even when it runs
-	// on a workspace key today), needs sign-in, or already has grants.
-	const oauthServers = (servers || []).filter(
-		(s) =>
-			s.status === "needs-auth" ||
-			oauthByName[s.name]?.capable ||
-			oauthByName[s.name]?.shared ||
-			oauthByName[s.name]?.users.length,
-	);
+	// on a workspace key today) or has a preset flow, which is what a personal
+	// sign-in needs. Anything else has nothing to connect.
+	const oauthServers = (tools || []).filter((s) => s.capable);
 
 	return (
 		<SettingsPanel>
@@ -143,8 +117,17 @@ export function MyAccountsPanel() {
 			)}
 			<GithubAccounts personal />
 			<SettingsGroupLabel>Tools</SettingsGroupLabel>
-			{servers === null ? (
-				<LoadingState>Checking connections…</LoadingState>
+			{tools === null || (oauthServers.length === 0 && checking) ? (
+				// Ghost rows, not "no tools yet": an empty state is a confident
+				// claim, and the list is merely in flight.
+				<SettingCard>
+					<ListSkeleton
+						variant="rows"
+						rows={4}
+						rowClassName="px-5 py-6"
+						label="Loading tools"
+					/>
+				</SettingCard>
 			) : oauthServers.length === 0 ? (
 				<EmptyState placement="card">
 					No tools with personal sign-in are configured yet. Add one on the
@@ -153,8 +136,7 @@ export function MyAccountsPanel() {
 			) : (
 				<SettingCard>
 					{oauthServers.map((s) => {
-						const st = oauthByName[s.name];
-						const mine = st?.users.some(isMe);
+						const mine = s.users.some(isMe);
 						const slack = s.name.toLowerCase() === "slack";
 						return (
 							<SettingRow key={s.name} className="gap-3">
@@ -171,11 +153,9 @@ export function MyAccountsPanel() {
 														// says connected, so the description says what that
 														// buys instead of repeating the state.
 														"Sessions use your account"
-											: st?.shared
+											: s.shared
 												? "Using the workspace account"
-												: st?.capable
-													? "Using the workspace key"
-													: "Not connected"}
+												: "Using the workspace key"}
 									</SettingRowDescription>
 								</SettingRowText>
 								<SettingRowControl className="flex items-center gap-2">

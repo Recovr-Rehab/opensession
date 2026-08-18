@@ -589,27 +589,116 @@ export function mcpOauthStatus(
 }
 
 // OAuth-capability probe (RFC 9728 protected-resource metadata on the
-// server origin), cached 1h — drives "Connect my account" visibility for
-// servers that run on a static workspace key today (e.g. posthog).
-const capableCache = new Map<string, { capable: boolean; ts: number }>();
-export async function isOauthCapable(serverUrl: string): Promise<boolean> {
-  let origin: string;
+// server origin) — drives "Connect my account" visibility for servers that
+// run on a static workspace key today (e.g. posthog).
+//
+// The answer is kept on disk, not only in memory, because it decides
+// MEMBERSHIP of the My accounts list rather than one row's state: a cold
+// process cannot say which tools belong on that list at all, so the panel
+// would have to wait on a probe per configured server before it could draw a
+// single row. Whether an origin publishes OAuth metadata is a stable fact
+// about that service, so the last answer is a good one to show while a fresh
+// probe runs behind it.
+//
+// A probe that never got an answer is remembered in memory only, and briefly:
+// a network blip must not persist "this tool has no personal sign-in" and drop
+// the row from everyone's list for an hour.
+const CAPABLE_PATH = statePath(".opensession-mcp-capable.json");
+const CAPABLE_TTL_MS = 60 * 60_000;
+const CAPABLE_ERROR_TTL_MS = 60_000;
+
+/** `soft`: the probe errored, so this is a placeholder that keeps us from
+ *  hammering an unreachable origin, not a fact worth persisting. */
+interface Capability {
+  capable: boolean;
+  ts: number;
+  soft?: boolean;
+}
+
+let capableCache: Map<string, Capability> | null = null;
+const capableInflight = new Map<string, Promise<boolean>>();
+
+function capabilities(): Map<string, Capability> {
+  if (capableCache) return capableCache;
+  capableCache = new Map();
   try {
-    origin = new URL(serverUrl).origin;
-  } catch {
-    return false;
-  }
-  const cached = capableCache.get(origin);
-  if (cached && Date.now() - cached.ts < 60 * 60_000) return cached.capable;
-  let capable = false;
-  try {
-    const res = await fetch(`${origin}/.well-known/oauth-protected-resource`, {
-      signal: AbortSignal.timeout(6_000),
-    });
-    capable = res.ok;
+    const raw = JSON.parse(readFileSync(CAPABLE_PATH, "utf8")) as Record<
+      string,
+      Capability
+    >;
+    for (const [origin, e] of Object.entries(raw))
+      if (typeof e?.capable === "boolean" && typeof e?.ts === "number")
+        capableCache.set(origin, { capable: e.capable, ts: e.ts });
   } catch {}
-  capableCache.set(origin, { capable, ts: Date.now() });
-  return capable;
+  return capableCache;
+}
+
+function capabilityFresh(e: Capability): boolean {
+  return Date.now() - e.ts < (e.soft ? CAPABLE_ERROR_TTL_MS : CAPABLE_TTL_MS);
+}
+
+function originOf(serverUrl: string): string | undefined {
+  try {
+    return new URL(serverUrl).origin;
+  } catch {
+    return undefined;
+  }
+}
+
+function probeCapable(origin: string): Promise<boolean> {
+  const running = capableInflight.get(origin);
+  if (running) return running;
+  const p = (async () => {
+    let capable = false;
+    let answered = false;
+    try {
+      const res = await fetch(
+        `${origin}/.well-known/oauth-protected-resource`,
+        { signal: AbortSignal.timeout(6_000) },
+      );
+      capable = res.ok;
+      answered = true;
+    } catch {}
+    capabilities().set(origin, {
+      capable,
+      ts: Date.now(),
+      ...(answered ? {} : { soft: true }),
+    });
+    if (answered) persistCapabilities();
+    return capable;
+  })().finally(() => capableInflight.delete(origin));
+  capableInflight.set(origin, p);
+  return p;
+}
+
+function persistCapabilities(): void {
+  const out: Record<string, Capability> = {};
+  for (const [origin, e] of capabilities()) if (!e.soft) out[origin] = e;
+  try {
+    writeFileSync(CAPABLE_PATH, JSON.stringify(out, null, 2) + "\n");
+  } catch {}
+}
+
+/**
+ * The last known capability answer, refreshing a stale one in the background.
+ * `undefined` means no probe has ever finished for this origin, which the
+ * caller should report as still checking rather than as "no personal sign-in
+ * here" — the two look identical to a reader and only one of them is true.
+ */
+export function cachedOauthCapable(serverUrl: string): boolean | undefined {
+  const origin = originOf(serverUrl);
+  if (!origin) return false;
+  const hit = capabilities().get(origin);
+  if (!hit || !capabilityFresh(hit)) probeCapable(origin).catch(() => {});
+  return hit?.capable;
+}
+
+export async function isOauthCapable(serverUrl: string): Promise<boolean> {
+  const origin = originOf(serverUrl);
+  if (!origin) return false;
+  const hit = capabilities().get(origin);
+  if (hit && capabilityFresh(hit)) return hit.capable;
+  return probeCapable(origin);
 }
 
 /** Raw grant token (no "Bearer " prefix) — stdio env injection. */

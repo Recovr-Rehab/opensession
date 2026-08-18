@@ -8,7 +8,7 @@
 
 import type { RouteContext } from "./context";
 import { getAgents } from "../agents-registry";
-import { addMcpServer, getConnections, removeMcpServer, setMcpAllowedUsers } from "../connections";
+import { addMcpServer, getConnections, readMcpConfig, removeMcpServer, setMcpAllowedUsers } from "../connections";
 import { refreshOpencodePickerModels } from "../models";
 import { BRIDGE_PROVIDER_IDS, PROVIDER_ID_RE, addPickerModel, defaultPickerModelsForProvider, maskProviderKey, opencodeProviders, readOpencodeBridgeConfig, removeOpencodeProvider, removePickerModel, setBridgeEnabled, setOpencodeProvider } from "../opencode-config";
 import { isPiModelId, piEngineEnabled, readPiEngineConfig, setPiEnabled, setPiPickerModels } from "../pi-config";
@@ -79,6 +79,42 @@ export async function handleConnectionsRoutes(
 		} catch (e: any) {
 			return connectFailedPage(server, e?.message || String(e));
 		}
+	}
+
+	// The My accounts list, in one request that never touches the network:
+	// which tools offer a personal sign-in, and who is signed in on each. Both
+	// answers are local (mcp-config.json + the grant store), so the panel draws
+	// its rows immediately instead of waiting on GET /api/connections to probe
+	// every configured server just to learn their names. A capability nobody
+	// has probed yet comes back null, and `pending` is the client's cue to ask
+	// again once the background probe lands.
+	if (path === "/api/connections/mcp-oauth" && req.method === "GET") {
+		const { cachedOauthCapable, mcpOauthStatus, oauthPresetFor } = await import(
+			"../mcp-oauth"
+		);
+		const servers = Object.entries(readMcpConfig().mcpServers).map(
+			([name, cfg]: [string, any]) => {
+				const status = mcpOauthStatus(name);
+				// An existing grant is proof of capability, and a stronger one than
+				// the probe: without this a momentary network failure would drop a
+				// tool somebody is signed in to out of their own list.
+				const connected = !!status.shared || status.users.length > 0;
+				// oauthUrl: a stdio server's HTTP OAuth home (see the per-server
+				// route below).
+				const oauthTarget = cfg?.url || cfg?.oauthUrl;
+				const capable =
+					connected || oauthPresetFor(name)
+						? true
+						: oauthTarget
+							? cachedOauthCapable(oauthTarget)
+							: false;
+				return { name, capable: capable ?? null, ...status };
+			},
+		);
+		return Response.json({
+			servers,
+			pending: servers.some((s) => s.capable === null),
+		});
 	}
 
 	// Tool catalog of an HTTP MCP server (New-project tool picker).
