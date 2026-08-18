@@ -24,10 +24,9 @@ import {
 	PlainReplyBox,
 	PlainThreadActions,
 	PlainWaitingBanner,
-	plainThreadUrl,
 } from "./PlainThreadPanel";
 import { cn } from "../ui/cn";
-import { IconArrowUpRight, IconSparkle } from "./icons";
+import { IconSparkle } from "./icons";
 
 interface Props {
 	/** The Plain thread id — the pane's key. */
@@ -43,24 +42,30 @@ interface Props {
 	 *  no way through to what it did. */
 	session?: UnifiedSession | null;
 	className?: string;
-	/** Put the ticket's identity — subject, status, customer, the Plain link —
-	 *  in a top bar of the pane's own instead of at the top of the thread. For
-	 *  the Support inbox, where the pane has that bar to itself. */
+	/** Put the ticket's identity — subject, status, customer — in a top bar of
+	 *  the pane's own instead of at the top of the thread. For the Support
+	 *  inbox, where the pane has that bar to itself. */
 	headerInBar?: boolean;
 }
 
 /**
  * The pane width at which the ticket's actions fit in the bar beside the
- * subject. The bar layout runs to about 440px, the Plain link takes another
- * 110, and the status pill in front of the name about 55, so this leaves the
- * subject and the customer under it around 185px, which still reads as a title
- * rather than an ellipsis. A 1440pt window clears it; the app sidebar and the
- * queue column take about 600 of whatever is left.
+ * subject. Measured on a ticket carrying the widest of them (an assignee, a
+ * named priority, two labels): the action row 536px, the status badge 26, the
+ * bar's own padding and gaps 48. At this threshold that leaves the subject and
+ * the customer under it about 140px, which is short but still reads as a title
+ * rather than as an ellipsis; wider panes give it everything they gain. A
+ * 1440pt window clears it, the app sidebar and the queue column taking about
+ * 600 of whatever is left.
+ *
+ * It came down 40px when "Open in Plain" stopped being a link floating at the
+ * end of the bar and became a button in the action row, which is a smaller
+ * control saying the same thing.
  *
  * Narrower than this the actions stay at the top of the thread, where they have
  * a whole row to wrap into.
  */
-const ACTIONS_IN_BAR_MIN = 790;
+const ACTIONS_IN_BAR_MIN = 750;
 
 /**
  * The support-ticket Conversation surface: the full thread straight from Plain
@@ -160,7 +165,6 @@ export function ConversationPane({
 	const customerName = thread?.customer?.name || "";
 	const customerEmail = thread?.customer?.email || "";
 	const customerLabel = customerName || customerEmail || "Unknown customer";
-	const plainUrl = plainThreadUrl(threadId);
 	// Not on a phone: there the bar is where the app's own back control floats,
 	// so the ticket keeps its header at the top of the thread.
 	const headerInTopBar = !!headerInBar && !isPhone;
@@ -241,18 +245,6 @@ export function ConversationPane({
 									className="shrink-0"
 								/>
 							)}
-							{plainUrl && (
-								<a
-									className="ml-2 inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-meta font-semibold text-link no-underline hover:underline"
-									href={plainUrl}
-									target="_blank"
-									rel="noreferrer"
-									title="Open this thread in Plain"
-								>
-									Open in Plain
-									<IconArrowUpRight size={13} />
-								</a>
-							)}
 						</>
 					)}
 				</div>
@@ -294,16 +286,6 @@ export function ConversationPane({
 												</span>
 											)}
 											{status && <PlainStatusBadge status={status} />}
-											<a
-												className="ml-auto inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-meta font-semibold text-link no-underline hover:underline"
-												href={plainUrl}
-												target="_blank"
-												rel="noreferrer"
-												title="Open this thread in Plain"
-											>
-												Open in Plain
-												<IconArrowUpRight size={13} />
-											</a>
 										</div>
 										{thread?.title && (
 											<div className="mt-2 text-section-title font-semibold text-fg">

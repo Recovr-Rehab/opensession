@@ -171,16 +171,6 @@ export function PlainThreadPanel({ sessionId, threadId, plainUrl }: Props) {
 					</span>
 					{status && <PlainStatusBadge status={status} />}
 				</div>
-				<a
-					className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-meta font-semibold text-link no-underline hover:underline"
-					href={plainUrl}
-					target="_blank"
-					rel="noreferrer"
-					title="Open this thread in Plain"
-				>
-					Open in Plain
-					<IconArrowUpRight size={13} />
-				</a>
 			</div>
 
 			{thread?.waitingSince && (
@@ -374,6 +364,15 @@ export function PlainThreadActions({
 	// tag without its value would say nothing. The thread's own row has space
 	// for both, and keeps the words.
 	const verbLabel = (text: string) => (inBar ? false : text);
+
+	// The way out to Plain, for the few things this pane cannot do. It belongs
+	// with the ticket's other actions rather than beside them as a link: it
+	// used to be a blue anchor at the end of the bar, which made the quietest
+	// action in the row the loudest thing in it, and put a second vocabulary
+	// next to five bordered controls. An action that NAVIGATES still has to be
+	// an anchor, so it is the Button primitive rendered as one — that is what
+	// `render` and the `trailing` outbound arrow are for.
+	const plainUrl = plainThreadUrl(threadId);
 
 	return (
 		<div
@@ -601,6 +600,20 @@ export function PlainThreadActions({
 							})}
 						</Menu.Popup>
 					</Menu.Root>
+				)}
+				{plainUrl && (
+					<Button
+						size="sm"
+						variant="default"
+						trailing={<IconArrowUpRight size={14} />}
+						// In the bar the destination is the whole label: the row
+						// there is already at the width the subject pays for, and
+						// the arrow says "open" on its own.
+						render={<a href={plainUrl} target="_blank" rel="noreferrer" />}
+						title="Open this thread in Plain"
+					>
+						{inBar ? "Plain" : "Open in Plain"}
+					</Button>
 				)}
 				{inBar ? (
 					<Menu.Root>
