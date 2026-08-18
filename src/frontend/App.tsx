@@ -169,6 +169,7 @@ import {
 	copyToClipboard,
 	splitSessionRef,
 	subagentSuffix,
+	workspacePanePath,
 } from "./lib/share-link";
 import {
 	getPins,
@@ -2601,14 +2602,22 @@ export function App(
 	// Feed the ⌘⇧C copy-link shortcut: the open session (workspace-scoped when it
 	// has one, and drilled into a sub-agent when that's what's on screen), the
 	// open workspace/PR preview, or nothing linkable.
+	const activeWorkspacePane =
+		activeWorkspaceId &&
+		(activeViewTab === "review" ||
+			activeViewTab === "conversation" ||
+			activeViewTab === "video")
+			? workspacePanePath(activeWorkspaceId, activeViewTab)
+			: null;
 	copyLinkPathRef.current =
-		route.view === "session" && currentSession
+		activeWorkspacePane ??
+		(route.view === "session" && currentSession
 			? sessionPath(currentSession) + openSubagentPath
 			: route.view === "workspace"
 				? routePath(route)
 				: route.view === "pr"
 					? routePath(route)
-					: null;
+					: null);
 
 	// Canonicalize the open session's URL to /workspace/<wsId>/session/<sessionId> once
 	// its workspace is known (replaceState: same history depth, so Back and the
@@ -2623,15 +2632,16 @@ export function App(
 		// the workspace (sidebar, bare /workspace/<id> URL) returns here.
 		if (activeWorkspaceId) saveWorkspaceLastSession(activeWorkspaceId, route.id);
 		const canonical =
-			(activeWorkspaceId
+			activeWorkspacePane ??
+			((activeWorkspaceId
 				? `${BASE_PATH}/workspace/${encodeURIComponent(activeWorkspaceId)}/session/${encodeURIComponent(route.id)}`
 				: `${BASE_PATH}/session/${encodeURIComponent(route.id)}`) +
-			openSubagentPath;
+				openSubagentPath);
 		if (location.pathname !== canonical)
 			// Carry the entry's state across: dropping it would erase this panel's
 			// depth and strand `goBack` (and the Back caret) on the way home.
 			history.replaceState(history.state, "", canonical);
-	}, [route, currentSession, activeWorkspaceId, openSubagentPath]);
+	}, [route, currentSession, activeWorkspaceId, activeWorkspacePane, openSubagentPath]);
 	const byCreated = (a: UnifiedSession, b: UnifiedSession) =>
 		(a.createdAt || "").localeCompare(b.createdAt || "");
 	// Archived (closed) sessions leave the strip — except the one you're actively

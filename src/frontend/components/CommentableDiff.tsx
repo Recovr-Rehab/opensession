@@ -19,6 +19,7 @@ import type { Editor, EditorOptions } from "@pierre/diffs/edit";
 import type { DiffFileGroup } from "../lib/types";
 import { IconCheck, IconChevronRight, IconCopy, IconPencil, IconUndo } from "./icons";
 import { copyToClipboard } from "../lib/share-link";
+import { canAutoExpandDiffFile } from "../lib/review-diff";
 import { noAutofill } from "../lib/composer-autofill";
 import { Tooltip } from "../ui/tooltip";
 import { Button } from "../ui/button";
@@ -98,8 +99,10 @@ interface Props {
   placeholder: string;
   disabled?: boolean;
   disabledHint?: string;
-  /** Expand this many leading files on first render (review canvas uses 10). */
+  /** Expand this many leading files on first render. */
   defaultExpandedFiles?: number;
+  /** Omit the global expander when mounting every file would exhaust the tab. */
+  allowExpandAll?: boolean;
   onSubmit: (target: CommentTarget, text: string) => Promise<void>;
   /**
    * When provided, changed image files render the actual pictures (before/after)
@@ -189,12 +192,6 @@ const NO_ANNOTATIONS: DiffLineAnnotation<Meta>[] = [];
 
 const NO_VIEWED: ReadonlySet<string> = new Set();
 
-// Lock files are machine-written churn nobody reads line by line — they start
-// collapsed even when the surface expands everything. The header row (with its
-// +/- counts) and manual expand / "Expand all" still work.
-const LOCK_FILE =
-  /(^|\/)(bun\.lockb?|package-lock\.json|yarn\.lock|pnpm-lock\.yaml|Cargo\.lock|Gemfile\.lock|composer\.lock|poetry\.lock|uv\.lock|go\.sum|flake\.lock|Podfile\.lock|Package\.resolved)$/;
-
 /* Mounting a FileDiff parses and highlights that file on the main thread, so a
    surface that opens many at once — the review canvas expands every file, and
    "Expand all" is one click anywhere — commits one long, uninterruptible task.
@@ -231,6 +228,7 @@ const IMAGE_EXT = /\.(png|jpe?g|gif|webp|svg|avif|bmp|ico)$/i;
 export function CommentableDiff({
   patch,
   defaultExpandedFiles = 0,
+  allowExpandAll = true,
   submitLabel,
   placeholder,
   disabled,
@@ -262,6 +260,7 @@ export function CommentableDiff({
   // GitHub-backed "Viewed" checkboxes: hidden until the parent's fetch lands.
   const viewedEnabled = !!onToggleViewed && viewedFiles !== undefined;
   const viewed = viewedFiles ?? NO_VIEWED;
+  const stats = useMemo(() => files.map(fileStats), [files]);
 
   // Files render collapsed by default (just the header row) — mounting a
   // FileDiff parses + highlights on the main thread, so a large change would
@@ -272,7 +271,13 @@ export function CommentableDiff({
         files
           .slice(0, defaultExpandedFiles)
           .map((_, index) => index)
-          .filter((index) => !LOCK_FILE.test(files[index].name)),
+          .filter(
+            (index) =>
+              canAutoExpandDiffFile(
+                files[index].name,
+                stats[index].add + stats[index].del,
+              ),
+          ),
       ),
   );
   const [collapsedGroups, setCollapsedGroups] = useState<ReadonlySet<string>>(
@@ -298,7 +303,6 @@ export function CommentableDiff({
     });
   }, [files]);
 
-  const stats = useMemo(() => files.map(fileStats), [files]);
   const groupedFiles = useMemo(() => {
     if (!groups?.length) return null;
     const byPath = new Map(files.map((file, index) => [file.name, index]));
@@ -374,12 +378,17 @@ export function CommentableDiff({
         files
           .slice(0, defaultExpandedFiles)
           .map((_, index) => index)
-          .filter((index) => !LOCK_FILE.test(files[index].name)),
+          .filter((index) =>
+            canAutoExpandDiffFile(
+              files[index].name,
+              stats[index].add + stats[index].del,
+            ),
+          ),
       ),
     );
     setMountBudget(MOUNT_FIRST_BATCH);
     viewedCollapseKey.current = null;
-  }, [patch, defaultExpandedFiles, files]);
+  }, [patch, defaultExpandedFiles, files, stats]);
 
   // Collapse already-viewed files once GitHub's viewed state arrives (it
   // loads async, after the diff renders). Applied once per patch so it never
@@ -877,13 +886,15 @@ export function CommentableDiff({
             {countViewed(viewed, files)} of {files.length} viewed
           </span>
         )}
-        <button
-          type="button"
-          className="cursor-pointer border-none bg-transparent px-1 py-0.5 font-sans text-label font-medium text-faint hover:text-fg"
-          onClick={toggleAll}
-        >
-          {allOpen ? "Collapse all" : "Expand all"}
-        </button>
+        {allowExpandAll && (
+          <button
+            type="button"
+            className="cursor-pointer border-none bg-transparent px-1 py-0.5 font-sans text-label font-medium text-faint hover:text-fg"
+            onClick={toggleAll}
+          >
+            {allOpen ? "Collapse all" : "Expand all"}
+          </button>
+        )}
       </div>
       {groupedFiles
         ? groupedFiles.map((group) => {

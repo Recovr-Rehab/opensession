@@ -24,6 +24,14 @@ export function sessionPath(
   return base + subagentSuffix(subagent);
 }
 
+/** Canonical URL for a workspace-wide pane shown beside its session tabs. */
+export function workspacePanePath(
+  workspaceId: string,
+  pane: "review" | "conversation" | "video",
+): string {
+  return `${BASE_PATH}/workspace/${encodeURIComponent(workspaceId)}/${pane}`;
+}
+
 /** The `/subagent/<agentId>…` tail every session URL builder appends. */
 export function subagentSuffix(subagent: readonly string[] = []): string {
   return subagent.length

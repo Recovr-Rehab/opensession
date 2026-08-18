@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { sessionPath, splitSessionRef, subagentSuffix } from "./share-link";
+import {
+	sessionPath,
+	splitSessionRef,
+	subagentSuffix,
+	workspacePanePath,
+} from "./share-link";
 
 // BASE_PATH is "" in this app (URLs serve at the domain root), so the paths
 // below are what a copied link actually carries.
@@ -75,5 +80,16 @@ describe("subagentSuffix", () => {
 	test("is empty with nothing open", () => {
 		expect(subagentSuffix()).toBe("");
 		expect(subagentSuffix([])).toBe("");
+	});
+});
+
+describe("workspacePanePath", () => {
+	test("keeps the selected workspace pane in copied links", () => {
+		expect(workspacePanePath("ws 1", "review")).toBe(
+			"/workspace/ws%201/review",
+		);
+		expect(workspacePanePath("ws 1", "conversation")).toBe(
+			"/workspace/ws%201/conversation",
+		);
 	});
 });

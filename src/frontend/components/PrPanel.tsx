@@ -98,6 +98,7 @@ import { InlineAlert, LoadingState } from "../ui/state";
 import { CodeFlow } from "./CodeFlow";
 import { revealDiffFile } from "../lib/diff-navigation";
 import { PrFileTree } from "./pr/PrFileTree";
+import { reviewDiffLoadPolicy } from "../lib/review-diff";
 
 // Re-exported so existing importers of these (formerly local) helpers keep working.
 export { checkClass, isDeployment, formatPrCommentPrompt, CheckRow, PrStateIcon };
@@ -377,6 +378,10 @@ export function PrPanel({
   const [loadedDiff, setDiff] = useState<PrDiffData | null>(null);
   const diff = loadedDiff?.headRefOid === pr?.headRefOid ? loadedDiff : null;
   const diffOutOfDate = !!loadedDiff && !diff;
+  const diffLoadPolicy = reviewDiffLoadPolicy(
+    diff?.patch.length ?? 0,
+    pr?.changedFiles ?? 0,
+  );
   const [diffGroups, setDiffGroups] = useState<{
     oid: string;
     groups: DiffFileGroup[] | null;
@@ -646,7 +651,7 @@ export function PrPanel({
 
   useEffect(() => {
     const files = pr?.files || [];
-    if (!diff?.patch || files.length < 3) {
+    if (!diff?.patch || files.length < 3 || !diffLoadPolicy.groupFiles) {
       setDiffGroups(null);
       setDiffGroupsLoading(false);
       return;
@@ -687,6 +692,7 @@ export function PrPanel({
     active?.repo,
     active?.branch,
     diff?.headRefOid,
+    diffLoadPolicy.groupFiles,
     pr?.files?.length,
     diffGroupsRetry,
   ]);
@@ -1171,7 +1177,8 @@ export function PrPanel({
         diffStyle,
         wrapLines,
         stickyFileHeaders: true,
-        defaultExpandedFiles: Infinity,
+        defaultExpandedFiles: diffLoadPolicy.defaultExpandedFiles,
+        allowExpandAll: diffLoadPolicy.allowExpandAll,
         viewedFiles: prViewed?.key === viewedKey ? prViewed.viewed : undefined,
         onToggleViewed: handleToggleViewed,
         disabled: !reviewing || !caps.reviewComments,
@@ -1201,6 +1208,8 @@ export function PrPanel({
       handleAddPending,
       imageSrcs,
       editFile,
+      diffLoadPolicy.defaultExpandedFiles,
+      diffLoadPolicy.allowExpandAll,
     ],
   );
 

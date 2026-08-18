@@ -23,7 +23,11 @@ import {
 import { AGENT_NAME, DEFAULT_DOC_TITLE, sessionSourceName } from "../lib/brand";
 import { brandLogo } from "../brand-logos";
 import { withQuotes, type Quote } from "../lib/quotes";
-import { absoluteLink, sessionPath } from "../lib/share-link";
+import {
+	absoluteLink,
+	sessionPath,
+	workspacePanePath,
+} from "../lib/share-link";
 import { markNotesRead } from "../lib/note-reads";
 import { clearMention, onMentionsChanged } from "../lib/mentions";
 import { QuoteSelection } from "./QuoteSelection";
@@ -3989,14 +3993,22 @@ export function SessionViewer({
 	}
 
 	function handleShare() {
-		// Match the canonical URL App maintains: workspace-scoped when the session
-		// belongs to one, legacy /session/<id> only for workspace-less sessions,
-		// and trailing the sub-agent breadcrumb when that's the pane on screen —
-		// share what you are reading, not the session it was opened from.
-		const path = sessionPath(
-			session,
-			subagentOpen ? subagentStack.map((s) => s.agentId) : [],
-		);
+		// Share the workspace pane on screen rather than the session that happened
+		// to host it. Session and sub-agent links keep their existing canonical form.
+		const pane = showReview
+			? "review"
+			: showConversation
+				? "conversation"
+				: showVideo
+					? "video"
+					: null;
+		const path =
+			pane && session.workspaceId
+				? workspacePanePath(session.workspaceId, pane)
+				: sessionPath(
+						session,
+						subagentOpen ? subagentStack.map((s) => s.agentId) : [],
+					);
 		const link = absoluteLink(path);
 		// Phone: native share sheet. Desktop: copy, with the inline check on
 		// the button + a floating "Link copied" toast.
