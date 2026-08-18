@@ -48,7 +48,12 @@ import { ensureWarmTemplateScheduler } from "./src/server/warm-template";
 import { handleRunnerWsUpgrade } from "./src/server/runner-ws";
 import { handleSandboxPortalRelayUpgrade } from "./src/server/sandbox-portal-relay";
 import { handleWorkloadIdentityRequest } from "./src/server/workload-identity";
-import { findSession, invalidateSessionsCache, recordRunOutcome } from "./src/server/session-cache";
+import {
+	findSession,
+	findSessionAsync,
+	invalidateSessionsCache,
+	recordRunOutcome,
+} from "./src/server/session-cache";
 import { getSessionControl } from "./src/server/session-control";
 import { buildReposNote } from "./src/server/session-repos";
 import { destroySessionSandbox } from "./src/server/session-sandbox";
@@ -64,6 +69,11 @@ import {
 } from "./src/server/web-auth";
 import { startWebhookServer } from "./src/server/webhook-server";
 import { prImagePublicRoutes } from "./src/server/pr-images";
+import {
+	sessionHtmlWithSocialMeta,
+	sessionSocialCardPublicRoutes,
+	socialSessionIdFromPath,
+} from "./src/server/session-social-card";
 import { sweepArchivedWorktrees } from "./src/server/worktree";
 import {
 	type WSClientData,
@@ -191,6 +201,25 @@ function hotServe(
 	}
 	return live;
 }
+
+const sessionSpaEntry = (() => {
+	const bundle = frontend;
+	if (!bundle) return spaEntry;
+	return async (req: Request) => {
+		if (!bundle.version)
+			return new Response("Frontend is still building", { status: 503 });
+		const pathname = new URL(req.url).pathname;
+		const id = socialSessionIdFromPath(pathname);
+		const session = id ? await findSessionAsync(id) : undefined;
+		return new Response(
+			session
+				? sessionHtmlWithSocialMeta(bundle.indexHtml, session, pathname)
+				: bundle.indexHtml,
+			{ headers: SPA_HEADERS },
+		);
+	};
+})();
+
 const server: import("bun").Server<WSClientData> = hotServe({
 		port: PORT,
 		hostname: HOST,
@@ -234,7 +263,12 @@ const server: import("bun").Server<WSClientData> = hotServe({
 				"/reviews",
 				"/reviews/*",
 				"/support/*",
-			].map((p) => [p, spaEntry]),
+			].map((p) => [
+				p,
+				p === "/session/*" || p === "/workspace/*"
+					? sessionSpaEntry
+					: spaEntry,
+			]),
 		),
 
 		async fetch(req) {
@@ -554,6 +588,9 @@ if (!g.__opensessionBooted) {
 		invalidateSessionsCache();
 	});
 	for (const [key, handler] of prImagePublicRoutes()) {
+		webhookRoutes.set(key, handler);
+	}
+	for (const [key, handler] of sessionSocialCardPublicRoutes()) {
 		webhookRoutes.set(key, handler);
 	}
 	const webhookServer = startWebhookServer(agents, webhookRoutes);

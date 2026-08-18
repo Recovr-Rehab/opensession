@@ -9,18 +9,44 @@ import type { UnifiedSession } from "../../server/types";
 const scratch = mkdtempSync(join(tmpdir(), "opensession-unfurl-"));
 const previousStateDir = process.env.OPENSESSION_STATE_DIR;
 const previousUiBase = process.env.OPENSESSION_UI_BASE;
+const previousCardBase = process.env.OPENSESSION_SESSION_CARD_BASE;
+const previousCardSecret = process.env.OPENSESSION_SESSION_CARD_SECRET;
 process.env.OPENSESSION_STATE_DIR = scratch;
 process.env.OPENSESSION_UI_BASE = "https://os.example.test";
+process.env.OPENSESSION_SESSION_CARD_BASE = "https://media.example.test";
+process.env.OPENSESSION_SESSION_CARD_SECRET = "test-session-social-card-secret-32-bytes";
 
 const { createWorkspace } = await import("../../server/workspaces");
-const { cardTitle } = await import("./unfurl");
+const { cardTitle, unfurlForSession } = await import("./unfurl");
 
 afterAll(() => {
 	if (previousStateDir === undefined) delete process.env.OPENSESSION_STATE_DIR;
 	else process.env.OPENSESSION_STATE_DIR = previousStateDir;
 	if (previousUiBase === undefined) delete process.env.OPENSESSION_UI_BASE;
 	else process.env.OPENSESSION_UI_BASE = previousUiBase;
+	if (previousCardBase === undefined)
+		delete process.env.OPENSESSION_SESSION_CARD_BASE;
+	else process.env.OPENSESSION_SESSION_CARD_BASE = previousCardBase;
+	if (previousCardSecret === undefined)
+		delete process.env.OPENSESSION_SESSION_CARD_SECRET;
+	else process.env.OPENSESSION_SESSION_CARD_SECRET = previousCardSecret;
 	rmSync(scratch, { recursive: true, force: true });
+});
+
+describe("unfurlForSession", () => {
+	test("includes the dynamic social card image", () => {
+		const unfurl = unfurlForSession(
+			session({ id: "sess-card", title: "Ship the card", createdBy: "Kent" }),
+			"https://os.example.test/session/sess-card",
+		);
+		expect(unfurl.blocks).toContainEqual({
+			type: "image",
+			image_url: expect.stringMatching(
+				/^https:\/\/media\.example\.test\/session-card\/sess-card\/[A-Za-z0-9_-]{32}\.png$/,
+			),
+			alt_text: "Ship the card, an Open Session by Kent",
+		});
+	});
 });
 
 function session(patch: Partial<UnifiedSession>): UnifiedSession {

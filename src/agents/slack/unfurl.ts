@@ -11,9 +11,13 @@
 
 import { slackApiCall } from "./slack-api";
 import { findSession } from "../../server/session-cache";
-import { getWorkspace } from "../../server/workspaces";
 import type { UnifiedSession } from "../../server/types";
 import { configuredServer } from "../../server/config";
+import {
+  sessionCardTitle,
+  sessionSocialCardData,
+  sessionSocialCardUrl,
+} from "../../server/session-social-card";
 
 const UI_BASE =
   process.env.OPENSESSION_UI_BASE ||
@@ -60,12 +64,6 @@ export function sessionIdFromUrl(rawUrl: string): string | null {
 /** Escape text going into Slack mrkdwn (esp. inside a `<url|text>` link). */
 function esc(t: string): string {
   return t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-/** Drop the provider/family prefix from a model id: opencode/anthropic/foo → foo. */
-function modelLabel(model: string): string {
-  const parts = model.split("/");
-  return parts[parts.length - 1] || model;
 }
 
 function statusChip(s: UnifiedSession): string {
@@ -136,27 +134,21 @@ function reviewLabel(decision?: string): string {
  * workspace prints it once.
  */
 export function cardTitle(s: UnifiedSession): { title: string; session?: string } {
-  const sessionTitle = (s.title || s.id).trim();
-  const workspace = s.workspaceId ? getWorkspace(s.workspaceId) : null;
-  const name = workspace?.name?.trim();
-  if (!name) return { title: sessionTitle };
-  return {
-    title: name,
-    session: sessionTitle && sessionTitle !== name ? sessionTitle : undefined,
-  };
+  return sessionCardTitle(s);
 }
 
 /** Build the Block Kit unfurl body for one session. */
-function unfurlForSession(s: UnifiedSession, url: string): { blocks: any[] } {
-  const { title, session: sessionTitle } = cardTitle(s);
+export function unfurlForSession(s: UnifiedSession, url: string): { blocks: any[] } {
+  const card = sessionSocialCardData(s);
+  const { title, sessionTitle } = card;
 
   const bits: string[] = [statusChip(s)];
   if (sessionTitle) bits.push(esc(sessionTitle));
   if (s.repo) bits.push(s.branch ? `${s.repo} · \`${s.branch}\`` : s.repo);
-  if (s.model) bits.push(modelLabel(s.model));
+  if (card.model) bits.push(card.model);
   if (s.mode) bits.push(s.mode);
   if (s.linearIssue?.identifier) bits.push(s.linearIssue.identifier);
-  if (s.startedBy) bits.push(`by ${s.startedBy}`);
+  if (s.createdBy || s.startedBy) bits.push(`by ${card.owner}`);
   if (s.isRunning && s.runStartedAt) bits.push(`running ${relTime(s.runStartedAt)}`);
   else if (s.lastActivity) bits.push(`updated ${relTime(s.lastActivity)} ago`);
 
@@ -164,6 +156,11 @@ function unfurlForSession(s: UnifiedSession, url: string): { blocks: any[] } {
     {
       type: "section",
       text: { type: "mrkdwn", text: `*<${url}|${esc(title)}>*` },
+    },
+    {
+      type: "image",
+      image_url: sessionSocialCardUrl(s.id),
+      alt_text: `${title}, an Open Session by ${card.owner}`,
     },
   ];
 
