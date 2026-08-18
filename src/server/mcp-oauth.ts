@@ -228,20 +228,40 @@ async function ensureServerAuth(
     throw new Error(
       `${name}: authorization server offers no dynamic client registration`,
     );
-  const reg = (await (
-    await fetch(endpoints.register, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        client_name: productName(),
-        redirect_uris: [callbackUrl()],
-        grant_types: ["authorization_code", "refresh_token"],
-        response_types: ["code"],
-        token_endpoint_auth_method: "none",
-      }),
-      signal: AbortSignal.timeout(10_000),
-    })
-  ).json()) as { client_id?: string; error_description?: string };
+  const registrationUrl = new URL(endpoints.register);
+  const registrationResponse = await fetch(endpoints.register, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      client_name: productName(),
+      redirect_uris: [callbackUrl()],
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+      token_endpoint_auth_method: "none",
+    }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  const registrationText = await registrationResponse.text();
+  if (!registrationResponse.ok) {
+    if (
+      registrationResponse.status === 403 &&
+      registrationUrl.hostname === "api.figma.com"
+    ) {
+      throw new Error(
+        "Figma does not currently allow Open Session to connect. Its remote MCP server accepts only clients listed in the Figma MCP Catalog.",
+      );
+    }
+    const detail = registrationText.trim().slice(0, 200);
+    throw new Error(
+      `${name}: client registration failed (HTTP ${registrationResponse.status})${detail ? `: ${detail}` : ""}`,
+    );
+  }
+  let reg: { client_id?: string; error_description?: string };
+  try {
+    reg = JSON.parse(registrationText);
+  } catch {
+    throw new Error(`${name}: client registration returned invalid JSON`);
+  }
   if (!reg.client_id)
     throw new Error(
       `${name}: client registration failed (${reg.error_description || "no client_id"})`,
