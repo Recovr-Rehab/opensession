@@ -15,6 +15,7 @@ import {
 	archivedScope,
 	archivedIndexRow,
 	nativeCreateRepoOptions,
+	sessionListRow,
 	sessionsVariant,
 } from "./sessions";
 
@@ -30,7 +31,14 @@ function scopeOf(query: string) {
 	return archivedScope(paramsOf(query), sessionsVariant(paramsOf(query)));
 }
 
-function archivedSession(over: Partial<UnifiedSession> = {}): UnifiedSession {
+type TestSession = UnifiedSession & {
+	waitingForInput?: boolean;
+	queuedCount?: number;
+	workspacePreparing?: boolean;
+	rev?: number;
+};
+
+function archivedSession(over: Partial<TestSession> = {}): TestSession {
 	return {
 		id: "os-019fea32-b27e-7000-9131-0f5484659833",
 		claudeSessionId: "ses_1",
@@ -233,6 +241,114 @@ describe("archivedIndexRow", () => {
 		expect(row.aliasIds).toEqual([
 			"bks-019f0000-0000-7000-0000-000000000000",
 		]);
+	});
+});
+
+describe("sessionListRow", () => {
+	test("drops run-resume fields no list client reads", () => {
+		const row = sessionListRow(
+			archivedSession({
+				lastEngineModel: "opencode/anthropic/claude-opus-5",
+				lastEngineProvider: "opencode",
+				mcpServers: ["github", "linear"],
+				piSessionId: "pi-session",
+				presetNote: "Long workspace preset instructions",
+				slackThread: { channel: "C1", threadTs: "1.2" },
+				slackThreads: [{ channel: "C1", threadTs: "1.2" }],
+				rev: 12,
+			}),
+		);
+		for (const internal of [
+			"lastEngineModel",
+			"lastEngineProvider",
+			"mcpServers",
+			"piSessionId",
+			"presetNote",
+			"slackThread",
+			"slackThreads",
+			"rev",
+		])
+			expect(row).not.toHaveProperty(internal);
+	});
+
+	test("omits defaults while preserving values that change list UI", () => {
+		const row = sessionListRow(
+			archivedSession({
+				isRunning: false,
+				waitingForInput: false,
+				queuedCount: 0,
+				branch: null,
+				claudeSessionId: null,
+				createdBy: null,
+				startedBy: null,
+				transcriptPath: null,
+				workspaceId: null,
+				fastMode: false,
+				prIsDraft: false,
+				prReviewDecision: "",
+				prReviewRequested: [],
+				prReviewedBy: [],
+				aliasIds: [],
+				attachedRepos: [],
+				linkedPrs: [],
+			}),
+		);
+		for (const absent of [
+			"isRunning",
+			"waitingForInput",
+			"queuedCount",
+			"branch",
+			"claudeSessionId",
+			"createdBy",
+			"startedBy",
+			"transcriptPath",
+			"workspaceId",
+			"fastMode",
+			"prIsDraft",
+			"prReviewDecision",
+			"prReviewRequested",
+			"prReviewedBy",
+			"aliasIds",
+			"attachedRepos",
+			"linkedPrs",
+		])
+			expect(row).not.toHaveProperty(absent);
+
+		const live = sessionListRow(
+			archivedSession({
+				isRunning: true,
+				waitingForInput: true,
+				queuedCount: 2,
+				prIsDraft: true,
+				prReviewRequested: ["kent"],
+			}),
+		);
+		expect(live).toMatchObject({
+			isRunning: true,
+			waitingForInput: true,
+			queuedCount: 2,
+			prIsDraft: true,
+			prReviewRequested: ["kent"],
+		});
+	});
+
+	test("keeps rich fields used by list and native session surfaces", () => {
+		const full = archivedSession({
+			usage: { turns: 4 } as never,
+			walkthrough: { title: "Demo" } as never,
+			prs: [{ repo: "opensession", branch: "feature/thing" }] as never,
+			modelHistory: [{ model: "claude-opus-5", at: "2026-08-09" }],
+			opencodeSessionId: "ses_opencode",
+		});
+		const row = sessionListRow(full);
+		for (const kept of [
+			"usage",
+			"walkthrough",
+			"prs",
+			"modelHistory",
+			"opencodeSessionId",
+		] as const)
+			expect(row[kept]).toEqual(full[kept]);
 	});
 });
 

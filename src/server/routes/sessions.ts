@@ -104,6 +104,12 @@ interface SessionsResponseSnapshot {
  * keeps churning on `isRunning` / `lastActivity`.
  */
 export type SessionsVariant = "include" | "exclude" | "only" | "only-slim";
+type SessionListSignals = {
+	waitingForInput?: boolean;
+	queuedCount?: number;
+	workspacePreparing?: boolean;
+	rev?: number;
+};
 
 /** Translate the web create sentinel into the control path's explicit flag. */
 export function nativeCreateRepoOptions(mode: string, repo: unknown) {
@@ -203,6 +209,59 @@ function enrichSession(s: UnifiedSession) {
 		// on opensession session files, in-memory for slack/linear sessions.
 		lastRunError: runErrors.get(s.id) || s.lastRunError,
 	};
+}
+
+/**
+ * A session as list clients consume it.
+ *
+ * The detail route keeps the full UnifiedSession. The list drops fields used
+ * only to resume or persist a run, then omits values for which every client
+ * already treats absence as the same default. Keeping this projection here
+ * prevents another stored per-session field from silently becoming list
+ * payload weight.
+ */
+export function sessionListRow(
+	s: UnifiedSession & SessionListSignals,
+): UnifiedSession & SessionListSignals {
+	const {
+		lastEngineModel: _lastEngineModel,
+		lastEngineProvider: _lastEngineProvider,
+		mcpServers: _mcpServers,
+		piSessionId: _piSessionId,
+		presetNote: _presetNote,
+		slackThread: _slackThread,
+		slackThreads: _slackThreads,
+		...listed
+	} = s;
+	const row: Partial<UnifiedSession & SessionListSignals> = listed;
+
+	// These values are all represented by a missing optional in the web,
+	// Swift, TUI and extension clients. In particular, Swift's hand-written
+	// Codable model already makes each one optional.
+	if (!row.isRunning) delete row.isRunning;
+	if (!row.waitingForInput) delete row.waitingForInput;
+	if (!row.queuedCount) delete row.queuedCount;
+	if (row.branch == null) delete row.branch;
+	if (row.claudeSessionId == null) delete row.claudeSessionId;
+	if (row.createdBy == null) delete row.createdBy;
+	if (row.startedBy == null) delete row.startedBy;
+	if (row.transcriptPath == null) delete row.transcriptPath;
+	if (row.workspaceId == null) delete row.workspaceId;
+	if (!row.fastMode) delete row.fastMode;
+	if (!row.prIsDraft) delete row.prIsDraft;
+	if (!row.prReviewDecision) delete row.prReviewDecision;
+	if (!row.prReviewRequested?.length) delete row.prReviewRequested;
+	if (!row.prReviewedBy?.length) delete row.prReviewedBy;
+	if (!row.aliasIds?.length) delete row.aliasIds;
+	if (!row.attachedRepos?.length) delete row.attachedRepos;
+	if (!row.linkedPrs?.length) delete row.linkedPrs;
+	if (!row.desk) delete row.desk;
+	if (!row.repoLess) delete row.repoLess;
+	if (!row.titleOverridden) delete row.titleOverridden;
+	if (!row.workspacePreparing) delete row.workspacePreparing;
+	delete row.rev;
+
+	return row as UnifiedSession & SessionListSignals;
 }
 
 /**
@@ -415,7 +474,9 @@ export async function handleSessionsRoutes(
 				.filter((s) => s.archived && inWorkspaceGroup(s, scope))
 				.map(enrichSession);
 			const text = JSON.stringify(
-				variant === "only-slim" ? rows.map(archivedIndexRow) : rows,
+				variant === "only-slim"
+					? rows.map(archivedIndexRow)
+					: rows.map(sessionListRow),
 			);
 			// Still ETagged, so a client polling its workspace settles into 304s.
 			return sessionsListResponse(req, {
@@ -436,7 +497,9 @@ export async function handleSessionsRoutes(
 					? sessions.filter((s) => !s.archived)
 					: sessions.filter((s) => s.archived);
 		const text = JSON.stringify(
-			variant === "only-slim" ? sliced.map(archivedIndexRow) : sliced,
+			variant === "only-slim"
+				? sliced.map(archivedIndexRow)
+				: sliced.map(sessionListRow),
 		);
 		const snapshot: SessionsResponseSnapshot = {
 			text,
