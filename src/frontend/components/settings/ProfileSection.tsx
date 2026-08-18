@@ -268,22 +268,31 @@ function ProfileForm({
 						)}
 					</div>
 					<div className="flex min-w-0 flex-1 flex-col gap-3.5">
-						<Field label="Name">
-							<Input
-								value={name}
-								onChange={(e) => setName(e.target.value)}
-								placeholder="Ada Lovelace"
-								spellCheck={false}
-							/>
-						</Field>
-						{shortNameChanging && (
-							<InlineAlert variant="warn">
-								This changes your short name from {profile.shortName} to{" "}
-								{nextShort}, which is what mentions and attribution use. Your
-								pins and preferences move with you, and {profile.shortName}{" "}
-								keeps resolving to you.
-							</InlineAlert>
-						)}
+						{/* The hint is a sibling of the Field, not a child: `Field` is
+						    the `<label>`, so text inside it joins the input's accessible
+						    name. The wrapper gives it the gap the label already has
+						    above the input, rather than the form's row gap. */}
+						<div className="flex min-w-0 flex-col gap-1.5">
+							<Field label="Name">
+								<Input
+									value={name}
+									onChange={(e) => setName(e.target.value)}
+									placeholder="Ada Lovelace"
+									spellCheck={false}
+								/>
+							</Field>
+							{/* Not a warning: nothing is wrong, and the rename is handled
+							    for them by routes/profile.ts, which keeps the old short
+							    name as an alias and carries the per-user stores across.
+							    All they need is which name their teammates will see, and
+							    that the old one still finds them. */}
+							{shortNameChanging && (
+								<p className="m-0 text-meta text-dim">
+									{profile.shortName} becomes {nextShort} in mentions and
+									attribution. {profile.shortName} keeps working.
+								</p>
+							)}
+						</div>
 						<FieldGrid>
 							<Field label="Email">
 								<Input
