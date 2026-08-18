@@ -322,19 +322,23 @@ summary:focus-visible {
 
 /* The phone, in front of the window at the corner it overlaps.
    Everything here is in cqw, a percentage of the stage's own width, so the
-   pair keeps its composition at every size the stage takes. The proportions
-   are an iPhone's: a 393x852 screen, and a corner at about 12% of the width,
-   which is a superellipse on the device and gets the site's own squircle
-   treatment here. */
+   pair keeps its composition at every size the stage takes.
+
+   The size is not a taste: the window stands for a 14-inch MacBook Pro's
+   screen, 302mm across its 88.8cqw, which puts 1mm at 0.294cqw. An iPhone 17
+   Pro is 71.9 by 150mm, so it is 21.1 by 44.1cqw and the two objects are
+   drawn at one physical scale. The corner is the device's own, about 12% of
+   its width, authored circular and multiplied by --rf like every other corner
+   here so the squircle browsers land on the shape the phone really has. */
 .demo-phone {
 	position: absolute;
 	right: 2.5cqw;
 	bottom: 2.5cqw;
-	width: 17.5cqw;
-	height: 38cqw;
+	width: 21.1cqw;
+	height: 44.1cqw;
 	object-fit: cover;
 	object-position: top center;
-	border-radius: calc(1.55cqw * var(--rf));
+	border-radius: calc(1.87cqw * var(--rf));
 	corner-shape: var(--cs);
 	background: var(--window);
 	/* A hairline for the device's own edge, and a shadow deeper than the
