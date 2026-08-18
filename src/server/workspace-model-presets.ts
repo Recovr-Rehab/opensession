@@ -63,8 +63,10 @@ export function resolveWorkspaceModelPreset(
 	if (!model) return undefined;
 	// The default Opus + Fable combination is also a real Dial preset. Keep
 	// the editable workspace id on the session, but activate its actual oracle
-	// agent when the full configuration still matches.
-	const enginePresetId = !pi ? matchingDialPreset(preset) : undefined;
+	// wiring when the full configuration still matches — on every engine: the
+	// opencode runner, the direct SDKs, and pi (its dial oracle tool) all
+	// follow enginePresetId.
+	const enginePresetId = matchingDialPreset(preset);
 	const supporting = (preset.supporting || [])
 		.filter((member) => member.model?.trim())
 		.map((member) => {

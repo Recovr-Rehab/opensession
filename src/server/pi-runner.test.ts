@@ -21,20 +21,24 @@ import { tmpdir } from "os";
 import { join } from "path";
 import {
   assertContainedPiPath,
+  buildPiThirdPartyProviderPlan,
   isPiSessionBusy,
   isPiUsageLimitShape,
   makeGuardedGrepExecute,
   makeGuardedToolOps,
   makePiBashTool,
   parsePiModel,
+  piDialOracleAgent,
   piGateReason,
   piToolNames,
+  resolvePiPresetWiring,
   resolvePiRoutedModel,
   resolvePiDialModel,
   runPi,
   runPiSmokeTurn,
 } from "./pi-runner";
 import { __setCodexAccountsPathForTest } from "./codex-accounts";
+import type { ResolvedWorkspaceModelPreset } from "./workspace-model-presets";
 
 describe("parsePiModel", () => {
   test("splits pi/<provider>/<model>", () => {
@@ -81,6 +85,227 @@ describe("resolvePiRoutedModel", () => {
   test("rejects unknown preset ids", () => {
     expect(resolvePiRoutedModel("pi/dial/nope")).toBeNull();
     expect(resolvePiRoutedModel("pi/orchestrator/nope")).toBeNull();
+    // A workspace preset id with no live workspace behind it resolves to
+    // nothing rather than minting a bogus "workspace-preset" provider.
+    expect(resolvePiRoutedModel("pi/workspace-preset/ws-not-a-workspace/nope")).toBeNull();
+  });
+
+  test("preset wiring on the STORED id survives dispatch of the concrete lead", () => {
+    // agent-runner dispatches presets as their concrete model; the stored
+    // session id is where the preset (and its oracle/effort) still lives.
+    expect(
+      resolvePiRoutedModel("pi/anthropic/claude-fable-5", "dial/ultra")
+    ).toMatchObject({
+      providerID: "anthropic",
+      modelID: "claude-fable-5",
+      dial: { id: "dial/ultra" },
+      effort: "high",
+    });
+    expect(
+      resolvePiRoutedModel("pi/openai/gpt-5.6-sol", "pi/orchestrator/sol")
+    ).toMatchObject({
+      providerID: "openai",
+      modelID: "gpt-5.6-sol",
+      orchestrator: { id: "orchestrator/sol" },
+      effort: "xhigh",
+    });
+    // A non-preset stored id attaches nothing.
+    const plain = resolvePiRoutedModel(
+      "pi/anthropic/claude-opus-5",
+      "pi/anthropic/claude-opus-5"
+    );
+    expect(plain?.dial).toBeUndefined();
+    expect(plain?.orchestrator).toBeUndefined();
+    expect(plain?.effort).toBeUndefined();
+  });
+});
+
+// Workspace ("Custom") preset fixtures — the store read is the one impure
+// step in resolvePiRoutedModel, so like claude-direct-policy.test.ts these
+// exercise the pure wiring half on already-resolved presets.
+const WS_PRESETS: Record<string, ResolvedWorkspaceModelPreset> = {
+  opus: {
+    id: "pi/workspace-preset/ws-test/opus",
+    label: "Opus, my way",
+    model: "pi/anthropic/claude-opus-5",
+    effort: "xhigh",
+    note: "## Workspace model preset · Opus, my way",
+  },
+  opusFable: {
+    id: "pi/workspace-preset/ws-test/opus-fable",
+    label: "Opus + Fable oracle",
+    model: "pi/anthropic/claude-opus-5",
+    effort: "xhigh",
+    enginePresetId: "dial/opus-fable",
+    note: "## Workspace model preset · Opus + Fable oracle",
+  },
+  lead: {
+    id: "pi/workspace-preset/ws-test/lead",
+    label: "Fable leads",
+    model: "pi/anthropic/claude-fable-5",
+    effort: "high",
+    enginePresetId: "orchestrator/fable",
+    note: "## Workspace model preset · Fable leads",
+  },
+};
+
+describe("resolvePiPresetWiring (workspace presets)", () => {
+  test("a routed workspace preset id resolves to its lead with the preset attached", () => {
+    const out = resolvePiPresetWiring("pi/workspace-preset/ws-test/opus", WS_PRESETS.opus);
+    expect(out).toMatchObject({
+      providerID: "anthropic",
+      modelID: "claude-opus-5",
+      workspacePreset: { id: "pi/workspace-preset/ws-test/opus" },
+      effort: "xhigh",
+    });
+    expect(out?.dial).toBeUndefined();
+  });
+
+  test("follows enginePresetId so a restated built-in keeps its oracle", () => {
+    const out = resolvePiPresetWiring(
+      "pi/workspace-preset/ws-test/opus-fable",
+      WS_PRESETS.opusFable
+    );
+    expect(out).toMatchObject({
+      modelID: "claude-opus-5",
+      dial: { id: "dial/opus-fable", oracleAgent: "oracle-fable" },
+      // The workspace preset's own pin outranks the built-in tier's.
+      effort: "xhigh",
+    });
+  });
+
+  test("follows enginePresetId on the orchestrator side too", () => {
+    const out = resolvePiPresetWiring(
+      "pi/workspace-preset/ws-test/lead",
+      WS_PRESETS.lead
+    );
+    expect(out).toMatchObject({
+      modelID: "claude-fable-5",
+      orchestrator: { id: "orchestrator/fable" },
+      effort: "high",
+    });
+  });
+
+  test("wiring rides the stored id while the routed id is the concrete lead", () => {
+    // The agent-runner path: dispatch got the lead, opts.model kept the preset.
+    const out = resolvePiPresetWiring("pi/anthropic/claude-opus-5", WS_PRESETS.opusFable, [
+      "pi/anthropic/claude-opus-5",
+      WS_PRESETS.opusFable.id,
+    ]);
+    expect(out).toMatchObject({
+      modelID: "claude-opus-5",
+      dial: { id: "dial/opus-fable" },
+      effort: "xhigh",
+    });
+  });
+
+  test("an unknown enginePresetId is ignored rather than faked", () => {
+    const out = resolvePiPresetWiring("pi/workspace-preset/ws-test/opus", {
+      ...WS_PRESETS.opus,
+      enginePresetId: "dial/not-real",
+    });
+    expect(out?.dial).toBeUndefined();
+    expect(out?.modelID).toBe("claude-opus-5");
+  });
+});
+
+describe("piDialOracleAgent (same-bridge semantics)", () => {
+  test("keeps the preset's oracle when the account family matches", () => {
+    expect(piDialOracleAgent("oracle-fable", "anthropic")).toBe("oracle-fable");
+    expect(piDialOracleAgent("oracle-sol", "openai")).toBe("oracle-sol");
+  });
+
+  test("substitutes the same-bridge alternate across families", () => {
+    // dial/ultra on a pi/anthropic run: Sol → Opus, like every other engine.
+    expect(piDialOracleAgent("oracle-sol", "anthropic")).toBe("oracle-opus");
+    // dial/high on a pi/openai run: Fable → Terra.
+    expect(piDialOracleAgent("oracle-fable", "openai")).toBe("oracle-terra");
+  });
+
+  test("third-party providers keep the preset's own choice", () => {
+    expect(piDialOracleAgent("oracle-sol", "wafer")).toBe("oracle-sol");
+    expect(piDialOracleAgent("oracle-fable", "cerebras")).toBe("oracle-fable");
+  });
+});
+
+describe("buildPiThirdPartyProviderPlan", () => {
+  test("wafer registers as a generic OpenAI-compatible provider with our catalog", () => {
+    const plan = buildPiThirdPartyProviderPlan({
+      providerID: "wafer",
+      modelID: "deepseek-v4-flash-0731-fast",
+      apiKey: "wfr-test",
+      builtinModelIds: [],
+    });
+    if ("error" in plan) throw new Error(plan.error);
+    expect(plan.config).toMatchObject({
+      apiKey: "wfr-test",
+      name: "Wafer",
+      api: "openai-completions",
+      baseUrl: "https://pass.wafer.ai/v1",
+    });
+    const models = plan.config.models as Array<Record<string, unknown>>;
+    const ids = models.map((m) => m.id);
+    expect(ids).toContain("deepseek-v4-flash-0731-fast");
+    expect(ids).toContain("kimi-k3");
+    const deepseek = models.find((m) => m.id === "deepseek-v4-flash-0731-fast")!;
+    // Pi's six-rung ladder onto Wafer's four: only the off-ladder rungs map.
+    expect(deepseek.thinkingLevelMap).toEqual({ minimal: "low", xhigh: "max" });
+    expect(deepseek.contextWindow).toBe(1_048_576);
+    expect(deepseek.cost).toMatchObject({ input: 0.28, cacheRead: 0.07 });
+    // Vision only where Wafer documents it.
+    expect(deepseek.input).toEqual(["text"]);
+    const kimi = models.find((m) => m.id === "kimi-k3")!;
+    expect(kimi.input).toEqual(["text", "image"]);
+  });
+
+  test("a configured baseURL overrides the catalog default", () => {
+    const plan = buildPiThirdPartyProviderPlan({
+      providerID: "wafer",
+      modelID: "glm-5.2",
+      apiKey: "wfr-test",
+      baseURL: "https://proxy.example.test/v1",
+      builtinModelIds: [],
+    });
+    if ("error" in plan) throw new Error(plan.error);
+    expect(plan.config.baseUrl).toBe("https://proxy.example.test/v1");
+  });
+
+  test("a builtin-catalog provider with a known model passes no model table", () => {
+    const plan = buildPiThirdPartyProviderPlan({
+      providerID: "cerebras",
+      modelID: "gpt-oss-120b",
+      apiKey: "csk-test",
+      builtinModelIds: ["gpt-oss-120b", "zai-glm-4.7"],
+    });
+    if ("error" in plan) throw new Error(plan.error);
+    expect(plan.config).toEqual({ apiKey: "csk-test" });
+  });
+
+  test("a model newer than both catalogs gets a conservative fallback entry", () => {
+    const plan = buildPiThirdPartyProviderPlan({
+      providerID: "cerebras",
+      modelID: "brand-new-model",
+      apiKey: "csk-test",
+      builtinModelIds: ["gpt-oss-120b"],
+    });
+    if ("error" in plan) throw new Error(plan.error);
+    const models = plan.config.models as Array<Record<string, unknown>>;
+    expect(models).toHaveLength(1);
+    expect(models[0]).toMatchObject({
+      id: "brand-new-model",
+      reasoning: true,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    });
+  });
+
+  test("a provider in neither catalog fails clearly instead of guessing", () => {
+    const plan = buildPiThirdPartyProviderPlan({
+      providerID: "mystery",
+      modelID: "some-model",
+      apiKey: "k",
+      builtinModelIds: [],
+    });
+    expect(plan).toMatchObject({ error: expect.stringContaining("neither") });
   });
 });
 

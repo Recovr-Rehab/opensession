@@ -2,9 +2,20 @@
  * Pi engine runner — pi.dev's coding agent (`@earendil-works/pi-coding-agent`)
  * as a second engine beside opencode, driven IN-PROCESS through the SDK (the
  * claude-direct precedent, not the opencode server-pool one). Model ids are
- * `pi/<provider>/<model>`; served providers are `pi/anthropic/*` (the
- * loopback Anthropic bridge) and `pi/openai/*` (the ChatGPT-subscription
- * codex pool).
+ * `pi/<provider>/<model>`; `pi/anthropic/*` runs on the designated Claude
+ * accounts (in-process provider or the loopback bridge), `pi/openai/*` on the
+ * ChatGPT-subscription codex pool, and any other configured third-party
+ * provider (wafer, cerebras, moonshotai, xai, …) on its OpenCode-configured
+ * API key — pi's built-in catalog supplies the dialect where it knows the
+ * provider, piProviderCatalog/buildPiThirdPartyProviderPlan where it does
+ * not (Wafer). Preset ids route here too: `pi/dial/<tier>`,
+ * `pi/orchestrator/<name>` and `pi/workspace-preset/<ws>/<id>` resolve to
+ * their concrete lead with the preset wiring attached — the dial oracle as a
+ * native custom tool (same-bridge resolved via sameBridgeDialOracle, answered
+ * out-of-band by opencodeOneShot), orchestrator/workspace delegation as
+ * instructions over opensession-sessions (the codex-direct shape; pi has no
+ * subagent registry, so claude-direct's native worker agents have no pi
+ * equivalent).
  *
  * Containment / policy parity (the research-policy 14-point checklist):
  *  - Config gate, not an env flag: every turn refuses unless
@@ -158,14 +169,23 @@ import { basename, dirname, join, resolve, sep } from "path";
 import type {
   AgentSession,
   AgentSessionEvent,
+  ModelRuntime,
   ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
+
+/** The extension-registration config shape ModelRuntime.registerProvider
+ *  accepts (ProviderConfigInput — not re-exported by the package index). */
+type PiProviderConfigInput = Parameters<ModelRuntime["registerProvider"]>[1];
 import { stateDir } from "./paths";
 import { audit, summarizeText } from "./audit";
 import { journalSet, buildRunJournalRecord, journalClear, registerActiveRunProbe } from "./run-journal";
 import { isClaudeUsageLimitError, isCodexUsageLimitError } from "./runner-shared";
 import { ensureAnthropicBridge } from "./anthropic-bridge";
-import { opencodeProviders, readOpencodeBridgeConfig } from "./opencode-config";
+import {
+  opencodeProviders,
+  piProviderCatalog,
+  readOpencodeBridgeConfig,
+} from "./opencode-config";
 import { markCodexExhausted, type CodexAccount } from "./codex-accounts";
 import {
   pickOpenaiAccount,
@@ -208,8 +228,11 @@ import {
   opencodeModelLabel,
   orchestratorPreset,
   orchestratorWorkerForBridge,
+  sameBridgeDialOracle,
   toPiModel,
 } from "./models";
+import { resolveWorkspaceModelPreset } from "./workspace-model-presets";
+import type { ResolvedWorkspaceModelPreset } from "./workspace-model-presets";
 import type { TranscriptEntry } from "./types";
 import type { RunAgentOpts } from "./agent-runner";
 import type { StreamEvent, ImageInput, TurnUsage } from "./run-events";
@@ -236,40 +259,165 @@ export function parsePiModel(
 
 /** Resolve a Pi model or preset to the concrete model that executes its main
  * turn. The stored preset id stays intact so its effort and companion tools
- * remain attached across continuation turns. */
-export function resolvePiRoutedModel(model: string): {
+ * remain attached across continuation turns.
+ *
+ * `storedModel` is the session's stored id (`opts.model`). It matters for
+ * workspace ("Custom") presets: agent-runner dispatches those as their
+ * concrete LEAD model, so the preset id — and with it an `enginePresetId`'s
+ * oracle/worker wiring and the preset's pinned effort — survives only on the
+ * stored id. Resolving over both ids is the codex-direct recipe
+ * (resolveCodexDirectPreset). */
+export function resolvePiRoutedModel(
+  model: string,
+  storedModel?: string | null
+): PiResolvedModel | null {
+  const ids = [model, storedModel || ""].filter(Boolean);
+  const ws = ids
+    .map((id) => resolveWorkspaceModelPreset(id))
+    .find((hit): hit is ResolvedWorkspaceModelPreset => !!hit);
+  return resolvePiPresetWiring(model, ws, ids);
+}
+
+export interface PiResolvedModel {
   providerID: string;
   modelID: string;
   dial?: NonNullable<ReturnType<typeof dialPreset>>;
   orchestrator?: NonNullable<ReturnType<typeof orchestratorPreset>>;
-} | null {
-  const dial = dialPreset(model);
-  const orchestrator = orchestratorPreset(model);
+  workspacePreset?: ResolvedWorkspaceModelPreset;
+  /** The preset's effort override (workspace preset first — it is what the
+   *  person configured — then the built-in preset's); undefined on a
+   *  non-preset run, where the session's own effort stands. */
+  effort?: string;
+}
+
+/** Pure half of resolvePiRoutedModel (exported for tests): the preset wiring
+ * given an already-resolved workspace preset — the workspace-store read is the
+ * only impure step, exactly the split claude-direct-policy makes. */
+export function resolvePiPresetWiring(
+  model: string,
+  ws: ResolvedWorkspaceModelPreset | undefined,
+  candidateIds: readonly string[] = [model]
+): PiResolvedModel | null {
+  const candidates = [...candidateIds, ws?.enginePresetId];
+  const dial = candidates
+    .map((id) => dialPreset(id))
+    .find((hit): hit is NonNullable<ReturnType<typeof dialPreset>> => !!hit);
+  const orchestrator = candidates
+    .map((id) => orchestratorPreset(id))
+    .find((hit): hit is NonNullable<ReturnType<typeof orchestratorPreset>> => !!hit);
   const lower = model.toLowerCase();
   if (lower.startsWith("pi/dial/") && !dial) return null;
   if (lower.startsWith("pi/orchestrator/") && !orchestrator) return null;
-  const concrete = toPiModel(model);
+  if (lower.startsWith("pi/workspace-preset/") && !ws) return null;
+  // A workspace preset id resolves to its (already pi-routed) lead; everything
+  // else routes through toPiModel as before.
+  const concrete =
+    ws && lower.startsWith("pi/workspace-preset/") ? ws.model : toPiModel(model);
   const parsed = concrete ? parsePiModel(concrete) : null;
-  return parsed
-    ? {
-        ...parsed,
-        ...(dial ? { dial } : {}),
-        ...(orchestrator ? { orchestrator } : {}),
-      }
-    : null;
+  if (!parsed) return null;
+  const effort = ws?.effort ?? dial?.effort ?? orchestrator?.effort;
+  return {
+    ...parsed,
+    ...(dial ? { dial } : {}),
+    ...(orchestrator ? { orchestrator } : {}),
+    ...(ws ? { workspacePreset: ws } : {}),
+    ...(effort ? { effort } : {}),
+  };
 }
 
 /** @deprecated Dial was generalized to routed presets. Keep the focused name
  * for callers/tests that only exercise the Dial family. */
 export const resolvePiDialModel = resolvePiRoutedModel;
 
-function makePiDialOracleTool(dial: NonNullable<ReturnType<typeof dialPreset>>, user?: string): ToolDefinition<any, any, any> {
-  const oracle = DIAL_ORACLE_AGENTS[dial.oracleAgent];
+/** The oracle agent a pi dial run actually consults: the preset's oracle when
+ * its account family matches the run's provider, else the same-bridge
+ * substitute — the rule every other engine applies (sameBridgeDialOracle).
+ * Pi's oracle executes out-of-band through opencodeOneShot, so a cross-family
+ * oracle would technically work; the substitution is account-pool POLICY
+ * parity — a dial run must not consult (and bill) a second account family the
+ * same preset would not consult on any other engine. Third-party providers
+ * (wafer, cerebras) keep the preset's own choice, also like the others. */
+export function piDialOracleAgent(oracleAgent: string, providerID: string): string {
+  return sameBridgeDialOracle(oracleAgent, providerID);
+}
+
+/**
+ * Registration plan for a third-party (non-anthropic/openai) provider — the
+ * pure half of the runner's provider branch, exported for tests.
+ *
+ * Model metadata comes from pi's built-in provider catalog when pi knows the
+ * provider (cerebras, moonshotai, xai, …); a provider pi has never heard of
+ * but we catalog ourselves (Wafer — piProviderCatalog) is registered as a
+ * generic OpenAI-compatible provider carrying the same model table the
+ * opencode engine injects. A provider in neither catalog fails clearly
+ * instead of guessing a protocol. A model id newer than both catalogs gets a
+ * conservative fallback entry — zero cost (unknown pricing must under-report,
+ * not invent; tokens still record) and safe window/output floors — inheriting
+ * the provider's api/baseUrl, so a catalog lag never blocks a run.
+ */
+export function buildPiThirdPartyProviderPlan(input: {
+  providerID: string;
+  modelID: string;
+  apiKey: string;
+  baseURL?: string;
+  /** Model ids pi's built-in catalog holds for this provider (may be empty). */
+  builtinModelIds: readonly string[];
+}): { config: PiProviderConfigInput } | { error: string } {
+  const catalog = piProviderCatalog(input.providerID);
+  const builtin = new Set(input.builtinModelIds);
+  if (!catalog && !builtin.size) {
+    return {
+      error:
+        `Provider "${input.providerID}" is in neither Pi's built-in catalog nor ours, ` +
+        "so the pi engine cannot guess its protocol. Use an opencode/* id for this model.",
+    };
+  }
+  const known =
+    builtin.has(input.modelID) ||
+    !!catalog?.models.some((m) => m.id === input.modelID);
+  // Registering `models` REPLACES the provider's model list (pi's extension
+  // layer), so the self-catalog always rides along in full; builtin-backed
+  // providers with a known model pass no models at all and keep pi's own list.
+  const models = [
+    ...(catalog?.models ?? []),
+    ...(known
+      ? []
+      : [
+          {
+            id: input.modelID,
+            name: input.modelID,
+            reasoning: true,
+            input: ["text"] as Array<"text" | "image">,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+            contextWindow: 131_072,
+            maxTokens: 32_768,
+          },
+        ]),
+  ];
+  return {
+    config: {
+      apiKey: input.apiKey,
+      ...(catalog ? { name: catalog.name, api: catalog.api } : {}),
+      ...(input.baseURL
+        ? { baseUrl: input.baseURL }
+        : catalog
+          ? { baseUrl: catalog.baseUrl }
+          : {}),
+      ...(models.length ? { models } : {}),
+    },
+  };
+}
+
+function makePiDialOracleTool(
+  oracleAgent: string,
+  user?: string
+): ToolDefinition<any, any, any> {
+  const oracle = DIAL_ORACLE_AGENTS[oracleAgent];
   return {
     name: "oracle",
     label: "Oracle",
     description:
-      `Consult ${oracle?.label || dial.oracleAgent} for a read-only senior-engineering second opinion. ` +
+      `Consult ${oracle?.label || oracleAgent} for a read-only senior-engineering second opinion. ` +
       "Use it for hard plans, significant reviews, architecture tradeoffs, or stubborn debugging, not routine searches or edits.",
     parameters: {
       type: "object",
@@ -285,7 +433,7 @@ function makePiDialOracleTool(dial: NonNullable<ReturnType<typeof dialPreset>>, 
       const prompt = String((params as { prompt?: unknown })?.prompt ?? "").trim();
       if (!prompt) throw new Error("oracle requires a prompt");
       if (signal?.aborted) throw new Error("Oracle request aborted");
-      if (!oracle) throw new Error(`Dial oracle "${dial.oracleAgent}" is not configured`);
+      if (!oracle) throw new Error(`Dial oracle "${oracleAgent}" is not configured`);
       const answer = await opencodeOneShot(prompt, {
         model: oracle.model,
         effort: oracle.variant,
@@ -1083,7 +1231,9 @@ export async function* runPi(
     yield { type: "error", content: gateReason, provider: PROVIDER, model };
     return;
   }
-  const resolved = resolvePiRoutedModel(model);
+  // The routed id plus the session's stored id: a workspace preset's wiring
+  // (enginePresetId oracle, pinned effort) survives only on the stored one.
+  const resolved = resolvePiRoutedModel(model, opts.model);
   const parsed = resolved
     ? { providerID: resolved.providerID, modelID: resolved.modelID }
     : null;
@@ -1092,12 +1242,17 @@ export async function* runPi(
       type: "error",
       content:
         `Not a pi model id: "${model}" ` +
-        "(expected pi/<provider>/<model>, pi/dial/<preset>, or pi/orchestrator/<preset>)",
+        "(expected pi/<provider>/<model>, pi/dial/<preset>, pi/orchestrator/<preset>, " +
+        "or pi/workspace-preset/<workspace>/<preset>)",
       provider: PROVIDER,
       model,
     };
     return;
   }
+  // The oracle this run's dial preset actually consults (same-bridge rule).
+  const dialOracleAgent = resolved?.dial
+    ? piDialOracleAgent(resolved.dial.oracleAgent, parsed.providerID)
+    : undefined;
   const configuredProvider = opencodeProviders()[parsed.providerID];
   if (
     parsed.providerID !== "anthropic" &&
@@ -1467,15 +1622,20 @@ export async function* runPi(
       }
     } else {
       // Third-party picker providers share OpenCode's configured API key and
-      // optional base URL. Pi's built-in provider catalog supplies the API
-      // dialect and model metadata; a provider absent from that catalog fails
-      // clearly instead of guessing a protocol.
-      runtime.registerProvider(parsed.providerID, {
-        apiKey: configuredProvider!.apiKey,
-        ...(configuredProvider!.baseURL
-          ? { baseUrl: configuredProvider!.baseURL }
-          : {}),
+      // optional base URL. buildPiThirdPartyProviderPlan supplies the API
+      // dialect and model metadata — pi's built-in catalog when pi knows the
+      // provider, our own catalog (Wafer) when it does not, a conservative
+      // fallback entry for a model id newer than both — and refuses clearly
+      // for a provider in neither catalog.
+      const plan = buildPiThirdPartyProviderPlan({
+        providerID: parsed.providerID,
+        modelID: parsed.modelID,
+        apiKey: configuredProvider!.apiKey!,
+        baseURL: configuredProvider!.baseURL,
+        builtinModelIds: runtime.getModels(parsed.providerID).map((m) => m.id),
       });
+      if ("error" in plan) throw new Error(plan.error);
+      runtime.registerProvider(parsed.providerID, plan.config);
       await runtime.setRuntimeApiKey(
         parsed.providerID,
         configuredProvider!.apiKey!,
@@ -1483,7 +1643,7 @@ export async function* runPi(
       piModel = runtime.getModel(parsed.providerID, parsed.modelID);
       if (!piModel) {
         throw new Error(
-          `Model "${parsed.providerID}/${parsed.modelID}" is not in Pi's provider catalog. ` +
+          `Model "${parsed.providerID}/${parsed.modelID}" could not be registered with pi. ` +
             "Use a model supported by that provider's Pi integration.",
         );
       }
@@ -1537,7 +1697,7 @@ export async function* runPi(
     const guardedOps = makeGuardedToolOps(cwd);
     const customTools: ToolDefinition<any, any, any>[] = [
       ...mcpBridge.discoveryTools,
-      ...(resolved?.dial ? [makePiDialOracleTool(resolved.dial, user)] : []),
+      ...(dialOracleAgent ? [makePiDialOracleTool(dialOracleAgent, user)] : []),
     ];
     for (const name of localTools) {
       switch (name) {
@@ -1626,19 +1786,28 @@ export async function* runPi(
       githubUserLogin,
       deniedToolNotes: policy.noteGroups,
       commandPolicyGated: bashGated,
-      dialOracle: resolved?.dial
+      dialOracle:
+        resolved?.dial && dialOracleAgent
+          ? {
+              agent: "oracle",
+              // A workspace preset that restated a built-in tier keeps its
+              // own label — that is the name the person picked.
+              presetLabel: resolved.workspacePreset?.label || resolved.dial.label,
+              mainLabel: parsed.modelID,
+              oracleLabel:
+                DIAL_ORACLE_AGENTS[dialOracleAgent]?.label || dialOracleAgent,
+              tool: true,
+            }
+          : undefined,
+      // Named only when the run actually carries the delegation surface
+      // (opensession-sessions rides inProcessMcp on interactive runs) —
+      // instructions naming a tool the run does not have read as a broken
+      // tool (the codex-direct rule). An orchestrator preset without it
+      // still keeps its effort override.
+      orchestrator: resolved?.orchestrator && opts.inProcessMcp?.["opensession-sessions"]
         ? {
-            agent: "oracle",
-            presetLabel: resolved.dial.label,
-            mainLabel: parsed.modelID,
-            oracleLabel:
-              DIAL_ORACLE_AGENTS[resolved.dial.oracleAgent]?.label || resolved.dial.oracleAgent,
-            tool: true,
-          }
-        : undefined,
-      orchestrator: resolved?.orchestrator
-        ? {
-            presetLabel: resolved.orchestrator.label,
+            presetLabel:
+              resolved.workspacePreset?.label || resolved.orchestrator.label,
             mainLabel: opencodeModelLabel(resolved.orchestrator.model),
             workers: resolved.orchestrator.workerAgents.map((name) => ({
               agent: name,
@@ -1729,8 +1898,9 @@ export async function* runPi(
       ? sdk.SessionManager.open(resumePath, sessionDir)
       : sdk.SessionManager.create(cwd, sessionDir);
 
-    const selectedEffort =
-      resolved?.dial?.effort ?? resolved?.orchestrator?.effort ?? opts.effort;
+    // Preset effort override (workspace preset's pin first, then the built-in
+    // preset's) falls back to the session's own effort.
+    const selectedEffort = resolved?.effort ?? opts.effort;
     const thinkingLevel =
       selectedEffort && THINKING_LEVELS.has(selectedEffort)
         ? (selectedEffort as "low" | "medium" | "high" | "xhigh" | "max")

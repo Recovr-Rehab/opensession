@@ -228,6 +228,56 @@ export function defaultPickerModelsForProvider(id: string): readonly string[] {
   return [];
 }
 
+/** A self-catalogued provider shaped for the Pi engine's registerProvider:
+ *  the API dialect, endpoint and per-model metadata pi needs to serve a
+ *  provider absent from its built-in catalog. One source of truth with the
+ *  OpenCode injection above (opencodeProviderOptions' wafer arm) — the same
+ *  WAFER_MODELS table, expressed as pi-ai model entries. Cerebras needs no
+ *  entry here: pi's built-in catalog already carries it. */
+export interface PiProviderCatalog {
+  name: string;
+  api: "openai-completions";
+  baseUrl: string;
+  models: Array<{
+    id: string;
+    name: string;
+    reasoning: boolean;
+    thinkingLevelMap: Record<string, string>;
+    input: Array<"text" | "image">;
+    cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
+    contextWindow: number;
+    maxTokens: number;
+  }>;
+}
+
+export function piProviderCatalog(id: string): PiProviderCatalog | undefined {
+  if (id !== "wafer") return undefined;
+  return {
+    name: "Wafer",
+    api: "openai-completions",
+    baseUrl: "https://pass.wafer.ai/v1",
+    models: Object.entries(WAFER_MODELS).map(([modelId, m]) => ({
+      id: modelId,
+      name: m.name,
+      reasoning: true,
+      // Pi's six-rung ladder onto Wafer's four (WAFER_EFFORTS): pi-ai falls
+      // back to the raw level for unmapped rungs, so only the two off-ladder
+      // ones need entries. This is also the thinking switch — Wafer serves
+      // reasoning OFF until a request carries an effort, same as on OpenCode.
+      thinkingLevelMap: { minimal: "low", xhigh: "max" },
+      input: m.attachment ? ["text", "image"] : ["text"],
+      cost: {
+        input: m.cost.input,
+        output: m.cost.output,
+        cacheRead: m.cost.cache_read,
+        cacheWrite: 0,
+      },
+      contextWindow: m.context,
+      maxTokens: m.output,
+    })),
+  };
+}
+
 /** Valid provider ids — matches opencode's own provider slugs. */
 export const PROVIDER_ID_RE = /^[a-z0-9-]+$/;
 
