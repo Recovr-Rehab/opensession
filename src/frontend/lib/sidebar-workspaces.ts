@@ -46,6 +46,84 @@ export function spawnedSessionBelongsInSidebar(
 	return !session.spawnedBy || needsAttention || claimed;
 }
 
+export interface ActiveWorkspaceSubagent {
+	session: UnifiedSession;
+	/** One for a direct child of workspace work, increasing for nested workers. */
+	depth: number;
+}
+
+/**
+ * Active child sessions owned by one open workspace.
+ *
+ * `parentSessionId` is the relationship. A worker can carry the parent's
+ * workspace, mint a temporary workspace of its own, or omit one, so workspace
+ * equality alone is not enough: seed the family from sessions in the selected
+ * workspace, then follow child edges. The returned rows remain live while a
+ * worker is running, blocked on a question, or has queued work to deliver.
+ */
+export function activeSubagentsForWorkspace(
+	sessions: readonly UnifiedSession[],
+	workspaceId: string | null | undefined,
+): ActiveWorkspaceSubagent[] {
+	if (!workspaceId) return [];
+
+	// The live session list should already be unique. Keeping the last copy of
+	// a duplicate makes this helper defensive against an optimistic list merge
+	// without ever rendering the same child twice.
+	const byId = new Map<string, UnifiedSession>();
+	for (const session of sessions) byId.set(session.id, session);
+
+	const family = new Set<string>();
+	const childrenByParent = new Map<string, string[]>();
+	for (const session of byId.values()) {
+		if (session.workspaceId === workspaceId) family.add(session.id);
+		if (session.parentSessionId) {
+			const children = childrenByParent.get(session.parentSessionId) ?? [];
+			children.push(session.id);
+			childrenByParent.set(session.parentSessionId, children);
+		}
+	}
+	const queue = Array.from(family);
+	for (let i = 0; i < queue.length; i++) {
+		for (const childId of childrenByParent.get(queue[i]) ?? []) {
+			if (family.has(childId)) continue;
+			family.add(childId);
+			queue.push(childId);
+		}
+	}
+
+	const depthOf = (session: UnifiedSession): number => {
+		let depth = 1;
+		let parentId = session.parentSessionId;
+		const seen = new Set([session.id]);
+		while (parentId && family.has(parentId) && !seen.has(parentId)) {
+			seen.add(parentId);
+			const parent = byId.get(parentId);
+			if (!parent?.parentSessionId) break;
+			depth++;
+			parentId = parent.parentSessionId;
+		}
+		return depth;
+	};
+
+	return Array.from(byId.values())
+		.filter(
+			(session) =>
+				family.has(session.id) &&
+				!!session.parentSessionId &&
+				!session.archived &&
+				(session.isRunning ||
+					!!session.waitingForInput ||
+					(session.queuedCount ?? 0) > 0),
+		)
+		.map((session) => ({ session, depth: depthOf(session) }))
+		.sort(
+			(a, b) =>
+				(a.session.createdAt || "").localeCompare(b.session.createdAt || "") ||
+				a.session.id.localeCompare(b.session.id),
+		);
+}
+
 /**
  * Which workspace row a selected session belongs to. Usually the row that
  * lists it, but a session the sidebar deliberately keeps out of the rows — an

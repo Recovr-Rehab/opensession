@@ -73,6 +73,7 @@ import {
 import { mobileFilterBtn } from "../lib/app-header-classes";
 import {
 	ASK_BAND,
+	activeSubagentsForWorkspace,
 	isAskWorkspace,
 	isScratchWorkspace,
 	spawnedSessionBelongsInSidebar,
@@ -267,6 +268,7 @@ import {
 import { AutoCreatedMark } from "./sidebar/AutoCreatedMark";
 import { OriginMark } from "./sidebar/OriginMark";
 import { AutomationReportRow } from "./sidebar/AutomationReportRow";
+import { ActiveSubagentRows } from "./sidebar/ActiveSubagentRows";
 import { DraftRow } from "./sidebar/DraftRow";
 import { SidebarCtxMenu } from "./sidebar/SidebarCtxMenu";
 import { SidebarToolRows, SidebarToolsMenu } from "./sidebar/SidebarToolsMenu";
@@ -1097,6 +1099,19 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		return [...people, { key: AGENT_PERSON_KEY, label: AGENT_NAME }];
 	}, [people, automationOverview]);
 
+	// Child sessions are contextual navigation for the workspace that is open,
+	// not another person/status lane. Derive them from the complete live list so
+	// a teammate or search lens cannot cut a running worker out from under its
+	// selected parent row.
+	const activeWorkspaceSubagents = useMemo(
+		() => activeSubagentsForWorkspace(sessions, selectedWorkspaceId),
+		[sessions, selectedWorkspaceId],
+	);
+	const activeWorkspaceSubagentIds = useMemo(
+		() => new Set(activeWorkspaceSubagents.map(({ session }) => session.id)),
+		[activeWorkspaceSubagents],
+	);
+
 	// Every non-archived session, narrowed by the repo/person filters and search.
 	// Rows are built per-workspace below; a session matching the filter surfaces its
 	// whole workspace row.
@@ -1188,6 +1203,16 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		const byWs = new Map<string, UnifiedSession[]>();
 		const solo: UnifiedSession[] = [];
 		for (const s of filtered) {
+			// An active child linked out to its own temporary workspace is rendered
+			// under the selected parent workspace below. Do not mint a second row for
+			// the same session elsewhere in this visible hierarchy. A child already in
+			// the selected workspace stays in the aggregate so its activity still
+			// contributes to the parent row.
+			if (
+				activeWorkspaceSubagentIds.has(s.id) &&
+				s.workspaceId !== selectedWorkspaceId
+			)
+				continue;
 			// Automations render in their own band — EXCEPT runs YOU claimed
 			// (right-click → Add to my workspaces / Set status): those graduate
 			// into the workspace rows and take part in your lanes like your own
@@ -1367,7 +1392,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		return rows;
 		// `lanes` feeds mineStatus/pinnedLane (read via the lib cache), and
 		// `mentionsRev` the @-mention badge (mentionFor, same cache pattern).
-	}, [filtered, sessions, workspaces, selectedId, reads, search, filter, lanes, activeReviewPrKeys, mentionsRev]);
+	}, [filtered, sessions, workspaces, selectedId, reads, search, filter, lanes, activeReviewPrKeys, mentionsRev, activeWorkspaceSubagentIds, selectedWorkspaceId]);
 	const rowOwnsSelection = (row: WsRow) =>
 		workspaceRowOwnsSession(row, selectedSession);
 	const selectionBelongsToWorkspaceRow = allWsRows.some(rowOwnsSelection);
@@ -1428,6 +1453,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		const byAutomation = new Map<string, UnifiedSession[]>();
 		for (const s of sorted) {
 			if (!s.automation) continue;
+			if (activeWorkspaceSubagentIds.has(s.id)) continue;
 			// A run you claimed (or a legacy global override) lives in the
 			// workspace rows instead — don't render it twice.
 			if (isClaimed(s)) continue;
@@ -1468,6 +1494,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		sorted,
 		lanes,
 		automationOverview,
+		activeWorkspaceSubagentIds,
 		filter.person,
 		filter.repo,
 		currentUser,
@@ -2637,6 +2664,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		return renderWsRowImpl(row, false, true);
 	}
 
+	// Pinned is an orthogonal shortcut, so the selected workspace can appear
+	// there and in its primary lane. Its children render only at the primary
+	// placement, keeping one visible subagent row per session.
+	function renderPinnedWsRow(row: WsRow) {
+		return renderWsRowImpl(row, false, false, false);
+	}
+
 	// `inbox` renders the Inbox-mode variant of the same row — a repo tile in
 	// front of the title, idle timestamp on every row — with identical behavior
 	// (click, swipe, context menu, pin, archive).
@@ -2645,7 +2679,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	//
 	// `review` marks a row under the "Needs review" band, whose click opens the
 	// Review tab instead of the session.
-	function renderWsRowImpl(row: WsRow, inbox: boolean, review = false) {
+	function renderWsRowImpl(
+		row: WsRow,
+		inbox: boolean,
+		review = false,
+		includeSubagents = true,
+	) {
 		const active = rowOwnsSelection(row);
 		const editing = rowRenameEditing(row);
 		const waiting = row.status === "needsinput";
@@ -2700,7 +2739,11 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			? (snoozes[row.key] ?? null)
 			: null;
 		const flatRepoGrouping = filter.groupBy === "repo" || rowIsScratch(row);
-		return (
+		const subagents =
+			includeSubagents && row.workspace?.id === selectedWorkspaceId
+				? activeWorkspaceSubagents
+				: [];
+		const workspaceRow = (
 			<div
 				key={row.key}
 				className={SIDEBAR_SWIPE_ROW}
@@ -3146,6 +3189,16 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				</span>
 				</button>
 			</div>
+		);
+		return (
+			<React.Fragment key={row.key}>
+				{workspaceRow}
+				<ActiveSubagentRows
+					items={subagents}
+					selectedId={selectedId}
+					onSelect={onSelect}
+				/>
+			</React.Fragment>
 		);
 	}
 
@@ -5092,6 +5145,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						// legacy pin can still point at it). Skip it so it can't render
 						// as an un-archivable ghost row.
 						.filter((s): s is UnifiedSession => !!s && !s.archived)
+						.filter((s) => !activeWorkspaceSubagentIds.has(s.id))
 						// Honor the repo filter — a pinned session from another repo
 						// shouldn't leak into a repo-scoped view (workspace pins
 						// already drop out via wsRows/filtered).
@@ -5165,7 +5219,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 							),
 							repo: wsRowRepo(row),
 							sessions: row.sessions,
-							node: renderWsRow(row),
+							node: renderPinnedWsRow(row),
 						});
 					}
 					const seenLoose = new Set<string>();
