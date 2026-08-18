@@ -96,7 +96,7 @@ import { startWatching } from "./file-watcher";
 import { ensureAskCheckout, ensureScratchDir, getRepo, isSharedCheckoutDir, repoForPath, repoForPathOrNull, reviveWorktree, sessionRepoId, worktreeHeadBranch } from "./worktree";
 import { createGoalSelfMcpServer } from "../agents/slack/goal-tools";
 import { sendSlackMessage } from "../agents/slack/slack-api";
-import type { RunHostSpec } from "../runner-host/protocol";
+import { runHostsDir, type RunHostSpec } from "../runner-host/protocol";
 import { maybeLaunchRunnerRun } from "./runner-session";
 import { shouldPersistModelSwitch, type ImageInput, type TurnUsage } from "./run-events";
 import type {
@@ -507,6 +507,33 @@ export function restorePromptQueues(): void {
 // the journal, so both paths are covered.
 const RESUME_SNAPSHOT_PATH = `${SESSIONS_DIR}/active-at-shutdown.json`;
 
+export function readActiveShutdownSnapshot(): ActiveRunRecord[] {
+	try {
+		if (!existsSync(RESUME_SNAPSHOT_PATH)) return [];
+		const records = JSON.parse(readFileSync(RESUME_SNAPSHOT_PATH, "utf-8"));
+		return Array.isArray(records) ? records : [];
+	} catch (e) {
+		console.error("[resume] Failed to read active-session snapshot:", e);
+		return [];
+	}
+}
+
+/** Snapshot-only local hosts that still have a run directory to reattach to.
+ * A host that finished cleanly during the shutdown drain removes this file and
+ * remains eligible for the normal generic wake instead. */
+export function recoverableLocalHostSnapshotRecords(
+	records: ActiveRunRecord[],
+	hostsDir = runHostsDir(SESSIONS_DIR),
+): ActiveRunRecord[] {
+	return records.filter(
+		(record) =>
+			!!record.hostId &&
+			!record.sandboxId &&
+			!record.runnerId &&
+			existsSync(`${hostsDir}/${record.hostId}/spec.json`),
+	);
+}
+
 /** Capture the sessions with an in-flight run, for boot-time wake-up. Called at
  *  the very start of graceful shutdown, before the drain empties the journal. */
 export function snapshotActiveSessions(): void {
@@ -529,15 +556,11 @@ export function snapshotActiveSessions(): void {
 /** Wake sessions that were active at the last graceful shutdown but finished
  *  their turn during the drain (so they weren't in the journal to resume).
  *  `alreadyResumed` are the osSessionIds the journal resume already handled. */
-export function resumeDrainedSessions(alreadyResumed: Set<string>): void {
-	let records: ActiveRunRecord[] = [];
-	try {
-		if (!existsSync(RESUME_SNAPSHOT_PATH)) return;
-		records = JSON.parse(readFileSync(RESUME_SNAPSHOT_PATH, "utf-8"));
-	} catch (e) {
-		console.error("[resume] Failed to read active-session snapshot:", e);
-		return;
-	}
+export function resumeDrainedSessions(
+	alreadyResumed: Set<string>,
+	records = readActiveShutdownSnapshot(),
+): void {
+	if (!records.length) return;
 	// Consume the snapshot so the next (non-graceful) boot doesn't replay it.
 	try {
 		writeFileAtomic(RESUME_SNAPSHOT_PATH, "[]");

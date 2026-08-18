@@ -31,6 +31,7 @@ afterEach(() => {
 	agent.__setEngineForTest(null);
 	agent.__setAbortDetachedForTest(null);
 	agent.__setReattachForTest(null);
+	agent.__setLocalHostResumeForTest(null);
 	mod.__setActiveRunsPathForTest(oldJournal);
 	if (oldForceLimit === undefined) delete process.env.OPENSESSION_FORCE_LIMIT;
 	else process.env.OPENSESSION_FORCE_LIMIT = oldForceLimit;
@@ -992,6 +993,72 @@ describe("restart recovery queue", () => {
 });
 
 describe("restart recovery reattach", () => {
+	it("claims a snapshot-only local host before the generic wake can re-prompt", async () => {
+		const sessionId = `local-host-snapshot-${crypto.randomUUID()}`;
+		const hostId = `rh-${crypto.randomUUID()}`;
+		const fake = makeFakeEngine([{ kind: "clean" }]);
+		agent.__setEngineForTest(fake.engine);
+		let resumeCalls = 0;
+		agent.__setLocalHostResumeForTest(async (run) => {
+			resumeCalls++;
+			return (async function* () {
+				yield {
+					type: "init" as const,
+					sessionId: run.claudeSessionId,
+					provider: "pi",
+					model: run.model,
+				};
+				yield {
+					type: "done" as const,
+					sessionId: run.claudeSessionId,
+					provider: "pi",
+					model: run.model,
+					result: "PI_SURVIVED_RESTART",
+				};
+			})();
+		});
+		const snapshotRun: mod.ActiveRunRecord = {
+			runKey: hostId,
+			hostId,
+			osSessionId: sessionId,
+			claudeSessionId: `pi-${crypto.randomUUID()}`,
+			prompt: "sleep, then finish once",
+			promptEntryId: crypto.randomUUID(),
+			cwd: "/tmp",
+			model: "pi/anthropic/claude-sonnet-5",
+			kind: "prompt",
+			startedAt: new Date().toISOString(),
+		};
+		let resolveTerminal!: (event: StreamEvent) => void;
+		const terminal = new Promise<StreamEvent>((resolve) => {
+			resolveTerminal = resolve;
+		});
+
+		try {
+			const resumed = agent.resumeInterruptedRuns(
+				(_id, event) => event && resolveTerminal(event),
+				undefined,
+				undefined,
+				undefined,
+				undefined,
+				[snapshotRun],
+			);
+
+			// resumeDrainedSessions receives this set synchronously, before the
+			// asynchronous host attach starts, so it cannot launch a generic wake.
+			expect(resumed).toEqual([sessionId]);
+			await expect(terminal).resolves.toMatchObject({
+				type: "done",
+				result: "PI_SURVIVED_RESTART",
+			});
+			expect(resumeCalls).toBe(1);
+			expect(fake.calls).toHaveLength(0);
+			expect(mod.activeRunRecords()).toEqual([]);
+		} finally {
+			clearRunState(sessionId);
+		}
+	});
+
 	it("does not let a reattached turn hold a queue slot", async () => {
 		// Every one of these runs survived the restart on its own detached
 		// server and is still executing. Following such a turn costs this

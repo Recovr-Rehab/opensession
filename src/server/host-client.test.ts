@@ -44,6 +44,57 @@ function hello(spec: RunHostSpec, selectedModel: string) {
 }
 
 describe("HostHandle model recovery", () => {
+	test("acknowledges a terminal event so the detached host can exit", async () => {
+		const root = mkdtempSync(join(tmpdir(), "host-client-terminal-test-"));
+		roots.push(root);
+		const dir = join(root, "rh-terminal");
+		mkdirSync(dir);
+		const sent: unknown[] = [];
+		let handlers: { onMsg(msg: any): void; onClose(): void } | undefined;
+		const launcher: HostLauncher = {
+			alive: () => true,
+			newRunDir: (hostId) => join(root, hostId),
+			launch: async () => {},
+			connector: () => ({
+				connect: async (nextHandlers) => {
+					handlers = nextHandlers;
+					return {
+						send: (message) => {
+							sent.push(message);
+							return true;
+						},
+						close: () => {},
+					};
+				},
+			}),
+		};
+		const spec: RunHostSpec = {
+			hostId: "rh-terminal",
+			osSessionId: "os-terminal",
+			prompt: "finish once",
+			cwd: "/tmp",
+		};
+		const handle = new HostHandle(dir, spec, {}, launcher);
+		await handle.connectWithWait(100);
+		const events = handle.events();
+		handlers!.onMsg({
+			t: "event",
+			event: { type: "done", result: "PI_SURVIVED_RESTART" },
+		});
+		handlers!.onMsg({
+			t: "end",
+			done: { type: "done", result: "PI_SURVIVED_RESTART" },
+		});
+
+		expect((await events.next()).value).toMatchObject({
+			type: "done",
+			result: "PI_SURVIVED_RESTART",
+		});
+		expect((await events.next()).done).toBe(true);
+		expect(sent).toContainEqual({ t: "shutdown" });
+		expect(handle.ended).toBe(true);
+	});
+
 	test("applies proxied transcript frames in the server store", () => {
 		const root = mkdtempSync(join(tmpdir(), "host-client-transcript-test-"));
 		roots.push(root);

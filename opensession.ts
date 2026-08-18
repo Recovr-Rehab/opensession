@@ -34,7 +34,7 @@ import { startPlainArchiveSweep } from "./src/server/plain-archive";
 import { devInstanceBootError, isDevInstance } from "./src/server/dev-mode";
 import { startPrReviewNotificationTicker } from "./src/server/pr-review-notifications";
 import { startPublicIngress } from "./src/server/public-ingress";
-import { recordRecoveredRunEvent, restorePromptQueues, resumeDrainedSessions, snapshotActiveSessions, startLoopTicker } from "./src/server/run-session";
+import { readActiveShutdownSnapshot, recoverableLocalHostSnapshotRecords, recordRecoveredRunEvent, restorePromptQueues, resumeDrainedSessions, snapshotActiveSessions, startLoopTicker } from "./src/server/run-session";
 import { startMcpHttpServer, startRunRpcServer } from "./src/server/run-rpc";
 import { handleSandboxWsUpgrade, startTimerPoisonHeartbeat, timerPoisonRequestCheck } from "./src/server/run-ws";
 import {
@@ -707,6 +707,7 @@ if (!g.__opensessionBooted) {
 		} catch (e) {
 			console.error("[runner] Detached-server adoption failed:", e);
 		}
+		const shutdownRecords = readActiveShutdownSnapshot();
 		const resumedIds = resumeInterruptedRuns(
 			(bksSessionId, terminalEvent) => {
 				if (bksSessionId && terminalEvent) {
@@ -790,6 +791,7 @@ if (!g.__opensessionBooted) {
 				return buildReposNote(session);
 			},
 			recordRecoveredRunEvent,
+			recoverableLocalHostSnapshotRecords(shutdownRecords),
 		);
 		if (resumedIds.length > 0) {
 			console.log(
@@ -797,7 +799,7 @@ if (!g.__opensessionBooted) {
 			);
 			invalidateSessionsCache();
 		}
-		resumeDrainedSessions(new Set(resumedIds));
+		resumeDrainedSessions(new Set(resumedIds), shutdownRecords);
 		// Re-deliver messages that were queued/steered when the process went down.
 		restorePromptQueues();
 		// Restore human-in-the-loop asks: re-arm scheduled timers, and degrade any

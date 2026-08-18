@@ -413,8 +413,20 @@ const takenRunKeys: Set<string> = ((globalThis as any).__runJournalTakenKeys ??=
  * losing them. Returned records have claimedAt stripped so a reattach's
  * re-record doesn't persist a stale claim.
  */
-export function takeInterruptedRuns(): ActiveRunRecord[] {
+export function takeInterruptedRuns(seedRecords: ActiveRunRecord[] = []): ActiveRunRecord[] {
   const journal = readRunJournal();
+  // A graceful-shutdown snapshot can retain a detached local host after its
+  // shared record disappeared during process teardown. Fold those records
+  // into the same atomic boot claim without journalSet(): journalSet denotes a
+  // NEW live registration and would incorrectly move recovery state to
+  // `running` before boot_journal_found has a chance to claim it.
+  for (const record of seedRecords) {
+    if (journal[record.runKey]) continue;
+    journal[record.runKey] = {
+      ...record,
+      firstJournaledAt: record.firstJournaledAt || record.startedAt,
+    };
+  }
   const entries = Object.values(journal).filter(
     (r) => !isRunActiveInProcess(r.runKey) && !takenRunKeys.has(r.runKey)
   );

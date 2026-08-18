@@ -87,6 +87,7 @@ import {
   hostSteer,
   hostInterruptSteer,
   hostCancel,
+  hostRunCount,
 } from "./host-registry";
 import { buildEngineSwitchHandoffNote } from "./fork-handoff";
 import { personaName } from "./config";
@@ -302,6 +303,17 @@ export function __setEngineForTest(fn: EngineRunner | null): void {
 let reattachForTest: typeof tryReattachOpencodeRun | null = null;
 export function __setReattachForTest(fn: typeof tryReattachOpencodeRun | null): void {
   reattachForTest = fn;
+}
+
+type LocalHostResume = (
+  run: ActiveRunRecord,
+  callbacks: { onAskUser?: RunAgentOpts["onAskUser"] },
+) => Promise<AsyncGenerator<StreamEvent> | null>;
+
+/** Test seam for the local detached-host half of restart recovery. */
+let localHostResumeForTest: LocalHostResume | null = null;
+export function __setLocalHostResumeForTest(fn: LocalHostResume | null): void {
+  localHostResumeForTest = fn;
 }
 
 /** Test seam for abandonment paths that must reach a detached engine turn. */
@@ -1017,15 +1029,15 @@ export function isAgentSessionBusy(...ids: Array<string | null | undefined>): bo
  * not count external CLI/tmux runs — we can't drain those.)
  */
 export function activeAgentRunCount(): number {
-  return activeOpencodeRunCount() + activePiRunCount();
+  return activeOpencodeRunCount() + activePiRunCount() + hostRunCount();
 }
 
 /** Of those, how many execute on a DETACHED engine server that survives a
  *  restart — the graceful-shutdown drain skips waiting on these (boot
- *  reattaches them via the journal instead). Pi is in-process and never
- *  detaches, so it contributes 0 here and the drain always waits on it. */
+ *  reattaches them via the journal instead). In-process Pi contributes 0;
+ *  Pi inside a local run host contributes through hostRunCount(). */
 export function activeDetachedAgentRunCount(): number {
-  return activeDetachedOpencodeRunCount();
+  return activeDetachedOpencodeRunCount() + hostRunCount();
 }
 
 /**
@@ -1180,6 +1192,7 @@ export function resumeInterruptedRuns(
   inProcessMcpFor?: (osSessionId: string, user?: string) => Record<string, unknown> | undefined,
   reposNoteFor?: (osSessionId: string) => string | undefined,
   onEvent?: (osSessionId: string, event: StreamEvent) => void,
+  snapshotLocalHostRuns: ActiveRunRecord[] = [],
 ): string[] {
   const resumed: string[] = [];
   const settledRunKeys = new Set<string>();
@@ -1317,7 +1330,16 @@ export function resumeInterruptedRuns(
       hostCancel(id);
     }
   };
-  const taken = takeInterruptedRuns();
+  const snapshotSeeds = snapshotLocalHostRuns.filter(
+    (run) => !!run.hostId && !run.sandboxId && !run.runnerId,
+  );
+  const taken = takeInterruptedRuns(snapshotSeeds);
+  // A graceful shutdown snapshot is intentionally broader than the shared
+  // run journal: it also covers turns that finish during the drain. A local
+  // detached host can still be alive even when its shared record disappeared
+  // during process teardown. Seed those snapshot records into the atomic boot
+  // claim so resumeLocalHostRun owns them synchronously and the generic
+  // drained-session wake cannot start a second host for the same turn.
   const { interrupted, quarantined } = sanitizeInterruptedRuns(taken);
   journalQuarantine(quarantined);
   const recoveringEngineSessions = new Set(
@@ -1530,8 +1552,10 @@ export function resumeInterruptedRuns(
           Object.assign(run, journalStartRecovery(run));
           if (run.osSessionId)
             transitionRunState(run.osSessionId, "reattach_start", { run_key: run.runKey });
-          const reattached = await (await import("./host-client"))
-            .resumeLocalHostRun(run, {
+          const resumeLocalHost =
+            localHostResumeForTest ??
+            (await import("./host-client")).resumeLocalHostRun;
+          const reattached = await resumeLocalHost(run, {
               onAskUser: run.osSessionId ? askHandlerFor?.(run.osSessionId) : undefined,
             })
             .catch((e) => {
