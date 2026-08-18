@@ -56,6 +56,12 @@
 				display: none;
 			}
 
+			/* The settings control is inert here (see product-demo-main.tsx), so it
+			   should not advertise a press either. */
+			html [aria-label="Open settings"] {
+				cursor: default;
+			}
+
 			/* The Desk trigger. It floats over the transcript waiting to be
 			   pressed, which is one affordance too many in a screenshot. */
 			html [aria-label="Open the Desk"] {

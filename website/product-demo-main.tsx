@@ -677,6 +677,23 @@ const repoMarkObserver = new MutationObserver(() => {
 });
 repoMarkObserver.observe(document.documentElement, { childList: true, subtree: true });
 
+// Settings is a real page in the app and a dead end in a picture of it: there
+// is no account here to configure, and leaving it live means one click can
+// take a visitor off the one screen this preview exists to show. The control
+// stays where it is, because it is part of what the product looks like, and
+// does nothing. Captured on the way down so it beats the app's own handler,
+// and on click rather than pointer-events so a keyboard Enter is covered too.
+document.addEventListener(
+	"click",
+	(event) => {
+		const target = event.target as HTMLElement | null;
+		if (!target?.closest?.('[aria-label="Open settings"]')) return;
+		event.preventDefault();
+		event.stopPropagation();
+	},
+	true,
+);
+
 const [{ App }, { TooltipProvider }] = await Promise.all([
 	import("../src/frontend/App"),
 	import("../src/frontend/ui/tooltip"),
