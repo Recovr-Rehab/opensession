@@ -8,7 +8,7 @@ import {
 } from "../../lib/support-surface";
 import { ContextMenu, Menu, MENU_ICON } from "../../ui/menu";
 import { cn } from "../../ui/cn";
-import { IconCheck, IconDotsHorizontal } from "../icons";
+import { IconDotsHorizontal } from "../icons";
 
 /**
  * The sidebar's own right-click menu: every tool and every source, ticked when
@@ -49,7 +49,7 @@ export type SidebarMenuSource = {
 	shown: boolean;
 };
 
-const check = <IconCheck size={20} className="shrink-0 text-dim" />;
+const check = (on: boolean) => <Menu.Check on={on} size={20} className="text-dim" />;
 
 /**
  * The tool list itself, shared by the two menus that offer it: this one and
@@ -103,7 +103,7 @@ export function SidebarToolRows({
 								    the row holds a place for it, and the tick keeps the
 								    trailing edge, in the column every other row ticks in. */}
 								<span className="w-7 shrink-0" aria-hidden="true" />
-								{tool.surface !== "off" && check}
+								{check(tool.surface !== "off")}
 							</ContextMenu.CheckboxItem>
 							{/* A menu of its own rather than a submenu of this row: Base UI
 							    submenus open on hover and IGNORE a mouse click
@@ -142,7 +142,7 @@ export function SidebarToolRows({
 										{SUPPORT_PLACEMENT_OPTIONS.map((option) => (
 											<Menu.RadioItem key={option.value} value={option.value}>
 												<span className="grow truncate">{option.label}</span>
-												<Menu.RadioItemIndicator render={check} />
+												{check(tool.surface === option.value)}
 											</Menu.RadioItem>
 										))}
 									</Menu.RadioGroup>
@@ -159,7 +159,7 @@ export function SidebarToolRows({
 							    menu's icon column is 20, the size every other row uses. */}
 							<span className={cn(ICON_SLOT, MENU_ICON)}>{tool.icon}</span>
 							<span className="grow truncate">{tool.label}</span>
-							{tool.shown && check}
+							{check(tool.shown)}
 						</ContextMenu.CheckboxItem>
 					),
 			)}
@@ -203,7 +203,7 @@ export function SidebarToolsMenu({
 							>
 								<span className={ICON_SLOT}>{source.icon}</span>
 								<span className="grow truncate">{source.label}</span>
-								{source.shown && check}
+								{check(source.shown)}
 							</ContextMenu.CheckboxItem>
 						))}
 					</ContextMenu.Group>

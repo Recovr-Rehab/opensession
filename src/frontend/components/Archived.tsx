@@ -28,7 +28,7 @@ import { Card } from "../ui/card";
 import { Input } from "../ui/input";
 import { Menu } from "../ui/menu";
 import { EmptyState, ListSkeleton } from "../ui/state";
-import { IconCheck, IconChevronRight, IconFilter, IconUnarchive } from "./icons";
+import { IconChevronRight, IconFilter, IconUnarchive } from "./icons";
 import { RepoTile } from "./RepoTile";
 import { UserAvatar } from "./UserAvatar";
 
@@ -280,19 +280,19 @@ export function Archived({ sessions, loaded, onSelect, onChanged }: Props) {
 									<Menu.RadioItem value="mine" closeOnClick>
 										<UserAvatar name={currentUser} size={18} />
 										<span className="min-w-0 flex-1">My archived</span>
-										{owner === "mine" && <IconCheck size={17} className="shrink-0 text-accent" />}
+										<Menu.Check on={owner === "mine"} />
 									</Menu.RadioItem>
 									{people.map(({ key, label }) => (
 										<Menu.RadioItem key={key} value={key} closeOnClick>
 											<UserAvatar name={label} size={18} />
 											<span className="min-w-0 flex-1 truncate">{label}</span>
-											{owner === key && <IconCheck size={17} className="shrink-0 text-accent" />}
+											<Menu.Check on={owner === key} />
 										</Menu.RadioItem>
 									))}
 									<Menu.RadioItem value="everyone" closeOnClick>
 										<span className="size-[18px] shrink-0" />
 										<span className="min-w-0 flex-1">Everyone</span>
-										{owner === "everyone" && <IconCheck size={17} className="shrink-0 text-accent" />}
+										<Menu.Check on={owner === "everyone"} />
 									</Menu.RadioItem>
 								</Menu.RadioGroup>
 							</Menu.Group>
@@ -305,13 +305,13 @@ export function Archived({ sessions, loaded, onSelect, onChanged }: Props) {
 											<Menu.RadioItem value="all" closeOnClick>
 												<span className="size-[18px] shrink-0" />
 												<span className="min-w-0 flex-1">All repos</span>
-												{repo === "all" && <IconCheck size={17} className="shrink-0 text-accent" />}
+												<Menu.Check on={repo === "all"} />
 											</Menu.RadioItem>
 											{repos.map((name) => (
 												<Menu.RadioItem key={name} value={name} closeOnClick>
 													<RepoTile name={name} size={18} />
 													<span className="min-w-0 flex-1 truncate">{repoLabel(name)}</span>
-													{repo === name && <IconCheck size={17} className="shrink-0 text-accent" />}
+													<Menu.Check on={repo === name} />
 												</Menu.RadioItem>
 											))}
 										</Menu.RadioGroup>
@@ -327,7 +327,7 @@ export function Archived({ sessions, loaded, onSelect, onChanged }: Props) {
 											{(["all", "auto", "manual"] as const).map((value) => (
 												<Menu.RadioItem key={value} value={value} closeOnClick>
 													<span className="min-w-0 flex-1">{{ all: "All", auto: "Auto-archived", manual: "Manual" }[value]}</span>
-													{reason === value && <IconCheck size={17} className="shrink-0 text-accent" />}
+													<Menu.Check on={reason === value} />
 												</Menu.RadioItem>
 											))}
 										</Menu.RadioGroup>

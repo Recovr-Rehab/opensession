@@ -4,7 +4,7 @@ import { PRODUCT_NAME } from "../lib/brand";
 import { usePeople, type Person } from "../lib/people";
 import { cn } from "../ui/cn";
 import { Menu } from "../ui/menu";
-import { IconCheck, IconChevronDown } from "./icons";
+import { IconChevronDown } from "./icons";
 import { UserAvatar } from "./UserAvatar";
 
 /**
@@ -401,7 +401,7 @@ export function TeamLensMenu({
 							<span className="min-w-0 flex-1 truncate">
 								{m.isYou ? `${m.person.fullName} (you)` : m.person.fullName}
 							</span>
-							{m.key === value && <IconCheck className="shrink-0 text-accent" size={17} />}
+							<Menu.Check on={m.key === value} />
 						</Menu.RadioItem>
 					))}
 					<Menu.Separator />
@@ -415,9 +415,7 @@ export function TeamLensMenu({
 						{/* Not a person: it drops the filter entirely. Named for what
 						    you get, in the same words the sidebar header uses for it. */}
 						<span className="min-w-0 flex-1 truncate">All workspaces</span>
-						{value === "everyone" && (
-							<IconCheck className="shrink-0 text-accent" size={17} />
-						)}
+						<Menu.Check on={value === "everyone"} />
 						</Menu.RadioItem>
 					</Menu.RadioGroup>
 				</Menu.Group>

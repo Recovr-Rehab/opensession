@@ -203,7 +203,7 @@ export function RepoBar({
                   <Menu.Item key={p.id} onClick={() => switchPrimary(p.id)}>
                     <RepoTile name={p.id} />
                     <span className="min-w-0 flex-1 truncate">{repoLabel(p.id)}</span>
-                    {p.id === primary && <IconCheck size={20} className="text-dim" />}
+                    <Menu.Check on={p.id === primary} size={20} className="text-dim" />
                   </Menu.Item>
                 ))
               ) : (

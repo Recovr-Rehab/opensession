@@ -38,7 +38,6 @@ import {
   IconPaperclip,
   IconAtSign,
   IconCrosshair,
-  IconCheck,
   IconEye,
   IconNote,
   IconStopSquare,
@@ -1807,9 +1806,7 @@ export function Composer({
                         {busySendKeys("queue")}
                       </ContextMenu.Shortcut>
                     )}
-                    {busySendPrefs.enter === "queue" && (
-                      <IconCheck size={16} className="text-accent" />
-                    )}
+                    <ContextMenu.Check on={busySendPrefs.enter === "queue"} size={16} />
                   </ContextMenu.Item>
                   <ContextMenu.Item
                     onClick={() => pickBusySend("steer")}
@@ -1821,9 +1818,7 @@ export function Composer({
                         {busySendKeys("steer")}
                       </ContextMenu.Shortcut>
                     )}
-                    {busySendPrefs.enter === "steer" && (
-                      <IconCheck size={16} className="text-accent" />
-                    )}
+                    <ContextMenu.Check on={busySendPrefs.enter === "steer"} size={16} />
                   </ContextMenu.Item>
                 </ContextMenu.Popup>
               </ContextMenu.Root>

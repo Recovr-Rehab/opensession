@@ -113,9 +113,7 @@ export function SettingsAccountFooter() {
 								>
 									<UserAvatar name={name} size={22} />
 									<span className="min-w-0 flex-1 font-medium">{name}</span>
-									{name === currentUser && (
-										<IconCheck size={17} className="shrink-0 text-accent" />
-									)}
+									<Menu.Check on={name === currentUser} />
 								</Menu.RadioItem>
 							))}
 						</Menu.RadioGroup>

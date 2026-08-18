@@ -1124,7 +1124,7 @@ function ReviewerChip({
 						<Menu.Item key={name} onClick={() => pick(name)}>
 							<UserAvatar name={name} size={22} />
 							<span className="min-w-0 flex-1 truncate">{name}</span>
-							{req?.to === name && <IconCheck size={20} className="text-dim" />}
+							<Menu.Check on={req?.to === name} size={20} className="text-dim" />
 						</Menu.Item>
 					))}
 					{reviewTeams.length > 0 && <Menu.Separator />}
@@ -1137,9 +1137,7 @@ function ReviewerChip({
 								<IconStack size={20} />
 							</span>
 							<span className="min-w-0 flex-1 truncate">{team.name}</span>
-							{req?.to === team.github && (
-								<IconCheck size={20} className="text-dim" />
-							)}
+							<Menu.Check on={req?.to === team.github} size={20} className="text-dim" />
 						</Menu.Item>
 					))}
 					{(req || githubRequested.length > 0) && (

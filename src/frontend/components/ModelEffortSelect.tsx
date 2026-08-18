@@ -5,7 +5,7 @@ import { baseModelId, engineModelId, isAnthropicModel, modelEngine, type EngineI
 import { Menu } from "../ui/menu";
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
-import { IconBolt, IconCheck, IconChevronRight, IconUndo } from "./icons";
+import { IconBolt, IconChevronRight, IconUndo } from "./icons";
 import { BrandMark } from "./BrandTile";
 import type { SessionUsage } from "../lib/types";
 import { UsageCost, UsageDetails } from "./UsageMeter";
@@ -584,7 +584,7 @@ export function ModelEffortSelect({
 				) : (
 					<span className="min-w-0 truncate">{option.label}</span>
 				)}
-				{selected && <IconCheck className="shrink-0 text-dim" size={17} />}
+				<Menu.Check on={selected} className="text-dim" />
 			</Menu.Item>
 		);
 		return option.description ? (
@@ -746,7 +746,7 @@ export function ModelEffortSelect({
 											</span>
 											<span className="min-w-0 truncate">{e.label}</span>
 										</span>
-										{selected && <IconCheck className="shrink-0 text-dim" size={17} />}
+										<Menu.Check on={selected} className="text-dim" />
 									</Menu.Item>
 								);
 							})}
@@ -773,9 +773,7 @@ export function ModelEffortSelect({
 										className={cn("justify-between gap-3", selected && "bg-hover")}
 									>
 										<span className="min-w-0 truncate">{e.label}</span>
-										{selected && (
-											<IconCheck className="shrink-0 text-dim" size={17} />
-										)}
+										<Menu.Check on={selected} className="text-dim" />
 									</Menu.Item>
 								);
 							})}
@@ -811,7 +809,7 @@ export function ModelEffortSelect({
 										className={cn("justify-between gap-3", selected && "bg-hover")}
 									>
 										<span className="min-w-0 truncate">{o.label}</span>
-										{selected && <IconCheck className="shrink-0 text-dim" size={17} />}
+										<Menu.Check on={selected} className="text-dim" />
 									</Menu.Item>
 								);
 							})}
@@ -833,9 +831,7 @@ export function ModelEffortSelect({
 								className={cn("justify-between gap-3", !accountId && "bg-hover")}
 							>
 								<span className="min-w-0 truncate">Auto</span>
-								{!accountId && (
-									<IconCheck className="shrink-0 text-dim" size={17} />
-								)}
+								<Menu.Check on={!accountId} className="text-dim" />
 							</Menu.Item>
 							{providerAccounts.map((a) => {
 								const selected = a.id === accountId;
@@ -850,9 +846,7 @@ export function ModelEffortSelect({
 											{a.owner ? ` · ${a.owner}` : ""}
 											{a.usable ? "" : " · exhausted"}
 										</span>
-										{selected && (
-											<IconCheck className="shrink-0 text-dim" size={17} />
-										)}
+										<Menu.Check on={selected} className="text-dim" />
 									</Menu.Item>
 								);
 							})}

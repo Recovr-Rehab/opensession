@@ -1,6 +1,6 @@
 import React from "react";
 import { Menu } from "../ui/menu";
-import { IconSparkle, IconCheck, IconChevronRight } from "./icons";
+import { IconSparkle, IconChevronRight } from "./icons";
 import type { ModelOption } from "../lib/api";
 import { useEngines } from "../hooks/useEngines";
 import { baseModelId, engineModelId, modelEngine } from "../lib/model-engine";
@@ -89,7 +89,7 @@ export function ModelMenuRow({
 				<span className="min-w-0 flex-1 truncate">
 					{raw ? m.label : shortModelLabel(m.id, models)}
 				</span>
-				{m.id === effectiveBase && <IconCheck size={18} className="text-dim" />}
+				<Menu.Check on={m.id === effectiveBase} size={18} className="text-dim" />
 			</Menu.Item>
 		);
 	};
@@ -149,7 +149,7 @@ export function ModelMenuRow({
 										onClick={() => next && onChange(next === defaultModel ? "" : next)}
 									>
 										<span className="min-w-0 flex-1 truncate">{e.label}</span>
-										{e.id === activeEngine && <IconCheck size={18} className="text-dim" />}
+										<Menu.Check on={e.id === activeEngine} size={18} className="text-dim" />
 									</Menu.Item>
 								);
 							})}

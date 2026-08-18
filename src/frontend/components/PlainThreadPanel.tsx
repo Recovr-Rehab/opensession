@@ -262,9 +262,7 @@ const SNOOZE_OPTIONS: { label: string; seconds: number }[] = [
  *  grammar (see Archived.tsx), where this row used to lead with a "✓" glyph in
  *  a hand-measured 16px gutter. */
 function MenuTick({ on }: { on: boolean }) {
-	return on ? (
-		<IconCheck size={17} className="ml-auto shrink-0 text-accent" />
-	) : null;
+	return <Menu.Check on={on} className="ml-auto" />;
 }
 
 /**

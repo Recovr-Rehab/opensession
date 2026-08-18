@@ -175,9 +175,15 @@ function Item(itemProps: ItemProps) {
 				)}
 				<BaseSelect.ItemText className="min-w-0 truncate">{children}</BaseSelect.ItemText>
 			</span>
-			<BaseSelect.ItemIndicator className="shrink-0 text-accent">
-				<IconCheck size={17} />
-			</BaseSelect.ItemIndicator>
+			{/* The tick's column is reserved on every row, the way `ui/menu`'s
+			    `Check` reserves it: an indicator that only takes space while
+			    selected makes the picked row wider than the rest, so the popup
+			    is a different width depending on what is selected. */}
+			<span className="flex size-[17px] shrink-0 items-center justify-center text-accent">
+				<BaseSelect.ItemIndicator>
+					<IconCheck size={17} />
+				</BaseSelect.ItemIndicator>
+			</span>
 		</BaseSelect.Item>
 	);
 }

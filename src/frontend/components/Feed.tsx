@@ -30,7 +30,7 @@ import { EmptyState } from "../ui/state";
 import { Button } from "../ui/button";
 import { Menu } from "../ui/menu";
 import { cn } from "../ui/cn";
-import { IconCheck, IconFeed, IconPeople, IconRepo, IconRobot } from "./icons";
+import { IconFeed, IconPeople, IconRepo, IconRobot } from "./icons";
 import {
 	PEOPLE_CHIP,
 	PEOPLE_CHIP_GLYPH,
@@ -346,9 +346,7 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 												{/* Sized to the tiles below so every label shares one edge. */}
 												<span className="size-[18px] shrink-0" />
 												<span className="min-w-0 flex-1 truncate">All repos</span>
-												{repo === "all" && (
-													<IconCheck className="shrink-0 text-accent" size={17} />
-												)}
+												<Menu.Check on={repo === "all"} />
 											</Menu.RadioItem>
 											{repoOptions.map((name) => (
 												<Menu.RadioItem key={name} value={name} closeOnClick>
@@ -356,9 +354,7 @@ export function Feed({ sessions, teamViewing, onSelect }: Props) {
 													<span className="min-w-0 flex-1 truncate">
 														{repoLabel(name)}
 													</span>
-													{repo === name && (
-														<IconCheck className="shrink-0 text-accent" size={17} />
-													)}
+													<Menu.Check on={repo === name} />
 												</Menu.RadioItem>
 											))}
 										</Menu.RadioGroup>

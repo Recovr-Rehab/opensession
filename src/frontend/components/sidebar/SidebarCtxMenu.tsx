@@ -2,10 +2,10 @@ import { CTX_ITEM_STYLE, CTX_MENU_STYLE, CTX_SEP_STYLE } from "../../lib/sidebar
 import { statusMenuIcon } from "../../lib/sidebar-lanes";
 import { MINE_STATUS_META, type CtxEntry } from "../../lib/sidebar-types";
 import { snoozePresets } from "../../lib/snoozes";
-import { IconCheck, IconChevronRight, IconMoon, IconStatusRing } from "../icons";
+import { IconChevronRight, IconMoon, IconStatusRing } from "../icons";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { MenuShortcut } from "../../ui/menu";
+import { MenuCheck, MenuShortcut } from "../../ui/menu";
 
 function CtxItem({
 	icon,
@@ -163,8 +163,9 @@ export function SidebarCtxMenu({
 	const snoozeEntry = entries.find(
 		(e): e is Extract<CtxEntry, { kind: "snooze" }> => e.kind === "snooze",
 	);
-	const check = (on: boolean) =>
-		on ? <IconCheck size={20} style={{ color: "var(--text-dim)" }} /> : undefined;
+	const check = (on: boolean) => (
+		<MenuCheck on={on} size={20} className="text-dim" />
+	);
 
 	const SUB_W = 210;
 	const subLeft = sub

@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { Menu } from "../ui/menu";
 import { cn } from "../ui/cn";
-import { IconCheck } from "./icons";
 import { isApple } from "../lib/platform";
 
 export type PaletteSelectOption = {
@@ -119,7 +118,13 @@ export function PaletteSelect({
 							// the keyboard event, not a synthesized click), so the
 							// modifier form works from the keyboard too.
 							onClick={(e) => pick(option, isApple ? e.metaKey : e.ctrlKey)}
-							className={cn("justify-between gap-3", selected && "bg-hover")}
+							// A hair of air between rows: more than one can be picked
+							// here, and two selected rows that touch read as one block
+							// with a pinched waist rather than as two repos.
+							className={cn(
+								"mt-0.5 justify-between gap-3 first:mt-0",
+								selected && "bg-hover",
+							)}
 						>
 							<span className="flex min-w-0 items-center gap-2.5">
 								{option.icon && (
@@ -131,12 +136,16 @@ export function PaletteSelect({
 									{option.menuLabel ?? option.label}
 								</span>
 							</span>
-							{selected && <IconCheck className="shrink-0 text-dim" size={17} />}
+							<Menu.Check on={selected} className="text-dim" />
 						</Menu.Item>
 					);
 				})}
 				{onToggleExtra && multiHint && (
-					<div className="max-w-[260px] px-2.5 pt-1.5 pb-0.5 text-meta leading-snug text-faint">
+					// `w-0 min-w-full` keeps this line out of the popup's own width:
+					// the hint changes as you pick, so a popup sized to it would be
+					// one width teaching the gesture and another naming the repos.
+					// The rows decide how wide the menu is; the hint wraps inside it.
+					<div className="w-0 min-w-full px-2.5 pt-1.5 pb-0.5 text-meta leading-snug text-faint">
 						{multiHint}
 					</div>
 				)}

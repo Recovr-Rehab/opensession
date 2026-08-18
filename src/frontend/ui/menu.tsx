@@ -1,6 +1,7 @@
 import * as React from "react";
 import { Menu as BaseMenu } from "@base-ui/react/menu";
 import { ContextMenu as BaseContextMenu } from "@base-ui/react/context-menu";
+import { IconCheck } from "../components/icons";
 import { cn } from "./cn";
 import {
 	POPUP_HOOK,
@@ -166,6 +167,37 @@ export function MenuShortcut({
 	);
 }
 
+/**
+ * The tick on a selectable row. It holds its column whether or not the row is
+ * the picked one, because a tick that only exists while selected makes that
+ * one row wider than its neighbours: the popup is then a different width
+ * depending on what is selected, and every label in it shifts under the
+ * pointer when you change your mind. Reserving the slot is the move
+ * `ui/select`'s trigger already makes with `sizeTo`.
+ *
+ * Exported on its own as well as on the Menu namespaces: the hand-rolled
+ * popovers (the composer's "+" menu, the New-session create menu) carry rows
+ * Base UI can't own, and their ticks have to read like the ones in a real menu.
+ */
+export function MenuCheck({
+	on,
+	size = 17,
+	className,
+}: {
+	/** Whether this row is the picked one. */
+	on: boolean;
+	size?: number;
+	className?: string;
+}) {
+	return (
+		<IconCheck
+			size={size}
+			aria-hidden
+			className={cn("shrink-0 text-accent", !on && "invisible", className)}
+		/>
+	);
+}
+
 function Separator({ className }: { className?: string }) {
 	return <BaseMenu.Separator className={cn("-mx-1.5 my-1.5 h-px bg-line", className)} />;
 }
@@ -192,6 +224,7 @@ export const ContextMenu = {
 	Item,
 	Separator,
 	Shortcut: MenuShortcut,
+	Check: MenuCheck,
 	// Grouping and checkable rows are the plain Menu parts for the same reason
 	// the submenu parts below are: Base UI builds both menus on one primitive,
 	// so a context menu can offer a checkable list without a second styling
@@ -213,6 +246,7 @@ export const Menu = {
 	Item,
 	Separator,
 	Shortcut: MenuShortcut,
+	Check: MenuCheck,
 	Group: BaseMenu.Group,
 	GroupLabel,
 	SubmenuRoot: BaseMenu.SubmenuRoot,

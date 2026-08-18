@@ -63,7 +63,6 @@ import { pollWhileVisible, PR_WEBHOOK_FALLBACK_POLL_MS } from "../lib/poll";
 import { Textarea } from "../ui/input";
 import {
   IconBranches,
-  IconCheck,
   IconChevronRight,
   IconDiffSplit,
   IconDiffUnified,
@@ -1366,19 +1365,19 @@ export function PrPanel({
         <Menu.RadioItem value="unified" closeOnClick>
           <IconDiffUnified size={18} className={MENU_ICON} />
           <span className="min-w-0 flex-1 truncate">Unified diff</span>
-          {diffStyle === "unified" && <IconCheck className="shrink-0 text-accent" size={17} />}
+          <Menu.Check on={diffStyle === "unified"} />
         </Menu.RadioItem>
         <Menu.RadioItem value="split" closeOnClick>
           <IconDiffSplit size={18} className={MENU_ICON} />
           <span className="min-w-0 flex-1 truncate">Split diff</span>
-          {diffStyle === "split" && <IconCheck className="shrink-0 text-accent" size={17} />}
+          <Menu.Check on={diffStyle === "split"} />
         </Menu.RadioItem>
       </Menu.RadioGroup>
       <Menu.Separator />
       <Menu.CheckboxItem checked={wrapLines} onCheckedChange={changeWrapLines} closeOnClick>
         <IconReturn size={18} className={MENU_ICON} />
         <span className="min-w-0 flex-1 truncate">Wrap long lines</span>
-        {wrapLines && <IconCheck className="shrink-0 text-accent" size={17} />}
+        <Menu.Check on={wrapLines} />
       </Menu.CheckboxItem>
     </>
   );
@@ -1721,9 +1720,7 @@ export function PrPanel({
                             >
                               <Icon size={18} className={MENU_ICON} />
                               <span className="min-w-0 flex-1 truncate">{label}</span>
-                              {codeView === key && (
-                                <IconCheck className="shrink-0 text-accent" size={17} />
-                              )}
+                              <Menu.Check on={codeView === key} />
                             </Menu.RadioItem>
                           );
                         })}

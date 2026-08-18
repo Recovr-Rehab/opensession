@@ -18,7 +18,6 @@ import {
   IconPaperclip,
   IconChevronDown,
   IconChevronRight,
-  IconCheck,
   IconConnections,
   IconDotsHorizontal,
   IconEye,
@@ -1225,10 +1224,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                               }}
                               className="items-start"
                             >
-                              <IconCheck
-                                size={17}
-                                className={`mt-0.5 shrink-0 text-dim ${selected ? "" : "invisible"}`}
-                              />
+                              <Menu.Check on={selected} className="mt-0.5 text-dim" />
                               <span className="flex min-w-0 flex-col gap-0.5">
                                 <span>
                                   {sandboxLabel(opt.id)}
@@ -1277,7 +1273,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                             <IconTile name={mcp} size={20} />
                             <span className="min-w-0 truncate">{displayName(mcp)}</span>
                           </span>
-                          {checked && <IconCheck className="shrink-0 text-dim" size={17} />}
+                          <Menu.Check on={checked} className="text-dim" />
                         </Menu.CheckboxItem>
                       );
                     })}
@@ -1400,10 +1396,10 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                         setCreateMenuOpen(false);
                       }}
                     >
-                      <IconCheck
-                        className="mt-px shrink-0 text-dim"
+                      <Menu.Check
+                        on={createAction === opt.action}
                         size={22}
-                        style={{ visibility: createAction === opt.action ? "visible" : "hidden" }}
+                        className="mt-px text-dim"
                       />
                       <span className="flex min-w-0 flex-col gap-px">
                         <span className="text-label font-semibold">{opt.title}</span>
