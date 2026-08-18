@@ -1641,8 +1641,7 @@ final class SessionViewModel {
     /// or review loop makes an older failure inert on every native surface.
     func failureContinuationEntryId(catalog: ModelCatalog?) -> String? {
         let nativeSource = session.source == "opensession" || session.source == "backstage"
-        let hasEngine = [session.claudeSessionId, session.codexThreadId, session.opencodeSessionId]
-            .contains { $0?.isEmpty == false }
+        let hasEngine = session.ran == true
         let effectiveModel = model.isEmpty ? (catalog?.defaultModel ?? "") : model
         let codexCanStartFresh = catalog?.option(for: effectiveModel)?.provider == "codex"
             || effectiveModel.hasPrefix("gpt") || effectiveModel.hasPrefix("codex")

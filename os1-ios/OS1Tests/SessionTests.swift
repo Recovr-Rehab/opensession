@@ -259,7 +259,7 @@ final class SessionTests: XCTestCase {
         let sessions = try JSONDecoder().decode(
             [Session].self,
             from: Data(
-                #"[{"id":"first","workspaceId":"ws-1","branch":"feature","createdAt":"2026-07-01T00:00:00Z","lastActivity":"2026-07-01T00:01:00Z","opencodeSessionId":"oc-1"},{"id":"second","workspaceId":"ws-1","branch":"feature","createdAt":"2026-07-02T00:00:00Z","lastActivity":"2026-07-02T00:01:00Z"},{"id":"other","workspaceId":"ws-2","branch":"other"}]"#.utf8
+                #"[{"id":"first","workspaceId":"ws-1","branch":"feature","createdAt":"2026-07-01T00:00:00Z","lastActivity":"2026-07-01T00:01:00Z","ran":true},{"id":"second","workspaceId":"ws-1","branch":"feature","createdAt":"2026-07-02T00:00:00Z","lastActivity":"2026-07-02T00:01:00Z"},{"id":"other","workspaceId":"ws-2","branch":"other"}]"#.utf8
             )
         )
 
@@ -415,7 +415,7 @@ final class SessionTests: XCTestCase {
         let sessions = try JSONDecoder().decode(
             [Session].self,
             from: Data(
-                #"[{"id":"automation","workspaceId":"ws-1","automation":"Review","createdAt":"2026-07-01T00:00:00Z","lastActivity":"2026-07-01T00:01:00Z","opencodeSessionId":"oc-1"},{"id":"main","workspaceId":"ws-1","createdAt":"2026-07-02T00:00:00Z","lastActivity":"2026-07-02T00:01:00Z","opencodeSessionId":"oc-2"},{"id":"shell","workspaceId":"ws-1","createdAt":"2026-07-03T00:00:00Z","lastActivity":"2026-07-03T00:00:00Z"}]"#.utf8
+                #"[{"id":"automation","workspaceId":"ws-1","automation":"Review","createdAt":"2026-07-01T00:00:00Z","lastActivity":"2026-07-01T00:01:00Z","ran":true},{"id":"main","workspaceId":"ws-1","createdAt":"2026-07-02T00:00:00Z","lastActivity":"2026-07-02T00:01:00Z","ran":true},{"id":"shell","workspaceId":"ws-1","createdAt":"2026-07-03T00:00:00Z","lastActivity":"2026-07-03T00:00:00Z"}]"#.utf8
             )
         )
 
@@ -473,15 +473,26 @@ final class SessionTests: XCTestCase {
         )
     }
 
-    func testEmptyEngineIdStillCountsAsNeverRun() throws {
-        let session = try JSONDecoder().decode(
+    /// The list is a SUMMARY: it carries `ran` and not the engine session ids,
+    /// which were 9% of its bytes and which nothing here ever compared. A row
+    /// without the flag never ran, which is also the right answer for the
+    /// optimistic row this client mints for a just-created session.
+    func testMissingRanFlagCountsAsNeverRun() throws {
+        let shell = try JSONDecoder().decode(
             Session.self,
             from: Data(
-                #"{"id":"shell","claudeSessionId":"","createdAt":"2026-07-01T00:00:00Z","lastActivity":"2026-07-01T00:00:00Z"}"#.utf8
+                #"{"id":"shell","createdAt":"2026-07-01T00:00:00Z","lastActivity":"2026-07-01T00:00:00Z"}"#.utf8
             )
         )
+        XCTAssertTrue(shell.neverRan)
 
-        XCTAssertTrue(session.neverRan)
+        let started = try JSONDecoder().decode(
+            Session.self,
+            from: Data(
+                #"{"id":"started","ran":true,"createdAt":"2026-07-01T00:00:00Z","lastActivity":"2026-07-01T00:00:00Z"}"#.utf8
+            )
+        )
+        XCTAssertFalse(started.neverRan)
     }
 
     /// Usage rides on the session row. Older servers send none of it, and a

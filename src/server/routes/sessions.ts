@@ -108,8 +108,51 @@ type SessionListSignals = {
 	waitingForInput?: boolean;
 	queuedCount?: number;
 	workspacePreparing?: boolean;
+	/** See sessionRan — the list's stand-in for the engine session ids. */
+	ran?: boolean;
 	rev?: number;
 };
+
+/**
+ * A session as list clients consume it: everything a session has, minus the
+ * two required fields the list no longer carries.
+ *
+ * The pair is stated as a type so a consumer that reaches for an engine id or
+ * a transcript path off a list row fails to compile rather than reading
+ * undefined. GET /api/sessions/:id still answers with the whole session.
+ */
+export type SessionListRow = Omit<
+	UnifiedSession,
+	"claudeSessionId" | "transcriptPath"
+> &
+	SessionListSignals;
+
+/**
+ * This session has an engine conversation behind it — it ran at least one turn.
+ *
+ * Every list surface that reads an engine session id reads it only for this:
+ * an untouched "New session" shell should not displace the conversation that
+ * started a workspace (web `sessionNeverRan`, Swift `Session.neverRan`), and
+ * closing one deletes rather than archives it. The ids themselves are 9% of
+ * the list payload and are 26-char strings nobody compares, so the list
+ * carries the answer and the detail route carries the ids.
+ */
+export function sessionRan(
+	s: Pick<
+		UnifiedSession,
+		| "claudeSessionId"
+		| "codexThreadId"
+		| "opencodeSessionId"
+		| "piSessionId"
+	>,
+): boolean {
+	return !!(
+		s.claudeSessionId ||
+		s.codexThreadId ||
+		s.opencodeSessionId ||
+		s.piSessionId
+	);
+}
 
 /** Translate the web create sentinel into the control path's explicit flag. */
 export function nativeCreateRepoOptions(mode: string, repo: unknown) {
@@ -202,6 +245,11 @@ function enrichSession(s: UnifiedSession) {
 			: {}),
 		waitingForInput: pendingAsks.has(s.id),
 		queuedCount: promptQueues.get(s.id)?.length || 0,
+		// Present on the list AND on the detail response, so one rule reads the
+		// same either side of a hydrate. `undefined` rather than `false`: it is
+		// dropped by JSON.stringify, and a session object a client builds
+		// optimistically for a just-created tab is correct by omission.
+		ran: sessionRan(s) || undefined,
 		// Worktree still being created by this session's create run — the
 		// viewer shows "Waiting for workspace" and queues sends meanwhile.
 		...(preparingWorkspaces.has(s.id) ? { workspacePreparing: true } : {}),
@@ -215,25 +263,42 @@ function enrichSession(s: UnifiedSession) {
  * A session as list clients consume it.
  *
  * The detail route keeps the full UnifiedSession. The list drops fields used
- * only to resume or persist a run, then omits values for which every client
+ * only to resume or persist a run, drops the ones only the session you have
+ * OPEN reads (which it hydrates), then omits values for which every client
  * already treats absence as the same default. Keeping this projection here
  * prevents another stored per-session field from silently becoming list
  * payload weight.
+ *
+ * `worktreeDir` deliberately stays. It reads like detail, but both sidebars
+ * group legacy rows on it and both persist `wt:<dir>` as a row key in the
+ * shared hides/pins overlays, so a list without it loses the grouping for
+ * every session filed before workspace ids existed.
  */
 export function sessionListRow(
 	s: UnifiedSession & SessionListSignals,
-): UnifiedSession & SessionListSignals {
+): SessionListRow {
 	const {
+		// Resume/persist internals: no client reads them at all.
 		lastEngineModel: _lastEngineModel,
 		lastEngineProvider: _lastEngineProvider,
 		mcpServers: _mcpServers,
-		piSessionId: _piSessionId,
 		presetNote: _presetNote,
 		slackThread: _slackThread,
 		slackThreads: _slackThreads,
+		// Detail only. The engine ids and the transcript path answer "has this
+		// session run?" on a list, which `ran` above now answers in 11 bytes
+		// instead of ~105; the model-switch history is drawn as dividers in
+		// the open conversation and nowhere else. All four are on
+		// GET /api/sessions/:id, which the open session hydrates from.
+		claudeSessionId: _claudeSessionId,
+		codexThreadId: _codexThreadId,
+		opencodeSessionId: _opencodeSessionId,
+		piSessionId: _piSessionId,
+		modelHistory: _modelHistory,
+		transcriptPath: _transcriptPath,
 		...listed
 	} = s;
-	const row: Partial<UnifiedSession & SessionListSignals> = listed;
+	const row: Partial<SessionListRow> = listed;
 
 	// These values are all represented by a missing optional in the web,
 	// Swift, TUI and extension clients. In particular, Swift's hand-written
@@ -242,10 +307,8 @@ export function sessionListRow(
 	if (!row.waitingForInput) delete row.waitingForInput;
 	if (!row.queuedCount) delete row.queuedCount;
 	if (row.branch == null) delete row.branch;
-	if (row.claudeSessionId == null) delete row.claudeSessionId;
 	if (row.createdBy == null) delete row.createdBy;
 	if (row.startedBy == null) delete row.startedBy;
-	if (row.transcriptPath == null) delete row.transcriptPath;
 	if (row.workspaceId == null) delete row.workspaceId;
 	if (!row.fastMode) delete row.fastMode;
 	if (!row.prIsDraft) delete row.prIsDraft;
@@ -261,7 +324,7 @@ export function sessionListRow(
 	if (!row.workspacePreparing) delete row.workspacePreparing;
 	delete row.rev;
 
-	return row as UnifiedSession & SessionListSignals;
+	return row as SessionListRow;
 }
 
 /**
@@ -274,14 +337,15 @@ export function sessionListRow(
  * real session (GET /api/sessions/:id), so nothing downstream has to make do
  * with the subset.
  */
-export function archivedIndexRow(s: UnifiedSession): UnifiedSession {
+export function archivedIndexRow(
+	s: UnifiedSession & SessionListSignals,
+): SessionListRow {
 	return {
-		// Every field the session shape REQUIRES, carried verbatim. An index
-		// row is a real session, just a poorer one — a client can merge it into
-		// its list and read it like any other row instead of threading a second
+		// Every field a LIST row requires, carried verbatim. An index row is a
+		// real list row, just a poorer one — a client can merge it into its
+		// list and read it like any other row instead of threading a second
 		// type through every consumer. What it drops is only ever optional.
 		id: s.id,
-		claudeSessionId: s.claudeSessionId,
 		source: s.source,
 		branch: s.branch,
 		worktreeDir: s.worktreeDir,
@@ -290,7 +354,11 @@ export function archivedIndexRow(s: UnifiedSession): UnifiedSession {
 		lastActivity: s.lastActivity,
 		createdAt: s.createdAt,
 		isRunning: s.isRunning,
-		transcriptPath: s.transcriptPath,
+		// The same summary the live list carries in place of the engine ids, so
+		// `sessionNeverRan` reads one rule across both slices. An archived
+		// session that ran is what the workspace landing pick falls back to
+		// when every live row is an abandoned shell.
+		...(s.ran ? { ran: true } : {}),
 		archived: true,
 		// Says out loud that this is a summary, so a client that merges it into
 		// its list knows to hydrate before reading anything the index doesn't

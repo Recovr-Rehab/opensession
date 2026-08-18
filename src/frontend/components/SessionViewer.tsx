@@ -1128,16 +1128,11 @@ export function SessionViewer({
 		lastChangeSeq: number;
 	} | null>(cachedTranscript?.seq ?? null);
 	// Existing engine-backed sessions can load from the owned transcript store even
-	// when no mirror file exists. Fresh sessions have none of these identifiers, so
-	// they still render the empty canvas without flashing a loader.
-	const [loading, setLoading] = useState(
-		!cachedTranscript &&
-			!!(
-				session.transcriptPath ||
-				session.claudeSessionId ||
-				session.codexThreadId
-			),
-	);
+	// when no mirror file exists. Fresh sessions never ran, so they still render
+	// the empty canvas without flashing a loader. `ran` and not the engine ids:
+	// this is the FIRST render, before the session's detail has hydrated, and
+	// the list row carries the answer where it no longer carries the ids.
+	const [loading, setLoading] = useState(!cachedTranscript && !!session.ran);
 	// The initial transcript is the tail only when the file is large; these drive
 	// the "load earlier history" affordance at the top of the conversation.
 	const [historyTruncated, setHistoryTruncated] = useState(
@@ -2622,9 +2617,12 @@ export function SessionViewer({
 			// (the usual reason this effect re-runs) never throws here.
 			send({ type: "unwatch", sessionId: session.id });
 		};
-		// transcriptPath in deps: new sessions start without a transcript file —
-		// re-watch once it appears so the live tail attaches
-	}, [session.id, connected, session.transcriptPath, liveTurnStore]);
+		// `ran` in deps: new sessions start with no engine conversation and no
+		// transcript file — re-watch once the first run makes one so the live
+		// tail attaches. It stands in for `transcriptPath`, which said the same
+		// thing a moment later but is detail-only now: reading it here would
+		// re-watch every session ONCE MORE the instant its detail hydrated.
+	}, [session.id, connected, session.ran, liveTurnStore]);
 
 	// Drop optimistic bubbles once their real turn shows up. Each pending message
 	// is claimed (one-to-one) either by a transcript user entry recorded around or
@@ -3143,10 +3141,7 @@ export function SessionViewer({
 	// starts a new engine conversation server-side (see runSessionPrompt). Only
 	// non-opensession sources with no engine to resume stay read-only.
 	const noEngine =
-		!isCodexModel &&
-		!session.claudeSessionId &&
-		!session.codexThreadId &&
-		session.source !== "opensession";
+		!isCodexModel && !session.ran && session.source !== "opensession";
 	const latestAssistantMessage = entries.findLast(
 		(entry) => entry.type === "assistant" && entry.content.trim(),
 	)?.content.trim() || "";
@@ -3246,9 +3241,7 @@ export function SessionViewer({
 	}, [session.id, slackComposer]);
 	// Exact engine-state forks use Claude's SDK forkSession. Other backends can
 	// still fork as a new sibling with a transcript handoff.
-	const canForkSession =
-		session.source === "opensession" &&
-		!!(session.claudeSessionId || session.codexThreadId || session.transcriptPath);
+	const canForkSession = session.source === "opensession" && !!session.ran;
 
 	const handleFork = useCallback((messageId: string) => {
 		setForkFrom(messageId);
@@ -3365,9 +3358,10 @@ export function SessionViewer({
 				(c) =>
 					c.id !== session.id &&
 					// Legacy hidden sessions are not valid workspace context options.
-					// Only sessions with something to hand over — a transcript or at
-					// least a started engine thread.
-					(c.transcriptPath || c.claudeSessionId || c.codexThreadId),
+					// Only sessions with something to hand over — a session that has
+					// actually run a turn. These are LIST rows, so `ran` is the only
+					// form of that answer they carry.
+					c.ran,
 			)
 			.sort((a, b) =>
 				(b.lastActivity || "").localeCompare(a.lastActivity || ""),
@@ -5972,7 +5966,7 @@ export function SessionViewer({
 								// that *ran* but has no transcript file gets the notice. When
 								// the workspace has sibling sessions, the canvas offers their
 								// transcripts as attachable context for the first message.
-								session.claudeSessionId || session.codexThreadId ? (
+								session.ran ? (
 									<div className="py-10 text-center text-faint">
 										No transcript available for this session
 									</div>

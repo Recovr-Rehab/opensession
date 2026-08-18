@@ -16,6 +16,7 @@ import {
 	archivedIndexRow,
 	nativeCreateRepoOptions,
 	sessionListRow,
+	sessionRan,
 	sessionsVariant,
 } from "./sessions";
 
@@ -35,6 +36,7 @@ type TestSession = UnifiedSession & {
 	waitingForInput?: boolean;
 	queuedCount?: number;
 	workspacePreparing?: boolean;
+	ran?: boolean;
 	rev?: number;
 };
 
@@ -212,7 +214,7 @@ describe("archivedIndexRow", () => {
 		expect(row.externalRefs).toEqual([{ kind: "tella-video", id: "vid_1" }]);
 	});
 
-	test("is a whole session, so a client can merge it into its list", () => {
+	test("is a whole list row, so a client can merge it into its list", () => {
 		// The point of carrying every REQUIRED field: consumers read an index
 		// row like any other session instead of threading a second type
 		// through the sidebar, the tab strip and the palette.
@@ -220,7 +222,6 @@ describe("archivedIndexRow", () => {
 		const row = archivedIndexRow(full);
 		for (const required of [
 			"id",
-			"claudeSessionId",
 			"source",
 			"branch",
 			"worktreeDir",
@@ -229,9 +230,21 @@ describe("archivedIndexRow", () => {
 			"lastActivity",
 			"createdAt",
 			"isRunning",
-			"transcriptPath",
 		] as const)
 			expect(row[required]).toEqual(full[required]);
+	});
+
+	test("summarizes the engine ids as `ran`, like the live list does", () => {
+		// One rule reads across both slices: pickLandingSession falls back to
+		// the newest archived session that RAN when every live row in a
+		// workspace is an abandoned shell.
+		expect(archivedIndexRow(archivedSession({ ran: true })).ran).toBe(true);
+		const shell = archivedIndexRow(archivedSession({ ran: undefined }));
+		expect(shell).not.toHaveProperty("ran");
+		for (const detail of ["claudeSessionId", "transcriptPath"])
+			expect(archivedIndexRow(archivedSession({ ran: true }))).not.toHaveProperty(
+				detail,
+			);
 	});
 
 	test("carries alias ids so a link naming an old id still resolves", () => {
@@ -262,13 +275,55 @@ describe("sessionListRow", () => {
 			"lastEngineModel",
 			"lastEngineProvider",
 			"mcpServers",
-			"piSessionId",
 			"presetNote",
 			"slackThread",
 			"slackThreads",
 			"rev",
 		])
 			expect(row).not.toHaveProperty(internal);
+	});
+
+	test("drops the fields only the open session reads", () => {
+		// The summary/detail split. Each of these is on GET /api/sessions/:id,
+		// which the open session hydrates from — dropping one here without
+		// hydrating there shows up as a missing model divider or a session
+		// that can't fork, not as a type error.
+		const row = sessionListRow(
+			archivedSession({
+				claudeSessionId: "ses_1",
+				codexThreadId: "thread_1",
+				opencodeSessionId: "ses_opencode",
+				piSessionId: "pi-session",
+				modelHistory: [{ model: "claude-opus-5", at: "2026-08-09" }],
+				transcriptPath: "/transcripts/ses_1.jsonl",
+			}),
+		);
+		for (const detail of [
+			"claudeSessionId",
+			"codexThreadId",
+			"opencodeSessionId",
+			"piSessionId",
+			"modelHistory",
+			"transcriptPath",
+		])
+			expect(row).not.toHaveProperty(detail);
+	});
+
+	test("keeps worktreeDir, which is a list field however much it reads like detail", () => {
+		// Both sidebars group sessions filed before workspace ids on it, and
+		// both persist `wt:<dir>` as a row key in the shared hides/pins
+		// overlays. Dropping it would empty those rows, not just their paths.
+		expect(sessionListRow(archivedSession()).worktreeDir).toBe(
+			"/home/ubuntu/worktrees/thing",
+		);
+	});
+
+	test("carries `ran` through, and spends nothing on a session that never did", () => {
+		// enrichSession derives it; this projection must not treat it as one
+		// of the falsy defaults it strips, or every workspace would land on an
+		// abandoned "New session" shell.
+		expect(sessionListRow(archivedSession({ ran: true })).ran).toBe(true);
+		expect(sessionListRow(archivedSession())).not.toHaveProperty("ran");
 	});
 
 	test("omits defaults while preserving values that change list UI", () => {
@@ -278,10 +333,8 @@ describe("sessionListRow", () => {
 				waitingForInput: false,
 				queuedCount: 0,
 				branch: null,
-				claudeSessionId: null,
 				createdBy: null,
 				startedBy: null,
-				transcriptPath: null,
 				workspaceId: null,
 				fastMode: false,
 				prIsDraft: false,
@@ -298,10 +351,8 @@ describe("sessionListRow", () => {
 			"waitingForInput",
 			"queuedCount",
 			"branch",
-			"claudeSessionId",
 			"createdBy",
 			"startedBy",
-			"transcriptPath",
 			"workspaceId",
 			"fastMode",
 			"prIsDraft",
@@ -337,18 +388,37 @@ describe("sessionListRow", () => {
 			usage: { turns: 4 } as never,
 			walkthrough: { title: "Demo" } as never,
 			prs: [{ repo: "opensession", branch: "feature/thing" }] as never,
-			modelHistory: [{ model: "claude-opus-5", at: "2026-08-09" }],
-			opencodeSessionId: "ses_opencode",
 		});
 		const row = sessionListRow(full);
-		for (const kept of [
-			"usage",
-			"walkthrough",
-			"prs",
-			"modelHistory",
-			"opencodeSessionId",
-		] as const)
+		for (const kept of ["usage", "walkthrough", "prs"] as const)
 			expect(row[kept]).toEqual(full[kept]);
+	});
+});
+
+describe("sessionRan", () => {
+	test("any engine's session id counts, so no engine drops out of the answer", () => {
+		// One id per engine, and a session only ever has the one its runs used.
+		// Missing an engine here would make every session on it look untouched.
+		for (const id of [
+			"claudeSessionId",
+			"codexThreadId",
+			"opencodeSessionId",
+			"piSessionId",
+		] as const)
+			expect(sessionRan(archivedSession({ [id]: "x" } as never))).toBe(true);
+	});
+
+	test("a shell that never ran a turn has none of them", () => {
+		expect(
+			sessionRan(
+				archivedSession({
+					claudeSessionId: null,
+					codexThreadId: undefined,
+					opencodeSessionId: undefined,
+					piSessionId: undefined,
+				}),
+			),
+		).toBe(false);
 	});
 });
 

@@ -3125,9 +3125,7 @@ export function App(
 	const closeSessionNow = async (s: UnifiedSession) => {
 		const neverRan =
 			s.source === "opensession" &&
-			!s.claudeSessionId &&
-			!s.codexThreadId &&
-			!s.transcriptPath &&
+			!s.ran &&
 			!s.isRunning &&
 			!s.queuedCount;
 		const wasOpen = currentSession?.id === s.id;

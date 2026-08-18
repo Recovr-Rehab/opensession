@@ -97,7 +97,6 @@ import { GitStatusRows } from "./pr/GitStatus";
 import { InlineAlert, LoadingState } from "../ui/state";
 import { CodeFlow } from "./CodeFlow";
 import { revealDiffFile } from "../lib/diff-navigation";
-import { PrFileTree } from "./pr/PrFileTree";
 
 // Re-exported so existing importers of these (formerly local) helpers keep working.
 export { checkClass, isDeployment, formatPrCommentPrompt, CheckRow, PrStateIcon };
@@ -415,7 +414,6 @@ export function PrPanel({
    * never re-triggers guide or code-flow generation.
    */
   const [page, setPage] = useState<"overview" | "files">("files");
-  const [fileTreeOpen, setFileTreeOpen] = useState(false);
   const [codeView, setCodeView] = useState<"all" | "guide" | "flow">("all");
   /** A check chip elsewhere in the app asked for the checks (focusTarget). */
   const [focusChecksSeq, setFocusChecksSeq] = useState(0);
@@ -1398,7 +1396,6 @@ export function PrPanel({
      drops its labels, the same pair moves onto the row above the diff, at the
      start of the line where a tab strip is read: the navigation stays one tap
      away, and the code gets the canvas. */
-  const fileTreePaths = files.map((file) => file.path);
   const pageTabs = (
     [
       ["overview", "Overview", IconMessages, comments.length || undefined, true],
@@ -1409,15 +1406,11 @@ export function PrPanel({
       key={key}
       side={headerCompact ? "bottom" : "right"}
       label={
-        key === "files" && page === "files"
-          ? fileTreeOpen
-            ? "Hide file tree"
-            : "Show file tree"
-          : count === undefined
-            ? label
-            : key === "overview"
-              ? `Overview · ${count} comment${count === 1 ? "" : "s"}`
-              : `${count} file${count === 1 ? "" : "s"} changed`
+        count === undefined
+          ? label
+          : key === "overview"
+            ? `Overview · ${count} comment${count === 1 ? "" : "s"}`
+            : `${count} file${count === 1 ? "" : "s"} changed`
       }
     >
       <button
@@ -1446,15 +1439,7 @@ export function PrPanel({
                   : "bg-transparent text-dim hover:bg-hover hover:text-fg"
               }`
         }
-        aria-expanded={key === "files" && page === "files" ? fileTreeOpen : undefined}
-        aria-controls={key === "files" ? "pr-file-tree" : undefined}
-        onClick={() => {
-          if (key === "files" && page === "files") {
-            setFileTreeOpen((open) => !open);
-            return;
-          }
-          setPage(key);
-        }}
+        onClick={() => setPage(key)}
       >
         {/* On the hairline the row already draws, so the tab and its page read
             as one surface. */}
@@ -1632,10 +1617,6 @@ export function PrPanel({
           </nav>
         )}
 
-        {!headerCompact && page === "files" && fileTreeOpen && fileTreePaths.length > 0 && (
-          <PrFileTree paths={fileTreePaths} onOpenFile={scrollToFile} />
-        )}
-
         <main
           className={`min-w-0 flex-1 overflow-y-auto bg-surface [--review-file-header-top:44px] ${reviewing ? "pb-24 phone:pb-36" : "pb-4"}`}
         >
@@ -1784,10 +1765,6 @@ export function PrPanel({
                 </div>
               )}
             </div>
-          )}
-
-          {headerCompact && page === "files" && fileTreeOpen && fileTreePaths.length > 0 && (
-            <PrFileTree paths={fileTreePaths} onOpenFile={scrollToFile} compact />
           )}
 
           {page === "overview" ? (

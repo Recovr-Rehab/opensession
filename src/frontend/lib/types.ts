@@ -328,7 +328,21 @@ export interface UnifiedSession {
 	id: string;
 	/** Historical marker retained while old session files age out. */
 	local?: boolean;
-	claudeSessionId: string | null;
+	/**
+	 * DETAIL ONLY — absent on every row from `GET /api/sessions`, present on
+	 * `GET /api/sessions/:id`, which `useHydratedSession` fetches for the
+	 * session you open. Read `ran` instead when the question is only whether
+	 * the session has run, which on a list it always is.
+	 */
+	claudeSessionId?: string | null;
+	/**
+	 * This session has an engine conversation behind it — it ran at least one
+	 * turn on some engine. The list's stand-in for the engine session ids
+	 * (`sessionRan` in src/server/routes/sessions.ts). Absent means it never
+	 * ran, which is also the right answer for a session object this client
+	 * builds optimistically for a just-created tab.
+	 */
+	ran?: boolean;
 	source: SessionSource;
 	branch: string | null;
 	worktreeDir: string | null;
@@ -350,7 +364,8 @@ export interface UnifiedSession {
 	 * sidebar then falls back to a client-observed start time.
 	 */
 	runStartedAt?: string;
-	transcriptPath: string | null;
+	/** DETAIL ONLY — see `claudeSessionId`. */
+	transcriptPath?: string | null;
 	prUrl?: string;
 	prState?: "OPEN" | "MERGED" | "CLOSED";
 	/** MERGEABLE | CONFLICTING | UNKNOWN — GitHub's async conflict probe. */
@@ -463,7 +478,10 @@ export interface UnifiedSession {
 	fastMode?: boolean;
 	/** Pinned account in the active model provider's pool; unset = auto. */
 	accountId?: string;
+	/** DETAIL ONLY — see `claudeSessionId`. */
 	codexThreadId?: string;
+	/** DETAIL ONLY — see `claudeSessionId`. Drawn as `/model` switch dividers
+	 *  in the open conversation, which is the only place it is read. */
 	modelHistory?: Array<{ model: string; from?: string; at: string; by?: string }>;
 	/** Cumulative token/cost accounting for this session's runs. */
 	usage?: SessionUsage;

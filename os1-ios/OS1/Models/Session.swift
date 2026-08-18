@@ -5,9 +5,12 @@ import Foundation
 /// fields are ignored, so server-side additions never break the client.
 struct Session: Identifiable, Decodable, Equatable, Hashable {
     let id: String
-    var claudeSessionId: String?
-    var codexThreadId: String?
-    var opencodeSessionId: String?
+    /// This session has an engine conversation behind it — it ran at least one
+    /// turn. The list carries this instead of the engine session ids
+    /// themselves (`sessionRan` in src/server/routes/sessions.ts): nothing here
+    /// ever compared an id, and at ~105 bytes a row they were 9% of the
+    /// response. Absent means it never ran.
+    var ran: Bool?
     var title: String?
     var titleOverridden: Bool?
     var source: String?
@@ -169,9 +172,7 @@ struct Session: Identifiable, Decodable, Equatable, Hashable {
     /// valid tabs, but should not displace the conversation that started the
     /// workspace from the leading position.
     var neverRan: Bool {
-        [claudeSessionId, codexThreadId, opencodeSessionId].allSatisfy {
-            $0?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
-        }
+        ran != true
             && isRunning != true
             && (queuedCount ?? 0) == 0
             && lastActivity == createdAt

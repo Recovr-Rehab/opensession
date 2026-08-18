@@ -170,7 +170,7 @@ final class TranscriptGroupingTests: XCTestCase {
         XCTAssertNil(viewModel.failureContinuationEntryId(catalog: nil))
 
         viewModel.updateSessionSnapshot(Session(
-            id: "bks-1", claudeSessionId: "claude-1", source: "slack"
+            id: "bks-1", ran: true, source: "slack"
         ))
         XCTAssertEqual(viewModel.failureContinuationEntryId(catalog: nil), "error")
 

@@ -11,13 +11,11 @@ import type { UnifiedSession } from "./types";
 function session(over: Partial<UnifiedSession>): UnifiedSession {
 	return {
 		id: "bks-x",
-		claudeSessionId: null,
 		source: "opensession",
 		title: "New session",
 		createdAt: "2026-07-01T00:00:00.000Z",
 		lastActivity: "2026-07-01T00:00:00.000Z",
 		isRunning: false,
-		transcriptPath: null,
 		...over,
 	} as UnifiedSession;
 }
@@ -26,8 +24,8 @@ describe("sessionNeverRan", () => {
 	test("true for an untouched New session shell", () => {
 		expect(sessionNeverRan(session({}))).toBe(true);
 	});
-	test("false once an engine session exists", () => {
-		expect(sessionNeverRan(session({ claudeSessionId: "ses_1" }))).toBe(false);
+	test("false once the session has run a turn", () => {
+		expect(sessionNeverRan(session({ ran: true }))).toBe(false);
 	});
 	test("false while running or queued", () => {
 		expect(sessionNeverRan(session({ isRunning: true }))).toBe(false);
@@ -69,7 +67,7 @@ describe("mainSession", () => {
 			id: "bks-ghpr-42-review",
 			workspaceId: "ws-1",
 			automation: "github-pr-review",
-			claudeSessionId: "review-run",
+			ran: true,
 			createdAt: "2026-07-01T00:00:00.000Z",
 		});
 		const shell = session({
@@ -81,17 +79,17 @@ describe("mainSession", () => {
 		const human = session({
 			id: "human",
 			workspaceId: "ws-1",
-			claudeSessionId: "human-run",
+			ran: true,
 			createdAt: "2026-07-03T00:00:00.000Z",
 		});
 		expect(mainSession([review, shell, human])?.id).toBe("human");
 	});
 
 	test("pins the main session ahead of a persisted sibling order", () => {
-		const main = session({ id: "main", claudeSessionId: "main-run" });
+		const main = session({ id: "main", ran: true });
 		const sibling = session({
 			id: "sibling",
-			claudeSessionId: "sibling-run",
+			ran: true,
 			createdAt: "2026-07-02T00:00:00.000Z",
 		});
 		expect(pinMainSessionFirst([main, sibling], ["sibling", "main"])).toEqual([
@@ -107,13 +105,13 @@ describe("pickLandingSession", () => {
 		const a = session({
 			id: "a",
 			workspaceId: wsId,
-			claudeSessionId: "ses_a",
+			ran: true,
 			createdAt: "2026-07-01T00:00:00.000Z",
 		});
 		const b = session({
 			id: "b",
 			workspaceId: wsId,
-			claudeSessionId: "ses_b",
+			ran: true,
 			createdAt: "2026-07-02T00:00:00.000Z",
 		});
 		expect(pickLandingSession([b, a], wsId)?.id).toBe("a");
@@ -128,7 +126,7 @@ describe("pickLandingSession", () => {
 		const real = session({
 			id: "real",
 			workspaceId: wsId,
-			claudeSessionId: "ses_r",
+			ran: true,
 			archived: true,
 			createdAt: "2026-07-01T00:00:00.000Z",
 			lastActivity: "2026-07-10T00:00:00.000Z",
@@ -139,14 +137,14 @@ describe("pickLandingSession", () => {
 		const older = session({
 			id: "older",
 			workspaceId: wsId,
-			claudeSessionId: "s1",
+			ran: true,
 			archived: true,
 			lastActivity: "2026-07-05T00:00:00.000Z",
 		});
 		const newer = session({
 			id: "newer",
 			workspaceId: wsId,
-			claudeSessionId: "s2",
+			ran: true,
 			archived: true,
 			lastActivity: "2026-07-10T00:00:00.000Z",
 		});
@@ -160,23 +158,23 @@ describe("pickLandingSession", () => {
 		const a = session({
 			id: "a",
 			workspaceId: wsId,
-			claudeSessionId: "ses_a",
+			ran: true,
 			createdAt: "2026-07-01T00:00:00.000Z",
 		});
 		const b = session({
 			id: "b",
 			workspaceId: wsId,
-			claudeSessionId: "ses_b",
+			ran: true,
 			createdAt: "2026-07-02T00:00:00.000Z",
 		});
 		expect(pickLandingSession([a, b], wsId, "b")?.id).toBe("b");
 	});
 	test("a stale remembered id (archived / other workspace) falls back", () => {
-		const live = session({ id: "live", workspaceId: wsId, claudeSessionId: "s1" });
+		const live = session({ id: "live", workspaceId: wsId, ran: true });
 		const gone = session({
 			id: "gone",
 			workspaceId: wsId,
-			claudeSessionId: "s2",
+			ran: true,
 			archived: true,
 		});
 		expect(pickLandingSession([live, gone], wsId, "gone")?.id).toBe("live");
@@ -186,7 +184,7 @@ describe("pickLandingSession", () => {
 		const other = session({
 			id: "other",
 			workspaceId: "ws-2",
-			claudeSessionId: "s",
+			ran: true,
 		});
 		expect(pickLandingSession([other], wsId)).toBeUndefined();
 	});

@@ -18,14 +18,17 @@ export function defaultSessionWorkspaceView(
 
 /**
  * True for an untouched "New session" shell: never ran a turn (no engine session
- * on either provider), nothing running or queued, and no activity since
+ * on any provider), nothing running or queued, and no activity since
  * creation. These rows are minted eagerly by the new-session endpoints so a tab
  * can render instantly; when abandoned they linger as empty shells.
+ *
+ * `ran` rather than the engine ids: the list carries the answer and not the
+ * ids, and an optimistic row this client mints for a just-created tab has
+ * neither, which is correct — it hasn't run.
  */
 export function sessionNeverRan(s: UnifiedSession): boolean {
 	return (
-		!s.claudeSessionId &&
-		!s.codexThreadId &&
+		!s.ran &&
 		!s.isRunning &&
 		!(s.queuedCount && s.queuedCount > 0) &&
 		s.lastActivity === s.createdAt
