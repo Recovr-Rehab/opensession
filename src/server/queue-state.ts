@@ -11,7 +11,7 @@
  * live in run-session.ts — they need the runner.
  */
 
-import { copyFileSync, existsSync } from "fs";
+import { copyFileSync, existsSync, readFileSync } from "fs";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { setTranscriptAppendListener } from "./file-watcher";
 import { stripContext } from "./prompt-context";
@@ -121,7 +121,8 @@ export const stoppedSessions: Set<string> = (g.__stoppedSessions ??= new Set());
 
 // Both maps are persisted to disk so a real restart/crash (not just a hot
 // reload, which keeps the globalThis maps) doesn't silently drop queued or
-// just-steered messages. Restored + re-drained on boot (restorePromptQueues).
+// just-steered messages. Queued prompts re-drain on boot; steer receipts stay
+// display-only until their transcript entry lands or cancellation requeues them.
 export const QUEUE_STORE = `${SESSIONS_DIR}/prompt-queues.json`;
 export function queueItem(item: QueueItem): QueueItem {
 	return item.id ? item : { ...item, id: crypto.randomUUID() };
@@ -134,7 +135,7 @@ export function queueWithIds(items: QueueItem[] | undefined): QueueItem[] {
 	});
 }
 
-export function persistQueues(): void {
+export function persistQueues(storePath = QUEUE_STORE): void {
 	try {
 		const entries = (m: Map<string, QueueItem[]>) =>
 			Object.fromEntries(
@@ -145,13 +146,13 @@ export function persistQueues(): void {
 		// Keep the previous copy as .bak before overwriting: if the store on disk
 		// ever ends up unparsable, restorePromptQueues falls back to it instead of
 		// silently dropping every queued message.
-		if (existsSync(QUEUE_STORE)) {
+		if (existsSync(storePath)) {
 			try {
-				copyFileSync(QUEUE_STORE, `${QUEUE_STORE}.bak`);
+				copyFileSync(storePath, `${storePath}.bak`);
 			} catch {}
 		}
 		writeJsonAtomic(
-			QUEUE_STORE,
+			storePath,
 			{
 				queued: entries(promptQueues),
 				steered: entries(steeredReceipts),
@@ -162,6 +163,137 @@ export function persistQueues(): void {
 	} catch (e) {
 		console.error("[queue] Failed to persist prompt queues:", e);
 	}
+}
+
+export type PersistedQueueState = {
+	queued?: Record<string, QueueItem[]>;
+	steered?: Record<string, QueueItem[]>;
+	dispatching?: Record<string, PromptDispatch>;
+};
+
+function readPersistedQueueState(storePath: string): PersistedQueueState | null {
+	try {
+		return JSON.parse(readFileSync(storePath, "utf8"));
+	} catch (e) {
+		console.error("[queue] Failed to read persisted queues:", e);
+		try {
+			const recovered = JSON.parse(readFileSync(`${storePath}.bak`, "utf8"));
+			console.warn("[queue] Recovered persisted queues from .bak");
+			return recovered;
+		} catch (backupError) {
+			console.error(
+				"[queue] Backup queue store unreadable too; queued messages lost:",
+				backupError,
+			);
+			return null;
+		}
+	}
+}
+
+/** Load raw durable maps before the server accepts writes. Ownership and
+ * transcript reconciliation happen after recovery identifies adopted runs. */
+export function hydratePersistedQueueState(storePath = QUEUE_STORE): number {
+	if (!existsSync(storePath)) return 0;
+	const data = readPersistedQueueState(storePath);
+	if (!data) return 0;
+	promptQueues.clear();
+	steeredReceipts.clear();
+	promptDispatches.clear();
+	for (const [sessionId, items] of Object.entries(data.queued || {})) {
+		if (items?.length) promptQueues.set(sessionId, queueWithIds(items));
+	}
+	for (const [sessionId, items] of Object.entries(data.steered || {})) {
+		if (items?.length) steeredReceipts.set(sessionId, queueWithIds(items));
+	}
+	for (const [sessionId, dispatch] of Object.entries(data.dispatching || {})) {
+		if (dispatch?.promptEntryId && dispatch.items?.length) {
+			promptDispatches.set(sessionId, {
+				promptEntryId: dispatch.promptEntryId,
+				items: queueWithIds(dispatch.items),
+			});
+		}
+	}
+	return (
+		[...promptQueues.values(), ...steeredReceipts.values()].reduce(
+			(count, items) => count + items.length,
+			0,
+		) + promptDispatches.size
+	);
+}
+
+/** Restore queue-owned state without deciding when queued prompts should drain.
+ * The caller supplies journal/session/transcript facts and arms drains for the
+ * returned queuedSessionIds. */
+export function restorePersistedQueueState(options: {
+	storePath?: string;
+	sessionExists: (sessionId: string) => boolean;
+	journalOwnsPrompt: (sessionId: string, promptEntryId: string) => boolean;
+	runOwnsSteers: (sessionId: string) => boolean;
+	deliveredUserTexts: (sessionId: string) => string[];
+	effects?: boolean;
+}): { queuedSessionIds: string[]; queuedCount: number; steeredCount: number } {
+	const storePath = options.storePath ?? QUEUE_STORE;
+	if (!existsSync(storePath)) {
+		return { queuedSessionIds: [], queuedCount: 0, steeredCount: 0 };
+	}
+	const data = readPersistedQueueState(storePath);
+	if (!data) return { queuedSessionIds: [], queuedCount: 0, steeredCount: 0 };
+
+	const queued = new Map<string, QueueItem[]>();
+	for (const [sessionId, items] of Object.entries(data.queued || {})) {
+		if (options.sessionExists(sessionId) && items?.length) {
+			queued.set(sessionId, queueWithIds(items));
+		}
+	}
+	for (const [sessionId, dispatch] of Object.entries(data.dispatching || {})) {
+		if (
+			!options.sessionExists(sessionId) ||
+			!dispatch?.items?.length ||
+			!dispatch.promptEntryId ||
+			options.journalOwnsPrompt(sessionId, dispatch.promptEntryId)
+		) {
+			continue;
+		}
+		const items = dispatch.items.map((item, index) =>
+			index === 0 ? { ...item, promptEntryId: dispatch.promptEntryId } : item,
+		);
+		queued.set(sessionId, [...items, ...(queued.get(sessionId) || [])]);
+	}
+
+	promptQueues.clear();
+	steeredReceipts.clear();
+	promptDispatches.clear();
+	for (const [sessionId, items] of queued) promptQueues.set(sessionId, items);
+
+	let steeredCount = 0;
+	for (const [sessionId, items] of Object.entries(data.steered || {})) {
+		if (!options.sessionExists(sessionId) || !items?.length) continue;
+		const delivered = options.deliveredUserTexts(sessionId);
+		const pending = queueWithIds(undeliveredSteers(items, delivered));
+		if (!pending.length) continue;
+		if (options.runOwnsSteers(sessionId)) {
+			steeredReceipts.set(sessionId, pending);
+			steeredCount += pending.length;
+		} else {
+			queued.set(sessionId, [...pending, ...(queued.get(sessionId) || [])]);
+			promptQueues.set(sessionId, queued.get(sessionId)!);
+		}
+	}
+
+	if (options.effects !== false) {
+		persistQueues(storePath);
+		for (const sessionId of new Set([
+			...promptQueues.keys(),
+			...steeredReceipts.keys(),
+		])) {
+			broadcastQueue(sessionId);
+		}
+	}
+	return {
+		queuedSessionIds: [...promptQueues.keys()],
+		queuedCount: [...promptQueues.values()].reduce((n, items) => n + items.length, 0),
+		steeredCount,
+	};
 }
 
 /** Move a selected queue batch into durable dispatching state before starting
@@ -259,7 +391,47 @@ export function steerDelivered(item: QueueItem, userTexts: string[]): boolean {
 	const attributed = (
 		item.user ? `[${item.user}] ${item.content}` : item.content
 	).trim();
-	return userTexts.some((u) => u === attributed || u.includes(attributed));
+	return userTexts.some((text) => userTextContainsSteer(text, attributed));
+}
+
+function userTextContainsSteer(text: string, attributed: string): boolean {
+	return steerRange(text, attributed) !== null;
+}
+
+function steerRange(text: string, attributed: string): [number, number] | null {
+	let start = text.indexOf(attributed);
+	while (start >= 0) {
+		const end = start + attributed.length;
+		const startsAtBoundary = start === 0 || text.slice(start - 2, start) === "\n\n";
+		const endsAtBoundary = end === text.length || text.slice(end, end + 2) === "\n\n";
+		if (startsAtBoundary && endsAtBoundary) return [start, end];
+		start = text.indexOf(attributed, start + 1);
+	}
+	return null;
+}
+
+/** Match receipts to transcript entries one-for-one. Two identical steers need
+ * two landed user entries; one transcript occurrence cannot retire both. */
+export function undeliveredSteers(
+	items: QueueItem[],
+	userTexts: string[],
+): QueueItem[] {
+	if (!userTexts.length) return items;
+	const remainingTexts = [...userTexts];
+	return items.filter((item) => {
+		const attributed = (
+			item.user ? `[${item.user}] ${item.content}` : item.content
+		).trim();
+		const textIndex = remainingTexts.findIndex(
+			(text) => steerRange(text, attributed) !== null,
+		);
+		if (textIndex < 0) return true;
+		const range = steerRange(remainingTexts[textIndex], attributed)!;
+		const text = remainingTexts[textIndex];
+		remainingTexts[textIndex] =
+			text.slice(0, range[0]) + "\0".repeat(attributed.length) + text.slice(range[1]);
+		return false;
+	});
 }
 
 function reconcileSteerReceiptsOnAppend(
@@ -272,7 +444,7 @@ function reconcileSteerReceiptsOnAppend(
 		.filter((e) => e.type === "user")
 		.map((e) => e.content.trim());
 	if (users.length === 0) return;
-	const remaining = steered.filter((item) => !steerDelivered(item, users));
+	const remaining = undeliveredSteers(steered, users);
 	if (remaining.length === steered.length) return;
 	if (remaining.length > 0) steeredReceipts.set(sessionId, remaining);
 	else steeredReceipts.delete(sessionId);
@@ -303,19 +475,20 @@ setAppendHook(reconcileSteerReceiptsOnAppend);
 export function requeueSteerReceipts(
 	sessionId: string,
 	deliveredUserTexts?: string[],
+	effects = true,
 ): number {
 	const steered = steeredReceipts.get(sessionId);
 	if (!steered?.length) return 0;
-	const undelivered = deliveredUserTexts?.length
-		? steered.filter((item) => !steerDelivered(item, deliveredUserTexts))
-		: steered;
+	const undelivered = undeliveredSteers(steered, deliveredUserTexts || []);
 	if (undelivered.length > 0) {
 		const queue = promptQueues.get(sessionId) || [];
 		promptQueues.set(sessionId, [...undelivered, ...queue]);
 	}
 	steeredReceipts.delete(sessionId);
-	persistQueues();
-	broadcastQueue(sessionId);
+	if (effects) {
+		persistQueues();
+		broadcastQueue(sessionId);
+	}
 	return undelivered.length;
 }
 

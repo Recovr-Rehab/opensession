@@ -6,7 +6,10 @@ import { emitSessionStateChange } from "./session-state-events";
  *
  * Transcript entries already have a durable per-session sequence in
  * transcript-store. This feed gives ephemeral phases the same reconnect
- * semantics without making them durable.
+ * semantics without making them durable. A real restart intentionally starts
+ * a new epoch; recordRecoveredRunEvent rebuilds the active phase from the
+ * adopted run's init and subsequent stream events while transcript backfill
+ * supplies anything that committed before adoption.
  */
 
 export type SessionFeedPhase = "delta" | "committed" | "status";

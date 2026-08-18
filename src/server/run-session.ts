@@ -122,13 +122,11 @@ import {
 	isGitHubQueueItem,
 	persistQueues,
 	promptQueues,
-	promptDispatches,
 	queuedPromptIndex,
 	queueItem,
-	QUEUE_STORE,
 	recordSteer,
 	requeueSteerReceipts,
-	steerDelivered,
+	restorePersistedQueueState,
 	steeredReceipts,
 	stoppedSessions,
 	type QueueItem,
@@ -140,7 +138,7 @@ import {
 } from "./uploads";
 import { buildSessionNote } from "./session-repos";
 import { interactiveMcpServers } from "./interactive-mcp";
-import { makeAskHandler } from "./asks";
+import { makeAskHandler, settleRestoredAskAfterRecovery } from "./asks";
 
 // The runner writes its active-run journal before it can call an engine. Once
 // that journal names this prompt entry, normal boot recovery owns it and the
@@ -412,86 +410,36 @@ export function interruptQueuedPrompt(
 
 /**
  * Restore queued + steered messages a previous process left behind (a real
- * restart/crash — hot reloads keep the in-memory maps). Drainable queue items
- * are re-armed for delivery; unconfirmed steer receipts are folded back into the
- * queue too (best-effort: we can't know whether their turn landed before the
- * crash, and silently dropping the user's message is the worse failure). Call
+ * restart/crash; hot reloads keep the in-memory maps). Drainable queue items
+ * are re-armed for delivery; unconfirmed steer receipts remain display-only so
+ * an adopted run still owns their delivery, while the existing cancel path can
+ * requeue them if that run is stopped. Call
  * after resumeInterruptedRuns so a session being resumed reads as busy and the
  * watcher waits it out instead of starting a colliding run.
  */
-export function restorePromptQueues(): void {
-	if (!existsSync(QUEUE_STORE)) return;
-	let data: {
-		queued?: Record<string, QueueItem[]>;
-		steered?: Record<string, QueueItem[]>;
-		dispatching?: Record<string, { promptEntryId: string; items: QueueItem[] }>;
-	};
-	try {
-		data = JSON.parse(readFileSync(QUEUE_STORE, "utf-8"));
-	} catch (e) {
-		// Corrupt store — these are the user's queued messages, so don't just
-		// drop them: fall back to the .bak persistQueues keeps of the last copy.
-		console.error("[queue] Failed to read persisted queues:", e);
-		try {
-			data = JSON.parse(readFileSync(`${QUEUE_STORE}.bak`, "utf-8"));
-			console.warn("[queue] Recovered persisted queues from .bak");
-		} catch (e2) {
-			console.error(
-				"[queue] Backup queue store unreadable too — queued messages lost:",
-				e2,
-			);
-			return;
-		}
+export function restorePromptQueues(resumedSessionIds: Set<string>): void {
+	const active = activeRunRecords();
+	const restored = restorePersistedQueueState({
+		sessionExists: (sessionId) => !!findSession(sessionId),
+		journalOwnsPrompt: (sessionId, promptEntryId) =>
+			active.some(
+				(run) =>
+					run.osSessionId === sessionId && run.promptEntryId === promptEntryId,
+			),
+		runOwnsSteers: (sessionId) =>
+			resumedSessionIds.has(sessionId) &&
+			active.some((run) => run.osSessionId === sessionId),
+		deliveredUserTexts: (sessionId) => {
+			const session = findSession(sessionId);
+			return session ? engineUserTexts(session) : [];
+		},
+	});
+	for (const sessionId of restored.queuedSessionIds) {
+		watchExternalRunAndDrain(sessionId);
 	}
-	const merged = new Map<string, QueueItem[]>();
-	for (const [id, items] of Object.entries(data.queued || {})) {
-		if (items?.length) merged.set(id, [...items]);
-	}
-	// A prompt removed from the queue but not yet acknowledged by the runner is
-	// the precise restart boundary that used to leave a visible, unanswered user
-	// line. If an active-run journal has the same prompt UUID, that journal will
-	// reattach or re-run it. Otherwise put the original batch back at the front
-	// of the queue. Its UUID survives into the retry so the transcript upserts
-	// the existing line instead of duplicating it.
-	for (const [id, dispatch] of Object.entries(data.dispatching || {})) {
-		if (!dispatch?.items?.length || !dispatch.promptEntryId) continue;
-		const journalOwnsPrompt = activeRunRecords().some(
-			(run) =>
-				run.osSessionId === id && run.promptEntryId === dispatch.promptEntryId,
-		);
-		if (journalOwnsPrompt) continue;
-		const items = dispatch.items.map((item, index) =>
-			index === 0 ? { ...item, promptEntryId: dispatch.promptEntryId } : item,
-		);
-		merged.set(id, [...items, ...(merged.get(id) || [])]);
-	}
-	for (const [id, items] of Object.entries(data.steered || {})) {
-		if (!items?.length) continue;
-		// A persisted steer receipt whose message already sits in the engine
-		// history landed before the restart — re-delivering it from the queue
-		// would duplicate it (same rule as requeueSteerReceipts). Plain queued
-		// items above are exempt: they were never delivered anywhere.
-		const session = findSession(id);
-		const delivered = session ? engineUserTexts(session) : [];
-		const undelivered = delivered.length
-			? items.filter((item) => !steerDelivered(item, delivered))
-			: items;
-		if (!undelivered.length) continue;
-		merged.set(id, [...(merged.get(id) || []), ...undelivered]);
-	}
-	steeredReceipts.clear();
-	promptDispatches.clear();
-	let restored = 0;
-	for (const [id, items] of merged) {
-		if (!findSession(id)) continue; // session no longer exists — drop
-		promptQueues.set(id, items);
-		restored += items.length;
-		watchExternalRunAndDrain(id); // drains once idle; waits out a resumed run
-	}
-	persistQueues();
-	if (restored > 0) {
+	if (restored.queuedCount > 0 || restored.steeredCount > 0) {
 		console.log(
-			`[queue] Restored ${restored} queued message(s) from before restart`,
+			`[queue] Restored ${restored.queuedCount} queued message(s) and ${restored.steeredCount} steer receipt(s) from before restart`,
 		);
 	}
 }
@@ -608,6 +556,7 @@ const recoveredSlackScanners = new Map<
 	string,
 	ReturnType<typeof createSlackPostScanner>
 >();
+const recoveredFeedStarted: Set<string> = (g.__recoveredFeedStarted ??= new Set());
 
 export function recordRecoveredRunEvent(osSessionId: string, event: StreamEvent): void {
 	const session = findSession(osSessionId);
@@ -649,6 +598,67 @@ export function recordRecoveredRunEvent(osSessionId: string, event: StreamEvent)
 				);
 		}
 		return;
+	}
+
+	// A real restart creates a fresh feed epoch. Rebuild the active feed from the
+	// adopted run's own event stream instead of persisting high-frequency feed
+	// frames. The transcript backfill remains authoritative for committed text;
+	// this path carries only the active phase and text produced after adoption.
+	const carriesFeedState =
+		event.type === "init" ||
+		event.type === "text_chunk" ||
+		event.type === "tool_use" ||
+		event.type === "tool_result";
+	if (carriesFeedState && !recoveredFeedStarted.has(osSessionId)) {
+		recoveredFeedStarted.add(osSessionId);
+		broadcastToSession(osSessionId, {
+			type: "stream_start",
+			sessionId: osSessionId,
+			by: session.startedBy || "Anonymous",
+		});
+		broadcastToSession(osSessionId, {
+			type: "session_status",
+			sessionId: osSessionId,
+			isRunning: true,
+		});
+	}
+	if (event.type === "text_chunk") {
+		broadcastToSession(osSessionId, {
+			type: "stream_text",
+			sessionId: osSessionId,
+			text: event.text,
+		});
+	} else if (event.type === "tool_use") {
+		broadcastToSession(osSessionId, {
+			type: "stream_tool_use",
+			sessionId: osSessionId,
+			entry: {
+				id: event.toolUseId || crypto.randomUUID(),
+				type: "tool_use",
+				content: `Using ${event.toolName}`,
+				timestamp: new Date().toISOString(),
+				toolName: event.toolName,
+				toolInput: event.toolInput,
+				toolUseId: event.toolUseId,
+			},
+		});
+	} else if (event.type === "tool_result") {
+		broadcastToSession(osSessionId, {
+			type: "stream_tool_result",
+			sessionId: osSessionId,
+			entry: {
+				id: event.toolUseId ? `tr-${event.toolUseId}` : crypto.randomUUID(),
+				type: "tool_result",
+				content: event.content || "",
+				timestamp: new Date().toISOString(),
+				toolUseId: event.toolUseId,
+				...(event.images?.length ? { images: event.images } : {}),
+				...(event.videos?.length ? { videos: event.videos } : {}),
+				...(event.featuredMedia?.length
+					? { featuredMedia: event.featuredMedia }
+					: {}),
+			},
+		});
 	}
 
 	// Capture Slack posts so a reply in the posted thread routes back to this
@@ -699,7 +709,19 @@ export function recordRecoveredRunEvent(osSessionId: string, event: StreamEvent)
 	}
 
 	if (event.type === "done" || event.type === "error") {
-		if (event.type === "done") clearSteerReceipts(osSessionId);
+		recoveredFeedStarted.delete(osSessionId);
+		if (event.type === "done") {
+			clearSteerReceipts(osSessionId);
+		} else {
+			const requeued = requeueSteerReceipts(
+				osSessionId,
+				engineUserTexts(session),
+			);
+			if (requeued > 0) watchExternalRunAndDrain(osSessionId);
+		}
+		if (settleRestoredAskAfterRecovery(osSessionId)) {
+			watchExternalRunAndDrain(osSessionId);
+		}
 		broadcastToSession(osSessionId, {
 			type: "stream_done",
 			sessionId: osSessionId,

@@ -21,7 +21,7 @@ import { startGeneratedTitleSweep } from "./src/server/generated-titles";
 import { startLiveActivitySync } from "./src/server/live-activities";
 import { kickTranscriptBackfillOnce } from "./src/server/transcript-backfill";
 import { kickOrphanTranscriptSweep } from "./src/server/transcript-orphan-sweep";
-import { makeAskHandler } from "./src/server/asks";
+import { makeAskHandler, restorePendingAsks } from "./src/server/asks";
 import { automationResumeMcpForSession, ensureConfiguredAutomations, getWebhookRoutes, setEventSessionCallback, settleResumedAutomationRun, startScheduler } from "./src/server/automations";
 import { startUsagePoller } from "./src/server/claude-accounts";
 import { startCodexUsagePoller } from "./src/server/codex-accounts";
@@ -80,7 +80,7 @@ import { join } from "node:path";
 // block below and the boot block further down), so importing the server graph
 // from a script or a test never touches live resources.
 import "./src/server/interactive-mcp"; // registerInteractiveMcpBuilder
-import "./src/server/queue-state"; // steer-receipt transcript reconcile listener
+import { hydratePersistedQueueState } from "./src/server/queue-state";
 import "./src/server/session-control-wiring"; // opensession-sessions MCP + Slack-link bridge
 import "./src/server/keychain"; // registers the keychain human-ask domain handler
 import { websocketHandlers } from "./src/server/ws-handlers";
@@ -146,6 +146,15 @@ const g = globalThis as any;
 // handlers (health routes) read it, and globalThis-backed so the set survives a
 // hot reload (loadAgents runs only on a real boot, inside the guard below).
 let agents: AgentModule[] = (g.__agents as AgentModule[] | undefined) ?? [];
+
+// A cold process must load durable interaction state before it can accept a
+// request that persists these globalThis-backed maps. Hot reloads reuse the
+// live maps and skip this branch.
+if (!g.__opensessionBooted && !isDevInstance()) {
+	initHumanAsks();
+	restorePendingAsks();
+	hydratePersistedQueueState();
+}
 
 console.log(`Starting Open Session server on ${HOST}:${PORT}...`);
 
@@ -694,7 +703,8 @@ if (!g.__opensessionBooted) {
 	// Dev instances skip the whole block: their isolated namespace has nothing
 	// to resume, and resumeInterruptedRuns/restorePromptQueues re-prompt and
 	// re-deliver — the classic double-send if any state were shared.
-	if (!devInstance) setTimeout(() => {
+	if (!devInstance) {
+		setTimeout(() => {
 		void (async () => {
 		// Adopt detached `opencode serve` scopes that survived the restart FIRST —
 		// resumeInterruptedRuns reattaches journaled runs to these adopted pool
@@ -801,15 +811,13 @@ if (!g.__opensessionBooted) {
 		}
 		resumeDrainedSessions(new Set(resumedIds), shutdownRecords);
 		// Re-deliver messages that were queued/steered when the process went down.
-		restorePromptQueues();
-		// Restore human-in-the-loop asks: re-arm scheduled timers, and degrade any
-		// block asks that lost their held turn to async so late replies still land.
-		initHumanAsks();
+		restorePromptQueues(new Set(resumedIds));
 		})();
 		// 1.5s: enough for boot-time state (agents, watchers, session-control
 		// registry) to settle before we start resuming, without adding dead air to
 		// every restart. Paired with the shorter drain above for faster recovery.
-	}, 1500);
+		}, 1500);
+	}
 
 	// Ongoing hygiene (every 6h): remove worktrees of sessions that were manually
 	// archived more than 14 days ago and have no WIP. Destructive on the shared

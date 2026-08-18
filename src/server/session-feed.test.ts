@@ -108,6 +108,42 @@ describe("session feed", () => {
 		expect(resumed.snapshot.active).toBeNull();
 	});
 
+	test("an adopted run starts a new epoch and rebuilds its active snapshot", () => {
+		const sessionId = `feed-${crypto.randomUUID()}`;
+		const before = appendSessionFeed(sessionId, {
+			type: "stream_start",
+			sessionId,
+		});
+		appendSessionFeed(sessionId, {
+			type: "stream_text",
+			sessionId,
+			text: "before restart",
+		});
+
+		// A real process has a fresh globalThis map. The recovered run's init event
+		// recreates the active phase instead of restoring any old feed frames.
+		(globalThis as { __osSessionFeeds?: Map<string, unknown> }).__osSessionFeeds =
+			new Map();
+		appendSessionFeed(sessionId, {
+			type: "stream_start",
+			sessionId,
+			by: "Michiel",
+		});
+		appendSessionFeed(sessionId, {
+			type: "stream_text",
+			sessionId,
+			text: "after adoption",
+		});
+
+		const resumed = resumeSessionFeed(sessionId, before.feedSeq, before.feedEpoch);
+		expect(resumed.frames).toEqual([]);
+		expect(resumed.snapshot.feedEpoch).not.toBe(before.feedEpoch);
+		expect(resumed.snapshot.active).toMatchObject({
+			by: "Michiel",
+			text: "after adoption",
+		});
+	});
+
 	test("stream boundaries emit authoritative running transitions", () => {
 		const sessionId = `feed-${crypto.randomUUID()}`;
 		const states: boolean[] = [];
