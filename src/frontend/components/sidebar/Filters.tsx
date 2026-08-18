@@ -114,15 +114,11 @@ function FilterRow({
 	value,
 	options,
 	onSelect,
-	footer,
 }: {
 	label: string;
 	value: string;
 	options: SelectOption[];
 	onSelect: (value: string) => void;
-	/** Rows under the options, below a rule: a setting about the things the
-	 *  options name, rather than another one of them to pick. */
-	footer?: React.ReactNode;
 }) {
 	const current = options.find((option) => option.value === value);
 	return (
@@ -137,12 +133,6 @@ function FilterRow({
 			</Menu.Trigger>
 			<Menu.Popup align="end" sideOffset={6}>
 				<ValueOptions value={value} options={options} onSelect={onSelect} />
-				{footer && (
-					<>
-						<Menu.Separator />
-						{footer}
-					</>
-				)}
 			</Menu.Popup>
 		</Menu.Root>
 	);
@@ -177,6 +167,35 @@ function FilterSubmenu({
 				<ValueOptions value={value} options={options} onSelect={onSelect} />
 			</Menu.Popup>
 		</Menu.SubmenuRoot>
+	);
+}
+
+/** A panel row that is itself the switch: the setting's name on the left, its
+ *  state drawn on the right. The switch is a picture (`SwitchIndicator`), so
+ *  the press stays on the row rather than on a control inside it, the way the
+ *  binary settings in the Advanced menu read. */
+function FilterToggleRow({
+	label,
+	on,
+	onToggle,
+}: {
+	label: string;
+	on: boolean;
+	onToggle: (on: boolean) => void;
+}) {
+	return (
+		<button
+			type="button"
+			role="switch"
+			aria-checked={on}
+			className={FILTER_ROW}
+			onClick={() => onToggle(!on)}
+		>
+			<span className="shrink-0 text-dim">{label}</span>
+			<span className="ml-auto flex items-center">
+				<SwitchIndicator on={on} />
+			</span>
+		</button>
 	);
 }
 
@@ -277,35 +296,21 @@ export function FilterPopover({
 					label="Group by"
 					value={filter.groupBy}
 					options={[
-						{ value: "none", label: "Nothing" },
+						// "Activity", not "Nothing": this is the inbox's own bands
+						// (Needs action / Recent / Yesterday / Earlier / Done) with
+						// nothing above them, so a list with five headings in it must
+						// not claim to have none. The stored value stays "none".
+						{ value: "none", label: "Activity" },
 						{ value: "repo", label: "Project" },
 						{ value: "status", label: "Status" },
 					]}
 					onSelect={(v) => onChange({ groupBy: v as GroupBy })}
 				/>
-				{/* The projects, and under them the one setting about the set of
-				    them rather than about which one you are in: a registered
-				    project with no work in it still draws a band, so a repo you
-				    just connected has somewhere to start from, and on an instance
-				    with more projects than you work in that is a screen of empty
-				    headings. It sits with the projects because that is what it is
-				    about; asking for one by name still shows it, empty or not. */}
 				<FilterRow
 					label="Repo"
 					value={filter.repo}
 					options={repoOptions}
 					onSelect={(v) => onChange({ repo: v })}
-					footer={
-						<Menu.CheckboxItem
-							checked={filter.emptyProjects === "hide"}
-							onCheckedChange={(hide) =>
-								onChange({ emptyProjects: hide ? "hide" : "show" })
-							}
-						>
-							<span className="grow truncate">Hide when empty</span>
-							<SwitchIndicator on={filter.emptyProjects === "hide"} />
-						</Menu.CheckboxItem>
-					}
 				/>
 				<FilterRow
 					label="Person"
@@ -404,6 +409,21 @@ export function FilterPopover({
 						)}
 					</Menu.Popup>
 				</Menu.Root>
+				{/* A registered project with no work in it still draws a band, so a
+				    repo you just connected has somewhere to start from, and on an
+				    instance with more projects than you work in that is a screen of
+				    empty headings. It is the one setting here about the set of
+				    projects rather than about which slice of the list you want, so
+				    it sits at the bottom on its own rather than in among the
+				    pickers. Scoping the list to one project shows that project
+				    either way, empty or not. */}
+				<FilterToggleRow
+					label="Hide empty projects"
+					on={filter.emptyProjects === "hide"}
+					onToggle={(hide) =>
+						onChange({ emptyProjects: hide ? "hide" : "show" })
+					}
+				/>
 			</div>
 		</>,
 		document.body,
