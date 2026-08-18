@@ -5,7 +5,6 @@ import type {
 	PrsFilter,
 	SortBy,
 } from "../../lib/sidebar-filter";
-import { SIDEBAR_HOVER_LAYER } from "../../lib/sidebar-classes";
 import {
 	DENSITY_OPTIONS,
 	getSidebarDensity,
@@ -14,19 +13,20 @@ import {
 	type SidebarDensity,
 } from "../../lib/sidebar-density";
 import { AGENT_PERSON_KEY } from "../../lib/automation-audience";
-import type { Group } from "../../lib/sidebar-types";
 import { useIsPhone } from "../../hooks/useIsPhone";
+import { Menu } from "../../ui/menu";
 import { cn } from "../../ui/cn";
 import { RepoTile, repoLabel } from "../RepoTile";
-import { IconRobot } from "../icons";
+import { IconChevronDown, IconRobot } from "../icons";
 import { UserAvatar } from "../UserAvatar";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
 // ── Filter popover ─────────────────────────────────────────────────────────
-// A small floating panel (anchored under the filter button) with three controls:
-// Group by (Status / Repo), Repo (All repos + one per repo), and Sort by
-// (Updated / Created). Rendered in a portal so it can overflow the narrow sidebar.
+// A small floating panel (anchored under the filter button) holding the view
+// controls for the session list: how it is grouped, which repo and person it
+// is scoped to, what it hides, how it is sorted, and how tight its rows are.
+// Rendered in a portal so it can overflow the narrow sidebar.
 
 interface SelectOption {
 	value: string;
@@ -34,24 +34,93 @@ interface SelectOption {
 	icon?: React.ReactNode;
 }
 
-/** Full-screen transparent catcher that closes a popover/menu on outside
- *  click. The nested one sits above the popover it opens out of, so its z-index
- *  is written out rather than layered on top of the base string — two `z-*`
- *  utilities on one element would leave the winner to Tailwind's output order. */
+/** Full-screen transparent catcher that closes the popover on outside click.
+ *  The row menus portal above it (Base UI positions them at z-10001), so a
+ *  press inside an open menu never reaches this. */
 const BACKDROP = "fixed inset-0 z-[300]";
-const BACKDROP_NESTED = "fixed inset-0 z-[320]";
 
-/** The filter panel itself (group / repo / person / PRs / sort), portalled and
- *  fixed-positioned at the anchor. Same entrance and shadow as MINI_MENU below;
- *  one step rounder, and it sits under the menus it opens. */
+/** The panel itself, portalled and fixed-positioned at the anchor: the app's
+ *  popup surface, so it reads as the same object as every menu it opens.
+ *
+ *  Padding is 12px because the rows inside carry `rounded-md` (7px × --rf) and
+ *  the panel `rounded-popup` (16px × --rf): 7 + 12 lands on 16 once both scale
+ *  together, which is the concentric-corner rule. `gap-0.5` keeps two adjacent
+ *  hover washes from fusing into one block. */
 const FILTER_POPOVER =
-	"fixed z-[301] flex flex-col gap-2.5 rounded-popup bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] " +
-	"px-3.5 py-3 smooth-shadow-ring-md animate-[hovercard-in_var(--dur-micro)_var(--ease)]";
+	"fixed z-[301] flex flex-col gap-0.5 rounded-popup bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] " +
+	"p-3 smooth-shadow-ring-md animate-[hovercard-in_var(--dur-micro)_var(--ease)]";
 
-/** One labelled control per row: the label holds its width, the select takes
- *  the rest. */
-const FILTER_ROW = "flex items-center justify-between gap-3.5";
-const FILTER_ROW_LABEL = "shrink-0 text-item-title text-dim";
+/** One control per row, and the row IS the control: the setting's name on the
+ *  left, its current value and a chevron on the right.
+ *
+ *  These wear the popup's vocabulary (a menu row's corner and hover wash), not
+ *  the field's. A bordered field per row put seven of the strong hairline on a
+ *  290px panel whose whole job is to be quiet, and a 7px box inside a 16px
+ *  panel corner reads square; boxes sized to their own content also left-ragged
+ *  the column. Taking the frames away leaves the values themselves as the only
+ *  thing to read, and the chevrons land on one x.
+ *
+ *  The phone step is the row's own, not the panel's: 36px is a comfortable
+ *  pointer row and a tight thumb one, and the whole row is the target now, so
+ *  the padding is the only thing standing between it and 44. */
+const FILTER_ROW =
+	"flex w-full cursor-pointer select-none items-center gap-3 rounded-md px-2 py-2 phone:py-3 text-left text-item-title hover:bg-hover data-[popup-open]:bg-hover";
+
+/** The leading glyph in a row and in its menu: one 16px box either way, so a
+ *  list where only some options carry one keeps its labels on a single x. */
+const GLYPH_SLOT = "flex size-4 shrink-0 items-center justify-center text-dim";
+
+function FilterRow({
+	label,
+	value,
+	options,
+	onSelect,
+}: {
+	label: string;
+	value: string;
+	options: SelectOption[];
+	onSelect: (value: string) => void;
+}) {
+	const current = options.find((option) => option.value === value);
+	const glyphs = options.some((option) => option.icon);
+	return (
+		<Menu.Root>
+			<Menu.Trigger className={FILTER_ROW}>
+				<span className="shrink-0 text-dim">{label}</span>
+				<span className="ml-auto flex min-w-0 items-center gap-2 text-fg">
+					{current?.icon && <span className={GLYPH_SLOT}>{current.icon}</span>}
+					<span className="truncate">{current?.label ?? value}</span>
+					<IconChevronDown size={16} className="-mr-0.5 shrink-0 text-faint" />
+				</span>
+			</Menu.Trigger>
+			<Menu.Popup align="end" sideOffset={6}>
+				<Menu.RadioGroup
+					value={value}
+					onValueChange={(next) => onSelect(String(next))}
+				>
+					{options.map((option) => (
+						// `closeOnClick`, because this list is a value picker: Base UI
+						// leaves a radio item's menu open by default, which is right
+						// for a menu you keep toggling things in and wrong for one
+						// answering a single question.
+						<Menu.RadioItem
+							key={option.value}
+							value={option.value}
+							closeOnClick
+							className="justify-between gap-3"
+						>
+							<span className="flex min-w-0 items-center gap-2">
+								{glyphs && <span className={GLYPH_SLOT}>{option.icon}</span>}
+								<span className="min-w-0 truncate">{option.label}</span>
+							</span>
+							<Menu.Check on={option.value === value} />
+						</Menu.RadioItem>
+					))}
+				</Menu.RadioGroup>
+			</Menu.Popup>
+		</Menu.Root>
+	);
+}
 
 export function FilterPopover({
 	anchor,
@@ -73,7 +142,7 @@ export function FilterPopover({
 	// Row density is a property of this list, so it sits with the other view
 	// controls rather than only in settings. It is a stored preference, not part
 	// of FilterState — hence its own state here, kept live by the pref's change
-	// event so the Appearance switch and this select never disagree.
+	// event so the Appearance switch and this row never disagree.
 	// Both hooks run before the `anchor` early return: an unmounted anchor must
 	// not change how many hooks this component calls.
 	const isPhone = useIsPhone();
@@ -94,7 +163,7 @@ export function FilterPopover({
 		...repos.map((name) => ({
 			value: name,
 			label: repoLabel(name),
-			icon: <RepoTile name={name} />,
+			icon: <RepoTile name={name} size={16} />,
 		})),
 	];
 
@@ -132,219 +201,92 @@ export function FilterPopover({
 		<>
 			<div className={BACKDROP} onClick={onClose} />
 			<div className={FILTER_POPOVER} style={{ left, top, width }}>
-				<div className={FILTER_ROW}>
-					<span className={FILTER_ROW_LABEL}>Group by</span>
-					<MiniSelect
-						value={filter.groupBy}
-						options={[
-							{ value: "status", label: "Status" },
-							{ value: "repo", label: "Project" },
-							{ value: "repo-status", label: "Project and status" },
-							{ value: "repo-inbox", label: "Project and inbox" },
-							{ value: "inbox", label: "Inbox" },
-						]}
-						onSelect={(v) => onChange({ groupBy: v as GroupBy })}
-					/>
-				</div>
-				<div className={FILTER_ROW}>
-					<span className={FILTER_ROW_LABEL}>Repo</span>
-					<MiniSelect
-						value={filter.repo}
-						options={repoOptions}
-						onSelect={(v) => onChange({ repo: v })}
-					/>
-				</div>
-				<div className={FILTER_ROW}>
-					<span className={FILTER_ROW_LABEL}>Person</span>
-					<MiniSelect
-						value={filter.person}
-						options={personOptions}
-						onSelect={(v) => onChange({ person: v })}
-					/>
-				</div>
+				<FilterRow
+					label="Group by"
+					value={filter.groupBy}
+					options={[
+						{ value: "status", label: "Status" },
+						{ value: "repo", label: "Project" },
+						{ value: "repo-status", label: "Project and status" },
+						{ value: "repo-inbox", label: "Project and inbox" },
+						{ value: "inbox", label: "Inbox" },
+					]}
+					onSelect={(v) => onChange({ groupBy: v as GroupBy })}
+				/>
+				<FilterRow
+					label="Repo"
+					value={filter.repo}
+					options={repoOptions}
+					onSelect={(v) => onChange({ repo: v })}
+				/>
+				<FilterRow
+					label="Person"
+					value={filter.person}
+					options={personOptions}
+					onSelect={(v) => onChange({ person: v })}
+				/>
 				{/* Session-less PR rows in the project lanes (the dissolved PR
 				    band): whose PRs surface. */}
-				<div className={FILTER_ROW}>
-					<span className={FILTER_ROW_LABEL}>Pull requests</span>
-					<MiniSelect
-						value={filter.prs}
-						options={[
-							{ value: "default", label: "Mine + requested" },
-							{ value: "all", label: "Everyone's" },
-							{ value: "none", label: "Hidden" },
-						]}
-						onSelect={(v) => onChange({ prs: v as PrsFilter })}
-					/>
-				</div>
+				<FilterRow
+					label="Pull requests"
+					value={filter.prs}
+					options={[
+						{ value: "default", label: "Mine + requested" },
+						{ value: "all", label: "Everyone's" },
+						{ value: "none", label: "Hidden" },
+					]}
+					onSelect={(v) => onChange({ prs: v as PrsFilter })}
+				/>
 				{/* Workspaces an agent started for itself. They sit in the ordinary
 				    lanes wearing a robot, so this is how you get a day's worth of
 				    them out of the way. A row you have open, one you pinned, and one
 				    asking for your review stay whatever this says. */}
-				<div className={FILTER_ROW}>
-					<span className={FILTER_ROW_LABEL}>Auto created</span>
-					<MiniSelect
-						value={filter.autoCreated}
-						options={[
-							{
-								value: "show",
-								label: "Shown",
-								icon: <IconRobot size={20} className="shrink-0 text-dim" />,
-							},
-							{ value: "hide", label: "Hidden" },
-						]}
-						onSelect={(v) => onChange({ autoCreated: v as AutoCreatedFilter })}
-					/>
-				</div>
-				<div className={FILTER_ROW}>
-					<span className={FILTER_ROW_LABEL}>Sort by</span>
-					<MiniSelect
-						value={filter.sort}
-						options={[
-							{ value: "updated", label: "Updated" },
-							{ value: "created", label: "Created" },
-						]}
-						onSelect={(v) => onChange({ sort: v as SortBy })}
-					/>
-				</div>
+				<FilterRow
+					label="Auto created"
+					value={filter.autoCreated}
+					options={[
+						{
+							value: "show",
+							label: "Shown",
+							icon: <IconRobot size={16} />,
+						},
+						{ value: "hide", label: "Hidden" },
+					]}
+					onSelect={(v) => onChange({ autoCreated: v as AutoCreatedFilter })}
+				/>
+				<FilterRow
+					label="Sort by"
+					value={filter.sort}
+					options={[
+						{ value: "updated", label: "Updated" },
+						{ value: "created", label: "Created" },
+					]}
+					onSelect={(v) => onChange({ sort: v as SortBy })}
+				/>
 				{/* Desktop only, because that is the whole of what the preference
 				    does: a phone row is a tap target and keeps its own padding at
 				    either setting (see SIDEBAR_DENSITY_VARS), so offering the
-				    control there would be a switch that changes nothing. */}
+				    control there would be a switch that changes nothing.
+
+				    A row like the six above it, not the segmented control Settings →
+				    Appearance shows: a segment is right on a settings page with room
+				    for it, and here the seven read as one panel only while they wear
+				    one control. */}
 				{!isPhone && (
-					<div className={FILTER_ROW}>
-						<span className={FILTER_ROW_LABEL}>Density</span>
-						{/* A select, like every other row here. Settings → Appearance
-						    shows the same two options as a segmented control, which is
-						    right on a settings page with room for it; in this popover
-						    the row is one of six, and the six read as one panel only
-						    while they wear one control. */}
-						<MiniSelect
-							value={density}
-							options={DENSITY_OPTIONS.map(({ value, label, Icon }) => ({
-								value,
-								label,
-								icon: <Icon size={20} className="shrink-0 text-dim" />,
-							}))}
-							onSelect={(v) => setSidebarDensity(v as SidebarDensity)}
-						/>
-					</div>
+					<FilterRow
+						label="Density"
+						value={density}
+						options={DENSITY_OPTIONS.map(({ value, label, Icon }) => ({
+							value,
+							label,
+							icon: <Icon size={16} />,
+						}))}
+						onSelect={(v) => setSidebarDensity(v as SidebarDensity)}
+					/>
 				)}
 			</div>
 		</>,
 		document.body,
-	);
-}
-
-/** The dropdown menu shared by MiniSelect and the repo chip: portalled, so it
- *  escapes both the filter popover and the narrow sidebar. */
-const MINI_MENU =
-	"fixed z-[321] max-h-[60vh] overflow-y-auto rounded-popup bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] p-[5px] smooth-shadow-ring-md animate-[hovercard-in_var(--dur-micro)_var(--ease)]";
-
-/** One row of that menu. The hover is a layer (SIDEBAR_HOVER_LAYER), so it
- *  adds to the selected row's wash instead of replacing it — which is what the
- *  old `hover:bg-pressed` on the selected branch was standing in for. */
-const MINI_MENU_ITEM =
-	"flex w-full items-center gap-[9px] rounded-md px-[9px] py-2 text-left text-item-title text-fg";
-
-function miniMenuItem(selected: boolean) {
-	return cn(MINI_MENU_ITEM, SIDEBAR_HOVER_LAYER, selected && "bg-pressed");
-}
-
-// A styled dropdown used by the filter popover. Its menu is portaled so it can
-// escape both the popover and the sidebar; a transparent backdrop closes it.
-function MiniSelect({
-	value,
-	options,
-	onSelect,
-}: {
-	value: string;
-	options: SelectOption[];
-	onSelect: (value: string) => void;
-}) {
-	const [open, setOpen] = useState(false);
-	const btnRef = useRef<HTMLButtonElement>(null);
-	const current = options.find((o) => o.value === value);
-	const r = open && btnRef.current ? btnRef.current.getBoundingClientRect() : null;
-
-	let menu: React.ReactNode = null;
-	if (open && r) {
-		const menuW = Math.max(r.width, 150);
-		const left = Math.max(8, Math.min(r.left, window.innerWidth - menuW - 8));
-		menu = createPortal(
-			<>
-				<div
-					className={BACKDROP_NESTED}
-					onClick={() => setOpen(false)}
-				/>
-				<div
-					className={MINI_MENU}
-					style={{ left, top: r.bottom + 4, minWidth: menuW }}
-				>
-					{options.map((o) => (
-						<button
-							key={o.value}
-							className={miniMenuItem(o.value === value)}
-							onClick={() => {
-								onSelect(o.value);
-								setOpen(false);
-							}}
-						>
-							{o.icon}
-							<span className="min-w-0 flex-1 truncate">{o.label}</span>
-							{o.value === value && (
-								<svg
-									className="shrink-0 text-dim"
-									width="17"
-									height="17"
-									viewBox="0 0 16 16"
-									fill="none"
-								>
-									<path
-										d="M3.5 8.5l3 3 6-7"
-										stroke="currentColor"
-										strokeWidth="1.6"
-										strokeLinecap="round"
-										strokeLinejoin="round"
-									/>
-								</svg>
-							)}
-						</button>
-					))}
-				</div>
-			</>,
-			document.body,
-		);
-	}
-
-	return (
-		<div className="relative">
-			<button
-				ref={btnRef}
-				className="flex min-w-[148px] cursor-pointer items-center gap-2 rounded-md border border-line-strong bg-panel py-2 pl-3 pr-2.5 text-item-title text-fg hover:bg-hover"
-				onClick={() => setOpen((o) => !o)}
-			>
-				<span className="flex min-w-0 flex-1 items-center gap-[7px]">
-					{current?.icon}
-					<span className="truncate">{current?.label ?? value}</span>
-				</span>
-				<svg
-					className="shrink-0 text-faint"
-					width="16"
-					height="16"
-					viewBox="0 0 16 16"
-					fill="none"
-				>
-					<path
-						d="M5 6.5L8 3.5l3 3M5 9.5l3 3 3-3"
-						stroke="currentColor"
-						strokeWidth="1.4"
-						strokeLinecap="round"
-						strokeLinejoin="round"
-					/>
-				</svg>
-			</button>
-			{menu}
-		</div>
 	);
 }
 
@@ -363,66 +305,17 @@ export const RepoFilterChip = React.forwardRef<
 	}
 >(function RepoFilterChip({ repo, repos = [], onClear, onSelect, variant }, ref) {
 	const probe = variant === "probe";
-	const [open, setOpen] = useState(false);
-	const bodyRef = useRef<HTMLButtonElement>(null);
-	const r = open && bodyRef.current ? bodyRef.current.getBoundingClientRect() : null;
 
-	// Repo dropdown, opened straight off the chip body (no detour through the
-	// filter popover). "All repos" clears the filter; reuses the MiniSelect menu.
-	let menu: React.ReactNode = null;
-	if (open && r) {
-		const options: SelectOption[] = [
-			{ value: "all", label: "All repos" },
-			...repos.map((name) => ({
-				value: name,
-				label: repoLabel(name),
-				icon: <RepoTile name={name} />,
-			})),
-		];
-		const menuW = Math.max(r.width, 170);
-		const left = Math.max(8, Math.min(r.left, window.innerWidth - menuW - 8));
-		menu = createPortal(
-			<>
-				<div className={BACKDROP} onClick={() => setOpen(false)} />
-				<div
-					className={MINI_MENU}
-					style={{ left, top: r.bottom + 5, minWidth: menuW }}
-				>
-					{options.map((o) => (
-						<button
-							key={o.value}
-							className={miniMenuItem(o.value === repo)}
-							onClick={() => {
-								onSelect?.(o.value);
-								setOpen(false);
-							}}
-						>
-							{o.icon}
-							<span className="min-w-0 flex-1 truncate">{o.label}</span>
-							{o.value === repo && (
-								<svg
-									className="shrink-0 text-dim"
-									width="17"
-									height="17"
-									viewBox="0 0 16 16"
-									fill="none"
-								>
-									<path
-										d="M3.5 8.5l3 3 6-7"
-										stroke="currentColor"
-										strokeWidth="1.6"
-										strokeLinecap="round"
-										strokeLinejoin="round"
-									/>
-								</svg>
-							)}
-						</button>
-					))}
-				</div>
-			</>,
-			document.body,
-		);
-	}
+	// One step down from the tile's 18px default, so the pill stays the height
+	// of the text beside it.
+	const body = (
+		<>
+			<RepoTile name={repo} size={17} />
+			<span className="min-w-0 truncate text-dim">{repoLabel(repo)}</span>
+		</>
+	);
+	const bodyClass =
+		"inline-flex min-w-0 items-center gap-[7px] rounded-full px-[3px] py-0.5 text-label leading-[1.15] hover:bg-hover data-[popup-open]:bg-hover";
 
 	return (
 		<span
@@ -434,20 +327,51 @@ export const RepoFilterChip = React.forwardRef<
 			)}
 			aria-hidden={probe || undefined}
 		>
-			{/* Body opens the repo dropdown; the × clears the filter. */}
-			<button
-				type="button"
-				ref={bodyRef}
-				className="inline-flex min-w-0 items-center gap-[7px] rounded-full px-[3px] py-0.5 text-label leading-[1.15] hover:bg-hover"
-				title="Switch repo"
-				tabIndex={probe ? -1 : undefined}
-				onClick={probe ? undefined : () => setOpen((o) => !o)}
-			>
-				{/* One step down from the tile's 18px default, so the pill stays
-				    the height of the text beside it. */}
-				<RepoTile name={repo} size={17} />
-				<span className="min-w-0 truncate text-dim">{repoLabel(repo)}</span>
-			</button>
+			{/* Body opens the repo menu; the × clears the filter. The probe is
+			    measured, never pressed, so it renders the same box without one. */}
+			{probe ? (
+				<span className={bodyClass}>{body}</span>
+			) : (
+				<Menu.Root>
+					<Menu.Trigger className={bodyClass} title="Switch repo">
+						{body}
+					</Menu.Trigger>
+					<Menu.Popup align="start" sideOffset={5}>
+						<Menu.RadioGroup
+							value={repo}
+							onValueChange={(next) => onSelect?.(String(next))}
+						>
+							<Menu.RadioItem
+								value="all"
+								closeOnClick
+								className="justify-between gap-3"
+							>
+								<span className="flex min-w-0 items-center gap-2">
+									<span className={GLYPH_SLOT} />
+									<span className="min-w-0 truncate">All repos</span>
+								</span>
+								<Menu.Check on={repo === "all"} />
+							</Menu.RadioItem>
+							{repos.map((name) => (
+								<Menu.RadioItem
+									key={name}
+									value={name}
+									closeOnClick
+									className="justify-between gap-3"
+								>
+									<span className="flex min-w-0 items-center gap-2">
+										<span className={GLYPH_SLOT}>
+											<RepoTile name={name} size={16} />
+										</span>
+										<span className="min-w-0 truncate">{repoLabel(name)}</span>
+									</span>
+									<Menu.Check on={name === repo} />
+								</Menu.RadioItem>
+							))}
+						</Menu.RadioGroup>
+					</Menu.Popup>
+				</Menu.Root>
+			)}
 			<button
 				type="button"
 				className="inline-flex size-[19px] shrink-0 items-center justify-center rounded-full text-item-title leading-none text-faint hover:bg-hover hover:text-fg"
@@ -457,7 +381,6 @@ export const RepoFilterChip = React.forwardRef<
 			>
 				×
 			</button>
-			{menu}
 		</span>
 	);
 });
