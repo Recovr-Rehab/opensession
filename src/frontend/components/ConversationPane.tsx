@@ -33,10 +33,11 @@ interface Props {
 
 /**
  * The pane width at which the ticket's actions fit in the bar beside the
- * subject. The bar layout runs to about 440px and the Plain link takes another
- * 110, so this leaves the subject and the customer under it around 240px, which
- * is a readable title rather than an ellipsis. A 1440pt window clears it; the
- * app sidebar and the queue column take about 600 of whatever is left.
+ * subject. The bar layout runs to about 440px, the Plain link takes another
+ * 110, and the status pill in front of the name about 55, so this leaves the
+ * subject and the customer under it around 185px, which still reads as a title
+ * rather than an ellipsis. A 1440pt window clears it; the app sidebar and the
+ * queue column take about 600 of whatever is left.
  *
  * Narrower than this the actions stay at the top of the thread, where they have
  * a whole row to wrap into.
@@ -157,23 +158,30 @@ export function ConversationPane({
 					    nothing below it moves when the words arrive. */}
 					{thread && (
 						<>
+							{/* The state leads the row instead of trailing the subject.
+							    It is one short word of fixed width, so in front it reads
+							    as the ticket's state rather than as part of its name, and
+							    the subject keeps a straight left edge to truncate against
+							    instead of dragging the pill around as it shortens. */}
+							{status && (
+								<span className={plainStatusClass(status)}>
+									{STATUS_LABEL[status] || status}
+								</span>
+							)}
 							<div className="flex min-w-0 flex-1 flex-col justify-center">
-								<div className="flex min-w-0 items-center gap-2">
-									{/* The actions beside it can leave this 200px on a
-									    laptop, so the full subject stays on hover. */}
-									<h2
-										className="m-0 truncate text-item-title font-semibold text-fg"
-										title={thread.title || undefined}
-									>
-										{thread.title || "No subject"}
-									</h2>
-									{status && (
-										<span className={plainStatusClass(status)}>
-											{STATUS_LABEL[status] || status}
-										</span>
-									)}
-								</div>
-								<div className="flex min-w-0 items-center gap-1.5 text-meta">
+								{/* The actions beside it can leave this 200px on a
+								    laptop, so the full subject stays on hover. */}
+								<h2
+									className="m-0 truncate text-item-title font-semibold text-fg"
+									title={thread.title || undefined}
+								>
+									{thread.title || "No subject"}
+								</h2>
+								{/* The customer is supporting text, not a badge: it takes
+								    the 13px step the rest of the app gives a line under a
+								    title, so the pair reads as one block rather than as a
+								    title with a caption. */}
+								<div className="flex min-w-0 items-center gap-1.5 text-label">
 									<span className="truncate text-dim">{customerLabel}</span>
 									{customerName && customerEmail && (
 										<>
