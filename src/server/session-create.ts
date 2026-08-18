@@ -52,7 +52,6 @@ type ResolvedSandboxProvider = Extract<
 >["provider"];
 import { SESSION_EFFORTS, findSession, invalidateSessionsCache, recordRunOutcome, touchNativeSession, updateSessionFile } from "./session-cache";
 import { attachRepo, buildBranchNote, buildReposNote, memoryNoteFor, planCreateAttachRepos, workspaceOwningWorktree } from "./session-repos";
-import { suggestRepos } from "./suggest-repos";
 import { ownedWorktree } from "./session-workspace";
 import { engineSessionPatch } from "./sessions";
 import { commitAuthorFor, userMatchesAny } from "./shared/user-mappings";
@@ -955,23 +954,12 @@ export async function handleCreateSessionMessage(
 	// that is a conversation with the model and its MCP tools. A fork stays
 	// whatever its source was; an OMITTED repo still means "inherit, else the
 	// default", which is what agent-created subagents depend on.
-	// "Auto": the palette handed the choice to us because it hadn't resolved one
-	// of its own yet (it normally sends the concrete repo, so the user has seen
-	// where the session is going). Resolve it HERE, before anything below reads
-	// the repo — the sentinel must not reach a worktree or a session record.
-	// Failure is not fatal: no answer means the configured default for a code
-	// session, and no repo for a question, which is where each would have
-	// landed without Auto.
+	// "Auto": the advisory picker preview had not resolved yet. Never block
+	// creation on another model call: start in the normal fallback environment
+	// and let the opening session move itself if the task belongs elsewhere.
 	let requestedRepo = typeof msg.repo === "string" ? msg.repo : undefined;
-	let autoAttachRepos: string[] = [];
-	if (!forkSource && requestedRepo === AUTO_REPO) {
-		const suggestion = await suggestRepos(prompt, {
-			mode: isAsk ? "ask" : "code",
-			forCreate: true,
-		});
-		requestedRepo = suggestion?.repo ?? (isAsk ? NO_REPO : undefined);
-		autoAttachRepos = suggestion?.extras ?? [];
-	}
+	const deferredAutoRepo = !forkSource && requestedRepo === AUTO_REPO;
+	if (deferredAutoRepo) requestedRepo = undefined;
 	const isRepoLess = forkSource
 		? isScratch || (forkSource.mode === "ask" && !forkSource.repo)
 		: isScratch || (isAsk && requestedRepo === NO_REPO);
@@ -1301,11 +1289,8 @@ export async function handleCreateSessionMessage(
 							: "";
 		const askedForRepos = Array.isArray(msg.attachRepos) && msg.attachRepos.length;
 		if (askedForRepos && unsupportedAttach) throw new Error(unsupportedAttach);
-		// Auto's suggested second repo takes the same path, but is never fatal:
-		// nobody asked for it, so a create that can't hold one simply doesn't
-		// get one rather than failing on a guess.
 		const attachRepoIds = planCreateAttachRepos(
-			askedForRepos ? msg.attachRepos : unsupportedAttach ? [] : autoAttachRepos,
+			askedForRepos ? msg.attachRepos : [],
 			repo.id,
 			attachBranch,
 		);
@@ -1353,6 +1338,14 @@ export async function handleCreateSessionMessage(
 			prompt,
 			stageFileAttachments(bksId, msg.files),
 		);
+		if (deferredAutoRepo) {
+			openingPrompt += `\n\n${wrapContext(
+				isAsk
+					? `Repository selection was left on Auto and session creation did not wait for the preview. Decide whether this question belongs to a registered repository. If another repository is a better fit, use opensession-repos list_repos and read it from the checkout path returned there.`
+					: `Repository selection was left on Auto and session creation did not wait for the preview. Decide whether this task belongs in the current repository before editing. If another registered repository is a better fit, use the opensession-repos tools to switch this session or attach that repository first.`,
+				"repos-note",
+			)}`;
+		}
 		// @session:<id> mentions from the New-session box get the same
 		// resolving footer as prompts on existing sessions (see
 		// runSessionPromptInner) — this create path bypasses it.

@@ -47,17 +47,13 @@ const SUGGEST_MODEL = process.env.SUGGEST_REPOS_MODEL || "claude-haiku-4-5";
  * waiting and answer "no suggestion", while the call finishes harmlessly in
  * the background.
  *
- * The budgets are generous because nobody is watching a spinner for either
- * one. The preview fills the picker in when it lands, the way the branch
- * field already does; the create resolves server-side while the session shell
- * is already on screen. Measured on this deployment, a classification runs
- * ~13s (~4-5s of that is fixed one-shot overhead), so a budget under ~20s
- * would mostly be measuring our own impatience.
+ * The budget is generous because it never gates creation. The preview fills
+ * the picker in when it lands, the way the branch field already does.
+ * Measured on this deployment, a classification runs ~13s (~4-5s of that is
+ * fixed one-shot overhead), so a budget under ~20s would mostly be measuring
+ * our own impatience.
  */
 const PREVIEW_BUDGET_MS = 25_000;
-/** A create has already been committed to and its whole destination hangs on
- *  the answer, so it is worth waiting longer for than a preview. */
-const CREATE_BUDGET_MS = 30_000;
 /**
  * At most one extra repo. Attaching a repo costs a worktree checkout and
  * permanent context the agent carries all session; NOT attaching one costs
@@ -135,13 +131,12 @@ function escapeRegExp(s: string): string {
  */
 export async function suggestRepos(
 	prompt: string,
-	opts: { mode?: "ask" | "code"; forCreate?: boolean } = {},
+	opts: { mode?: "ask" | "code" } = {},
 ): Promise<RepoSuggestion | null> {
 	const text = (prompt || "").trim();
 	// Too little signal to route on — the picker keeps showing its default.
 	if (text.length < 10) return null;
 	const mode = opts.mode === "ask" ? "ask" : "code";
-	const budgetMs = opts.forCreate ? CREATE_BUDGET_MS : PREVIEW_BUDGET_MS;
 
 	try {
 		const cards = await repoRoutingCatalog();
@@ -162,7 +157,9 @@ export async function suggestRepos(
 				model: SUGGEST_MODEL,
 				label: "suggest-repos",
 			}),
-			new Promise<null>((resolve) => setTimeout(() => resolve(null), budgetMs)),
+			new Promise<null>((resolve) =>
+				setTimeout(() => resolve(null), PREVIEW_BUDGET_MS),
+			),
 		]);
 		if (!resultText) return null;
 		const match = resultText.match(/\{[\s\S]*\}/);

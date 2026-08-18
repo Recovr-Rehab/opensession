@@ -503,12 +503,17 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   // answer rather than quietly attaching the previous one's repo.
   const autoAnsweredFor = useRef("");
   const autoSeqRef = useRef(0);
+  const registeredDefaultRepo =
+    repos.find((item) => item.default)?.id || repos[0]?.id || "";
+  const autoResolvedRepo =
+    autoResolved?.repo ||
+    (autoResolved && permission !== "ask" ? registeredDefaultRepo : "");
   /**
    * The repo the REST of the palette acts on. Auto is a picker value, not a
    * checkout: the branch picker, the prompt's repo context and the create all
    * want the repo it resolved to, and nothing at all until it has.
    */
-  const effectiveRepo = repo === AUTO_REPO ? (autoResolved?.repo ?? "") : repo;
+  const effectiveRepo = repo === AUTO_REPO ? autoResolvedRepo : repo;
 
   /** A repo's picker label, falling back to its id before `/repos` lands. */
   const repoOptionLabel = (id: string) =>
@@ -993,33 +998,33 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       return;
     }
     const prompt = promptText.current.trim();
-    const branch =
-      selectedWorktree === "__new__"
-        ? newBranch.trim() || slugifyBranch(prompt)
-        : selectedWorktree;
-    // On Auto, send what it resolved; if it hasn't yet, send the sentinel and
-    // let the server decide rather than making anyone watch a ~13s spinner.
-    // Either way the session records a real repo — "auto" never persists.
+    // The preview only applies to the exact prompt it answered. If it is still
+    // choosing (or the text changed), send the sentinel: the server starts in
+    // the normal fallback immediately and lets the session move itself later.
+    const resolvedAuto =
+      repo === AUTO_REPO && autoAnsweredFor.current === prompt ? autoResolved : null;
     const createRepo =
       repo === AUTO_REPO
-        ? autoResolved
-          ? (autoResolved.repo ?? NO_REPO)
-          : AUTO_REPO
+        ? resolvedAuto?.repo ||
+          (resolvedAuto
+            ? permission === "ask"
+              ? NO_REPO
+              : registeredDefaultRepo || AUTO_REPO
+            : AUTO_REPO)
         : repo;
+    // An unresolved Auto preview may leave a worktree selected from the prior
+    // answer. Start a fresh branch in the fallback repo instead of reusing it.
+    const branch =
+      createRepo === AUTO_REPO
+        ? slugifyBranch(prompt)
+        : selectedWorktree === "__new__"
+          ? newBranch.trim() || slugifyBranch(prompt)
+          : selectedWorktree;
     const attachRepos =
       repo === AUTO_REPO
-        ? (autoResolved?.extras ?? [])
+        ? resolvedAuto?.extras ?? []
         : extraRepos.filter((id) => id !== createRepo);
-    // Auto resolving to "no repo" makes this a scratch session, the same as
-    // picking No repo by hand would. Unresolved stays "code": the server is
-    // about to decide, and a code session with a repo is what it decides
-    // between (an Ask keeps its own mode either way).
-    const createMode =
-      repo === AUTO_REPO && permission !== "ask"
-        ? createRepo === NO_REPO
-          ? ("scratch" as const)
-          : ("code" as const)
-        : mode;
+    const createMode = mode;
 
     // With "Create more" off, App tears down the palette when the
     // session_created event arrives (and drops us into the new session).
@@ -1038,10 +1043,13 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
     onCreateStarted?.({
       prompt,
       mode: createMode,
-      // The optimistic shell wants somewhere to file the session. An Auto that
-      // hasn't answered has nowhere yet, so it borrows the configured default
-      // for the moment before session_created replaces the whole record.
-      repo: createRepo === AUTO_REPO ? configuredDefaultRepo : createRepo,
+      // The optimistic shell is replaced once the persisted record lands.
+      // Prefer Auto's preview, then the registered default, but never expose
+      // the sentinel as though it were a repository id.
+      repo:
+        createRepo === AUTO_REPO
+          ? resolvedAuto?.repo || registeredDefaultRepo
+          : createRepo,
       branch: createMode === "code" ? branch : null,
       ...(workspaceId ? { workspaceId } : {}),
       ...(model ? { model } : {}),
@@ -1213,7 +1221,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
             multiHint={
               repo === AUTO_REPO
                 ? autoResolved?.reason
-                  ? `Chose ${autoResolved.repo ? repoOptionLabel(autoResolved.repo) : "no repo"} — ${autoResolved.reason}.`
+                  ? `Chose ${autoResolvedRepo ? repoOptionLabel(autoResolvedRepo) : "no repo"} — ${autoResolved.reason}.`
                   : "Picks the repository from what you type."
                 : repoSelectionHint(extraRepos, repoOptionLabel, MULTI_MODIFIER)
             }
@@ -1239,8 +1247,8 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
                     // before committing a session to it. Until then it says
                     // what it is doing rather than showing a spinner.
                     autoResolved
-                    ? autoResolved.repo
-                      ? repoOptionLabel(autoResolved.repo)
+                    ? autoResolvedRepo
+                      ? repoOptionLabel(autoResolvedRepo)
                       : "No repo"
                     : autoResolving
                       ? "Choosing…"
