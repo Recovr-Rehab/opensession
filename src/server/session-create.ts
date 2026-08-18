@@ -52,6 +52,7 @@ type ResolvedSandboxProvider = Extract<
 >["provider"];
 import { SESSION_EFFORTS, findSession, invalidateSessionsCache, recordRunOutcome, touchNativeSession, updateSessionFile } from "./session-cache";
 import { attachRepo, buildBranchNote, buildReposNote, memoryNoteFor, planCreateAttachRepos, workspaceOwningWorktree } from "./session-repos";
+import { suggestRepos } from "./suggest-repos";
 import { ownedWorktree } from "./session-workspace";
 import { engineSessionPatch } from "./sessions";
 import { commitAuthorFor, userMatchesAny } from "./shared/user-mappings";
@@ -61,7 +62,7 @@ import { parseImageDataUrls, stageFileAttachments, withUploadsNote } from "./upl
 import { resolvePlainWorkspace } from "./workspace-resolve";
 import { resolveWorkspaceModelPreset } from "./workspace-model-presets";
 import { type Workspace, createWorkspace, getWorkspace, updateWorkspace } from "./workspaces";
-import { createWorktree, createWorktreeForExistingBranch, ensureAskCheckout, ensureScratchDir, getRepo, listWorktrees, NO_REPO, repoForPath, repoForPathOrNull, resolveUniqueBranch, sharedCheckoutForNewSessions, worktreeHeadBranch, worktreePathFor } from "./worktree";
+import { AUTO_REPO, createWorktree, createWorktreeForExistingBranch, ensureAskCheckout, ensureScratchDir, getRepo, listWorktrees, NO_REPO, repoForPath, repoForPathOrNull, resolveUniqueBranch, sharedCheckoutForNewSessions, worktreeHeadBranch, worktreePathFor } from "./worktree";
 import { type WSClientData, broadcastToSession, preparingWorkspaces } from "./ws-hub";
 
 /**
@@ -954,9 +955,26 @@ export async function handleCreateSessionMessage(
 	// that is a conversation with the model and its MCP tools. A fork stays
 	// whatever its source was; an OMITTED repo still means "inherit, else the
 	// default", which is what agent-created subagents depend on.
+	// "Auto": the palette handed the choice to us because it hadn't resolved one
+	// of its own yet (it normally sends the concrete repo, so the user has seen
+	// where the session is going). Resolve it HERE, before anything below reads
+	// the repo — the sentinel must not reach a worktree or a session record.
+	// Failure is not fatal: no answer means the configured default for a code
+	// session, and no repo for a question, which is where each would have
+	// landed without Auto.
+	let requestedRepo = typeof msg.repo === "string" ? msg.repo : undefined;
+	let autoAttachRepos: string[] = [];
+	if (!forkSource && requestedRepo === AUTO_REPO) {
+		const suggestion = await suggestRepos(prompt, {
+			mode: isAsk ? "ask" : "code",
+			forCreate: true,
+		});
+		requestedRepo = suggestion?.repo ?? (isAsk ? NO_REPO : undefined);
+		autoAttachRepos = suggestion?.extras ?? [];
+	}
 	const isRepoLess = forkSource
 		? isScratch || (forkSource.mode === "ask" && !forkSource.repo)
-		: isScratch || (isAsk && msg.repo === NO_REPO);
+		: isScratch || (isAsk && requestedRepo === NO_REPO);
 	// Optional model pick from the UI; invalid input falls back to default.
 	// A fork inherits the source's model. No pick = stamp the interactive
 	// default NOW: leaving it empty would let the init event persist the
@@ -988,7 +1006,7 @@ export async function handleCreateSessionMessage(
 	// session still resolves one here — sandbox selection and memory scopes
 	// are repo-keyed — but never records it (see `repoId` on the spec below).
 	const repo = getRepo(
-		typeof msg.repo === "string" && msg.repo !== NO_REPO ? msg.repo : undefined,
+		requestedRepo && requestedRepo !== NO_REPO ? requestedRepo : undefined,
 	);
 	// Sandbox opt-in (the sandbox rollout plan): boolean true = the
 	// config's default provider (legacy toggle behavior); a string
@@ -1271,21 +1289,23 @@ export async function handleCreateSessionMessage(
 			sessionBranch && sessionBranch !== repo.defaultBranch
 				? sessionBranch
 				: (branch || "").trim();
-		if (Array.isArray(msg.attachRepos) && msg.attachRepos.length) {
-			const unsupported =
-				isAsk || isScratch || isRepoLess
-					? "Only a Code session with a repo can work in more than one repo."
-					: forkSource || fromPr
-						? "A session started from a fork or a pull request works in the repo it came from."
-						: selectedRunner
-							? "Runner sessions work in one repo."
-							: volumeWorkspace || remoteSandbox
-								? "This sandbox keeps the workspace inside the container, which can't hold a second repo yet. Choose This machine, or a sandbox that mounts the worktree."
-								: "";
-			if (unsupported) throw new Error(unsupported);
-		}
+		const unsupportedAttach =
+			isAsk || isScratch || isRepoLess
+				? "Only a Code session with a repo can work in more than one repo."
+				: forkSource || fromPr
+					? "A session started from a fork or a pull request works in the repo it came from."
+					: selectedRunner
+						? "Runner sessions work in one repo."
+						: volumeWorkspace || remoteSandbox
+							? "This sandbox keeps the workspace inside the container, which can't hold a second repo yet. Choose This machine, or a sandbox that mounts the worktree."
+							: "";
+		const askedForRepos = Array.isArray(msg.attachRepos) && msg.attachRepos.length;
+		if (askedForRepos && unsupportedAttach) throw new Error(unsupportedAttach);
+		// Auto's suggested second repo takes the same path, but is never fatal:
+		// nobody asked for it, so a create that can't hold one simply doesn't
+		// get one rather than failing on a guess.
 		const attachRepoIds = planCreateAttachRepos(
-			msg.attachRepos,
+			askedForRepos ? msg.attachRepos : unsupportedAttach ? [] : autoAttachRepos,
 			repo.id,
 			attachBranch,
 		);

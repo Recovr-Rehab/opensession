@@ -197,6 +197,10 @@ export interface OpenSessionConfig {
   /** Working-dir policy for `sharedCheckout` repos' new sessions. */
   selfDev?: SelfDevMode;
   repos?: Record<string, RepoSection>;
+  /** What the New-session repo picker starts on for users with no personal
+   *  preference: a registered repo id, or "auto" (worktree.ts's AUTO_REPO —
+   *  spelled out here because worktree.ts imports this module). */
+  newSessionRepo?: string;
   identity?: IdentitySection;
   integrations?: IntegrationsSection;
   policy?: PolicySection;
@@ -671,6 +675,25 @@ export function canonicalRepoId(id: string): string {
 }
 
 /** The instance's default repo: the entry flagged `default: true`, then first. */
+/**
+ * The workspace-wide answer to "which repo does a new session start in?" — the
+ * picker's seed for anyone who hasn't set a personal preference.
+ *
+ * Deliberately NOT the per-repo `default` flag that defaultRepo() reads. That
+ * one is a server-wide FALLBACK which must always resolve to a real checkout
+ * (Slack routing, analytics and the sidebar's lanes all depend on it), so it
+ * cannot express "let the prompt decide". This can, and defaults to it.
+ *
+ * A value naming a repo that has since been unregistered falls back to Auto
+ * rather than to that missing repo.
+ */
+export function newSessionRepoDefault(): string {
+  const configured = (getConfig().newSessionRepo || "").trim();
+  if (!configured) return "auto";
+  if (configured === "auto" || configured === "none") return configured;
+  return configured in configuredRepos() ? configured : "auto";
+}
+
 export function defaultRepo(): Repo {
   const repos = configuredRepos();
   const repo = (
