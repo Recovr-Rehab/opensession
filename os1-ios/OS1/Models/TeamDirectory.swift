@@ -15,6 +15,9 @@ final class TeamDirectory {
     static let shared = TeamDirectory()
 
     private(set) var githubLogins: [String: String] = [:]
+    /// First name → the picture they uploaded, as a server-relative path.
+    /// Absent for everyone who has not set one, which is the normal case.
+    private(set) var profileImages: [String: String] = [:]
     /// Everyone on the roster, in the order the server lists them — what a
     /// picker offers ("ask Kent to review this"). The maps below answer
     /// questions about one name; this is the list itself.
@@ -37,6 +40,13 @@ final class TeamDirectory {
     func githubLogin(for name: String) -> String? {
         guard let key = Self.key(name) else { return nil }
         return githubLogins[key]
+    }
+
+    /// The picture this person uploaded, or nil when they have not set one and
+    /// their face should come from GitHub.
+    func profileImage(for name: String) -> String? {
+        guard let key = Self.key(name) else { return nil }
+        return profileImages[key]
     }
 
     /// The display name behind a GitHub login ("kentdebruin" → "Kent"), or nil
@@ -78,6 +88,13 @@ final class TeamDirectory {
             guard let key = Self.key(person.name) else { continue }
             displayNames[key] = person.name
             if let github = person.github, !github.isEmpty { githubLogins[key] = github }
+            // Assigned rather than merged: a person who cleared their picture
+            // must lose the tile, not keep the last one the roster carried.
+            if let image = person.image, !image.isEmpty {
+                profileImages[key] = image
+            } else {
+                profileImages[key] = nil
+            }
             if let fullName = person.fullName, !fullName.isEmpty { fullNames[key] = fullName }
         }
         lastFailureAt = nil

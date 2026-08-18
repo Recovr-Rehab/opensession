@@ -29,6 +29,17 @@ struct UserAvatar: View {
         return TeamDirectory.shared.githubLogin(for: person) ?? ""
     }
 
+    /// A picture this person uploaded on the web, resolved against our server.
+    /// It outranks the GitHub face because they chose it; the GitHub one is
+    /// only ever a stand-in for a picture nobody set.
+    private var uploadedURL: URL? {
+        guard let path = TeamDirectory.shared.profileImage(for: name),
+              !path.isEmpty,
+              let base = ServerConfig.shared.baseURL
+        else { return nil }
+        return URL(string: base.absoluteString + path)
+    }
+
     private var name: String { person ?? ServerConfig.shared.userName }
 
     var body: some View {
@@ -49,7 +60,10 @@ struct UserAvatar: View {
         .frame(width: size, height: size)
         .clipShape(Circle())
         .accessibilityLabel(name.isEmpty ? "You" : name)
-        .task(id: resolvedLogin) {
+        // Keyed on the URL, not the login: a picture that is uploaded, replaced
+        // or cleared changes the URL while the login stays put, and keying on
+        // the login would leave the old face until the next launch.
+        .task(id: avatarURL?.absoluteString ?? "") {
             if let url = avatarURL {
                 await AvatarImageCache.shared.ensureLoaded(url)
             }
@@ -57,6 +71,7 @@ struct UserAvatar: View {
     }
 
     private var avatarURL: URL? {
+        if let uploadedURL { return uploadedURL }
         guard !resolvedLogin.isEmpty else { return nil }
         // GitHub serves any account's avatar at github.com/<login>.png; 3x the
         // point size keeps it crisp on retina displays.
@@ -116,7 +131,14 @@ final class AvatarImageCache {
         defer { inflight.remove(key) }
         // The HTTP cache still applies underneath, so a relaunch usually
         // repopulates without touching the network.
-        var request = URLRequest(url: url)
+        //
+        // An uploaded picture is served by OUR server, behind the same sign-in
+        // gate as every other path, so it needs the bearer token. A GitHub
+        // avatar is public and must NOT carry it: never send our token to a
+        // host that is not ours.
+        var request = ServerConfig.shared.isOwnURL(url)
+            ? ServerConfig.shared.authorizedRequest(url)
+            : URLRequest(url: url)
         request.cachePolicy = .returnCacheDataElseLoad
         do {
             let (data, response) = try await URLSession.shared.data(for: request)

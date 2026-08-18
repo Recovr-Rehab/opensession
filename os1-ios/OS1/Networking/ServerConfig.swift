@@ -96,4 +96,23 @@ final class ServerConfig {
         }
         return request
     }
+
+    /// Whether `url` is on OUR server, and may therefore carry the token.
+    ///
+    /// Everything the app fetches by PATH is ours by construction, so this is
+    /// only asked where a URL could be either: an avatar is our `/media` when
+    /// the person uploaded one and github.com when they did not. Getting it
+    /// wrong sends our bearer token to a third party, so it compares scheme,
+    /// host and port rather than a string prefix.
+    func isOwnURL(_ url: URL) -> Bool {
+        guard let base = baseURL,
+              let ours = URLComponents(url: base, resolvingAgainstBaseURL: false),
+              let theirs = URLComponents(url: url, resolvingAgainstBaseURL: false),
+              let ourHost = ours.host?.lowercased(),
+              let theirHost = theirs.host?.lowercased()
+        else { return false }
+        return ours.scheme?.lowercased() == theirs.scheme?.lowercased()
+            && ourHost == theirHost
+            && ours.port == theirs.port
+    }
 }
