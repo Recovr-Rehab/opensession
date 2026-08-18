@@ -26,6 +26,7 @@ import {
 import {
 	ensureAutomationWebSession,
   keypadBearerAuthorized,
+  refreshWebIdentity,
   resolveWebAuth,
   teamMemberForLogin,
   webAuthRequired,
@@ -64,21 +65,23 @@ afterEach(() => {
   delete (globalThis as any).__webAuthSessions;
 });
 
-function enableFeature(): void {
+function enableFeature(memberName: string | null = "Alice Example"): void {
   const path = join(dir, "config.json");
   writeFileSync(
     path,
     JSON.stringify({
       identity: {
-        team: [
-          {
-            name: "Alice Example",
-            github: "alice",
-            slackId: "U_ALICE",
-            email: "alice@example.com",
-            aliases: ["Alice"],
-          },
-        ],
+        team: memberName
+          ? [
+              {
+                name: memberName,
+                github: "alice",
+                slackId: "U_ALICE",
+                email: "alice@example.com",
+                aliases: ["Alice"],
+              },
+            ]
+          : [],
       },
       integrations: { github: { userPrAuth: true, oauthClientId: "test-client-id" } },
     }),
@@ -388,6 +391,7 @@ describe("web sign-in resolution", () => {
   });
 
   test("resolves the session cookie and Bearer token from a seeded store", () => {
+    enableFeature();
     const now = Date.now();
     writeFileSync(
       process.env.OPENSESSION_WEB_SESSIONS_STORE!,
@@ -415,6 +419,109 @@ describe("web sign-in resolution", () => {
     expect(
       resolveWebAuth(new Request("http://x/", { headers: { cookie: "opensession_auth=wrong" } })),
     ).toBeNull();
+  });
+
+  test("refreshes a session name from the current roster row", () => {
+    enableFeature();
+    const now = Date.now();
+    writeFileSync(
+      process.env.OPENSESSION_WEB_SESSIONS_STORE!,
+      JSON.stringify({
+        sessions: [
+          {
+            token: "renamed-token",
+            login: "alice",
+            name: "Old Alice",
+            createdAt: now,
+            lastSeenAt: now,
+          },
+        ],
+      }),
+    );
+
+    const identity = resolveWebAuth(
+      new Request("http://x/", {
+        headers: { authorization: "Bearer renamed-token" },
+      }),
+    );
+    expect(identity).toEqual({ login: "alice", name: "Alice Example" });
+
+    enableFeature("Alice Newly Renamed");
+    const renamed = resolveWebAuth(
+      new Request("http://x/", {
+        headers: { authorization: "Bearer renamed-token" },
+      }),
+    );
+    expect(renamed).toEqual({ login: "alice", name: "Alice Newly Renamed" });
+    expect(
+      JSON.parse(
+        readFileSync(process.env.OPENSESSION_WEB_SESSIONS_STORE!, "utf8"),
+      ).sessions[0].name,
+    ).toBe("Alice Newly Renamed");
+  });
+
+  test("revokes a human session when its roster row is removed", () => {
+    enableFeature();
+    const now = Date.now();
+    writeFileSync(
+      process.env.OPENSESSION_WEB_SESSIONS_STORE!,
+      JSON.stringify({
+        sessions: [
+          {
+            token: "removed-token",
+            login: "alice",
+            name: "Alice Example",
+            createdAt: now,
+            lastSeenAt: now,
+          },
+        ],
+      }),
+    );
+
+    expect(
+      resolveWebAuth(
+        new Request("http://x/", {
+          headers: { authorization: "Bearer removed-token" },
+        }),
+      ),
+    ).toEqual({ login: "alice", name: "Alice Example" });
+
+    enableFeature(null);
+    expect(
+      resolveWebAuth(
+        new Request("http://x/", {
+          headers: { authorization: "Bearer removed-token" },
+        }),
+      ),
+    ).toBeNull();
+    expect(
+      JSON.parse(
+        readFileSync(process.env.OPENSESSION_WEB_SESSIONS_STORE!, "utf8"),
+      ).sessions,
+    ).toEqual([]);
+  });
+
+  test("refreshes identities used by long-lived transports", () => {
+    enableFeature();
+    expect(
+      refreshWebIdentity({ login: "alice", name: "Old Alice" }),
+    ).toEqual({ login: "alice", name: "Alice Example" });
+
+    enableFeature(null);
+    expect(
+      refreshWebIdentity({ login: "alice", name: "Alice Example" }),
+    ).toBeNull();
+    expect(
+      refreshWebIdentity({
+        login: "opensession-automation",
+        name: "Automation",
+        automation: true,
+      }),
+    ).toEqual({
+      login: "opensession-automation",
+      name: "Automation",
+      automation: true,
+    });
   });
 });
 

@@ -95,8 +95,22 @@ describe("your own profile", () => {
 			context("/api/profile", "GET", { authUser: ADA }),
 		);
 		const body = await res?.json();
+		expect(body.user).toBe("Ada Lovelace");
 		expect(body.name).toBe("Ada Lovelace");
 		expect(body.shortName).toBe("Ada");
+		expect(body.github).toBe("adalovelace");
+		expect(body.editable).toBe(true);
+	});
+
+	test("uses the verified login when the session display name is stale", async () => {
+		const res = await handleProfileRoutes(
+			context("/api/profile", "GET", {
+				authUser: { login: "adalovelace", name: "Ada Oldname" },
+			}),
+		);
+		const body = await res?.json();
+		expect(body.user).toBe("Ada Lovelace");
+		expect(body.name).toBe("Ada Lovelace");
 		expect(body.github).toBe("adalovelace");
 		expect(body.editable).toBe(true);
 	});

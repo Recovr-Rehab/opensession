@@ -16,9 +16,11 @@
  * even if it completed the OAuth flow (its token is also discarded).
  *
  * Sessions: ~/.opensession-web-sessions.json (0600), sliding 90-day expiry,
- * loaded into a globalThis map so hot reloads keep everyone signed in. The
- * same store carries one explicitly-labelled Automation identity for local
- * CDP/CLI work; machine callers must never borrow a teammate's session.
+ * loaded into a globalThis map so hot reloads keep everyone signed in. Human
+ * sessions re-resolve their roster row on every request, so a rename follows
+ * them immediately and removing the row revokes access. The same store carries
+ * one explicitly-labelled Automation identity for local CDP/CLI work; machine
+ * callers must never borrow a teammate's session.
  *
  * No `Secure` cookie attribute: TLS terminates at Caddy (the app itself
  * serves plain HTTP on 127.0.0.1, which is also how headless-Chrome test
@@ -157,6 +159,14 @@ export function teamMemberForLogin(login: string): { name: string } | null {
   return m ? { name: m.name } : null;
 }
 
+/** Re-resolve a verified identity against the live roster. Human membership
+ *  can change while an HTTP session or WebSocket is still open. */
+export function refreshWebIdentity(identity: WebIdentity): WebIdentity | null {
+  if (identity.automation || !webAuthRequired()) return identity;
+  const member = teamMemberForLogin(identity.login);
+  return member ? { login: identity.login, name: member.name } : null;
+}
+
 /** Mint a session for a VERIFIED login. Returns null for non-team logins
  *  (fail-closed — the caller should also discard the OAuth token). */
 export function createWebSession(login: string): { token: string; name: string } | null {
@@ -209,14 +219,42 @@ export function resolveWebAuth(req: Request): WebIdentity | null {
     persist();
     return null;
   }
-  if (now - s.lastSeenAt > TOUCH_INTERVAL_MS) {
-    s.lastSeenAt = now;
-    persist();
-  }
-  return {
+  let changed = false;
+  const refreshed = refreshWebIdentity({
     login: s.login,
     name: s.name,
     ...(s.kind === "automation" ? { automation: true } : {}),
+  });
+  if (!refreshed) {
+    sessions().delete(token);
+    persist();
+    audit({
+      kind: "web_auth_signout",
+      login: s.login,
+      user: s.name,
+      reason: "removed_from_roster",
+    });
+    return null;
+  }
+  if (s.name !== refreshed.name) {
+    const previousName = s.name;
+    s.name = refreshed.name;
+    changed = true;
+    audit({
+      kind: "web_auth_identity_refresh",
+      login: s.login,
+      user: refreshed.name,
+      previousName,
+    });
+  }
+  if (now - s.lastSeenAt > TOUCH_INTERVAL_MS) {
+    s.lastSeenAt = now;
+    changed = true;
+  }
+  if (changed) persist();
+  return {
+    ...refreshed,
+    name: s.name,
   };
 }
 

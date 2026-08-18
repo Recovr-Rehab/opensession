@@ -36,6 +36,8 @@ export interface WSClientData {
 	authUser?: string | null;
 	/** Verified GitHub login of the signed-in user (createdByLogin stamping). */
 	authLogin?: string | null;
+	/** Machine sessions do not belong to the human roster. */
+	authAutomation?: boolean;
 	/**
 	 * This socket is still WATCHING its session (transcript keeps streaming, so
 	 * unread/notifications work) but nobody is LOOKING at it — the tab is

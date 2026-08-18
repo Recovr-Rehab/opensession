@@ -59,13 +59,21 @@ function callerName(ctx: RouteContext): string {
 	return claimed?.trim() || "";
 }
 
-/** The caller's roster row. Matched on the full name, which is what a web
- *  session carries (web-auth.ts createWebSession), then on the spellings a
- *  signed-out client might send. */
-function memberFor(name: string): TeamMember | null {
+/** The caller's roster row. A verified GitHub login is authoritative in
+ *  sign-in mode. The display name can be stale when a member was renamed
+ *  between requests. Without sign-in, resolve the spellings a client may
+ *  claim the same way the rest of the identity layer does. */
+function memberFor(name: string, verifiedLogin?: string): TeamMember | null {
 	const key = name.trim().toLowerCase();
-	if (!key) return null;
 	const team = configuredIdentity().team;
+	const loginKey = verifiedLogin?.trim().toLowerCase();
+	if (loginKey) {
+		const verified = team.find(
+			(m) => m.github?.trim().toLowerCase() === loginKey,
+		);
+		if (verified) return verified;
+	}
+	if (!key) return null;
 	return (
 		team.find((m) => m.name.trim().toLowerCase() === key) ||
 		team.find((m) => m.github?.trim().toLowerCase() === key) ||
@@ -107,8 +115,12 @@ export async function handleProfileRoutes(
 	if (!name)
 		return Response.json({ error: "Sign in to edit your profile" }, { status: 401 });
 
+	const verifiedLogin = webAuthRequired() ? ctx.authUser?.login : undefined;
+	const member = memberFor(name, verifiedLogin);
+	const profileName = verifiedLogin && member ? member.name : name;
+
 	if (path === "/api/profile" && req.method === "GET") {
-		return Response.json(profilePayload(name, memberFor(name)));
+		return Response.json(profilePayload(profileName, member));
 	}
 
 	if (path === "/api/profile" && req.method === "PUT") {
@@ -122,7 +134,7 @@ export async function handleProfileRoutes(
 		const invalid = validateProfileFields(body);
 		if (invalid) return Response.json({ error: invalid }, { status: 400 });
 
-		const current = memberFor(name);
+		const current = member;
 		if (!current)
 			return Response.json(
 				{
@@ -149,20 +161,27 @@ export async function handleProfileRoutes(
 			);
 			// Re-find under the lock: the roster can have moved since memberFor.
 			const targetKey = current.name.trim().toLowerCase();
-			const idx = team.findIndex(
-				(m) =>
-					typeof m.name === "string" && m.name.trim().toLowerCase() === targetKey,
+			const targetLogin = verifiedLogin?.trim().toLowerCase();
+			const idx = team.findIndex((m) =>
+				targetLogin
+					? typeof m.github === "string" &&
+						m.github.trim().toLowerCase() === targetLogin
+					: typeof m.name === "string" &&
+						m.name.trim().toLowerCase() === targetKey,
 			);
 			if (idx === -1)
 				return Response.json({ error: "Team member not found" }, { status: 404 });
 
 			const merged: Record<string, unknown> = { ...team[idx] };
+			const lockedCurrent = parseTeamMember(merged);
+			if (!lockedCurrent)
+				return Response.json({ error: "Team member not found" }, { status: 404 });
 			for (const [key, value] of Object.entries(body)) {
 				if (value === null || value === "") delete merged[key];
 				else merged[key] = value;
 			}
 
-			const previousShort = current.name.trim().split(/\s+/)[0] ?? "";
+			const previousShort = lockedCurrent.name.trim().split(/\s+/)[0] ?? "";
 			const nextName = String(merged.name ?? "").trim();
 			const nextShort = nextName.split(/\s+/)[0] ?? "";
 			const shortNameChanged =
@@ -257,8 +276,9 @@ export async function handleProfileRoutes(
 			);
 		try {
 			const bytes = new Uint8Array(await req.arrayBuffer());
-			const image = await setProfileImage(name, bytes, contentType);
-			audit({ kind: "profile_update", user: name, fields: ["image"] });
+			const currentName = memberFor(profileName, verifiedLogin)?.name ?? profileName;
+			const image = await setProfileImage(verifiedLogin || profileName, bytes, contentType);
+			audit({ kind: "profile_update", user: currentName, fields: ["image"] });
 			return Response.json({ ok: true, image });
 		} catch (e) {
 			return Response.json(
@@ -269,8 +289,9 @@ export async function handleProfileRoutes(
 	}
 
 	if (path === "/api/profile/image" && req.method === "DELETE") {
-		clearProfileImage(name);
-		audit({ kind: "profile_update", user: name, fields: ["image"] });
+		const currentName = memberFor(profileName, verifiedLogin)?.name ?? profileName;
+		clearProfileImage(verifiedLogin || profileName);
+		audit({ kind: "profile_update", user: currentName, fields: ["image"] });
 		return Response.json({ ok: true, image: "" });
 	}
 

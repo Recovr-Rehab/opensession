@@ -37,6 +37,8 @@ import { resumeSessionFeed } from "./session-feed";
 import { type SeqEntry, transcriptStore } from "./transcript-store";
 import { startTranscriptWatch } from "./transcript-watch";
 import { MAX_UPLOAD_BYTES, WS_MAX_PAYLOAD_BYTES, asDataUrlList, parseImageDataUrls } from "./uploads";
+import { githubReconnectRequired } from "./github-auth";
+import { refreshWebIdentity } from "./web-auth";
 import { BOOT_ID, allClients, broadcastToAll, broadcastToSession, globalPresenceFrame, joinSession, leaveSession, markClientSeen, setClientAway } from "./ws-hub";
 import { existsSync, readFileSync, statSync, watch } from "fs";
 import { homedir } from "node:os";
@@ -449,11 +451,27 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 		// entire dispatch is fenced; the switch body keeps its indentation to
 		// avoid a 1500-line re-indent in the shared checkout.
 		try {
-		// GitHub web sign-in active (web-auth.ts): the upgrade stamped this
-		// socket with the cookie's verified identity — it overrides whatever
-		// name the client claims in any message, so attribution and per-user
-		// gating stop trusting self-declared users.
-		if (ws.data?.authUser) msg.user = ws.data.authUser;
+		// GitHub web sign-in active (web-auth.ts): re-resolve the verified login
+		// on every message. A roster rename follows an already-open socket, while
+		// removing someone closes it instead of leaving a cached identity active.
+		if (ws.data?.authLogin) {
+			const identity = refreshWebIdentity({
+				login: ws.data.authLogin,
+				name: ws.data.authUser || ws.data.authLogin,
+				...(ws.data.authAutomation ? { automation: true } : {}),
+			});
+			if (
+				!identity ||
+				(!identity.automation && githubReconnectRequired(identity.login))
+			) {
+				ws.close(4001, identity ? "GitHub reconnect required" : "Roster membership changed");
+				return;
+			}
+			const firstName = identity.name.split(" ")[0] || identity.name;
+			ws.data.authUser = firstName;
+			ws.data.user = firstName;
+			msg.user = firstName;
+		}
 		// Anything that isn't a heartbeat is a person doing something, so it
 		// refreshes this socket's attention (ws-hub's idle window — a face means
 		// "here now"). `away` carries its own stamp.
