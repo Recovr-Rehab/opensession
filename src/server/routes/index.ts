@@ -33,6 +33,7 @@ import { handleKeychainRoutes } from "./keychain";
 import { handleDeployRoutes } from "./deploys";
 import { handlePeopleRoutes } from "./people";
 import { handlePrefsRoutes } from "./prefs";
+import { handleProfileRoutes } from "./profile";
 import { handleSecurityRoutes } from "./security";
 import { handleGoalsRoutes } from "./goals";
 import { handleConnectionsRoutes } from "./connections";
@@ -88,6 +89,7 @@ export const routeHandlers: RouteHandler[] = [
 	handleDeployRoutes,
 	handlePeopleRoutes,
 	handlePrefsRoutes,
+	handleProfileRoutes,
 	handleSecurityRoutes,
 	handleGoalsRoutes,
 	handleConnectionsRoutes,

@@ -15,6 +15,19 @@
  */
 
 export const SETTINGS_KEYWORDS: Record<string, string[]> = {
+	profile: [
+		"avatar",
+		"picture",
+		"photo",
+		"profile picture",
+		"my name",
+		"change my name",
+		"rename",
+		"display name",
+		"timezone",
+		"my email",
+		"about me",
+	],
 	myAccounts: [
 		"oauth",
 		"sign in",

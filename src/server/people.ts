@@ -9,6 +9,7 @@
  */
 
 import { configuredIdentity, type ReviewTeam } from "./config";
+import { profileImagesByMemberName } from "./user-profiles";
 
 export interface DirectoryPerson {
 	/** Picker/display first name — the value presence viewers,
@@ -20,11 +21,17 @@ export interface DirectoryPerson {
 	github?: string;
 	/** IANA timezone, when configured. */
 	timezone?: string;
+	/** Uploaded profile picture as a `/media` URL, when they set one. Takes
+	 *  precedence over the GitHub avatar in every client (user-profiles.ts). */
+	image?: string;
 }
 
 /** The mentionable/pickable team, in config order. Members flagged
  *  `directory: false` (attribution-only identities) are excluded. */
 export function teamDirectory(): DirectoryPerson[] {
+	// One pass over the picture store for the whole roster rather than a file
+	// read per member per caller: this runs on every GET /api/people.
+	const images = profileImagesByMemberName();
 	return configuredIdentity()
 		.team.filter((m) => m.directory !== false)
 		.map((m) => ({
@@ -32,6 +39,7 @@ export function teamDirectory(): DirectoryPerson[] {
 		fullName: m.name,
 		...(m.github ? { github: m.github } : {}),
 		...(m.timezone ? { timezone: m.timezone } : {}),
+		...(images[m.name] ? { image: images[m.name] } : {}),
 	}));
 }
 

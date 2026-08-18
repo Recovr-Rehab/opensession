@@ -46,6 +46,7 @@ import { UsagePanel } from "./settings/UsagePanel";
 import { NotificationsPanel } from "./settings/NotificationsPanel";
 import { PapercutsPanel } from "./settings/PapercutsPanel";
 import { PreferencesPanel } from "./settings/PreferencesPanel";
+import { ProfilePanel } from "./settings/ProfilePanel";
 import { ShortcutsPanel } from "./settings/ShortcutsPanel";
 import { PrewarmingPanel } from "./settings/PrewarmingPanel";
 import { ReposPanel } from "./settings/ReposPanel";
@@ -76,6 +77,7 @@ export type ToolSectionKey = "automations" | "goals" | "security";
 
 /** Listed in nav order (SECTIONS below). */
 export type SettingsSectionKey =
+	| "profile"
 	| "myAccounts"
 	| "preferences"
 	| "notifications"
@@ -116,6 +118,25 @@ const SECTIONS: {
 	icon: React.ReactNode;
 	adminOnly?: boolean;
 }[] = [
+	{
+		key: "profile",
+		label: "Profile",
+		group: "Personal",
+		icon: (
+			<svg
+				width="20"
+				height="20"
+				viewBox="0 0 16 16"
+				fill="none"
+				stroke="currentColor"
+				strokeWidth="1.4"
+			>
+				<rect x="2.2" y="2.4" width="11.6" height="11.2" rx="3" />
+				<circle cx="8" cy="6.4" r="1.9" />
+				<path d="M4.8 12.2a3.4 3.4 0 0 1 6.4 0" strokeLinecap="round" />
+			</svg>
+		),
+	},
 	{
 		key: "myAccounts",
 		label: "My accounts",
@@ -726,6 +747,7 @@ function SectionPanel({
 			{section === "sandboxes" && <SandboxesPanel />}
 			{section === "runners" && <RunnersPanel />}
 			{section === "connections" && <Connections />}
+			{section === "profile" && <ProfilePanel />}
 			{section === "myAccounts" && <MyAccountsPanel />}
 			{section === "memory" && <MemoryPanel />}
 			{section === "prewarming" && <PrewarmingPanel />}

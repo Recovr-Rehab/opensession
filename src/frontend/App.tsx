@@ -262,6 +262,7 @@ const NO_SUBAGENTS: SubagentRef[] = [];
 // How long the launch splash may hold the screen while the first session list
 // is still in flight. Past this the app takes over and reports for itself.
 const SPLASH_MAX_MS = 8000;
+const SPLASH_EXIT_MS = 400;
 
 // Route views that render as a tool section inside the Settings surface.
 const TOOL_VIEWS = ["automations", "security", "goals"] as const;
@@ -272,6 +273,7 @@ function isToolView(view: string): view is ToolView {
 
 // Non-tool settings sections, addressable as <base>/settings/<section>.
 const SETTINGS_SECTIONS = new Set<SettingsSectionKey>([
+	"profile",
 	"myAccounts",
 	"preferences",
 	"notifications",
@@ -572,6 +574,7 @@ export function App(
 		patch,
 		remove,
 	} = useSessions({ loadArchived: route.view === "archived" });
+	const [launchComplete, setLaunchComplete] = useState(false);
 	const auth = useAuthStatus();
 	const currentUser = useCurrentUser();
 	const { connected, send, addHandler } = useWebSocket();
@@ -1441,7 +1444,7 @@ export function App(
 		const hide = () => {
 			if (!splash) return;
 			splash.classList.add("splash-hide");
-			removal = setTimeout(() => splash.remove(), 400);
+			removal = setTimeout(() => splash.remove(), SPLASH_EXIT_MS);
 		};
 		if (!loading) {
 			// The window is only handed over when there is something in it: the
@@ -1458,6 +1461,12 @@ export function App(
 			clearTimeout(cap);
 			clearTimeout(removal);
 		};
+	}, [loading]);
+
+	useEffect(() => {
+		if (loading) return;
+		const timer = setTimeout(() => setLaunchComplete(true), SPLASH_EXIT_MS);
+		return () => clearTimeout(timer);
 	}, [loading]);
 
 	// When a session is created from the New Session form or Ask box, jump straight into it
@@ -4294,14 +4303,6 @@ export function App(
 							}}
 							onSetStatus={setSessionLanes}
 						/>
-						{/* Desktop: docked toast at the sidebar bottom. On phones the
-						    update nudge moves to the top bar (next to the brand). */}
-						{!isPhone && (
-							<div className="pointer-events-none absolute right-2 bottom-2 left-2 z-[9500] flex flex-col gap-2">
-								<DesktopLinkToast />
-								<UpdatePill addHandler={addHandler} />
-							</div>
-						)}
 						{/* Drag the right edge to resize: a hover/active hairline over a
 						    wider invisible grab strip. Hidden on mobile, where the drawer
 						    is a fixed width. It sits above both primary (20) and nested
@@ -4689,6 +4690,16 @@ export function App(
 						<div className={RIGHT_PANEL_SLOT} ref={setRightPanelEl} />
 					</div>
 				</div>
+				)}
+
+				{/* Desktop notifications float over the sidebar rather than living inside
+				    it. Their readable width and interactions therefore survive a narrow or
+				    collapsed sidebar. Phones keep the compact update pill in the top bar. */}
+				{!isPhone && (
+					<div className="pointer-events-none fixed bottom-2 left-2 z-[9500] flex w-fit max-w-[calc(100vw-16px)] flex-col gap-2">
+						{launchComplete && <DesktopLinkToast />}
+						<UpdatePill addHandler={addHandler} />
+					</div>
 				)}
 
 				{/* Mobile-only floating + on the root list page — thumb-reach shortcut

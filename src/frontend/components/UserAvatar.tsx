@@ -9,9 +9,23 @@ import { cn } from "../ui/cn";
  */
 const GITHUB_LOGIN: Record<string, string> = {};
 
+/**
+ * Uploaded profile pictures, same keying as the login map above. A person who
+ * has set one is drawn with it everywhere instead of their GitHub avatar
+ * (server: user-profiles.ts, published on GET /api/people).
+ */
+const PROFILE_IMAGE: Record<string, string> = {};
+
 /** Merge directory-fetched logins into the map (lib/people.ts). */
 export function registerGithubLogins(entries: Record<string, string>) {
 	Object.assign(GITHUB_LOGIN, entries);
+}
+
+/** Merge directory-fetched pictures into the map (lib/people.ts). Replaces
+ *  rather than merges per key, so clearing a picture clears the tile. */
+export function registerProfileImages(entries: Record<string, string>) {
+	for (const key of Object.keys(PROFILE_IMAGE)) delete PROFILE_IMAGE[key];
+	Object.assign(PROFILE_IMAGE, entries);
 }
 
 export function githubLoginFor(name?: string | null): string | null {
@@ -20,20 +34,28 @@ export function githubLoginFor(name?: string | null): string | null {
 	return (first && GITHUB_LOGIN[first]) || null;
 }
 
+export function profileImageFor(name?: string | null): string | null {
+	if (!name) return null;
+	const first = name.trim().split(/\s+/)[0]?.toLowerCase();
+	return (first && PROFILE_IMAGE[first]) || null;
+}
+
 /**
- * Squircle user picture: the person's GitHub avatar, falling back to their
- * initial for unknown users (the agent persona, Anonymous) or when the image fails to
- * load. `children` render on top of the squircle — the presence facepile uses
- * that for its count badge.
+ * Squircle user picture: their uploaded profile picture, else their GitHub
+ * avatar, else their initial (the agent persona, Anonymous, or an image that
+ * fails to load). `children` render on top of the squircle — the presence
+ * facepile uses that for its count badge.
  *
  * `login` overrides the directory lookup for callers that already hold the
  * GitHub login — the members roster edits the identity table itself, so its
  * rows must picture the login being typed rather than the one /api/people
- * last published.
+ * last published. `image` does the same for the uploaded picture, which is
+ * what lets the profile page preview a new one before it is saved.
  */
 export function UserAvatar({
 	name,
 	login: loginProp,
+	image: imageProp,
 	size = 24,
 	edge = true,
 	className,
@@ -43,6 +65,8 @@ export function UserAvatar({
 }: {
 	name: string;
 	login?: string | null;
+	/** Uploaded picture URL. Overrides the directory lookup. */
+	image?: string | null;
 	size?: number;
 	/** Draw the hairline around a photo. Off where the picture is one glyph in
 	 *  a row of chrome and an edge reads as a second box. */
@@ -53,9 +77,13 @@ export function UserAvatar({
 	children?: React.ReactNode;
 }) {
 	const login = loginProp?.trim() || githubLoginFor(name);
+	// An uploaded picture is the person's own choice, so it outranks the
+	// GitHub avatar, which is only ever a stand-in for one.
+	const uploaded = imageProp?.trim() || profileImageFor(name);
+	const src = uploaded || (login ? `https://github.com/${login}.png?size=${size * 2}` : "");
 	const [failed, setFailed] = useState(false);
-	useEffect(() => setFailed(false), [login]);
-	const picture = !!login && !failed;
+	useEffect(() => setFailed(false), [src]);
+	const picture = !!src && !failed;
 	return (
 		<span
 			className={cn(
@@ -80,7 +108,7 @@ export function UserAvatar({
 		>
 			{picture ? (
 				<img
-					src={`https://github.com/${login}.png?size=${size * 2}`}
+					src={src}
 					alt={name}
 					// `corner-shape` is not inherited, and base.css squircles
 					// anything carrying a `rounded-*` class — so a photo inside a

@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import { writeJsonAtomic } from "./shared/atomic-write";
+import { NAME_KEYED_STORES, renameUserState } from "./shared/user-store";
 import { getPins, setPins } from "./pins";
 import { getLanes, setLanes } from "./lanes";
 import { getPersonalPrompt, setPersonalPrompt } from "./personal-prompts";
@@ -83,5 +84,85 @@ describe("per-user flat-file stores", () => {
 		expect(getPins("Nobody")).toEqual([]);
 		expect(getLanes("Nobody")).toEqual({});
 		expect(getPersonalPrompt("Nobody")).toBe("");
+	});
+});
+
+// Renaming yourself on Settings > Personal > Profile changes the display name
+// these stores file people under, so the state has to travel with the person.
+describe("renameUserState", () => {
+	beforeEach(() => {
+		for (const store of [...NAME_KEYED_STORES, "personal-prompts"]) {
+			rmSync(`${root}/.opensession-${store}`, { recursive: true, force: true });
+		}
+	});
+
+	test("carries a renamed person's state to the new name", () => {
+		setPins("Kent", ["os-1"]);
+		setLanes("Kent", { "os-1": "review" });
+		const carried = renameUserState("Kent", "Kentaro");
+		expect(carried).toContain("pins");
+		expect(carried).toContain("lanes");
+		expect(getPins("Kentaro")).toEqual(["os-1"]);
+		expect(getLanes("Kentaro")).toEqual({ "os-1": "review" });
+	});
+
+	// A copy, not a move: the old file is the rollback if the rename was wrong.
+	test("leaves the old name's state in place", () => {
+		setPins("Kent", ["os-1"]);
+		renameUserState("Kent", "Kentaro");
+		expect(getPins("Kent")).toEqual(["os-1"]);
+	});
+
+	test("never overwrites state the new name already has", () => {
+		setPins("Kent", ["os-old"]);
+		setPins("Kentaro", ["os-existing"]);
+		expect(renameUserState("Kent", "Kentaro")).not.toContain("pins");
+		expect(getPins("Kentaro")).toEqual(["os-existing"]);
+	});
+
+	// canonicalName hashes the LOWERCASED name but keeps the original case in
+	// the filename stem, so a capitalization fix is still a different file and
+	// still has to carry. This is the case that would otherwise look harmless.
+	test("carries a capitalization fix", () => {
+		setPins("kent", ["os-1"]);
+		expect(renameUserState("kent", "Kent")).toContain("pins");
+		expect(getPins("Kent")).toEqual(["os-1"]);
+	});
+
+	test("renaming to the same name does nothing", () => {
+		setPins("Kent", ["os-1"]);
+		expect(renameUserState("Kent", "Kent ")).toEqual([]);
+	});
+
+	test("carries state left under a legacy filename", () => {
+		seedLegacy("pins", "Kent", { pins: ["os-legacy"] });
+		expect(renameUserState("Kent", "Kentaro")).toContain("pins");
+		expect(getPins("Kentaro")).toEqual(["os-legacy"]);
+	});
+
+	// personal-prompts keys on the resolved teammate, so it already follows a
+	// person through a rename. Copying it would write a file nothing reads.
+	test("skips the stores that key on the person rather than the name", () => {
+		expect(NAME_KEYED_STORES).not.toContain("personal-prompts" as never);
+	});
+
+	// The list is hand-maintained, so check it against the real call sites: a
+	// store added without a line here would orphan silently on every rename.
+	test("covers every name-keyed store in the codebase", async () => {
+		const { Glob } = await import("bun");
+		const declared = new Set<string>(NAME_KEYED_STORES);
+		// The deliberate exclusions: both key on the resolved person rather than
+		// on the display name, so a rename already carries them.
+		declared.add("personal-prompts");
+		declared.add("profiles");
+		const missing: string[] = [];
+		for await (const file of new Glob("src/server/**/*.ts").scan(".")) {
+			const source = await Bun.file(file).text();
+			if (!source.includes("userStore<")) continue;
+			for (const m of source.matchAll(/name:\s*"([a-z-]+)"/g)) {
+				if (!declared.has(m[1])) missing.push(`${m[1]} (${file})`);
+			}
+		}
+		expect(missing).toEqual([]);
 	});
 });

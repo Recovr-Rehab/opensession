@@ -74,6 +74,71 @@ export interface UserStore<T> {
 	set(user: string, value: unknown): T;
 }
 
+/**
+ * Every store whose filename keys on the SELF-SELECTED display name, so a
+ * rename can carry them (renameUserState below). `drafts` is in the list even
+ * though drafts.ts predates this module: it writes the same filename scheme,
+ * which is where the scheme came from.
+ *
+ * personal-prompts is deliberately absent. It keys on the resolved teammate,
+ * so it already follows a person through a rename and copying it would write
+ * a second file under a key nothing reads.
+ *
+ * A store missing from this list is not an error the type system can catch, so
+ * user-store.test.ts asserts the list against the repo's own `userStore(`
+ * call sites.
+ */
+export const NAME_KEYED_STORES = [
+	"drafts",
+	"hides",
+	"lanes",
+	"pins",
+	"reads",
+	"snoozes",
+	"tab-colors",
+	"ui-prefs",
+] as const;
+
+/**
+ * Move one person's per-user state from one display name to another.
+ *
+ * The display name is the filename, so a rename would otherwise orphan someone
+ * quietly: their pins, read marks, lanes, snoozes, hides, tab colors, drafts
+ * and UI prefs would all still be on disk under a name nothing looks up, and
+ * the app would show them a factory-fresh sidebar. Nothing errors, which is
+ * what makes it worth handling here rather than leaving to the caller.
+ *
+ * Copies rather than moves, and never overwrites: the old file stays as a
+ * rollback, and a destination that already has state (renaming onto a name you
+ * used before) keeps what is already there. Returns the stores it carried.
+ */
+export function renameUserState(from: string, to: string): string[] {
+	const a = from.trim();
+	const b = to.trim();
+	// Only a rename that lands on the same FILE is a no-op. Case is not that
+	// rename: canonicalName hashes the lowercased identity but keeps the
+	// original case in the stem, so "Kent" and "kent" are two files that agree
+	// about the person. Fixing your own capitalization has to carry state too.
+	if (!a || !b || canonicalName(a) === canonicalName(b)) return [];
+	const carried: string[] = [];
+	for (const name of NAME_KEYED_STORES) {
+		const root = stateDir(name);
+		const target = `${root}/${canonicalName(b)}.json`;
+		if (existsSync(target)) continue;
+		const source = [canonicalName(a), ...legacyNames(a)]
+			.map((stem) => `${root}/${stem}.json`)
+			.find((file) => existsSync(file));
+		if (!source) continue;
+		try {
+			const raw = JSON.parse(readFileSync(source, "utf8"));
+			mkdirSync(root, { recursive: true });
+			writeJsonAtomic(target, raw);
+			carried.push(name);
+		} catch {}
+	}
+	return carried;
+}
+
 export function userStore<T>(options: {
 	/** State-dir base: "pins" → `~/.opensession-pins`. */
 	name: string;

@@ -7,7 +7,10 @@
 
 import { useEffect, useState } from "react";
 import { BASE_PATH } from "./base";
-import { registerGithubLogins } from "../components/UserAvatar";
+import {
+	registerGithubLogins,
+	registerProfileImages,
+} from "../components/UserAvatar";
 import { setKnownPeople } from "./markdown";
 import type { FileMention } from "./api";
 
@@ -17,6 +20,8 @@ export interface Person {
 	fullName: string;
 	github?: string;
 	timezone?: string;
+	/** Uploaded profile picture (a `/media` URL), when they set one. */
+	image?: string;
 }
 
 export interface ReviewTeam {
@@ -39,6 +44,17 @@ export function getPeople(): Person[] {
 export function getReviewTeams(): ReviewTeam[] {
 	void ensurePeople();
 	return reviewTeams;
+}
+
+/**
+ * Re-fetch the roster and tell every subscriber. The roster is otherwise
+ * fetched once per page load, which is right for something an admin edits
+ * rarely, and wrong the moment you edit your OWN row: your new name and
+ * picture have to appear without a reload (Settings > Personal > Profile).
+ */
+export function refreshPeople(): Promise<void> {
+	fetched = false;
+	return ensurePeople();
 }
 
 let inflight: Promise<void> | null = null;
@@ -68,6 +84,13 @@ export function ensurePeople(): Promise<void> {
 					list
 						.filter((p) => p.github)
 						.map((p) => [p.name.toLowerCase(), p.github as string]),
+				),
+			);
+			registerProfileImages(
+				Object.fromEntries(
+					list
+						.filter((p) => p.image)
+						.map((p) => [p.name.toLowerCase(), p.image as string]),
 				),
 			);
 			window.dispatchEvent(new Event(CHANGE_EVENT));
