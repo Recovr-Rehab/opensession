@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import type { OsReview, SupportThread, UnifiedSession } from "../lib/types";
 import type { ReviewQueueItem } from "../lib/review-queue";
 import { relativeTime, type OpenPr } from "../lib/api";
+import { CAP_LABEL } from "../lib/cap-label";
 import { providerFromUrl } from "../lib/provider";
 import { refTone, type PrTone } from "../lib/pr-refs";
 import { prChipClass } from "../lib/pr-tone-classes";
@@ -179,7 +180,9 @@ export function CardPrChip({
 			title={`Open on ${providerFromUrl(url).name}`}
 			className={prChipClass(tone, "card")}
 		>
-			{number != null ? `#${number}` : "PR"}
+			{/* Cap band, so the number centres on the chip the way the action
+			    button beside it centres its word. */}
+			<span className={CAP_LABEL}>{number != null ? `#${number}` : "PR"}</span>
 			<IconArrowUpRight size={15} className="opacity-70" />
 		</a>
 	);

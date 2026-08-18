@@ -64,6 +64,39 @@ describe("hover cards drop the repo and the idle timestamp", () => {
 		expect(html).not.toContain("mt-3.5");
 	});
 
+	// A word with no descenders ("Archive", "#5675") leaves the line box's
+	// reserved descender space empty, so centring the box puts the ink most of
+	// a pixel high on the plate. The label carries CAP_LABEL to centre the ink
+	// itself; it has to be a span, because the trim is a no-op on the control's
+	// own flex box.
+	test("the archive action centres its word on the cap band", () => {
+		const html = renderToStaticMarkup(
+			<WsCardBody
+				row={{ ...row([session()]), status: "merged" }}
+				onArchive={() => {}}
+				onOpen={() => {}}
+			/>,
+		);
+		expect(html).toMatch(
+			new RegExp(`<span class="[^"]*text-box[^"]*">Archive</span>`),
+		);
+	});
+
+	test("the PR chip centres its number the same way", () => {
+		const html = renderToStaticMarkup(
+			<SessionCardBody
+				session={session({
+					prUrl: "https://github.com/tellahq/example/pull/1",
+					prNumber: 1,
+					prState: "OPEN",
+				})}
+			/>,
+		);
+		expect(html).toMatch(
+			new RegExp(`<span class="[^"]*text-box[^"]*">#1</span>`),
+		);
+	});
+
 	test("a diff still holds the head line it shares with the repo's old slot", () => {
 		const withPr = session({
 			prAdditions: 25,

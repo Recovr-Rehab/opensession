@@ -102,11 +102,14 @@ export interface WsCardRow {
 	running: boolean;
 }
 
-// Footer action button base — the color variant carries the status meaning
+// Footer action button base. The color variant carries the status meaning
 // (green = ready to merge, purple = merged/archive, accent = needs an answer).
 // Sized like ui/button's `sm`, and tight-leading for the same reason that
 // primitive is: a text utility's stock line height pads one side of the label
-// more than the other, which on a solid plate reads as the word sitting high.
+// more than the other. That only evens the leading out, though, and a word
+// still sits high on the plate because the line box reserves descender space
+// the word never uses, so the label itself takes {@link CAP_LABEL}, which is
+// what actually centres the ink.
 export const WS_ACTION =
 	"inline-flex min-h-[26px] shrink-0 cursor-pointer items-center justify-center gap-1 rounded-md px-2.5 text-xs font-medium leading-none no-underline";
 

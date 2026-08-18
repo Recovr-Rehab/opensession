@@ -1,3 +1,4 @@
+import { CAP_LABEL } from "./cap-label";
 import type { SessionSource } from "./types";
 
 /**
@@ -60,10 +61,5 @@ export const SOURCE_CHIP_ARCHIVED =
 	"duration-[var(--dur-micro)] ease-[var(--ease)] [&:hover:not(:disabled)]:bg-hover " +
 	"[&:hover:not(:disabled)]:text-fg disabled:cursor-default disabled:opacity-60";
 
-/**
- * The chip's label. `text-box` trims the line box to cap height + baseline, so
- * the flex row centres the INK rather than the font's line box (which carries
- * descender space the word never uses and lands it a pixel high). Chrome and
- * Safari trim it; Firefox falls back to em-box centring, within a pixel.
- */
-export const SOURCE_CHIP_ARCHIVED_LABEL = "[text-box:trim-both_cap_alphabetic]";
+/** The chip's label, centred on its cap band like every other one. */
+export const SOURCE_CHIP_ARCHIVED_LABEL = CAP_LABEL;

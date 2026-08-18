@@ -1,4 +1,5 @@
 import type { WorkspaceOverview } from "../../lib/api";
+import { CAP_LABEL } from "../../lib/cap-label";
 import { providerFromUrl } from "../../lib/provider";
 import { sessionPrMerged } from "../../lib/session-prs";
 import { MAX_HOVERCARD_MEDIA, TONE_TEXT, WS_ACTION, compactNum, hoverState, prTone, prettyReview, useSessionOverview, useWsOverview, wsPrInfo, type WsCardRow } from "../../lib/sidebar-hover";
@@ -499,7 +500,9 @@ export function WsCardBody({
 							)
 						}
 					>
-						{row.sessions.some((c) => c.waitingForInput) ? "Answer" : "Open"}
+						<span className={CAP_LABEL}>
+							{row.sessions.some((c) => c.waitingForInput) ? "Answer" : "Open"}
+						</span>
 					</button>
 				) : row.status === "merged" ? (
 					<button
@@ -518,7 +521,7 @@ export function WsCardBody({
 							<path d="M3.25 5.75v6.5a1 1 0 0 0 1 1h7.5a1 1 0 0 0 1-1v-6.5" />
 							<path d="M6.5 8.5h3" strokeLinecap="round" />
 						</svg>
-						Archive
+						<span className={CAP_LABEL}>Archive</span>
 					</button>
 				) : row.status === "review" && prSession?.prUrl ? (
 					<a
@@ -531,7 +534,7 @@ export function WsCardBody({
 								: `${WS_ACTION} border border-line bg-surface text-dim hover:bg-hover hover:text-fg`
 						}
 					>
-						{prReady ? "Merge" : "Review"}
+						<span className={CAP_LABEL}>{prReady ? "Merge" : "Review"}</span>
 						<IconArrowUpRight size={15} className="opacity-80" />
 					</a>
 				) : null}
