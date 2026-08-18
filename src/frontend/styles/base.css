@@ -1561,7 +1561,7 @@ html.wco .app-body.sidebar-collapsed .wco-chrome {
    as well as the mirror so the two still agree glyph for glyph; a margin on
    this span alone would slide the painted text off the caret behind it), and
    wears it only while a mention is in the draft, so an ordinary sentence keeps
-   the type's own spacing. See `composerPillSpacing` in
+   the type's own spacing. See `composerMentionSpacing` in
    lib/composer-classes.ts.
 
    That sets a space at 7.2px, and the wash takes 5px of it on each side. What
@@ -1634,13 +1634,11 @@ html.wco .app-body.sidebar-collapsed .wco-chrome {
    destination rather than an alert (see `.session-link[data-session-id]`).
    Accent on both would spend the one distinction the two pills exist to draw.
 
-   It reaches the same 5px the mention does, and buys the room the same way:
-   the draft widens its word space while a pill is in it (`composerPillSpacing`
-   in lib/composer-classes.ts), which takes a 3.7px space to 7.2px and leaves
-   2.2px of gap outside the wash. A pill has to sit apart from the words around
-   it, and the space beside it is the only place that room can come from — a
-   wash that reaches to the edge of the next word reads as text with a
-   highlighter through it rather than as an object in the sentence.
+   It reaches 4px rather than the mention's 5px, and that one pixel keeps it out
+   of the word-spacing trade. A pasted link often sits inside a full sentence,
+   where widening every space is visibly worse than drawing this wash one pixel
+   tighter. At 4px the wash lands inside the space the type already gives it,
+   under the neighbouring word's own side bearing.
 
    Where the mention paints its wash on a pseudo-element, this one paints on
    the span, and that is the difference between the two that is NOT taste. A
@@ -1650,7 +1648,7 @@ html.wco .app-body.sidebar-collapsed .wco-chrome {
    pill around the id. `box-decoration-break: clone` gives each line fragment
    its own capsule.
 
-   The 5px then has to come from somewhere that is not padding, because
+   The 4px then has to come from somewhere that is not padding, because
    horizontal padding on an inline box moves every glyph after it and the
    mirror may not move a glyph. Two offset copies of the box do it instead: an
    outer box-shadow is clipped to OUTSIDE the border box, so each copy shows
@@ -1669,16 +1667,16 @@ html.wco .app-body.sidebar-collapsed .wco-chrome {
 	border-radius: 999px; corner-shape: var(--cs);
 	background: var(--hover);
 	box-shadow:
-		5px 0 0 var(--hover),
-		-5px 0 0 var(--hover);
+		4px 0 0 var(--hover),
+		-4px 0 0 var(--hover);
 	-webkit-box-decoration-break: clone;
 	box-decoration-break: clone;
 }
 .composer-hl .cmp-session[data-hover] {
 	background: var(--hover-strong);
 	box-shadow:
-		5px 0 0 var(--hover-strong),
-		-5px 0 0 var(--hover-strong);
+		4px 0 0 var(--hover-strong),
+		-4px 0 0 var(--hover-strong);
 }
 /* The glyph, painted into the slot the `os-` / `bks-` prefix lends it — the
    same trade the face makes with the `@`, and for the same reason: the mirror

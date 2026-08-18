@@ -60,7 +60,7 @@ import {
   composerSendQueue,
   composerSendSteer,
   composerSendStop,
-  composerPillSpacing,
+  composerMentionSpacing,
   composerTextarea,
   composerTextareaPadding,
   composerTextareaPaddingMinimized,
@@ -967,12 +967,12 @@ export function Composer({
     () => composerMentionRanges(displayText, people),
     [displayText, people],
   );
-  // A pill's padding is bought out of the space beside it, so the draft pays a
-  // wider word space only while it holds one. Both the field and the mirror
-  // wear it, or the painted text slides off the caret behind it. Both KINDS of
-  // pill ask for it: a session id sits between words exactly as a mention does,
-  // and without the room its wash runs up against them.
-  const hasPill = mentionRanges.length > 0 || sessionRanges.length > 0;
+  // A mention pill's padding is bought out of the space beside it, so the draft
+  // pays a wider word space only while it holds one. Both the field and the
+  // mirror wear it, or the painted text slides off the caret behind it. Session
+  // pills use a narrower wash instead: a pasted link often sits inside a full
+  // sentence, where widening every space is visibly wrong.
+  const hasMention = mentionRanges.length > 0;
   useEffect(() => {
     // The textarea scrolls internally at max-height; keep the mirror locked to it.
     const el = textareaRef.current;
@@ -1446,7 +1446,7 @@ export function Composer({
                 composerTextarea,
                 composerTextareaPadding,
                 "pointer-events-none absolute inset-0 z-0 overflow-hidden text-fg break-words whitespace-pre-wrap select-none",
-                hasPill && composerPillSpacing,
+                hasMention && composerMentionSpacing,
                 // A pill's wash reaches past its own box (base.css), so one at
                 // either end of a line would be cut off by this box. The
                 // padding pushes the clip edge out; the matching negative
@@ -1476,7 +1476,7 @@ export function Composer({
             className={cn(
               "composer-textarea",
               composerTextarea,
-              hasPill && composerPillSpacing,
+              hasMention && composerMentionSpacing,
               minimized
                 ? composerTextareaPaddingMinimized
                 : composerTextareaPadding,

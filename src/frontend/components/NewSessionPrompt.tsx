@@ -18,7 +18,6 @@ import {
 	composerHighlightHtml,
 	paintPillHover,
 } from "../lib/composer-highlight";
-import { composerPillSpacing } from "../lib/composer-classes";
 import { noAutofill } from "../lib/composer-autofill";
 import { useSessionNameProjection } from "../hooks/useSessionNameProjection";
 import { useFileMentions } from "./useFileMentions";
@@ -371,9 +370,8 @@ export function NewSessionPrompt({
 							"composer-hl",
 							TEXTAREA,
 							"pointer-events-none absolute inset-0 z-0 h-full select-none overflow-hidden break-words whitespace-pre-wrap",
-							composerPillSpacing,
 							// Padding here is two things added together, and both are
-							// load-bearing. 6px of it is clearance: a pill's wash reaches
+							// load-bearing. 4px of it is clearance: a pill's wash reaches
 							// past its own box (base.css), so one at either end of a line
 							// would be clipped by this box, and the negative margin plus
 							// the width give that room back outside the content. The
@@ -381,7 +379,7 @@ export function NewSessionPrompt({
 							// field keeps, unlike the session composer, which zeroes it.
 							// Without it every glyph here sits two pixels left of the one
 							// it paints over, which puts the wash off the word.
-							"-mx-[6px] w-[calc(100%+12px)] px-[8px] py-[2px]",
+							"-mx-[4px] w-[calc(100%+8px)] px-[6px] py-[2px]",
 						)}
 						aria-hidden="true"
 						dangerouslySetInnerHTML={{ __html: sessionHighlightHtml }}
@@ -391,10 +389,8 @@ export function NewSessionPrompt({
 					ref={textareaRef}
 					className={cn(
 						TEXTAREA,
-						sessionPill && [
-							composerPillSpacing,
+						sessionPill &&
 							"relative z-[1] break-words text-transparent caret-[var(--text)]",
-						],
 					)}
 					value={sessionNames.displayText}
 					onBeforeInput={sessionNames.handleBeforeInput}
