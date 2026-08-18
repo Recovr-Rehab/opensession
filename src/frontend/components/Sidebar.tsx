@@ -3715,8 +3715,17 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		// A fresh registered repo still earns its project band in the default
 		// lens. Its existing + action is the shortest path to the first session.
 		// Search and teammate lenses stay result-driven rather than filling with
-		// unrelated empty projects.
-		if (!search && filter.person === "me" && filter.autoCreated === "show") {
+		// unrelated empty projects, and so does the whole list once "Empty
+		// projects" is set to hidden — except when the list is scoped to one
+		// project, where the band is what was asked for rather than clutter.
+		const emptyBands =
+			filter.repo !== "all" || filter.emptyProjects === "show";
+		if (
+			emptyBands &&
+			!search &&
+			filter.person === "me" &&
+			filter.autoCreated === "show"
+		) {
 			for (const repo of registeredRepos) {
 				if (filter.repo === "all" || filter.repo === repo) present.add(repo);
 			}

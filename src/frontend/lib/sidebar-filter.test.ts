@@ -76,6 +76,14 @@ describe("readStoredFilter", () => {
 		expect(readStoredFilter().groupBy).toBe("auto");
 	});
 
+	// Empty project bands are the long-standing behaviour, so a blob that
+	// never heard of the setting keeps them.
+	test("empty projects show unless they were hidden", () => {
+		expect(readStoredFilter().emptyProjects).toBe("show");
+		write({ v: FILTER_VERSION, emptyProjects: "hide" });
+		expect(readStoredFilter().emptyProjects).toBe("hide");
+	});
+
 	test("a grouping nobody recognises reads as unset", () => {
 		write({ v: FILTER_VERSION, groupBy: "sideways" });
 		expect(readStoredFilter().groupBy).toBe("auto");

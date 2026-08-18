@@ -107,6 +107,12 @@ export type PrsFilter = "default" | "all" | "none";
 // name (components/sidebar/AutoCreatedMark), so this is the way to get them out
 // of the list on a day when there are more of them than you can read.
 export type AutoCreatedFilter = "show" | "hide";
+// A registered project with no work in it still draws a band, so a repo you
+// just connected has somewhere to start from (see renderRepoGroups). On an
+// instance with more projects than you work in, that is a screen of empty
+// headings, and this takes them out. Scoping the list to one project still
+// shows that project's band: asking for it by name is not clutter.
+export type EmptyProjectsFilter = "show" | "hide";
 export const DEFAULT_PROJECT = DEFAULT_REPO_ID;
 export const FILTER_KEY = "opensession-sidebar-filter";
 // Bumped when the default grouping changes. Because setFilter persists the
@@ -151,6 +157,7 @@ export interface FilterState {
 	sort: SortBy;
 	prs: PrsFilter;
 	autoCreated: AutoCreatedFilter;
+	emptyProjects: EmptyProjectsFilter;
 }
 
 /** What a grouping can be on disk: a pick, or "auto" for nobody's pick. */
@@ -299,6 +306,7 @@ export function readStoredFilter(): StoredFilterState {
 			sort: v.sort === "created" ? "created" : "updated",
 			prs: v.prs === "all" || v.prs === "none" ? v.prs : "default",
 			autoCreated: v.autoCreated === "hide" ? "hide" : "show",
+			emptyProjects: v.emptyProjects === "hide" ? "hide" : "show",
 		};
 	} catch {
 		return {
@@ -308,6 +316,7 @@ export function readStoredFilter(): StoredFilterState {
 			sort: "updated",
 			prs: "default",
 			autoCreated: "show",
+			emptyProjects: "show",
 		};
 	}
 }

@@ -1,5 +1,6 @@
 import type {
 	AutoCreatedFilter,
+	EmptyProjectsFilter,
 	FilterState,
 	GroupBy,
 	PrsFilter,
@@ -253,6 +254,22 @@ export function FilterPopover({
 						{ value: "hide", label: "Hidden" },
 					]}
 					onSelect={(v) => onChange({ autoCreated: v as AutoCreatedFilter })}
+				/>
+				{/* Projects with no workspaces in them. They draw a band so a repo
+				    you just connected has somewhere to start from, which on an
+				    instance with more projects than you work in is a screen of
+				    empty headings. Scoping the list to one project shows that
+				    project either way. */}
+				<FilterRow
+					label="Empty projects"
+					value={filter.emptyProjects}
+					options={[
+						{ value: "show", label: "Shown" },
+						{ value: "hide", label: "Hidden" },
+					]}
+					onSelect={(v) =>
+						onChange({ emptyProjects: v as EmptyProjectsFilter })
+					}
 				/>
 				<FilterRow
 					label="Sort by"
