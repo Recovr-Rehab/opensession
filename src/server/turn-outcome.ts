@@ -36,7 +36,6 @@
  * ledger, and a dropped ledger just means no verdict for that run.
  */
 
-import { logPapercut } from "./papercuts";
 import { audit } from "./audit";
 
 export type TurnVerdict = "reached" | "declared" | "silent-drop";
@@ -189,19 +188,17 @@ export function verdictFor(ledger: {
   return ledger.declaration ? "declared" : "silent-drop";
 }
 
-export function silentDropMessage(kind: string): string {
-  return (
-    `An unattended ${kind} run ended without reaching anyone — no note, message, report or ` +
-    "question — and without calling finish_silently to say the quiet ending was deliberate. " +
-    "Either it stopped early (check the transcript for an abandoned sub-agent or a mid-turn " +
-    "context rebuild), or it should have declared the silence."
-  );
-}
-
 /**
- * Close the ledger and return the verdict. A silent-drop is mirrored into the
- * papercut log (and through it the audit digest); the other two verdicts are
- * audited only, so a healthy run costs one audit line and no papercut noise.
+ * Close the ledger and return the verdict. Every verdict is audited and
+ * nothing else; buildAuditDigest counts them (totals.silentDrops plus the
+ * turnVerdicts breakdown) and states the meaning once.
+ *
+ * A silent-drop used to ALSO be mirrored into the papercut log, one row per
+ * occurrence. Measured 2026-08-18: 583 identical rows, 22% of the whole
+ * papercut store, still landing 30-50 a day — crowding out the friction a run
+ * actually noticed and wrote down, which is what that store is for. A verdict
+ * the server computes is not a papercut, and a message worth reading once is
+ * not worth 583 copies.
  */
 export function endTurn(
   key: string | undefined,
@@ -230,25 +227,6 @@ export function endTurn(
     reason: ledger.declaration?.reason,
     by: ctx?.by,
   });
-
-  // Same carve-out audit() makes for itself: bun test shares this module with
-  // the live paths, and a test asserting on verdicts must not append to the
-  // real papercut log that feeds Settings → Papercuts and the nightly digest.
-  if (verdict === "silent-drop" && process.env.NODE_ENV !== "test") {
-    try {
-      logPapercut({
-        message: silentDropMessage(ledger.kind),
-        repo: ctx?.repo,
-        sessionId: ledger.sessionId,
-        model: ctx?.model,
-        runKind: ledger.kind,
-        by: ctx?.by,
-      });
-    } catch {
-      // A papercut that cannot be written must never take down the run that
-      // produced it — the audit line above already carries the verdict.
-    }
-  }
 
   return outcome;
 }

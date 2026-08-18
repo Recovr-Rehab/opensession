@@ -283,6 +283,15 @@ export function buildAuditDigest(date: string): Record<string, unknown> | null {
   const models = new Map<string, number>();
   const accountSwitches = new Map<string, number>();
   const papercuts: Array<Record<string, unknown>> = [];
+  // Turn verdicts (turn-outcome.ts). A silent-drop — an unattended turn that
+  // ended without reaching anyone and without declaring the silence — used to
+  // reach this digest by being mirrored into the papercut log, one row per
+  // occurrence: 583 identical entries, 22% of the whole papercut store,
+  // crowding out the friction someone actually noticed and wrote down. The
+  // events were always here; the digest just never read them. Counting them is
+  // both smaller and more actionable than the rows were.
+  const verdicts = { reached: 0, declared: 0, silentDrop: 0 };
+  const silentDropsByRunKind = new Map<string, number>();
   const oneshots = { total: 0, failed: 0 };
   let events = 0;
   let turns = 0;
@@ -396,6 +405,17 @@ export function buildAuditDigest(date: string): Record<string, unknown> | null {
           });
         }
         break;
+      case "turn_outcome": {
+        const verdict = String(e.verdict || "");
+        if (verdict === "reached") verdicts.reached++;
+        else if (verdict === "declared") verdicts.declared++;
+        else if (verdict === "silent-drop") {
+          verdicts.silentDrop++;
+          const kind = String(e.run_kind || "unknown");
+          silentDropsByRunKind.set(kind, (silentDropsByRunKind.get(kind) || 0) + 1);
+        }
+        break;
+      }
     }
   }
 
@@ -447,7 +467,26 @@ export function buildAuditDigest(date: string): Record<string, unknown> | null {
       permissionDecisions,
       engineRetries,
       papercuts: papercuts.length,
+      silentDrops: verdicts.silentDrop,
       costUsd: +costUsd.toFixed(2),
+    },
+    // One explanation, not one per occurrence — the whole reason these stopped
+    // being papercuts.
+    turnVerdicts: {
+      ...verdicts,
+      silentDropsByRunKind: Object.fromEntries(
+        [...silentDropsByRunKind.entries()].sort((a, b) => b[1] - a[1]),
+      ),
+      // Inlined rather than imported from turn-outcome.ts: that module already
+      // imports audit(), so reading its copy back would close an import cycle.
+      ...(verdicts.silentDrop
+        ? {
+            silentDropMeaning:
+              "An unattended run ended without reaching anyone — no note, message, report " +
+              "or question — and without calling finish_silently to say the quiet ending was " +
+              "deliberate. Either it stopped early, or it should have declared the silence.",
+          }
+        : {}),
     },
     byRunKind,
     models: Object.fromEntries(models),
