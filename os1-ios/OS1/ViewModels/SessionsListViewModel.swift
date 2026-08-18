@@ -195,7 +195,16 @@ final class SessionsListViewModel {
             var titles: [String: String] = [:]
             titles.reserveCapacity(sessions.count)
             for session in sessions {
-                let title = session.displayTitle
+                // The WORKSPACE's name, not the session's own. A reference is
+                // read as "that piece of work", and the screen it opens is
+                // titled after the workspace, so labelling the chip after one
+                // of its conversations promised a name the destination never
+                // shows. That name is often a per-run label ("Review · PR
+                // #5741 …"). The web labels its chips from the same rule
+                // (`setSessionTitles` in App.tsx). Session title is the
+                // fallback, for a workspace this client has no name for.
+                let workspace = session.workspaceName ?? ""
+                let title = workspace.isEmpty ? session.displayTitle : workspace
                 if !title.isEmpty { titles[session.id] = title }
             }
             return (

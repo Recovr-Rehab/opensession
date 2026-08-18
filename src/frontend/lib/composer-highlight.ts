@@ -335,7 +335,7 @@ export function paintPillHover(
  * that wrapped has a box on each line, and the menu belongs against the half
  * that was actually pressed rather than against the union of the two.
  *
- * Null when the point is not on a pill — including when the mirror isn't
+ * Null when the point is not on a pill, including when the mirror isn't
  * mounted, which is every draft short of one (`needsComposerHighlight`).
  */
 export function pillRectAt(

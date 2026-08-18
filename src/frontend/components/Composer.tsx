@@ -993,7 +993,7 @@ export function Composer({
   // How a press finds the pill under it: the textarea covers the mirror, so
   // the press lands on the FIELD, and the browser has already placed the caret
   // by the time click fires. A caret strictly inside a pill came from pressing
-  // it — the edges still place an ordinary caret, which is the margin that
+  // it. The edges still place an ordinary caret, which is the margin that
   // keeps a click beside a reference from claiming one.
   function pillAtCaret(el: HTMLTextAreaElement) {
     if (el.selectionStart !== el.selectionEnd) return null;
@@ -1011,7 +1011,7 @@ export function Composer({
 
   // A press used to erase the reference outright, with nothing offered and
   // nothing asked. A pill is one object built out of one gesture, so the same
-  // gesture should not be able to destroy it by accident — and there was no
+  // gesture should not be able to destroy it by accident. There was also no
   // way at all to point a reference somewhere else short of deleting it and
   // starting over. Pressing one now selects it and offers what you can do to
   // it; Remove is a row in that menu rather than the whole interaction.
@@ -1160,7 +1160,7 @@ export function Composer({
     if (textareaRef.current) textareaRef.current.style.cursor = "";
   }, [hlHtml, textareaRef]);
   // The menu holds offsets into the draft and hangs off a box that the next
-  // line-break moves, so any edit takes it down — including the one its own
+  // line-break moves, so any edit takes it down, including the one its own
   // Remove row makes. Base UI already closes it on Escape, an outside press
   // and a scroll; typing is the case it cannot see, because the field it
   // would be watching is not the one focus is in.
@@ -1558,7 +1558,7 @@ export function Composer({
               press can reasonably mean and it was the only one on offer.
               Anchored to the pressed box rather than to a trigger: the subject
               is text inside the field, and it has no element of its own.
-              `modal={false}` — the draft behind it stays scrollable, and this
+              `modal={false}`, so the draft behind it stays scrollable: this
               menu is a detail of the field rather than a layer over the page. */}
           <Menu.Root
             open={!!pillMenu}

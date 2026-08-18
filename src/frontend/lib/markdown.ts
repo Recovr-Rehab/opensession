@@ -204,7 +204,7 @@ const AUTOMATION_ID_BARE = new RegExp(
 // Chip labels. A raw `bks-<uuid>` is 40 characters of noise in the middle of a
 // sentence, so a chip shows the name of the work it points at when we know it.
 // The app shell registers what it already polls (App.tsx); anything not in that
-// list — archived, deleted, not yet polled — falls back to a shortened id.
+// list (archived, deleted, not yet polled) falls back to a shortened id.
 interface SessionName {
   /** What the chip shows: the workspace's name (App.tsx says why). */
   label: string;
@@ -444,7 +444,7 @@ function automationChip(id: string, label?: string, href?: string): string {
 
 /** What the chip promises: which session opens, and whether it is working.
  *  The label names the workspace, so the session's own title goes here when it
- *  differs — that is the only thing separating two chips into one workspace. */
+ *  differs. That is the only thing separating two chips into one workspace. */
 function sessionTip(id: string): string {
   const name = sessionTitles.get(id);
   const running = runningSessions.has(id) ? " · running" : "";

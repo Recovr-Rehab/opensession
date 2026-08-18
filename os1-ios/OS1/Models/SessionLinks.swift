@@ -110,7 +110,7 @@ enum SessionLinks {
     }
 
     /// What a reference to another session draws as: a conversation glyph and
-    /// that session's own title. The full id stays in the accessibility label,
+    /// the name of the work it points at. The full id stays in the accessibility label,
     /// because the label above is lossy either way.
     static func chip(for id: String) -> TranscriptChip {
         let label = label(for: id)
@@ -123,9 +123,9 @@ enum SessionLinks {
         )
     }
 
-    /// The chip's text: the referenced session's title when we know it,
-    /// otherwise a shortened id. Both are lossy, which is fine — the link
-    /// itself carries the full id.
+    /// The chip's text: the name registered for that session when we have one
+    /// (its workspace's, see SessionsListViewModel), otherwise a shortened id.
+    /// Both are lossy, which is fine: the link itself carries the full id.
     static func label(for id: String) -> String {
         if let title = titles[id], !title.isEmpty {
             let title = cleanTitle(title)
