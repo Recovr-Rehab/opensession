@@ -1004,7 +1004,7 @@ body {
 /* The transcript passage staged as composer context ("Selected text"). Adding
    a passage takes the native selection away and hands the mark to this
    highlight, so exactly one band paints under the words and it survives the
-   click that moves the caret into the composer — registered by QuoteSelection,
+   click that moves the caret into the composer. Registered by QuoteSelection,
    which has no element of its own to carry a utility. */
 ::highlight(quote) {
 	background: color-mix(in srgb, var(--accent) 32%, transparent);

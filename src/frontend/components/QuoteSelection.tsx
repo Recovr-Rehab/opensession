@@ -1,46 +1,70 @@
-import React, { useCallback, useEffect, useRef } from "react";
+import React, {
+	useCallback,
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	useState,
+} from "react";
+import { createPortal } from "react-dom";
+import { motion } from "motion/react";
 import { newQuote, type Quote } from "../lib/quotes";
+import {
+	placeQuoteOffer,
+	type OfferRect,
+	type OfferPlacement,
+} from "../lib/quote-offer";
+import { FLOATING_PILL_BUTTON } from "../lib/session-viewer-classes";
+import { cn } from "../ui/cn";
+import { duration, ease } from "../ui/motion";
+import { IconCursor } from "./icons";
 
 interface Props {
 	/** The region whose text can be quoted: the transcript scroller. */
 	containerRef: React.RefObject<HTMLElement | null>;
 	/** The one passage currently riding along with the next message. */
 	quote: Quote | null;
-	/** Replaces the current context as soon as a selection settles. */
+	/** Attaches a passage as context: only ever from the pill. */
 	onQuote: (quote: Quote) => void;
 	/** Clears the current context and native selection. */
 	onClear: () => void;
-	/** Focuses the composer when typing or paste indicates input intent. */
+	/** Focuses the composer: after a passage is added, and when typing or
+	 *  pasting outside the composer indicates input intent. */
 	onInputIntent?: () => HTMLTextAreaElement | null;
 	/** Read-only viewers (no composer to carry the quote into) pass true. */
 	disabled?: boolean;
 }
 
-/** Registry name for the staged passage's own highlight — see base.css. */
+/** Registry name for the staged passage's own highlight. See base.css. */
 const QUOTE_HIGHLIGHT = "quote";
 
-/** Same passage, by DOM position rather than by text. */
-function sameRange(a: Range, b: Range): boolean {
-	return (
-		a.startContainer === b.startContainer &&
-		a.startOffset === b.startOffset &&
-		a.endContainer === b.endContainer &&
-		a.endOffset === b.endOffset
+/** The offered passage: what it says, and the two line boxes it hangs off. */
+interface Offer {
+	text: string;
+	first: OfferRect;
+	last: OfferRect;
+}
+
+/** First and last line box of a selection. `null` for a range that paints
+ *  nothing, which is what a selection collapsed by a re-render looks like. */
+function lineBoxes(range: Range): { first: OfferRect; last: OfferRect } | null {
+	const rects = Array.from(range.getClientRects()).filter(
+		(rect) => rect.width > 0 || rect.height > 0,
 	);
+	if (rects.length === 0) return null;
+	return { first: rects[0]!, last: rects[rects.length - 1]! };
 }
 
 /**
- * Granola-style transcript context: releasing a text selection immediately
- * stages it for the next message while leaving the browser's native selection
- * intact for copying. Typing or pasting focuses the composer; an ordinary click
- * anywhere clears the ephemeral context.
+ * Transcript context, on request: releasing a selection floats an "Add to
+ * chat" pill above it, and pressing that pill, nothing else, stages the
+ * passage for the next message. Selecting to copy, or to re-read a line, costs
+ * nothing; the composer only changes shape when someone asked it to.
  *
- * The passage keeps its mark while you write the message, but that mark is our
- * own — a Custom Highlight painted over the retained range, not the browser's
- * selection. It has to be: clicking into the composer collapses the native
- * selection, and putting it back (which is what this did until it turned out
- * you couldn't place a caret) reaches into a focused textarea and resets its
- * caret and selection on every click.
+ * Attaching takes the native selection away and paints the passage with our
+ * own Custom Highlight instead. That is both what keeps ONE band under the
+ * words (the two selections stack otherwise, our accent under the browser's
+ * grey inactive one) and what survives the click into the composer, which
+ * collapses the real selection.
  */
 export function QuoteSelection({
 	containerRef,
@@ -50,19 +74,21 @@ export function QuoteSelection({
 	onInputIntent,
 	disabled,
 }: Props) {
-	const rangeRef = useRef<Range | null>(null);
-	const hadQuoteRef = useRef(false);
-	const pressedRetainedRangeRef = useRef(false);
+	const stagedRef = useRef<Range | null>(null);
+	const offerRangeRef = useRef<Range | null>(null);
+	const pillRef = useRef<HTMLButtonElement>(null);
+	const [offer, setOffer] = useState<Offer | null>(null);
+	const [placement, setPlacement] = useState<OfferPlacement | null>(null);
 
 	const clear = useCallback(() => {
 		window.getSelection()?.removeAllRanges();
-		rangeRef.current = null;
+		stagedRef.current = null;
 		onClear();
 	}, [onClear]);
 
-	const capture = useCallback((): boolean => {
+	const capture = useCallback(() => {
 		const container = containerRef.current;
-		if (!container || disabled) return false;
+		if (!container || disabled) return;
 		const selection = window.getSelection();
 		const text = selection?.toString().trim() ?? "";
 		if (
@@ -70,27 +96,31 @@ export function QuoteSelection({
 			selection.rangeCount === 0 ||
 			selection.isCollapsed ||
 			text.length < 2
-		)
-			return false;
+		) {
+			setOffer(null);
+			return;
+		}
 		const range = selection.getRangeAt(0);
 		if (
 			!container.contains(range.startContainer) ||
 			!container.contains(range.endContainer)
 		)
-			return false;
-		const previous = rangeRef.current;
-		if (previous && sameRange(previous, range)) return false;
+			return;
+		const boxes = lineBoxes(range);
+		if (!boxes) return;
+		offerRangeRef.current = range.cloneRange();
+		setOffer({ text, ...boxes });
+	}, [containerRef, disabled]);
 
-		rangeRef.current = range.cloneRange();
-		onQuote(newQuote(text));
-		const active = document.activeElement;
-		if (
-			active instanceof HTMLInputElement ||
-			active instanceof HTMLTextAreaElement
-		)
-			active.blur();
-		return true;
-	}, [containerRef, disabled, onQuote]);
+	const add = useCallback(() => {
+		const range = offerRangeRef.current;
+		if (!range || !offer) return;
+		stagedRef.current = range;
+		onQuote(newQuote(offer.text));
+		window.getSelection()?.removeAllRanges();
+		setOffer(null);
+		onInputIntent?.();
+	}, [offer, onQuote, onInputIntent]);
 
 	useEffect(() => {
 		if (disabled) return;
@@ -120,6 +150,70 @@ export function QuoteSelection({
 		};
 	}, [capture, containerRef, disabled]);
 
+	// Measured, not guessed: the pill's width decides whether it fits beside a
+	// passage that ends near the right edge, and its own label is what sets
+	// that width. A layout effect lands the position before the browser paints.
+	useLayoutEffect(() => {
+		const pill = pillRef.current;
+		if (!offer || !pill) {
+			setPlacement(null);
+			return;
+		}
+		setPlacement(
+			placeQuoteOffer(
+				offer.first,
+				offer.last,
+				{ width: pill.offsetWidth, height: pill.offsetHeight },
+				{ width: window.innerWidth, height: window.innerHeight },
+			),
+		);
+	}, [offer]);
+
+	// The pill points at words, so it follows them: scrolling the transcript
+	// moves it, and scrolling the passage out of the transcript withdraws the
+	// offer rather than leaving a pill pointing at a header.
+	const offered = offer !== null;
+	useEffect(() => {
+		if (!offered) return;
+		const follow = () => {
+			const range = offerRangeRef.current;
+			const container = containerRef.current;
+			const boxes = range ? lineBoxes(range) : null;
+			if (!boxes || !container) return setOffer(null);
+			const bounds = container.getBoundingClientRect();
+			if (boxes.last.bottom < bounds.top || boxes.first.top > bounds.bottom)
+				return setOffer(null);
+			setOffer((current) => (current ? { ...current, ...boxes } : current));
+		};
+		document.addEventListener("scroll", follow, true);
+		window.addEventListener("resize", follow);
+		return () => {
+			document.removeEventListener("scroll", follow, true);
+			window.removeEventListener("resize", follow);
+		};
+	}, [offered, containerRef]);
+
+	// Any press that isn't on the pill withdraws the offer: it is either the
+	// start of a new selection (which offers itself on release) or a decision
+	// not to take this one. Escape says the same thing from the keyboard.
+	useEffect(() => {
+		if (!offered) return;
+		const onDown = (event: MouseEvent) => {
+			const target = event.target;
+			if (target instanceof Node && pillRef.current?.contains(target)) return;
+			setOffer(null);
+		};
+		const onKeyDown = (event: KeyboardEvent) => {
+			if (event.key === "Escape") setOffer(null);
+		};
+		document.addEventListener("mousedown", onDown, true);
+		document.addEventListener("keydown", onKeyDown);
+		return () => {
+			document.removeEventListener("mousedown", onDown, true);
+			document.removeEventListener("keydown", onKeyDown);
+		};
+	}, [offered]);
+
 	// Mark the staged passage independently of focus and of the native
 	// selection, both of which the next click takes away. Browsers without the
 	// Custom Highlight API simply lose the mark once you click; the chip in the
@@ -127,7 +221,7 @@ export function QuoteSelection({
 	useEffect(() => {
 		const highlights = CSS.highlights;
 		if (!highlights || typeof Highlight === "undefined") return;
-		const range = rangeRef.current;
+		const range = stagedRef.current;
 		if (!quote || !range) {
 			highlights.delete(QUOTE_HIGHLIGHT);
 			return;
@@ -139,61 +233,8 @@ export function QuoteSelection({
 	}, [quote]);
 
 	useEffect(() => {
-		if (quote) {
-			hadQuoteRef.current = true;
-		} else if (hadQuoteRef.current) {
-			window.getSelection()?.removeAllRanges();
-			rangeRef.current = null;
-			hadQuoteRef.current = false;
-		}
+		if (!quote) stagedRef.current = null;
 	}, [quote]);
-
-	useEffect(() => {
-		const notePress = (event: MouseEvent) => {
-			const retained = rangeRef.current;
-			pressedRetainedRangeRef.current = !!retained && Array.from(retained.getClientRects()).some(
-				(rect) =>
-					event.clientX >= rect.left &&
-					event.clientX <= rect.right &&
-					event.clientY >= rect.top &&
-					event.clientY <= rect.bottom,
-			);
-		};
-		const dismiss = (event: MouseEvent) => {
-			if (!quote || event.button !== 0) return;
-			// Clicking in the composer is where the passage was heading — placing
-			// a caret or selecting what you typed is never a dismissal.
-			if (event.target instanceof Element && event.target.closest(".composer"))
-				return;
-			const retained = rangeRef.current;
-			const selection = window.getSelection();
-			// A fresh drag that landed on the same passage isn't one either.
-			if (
-				retained &&
-				selection &&
-				!selection.isCollapsed &&
-				selection.rangeCount &&
-				sameRange(retained, selection.getRangeAt(0))
-			)
-				return;
-			// Nor is clicking the passage itself, which the highlight still marks.
-			if (pressedRetainedRangeRef.current && retained) return;
-			clear();
-		};
-		document.addEventListener("mousedown", notePress, true);
-		document.addEventListener("click", dismiss);
-		return () => {
-			document.removeEventListener("mousedown", notePress, true);
-			document.removeEventListener("click", dismiss);
-		};
-	}, [quote, clear, containerRef]);
-
-	useEffect(
-		() => () => {
-			if (hadQuoteRef.current) window.getSelection()?.removeAllRanges();
-		},
-		[],
-	);
 
 	useEffect(() => {
 		if (!quote) return;
@@ -275,5 +316,31 @@ export function QuoteSelection({
 		};
 	}, [quote, clear, containerRef, onInputIntent]);
 
-	return null;
+	if (!offer) return null;
+
+	return createPortal(
+		<motion.button
+			ref={pillRef}
+			type="button"
+			initial={{ opacity: 0, scale: 0.96 }}
+			animate={{ opacity: 1, scale: 1 }}
+			transition={{ type: "tween", duration: duration.micro, ease }}
+			className={cn(FLOATING_PILL_BUTTON, "fixed z-1000 whitespace-nowrap")}
+			style={{
+				left: placement?.left ?? 0,
+				top: placement?.top ?? 0,
+				// One frame before the measurement lands. Hidden rather than
+				// unmounted: the pill has to be in the DOM to be measured.
+				visibility: placement ? "visible" : "hidden",
+			}}
+			// The press must not collapse the selection it is about to attach:
+			// the passage stays visibly selected right up to the click.
+			onMouseDown={(event) => event.preventDefault()}
+			onClick={add}
+		>
+			<IconCursor size={13} className="text-dim" aria-hidden />
+			Add to chat
+		</motion.button>,
+		document.body,
+	);
 }
