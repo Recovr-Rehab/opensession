@@ -1,29 +1,45 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import type { PlainThread } from "../lib/types";
+import type { PlainThread, UnifiedSession } from "../lib/types";
 import { fetchPlainThreadById, startPlainTriageApi } from "../lib/api";
 import { useIsPhone } from "../hooks/useIsPhone";
-import { Button } from "../ui/button";
 import { InlineAlert, LoadingState } from "../ui/state";
-import { plainStatusClass } from "../lib/plain-status";
-import { SUPPORT_COLUMN_BAR } from "../lib/support-classes";
+import { Tooltip } from "../ui/tooltip";
+import { mineStatus } from "../lib/sidebar-lanes";
+import { MINE_STATUS_META } from "../lib/sidebar-types";
+import { SUPPORT_COLUMN_BAR, SUPPORT_TOP_RAIL } from "../lib/support-classes";
+// The transcript's floating pills. This is the same job — chrome that hangs
+// over live content the reader is scrolling — so it takes the same glass
+// rather than a second one invented here.
+import {
+	TRANSCRIPT_PILL,
+	TRANSCRIPT_PILL_BUTTON,
+	TRANSCRIPT_PILL_LOADING,
+	TRANSCRIPT_PILL_SPINNER,
+} from "../lib/session-viewer-classes";
+import { PlainStatusBadge } from "./PlainStatusBadge";
 import {
 	PlainEntryRow,
 	PlainReplyBox,
 	PlainThreadActions,
 	PlainWaitingBanner,
 	plainThreadUrl,
-	STATUS_LABEL,
 } from "./PlainThreadPanel";
 import { cn } from "../ui/cn";
-import { IconArrowUpRight } from "./icons";
+import { IconArrowUpRight, IconSparkle } from "./icons";
 
 interface Props {
 	/** The Plain thread id — the pane's key. */
 	threadId: string;
 	/** Navigate into a session (the triage button resolves to one over HTTP). */
 	onOpenSession: (id: string) => void;
-	/** Hide the "Triage this ticket" affordance (e.g. a triage session already exists). */
+	/** Hide the "Triage this ticket" affordance (e.g. the pane is already
+	 *  rendered inside the session that would answer it). */
 	hideTriage?: boolean;
+	/** A session already working this ticket. Shown at the top of the thread in
+	 *  place of the triage offer: on the Support page the ticket is all you can
+	 *  see, so without this there is nothing to say the agent has been here, and
+	 *  no way through to what it did. */
+	session?: UnifiedSession | null;
 	className?: string;
 	/** Put the ticket's identity — subject, status, customer, the Plain link —
 	 *  in a top bar of the pane's own instead of at the top of the thread. For
@@ -56,6 +72,7 @@ export function ConversationPane({
 	threadId,
 	onOpenSession,
 	hideTriage,
+	session,
 	className,
 	headerInBar,
 }: Props) {
@@ -147,6 +164,16 @@ export function ConversationPane({
 	const headerInTopBar = !!headerInBar && !isPhone;
 	const actionsInBar = headerInTopBar && paneWidth >= ACTIONS_IN_BAR_MIN;
 
+	// A ticket with a session on it is being worked; offering to start that
+	// work again would be the wrong thing to put in front of the reader, so the
+	// two share one slot. Neither depends on the thread having loaded, and the
+	// rail is what the thread's top padding clears, so this must not change
+	// when the ticket lands.
+	const rail = session ? "session" : hideTriage ? null : "triage";
+	const sessionDot = session
+		? MINE_STATUS_META.find((m) => m.key === mineStatus(session))
+		: null;
+
 	return (
 		<div
 			ref={setPaneEl}
@@ -161,16 +188,9 @@ export function ConversationPane({
 							{/* The state leads the row instead of trailing the subject.
 							    Trailing, it landed at a different x on every ticket and
 							    read as part of the name; leading, it reads as the
-							    ticket's state and the subject gets a left edge that only
-							    moves between statuses (Todo 40px, Done 42px, Snoozed 60px)
-							    rather than with every title. Not worth padding to one
-							    width for: the queue is the Todo inbox, so in the Support
-							    list they are all the same pill anyway. */}
-							{status && (
-								<span className={plainStatusClass(status)}>
-									{STATUS_LABEL[status] || status}
-								</span>
-							)}
+							    ticket's state and the subject gets a fixed left edge to
+							    truncate against. */}
+							{status && <PlainStatusBadge status={status} />}
 							<div className="flex min-w-0 flex-1 flex-col justify-center">
 								{/* The actions beside it can leave this 200px on a
 								    laptop, so the full subject stays on hover. */}
@@ -221,130 +241,163 @@ export function ConversationPane({
 					)}
 				</div>
 			)}
-			<div className="min-h-0 flex-1 overflow-y-auto">
-				<div
-					className={cn(
-						"mx-auto w-full max-w-[760px] px-5 pb-5",
-						// With the identity in the bar, the first block's own top
-						// margin is the whole gap under it.
-						headerInTopBar ? "pt-1" : "pt-6",
-					)}
-				>
-					{loading && !thread ? (
-						<LoadingState>Loading ticket…</LoadingState>
-					) : error && !thread ? (
-						<InlineAlert>Couldn't load this Plain thread: {error}</InlineAlert>
-					) : (
-						<>
-							{!headerInTopBar && (
-								<>
-									<div className="flex items-center gap-2.5 min-w-0">
-										<span
-											className="truncate text-item-title font-semibold text-fg"
-											title={customerEmail}
-										>
-											{customerLabel}
-										</span>
-										{customerName && customerEmail && (
-											<span className="text-faint text-label truncate">
-												{customerEmail}
+			<div className="relative min-h-0 flex-1">
+				<div className="h-full overflow-y-auto">
+					<div
+						className={cn(
+							"mx-auto w-full max-w-[760px] px-5 pb-5",
+							// The rail floats, so the thread owes it the space it sits in:
+							// 12px of offset plus a 32px pill, and 4px clear of it.
+							rail
+								? "pt-12"
+								: // With the identity in the bar, the first block's own top
+									// margin is the whole gap under it.
+									headerInTopBar
+									? "pt-1"
+									: "pt-6",
+						)}
+					>
+						{loading && !thread ? (
+							<LoadingState>Loading ticket…</LoadingState>
+						) : error && !thread ? (
+							<InlineAlert>Couldn't load this Plain thread: {error}</InlineAlert>
+						) : (
+							<>
+								{!headerInTopBar && (
+									<>
+										<div className="flex items-center gap-2.5 min-w-0">
+											<span
+												className="truncate text-item-title font-semibold text-fg"
+												title={customerEmail}
+											>
+												{customerLabel}
 											</span>
-										)}
-										{status && (
-											<span className={plainStatusClass(status)}>
-												{STATUS_LABEL[status] || status}
-											</span>
-										)}
-										<a
-											className="ml-auto inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-meta font-semibold text-link no-underline hover:underline"
-											href={plainUrl}
-											target="_blank"
-											rel="noreferrer"
-											title="Open this thread in Plain"
-										>
-											Open in Plain
-											<IconArrowUpRight size={13} />
-										</a>
-									</div>
-									{thread?.title && (
-										<div className="mt-2 text-section-title font-semibold text-fg">
-											{thread.title}
+											{customerName && customerEmail && (
+												<span className="text-faint text-label truncate">
+													{customerEmail}
+												</span>
+											)}
+											{status && <PlainStatusBadge status={status} />}
+											<a
+												className="ml-auto inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-meta font-semibold text-link no-underline hover:underline"
+												href={plainUrl}
+												target="_blank"
+												rel="noreferrer"
+												title="Open this thread in Plain"
+											>
+												Open in Plain
+												<IconArrowUpRight size={13} />
+											</a>
 										</div>
-									)}
-								</>
-							)}
-
-							{/* Is anyone still owed an answer? Plain leads with this;
-						    so should we. */}
-							{thread && (
-								<PlainWaitingBanner thread={thread} className="mt-3" />
-							)}
-
-							{/* One-click ticket admin, straight from here: status,
-						    priority, spam — no need to jump into Plain. Only when the
-						    bar could not take it. */}
-							{thread && !actionsInBar && (
-								<PlainThreadActions
-									threadId={threadId}
-									thread={thread}
-									onChanged={load}
-									className="mt-3"
-								/>
-							)}
-
-							<div className="mt-5 flex flex-col gap-3">
-								{thread && thread.entries.length === 0 ? (
-									<div className="mt-5 text-center text-label text-faint">
-										No messages in this thread yet.
-									</div>
-								) : (
-									thread?.entries.map((e) => (
-										<PlainEntryRow
-											key={e.id}
-											entry={e}
-											threadId={threadId}
-											threadTitle={thread?.title}
-										/>
-									))
+										{thread?.title && (
+											<div className="mt-2 text-section-title font-semibold text-fg">
+												{thread.title}
+											</div>
+										)}
+									</>
 								)}
-							</div>
-						</>
-					)}
+
+								{/* Is anyone still owed an answer? Plain leads with this;
+							    so should we. */}
+								{thread && (
+									<PlainWaitingBanner thread={thread} className="mt-3" />
+								)}
+
+								{/* One-click ticket admin, straight from here: status,
+							    priority, spam — no need to jump into Plain. Only when the
+							    bar could not take it. */}
+								{thread && !actionsInBar && (
+									<PlainThreadActions
+										threadId={threadId}
+										thread={thread}
+										onChanged={load}
+										className="mt-3"
+									/>
+								)}
+
+								<div className="mt-5 flex flex-col gap-3">
+									{thread && thread.entries.length === 0 ? (
+										<div className="mt-5 text-center text-label text-faint">
+											No messages in this thread yet.
+										</div>
+									) : (
+										thread?.entries.map((e) => (
+											<PlainEntryRow
+												key={e.id}
+												entry={e}
+												threadId={threadId}
+												threadTitle={thread?.title}
+											/>
+										))
+									)}
+								</div>
+							</>
+						)}
+					</div>
 				</div>
+				{rail && (
+					<div className={SUPPORT_TOP_RAIL}>
+						{rail === "session" && session ? (
+							<Tooltip
+								label={`Open the session on this ticket · ${
+									sessionDot?.label || "Session"
+								}`}
+							>
+								<button
+									type="button"
+									className={cn(TRANSCRIPT_PILL_BUTTON, "pointer-events-auto")}
+									onClick={() => onOpenSession(session.id)}
+								>
+									<span
+										className="size-[7px] shrink-0 rounded-full"
+										style={{
+											backgroundColor:
+												sessionDot?.dotColor || "var(--text-faint)",
+										}}
+										aria-hidden
+									/>
+									<span className="min-w-0 truncate">
+										{session.title || "Open session"}
+									</span>
+								</button>
+							</Tooltip>
+						) : triaging ? (
+							<div className={TRANSCRIPT_PILL_LOADING}>
+								<span className={TRANSCRIPT_PILL_SPINNER} aria-hidden />
+								<span>Starting triage…</span>
+							</div>
+						) : (
+							<Tooltip label="Investigates, posts an internal note, and can open a PR for review.">
+								<button
+									type="button"
+									className={cn(TRANSCRIPT_PILL_BUTTON, "pointer-events-auto")}
+									onClick={handleTriage}
+								>
+									<IconSparkle size={14} className="text-dim" aria-hidden />
+									Triage this ticket
+								</button>
+							</Tooltip>
+						)}
+						{triageError && (
+							<div
+								className={cn(
+									TRANSCRIPT_PILL,
+									"pointer-events-auto min-w-0 font-normal text-red",
+								)}
+								role="alert"
+							>
+								<span className="min-w-0 truncate" title={triageError}>
+									{triageError}
+								</span>
+							</div>
+						)}
+					</div>
+				)}
 			</div>
 
 			{/* Keep the customer reply available while the ticket scrolls. */}
 			{thread && (
 				<div className="mx-auto w-full max-w-[760px] shrink-0 px-5 pb-5">
-					{/* Answering and handing it to the agent first are the same
-					    decision, so the offer sits with the reply box instead of
-					    scrolling away at the top of the thread. */}
-					{!hideTriage && (
-						<div className="mb-2 flex flex-wrap items-center gap-3 rounded-2xl bg-panel px-4 py-3.5">
-							<div className="min-w-0 flex-1">
-								<div className="text-item-title font-semibold text-fg">
-									Triage this ticket
-								</div>
-								<div className="mt-0.5 text-label text-dim">
-									Investigates, posts an internal note, and can open a PR for
-									review.
-								</div>
-							</div>
-							<Button
-								variant="primary"
-								className="shrink-0"
-								onClick={handleTriage}
-								disabled={triaging}
-							>
-								{triaging ? "Starting triage…" : "Triage"}
-							</Button>
-							{triageError && (
-								<div className="basis-full text-label text-red">
-									{triageError}
-								</div>
-							)}
-						</div>
-					)}
 					<PlainReplyBox
 						key={threadId}
 						threadId={threadId}

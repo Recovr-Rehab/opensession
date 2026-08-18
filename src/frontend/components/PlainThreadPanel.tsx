@@ -31,7 +31,7 @@ import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
 import { useCurrentUser } from "./UserPicker";
 import { cn } from "../ui/cn";
 import { PLAIN_WORKSPACE_ID, PRODUCT_NAME } from "../lib/brand";
-import { plainStatusClass } from "../lib/plain-status";
+import { PlainStatusBadge } from "./PlainStatusBadge";
 import {
 	composerBox,
 	composerBoxExpanded,
@@ -52,6 +52,7 @@ import {
 	plainEntryName,
 	plainEntryNote,
 	plainEntryOut,
+	plainEntryRow,
 } from "../lib/plain-classes";
 import { Button } from "../ui/button";
 import { Tooltip } from "../ui/tooltip";
@@ -80,12 +81,6 @@ interface Props {
 	/** Deep link into the thread in the Plain app (the "jump into Plain" action). */
 	plainUrl: string;
 }
-
-export const STATUS_LABEL: Record<string, string> = {
-	TODO: "Todo",
-	SNOOZED: "Snoozed",
-	DONE: "Done",
-};
 
 /** Deep link into the Plain app, or "" when the instance has no configured
  *  Plain workspace id (integrations.plain.workspaceId) — links hide. */
@@ -174,11 +169,7 @@ export function PlainThreadPanel({ sessionId, threadId, plainUrl }: Props) {
 					<span className="truncate text-label font-semibold text-fg" title={thread?.customer?.email || ""}>
 						{thread?.customer?.name || thread?.customer?.email || "Plain thread"}
 					</span>
-					{status && (
-						<span className={plainStatusClass(status)}>
-							{STATUS_LABEL[status] || status}
-						</span>
-					)}
+					{status && <PlainStatusBadge status={status} />}
 				</div>
 				<a
 					className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-meta font-semibold text-link no-underline hover:underline"
@@ -1119,20 +1110,26 @@ export function PlainEntryRow({
 	const ours = entry.actorType !== "customer";
 	const subject = subjectWorthShowing(entry.subject, threadTitle);
 	return (
-		<div className={ours ? plainEntryOut : plainEntryIn}>
+		<div className={plainEntryRow}>
+			{/* The head sits above the message rather than inside it, so our own
+			    bubble holds nothing but the words — the transcript's grammar for a
+			    speaker label, and the only way the customer's side can lose its
+			    plate without losing who wrote it. */}
 			<div className={cn(plainEntryHead, ours && "flex-row-reverse")}>
 				<span className={plainEntryName}>{entry.actorName}</span>
 				<span className={plainEntryMeta}>
 					{entry.kind} · {timeOf(entry.timestamp)}
 				</span>
 			</div>
-			{subject && (
-				<div className="text-body font-semibold text-fg">{subject}</div>
-			)}
-			{entry.text && <div className={plainEntryBody}>{entry.text}</div>}
-			{entry.attachments?.length ? (
-				<PlainAttachments attachments={entry.attachments} />
-			) : null}
+			<div className={ours ? plainEntryOut : plainEntryIn}>
+				{subject && (
+					<div className="text-body font-semibold text-fg">{subject}</div>
+				)}
+				{entry.text && <div className={plainEntryBody}>{entry.text}</div>}
+				{entry.attachments?.length ? (
+					<PlainAttachments attachments={entry.attachments} />
+				) : null}
+			</div>
 		</div>
 	);
 }
