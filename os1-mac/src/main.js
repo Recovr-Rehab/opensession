@@ -14,6 +14,7 @@ const {
   clipboard,
   dialog,
   screen,
+  net,
 } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
@@ -28,20 +29,31 @@ if (process.platform === "darwin") {
   systemPreferences.setUserDefault("ApplePersistenceIgnoreState", "boolean", true);
 }
 
-// OS1_URL selects the hosted instance. Distributors can set OS1_CLOUD_URL;
-// the portable fallback is a locally running Open Session server.
-const CLOUD_URL =
-  process.env.OS1_CLOUD_URL ||
-  packageConfig.defaultServer ||
+// Which Open Session server this shell is a window onto. It is asked for on the
+// first launch and kept in the profile from then on (see "Choosing a server"
+// below), because a shell that only ever knows the address it was built with is
+// no use to anyone running their own instance.
+//
+// The packaged default seeds that first screen rather than deciding it: a
+// distributor sets it with OS1_CLOUD_URL or `opensession.defaultServer` in
+// package.json, and the portable fallback is a server on this machine. OS1_URL
+// overrides the stored address for one run without changing it, which is what
+// scripts/app-dev.ts uses.
+const DEFAULT_URL =
+  normalizeServerUrl(process.env.OS1_CLOUD_URL) ||
+  normalizeServerUrl(packageConfig.defaultServer) ||
   "http://127.0.0.1:3850/";
-const CLOUD_ORIGIN = new URL(CLOUD_URL).origin;
-let APP_URL = process.env.OS1_URL || CLOUD_URL;
-let APP_ORIGIN = new URL(APP_URL).origin;
+const RUN_URL = normalizeServerUrl(process.env.OS1_URL);
+
+// Null until a server is chosen: the window opens on the setup page instead,
+// and every origin check here fails closed in the meantime.
+let APP_URL = null;
+let APP_ORIGIN = null;
 // Only the app itself. Sign-in is a device code entered on github.com, and
 // that belongs in the browser the person is already signed into GitHub in,
 // not in this window, where it would navigate the app away from the screen
 // that is waiting for the code.
-let IN_WINDOW_ORIGINS = [APP_ORIGIN];
+let IN_WINDOW_ORIGINS = [];
 
 const stateFile = () => path.join(app.getPath("userData"), "window-state.json");
 
@@ -112,6 +124,134 @@ let windowReady = false;
 // both an in-app navigation and a relaunch.
 let zoomLevel = 0;
 
+// ---- Choosing a server ------------------------------------------------------
+// Which server this shell talks to belongs to the person using it, not to
+// whoever built the app. It is asked once, on the first launch, and kept in the
+// profile from then on; the app menu and the status page bring the question
+// back.
+
+const serverFile = () => path.join(app.getPath("userData"), "server.json");
+
+// Declarations rather than consts: DEFAULT_URL calls into these while this
+// module is still evaluating, and a const would still be in its dead zone.
+function hasScheme(raw) {
+  return /^https?:\/\//i.test(String(raw ?? "").trim());
+}
+
+// People type a host, not a URL, and they paste whole session links. Both
+// resolve to the origin: the app serves at the root of its host, so keeping a
+// path would send every later navigation through it.
+function normalizeServerUrl(raw) {
+  const text = String(raw ?? "").trim();
+  if (!text) return null;
+  const typed = hasScheme(text);
+  // A scheme this cannot speak is a typo, not a host by that name.
+  if (!typed && /^[a-z][a-z0-9+.-]*:\/\//i.test(text)) return null;
+  try {
+    // https for anything that did not say, since anything off this machine
+    // will be. An instance on a LAN or a tailnet that is not is found by the
+    // probe, which retries without the s and keeps whichever answered.
+    const url = new URL(typed ? text : `https://${text}`);
+    if (!url.hostname) return null;
+    // A server on this machine is plain http, and someone typing
+    // "localhost:3850" should not have to know to say so.
+    if (!typed && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) {
+      url.protocol = "http:";
+    }
+    return `${url.origin}/`;
+  } catch {
+    return null;
+  }
+}
+
+function readStoredServer() {
+  try {
+    return normalizeServerUrl(JSON.parse(fs.readFileSync(serverFile(), "utf8"))?.url);
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredServer(url) {
+  try {
+    fs.mkdirSync(path.dirname(serverFile()), { recursive: true });
+    fs.writeFileSync(serverFile(), JSON.stringify({ url }, null, 2));
+    return true;
+  } catch (err) {
+    console.error("[server] could not save", err);
+    return false;
+  }
+}
+
+// A profile that has been used before answered this question by working, so an
+// update that adds the question must not put it to everyone whose app already
+// opens. Only a profile with nothing in it is asked.
+function adoptDefaultForExistingProfile() {
+  if (readStoredServer() || !fs.existsSync(stateFile())) return;
+  writeStoredServer(DEFAULT_URL);
+}
+
+function setServer(url) {
+  APP_URL = url;
+  APP_ORIGIN = new URL(url).origin;
+  IN_WINDOW_ORIGINS = [APP_ORIGIN];
+  blockServiceWorker();
+}
+
+// The web app's service worker only exists for Web Push, app-shell caching and
+// the PWA badge, none of which function in Electron, and its Cache Storage
+// writes crash Electron 43's renderer (bad CacheStorageCache Mojo message).
+// Keep it out entirely; offline.html covers the offline case it would.
+function blockServiceWorker() {
+  if (!APP_ORIGIN) return;
+  // A filter is fixed when its listener is registered and a session holds only
+  // one of them, so re-registering is how the block follows a server change.
+  session.defaultSession.webRequest.onBeforeRequest(
+    { urls: [APP_ORIGIN + "/*sw.js*"] },
+    (_details, callback) => callback({ cancel: true }),
+  );
+}
+
+// Does something answer as an Open Session server there? A mistyped address and
+// an instance that is simply down are the same blank window otherwise, and only
+// one of the two is worth saving.
+async function probeServer(url) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 6000);
+  try {
+    const res = await net.fetch(new URL("api/health", url).toString(), {
+      signal: controller.signal,
+      credentials: "omit",
+    });
+    if (!res.ok) return { ok: false, error: `That address answered ${res.status}.` };
+    // The health route is public and answers JSON, so a host that is something
+    // else (a parked domain, a proxy's login wall) fails here rather than at
+    // the first empty window.
+    const body = await res.json();
+    if (!body || typeof body !== "object") {
+      return { ok: false, error: "That address isn't an Open Session server." };
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false, error: null };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function showSetup() {
+  if (!win || win.isDestroyed()) return;
+  clearStallGuard();
+  win.loadFile(path.join(__dirname, "setup.html"), {
+    query: {
+      url: APP_URL || DEFAULT_URL,
+      // A later visit can be called off; the first run has nothing to go back
+      // to.
+      mode: APP_URL ? "change" : "first-run",
+    },
+  });
+}
+
 // ---- Auto-update ------------------------------------------------------------
 // Electron's built-in Squirrel.Mac updater against the Open Session server's
 // release proxy (src/server/routes/os1-update.ts server-side). The server
@@ -180,11 +320,19 @@ function checkForUpdatesFromMenu() {
 }
 
 function initAutoUpdate() {
-  // Dev runs (`electron .`) are unsigned — Squirrel refuses to initialize.
+  // Dev runs (`electron .`) are unsigned, and Squirrel refuses to initialize.
   if (!app.isPackaged || process.platform !== "darwin") return;
+  // Called again once the first run has chosen a server, so the feed is only
+  // ever armed against the instance actually in use.
+  if (updaterReady || !APP_ORIGIN) return;
   try {
     autoUpdater.setFeedURL({
-      url: `${CLOUD_ORIGIN}/api/os1-mac/update?version=${encodeURIComponent(app.getVersion())}`,
+      // Updates come from the instance this shell is pointed at: every Open
+      // Session server serves the release proxy, and a self-hosted one is
+      // where its own build came from. Squirrel installs only a build signed
+      // by the identity the running app carries, so following the address
+      // does not widen who can hand this app a binary.
+      url: `${APP_ORIGIN}/api/os1-mac/update?version=${encodeURIComponent(app.getVersion())}`,
       serverType: "json",
     });
   } catch (err) {
@@ -445,14 +593,26 @@ function deepLinkToUrl(raw) {
 }
 
 function openDeepLink(raw) {
-  const url = deepLinkToUrl(raw);
-  if (!url) return;
-  if (!appReady) {
+  // Held rather than dropped while the app is still starting, or while the
+  // first run is being asked which server the link belongs to.
+  if (!appReady || !APP_URL) {
     pendingDeepLink = raw;
     return;
   }
+  const url = deepLinkToUrl(raw);
+  if (!url) return;
   showWindow();
   loadApp(url);
+}
+
+// Answers whether there was one, so a caller that would otherwise load the app
+// itself can let the link say where to land instead.
+function flushPendingDeepLink() {
+  if (!pendingDeepLink) return false;
+  const raw = pendingDeepLink;
+  pendingDeepLink = null;
+  openDeepLink(raw);
+  return true;
 }
 
 function showWindow() {
@@ -609,7 +769,7 @@ function createWindow() {
     armStallGuard();
   });
   win.webContents.setWindowOpenHandler(({ url }) => {
-    if (new URL(url).origin === APP_ORIGIN) return { action: "allow" };
+    if (inWindow(url)) return { action: "allow" };
     openExternal(url);
     return { action: "deny" };
   });
@@ -673,10 +833,17 @@ function createWindow() {
   // a dead window.
   win.webContents.on("render-process-gone", (_e, details) => {
     if (details.reason === "clean-exit") return;
-    loadApp(APP_URL);
+    openHome();
   });
 
-  loadApp(APP_URL);
+  openHome();
+}
+
+// What the window opens on: the app once there is a server to open, and the
+// question itself until then.
+function openHome() {
+  if (APP_URL) loadApp(APP_URL);
+  else showSetup();
 }
 
 // Electron's default menu, plus "Check for Updates…" in the app menu — the
@@ -690,6 +857,14 @@ function buildAppMenu() {
         submenu: [
           { role: "about" },
           { label: "Check for Updates…", click: checkForUpdatesFromMenu },
+          { type: "separator" },
+          {
+            label: "Change Server…",
+            click: () => {
+              showWindow();
+              showSetup();
+            },
+          },
           { type: "separator" },
           { role: "services" },
           { type: "separator" },
@@ -716,15 +891,13 @@ app.whenReady().then(async () => {
     app.dock.setIcon(path.join(__dirname, "../build/icon-512.png"));
   }
 
-  // The web app's service worker only exists for Web Push, app-shell caching
-  // and the PWA badge — none of which function in Electron — and its Cache
-  // Storage writes crash Electron 43's renderer (bad CacheStorageCache Mojo
-  // message). Keep it out entirely: block the script and clear any prior
-  // registration. The shell's offline.html covers the offline case.
-  session.defaultSession.webRequest.onBeforeRequest(
-    { urls: [APP_ORIGIN + "/*sw.js*"] },
-    (_details, callback) => callback({ cancel: true }),
-  );
+  // Which server, before anything that depends on it: the service-worker
+  // block, the origins allowed to stay in this window and the update feed all
+  // hang off the answer. Clearing a registration an older build left behind is
+  // unconditional, since it belongs to whatever origin wrote it.
+  adoptDefaultForExistingProfile();
+  const chosen = RUN_URL || readStoredServer();
+  if (chosen) setServer(chosen);
   await session.defaultSession
     .clearStorageData({ storages: ["serviceworkers", "cachestorage"] })
     .catch(() => {});
@@ -764,16 +937,58 @@ app.whenReady().then(async () => {
     autoUpdater.quitAndInstall();
   });
 
+  // The shell's own file:// pages are the only callers allowed here. The app
+  // this window loads shares their preload, and a server must not be able to
+  // repoint the shell at another one.
+  const fromShellPage = (e) => (e.senderFrame?.url ?? "").startsWith("file://");
+
+  ipcMain.on("os1:server-open", (e) => {
+    if (fromShellPage(e)) showSetup();
+  });
+  ipcMain.on("os1:server-cancel", (e) => {
+    if (fromShellPage(e) && APP_URL) loadApp(APP_URL);
+  });
+  ipcMain.handle("os1:server-probe", async (e, raw) => {
+    if (!fromShellPage(e)) return { ok: false };
+    const url = normalizeServerUrl(raw);
+    if (!url) return { ok: false, error: "That doesn't look like a server address." };
+    const reached = await probeServer(url);
+    if (reached.ok) return { ok: true, url };
+    // Nothing they typed said https, and an instance on a LAN or a tailnet is
+    // often plain http. Trying is cheaper than expecting them to know, and it
+    // only ever happens after the secure form failed outright.
+    const plain = hasScheme(raw) ? null : url.replace(/^https:/, "http:");
+    if (plain && (await probeServer(plain)).ok) return { ok: true, url: plain };
+    return { ...reached, url };
+  });
+  ipcMain.handle("os1:server-save", (e, raw) => {
+    if (!fromShellPage(e)) return { ok: false };
+    const url = normalizeServerUrl(raw);
+    if (!url) return { ok: false, error: "That doesn't look like a server address." };
+    if (!writeStoredServer(url)) return { ok: false, error: "Couldn't save that address." };
+    // A change reaches a running app by restarting it. The service-worker
+    // block, the update feed, the origins this window keeps and the page
+    // already loaded were all wired to the old address, and one restart is
+    // steadier than four things kept in step. A first run has none of that
+    // behind it yet.
+    if (APP_URL && url !== APP_URL) {
+      quitting = true;
+      app.relaunch();
+      app.quit();
+      return { ok: true };
+    }
+    setServer(url);
+    initAutoUpdate();
+    if (!flushPendingDeepLink()) openHome();
+    return { ok: true };
+  });
+
   buildAppMenu();
 
   appReady = true;
   createWindow();
 
-  if (pendingDeepLink) {
-    const deepLink = pendingDeepLink;
-    pendingDeepLink = null;
-    openDeepLink(deepLink);
-  }
+  flushPendingDeepLink();
 
   initAutoUpdate();
 
@@ -784,8 +999,9 @@ app.whenReady().then(async () => {
   // on screen. A loaded app reconnects on its own and would lose drafts and
   // scroll position on a reload, so only the status page is retried here.
   powerMonitor.on("resume", () => {
-    if (!win || win.isDestroyed()) return;
-    if (win.webContents.getURL().startsWith("file://")) loadApp(APP_URL);
+    if (!win || win.isDestroyed() || !APP_URL) return;
+    // Named rather than any file:// page: the setup page is someone typing.
+    if (win.webContents.getURL().includes("offline.html")) loadApp(APP_URL);
   });
 });
 

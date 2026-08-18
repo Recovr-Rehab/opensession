@@ -63,8 +63,21 @@ refreshes within ~3s). ⚠️ Writes are real — prompts/steers/archives hit
 production. For a fully isolated sandbox instead, run the whole server locally
 (`mkdir -p ~/.opensession-sessions && bun --hot run opensession.ts`, port 3850) —
 empty local state, optionally rsync'd from prod.
-`OS1_URL` overrides the server for a run. Distributions set
-`opensession.defaultServer` in `package.json` (or `OS1_CLOUD_URL`).
+## Which server
+
+The app asks the first time it opens and keeps the answer in its profile
+(`server.json`), so a build is not tied to the address it was made with. A bare
+host resolves to `https`, except on this machine, and the answer is checked
+against `/api/health` before it is saved; the address that answered is what gets
+stored, which is how a plain-http instance on a LAN or a tailnet is found.
+Change Server in the app menu, and a button on the status page, bring the
+question back; changing it restarts the app, since the update feed and the
+window's own origins are wired at launch.
+
+`OS1_URL` overrides the stored answer for one run. Distributions set the address
+the first-run screen offers with `opensession.defaultServer` in `package.json`
+(or `OS1_CLOUD_URL`); a profile that already worked keeps using it and is never
+asked.
 
 ## Architecture
 
@@ -73,12 +86,19 @@ empty local state, optionally rsync'd from prod.
   navigation is limited to the active app origin; everything else opens in the
   default browser. Window close hides to the dock; state persists across
   launches.
-- `src/preload.js` — exposes `window.os1` (`desktop`, `setBadge`, `clearBadge`)
-  for the frontend to feature-detect and mirror its app badge to the dock.
+- `src/preload.js`: exposes `window.os1` (`desktop`, `setBadge`, `clearBadge`,
+  `updates`) for the frontend to feature-detect and mirror its app badge to the
+  dock, plus `server` for the two shell pages below. The main process refuses
+  `server` calls from anything but a `file://` page, so the app a server serves
+  cannot repoint the shell.
+- `src/setup.html`: the server prompt, shown when nothing is stored yet and
+  again from Change Server. It checks the address before saving it.
 - `src/offline.html` — retry screen for when the configured server is
-  unreachable. It carries a copy of the web app's tokens and splash, since it
-  loads from `file://` with the server gone and can fetch nothing; `src/mark.png`
-  is that splash's mark.
+  unreachable, with a way back to that prompt, since a stored address that is
+  wrong looks exactly like a server that is down.
+- `src/shell.css`: the tokens and splash those two pages share. They load from
+  `file://` with the server possibly gone, so they can fetch nothing from it;
+  `src/mark.png` is that splash's mark.
 - **The web app's service worker is deliberately blocked** (request to `sw.js`
   cancelled + registrations cleared at boot). Its jobs — Web Push, app-shell
   cache, PWA badge — don't function in Electron anyway, and its Cache Storage

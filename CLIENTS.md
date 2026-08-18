@@ -43,8 +43,11 @@ is why it feels like an app rather than a website in a frame.
 browser tab cannot do: a dock icon, native window materials, deep links
 (`opensession://`), and staying out of the way of your browser's tab bar.
 
-It renders the *server's* frontend, so it does not lag behind the web UI. Server
-selection is `OS1_URL` / `OS1_CLOUD_URL`, falling back to the packaged default.
+It renders the *server's* frontend, so it does not lag behind the web UI. It
+asks which server on the first launch, with the packaged default prefilled, and
+keeps the answer in its profile; Change Server in the app menu, and a button on
+the status page, bring the question back. `OS1_URL` overrides the stored answer
+for one run.
 
 ```sh
 cd os1-mac && bun install && bun start

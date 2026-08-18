@@ -50,7 +50,7 @@ is an inconvenience rather than a dead end:
 | Client | Where the user changes it | Build-time default |
 | --- | --- | --- |
 | Chrome extension | the Server field in the side panel | `os1-chrome/deployment.json` |
-| Electron shell | `OS1_URL` / `OS1_CLOUD_URL` env | `os1-mac/package.json` → `opensession.defaultServer` |
+| Electron shell | asked on first launch, then app menu → Change Server | `os1-mac/package.json` → `opensession.defaultServer` |
 | Swift app (iOS/macOS) | Settings → Server | `OS1DefaultServerURL` in `os1-ios/project.yml` |
 | Web UI / PWA | n/a — served by the server itself | n/a |
 

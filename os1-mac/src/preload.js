@@ -10,6 +10,16 @@ contextBridge.exposeInMainWorld("os1", {
   materialBackdrop: true,
   setBadge: (count) => ipcRenderer.send("os1:set-badge", Number(count) || 0),
   clearBadge: () => ipcRenderer.send("os1:set-badge", 0),
+  // Which Open Session server this shell talks to. Only the shell's own
+  // file:// pages (setup.html, offline.html) call these, and main.js refuses
+  // them from anywhere else: the app served BY a server must not be able to
+  // repoint the shell at another one.
+  server: {
+    open: () => ipcRenderer.send("os1:server-open"),
+    cancel: () => ipcRenderer.send("os1:server-cancel"),
+    probe: (url) => ipcRenderer.invoke("os1:server-probe", url),
+    save: (url) => ipcRenderer.invoke("os1:server-save", url),
+  },
   // App auto-update (Squirrel.Mac, driven by main.js). `onState(cb)` reports
   // the current state immediately and again on every change, and returns an
   // unsubscribe. States: idle | available (= downloading) | downloaded.
