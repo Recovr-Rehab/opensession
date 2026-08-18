@@ -150,7 +150,7 @@ describe("session social card", () => {
 		expect(output).toContain("<title>Ship dynamic social cards · Open Session</title>");
 		expect(output).toContain('content="summary_large_image"');
 		expect(output).toMatch(
-			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png"/,
+			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=2"/,
 		);
 		expect(output).toContain(
 			'property="og:url" content="https://os.example.test/session/sess-social-1"',
@@ -164,13 +164,13 @@ describe("session social card", () => {
 		).toBe("sess-social-1");
 		expect(socialSessionIdFromPath("/settings")).toBeNull();
 		expect(sessionSocialCardUrl("sess-social-1")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png$/,
+			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=2$/,
 		);
 	});
 
 	test("signs ids containing Slack timestamp dots", () => {
 		expect(sessionSocialCardUrl("slack-C123-1719860000.000000")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png$/,
+			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=2$/,
 		);
 	});
 
@@ -199,7 +199,10 @@ describe("session social card", () => {
 		const route = sessionSocialCardPublicRoutes().get("GET /session-card/*")!;
 		const valid = new URL(sessionSocialCardUrl(signedRouteSessionId));
 		const invalid = new URL(
-			valid.href.replace(/[A-Za-z0-9_-]{32}\.png$/, `${"A".repeat(32)}.png`),
+			valid.href.replace(
+				/[A-Za-z0-9_-]{32}\.png(?=\?)/,
+				`${"A".repeat(32)}.png`,
+			),
 		);
 		const response = await route(new Request(invalid), invalid);
 		expect(response.status).toBe(404);

@@ -27,6 +27,7 @@ import { getUiPrefs } from "./ui-prefs";
 
 export const SESSION_CARD_WIDTH = 1200;
 export const SESSION_CARD_HEIGHT = 630;
+const SESSION_CARD_VERSION = 2;
 
 export interface SessionSocialCardData {
 	title: string;
@@ -240,7 +241,7 @@ function publicBase(): string {
 }
 
 export function sessionSocialCardUrl(sessionId: string): string {
-	return `${publicBase()}/session-card/${encodeURIComponent(sessionId)}/${cardToken(sessionId)}.png`;
+	return `${publicBase()}/session-card/${encodeURIComponent(sessionId)}/${cardToken(sessionId)}.png?v=${SESSION_CARD_VERSION}`;
 }
 
 let cachedCardSecret = "";
