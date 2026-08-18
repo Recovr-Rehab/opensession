@@ -500,14 +500,14 @@ export function Reviews({
                           const src = avatarUrl(s.prAuthor, providerFromUrl(s.prUrl), 40);
                           return src ? (
                             <img
-                              className="size-[22px] shrink-0 rounded-[32%] bg-active"
+                              className="size-[22px] shrink-0 rounded-avatar bg-active"
                               src={src}
                               alt=""
                               loading="lazy"
                             />
                           ) : (
                             <span
-                              className="inline-flex size-[22px] shrink-0 items-center justify-center rounded-[32%] bg-active text-meta font-semibold text-faint"
+                              className="inline-flex size-[22px] shrink-0 items-center justify-center rounded-avatar bg-active text-meta font-semibold text-faint"
                               aria-hidden
                             >
                               {s.prAuthor.charAt(0).toUpperCase()}

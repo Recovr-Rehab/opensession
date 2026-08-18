@@ -109,7 +109,7 @@ export function FilterPopover({
 	// rows already use.
 	const personIcon = (key: string, label: string) =>
 		key === AGENT_PERSON_KEY ? (
-			<span className="inline-flex size-4 shrink-0 items-center justify-center rounded-[32%] bg-active text-dim">
+			<span className="inline-flex size-4 shrink-0 items-center justify-center rounded-avatar bg-active text-dim">
 				<IconRobot size={13} />
 			</span>
 		) : (

@@ -120,7 +120,7 @@ function FeedOwnerMark({ owner }: { owner: FeedOwner }) {
 	}
 	return (
 		<span
-			className="flex size-[24px] shrink-0 items-center justify-center rounded-[32%] bg-active text-dim shadow-[var(--avatar-edge)]"
+			className="flex size-[24px] shrink-0 items-center justify-center rounded-avatar bg-active text-dim shadow-[var(--avatar-edge)]"
 			title={owner.label}
 		>
 			<IconRobot size={14} />

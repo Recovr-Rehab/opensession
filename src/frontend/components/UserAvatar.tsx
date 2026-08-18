@@ -67,7 +67,7 @@ export function UserAvatar({
 					? "[--avatar-edge:inset_0_0_0_1px_color-mix(in_srgb,var(--text)_14%,transparent)]"
 					: "[--avatar-edge:0_0_0_0_transparent]",
 				"relative inline-flex shrink-0 items-center justify-center",
-				"rounded-[32%] bg-active font-bold text-dim shadow-[var(--avatar-edge)] select-none",
+				"rounded-avatar bg-active font-bold text-dim shadow-[var(--avatar-edge)] select-none",
 				className,
 			)}
 			style={{

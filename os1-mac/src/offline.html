@@ -25,8 +25,12 @@
         --mono: "SF Mono", ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
         /* The radius multiplier and corner shape base.css flips together: a
            superellipse hugs the corner tighter than an arc, so a browser that
-           can draw one carries the larger radius. */
-        --rf: 1;
+           can draw one carries the larger radius, and a browser without
+           `corner-shape` takes the 1.75x smaller circular corner that cuts the
+           same amount off. This page only ever renders in Electron, which has
+           corner-shape, so the fallback is here to stay in step with base.css
+           rather than because anything draws it. */
+        --rf: 0.771;
         --cs: round;
       }
       /* The shell cannot read the app's stored theme (its own origin), so it

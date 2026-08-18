@@ -339,23 +339,36 @@
 	/* Squircle corner treatment (Chrome 139+ `corner-shape`). A superellipse
 	   hugs the corner tighter than a circular arc at the same radius, so a
 	   browser that can draw one carries a larger radius multiplier than the
-	   circular fallback. --rf scales every radius in the app and --cs picks the
-	   corner shape, so the pair flipped in the `@supports` block below is the
-	   whole switch.
+	   circular fallback. --rf scales every px radius in the app and --cs picks
+	   the corner shape, so the pair flipped in the `@supports` block below is
+	   the whole switch.
 
 	   `corner-shape` is Chromium-only (WebKit has not shipped it), so Safari,
-	   and therefore the installed iOS PWA, draws circular corners at --rf 1:
-	   every corner comes out at the radius it is authored with, which is what
-	   the app shipped before the squircle. 1 rather than the 0.85 this used to
-	   carry. 0.85 is near the geometric match (a circular arc meets the
-	   diagonal at 0.41r against a squircle's 0.23r) but reads visibly squarer
-	   than the squircle it stands in for, and it only ever applied to
-	   controls: large overlays kept the full 1.35, so a Safari palette was a
-	   very round shell full of noticeably squarer buttons. One factor keeps a
-	   shell and the controls inside it in the same relationship they have in
-	   Chrome, which is what the eye reads before it reads either corner. */
-	--rf: 1;
+	   and the installed iOS PWA with it, draws circular corners and has to
+	   reach the same shape with radius alone. It cannot land on it exactly,
+	   but the closest radius is the one that cuts the same amount off the
+	   corner: a circular arc removes 0.215r² of its corner square against a
+	   squircle's 0.073r², about three times as much, so it has to be 1.75x
+	   smaller to read at the same weight. 1.35 / 1.75 is the 0.771 here, and
+	   1.75 is the ratio tella-fusion authors its own squircle classes with
+	   (8px round against 14px squircle).
+
+	   This was 1, the radius each corner is authored with, and that is what
+	   made Safari read visibly rounder than Chrome. It was 0.85 before that,
+	   and why THAT was wrong is worth keeping: it reached only controls while
+	   large overlays kept the full 1.35, so a Safari palette was a very round
+	   shell full of squarer buttons, the hierarchy inverted rather than
+	   degraded. Every radius in the app now derives from this one token, so a
+	   shell and the controls inside it move together whatever it is set to. */
+	--rf: 0.771;
 	--cs: round;
+	/* The same correction for a radius written as a PERCENTAGE of its box,
+	   which --rf cannot scale because the percentage is already relative: the
+	   32% avatar tile, and nothing else. Percentages are authored at the value
+	   Chrome squircles, so this is 1 there and carries the whole 1/1.75 shrink
+	   in Safari. Derived from --rf rather than declared twice, so the
+	   `@supports` flip below stays the only place either one moves. */
+	--rp: calc(var(--rf) / 1.35);
 	/* Session column width — messages, work blocks, composer, ask cards all share
 	   it so the conversation reads as one column. */
 	--session-col: 780px;
@@ -1071,7 +1084,9 @@ button {
 	   file is authored as `calc(<value> * var(--rf))` + `corner-shape: var(--cs)`,
 	   so flipping these two tokens rounds up ALL radii at once. 1.35 matches the
 	   bump the Tailwind utilities already ship in tailwind.css, so legacy CSS
-	   and the new UI system land on the same corner. */
+	   and the new UI system land on the same corner. --rp follows on its own:
+	   it is derived from --rf, so a percentage radius lands back at the value
+	   it is authored with here and takes the circular shrink everywhere else. */
 	:root {
 		--rf: 1.35;
 		--cs: squircle;
@@ -1594,7 +1609,7 @@ html.wco .app-body.sidebar-collapsed .wco-chrome {
 	transform: translateY(-50%);
 	/* UserAvatar's squircle, the same shape the picture takes in the mention
 	   picker and in the sent chip. */
-	border-radius: 32%; corner-shape: var(--cs);
+	border-radius: calc(32% * var(--rp)); corner-shape: var(--cs);
 	background: var(--cmp-face) center / cover no-repeat, var(--bg-active);
 	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text) 14%, transparent);
 }
@@ -2217,7 +2232,7 @@ a.person-chip:focus-visible {
 	/* The same picture the app draws everywhere else: UserAvatar's squircle
 	   tile at 32%, not a circle. A round face here was the one person-shaped
 	   thing in the product that was not the product's own avatar. */
-	border-radius: 32%; corner-shape: var(--cs);
+	border-radius: calc(32% * var(--rp)); corner-shape: var(--cs);
 	object-fit: cover;
 	/* Same 1px lift as the session chip's glyph: flex centres on the line box,
 	   which sits below the cap band the eye reads the name by. */
@@ -2233,7 +2248,7 @@ a.person-chip:focus-visible {
 	max-height: none;
 	margin: 0;
 	border: 0;
-	border-radius: 32%; corner-shape: var(--cs);
+	border-radius: calc(32% * var(--rp)); corner-shape: var(--cs);
 }
 .person-chip-initial {
 	display: inline-grid;

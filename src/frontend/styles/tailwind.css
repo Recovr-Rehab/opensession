@@ -238,6 +238,14 @@
 	--radius-lg: calc(14px * var(--rf));
 	--radius-xl: calc(18px * var(--rf));
 	--radius-2xl: calc(22px * var(--rf));
+	/* The person tile: a face, a photo or an initial, at every size from the
+	   14px chip to the 26px people row. It is the one corner in the app
+	   written as a share of its box rather than in px, because it has to hold
+	   the same shape across that range, so it scales through --rp instead of
+	   --rf. Named here because `rounded-[32%]` was written out at nine call
+	   sites and a tenth would have had no way of knowing it was a shape the
+	   product repeats rather than a number somebody picked. */
+	--radius-avatar: calc(32% * var(--rp));
 	--text-xs: 13px;
 	--text-sm: 13px;
 	/* Tailwind's stock body alias, kept level with --text-body on purpose: it is
