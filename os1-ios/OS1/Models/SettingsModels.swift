@@ -150,6 +150,9 @@ struct SecurityScanResult: Codable, Sendable {
 
 struct ModelCatalogSettings: Codable, Sendable {
     var models: [SettingsModelOption]?
+    /// Engines a model can be routed to. Absent on a server that predates
+    /// them, which reads the same as a single-engine instance.
+    var engines: [ModelEngineOption]?
     var `default`: String?
     var interactiveDefault: String?
     var autoFallback: Bool?

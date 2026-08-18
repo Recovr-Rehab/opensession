@@ -20,7 +20,7 @@ struct ModelOption: Decodable, Identifiable, Hashable, Sendable {
 
 /// One execution engine from `GET /api/models`. `available` is optional so an
 /// older server that only sent an id and label still leaves the engine usable.
-struct ModelEngineOption: Decodable, Identifiable, Hashable, Sendable {
+struct ModelEngineOption: Codable, Identifiable, Hashable, Sendable {
     let id: String
     var label: String
     var available: Bool?
@@ -125,6 +125,24 @@ struct ModelCatalog: Decodable, Sendable {
               Self.routedID(id, engine: preferred) != nil
         else { return "opencode" }
         return preferred
+    }
+
+    /// The id a NEW session should start on for somebody whose personal
+    /// default engine is `engine` ("" = no preference). Engine lives in the
+    /// model id and nowhere else, and a bare picker id is what the composer
+    /// sends both for a deliberate OpenCode pick and for no pick at all — so
+    /// the preference can only be applied to the id the composer starts with,
+    /// never to one already chosen. Fail-soft: an engine this instance no
+    /// longer offers, and a model that cannot route to it, both keep the
+    /// unprefixed id rather than starting a session that cannot run. Mirrors
+    /// preferredNewSessionModel in the web's lib/new-session-model.
+    func preferredID(_ id: String, engine: String) -> String {
+        guard !engine.isEmpty,
+              engine != "opencode",
+              availableEngines.contains(where: { $0.id == engine }),
+              let routed = Self.routedID(id, engine: engine)
+        else { return id }
+        return routed
     }
 
     func option(for id: String?) -> ModelOption? {

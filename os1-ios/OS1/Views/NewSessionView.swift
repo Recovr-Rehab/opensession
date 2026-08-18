@@ -89,6 +89,7 @@ struct NewSessionView: View {
     /// The universal "+" reopens on whatever repo was used last.
     @AppStorage("os1.newSession.repo") private var lastRepo = ""
     @AppStorage("os1.composer.defaultModel") private var preferredModel = ""
+    @AppStorage("os1.composer.defaultEngine") private var preferredEngine = ""
 
     var body: some View {
         NavigationStack {
@@ -789,14 +790,20 @@ struct NewSessionView: View {
         sandboxStatus = try? await sandboxFetch
         if let fetched = try? await modelsFetch {
             catalog = fetched
-            let livePreferred = (try? await SettingsAPI.uiPrefs(
+            let livePrefs = try? await SettingsAPI.uiPrefs(
                 user: ServerConfig.shared.userName
-            ))?["default-model"] ?? preferredModel
+            )
+            let livePreferred = livePrefs?["default-model"] ?? preferredModel
+            let liveEngine = livePrefs?["default-engine"] ?? preferredEngine
             preferredModel = livePreferred
+            preferredEngine = liveEngine
             if model.isEmpty {
-                model = fetched.option(for: livePreferred) != nil
+                let start = fetched.option(for: livePreferred) != nil
                     ? livePreferred
                     : (fetched.defaultModel ?? "")
+                // Start on their default engine too. It then stays with the
+                // composer: selectModel recomposes onto currentEngine.
+                model = fetched.preferredID(start, engine: liveEngine)
             }
             defaultEffortForCurrentModel()
         }

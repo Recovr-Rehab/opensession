@@ -23,7 +23,7 @@ import {
   subtractStaging,
   type StagingCount,
 } from "../lib/attachments";
-import { getDefaultModelPref } from "../lib/default-model-pref";
+import { resolveNewSessionModel } from "../lib/default-model-pref";
 import { baseModelId, modelEngine } from "./ModelEffortSelect";
 import { getSendKeyPref, onSendKeyChanged } from "../lib/send-key-pref";
 import { effectiveSendKey, MOD_ENTER_GLYPH } from "../lib/send-key";
@@ -781,9 +781,13 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
 
   useEffect(() => {
 		fetchModels(modelWorkspaceId || workspaceId)
-      .then((m) => {
+      .then(async (m) => {
         setModels(m.models);
         setDefaultModel(m.default);
+        // Untouched picker: start on this person's own default model and
+        // engine (Settings → Preferences); "" is no preference, which keeps
+        // the workspace default.
+        const preselect = await resolveNewSessionModel(m);
         setModel((current) => {
           if (current) {
             // Pi-routed ids validate against their base entry (the pi/ prefix
@@ -792,16 +796,7 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
               ? current
               : "";
           }
-          // Untouched picker: preselect the user's own default-model pref
-          // (Settings → Preferences) when it's set and still selectable; "" (no
-          // preference) keeps the workspace default.
-          const pref = getDefaultModelPref();
-          if (pref && m.models.some((item) => item.id === pref)) return pref;
-          // A workspace default is an actual combination, not merely display
-          // state: retain its id so create_session receives and stores it.
-          return baseModelId(m.default).startsWith("workspace-preset/")
-            ? m.default
-            : "";
+          return preselect;
         });
       })
       .catch(() => {});

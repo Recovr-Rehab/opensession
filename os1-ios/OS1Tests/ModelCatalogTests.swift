@@ -128,6 +128,49 @@ final class ModelCatalogTests: XCTestCase {
         )
     }
 
+    func testPreferredIDStartsANewSessionOnAPersonalEngine() throws {
+        let data = Data(
+            """
+            {
+              "models": [{"id":"opencode/anthropic/claude-opus-5","label":"Opus 5"}],
+              "default": "dial/opus-fable",
+              "engines": [
+                {"id":"opencode","label":"OpenCode","available":true},
+                {"id":"pi","label":"Pi","available":true},
+                {"id":"claude","label":"Claude","available":true},
+                {"id":"codex","label":"Codex","available":false}
+              ]
+            }
+            """.utf8
+        )
+        let catalog = try JSONDecoder().decode(ModelCatalog.self, from: data)
+
+        XCTAssertEqual(
+            catalog.preferredID("opencode/anthropic/claude-opus-5", engine: "pi"),
+            "pi/anthropic/claude-opus-5"
+        )
+        XCTAssertEqual(
+            catalog.preferredID("dial/opus-fable", engine: "pi"),
+            "pi/dial/opus-fable"
+        )
+        // No preference, and OpenCode is the unprefixed base form rather than
+        // a prefix of its own.
+        XCTAssertEqual(catalog.preferredID("dial/opus-fable", engine: ""), "dial/opus-fable")
+        XCTAssertEqual(
+            catalog.preferredID("opencode/anthropic/claude-opus-5", engine: "opencode"),
+            "opencode/anthropic/claude-opus-5"
+        )
+        // Fail-soft: an engine this instance no longer offers, a model whose
+        // vendor the engine does not serve, and an id with no prefixable shape
+        // all keep the unprefixed id.
+        XCTAssertEqual(catalog.preferredID("dial/opus-fable", engine: "codex"), "dial/opus-fable")
+        XCTAssertEqual(
+            catalog.preferredID("opencode/openai/gpt-5.6-sol", engine: "claude"),
+            "opencode/openai/gpt-5.6-sol"
+        )
+        XCTAssertEqual(catalog.preferredID("claude-opus-5", engine: "pi"), "claude-opus-5")
+    }
+
     @MainActor
     func testWorkspaceCatalogPathEncodesQueryValue() {
         let path = OS1API.modelsPath(workspaceId: "ws/a b")

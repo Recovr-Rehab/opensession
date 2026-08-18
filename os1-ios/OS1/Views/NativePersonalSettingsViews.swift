@@ -89,6 +89,7 @@ struct NotificationsSettingsView: View {
 /// (Settings → Preferences). Haptics is the device-local exception.
 struct PreferencesSettingsView: View {
     @AppStorage("os1.composer.defaultModel") private var nativeDefaultModel = ""
+    @AppStorage("os1.composer.defaultEngine") private var nativeDefaultEngine = ""
     @AppStorage("os1.composer.sendKey") private var nativeSendKey = "enter"
     @AppStorage("os1.composer.busySend") private var nativeBusySend = "queue"
     @AppStorage("os1.composer.busySendMod") private var nativeBusySendMod = "steer"
@@ -101,7 +102,9 @@ struct PreferencesSettingsView: View {
     @AppStorage(Haptics.preferenceKey) private var haptics = true
 
     @State private var models: [SettingsModelOption]
+    @State private var engines: [ModelEngineOption]
     @State private var defaultModel: String
+    @State private var defaultEngine: String
     @State private var sendKey: String
     @State private var busySend: String
     @State private var busySendMod: String
@@ -128,6 +131,7 @@ struct PreferencesSettingsView: View {
         let defaults = UserDefaults.standard
         let seeded: [String: String] = [
             "default-model": defaults.string(forKey: "os1.composer.defaultModel") ?? "",
+            "default-engine": defaults.string(forKey: "os1.composer.defaultEngine") ?? "",
             "send-key": defaults.string(forKey: "os1.composer.sendKey") ?? "enter",
             "busy-send": defaults.string(forKey: "os1.composer.busySend") ?? "queue",
             "busy-send-mod": defaults.string(forKey: "os1.composer.busySendMod") ?? "steer",
@@ -136,16 +140,25 @@ struct PreferencesSettingsView: View {
         ]
         _seededPrefs = State(initialValue: seeded)
         _defaultModel = State(initialValue: seeded["default-model"] ?? "")
+        _defaultEngine = State(initialValue: seeded["default-engine"] ?? "")
         _sendKey = State(initialValue: seeded["send-key"] ?? "enter")
         _busySend = State(initialValue: seeded["busy-send"] ?? "queue")
         _busySendMod = State(initialValue: seeded["busy-send-mod"] ?? "steer")
         _turnActivity = State(initialValue: seeded["turn-activity"] ?? "auto")
         _replySuggestions = State(initialValue: seeded["reply-suggestions"] != "off")
-        _models = State(initialValue: SettingsCache.value("model-catalog", as: ModelCatalogSettings.self)?.models ?? [])
+        let cachedCatalog = SettingsCache.value("model-catalog", as: ModelCatalogSettings.self)
+        _models = State(initialValue: cachedCatalog?.models ?? [])
+        _engines = State(initialValue: cachedCatalog?.engines ?? [])
     }
 
     private var selectableModels: [SettingsModelOption] {
         models.filter { $0.id?.isEmpty == false }
+    }
+
+    /// Nothing to choose on a single-engine instance, and the same empty list
+    /// comes back from a server too old to answer — both hide the row.
+    private var selectableEngines: [ModelEngineOption] {
+        engines.filter(\.isAvailable)
     }
 
     var body: some View {
@@ -175,10 +188,22 @@ struct PreferencesSettingsView: View {
                         }
                     }
                 }
+                if selectableEngines.count > 1 {
+                    Picker("Default engine", selection: $defaultEngine) {
+                        Text("No preference").tag("")
+                        ForEach(selectableEngines, id: \.id) { engine in
+                            Text(engine.label).tag(engine.id)
+                        }
+                    }
+                }
             } header: {
                 Text("New sessions")
             } footer: {
-                Text("New sessions use this model when available. No preference uses the workspace default.")
+                Text(
+                    selectableEngines.count > 1
+                        ? "New sessions use this model and engine when available. No preference uses the workspace default."
+                        : "New sessions use this model when available. No preference uses the workspace default."
+                )
             }
 
             Section {
@@ -272,6 +297,7 @@ struct PreferencesSettingsView: View {
         #endif
         .task { await load() }
         .onChange(of: defaultModel) { _, _ in commit() }
+        .onChange(of: defaultEngine) { _, _ in commit() }
         .onChange(of: sendKey) { _, _ in commit() }
         .onChange(of: busySend) { _, _ in commit() }
         .onChange(of: busySendMod) { _, _ in commit() }
@@ -311,6 +337,7 @@ struct PreferencesSettingsView: View {
             guard NativePreferences.context() == requestContext else { loading = false; return }
             let server: [String: String] = [
                 "default-model": prefs["default-model"] ?? nativeDefaultModel,
+                "default-engine": prefs["default-engine"] ?? nativeDefaultEngine,
                 "send-key": prefs["send-key"] == "mod-enter" ? "mod-enter" : "enter",
                 "busy-send": prefs["busy-send"] == "steer" ? "steer" : "queue",
                 "busy-send-mod": prefs["busy-send-mod"] == "queue" ? "queue" : "steer",
@@ -328,6 +355,7 @@ struct PreferencesSettingsView: View {
             // only the ones still sitting on their seed adopt the server's.
             // The `commit()` below then pushes whatever they changed.
             if defaultModel == seededPrefs["default-model"] { defaultModel = server["default-model"] ?? defaultModel }
+            if defaultEngine == seededPrefs["default-engine"] { defaultEngine = server["default-engine"] ?? defaultEngine }
             if sendKey == seededPrefs["send-key"] { sendKey = server["send-key"] ?? sendKey }
             if busySend == seededPrefs["busy-send"] { busySend = server["busy-send"] ?? busySend }
             if busySendMod == seededPrefs["busy-send-mod"] { busySendMod = server["busy-send-mod"] ?? busySendMod }
@@ -351,6 +379,7 @@ struct PreferencesSettingsView: View {
         do {
             let catalog = try await SettingsAPI.modelCatalog()
             models = catalog.models ?? []
+            engines = catalog.engines ?? []
             SettingsCache.save("model-catalog", catalog)
         } catch {
             if self.error == nil { self.error = error.localizedDescription }
@@ -380,6 +409,7 @@ struct PreferencesSettingsView: View {
                 return
             }
             defaultModel = confirmed["default-model"] ?? defaultModel
+            defaultEngine = confirmed["default-engine"] ?? defaultEngine
             sendKey = confirmed["send-key"] == "mod-enter" ? "mod-enter" : "enter"
             busySend = confirmed["busy-send"] == "steer" ? "steer" : "queue"
             busySendMod = confirmed["busy-send-mod"] == "queue" ? "queue" : "steer"
@@ -388,6 +418,7 @@ struct PreferencesSettingsView: View {
                 confirmed["reply-suggestions"]
             ) ?? replySuggestions
             nativeDefaultModel = defaultModel
+            nativeDefaultEngine = defaultEngine
             #if os(macOS)
             nativeSendKey = sendKey
             #endif
@@ -409,6 +440,7 @@ struct PreferencesSettingsView: View {
     private var currentPrefs: [String: String] {
         [
             "default-model": defaultModel,
+            "default-engine": defaultEngine,
             "send-key": sendKey,
             "busy-send": busySend,
             "busy-send-mod": busySendMod,

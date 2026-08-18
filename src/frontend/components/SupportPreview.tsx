@@ -6,7 +6,7 @@ import { Composer } from "./Composer";
 import { useCurrentUser } from "./UserPicker";
 import { ConversationPane } from "./ConversationPane";
 import { loadDraft, saveDraft, clearDraft } from "../lib/drafts";
-import { getDefaultModelPref } from "../lib/default-model-pref";
+import { resolveNewSessionModel } from "../lib/default-model-pref";
 import { InlineAlert } from "../ui/state";
 
 interface Props {
@@ -69,14 +69,13 @@ export function SupportPreview({
 
 	useEffect(() => {
 		fetchModels()
-			.then((m) => {
+			.then(async (m) => {
 				setModels(m.models);
 				setDefaultModel(m.default);
-				// Preselect the user's own default-model pref (Settings →
-				// Preferences) when set and selectable; "" keeps the workspace default.
-				const pref = getDefaultModelPref();
-				if (pref && m.models.some((item) => item.id === pref))
-					setModel((current) => current || pref);
+				// Preselect this person's own default model and engine (Settings →
+				// Preferences); "" keeps the workspace default.
+				const preselect = await resolveNewSessionModel(m);
+				if (preselect) setModel((current) => current || preselect);
 			})
 			.catch(() => {});
 	}, []);

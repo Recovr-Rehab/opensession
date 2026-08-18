@@ -98,6 +98,17 @@ enum NativePreferences {
             resetMissing: changedIdentity,
             in: defaults
         )
+        // Not validated against the engine list here: which engines exist is a
+        // property of the instance, read where the preference is applied
+        // (ModelCatalog.preferredID), so one that is turned off reads as no
+        // preference rather than being forgotten.
+        set(
+            prefs["default-engine"],
+            default: "",
+            key: "os1.composer.defaultEngine",
+            resetMissing: changedIdentity,
+            in: defaults
+        )
         set(
             validated(prefs["send-key"], allowed: ["enter", "mod-enter"]),
             default: "enter",
