@@ -66,7 +66,7 @@ export const TAB_STRIP =
 	// above carries no border of its own, and a top inset here would put a
 	// second line across a top region meant to read as one surface.
 	//
-	// The non-split bar takes its 8px header overlap at the call site. Split bars
+	// The non-split bar takes its 5px header overlap at the call site. Split bars
 	// start at the top of an overflow-clipped column, so their full box stays in
 	// flow instead of losing its top edge outside that column.
 	"desktop:h-10 desktop:items-stretch desktop:py-0 " +
@@ -382,26 +382,24 @@ const CTRL_BASE =
 
 /**
  * New-tab "+". A comfortable square hit area on touch; on desktop a real
- * control on the same footprint and weight as the header's ⋯ menu. The
- * non-split strip overlaps the header by 8px, so the square sits 3px below its
- * geometric center to keep the hover plate out of the header's repaint area.
+ * control on the same footprint and weight as the header's ⋯ menu, centered
+ * on the same line as the tab labels.
  */
 export const TAB_NEW =
 	`${CTRL_BASE} justify-center text-[15px] ` +
-	"desktop:min-h-auto desktop:translate-y-[3px] desktop:self-center desktop:rounded-control " +
+	"desktop:min-h-auto desktop:self-center desktop:rounded-control " +
 	"desktop:px-[5px] desktop:py-[3px] desktop:text-[22px] " +
 	CTRL_REVEAL;
 
 /**
  * Archived-sessions menu. Same desktop footprint as the "+" it sits beside:
  * the two are one pair of quiet square controls after the last tab, and a
- * taller plate here read as a control stretched to fill the 40px band. It uses
- * the same 3px clearance as the plus. Stays lit while its menu is open
- * (`data-popup-open`).
+ * taller plate here read as a control stretched to fill the 40px band. Stays
+ * lit while its menu is open (`data-popup-open`).
  */
 export const TAB_HISTORY =
 	`${CTRL_BASE} justify-center ` +
-	"desktop:min-h-auto desktop:translate-y-[3px] desktop:self-center desktop:rounded-control " +
+	"desktop:min-h-auto desktop:self-center desktop:rounded-control " +
 	"desktop:px-[5px] desktop:py-[3px] " +
 	"data-[popup-open]:bg-hover data-[popup-open]:text-fg " +
 	CTRL_REVEAL;
