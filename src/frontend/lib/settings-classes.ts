@@ -30,6 +30,8 @@
  * two navs genuinely differ on, and says why.
  */
 
+import { cn } from "../ui/cn";
+import { SCROLL_EDGE_DIVIDER } from "./app-shell-classes";
 import {
 	SIDEBAR_DENSITY_VARS,
 	SIDEBAR_GROUP,
@@ -61,6 +63,25 @@ export const SETTINGS_PAGE = "flex min-h-0 flex-1 bg-sidebar";
  */
 export const SETTINGS_NAV =
 	`flex w-58 shrink-0 flex-col px-3 py-4 [html.wco_&]:pt-(--desktop-header-h) ${SIDEBAR_DENSITY_VARS}`;
+
+/**
+ * The nav's search field, and the seam it grows once the section list travels
+ * under it.
+ *
+ * At rest there is no line: the field and the list sit on one fill, so there is
+ * nothing between them to close off. Once the list has scrolled there is a cut
+ * edge, a row sliced in half at the top of the scrollport, and this closes it.
+ * The app's own chrome rows answer their scroller on the same terms; see
+ * SCROLL_EDGE_DIVIDER, and hooks/useScrollEdge.ts for why the state arrives as
+ * an attribute rather than a scroll timeline.
+ *
+ * The line runs to the column's own edges rather than the field's, which is
+ * where SettingsAccountFooter puts its top border: a seam across the column is
+ * as wide as the column. The 8px under the field is the air that keeps a
+ * half-scrolled row off the field's edge, and the list's own `pt-2` matches it
+ * at rest, so the line lands centred in the gap it appears in.
+ */
+export const SETTINGS_NAV_SEARCH = cn(SCROLL_EDGE_DIVIDER, "pb-2 after:-inset-x-3");
 
 /**
  * The scrolling section list, and one group inside it.

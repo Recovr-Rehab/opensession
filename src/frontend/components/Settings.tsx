@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useIsPhone } from "../hooks/useIsPhone";
+import { useScrollEdge } from "../hooks/useScrollEdge";
 import { cn } from "../ui/cn";
 import { useAuthStatus } from "./UserPicker";
 import {
@@ -19,6 +20,7 @@ import {
 	SETTINGS_NAV_ICON,
 	SETTINGS_NAV_LIST,
 	SETTINGS_NAV_ROW,
+	SETTINGS_NAV_SEARCH,
 } from "../lib/settings-classes";
 import { matchSections, type SectionHit } from "../lib/settings-search";
 import { Input } from "../ui/input";
@@ -610,11 +612,14 @@ function NavSearch({
 	onSubmit,
 	className,
 	sheet,
+	ref,
 }: {
 	value: string;
 	onChange: (v: string) => void;
 	onSubmit: () => void;
 	className?: string;
+	/** The desktop nav marks this box when the list scrolls under it. */
+	ref?: React.Ref<HTMLDivElement>;
 	/** Phone sheet: the field sits in a page of grouped cards rather than in
 	 *  the desktop sidebar's chrome, so it takes the cards' own fill instead of
 	 *  an outlined well, and a touch-sized box with a 16px value — anything
@@ -625,7 +630,7 @@ function NavSearch({
 	// The positioned box wraps the field only, so a caller's className can pad
 	// or stick the strip around it without moving the icons off the field.
 	return (
-		<div className={className}>
+		<div className={className} ref={ref}>
 			<div className="relative">
 				<IconSearch
 					size={sheet ? 20 : 18}
@@ -762,6 +767,11 @@ export function Settings({
 	// the whole page to a stray Esc is worse than having no keyboard exit.
 
 	const [query, setQuery] = useState("");
+	// The search field is a sibling above the section list, not its parent, so
+	// it cannot know on its own when rows have started travelling under it. The
+	// app's own chrome rows ask the same question the same way.
+	const [searchBar, setSearchBar] = useState<HTMLDivElement | null>(null);
+	useScrollEdge(searchBar, "[data-settings-nav-scroll]");
 
 	// Group the nav entries under their group label (order preserved).
 	const groups: SectionGroup[] = [];
@@ -813,12 +823,14 @@ export function Settings({
 					Back to app
 				</button>
 				<NavSearch
+					ref={setSearchBar}
 					value={query}
 					onChange={setQuery}
 					onSubmit={() => firstHit && onSelect(firstHit.key)}
-					className="mb-1"
+					className={SETTINGS_NAV_SEARCH}
 				/>
-				<div className={SETTINGS_NAV_LIST}>
+				{/* The attribute is what useScrollEdge finds the scrollport by. */}
+				<div data-settings-nav-scroll className={SETTINGS_NAV_LIST}>
 					{shown.map((g) => (
 						<div className={SETTINGS_NAV_GROUP} key={g.group}>
 							<div className={SETTINGS_NAV_CAPTION}>{g.group}</div>
