@@ -14,6 +14,7 @@ import {
 import { AGENT_PERSON_KEY } from "../../lib/automation-audience";
 import { useIsPhone } from "../../hooks/useIsPhone";
 import { Menu } from "../../ui/menu";
+import { SwitchIndicator } from "../../ui/switch";
 import { cn } from "../../ui/cn";
 import { RepoTile, repoLabel } from "../RepoTile";
 import { IconChevronDown, IconChevronRight, IconRobot } from "../icons";
@@ -302,7 +303,7 @@ export function FilterPopover({
 							}
 						>
 							<span className="grow truncate">Hide when empty</span>
-							<Menu.Check on={filter.emptyProjects === "hide"} />
+							<SwitchIndicator on={filter.emptyProjects === "hide"} />
 						</Menu.CheckboxItem>
 					}
 				/>
@@ -368,9 +369,13 @@ export function FilterPopover({
 						    A setting with only an on and an off is a row you flip, not
 						    a question with a submenu behind it: "Shown" and "Hidden"
 						    one level further in is a menu to read and two presses to
-						    answer what a tick answers in one. Named for what ticking
-						    it does, and it stays open on a press, the way every
-						    checkable menu row in the app does. */}
+						    answer what one press answers here. It wears a switch
+						    rather than a tick because it is a setting, not one option
+						    picked out of a list: a switch says on and off in its
+						    shape, where a tick can only say "this one" by being
+						    there and "not this one" by being absent. Named for what
+						    turning it on does, and it stays open on a press, the way
+						    every checkable menu row in the app does. */}
 						<Menu.CheckboxItem
 							checked={filter.autoCreated === "show"}
 							onCheckedChange={(shown) =>
@@ -378,7 +383,7 @@ export function FilterPopover({
 							}
 						>
 							<span className="grow truncate">Show auto created</span>
-							<Menu.Check on={filter.autoCreated === "show"} />
+							<SwitchIndicator on={filter.autoCreated === "show"} />
 						</Menu.CheckboxItem>
 						{/* Desktop only, because that is the whole of what the
 						    preference does: a phone row is a tap target and keeps its
