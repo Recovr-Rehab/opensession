@@ -479,54 +479,11 @@ private struct RepoTileEditorView: View {
     /// same job the web editor's canvas does, and for the same reason: the
     /// server's icon path decodes PNG and nothing else.
     private func upload(_ raw: Data) async {
-        guard let png = Self.squarePNG(raw) else {
+        guard let png = SettingsIconImage.squarePNG(raw) else {
             error = "That image couldn’t be read."
             return
         }
         await run { try await OS1API.uploadRepoIcon(id: repo.id, png: png) }
-    }
-
-    private static func squarePNG(_ raw: Data, side: CGFloat = 256) -> Data? {
-        #if canImport(UIKit)
-        guard let image = UIImage(data: raw) else { return nil }
-        let size = CGSize(width: side, height: side)
-        let format = UIGraphicsImageRendererFormat.default()
-        format.scale = 1
-        format.opaque = false
-        let rendered = UIGraphicsImageRenderer(size: size, format: format).image { _ in
-            // Aspect fit on transparency: a wide logo is letterboxed rather
-            // than stretched, and the tile's own rounding shows through.
-            let scale = min(side / image.size.width, side / image.size.height)
-            let drawn = CGSize(
-                width: image.size.width * scale,
-                height: image.size.height * scale
-            )
-            image.draw(in: CGRect(
-                x: (side - drawn.width) / 2,
-                y: (side - drawn.height) / 2,
-                width: drawn.width,
-                height: drawn.height
-            ))
-        }
-        return rendered.pngData()
-        #else
-        guard let source = NSImage(data: raw) else { return nil }
-        let target = NSImage(size: NSSize(width: side, height: side))
-        target.lockFocus()
-        let scale = min(side / source.size.width, side / source.size.height)
-        let drawn = NSSize(width: source.size.width * scale, height: source.size.height * scale)
-        source.draw(in: NSRect(
-            x: (side - drawn.width) / 2,
-            y: (side - drawn.height) / 2,
-            width: drawn.width,
-            height: drawn.height
-        ))
-        target.unlockFocus()
-        guard let tiff = target.tiffRepresentation,
-              let bitmap = NSBitmapImageRep(data: tiff)
-        else { return nil }
-        return bitmap.representation(using: .png, properties: [:])
-        #endif
     }
 
     // MARK: - Avatar

@@ -9,8 +9,8 @@
  *
  * Precedence per key: existing env var → config.json → built-in default.
  *
- * Sections `server`, `paths`, `repos`, `identity`, `persona`, `branding`,
- * `policy`, and integration-specific settings are consumed by their owning
+ * Sections `server`, `paths`, `repos`, `identity`, `organization`, `persona`,
+ * `branding`, `policy`, and integration-specific settings are consumed by their owning
  * modules. See config.example.json at the repo root for the full schema.
  */
 
@@ -180,6 +180,12 @@ export interface PersonaSection {
   product?: string;
 }
 
+/** The company or team sharing this Open Session instance. */
+export interface OrganizationSection {
+  /** Workspace name shown to everyone using the instance. */
+  name?: string;
+}
+
 /** Instance branding — what the *platform itself* is called in the UI
  *  (distinct from persona: `persona.name` is the agent, `persona.product`
  *  is the company's product the agent supports). */
@@ -204,6 +210,7 @@ export interface OpenSessionConfig {
   identity?: IdentitySection;
   integrations?: IntegrationsSection;
   policy?: PolicySection;
+  organization?: OrganizationSection;
   persona?: PersonaSection;
   branding?: BrandingSection;
 }
@@ -487,6 +494,12 @@ function parseConfig(text: string): OpenSessionConfig {
         githubBotLogins: strArray(policy.githubBotLogins),
       });
     }
+    const organization = obj(raw.organization);
+    if (organization) {
+      cfg.organization = defined({
+        name: str(organization.name),
+      });
+    }
     const persona = obj(raw.persona);
     if (persona) {
       cfg.persona = defined({
@@ -728,6 +741,12 @@ export function productName(): string {
  *  falls back to the full product name. */
 export function productMark(): string {
   return getConfig().branding?.productMark || productName();
+}
+
+/** The company or team sharing this instance. A fresh install falls back to
+ * the product name until an administrator names the organization. */
+export function organizationName(): string {
+  return getConfig().organization?.name || productName();
 }
 
 export interface IdentityPatch {

@@ -13,6 +13,7 @@ struct SettingsView: View {
     @State private var checkResult: String?
     @State private var copiedCode = false
     @State private var confirmingSignOut = false
+    @State private var isAdmin = true
 
     private var signIn: GitHubSignIn { .shared }
 
@@ -43,6 +44,11 @@ struct SettingsView: View {
             #endif
             .toolbar { toolbar }
             .onAppear { signIn.nudge() }
+            .task {
+                if let status = try? await OS1API.authStatus() {
+                    isAdmin = status.admin != false
+                }
+            }
             .onChange(of: signIn.flow?.deviceCode) { _, deviceCode in
                 copiedCode = false
                 if deviceCode == nil, config.token != token {
@@ -92,6 +98,11 @@ struct SettingsView: View {
             // Identity, Members and Integrations are not rows of their own here
             // — they live inside Setup, which is where a phone meets them.
             Section("Workspace") {
+                if isAdmin {
+                    settingsLink("General", icon: "building.2") {
+                        GeneralSettingsView()
+                    }
+                }
                 settingsLink("Setup", icon: "checklist") {
                     SetupSettingsView()
                 }
@@ -99,8 +110,10 @@ struct SettingsView: View {
                 // says which one: a name card for what the instance is
                 // called, a crop of one face for your own sign-ins, two
                 // figures for the roster of everybody.
-                settingsLink("Identity", icon: "person.text.rectangle") {
-                    IdentitySettingsView()
+                if isAdmin {
+                    settingsLink("Identity", icon: "person.text.rectangle") {
+                        IdentitySettingsView()
+                    }
                 }
                 settingsLink("Repositories", icon: "shippingbox") {
                     RepositoriesSettingsView()

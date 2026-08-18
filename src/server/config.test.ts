@@ -11,6 +11,7 @@ import {
   configPath,
   defaultRepo,
   personaName,
+  organizationName,
   productName,
   productMark,
   updateIdentityConfig,
@@ -200,6 +201,14 @@ describe("config loader", () => {
     withConfig(JSON.stringify({ persona: { name: "  " }, branding: { productName: "" } }));
     expect(personaName()).toBe("Assistant");
     expect(productName()).toBe("Open Session");
+  });
+
+  test("organization: name falls back to the product name", () => {
+    withConfig(JSON.stringify({ branding: { productName: "OpenSession" } }));
+    expect(organizationName()).toBe("OpenSession");
+
+    withConfig(JSON.stringify({ organization: { name: "Acme" } }));
+    expect(organizationName()).toBe("Acme");
   });
 
   test("identity: custom roster is parsed and validated", () => {

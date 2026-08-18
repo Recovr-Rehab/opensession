@@ -977,6 +977,7 @@ enum OS1API {
         /// Signed out because GitHub ended this person's grant, not because
         /// they never signed in, so `login` is still theirs.
         let reconnectRequired: Bool?
+        let admin: Bool?
         let login: String?
         let name: String?
     }

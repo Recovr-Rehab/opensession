@@ -1,4 +1,4 @@
-import { request } from "./request";
+import { API_BASE, ApiError, request } from "./request";
 
 // ── Audit log ──
 
@@ -276,7 +276,54 @@ export async function savePersonalPrompt(
 	});
 }
 
-// ── Instance identity (Settings → General: agent + product name) ──
+// ── Organization settings (Settings → Workspace → General) ──
+
+export interface OrganizationSettingsDto {
+	organizationName: string;
+	organizationIconUrl: string | null;
+	organizationIconRevision: string | null;
+	configPath: string;
+}
+
+export async function fetchOrganizationSettings(): Promise<OrganizationSettingsDto> {
+	return request("/settings/general", {
+		label: "Failed to fetch organization settings",
+	});
+}
+
+/** Empty string resets the name to the instance's product name. */
+export async function saveOrganizationSettings(patch: {
+	organizationName?: string;
+}): Promise<OrganizationSettingsDto> {
+	return request("/settings/general", { method: "PUT", body: patch });
+}
+
+export async function uploadOrganizationIcon(
+	png: Blob,
+): Promise<OrganizationSettingsDto> {
+	const res = await fetch(`${API_BASE}/settings/general/icon`, {
+		method: "POST",
+		headers: { "Content-Type": "image/png" },
+		body: png,
+	});
+	const body = (await res.json().catch(() => null)) as
+		| (OrganizationSettingsDto & { error?: string })
+		| null;
+	if (!res.ok) {
+		throw new ApiError(
+			body?.error || `Failed to upload the organization icon: ${res.status}`,
+			res.status,
+		);
+	}
+	if (!body) throw new ApiError("The server returned an empty response", res.status);
+	return body;
+}
+
+export async function removeOrganizationIcon(): Promise<OrganizationSettingsDto> {
+	return request("/settings/general/icon", { method: "DELETE" });
+}
+
+// ── Instance identity (Settings → Workspace → Identity) ──
 
 export interface InstanceIdentityDto {
 	personaName: string;

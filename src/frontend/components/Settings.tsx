@@ -29,6 +29,7 @@ import { Connections } from "./Connections";
 import {
 	IconChevronLeft,
 	IconChevronRight,
+	IconHome,
 	IconSearch,
 	IconX,
 } from "./icons";
@@ -36,6 +37,7 @@ import { MyAccountsPanel } from "./MyAccounts";
 import { AppearancePanel } from "./settings/AppearancePanel";
 import { AuditPanel } from "./settings/AuditPanel";
 import { DeploysPanel } from "./settings/DeploysPanel";
+import { GeneralPanel } from "./settings/GeneralPanel";
 import { IdentityPanel } from "./settings/IdentityPanel";
 import { IntegrationsPanel } from "./settings/IntegrationsPanel";
 import { LibraryPanel } from "./settings/LibraryPanel";
@@ -81,6 +83,7 @@ export type SettingsSectionKey =
 	| "notifications"
 	| "appearance"
 	| "shortcuts"
+	| "general"
 	| "setup"
 	| "identity"
 	| "repos"
@@ -214,6 +217,13 @@ const SECTIONS: {
 		),
 	},
 	{
+		key: "general",
+		label: "General",
+		group: "Workspace",
+		adminOnly: true,
+		icon: <IconHome size={20} />,
+	},
+	{
 		key: "setup",
 		label: "Setup",
 		group: "Workspace",
@@ -240,6 +250,7 @@ const SECTIONS: {
 		key: "identity",
 		label: "Identity",
 		group: "Workspace",
+		adminOnly: true,
 		icon: (
 			<svg
 				width="20"
@@ -714,6 +725,7 @@ function SectionPanel({
 			{section === "preferences" && <PreferencesPanel />}
 			{section === "appearance" && <AppearancePanel />}
 			{section === "shortcuts" && <ShortcutsPanel />}
+			{section === "general" && <GeneralPanel />}
 			{section === "setup" && <SetupPanel onDone={onBack} />}
 			{section === "identity" && <IdentityPanel />}
 			{section === "repos" && <ReposPanel />}

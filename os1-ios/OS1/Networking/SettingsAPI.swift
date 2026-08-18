@@ -550,6 +550,44 @@ enum SettingsAPI {
         )
     }
 
+    // MARK: - General
+
+    static func organizationSettings() async throws -> OrganizationSettings {
+        try await request("/api/settings/general")
+    }
+
+    static func saveOrganizationSettings(_ patch: [String: Any]) async throws -> OrganizationSettings {
+        try await request("/api/settings/general", method: "PUT", body: patch)
+    }
+
+    static func uploadOrganizationIcon(_ png: Data) async throws -> OrganizationSettings {
+        guard let resolved = Connection.current() else { throw OS1API.APIError.notConfigured }
+        guard let url = URL(string: resolved.baseURL.absoluteString + "/api/settings/general/icon")
+        else { throw OS1API.APIError.badURL }
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(resolved.token)", forHTTPHeaderField: "Authorization")
+        request.setValue("image/png", forHTTPHeaderField: "Content-Type")
+        request.httpMethod = "POST"
+        request.httpBody = png
+        let (data, response) = try await URLSession.shared.data(for: request)
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            if let error = try? await decode(ServerError.self, from: data), let message = error.error {
+                throw OS1API.APIError.server(message)
+            }
+            throw OS1API.APIError.http(http.statusCode)
+        }
+        return try await decode(OrganizationSettings.self, from: data)
+    }
+
+    static func removeOrganizationIcon() async throws -> OrganizationSettings {
+        try await request("/api/settings/general/icon", method: "DELETE")
+    }
+
+    static func organizationIconURL(_ path: String?) -> URL? {
+        guard let path, !path.isEmpty, let base = Connection.current()?.baseURL else { return nil }
+        return URL(string: path, relativeTo: base)?.absoluteURL
+    }
+
     // MARK: - Identity
 
     static func instanceIdentity() async throws -> InstanceIdentitySettings {

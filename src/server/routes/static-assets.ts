@@ -12,6 +12,7 @@ import { configuredIntegration, configuredRepos, productMark, productName } from
 import { FRONTEND_DIST, FRONTEND_SRC, devTailwindCss, frontend } from "../frontend-build";
 import { trimIconMargin } from "../png-trim";
 import { resolveRepoIcon } from "../repo-appearance";
+import { organizationIconBytes } from "../organization-settings";
 
 // Icons normalized for the tile, keyed by path and invalidated by mtime.
 // Trimming decodes and re-encodes a PNG, which is silly to repeat for a file
@@ -121,6 +122,17 @@ export async function handleStaticAssetsRoutes(
 				},
 			},
 		);
+	}
+
+	if (path === "/organization-icon.png" && req.method === "GET") {
+		const bytes = organizationIconBytes();
+		if (!bytes) return new Response("Not found", { status: 404 });
+		return new Response(bytes.slice().buffer as ArrayBuffer, {
+			headers: {
+				"Content-Type": "image/png",
+				"Cache-Control": "public, max-age=3600, must-revalidate",
+			},
+		});
 	}
 
 	// The sign-in screen's backdrop: the "Silver Silk" loop the landing page
