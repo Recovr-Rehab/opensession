@@ -23,6 +23,7 @@ import {
 import { AGENT_NAME, DEFAULT_DOC_TITLE, sessionSourceName } from "../lib/brand";
 import { brandLogo } from "../brand-logos";
 import { withQuotes, type Quote } from "../lib/quotes";
+import { absoluteLink, sessionPath } from "../lib/share-link";
 import { markNotesRead } from "../lib/note-reads";
 import { clearMention, onMentionsChanged } from "../lib/mentions";
 import { QuoteSelection } from "./QuoteSelection";
@@ -529,6 +530,9 @@ interface Props {
 	onOpenSubagent?: (sessionId: string, agentId: string, label: string) => void;
 	/** Pop back to the sub-agent that spawned the current one. */
 	onSubagentBack?: (sessionId: string) => void;
+	/** The name the pane read off a sub-agent's transcript, for its tab: a link
+	 *  carries agent ids only, so this is where a linked tab gets its label. */
+	onSubagentLabel?: (sessionId: string, agentId: string, label: string) => void;
 }
 
 // Stable identity for "no sub-agent open", so the default prop doesn't hand
@@ -828,6 +832,7 @@ export function SessionViewer({
 	subagentStack = NO_SUBAGENTS,
 	onOpenSubagent,
 	onSubagentBack,
+	onSubagentLabel,
 }: Props) {
 	// Repos the Review tab can target: the session's own, then each attached
 	// one. Keyed on the contents like the PR lists below, and for a sharper
@@ -1352,6 +1357,11 @@ export function SessionViewer({
 		(agentId: string, label: string) =>
 			onOpenSubagent?.(session.id, agentId, label),
 		[onOpenSubagent, session.id],
+	);
+	const nameSubagent = useCallback(
+		(agentId: string, label: string) =>
+			onSubagentLabel?.(session.id, agentId, label),
+		[onSubagentLabel, session.id],
 	);
 	// The agent-published walkthrough, rendered inline in the session as well as in
 	// the Review tab. Keyed on its contents so the object identity only changes
@@ -3981,11 +3991,14 @@ export function SessionViewer({
 
 	function handleShare() {
 		// Match the canonical URL App maintains: workspace-scoped when the session
-		// belongs to one, legacy /session/<id> only for workspace-less sessions.
-		const path = session.workspaceId
-			? `${BASE_PATH}/workspace/${encodeURIComponent(session.workspaceId)}/session/${encodeURIComponent(session.id)}`
-			: `${BASE_PATH}/session/${encodeURIComponent(session.id)}`;
-		const link = `${location.origin}${path}`;
+		// belongs to one, legacy /session/<id> only for workspace-less sessions,
+		// and trailing the sub-agent breadcrumb when that's the pane on screen —
+		// share what you are reading, not the session it was opened from.
+		const path = sessionPath(
+			session,
+			subagentOpen ? subagentStack.map((s) => s.agentId) : [],
+		);
+		const link = absoluteLink(path);
 		// Phone: native share sheet. Desktop: copy, with the inline check on
 		// the button + a floating "Link copied" toast.
 		// The native sheet titles the link with the workspace, matching the header.
@@ -5845,6 +5858,7 @@ export function SessionViewer({
 								stack={subagentStack}
 								onOpenSubagent={openSubagent}
 								onBack={() => onSubagentBack?.(session.id)}
+								onLabel={nameSubagent}
 							/>
 						</div>
 					) : showConversation && conversationThreadId ? (

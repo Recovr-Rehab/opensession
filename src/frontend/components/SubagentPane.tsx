@@ -20,6 +20,9 @@ interface Props {
   onOpenSubagent: (agentId: string, label: string) => void;
   /** Pop back to the parent sub-agent in the stack. */
   onBack: () => void;
+  /** The name read off the sub-agent's own transcript. A link into a sub-agent
+   *  carries ids only, so this is what gives its tab a real label. */
+  onLabel?: (agentId: string, label: string) => void;
 }
 
 /**
@@ -39,7 +42,13 @@ const LIVE_DOT =
   "size-[7px] shrink-0 rounded-full bg-green animate-[pulse_1.6s_ease-in-out_infinite] " +
   "motion-reduce:[animation-duration:1.6s]! motion-reduce:[animation-iteration-count:infinite]!";
 
-export function SubagentPane({ sessionId, stack, onOpenSubagent, onBack }: Props) {
+export function SubagentPane({
+  sessionId,
+  stack,
+  onOpenSubagent,
+  onBack,
+  onLabel,
+}: Props) {
   const current = stack[stack.length - 1];
   const [data, setData] = useState<SubagentTranscript | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -96,6 +105,12 @@ export function SubagentPane({ sessionId, stack, onOpenSubagent, onBack }: Props
 
   const meta = data?.meta;
   const title = meta?.agentType || current.label || "Sub-agent";
+  // Hand the name up for the tab. A drill-in already arrived carrying the Task
+  // call's summary; a link arrived with an agent id and nothing to call it.
+  const resolvedLabel = meta?.description || meta?.agentType || null;
+  useEffect(() => {
+    if (resolvedLabel) onLabel?.(current.agentId, resolvedLabel);
+  }, [current.agentId, resolvedLabel, onLabel]);
   const modelLabel = meta?.model
     ? friendlyModelSlug(opencodeModelParts(meta.model)?.model ?? meta.model)
     : null;
