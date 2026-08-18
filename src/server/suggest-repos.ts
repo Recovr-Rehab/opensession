@@ -26,6 +26,7 @@ import { opencodeOneShot } from "./opencode-oneshot";
 import { configuredRepos } from "./config";
 import { repoRoutingCatalog, renderRepoCatalog, type RepoCard } from "./repo-context";
 import { getCachedSessions } from "./session-cache";
+import type { UnifiedSession } from "./types";
 
 const SUGGEST_MODEL = process.env.SUGGEST_REPOS_MODEL || "claude-haiku-4-5";
 /**
@@ -77,17 +78,34 @@ export interface RepoSuggestion {
 }
 
 /** Recent session titles per repo, as evidence of where work like this goes. */
-function historyExamples(ids: Set<string>): string {
+export function historyExamples(
+	ids: Set<string>,
+	sessions: Pick<UnifiedSession, "repo" | "title" | "repoAuto">[] = getCachedSessions(),
+): string {
 	const byRepo = new Map<string, string[]>();
-	// getCachedSessions is newest-first; take the first few per repo and stop.
-	for (const session of getCachedSessions()) {
+	// Sessions arrive newest-first; take the first few per repo and stop.
+	for (const session of sessions) {
 		const repo = session.repo;
 		if (!repo || !ids.has(repo)) continue;
+		// Auto's own past answers. Learning from them would be learning from
+		// this classifier, and since we sample the NEWEST titles per repo they
+		// would be the entire corpus within weeks of Auto becoming the default
+		// — a mistake it made once would then be evidence for making it again.
+		if (session.repoAuto) continue;
 		const title = (session.title || "").trim();
 		if (title.length < MIN_EXAMPLE_LEN) continue;
 		// Automation runs are named "<Automation> — <date>"; they say where a
 		// SCHEDULE points, not where a person's task belongs.
 		if (/\s—\s\d{4}-\d{2}-\d{2}/.test(title)) continue;
+		// "Review · PR #123 …" is a session spawned to read a diff. It names
+		// the repo the PR was already in, so it teaches nothing about routing
+		// and, in a repo with steady review traffic, crowds out everything
+		// that does.
+		if (/^Review\s·\sPR\s#/.test(title)) continue;
+		// Degenerate titles from agent handshakes ("Acknowledge readiness and
+		// stop"). They pass the length test while saying nothing about the
+		// repo, and a quiet repo can end up described entirely by them.
+		if (/^(acknowledge|output|reply|respond|confirm)\b/i.test(title)) continue;
 		const list = byRepo.get(repo) ?? [];
 		if (list.length >= EXAMPLES_PER_REPO) continue;
 		list.push(title.slice(0, 100));
@@ -99,13 +117,13 @@ function historyExamples(ids: Set<string>): string {
 	return blocks.join("\n");
 }
 
-function buildSystemPrompt(cards: RepoCard[], examples: string, mode: "ask" | "code"): string {
+export function buildSystemPrompt(cards: RepoCard[], examples: string, mode: "ask" | "code"): string {
 	const attachable = cards.filter((c) => !c.sharedCheckout).map((c) => c.id);
 	return `You route engineering tasks to the right repository. You are given a task description and a catalog of the registered repositories, and you pick the one the work belongs in.
 
 # Repositories
 ${renderRepoCatalog(cards)}
-${examples ? `\n# Where work like this has recently been filed\nRecent session titles per repository. This is evidence of team habit — weight it heavily when the description and layout leave the choice open.\n\n${examples}\n` : ""}
+${examples ? `\n# Where work like this has recently been filed\nRecent session titles per repository. Treat this as WEAK, corroborating evidence only — use it to break a tie the layout and docs left open, never to override them. These labels are the picker's own past output, including its mistakes, so a title that contradicts where the code plainly lives is a misfiling and not a fact.\n\n${examples}\n` : ""}
 # How to choose
 - Match the task against what each repository CONTAINS — its directories and its own documentation — not just its one-line description. A monorepo whose description lists many things is not automatically the answer.
 - A path, package, service or file name in the task is the strongest signal: find the repository whose directory listing contains it.
@@ -127,7 +145,7 @@ Respond with ONLY a JSON object: {"repo": "<repo id>"|null, "extras": ["<repo id
 }
 
 /** Every way a prompt can name a repo outright, mapped to its id. */
-function namedRepos(prompt: string, cards: RepoCard[]): string[] {
+export function namedRepos(prompt: string, cards: RepoCard[]): string[] {
 	const text = prompt.toLowerCase();
 	const hits = new Set<string>();
 	for (const card of cards) {

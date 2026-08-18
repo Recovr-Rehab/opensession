@@ -121,6 +121,16 @@ export interface UnifiedSession {
    * path; this field is how CLIENTS get the same answer without one.
    */
   repoLess?: boolean;
+  /**
+   * `repo` was Auto's choice, not a person's.
+   *
+   * suggest-repos.ts routes partly on where past sessions were filed, which
+   * only means anything while those labels are human judgement. It samples
+   * the NEWEST titles per repo, so once Auto is the default its own answers
+   * would become the whole corpus within weeks and it would be learning from
+   * itself, mistakes included. This is how those sessions are left out.
+   */
+  repoAuto?: boolean;
   /** Workspace this session belongs to; null/undefined = standalone. NOT a
    *  project — a project is the level above (a repo band or a feed band).
    *  See CONCEPTS.md. */
@@ -500,6 +510,8 @@ export interface NativeSessionFile {
    *  the note on UnifiedSession.repoLess for why this is stored rather than
    *  derived from a missing `repo`. */
   repoLess?: boolean;
+  /** Auto picked `repo`, not a person — see UnifiedSession.repoAuto. */
+  repoAuto?: boolean;
   workspaceId?: string | null; // Workspace this session belongs to
   /** The branch this session's worktree was cut from, when it was stacked on
    *  another session's branch rather than on the trunk. Drives the stacked-PR
