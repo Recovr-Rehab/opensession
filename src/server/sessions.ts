@@ -88,6 +88,15 @@ const SKIP_FILES = new Set([
   "processed-events.json",
 ]);
 
+/** Which archive half a scan should return. `include` is the legacy/internal
+ * whole-list contract; request paths use the narrower halves. */
+export type SessionArchiveSlice = "include" | "exclude" | "only";
+
+function inArchiveSlice(archived: boolean, slice: SessionArchiveSlice): boolean {
+  if (slice === "include") return true;
+  return slice === "only" ? archived : !archived;
+}
+
 function resolveSlackUser(userId: string): string {
   // Could be a Slack user ID (e.g. UT41L6GCC) or already a display name
   const mapped = slackIdToFirstName(userId);
@@ -900,6 +909,7 @@ function* slackSessionRows(): Generator<UnifiedSession> {
 
     // Use a stable ID based on filename
     const id = `slack-${file.replace(".json", "")}`;
+    const archived = isArchivedId(id);
 
     yield overlaySidecarExtras({
       id,
@@ -920,13 +930,7 @@ function* slackSessionRows(): Generator<UnifiedSession> {
       createdAt:
         data.createdAt || getFileMtime(`${SLACK_SESSIONS_DIR}/${file}`),
       isRunning: false,
-      transcriptPath: resolveTranscriptPath(
-        findTranscriptPath(data.worktreeDir || null, data.claudeSessionId || null),
-        data.codexThreadId,
-        data.model,
-        // Slack session files store the opencode id in the claude slot.
-        isOpencodeSessionId(data.claudeSessionId) ? data.claudeSessionId : null
-      ),
+      transcriptPath: null,
       opencodeSessionId: isOpencodeSessionId(data.claudeSessionId)
         ? data.claudeSessionId || undefined
         : undefined,
@@ -939,6 +943,8 @@ function* slackSessionRows(): Generator<UnifiedSession> {
       // an engine session; without it every pi read falls to the claude-slot
       // ride and the run-start arm can't resume the pi session.
       piSessionId: data.piSessionId || undefined,
+      archived: archived || undefined,
+      archivedReason: archived ? getArchiveReason(id) || "manual" : undefined,
     });
   }
 }
@@ -971,6 +977,7 @@ function* linearSessionRows(): Generator<UnifiedSession> {
       : data.branch;
 
     const id = `linear-${data.branch}`;
+    const archived = isArchivedId(id);
 
     yield overlaySidecarExtras({
       id,
@@ -985,13 +992,7 @@ function* linearSessionRows(): Generator<UnifiedSession> {
         data.updatedAt || getFileMtime(`${LINEAR_SESSIONS_DIR}/${file}`),
       createdAt: getFileMtime(`${LINEAR_SESSIONS_DIR}/${file}`),
       isRunning: false,
-      transcriptPath: resolveTranscriptPath(
-        findTranscriptPath(data.worktreeDir || null, data.claudeSessionId),
-        null,
-        data.model,
-        // Linear session files store the opencode id in the claude slot too.
-        isOpencodeSessionId(data.claudeSessionId) ? data.claudeSessionId : null
-      ),
+      transcriptPath: null,
       opencodeSessionId: isOpencodeSessionId(data.claudeSessionId)
         ? data.claudeSessionId || undefined
         : undefined,
@@ -1005,6 +1006,8 @@ function* linearSessionRows(): Generator<UnifiedSession> {
       model: data.model,
       // Same pi-slot mapping as the slack scan (agent-session-sync writes it).
       piSessionId: data.piSessionId || undefined,
+      archived: archived || undefined,
+      archivedReason: archived ? getArchiveReason(id) || "manual" : undefined,
     });
   }
 }
@@ -1025,6 +1028,7 @@ function* nativeSessionRows(): Generator<UnifiedSession> {
     // prompt-queues.json, active-at-shutdown.json, …) — a real session always
     // has an id, these don't, so they'd otherwise become bogus id:undefined rows.
     if (!data || !data.id) continue;
+    const archived = !!data.archived || isArchivedId(data.id);
 
     yield {
       id: data.id,
@@ -1060,8 +1064,10 @@ function* nativeSessionRows(): Generator<UnifiedSession> {
           ? data.createdBy.slice(0, -" (automation)".length)
           : undefined),
       automationId: data.automationId,
-      archived: data.archived || undefined,
-      archivedReason: data.archivedReason,
+      archived: archived || undefined,
+      archivedReason:
+        data.archivedReason ||
+        (archived ? getArchiveReason(data.id) || "manual" : undefined),
       plainThreadId: data.plainThreadId,
       externalRefs: data.externalRefs,
       // The MCP allowlist the session was created with. Dropping it here left
@@ -1090,13 +1096,7 @@ function* nativeSessionRows(): Generator<UnifiedSession> {
       lastActivity: data.lastActivity,
       createdAt: data.createdAt,
       isRunning: false,
-      transcriptPath: resolveTranscriptPath(
-        findTranscriptPath(data.worktreeDir, data.claudeSessionId),
-        data.codexThreadId,
-        data.model,
-        data.opencodeSessionId ||
-          (isOpencodeSessionId(data.claudeSessionId) ? data.claudeSessionId : null)
-      ),
+      transcriptPath: null,
     };
   }
 }
@@ -1149,6 +1149,7 @@ function* assembleSessionSteps(
   slackSessions: UnifiedSession[],
   linearSessions: UnifiedSession[],
   nativeSessions: UnifiedSession[],
+  slice: SessionArchiveSlice = "include",
 ): Generator<void, UnifiedSession[]> {
   const runningPids = getRunningPids();
 
@@ -1178,6 +1179,10 @@ function* assembleSessionSteps(
       // Slack "Open in Open Session" button, which uses slack-<channel>-<ts>)
       // still resolve to the surviving session.
       existing.aliasIds = [...(existing.aliasIds || []), session.id];
+      if (session.archived && !existing.archived) {
+        existing.archived = true;
+        existing.archivedReason = session.archivedReason;
+      }
       for (const aliasKey of engineKeys) byEngineId.set(aliasKey, existing);
       continue;
     }
@@ -1190,6 +1195,24 @@ function* assembleSessionSteps(
     allSessions.push(session);
     for (const key of engineKeys) byEngineId.set(key, session);
   }
+
+  // Archive is a property of the deduplicated conversation, not whichever
+  // source happened to win. An archive registry entry under a historical
+  // Slack/Linear alias must therefore move the canonical row too.
+  for (const session of allSessions) {
+    yield;
+    const archivedId = [session.id, ...(session.aliasIds || [])].find(
+      isArchivedId,
+    );
+    if (!session.archived && archivedId) {
+      session.archived = true;
+      session.archivedReason = getArchiveReason(archivedId) || "manual";
+    }
+  }
+  const selectedSessions =
+    slice === "include"
+      ? allSessions
+      : allSessions.filter((session) => inArchiveSlice(!!session.archived, slice));
 
   // Enrich with PR URLs and state, matched within the session's own repo so a
   // branch name reused across repos never picks up the wrong PR. Beyond the
@@ -1227,7 +1250,22 @@ function* assembleSessionSteps(
       else discoveredByBranch.set(key, [...found]);
     }
   }
-  for (const session of allSessions) {
+  // Transcript discovery traverses engine stores and is the dominant per-row
+  // cost. Resolve it only after archive slicing so the live poll never enriches
+  // the archived half (and vice versa).
+  for (const session of selectedSessions) {
+    yield;
+    session.transcriptPath = resolveTranscriptPath(
+      findTranscriptPath(session.worktreeDir, session.claudeSessionId),
+      session.codexThreadId,
+      session.model,
+      session.opencodeSessionId ||
+        (isOpencodeSessionId(session.claudeSessionId)
+          ? session.claudeSessionId
+          : null),
+    );
+  }
+  for (const session of selectedSessions) {
     yield;
     const primaryBranch = sessionPrBranch(session, workspaceOf(session));
     if (primaryBranch) {
@@ -1329,19 +1367,10 @@ function* assembleSessionSteps(
     if (refs.length > 0) session.prs = refs;
   }
 
-  // Apply the cross-source archive registry
-  for (const session of allSessions) {
-    yield;
-    if (!session.archived && isArchivedId(session.id)) {
-      session.archived = true;
-      session.archivedReason = getArchiveReason(session.id) || "manual";
-    }
-  }
-
   // Apply auto-generated summary titles (the short Conductor-style name),
   // keyed by unified id or merged alias id. Sits UNDER a manual rename (applied
   // next) but OVER the derived first-line title.
-  for (const session of allSessions) {
+  for (const session of selectedSessions) {
     yield;
     const generated =
       getGeneratedTitle(session.id) ??
@@ -1351,7 +1380,7 @@ function* assembleSessionSteps(
 
   // Apply cross-source manual title overrides (rename). Keyed by the unified id
   // or any merged alias id, so a rename sticks across the dedup in this scan.
-  for (const session of allSessions) {
+  for (const session of selectedSessions) {
     yield;
     const override =
       getTitleOverride(session.id) ??
@@ -1364,7 +1393,7 @@ function* assembleSessionSteps(
 
   // Apply manual status-lane overrides. Keyed by unified id or any merged alias
   // id (same as the rename registry) so a pinned lane survives the dedup scan.
-  for (const session of allSessions) {
+  for (const session of selectedSessions) {
     yield;
     const status =
       getStatusOverride(session.id) ??
@@ -1374,7 +1403,7 @@ function* assembleSessionSteps(
 
   // Apply pending review requests (the info panel's Reviewer picker), keyed by
   // unified id or any merged alias id like the registries above.
-  for (const session of allSessions) {
+  for (const session of selectedSessions) {
     yield;
     const review =
       getReviewRequest(session.id) ??
@@ -1386,23 +1415,29 @@ function* assembleSessionSteps(
   // that surfaced without one — in memory now, on disk right after — so the
   // sidebar only ever has workspace rows to render. Runs after the title
   // registries above so a minted workspace takes the session's final name.
-  ensureSessionWorkspaces(allSessions);
+  ensureSessionWorkspaces(selectedSessions);
 
   // Sort by lastActivity descending
-  allSessions.sort(
+  selectedSessions.sort(
     (a, b) =>
       new Date(b.lastActivity).getTime() - new Date(a.lastActivity).getTime()
   );
 
-  return allSessions;
+  return selectedSessions;
 }
 
 function assembleSessions(
   slackSessions: UnifiedSession[],
   linearSessions: UnifiedSession[],
   nativeSessions: UnifiedSession[],
+  slice: SessionArchiveSlice = "include",
 ): UnifiedSession[] {
-  const steps = assembleSessionSteps(slackSessions, linearSessions, nativeSessions);
+  const steps = assembleSessionSteps(
+    slackSessions,
+    linearSessions,
+    nativeSessions,
+    slice,
+  );
   while (true) {
     const step = steps.next();
     if (step.done) return step.value;
@@ -1413,8 +1448,14 @@ async function assembleSessionsAsync(
   slackSessions: UnifiedSession[],
   linearSessions: UnifiedSession[],
   nativeSessions: UnifiedSession[],
+  slice: SessionArchiveSlice = "include",
 ): Promise<UnifiedSession[]> {
-  const steps = assembleSessionSteps(slackSessions, linearSessions, nativeSessions);
+  const steps = assembleSessionSteps(
+    slackSessions,
+    linearSessions,
+    nativeSessions,
+    slice,
+  );
   let batch = 0;
   while (true) {
     const step = steps.next();
@@ -1423,16 +1464,19 @@ async function assembleSessionsAsync(
   }
 }
 
-export function getAllSessions(): UnifiedSession[] {
+export function getAllSessions(slice: SessionArchiveSlice = "include"): UnifiedSession[] {
   return assembleSessions(
     scanSlackSessions(),
     scanLinearSessions(),
     scanNativeSessions(),
+    slice,
   );
 }
 
 /** Cooperative counterpart for request paths that can await a cold scan. */
-export async function getAllSessionsAsync(): Promise<UnifiedSession[]> {
+export async function getAllSessionsAsync(
+  slice: SessionArchiveSlice = "include",
+): Promise<UnifiedSession[]> {
   // Warm the indexes before row parsing starts. Running these in the same
   // Promise.all as the scans lets the first transcript miss fall back to the
   // synchronous builders while the cooperative warm-up is still in flight.
@@ -1444,7 +1488,12 @@ export async function getAllSessionsAsync(): Promise<UnifiedSession[]> {
   ]);
   // These overlays read and mutate process-local state, so they deliberately
   // remain on the server thread rather than crossing a Worker boundary.
-  return await assembleSessionsAsync(slackSessions, linearSessions, nativeSessions);
+  return await assembleSessionsAsync(
+    slackSessions,
+    linearSessions,
+    nativeSessions,
+    slice,
+  );
 }
 
 export function deleteSession(session: UnifiedSession): void {

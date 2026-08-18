@@ -24,7 +24,7 @@
  */
 
 import { homeDir } from "./paths";
-import { getCachedSessionsAsync } from "./session-cache";
+import { getCachedSessions, getCachedSessionsAsync } from "./session-cache";
 import { mergedSessionTranscriptAsync } from "./sessions";
 import { opencodeOneShot } from "./opencode-oneshot";
 import { audit } from "./audit";
