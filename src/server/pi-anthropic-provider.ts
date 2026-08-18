@@ -121,7 +121,12 @@ import {
   type ContentBlock,
 } from "./anthropic-bridge";
 import { markExhausted, type ClaudeAccount } from "./claude-accounts";
-import { CLAUDE_CODE_BIN, isClaudeUsageLimitError } from "./runner-shared";
+import {
+  CLAUDE_CODE_BIN,
+  describeUsageLimitReset,
+  isClaudeUsageLimitError,
+  usageLimitResetAt,
+} from "./runner-shared";
 
 const g = globalThis as any;
 
@@ -906,7 +911,10 @@ async function* runSdkAttempt(
     // rolling-cap refusal is exempt (tagged at the throw): it is 429-worded
     // for the classifier but is not account exhaustion.
     if (account && !localCap && usageShaped) {
-      markExhausted(account.id, model.id);
+      // Bench it until the reset the account itself named, when it named one:
+      // a weekly limit otherwise came back into the pool in an hour and failed
+      // again, every hour, until it genuinely reset.
+      markExhausted(account.id, model.id, usageLimitResetAt(message));
     }
     // Rotate rather than fail, when another account can serve. Gated on an
     // empty `partial.content`: every content event pushes there before it is
@@ -916,6 +924,11 @@ async function* runSdkAttempt(
     // in per-account config dirs, so planSdkTurn treats it as divergence and
     // replays the conversation fresh on the new account.
     let rotateTo: ClaudeAccount | undefined;
+    // Why the pool could not serve, when it could not. Dropping this refusal
+    // (the original bug) made a dry pool indistinguishable from a walk that
+    // never ran: four accounts were consulted and the reader was shown the
+    // last one's sentence, so working rotation read as no rotation at all.
+    let poolRefusal: string | undefined;
     if (account && (usageShaped || localCap) && partial.content.length === 0) {
       excluded.add(account.id);
       const next = pickBridgeAccount(model.id, {
@@ -925,7 +938,8 @@ async function* runSdkAttempt(
         user: opts.user,
         excludeIds: [...excluded],
       });
-      if (!("error" in next)) rotateTo = next;
+      if ("error" in next) poolRefusal = next.error;
+      else rotateTo = next;
     }
     audit({
       ...auditBase,
@@ -942,6 +956,27 @@ async function* runSdkAttempt(
           `retrying this turn on "${rotateTo.name}"`
       );
       rotate.retry = true;
+      return;
+    }
+    // A strict pin is deliberately excluded: nothing but the pinned account
+    // was ever going to be tried, so reporting the POOL as dry would be false.
+    // Its own refusal (below) names the account the person chose.
+    if (poolRefusal && account && !(opts.accountId && opts.accountStrict)) {
+      // Rotation was tried and the pool had nothing left. Say that, rather
+      // than echoing one account's limit as if nothing had been attempted.
+      // The original message stays inside the sentence so isPiUsageLimitShape
+      // still classifies this as exhaustion upstream.
+      console.warn(
+        `[pi-anthropic] usage limit on "${account.name}" (${model.id}) and no other ` +
+          `account can serve it: ${poolRefusal}`
+      );
+      const reset = describeUsageLimitReset(message);
+      yield fail(
+        "error",
+        `every Claude account is usage-limited for ${model.id}` +
+          (reset ? `, the soonest resets ${reset}` : "") +
+          `. Last account tried ("${account.name}") said: ${message}`
+      );
       return;
     }
     yield fail("error", message);

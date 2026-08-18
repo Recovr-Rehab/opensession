@@ -499,6 +499,38 @@ describe("buildPiAnthropicProvider", () => {
     expect((stillPickable as any).id).toBe("cap-a");
   });
 
+  test("a dry pool says so, instead of echoing the last account's limit", async () => {
+    // The bug this replaced: the walk consulted every account, the picker
+    // refused, that refusal was dropped on the floor, and the reader was shown
+    // the LAST account's sentence, so a working rotation read as no rotation
+    // at all (it misled two people for an afternoon).
+    designate(["dry-a", "dry-b"]);
+    seedAccounts(["dry-a", "dry-b"]);
+    accounts.__setUsageCacheForTest("dry-a", freshUsage);
+    accounts.__setUsageCacheForTest("dry-b", freshUsage);
+    for (let i = 0; i < 300; i++) {
+      admitBridgeRequest("dry-a", 1);
+      admitBridgeRequest("dry-b", 1);
+    }
+    const provider = buildPiAnthropicProvider({
+      unifiedSessionId: "os-dry",
+      builtinModels: [model],
+    }) as any;
+    const events: any[] = [];
+    for await (const ev of provider.streamSimple(model, {
+      messages: [{ role: "user", content: "hi" }],
+    })) {
+      events.push(ev);
+    }
+    const message = events[events.length - 1].error.errorMessage as string;
+    expect(message).toContain("every Claude account is usage-limited");
+    // Still names what was tried last, so the detail is not lost…
+    expect(message).toContain("dry-b");
+    // …and still classifies as exhaustion, so the model fallback upstream
+    // (agent-runner) engages exactly as it did before.
+    expect(isPiUsageLimitShape(message, "anthropic")).toBe(true);
+  });
+
   test("a strict pin refuses instead of rotating off the pinned account", async () => {
     designate(["pin-strict", "pin-other"]);
     seedAccounts(["pin-strict", "pin-other"]);

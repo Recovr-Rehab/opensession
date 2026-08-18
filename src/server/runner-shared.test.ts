@@ -1,12 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import {
   declaredRunFailure,
+  describeUsageLimitReset,
   hasRunStatusDeclaration,
   isClaudeBridgeLaunchError,
   isClaudeMalformedTerminalError,
   isProviderOverloadError,
   isTransientRunError,
   isUpstreamIdleStallError,
+  usageLimitResetAt,
 } from "./runner-shared";
 
 describe("isClaudeBridgeLaunchError", () => {
@@ -136,5 +138,68 @@ describe("hasRunStatusDeclaration", () => {
     expect(hasRunStatusDeclaration("done\nRUN STATUS: failed — x")).toBe(true);
     expect(hasRunStatusDeclaration("mentions SCAN STATUS: ok inline")).toBe(false);
     expect(hasRunStatusDeclaration("")).toBe(false);
+  });
+});
+
+describe("describeUsageLimitReset", () => {
+  test("returns the account's own words, whatever the phrasing", () => {
+    expect(
+      describeUsageLimitReset("You've hit your weekly limit · resets Aug 20, 9am (UTC)"),
+    ).toBe("Aug 20, 9am (UTC)");
+    expect(
+      describeUsageLimitReset("You've hit your session limit · resets 12:50pm (UTC)"),
+    ).toBe("12:50pm (UTC)");
+    expect(describeUsageLimitReset("5-hour limit reached ∙ resets 3am")).toBe("3am");
+  });
+
+  test("no reset stated means no opinion", () => {
+    expect(describeUsageLimitReset("You're out of usage credits.")).toBeUndefined();
+    expect(describeUsageLimitReset("")).toBeUndefined();
+  });
+});
+
+describe("usageLimitResetAt", () => {
+  // A fixed "now" so these never drift: 2026-08-18T18:54:02Z, the minute the
+  // weekly-limit failure this parser was written for actually happened.
+  const now = Date.UTC(2026, 7, 18, 18, 54, 2);
+
+  test("a dated weekly reset benches for days, not the one-hour default", () => {
+    const at = usageLimitResetAt(
+      "You've hit your weekly limit · resets Aug 20, 9am (UTC)",
+      now,
+    );
+    expect(at).toBe(Date.UTC(2026, 7, 20, 9, 0));
+    // The whole point: far beyond the hour markExhausted would have used.
+    expect(at! - now).toBeGreaterThan(24 * 60 * 60 * 1000);
+  });
+
+  test("a bare time means the next occurrence of it", () => {
+    // 3am has passed today ⇒ tomorrow.
+    expect(usageLimitResetAt("5-hour limit reached ∙ resets 3am", now)).toBe(
+      Date.UTC(2026, 7, 19, 3, 0),
+    );
+    // 11:30pm is still ahead today.
+    expect(usageLimitResetAt("limit · resets 11:30pm (UTC)", now)).toBe(
+      Date.UTC(2026, 7, 18, 23, 30),
+    );
+  });
+
+  test("a date with no year picks the occurrence ahead of now", () => {
+    const dec = Date.UTC(2026, 11, 30, 12, 0);
+    expect(usageLimitResetAt("resets Jan 2, 9am (UTC)", dec)).toBe(
+      Date.UTC(2027, 0, 2, 9, 0),
+    );
+  });
+
+  test("refuses anything it cannot vouch for, so the caller keeps its default", () => {
+    // No time of day.
+    expect(usageLimitResetAt("resets soon", now)).toBeUndefined();
+    // No reset at all.
+    expect(usageLimitResetAt("You're out of usage credits.", now)).toBeUndefined();
+    // Unknown month.
+    expect(usageLimitResetAt("resets Foo 20, 9am (UTC)", now)).toBeUndefined();
+    // Beyond the 14-day ceiling: a mis-parse must never bench a healthy
+    // account for weeks, which would be worse than the churn this replaces.
+    expect(usageLimitResetAt("resets Sep 30, 9am (UTC)", now)).toBeUndefined();
   });
 });

@@ -1283,7 +1283,18 @@ export function __setNearLimitRefresherForTest(fn: UsageRefresher | null): void 
  * time when known (refreshes usage in the background to confirm), otherwise a
  * fixed cool-off.
  */
-export function markExhausted(id: string, model?: string): void {
+export function markExhausted(
+  id: string,
+  model?: string,
+  /** Reset time the account's own limit message stated, when it stated one
+   *  (usageLimitResetAt in runner-shared parses it). Passed as an argument
+   *  rather than imported so this module keeps its small dependency set.
+   *  Only ever LENGTHENS the sideline: a weekly limit resetting in two days
+   *  used to be benched for an hour, so the account returned to the pool
+   *  every hour, was picked, failed, and was benched again. That made the
+   *  pool look larger than it was and spent a request each time proving it. */
+  statedResetAt?: number,
+): void {
   const account = readStore().find((a) => a.id === id);
   const cached = usageCache.get(id);
   const scoped =
@@ -1295,9 +1306,14 @@ export function markExhausted(id: string, model?: string): void {
     : cached?.fiveHour?.resetsAt
       ? Date.parse(cached.fiveHour.resetsAt)
       : NaN;
-  const until = Number.isFinite(resetsAt) && resetsAt > Date.now()
+  const cachedUntil = Number.isFinite(resetsAt) && resetsAt > Date.now()
     ? resetsAt
     : Date.now() + DEFAULT_EXHAUST_MS;
+  // The longer of the two. Cached usage describes the 5-hour window; a stated
+  // reset can name a weekly one the cache knows nothing about, and taking the
+  // max means neither source can shorten a sideline the other justified.
+  const until =
+    statedResetAt && statedResetAt > cachedUntil ? statedResetAt : cachedUntil;
   sidelines().set(exhaustionKey(id, scoped && model ? model : undefined), until);
   persistSidelines();
   console.warn(

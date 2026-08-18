@@ -117,6 +117,76 @@ export function isClaudeUsageLimitError(message: string, isErrorResult: boolean)
   );
 }
 
+const RESET_MONTHS: Record<string, number> = {
+  jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+  jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11,
+};
+
+/**
+ * The reset an account's own limit message states, verbatim: "Aug 20, 9am
+ * (UTC)", "12:50pm (UTC)", "3am". Returned as the account wrote it rather
+ * than reformatted, so a phrasing we have not seen still reads correctly.
+ * Bounded to one line and 40 characters, since this text reaches a person.
+ */
+export function describeUsageLimitReset(message: string): string | undefined {
+  const m = /\bresets?\s+(.{1,40}?)\s*$/im.exec(message || "");
+  const text = m?.[1]?.trim().replace(/[.,;]$/, "");
+  return text || undefined;
+}
+
+/**
+ * The same reset as a timestamp, for how long to sideline the account.
+ *
+ * This matters more than it looks. markExhausted otherwise reads a reset only
+ * from CACHED usage data, and falls back to one hour when there is none. An
+ * account whose weekly limit resets in two days therefore came back into the
+ * pool every hour, got picked, failed, and was benched again, burning a
+ * request each time and making the pool look larger than it was.
+ *
+ * Deliberately conservative: it parses only the shapes Claude actually emits,
+ * reads them as UTC (which is what those messages carry), and refuses
+ * anything in the past or more than 14 days out, so a mis-parse can never
+ * bench a healthy account for an absurd stretch. Undefined means "no opinion",
+ * and the caller keeps its existing default.
+ */
+export function usageLimitResetAt(
+  message: string,
+  now: number = Date.now(),
+): number | undefined {
+  const text = describeUsageLimitReset(message);
+  if (!text) return undefined;
+  const s = text.toLowerCase().replace(/\((?:utc|gmt)\)/g, " ").trim();
+  const time = /\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/.exec(s);
+  if (!time) return undefined;
+  let hour = Number(time[1]) % 12;
+  if (time[3] === "pm") hour += 12;
+  const minute = Number(time[2] || 0);
+  if (!Number.isFinite(hour) || minute > 59) return undefined;
+
+  const date = /\b([a-z]{3,9})\.?\s+(\d{1,2})\b/.exec(s);
+  let at: number;
+  if (date) {
+    const month = RESET_MONTHS[date[1].slice(0, 3)];
+    if (month === undefined) return undefined;
+    const day = Number(date[2]);
+    if (day < 1 || day > 31) return undefined;
+    // No year in the message: pick the one that lands nearest ahead of now,
+    // so a December limit resetting in January does not read as ten months ago.
+    const year = new Date(now).getUTCFullYear();
+    at = Date.UTC(year, month, day, hour, minute);
+    if (at < now) at = Date.UTC(year + 1, month, day, hour, minute);
+  } else {
+    // Time only: the next occurrence of it.
+    const d = new Date(now);
+    at = Date.UTC(
+      d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), hour, minute,
+    );
+    if (at <= now) at += 24 * 60 * 60 * 1000;
+  }
+  if (!(at > now) || at > now + 14 * 24 * 60 * 60 * 1000) return undefined;
+  return at;
+}
+
 /**
  * A Claude account whose *subscription* is the fault — an expired, downgraded,
  * or billing-blocked Max plan. The bridge surfaces it as
