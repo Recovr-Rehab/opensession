@@ -159,10 +159,13 @@ export function ConversationPane({
 					{thread && (
 						<>
 							{/* The state leads the row instead of trailing the subject.
-							    It is one short word of fixed width, so in front it reads
-							    as the ticket's state rather than as part of its name, and
-							    the subject keeps a straight left edge to truncate against
-							    instead of dragging the pill around as it shortens. */}
+							    Trailing, it landed at a different x on every ticket and
+							    read as part of the name; leading, it reads as the
+							    ticket's state and the subject gets a left edge that only
+							    moves between statuses (Todo 40px, Done 42px, Snoozed 60px)
+							    rather than with every title. Not worth padding to one
+							    width for: the queue is the Todo inbox, so in the Support
+							    list they are all the same pill anyway. */}
 							{status && (
 								<span className={plainStatusClass(status)}>
 									{STATUS_LABEL[status] || status}
@@ -177,11 +180,11 @@ export function ConversationPane({
 								>
 									{thread.title || "No subject"}
 								</h2>
-								{/* The customer is supporting text, not a badge: it takes
-								    the 13px step the rest of the app gives a line under a
-								    title, so the pair reads as one block rather than as a
-								    title with a caption. */}
-								<div className="flex min-w-0 items-center gap-1.5 text-label">
+								{/* The customer sits at the bottom step, under a 14px
+								    subject. Who the ticket is from is read once on the way
+								    in and then lives in the queue row beside it, so it
+								    recedes here rather than competing with the subject. */}
+								<div className="flex min-w-0 items-center gap-1.5 text-meta">
 									<span className="truncate text-dim">{customerLabel}</span>
 									{customerName && customerEmail && (
 										<>
