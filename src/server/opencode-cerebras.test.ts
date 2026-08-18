@@ -101,7 +101,7 @@ describe("Cerebras provider", () => {
       "Gemma 4 31B",
     );
     expect(opencodeModelLabel("opencode/cerebras/zai-glm-4.7")).toBe(
-      "Z.ai GLM 4.7",
+      "Z.ai GLM-4.7",
     );
     expect(modelEfforts("opencode/cerebras/gpt-oss-120b")).toEqual([
       "low",

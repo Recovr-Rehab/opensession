@@ -56,11 +56,16 @@ describe("opencodeModelLabel", () => {
     expect(opencodeModelLabel("opencode/anthropic/claude-fable-5")).toBe("Fable 5");
     expect(opencodeModelLabel("opencode/openai/gpt-5.5")).toBe("GPT-5.5");
     expect(opencodeModelLabel("opencode/openai/gpt-5.4-mini")).toBe("GPT-5.4 mini");
+    expect(opencodeModelLabel("opencode/openai/gpt-5.6-sol")).toBe("GPT-5.6 Sol");
+    expect(opencodeModelLabel("opencode/openai/gpt-5.6-terra")).toBe("GPT-5.6 Terra");
+    expect(opencodeModelLabel("opencode/openai/gpt-5.6-luna")).toBe("GPT-5.6 Luna");
   });
 
   it("prettifies slugs with no native registry entry to borrow from", () => {
     expect(opencodeModelLabel("opencode/anthropic/claude-sonnet-6")).toBe("Sonnet 6");
     expect(opencodeModelLabel("opencode/openai/gpt-6")).toBe("GPT-6");
+    expect(opencodeModelLabel("opencode/cerebras/zai-glm-4.7")).toBe("Z.ai GLM-4.7");
+    expect(opencodeModelLabel("opencode/example/glm-5.3")).toBe("GLM-5.3");
   });
 });
 

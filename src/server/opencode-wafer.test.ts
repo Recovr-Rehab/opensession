@@ -100,7 +100,7 @@ describe("Wafer provider", () => {
       opencodeModelLabel("opencode/wafer/deepseek-v4-flash-0731-fast"),
     ).toBe("DeepSeek V4 Flash");
     expect(opencodeModelLabel("opencode/wafer/glm5.2-fast")).toBe(
-      "GLM 5.2 Fast",
+      "GLM-5.2 Fast",
     );
     expect(opencodeModelLabel("opencode/wafer/kimi-k2.6")).toBe("Kimi K2.6");
     // One ladder across the catalog — Wafer normalizes effort at its edge, so

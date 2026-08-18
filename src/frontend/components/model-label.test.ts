@@ -47,7 +47,20 @@ describe("workspace preset labels", () => {
 			"Opus 5 + Fable oracle",
 		);
 		expect(shortModelLabel("claude/anthropic/claude-sonnet-5", models)).toBe("Sonnet 5");
-		expect(shortModelLabel("codex/openai/gpt-5.6-sol", models)).toBe("GPT-5.6 sol");
+		expect(shortModelLabel("codex/openai/gpt-5.6-sol", models)).toBe("GPT-5.6 Sol");
+		expect(shortModelLabel("opencode/openai/gpt-5.6-terra", models)).toBe(
+			"GPT-5.6 Terra",
+		);
+		expect(shortModelLabel("opencode/openai/gpt-5.6-luna", models)).toBe(
+			"GPT-5.6 Luna",
+		);
+		expect(shortModelLabel("opencode/cerebras/zai-glm-4.7", models)).toBe(
+			"Z.ai GLM-4.7",
+		);
+		expect(shortModelLabel("opencode/wafer/glm-5.2", models)).toBe("GLM-5.2");
+		expect(shortModelLabel("opencode/wafer/glm5.2-fast", models)).toBe(
+			"GLM-5.2 Fast",
+		);
 		// An id with no catalog entry reads exactly as the unrouted one does —
 		// the prefix goes, nothing else changes.
 		expect(shortModelLabel("claude/dial/opus-fable", models)).toBe(

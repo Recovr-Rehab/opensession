@@ -119,10 +119,24 @@ export { baseModelId, engineModelId, modelEngine, piModelId } from "../lib/model
 export function friendlyModelSlug(slug: string): string {
 	if (slug === "gpt-oss-120b") return "GPT OSS 120B";
 	if (slug === "gemma-4-31b") return "Gemma 4 31B";
-	if (slug === "zai-glm-4.7") return "Z.ai GLM 4.7";
+	const glm = slug.match(/^(zai-)?glm-?(\d+(?:\.\d+)*)(?:-(.+))?$/i);
+	if (glm) {
+		const prefix = glm[1] ? "Z.ai " : "";
+		const suffix = glm[3]
+			? ` ${glm[3].split("-").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ")}`
+			: "";
+		return `${prefix}GLM-${glm[2]}${suffix}`;
+	}
 	if (slug.startsWith("gpt-")) {
 		const m = slug.slice(4).match(/^(\d+(?:[.-]\d+)*)(?:-(.+))?$/);
-		if (m) return `GPT-${m[1].replace(/-/g, ".")}${m[2] ? ` ${m[2].replace(/-/g, " ")}` : ""}`;
+		if (m) {
+			const suffix = m[2]
+				?.replace(/-/g, " ")
+				.replace(/^(sol|terra|luna)$/i, (name) =>
+					name.charAt(0).toUpperCase() + name.slice(1).toLowerCase(),
+				);
+			return `GPT-${m[1].replace(/-/g, ".")}${suffix ? ` ${suffix}` : ""}`;
+		}
 		return `GPT-${slug.slice(4)}`;
 	}
 	const words: string[] = [];

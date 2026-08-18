@@ -156,19 +156,19 @@ const WAFER_MODELS: Record<
     cost: { input: 0.28, output: 0.56, cache_read: 0.07 },
   },
   "glm-5.2": {
-    name: "GLM 5.2",
+    name: "GLM-5.2",
     context: 1_048_576,
     output: 131_072,
     cost: { input: 1.26, output: 3.96, cache_read: 0.23 },
   },
   "glm5.2-fast": {
-    name: "GLM 5.2 Fast",
+    name: "GLM-5.2 Fast",
     context: 1_048_576,
     output: 131_072,
     cost: { input: 2.1, output: 6.6, cache_read: 0.21 },
   },
   "glm-5.1": {
-    name: "GLM 5.1",
+    name: "GLM-5.1",
     context: 202_752,
     output: 131_072,
     cost: { input: 1.0, output: 3.2, cache_read: 0.1 },
