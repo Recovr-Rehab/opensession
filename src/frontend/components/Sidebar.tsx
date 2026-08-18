@@ -152,7 +152,7 @@ import {
 } from "./icons";
 import { Button } from "../ui/button";
 import { Tooltip } from "../ui/tooltip";
-import { ContextMenu, Menu } from "../ui/menu";
+import { ContextMenu, MENU_ICON, Menu } from "../ui/menu";
 import { Popover } from "../ui/popover";
 import { cn } from "../ui/cn";
 import { RowCardPopup } from "./SidebarRowCards";
@@ -171,6 +171,7 @@ import {
 import {
 	placeSidebarRows,
 	rowAutoCreatedInLens,
+	rowOriginSource,
 	rowWasAutoCreated,
 	rowsAtPlacement,
 } from "../lib/sidebar-placement";
@@ -264,6 +265,7 @@ import {
 	WsStatusMark,
 } from "./sidebar/HoverCards";
 import { AutoCreatedMark } from "./sidebar/AutoCreatedMark";
+import { OriginMark } from "./sidebar/OriginMark";
 import { AutomationReportRow } from "./sidebar/AutomationReportRow";
 import { DraftRow } from "./sidebar/DraftRow";
 import { SidebarCtxMenu } from "./sidebar/SidebarCtxMenu";
@@ -2949,6 +2951,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				    beside its own name. The separated section only holds while the
 				    default lens and grouping do. */}
 				{!editing && rowWasAutoCreated(row) && <AutoCreatedMark />}
+				{/* Where the work came from, when the whole row came from one place:
+				    a Slack thread, a Linear issue. Same slot and ink as the mark
+				    above (SidebarItem carries the session-row half). */}
+				{!editing && <OriginMark source={rowOriginSource(row)} />}
 				{row.mention && !editing && (
 					// Same badge as a session row (SidebarItem): the face of whoever
 					// tagged you, with an accent @ so it can't read as a viewer.
@@ -4281,11 +4287,13 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			    Its two jobs moved rather than went: the collapse is gone (it hid
 			    at most a few rows and a collapsed band left the top of the
 			    sidebar looking empty), and the ••• menu that chose which tools
-			    show is now the right-click menu on any tool row. Untick the last
-			    one and the strip unmounts, which is recoverable exactly as it
-			    was before: the sidebar's own right-click menu lists every tool,
-			    Settings behind it. The band header rendered only while at least
-			    one tool was visible, so it was never the escape hatch either. */}
+			    show is now in the right-click menu on any tool row, beside the
+			    "Remove from toolbar" that already lived there. Take the last
+			    tool off and the strip unmounts, which is recoverable exactly as
+			    it was before: the sidebar's own right-click menu lists every
+			    tool, Settings behind it. The band header rendered only while at
+			    least one tool was visible, so it was never the escape hatch
+			    either. */}
 			{visibleTools.length > 0 && (
 				<nav
 					className={cn(
@@ -4383,12 +4391,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 								)}
 							</>
 						);
-						// Right-click opens the chooser: every tool, ticked when it is
-						// showing. Dropping the row you opened it on is unticking it in
-						// that list, so one menu both takes a tool off the strip and
-						// puts it back. Desktop only: phones have no right-click, and
-						// the chooser is itself desktop-only, so a stray long-press
-						// there would only be recoverable from Settings.
+						// Right-click drops this tool from the strip, the same gesture
+						// the feed headers use to hide themselves, and opens the chooser
+						// that puts any of them back. Desktop only: phones have no
+						// right-click, and the chooser is itself desktop-only, so a
+						// stray long-press there would only be recoverable from
+						// Settings.
 						const row = isPhone ? (
 							<button
 								key={tool.id}
@@ -4412,14 +4420,25 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 									{rowBody}
 								</ContextMenu.Trigger>
 								{/* This menu is now the only place that chooses which tools
-								    show, since the band heading that held the ••• is gone. It
-								    is the list and nothing else. The two commands that used
-								    to bracket it, "Remove from toolbar" on the row you
-								    right-clicked and "Hide tools from sidebar" for all of
-								    them, were the same decision written twice: the row you
-								    opened this on is ticked in the list, and unticking it is
-								    the same click. */}
+								    show, since the band heading that held the ••• is gone.
+								    "Remove from toolbar" leads, about the row you opened the
+								    menu on: the list under it can do the same thing by
+								    unticking that row, but the command names the tool you
+								    already aimed at, which is the common case and the one
+								    worth a click rather than a read. "Hide tools from
+								    sidebar" used to close the menu, and it went: it was the
+								    same decision as unticking every row, a step further than
+								    anyone reaches for by accident. */}
 								<ContextMenu.Popup>
+									<ContextMenu.Item
+										onClick={() => setToolVisible(tool.id, false)}
+									>
+										<IconEyeOff size={20} className={MENU_ICON} />
+										<span className="min-w-0 flex-1 truncate">
+											Remove from toolbar
+										</span>
+									</ContextMenu.Item>
+									<ContextMenu.Separator />
 									<ContextMenu.Group>
 										<ContextMenu.GroupLabel>
 											Show in toolbar
