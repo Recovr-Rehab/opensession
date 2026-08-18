@@ -12,6 +12,7 @@ import {
 	effectiveTheme,
 	onThemeChanged,
 } from "../lib/theme";
+import { expandIconMarkup } from "./icons";
 
 /**
  * The repo the markdown on this surface is about — what a bare `#5528` in it
@@ -122,9 +123,26 @@ export function MarkdownBody({
 						.catch(() => null);
 					const pre = code.parentElement;
 					if (!alive || !svg || !pre || !el.contains(pre)) continue;
+					// The diagram itself sits in a scroller, with the expand
+					// control as its SIBLING rather than a child: a wide diagram
+					// scrolls sideways, and a button inside that box would ride
+					// off the edge with it.
 					const wrap = document.createElement("div");
-					wrap.className = "md-mermaid";
-					wrap.innerHTML = svg;
+					wrap.className = "md-mermaid-wrap";
+					const well = document.createElement("div");
+					well.className = "md-mermaid";
+					well.innerHTML = svg;
+					// A real button, activated by the same delegated listener that
+					// opens session images (MediaLightbox.tsx). Clicking the diagram
+					// opens it too; this is what puts it in the tab order, and what
+					// makes it discoverable on a touch screen with no hover.
+					const expand = document.createElement("button");
+					expand.type = "button";
+					expand.className = "md-diagram-expand";
+					expand.title = "Expand diagram";
+					expand.setAttribute("aria-label", "Expand diagram");
+					expand.innerHTML = expandIconMarkup();
+					wrap.append(well, expand);
 					pre.replaceWith(wrap);
 				}
 			}

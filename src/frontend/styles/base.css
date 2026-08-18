@@ -160,6 +160,11 @@
 	--bg-panel: #262626;
 	--bg-hover: #2e2e2e;
 	--bg-active: #353535;
+	/* What a mermaid diagram is drawn on. A token rather than a value in the
+	   `.md-mermaid` rule because the media lightbox paints the same surface
+	   under a diagram it has opened: the chart's ink is themed to the page, so
+	   on the viewer's near-black scrim a light-theme one would be unreadable. */
+	--diagram-canvas: #0c0c10;
 	/* The session's right-hand panel: the fill of the column itself, and the
 	   plate its sections sit on. The column takes a hair off the page rather
 	   than a whole tier, the argument --sidebar-bg already makes at column
@@ -486,6 +491,8 @@ html[data-theme="light"] {
 	--bg-panel: #f0f0f0;
 	--bg-hover: #e9e9e9;
 	--bg-active: #e0e0e0;
+	/* See :root. */
+	--diagram-canvas: #fbfbfc;
 	/* See :root. Four units off white for the column, eleven for its plates:
 	   the page's own #f0f0f0 plate is right for one card on white and too heavy
 	   repeated six times down a 480px column. */
@@ -1906,17 +1913,24 @@ html[data-theme="light"] .composer-hl .cmp-fence {
 	border: 0;
 	border-radius: 0;
 }
-/* Rendered ```mermaid diagram (MarkdownBody swaps the fence for the SVG) */
-.md-mermaid {
+/* Rendered ```mermaid diagram (MarkdownBody swaps the fence for the SVG).
+   The diagram scrolls sideways inside its well, so the expand control is a
+   sibling of that scroller rather than a child: inside it, a wide diagram
+   would carry the button off the edge as you scrolled. */
+.md-mermaid-wrap {
+	position: relative;
 	margin: 2px 0 8px;
+}
+.md-mermaid {
 	padding: 12px;
-	background: #0c0c10;
+	background: var(--diagram-canvas);
 	border: 1px solid var(--border);
 	border-radius: calc(8px * var(--rf)); corner-shape: var(--cs);
 	overflow-x: auto;
-}
-html[data-theme="light"] .md-mermaid {
-	background: #fbfbfc;
+	/* The whole chart opens the viewer, the way a picture in the transcript
+	   does; the button beside it is the discoverable and keyboard-reachable
+	   route to the same place (MediaLightbox.tsx). */
+	cursor: zoom-in;
 }
 .md-mermaid svg {
 	display: block;
@@ -1938,8 +1952,10 @@ html[data-theme="light"] .md-mermaid {
 	line-height: 0;
 }
 /* Always visible (not hover-gated) so it works on touch/iOS. top offsets the
-   video's own 6px top margin inside the wrapper. */
-.md-video-expand {
+   video's own 6px top margin inside the wrapper; a diagram's margin is on the
+   wrapper instead, so it sits at the plain inset. */
+.md-video-expand,
+.md-diagram-expand {
 	position: absolute;
 	top: 12px;
 	right: 6px;
@@ -1955,7 +1971,11 @@ html[data-theme="light"] .md-mermaid {
 	cursor: pointer;
 	opacity: 0.75;
 }
-.md-video-expand:hover {
+.md-diagram-expand {
+	top: 6px;
+}
+.md-video-expand:hover,
+.md-diagram-expand:hover {
 	opacity: 1;
 	background: rgba(0, 0, 0, 0.75);
 }

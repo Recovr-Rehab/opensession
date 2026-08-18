@@ -1,7 +1,12 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { type WorkspaceMediaItem } from "../lib/api";
+import {
+	type DiagramMedia,
+	diagramDataUrl,
+	readDiagramSvg,
+} from "../lib/diagram-media";
 import {
 	canUseNativeIOSShare,
 	nativeShareWasCancelled,
@@ -49,8 +54,13 @@ import {
  */
 
 export interface LightboxItem {
-	kind: "image" | "video";
+	kind: "image" | "video" | "diagram";
 	src: string;
+	/** kind "diagram" only: the live SVG to draw, so that zooming a chart to
+	 * read its labels keeps them sharp instead of magnifying pixels. `src` is
+	 * the same diagram as a file, which is all Download needs — and being a
+	 * data: URL, it also opts the link actions out (see below). */
+	diagram?: DiagramMedia;
 	walkthroughLabel?: WalkthroughMediaLabel;
 	sessionTitle?: string;
 	description?: string;
@@ -186,22 +196,65 @@ export function openLightbox(
 
 /** Every piece of session media currently in the DOM, in document order —
  * markdown images/videos, pasted attachments, tool-result screenshots. */
-const GALLERY_SELECTOR = "img.md-image, video.md-video";
+const GALLERY_SELECTOR = "img.md-image, video.md-video, .md-mermaid > svg";
+
+/** One node as an item, or null when it cannot be shown: a diagram whose
+ * markup never says how big it is has nothing to letterbox. */
+function galleryItem(node: Element): LightboxItem | null {
+	if (node.tagName === "IMG" || node.tagName === "VIDEO") {
+		return {
+			kind: node.tagName === "VIDEO" ? "video" : "image",
+			src: (node as HTMLImageElement | HTMLVideoElement).src,
+			// Markdown alt text is the only description these carry; captioning the
+			// viewer with it beats a bare counter once you are paging through a
+			// dozen screenshots.
+			sessionTitle: (node as HTMLImageElement).alt?.trim() || undefined,
+		};
+	}
+	const diagram = readDiagramSvg(node.outerHTML);
+	return diagram
+		? { kind: "diagram", src: diagramDataUrl(diagram.svg), diagram }
+		: null;
+}
 
 /** Open the lightbox on `el`, with prev/next browsing across all session media
  * currently on screen (a conversation-wide gallery). */
 export function openGalleryFrom(el: Element) {
-	const nodes = Array.from(document.querySelectorAll(GALLERY_SELECTOR));
-	const items: LightboxItem[] = nodes.map((n) => ({
-		kind: n.tagName === "VIDEO" ? "video" : "image",
-		src: (n as HTMLImageElement | HTMLVideoElement).src,
-		// Markdown alt text is the only description these carry; captioning the
-		// viewer with it beats a bare counter once you are paging through a
-		// dozen screenshots.
-		sessionTitle: (n as HTMLImageElement).alt?.trim() || undefined,
-	}));
-	if (items.length === 0) return;
-	openLightbox(items, Math.max(0, nodes.indexOf(el)), el);
+	const shown = Array.from(document.querySelectorAll(GALLERY_SELECTOR)).flatMap(
+		(node) => {
+			const item = galleryItem(node);
+			return item ? [{ node, item }] : [];
+		},
+	);
+	if (shown.length === 0) return;
+	openLightbox(
+		shown.map((entry) => entry.item),
+		Math.max(
+			0,
+			shown.findIndex((entry) => entry.node === el),
+		),
+		el,
+	);
+}
+
+/** The diagram a click is about: anywhere on the rendered chart, or the expand
+ * button beside it (which is also what Enter and Space on that button
+ * dispatch). Diagram labels are real text, so a click that ends a selection is
+ * someone copying a node name, not asking for a viewer — the button stays
+ * unambiguous either way. */
+function diagramFor(target: Element): Element | null {
+	const svg = target
+		.closest?.(".md-mermaid-wrap")
+		?.querySelector(".md-mermaid > svg");
+	if (!svg) return null;
+	if (target.closest?.("button.md-diagram-expand")) return svg;
+	const selection = window.getSelection();
+	const selecting =
+		selection &&
+		!selection.isCollapsed &&
+		selection.anchorNode &&
+		svg.contains(selection.anchorNode);
+	return selecting ? null : svg;
 }
 
 export function MediaLightboxHost() {
@@ -281,13 +334,14 @@ export function MediaLightboxHost() {
 			// Enter on the focused link dispatches a click whose target is the
 			// wrapping <a>, not the <img> inside it — match both, or keyboard
 			// activation falls through to the raw file in a new tab.
-			const img =
+			const media =
 				target.closest?.("img.md-image") ||
-				target.closest?.("a.md-image-link")?.querySelector("img.md-image");
-			if (!img) return;
+				target.closest?.("a.md-image-link")?.querySelector("img.md-image") ||
+				diagramFor(target);
+			if (!media) return;
 			e.preventDefault();
 			e.stopPropagation();
-			openGalleryFrom(img);
+			openGalleryFrom(media);
 		}
 		document.addEventListener("click", onClick, true);
 		return () => document.removeEventListener("click", onClick, true);
@@ -451,12 +505,18 @@ function shareableSrc(item: LightboxItem): string {
 const MAX_SCALE = 8;
 const DOUBLE_TAP_SCALE = 2.5;
 
+/** Air between a diagram and its own edge, so the drawing is not flush against
+ * the corner of the surface it sits on. */
+const DIAGRAM_PADDING = 16;
+
 /**
- * Pinch/pan/zoom surface for one image. The wrapper (not the letterboxed img)
+ * Pinch/pan/zoom surface for one image, or for one diagram — a mermaid chart
+ * keeps its vector markup here rather than arriving as a picture, so the
+ * labels stay sharp all the way up. The wrapper (not the letterboxed media)
  * owns the gesture so pinches starting beside the photo still work; transforms
- * are written straight to the img style (no per-move re-render). A clean tap
- * on the backdrop area of the wrapper closes — unless it's the first half of a
- * double-tap on the image, which zooms instead.
+ * are written straight to the media's style (no per-move re-render). A clean
+ * tap on the backdrop area of the wrapper closes — unless it's the first half
+ * of a double-tap on the media, which zooms instead.
  *
  * At the fit scale a horizontal drag pages to the neighbouring item instead:
  * the picture follows the finger and either carries on to the next one or
@@ -464,8 +524,9 @@ const DOUBLE_TAP_SCALE = 2.5;
  * arms once the drag is decidedly horizontal, so a pinch or a vertical flick
  * never steals a page turn, and zoomed in the same drag pans the photo.
  */
-function ZoomableImage({
+function ZoomableMedia({
 	src,
+	diagram,
 	onTapBackdrop,
 	onZoomChange,
 	onSwipe,
@@ -473,6 +534,8 @@ function ZoomableImage({
 	viewTransitionName,
 }: {
 	src: string;
+	/** Present for a diagram: draw this markup instead of loading `src`. */
+	diagram?: DiagramMedia;
 	onTapBackdrop: () => void;
 	onZoomChange: (zoomed: boolean) => void;
 	/** Page to the previous (-1) / next (+1) item; absent when there is one. */
@@ -484,6 +547,9 @@ function ZoomableImage({
 }) {
 	const wrapRef = useRef<HTMLDivElement>(null);
 	const imgRef = useRef<HTMLImageElement>(null);
+	const boxRef = useRef<HTMLDivElement>(null);
+	/** The element the transform is written to, whichever kind is on screen. */
+	const mediaEl = () => (diagram ? boxRef.current : imgRef.current);
 	/** Cached layoutOrigin(), see there. Null means "measure on next read". */
 	const layout = useRef<{ x: number; y: number; w: number; h: number } | null>(null);
 	const t = useRef({ s: 1, tx: 0, ty: 0 });
@@ -504,9 +570,36 @@ function ZoomableImage({
 	const lastTap = useRef<{ at: number; x: number; y: number } | null>(null);
 	const [zoomed, setZoomed] = useState(false);
 	const zoomedRef = useRef(false);
+	/** A diagram's box, fitted to the surface. Unlike a photo, a chart has no
+	 * natural pixel size to hold it back — its viewBox is arbitrary units — so
+	 * it fills the room available rather than stopping at 1:1. Sized here in JS
+	 * rather than by CSS on the svg because the gesture code needs a real box
+	 * to measure the zoom and pan bounds against. */
+	const [fit, setFit] = useState<{ w: number; h: number } | null>(null);
+	useLayoutEffect(() => {
+		if (!diagram) return;
+		const measure = () => {
+			const wrap = wrapRef.current;
+			if (!wrap) return;
+			const room = {
+				w: wrap.clientWidth - DIAGRAM_PADDING * 2,
+				h: wrap.clientHeight - DIAGRAM_PADDING * 2,
+			};
+			const scale = Math.min(room.w / diagram.size.w, room.h / diagram.size.h);
+			if (!(scale > 0) || !Number.isFinite(scale)) return;
+			setFit({
+				w: Math.round(diagram.size.w * scale) + DIAGRAM_PADDING * 2,
+				h: Math.round(diagram.size.h * scale) + DIAGRAM_PADDING * 2,
+			});
+			layout.current = null;
+		};
+		measure();
+		window.addEventListener("resize", measure);
+		return () => window.removeEventListener("resize", measure);
+	}, [diagram]);
 
 	function apply(animate = false) {
-		const img = imgRef.current;
+		const img = mediaEl();
 		if (!img) return;
 		const { s, tx, ty } = t.current;
 		img.style.transition = animate ? "transform 0.18s ease-out" : "none";
@@ -559,7 +652,7 @@ function ZoomableImage({
 	 * a gesture does can invalidate it — only a real layout change can. */
 	function layoutOrigin() {
 		if (layout.current) return layout.current;
-		const img = imgRef.current!;
+		const img = mediaEl()!;
 		const r = img.getBoundingClientRect();
 		const { s, tx, ty } = t.current;
 		return (layout.current = {
@@ -589,8 +682,7 @@ function ZoomableImage({
 	 * should spread under the floating chrome like a native photo viewer, not
 	 * clip at the wrapper edges. */
 	function clamp(next: { s: number; tx: number; ty: number }) {
-		const img = imgRef.current;
-		if (!img) return next;
+		if (!mediaEl()) return next;
 		const C = { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
 		const o = layoutOrigin();
 		const clampAxis = (
@@ -794,28 +886,45 @@ function ZoomableImage({
 			onPointerUp={onPointerEnd}
 			onPointerCancel={onPointerEnd}
 		>
-			<img
-				ref={imgRef}
-				src={src}
-				alt=""
-				draggable={false}
-				// object-contain sizes the box from the decoded picture, so the
-				// box before load is not the box after it.
-				onLoad={() => {
-					layout.current = null;
-				}}
-				// The scrim is near-black in both themes, so a dark screenshot
-				// opened full size has no edge of its own and bleeds into it.
-				// A white hairline rather than border-line-strong: this surface
-				// is always dark, like the rest of the lightbox chrome.
-				// The top of the radius scale, because this is the largest
-				// floating surface in the app and a card-sized corner on a
-				// screen-sized photo reads as a crop rather than a shape.
-				// Anything rounder would leave the scale, and it starts
-				// clipping content that sits in a screenshot's own corner.
-				className="min-h-0 min-w-0 max-h-full max-w-full rounded-2xl border border-white/20 object-contain [transform-origin:0_0]"
-				style={{ viewTransitionName }}
-			/>
+			{diagram ? (
+				<div
+					ref={boxRef}
+					role="img"
+					aria-label="Diagram"
+					// The same hairline and corner the photo takes, over the well
+					// the diagram is drawn on in the transcript: a light-theme
+					// chart is near-black ink, which would be unreadable straight
+					// on the scrim.
+					className="box-border shrink-0 rounded-2xl border border-white/20 bg-[var(--diagram-canvas)] p-4 [transform-origin:0_0] [&>svg]:block [&>svg]:h-full [&>svg]:w-full"
+					style={{ width: fit?.w, height: fit?.h, viewTransitionName }}
+					// The markup is mermaid's own output, already rendered into the
+					// transcript by MarkdownBody; this is the same SVG, resized.
+					dangerouslySetInnerHTML={{ __html: diagram.svg }}
+				/>
+			) : (
+				<img
+					ref={imgRef}
+					src={src}
+					alt=""
+					draggable={false}
+					// object-contain sizes the box from the decoded picture, so the
+					// box before load is not the box after it.
+					onLoad={() => {
+						layout.current = null;
+					}}
+					// The scrim is near-black in both themes, so a dark screenshot
+					// opened full size has no edge of its own and bleeds into it.
+					// A white hairline rather than border-line-strong: this surface
+					// is always dark, like the rest of the lightbox chrome.
+					// The top of the radius scale, because this is the largest
+					// floating surface in the app and a card-sized corner on a
+					// screen-sized photo reads as a crop rather than a shape.
+					// Anything rounder would leave the scale, and it starts
+					// clipping content that sits in a screenshot's own corner.
+					className="min-h-0 min-w-0 max-h-full max-w-full rounded-2xl border border-white/20 object-contain [transform-origin:0_0]"
+					style={{ viewTransitionName }}
+				/>
+			)}
 		</div>
 	);
 }
@@ -828,6 +937,12 @@ const MAX_VISIBLE_DOTS = 7;
 // preview's separation between actions above and descriptions below.
 const lightboxAction =
 	"inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-full border-0 bg-transparent px-2 py-1 text-xs text-white/60 no-underline transition-colors hover:bg-white/15 hover:text-white";
+
+const PREVIEW_LABEL: Record<LightboxItem["kind"], string> = {
+	image: "Image preview",
+	video: "Video preview",
+	diagram: "Diagram preview",
+};
 
 function MediaLightbox({
 	items,
@@ -990,7 +1105,7 @@ function MediaLightbox({
 			className="fixed inset-0 z-[11000] flex flex-col bg-black/85"
 			role="dialog"
 			aria-modal="true"
-			aria-label={item.kind === "image" ? "Image preview" : "Video preview"}
+			aria-label={PREVIEW_LABEL[item.kind]}
 			initial={useHeroTransition ? false : { opacity: 0 }}
 			animate={{ opacity: 1 }}
 			exit={useHeroTransition ? { opacity: 1 } : { opacity: 0 }}
@@ -1101,10 +1216,11 @@ function MediaLightbox({
 								: { type: "spring", duration: 0.28, bounce: 0 }
 					}
 				>
-					{item.kind === "image" ? (
-						<ZoomableImage
+					{item.kind !== "video" ? (
+						<ZoomableMedia
 							key={item.src}
 							src={item.src}
+							diagram={item.diagram}
 							onTapBackdrop={requestClose}
 							onZoomChange={setImageZoomed}
 							onSwipe={many ? (d) => (d === 1 ? next() : prev()) : undefined}

@@ -738,14 +738,38 @@ export function IconWrench(p: IconProps) {
   );
 }
 
+const EXPAND_PATHS = [
+  "M14.75 4.75H19.25V9.25",
+  "M19.25 4.75L13.75 10.25",
+  "M9.25 19.25H4.75V14.75",
+  "M4.75 19.25L10.25 13.75",
+];
+
 export function IconExpand(p: IconProps) {
   return (
     <Svg {...p}>
-      <path {...stroke} d="M14.75 4.75H19.25V9.25" />
-      <path {...stroke} d="M19.25 4.75L13.75 10.25" />
-      <path {...stroke} d="M9.25 19.25H4.75V14.75" />
-      <path {...stroke} d="M4.75 19.25L10.25 13.75" />
+      {EXPAND_PATHS.map((d) => (
+        <path key={d} {...stroke} d={d} />
+      ))}
     </Svg>
+  );
+}
+
+/**
+ * The same glyph as markup, for the one control that is built as an innerHTML
+ * string rather than as JSX: the expand button on a rendered mermaid diagram,
+ * which MarkdownBody creates in the DOM (see there). Shares EXPAND_PATHS with
+ * <IconExpand> so there is still one drawing.
+ */
+export function expandIconMarkup(size = MIN_ICON_SIZE): string {
+  const paths = EXPAND_PATHS.map(
+    (d) =>
+      `<path d="${d}" stroke="currentColor" stroke-width="${stroke.strokeWidth}"` +
+      ` stroke-linecap="${stroke.strokeLinecap}" stroke-linejoin="${stroke.strokeLinejoin}"/>`,
+  ).join("");
+  return (
+    `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none"` +
+    ` aria-hidden="true">${paths}</svg>`
   );
 }
 
