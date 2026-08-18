@@ -48,6 +48,14 @@
 				display: none;
 			}
 
+			/* The app's floating desktop notifications: the "Open in app" hand-off
+			   and the update toast. Both are right in the product and wrong in a
+			   screenshot of it. Matched on the stack rather than on either
+			   toast's copy, which is the part that keeps changing. */
+			html [class*="z-[9500]"] {
+				display: none;
+			}
+
 			.sidebar-independent-section:has(.sidebar-people-row) {
 				display: none;
 			}

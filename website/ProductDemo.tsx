@@ -1,7 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import markUrl from "../os1-mac/build/icon-512.png";
 
-const desktopDemoWidth = 840;
+/* The width the app is laid out at before it is scaled to fit the window. It
+   is what decides how large the product reads: a wider layout means smaller
+   UI and more of the real interface in the same frame. */
+const desktopDemoWidth = 1080;
 
 export function ProductDemo() {
 	const previewRef = useRef<HTMLElement>(null);
