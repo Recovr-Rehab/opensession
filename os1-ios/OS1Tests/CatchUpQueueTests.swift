@@ -63,6 +63,16 @@ final class CatchUpQueueTests: XCTestCase {
         XCTAssertEqual(cards.map(\.target.id), ["mine"])
     }
 
+    func testSpawnedWorkerDoesNotMakeItsParentWorkspaceUnread() {
+        let parent = session("parent", workspace: "ws-1")
+        var worker = session("worker", workspace: "ws-1")
+        worker.spawnedBy = parent.id
+
+        let cards = build([parent, worker], unread: ["worker"])
+
+        XCTAssertTrue(cards.isEmpty)
+    }
+
     /// A session you have never opened is not unread — `isUnread` is the
     /// store's judgement, and the queue must not second-guess it.
     func testNothingIsUnreadWithoutAMark() {

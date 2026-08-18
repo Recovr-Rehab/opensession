@@ -42,6 +42,18 @@ final class PreferenceHydrationTests: XCTestCase {
         XCTAssertTrue(store.isUnread(session))
     }
 
+    func testSpawnedWorkerDoesNotMakeWorkspaceUnread() {
+        let store = ReadsStore()
+        let parent = Session(id: "parent")
+        var worker = Session(id: "worker")
+        worker.spawnedBy = parent.id
+        worker.lastActivity = "2026-08-11T12:00:00.000Z"
+
+        store.applyHydrated(["worker": "1970-01-01T00:00:00.000Z"], persist: false)
+
+        XCTAssertFalse(store.isUnread([parent, worker]))
+    }
+
     func testPinBeforeHydrationIsReplayedOverRemotePins() {
         let store = PinStore()
         let workspace = SidebarWorkspace(

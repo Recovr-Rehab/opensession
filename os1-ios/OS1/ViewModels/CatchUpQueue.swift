@@ -31,8 +31,8 @@ enum CatchUpQueue {
     /// The rules mirror the web deck (`src/frontend/components/CatchUpDeck.tsx`)
     /// so the two clients agree about what "unread work" means:
     /// not archived, not an automation's own session, not the Desk (a
-    /// summonable overlay you read as you talk to it), started by you, and
-    /// carrying activity past your read mark.
+    /// summonable overlay you read as you talk to it), not a spawned worker,
+    /// started by you, and carrying activity past your read mark.
     nonisolated static func build(
         sessions: [Session],
         workspaceNames: [String: String],
@@ -99,6 +99,7 @@ enum CatchUpQueue {
         guard session.archived != true,
               !session.isAutomation,
               session.desk != true,
+              session.spawnedBy?.isEmpty != false,
               let owner = session.startedBy,
               !owner.isEmpty
         else { return false }

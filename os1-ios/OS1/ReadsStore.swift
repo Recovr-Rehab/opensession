@@ -154,10 +154,12 @@ final class ReadsStore {
         return last > read
     }
 
-    /// A sidebar row is unread when any session under it is — one unread session
-    /// bolds the whole workspace row, like the web sidebar.
+    /// A sidebar row is unread when any visible session under it is. Spawned
+    /// workers stay behind their parent, so counting one would leave the row
+    /// bold with no session the reader could open to clear it.
     func isUnread(_ sessions: [Session]) -> Bool {
-        sessions.contains { isUnread($0) }
+        let visible = sessions.filter { $0.spawnedBy?.isEmpty != false }
+        return (visible.isEmpty ? sessions : visible).contains { isUnread($0) }
     }
 
     private func enforceCap() {
