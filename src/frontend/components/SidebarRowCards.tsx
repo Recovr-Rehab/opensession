@@ -3,6 +3,8 @@ import type { OsReview, SupportThread, UnifiedSession } from "../lib/types";
 import type { ReviewQueueItem } from "../lib/review-queue";
 import { relativeTime, type OpenPr } from "../lib/api";
 import { providerFromUrl } from "../lib/provider";
+import { refTone, type PrTone } from "../lib/pr-refs";
+import { prChipClass } from "../lib/pr-tone-classes";
 import { TONE_TEXT, prettyReview, type HoverTone } from "../lib/sidebar-hover";
 import { plainThreadUrl } from "./PlainThreadPanel";
 import { IconArrowUpRight, IconGitMerge } from "./icons";
@@ -144,6 +146,40 @@ export function CardLink({
 			className="inline-flex shrink-0 items-center gap-0.5 text-xs text-dim no-underline hover:text-fg"
 		>
 			{children}
+			<IconArrowUpRight size={15} className="opacity-70" />
+		</a>
+	);
+}
+
+/**
+ * The PR a card leads to, drawn as the chip every other PR surface draws (the
+ * session header, the status strip, a series row) rather than the dim text
+ * link the cards used to end on. It costs the footer nothing: the number is
+ * the PR's identity and the colour is its state, so the same width now says
+ * which PR and how it stands.
+ *
+ * A pill, not the header's split button. There the two halves lead to two
+ * places (the Review tab, then the provider); a card has only the one
+ * destination to offer, so a seam would promise a second.
+ */
+export function CardPrChip({
+	url,
+	number,
+	tone,
+}: {
+	url: string;
+	number?: number | null;
+	tone: PrTone;
+}) {
+	return (
+		<a
+			href={url}
+			target="_blank"
+			rel="noopener noreferrer"
+			title={`Open on ${providerFromUrl(url).name}`}
+			className={prChipClass(tone, "card")}
+		>
+			{number != null ? `#${number}` : "PR"}
 			<IconArrowUpRight size={15} className="opacity-70" />
 		</a>
 	);
@@ -341,12 +377,7 @@ export function PrRowCard({ item }: { item: ReviewQueueItem }) {
 				time={`Updated ${relativeTime(pr.updatedAt)}`}
 				timeTitle={new Date(pr.updatedAt).toLocaleString()}
 			>
-				<CardLink
-					href={pr.url}
-					title={`Open on ${providerFromUrl(pr.url).name}`}
-				>
-					<span className="text-[0.95em]">#{pr.number}</span>
-				</CardLink>
+				<CardPrChip url={pr.url} number={pr.number} tone={refTone(pr)} />
 			</CardFooter>
 		</>
 	);

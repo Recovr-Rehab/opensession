@@ -4,6 +4,7 @@ import {
 	refLabel,
 	refState,
 	refTone,
+	sessionPrTone,
 	summarizePrSeries,
 	type SessionPrRef,
 } from "./pr-refs";
@@ -42,6 +43,23 @@ describe("refTone", () => {
 		).toBe("yellow");
 		expect(refTone(ref({ isDraft: true }))).toBe("muted");
 		expect(refTone(ref())).toBe("green");
+	});
+});
+
+// The only thing this adapter can get wrong is the renaming, and a wrong name
+// reads as `undefined` rather than as an error: every PR would come back green.
+// So the cases that must move are the ones that are not green.
+describe("sessionPrTone", () => {
+	test("reads a session's flat PR fields as the same four facts", () => {
+		expect(sessionPrTone({ prState: "MERGED" })).toBe("purple");
+		expect(sessionPrTone({ prReviewDecision: "CHANGES_REQUESTED" })).toBe("red");
+		expect(
+			sessionPrTone({
+				prChecks: { total: 2, passed: 1, failed: 0, pending: 1 },
+			}),
+		).toBe("yellow");
+		expect(sessionPrTone({ prIsDraft: true })).toBe("muted");
+		expect(sessionPrTone({ prState: "OPEN" })).toBe("green");
 	});
 });
 

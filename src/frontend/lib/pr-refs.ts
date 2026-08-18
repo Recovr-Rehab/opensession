@@ -55,6 +55,26 @@ export function refTone(ref: PrStateFacts): PrTone {
 }
 
 /**
+ * The same tone for a session's primary PR. Those four facts live flat on the
+ * session under longer names, so a surface that has a session rather than a
+ * ref gets the colour every other PR surface derives instead of a second rule
+ * of its own.
+ */
+export function sessionPrTone(
+	s: Pick<
+		UnifiedSession,
+		"prState" | "prIsDraft" | "prReviewDecision" | "prChecks"
+	>,
+): PrTone {
+	return refTone({
+		state: s.prState,
+		isDraft: s.prIsDraft,
+		reviewDecision: s.prReviewDecision,
+		checks: s.prChecks,
+	});
+}
+
+/**
  * The state a ref-only PR can honestly claim. Same precedence as `refTone`, so
  * the words and the colour never disagree, and pending checks are counted the
  * way the primary headline counts them rather than collapsing to "Open".

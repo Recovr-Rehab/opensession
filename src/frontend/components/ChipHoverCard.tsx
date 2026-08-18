@@ -27,6 +27,7 @@ import { Popover } from "../ui/popover";
 import {
 	CardFooter,
 	CardLink,
+	CardPrChip,
 	CardRows,
 	RowCardPopup,
 	checksLabel,
@@ -418,12 +419,7 @@ function PrChipCardBody({ pr }: { pr: ChipPr }) {
 				timeTitle={pr.updatedAt ? new Date(pr.updatedAt).toLocaleString() : undefined}
 			>
 				{pr.url && (
-					<CardLink
-						href={pr.url}
-						title={`Open on ${providerFromUrl(pr.url).name}`}
-					>
-						<span className="text-[0.95em]">#{pr.number}</span>
-					</CardLink>
+					<CardPrChip url={pr.url} number={pr.number} tone={tone} />
 				)}
 			</CardFooter>
 		</>

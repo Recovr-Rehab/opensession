@@ -12,7 +12,8 @@ import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
 import { BottomSheet, SheetBody, SheetItem, SheetSeparator } from "../../ui/sheet";
 import { openLightbox } from "../MediaLightbox";
-import { CardFooter, CardLink, checksLabel, osReviewLabel } from "../SidebarRowCards";
+import { sessionPrTone } from "../../lib/pr-refs";
+import { CardFooter, CardPrChip, checksLabel, osReviewLabel } from "../SidebarRowCards";
 import { IconArrowUpRight, IconGitMerge, IconInbox, IconLink, IconMail, IconMoon, IconPencil, IconPin, IconPullRequest } from "../icons";
 import React, { useEffect, useState } from "react";
 
@@ -112,14 +113,11 @@ export function SessionCardBody({ session: s }: { session: UnifiedSession }) {
 
 			<CardFooter>
 				{s.prUrl && (
-					<CardLink
-						href={s.prUrl}
-						title={`Open on ${providerFromUrl(s.prUrl).name}`}
-					>
-						<span className="text-[0.95em]">
-							{s.prNumber ? `#${s.prNumber}` : "PR"}
-						</span>
-					</CardLink>
+					<CardPrChip
+						url={s.prUrl}
+						number={s.prNumber}
+						tone={sessionPrTone(s)}
+					/>
 				)}
 			</CardFooter>
 		</>
@@ -538,14 +536,11 @@ export function WsCardBody({
 					</a>
 				) : null}
 				{prSession?.prUrl && (
-					<CardLink
-						href={prSession.prUrl}
-						title={`Open on ${providerFromUrl(prSession.prUrl).name}`}
-					>
-						<span className="text-[0.95em]">
-							{prSession.prNumber ? `#${prSession.prNumber}` : "PR"}
-						</span>
-					</CardLink>
+					<CardPrChip
+						url={prSession.prUrl}
+						number={prSession.prNumber}
+						tone={sessionPrTone(prSession)}
+					/>
 				)}
 				{prStatusBits.length > 0 && (
 					<span className="min-w-0 truncate text-meta text-faint">

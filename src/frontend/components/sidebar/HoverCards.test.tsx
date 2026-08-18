@@ -88,3 +88,45 @@ describe("hover cards drop the repo and the idle timestamp", () => {
 		}
 	});
 });
+
+// The PR is the one place a card leads, so it takes the chip every other PR
+// surface draws rather than a dim text link: the number says which PR, the
+// colour says how it stands. Both come off the derivation the header uses
+// (lib/pr-refs), so the two surfaces cannot disagree about one PR.
+describe("the card's PR is the chip the rest of the app draws", () => {
+	// The anchor's own tag, so a colour on the status line above it cannot be
+	// mistaken for a colour on the chip.
+	const chip = (html: string) =>
+		html.match(/<a[^>]*href="https:\/\/github[^"]*"[^>]*>/)?.[0] ?? "";
+
+	const cardWithPr = (extra: Partial<UnifiedSession>) =>
+		renderToStaticMarkup(
+			<SessionCardBody
+				session={session({
+					prUrl: "https://github.com/tellahq/example/pull/1",
+					prNumber: 1,
+					prState: "OPEN",
+					...extra,
+				})}
+			/>,
+		);
+
+	test("it is a control, and it still leaves for the provider", () => {
+		const tag = chip(cardWithPr({}));
+		expect(tag).toContain('target="_blank"');
+		expect(tag).toContain("min-h-[26px]");
+		expect(tag).not.toContain("text-dim");
+	});
+
+	test("its colour is the PR's state, not one fixed link colour", () => {
+		expect(chip(cardWithPr({}))).toContain("text-green");
+		expect(chip(cardWithPr({ prState: "MERGED" }))).toContain("text-purple");
+		expect(
+			chip(
+				cardWithPr({
+					prChecks: { total: 2, passed: 1, failed: 1, pending: 0 },
+				}),
+			),
+		).toContain("text-red");
+	});
+});

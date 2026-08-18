@@ -232,8 +232,9 @@ export const PR_HEAD_BTN = "min-h-[32px] px-[11px]";
 
 /** Where a PR chip is rendered. `bar`/`head` are the primary chip (half of the
  *  split button, hence the squared end); `sib` is a sibling chip in the header,
- *  `row` a sibling chip inside a series row. */
-type ChipSize = "bar" | "head" | "sib" | "row";
+ *  `row` a sibling chip inside a series row, `card` the one a hover card ends
+ *  on. */
+type ChipSize = "bar" | "head" | "sib" | "row" | "card";
 
 const CHIP_BASE =
 	"inline-flex items-center gap-0.5 whitespace-nowrap border font-semibold tabular-nums no-underline transition-[background-color]";
@@ -249,6 +250,10 @@ const CHIP_SIZE: Record<ChipSize, string> = {
 	sib: "min-h-[32px] cursor-pointer rounded-control px-[11px] text-label",
 	// Inert markup inside the row button — the whole row is the target.
 	row: "min-h-[22px] cursor-[inherit] rounded-md px-[7px] text-label",
+	// A hover card's footer. Sized to the action button that can sit beside it
+	// (WS_ACTION's 26px) so the pair reads level, and rounded to match: a
+	// control corner on a 26px box, not the 32px chrome the header wears.
+	card: "min-h-[26px] shrink-0 cursor-pointer rounded-md px-2 text-label",
 };
 
 /** Toned chips take a soft tinted fill rather than the neutral control
@@ -283,12 +288,21 @@ const CHIP_TONE_FLAT: Record<PrTone, string> = {
 };
 
 export function prChipClass(tone: PrTone, size: ChipSize): string {
-	const flat = size === "row";
+	// A card's chip goes flat for the same reason a row's does: it sits on the
+	// popup's own surface rather than on a band already in its colour, and a
+	// tinted fill there reads as a badge beside the card's one real action.
+	const flat = size === "row" || size === "card";
 	// Only the neutral chip keeps the control shadow: a toned pill is already
 	// separated from the strip by its fill, and a sibling chip is too small to
 	// carry one.
 	const shadow = tone === "muted" && (size === "bar" || size === "head");
-	return `${CHIP_BASE} ${CHIP_SIZE[size]} ${flat ? CHIP_TONE_FLAT[tone] : CHIP_TONE[tone]}${shadow ? " smooth-shadow-sm" : ""}`;
+	// Unlike a row's chip, a card's is the link itself, so it answers the
+	// pointer. Mixed from its own ink so a green chip washes green.
+	const hover =
+		size === "card"
+			? " hover:bg-[color-mix(in_srgb,currentColor_12%,transparent)] active:bg-[color-mix(in_srgb,currentColor_18%,transparent)]"
+			: "";
+	return `${CHIP_BASE} ${CHIP_SIZE[size]} ${flat ? CHIP_TONE_FLAT[tone] : CHIP_TONE[tone]}${shadow ? " smooth-shadow-sm" : ""}${hover}`;
 }
 
 /** The outbound half of the split button: same tone, square inner corner, and
