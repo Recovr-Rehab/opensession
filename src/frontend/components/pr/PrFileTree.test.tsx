@@ -5,11 +5,11 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { PrFileTree } from "./PrFileTree";
 
 describe("PrFileTree", () => {
-  test("keeps the useful tail of long file names", () => {
+  test("shortens long file names from the center", () => {
     const entry = Bun.resolveSync("@pierre/trees", import.meta.dir);
     const source = readFileSync(join(dirname(entry), "render/FileTreeView.js"), "utf8");
 
-    expect(source).toContain('split: ["last", 10]');
+    expect(source).toContain('split: "center"');
     expect(source).not.toContain('split: "extension"');
   });
 

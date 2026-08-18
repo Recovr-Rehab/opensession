@@ -4,4 +4,4 @@ index 648639b4b..62470501e 100644
 +++ b/dist/render/FileTreeView.js
 @@ -377 +377 @@ function renderFileTreeRowContent(row, resolveIcon, { actionLaneEnabled = false,
 -				split: "extension",
-+				split: ["last", 10],
++				split: "center",
