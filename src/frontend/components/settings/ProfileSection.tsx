@@ -7,14 +7,16 @@ import {
 	type Profile,
 } from "../../lib/api/profile";
 import { refreshPeople } from "../../lib/people";
+import { isTouchPrimary } from "../../lib/platform";
 import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
 import { Field, FieldGrid, Input } from "../../ui/input";
+import { ContextMenu } from "../../ui/menu";
 import { SettingsForm, SettingsGroupLabel } from "../../ui/settings";
 import { Spinner } from "../../ui/spinner";
 import { EmptyState, InlineAlert, Skeleton, SkeletonBar } from "../../ui/state";
 import { toast } from "../../ui/toast";
-import { IconCamera } from "../icons";
+import { IconCamera, IconTrash } from "../icons";
 import { useCurrentUser } from "../UserPicker";
 import { UserAvatar } from "../UserAvatar";
 
@@ -134,6 +136,11 @@ function ProfileForm({
 	// but not which way it goes, and someone with no picture yet is being
 	// offered a different thing than someone replacing one.
 	const pictureAction = profile.image ? "Change picture" : "Upload picture";
+	// Removing lives on the context menu, so the only thing that says it exists
+	// is this description. Name the gesture this device actually has: a phone
+	// has no right-click, and the string is what a screen reader reads out
+	// there, where the title itself never shows.
+	const removeGesture = isTouchPrimary ? "Long-press" : "Right-click";
 
 	async function pickPicture(file: File | undefined) {
 		if (!file) return;
@@ -202,34 +209,41 @@ function ProfileForm({
 	return (
 		<SettingsForm>
 			<form className="flex flex-col gap-3.5" onSubmit={submit}>
-				{/* Remove sits beside the picture, not under it: stacked, a lone
-				    ghost label between the picture and the Name label read as a
-				    caption for the picture rather than an action on it. */}
-				<div className="flex items-center gap-2.5">
-					<input
-						ref={fileRef}
-						type="file"
-						accept="image/png,image/jpeg,image/gif,image/webp"
-						className="hidden"
-						onChange={(e) => void pickPicture(e.target.files?.[0])}
-					/>
-					{/* The picture IS the button. A separate "Upload picture"
-					    plate beside it named an action the picture already
-					    invites, so the form opened on a thumbnail and a label
-					    about that thumbnail. Remove keeps its own control,
-					    because clearing a picture is not something a click on
-					    the picture could mean. */}
-					<button
-						type="button"
-						disabled={busy !== null}
-						onClick={() => fileRef.current?.click()}
-						aria-label={pictureAction}
-						title={pictureAction}
-						// `flex`, not the default inline box: an inline child sits on
-						// the text baseline, which leaves 4px of descender space under
-						// the picture, so the row measures taller than the picture and
-						// Remove no longer centers against it.
-						className="focus-ring group relative flex rounded-avatar disabled:pointer-events-none"
+				<input
+					ref={fileRef}
+					type="file"
+					accept="image/png,image/jpeg,image/gif,image/webp"
+					className="hidden"
+					onChange={(e) => void pickPicture(e.target.files?.[0])}
+				/>
+				{/* The picture IS the button, and Remove is the right-click on it
+				    (long-press on touch). A separate plate for either one named an
+				    action the picture already invites and made the form open on a
+				    thumbnail and a label about that thumbnail. Removing is rare and
+				    reversible in one click, so it can afford to be the quieter of
+				    the two; the title says where it lives, since nothing on screen
+				    does. */}
+				<ContextMenu.Root>
+					<ContextMenu.Trigger
+						render={
+							<button
+								type="button"
+								disabled={busy !== null}
+								onClick={() => fileRef.current?.click()}
+								aria-label={pictureAction}
+								title={
+									profile.image
+										? `${pictureAction}. ${removeGesture} to remove it.`
+										: pictureAction
+								}
+								// `flex`, not the default inline box: an inline child
+								// sits on the text baseline, which leaves 4px of
+								// descender space under the picture. `self-start` keeps
+								// the button its own width in the form's column, which
+								// would otherwise stretch it across the card.
+								className="focus-ring group relative flex self-start rounded-avatar disabled:pointer-events-none"
+							/>
+						}
 					>
 						<UserAvatar
 							name={profile.name}
@@ -255,18 +269,19 @@ function ProfileForm({
 								)}
 							</span>
 						</UserAvatar>
-					</button>
+					</ContextMenu.Trigger>
 					{profile.image && (
-						<Button
-							size="sm"
-							variant="ghost"
-							disabled={busy !== null}
-							onClick={() => void removePicture()}
-						>
-							Remove
-						</Button>
+						<ContextMenu.Popup>
+							<ContextMenu.Item
+								disabled={busy !== null}
+								onClick={() => void removePicture()}
+							>
+								<IconTrash size={16} className="text-faint" />
+								Remove picture
+							</ContextMenu.Item>
+						</ContextMenu.Popup>
 					)}
-				</div>
+				</ContextMenu.Root>
 				{/* The hint is a sibling of the Field, not a child: `Field` is
 				    the `<label>`, so text inside it joins the input's accessible
 				    name. The wrapper gives it the gap the label already has
