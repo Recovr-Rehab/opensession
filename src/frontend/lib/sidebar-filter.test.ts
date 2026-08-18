@@ -10,8 +10,13 @@ const store = new Map<string, string>();
 };
 
 const { rememberRepoCount } = await import("./repo-count");
-const { FILTER_KEY, FILTER_VERSION, defaultGroupBy, readStoredFilter } =
-	await import("./sidebar-filter");
+const {
+	FILTER_KEY,
+	FILTER_VERSION,
+	defaultGroupBy,
+	defaultLanes,
+	readStoredFilter,
+} = await import("./sidebar-filter");
 
 function write(blob: Record<string, unknown>) {
 	store.set(FILTER_KEY, JSON.stringify(blob));
@@ -19,38 +24,81 @@ function write(blob: Record<string, unknown>) {
 
 beforeEach(() => store.clear());
 
-describe("defaultGroupBy", () => {
-	test("one project reads as a plain inbox", () => {
+describe("the default grouping", () => {
+	test("an unread list is an inbox, whatever it is grouped by", () => {
 		rememberRepoCount(1);
-		expect(defaultGroupBy()).toBe("inbox");
+		expect(defaultLanes()).toBe("inbox");
+		rememberRepoCount(4);
+		expect(defaultLanes()).toBe("inbox");
 	});
 
-	test("several projects nest that inbox under each one", () => {
+	test("one project has nothing to group by", () => {
+		rememberRepoCount(1);
+		expect(defaultGroupBy()).toBe("none");
+	});
+
+	test("several projects nest those bands under each one", () => {
 		rememberRepoCount(4);
-		expect(defaultGroupBy()).toBe("repo-inbox");
+		expect(defaultGroupBy()).toBe("repo");
 	});
 
 	// An instance with no project registered yet has nothing to group by
 	// either — it is the empty end of the same case.
-	test("no projects reads as a plain inbox", () => {
+	test("no projects has nothing to group by", () => {
 		rememberRepoCount(0);
-		expect(defaultGroupBy()).toBe("inbox");
+		expect(defaultGroupBy()).toBe("none");
 	});
 });
 
 describe("readStoredFilter", () => {
-	test("nothing stored leaves the grouping to the default", () => {
-		expect(readStoredFilter().groupBy).toBe("auto");
+	test("nothing stored leaves both axes to the defaults", () => {
+		const stored = readStoredFilter();
+		expect(stored.lanes).toBe("auto");
+		expect(stored.groupBy).toBe("auto");
 	});
 
-	test("a grouping picked at the current version is honoured", () => {
-		write({ v: FILTER_VERSION, groupBy: "repo-status" });
-		expect(readStoredFilter().groupBy).toBe("repo-status");
+	test("a pick at the current version is honoured", () => {
+		write({ v: FILTER_VERSION, lanes: "status", groupBy: "repo" });
+		const stored = readStoredFilter();
+		expect(stored.lanes).toBe("status");
+		expect(stored.groupBy).toBe("repo");
+	});
+
+	test("the axes are picked independently", () => {
+		write({ v: FILTER_VERSION, lanes: "none" });
+		const stored = readStoredFilter();
+		expect(stored.lanes).toBe("none");
+		expect(stored.groupBy).toBe("auto");
 	});
 
 	test("an explicit auto stays auto", () => {
-		write({ v: FILTER_VERSION, groupBy: "auto" });
-		expect(readStoredFilter().groupBy).toBe("auto");
+		write({ v: FILTER_VERSION, lanes: "auto", groupBy: "auto" });
+		const stored = readStoredFilter();
+		expect(stored.lanes).toBe("auto");
+		expect(stored.groupBy).toBe("auto");
+	});
+
+	// v3 stored one compound grouping, and stored "auto" when nobody picked —
+	// so what it names is a real choice, and it decomposes into the pair it
+	// always stood for.
+	test.each([
+		["repo-inbox", "inbox", "repo"],
+		["repo-status", "status", "repo"],
+		["repo", "none", "repo"],
+		["inbox", "inbox", "none"],
+		["status", "status", "none"],
+	] as const)("v3 %s decomposes into %s lanes grouped by %s", (groupBy, lanes, by) => {
+		write({ v: 3, groupBy });
+		const stored = readStoredFilter();
+		expect(stored.lanes).toBe(lanes);
+		expect(stored.groupBy).toBe(by);
+	});
+
+	// "recently" was never in the menu, and the sidebar drew it as the plain
+	// status lanes — nothing it can decompose into that anyone asked for.
+	test("a v3 grouping that was never offered reads as unset", () => {
+		write({ v: 3, groupBy: "recently" });
+		expect(readStoredFilter().lanes).toBe("auto");
 	});
 
 	// Before v3 the whole state persisted together, so "repo-status" on a v2
@@ -58,6 +106,7 @@ describe("readStoredFilter", () => {
 	test("the previous version's default reads as unset", () => {
 		write({ v: 2, groupBy: "repo-status", repo: "acme", person: "kent" });
 		const stored = readStoredFilter();
+		expect(stored.lanes).toBe("auto");
 		expect(stored.groupBy).toBe("auto");
 		// Everything the person did choose survives the migration.
 		expect(stored.repo).toBe("acme");
@@ -66,14 +115,18 @@ describe("readStoredFilter", () => {
 
 	test("a v2 pick that was never a default survives", () => {
 		write({ v: 2, groupBy: "status" });
-		expect(readStoredFilter().groupBy).toBe("status");
+		const stored = readStoredFilter();
+		expect(stored.lanes).toBe("status");
+		expect(stored.groupBy).toBe("none");
 	});
 
 	// "status" was the default before v2, so a blob older than that says
 	// nothing about what its owner wanted.
 	test("a pre-v2 status reads as unset", () => {
 		write({ groupBy: "status" });
-		expect(readStoredFilter().groupBy).toBe("auto");
+		const stored = readStoredFilter();
+		expect(stored.lanes).toBe("auto");
+		expect(stored.groupBy).toBe("auto");
 	});
 
 	// Empty project bands are the long-standing behaviour, so a blob that
@@ -85,7 +138,9 @@ describe("readStoredFilter", () => {
 	});
 
 	test("a grouping nobody recognises reads as unset", () => {
-		write({ v: FILTER_VERSION, groupBy: "sideways" });
-		expect(readStoredFilter().groupBy).toBe("auto");
+		write({ v: FILTER_VERSION, lanes: "sideways", groupBy: "sideways" });
+		const stored = readStoredFilter();
+		expect(stored.lanes).toBe("auto");
+		expect(stored.groupBy).toBe("auto");
 	});
 });

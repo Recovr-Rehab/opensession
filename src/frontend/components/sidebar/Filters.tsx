@@ -3,6 +3,7 @@ import type {
 	EmptyProjectsFilter,
 	FilterState,
 	GroupBy,
+	Lanes,
 	PrsFilter,
 	SortBy,
 } from "../../lib/sidebar-filter";
@@ -202,15 +203,27 @@ export function FilterPopover({
 		<>
 			<div className={BACKDROP} onClick={onClose} />
 			<div className={FILTER_POPOVER} style={{ left, top, width }}>
+				{/* How the list is built, as the two questions it is: what the
+				    groups inside it are, and whether those sit under one band per
+				    project. One menu of five used to answer both at once
+				    ("Project and status", "Project and inbox", …), so changing
+				    the banding meant re-picking the lanes along with it. */}
+				<FilterRow
+					label="Lanes"
+					value={filter.lanes}
+					options={[
+						{ value: "inbox", label: "Inbox" },
+						{ value: "status", label: "Status" },
+						{ value: "none", label: "None" },
+					]}
+					onSelect={(v) => onChange({ lanes: v as Lanes })}
+				/>
 				<FilterRow
 					label="Group by"
 					value={filter.groupBy}
 					options={[
-						{ value: "status", label: "Status" },
+						{ value: "none", label: "Nothing" },
 						{ value: "repo", label: "Project" },
-						{ value: "repo-status", label: "Project and status" },
-						{ value: "repo-inbox", label: "Project and inbox" },
-						{ value: "inbox", label: "Inbox" },
 					]}
 					onSelect={(v) => onChange({ groupBy: v as GroupBy })}
 				/>

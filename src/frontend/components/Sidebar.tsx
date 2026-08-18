@@ -1861,11 +1861,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			snoozedWsRows,
 		],
 	);
-	// The groupings that draw repo bands, and so have somewhere to nest a lane.
-	const groupsByRepo =
-		filter.groupBy === "repo" ||
-		filter.groupBy === "repo-status" ||
-		filter.groupBy === "repo-inbox";
+	// Grouping by project draws the repo bands, and so gives every lane
+	// somewhere to nest.
+	const groupsByRepo = filter.groupBy === "repo";
 	const hasWorkspaceFilter =
 		!!search ||
 		filter.repo !== "all" ||
@@ -2740,7 +2738,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		const snoozeIso = activeSnoozeKeys.has(row.key)
 			? (snoozes[row.key] ?? null)
 			: null;
-		const flatRepoGrouping = filter.groupBy === "repo" || rowIsScratch(row);
+		const noLaneHeading = filter.lanes === "none" || rowIsScratch(row);
 		const subagents =
 			includeSubagents && row.workspace?.id === selectedWorkspaceId
 				? activeWorkspaceSubagents
@@ -2921,15 +2919,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				    native app already spend on it. A review you were asked for is the
 				    same kind of claim, so it takes the same dot rather than a colour
 				    of its own — the PR's own health keeps its place in the hover card.
-				    Below that, flat repo grouping has no lane heading so its mark
-				    carries the workspace status, while grouped lanes provide that
+				    Below that, a row with no lane heading over it carries the
+				    workspace status in its own mark, while lanes provide that
 				    context and keep the richer PR lifecycle mark here instead. */}
 				<span className={SIDEBAR_RAIL}>
 					{waiting || needsMyReview ? (
 						<span
 							className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.waiting}`}
 						/>
-					) : flatRepoGrouping ? (
+					) : noLaneHeading ? (
 						<WsStatusMark row={row} size={18} />
 					) : row.running ? (
 						<span
@@ -3065,9 +3063,10 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				)}
 				{!isPhone &&
 					// Date-banded modes earn a timestamp on every row: the band says
-					// which day, the stamp says when within it. ("Project and inbox"
-					// renders compact rows, so it asks for the time here.)
-					(inbox || filter.groupBy === "repo-inbox" || !row.workspace) &&
+					// which day, the stamp says when within it. (Inbox lanes under a
+					// project band render compact rows, so they ask for the time
+					// here rather than on the row's own second line.)
+					(inbox || filter.lanes === "inbox" || !row.workspace) &&
 					!snoozeIso &&
 					wsTimePref !== "off" &&
 					row.lastActivity && (
@@ -3620,6 +3619,27 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			);
 		}
 		return nodes;
+	}
+
+	// ── No lanes: one plain list ──────────────────────────────────────────
+	// "Lanes: None" with nothing to group by. There is no heading anywhere to
+	// read a row's status or project off, so every row carries both itself:
+	// its own status mark (see noLaneHeading in renderWsRowImpl) and the repo
+	// tile the Inbox variant puts in front of the title. Ordered the way the
+	// same lanes-less list is inside a project band — needs input first, then
+	// the lane order — so a question never sinks below idle work, and the
+	// sort is stable, so activity order holds within each bucket.
+	function renderFlatList(rows: WsRow[], prItems: ReviewQueueItem[] = []) {
+		const laneRank = (status: MineStatus) =>
+			MINE_STATUS_META.findIndex((meta) => meta.key === status);
+		return [
+			...[...rows]
+				.sort((a, b) => laneRank(a.status) - laneRank(b.status))
+				.map((r) => renderWsRowImpl(r, true)),
+			...[...prItems]
+				.sort((a, b) => laneRank(prItemLane(a)) - laneRank(prItemLane(b)))
+				.map(renderPrRow),
+		];
 	}
 
 	// The repo bands — one collapsible band per repo, shared by three "Group by"
@@ -5476,73 +5496,73 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 				    header above (which carries the filter, new-workspace and
 				    new-session actions) — no second in-list heading. ── */}
 				<div className={SIDEBAR_GROUP}>
-					{/* Status groups over the focus person's workspaces. The Person
-					    filter defaults to you; picking a teammate shows all their groups,
-					    "Unassigned" shows every Backlog, and "Everyone" shows all workspaces.
-					    "Group by: Repo" shows one band per repo holding a flat
-					    Conductor-style row list; "Repo and status" nests the labeled
-					    status lanes under each repo band instead. Empty lanes/bands
-					    are hidden — only groups with sessions render. */}
-					{/* Snoozed rows sit out of focusWsRows, so each mode places them
-					    itself: "Project and status" / "Project and inbox" give every
-					    repo band its own Snoozed group (renderRepoGroups), while flat
-					    "Project" — which has no lanes — renders one global Snoozed
-					    group after the bands, and the plain status mode slots it above
-					    Backlog via renderStatusLanes. */}
+					{/* The focus person's workspaces, laid out by the two grouping
+					    axes. The Person filter decides whose: it defaults to you,
+					    picking a teammate shows all their groups, "Unassigned" shows
+					    every Backlog, and "Everyone" shows all workspaces.
+
+					    "Group by: Project" gives one band per repo and nests
+					    whatever "Lanes" asks for inside each: the status lanes, the
+					    inbox's activity bands, or nothing (a flat Conductor-style
+					    row list). Ungrouped, those same lanes run down the whole
+					    list. Empty lanes and bands are hidden — only groups with
+					    sessions render. */}
+					{/* Snoozed rows sit out of focusWsRows, so each layout places
+					    them itself: lanes nested under a project band give every
+					    band its own Snoozed group (renderRepoGroups), a lanes-less
+					    list — which has nowhere to slot one — renders a single
+					    global Snoozed group after the rows, and the status lanes
+					    slot it above Backlog via renderStatusLanes. */}
 					{/* Plain (support tickets) renders as one more project: a band
 					    beside the repos with priority lanes nested under it — or,
-					    in the flat status view, its priority lanes appended after
-					    the status lanes so everything reads as one list. */}
-					{/* Inbox: one flat activity-ranked list (no repo/status
-					    grouping), then the Snoozed group and the feed bands as
-					    usual. Session-less PR rows sit this mode out — it ranks
-					    sessions by activity, which a bare PR doesn't have. Plain
-					    and the other feeds keep the banded (repo-mode) shape:
-					    their items aren't the activity-ranked sessions this mode
-					    orders, so they stay grouped apart, lanes nested. */}
-					{filter.groupBy === "inbox"
-						? [
-								...renderInboxBands(focusWsRows),
-								...renderStatusLanes([], "", snoozedWsRows),
-								...visibleFeeds.map((d) => renderFeedBand(d, true)),
-							]
-						: groupsByRepo
-						? (
-								<>
-									{renderRepoGroups(
-										filter.groupBy === "repo-status"
-											? "status"
-											: filter.groupBy === "repo-inbox"
-												? "inbox"
-												: "flat",
-									)}
-									{filter.groupBy === "repo" &&
-										renderStatusLanes(
-											[],
-											"",
-											snoozedWsRows.filter((row) => !rowIsScratch(row)),
-										)}
-									{visibleFeeds.map((d) =>
-										renderFeedBand(d, filter.groupBy !== "repo"),
-									)}
-								</>
-							)
-						: [
-								...renderStatusLanes(
-									focusWsRows,
+					    under ungrouped status lanes, its priority lanes appended
+					    after them so everything reads as one list. */}
+					{/* Ungrouped Inbox is one activity-ranked list. Session-less PR
+					    rows sit it out — it ranks sessions by activity, which a bare
+					    PR doesn't have. Plain and the other feeds keep their banded
+					    shape whenever there are lanes: their items aren't the
+					    sessions those lanes order, so they stay grouped apart. */}
+					{groupsByRepo ? (
+						<>
+							{renderRepoGroups(
+								filter.lanes === "none" ? "flat" : filter.lanes,
+							)}
+							{filter.lanes === "none" &&
+								renderStatusLanes(
+									[],
 									"",
-									snoozedWsRows,
-									undefined,
-									lanePrItems,
-								),
-								// Flat status view: Plain's priority lanes stay inlined
-								// after the status lanes (one continuous list); other
-								// feeds render as bands below.
-								...renderSupportLanes(plainThreadsInView),
-								...visibleFeeds
-									.filter((d) => d.id !== "plain")
-									.map((d) => renderFeedBand(d, false)),
-							]}
+									snoozedWsRows.filter((row) => !rowIsScratch(row)),
+								)}
+							{visibleFeeds.map((d) =>
+								renderFeedBand(d, filter.lanes !== "none"),
+							)}
+						</>
+					) : filter.lanes === "status" ? (
+						[
+							...renderStatusLanes(
+								focusWsRows,
+								"",
+								snoozedWsRows,
+								undefined,
+								lanePrItems,
+							),
+							// Plain's priority lanes stay inlined after the status
+							// lanes (one continuous list); other feeds render as
+							// bands below.
+							...renderSupportLanes(plainThreadsInView),
+							...visibleFeeds
+								.filter((d) => d.id !== "plain")
+								.map((d) => renderFeedBand(d, false)),
+						]
+					) : (
+						[
+							...(filter.lanes === "inbox"
+								? renderInboxBands(focusWsRows)
+								: renderFlatList(focusWsRows, lanePrItems)),
+							...renderStatusLanes([], "", snoozedWsRows),
+							...visibleFeeds.map((d) => renderFeedBand(d, true)),
+						]
+					)}
 				</div>
 
 				{/* The agent's own workspaces, switched from the foot of the list

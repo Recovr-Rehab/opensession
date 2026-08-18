@@ -82,20 +82,23 @@ export function readExpanded(): Set<string> {
 }
 
 // ── Grouping / filtering controls (the filter popover) ─────────────────────
-// The sidebar can be organized several ways ("Group by": Status, Repo as a
-// flat Conductor-style list, Repo and status with lanes nested per repo,
-// Repo and inbox with the activity bands nested per repo instead, Recently
-// opened, or Inbox — an email-style flat list of two-line rows banded by
-// activity), narrowed to a single repo ("Repo") or a single person
+// How the list is built is two questions, not one. "Lanes" says what the
+// groups inside it are: an inbox's activity bands (Needs action / Recent /
+// Yesterday / …, on two-line rows), the status lanes (Needs input / In
+// progress / …), or none at all — one plain list where each row's own mark
+// carries its status. "Group by" says whether those sit inside one band per
+// project.
+//
+// This replaced a single menu whose five entries were the two answers written
+// as one ("Status", "Project", "Project and status", "Project and inbox",
+// "Inbox"), where changing the project banding meant re-picking the lanes
+// along with it.
+//
+// The list is narrowed to a single repo ("Repo") or a single person
 // ("Person"), and ordered by recency of activity or creation ("Sort by"). The
-// choices persist together per browser; the default grouping is repo + status.
-export type GroupBy =
-	| "status"
-	| "repo"
-	| "repo-status"
-	| "repo-inbox"
-	| "recently"
-	| "inbox";
+// choices persist together per browser.
+export type Lanes = "inbox" | "status" | "none";
+export type GroupBy = "none" | "repo";
 export type SortBy = "updated" | "created";
 // Session-less PR rows folded into the project lanes: the default shows your
 // own PRs + explicit review requests (the retired PR band's default sources),
@@ -115,28 +118,32 @@ export type AutoCreatedFilter = "show" | "hide";
 export type EmptyProjectsFilter = "show" | "hide";
 export const DEFAULT_PROJECT = DEFAULT_REPO_ID;
 export const FILTER_KEY = "opensession-sidebar-filter";
-// Bumped when the default grouping changes. Because setFilter persists the
-// whole state, a stored grouping from before the bump is ambiguous — most
-// people got it by touching Repo or Person, not by choosing it — so a blob
-// carrying the default of its day keeps its repo/person/sort but takes the new
-// default. Anything written at the current version says what it means: v3
-// stores "auto" when nobody picked a grouping.
-export const FILTER_VERSION = 3;
+// Bumped when the grouping's shape or its default changes. Because setFilter
+// persists the whole state, a grouping stored before the bump is ambiguous —
+// most people got it by touching Repo or Person, not by choosing it — so a
+// blob carrying the default of its day keeps its repo/person/sort but takes
+// the new default. Anything written at the current version says what it
+// means: since v3, "auto" is what an unpicked axis stores. v4 split the one
+// grouping into the `lanes` / `groupBy` pair.
+export const FILTER_VERSION = 4;
 
-const GROUPINGS: GroupBy[] = [
-	"status",
-	"repo",
-	"repo-status",
-	"repo-inbox",
-	"recently",
-	"inbox",
-];
+const LANES: Lanes[] = ["inbox", "status", "none"];
+const GROUP_BYS: GroupBy[] = ["none", "repo"];
 
 /**
- * The grouping to use when nobody picked one. A single project has nothing to
- * group by, so it reads as a plain inbox; several get the same inbox bands
- * nested under each project. It re-decides as projects are added, since the
- * choice is stored as "auto" rather than as its answer.
+ * The lanes to use when nobody picked any. A list of work you have not read
+ * yet is an inbox; the status lanes are the deliberate choice, so they are
+ * the one you ask for.
+ */
+export function defaultLanes(): Lanes {
+	return "inbox";
+}
+
+/**
+ * Whether to band by project when nobody said. A single project has nothing
+ * to group by, so its lanes stand on their own; several get one band each. It
+ * re-decides as projects are added, since the choice is stored as "auto"
+ * rather than as its answer.
  *
  * The count is only unknown on the very first load, before `/api/repos`
  * answers (lib/repo-count) — assume several then, so an instance that has them
@@ -144,10 +151,11 @@ const GROUPINGS: GroupBy[] = [
  */
 export function defaultGroupBy(): GroupBy {
 	const count = repoCount();
-	return count !== null && count <= 1 ? "inbox" : "repo-inbox";
+	return count !== null && count <= 1 ? "none" : "repo";
 }
 
 export interface FilterState {
+	lanes: Lanes;
 	groupBy: GroupBy;
 	repo: string; // a repo id, or "all"
 	// "me" (your workspaces — the default), "everyone" (literally all
@@ -160,10 +168,13 @@ export interface FilterState {
 	emptyProjects: EmptyProjectsFilter;
 }
 
-/** What a grouping can be on disk: a pick, or "auto" for nobody's pick. */
+/** What either axis can be on disk: a pick, or "auto" for nobody's pick. */
+export type StoredLanes = Lanes | "auto";
 export type StoredGroupBy = GroupBy | "auto";
 
-export interface StoredFilterState extends Omit<FilterState, "groupBy"> {
+export interface StoredFilterState
+	extends Omit<FilterState, "lanes" | "groupBy"> {
+	lanes: StoredLanes;
 	groupBy: StoredGroupBy;
 }
 
@@ -186,6 +197,7 @@ export function getFilter(): FilterState {
 		stored ||= readStoredFilter();
 		current = {
 			...stored,
+			lanes: stored.lanes === "auto" ? defaultLanes() : stored.lanes,
 			groupBy: stored.groupBy === "auto" ? defaultGroupBy() : stored.groupBy,
 		};
 	}
@@ -273,29 +285,55 @@ export function personLensFilter(picked: string, currentUser: string): string {
 		: personFilterFor(picked, currentUser);
 }
 
+/** The single grouping v3 and earlier stored, as the pair it always meant.
+ *  "recently" is absent on purpose: it was never in the menu, and the sidebar
+ *  drew it as the plain status lanes, so it reads as unset like any other
+ *  value nobody recognises. */
+const LEGACY_GROUPINGS: Record<string, StoredGrouping> = {
+	status: { lanes: "status", groupBy: "none" },
+	repo: { lanes: "none", groupBy: "repo" },
+	"repo-status": { lanes: "status", groupBy: "repo" },
+	"repo-inbox": { lanes: "inbox", groupBy: "repo" },
+	inbox: { lanes: "inbox", groupBy: "none" },
+};
+
+interface StoredGrouping {
+	lanes: StoredLanes;
+	groupBy: StoredGroupBy;
+}
+
 /**
- * Which grouping a stored blob is actually asking for. "auto" means nobody
- * chose one, so `defaultGroupBy` decides and keeps deciding.
+ * Which lanes and project banding a stored blob is actually asking for.
+ * "auto" on an axis means nobody chose it, so the default decides and keeps
+ * deciding.
  *
- * A blob written before v3 can't say that: setFilter persists the whole
- * state, so the grouping it carries may only be the default of its day. Those
- * defaults — "status" before v2, "repo-status" before v3 — therefore read as
- * unset, and everything else as a real choice.
+ * v4 stores the two separately and says what it means. Older blobs stored one
+ * compound value, and since setFilter persists the whole state that value may
+ * only be the default of its day — so v2's "repo-status" and pre-v2's
+ * "status" read as unset, and every other value decomposes into the pair it
+ * stood for. v3 is exempt: it already stored "auto" for an unpicked grouping,
+ * so whatever it names is a real choice.
  */
-function storedGroupBy(v: any): StoredGroupBy {
-	const g = v?.groupBy;
-	if (!GROUPINGS.includes(g)) return "auto";
-	if (v.v === FILTER_VERSION) return g;
-	if (g === "repo-status") return "auto";
-	if (g === "status" && v.v !== 2) return "auto";
-	return g;
+function storedGrouping(v: any): StoredGrouping {
+	const unset: StoredGrouping = { lanes: "auto", groupBy: "auto" };
+	if (v?.v === FILTER_VERSION)
+		return {
+			lanes: LANES.includes(v.lanes) ? v.lanes : "auto",
+			groupBy: GROUP_BYS.includes(v.groupBy) ? v.groupBy : "auto",
+		};
+	const legacy = LEGACY_GROUPINGS[v?.groupBy];
+	if (!legacy) return unset;
+	if (v.v === 3) return legacy;
+	if (v.groupBy === "repo-status") return unset;
+	if (v.groupBy === "status" && v.v !== 2) return unset;
+	return legacy;
 }
 
 export function readStoredFilter(): StoredFilterState {
 	try {
 		const v = JSON.parse(localStorage.getItem(FILTER_KEY) || "{}");
 		return {
-			groupBy: storedGroupBy(v),
+			...storedGrouping(v),
 			repo: typeof v.repo === "string" ? v.repo : "all",
 			// Legacy stored "all" behaved as "you" in the lanes — map it to "me"
 			// so nobody's default flips to everyone.
@@ -310,6 +348,7 @@ export function readStoredFilter(): StoredFilterState {
 		};
 	} catch {
 		return {
+			lanes: "auto",
 			groupBy: "auto",
 			repo: "all",
 			person: "me",
