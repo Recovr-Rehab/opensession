@@ -47,4 +47,37 @@ describe("LiveTurnStore", () => {
 		expect(store.getSnapshot().text).toBe("");
 		store.clear();
 	});
+
+	test("drops a half-streamed block when its durable entry lands mid-flight", async () => {
+		// The opencode runner delivers a block as deltas, so the transcript
+		// entry can arrive while the tail is still coming. Without prefix
+		// matching the bubble keeps growing beside the durable entry and the
+		// reply shows twice.
+		const store = new LiveTurnStore();
+		store.start(undefined, "run-3");
+		store.append("Hello ");
+		store.append("there, ");
+		await Bun.sleep(25);
+		store.land(["Hello there, world"]);
+		expect(store.getSnapshot().text).toBe("");
+
+		// The rest of the block still arrives; it must be swallowed, not shown.
+		store.append("wor");
+		store.append("ld");
+		await Bun.sleep(25);
+		expect(store.getSnapshot().text).toBe("");
+		store.clear();
+	});
+
+	test("keeps streaming text that follows a landed block", async () => {
+		const store = new LiveTurnStore();
+		store.start(undefined, "run-4");
+		store.append("first block");
+		await Bun.sleep(25);
+		store.land(["first block"]);
+		store.append("second block");
+		await Bun.sleep(25);
+		expect(store.getSnapshot().text).toBe("second block");
+		store.clear();
+	});
 });

@@ -155,6 +155,7 @@ import {
   activeRunRecords,
   type ActiveRunRecord,
 } from "./run-journal";
+import { streamPartialTextEnabled, TextPartStream } from "./stream-text";
 import { transitionRunState } from "./run-state";
 import {
   adoptedProcHandle,
@@ -3179,9 +3180,21 @@ function makePartMirror(ctx: {
   steerFn: OpencodeSteerFn;
   emittedText: Set<string>;
   compactionMsgs: Set<string>;
+  /**
+   * Messages the engine has announced as role "assistant" (message.updated).
+   * A delta names neither its part's type nor its message's role, so this is
+   * what keeps a person's own prompt out of the reply. Caller-owned, like
+   * compactionMsgs, because the ladder that sees message.updated owns it.
+   */
+  assistantMsgs: Set<string>;
   startedTools: Set<string>;
   finishedTools: Set<string>;
-}): { mirrorTextPart: (part: any) => void; mirrorToolPart: (part: any) => void } {
+}): {
+  mirrorTextPart: (part: any) => void;
+  mirrorTextDelta: (props: any) => void;
+  mirrorToolPart: (part: any) => void;
+  textStream: TextPartStream;
+} {
   const {
     ocSessionId,
     model,
@@ -3190,12 +3203,59 @@ function makePartMirror(ctx: {
     steerFn,
     emittedText,
     compactionMsgs,
+    assistantMsgs,
     startedTools,
     finishedTools,
   } = ctx;
   let envelopeLeakSteers = 0;
+  // Emits only what the stream has not carried yet for a part, so the deltas
+  // plus the completion tail concatenate to exactly the finished text.
+  const textStream = new TextPartStream();
+  /**
+   * partID -> messageID, for every text part this run has seen announced.
+   * Populated by mirrorTextPart from the creation snapshot, which the engine
+   * publishes empty before any delta for that part arrives.
+   */
+  const textPartMsg = new Map<string, string>();
+  const pushTextTail = (part: any) => {
+    const tail = textStream.tail(part.id, part.text);
+    if (tail) push({ type: "text_chunk", text: tail });
+  };
+  /**
+   * The engine's token stream. `message.part.delta` carries the new characters
+   * of one field of one part, and is the only place partial text exists:
+   * `message.part.updated` publishes a text part exactly twice, empty at
+   * creation and complete at the end, so mirroring snapshots can never type
+   * anything out.
+   *
+   * The field name is NOT a sufficient filter, which is what sank the first
+   * attempt at this (d9603d54): a reasoning part's body is also called `text`,
+   * and so is a person's own prompt. So a delta is forwarded only for a part
+   * that arrived here as a text part, on a message the engine called the
+   * assistant's. Both lookups fail closed, the same way opencode's own client
+   * does, and a dropped delta costs nothing: the completion snapshot then
+   * delivers that part whole, which is what shipped before this existed.
+   */
+  const mirrorTextDelta = (props: any) => {
+    if (!streamPartialTextEnabled()) return;
+    if (props?.field !== "text") return;
+    const id = props?.partID;
+    if (typeof id !== "string" || emittedText.has(id)) return;
+    const messageID = textPartMsg.get(id);
+    if (!messageID || !assistantMsgs.has(messageID)) return;
+    // Compaction summaries are bookkeeping, not the reply.
+    if (compactionMsgs.has(messageID)) return;
+    const piece = textStream.advance(id, props?.delta);
+    if (piece) push({ type: "text_chunk", text: piece });
+  };
   const mirrorTextPart = (part: any) => {
-    if (part.type === "text" && !part.synthetic && part.time?.end && !emittedText.has(part.id)) {
+    if (part.type !== "text" || part.synthetic) return;
+    // Register from the creation snapshot, which is empty: this is what makes
+    // the part's deltas eligible above.
+    if (typeof part.id === "string" && typeof part.messageID === "string") {
+      textPartMsg.set(part.id, part.messageID);
+    }
+    if (part.time?.end && !emittedText.has(part.id)) {
       emittedText.add(part.id);
       if (compactionMsgs.has(part.messageID)) {
         turnEvent({ direction: "out", kind: "compaction_summary", ...summarizeText(part.text) });
@@ -3207,7 +3267,9 @@ function makePartMirror(ctx: {
         appendOpencodeTranscript(ocSessionId, [
           transcriptLineAssistantText(part.text, part.id, undefined, model),
         ]);
-        push({ type: "text_chunk", text: part.text });
+        // The whole part when nothing streamed, otherwise just the tail.
+        pushTextTail(part);
+        textStream.done(part.id);
         // Assistant text shaped like a tool transcript = the model
         // narrating tool calls/results it invented (see
         // looksLikeFabricatedToolTranscript). Correct it in-band before
@@ -3274,7 +3336,7 @@ function makePartMirror(ctx: {
       });
     }
   };
-  return { mirrorTextPart, mirrorToolPart };
+  return { mirrorTextPart, mirrorTextDelta, mirrorToolPart, textStream };
 }
 
 /**
@@ -3320,9 +3382,13 @@ function collectFinalAssistantText(
     model: string;
     emittedText: Set<string>;
     pending: StreamEvent[];
+    /** The run's text ledger. A part can have gone out in pieces without ever
+     * completing over SSE, and pushing its whole body here would say it all a
+     * second time. */
+    textStream?: TextPartStream;
   }
 ): { lastAssistant: { info: any; parts: any[] } | undefined; info: any; textOut: string } {
-  const { ocSessionId, model, emittedText, pending } = ctx;
+  const { ocSessionId, model, emittedText, pending, textStream } = ctx;
   const lastAssistant = latestTurnAssistant(list);
   const info = lastAssistant?.info;
   const parts = lastAssistant?.parts || [];
@@ -3340,7 +3406,10 @@ function collectFinalAssistantText(
             ? transcriptLineCompactionSummary(pt.text, pt.id)
             : transcriptLineAssistantText(pt.text, pt.id, undefined, model),
         ]);
-        if (!finalIsCompaction) pending.push({ type: "text_chunk", text: pt.text });
+        if (!finalIsCompaction) {
+          const tail = textStream ? textStream.tail(pt.id, pt.text) : pt.text;
+          if (tail) pending.push({ type: "text_chunk", text: tail });
+        }
       }
       return finalIsCompaction ? "" : pt.text;
     })
@@ -4749,6 +4818,9 @@ async function* runOpencodeAttempt(
     // fires on creation, before their text parts complete) — their text
     // becomes a "context compacted" system chip, not assistant output.
     const compactionMsgs = new Set<string>();
+    // Messages the engine called the assistant's, which is what lets one of
+    // their text deltas reach the bubble (see mirrorTextDelta).
+    const assistantMsgs = new Set<string>();
     // Silent context rebuilds under the engine (Agent SDK autocompaction /
     // Meridian replay) — invisible to opencode, so we detect them from the
     // per-step prompt-cache numbers and leave a durable line in the transcript.
@@ -4835,7 +4907,7 @@ async function* runOpencodeAttempt(
       wake?.();
     };
     failRun = signalDone;
-    const { mirrorTextPart, mirrorToolPart } = makePartMirror({
+    const { mirrorTextPart, mirrorTextDelta, mirrorToolPart, textStream } = makePartMirror({
       ocSessionId,
       model,
       turnEvent,
@@ -4843,6 +4915,7 @@ async function* runOpencodeAttempt(
       steerFn,
       emittedText,
       compactionMsgs,
+      assistantMsgs,
       startedTools,
       finishedTools,
     });
@@ -5067,6 +5140,12 @@ async function* runOpencodeAttempt(
       const p = ev?.properties;
       stallGuard.noteEvent(ev);
       switch (ev?.type) {
+        case "message.part.delta": {
+          // The engine's token stream (see mirrorTextDelta).
+          if (p?.sessionID !== ocSessionId) return;
+          mirrorTextDelta(p);
+          return;
+        }
         case "message.part.updated": {
           const part = p?.part;
           if (!part) return;
@@ -5097,6 +5176,9 @@ async function* runOpencodeAttempt(
         case "message.updated": {
           const info = p?.info;
           if (info?.sessionID !== ocSessionId) return;
+          // What makes this message's text deltas eligible to reach the
+          // bubble; the delta feed itself carries no role.
+          if (info.role === "assistant") assistantMsgs.add(info.id);
           if (isCompactionMessageInfo(info)) compactionMsgs.add(info.id);
           else watchContextRebuild(info);
           return;
@@ -5623,6 +5705,7 @@ async function* runOpencodeAttempt(
       model,
       emittedText,
       pending,
+      textStream,
     });
     while (pending.length) yield pending.shift()!;
 
@@ -6108,6 +6191,9 @@ export async function tryReattachOpencodeRun(
       // mid-compaction can miss the flag — worst case that one summary
       // renders as a plain assistant bubble, the pre-fix behavior.
       const compactionMsgs = new Set<string>();
+      // Messages the engine called the assistant's, which is what lets one of
+      // their text deltas reach the bubble (see mirrorTextDelta).
+      const assistantMsgs = new Set<string>();
       // Same rebuild watch as the primary pump — a reattached turn is served by
       // the same bridge and can have its context rewritten mid-flight too.
       const watchContextRebuild = makeContextRebuildWatcher({
@@ -6137,7 +6223,7 @@ export async function tryReattachOpencodeRun(
         idle = true;
         wake?.();
       };
-      const { mirrorTextPart, mirrorToolPart } = makePartMirror({
+      const { mirrorTextPart, mirrorTextDelta, mirrorToolPart, textStream } = makePartMirror({
         ocSessionId: ocSessionId!,
         model,
         turnEvent,
@@ -6145,6 +6231,7 @@ export async function tryReattachOpencodeRun(
         steerFn,
         emittedText,
         compactionMsgs,
+        assistantMsgs,
         startedTools,
         finishedTools,
       });
@@ -6331,6 +6418,12 @@ export async function tryReattachOpencodeRun(
         const p = ev?.properties;
         stallGuard.noteEvent(ev);
         switch (ev?.type) {
+          case "message.part.delta": {
+            // The engine's token stream (see mirrorTextDelta).
+            if (p?.sessionID !== ocSessionId) return;
+            mirrorTextDelta(p);
+            return;
+          }
           case "message.part.updated": {
             const part = p?.part;
             if (!part) return;
@@ -6362,6 +6455,9 @@ export async function tryReattachOpencodeRun(
           case "message.updated": {
             const info = p?.info;
             if (info?.sessionID !== ocSessionId) return;
+            // What makes this message's text deltas eligible to reach the
+            // bubble; the delta feed itself carries no role.
+            if (info.role === "assistant") assistantMsgs.add(info.id);
             if (isCompactionMessageInfo(info)) compactionMsgs.add(info.id);
             else watchContextRebuild(info);
             return;
@@ -6533,6 +6629,7 @@ export async function tryReattachOpencodeRun(
         model,
         emittedText,
         pending,
+        textStream,
       });
       while (pending.length) yield pending.shift()!;
 
