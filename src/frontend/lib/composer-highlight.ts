@@ -329,6 +329,30 @@ export function paintPillHover(
 	pendingHover.set(hovered, next);
 }
 
+/**
+ * The box of the pill under a point, for anchoring the menu a press on one
+ * opens (Composer.tsx). Per FRAGMENT, like the hover hit test below: a pill
+ * that wrapped has a box on each line, and the menu belongs against the half
+ * that was actually pressed rather than against the union of the two.
+ *
+ * Null when the point is not on a pill — including when the mirror isn't
+ * mounted, which is every draft short of one (`needsComposerHighlight`).
+ */
+export function pillRectAt(
+	mirror: HTMLElement | null,
+	x: number,
+	y: number,
+): DOMRect | null {
+	if (!mirror) return null;
+	for (const span of mirror.querySelectorAll<HTMLElement>(
+		".cmp-mention, .cmp-session",
+	))
+		for (const rect of span.getClientRects())
+			if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom)
+				return rect;
+	return null;
+}
+
 function hitTestPillHover(
 	mirror: HTMLElement,
 	field: HTMLTextAreaElement,

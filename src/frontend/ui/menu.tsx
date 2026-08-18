@@ -39,12 +39,23 @@ function Popup({
 	side,
 	align,
 	sideOffset = 8,
+	anchor,
+	finalFocus,
 	children,
 }: {
 	className?: string;
 	side?: React.ComponentProps<typeof BaseMenu.Positioner>["side"];
 	align?: React.ComponentProps<typeof BaseMenu.Positioner>["align"];
 	sideOffset?: number;
+	/** Anchor something other than the trigger — an element, a ref, or a
+	 * virtual element with `getBoundingClientRect`. That last form is for a
+	 * menu whose subject is not a control at all: the composer's pill menu
+	 * hangs off a box of TEXT inside a textarea (Composer.tsx), which has no
+	 * element of its own to point at. */
+	anchor?: React.ComponentProps<typeof BaseMenu.Positioner>["anchor"];
+	/** Where focus goes on close. Defaults to the trigger, which a menu opened
+	 * from an anchor rather than a trigger does not have. */
+	finalFocus?: React.ComponentProps<typeof BaseMenu.Popup>["finalFocus"];
 	children: React.ReactNode;
 }) {
 	return (
@@ -53,10 +64,14 @@ function Popup({
 				side={side}
 				align={align}
 				sideOffset={sideOffset}
+				anchor={anchor}
 				collisionPadding={8}
 				className="z-[10001] outline-none"
 			>
-				<BaseMenu.Popup className={cn(POPUP_HOOK, popupSurfaceClasses, className)}>
+				<BaseMenu.Popup
+					className={cn(POPUP_HOOK, popupSurfaceClasses, className)}
+					finalFocus={finalFocus}
+				>
 					<div className={popupScrollClasses}>{children}</div>
 				</BaseMenu.Popup>
 			</BaseMenu.Positioner>

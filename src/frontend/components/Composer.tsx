@@ -11,6 +11,7 @@ import {
   composerMentionRanges,
   needsComposerHighlight,
   paintPillHover,
+  pillRectAt,
 } from "../lib/composer-highlight";
 import { insertPastedSessionId } from "../lib/session-url";
 import {
@@ -41,6 +42,8 @@ import {
   IconEye,
   IconNote,
   IconStopSquare,
+  IconPencil,
+  IconTrash,
 } from "./icons";
 import {
   composerBox,
@@ -76,7 +79,7 @@ import {
 import { askSurface, noteSurface } from "../lib/tinted-surface";
 import { cn } from "../ui/cn";
 import { Tooltip } from "../ui/tooltip";
-import { ContextMenu, MenuShortcut } from "../ui/menu";
+import { ContextMenu, Menu, MenuShortcut, MENU_ICON } from "../ui/menu";
 import { Button } from "../ui/button";
 import { Modal } from "../ui/modal";
 import {
@@ -977,12 +980,116 @@ export function Composer({
     if (el && hl) hl.scrollTop = el.scrollTop;
   }, [hlHtml, textareaRef]);
 
-  // Pressing a mention or session pill removes it. The textarea covers the
-  // mirror, so the press lands on the field. The browser has already placed
-  // the caret by the time click fires, and a caret strictly inside a pill came
-  // from pressing it (its edges still place a caret, which is the margin that
-  // keeps an ordinary click near a pill from eating one). Mentions keep native
-  // undo through execCommand. Session tokens use the canonical history below.
+  // The menu a press on a pill opens, anchored to the box that was pressed.
+  // Held in display offsets, like every other range in this component; any
+  // edit closes it, so they cannot go stale under it.
+  const [pillMenu, setPillMenu] = useState<{
+    kind: "session" | "mention";
+    start: number;
+    end: number;
+    rect: { left: number; top: number; width: number; height: number };
+  } | null>(null);
+
+  // How a press finds the pill under it: the textarea covers the mirror, so
+  // the press lands on the FIELD, and the browser has already placed the caret
+  // by the time click fires. A caret strictly inside a pill came from pressing
+  // it — the edges still place an ordinary caret, which is the margin that
+  // keeps a click beside a reference from claiming one.
+  function pillAtCaret(el: HTMLTextAreaElement) {
+    if (el.selectionStart !== el.selectionEnd) return null;
+    const caret = el.selectionStart;
+    const session = sessionNames.sessions.find(
+      (s) => caret > s.start && caret < s.end,
+    );
+    if (session)
+      return { kind: "session" as const, start: session.start, end: session.end };
+    const mention = mentionRanges.find((r) => caret > r.start && caret < r.end);
+    if (mention)
+      return { kind: "mention" as const, start: mention.start, end: mention.end };
+    return null;
+  }
+
+  // A press used to erase the reference outright, with nothing offered and
+  // nothing asked. A pill is one object built out of one gesture, so the same
+  // gesture should not be able to destroy it by accident — and there was no
+  // way at all to point a reference somewhere else short of deleting it and
+  // starting over. Pressing one now selects it and offers what you can do to
+  // it; Remove is a row in that menu rather than the whole interaction.
+  function openPillMenu(el: HTMLTextAreaElement, x: number, y: number): boolean {
+    const hit = pillAtCaret(el);
+    if (!hit) return false;
+    // Selected, because the menu is ABOUT that reference and a menu that
+    // names no subject is a menu you have to guess at. It is also already the
+    // state Change wants to leave behind.
+    el.setSelectionRange(hit.start, hit.end);
+    // The pressed point is the fallback anchor: a press that reached here
+    // found a pill in the TEXT, but the mirror it is painted in only mounts
+    // for a draft that needs highlighting, so there is not always a box.
+    const rect = pillRectAt(hlRef.current, x, y);
+    setPillMenu({
+      ...hit,
+      rect: rect
+        ? { left: rect.left, top: rect.top, width: rect.width, height: rect.height }
+        : { left: x, top: y, width: 0, height: 0 },
+    });
+    return true;
+  }
+
+  // Base UI positions against an element; a pill is a box of text with no
+  // element of its own, so it is handed the box instead. Rebuilt with the
+  // menu's own state, which is the only thing that moves it.
+  const pillAnchor = useMemo(
+    () =>
+      pillMenu
+        ? {
+            getBoundingClientRect: () =>
+              new DOMRect(
+                pillMenu.rect.left,
+                pillMenu.rect.top,
+                pillMenu.rect.width,
+                pillMenu.rect.height,
+              ),
+          }
+        : null,
+    [pillMenu],
+  );
+
+  /** Point the reference somewhere else, rather than at nothing. */
+  function changePill() {
+    const el = textareaRef.current;
+    if (!el || !pillMenu) return;
+    const { kind, start, end } = pillMenu;
+    setPillMenu(null);
+    el.focus();
+    if (kind === "mention") {
+      // Everything after the `@` is selected and the picker re-opens on it, so
+      // typing searches for the person to put there instead. Selecting the
+      // `@` too would end the mention the moment the first letter replaced it.
+      el.setSelectionRange(start + 1, end);
+      mentions.sync();
+    } else {
+      // A session has no picker to re-open: the whole token stays selected,
+      // and typing or pasting another link over it replaces the reference
+      // (the projection consumes a token that any edit touches).
+      el.setSelectionRange(start, end);
+    }
+  }
+
+  /** What the press itself used to do, now that it is asked for. */
+  function removePill() {
+    const el = textareaRef.current;
+    if (!el || !pillMenu) return;
+    const { start } = pillMenu;
+    setPillMenu(null);
+    el.focus();
+    // Put the caret back strictly inside the reference and go through the
+    // erase path below, which already owns the undo entry each kind needs.
+    el.setSelectionRange(start + 1, start + 1);
+    removePillAtCaret(el);
+  }
+
+  // Erase one whole pill. Mentions keep native undo through execCommand;
+  // session tokens use the projection's canonical history.
   function removePillAtCaret(el: HTMLTextAreaElement): boolean {
     // A session reference erases through the projection, which owns its
     // canonical id and its own undo entry.
@@ -1052,6 +1159,14 @@ export function Composer({
     hoveredPill.current = null;
     if (textareaRef.current) textareaRef.current.style.cursor = "";
   }, [hlHtml, textareaRef]);
+  // The menu holds offsets into the draft and hangs off a box that the next
+  // line-break moves, so any edit takes it down — including the one its own
+  // Remove row makes. Base UI already closes it on Escape, an outside press
+  // and a scroll; typing is the case it cannot see, because the field it
+  // would be watching is not the one focus is in.
+  useEffect(() => {
+    setPillMenu(null);
+  }, [displayText]);
 
   // Dictated text lands at the end of the draft (with a joining space) and
   // focus returns to the textarea so you can touch it up and send.
@@ -1407,7 +1522,7 @@ export function Composer({
             onKeyDown={handleKeyDown}
             onKeyUp={mentions.sync}
             onClick={(e) => {
-              if (removePillAtCaret(e.currentTarget)) return;
+              if (openPillMenu(e.currentTarget, e.clientX, e.clientY)) return;
               mentions.sync();
             }}
             onMouseMove={(e) => updatePillHover(e.clientX, e.clientY)}
@@ -1438,6 +1553,37 @@ export function Composer({
             {...noAutofill}
             autoFocus={autoFocus}
           />
+          {/* What a press on a pill gets instead of the reference vanishing.
+              Two rows, because removing it is only one of the two things a
+              press can reasonably mean and it was the only one on offer.
+              Anchored to the pressed box rather than to a trigger: the subject
+              is text inside the field, and it has no element of its own.
+              `modal={false}` — the draft behind it stays scrollable, and this
+              menu is a detail of the field rather than a layer over the page. */}
+          <Menu.Root
+            open={!!pillMenu}
+            onOpenChange={(open) => {
+              if (!open) setPillMenu(null);
+            }}
+            modal={false}
+          >
+            <Menu.Popup
+              anchor={pillAnchor}
+              side="top"
+              align="start"
+              finalFocus={textareaRef}
+              className={composerMenuWidth}
+            >
+              <Menu.Item onClick={changePill}>
+                <IconPencil size={17} aria-hidden className={MENU_ICON} />
+                Change
+              </Menu.Item>
+              <Menu.Item onClick={removePill}>
+                <IconTrash size={17} aria-hidden className={MENU_ICON} />
+                Remove
+              </Menu.Item>
+            </Menu.Popup>
+          </Menu.Root>
         </motion.div>
         <div
           className={cn(

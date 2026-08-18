@@ -608,13 +608,26 @@ export function App(
 	const showToast = useCallback((message: string) => {
 		toast(message);
 	}, []);
-	// Session-reference chips in transcripts (`bks-…`) label themselves with the
-	// referenced session's title. markdown.ts renders to an HTML string rather
-	// than React nodes, so it can't read this from context — hand it the titles
-	// we already poll. No-ops unless a title actually changed.
+	// Session-reference chips in transcripts (`bks-…`), and the pill the
+	// composer projects a draft id into, label themselves from this registry.
+	// markdown.ts renders to an HTML string rather than React nodes, so it
+	// can't read this from context — hand it the names we already poll. No-ops
+	// unless a name actually changed.
+	//
+	// The name is the WORKSPACE's, not the session's, for the same reason a
+	// sidebar row takes it (Sidebar.tsx) and the viewer header shows it: a
+	// reference is read as "that piece of work", and clicking one lands on a
+	// page titled after the workspace. Labelling the chip after one of its
+	// tabs promised a name the destination doesn't show — and the tab is often
+	// a machine-made per-run label ("Review · PR #5741 …") where the workspace
+	// is what a person recognizes. A session title is the fallback, for a
+	// session whose workspace this client has no name for.
 	useEffect(() => {
 		setSessionTitles(
-			sessions.map((s) => [s.id, s.title, s.isRunning] as const),
+			sessions.map(
+				(s) =>
+					[s.id, s.workspaceName || s.title, s.isRunning, s.title] as const,
+			),
 		);
 		setKnownPrStates(
 			sessions.flatMap((session) => [

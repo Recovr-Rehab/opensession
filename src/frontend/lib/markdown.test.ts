@@ -185,6 +185,26 @@ describe("session chip labels", () => {
     expect(html).not.toContain("data-session-label");
   });
 
+  it("keeps the session's own title in the tooltip when it differs", () => {
+    // The label names the workspace, so two chips into one workspace read the
+    // same; the tip is where they come apart.
+    setSessionTitles([[id, "Ship the movavi comparison page", false, "Review · PR #5778 Alternatives"]]);
+    const html = renderMarkdown(`Delegated to \`${id}\`.`);
+    expect(html).toContain(
+      '<span class="session-link-label">Ship the movavi comparison page</span>',
+    );
+    expect(html).toContain(
+      `title="Open Ship the movavi comparison page · Alternatives (${id})"`,
+    );
+  });
+
+  it("leaves the tooltip alone when the session's title is the workspace's", () => {
+    setSessionTitles([[id, "Fix the sidebar hover states", false, "Fix the sidebar hover states"]]);
+    expect(renderMarkdown(`Delegated to \`${id}\`.`)).toContain(
+      `title="Open Fix the sidebar hover states (${id})"`,
+    );
+  });
+
   it("falls back to a shortened id, marked for monospace", () => {
     const html = renderMarkdown(`Delegated to \`${id}\`.`);
     expect(html).toContain('<span class="session-link-label">bks-019f24b5…</span>');

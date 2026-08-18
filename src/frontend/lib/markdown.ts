@@ -202,10 +202,19 @@ const AUTOMATION_ID_BARE = new RegExp(
 );
 
 // Chip labels. A raw `bks-<uuid>` is 40 characters of noise in the middle of a
-// sentence, so a chip shows the referenced session's own title when we know it.
-// The app shell registers the titles it already polls (App.tsx); anything not in
-// that list — archived, deleted, not yet polled — falls back to a shortened id.
-let sessionTitles = new Map<string, string>();
+// sentence, so a chip shows the name of the work it points at when we know it.
+// The app shell registers what it already polls (App.tsx); anything not in that
+// list — archived, deleted, not yet polled — falls back to a shortened id.
+interface SessionName {
+  /** What the chip shows: the workspace's name (App.tsx says why). */
+  label: string;
+  /** The session's own title, when it differs from the label. Tooltip only:
+   *  a workspace holds many sessions, so the label alone cannot say WHICH
+   *  conversation a chip opens, and two chips into one workspace would
+   *  otherwise be identical down to the tooltip. */
+  tab?: string;
+}
+let sessionTitles = new Map<string, SessionName>();
 const sessionTitleListeners = new Set<() => void>();
 /** Sessions whose agent is mid-run, for the chip's live dot. */
 let runningSessions = new Set<string>();
@@ -213,19 +222,24 @@ const SESSION_TITLE_MAX = 38;
 const SESSION_ID_SHORT = 12; // `os-019fb3ad2` / `bks-019fb3ad`
 
 /**
- * Register id → title (and whether that session is running) for session
- * chips. Cheap no-op when no title changed; the running set never clears the
- * cache, because a run starting somewhere else is not a reason to re-render
- * every transcript. Rendered chips pick it up through the DOM sync below.
+ * Register id → name (whether that session is running, and its own tab title
+ * for the tooltip) for session chips. Cheap no-op when nothing a chip renders
+ * changed; the running set never clears the cache, because a run starting
+ * somewhere else is not a reason to re-render every transcript. Rendered chips
+ * pick that up through the DOM sync below.
  */
 export function setSessionTitles(
-  entries: Iterable<readonly [string, string | null | undefined, boolean?]>,
+  entries: Iterable<
+    readonly [string, string | null | undefined, boolean?, (string | null)?]
+  >,
 ): void {
-  const next = new Map<string, string>();
+  const next = new Map<string, SessionName>();
   const running = new Set<string>();
-  for (const [id, title, isRunning] of entries) {
-    const t = String(title ?? "").trim();
-    if (id && t) next.set(id, cleanSessionTitle(t));
+  for (const [id, title, isRunning, tabTitle] of entries) {
+    const label = cleanSessionTitle(String(title ?? "").trim());
+    const tab = cleanSessionTitle(String(tabTitle ?? "").trim());
+    if (id && label)
+      next.set(id, { label, ...(tab && tab !== label ? { tab } : {}) });
     if (id && isRunning) running.add(id);
   }
   runningSessions = running;
@@ -235,8 +249,9 @@ export function setSessionTitles(
   syncRenderedSessionRuns();
   if (next.size === sessionTitles.size) {
     let same = true;
-    for (const [id, t] of next) {
-      if (sessionTitles.get(id) !== t) {
+    for (const [id, name] of next) {
+      const had = sessionTitles.get(id);
+      if (!had || had.label !== name.label || had.tab !== name.tab) {
         same = false;
         break;
       }
@@ -348,7 +363,7 @@ function syncRenderedSessionRuns(): void {
  * the same registry, so a reference keeps one name before and after sending.
  */
 export function sessionTitleFor(id: string): string | undefined {
-  return sessionTitles.get(id);
+  return sessionTitles.get(id)?.label;
 }
 
 export function shortSessionId(id: string): string {
@@ -399,7 +414,7 @@ function sessionChip(
 }
 
 function sessionLink(id: string, href?: string): string {
-  const title = sessionTitles.get(id);
+  const title = sessionTitles.get(id)?.label;
   const label = title
     ? title.length > SESSION_TITLE_MAX
       ? `${title.slice(0, SESSION_TITLE_MAX - 1).trimEnd()}…`
@@ -427,11 +442,15 @@ function automationChip(id: string, label?: string, href?: string): string {
   );
 }
 
-/** What the chip promises: which session opens, and whether it is working. */
+/** What the chip promises: which session opens, and whether it is working.
+ *  The label names the workspace, so the session's own title goes here when it
+ *  differs — that is the only thing separating two chips into one workspace. */
 function sessionTip(id: string): string {
-  const title = sessionTitles.get(id);
+  const name = sessionTitles.get(id);
   const running = runningSessions.has(id) ? " · running" : "";
-  return title ? `Open ${title} (${id})${running}` : `Open session ${id}${running}`;
+  if (!name) return `Open session ${id}${running}`;
+  const tab = name.tab ? ` · ${name.tab}` : "";
+  return `Open ${name.label}${tab} (${id})${running}`;
 }
 
 // Agents write pull requests the GitHub way — a bare `#5528`, sometimes
