@@ -19,7 +19,7 @@ import { useIsPhone } from "../../hooks/useIsPhone";
 import { Menu } from "../../ui/menu";
 import { cn } from "../../ui/cn";
 import { RepoTile, repoLabel } from "../RepoTile";
-import { IconChevronDown, IconRobot } from "../icons";
+import { IconChevronDown, IconChevronRight, IconRobot } from "../icons";
 import { UserAvatar } from "../UserAvatar";
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
@@ -72,6 +72,45 @@ const FILTER_ROW =
  *  list where only some options carry one keeps its labels on a single x. */
 const GLYPH_SLOT = "flex size-4 shrink-0 items-center justify-center text-dim";
 
+/** The options themselves. Shared, because the same question is asked from
+ *  two places now: a row on the panel, and a row inside the Advanced menu. */
+function ValueOptions({
+	value,
+	options,
+	onSelect,
+}: {
+	value: string;
+	options: SelectOption[];
+	onSelect: (value: string) => void;
+}) {
+	const glyphs = options.some((option) => option.icon);
+	return (
+		<Menu.RadioGroup
+			value={value}
+			onValueChange={(next) => onSelect(String(next))}
+		>
+			{options.map((option) => (
+				// `closeOnClick`, because this list is a value picker: Base UI
+				// leaves a radio item's menu open by default, which is right
+				// for a menu you keep toggling things in and wrong for one
+				// answering a single question.
+				<Menu.RadioItem
+					key={option.value}
+					value={option.value}
+					closeOnClick
+					className="justify-between gap-3"
+				>
+					<span className="flex min-w-0 items-center gap-2">
+						{glyphs && <span className={GLYPH_SLOT}>{option.icon}</span>}
+						<span className="min-w-0 truncate">{option.label}</span>
+					</span>
+					<Menu.Check on={option.value === value} />
+				</Menu.RadioItem>
+			))}
+		</Menu.RadioGroup>
+	);
+}
+
 function FilterRow({
 	label,
 	value,
@@ -84,7 +123,6 @@ function FilterRow({
 	onSelect: (value: string) => void;
 }) {
 	const current = options.find((option) => option.value === value);
-	const glyphs = options.some((option) => option.icon);
 	return (
 		<Menu.Root>
 			<Menu.Trigger className={FILTER_ROW}>
@@ -96,31 +134,41 @@ function FilterRow({
 				</span>
 			</Menu.Trigger>
 			<Menu.Popup align="end" sideOffset={6}>
-				<Menu.RadioGroup
-					value={value}
-					onValueChange={(next) => onSelect(String(next))}
-				>
-					{options.map((option) => (
-						// `closeOnClick`, because this list is a value picker: Base UI
-						// leaves a radio item's menu open by default, which is right
-						// for a menu you keep toggling things in and wrong for one
-						// answering a single question.
-						<Menu.RadioItem
-							key={option.value}
-							value={option.value}
-							closeOnClick
-							className="justify-between gap-3"
-						>
-							<span className="flex min-w-0 items-center gap-2">
-								{glyphs && <span className={GLYPH_SLOT}>{option.icon}</span>}
-								<span className="min-w-0 truncate">{option.label}</span>
-							</span>
-							<Menu.Check on={option.value === value} />
-						</Menu.RadioItem>
-					))}
-				</Menu.RadioGroup>
+				<ValueOptions value={value} options={options} onSelect={onSelect} />
 			</Menu.Popup>
 		</Menu.Root>
+	);
+}
+
+/** The same control as a row inside the Advanced menu: label, current value,
+ *  and its options one level in. Reads as a menu row rather than a panel row,
+ *  because that is where it now lives. */
+function FilterSubmenu({
+	label,
+	value,
+	options,
+	onSelect,
+}: {
+	label: string;
+	value: string;
+	options: SelectOption[];
+	onSelect: (value: string) => void;
+}) {
+	const current = options.find((option) => option.value === value);
+	return (
+		<Menu.SubmenuRoot>
+			<Menu.SubmenuTrigger className="justify-between gap-3">
+				<span className="truncate">{label}</span>
+				<span className="flex flex-none items-center gap-2 text-dim">
+					{current?.icon && <span className={GLYPH_SLOT}>{current.icon}</span>}
+					<span className="truncate">{current?.label ?? value}</span>
+					<IconChevronRight className="shrink-0 text-faint" size={17} />
+				</span>
+			</Menu.SubmenuTrigger>
+			<Menu.Popup>
+				<ValueOptions value={value} options={options} onSelect={onSelect} />
+			</Menu.Popup>
+		</Menu.SubmenuRoot>
 	);
 }
 
@@ -199,6 +247,13 @@ export function FilterPopover({
 		{ value: "everyone", label: "Everyone" },
 	];
 
+	// How much of what is now out of sight is doing something. Only the three
+	// that change which rows the list holds count: density is a look.
+	const advancedChanged =
+		(filter.prs === "default" ? 0 : 1) +
+		(filter.autoCreated === "show" ? 0 : 1) +
+		(filter.emptyProjects === "show" ? 0 : 1);
+
 	return createPortal(
 		<>
 			<div className={BACKDROP} onClick={onClose} />
@@ -239,51 +294,6 @@ export function FilterPopover({
 					options={personOptions}
 					onSelect={(v) => onChange({ person: v })}
 				/>
-				{/* Session-less PR rows in the project lanes (the dissolved PR
-				    band): whose PRs surface. */}
-				<FilterRow
-					label="Pull requests"
-					value={filter.prs}
-					options={[
-						{ value: "default", label: "Mine + requested" },
-						{ value: "all", label: "Everyone's" },
-						{ value: "none", label: "Hidden" },
-					]}
-					onSelect={(v) => onChange({ prs: v as PrsFilter })}
-				/>
-				{/* Workspaces an agent started for itself. They sit in the ordinary
-				    lanes wearing a robot, so this is how you get a day's worth of
-				    them out of the way. A row you have open, one you pinned, and one
-				    asking for your review stay whatever this says. */}
-				<FilterRow
-					label="Auto created"
-					value={filter.autoCreated}
-					options={[
-						{
-							value: "show",
-							label: "Shown",
-							icon: <IconRobot size={16} />,
-						},
-						{ value: "hide", label: "Hidden" },
-					]}
-					onSelect={(v) => onChange({ autoCreated: v as AutoCreatedFilter })}
-				/>
-				{/* Projects with no workspaces in them. They draw a band so a repo
-				    you just connected has somewhere to start from, which on an
-				    instance with more projects than you work in is a screen of
-				    empty headings. Scoping the list to one project shows that
-				    project either way. */}
-				<FilterRow
-					label="Empty projects"
-					value={filter.emptyProjects}
-					options={[
-						{ value: "show", label: "Shown" },
-						{ value: "hide", label: "Hidden" },
-					]}
-					onSelect={(v) =>
-						onChange({ emptyProjects: v as EmptyProjectsFilter })
-					}
-				/>
 				<FilterRow
 					label="Sort by"
 					value={filter.sort}
@@ -293,27 +303,98 @@ export function FilterPopover({
 					]}
 					onSelect={(v) => onChange({ sort: v as SortBy })}
 				/>
-				{/* Desktop only, because that is the whole of what the preference
-				    does: a phone row is a tap target and keeps its own padding at
-				    either setting (see SIDEBAR_DENSITY_VARS), so offering the
-				    control there would be a switch that changes nothing.
+				{/* The settings you set once and forget, one level in: what the
+				    list is made of and who it is for stays on the panel, and the
+				    rest is here.
 
-				    A row like the six above it, not the segmented control Settings →
-				    Appearance shows: a segment is right on a settings page with room
-				    for it, and here the seven read as one panel only while they wear
-				    one control. */}
-				{!isPhone && (
-					<FilterRow
-						label="Density"
-						value={density}
-						options={DENSITY_OPTIONS.map(({ value, label, Icon }) => ({
-							value,
-							label,
-							icon: <Icon size={16} />,
-						}))}
-						onSelect={(v) => setSidebarDensity(v as SidebarDensity)}
-					/>
-				)}
+				    It says how many of them are off their default, because a
+				    setting that hides rows is exactly the one you want to find
+				    again when the list looks short, and a closed menu cannot
+				    show you that it is the reason. Density is a look, not a
+				    filter, so it is not part of that count. */}
+				<Menu.Root>
+					<Menu.Trigger className={cn(FILTER_ROW, "mt-1")}>
+						<span className="shrink-0 text-dim">Advanced</span>
+						<span className="ml-auto flex min-w-0 items-center gap-2 text-fg">
+							{advancedChanged > 0 && (
+								<span className="truncate text-dim">
+									{advancedChanged} changed
+								</span>
+							)}
+							<IconChevronRight
+								size={16}
+								className="-mr-0.5 shrink-0 text-faint"
+							/>
+						</span>
+					</Menu.Trigger>
+					<Menu.Popup align="end" sideOffset={6}>
+						{/* Session-less PR rows in the project lanes (the dissolved
+						    PR band): whose PRs surface. */}
+						<FilterSubmenu
+							label="Pull requests"
+							value={filter.prs}
+							options={[
+								{ value: "default", label: "Mine + requested" },
+								{ value: "all", label: "Everyone's" },
+								{ value: "none", label: "Hidden" },
+							]}
+							onSelect={(v) => onChange({ prs: v as PrsFilter })}
+						/>
+						{/* Workspaces an agent started for itself. They sit in the
+						    ordinary lanes wearing a robot, so this is how you get a
+						    day's worth of them out of the way. A row you have open,
+						    one you pinned, and one asking for your review stay
+						    whatever this says. */}
+						<FilterSubmenu
+							label="Auto created"
+							value={filter.autoCreated}
+							options={[
+								{
+									value: "show",
+									label: "Shown",
+									icon: <IconRobot size={16} />,
+								},
+								{ value: "hide", label: "Hidden" },
+							]}
+							onSelect={(v) =>
+								onChange({ autoCreated: v as AutoCreatedFilter })
+							}
+						/>
+						{/* Projects with no workspaces in them. They draw a band so a
+						    repo you just connected has somewhere to start from, which
+						    on an instance with more projects than you work in is a
+						    screen of empty headings. Scoping the list to one project
+						    shows that project either way. */}
+						<FilterSubmenu
+							label="Empty projects"
+							value={filter.emptyProjects}
+							options={[
+								{ value: "show", label: "Shown" },
+								{ value: "hide", label: "Hidden" },
+							]}
+							onSelect={(v) =>
+								onChange({ emptyProjects: v as EmptyProjectsFilter })
+							}
+						/>
+						{/* Desktop only, because that is the whole of what the
+						    preference does: a phone row is a tap target and keeps its
+						    own padding at either setting (see SIDEBAR_DENSITY_VARS),
+						    so offering the control there would be a switch that
+						    changes nothing. */}
+						{!isPhone && (
+							<FilterSubmenu
+								label="Density"
+								value={density}
+								options={DENSITY_OPTIONS.map(({ value, label, Icon }) => ({
+									value,
+									label,
+									icon: <Icon size={16} />,
+								}))}
+								onSelect={(v) => setSidebarDensity(v as SidebarDensity)}
+							/>
+						)}
+					</Menu.Popup>
+				</Menu.Root>
 			</div>
 		</>,
 		document.body,
