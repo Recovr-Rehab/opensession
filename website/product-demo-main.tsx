@@ -173,6 +173,46 @@ const sessions: UnifiedSession[] = [
 	})),
 ];
 
+/**
+ * What the team shipped, for the feed. The demo's repo is a shared checkout,
+ * which in the product ships straight to the default branch rather than
+ * through pull requests, so this is commits: one row per shipped thing, from
+ * five different people over three days, which is the window the feed opens
+ * on.
+ *
+ * Titles are deliberately not the sidebar's: those are work in flight, and a
+ * session that is still open has not shipped anything yet.
+ */
+const shippedCommits = (
+	[
+		["louise", "Louise de Sadeleer", "Keep the composer draft when a session switches", 96, 31, 25],
+		["jaap", "Jaap Frolich", "Batch transcript writes behind one flush", 240, 118, 96],
+		["alex", "Alex Rivera", "Cache repo icons so the sidebar stops flashing", 58, 12, 187],
+		["kent", "Kent de Bruin", "Give the run banner a real elapsed clock", 64, 22, 291],
+		["grant", "Grant Shaddick", "Sign preview links with a short-lived token", 148, 57, 448],
+		["kent", "Kent de Bruin", "Round the session rows to match the panel", 41, 38, 1495],
+		["louise", "Louise de Sadeleer", "Show who else is reading a session", 203, 64, 1602],
+		["alex", "Alex Rivera", "Stop the sidebar jumping to the top on rename", 27, 9, 1744],
+		["jaap", "Jaap Frolich", "Move the diff parser off the main thread", 312, 140, 1860],
+		["grant", "Grant Shaddick", "Add a health check to the deploy workflow", 72, 5, 1938],
+		["louise", "Louise de Sadeleer", "Name the model in the composer footer", 33, 11, 2905],
+		["jaap", "Jaap Frolich", "Drop the duplicate presence broadcast", 18, 96, 3050],
+		["alex", "Alex Rivera", "Write the archive filter into the URL", 88, 26, 3180],
+		["kent", "Kent de Bruin", "Tighten the empty state on the reviews page", 52, 18, 3295],
+	] as const
+).map(([person, author, title, additions, deletions, minutes], index) => ({
+	repo: "opensession",
+	// Only the first seven characters are ever shown, but the row is keyed on
+	// the whole thing, so they have to differ past that.
+	sha: `${(0xc0ffee + index * 0x9e3779b).toString(16).padStart(7, "0")}${"a3f7b21c9d40e85f6a1b2c3d4e5f6071".slice(index)}`,
+	title,
+	author,
+	person,
+	committedAt: minutesAgo(minutes),
+	additions,
+	deletions,
+}));
+
 /** Rows carrying activity you have not looked at yet: bold, in the product's
  *  own unread weight. */
 const unreadSessionIds = new Set([
@@ -434,6 +474,11 @@ const responseFor = (url: URL, method: string): Response => {
 			],
 		});
 	if (path === "/api/open-prs") return json({ prs: [] });
+	// The feed reads both: merged pull requests, and commits from repos that
+	// ship without them. This one is the second kind.
+	if (path === "/api/recent-prs") return json({ prs: [] });
+	if (path === "/api/recent-commits")
+		return json({ commits: shippedCommits, days: 3, hasMore: false });
 	if (path === "/api/feeds") return json({ feeds: [] });
 	if (path === "/api/todos") return json({ todos: [] });
 	if (path === "/api/pins") return json({ pins: [] });
@@ -684,8 +729,7 @@ repoMarkObserver.observe(document.documentElement, { childList: true, subtree: t
 //
 //   Settings      a real page, and a dead end with no account to configure
 //   Dictate       asks the visitor's own browser for a microphone
-//   Feed          a real page the fixtures leave empty
-//   Archived      the same, with nothing archived to show
+//   Archived      a real page with nothing archived to show
 //   A pull request chip  routes through a workspace the fixture never defines,
 //                        so it lands on "Workspace not found"
 //
@@ -695,7 +739,6 @@ repoMarkObserver.observe(document.documentElement, { childList: true, subtree: t
 const inertInDemo = [
 	'[aria-label="Open settings"]',
 	'[aria-label="Dictate"]',
-	'[title="What the team has been shipping"]',
 	'[title="View archived sessions"]',
 	'a[href^="/pr/"]',
 ].join(", ");

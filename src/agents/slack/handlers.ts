@@ -1574,8 +1574,8 @@ Please help with this request. Start by exploring the codebase to understand wha
   // Regular (non-worktree) channel mention. A quick Haiku classifier decides the
   // route: an explicit PR action runs directly (no worktree), a question runs
   // in-thread in the repo's checkout (no worktree), and a coding task spins up a
-  // worktree as before. Repo selection uses the New-session picker's shared
-  // Auto router (message + channel name + thread context; no match → default).
+  // worktree as before — in whichever registered repo the classifier picks
+  // (message + channel name + thread context; unknown → default repo).
   // Fail-open: a null verdict falls through to the default-repo code path.
   //
   // Only thread mentions get surrounding context: a thread is one coherent
@@ -1593,7 +1593,7 @@ Please help with this request. Start by exploring the codebase to understand wha
     ? null
     : (await getChannelKind(channel).catch(() => null))?.name || null;
   const intent = await classifyMention(cleanText, { channelName, context });
-  // Auto's repo verdict; getRepo(null/undefined) = the default repo.
+  // The classifier's repo verdict; getRepo(null/undefined) = the default repo.
   const repo = getRepo(intent?.repo || undefined);
   const isDefaultRepo = repo.id === getRepo().id;
   if (!isDefaultRepo) console.log(`[slack] mention routed to repo ${repo.id}`);
