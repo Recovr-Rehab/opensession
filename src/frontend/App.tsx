@@ -135,6 +135,7 @@ import {
 	updateWorkspaceApi,
 	deleteWorkspaceApi,
 	fetchRepos,
+	REPOS_CHANGED_EVENT,
 	resolveWorkspaceApi,
 	type OpenPr,
 } from "./lib/api";
@@ -575,6 +576,7 @@ export function App(
 		remove,
 	} = useSessions({ loadArchived: route.view === "archived" });
 	const [launchComplete, setLaunchComplete] = useState(false);
+	const [registeredRepos, setRegisteredRepos] = useState<string[]>([]);
 	const auth = useAuthStatus();
 	const currentUser = useCurrentUser();
 	const { connected, send, addHandler } = useWebSocket();
@@ -656,13 +658,19 @@ export function App(
 	// (MarkdownRepoProvider).
 	useEffect(() => {
 		let live = true;
-		fetchRepos()
+		const loadRepos = () => fetchRepos()
 			.then((repos) => {
-				if (live) setKnownRepos(repos);
+				if (live) {
+					setKnownRepos(repos);
+					setRegisteredRepos(repos.map((repo) => repo.id));
+				}
 			})
 			.catch(() => {});
+		loadRepos();
+		window.addEventListener(REPOS_CHANGED_EVENT, loadRepos);
 		return () => {
 			live = false;
+			window.removeEventListener(REPOS_CHANGED_EVENT, loadRepos);
 		};
 	}, []);
 	// Register the service worker at boot, not just when enabling push: it also
@@ -4104,6 +4112,7 @@ export function App(
 						<Sidebar
 							ref={sidebarRef}
 							sessions={sessions}
+							registeredRepos={registeredRepos}
 							sessionsError={sessionsError}
 							sessionsLoading={loading}
 							onRetrySessions={() => void refresh()}

@@ -151,6 +151,7 @@ struct SessionsListView: View {
     /// the list re-groups when the first `/api/repos` of a launch lands.
     @AppStorage(RepoCount.storageKey) private var knownRepoCount = RepoCount.unknown
     @AppStorage("os1.list.repo") private var repoFilter = "all"
+    @State private var registeredRepoIDs: [String] = []
     @AppStorage("os1.list.sort") private var sortByRaw = SortBy.updated.rawValue
     // Default to the signed-in person's own sessions, like the web sidebar —
     // the server also hosts hundreds of automation runs and teammates' sessions.
@@ -316,11 +317,15 @@ struct SessionsListView: View {
             })
             .task {
                 viewModel.startPolling()
+            }
+            .task(id: knownRepoCount) {
                 // Not for the sheet's repo picker — for the tiles in this
                 // list. The repo list carries each repo's assigned tile
                 // color, and without it every tile falls back to its own
                 // hash, which is exactly where two repos can collide.
-                _ = try? await OS1API.repos()
+                if let repos = try? await OS1API.repos() {
+                    registeredRepoIDs = repos.map(\.id)
+                }
             }
             // Keyed on the shared location so turning Support off stops the
             // poll. Both visible locations use the count in their native row.
@@ -1365,11 +1370,25 @@ struct SessionsListView: View {
     private var availableRepos: [String] {
         SessionsListViewModel.repositoryOrder(
             in: viewModel.sessions,
-            workspaceRepos: viewModel.workspaces.compactMap {
+            workspaceRepos: registeredRepoIDs + viewModel.workspaces.compactMap {
                 $0.draft == nil ? nil : $0.repo
             },
             preferredOrderJSON: preferredRepoOrder
         )
+    }
+
+    /// Empty registered repos belong in the normal project list while looking
+    /// at your own unsearched work. Search and teammate lenses stay result-driven.
+    private var repoBandRepos: [String] {
+        let occupied = Set(filteredWorkspaces.map(\.effectiveRepo))
+        return availableRepos.filter { repo in
+            guard repoFilter == "all" || repoFilter == repo else { return false }
+            if !searchText.trimmingCharacters(in: .whitespaces).isEmpty
+                || peopleFilter != "mine" {
+                return occupied.contains(repo)
+            }
+            return true
+        }
     }
 
     /// What counts as "mine" here — one rule, shared with the Archived sheet.
@@ -1488,11 +1507,11 @@ struct SessionsListView: View {
                 )]
         case .repo:
             let byRepo = Dictionary(grouping: workspaces, by: \.effectiveRepo)
-            return availableRepos.filter { byRepo[$0] != nil }.map {
+            return repoBandRepos.map {
                 SessionGroup(
                     id: "repo-\($0)",
                     title: $0,
-                    workspaces: byRepo[$0]!,
+                    workspaces: byRepo[$0] ?? [],
                     repo: $0
                 )
             }
@@ -1532,8 +1551,8 @@ struct SessionsListView: View {
 
     private var repoSessionGroups: [RepoSessionGroup] {
         let byRepo = Dictionary(grouping: filteredWorkspaces, by: \.effectiveRepo)
-        return availableRepos.compactMap { repo in
-            guard let workspaces = byRepo[repo] else { return nil }
+        return repoBandRepos.map { repo in
+            let workspaces = byRepo[repo] ?? []
             let lanes = Session.Lane.allCases.compactMap { lane in
                 let inLane = workspaces.filter { $0.lane == lane }
                 return inLane.isEmpty
@@ -1553,8 +1572,8 @@ struct SessionsListView: View {
     /// the Inbox activity bands instead of status lanes.
     private var repoInboxGroups: [RepoSessionGroup] {
         let byRepo = Dictionary(grouping: filteredWorkspaces, by: \.effectiveRepo)
-        return availableRepos.compactMap { repo in
-            guard let workspaces = byRepo[repo] else { return nil }
+        return repoBandRepos.map { repo in
+            let workspaces = byRepo[repo] ?? []
             let bands = SessionsListViewModel.inboxBands(
                 workspaces,
                 mentionedSessionIds: MentionStore.shared.sessionIds
@@ -2432,7 +2451,9 @@ struct SessionsListView: View {
 
     @ViewBuilder
     private var emptyFilterOverlay: some View {
-        if !hasVisibleWorkspaces && viewModel.archivedSessions.isEmpty {
+        if !hasVisibleWorkspaces
+            && repoBandRepos.isEmpty
+            && viewModel.archivedSessions.isEmpty {
             if !searchText.isEmpty {
                 ContentUnavailableView.search(text: searchText)
             } else if peopleFilter == "mine" {

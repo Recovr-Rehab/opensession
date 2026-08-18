@@ -284,6 +284,7 @@ const AUTOMATION_COLOR = "#d29922";
 
 export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	sessions,
+	registeredRepos,
 	sessionsError,
 	sessionsLoading,
 	onRetrySessions,
@@ -984,6 +985,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// so the options don't churn while you type.
 	const discoveredRepos = useMemo(() => {
 		const counts = new Map<string, number>();
+		for (const repo of registeredRepos) counts.set(repo, 0);
 		for (const s of sessions) {
 			// Repo-less sessions (scratch, repo-less Ask) would otherwise each
 			// add a vote for whatever repo sessionRepo falls back to.
@@ -996,7 +998,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		return Array.from(counts.entries())
 			.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
 			.map(([name]) => name);
-	}, [sessions, openPrs]);
+	}, [registeredRepos, sessions, openPrs]);
 	const repos = useMemo(
 		() => mergeRepoOrder(repoOrderDraft ?? savedRepoOrder, discoveredRepos),
 		[repoOrderDraft, savedRepoOrder, discoveredRepos],
@@ -3655,6 +3657,15 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 			...prByRepo.keys(),
 			...requestedPrByRepo.keys(),
 		]);
+		// A fresh registered repo still earns its project band in the default
+		// lens. Its existing + action is the shortest path to the first session.
+		// Search and teammate lenses stay result-driven rather than filling with
+		// unrelated empty projects.
+		if (!search && filter.person === "me" && filter.autoCreated === "show") {
+			for (const repo of registeredRepos) {
+				if (filter.repo === "all" || filter.repo === repo) present.add(repo);
+			}
+		}
 		const order = [
 			...repos.filter((r) => present.has(r)),
 			...Array.from(present).filter((r) => !repos.includes(r) && r !== ASK_BAND),

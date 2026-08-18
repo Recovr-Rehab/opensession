@@ -2,6 +2,13 @@ import { API_BASE, ApiError, request } from "./request";
 import { rememberRepoColors } from "../repo-colors";
 import { rememberRepoCount } from "../repo-count";
 
+export const REPOS_CHANGED_EVENT = "opensession:repos-changed";
+
+export function notifyReposChanged() {
+	if (typeof window !== "undefined" && typeof window.dispatchEvent === "function")
+		window.dispatchEvent(new Event(REPOS_CHANGED_EVENT));
+}
+
 export interface RepoInfo {
 	id: string;
 	label?: string;
@@ -135,11 +142,13 @@ export async function registerRepoApi(input: {
 	url?: string;
 	path?: string;
 }): Promise<RepoInfo> {
-	return request<RepoInfo>("/repos", {
+	const repo = await request<RepoInfo>("/repos", {
 		method: "POST",
 		body: input,
 		label: "Failed to add repository",
 	});
+	notifyReposChanged();
+	return repo;
 }
 
 export interface AttachedRepo {

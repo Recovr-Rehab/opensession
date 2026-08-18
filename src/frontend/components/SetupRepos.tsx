@@ -23,6 +23,7 @@ import { repoLetter } from "../lib/repo-label";
 import { pngFromImageFile } from "../lib/icon-image";
 import {
 	fetchRepos,
+	notifyReposChanged,
 	repoGithubAvatarUrl,
 	setRepoAppearanceApi,
 	uploadRepoIconApi,
@@ -523,6 +524,7 @@ function AddRepoPicker({
 			setAdded((prev) => new Set(prev).add(key));
 			setManual("");
 			toast(`${fullName} registered`);
+			notifyReposChanged();
 			await onAdded();
 		} catch (e: any) {
 			setError(e.message);

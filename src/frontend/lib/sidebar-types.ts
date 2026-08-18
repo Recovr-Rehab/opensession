@@ -13,6 +13,8 @@ export const KNOWN_PEOPLE = new Set([...TEAM, AGENT_NAME].map((n) => n.toLowerCa
 
 export interface Props {
 	sessions: UnifiedSession[];
+	/** Repositories registered on this instance, including ones with no sessions yet. */
+	registeredRepos: string[];
 	/** The initial/live session list request failed entirely. */
 	sessionsError: string | null;
 	/** True until the first session-list request settles. */
