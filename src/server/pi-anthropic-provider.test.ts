@@ -25,6 +25,7 @@ import {
   piSdkSessionStore,
   planSdkTurn,
   rememberSdkTurn,
+  shouldDeferClaudeText,
   usageFromSdkResult,
   type PiCatalogModel,
   type PiWireMessage,
@@ -367,6 +368,28 @@ describe("usageFromSdkResult", () => {
     const usage = usageFromSdkResult(model, undefined);
     expect(usage.totalTokens).toBe(0);
     expect(usage.cost.total).toBe(0);
+  });
+});
+
+describe("Claude limit notice probe", () => {
+  test("holds short output until it can rule out a synthetic limit notice", () => {
+    expect(shouldDeferClaudeText("Replying normally")).toBe(true);
+    expect(
+      shouldDeferClaudeText(
+        "This is a normal answer that is now long enough to stream without waiting for its result."
+      )
+    ).toBe(false);
+  });
+
+  test("keeps observed limit notices hidden from the stream", () => {
+    expect(
+      shouldDeferClaudeText("You've hit your weekly limit · resets Aug 20, 9am (UTC)")
+    ).toBe(true);
+    expect(
+      shouldDeferClaudeText(
+        "You're out of usage credits. Run /usage-credits to keep using Fable 5 or /model to switch models."
+      )
+    ).toBe(true);
   });
 });
 

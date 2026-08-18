@@ -130,6 +130,13 @@ import {
 
 const g = globalThis as any;
 
+const LIMIT_NOTICE_PROBE_CHARS = 64;
+
+/** Hold a small prefix until provider limit text can be distinguished from a real answer. */
+export function shouldDeferClaudeText(text: string): boolean {
+  return text.length < LIMIT_NOTICE_PROBE_CHARS || isClaudeUsageLimitError(text, false);
+}
+
 // ── Types (derived from the SDK so pi-ai never becomes a value import) ───────
 
 /** The pi-ai Provider shape registerNativeProvider accepts. */
@@ -644,6 +651,8 @@ async function* runSdkAttempt(
     // (tool_use streams are ignored — the post-hook captures are authoritative
     // and a blocked-then-retried call must not double).
     let idxMap = new Map<number, number>();
+    let pendingText = new Map<number, { text: string; usageLimit: boolean }>();
+    let deferredUsageLimit: string | undefined;
     let sawStreamContent = false;
     let emittedCaptures = 0;
 
@@ -722,14 +731,13 @@ async function* runSdkAttempt(
           if (!ev) continue;
           if (ev.type === "message_start") {
             idxMap = new Map();
+            pendingText = new Map();
           } else if (ev.type === "content_block_start") {
             const block = ev.content_block as Record<string, any> | undefined;
             const sdkIdx = Number(ev.index);
             if (block?.type === "text") {
               sawStreamContent = true;
-              const contentIndex = partial.content.push({ type: "text", text: "" }) - 1;
-              idxMap.set(sdkIdx, contentIndex);
-              yield { type: "text_start", contentIndex, partial };
+              pendingText.set(sdkIdx, { text: "", usageLimit: false });
             } else if (block?.type === "thinking") {
               sawStreamContent = true;
               const contentIndex = partial.content.push({ type: "thinking", thinking: "" }) - 1;
@@ -741,9 +749,22 @@ async function* runSdkAttempt(
               idxMap.set(sdkIdx, -1);
             }
           } else if (ev.type === "content_block_delta") {
-            const contentIndex = idxMap.get(Number(ev.index));
-            if (contentIndex === undefined || contentIndex === -1) continue;
+            const sdkIdx = Number(ev.index);
+            const pending = pendingText.get(sdkIdx);
             const delta = ev.delta as Record<string, any> | undefined;
+            if (pending && delta?.type === "text_delta" && typeof delta.text === "string") {
+              pending.text += delta.text;
+              pending.usageLimit ||= isClaudeUsageLimitError(pending.text, false);
+              if (pending.usageLimit || shouldDeferClaudeText(pending.text)) continue;
+              const contentIndex = partial.content.push({ type: "text", text: pending.text }) - 1;
+              idxMap.set(sdkIdx, contentIndex);
+              pendingText.delete(sdkIdx);
+              yield { type: "text_start", contentIndex, partial };
+              yield { type: "text_delta", contentIndex, delta: pending.text, partial };
+              continue;
+            }
+            const contentIndex = idxMap.get(sdkIdx);
+            if (contentIndex === undefined || contentIndex === -1) continue;
             const blk = partial.content[contentIndex];
             if (delta?.type === "text_delta" && typeof delta.text === "string" && blk?.type === "text") {
               blk.text += delta.text;
@@ -759,7 +780,22 @@ async function* runSdkAttempt(
               blk.thinkingSignature = `${blk.thinkingSignature || ""}${delta.signature || ""}`;
             }
           } else if (ev.type === "content_block_stop") {
-            const contentIndex = idxMap.get(Number(ev.index));
+            const sdkIdx = Number(ev.index);
+            const pending = pendingText.get(sdkIdx);
+            if (pending) {
+              pendingText.delete(sdkIdx);
+              if (pending.usageLimit || isClaudeUsageLimitError(pending.text, false)) {
+                deferredUsageLimit = pending.text;
+                continue;
+              }
+              const contentIndex = partial.content.push({ type: "text", text: pending.text }) - 1;
+              idxMap.set(sdkIdx, contentIndex);
+              yield { type: "text_start", contentIndex, partial };
+              yield { type: "text_delta", contentIndex, delta: pending.text, partial };
+              yield { type: "text_end", contentIndex, content: pending.text, partial };
+              continue;
+            }
+            const contentIndex = idxMap.get(sdkIdx);
             if (contentIndex === undefined || contentIndex === -1) continue;
             const blk = partial.content[contentIndex];
             if (blk?.type === "text") {
@@ -777,6 +813,10 @@ async function* runSdkAttempt(
           if (Array.isArray(blocks)) {
             for (const b of blocks) {
               if (!b || typeof b !== "object" || b.type !== "text" || !b.text) continue;
+              if (isClaudeUsageLimitError(b.text, false)) {
+                deferredUsageLimit = b.text;
+                continue;
+              }
               const contentIndex = partial.content.push({ type: "text", text: b.text }) - 1;
               yield { type: "text_start", contentIndex, partial };
               yield { type: "text_delta", contentIndex, delta: b.text, partial };
@@ -787,6 +827,7 @@ async function* runSdkAttempt(
         }
         if (m.type === "result") {
           sdkSessionId = String(m.session_id || "") || sdkSessionId;
+          if (deferredUsageLimit) throw new Error(deferredUsageLimit);
           // error_max_turns WITH captures is a SUCCESS (the bridge's fix):
           // models that answer a blocked call by trying the next tool burn a
           // turn per call and can blow the cap before ending cleanly — the
