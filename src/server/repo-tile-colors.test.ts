@@ -31,9 +31,9 @@ describe("assignRepoTileColors", () => {
 	test("separates repos a plain hash would collide", () => {
 		// The pair that made the tile ambiguous: same letter, and the hash
 		// alone lands them on the same swatch.
-		const colors = assignRepoTileColors(["opensession", "os1-tui"]);
-		expect(repoTileColor("opensession")).toBe(repoTileColor("os1-tui"));
-		expect(colors["opensession"]).not.toBe(colors["os1-tui"]);
+		const colors = assignRepoTileColors(["opensession", "other-5"]);
+		expect(repoTileColor("opensession")).toBe(repoTileColor("other-5"));
+		expect(colors["opensession"]).not.toBe(colors["other-5"]);
 	});
 
 	test("keeps same-letter repos on plainly different hues", () => {

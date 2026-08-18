@@ -41,7 +41,7 @@ const ROOT = join(import.meta.dir, "..");
 const SHEET = join(ROOT, "src/frontend/styles/legacy.css");
 /** Scanned for identifiers — deliberately wide, so a class referenced from
  *  anywhere at all keeps its rule. Being wrong here deletes a live rule. */
-const SCAN_DIRS = ["src", "os1-chrome", "os1-tui", "website"];
+const SCAN_DIRS = ["src", "os1-chrome", "website"];
 /** Scanned for runtime-built class prefixes. Only the directories that render
  *  markup: `src/server` builds plenty of hyphenated strings that are not class
  *  names (`auto-${randomUUIDv7()}` for automation ids), and harvesting those

@@ -169,7 +169,7 @@ One sign-in flow, for every client: the **device flow** (`POST
 suspended phone doesn't lose the outcome). There is deliberately no
 authorization-code redirect. A redirect has to return to the exact origin it
 left, and on the iOS PWA it comes back in Safari rather than the installed
-app; the native and terminal clients can't take one at all. GitHub side: one
+app; native apps can't take one at all. GitHub side: one
 org-owned **GitHub App** with "Enable Device Flow" checked, installed on your
 org → All repositories, installable only on that account. GitHub App user
 tokens are what scopes teammates' tokens to your org (see the previous

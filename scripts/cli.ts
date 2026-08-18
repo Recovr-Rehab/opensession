@@ -64,9 +64,6 @@ ${bold("Running")}
   status                   is it running?
   logs [-f] [-n N]         tail the service journal
 
-${bold("Client")}
-  tui [--host <url>]       open the terminal client (the 'os' binary)
-
 ${bold("Maintenance")}
   update [--channel <ref>] pull upstream (ff, or merge on a fork with local
          [--check]         commits), reinstall deps, health-gated restart;
@@ -117,25 +114,6 @@ async function start(): Promise<number> {
     return await runInherit(["bun", "run", "opensession.ts"], REPO_ROOT);
   }
   return await service.control("start");
-}
-
-/**
- * `opensession tui` — hand off to the `os` client (os1-tui).
- *
- * A thin alias, not a reimplementation: `os` is a separate binary because it's a
- * *client* (fetch + WebSocket, runs on your laptop) while this CLI is a
- * *server-admin* tool that imports server modules and manages the unit. Prefer
- * `os` directly; this exists for discoverability from `opensession --help`.
- */
-async function tui(): Promise<number> {
-  const onPath = Bun.which("os");
-  if (onPath) return await runInherit([onPath, ...argv.slice(1)], process.cwd());
-  const entry = `${REPO_ROOT}/os1-tui/src/index.ts`;
-  if (!existsSync(entry)) {
-    fail("no TUI found", "expected the `os` binary on PATH or os1-tui/ in this checkout");
-    return 1;
-  }
-  return await runInherit(["bun", entry, ...argv.slice(1)], REPO_ROOT);
 }
 
 /**
@@ -361,9 +339,6 @@ async function main(): Promise<number> {
       if (positional[0] === "pair") return await runnersPair();
       if (positional[0] === "remove") return await runnersRemove(positional[1] ?? "");
       return await runnersList();
-
-    case "tui":
-      return await tui();
 
     case "version":
     case "--version":

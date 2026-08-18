@@ -5,18 +5,6 @@ import {
 	fetchSessionsSnapshot,
 } from "./api";
 
-// os1-tui's tests run earlier in the same bun-test process and leak
-// @opentui/core's stub `window`, which carries requestAnimationFrame and
-// nothing else. fetchRepos records the repo count on success, and that
-// notifies listeners through window.dispatchEvent — against the stub it
-// throws, the success looks transient, and the call is retried. Fill the one
-// method in rather than deleting the stub, which os1-tui's own renderer owns.
-const leakedWindow = (globalThis as unknown as {
-	window?: Record<string, unknown>;
-}).window;
-if (leakedWindow && typeof leakedWindow.dispatchEvent !== "function")
-	leakedWindow.dispatchEvent = () => true;
-
 const originalFetch = globalThis.fetch;
 
 afterEach(() => {

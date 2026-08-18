@@ -60,9 +60,7 @@ bun run test:snapshots # the run-pipeline fixtures, which only work run alone
 ```
 
 `bun run test` is `bun test src scripts`, which is where every server-side test
-lives. A bare `bun test` also sweeps `os1-tui/`, a separate package with its own
-`node_modules`, and fails to resolve its imports unless you installed there too;
-that client has its own suite (`cd os1-tui && bun test`) and its own CI job.
+lives.
 
 The snapshot suite needs its own command because it redirects module state that
 an earlier file in a sweep may already have frozen, in which case it skips

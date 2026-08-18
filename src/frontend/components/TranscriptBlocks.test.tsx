@@ -3,11 +3,8 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { TranscriptEntry } from "../lib/types";
 
-// `bun test` runs every file in one process, so a `window` may already be
-// installed by whichever file ran first (@opentui/core's stub, a sibling
-// shim) — and a readonly one, which a plain assignment throws on. Fill in
-// what this file needs instead of replacing it. Which file gets here first
-// changes whenever a test file is added, so this cannot depend on order.
+// A sibling test may already have installed a partial `window`. Fill in this
+// file's browser surface without replacing it or depending on test order.
 Object.assign(
 	((globalThis as unknown as { window?: Record<string, unknown> }).window ??= {}),
 	{

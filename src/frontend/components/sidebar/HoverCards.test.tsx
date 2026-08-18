@@ -5,10 +5,8 @@ import { SessionCardBody, WsCardBody } from "./HoverCards";
 import type { WsCardRow } from "../../lib/sidebar-hover";
 import type { UnifiedSession } from "../../lib/types";
 
-// `bun test` runs every file in one process, so a `window` may already be
-// installed by whichever file ran first (@opentui/core's stub, a sibling
-// shim) — and a readonly one, which a plain assignment throws on. Fill in
-// what this file needs instead of replacing it.
+// A sibling test may already have installed a partial `window`. Fill in this
+// file's browser surface without replacing it.
 Object.assign(
 	((globalThis as unknown as { window?: Record<string, unknown> }).window ??= {}),
 	{ addEventListener: () => {}, matchMedia: () => ({ matches: false }) },

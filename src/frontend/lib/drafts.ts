@@ -128,7 +128,10 @@ function schedulePersist(key: string) {
 // methods.
 if (
   typeof window !== "undefined" &&
-  typeof window.addEventListener === "function"
+  typeof window.addEventListener === "function" &&
+  typeof window.setInterval === "function" &&
+  typeof document !== "undefined" &&
+  typeof document.addEventListener === "function"
 ) {
   window.addEventListener("pagehide", () => {
     for (const key of [...timers.keys()]) {

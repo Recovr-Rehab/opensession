@@ -1,11 +1,6 @@
 import { expect, test, beforeEach, afterEach } from "bun:test";
 
-// `bun test` runs every file in one process, and os1-tui's renderer leaves a
-// stub `window` behind that carries almost nothing. lib/drafts arms its
-// cross-device sync behind window.addEventListener and then reaches for
-// setInterval and document, so fill in what is missing before the import that
-// gets there — the file-local repair NewSessionPrompt.test.tsx makes — rather
-// than taking the stub away from its owner.
+// These browser-facing stores need a small DOM/storage surface in Bun.
 const globals = globalThis as Record<string, any>;
 if (!globals.window) globals.window = {};
 const win = globals.window;

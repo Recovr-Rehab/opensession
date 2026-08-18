@@ -90,7 +90,7 @@ Then read the real setup guide — secrets, accounts, integrations, systemd:
 - [docs/setup/networking.md](docs/setup/networking.md) — Tailscale, a custom
   domain, and verifying you are not public
 - [CLIENTS.md](CLIENTS.md) — web UI, PWA, desktop shell, native app,
-  Chrome extension, terminal client
+  Chrome extension
 - [docs/nodes.md](docs/nodes.md) — attaching another machine as an
   execution node (`opensession connect`)
 - [docs/worktrees.md](docs/worktrees.md) — how sessions map to git worktrees,
@@ -120,7 +120,7 @@ defaults to a local, single-repository Open Session install.
 
 ## Clients
 
-One server, six front ends — only the web UI is required, and everything else
+One server, five front ends — only the web UI is required, and everything else
 talks to the same instance. See **[CLIENTS.md](CLIENTS.md)** for the full
 tour and which to pick.
 
@@ -131,7 +131,6 @@ tour and which to pick.
 | macOS desktop shell (Electron) | [`os1-mac/`](os1-mac/) |
 | Native Swift app (iOS + macOS) | [`os1-ios/`](os1-ios/) |
 | Chrome extension (page context → session) | [`os1-chrome/`](os1-chrome/) |
-| Terminal client (`os`) — WIP | [`os1-tui/`](os1-tui/) |
 
 ## Make it your own
 

@@ -6,8 +6,8 @@
  * and same-letter families are the norm (`tella-fusion`/`tella-mac`/
  * `tella-windows`, `gitops`/`gstreamer`/`gst-plugins-rs`). A plain hash can't
  * promise anything there: over this palette it puts `tella-fusion` and
- * `tella-windows` on neighbouring hues and `opensession` and `os1-chrome` on
- * the identical swatch.
+ * `tella-windows` on neighbouring hues and can put unrelated same-letter ids
+ * on the identical swatch.
  *
  * So the color is assigned across the whole registered set instead of derived
  * per id: hash for a starting point, then take the next free entry. Every

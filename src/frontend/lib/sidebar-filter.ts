@@ -205,11 +205,6 @@ export function onFilterChanged(handler: () => void): () => void {
 // Guarded because this module is reached from plain `bun test` runs (the pull
 // request list's row-merging test imports the component), where there is no
 // window to listen on and a module-scope call throws before the first test runs.
-// The method is checked too, not just the object: `bun test` runs every file in
-// one process, and os1-tui's renderer leaves a stub `window` behind that
-// carries requestAnimationFrame and nothing else. Which file installs it first
-// moves whenever a test file is added, so a plain `typeof window` check passes
-// or throws depending on run order.
 if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
 	window.addEventListener("storage", (event) => {
 		if (event.key !== FILTER_KEY) return;

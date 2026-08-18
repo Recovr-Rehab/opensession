@@ -1,18 +1,6 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { NewSessionPromptHandle } from "./NewSessionPrompt";
-
-// `bun test` runs every file in one process, and os1-tui's renderer leaves a
-// stub `window` behind that carries addEventListener and nothing else.
-// lib/drafts arms its cross-device poll behind that first method and then
-// calls window.setInterval, so reaching it through the stub throws where
-// neither module is at fault. Fill the gap in before the import that gets
-// there — the same file-local repair live-turn-store.test.ts makes for
-// requestAnimationFrame — rather than taking the stub away from its owner.
-const stub = globalThis.window as { setInterval?: unknown } | undefined;
-if (stub && typeof stub.setInterval !== "function")
-	stub.setInterval = setInterval;
-const { NewSessionPrompt } = await import("./NewSessionPrompt");
+import { NewSessionPrompt, type NewSessionPromptHandle } from "./NewSessionPrompt";
 
 function field(overrides: Partial<Parameters<typeof NewSessionPrompt>[0]> = {}) {
 	const props: Parameters<typeof NewSessionPrompt>[0] = {

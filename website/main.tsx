@@ -255,8 +255,8 @@ function LandingPage() {
 							branch, beside the session that built it.
 						</Feature>
 						<Feature icon={<IconStack size={28} />} name="Everywhere you are">
-							A web app, a Mac app, a native iOS app, a browser side panel and a
-							terminal client, all on one server.
+							A web app, a Mac app, a native iOS app and a browser side panel, all
+							on one server.
 						</Feature>
 						<Feature icon={<IconRepo size={28} />} name="Open source">
 							Read it, fork it, run it. There is no hosted tier in the path that

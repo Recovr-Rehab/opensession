@@ -51,10 +51,6 @@ are ambiguous between them:
   screenshot, element pick with React fiber info — and starts sessions via the
   REST surface with Bearer auth; loaded unpacked, never the Web Store; see
   `os1-chrome/README.md`).
-- **Terminal client** — `os1-tui/` (the `os` binary; TUI on OpenTUI, tmux
-  keys, tabs). Pure client: HTTP + one WebSocket per watched session, no
-  server imports, so it compiles to a standalone binary. `opensession tui` is
-  an alias. Read `os1-tui/AGENTS.md` before touching it.
 
 Conversation scoping rule: once a conversation is about a specific app, every
 following message is about THAT app unless the user says otherwise — don't
@@ -73,7 +69,7 @@ resolution) rather than sharing code. Concretely:
 - A **server/protocol change** (new WS message or field, new REST route or
   query param, changed entry shape, a new notice kind) — the Swift `Codable`
   models and socket handling are a hand-written copy of the wire shapes, so
-  they do not follow automatically. Same for `os1-tui/` and `os1-chrome/`.
+  they do not follow automatically. Same for `os1-chrome/`.
 - A **new per-user pref, setting, or account-level toggle** — decide whether
   the native app should read and write it too, or deliberately ignore it.
 - A **transcript or session-viewer change** — the native app renders its own
