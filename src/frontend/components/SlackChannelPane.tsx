@@ -413,7 +413,7 @@ export function SlackChannelPane({
 						placeholder={
 							asUser
 								? "Message the channel as yourself…"
-								: "Connect Slack in Settings → My accounts to post as yourself"
+								: "Connect Slack in Settings → Account to post as yourself"
 						}
 						value={draft}
 						disabled={!asUser || sending}

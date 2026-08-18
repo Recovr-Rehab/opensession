@@ -6,7 +6,7 @@
  * Identity: reads use the signed-in caller's Slack grant when they have one
  * (their visibility, incl. private channels), bot token otherwise. POSTING
  * requires the caller's own grant — messages appear AS THEM (that's the
- * point); without a grant the route 403s with a pointer to My accounts.
+ * point); without a grant the route 403s with a pointer to the Account page.
  */
 import type { RouteContext } from "./context";
 import { configuredIntegration } from "../config";
@@ -250,7 +250,7 @@ export async function handleSlackChannelRoutes(
 			return Response.json(
 				{
 					error:
-						"Connect your Slack account in Settings → My accounts to post as yourself",
+						"Connect your Slack account in Settings → Account to post as yourself",
 				},
 				{ status: 403 },
 			);

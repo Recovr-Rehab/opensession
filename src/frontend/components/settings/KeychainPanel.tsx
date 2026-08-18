@@ -23,7 +23,7 @@ import { SettingRow } from "./shared";
 // (src/server/keychain.ts). Registration lives here rather than in a tool
 // because a secret pasted into a session prompt is a secret in the transcript.
 //
-// It renders as a section of Settings → My accounts rather than a page of its
+// It renders as a section of Settings → Account rather than a page of its
 // own: a credential you lend to a session is the same kind of thing as an
 // account a session acts as, and it was one thin page in a nav that is already
 // 22 entries deep. Old /settings/keychain links redirect there (App.tsx's

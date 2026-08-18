@@ -404,7 +404,7 @@ export async function handlePlainRoutes(
 					firstName && text && !alreadySigned
 						? `${text.trimEnd()}\n\n${firstName}`
 						: text;
-				// Their own Plain grant (My accounts → Connect) sends the reply
+				// Their own Plain grant (Account → Connect) sends the reply
 				// AS THEM; without one (or if Plain rejects the token) the
 				// workspace machine user sends it, name carried in the sign-off.
 				const { mcpUserGrantToken } = await import("../mcp-oauth");

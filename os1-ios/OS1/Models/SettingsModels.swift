@@ -242,7 +242,7 @@ struct SettingsAgentHealth: Codable, Sendable {
 }
 
 /// Who an MCP server is authenticated as. `users` are the people who granted
-/// their own account (Settings → My accounts); `shared` is the workspace-wide
+/// their own account (Settings → Account); `shared` is the workspace-wide
 /// grant everyone else falls back to; `capable` says the server can do OAuth at
 /// all, even when it runs on a workspace API key today.
 struct MCPOauthStatus: Codable, Sendable {

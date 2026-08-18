@@ -81,7 +81,7 @@ export async function handleConnectionsRoutes(
 		}
 	}
 
-	// The My accounts list, in one request that never touches the network:
+	// The Account list, in one request that never touches the network:
 	// which tools offer a personal sign-in, and who is signed in on each. Both
 	// answers are local (mcp-config.json + the grant store), so the panel draws
 	// its rows immediately instead of waiting on GET /api/connections to probe

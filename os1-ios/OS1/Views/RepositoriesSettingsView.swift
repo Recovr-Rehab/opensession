@@ -141,7 +141,7 @@ private struct AddRepositoryView: View {
                         Text("No GitHub credential on this instance, so there is no list to pick from.")
                             .foregroundStyle(.secondary)
                     } footer: {
-                        Text("Connect your GitHub account under Settings → My accounts, then come back.")
+                        Text("Connect your GitHub account under Settings → Account, then come back.")
                     }
                 } else {
                     Section {

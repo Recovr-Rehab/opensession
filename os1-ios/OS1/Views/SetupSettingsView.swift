@@ -14,7 +14,7 @@ import SwiftUI
 /// without typing a secret. Two kinds qualify, and both hand off to the
 /// screen that already owns them rather than growing a second copy here:
 /// picking from a list the server already holds (Repositories, which is also
-/// where a repo is added), and anything completed by signing in (My accounts,
+/// where a repo is added), and anything completed by signing in (the account screen,
 /// where the GitHub device flow and the MCP OAuth grants live).
 ///
 /// Everything else stays read-only, and the rows say where to finish it. A
@@ -141,7 +141,7 @@ struct SetupSettingsView: View {
                 MyAccountsSettingsView()
             } label: {
                 Label {
-                    Text("My accounts").foregroundStyle(OS1VisualStyle.text)
+                    Text("Account").foregroundStyle(OS1VisualStyle.text)
                 } icon: {
                     Image(systemName: "person.crop.circle")
                         .symbolRenderingMode(.monochrome)

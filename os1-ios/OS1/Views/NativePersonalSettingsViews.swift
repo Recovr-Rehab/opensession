@@ -1154,7 +1154,7 @@ struct ShortcutsSettingsView: View {
     }
 }
 
-/// Settings → Personal → My accounts: every per-user sign-in in one place.
+/// Settings → Personal → Account: every per-user sign-in in one place.
 ///
 /// The web has had this page since per-user grants landed; the native app
 /// shipped without it, so a phone could see which tools the workspace was
@@ -1215,7 +1215,7 @@ struct MyAccountsSettingsView: View {
             }
         }
         .insetGroupedListCompat()
-        .navigationTitle("My accounts")
+        .navigationTitle("Account")
         .task { await load() }
         .refreshable { await load() }
         .onDisappear { pollTask?.cancel(); githubTask?.cancel() }

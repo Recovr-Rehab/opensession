@@ -82,7 +82,7 @@ export async function handleSlackComposeRoutes(ctx: RouteContext): Promise<Respo
 	const slackToken = mcpUserGrantToken("slack", caller);
 	if (!slackToken) {
 		return Response.json(
-			{ error: "Connect your Slack account in Settings → My accounts to post as yourself" },
+			{ error: "Connect your Slack account in Settings → Account to post as yourself" },
 			{ status: 403 },
 		);
 	}

@@ -367,7 +367,7 @@ struct ConnectionsSettingsView: View {
     /// your GitHub login; the name compare is the fallback for an account whose
     /// login the server doesn't know yet, matched loosely in both directions
     /// because one person arrives as "Michiel", "Michiel Westerbeek" and
-    /// "happylinks". My accounts had to learn the same thing, having read every
+    /// "happylinks". The account screen had to learn the same thing, having read every
     /// one of this account's own grants as somebody else's.
     private var myTeamRow: GitHubTeamConnection? {
         if let mine = teamRoster.first(where: { $0.canManage == true }) { return mine }
@@ -917,7 +917,7 @@ private struct PlainRouterEditor: View {
     var body: some View { NavigationStack { Form { TextField("Basic model", text: $model); TextEditor(text: $prompt).frame(minHeight: 180); Button("Reset to server defaults") { prompt = config?.defaultPrompt ?? ""; model = config?.defaultBasicModel ?? "" } } .navigationTitle("Plain Router").onAppear { prompt = config?.prompt ?? ""; model = config?.basicModel ?? "" }.toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }; ToolbarItem(placement: .confirmationAction) { Button("Save") { Task { await onSave(prompt, model) } } } } } }
 }
 
-/// Internal rather than file-private: My accounts (Settings → Personal) runs
+/// Internal rather than file-private: the account screen (Settings → Personal) runs
 /// the same device flow, and two copies of a code-entry screen would drift.
 struct GitHubConnectionFlowView: View {
     let flow: GitHubDeviceFlow

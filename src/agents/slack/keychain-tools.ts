@@ -44,7 +44,7 @@ export function createKeychainMcpServer(ctx: KeychainToolContext) {
         const creds = listCredentials();
         if (!creds.length) {
           return text(
-            "The keychain is empty. Credentials are registered by their owner in the Open Session UI (Settings → My accounts) — never paste a secret into a session."
+            "The keychain is empty. Credentials are registered by their owner in the Open Session UI (Settings → Account) — never paste a secret into a session."
           );
         }
         const lines = creds.map((c) => {

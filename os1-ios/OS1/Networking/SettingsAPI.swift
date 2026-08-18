@@ -365,7 +365,7 @@ enum SettingsAPI {
         try await request("/api/connections/mcp/\(segment(name))", method: "DELETE")
     }
 
-    // MARK: - Per-user MCP OAuth (Settings → My accounts)
+    // MARK: - Per-user MCP OAuth (Settings → Account)
 
     static func mcpOauth(name: String) async throws -> MCPOauthStatus {
         try await request("/api/connections/mcp/\(segment(name))/oauth")

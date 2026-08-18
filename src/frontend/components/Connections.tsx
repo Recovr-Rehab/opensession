@@ -493,7 +493,7 @@ interface DeviceFlow {
  * device flow: show a code, the person enters it on github.com, we poll until
  * GitHub hands over their token (stored server-side, never shown here).
  */
-/** `personal`: only the signed-in user's own row (the My accounts page);
+/** `personal`: only the signed-in user's own row (the Account page);
  *  default shows the whole team roster (admin overview). */
 export function GithubAccounts({ personal = false }: { personal?: boolean } = {}) {
   const [data, setData] = useState<GithubAuthData | null>(null);

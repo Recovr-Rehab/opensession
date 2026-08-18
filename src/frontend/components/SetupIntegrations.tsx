@@ -213,7 +213,7 @@ function GithubAuthSetupDialog({
 									Paste the client id and the client secret above. Sign-in is a device code and needs no secret, but renewing a teammate&rsquo;s token does, and without it their access stops after a few hours.
 								</>,
 								<>
-									Enable GitHub sign-in, save, restart Open Session, then have each teammate connect under Personal → My accounts.
+									Enable GitHub sign-in, save, restart Open Session, then have each teammate connect under Personal → Account.
 								</>,
 							]}
 						/>

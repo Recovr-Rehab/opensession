@@ -72,7 +72,7 @@ export async function setPapercutsRepoEnabled(
 	});
 }
 
-// ── Tool accounts (Settings → My accounts: personal sign-in per MCP tool) ──
+// ── Tool accounts (Settings → Account: personal sign-in per MCP tool) ──
 
 export interface ToolAccountDto {
 	name: string;
@@ -132,7 +132,7 @@ export async function disconnectTool(
 	);
 }
 
-// ── Keychain (Settings → My accounts: per-person credentials + grants) ──
+// ── Keychain (Settings → Account: per-person credentials + grants) ──
 
 export interface KeychainCredentialDto {
 	id: string;

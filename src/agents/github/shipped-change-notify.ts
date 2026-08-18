@@ -235,7 +235,7 @@ export async function shareShippedVisualChange(opts: {
     throw new Error("Choose a configured Slack channel");
   }
   if (!opts.slackToken) {
-    throw new Error("Connect your Slack account in Settings → My accounts to post as yourself");
+    throw new Error("Connect your Slack account in Settings → Account to post as yourself");
   }
   const visual = selectShippedVisualChange(
     opts.session,

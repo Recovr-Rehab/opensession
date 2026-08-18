@@ -216,7 +216,7 @@ export function SetupPanel({ onDone }: { onDone?: () => void }) {
 								<SettingsHint>
 									Which models are available, and which one sessions start on,
 									live under Workspace → Models. Accounts you sign into
-									yourself are under Personal → My accounts.
+									yourself are under Personal → Account.
 								</SettingsHint>
 							</>
 						)}
@@ -239,8 +239,7 @@ export function SetupPanel({ onDone }: { onDone?: () => void }) {
 									onSaved={setup.applyGithub}
 								/>
 								<SettingsHint>
-									After setup, teammates connect their own accounts under Personal →
-									My accounts.
+									After setup, teammates connect their own accounts under Personal → Account.
 								</SettingsHint>
 							</>
 						)}
