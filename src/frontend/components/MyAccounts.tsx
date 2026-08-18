@@ -141,6 +141,7 @@ export function MyAccountsPanel() {
 			{error && (
 				<InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
 			)}
+			<GithubAccounts personal />
 			<SettingsGroupLabel>Tools</SettingsGroupLabel>
 			{servers === null ? (
 				<LoadingState>Checking connections…</LoadingState>
@@ -227,7 +228,6 @@ export function MyAccountsPanel() {
 					use the workspace account.
 				</SettingsHint>
 			)}
-			<GithubAccounts personal />
 			<KeychainSection />
 		</SettingsPanel>
 	);
