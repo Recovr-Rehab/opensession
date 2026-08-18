@@ -245,7 +245,7 @@ final class SessionViewModelTests: XCTestCase {
         let viewModel = makeViewModel()
         viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
         viewModel.handle(.streamStart(sessionId: "bks-1"))
-        viewModel.handle(.streamText(sessionId: "bks-1", text: "Partial repl"))
+        viewModel.handle(.streamText(sessionId: "bks-1", text: "Partial repl", blockId: nil))
         viewModel.stop()
         viewModel.updateSessionSnapshot(Session(id: "bks-1", isRunning: false))
 
@@ -271,7 +271,7 @@ final class SessionViewModelTests: XCTestCase {
         let viewModel = makeViewModel()
         viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: true))
         viewModel.handle(.streamStart(sessionId: "bks-1"))
-        viewModel.handle(.streamText(sessionId: "bks-1", text: "I can help"))
+        viewModel.handle(.streamText(sessionId: "bks-1", text: "I can help", blockId: nil))
 
         viewModel.handle(.transcriptInit(
             sessionId: "bks-1",
@@ -435,7 +435,7 @@ final class SessionViewModelTests: XCTestCase {
         let viewModel = makeViewModel()
         viewModel.handle(.transcriptInit(sessionId: "bks-other", entries: [entry("x", "user")], cursor: .empty))
         viewModel.handle(.streamStart(sessionId: "bks-other"))
-        viewModel.handle(.streamText(sessionId: "bks-other", text: "nope"))
+        viewModel.handle(.streamText(sessionId: "bks-other", text: "nope", blockId: nil))
         XCTAssertTrue(viewModel.isLoadingConversation)
         XCTAssertTrue(viewModel.entries.isEmpty)
         XCTAssertFalse(viewModel.isStreaming)
@@ -445,8 +445,8 @@ final class SessionViewModelTests: XCTestCase {
         let viewModel = makeViewModel()
         viewModel.handle(.streamStart(sessionId: "bks-1"))
         XCTAssertTrue(viewModel.isStreaming)
-        viewModel.handle(.streamText(sessionId: "bks-1", text: "Hello "))
-        viewModel.handle(.streamText(sessionId: "bks-1", text: "world"))
+        viewModel.handle(.streamText(sessionId: "bks-1", text: "Hello ", blockId: nil))
+        viewModel.handle(.streamText(sessionId: "bks-1", text: "world", blockId: nil))
         // Chunks coalesce off-screen until a flush point (stream_done here).
         viewModel.handle(.streamDone(sessionId: "bks-1"))
         XCTAssertEqual(viewModel.liveText, "Hello world")
@@ -455,7 +455,7 @@ final class SessionViewModelTests: XCTestCase {
     func testAppendStripsLandedTextFromLiveBubble() {
         let viewModel = makeViewModel()
         viewModel.handle(.streamStart(sessionId: "bks-1"))
-        viewModel.handle(.streamText(sessionId: "bks-1", text: "Hello world"))
+        viewModel.handle(.streamText(sessionId: "bks-1", text: "Hello world", blockId: nil))
         viewModel.handle(.streamDone(sessionId: "bks-1"))
         viewModel.handle(.transcriptAppend(sessionId: "bks-1", entries: [
             entry("e1", "assistant", text: "Hello world")
@@ -472,10 +472,42 @@ final class SessionViewModelTests: XCTestCase {
         viewModel.handle(.transcriptAppend(sessionId: "bks-1", entries: [
             entry("e1", "assistant", text: "block A")
         ]))
-        viewModel.handle(.streamText(sessionId: "bks-1", text: "block A"))
+        viewModel.handle(.streamText(sessionId: "bks-1", text: "block A", blockId: nil))
         viewModel.handle(.streamDone(sessionId: "bks-1"))
         XCTAssertEqual(viewModel.liveText, "", "already-landed block must not re-enter the live bubble")
         XCTAssertEqual(viewModel.entries.count, 1)
+    }
+
+    func testNamedBlockLeavesTheBubbleWhenItsEntryLandsMidStream() {
+        // The reply types out in pieces, so its entry can land while the block
+        // is half-written. The block's id is on both, which is what cancels it.
+        let viewModel = makeViewModel()
+        viewModel.handle(.streamStart(sessionId: "bks-1"))
+        viewModel.handle(.streamText(sessionId: "bks-1", text: "The main ", blockId: "prt_1"))
+        viewModel.handle(.streamText(sessionId: "bks-1", text: "constraint ", blockId: "prt_1"))
+        viewModel.handle(.transcriptAppend(sessionId: "bks-1", entries: [
+            entry("prt_1", "assistant", text: "The main constraint is decisive.")
+        ]))
+        XCTAssertEqual(viewModel.liveText, "")
+
+        // Frames still in flight for that block are the entry's own words.
+        viewModel.handle(.streamText(sessionId: "bks-1", text: "is decisive.", blockId: "prt_1"))
+        viewModel.handle(.streamDone(sessionId: "bks-1"))
+        XCTAssertEqual(viewModel.liveText, "")
+        XCTAssertEqual(viewModel.entries.map(\.id), ["prt_1"])
+    }
+
+    func testHalfStreamedBlockLeavesTheBubbleWithoutAnId() {
+        let viewModel = makeViewModel()
+        viewModel.handle(.streamStart(sessionId: "bks-1"))
+        viewModel.handle(.streamText(sessionId: "bks-1", text: "Hello ", blockId: nil))
+        viewModel.handle(.transcriptAppend(sessionId: "bks-1", entries: [
+            entry("e1", "assistant", text: "Hello world")
+        ]))
+        XCTAssertEqual(viewModel.liveText, "")
+        viewModel.handle(.streamText(sessionId: "bks-1", text: "world", blockId: nil))
+        viewModel.handle(.streamDone(sessionId: "bks-1"))
+        XCTAssertEqual(viewModel.liveText, "")
     }
 
     /// The foreground-resync fix: a re-watch's transcript_init carries blocks
@@ -483,7 +515,7 @@ final class SessionViewModelTests: XCTestCase {
     func testResyncInitStripsAlreadyLandedLiveText() {
         let viewModel = makeViewModel()
         viewModel.handle(.streamStart(sessionId: "bks-1"))
-        viewModel.handle(.streamText(sessionId: "bks-1", text: "Hello world"))
+        viewModel.handle(.streamText(sessionId: "bks-1", text: "Hello world", blockId: nil))
         viewModel.handle(.streamDone(sessionId: "bks-1"))
         // Foreground re-watch → full resync containing the same block.
         viewModel.handle(.transcriptInit(sessionId: "bks-1", entries: [
@@ -498,7 +530,7 @@ final class SessionViewModelTests: XCTestCase {
     func testResyncInitKeepsUnlandedTail() {
         let viewModel = makeViewModel()
         viewModel.handle(.streamStart(sessionId: "bks-1"))
-        viewModel.handle(.streamText(sessionId: "bks-1", text: "Hello world. And more"))
+        viewModel.handle(.streamText(sessionId: "bks-1", text: "Hello world. And more", blockId: nil))
         // Resync landed only the first block; the tail is still live-only.
         viewModel.handle(.transcriptInit(sessionId: "bks-1", entries: [
             entry("e1", "assistant", text: "Hello world.")
@@ -743,7 +775,7 @@ final class SessionViewModelTests: XCTestCase {
     func testToolCallGraduatesPrecedingLiveText() {
         let viewModel = makeViewModel()
         viewModel.handle(.streamStart(sessionId: "bks-1"))
-        viewModel.handle(.streamText(sessionId: "bks-1", text: "Let me check."))
+        viewModel.handle(.streamText(sessionId: "bks-1", text: "Let me check.", blockId: nil))
         viewModel.handle(.streamEntry(sessionId: "bks-1", entry: entry("live-1", "tool_use", toolUseId: "tu-1")))
         XCTAssertEqual(viewModel.liveText, "", "text must leave the live bubble")
         XCTAssertEqual(viewModel.displayItems.count, 2)
@@ -761,7 +793,7 @@ final class SessionViewModelTests: XCTestCase {
     func testDurableAppendReplacesGraduatedLiveText() {
         let viewModel = makeViewModel()
         viewModel.handle(.streamStart(sessionId: "bks-1"))
-        viewModel.handle(.streamText(sessionId: "bks-1", text: "Let me check."))
+        viewModel.handle(.streamText(sessionId: "bks-1", text: "Let me check.", blockId: nil))
         viewModel.handle(.streamEntry(sessionId: "bks-1", entry: entry("live-1", "tool_use", toolUseId: "tu-1")))
         viewModel.handle(.transcriptAppend(sessionId: "bks-1", entries: [
             entry("e1", "assistant", text: "Let me check."),
@@ -789,7 +821,7 @@ final class SessionViewModelTests: XCTestCase {
     func testRunStopPreservesLiveTextUntilAppendLands() {
         let viewModel = makeViewModel()
         viewModel.handle(.streamStart(sessionId: "bks-1"))
-        viewModel.handle(.streamText(sessionId: "bks-1", text: "tail text"))
+        viewModel.handle(.streamText(sessionId: "bks-1", text: "tail text", blockId: nil))
         viewModel.handle(.sessionStatus(sessionId: "bks-1", isRunning: false))
         XCTAssertFalse(viewModel.isRunning)
         XCTAssertFalse(viewModel.isStreaming)

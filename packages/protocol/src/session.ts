@@ -330,7 +330,15 @@ export type SessionLiveEvent =
       lastChangeSeq?: number;
     }
   | { type: "stream_start"; sessionId: string; by?: string }
-  | { type: "stream_text"; sessionId?: string; text: string }
+  | {
+      type: "stream_text";
+      sessionId?: string;
+      text: string;
+      /** The assistant block this text belongs to, when the engine names its
+       *  blocks. The durable entry that lands it carries the same id — see
+       *  `LiveTextBuffer`, which every live surface dedups with. */
+      blockId?: string;
+    }
   | { type: "stream_tool_use"; sessionId?: string; entry: TranscriptEntry }
   | { type: "stream_tool_result"; sessionId?: string; entry: TranscriptEntry }
   | { type: "stream_done"; sessionId?: string }

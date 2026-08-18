@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { TextPartStream, streamPartialTextEnabled } from "./stream-text";
+import {
+  BlockFlusher,
+  TextPartStream,
+  safeFlushLength,
+  streamPartialTextEnabled,
+} from "./stream-text";
 
 const originalKillSwitch = process.env.OPENSESSION_OC_STREAM_TEXT;
 
@@ -93,6 +98,107 @@ describe("TextPartStream", () => {
     expect(stream.size).toBe(0);
     // A recycled id starts clean.
     expect(stream.tail("p1", "first")).toBe("first");
+  });
+});
+
+describe("safeFlushLength", () => {
+  const flushed = (text: string) => text.slice(0, safeFlushLength(text));
+
+  test("cuts at the end of a sentence, not mid-word", () => {
+    expect(flushed("The main constraint is decisive. It canno")).toBe(
+      "The main constraint is decisive. "
+    );
+  });
+
+  test("holds a sentence whose code span has not closed", () => {
+    expect(flushed("The main constraint is decisive: `celld actors coordinate. So")).toBe("");
+    expect(
+      flushed("The main constraint is decisive: `celld` actors coordinate. So")
+    ).toBe("The main constraint is decisive: `celld` actors coordinate. ");
+  });
+
+  test("holds a half-written link until its destination closes", () => {
+    expect(flushed("See [the writeup. Next")).toBe("");
+    expect(flushed("See [the writeup](https://x.test). Next")).toBe(
+      "See [the writeup](https://x.test). "
+    );
+  });
+
+  test("holds a half-written bold run", () => {
+    expect(flushed("This is **important. And")).toBe("");
+    expect(flushed("This is **important**. And")).toBe("This is **important**. ");
+  });
+
+  test("does not cut after an abbreviation", () => {
+    expect(flushed("Rendering is throttled, e.g. per frame, which")).toBe("");
+  });
+
+  test("cuts at a completed line, and at a blank line between blocks", () => {
+    expect(flushed("- one\n- two\n- thr")).toBe("- one\n- two\n");
+    expect(flushed("A paragraph\n\n## A hea")).toBe("A paragraph\n\n");
+  });
+
+  test("holds a fence opener, then releases whole code lines", () => {
+    expect(flushed("```ts\n")).toBe("");
+    expect(flushed("```ts\nconst a = 1;\n")).toBe("```ts\nconst a = 1;\n");
+    // A backtick inside the fence is code, not an open span.
+    expect(flushed("```ts\nconst a = `x`;\nconst b = 2;\n")).toBe(
+      "```ts\nconst a = `x`;\nconst b = 2;\n"
+    );
+    expect(flushed("```ts\nconst a = 1;\n```\nAfter")).toBe("```ts\nconst a = 1;\n```\n");
+  });
+
+  test("a sentence inside a fence is not a boundary", () => {
+    expect(flushed("```\nsome. text without a newline")).toBe("");
+  });
+
+  test("underscores are not emphasis", () => {
+    expect(flushed("Call safe_flush_length here. Then")).toBe(
+      "Call safe_flush_length here. "
+    );
+  });
+
+  test("an escaped backtick does not open a span", () => {
+    expect(flushed("A \\` literal backtick. Then")).toBe("A \\` literal backtick. ");
+  });
+});
+
+describe("BlockFlusher", () => {
+  test("emits whole sentences and holds the rest", () => {
+    const flusher = new BlockFlusher();
+    expect(flusher.push("p1", "One correction")).toBe("");
+    expect(flusher.push("p1", " to what I said. And then")).toBe(
+      "One correction to what I said. "
+    );
+    expect(flusher.push("p1", " some more.")).toBe("");
+    expect(flusher.push("p1", " Done. ")).toBe("And then some more. Done. ");
+  });
+
+  test("what it holds plus the part's tail is the whole block", () => {
+    const flusher = new BlockFlusher();
+    const stream = new TextPartStream();
+    const deltas = ["A first line.", " Then a `span", "` that closes.", " Tail with no end"];
+    let sent = "";
+    for (const delta of deltas) {
+      const piece = stream.advance("p1", flusher.push("p1", delta));
+      sent += piece;
+    }
+    const whole = deltas.join("");
+    expect(whole.startsWith(sent)).toBe(true);
+    expect(sent).not.toBe(whole);
+    // Completion says exactly the remainder, so the two concatenate to the block.
+    flusher.clear("p1");
+    expect(sent + stream.tail("p1", whole)).toBe(whole);
+  });
+
+  test("tracks parts independently and releases them on clear", () => {
+    const flusher = new BlockFlusher();
+    flusher.push("p1", "held");
+    flusher.push("p2", "also held");
+    expect(flusher.size).toBe(2);
+    flusher.clear("p1");
+    flusher.clear("p2");
+    expect(flusher.size).toBe(0);
   });
 });
 

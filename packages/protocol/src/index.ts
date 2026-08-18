@@ -2,6 +2,9 @@
  * Open Session protocol — the contracts a cloud agent session is made of:
  *
  * - `./events`  — engine-neutral run event stream (`StreamEvent`, `TurnUsage`)
+ * - `./live-text` — the live bubble's text (`LiveTextBuffer`): how a surface
+ *                 showing a running turn cancels a block once it lands
+ *                 durably, so a reply never renders twice
  * - `./runner`  — the run-host wire contract (`RunHostSpec`, host/client
  *                 messages, NDJSON framing): what "bring your own runner" means
  * - `./session` — the client↔server session contract (`TranscriptEntry`,
@@ -16,6 +19,7 @@
  * implementations; anything speaking these types can run or watch a session.
  */
 export * from "./events";
+export * from "./live-text";
 export * from "./runner";
 export * from "./session";
 export * from "./notices";

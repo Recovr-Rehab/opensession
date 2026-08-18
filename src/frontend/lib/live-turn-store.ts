@@ -1,3 +1,4 @@
+import { LiveTextBuffer } from "@tellahq/opensession-protocol/live-text";
 import {
 	countSessionPerf,
 	recordSessionPerf,
@@ -7,7 +8,6 @@ import {
 export interface LiveTurnSnapshot {
 	text: string;
 	live: boolean;
-	rapid: boolean;
 	by: string | null;
 	runId: string | null;
 	revision: number;
@@ -16,7 +16,6 @@ export interface LiveTurnSnapshot {
 const EMPTY: LiveTurnSnapshot = {
 	text: "",
 	live: false,
-	rapid: false,
 	by: null,
 	runId: null,
 	revision: 0,
@@ -38,13 +37,20 @@ const cancelFrame = (id: number) => {
 // schedule, silencing the store for good.
 const SCHEDULING = -1;
 
+/**
+ * The bubble a running turn writes into.
+ *
+ * What to show is `LiveTextBuffer`'s job (it owns cancelling a block once the
+ * durable entry lands, and it is the same class the server's feed and the
+ * native app use). What this adds is when to paint: frames are coalesced to
+ * one repaint per animation frame, and the buffer keeps growing between them.
+ */
 export class LiveTurnStore {
 	private snapshot: LiveTurnSnapshot = EMPTY;
 	private listeners = new Set<() => void>();
-	private pending = "";
-	private landed: string[] = [];
+	private buffer = new LiveTextBuffer();
+	private dirty = false;
 	private frame: number | null = null;
-	private settleTimer: ReturnType<typeof setTimeout> | null = null;
 	private clearTimer: ReturnType<typeof setTimeout> | null = null;
 	private firstDeltaAt: number | null = null;
 
@@ -61,18 +67,17 @@ export class LiveTurnStore {
 
 	getSnapshot = () => this.snapshot;
 	getServerSnapshot = () => EMPTY;
-	hasText = () => Boolean(this.snapshot.text || this.pending);
-	textLength = () => this.snapshot.text.length + this.pending.length;
+	hasText = () => Boolean(this.buffer.text);
+	textLength = () => this.buffer.text.length;
 
 	start(by?: string | null, runId?: string) {
 		this.cancelTimers();
-		this.pending = "";
-		this.landed = [];
+		this.buffer.reset();
+		this.dirty = false;
 		this.firstDeltaAt = null;
 		this.snapshot = {
 			text: "",
 			live: true,
-			rapid: false,
 			by: by ?? null,
 			runId: runId ?? crypto.randomUUID(),
 			revision: this.snapshot.revision + 1,
@@ -80,67 +85,26 @@ export class LiveTurnStore {
 		this.emit();
 	}
 
-	append(text: string) {
-		// A block that already landed durably is swallowed rather than shown
-		// twice. It can arrive in one piece (a whole-part mirror) or in several
-		// (streaming keeps delivering the tail after the entry landed), so match
-		// the front of what is still outstanding and keep the rest.
-		for (let i = 0; i < this.landed.length; i++) {
-			const outstanding = this.landed[i];
-			if (!outstanding.startsWith(text)) continue;
-			const rest = outstanding.slice(text.length);
-			if (rest) this.landed[i] = rest;
-			else this.landed.splice(i, 1);
-			return;
-		}
-		if (!text) return;
+	append(text: string, blockId?: string) {
+		if (!this.buffer.append(text, blockId)) return;
 		countSessionPerf("stream_frames_received");
 		if (this.firstDeltaAt === null) this.firstDeltaAt = performance.now();
-		this.pending += text;
+		this.dirty = true;
 		if (this.frame === null) {
 			this.frame = SCHEDULING;
 			const id = scheduleFrame(() => this.flush());
 			// A synchronous callback already flushed and cleared the slot.
 			if (this.frame === SCHEDULING) this.frame = id;
 		}
-		if (this.settleTimer !== null) clearTimeout(this.settleTimer);
-		this.settleTimer = setTimeout(() => {
-			this.settleTimer = null;
-			if (!this.snapshot.rapid) return;
-			this.snapshot = {
-				...this.snapshot,
-				rapid: false,
-				revision: this.snapshot.revision + 1,
-			};
-			this.emit();
-		}, 130);
 	}
 
-	land(contents: string[]) {
-		for (const content of contents) {
-			const before = this.snapshot.text + this.pending;
-			const after = before.replace(content, "");
-			if (after === before) {
-				// Not in the buffer as a whole. The durable entry can land while
-				// the tail is still streaming, so the buffer may hold only the
-				// start of this block: clear what is already on screen and keep
-				// just the outstanding remainder, which `append` swallows as it
-				// arrives. Anything more tangled falls through to the whole-block
-				// path, which is what shipped before streaming existed.
-				if (before && content.startsWith(before)) {
-					this.landed.push(content.slice(before.length));
-					this.snapshot = { ...this.snapshot, text: "" };
-					this.pending = "";
-					continue;
-				}
-				this.landed.push(content);
-			}
-			this.snapshot = { ...this.snapshot, text: after };
-			this.pending = "";
-		}
-		this.landed = this.landed.slice(-30);
+	/** Blocks that just landed as durable transcript entries. */
+	land(entries: Array<{ id?: string; content: string }>) {
+		for (const entry of entries) this.buffer.land(entry.content, entry.id);
+		this.dirty = false;
 		this.snapshot = {
 			...this.snapshot,
+			text: this.buffer.text,
 			revision: this.snapshot.revision + 1,
 		};
 		this.emit();
@@ -151,7 +115,6 @@ export class LiveTurnStore {
 		this.snapshot = {
 			...this.snapshot,
 			live: false,
-			rapid: false,
 			by: null,
 			revision: this.snapshot.revision + 1,
 		};
@@ -165,8 +128,8 @@ export class LiveTurnStore {
 
 	clear() {
 		this.cancelTimers();
-		this.pending = "";
-		this.landed = [];
+		this.buffer.reset();
+		this.dirty = false;
 		this.snapshot = {
 			...EMPTY,
 			revision: this.snapshot.revision + 1,
@@ -179,16 +142,15 @@ export class LiveTurnStore {
 			cancelFrame(this.frame);
 		}
 		this.frame = null;
-		if (!this.pending) return;
+		if (!this.dirty) return;
+		this.dirty = false;
 		const receivedAt = this.firstDeltaAt;
 		this.firstDeltaAt = null;
 		this.snapshot = {
 			...this.snapshot,
-			text: this.snapshot.text + this.pending,
-			rapid: true,
+			text: this.buffer.text,
 			revision: this.snapshot.revision + 1,
 		};
-		this.pending = "";
 		countSessionPerf("stream_paints");
 		if (receivedAt !== null) {
 			recordSessionPerf("first_delta_to_paint_ms", performance.now() - receivedAt);
@@ -204,10 +166,8 @@ export class LiveTurnStore {
 		if (this.frame !== null && this.frame !== SCHEDULING) {
 			cancelFrame(this.frame);
 		}
-		if (this.settleTimer !== null) clearTimeout(this.settleTimer);
 		if (this.clearTimer !== null) clearTimeout(this.clearTimer);
 		this.frame = null;
-		this.settleTimer = null;
 		this.clearTimer = null;
 	}
 }

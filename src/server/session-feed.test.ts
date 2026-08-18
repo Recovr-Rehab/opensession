@@ -91,6 +91,73 @@ describe("session feed", () => {
 		expect(sessionFeedSnapshot(sessionId).active?.text).toBe("");
 	});
 
+	test("a block that landed mid-stream leaves the snapshot a joiner gets", () => {
+		// The bug this pins: the reply types out in deltas, so when the durable
+		// entry lands only part of the block has streamed. Subtracting whole
+		// blocks missed that, and the next viewer to open the session was
+		// handed the paragraph a second time under the one in its transcript.
+		const sessionId = `feed-${crypto.randomUUID()}`;
+		appendSessionFeed(sessionId, { type: "stream_start", sessionId });
+		for (const [text, blockId] of [
+			["The main constraint ", "prt_1"],
+			["is decisive. ", "prt_1"],
+		] as const) {
+			appendSessionFeed(sessionId, { type: "stream_text", sessionId, text, blockId });
+		}
+		appendSessionFeed(sessionId, {
+			type: "transcript_append",
+			sessionId,
+			entries: [
+				{
+					id: "prt_1",
+					type: "assistant",
+					content: "The main constraint is decisive. It cannot host agents.",
+					timestamp: new Date().toISOString(),
+				},
+			],
+		});
+		expect(sessionFeedSnapshot(sessionId).active?.text).toBe("");
+
+		// The frames still in flight for that block are the entry's own words.
+		appendSessionFeed(sessionId, {
+			type: "stream_text",
+			sessionId,
+			text: "It cannot host agents.",
+			blockId: "prt_1",
+		});
+		expect(sessionFeedSnapshot(sessionId).active?.text).toBe("");
+
+		// The next block still streams into the bubble as usual.
+		appendSessionFeed(sessionId, {
+			type: "stream_text",
+			sessionId,
+			text: "So the viable shape is",
+			blockId: "prt_2",
+		});
+		expect(sessionFeedSnapshot(sessionId).active?.text).toBe("So the viable shape is");
+	});
+
+	test("an engine that names no blocks keeps the string fallback", () => {
+		const sessionId = `feed-${crypto.randomUUID()}`;
+		appendSessionFeed(sessionId, { type: "stream_start", sessionId });
+		appendSessionFeed(sessionId, { type: "stream_text", sessionId, text: "half a " });
+		appendSessionFeed(sessionId, {
+			type: "transcript_append",
+			sessionId,
+			entries: [
+				{
+					id: "a",
+					type: "assistant",
+					content: "half a block",
+					timestamp: new Date().toISOString(),
+				},
+			],
+		});
+		expect(sessionFeedSnapshot(sessionId).active?.text).toBe("");
+		appendSessionFeed(sessionId, { type: "stream_text", sessionId, text: "block" });
+		expect(sessionFeedSnapshot(sessionId).active?.text).toBe("");
+	});
+
 	test("does not replay a completed ephemeral stream", () => {
 		const sessionId = `feed-${crypto.randomUUID()}`;
 		const start = appendSessionFeed(sessionId, {

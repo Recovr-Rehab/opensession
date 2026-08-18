@@ -2413,7 +2413,9 @@ export function SessionViewer({
 						(e) => e.type === "assistant" && e.content,
 					);
 					if (landed.length) {
-						liveTurnStore.land(landed.map((e) => e.content));
+						liveTurnStore.land(
+							landed.map((e) => ({ id: e.id, content: e.content })),
+						);
 					}
 					break;
 				}
@@ -2528,7 +2530,7 @@ export function SessionViewer({
 					break;
 				case "stream_text": {
 					if (isTimelineOnlyRunnerNotice(msg.text)) break;
-					liveTurnStore.append(msg.text);
+					liveTurnStore.append(msg.text, msg.blockId);
 					break;
 				}
 				case "stream_tool_use":
@@ -6848,33 +6850,26 @@ function StreamingMessage({
 		store.getSnapshot,
 		store.getServerSnapshot,
 	);
-	const markdownText = snapshot.rapid ? "" : snapshot.text;
 	const repo = useMarkdownRepo();
 	const assetPaths = useOpenAssetPaths();
 	const html = React.useMemo(
 		() =>
-			markdownText
-				? renderMarkdown(markdownText, { repo, sessionId, assetPaths })
+			snapshot.text
+				? renderMarkdown(snapshot.text, { repo, sessionId, assetPaths })
 				: "",
-		[markdownText, repo, sessionId, assetPaths],
+		[snapshot.text, repo, sessionId, assetPaths],
 	);
 	if (!snapshot.text) return null;
 
+	// Always rendered, never raw source: the server cuts frames at block
+	// boundaries (safeFlushLength), so what arrives here is markdown that
+	// stands on its own rather than a paragraph caught mid-construct.
 	return (
 		/* .msg-streaming + .msg-body-assistant stay as hooks: the streaming caret
 		   is a ::after on that pair, and base.css's reduced-motion exception
 		   keeps it blinking by naming the same selector. */
 		<div className={cn(msgRow, msgStreamingRow)}>
-			{snapshot.rapid ? (
-				<div className={cn(msgBodyStreaming, "whitespace-pre-wrap")}>
-					{snapshot.text}
-				</div>
-			) : (
-				<MarkdownBody
-					className={cn(msgBodyStreaming, "markdown")}
-					html={html}
-				/>
-			)}
+			<MarkdownBody className={cn(msgBodyStreaming, "markdown")} html={html} />
 		</div>
 	);
 }

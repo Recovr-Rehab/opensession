@@ -77,7 +77,7 @@ final class ServerEventTests: XCTestCase {
     }
 
     func testStreamText() {
-        guard case .streamText(let id, let text) =
+        guard case .streamText(let id, let text, _) =
             parse(#"{"type":"stream_text","sessionId":"bks-1","text":"chunk"}"#)
         else { return XCTFail("expected .streamText") }
         XCTAssertEqual(id, "bks-1")

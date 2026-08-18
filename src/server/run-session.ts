@@ -627,6 +627,7 @@ export function recordRecoveredRunEvent(osSessionId: string, event: StreamEvent)
 			type: "stream_text",
 			sessionId: osSessionId,
 			text: event.text,
+			...(event.blockId ? { blockId: event.blockId } : {}),
 		});
 	} else if (event.type === "tool_use") {
 		broadcastToSession(osSessionId, {
@@ -2233,6 +2234,10 @@ async function runSessionPromptInner(
 					type: "stream_text",
 					sessionId,
 					text: event.text,
+					// Which assistant block this belongs to, when the engine names
+					// them: a viewer cancels the live copy by id the moment the
+					// durable entry lands (see LiveTextBuffer).
+					...(event.blockId ? { blockId: event.blockId } : {}),
 				});
 				break;
 			case "model_switch": {

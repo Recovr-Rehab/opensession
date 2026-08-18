@@ -155,7 +155,7 @@ import {
   activeRunRecords,
   type ActiveRunRecord,
 } from "./run-journal";
-import { streamPartialTextEnabled, TextPartStream } from "./stream-text";
+import { BlockFlusher, streamPartialTextEnabled, TextPartStream } from "./stream-text";
 import { transitionRunState } from "./run-state";
 import {
   adoptedProcHandle,
@@ -3211,6 +3211,9 @@ function makePartMirror(ctx: {
   // Emits only what the stream has not carried yet for a part, so the deltas
   // plus the completion tail concatenate to exactly the finished text.
   const textStream = new TextPartStream();
+  // Holds each part's deltas to the next boundary where the markdown written
+  // so far renders as itself (see safeFlushLength).
+  const blockFlusher = new BlockFlusher();
   /**
    * partID -> messageID, for every text part this run has seen announced.
    * Populated by mirrorTextPart from the creation snapshot, which the engine
@@ -3219,7 +3222,7 @@ function makePartMirror(ctx: {
   const textPartMsg = new Map<string, string>();
   const pushTextTail = (part: any) => {
     const tail = textStream.tail(part.id, part.text);
-    if (tail) push({ type: "text_chunk", text: tail });
+    if (tail) push({ type: "text_chunk", text: tail, blockId: part.id });
   };
   /**
    * The engine's token stream. `message.part.delta` carries the new characters
@@ -3245,8 +3248,9 @@ function makePartMirror(ctx: {
     if (!messageID || !assistantMsgs.has(messageID)) return;
     // Compaction summaries are bookkeeping, not the reply.
     if (compactionMsgs.has(messageID)) return;
-    const piece = textStream.advance(id, props?.delta);
-    if (piece) push({ type: "text_chunk", text: piece });
+    const delta = typeof props?.delta === "string" ? props.delta : "";
+    const piece = textStream.advance(id, blockFlusher.push(id, delta));
+    if (piece) push({ type: "text_chunk", text: piece, blockId: id });
   };
   const mirrorTextPart = (part: any) => {
     if (part.type !== "text" || part.synthetic) return;
@@ -3267,7 +3271,9 @@ function makePartMirror(ctx: {
         appendOpencodeTranscript(ocSessionId, [
           transcriptLineAssistantText(part.text, part.id, undefined, model),
         ]);
-        // The whole part when nothing streamed, otherwise just the tail.
+        // The whole part when nothing streamed, otherwise just the tail —
+        // including whatever the flusher was still holding back.
+        blockFlusher.clear(part.id);
         pushTextTail(part);
         textStream.done(part.id);
         // Assistant text shaped like a tool transcript = the model
@@ -3408,7 +3414,7 @@ function collectFinalAssistantText(
         ]);
         if (!finalIsCompaction) {
           const tail = textStream ? textStream.tail(pt.id, pt.text) : pt.text;
-          if (tail) pending.push({ type: "text_chunk", text: tail });
+          if (tail) pending.push({ type: "text_chunk", text: tail, blockId: pt.id });
         }
       }
       return finalIsCompaction ? "" : pt.text;

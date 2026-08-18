@@ -99,6 +99,14 @@ export interface StreamEvent {
     | "runner_notice";
   sessionId?: string;
   text?: string;
+  /**
+   * On a text_chunk: which assistant block this text belongs to, when the
+   * engine names its blocks (opencode's part id). The durable transcript
+   * entry for that block carries the SAME id, which is what lets a viewer
+   * cancel the live copy exactly when the durable one lands, instead of
+   * subtracting strings (see LiveTextBuffer in the protocol package).
+   */
+  blockId?: string;
   /** On a model_switch: the exhausted model and the fallback it switched to. */
   fromModel?: string;
   toModel?: string;

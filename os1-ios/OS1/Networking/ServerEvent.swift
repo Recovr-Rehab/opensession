@@ -13,7 +13,10 @@ enum ServerEvent: Sendable {
     case sessionNote(sessionId: String, note: SessionNote)
     case sessionNoteDeleted(sessionId: String, noteId: String)
     case streamStart(sessionId: String)
-    case streamText(sessionId: String, text: String)
+    /// `blockId` names the assistant block this text belongs to when the
+    /// engine names its blocks; the durable entry that lands it carries the
+    /// same id, which is what makes cancelling the live copy exact.
+    case streamText(sessionId: String, text: String, blockId: String?)
     case streamEntry(sessionId: String, entry: TranscriptEntry)
     case streamDone(sessionId: String)
     case sessionStatus(sessionId: String, isRunning: Bool)
@@ -80,7 +83,7 @@ enum ServerEvent: Sendable {
             return .streamStart(sessionId: id)
         case "stream_text":
             guard let id = frame.sessionId, let text = frame.text else { return .ignored }
-            return .streamText(sessionId: id, text: text)
+            return .streamText(sessionId: id, text: text, blockId: frame.blockId)
         case "stream_tool_use", "stream_tool_result":
             guard let id = frame.sessionId, let entry = frame.entry else { return .ignored }
             return .streamEntry(sessionId: id, entry: entry)
@@ -346,6 +349,7 @@ private struct RawFrame: Decodable {
     let note: SessionNote?
     let noteId: String?
     let text: String?
+    let blockId: String?
     struct WireViewing: Decodable {
         let user: String?
         let sessionId: String?

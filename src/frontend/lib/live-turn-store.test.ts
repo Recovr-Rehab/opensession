@@ -10,7 +10,7 @@ describe("LiveTurnStore", () => {
 		for (let index = 0; index < 100; index++) store.append(String(index % 10));
 		await Bun.sleep(25);
 		expect(store.getSnapshot().text).toHaveLength(100);
-		// start + a single frame flush (the 130ms markdown-settle tick is later).
+		// start + a single frame flush.
 		expect(notifications).toBe(2);
 		unsubscribe();
 		store.clear();
@@ -19,14 +19,14 @@ describe("LiveTurnStore", () => {
 	test("deduplicates committed text in either arrival order", async () => {
 		const store = new LiveTurnStore();
 		store.start(undefined, "run-2");
-		store.land(["already committed"]);
+		store.land([{ content: "already committed" }]);
 		store.append("already committed");
 		await Bun.sleep(25);
 		expect(store.getSnapshot().text).toBe("");
 
 		store.append("streamed first");
 		await Bun.sleep(25);
-		store.land(["streamed first"]);
+		store.land([{ content: "streamed first" }]);
 		expect(store.getSnapshot().text).toBe("");
 		store.clear();
 	});
@@ -41,7 +41,7 @@ describe("LiveTurnStore", () => {
 		store.append("Hello ");
 		store.append("there, ");
 		await Bun.sleep(25);
-		store.land(["Hello there, world"]);
+		store.land([{ content: "Hello there, world" }]);
 		expect(store.getSnapshot().text).toBe("");
 
 		// The rest of the block still arrives; it must be swallowed, not shown.
@@ -52,12 +52,30 @@ describe("LiveTurnStore", () => {
 		store.clear();
 	});
 
+	test("cancels a block by id, whatever the durable text ended up being", async () => {
+		// The wire normalizes and clamps entry content, so the durable text is
+		// not always the streamed text character for character. The engine's
+		// block id is, and it is what the entry carries.
+		const store = new LiveTurnStore();
+		store.start(undefined, "run-5");
+		store.append("Here is the clip.\nOPENSESSION_VIDEO: /tmp/a.mp4\n", "prt_1");
+		await Bun.sleep(25);
+		store.land([{ id: "prt_1", content: "Here is the clip." }]);
+		expect(store.getSnapshot().text).toBe("");
+
+		// A late frame for that block is the entry's own words, not new text.
+		store.append("trailing", "prt_1");
+		await Bun.sleep(25);
+		expect(store.getSnapshot().text).toBe("");
+		store.clear();
+	});
+
 	test("keeps streaming text that follows a landed block", async () => {
 		const store = new LiveTurnStore();
 		store.start(undefined, "run-4");
 		store.append("first block");
 		await Bun.sleep(25);
-		store.land(["first block"]);
+		store.land([{ content: "first block" }]);
 		store.append("second block");
 		await Bun.sleep(25);
 		expect(store.getSnapshot().text).toBe("second block");

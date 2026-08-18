@@ -1,3 +1,4 @@
+import { LiveTextBuffer } from "@tellahq/opensession-protocol/live-text";
 import type { SessionLiveEvent } from "@tellahq/opensession-protocol/session";
 import { emitSessionStateChange } from "./session-state-events";
 
@@ -43,12 +44,22 @@ export interface SessionFeedSnapshot {
 	};
 }
 
+/** The running turn, minus its text — that lives in `FeedState.live`. */
+interface ActiveTurn {
+	runId: string;
+	turnId: string;
+	entryId: string;
+	by?: string;
+	startedAt: number;
+}
+
 interface FeedState {
 	epoch: string;
 	nextSeq: number;
 	frames: SessionFeedFrame[];
-	active: SessionFeedSnapshot["active"];
-	landed: string[];
+	active: ActiveTurn | null;
+	/** The active turn's live text, minus the blocks that already landed. */
+	live: LiveTextBuffer;
 	bytes: number;
 }
 
@@ -76,7 +87,7 @@ function stateFor(sessionId: string): FeedState {
 			nextSeq: 1,
 			frames: [],
 			active: null,
-			landed: [],
+			live: new LiveTextBuffer(),
 			bytes: 0,
 		};
 		feeds().set(sessionId, state);
@@ -112,25 +123,21 @@ export function appendSessionFeed(
 			turnId: `turn:${runId}`,
 			entryId: `stream:${runId}`,
 			...(event.by ? { by: event.by } : {}),
-			text: "",
 			startedAt: Date.now(),
 		};
-		state.landed = [];
+		state.live.reset();
 	} else if (event.type === "stream_text" && state.active) {
-		const text = event.text ?? "";
-		const landedAt = state.landed.indexOf(text);
-		if (landedAt === -1) state.active.text += text;
-		else state.landed.splice(landedAt, 1);
+		state.live.append(event.text ?? "", event.blockId);
 	} else if (event.type === "transcript_append" && state.active) {
+		// A block that landed durably is in the transcript this viewer will
+		// also receive, so it must leave the live text a fresh viewer is
+		// handed — otherwise the same paragraph shows twice, once above the
+		// turn's tool steps and once in the bubble under them.
 		for (const entry of event.entries ?? []) {
 			if (entry.type === "assistant" && typeof entry.content === "string") {
-				const content = entry.content;
-				const before = state.active.text;
-				state.active.text = before.replace(content, "");
-				if (before === state.active.text) state.landed.push(content);
+				state.live.land(entry.content, entry.id);
 			}
 		}
-		state.landed = state.landed.slice(-30);
 	}
 
 	const active = state.active;
@@ -160,7 +167,7 @@ export function appendSessionFeed(
 	}
 	if (type === "stream_done") {
 		state.active = null;
-		state.landed = [];
+		state.live.reset();
 	}
 	const running =
 		event.type === "stream_start"
@@ -187,7 +194,7 @@ export function sessionFeedSnapshot(sessionId: string): SessionFeedSnapshot {
 		sessionId,
 		feedEpoch: state.epoch,
 		feedSeq: state.nextSeq - 1,
-		active: state.active ? { ...state.active } : null,
+		active: state.active ? { ...state.active, text: state.live.text } : null,
 	};
 }
 

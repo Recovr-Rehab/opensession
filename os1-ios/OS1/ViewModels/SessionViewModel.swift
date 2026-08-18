@@ -221,12 +221,20 @@ final class SessionViewModel {
     /// How long a delivering chip may wait for its transcript echo before
     /// being dropped as a ghost. Internal so tests can reference it.
     let deliveringGrace: TimeInterval = 30
-    /// Assistant blocks that already landed as transcript entries. Opencode
-    /// streams whole completed blocks, and the durable entry can beat the
-    /// stream_text broadcast (or vice versa) — without this the same text
-    /// shows twice: in the transcript AND in the live bubble. Mirrors the
-    /// web viewer's landedStreamTextRef.
+    /// Assistant blocks that already landed as transcript entries. A block
+    /// reaches the viewer twice — as stream frames while it is written, and as
+    /// the durable entry when it finishes — and whichever arrives second must
+    /// be dropped, or the same paragraph shows twice: in the transcript AND in
+    /// the live bubble. Mirrors `LiveTextBuffer` on the server and the web.
     private var landedStreamTexts: [String] = []
+    /// What has streamed so far for each named block (`blockId` on
+    /// stream_text). The durable entry carries the same id, so its arrival
+    /// removes exactly the text that block contributed — no string matching,
+    /// even when the block was half-written or the wire normalized its text.
+    private var liveBlockText: [String: String] = [:]
+    /// Named blocks already landed durably: their late frames are a second
+    /// copy of what the transcript now carries.
+    private var landedBlockIds: Set<String> = []
     /// Assistant entries newly discovered by the last resync. Restricting
     /// partial-response reconciliation to these avoids matching an unrelated
     /// historical response that happens to start with the same words.
@@ -1347,7 +1355,20 @@ final class SessionViewModel {
             // still matches.
             flushLiveTextNow()
             for entry in appended where entry.isAssistant && !entry.text.isEmpty {
-                if !stripLanded(entry.text) {
+                if let streamed = liveBlockText.removeValue(forKey: entry.id) {
+                    // The block named itself on the way in: take out exactly
+                    // what it contributed, however much of it arrived.
+                    landedBlockIds.insert(entry.id)
+                    _ = stripLanded(streamed)
+                    continue
+                }
+                if stripLanded(entry.text) { continue }
+                if !liveText.isEmpty, entry.text.hasPrefix(liveText) {
+                    // The entry landed while the block's tail was still
+                    // streaming: clear what is on screen and swallow the rest.
+                    landedStreamTexts.append(String(entry.text.dropFirst(liveText.count)))
+                    liveText = ""
+                } else {
                     landedStreamTexts.append(entry.text)
                 }
             }
@@ -1371,16 +1392,28 @@ final class SessionViewModel {
             liveText = ""
             liveEntries = []
             landedStreamTexts = []
+            liveBlockText = [:]
+            landedBlockIds = []
             resyncAssistantCandidates = []
             replySuggestions = []
             isStreaming = true
             streamEnded = false
             rebuildDisplayItems()
 
-        case .streamText(let id, let text) where id == session.id:
+        case .streamText(let id, let text, let blockId) where id == session.id:
             isStreaming = true
-            if let landed = landedStreamTexts.firstIndex(of: text) {
-                landedStreamTexts.remove(at: landed)
+            if let blockId {
+                guard !landedBlockIds.contains(blockId) else { break }
+                liveBlockText[blockId, default: ""] += text
+                appendLiveText(text)
+                break
+            }
+            // No id to match on: the front of what is still outstanding is
+            // this frame's text when the entry beat the block's own tail.
+            if let landed = landedStreamTexts.firstIndex(where: { $0.hasPrefix(text) }) {
+                let rest = String(landedStreamTexts[landed].dropFirst(text.count))
+                if rest.isEmpty { landedStreamTexts.remove(at: landed) }
+                else { landedStreamTexts[landed] = rest }
             } else {
                 appendLiveText(text)
             }
