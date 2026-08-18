@@ -125,6 +125,31 @@ const pendingAsks = new Map<
   { input: Record<string, unknown>; resolve: (r: AskResult) => void }
 >();
 
+// ── Transcript relay (in-process engines: pi) ────────────────────────────────
+// Engine drivers that persist transcript entries in-process consult the
+// forwarder seam (src/server/transcript-forward.ts). Registered here, it
+// turns every append into a `transcript` frame so the SERVER stays the
+// store's only writer. WS mode: frames ride the sequenced ring buffer and
+// replay after a reconnect like any event frame. Socket mode is live-only,
+// so a bounded history (transcript-relay.ts) is re-sent after every
+// (re)attach; lines carry stable uuids and upsert server-side, so
+// re-delivery is exact.
+const { TranscriptRelay } = await import("./transcript-relay");
+const transcriptRelay = new TranscriptRelay();
+{
+  const { setTranscriptForwarder } = await import("../server/transcript-forward");
+  let warnedOverflow = false;
+  setTranscriptForwarder((engineSessionId, lines) => {
+    if (!RUN_WS_URL && !transcriptRelay.record(engineSessionId, lines) && !warnedOverflow) {
+      warnedOverflow = true;
+      log(
+        "transcript history exceeded its byte budget; reattach resend will be partial (live frames unaffected)",
+      );
+    }
+    send({ t: "transcript", engineSessionId, lines });
+  });
+}
+
 function send(msg: HostToClientMsg): void {
   // hello/ping are per-connection transport chatter — never sequenced,
   // never replayed; everything else goes through the WS buffer in WS mode.
@@ -157,6 +182,11 @@ function sendHello(): void {
     transientFallback: meta.transientFallback,
     done: ended ? terminal : undefined,
   });
+  // Socket mode is live-only: re-send the transcript history so a
+  // reattaching server upserts anything it missed while detached.
+  if (!RUN_WS_URL) {
+    for (const batch of transcriptRelay.replay()) send({ t: "transcript", ...batch });
+  }
 }
 
 function handleClientMsg(msg: ClientToHostMsg): void {
@@ -411,6 +441,8 @@ process.on("SIGTERM", () => {
 try {
   for await (const event of runAgent({
     prompt: spec.prompt,
+    promptEntryId: spec.promptEntryId,
+    seedTranscriptEntries: spec.seedTranscriptEntries,
     sessionId: spec.engineSessionId || undefined,
     cwd: spec.cwd,
     mode: spec.mode,

@@ -25,6 +25,7 @@
  */
 import type { StreamEvent, ImageInput } from "./events";
 import type { GitIdentity } from "./identity";
+import type { TranscriptEntry } from "./session";
 
 /**
  * What MCP surface a run gets. There is no implicit default: `"all"` is a
@@ -47,6 +48,14 @@ export interface RunHostSpec {
   /** Open Session session this run belongs to (busy/steer/cancel key, journal). */
   osSessionId: string;
   prompt: string;
+  /** Transcript uuid of the server's already-written user line for this
+   *  prompt. The in-host engine threads it into its own user-line write so
+   *  the row upserts instead of duplicating the bubble (the same contract as
+   *  RunAgentOpts.promptEntryId for in-process runs). */
+  promptEntryId?: string;
+  /** Server-owned transcript snapshot for engines that need a context fallback
+   *  inside a detached host. Hosts must not open the server's transcript DB. */
+  seedTranscriptEntries?: TranscriptEntry[];
   /** Engine session id to resume (claude session id / codex thread id). */
   engineSessionId?: string;
   cwd: string;
@@ -178,7 +187,20 @@ type HostToClientPayload =
    * transcript jsonl still has everything). Sent once at replay time; the
    * server logs it.
    */
-  | { t: "gap"; from: number; to: number };
+  | { t: "gap"; from: number; to: number }
+  /**
+   * Proxied transcript append for in-process engines (Pi today). The host's
+   * engine driver persists full-fidelity transcript lines, but the host may
+   * not own the live transcript store (a sandbox has its own filesystem; a
+   * local detached host must not be a second writer on the server's
+   * transcripts.db), so the lines are forwarded and the server applies them.
+   * `engineSessionId` keys the append (the server records the
+   * engine→unified-session mapping first); it may equal the run's
+   * osSessionId for lines persisted before the engine session exists. Lines
+   * carry stable uuids, so re-delivery (socket-mode reattach resend, WS
+   * replay) upserts instead of duplicating.
+   */
+  | { t: "transcript"; engineSessionId: string; lines: Record<string, unknown>[] };
 
 export type ClientToHostMsg =
   | { t: "ask_answer"; askId: string; result: AskResult }

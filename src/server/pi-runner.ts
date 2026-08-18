@@ -130,9 +130,9 @@
  *    ok/duration/pi_session_id/tokens-or-error, first-call-wins closer with a
  *    cancelled/abandoned finally backstop) + `pi_gate_denied`.
  *
- * Documented v1 gaps: `seedTranscriptEntries` is ignored (cross-engine
- * handoffs put the note in the prompt; the store already holds unified
- * history — same as the other non-opencode runners); reattach is null by
+ * Documented v1 gaps: cross-engine handoffs put the note in the prompt;
+ * `seedTranscriptEntries` is used only by detached hosts as a resume-miss
+ * fallback. The adapter-level reattach is null by
  * design; no turn wall-clock deadline (cancel works; the smoke harness caps
  * itself); no account rotation inside a turn (anthropic: the bridge owns
  * accounts; openai: a usage-limit terminal sidelines the picked codex
@@ -213,6 +213,7 @@ import {
   storeAppendUserLineEarly,
 } from "./opencode-transcript";
 import { transcriptStore } from "./transcript-store";
+import { transcriptForwarder } from "./transcript-forward";
 import { gitIdentityEnv } from "./shared/user-mappings";
 import { githubAuthEnv, githubUserLoginForRun } from "./github-auth";
 import { ensureAgentAwsCredsFile } from "./aws-creds";
@@ -663,6 +664,20 @@ function findPiSessionFile(sessionDir: string, piSessionId: string): string | nu
 
 // ── Transcript integration (the claude-direct recipe) ────────────────────────
 
+/** One transcript append, routed. In the server process this writes the
+ *  store directly (appendOpencodeTranscript). Inside a run host a forwarder
+ *  is registered (transcript-forward.ts): the batch is relayed to the server
+ *  over the run-host protocol instead, keeping transcripts.db single-writer
+ *  and giving sandboxed/detached pi runs host-side persistence. */
+function piAppend(engineSessionId: string, lines: Record<string, unknown>[]): void {
+  const forward = transcriptForwarder();
+  if (forward) {
+    forward(engineSessionId, lines);
+    return;
+  }
+  appendOpencodeTranscript(engineSessionId, lines);
+}
+
 /** Store one batch of normalized entries under the pi session id. Requires
  *  recordBksSessionFor to have mapped pi→unified first (see runPi); system
  *  entries ride runner-notice lines. Best-effort — a transcript write must
@@ -680,7 +695,7 @@ function persistEntries(
           : transcriptLineForEntry(e)
       )
       .filter((l): l is Record<string, unknown> => !!l);
-    appendOpencodeTranscript(engineSessionId, lines);
+    piAppend(engineSessionId, lines);
   } catch (e) {
     console.warn("[pi-runner] transcript persist failed:", e);
   }
@@ -1860,8 +1875,9 @@ export async function* runPi(
     // Resume: the journaled engine id is pi's session-header uuid — find its
     // jsonl in this unified session's dir. Not found (rotated dir, pruned
     // file) → fresh session; the store already holds the unified history and
-    // cross-engine handoff notes ride the prompt (seedTranscriptEntries is
-    // deliberately ignored, like the other non-opencode runners).
+    // Cross-engine handoff notes ride the prompt. A detached host also gets a
+    // server-read seed snapshot for the resume-miss case because it must never
+    // open transcripts.db itself.
     const resumePath = opts.sessionId
       ? findPiSessionFile(sessionDir, opts.sessionId)
       : null;
@@ -1874,11 +1890,12 @@ export async function* runPi(
     let resumeMissNote: string | null = null;
     if (opts.sessionId && !resumePath && unifiedSessionId) {
       try {
-        const tail = transcriptStore()
-          .readTail(unifiedSessionId, 200)
+        const tail = (transcriptForwarder()
+          ? opts.seedTranscriptEntries || []
+          : transcriptStore().readTail(unifiedSessionId, 200).entries)
           // This turn's own prompt was already early-persisted — the model
           // gets it as the actual prompt, not as history.
-          .entries.filter((e) => e.id !== String(userLine.uuid));
+          .filter((e) => e.id !== String(userLine.uuid));
         if (tail.length) {
           resumeMissNote = buildEngineSwitchHandoffNote({
             fromModel: model,
@@ -1994,7 +2011,7 @@ export async function* runPi(
     push({ type: "init", sessionId: piSessionId, provider: PROVIDER, model });
     // Engine-keyed write of the turn's user line — same uuid as the early
     // store write, so the row upserts instead of duplicating the bubble.
-    appendOpencodeTranscript(piSessionId, [userLine]);
+    piAppend(piSessionId, [userLine]);
 
     if (resumeMissNote) {
       const notice =
@@ -2179,7 +2196,7 @@ export async function* runPi(
             const ce = ev as any;
             if (!ce.aborted && ce.result?.summary) {
               try {
-                appendOpencodeTranscript(piSessionId!, [
+                piAppend(piSessionId!, [
                   transcriptLineCompactionSummary(
                     String(ce.result.summary),
                     crypto.randomUUID(),

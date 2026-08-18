@@ -497,6 +497,32 @@ async function repoOriginUrl(repoDir: string): Promise<string> {
   return out.trim();
 }
 
+/**
+ * Host-side engine config files projected read-only into a container, as
+ * [hostSrc, containerDest] pairs. Sources honor the host-side env seams
+ * (OPENSESSION_OPENCODE_CONFIG / OPENSESSION_PI_CONFIG; test/verify suites
+ * point them at temp files); destinations stay the legacy default paths the
+ * in-container process (which has no such env) dual-reads.
+ *  - OpenCode bridge config: bridge mode, accounts restriction, turn timeout.
+ *    without it every opencode/anthropic/* run in a sandbox fails with
+ *    "bridge disabled".
+ *  - Pi engine config: the enabled gate + Anthropic transport policy. Without
+ *    it every pi/* run in a sandbox refuses with "pi engine is not enabled"
+ *    (pi credentials are the claude/codex account mounts above, shared with
+ *    the opencode engine).
+ * A missing source is simply omitted: the engine then reports its own clear
+ * config error in-container. Exported for the sandbox engine-config tests.
+ */
+export function engineConfigMounts(home = HOME): Array<[src: string, dest: string]> {
+  const out: Array<[string, string]> = [];
+  const opencodeSrc =
+    process.env.OPENSESSION_OPENCODE_CONFIG || stateDir("opencode.json");
+  if (existsSync(opencodeSrc)) out.push([opencodeSrc, `${home}/.opensession-opencode.json`]);
+  const piSrc = process.env.OPENSESSION_PI_CONFIG || stateDir("pi.json");
+  if (existsSync(piSrc)) out.push([piSrc, `${home}/.opensession-pi.json`]);
+  return out;
+}
+
 interface CreateContainerOpts {
   workspace: "bind" | "volume";
   /** Attached-repo worktrees to mount (bind mode only). */
@@ -652,19 +678,9 @@ async function createContainer(
   for (const acct of listCodexAccounts()) {
     if (acct.kind === "home") roIfExists(`${acct.value}/auth.json`, `codex auth (${acct.name})`);
   }
-  // OpenCode bridge config (~/.opensession-opencode.json): read IN-CONTAINER by
-  // the runner-host's opencode dispatch (bridge mode, accounts restriction,
-  // turn timeout) — without it every opencode/anthropic/* run in a sandbox
-  // fails with "bridge disabled". ro like the account pool it selects from.
-  // Source honors the host-side OPENSESSION_OPENCODE_CONFIG seam (old name
-  // accepted), but the destination stays the legacy default path — that's what
-  // the in-container process (which has no such env) dual-reads.
-  {
-    const src =
-      process.env.OPENSESSION_OPENCODE_CONFIG ||
-      stateDir("opencode.json");
-    if (existsSync(src)) mounts.push(...vol(src, `${HOME}/.opensession-opencode.json`, true));
-  }
+  // Engine config files (see engineConfigMounts): the opencode bridge config
+  // and the pi engine gate, ro at their legacy in-container names.
+  for (const [src, dest] of engineConfigMounts()) mounts.push(...vol(src, dest, true));
   // External preview commands at identical paths, read-only. Repo-owned
   // lifecycle scripts already arrive with the workspace.
   for (const dir of externalPreviewCommandDirs()) {

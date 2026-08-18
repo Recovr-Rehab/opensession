@@ -34,6 +34,7 @@ import { stripContext } from "./prompt-context";
 import { parseJsonlLines } from "./jsonl-parser";
 import { extractAssistantVideos, toolResultMedia } from "./transcript-media";
 import { transcriptStore } from "./transcript-store";
+import { transcriptForwarder } from "./transcript-forward";
 
 const HOME = homeDir();
 
@@ -511,6 +512,11 @@ export function storeAppendUserLineEarly(
   priorOcSessionId?: string | null
 ): void {
   if (!unifiedId) return;
+  const forward = transcriptForwarder();
+  if (forward) {
+    forward(unifiedId, [line]);
+    return;
+  }
   try {
     const entries = parseJsonlLines([JSON.stringify(line)]);
     if (!entries.length) return;
@@ -828,6 +834,40 @@ export function appendOpencodeTranscript(
 ): void {
   if (!lines.length) return;
   storeAppendLines(ocSessionId, lines);
+}
+
+/**
+ * Apply a run host's proxied transcript append (the `transcript` frame in the
+ * run-host protocol; see transcript-forward.ts for why hosts never write the
+ * store themselves). Runs in the SERVER process only: the store keeps its
+ * single writer. The frame carries both ids, so the engine→unified mapping is
+ * recorded here before the append resolves through it. Lines persisted before
+ * the engine session exists arrive keyed by the unified id itself and append
+ * directly. Best-effort: a transcript write must never take the run stream
+ * down, and re-delivered batches (reattach resend, WS replay) upsert by uuid.
+ */
+export function applyForwardedTranscript(
+  osSessionId: string,
+  engineSessionId: string,
+  lines: JsonlLine[]
+): void {
+  if (!osSessionId || !lines.length) return;
+  try {
+    if (!engineSessionId || engineSessionId === osSessionId) {
+      const entries = parseJsonlLines(lines.map((l) => JSON.stringify(l)));
+      if (!entries.length) return;
+      transcriptStore().appendTranscriptEvents(osSessionId, entries, {});
+      return;
+    }
+    recordBksSessionFor(engineSessionId, osSessionId);
+    appendOpencodeTranscript(engineSessionId, lines);
+  } catch (e) {
+    warnStoreFailureOnce(
+      osSessionId,
+      `[opencode-transcript] forwarded transcript apply failed for ${osSessionId}`,
+      e
+    );
+  }
 }
 
 /**

@@ -94,6 +94,12 @@ export interface ActiveRunRecord {
   sandboxId?: string;
   /** Persistent Runner that owns this run's remote workspace and run host. */
   runnerId?: string;
+  /** Local detached run host driving this run (in-process engines: Pi).
+   *  points at ~/.opensession-sessions/run-hosts/<hostId>, updated when a
+   *  crashed host respawns under a fresh id. Lets resume-after-restart
+   *  REATTACH to the live host (resumeLocalHostRun) instead of re-prompting.
+   *  Never set together with sandboxId/runnerId. */
+  hostId?: string;
   /** Provider owning sandboxId, so resume-after-restart can reattach via provider.get() */
   sandboxProvider?: string;
   /** Credential/network boundary for a sandbox run, preserved on relaunch. */

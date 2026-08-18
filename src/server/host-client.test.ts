@@ -4,6 +4,11 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { HostHandle, type HostLauncher } from "./host-client";
 import type { RunHostMeta, RunHostSpec } from "../runner-host/protocol";
+import {
+  TranscriptStore,
+  __setTranscriptStoreForTest,
+} from "./transcript-store";
+import { transcriptLineUser } from "./opencode-transcript";
 
 const roots: string[] = [];
 
@@ -39,6 +44,34 @@ function hello(spec: RunHostSpec, selectedModel: string) {
 }
 
 describe("HostHandle model recovery", () => {
+	test("applies proxied transcript frames in the server store", () => {
+		const root = mkdtempSync(join(tmpdir(), "host-client-transcript-test-"));
+		roots.push(root);
+		const store = new TranscriptStore(join(root, "transcripts.db"));
+		const previous = __setTranscriptStoreForTest(store);
+		const spec: RunHostSpec = {
+			hostId: "rh-transcript",
+			osSessionId: "os-transcript",
+			prompt: "test",
+			cwd: "/tmp",
+		};
+		const handle = makeHandle(spec);
+		try {
+			(handle as any).handleMsg({
+				t: "transcript",
+				engineSessionId: spec.osSessionId,
+				lines: [transcriptLineUser("hello", "prompt-1")],
+			});
+
+			expect(store.readTail(spec.osSessionId, 10).entries).toMatchObject([
+				{ id: "prompt-1", type: "user", content: "hello" },
+			]);
+		} finally {
+			(handle as any).finish();
+			__setTranscriptStoreForTest(previous);
+		}
+	});
+
   test("reconciles unix reconnects without duplicating reported switches", async () => {
     const spec: RunHostSpec = {
       hostId: "rh-test",

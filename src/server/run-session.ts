@@ -27,6 +27,7 @@ import {
 	type StreamEvent,
 } from "./agent-runner";
 import { syncAgentSessionEngine } from "./agent-session-sync";
+import { runAgentHosted } from "./host-client";
 import { getRunState, transitionRunState } from "./run-state";
 import { getAutomation, selfImproveMcpForSession } from "./automations";
 import { resolveSessionRunInputs } from "./session-run-inputs";
@@ -1105,8 +1106,9 @@ export async function maybeLaunchSandboxedRun(
 	opts: {
 		prompt: string;
 		/** Transcript id of the already-written user line (host-engine runs
-		 *  upsert instead of duplicating it — mirrors the host runAgent call). */
+		 *  upsert instead of duplicating it; mirrors the host runAgent call). */
 		promptEntryId?: string;
+		seedTranscriptEntries?: TranscriptEntry[];
 		engineSessionId?: string;
 		cwd: string;
 		user?: string;
@@ -1241,6 +1243,8 @@ export async function maybeLaunchSandboxedRun(
 			hostId: `rh-${randomUUIDv7()}`,
 			osSessionId: session.id,
 			prompt: opts.prompt,
+			promptEntryId: opts.promptEntryId,
+			seedTranscriptEntries: opts.seedTranscriptEntries,
 			engineSessionId: remoteSandboxReplaced
 				? undefined
 				: opts.engineSessionId || undefined,
@@ -1934,6 +1938,15 @@ async function runSessionPromptInner(
 	// opt-in field) = the unchanged in-process path below. A recorded provider
 	// that is unavailable throws before this point; it never falls back.
 	const turnMetricStartedAt = Date.now();
+	// Pi buffers its native session file until the first assistant message.
+	// Detached hosts get a server-read snapshot for the rare resume-miss case;
+	// the host must never open transcripts.db itself.
+	const piHostSeedEntries =
+		routedEngine === "pi" && engineSessionId
+			? (
+					await readEngineTranscriptAsync(cwd, engineSessionId, "pi")
+				).filter((entry) => entry.id !== durablePromptEntryId)
+			: undefined;
 	const runnerRun = await maybeLaunchRunnerRun(session, {
 		prompt,
 		engineSessionId: engineSessionId || undefined,
@@ -1945,6 +1958,7 @@ async function runSessionPromptInner(
 	const sandboxRun = runnerRun ? null : await maybeLaunchSandboxedRun(session, {
 		prompt,
 		promptEntryId: durablePromptEntryId,
+		seedTranscriptEntries: piHostSeedEntries,
 		engineSessionId: engineSessionId || undefined,
 		cwd,
 		user,
@@ -1973,6 +1987,64 @@ async function runSessionPromptInner(
 		return;
 	}
 
+	// Local detached run host for the pi engine: pi drives its turn in-process
+	// via the SDK, so unlike opencode there is no detachable engine server to
+	// outlive a restart. Instead the whole turn moves into a transient
+	// run-host unit (host-client.ts) that survives `systemctl restart` and is
+	// reattached by the boot sweep (resumeLocalHostRun). Transcript writes are
+	// proxied back over the host protocol, so the server stays the store's
+	// only writer. Kill switch: OPENSESSION_PI_DETACH=0 (the generic
+	// disable-run-hosts file and runAgentHosted's in-process fallback also
+	// apply). Automation-owned sessions keep the in-process path: their runs
+	// carry a scoped policy surface this launcher does not thread.
+	const hostedRun =
+		!runnerRun &&
+		!sandboxRun &&
+		routedEngine === "pi" &&
+		!isAutomationSession &&
+		process.env.OPENSESSION_PI_DETACH !== "0"
+			? runAgentHosted({
+					osSessionId: session.id,
+					prompt,
+					promptEntryId: durablePromptEntryId,
+					seedTranscriptEntries: piHostSeedEntries,
+					sessionId: engineSessionId || undefined,
+					cwd,
+					mode: session.mode,
+					mcpGrantUser: session.startedBy || undefined,
+					model: session.model,
+					images,
+					mcpServers: mcpServers ?? "all",
+					proxyMcpServers: [
+						...Object.keys(interactiveMcpServers(user, sessionId)),
+						...(session.goalId ? ["opensession-goal-self"] : []),
+					],
+					reposNote: await buildSessionNote(session, user),
+					deniedTools,
+					confirmTools: STRIPE_CONFIRM_TOOLS,
+					aws: true,
+					author: commitAuthorFor(user, session.startedBy),
+					user: runInputs.user,
+					fallbackModel: interactiveFallbackModel(session.model),
+					effort: session.effort,
+					fastMode: session.fastMode,
+					accountId: session.accountId,
+					journalKind: "prompt",
+					onAskUser: makeAskHandler(sessionId),
+					onSteerFailed: (text) => {
+						enqueuePrompt(session.id, { content: text, user });
+						watchExternalRunAndDrain(session.id);
+					},
+					fallbackInProcessMcp: () =>
+						session.goalId
+							? {
+									...interactiveMcpServers(user, sessionId),
+									"opensession-goal-self": createGoalSelfMcpServer(session.goalId),
+								}
+							: interactiveMcpServers(user, sessionId),
+				})
+			: null;
+
 	let finalSessionId = sandboxRun?.freshEngine ? "" : engineSessionId || "";
 	let endedWithError = false;
 	// Terminal failure this run died on (usage limits with no account left,
@@ -1993,7 +2065,7 @@ async function runSessionPromptInner(
 	// while human messages are queued behind ongoing work.
 	let toolUseCount = 0;
 
-	for await (const event of runnerRun ?? sandboxRun ?? runAgent({
+	for await (const event of runnerRun ?? sandboxRun ?? hostedRun ?? runAgent({
 		prompt,
 		promptEntryId: durablePromptEntryId,
 		sessionId: engineSessionId || undefined,

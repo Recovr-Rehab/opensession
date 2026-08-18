@@ -1504,6 +1504,121 @@ export function resumeInterruptedRuns(
       }));
       continue;
     }
+    // LOCAL detached run hosts (in-process engines: pi). The host process
+    // outlived the restart in its own transient systemd unit; reattach to its
+    // socket and re-pump the live turn. A host that is gone (crashed mid-run,
+    // dir cleaned up) falls back to the classic continuation re-prompt right
+    // here: unlike sandboxes/Runners there is no execution boundary to
+    // respect. The engine session lives in shared state on this machine, so
+    // an in-process resume is exactly the pre-detach recovery behavior.
+    if (run.hostId && !run.sandboxId && !run.runnerId) {
+      rememberHandledSession(run);
+      trackRecovery(run);
+      recoveryTasks.push(recoveryTask(run, async () => {
+        let terminalSeen = false;
+        try {
+          if (abandonStoppedRecovery(run)) return;
+          Object.assign(run, journalStartRecovery(run));
+          if (run.osSessionId)
+            transitionRunState(run.osSessionId, "reattach_start", { run_key: run.runKey });
+          const reattached = await (await import("./host-client"))
+            .resumeLocalHostRun(run, {
+              onAskUser: run.osSessionId ? askHandlerFor?.(run.osSessionId) : undefined,
+            })
+            .catch((e) => {
+              console.warn(`[runner] Local host reattach failed for ${run.runKey}:`, e);
+              return null;
+            });
+          if (abandonStoppedRecovery(run)) {
+            cancelRecoveredEngine(run);
+            return;
+          }
+          if (run.osSessionId)
+            transitionRunState(
+              run.osSessionId,
+              reattached ? "reattach_ok" : "reattach_fail",
+              { run_key: run.runKey },
+            );
+          if (reattached) {
+            Object.assign(run, journalMarkRecoveryAttached(run) || {});
+          }
+          let events = reattached;
+          if (!events) {
+            if (!run.prompt && !run.claudeSessionId) {
+              reportRecoveryFailure(
+                run,
+                "Restart recovery could not reconnect to the detached run host and had nothing to resume. Send the prompt again to continue.",
+              );
+              return;
+            }
+            if (run.osSessionId)
+              transitionRunState(run.osSessionId, "resume_reprompt", { run_key: run.runKey });
+            // The re-run journals under its own runKey. Drop the host record.
+            journalClear(run.runKey);
+            console.log(
+              `[runner] Local run host ${run.hostId} is gone; resuming ${run.osSessionId || run.runKey} in-process`,
+            );
+            events = runAgent({
+              prompt: run.claudeSessionId
+                ? resumeContinuationPrompt(run.prompt || "")
+                : run.prompt!,
+              promptEntryId: run.claudeSessionId ? undefined : run.promptEntryId,
+              sessionId: run.claudeSessionId || undefined,
+              cwd: run.cwd,
+              mode: run.mode,
+              model: run.model,
+              selectedModel: run.selectedModel,
+              transientFallback: run.transientFallback,
+              effort: run.effort,
+              fastMode: run.fastMode,
+              mcpServers: run.mcpServers ?? "all",
+              inProcessMcp: run.osSessionId
+                ? inProcessMcpFor?.(run.osSessionId, run.user)
+                : undefined,
+              reposNote: run.osSessionId ? reposNoteFor?.(run.osSessionId) : undefined,
+              user: run.user,
+              deniedTools: run.deniedTools,
+              confirmTools: run.confirmTools,
+              aws: run.aws,
+              fallbackModel: run.fallbackModel,
+              accountId: run.accountId,
+              accountStrict: run.accountStrict,
+              usageCredits: run.usageCredits,
+              journal: {
+                osSessionId: run.osSessionId,
+                kind: recoveryKind(run.kind, "resume"),
+                firstJournaledAt: run.firstJournaledAt,
+                resumeAttempts: run.resumeAttempts,
+                lastResumeAt: run.lastResumeAt,
+              },
+              onAskUser: run.osSessionId ? askHandlerFor?.(run.osSessionId) : undefined,
+            });
+          }
+          for await (const event of events) {
+            if (abandonStoppedRecovery(run)) return;
+            if (event.type === "done" || event.type === "error") {
+              terminalSeen = settleRecovery(run, event) || terminalSeen;
+            } else emitRecoveryEvent(run, event);
+          }
+          if (abandonStoppedRecovery(run)) return;
+          if (!terminalSeen) {
+            reportRecoveryFailure(
+              run,
+              "Restart recovery ended before the detached run host returned a final result. Send the prompt again to continue.",
+            );
+          }
+        } catch (e) {
+          console.error(`[runner] Local host resume failed for ${run.runKey}:`, e);
+          if (abandonStoppedRecovery(run)) return;
+          if (!terminalSeen)
+            reportRecoveryFailure(
+              run,
+              "Restart recovery failed while reconnecting to the detached run host. Send the prompt again to continue.",
+            );
+        }
+      }));
+      continue;
+    }
     if (!run.claudeSessionId) {
       // No engine session id means the run died before the model produced its
       // first turn (e.g. during MCP startup) — so nothing actually ran and no
