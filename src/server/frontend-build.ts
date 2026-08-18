@@ -9,6 +9,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync,
 import { dirname, join, resolve } from "path";
 import { activeRunRecords } from "./run-journal";
 import { writeFileAtomic } from "./shared/atomic-write";
+import { gitIdentityFor } from "./shared/user-mappings";
 import { broadcastToAll } from "./ws-hub";
 import { configuredServer, defaultRepo, githubBotLogins, personaName, plainWorkspaceId, productMark, productName } from "./config";
 
@@ -429,6 +430,21 @@ export const spaEntry = frontend
 	: homepage ?? (() => new Response("Hosted frontend unavailable", { status: 503 }));
 
 /**
+ * A run's user as a name a reader recognises. A run carries whatever id its
+ * entry point identifies people by: the web sends a display name, but a Slack
+ * run sends the raw Slack id, because that is what `filterMcpServers` gates
+ * on. An id names nobody, so it resolves through the same identity table as
+ * commit attribution, and an unknown one is dropped rather than printed.
+ */
+export function editorName(user?: string | null): string | null {
+	const key = (user || "").trim();
+	if (!key) return null;
+	const person = gitIdentityFor(key);
+	if (person) return person.name.split(" ")[0];
+	return /^U[A-Z0-9]{6,}$/.test(key) ? null : key;
+}
+
+/**
  * Best-effort "who caused this" label for update/restart notices. These
  * notices are broadcast globally, so attribution is limited to user names and
  * never includes private session titles. Edits from a CLI/tmux Claude or a
@@ -444,10 +460,10 @@ export function sharedCheckoutEditors(writeCapableOnly = false): string | undefi
 		for (const run of activeRunRecords()) {
 			if (!run.cwd || resolve(run.cwd) !== checkout) continue;
 			if (writeCapableOnly && run.mode === "ask") continue;
-			const user = (run.user || "").trim();
-			if (!user || seen.has(user)) continue;
-			seen.add(user);
-			labels.push(user);
+			const label = editorName(run.user);
+			if (!label || seen.has(label)) continue;
+			seen.add(label);
+			labels.push(label);
 		}
 		if (!labels.length) return undefined;
 		const shown = labels.slice(0, 2).join(", ");
