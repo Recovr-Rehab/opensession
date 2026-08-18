@@ -49,7 +49,7 @@ import type { Sandbox } from "./sandbox/provider";
 import { shellQuoteWord } from "./sandbox/adapters/bootstrap";
 import { DEFAULT_SANDBOX_PREVIEW_PORTS, sandboxConfig, usesOutboundSandboxPortalRelay } from "./sandbox/config";
 import { configuredRepos, configuredServer, type Repo } from "./config";
-import { repoForPath } from "./worktree";
+import { repoForPath, repoForPathOrNull } from "./worktree";
 import {
   claimPoolPreview,
   poolClaimFor,
@@ -679,6 +679,7 @@ export async function getPreviewStatus(worktreeDir: string): Promise<PreviewStat
   }
   const webapp = services.find((s) => s.key === "WEBAPP_PORT");
   const previewUrl = webapp?.previewUrl || null;
+  const repo = repoForPathOrNull(worktreeDir);
 
   if (services.some((service) => service.previewUrl)) {
     writeHostTunnelsEnv(worktreeDir, services);
@@ -705,7 +706,7 @@ export async function getPreviewStatus(worktreeDir: string): Promise<PreviewStat
     previewUrl,
     bootable:
       !!webapp?.running ||
-      (await resolvePreviewBoot(worktreeDir, repoForPath(worktreeDir), hostExists)) != null,
+      (repo != null && (await resolvePreviewBoot(worktreeDir, repo, hostExists)) != null),
     services,
     portalRecipes: hostPreviewPortalRecipes(worktreeDir),
   };
@@ -886,13 +887,14 @@ function setupStampPath(worktreeDir: string): string {
 export async function startPreview(worktreeDir: string): Promise<PreviewStatus> {
   const status = await getPreviewStatus(worktreeDir);
   if (status.running || status.starting) return status;
+  const repo = repoForPathOrNull(worktreeDir);
+  if (!repo) return status;
 
   // Warm preview pool: adopt an already-booted container when one is ready —
   // the claim syncs the worktree into it and hands back its host port; from
   // there the normal status path (listener on the port -> Caddy route) takes
   // over. Falls through to the host boot when the pool has nothing warm.
   try {
-    const repo = repoForPath(worktreeDir);
     if (previewPoolEnabled(repo.id)) {
       const claim = await claimPoolPreview(repo.id, worktreeDir);
       if (claim) {
@@ -906,7 +908,7 @@ export async function startPreview(worktreeDir: string): Promise<PreviewStatus> 
     console.warn(`[preview] pool claim for ${worktreeDir} failed (falling back to host boot):`, e);
   }
 
-  const boot = await resolvePreviewBoot(worktreeDir, repoForPath(worktreeDir), hostExists);
+  const boot = await resolvePreviewBoot(worktreeDir, repo, hostExists);
   if (!boot) return status; // nothing to run (status.bootable is false)
 
   const env: Record<string, string | undefined> = {
@@ -923,7 +925,7 @@ export async function startPreview(worktreeDir: string): Promise<PreviewStatus> 
       return status;
     }
     seedHostPortsConf(worktreeDir, port);
-    seedHostEnvFiles(worktreeDir, repoForPath(worktreeDir));
+    seedHostEnvFiles(worktreeDir, repo);
     env.WEBAPP_PORT = String(port);
     env.PREVIEW_URL = `https://${await previewHost()}:${httpsPortFor(port)}`;
     // One-shot sibling hook, stamped per worktree; failure never blocks the

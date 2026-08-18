@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import {
+  getPreviewStatus,
   parsePreviewPortalRecipes,
   repoLifecycle,
   resolvePreviewBoot,
+  startPreview,
 } from "./preview";
 
 // The resolver is the ONE bring-up chain shared by host and sandbox previews:
@@ -86,6 +88,29 @@ describe("resolvePreviewBoot", () => {
   test("no mechanism at all resolves to null (UI: disabled Start)", async () => {
     const boot = await resolvePreviewBoot(WT, { id: "widget" }, existsIn([]));
     expect(boot).toBeNull();
+  });
+});
+
+describe("getPreviewStatus", () => {
+  test("a repo-less scratch workspace is not bootable", async () => {
+    const scratch = mkdtempSync(join(tmpdir(), "preview-scratch-"));
+    try {
+      expect(await getPreviewStatus(scratch)).toMatchObject({
+        hasPortsConf: false,
+        running: false,
+        starting: false,
+        previewUrl: null,
+        bootable: false,
+        services: [],
+      });
+      expect(await startPreview(scratch)).toMatchObject({
+        running: false,
+        starting: false,
+        bootable: false,
+      });
+    } finally {
+      rmSync(scratch, { recursive: true, force: true });
+    }
   });
 });
 
