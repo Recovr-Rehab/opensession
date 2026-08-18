@@ -257,7 +257,7 @@ const CREATE_MAIN =
 const CREATE_MAIN_SPLIT = "desktop:rounded-l-control phone:rounded-l-[999px] phone:rounded-r-none";
 const CREATE_MAIN_WHOLE = "desktop:rounded-control phone:rounded-[999px]";
 const CREATE_CARET =
-	"inline-flex cursor-pointer items-center gap-[7px] rounded-r-control phone:rounded-r-[999px] border-none bg-accent p-[7px] text-label font-semibold text-on-accent shadow-[inset_1px_0_0_rgba(0,0,0,0.14)] transition-[background-color,opacity] enabled:hover:bg-accent-hover";
+	"inline-flex cursor-pointer items-center gap-[7px] rounded-r-control phone:rounded-r-[999px] border-none bg-accent p-[7px] text-label font-semibold text-on-accent shadow-[inset_1px_0_0_rgba(0,0,0,0.14)] transition-[background-color,opacity] enabled:hover:bg-accent-hover disabled:cursor-default disabled:opacity-40";
 const CREATE_KBD = "opacity-70";
 const CREATE_MENU =
 	"absolute bottom-[calc(100%+6px)] right-0 z-20 min-w-[208px] rounded-control bg-popup-glass [backdrop-filter:var(--popup-blur)] [--smooth-ring-color:var(--popup-ring)] p-[5px] smooth-shadow-ring-md";
@@ -1349,14 +1349,13 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
               <Tooltip label="Create options" shortcut={CYCLE_SHORTCUT}>
               <button
                 type="button"
-                className={`${CREATE_CARET} ${
-                  // Keep the caret usable (to preview modes) even before a
-                  // prompt is typed, and while its menu is open.
-                  createMenuOpen || !canCreate
-                    ? "cursor-pointer opacity-100"
-                    : "disabled:cursor-default disabled:opacity-40"
-                }`}
+                className={CREATE_CARET}
                 onClick={() => setCreateMenuOpen((v) => !v)}
+                // Not having a prompt yet leaves the caret alone: the options
+                // are still worth reading, and picking one is how you change
+                // what Enter will do. A create in flight is the one thing that
+                // closes it off, and then it greys out with the main button
+                // beside it, so the pair still reads as one busy control.
                 disabled={busy}
                 aria-haspopup="menu"
                 aria-expanded={createMenuOpen}
