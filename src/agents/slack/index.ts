@@ -259,10 +259,11 @@ export class SlackAgent implements AgentModule {
         if (event.type === "link_shared") {
           const eventId = `unfurl-${event.channel}-${event.message_ts}`;
           if (!isEventProcessed(eventId)) {
-            markEventProcessed(eventId);
-            handleLinkShared(event).catch((e) => {
-              console.error("[slack] Error unfurling link:", e);
-            });
+            handleLinkShared(event)
+              .then(() => markEventProcessed(eventId))
+              .catch((e) => {
+                console.error("[slack] Error unfurling link:", e);
+              });
           }
         }
 

@@ -17,7 +17,7 @@ process.env.OPENSESSION_SESSION_CARD_BASE = "https://media.example.test";
 process.env.OPENSESSION_SESSION_CARD_SECRET = "test-session-social-card-secret-32-bytes";
 
 const { createWorkspace } = await import("../../server/workspaces");
-const { cardTitle, unfurlForSession } = await import("./unfurl");
+const { cardTitle, handleLinkShared, unfurlForSession } = await import("./unfurl");
 
 afterAll(() => {
 	if (previousStateDir === undefined) delete process.env.OPENSESSION_STATE_DIR;
@@ -46,6 +46,50 @@ describe("unfurlForSession", () => {
 			),
 			alt_text: "Ship the card, an Open Session by Kent",
 		});
+	});
+});
+
+describe("handleLinkShared", () => {
+	test("sends the generated attachment to chat.unfurl", async () => {
+		const calls: Array<{ method: string; params: Record<string, any> }> = [];
+		const s = session({ id: "sess-card", title: "Ship the card", createdBy: "Kent" });
+		await handleLinkShared(
+			{
+				channel: "C1",
+				message_ts: "1700000000.000100",
+				links: [{ url: "https://os.example.test/session/sess-card" }],
+			},
+			{
+				findSession: async () => s,
+				unfurl: async (method, params) => {
+					calls.push({ method, params });
+					return { ok: true };
+				},
+			},
+		);
+		expect(calls).toHaveLength(1);
+		expect(calls[0].method).toBe("chat.unfurl");
+		expect(calls[0].params.channel).toBe("C1");
+		expect(Object.keys(calls[0].params.unfurls)).toEqual([
+			"https://os.example.test/session/sess-card",
+		]);
+	});
+
+	test("rejects when Slack refuses the attachment", async () => {
+		const s = session({ id: "sess-card", title: "Ship the card" });
+		expect(
+			handleLinkShared(
+				{
+					channel: "C1",
+					message_ts: "1700000000.000100",
+					links: [{ url: "https://os.example.test/session/sess-card" }],
+				},
+				{
+					findSession: async () => s,
+					unfurl: async () => ({ ok: false, error: "cannot_parse_attachment" }),
+				},
+			),
+		).rejects.toThrow("Slack chat.unfurl failed: cannot_parse_attachment");
 	});
 });
 

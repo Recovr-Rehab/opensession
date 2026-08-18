@@ -10,7 +10,7 @@
  */
 
 import { slackApiCall } from "./slack-api";
-import { findSession } from "../../server/session-cache";
+import { findSessionAsync } from "../../server/session-cache";
 import type { UnifiedSession } from "../../server/types";
 import { configuredServer } from "../../server/config";
 import {
@@ -200,28 +200,44 @@ export function unfurlForSession(s: UnifiedSession, url: string): { blocks: any[
   return { blocks };
 }
 
+interface LinkSharedDeps {
+  findSession: typeof findSessionAsync;
+  unfurl: typeof slackApiCall;
+}
+
+const linkSharedDeps: LinkSharedDeps = {
+  findSession: findSessionAsync,
+  unfurl: slackApiCall,
+};
+
 /**
  * Handle a Slack `link_shared` event: look up every Open Session session link in
  * the message and post rich previews back via chat.unfurl. Unknown or foreign
  * links are ignored; if none resolve we make no API call.
  */
-export async function handleLinkShared(event: any): Promise<void> {
+export async function handleLinkShared(
+  event: any,
+  deps: LinkSharedDeps = linkSharedDeps,
+): Promise<void> {
   const links: Array<{ url: string; domain?: string }> = event.links || [];
   const unfurls: Record<string, { blocks: any[] }> = {};
 
   for (const link of links) {
     const id = sessionIdFromUrl(link.url);
     if (!id) continue;
-    const session = findSession(id);
+    const session = await deps.findSession(id);
     if (!session) continue;
     unfurls[link.url] = unfurlForSession(session, link.url);
   }
 
   if (Object.keys(unfurls).length === 0) return;
 
-  await slackApiCall("chat.unfurl", {
+  const result = await deps.unfurl("chat.unfurl", {
     channel: event.channel,
     ts: event.message_ts,
     unfurls,
   });
+  if (!result?.ok) {
+    throw new Error(`Slack chat.unfurl failed: ${result?.error || "unknown error"}`);
+  }
 }
