@@ -56,9 +56,13 @@
 				display: none;
 			}
 
-			/* The settings control is inert here (see product-demo-main.tsx), so it
-			   should not advertise a press either. */
-			html [aria-label="Open settings"] {
+			/* The controls product-demo-main.tsx makes inert should not advertise a
+			   press either. Keep this list in step with the one there. */
+			html [aria-label="Open settings"],
+			html [aria-label="Dictate"],
+			html [title="What the team has been shipping"],
+			html [title="View archived sessions"],
+			html a[href^="/pr/"] {
 				cursor: default;
 			}
 

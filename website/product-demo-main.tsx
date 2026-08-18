@@ -677,17 +677,34 @@ const repoMarkObserver = new MutationObserver(() => {
 });
 repoMarkObserver.observe(document.documentElement, { childList: true, subtree: true });
 
-// Settings is a real page in the app and a dead end in a picture of it: there
-// is no account here to configure, and leaving it live means one click can
-// take a visitor off the one screen this preview exists to show. The control
-// stays where it is, because it is part of what the product looks like, and
-// does nothing. Captured on the way down so it beats the app's own handler,
-// and on click rather than pointer-events so a keyboard Enter is covered too.
+// A preview is a picture you can touch, not the product with an empty database
+// behind it. These controls all reach somewhere the fixtures cannot follow, so
+// they stay where they are, because they are part of what the product looks
+// like, and do nothing:
+//
+//   Settings      a real page, and a dead end with no account to configure
+//   Dictate       asks the visitor's own browser for a microphone
+//   Feed          a real page the fixtures leave empty
+//   Archived      the same, with nothing archived to show
+//   A pull request chip  routes through a workspace the fixture never defines,
+//                        so it lands on "Workspace not found"
+//
+// Captured on the way down so it beats the app's own handler, and on click
+// rather than pointer-events so a keyboard Enter is covered too. Worth walking
+// again whenever the app grows a surface the demo has no data for.
+const inertInDemo = [
+	'[aria-label="Open settings"]',
+	'[aria-label="Dictate"]',
+	'[title="What the team has been shipping"]',
+	'[title="View archived sessions"]',
+	'a[href^="/pr/"]',
+].join(", ");
+
 document.addEventListener(
 	"click",
 	(event) => {
 		const target = event.target as HTMLElement | null;
-		if (!target?.closest?.('[aria-label="Open settings"]')) return;
+		if (!target?.closest?.(inertInDemo)) return;
 		event.preventDefault();
 		event.stopPropagation();
 	},
