@@ -17,14 +17,12 @@
  *    automation runs, so flipping their model would just brick them.
  *  - sessions with an in-flight run (per the shared run journal): flipping the
  *    model mid-turn races the run's own end-of-turn session patch.
- *  - targets that don't name an engine, and direct engines that are switched
- *    off.
+ *  - targets that don't name an engine.
  */
 import { existsSync, readFileSync } from "fs";
 import { OPENSESSION_SESSIONS_DIR } from "./paths";
 import { writeJsonAtomic } from "./shared/atomic-write";
 import { explicitEngineFor, resolveModel } from "./models";
-import { directEngineEnabled } from "./engine/engines-config";
 import type { ActiveRunRecord } from "./run-journal";
 import type { NativeSessionFile } from "./types";
 
@@ -111,22 +109,10 @@ export function migrateSessionEngine(
       ok: false,
       error:
         `"${targetModel}" is not an engine model id — expected ` +
-        "<engine>/<provider>/<model>, e.g. opencode/anthropic/claude-sonnet-5, " +
-        "pi/anthropic/claude-opus-5 or claude/anthropic/claude-opus-5.",
+        "<engine>/<provider>/<model>, e.g. opencode/anthropic/claude-sonnet-5 " +
+        "or pi/anthropic/claude-opus-5.",
     };
   }
-  // A direct engine that is switched off would leave the session unable to run
-  // at all, so refuse the flip rather than produce a broken session — the same
-  // fail-closed reasoning as the automation gate below.
-  if ((engine === "claude" || engine === "codex") && !directEngineEnabled(engine)) {
-    return {
-      ok: false,
-      error:
-        `The ${engine} engine is off — turn it on in Settings before ` +
-        `migrating ${sessionId} onto it.`,
-    };
-  }
-
   if (isAutomationOwnedSession(data)) {
     return {
       ok: false,

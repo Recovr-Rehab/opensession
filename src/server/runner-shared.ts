@@ -368,9 +368,7 @@ export function hasRunStatusDeclaration(text: string): boolean {
  *  worse, Permission.disabled() hides a tool entirely when its last-matching
  *  rule is a "*" deny, which is what made bash vanish from every unattended
  *  ask run (the PR #4676 review starvation, the health-monitor blinding).
- *  Shared by the opencode config generation (opencode-runner.ts) and the
- *  claude-direct ask-mode canUseTool (engine/claude-direct-policy.ts) —
- *  claude-direct evaluates the same rules last-match-wins in askBashDecision.
+ *  Used by the opencode config generation (opencode-runner.ts).
  *  Verified against opencode v1.17.15 source (permission/index.ts
  *  evaluate/disabled, session/llm/request.ts resolveTools). */
 export const ASK_BASH_PERMISSIONS: Record<string, "allow" | "deny"> = {

@@ -12,8 +12,6 @@ import {
 	nativeSessionIdsForEngineSessions,
 	priceDay,
 	resetRatesForTest,
-	scanClaudeDirect,
-	scanCodexDirect,
 	scanOpencodeShards,
 } from "./engine-usage";
 
@@ -111,11 +109,7 @@ describe("engine usage pricing", () => {
 	test("a day past the store's retention is unmeasured, not zero", () => {
 		// The shard DBs prune at about a month. Charting a pruned day as 0
 		// would read as "usage started here", so it carries a flag instead.
-		const pruned = priceDay("2026-05-20", new Map(), {
-			opencode: "unmeasured",
-			"claude-direct": "measured",
-			"codex-direct": "measured",
-		});
+		const pruned = priceDay("2026-05-20", new Map(), { opencode: "unmeasured" });
 		expect(pruned.unmeasured).toBe(true);
 		expect(pruned.coverage.opencode).toBe("unmeasured");
 		expect(pruned.costUsd).toBe(0);
@@ -169,7 +163,13 @@ describe("engine usage day cache", () => {
 			totalTokens: 60,
 			costUsd: 23,
 			unpricedRequests: 5,
-			coverage: { opencode: "measured", "claude-direct": "measured", "codex-direct": "measured" },
+			// A day cached while the (since removed) direct engines existed
+			// carries their coverage keys; it must decode byte-for-byte.
+			coverage: {
+				opencode: "measured",
+				"claude-direct": "measured",
+				"codex-direct": "measured",
+			} as EngineUsageDay["coverage"],
 			unmeasured: false,
 			bySession: { "os-example": { requests: 2, output: 13 } },
 			sessionAttribution: "measured",
@@ -195,7 +195,11 @@ describe("engine usage day cache", () => {
 			totalTokens: 0,
 			costUsd: 0,
 			unpricedRequests: 0,
-			coverage: { opencode: "unmeasured", "claude-direct": "measured", "codex-direct": "measured" },
+			coverage: {
+				opencode: "unmeasured",
+				"claude-direct": "measured",
+				"codex-direct": "measured",
+			} as EngineUsageDay["coverage"],
 			unmeasured: true,
 			sessionAttribution: "unmeasured",
 		};
@@ -208,7 +212,7 @@ describe("engine usage day cache", () => {
 			opencode: "unmeasured",
 			"claude-direct": "measured",
 			"codex-direct": "measured",
-		});
+		} as EngineUsageDay["coverage"]);
 	});
 
 	test("preserves v3/v4 totals but requires a session-attribution rescan", () => {
@@ -231,11 +235,7 @@ describe("engine usage day cache", () => {
 			});
 
 			expect(day).toMatchObject({ output: 20, totalTokens: 100, unmeasured: false });
-			expect(day?.coverage).toEqual({
-				opencode: "measured",
-				"claude-direct": "measured",
-				"codex-direct": "measured",
-			});
+			expect(day?.coverage).toEqual({ opencode: "measured" });
 			expect(day?.sessionAttribution).toBeUndefined();
 			expect(day?.bySession).toBeUndefined();
 		}
@@ -310,139 +310,4 @@ describe("OpenCode session attribution", () => {
 	});
 });
 
-// ── The direct engines ──
-//
-// Neither writes to the opencode shard DBs, so an engine we do not read reports
-// as zero rather than as missing, and nothing else detects it. Each format
-// carries one trap worth about 2x if mishandled: replayed history on the Claude
-// side, repeated token_count events on the codex side.
-
 const CUTOFF = Date.parse("2026-08-10T00:00:00Z");
-
-describe("claude-direct transcripts", () => {
-	const usage = (input: number, output: number, cacheRead: number, cacheWrite: number) => ({
-		input_tokens: input,
-		output_tokens: output,
-		cache_read_input_tokens: cacheRead,
-		cache_creation_input_tokens: cacheWrite,
-	});
-	const assistant = (o: { id?: string; uuid?: string; at: string; model?: string; usage: object }) =>
-		JSON.stringify({
-			type: "assistant",
-			requestId: o.id,
-			uuid: o.uuid,
-			timestamp: o.at,
-			message: { model: o.model ?? "claude-opus-5", usage: o.usage },
-		});
-
-	test("counts a replayed request once and ignores synthetic lines", async () => {
-		const root = join(dir, "claude");
-		const proj = join(root, "acct-1", "projects", "-tmp-work");
-		mkdirSync(proj, { recursive: true });
-		writeFileSync(
-			join(proj, "a.jsonl"),
-			[
-				assistant({ id: "req_1", at: "2026-08-14T10:00:00Z", usage: usage(10, 20, 30, 40) }),
-				// Written locally to keep the transcript well formed; no request.
-				assistant({ id: "req_s", at: "2026-08-14T10:01:00Z", model: "<synthetic>", usage: usage(9, 9, 9, 9) }),
-				JSON.stringify({ type: "user", timestamp: "2026-08-14T10:02:00Z", message: { content: "hi" } }),
-				// Older than the range.
-				assistant({ id: "req_0", at: "2026-08-01T10:00:00Z", usage: usage(7, 7, 7, 7) }),
-			].join("\n"),
-		);
-		// A resume replays the history verbatim into a new file, timestamps
-		// included, and adds one request. req_1 must be counted once in total.
-		writeFileSync(
-			join(proj, "b.jsonl"),
-			[
-				assistant({ id: "req_1", at: "2026-08-14T10:00:00Z", usage: usage(10, 20, 30, 40) }),
-				// No requestId: the uuid is the fallback key.
-				assistant({ uuid: "u-2", at: "2026-08-14T11:00:00Z", usage: usage(1, 2, 3, 4) }),
-			].join("\n"),
-		);
-
-		const days = new Map();
-		await scanClaudeDirect(days, CUTOFF, root);
-
-		expect([...days.keys()]).toEqual(["2026-08-14"]);
-		const b = days.get("2026-08-14").get("anthropic|claude-opus-5");
-		expect(b.requests).toBe(2);
-		expect(b.input).toBe(11);
-		expect(b.output).toBe(22);
-		expect(b.cacheRead).toBe(33);
-		expect(b.cacheWrite).toBe(44);
-	});
-});
-
-describe("codex-direct rollouts", () => {
-	const tokenCount = (at: string, input: number, cached: number, output: number) =>
-		JSON.stringify({
-			timestamp: at,
-			type: "event_msg",
-			payload: {
-				type: "token_count",
-				info: { total_token_usage: { input_tokens: input, cached_input_tokens: cached, output_tokens: output } },
-			},
-		});
-	const turnContext = (at: string, model: string) =>
-		JSON.stringify({ timestamp: at, type: "turn_context", payload: { model } });
-	const rollout = (name: string, lines: string[]) => {
-		const root = join(dir, name);
-		const day = join(root, "acct-1", "sessions", "2026", "08", "14");
-		mkdirSync(day, { recursive: true });
-		writeFileSync(join(day, "rollout-2026-08-14T10-00-00-abc.jsonl"), lines.join("\n"));
-		return root;
-	};
-
-	test("bills the delta of the running total, so a repeated event is free", async () => {
-		const root = rollout("codex-a", [
-			turnContext("2026-08-09T22:00:00Z", "gpt-5.6-sol"),
-			// Before the range, so not counted — but it must still seed the
-			// baseline, or the next event books the whole running total.
-			tokenCount("2026-08-09T23:00:00Z", 100, 40, 10),
-			tokenCount("2026-08-14T10:00:00Z", 300, 140, 30),
-			// codex repeats token_count on an aborted turn, and the running
-			// total correctly stands still. Summing last_token_usage instead
-			// would charge this twice.
-			tokenCount("2026-08-14T10:05:00Z", 300, 140, 30),
-			tokenCount("2026-08-14T10:10:00Z", 500, 240, 50),
-		]);
-
-		const days = new Map();
-		await scanCodexDirect(days, CUTOFF, root);
-
-		const b = days.get("2026-08-14").get("openai|gpt-5.6-sol");
-		expect(b.requests).toBe(2);
-		// input_tokens includes the cached part, so uncached is the difference.
-		expect(b.input).toBe(200);
-		expect(b.cacheRead).toBe(200);
-		expect(b.output).toBe(40);
-		// OpenAI bills no cache writes.
-		expect(b.cacheWrite).toBe(0);
-	});
-
-	test("cached input prices as a cache read, not as input", async () => {
-		const root = rollout("codex-b", [
-			turnContext("2026-08-14T09:00:00Z", "gpt-5.6-sol"),
-			tokenCount("2026-08-14T10:00:00Z", 1_000_000, 900_000, 0),
-		]);
-		const days = new Map();
-		await scanCodexDirect(days, CUTOFF, root);
-		// 100k uncached at $5/Mtok, 900k cached at $0.50/Mtok.
-		expect(priceDay("2026-08-14", days.get("2026-08-14")).costUsd).toBeCloseTo(0.95);
-	});
-
-	test("a reset total starts a fresh baseline rather than booking a negative", async () => {
-		const root = rollout("codex-c", [
-			turnContext("2026-08-14T09:00:00Z", "gpt-5.6-sol"),
-			tokenCount("2026-08-14T10:00:00Z", 500, 0, 50),
-			tokenCount("2026-08-14T10:05:00Z", 200, 0, 20),
-		]);
-		const days = new Map();
-		await scanCodexDirect(days, CUTOFF, root);
-		const b = days.get("2026-08-14").get("openai|gpt-5.6-sol");
-		expect(b.requests).toBe(2);
-		expect(b.input).toBe(700);
-		expect(b.output).toBe(70);
-	});
-});

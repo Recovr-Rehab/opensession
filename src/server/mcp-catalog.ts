@@ -51,7 +51,6 @@ import { createWorkflowsMcpServer } from "../agents/slack/workflow-tools";
 import { createRunnersMcpServer } from "./runners-mcp";
 import { createPortalsMcpServer } from "./portals-mcp";
 import { createSelfDeployMcpServer } from "./self-deploy";
-import { createCodexDirectOracleServer } from "./engine/codex-direct-oracle";
 
 /**
  * The classes of run that carry in-process servers. One entry per wiring site,
@@ -66,8 +65,6 @@ export type RunClass =
   | "slack"
   /** Goal wakes (goal-runner.ts). */
   | "goal"
-  /** codex-direct runs on a Dial preset (engine/codex-direct-mcp.ts). */
-  | "codex-dial"
   /** Built here, wired into no run — a live registration with no call site. */
   | "unwired";
 
@@ -399,16 +396,6 @@ export const MCP_SERVER_CATALOG: McpServerCatalogEntry[] = [
     condition: "Only on a session that carries a goalId.",
     note: "Deliberately NOT in SHARED_INPROCESS_SERVERS: goal wakes keep per-session engine servers, because the tool list is discovered once per directory instance.",
     build: () => createGoalSelfMcpServer("goal-example"),
-  },
-  {
-    name: "opensession-oracle",
-    summary: "The Dial's oracle as an MCP tool, for the codex engine.",
-    source: "src/server/engine/codex-direct-oracle.ts",
-    wiring: ["src/server/engine/codex-direct-mcp.ts"],
-    runClasses: ["codex-dial"],
-    condition: "codex-direct runs on a Dial preset that have a unified session id.",
-    note: "Answers through the tool-less opencodeOneShot, so it cannot read a file, run a command or reach any MCP server.",
-    build: () => createCodexDirectOracleServer({ oracleAgent: "oracle-fable" }),
   },
 ];
 

@@ -125,7 +125,6 @@ const RUN_CLASS_LABEL: Record<string, string> = {
   automation: "automation",
   slack: "Slack loop",
   goal: "goal wake",
-  "codex-dial": "codex Dial",
   unwired: "**unwired**",
 };
 
@@ -162,7 +161,7 @@ async function renderMcpTools(): Promise<string> {
         "  the servers `automations.ts` builds for them; the run-rpc fallback",
         "  resolver fails closed for automation-owned sessions, so asking for an",
         "  interactive server yields nothing.",
-        "- **Slack loop**, **goal wake**, **codex Dial** — their own narrow sets.",
+        "- **Slack loop**, **goal wake** — their own narrow sets.",
         "",
         "Two further layers apply to every run, and neither currently touches an",
         "in-process tool (both name external MCP tools):",
@@ -270,27 +269,6 @@ export const ENGINE_NOTES: Record<
       "(`SHARED_INPROCESS_SERVERS` / `sharedOpencodeEligible`). Unattended runs are gated " +
       "deny-by-default on journal kind (`opencodeGateReason`) and get the tool-strip policy.",
   },
-  claude: {
-    title: "claude-direct",
-    adapter: "src/server/engine/claude-direct-adapter.ts (policy in claude-direct-policy.ts)",
-    prefix: "`claude/<provider>/<model>`",
-    gate:
-      "`directEngineEnabled(\"claude\")` — `claude.enabled` in `~/.opensession-engines.json`; " +
-      "`OPENSESSION_ENGINE_CLAUDE_DIRECT=1` is honoured as a legacy alias. Off by default.",
-    note:
-      "Vendor-scoped: Anthropic models only. Loads lazily on the first turn that routes to it. " +
-      "Ask mode denies the mutating built-ins in `ASK_MODE_DENIED_TOOLS`.",
-  },
-  codex: {
-    title: "codex-direct",
-    adapter: "src/server/engine/codex-direct-adapter.ts (MCP wiring in codex-direct-mcp.ts)",
-    prefix: "`codex/<provider>/<model>`",
-    gate: "`directEngineEnabled(\"codex\")` — `codex.enabled` in `~/.opensession-engines.json`. Off by default.",
-    note:
-      "Vendor-scoped: OpenAI models only. Drives the `codex` binary's app-server JSON-RPC surface, " +
-      "with an isolated CODEX_HOME per account. The Dial's oracle reaches it as the " +
-      "`opensession-oracle` MCP server, because codex has no dynamic tool registration.",
-  },
   pi: {
     title: "pi",
     adapter: "src/server/pi-runner.ts",
@@ -318,7 +296,7 @@ async function renderEngines(): Promise<string> {
   const { ENGINE_IDS } = await import(`${REPO_ROOT}/src/server/engine/engines-config.ts`);
   // Read the ids from the engine registry so a new one cannot be missed, but
   // lead with the default engine rather than the union's alphabetical order.
-  const lead = ["opencode", "claude", "codex", "pi"];
+  const lead = ["opencode", "pi"];
   const ids: string[] = [
     ...lead.filter((id) => (ENGINE_IDS as readonly string[]).includes(id)),
     ...[...ENGINE_IDS].filter((id: string) => !lead.includes(id)).sort(),
@@ -337,7 +315,7 @@ async function renderEngines(): Promise<string> {
         "`routeModel()` resolves in one order, and this is the only place that",
         "order lives:",
         "",
-        "1. an explicit engine prefix on the id (`pi/…`, `claude/…`, `codex/…`);",
+        "1. an explicit engine prefix on the id (`pi/…`);",
         "   a leading `opencode/` is the picker's own id shape, not a choice;",
         "2. the per-model default engine — `modelEngines` in",
         "   `~/.opensession-engines.json`, keyed by the base model id, and applied",
@@ -394,9 +372,9 @@ async function renderEngines(): Promise<string> {
   );
   for (const example of [
     "pi/anthropic/claude-opus-5",
+    // Legacy ids of the removed direct engines normalize onto opencode.
     "claude/anthropic/claude-opus-5",
     "codex/openai/gpt-5.6-sol",
-    "claude/dial/opus-fable",
     "opencode/anthropic/claude-opus-5",
   ]) {
     const route = models.routeModel(example);
@@ -410,8 +388,6 @@ function steerLabel(models: any, id: string): string {
   if (id === "fake") return "n/a";
   const probe: Record<string, string> = {
     opencode: "opencode/anthropic/claude-opus-5",
-    claude: "claude/anthropic/claude-opus-5",
-    codex: "codex/openai/gpt-5.6-sol",
     pi: "pi/anthropic/claude-opus-5",
   };
   return models.modelSupportsSteer(probe[id]) ? "yes" : "no";

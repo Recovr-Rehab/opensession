@@ -87,34 +87,18 @@ describe("migrateSessionEngine", () => {
   });
 
   test("accepts any enabled engine, not just opencode", () => {
-    // pi ids need no extra switch here (the pi runner reports its own config
-    // gate); the direct engines are refused while switched off, so a flip can
-    // never leave a session on an engine that cannot run it.
+    // pi ids need no extra switch here: the pi runner reports its own config
+    // gate at run time.
     const pi = migrateSessionEngine("bks-mig-ok", "pi/anthropic/claude-opus-5");
     expect(pi.ok).toBe(true);
     if (pi.ok) expect(pi.to).toBe("pi/anthropic/claude-opus-5");
 
-    // Both halves run against a scratch engines file. Reading the machine's own
-    // ~/.opensession-engines.json instead made the off-case assert that the
-    // person running the test had claude-direct switched off, which on a live
-    // instance is simply untrue.
-    const enginesConfig = join(scratch, "engines.json");
-    const priorConfig = process.env.OPENSESSION_ENGINES_CONFIG;
-    process.env.OPENSESSION_ENGINES_CONFIG = enginesConfig;
-    try {
-      writeFileSync(enginesConfig, JSON.stringify({ claude: { enabled: false } }));
-      const off = migrateSessionEngine("bks-mig-ok", "claude/anthropic/claude-opus-5");
-      expect(off.ok).toBe(false);
-      if (!off.ok) expect(off.error).toContain("engine is off");
-
-      writeFileSync(enginesConfig, JSON.stringify({ claude: { enabled: true } }));
-      const on = migrateSessionEngine("bks-mig-ok", "claude/anthropic/claude-opus-5");
-      expect(on.ok).toBe(true);
-      if (on.ok) expect(on.to).toBe("claude/anthropic/claude-opus-5");
-    } finally {
-      if (priorConfig === undefined) delete process.env.OPENSESSION_ENGINES_CONFIG;
-      else process.env.OPENSESSION_ENGINES_CONFIG = priorConfig;
-    }
+    // A legacy direct-engine id normalizes onto opencode (the engines are
+    // removed), so the flip lands the session on a runnable engine rather
+    // than failing or bricking it.
+    const legacy = migrateSessionEngine("bks-mig-ok", "claude/anthropic/claude-opus-5");
+    expect(legacy.ok).toBe(true);
+    if (legacy.ok) expect(legacy.to).toBe("opencode/anthropic/claude-opus-5");
     // Leave the session where the other tests expect it.
     migrateSessionEngine("bks-mig-ok", "opencode/anthropic/claude-haiku-4-5");
   });

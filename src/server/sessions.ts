@@ -159,8 +159,9 @@ export async function readEngineTranscriptAsync(
 }
 
 /**
- * A STORE-ONLY engine session's transcript as entries — pi, and the two
- * direct-SDK engines (claude-direct, codex-direct). None of them has an
+ * A STORE-ONLY engine session's transcript as entries — pi, and the removed
+ * direct-SDK engines' historical sessions (claude-direct, codex-direct),
+ * which must stay readable. None of them has an
  * engine-owned store to read: no jsonl, no codex rollout, no SQLite. They
  * persist every turn into the owned transcript store under the UNIFIED session
  * id, so this resolves the owning session from the ENGINE id and serves its

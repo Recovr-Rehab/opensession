@@ -12,7 +12,6 @@ import { addMcpServer, getConnections, readMcpConfig, removeMcpServer, setMcpAll
 import { refreshOpencodePickerModels } from "../models";
 import { BRIDGE_PROVIDER_IDS, PROVIDER_ID_RE, addPickerModel, defaultPickerModelsForProvider, maskProviderKey, opencodeProviders, readOpencodeBridgeConfig, removeOpencodeProvider, removePickerModel, setBridgeEnabled, setOpencodeProvider } from "../opencode-config";
 import { isPiModelId, piEngineEnabled, readPiEngineConfig, setPiEnabled, setPiPickerModels } from "../pi-config";
-import { directEngineEnabled, modelEngineDefaults, setDirectEngineEnabled } from "../engine/engines-config";
 
 export async function handleConnectionsRoutes(
 	ctx: RouteContext,
@@ -28,12 +27,7 @@ export async function handleConnectionsRoutes(
 		return Response.json({
 			mcpServers,
 			agents: agentHealth,
-			engines: [
-				"opencode",
-				...(piEngineEnabled() ? ["pi"] : []),
-				...(directEngineEnabled("claude") ? ["claude"] : []),
-				...(directEngineEnabled("codex") ? ["codex"] : []),
-			],
+			engines: ["opencode", ...(piEngineEnabled() ? ["pi"] : [])],
 		});
 	}
 
@@ -425,47 +419,6 @@ export async function handleConnectionsRoutes(
 		} catch (e: any) {
 			return Response.json(
 				{ error: e?.message || "Failed to save opencode engine config" },
-				{ status: 400 },
-			);
-		}
-	}
-
-	// The two direct-SDK engines' on/off switches, the pi-engine sibling of
-	// the routes below. GET reports both gates plus the per-model default
-	// engines; PUT takes { engine: "claude"|"codex", enabled: boolean }.
-	if (path === "/api/settings/direct-engines" && req.method === "GET") {
-		return Response.json({
-			claude: { enabled: directEngineEnabled("claude") },
-			codex: { enabled: directEngineEnabled("codex") },
-			modelEngines: modelEngineDefaults(),
-		});
-	}
-
-	if (path === "/api/settings/direct-engines" && req.method === "PUT") {
-		const body = await req.json().catch(() => null);
-		const engine = body?.engine;
-		if (engine !== "claude" && engine !== "codex") {
-			return Response.json(
-				{ error: 'engine must be "claude" or "codex"' },
-				{ status: 400 },
-			);
-		}
-		if (typeof body.enabled !== "boolean") {
-			return Response.json(
-				{ error: "enabled must be a boolean" },
-				{ status: 400 },
-			);
-		}
-		try {
-			setDirectEngineEnabled(engine, body.enabled);
-			return Response.json({
-				claude: { enabled: directEngineEnabled("claude") },
-				codex: { enabled: directEngineEnabled("codex") },
-				modelEngines: modelEngineDefaults(),
-			});
-		} catch (e: any) {
-			return Response.json(
-				{ error: e?.message || "Failed to save the engine config" },
 				{ status: 400 },
 			);
 		}

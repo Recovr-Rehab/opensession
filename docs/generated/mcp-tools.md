@@ -24,7 +24,7 @@ boundary:
   the servers `automations.ts` builds for them; the run-rpc fallback
   resolver fails closed for automation-owned sessions, so asking for an
   interactive server yields nothing.
-- **Slack loop**, **goal wake**, **codex Dial** — their own narrow sets.
+- **Slack loop**, **goal wake** — their own narrow sets.
 
 Two further layers apply to every run, and neither currently touches an
 in-process tool (both name external MCP tools):
@@ -63,9 +63,8 @@ in-process tool (both name external MCP tools):
 | [`opensession-self`](#opensession-self) | 2 | automation | no | Only with the human-set `selfImprove` flag on that automation. |
 | [`opensession-github`](#opensession-github) | 4 | Slack loop | yes | – |
 | [`opensession-goal-self`](#opensession-goal-self) | 6 | goal wake | no | Only on a session that carries a goalId. |
-| [`opensession-oracle`](#opensession-oracle) | 1 | codex Dial | no | codex-direct runs on a Dial preset that have a unified session id. |
 
-25 servers, 99 tools. "Shared server" is membership of
+24 servers, 98 tools. "Shared server" is membership of
 `SHARED_INPROCESS_SERVERS` (`src/server/opencode-policy.ts`): a run carrying
 any server outside that list falls back to a per-session engine server.
 
@@ -879,19 +878,3 @@ Set a short human-readable phase label for where the mission is (e.g. 'week 2: s
 `mcp__opensession-goal-self__append_ledger` · input: `text` (string, required)
 
 Append to your durable fact ledger — the authoritative record that survives context compaction. Write down baselines, decisions, PR URLs, and measured results here every wake, and read it back at the start of each wake. Be concrete (numbers, links).
-
-## opensession-oracle
-
-The Dial's oracle as an MCP tool, for the codex engine.
-
-- **Source** `src/server/engine/codex-direct-oracle.ts`
-- **Wired in** `src/server/engine/codex-direct-mcp.ts`
-- **Runs** codex Dial
-- **Condition** codex-direct runs on a Dial preset that have a unified session id.
-- **Note** Answers through the tool-less opencodeOneShot, so it cannot read a file, run a command or reach any MCP server.
-
-### `oracle`
-
-`mcp__opensession-oracle__oracle` · input: `prompt` (string, required)
-
-Consult Claude Fable 5 for a read-only senior-engineering second opinion. Use it for hard plans, significant reviews, architecture tradeoffs, or stubborn debugging, not routine searches or edits. The oracle sees none of your conversation and cannot read files or run commands, so put the relevant context, file paths, constraints and options in the question itself.

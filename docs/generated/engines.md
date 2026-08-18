@@ -11,7 +11,7 @@ overrides configured — so it shows the shipped defaults.
 `routeModel()` resolves in one order, and this is the only place that
 order lives:
 
-1. an explicit engine prefix on the id (`pi/…`, `claude/…`, `codex/…`);
+1. an explicit engine prefix on the id (`pi/…`);
    a leading `opencode/` is the picker's own id shape, not a choice;
 2. the per-model default engine — `modelEngines` in
    `~/.opensession-engines.json`, keyed by the base model id, and applied
@@ -31,22 +31,6 @@ that engine's own gate reports why it cannot run.
 - **Gate** Always available; the Anthropic side additionally needs the Meridian bridge enabled (`bridgeEnabled()`, `~/.opensession-opencode.json`).
 - **Mid-turn steer** yes
 - **Note** The default engine and the only one eligible for the shared always-warm servers (`SHARED_INPROCESS_SERVERS` / `sharedOpencodeEligible`). Unattended runs are gated deny-by-default on journal kind (`opencodeGateReason`) and get the tool-strip policy.
-
-### claude-direct · `claude`
-
-- **Adapter** `src/server/engine/claude-direct-adapter.ts (policy in claude-direct-policy.ts)`
-- **Model ids** `claude/<provider>/<model>`
-- **Gate** `directEngineEnabled("claude")` — `claude.enabled` in `~/.opensession-engines.json`; `OPENSESSION_ENGINE_CLAUDE_DIRECT=1` is honoured as a legacy alias. Off by default.
-- **Mid-turn steer** yes
-- **Note** Vendor-scoped: Anthropic models only. Loads lazily on the first turn that routes to it. Ask mode denies the mutating built-ins in `ASK_MODE_DENIED_TOOLS`.
-
-### codex-direct · `codex`
-
-- **Adapter** `src/server/engine/codex-direct-adapter.ts (MCP wiring in codex-direct-mcp.ts)`
-- **Model ids** `codex/<provider>/<model>`
-- **Gate** `directEngineEnabled("codex")` — `codex.enabled` in `~/.opensession-engines.json`. Off by default.
-- **Mid-turn steer** yes
-- **Note** Vendor-scoped: OpenAI models only. Drives the `codex` binary's app-server JSON-RPC surface, with an isolated CODEX_HOME per account. The Dial's oracle reaches it as the `opensession-oracle` MCP server, because codex has no dynamic tool registration.
 
 ### pi · `pi`
 
@@ -100,7 +84,6 @@ engine cannot serve a model, and the run stays where it was.
 | Example id | Routes to |
 | --- | --- |
 | `pi/anthropic/claude-opus-5` | pi |
-| `claude/anthropic/claude-opus-5` | claude |
-| `codex/openai/gpt-5.6-sol` | codex |
-| `claude/dial/opus-fable` | claude |
+| `claude/anthropic/claude-opus-5` | opencode |
+| `codex/openai/gpt-5.6-sol` | opencode |
 | `opencode/anthropic/claude-opus-5` | opencode |

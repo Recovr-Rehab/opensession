@@ -11,8 +11,6 @@ import {
   explicitEngineFor,
   modelLabel,
   routeModel,
-  toClaudeModel,
-  toCodexModel,
   DIAL_ORACLE_AGENTS,
   DIAL_PRESETS,
   dialPreset,
@@ -247,116 +245,64 @@ describe("pi engine model routing", () => {
   });
 });
 
-describe("direct-SDK engine model routing (claude/ and codex/)", () => {
-  it("resolves explicit claude/<vendor>/<model> ids to the claude engine", () => {
+describe("legacy direct-engine ids (claude/ and codex/)", () => {
+  // The direct-SDK engines are removed. Their prefixes survive in stored
+  // sessions and modelHistory, so they must keep RESOLVING — onto the
+  // opencode engine, same upstream model — rather than going null (which
+  // would degrade a legacy session to the default model) or routing to a
+  // dead engine.
+  it("normalizes a legacy claude/<vendor>/<model> id onto opencode", () => {
     const m = resolveModel("claude/anthropic/claude-opus-5");
-    expect(m?.id).toBe("claude/anthropic/claude-opus-5");
-    expect(m?.provider).toBe("claude");
+    expect(m?.id).toBe("opencode/anthropic/claude-opus-5");
+    expect(m?.provider).toBe("opencode");
     expect(resolveModel("CLAUDE/Anthropic/Claude-Opus-5")?.id).toBe(
-      "claude/anthropic/claude-opus-5"
+      "opencode/anthropic/claude-opus-5"
     );
-    expect(providerFor("claude/anthropic/claude-opus-5")).toBe("claude");
+    expect(providerFor("claude/anthropic/claude-opus-5")).toBe("opencode");
+    expect(toOpencodeModel("claude/anthropic/claude-opus-5")).toBe(
+      "opencode/anthropic/claude-opus-5"
+    );
   });
 
-  it("resolves explicit codex/<vendor>/<model> ids to the codex engine", () => {
+  it("normalizes a legacy codex/<vendor>/<model> id onto opencode", () => {
     const m = resolveModel("codex/openai/gpt-5.6-sol");
-    expect(m?.id).toBe("codex/openai/gpt-5.6-sol");
-    expect(m?.provider).toBe("codex");
-    expect(providerFor("codex/openai/gpt-5.6-sol")).toBe("codex");
+    expect(m?.id).toBe("opencode/openai/gpt-5.6-sol");
+    expect(m?.provider).toBe("opencode");
+    expect(toOpencodeModel("codex/openai/gpt-5.6-sol")).toBe(
+      "opencode/openai/gpt-5.6-sol"
+    );
   });
 
-  it("never routes a cross-vendor combination — null, never another engine", () => {
-    // The silent-fallback trap: an un-routable id must not degrade to the
-    // generic slash passthrough (which would mint opencode/claude/…).
-    expect(resolveModel("claude/openai/gpt-5.6-sol")).toBeNull();
-    expect(resolveModel("codex/anthropic/claude-opus-5")).toBeNull();
-    expect(toClaudeModel("gpt-5.6-sol")).toBeUndefined();
-    expect(toCodexModel("claude-opus-5")).toBeUndefined();
-    // A preset whose MAIN model is the other vendor is equally un-routable.
-    expect(resolveModel("codex/dial/opus-fable")).toBeNull();
-    expect(toCodexModel("dial/opus-fable")).toBeUndefined();
-    expect(toClaudeModel("dial/high")).toBeUndefined();
+  it("normalizes a legacy preset-routed id onto the preset itself", () => {
+    // The vendor scoping died with the engines: what matters now is that the
+    // id under the prefix resolves, whatever vendor it names.
+    expect(resolveModel("claude/orchestrator/fable")?.id).toBe("orchestrator/fable");
+    expect(resolveModel("claude/orchestrator/not-real")).toBeNull();
   });
 
-  it("rejects truncated direct ids instead of minting a bogus passthrough", () => {
+  it("still rejects truncated ids instead of minting a bogus passthrough", () => {
     expect(resolveModel("claude/anthropic")).toBeNull();
     expect(resolveModel("codex/openai")).toBeNull();
     expect(resolveModel("claude/")).toBeNull();
     // A bare native id is still the native model, not an engine id.
     expect(resolveModel("claude-opus-5")?.id).toBe("claude-opus-5");
+    // A workspace-preset id under a legacy prefix resolves exactly as the
+    // bare id does (the opencode engine resolves the preset at dispatch).
+    expect(resolveModel("claude/workspace-preset/ws-x/nope")?.id).toBe(
+      resolveModel("workspace-preset/ws-x/nope")?.id
+    );
   });
 
-  it("composes any picker model or preset onto a direct engine, like toPiModel", () => {
-    expect(toClaudeModel("opencode/anthropic/claude-opus-5")).toBe(
-      "claude/anthropic/claude-opus-5"
+  it("applies the retired-codex reroute under the legacy prefix", () => {
+    expect(toOpencodeModel("codex/openai/gpt-5.5")).toBe("opencode/openai/gpt-5.6-sol");
+    expect(toOpencodeModel("codex/openai/gpt-5.4-mini")).toBe(
+      "opencode/openai/gpt-5.6-luna"
     );
-    expect(toClaudeModel("claude-opus-5")).toBe("claude/anthropic/claude-opus-5");
-    expect(toClaudeModel("dial/opus-fable")).toBe("claude/anthropic/claude-opus-5");
-    expect(toClaudeModel(ORCHESTRATOR_PRESETS[0].id)).toBe(
-      "claude/anthropic/claude-fable-5"
-    );
-    expect(toCodexModel("opencode/openai/gpt-5.6-sol")).toBe("codex/openai/gpt-5.6-sol");
-    expect(toCodexModel("gpt-5.6-sol")).toBe("codex/openai/gpt-5.6-sol");
-    expect(toCodexModel(BEST_AVAILABLE_CODEX_MODEL)).toBe("codex/openai/gpt-5.6-sol");
-    expect(toCodexModel("dial/high")).toBe("codex/openai/gpt-5.6-sol");
-    // Already-routed ids normalize rather than double-prefix.
-    expect(toClaudeModel("claude/anthropic/claude-opus-5")).toBe(
-      "claude/anthropic/claude-opus-5"
-    );
-    expect(toClaudeModel("claude/dial/opus-fable")).toBe(
-      "claude/anthropic/claude-opus-5"
-    );
-    // Another engine's explicit choice is never re-routed.
-    expect(toClaudeModel("pi/anthropic/claude-opus-5")).toBeUndefined();
-    expect(toCodexModel("pi/openai/gpt-5.6-sol")).toBeUndefined();
   });
 
-  it("accepts an orchestrator preset on the engine that can lead it", () => {
-    // The picker offering an engine the adapter then refuses is the mismatch
-    // this pair guards: routing and resolution answer the same question.
-    expect(resolveModel("claude/orchestrator/fable")?.id).toBe("claude/orchestrator/fable");
-    expect(resolveModel("claude/orchestrator/fable")?.provider).toBe("claude");
-    expect(resolveModel("codex/orchestrator/sol")?.id).toBe("codex/orchestrator/sol");
-    expect(resolveModel("claude/orchestrator/sol")).toBeNull();
-    expect(resolveModel("codex/orchestrator/fable")).toBeNull();
-    expect(resolveModel("claude/orchestrator/not-real")).toBeNull();
-  });
-
-  it("resolves a workspace preset through its store instead of a bogus passthrough", () => {
-    // No such workspace, so this is the not-found arm — it must answer "no",
-    // not mint opencode/workspace-preset/… the way the generic slash
-    // passthrough would. The found arm needs the workspace store, so it is
-    // covered where the store is available rather than here.
-    expect(resolveModel("claude/workspace-preset/ws-not-a-workspace/nope")).toBeNull();
-    expect(toClaudeModel("workspace-preset/ws-not-a-workspace/nope")).toBeUndefined();
-    expect(toCodexModel("workspace-preset/ws-not-a-workspace/nope")).toBeUndefined();
-  });
-
-  it("never maps direct ids onto the opencode engine", () => {
-    expect(toOpencodeModel("claude/anthropic/claude-opus-5")).toBe(
-      "claude/anthropic/claude-opus-5"
-    );
-    expect(toOpencodeModel("codex/openai/gpt-5.6-sol")).toBe("codex/openai/gpt-5.6-sol");
-  });
-
-  it("preserves the retired-codex reroute under the codex/ prefix", () => {
-    expect(toOpencodeModel("codex/openai/gpt-5.5")).toBe("codex/openai/gpt-5.6-sol");
-    expect(toOpencodeModel("codex/openai/gpt-5.4")).toBe("codex/openai/gpt-5.6-sol");
-    expect(toOpencodeModel("codex/openai/gpt-5.4-mini")).toBe("codex/openai/gpt-5.6-luna");
-    expect(toOpencodeModel("codex/openai/gpt-5.3-codex-spark")).toBe(
-      "codex/openai/gpt-5.6-luna"
-    );
-    // Composition reroutes too: a retired slug never reaches a direct engine.
-    expect(toCodexModel("gpt-5.5")).toBe("codex/openai/gpt-5.6-sol");
-    expect(toCodexModel("gpt-5.3-codex-spark")).toBe("codex/openai/gpt-5.6-luna");
-  });
-
-  it("draws each direct engine from its own account pool", () => {
+  it("keeps the shared bookkeeping working on legacy ids", () => {
     expect(accountProviderForModel("claude/anthropic/claude-opus-5")).toBe("claude");
     expect(accountProviderForModel("codex/openai/gpt-5.6-sol")).toBe("codex");
-  });
-
-  it("exposes the same effort variants and tiers as the opencode sibling", () => {
     expect(modelEfforts("claude/anthropic/claude-opus-5")).toEqual([
       "low",
       "medium",
@@ -364,40 +310,21 @@ describe("direct-SDK engine model routing (claude/ and codex/)", () => {
       "xhigh",
       "max",
     ]);
-    expect(modelEfforts("codex/openai/gpt-5.6-sol")).toEqual([
-      "none",
-      "low",
-      "medium",
-      "high",
-      "xhigh",
-    ]);
     expect(normalizeModelEffort("claude/anthropic/claude-haiku-4-5", "low")).toBe("high");
     expect(fallbackTier("claude/anthropic/claude-opus-5")).toBe(
       fallbackTier("claude-opus-5")
     );
     expect(fallbackTier("codex/openai/gpt-5.6-sol")).toBe(fallbackTier("gpt-5.6-sol"));
+    expect(modelSupportsSteer("claude/anthropic/claude-opus-5")).toBe(true);
+    expect(modelSupportsSteer("codex/openai/gpt-5.6-sol")).toBe(true);
   });
 
-  it("labels direct ids with the engine kept visible", () => {
+  it("labels legacy ids with the engine kept visible, for stored history", () => {
     expect(directModelLabel("claude/anthropic/claude-opus-5")).toBe(
       "Claude · Claude Opus 5"
     );
     expect(directModelLabel("codex/openai/gpt-5.6-sol")).toBe("Codex · GPT-5.6 Sol");
-    expect(directModelLabel("claude/dial/opus-fable")).toBe(
-      "Claude · Opus 5 + Fable oracle"
-    );
     expect(modelLabel("claude/anthropic/claude-opus-5")).toBe("Claude · Claude Opus 5");
-  });
-
-  it("reports steer support by engine, not by model slug", () => {
-    // Was providerFor(model) !== "codex", from when a bare gpt-* id ran on the
-    // Codex CLI engine. That engine is gone: bare slugs run on opencode, and
-    // codex-direct steers natively.
-    expect(modelSupportsSteer("codex/openai/gpt-5.6-sol")).toBe(true);
-    expect(modelSupportsSteer("gpt-5.6-sol")).toBe(true);
-    expect(modelSupportsSteer("opencode/openai/gpt-5.6-sol")).toBe(true);
-    expect(modelSupportsSteer("claude/anthropic/claude-opus-5")).toBe(true);
-    expect(modelSupportsSteer("pi/anthropic/claude-opus-5")).toBe(true);
   });
 
   it("never registers direct entries: the model list stays engine-agnostic", () => {
@@ -442,58 +369,50 @@ describe("routeModel (engine resolution order)", () => {
   });
 
   it("honors an explicit engine prefix over everything else", () => {
-    writeConfig({
-      claude: { enabled: true },
-      modelEngines: { "claude-opus-5": "claude" },
-    });
+    writeConfig({ modelEngines: { "claude-opus-5": "opencode" } });
     expect(routeModel("pi/anthropic/claude-opus-5", { interactive: true })).toEqual({
       engine: "pi",
       model: "pi/anthropic/claude-opus-5",
     });
-    // An explicit choice routes even with the engine disabled — the engine's
-    // own gate reports why, rather than a silent reroute.
-    writeConfig({ claude: { enabled: false } });
+    // The removed direct engines' legacy prefixes are NOT an engine choice
+    // anymore: they normalize onto opencode instead of routing to a dead
+    // engine.
     expect(routeModel("claude/anthropic/claude-opus-5")).toEqual({
-      engine: "claude",
-      model: "claude/anthropic/claude-opus-5",
+      engine: "opencode",
+      model: "opencode/anthropic/claude-opus-5",
+    });
+    expect(routeModel("codex/openai/gpt-5.6-sol")).toEqual({
+      engine: "opencode",
+      model: "opencode/openai/gpt-5.6-sol",
     });
   });
 
   it("applies the per-model default engine for interactive runs only", () => {
     writeConfig({
-      claude: { enabled: true },
-      codex: { enabled: true },
-      modelEngines: { "claude-opus-5": "claude", "gpt-5.6-sol": "codex" },
+      modelEngines: { "claude-opus-5": "pi" },
     });
     expect(routeModel("opencode/anthropic/claude-opus-5", { interactive: true })).toEqual({
-      engine: "claude",
-      model: "claude/anthropic/claude-opus-5",
-    });
-    expect(routeModel("opencode/openai/gpt-5.6-sol", { interactive: true })).toEqual({
-      engine: "codex",
-      model: "codex/openai/gpt-5.6-sol",
+      engine: "pi",
+      model: "pi/anthropic/claude-opus-5",
     });
     // Automations and agent loops stay on their current routing this phase.
     expect(routeModel("opencode/anthropic/claude-opus-5").engine).toBe("opencode");
   });
 
-  it("fails soft on a stale default: disabled or un-routable stays on opencode", () => {
+  it("fails soft on a stale default naming a removed engine", () => {
+    // A modelEngines entry left over from the removed direct engines is
+    // dropped by normalization, and the run stays on opencode.
     writeConfig({
-      claude: { enabled: false },
-      modelEngines: { "claude-opus-5": "claude" },
-    });
-    expect(routeModel("opencode/anthropic/claude-opus-5", { interactive: true }).engine).toBe(
-      "opencode"
-    );
-    // Enabled but cross-vendor: ignored rather than silently rerouted.
-    writeConfig({
-      codex: { enabled: true },
-      modelEngines: { "claude-opus-5": "codex" },
+      claude: { enabled: true },
+      modelEngines: { "claude-opus-5": "claude", "gpt-5.6-sol": "codex" },
     });
     expect(routeModel("opencode/anthropic/claude-opus-5", { interactive: true })).toEqual({
       engine: "opencode",
       model: "opencode/anthropic/claude-opus-5",
     });
+    expect(routeModel("opencode/openai/gpt-5.6-sol", { interactive: true }).engine).toBe(
+      "opencode"
+    );
   });
 
   it("keys the default map by the engine-stripped base id", () => {
@@ -505,7 +424,9 @@ describe("routeModel (engine resolution order)", () => {
     expect(modelEngineKey("pi/dial/ultra")).toBe("dial/ultra");
     expect(modelEngineKey("claude/dial/opus-fable")).toBe("dial/opus-fable");
     expect(modelEngineKey("claude-opus-5")).toBe("claude-opus-5");
-    expect(explicitEngineFor("claude/anthropic/claude-opus-5")).toBe("claude");
+    // Legacy prefixes are no longer an explicit engine choice.
+    expect(explicitEngineFor("claude/anthropic/claude-opus-5")).toBeNull();
+    expect(explicitEngineFor("pi/anthropic/claude-opus-5")).toBe("pi");
     expect(explicitEngineFor("claude-opus-5")).toBeNull();
     expect(explicitEngineFor("anthropic/claude-opus-5")).toBeNull();
   });

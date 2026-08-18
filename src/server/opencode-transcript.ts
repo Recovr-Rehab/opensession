@@ -766,7 +766,7 @@ export function transcriptLineToolResult(
 /** Map an already-parsed TranscriptEntry (any engine) back onto a claude-shape
  *  jsonl line, preserving ids so re-parsed copies upsert instead of duplicate.
  *  Since mirror retirement this is internal normalization plumbing only: the
- *  reattach gap-backfill (and the claude-direct adapter) route entries through
+ *  reattach gap-backfill route entries through
  *  transcriptLineForEntry → parseJsonlLines → appendTranscriptEvents so every
  *  writer shares ONE parse/identity path into the store — no file is written. */
 export function transcriptLineForEntry(e: TranscriptEntry): JsonlLine | null {

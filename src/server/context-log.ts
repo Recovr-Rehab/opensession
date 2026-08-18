@@ -20,7 +20,7 @@
  * ## The choke point
  *
  * `runOnModel` (agent-runner.ts) is where every engine dispatch happens —
- * opencode, pi, claude-direct, codex-direct, and the test fake — for every
+ * opencode, pi, and the test fake — for every
  * model of a fallback walk. One call there covers all of them, including the
  * handoff the walk itself prepends on a cross-provider hop, because it runs
  * once per hop with that hop's exact prompt.
@@ -64,13 +64,11 @@
  * was scoped to. That reconstructs which tools the model had, not the wording
  * of each schema.
  *
- * The direct engines' `instructions` records come from their own adapters
- * rather than from a runner: claude-direct and codex-direct assemble their
- * system prompt themselves and never reach the opencode runner, so each logs
- * at the point its text is final (claude-direct's append to the claude_code
- * preset, codex-direct's `developerInstructions`). What is still outside the
- * record on those two is the vendor preset each appends to, which is the
- * engine's own text and not ours to record.
+ * An engine that assembles its own system prompt (the removed direct-SDK
+ * engines did; historical sessions carry their records) logs the
+ * `instructions` source at the point its text is final rather than from a
+ * runner. What stays outside such a record is the vendor preset the engine
+ * appends to, which is the engine's own text and not ours to record.
  */
 import { createHash } from "crypto";
 import {
@@ -202,11 +200,9 @@ export type StandingContextSource =
 	 *  only inside the runner. */
 	| "mcp-servers"
 	/** The standing instruction text the engine was given (opencode's
-	 *  instructions file or the shared server's per-prompt `system`;
-	 *  claude-direct's append to the claude_code preset; codex-direct's
-	 *  `developerInstructions`), which already folds in AGENTS.local.md /
-	 *  CLAUDE.local.md. Written wherever that text is final, which is a runner
-	 *  for opencode and the adapter itself for the two direct engines. */
+	 *  instructions file or the shared server's per-prompt `system`), which
+	 *  already folds in AGENTS.local.md / CLAUDE.local.md. Written wherever
+	 *  that text is final. */
 	| "instructions";
 
 export interface StandingContextInput {

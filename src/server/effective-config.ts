@@ -57,7 +57,7 @@ import {
   explicitEngineFor,
 } from "./models";
 import { resolveWorkspaceModelPreset } from "./workspace-model-presets";
-import { directEngineEnabled, enginesConfigPath, modelEngineDefault } from "./engine/engines-config";
+import { enginesConfigPath, modelEngineDefault } from "./engine/engines-config";
 import { readOpencodeBridgeConfig } from "./opencode-config";
 import {
   claudePoolDryReason,
@@ -390,9 +390,7 @@ export async function buildSessionEffectiveConfig(
     explicit && explicit !== "opencode"
       ? `explicit "${explicit}/" prefix on the session's model id`
       : perModelDefault && perModelDefault !== "opencode"
-        ? directEngineEnabled(perModelDefault as any)
-          ? `${enginesConfigPath()} modelEngines["${engineKey}"]`
-          : `${enginesConfigPath()} modelEngines["${engineKey}"] = "${perModelDefault}" IGNORED (that engine is disabled) — fail-soft to opencode`
+        ? `${enginesConfigPath()} modelEngines["${engineKey}"]`
         : "default engine (opencode)";
 
   const model: Record<string, ConfigRow> = {

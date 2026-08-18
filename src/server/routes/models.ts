@@ -8,9 +8,7 @@
 
 import { requestUser, type RouteContext } from "./context";
 import { DIAL_PRESETS, KNOWN_MODELS, ORCHESTRATOR_PRESETS, accountProviderForModel, getDefaultModel, getModelFallbackAuto, interactiveDefaultModel, modelEfforts, modelEngineKey, refreshOpencodePickerModels, setDefaultModel, setInteractiveDefaultModel, setModelFallbackAuto, toOpencodeModel } from "../models";
-import { ENGINE_IDS, directEngineEnabled, modelEngineDefaults, setModelEngineDefault, type EngineId } from "../engine/engines-config";
-import { listAccountsPublic } from "../claude-accounts";
-import { listCodexAccountsPublic } from "../codex-accounts";
+import { ENGINE_IDS, modelEngineDefaults, setModelEngineDefault, type EngineId } from "../engine/engines-config";
 import { opencodeOrchestratorEnabled } from "../opencode-config";
 import { piEngineEnabled } from "../pi-config";
 import { type Sandbox } from "../sandbox";
@@ -24,12 +22,8 @@ import { getWorkspace, workspaceModelSettings } from "../workspaces";
 
 /** Engine ids in picker order, with their labels and whether each one can
  *  actually run a turn right now. "Available" is deliberately cheap and
- *  local — configured/enabled plus, for the direct engines, an account in the
- *  pool they draw from (the same signal engine-status.ts reports); it is not a
- *  liveness probe. */
+ *  local (configured/enabled); it is not a liveness probe. */
 function availableEngines(): { id: EngineId; label: string; available: boolean }[] {
-	const directAvailable = (engine: "claude" | "codex", accounts: () => number) =>
-		directEngineEnabled(engine) && accounts() > 0;
 	return [
 		{
 			id: "opencode",
@@ -39,16 +33,6 @@ function availableEngines(): { id: EngineId; label: string; available: boolean }
 			available: KNOWN_MODELS.some((m) => m.provider === "opencode"),
 		},
 		{ id: "pi", label: "Pi", available: piEngineEnabled() },
-		{
-			id: "claude",
-			label: "Claude",
-			available: directAvailable("claude", () => listAccountsPublic().length),
-		},
-		{
-			id: "codex",
-			label: "Codex",
-			available: directAvailable("codex", () => listCodexAccountsPublic().length),
-		},
 	];
 }
 

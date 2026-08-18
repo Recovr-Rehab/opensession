@@ -49,7 +49,7 @@ export type { TurnUsage } from "../run-events";
 export type EngineAskHandler = NonNullable<RunAgentOpts["onAskUser"]>;
 
 export interface EngineAdapter {
-  /** Stable adapter id, e.g. "opencode" / "claude-direct". */
+  /** Stable adapter id, e.g. "opencode" / "pi". */
   readonly name: string;
 
   /**

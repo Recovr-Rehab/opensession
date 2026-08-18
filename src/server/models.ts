@@ -17,15 +17,12 @@
  * resolves presets to their concrete main model. Stored Pi ids resolve to
  * provider "pi" and never map back onto OpenCode.
  *
- * Direct-SDK engines (opt-in): `claude/` and `codex/` compose the same way
- * (toClaudeModel / toCodexModel mirror toPiModel), but are VENDOR-SCOPED —
- * the claude engine only serves Anthropic models, the codex engine only
- * OpenAI ones, and an un-routable combination resolves to null rather than
- * silently falling through to another engine. Native bare ids (claude-*,
- * gpt-*) still map onto opencode at dispatch; they reach a direct engine only
- * via an explicit prefix or the per-model default-engine map
- * (engine/engines-config.ts). routeModel() below is the one place that
- * resolution order lives.
+ * Removed engines: the direct-SDK engines (claude/…, codex/…) are deleted.
+ * Their prefixes survive in stored sessions and modelHistory, so they stay
+ * RESOLVABLE — a legacy claude/<vendor>/<model> or codex/<vendor>/<model> id
+ * normalizes onto its opencode form instead of resolving to a dead engine,
+ * and those sessions keep running the same model. routeModel() below is the
+ * one place the resolution order lives.
  */
 
 import { existsSync, readFileSync } from "fs";
@@ -39,27 +36,25 @@ import {
   BRIDGE_PROVIDER_IDS,
 } from "./opencode-config";
 import { stateDir } from "./paths";
-import { directEngineEnabled, modelEngineDefault } from "./engine/engines-config";
+import { modelEngineDefault } from "./engine/engines-config";
 // Workspace ("Custom") presets live in the workspace store, so the one thing
 // this module needs from them — a preset's lead model — has to be read there.
 // The import cycle back into this module is inert: workspace-model-presets
 // touches these bindings only inside function bodies, never at load time.
 import { resolveWorkspaceModelPreset } from "./workspace-model-presets";
 
+// "claude" and "codex" are LEGACY provider tags: the CLI-era engines and the
+// removed direct-SDK engines stored them on sessions (and readers still key
+// engine-id slots on them), but routing never produces them anymore.
 export type Provider = "claude" | "codex" | "opencode" | "pi";
 
-/** Every engine id that can lead a model id, as a routing prefix. Keep this
- *  in step with the Provider union above: it is the single place the id
- *  grammar's engine axis is spelled out, so a new engine can't silently lose
- *  efforts, preset lookup, tiering or account-pool detection. */
+/** Every engine id that can lead a model id, as a routing prefix — including
+ *  the removed direct engines' claude/ and codex/, which legacy stored ids
+ *  still carry. Keep this in step with the Provider union above: it is the
+ *  single place the id grammar's engine axis is spelled out, so an engine
+ *  prefix can't silently lose efforts, preset lookup, tiering or account-pool
+ *  detection. */
 const ENGINE_PREFIX_RE = /^(?:opencode|pi|claude|codex)\//;
-
-/** The upstream vendor each direct-SDK engine serves, and the ONLY one it
- *  serves: the claude engine drives the Anthropic SDK, the codex engine the
- *  OpenAI one. An un-routable combination resolves to null/undefined
- *  everywhere below rather than silently landing on another engine. */
-const DIRECT_ENGINE_VENDOR = { claude: "anthropic", codex: "openai" } as const;
-export type DirectEngine = keyof typeof DIRECT_ENGINE_VENDOR;
 
 /** `<engine>/<upstream vendor>/…` — captures the vendor segment of a routed
  *  id, whichever engine carries it. */
@@ -520,10 +515,10 @@ export function piModelLabel(id: string): string {
   return `Pi · ${native?.label || prettifyModelSlug(tail)}`;
 }
 
-/** Friendly label for a direct-SDK engine id ("claude/anthropic/claude-opus-5"
- *  → "Claude · Claude Opus 5"). Same rule as piModelLabel: the engine stays
- *  visible so the entry never reads as a duplicate of the opencode-served
- *  model beside it. */
+/** Friendly label for a LEGACY direct-SDK engine id still stored on old
+ *  sessions and modelHistory ("claude/anthropic/claude-opus-5" → "Claude ·
+ *  Claude Opus 5"). The engines are removed; the label keeps their history
+ *  readable. */
 export function directModelLabel(id: string): string {
   const engine = id.startsWith("codex/") ? "Codex" : "Claude";
   const preset = modelPreset(id);
@@ -884,7 +879,7 @@ export function toOpencodeModel(model?: string | null): string | undefined {
   // pi/openai/gpt-5.5 or codex/openai/gpt-5.5 would otherwise run the
   // 272k-window model there (compact-heavy, the exact loop the retirement
   // exists to prevent). The engine prefix is preserved throughout.
-  const m = mapped?.match(/^(opencode|pi|codex)\/openai\/(.+)$/);
+  const m = mapped?.match(/^(opencode|pi)\/openai\/(.+)$/);
   const reroute = m && RETIRED_CODEX_REROUTE[m[2]];
   return reroute ? `${m[1]}/openai/${reroute}` : mapped;
 }
@@ -906,98 +901,12 @@ export function toPiModel(model?: string | null): string | undefined {
     : undefined;
 }
 
-/**
- * Route any picker model or preset to a direct-SDK engine — the same
- * composition toPiModel does, plus the vendor scope these engines have and pi
- * does not: the claude engine drives the Anthropic SDK and the codex engine
- * the OpenAI one, so a cross-vendor request (codex/claude-opus-5,
- * claude/gpt-5.6-sol) returns undefined. Never silently rerouted to the engine
- * that COULD serve it — a silent fallback here is the bug this shape exists to
- * prevent.
- */
-function toDirectEngineModel(
-  engine: DirectEngine,
-  model?: string | null
-): string | undefined {
-  const requested = (model || "").trim();
-  if (!requested) return undefined;
-  const prefix = `${engine}/`;
-  // Resolve a routed preset BEFORE preserving an explicit prefix, exactly like
-  // toPiModel: otherwise claude/dial/… would reach the SDK as provider "dial".
-  const pickerId = requested.startsWith(prefix)
-    ? requested.slice(prefix.length)
-    : requested;
-  // Another engine's id is a deliberate choice, never re-routed through here.
-  if (ENGINE_PREFIX_RE.test(pickerId) && !pickerId.startsWith("opencode/")) {
-    return undefined;
-  }
-  const concrete = directEngineTarget(pickerId);
-  const vendorPrefix = `opencode/${DIRECT_ENGINE_VENDOR[engine]}/`;
-  return concrete?.startsWith(vendorPrefix)
-    ? `${prefix}${concrete.slice("opencode/".length)}`
-    : undefined;
-}
-
-/** Guards the workspace-preset lookup below against a preset whose lead names
- *  another preset: resolveWorkspaceModelPreset resolves its lead through
- *  resolveModel, which lands back here. One level is all any real preset
- *  needs; a cycle answers "not servable" instead of overflowing the stack. */
-let resolvingWorkspacePreset = false;
-
-/**
- * The concrete `opencode/<vendor>/<model>` an id points at, for the vendor
- * scoping the direct engines apply — resolving the three preset families the
- * picker can hand them:
- *
- *  - dial/… and orchestrator/… through their built-in tables;
- *  - workspace-preset/…/… through the workspace store, which is where a
- *    "Custom" preset's lead model lives.
- *
- * Kept in one place because `toDirectEngineModel` (what the picker routes to)
- * and `directEngineServes` (what `resolveModel` accepts) must answer the same
- * question — an engine offered in the picker and refused by the adapter is
- * exactly the mismatch this shape exists to prevent.
- */
-function directEngineTarget(id: string): string | undefined {
-  if (id.toLowerCase().startsWith("workspace-preset/")) {
-    if (resolvingWorkspacePreset) return undefined;
-    resolvingWorkspacePreset = true;
-    try {
-      const ws = resolveWorkspaceModelPreset(id);
-      return ws ? toOpencodeModel(ws.model) : undefined;
-    } finally {
-      resolvingWorkspacePreset = false;
-    }
-  }
-  return toOpencodeModel(modelPreset(id)?.model || id);
-}
-
-/** Whether a direct engine can serve `rest` (an id with its engine prefix
- *  already stripped): its own vendor's models, or a dial / orchestrator /
- *  workspace preset whose MAIN model is that vendor's. */
-function directEngineServes(engine: DirectEngine, rest: string): boolean {
-  if (!rest.includes("/")) return false;
-  const target = directEngineTarget(rest);
-  return !!target?.startsWith(`opencode/${DIRECT_ENGINE_VENDOR[engine]}/`);
-}
-
-/** Route a model or preset to the claude direct-SDK engine (Anthropic only). */
-export function toClaudeModel(model?: string | null): string | undefined {
-  return toDirectEngineModel("claude", model);
-}
-
-/** Route a model or preset to the codex direct-SDK engine (OpenAI only). */
-export function toCodexModel(model?: string | null): string | undefined {
-  return toDirectEngineModel("codex", model);
-}
-
 /** Compose `model` onto `engine`; undefined when that engine can't serve it. */
 export function toEngineModel(
   model: string | null | undefined,
   engine: Provider
 ): string | undefined {
   if (engine === "pi") return toPiModel(model);
-  if (engine === "claude" || engine === "codex") return toDirectEngineModel(engine, model);
   return toOpencodeModel(model);
 }
 
@@ -1006,7 +915,10 @@ export function toEngineModel(
  *  ("anthropic/claude-opus-5") are UNROUTED — they dispatch to opencode
  *  unless a per-model default says otherwise (routeModel below). */
 export function explicitEngineFor(model?: string | null): Provider | null {
-  const m = (model || "").trim().toLowerCase().match(/^(opencode|pi|claude|codex)\//);
+  // Only the LIVE engines: the removed direct engines' claude/ and codex/
+  // prefixes are not an engine choice anymore — resolveModel normalizes them
+  // onto opencode, and routeModel dispatches them there.
+  const m = (model || "").trim().toLowerCase().match(/^(opencode|pi)\//);
   return m ? (m[1] as Provider) : null;
 }
 
@@ -1017,7 +929,10 @@ const PRESET_HEADS = ["dial/", "orchestrator/", "workspace-preset/"];
  *  "pi/anthropic/claude-opus-5" → "opencode/anthropic/claude-opus-5",
  *  "claude/dial/opus-fable" → "dial/opus-fable". Unprefixed ids pass through. */
 function pickerBaseId(id: string): string {
-  const engine = explicitEngineFor(id);
+  // The removed direct engines' legacy prefixes strip the same way pi/ does,
+  // so a stored claude/… id keys the same per-model default as its base id.
+  const legacy = id.match(/^(claude|codex)\//)?.[1];
+  const engine = explicitEngineFor(id) || legacy;
   if (!engine || engine === "opencode") return id;
   const rest = id.slice(engine.length + 1);
   return PRESET_HEADS.some((head) => rest.startsWith(head)) ? rest : `opencode/${rest}`;
@@ -1040,9 +955,10 @@ export function modelEngineKey(model?: string | null): string {
   return slash > 0 ? rest.slice(slash + 1) : rest;
 }
 
-/** Which engines fold a message into a LIVE turn: opencode in-band, pi and the
- *  two direct SDKs natively. One table so a future engine that can't steer has
- *  a single place to say so. */
+/** Which engines fold a message into a LIVE turn: opencode in-band, pi
+ *  natively. The legacy claude/codex tags stay keyed so the Provider union
+ *  stays total, but routing never produces them. One table so a future engine
+ *  that can't steer has a single place to say so. */
 const STEERABLE_ENGINES: Record<Provider, boolean> = {
   opencode: true,
   pi: true,
@@ -1056,9 +972,8 @@ const STEERABLE_ENGINES: Record<Provider, boolean> = {
  *
  * Engine-based, not slug-based. The old predicate was `providerFor(model) !==
  * "codex"`, from when a bare gpt-* id ran on the Codex CLI engine, which had
- * no steer. That engine is deleted: bare gpt-* ids run on opencode, and the
- * codex-direct engine steers natively — so the slug says nothing and the
- * engine says everything. A live run that still can't take a steer answers
+ * no steer. That engine is deleted: bare gpt-* ids run on opencode — so the
+ * slug says nothing and the engine says everything. A live run that still can't take a steer answers
  * false at the call site (steerAgentRun) and the caller queues.
  */
 export function modelSupportsSteer(model?: string | null): boolean {
@@ -1075,10 +990,10 @@ export function modelSupportsSteer(model?: string | null): boolean {
  *      modelEngines map, keyed by the base id;
  *   3. opencode.
  *
- * Fail-soft on the default only: a preference naming a disabled direct engine,
- * or one that model can't route to, is ignored and the run stays on opencode —
- * a stale preference must not brick a session. An EXPLICIT choice is never
- * softened: it routes, and the engine's own gate reports why it can't run.
+ * Fail-soft on the default only: a preference that model can't route to is
+ * ignored and the run stays on opencode — a stale preference must not brick a
+ * session. An EXPLICIT choice is never softened: it routes, and the engine's
+ * own gate reports why it can't run.
  */
 export function routeModel(
   model: string | null | undefined,
@@ -1088,24 +1003,18 @@ export function routeModel(
   const explicit = explicitEngineFor(requested);
   // A leading `opencode/` is the picker's own id shape, not an engine choice —
   // every catalog entry carries it — so it does NOT outrank the per-model
-  // default the way pi/, claude/ and codex/ do.
+  // default the way pi/ does.
   if (explicit && explicit !== "opencode") return { engine: explicit, model: requested };
   if (opts?.interactive) {
+    // No availability gate here: pi keeps its own config gate in pi-runner,
+    // which reports a clear error of its own.
     const preferred = modelEngineDefault(modelEngineKey(requested));
-    if (preferred && preferred !== "opencode" && engineUsableAsDefault(preferred)) {
+    if (preferred && preferred !== "opencode") {
       const routed = toEngineModel(requested, preferred);
       if (routed) return { engine: preferred, model: routed };
     }
   }
   return { engine: "opencode", model: toOpencodeModel(requested) || requested };
-}
-
-/** Whether a per-model default may route to this engine. Only the two direct
- *  engines have a global on/off switch here; pi keeps its own config gate in
- *  pi-runner, which reports a clear error of its own. */
-function engineUsableAsDefault(engine: Provider): boolean {
-  if (engine === "claude" || engine === "codex") return directEngineEnabled(engine);
-  return true;
 }
 
 function toOpencodeModelRaw(model?: string | null): string | undefined {
@@ -1117,10 +1026,13 @@ function toOpencodeModelRaw(model?: string | null): string | undefined {
   // bookkeeping (accountProviderForModel, the fallback walk) working on them
   // instead of minting a bogus opencode/pi/… id below.
   if (m.startsWith("pi/")) return m;
-  // Same rule for the direct-SDK engines: claude/… and codex/… are routing
-  // choices the dispatcher honors by prefix. Without this arm the generic
-  // slash passthrough below would mint a bogus opencode/claude/… id.
-  if (m.startsWith("claude/") || m.startsWith("codex/")) return m;
+  // The removed direct-SDK engines' legacy prefixes normalize onto opencode
+  // (same upstream model), so stored claude/… and codex/… sessions keep
+  // running. Without this arm the generic slash passthrough below would mint
+  // a bogus opencode/claude/… id.
+  if (m.startsWith("claude/") || m.startsWith("codex/")) {
+    return toOpencodeModel(m.slice(m.indexOf("/") + 1));
+  }
   // Dial/orchestrator presets resolve to their MAIN model here; the preset id
   // itself stays on the session (and in opts.model) so the runner can wire the
   // oracle / workers.
@@ -1328,16 +1240,13 @@ export function resolveModel(input: string): ModelInfo | null {
       ? { id: s, provider: "pi", label: s, aliases: [] }
       : null;
   }
-  // Direct-SDK engines: claude/<vendor>/<model> and codex/<vendor>/<model>,
-  // composed like the pi ids above but VENDOR-SCOPED — claude routes only
-  // Anthropic models, codex only OpenAI ones. A cross-vendor or truncated id
-  // is null, never a fall-through to the generic slash arm below (which would
-  // mint an opencode/claude/… id and silently run the wrong engine).
+  // The removed direct-SDK engines' legacy prefixes: resolve the id under
+  // the prefix instead of returning null, so a stored claude/… or codex/…
+  // session model keeps resolving — onto the opencode engine, same upstream
+  // model. Never a fall-through to the generic slash arm below, which would
+  // mint a bogus opencode/claude/… id.
   if (s.startsWith("claude/") || s.startsWith("codex/")) {
-    const engine: DirectEngine = s.startsWith("claude/") ? "claude" : "codex";
-    return directEngineServes(engine, s.slice(engine.length + 1))
-      ? { id: s, provider: engine, label: s, aliases: [] }
-      : null;
+    return resolveModel(s.slice(s.indexOf("/") + 1));
   }
   // A bare "<provider>/<model>" (e.g. "openai/gpt-5.6-sol", "anthropic/claude-…")
   // is an opencode engine id written without the engine prefix — a shape a

@@ -98,7 +98,7 @@
 import { Database } from "bun:sqlite";
 import { readdirSync, statSync } from "node:fs";
 import { OPENSESSION_SESSIONS_DIR } from "../src/server/paths";
-import { loadRates, scanClaudeDirect, scanCodexDirect, type EngineUsageScan } from "../src/server/engine-usage";
+import { loadRates } from "../src/server/engine-usage";
 
 const SHARD_DIR = `${OPENSESSION_SESSIONS_DIR}/opencode/db`;
 
@@ -457,26 +457,6 @@ async function scanOpencode(cutoff: number): Promise<OpencodeScan> {
 	return out;
 }
 
-// ── direct engines ──
-
-/** Fold an engine-usage day scan (date → provider|model → bucket) into one
- *  aggregate per provider|model. Those scanners are the maintained readers for
- *  the direct engines' stores, replay dedupe and delta accounting included. */
-function foldDays(days: EngineUsageScan["days"]): Map<string, Agg> {
-	const out = new Map<string, Agg>();
-	for (const byModel of days.values()) {
-		for (const [key, b] of byModel) {
-			let a = out.get(key);
-			if (!a) out.set(key, (a = emptyAgg()));
-			a.requests += b.requests;
-			a.input += b.input;
-			a.cacheRead += b.cacheRead;
-			a.cacheWrite += b.cacheWrite;
-			a.output += b.output;
-		}
-	}
-	return out;
-}
 
 // ── report ──
 
@@ -626,16 +606,6 @@ function prefixSection(scan: OpencodeScan): string[] {
 	return lines;
 }
 
-function directTable(label: string, byModel: Map<string, Agg>): string[] {
-	const lines: string[] = [];
-	for (const [key, a] of [...byModel.entries()].sort((x, y) => y[1].input - x[1].input)) {
-		const [provider, model] = key.split("|");
-		lines.push(
-			`${col(label, 15)} ${col(`${provider}/${model}`, 31)} ${col(num(a.requests), 9, true)} ${col(num(a.input), 12, true)} ${col(num(a.cacheRead), 12, true)} ${col(pct(hitRate(a)), 9, true)}`,
-		);
-	}
-	return lines;
-}
 
 async function main(): Promise<void> {
 	const argv = process.argv.slice(2);
@@ -654,13 +624,6 @@ async function main(): Promise<void> {
 	const cutoff = Date.now() - days * 86_400_000;
 	const started = Date.now();
 	const scan = await scanOpencode(cutoff);
-
-	const claudeDays: EngineUsageScan["days"] = new Map();
-	await scanClaudeDirect(claudeDays, cutoff);
-	const codexDays: EngineUsageScan["days"] = new Map();
-	await scanCodexDirect(codexDays, cutoff);
-	const claude = foldDays(claudeDays);
-	const codex = foldDays(codexDays);
 
 	if (asJson) {
 		const dumpCoverage = (m: Map<string, CoverageCell>) =>
@@ -707,8 +670,6 @@ async function main(): Promise<void> {
 						byCoverage: dumpCoverage(scan.byCoverage),
 						variantPairs: dumpCoverage(scan.variantPairs),
 					},
-					claudeDirect: dump(claude),
-					codexDirect: dump(codex),
 				},
 				null,
 				2,
@@ -717,7 +678,7 @@ async function main(): Promise<void> {
 		return;
 	}
 
-	const all = totals([...scan.byPool.values(), ...claude.values(), ...codex.values()]);
+	const all = totals([...scan.byPool.values()]);
 	console.log(`\nPrompt cache — last ${days} day(s), since ${new Date(cutoff).toISOString().slice(0, 16)}Z`);
 	console.log(`${scan.dbs} shard DBs read, ${num(scan.rows)} priced opencode requests, ${((Date.now() - started) / 1000).toFixed(0)}s\n`);
 
@@ -732,14 +693,6 @@ async function main(): Promise<void> {
 	console.log(`\n── opencode, by model (>= ${minRequests} requests) ──`);
 	for (const l of modelTable(scan, minRequests)) console.log(l);
 
-	if (claude.size || codex.size) {
-		console.log("\n── direct engines (totals only; no pool or turn split in their stores) ──");
-		console.log(
-			`${col("engine", 15)} ${col("provider/model", 31)} ${col("requests", 9, true)} ${col("uncached in", 12, true)} ${col("cache read", 12, true)} ${col("hit rate", 9, true)}`,
-		);
-		for (const l of directTable("claude-direct", claude)) console.log(l);
-		for (const l of directTable("codex-direct", codex)) console.log(l);
-	}
 
 	if (showPrefix) {
 		console.log("\n── prefix coverage: did a request read back what the one before it sent? ──");

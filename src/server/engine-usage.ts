@@ -10,8 +10,8 @@
  * kept only each turn's LAST request. Measured over 30 days to 2026-08-14, the
  * audit-derived figures read 2.5B tokens and $2.8K against a true 78B and $86K.
  *
- * THREE SOURCES, one per engine, because each engine keeps its own book and
- * none of them writes to another's:
+ * ONE SOURCE per engine, because each engine keeps its own book and
+ * none of them writes to another's. Today that is a single source:
  *
  *  - opencode: the per-session shard DBs under
  *    ~/.opensession-sessions/opencode/db/*.db (plus the shared-pool servers'
@@ -23,24 +23,14 @@
  *    Anthropic, the shard DBs reading slightly low because a deleted session
  *    takes its DB with it.
  *
- *  - claude-direct: Agent SDK transcripts under
- *    ~/.opensession-claude-direct/cfg/<account>/projects/<cwd>/<session>.jsonl,
- *    one `assistant` line per API request. Two traps, each worth about 2x if
- *    missed: a resumed or forked transcript REPLAYS its history verbatim into
- *    the new file, so roughly half of all lines are duplicates and must be
- *    deduped on requestId (uuid when absent, which is stable across replays);
- *    and `<synthetic>` lines are generated locally and never hit the API.
- *
- *  - codex-direct: rollouts under
- *    ~/.opensession-codex-direct/home/<account>/sessions/YYYY/MM/DD/rollout-*.jsonl.
- *    Usage is the DELTA of each `token_count` event's running
- *    `total_token_usage`, never its `last_token_usage`: codex re-emits a
- *    token_count on an aborted turn repeating the same last_* figures while the
- *    running total correctly stands still, so summing last_* overcounts
- *    (measured 9.51M against a true 9.16M input tokens on one session). Deltas
- *    make a repeat a no-op. The running total was monotonic across all 46
- *    rollouts on disk, and its `input_tokens` INCLUDES `cached_input_tokens`,
- *    so uncached input is the difference; OpenAI does not bill cache writes.
+ * The pi engine runs THROUGH these same records (its Anthropic turns ride the
+ * shared bridge and its usage lands in the same shard DBs the scanner reads),
+ * so it needs no source of its own. The removed direct-SDK engines
+ * (claude-direct, codex-direct) had scanners here; they only ever recorded
+ * about 11 smoke transcripts, and past days holding that usage stay valid in
+ * the per-day cache below. Their state dirs (~/.opensession-claude-direct,
+ * ~/.opensession-codex-direct) remain on disk as historical records that
+ * nothing reads anymore.
  *
  * Adding an engine means adding a source here, and nothing else will catch the
  * omission: the audit log's `result` events carry no engine field, so an engine
@@ -63,19 +53,11 @@
  * written. A day older than the store's earliest row is therefore not zero
  * usage, it is NO DATA, and the two must never render the same way: a 90-day
  * range would otherwise draw 60 days of flat zero and read as "we started in
- * July". Coverage is tracked per source: an OpenCode retention gap must not
- * hide real usage from either direct engine. A merged day is only globally
+ * July". Coverage is tracked per source. A merged day is only globally
  * `unmeasured` when the missing source leaves no usage to display. The per-day
  * cache below is what makes history outlive the source, so a day measured once
  * stays measured: it is the durable record, and the prewarm is what keeps it
  * ahead of the pruning.
- *
- * Only the opencode store prunes, so it alone sets that horizon. The
- * direct-engine stores are append-only files, and their earliest row is the day
- * that engine started rather than a limit on what we know: bounding the horizon
- * by them would mark every day before the engine existed as unmeasured, which
- * is the same lie pointing the other way. If either store is ever found to
- * prune, it has to start declaring a horizon of its own here.
  */
 
 import type { Dirent } from "node:fs";
@@ -86,13 +68,6 @@ import { isNativeSessionId, OPENSESSION_SESSIONS_DIR, stateDir } from "./paths";
 
 const SHARD_DIR = `${OPENSESSION_SESSIONS_DIR}/opencode/db`;
 
-// The two direct engines' stores. Their layouts are owned by
-// claude-direct-adapter.ts (`${CLAUDE_DIRECT_STATE_DIR}/cfg/<account>`) and
-// codex-direct-auth.ts (`${CODEX_DIRECT_STATE_DIR}/home/<account>`); we rebuild
-// the paths here rather than importing those modules, which would drag a whole
-// engine into a scanner. Deferred so a test can point the state dir elsewhere.
-const claudeDirectCfgDir = () => `${stateDir("claude-direct")}/cfg`;
-const codexDirectHomeDir = () => `${stateDir("codex-direct")}/home`;
 
 export interface ModelUsage {
 	provider: string;
@@ -106,7 +81,7 @@ export interface ModelUsage {
 	costUsd: number;
 }
 
-export type EngineUsageSource = "opencode" | "claude-direct" | "codex-direct";
+export type EngineUsageSource = "opencode";
 export type EngineUsageCoverage = Record<EngineUsageSource, "measured" | "unmeasured">;
 
 export interface EngineUsageDay {
@@ -136,7 +111,7 @@ export interface EngineUsageDay {
 }
 
 function measuredCoverage(): EngineUsageCoverage {
-	return { opencode: "measured", "claude-direct": "measured", "codex-direct": "measured" };
+	return { opencode: "measured" };
 }
 
 // ── Rates ──
@@ -437,162 +412,6 @@ export async function scanOpencodeShards(
 }
 
 /**
- * Add the claude-direct engine's usage. Its transcripts are Agent SDK JSONL,
- * one `assistant` line per API request.
- *
- * `seen` dedupes across the whole scan rather than per file: a resumed or
- * forked transcript replays its history verbatim into the new file, timestamps
- * included, so about half of all lines are a request already counted elsewhere.
- */
-export async function scanClaudeDirect(
-	days: EngineUsageScan["days"],
-	cutoff: number,
-	root: string = claudeDirectCfgDir(),
-): Promise<void> {
-	const seen = new Set<string>();
-	let scanned = 0;
-	for (const path of filesUnder(root, (n) => n.endsWith(".jsonl"))) {
-		// Last written before the cutoff, so it holds nothing after it. Any
-		// replay it carries is counted from the newer file instead.
-		try {
-			if (statSync(path).mtimeMs < cutoff) continue;
-		} catch {
-			continue;
-		}
-		let text: string;
-		try {
-			text = readFileSync(path, "utf-8");
-		} catch {
-			continue;
-		}
-		for (const line of text.split("\n")) {
-			if (!line.startsWith("{")) continue;
-			// Most of a transcript is prompts, tool output and attachments, and
-			// parsing all of it is the whole cost of this scan. A line we want
-			// carries a `usage` object, so its key is necessarily in the text.
-			if (!line.includes('"usage"')) continue;
-			let d: Record<string, any>;
-			try {
-				d = JSON.parse(line);
-			} catch {
-				continue;
-			}
-			if (d.type !== "assistant") continue;
-			const usage = d.message?.usage;
-			if (!usage) continue;
-			// Written locally to keep the transcript well formed; no API call.
-			const model = String(d.message?.model || "?");
-			if (model === "<synthetic>") continue;
-			const ms = Date.parse(d.timestamp);
-			if (!Number.isFinite(ms) || ms < cutoff) continue;
-			const key = String(d.requestId || d.uuid || "");
-			// A line carrying neither id cannot be deduped, so count it rather
-			// than drop real usage.
-			if (key) {
-				if (seen.has(key)) continue;
-				seen.add(key);
-			}
-			addUsage(days, utcDate(ms), "anthropic", model, {
-				input: usage.input_tokens || 0,
-				output: usage.output_tokens || 0,
-				cacheRead: usage.cache_read_input_tokens || 0,
-				// The SDK splits ephemeral_1h from ephemeral_5m here; every
-				// write we have ever measured is 1-hour, which is the rate
-				// loadRates() applies.
-				cacheWrite: usage.cache_creation_input_tokens || 0,
-			});
-		}
-		if (++scanned % 25 === 0) await new Promise((r) => setTimeout(r, 0));
-	}
-}
-
-/**
- * Add the codex-direct engine's usage, from its rollout files.
- *
- * One request is the DELTA of `total_token_usage` against the previous
- * token_count event in the same rollout, never `last_token_usage`: codex
- * repeats that on an aborted turn while the running total correctly stands
- * still, so summing it overcounts. Every event is walked, including ones before
- * the cutoff, because a delta needs its predecessor; only events at or after
- * the cutoff are counted.
- */
-export async function scanCodexDirect(
-	days: EngineUsageScan["days"],
-	cutoff: number,
-	root: string = codexDirectHomeDir(),
-): Promise<void> {
-	let scanned = 0;
-	for (const path of filesUnder(root, (n) => n.startsWith("rollout-") && n.endsWith(".jsonl"))) {
-		try {
-			if (statSync(path).mtimeMs < cutoff) continue;
-		} catch {
-			continue;
-		}
-		let text: string;
-		try {
-			text = readFileSync(path, "utf-8");
-		} catch {
-			continue;
-		}
-		let model = "?";
-		let prevIn = 0;
-		let prevCached = 0;
-		let prevOut = 0;
-		for (const line of text.split("\n")) {
-			if (!line.startsWith("{")) continue;
-			// As above: skip the conversation without parsing it. Both kinds we
-			// read name themselves in the text.
-			if (!line.includes('"token_count"') && !line.includes('"turn_context"')) continue;
-			let d: Record<string, any>;
-			try {
-				d = JSON.parse(line);
-			} catch {
-				continue;
-			}
-			// One model per rollout in every file measured, but it is declared
-			// per turn, so follow the latest rather than assuming.
-			if (d.type === "turn_context") {
-				if (d.payload?.model) model = String(d.payload.model);
-				continue;
-			}
-			if (d.type !== "event_msg" || d.payload?.type !== "token_count") continue;
-			const total = d.payload?.info?.total_token_usage;
-			if (!total) continue;
-			const totalIn = total.input_tokens || 0;
-			const totalCached = total.cached_input_tokens || 0;
-			const totalOut = total.output_tokens || 0;
-			let dIn = totalIn - prevIn;
-			let dCached = totalCached - prevCached;
-			let dOut = totalOut - prevOut;
-			prevIn = totalIn;
-			prevCached = totalCached;
-			prevOut = totalOut;
-			// The total was monotonic in every rollout measured. Should a future
-			// codex reset it mid-file, read the new total as a fresh baseline
-			// rather than booking a negative request.
-			if (dIn < 0 || dCached < 0 || dOut < 0) {
-				dIn = totalIn;
-				dCached = totalCached;
-				dOut = totalOut;
-			}
-			// No new tokens: the repeated aborted-turn event.
-			if (dIn <= 0 && dOut <= 0) continue;
-			const ms = Date.parse(d.timestamp);
-			if (!Number.isFinite(ms) || ms < cutoff) continue;
-			addUsage(days, utcDate(ms), "openai", model, {
-				// input_tokens includes the cached part, and OpenAI bills no
-				// cache writes.
-				input: Math.max(0, dIn - dCached),
-				output: dOut,
-				cacheRead: dCached,
-				cacheWrite: 0,
-			});
-		}
-		if (++scanned % 25 === 0) await new Promise((r) => setTimeout(r, 0));
-	}
-}
-
-/**
  * Every engine's usage for days at or after `fromDate`, merged into one set of
  * per-day, per-model buckets. A model run on two engines aggregates into one
  * row, which is what makes the totals comparable.
@@ -603,8 +422,6 @@ export async function scanEngineUsage(fromDate: string): Promise<EngineUsageScan
 	const cutoff = Date.parse(`${fromDate}T00:00:00Z`);
 	if (!Number.isFinite(cutoff)) return { days, sessions, earliest: null, sessionAttributionComplete: false };
 	const opencode = await scanOpencodeShards(days, sessions, cutoff);
-	await scanClaudeDirect(days, cutoff);
-	await scanCodexDirect(days, cutoff);
 	return {
 		days,
 		sessions,
@@ -673,7 +490,9 @@ export function emptyEngineUsageDay(date: string): EngineUsageDay {
 // range costs one pass rather than one per day.
 
 // 2: days before the store's earliest row carry `unmeasured` instead of zeros.
-// 3: the two direct engines are counted.
+// 3: the (since removed) direct engines were counted. Cached days written
+//    while they existed keep that usage and their extra coverage keys; both
+//    decode fine and the history stays explainable.
 // 4: OpenCode requests carry direct native-session attribution.
 // 5: Internal OpenCode task sessions inherit attribution through parent_id.
 // 6: Parent ownership wins when a task title happens to mention another id.
