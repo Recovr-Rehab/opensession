@@ -398,6 +398,17 @@ export function IconCursor(p: IconProps) {
   );
 }
 
+export function IconBrowserTab(p: IconProps) {
+  return (
+    <Svg {...p}>
+      <path
+        {...stroke}
+        d="M9.75 4.75H7.75C6.09315 4.75 4.75 6.09315 4.75 7.75V16.25C4.75 17.9069 6.09315 19.25 7.75 19.25H16.25C17.9069 19.25 19.25 17.9069 19.25 16.25V8.25M9.75 4.75V7.25C9.75 7.80228 10.1977 8.25 10.75 8.25H14.25M9.75 4.75H14.25M19.25 8.25V7.75C19.25 6.09315 17.9069 4.75 16.25 4.75H14.25M19.25 8.25H14.25M14.25 8.25V4.75"
+      />
+    </Svg>
+  );
+}
+
 /* ── Tool icons (transcript work blocks) ─────────────────── */
 
 export function IconTerminal(p: IconProps) {

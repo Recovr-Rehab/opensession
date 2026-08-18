@@ -3002,12 +3002,14 @@ export function App(
 	function openNewSessionInWorkspace(
 		src: UnifiedSession,
 		mode: "share" | "stack" | "ask",
+		prompt?: string,
 	): void {
 		const workspace = src.workspaceId
 			? workspaces.find((item) => item.id === src.workspaceId)
 			: undefined;
 		setPalette({
 			open: true,
+			...(prompt ? { prompt } : {}),
 			repo: src.repo || workspace?.repo,
 			...(src.workspaceId
 				? {
@@ -3851,6 +3853,9 @@ export function App(
 				onOpenWorkspace={() => setActiveViewTab(null)}
 				allSessions={sessions}
 				onNewSession={handleNewSession}
+				onStartNewChat={(prompt) =>
+					openNewSessionInWorkspace(viewerSession, "share", prompt)
+				}
 				// Mirrors SessionTabs' own "render nothing" rule so the header's
 				// lone-session + never doubles up with the strip's — and, just as
 				// important, so it APPEARS whenever the strip doesn't. Closed

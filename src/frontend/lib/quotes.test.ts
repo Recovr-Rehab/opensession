@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { withQuotes, type Quote } from "./quotes";
+import { quotePreview, withQuotes, type Quote } from "./quotes";
 
 const q = (id: string, text: string): Quote => ({ id, text });
 
@@ -28,5 +28,21 @@ describe("withQuotes", () => {
 
 	it("sends the passages alone when nothing was typed", () => {
 		expect(withQuotes([q("a", "one")], "   ")).toBe("> one");
+	});
+});
+
+describe("quotePreview", () => {
+	it("keeps selections up to 20 characters", () => {
+		expect(quotePreview("exactly 20 chars....")).toBe("exactly 20 chars....");
+	});
+
+	it("truncates longer selections after 20 characters", () => {
+		expect(quotePreview("12345678901234567890more")).toBe(
+			"12345678901234567890...",
+		);
+	});
+
+	it("turns multiline selections into one preview line", () => {
+		expect(quotePreview("first\n\nsecond")).toBe("first second");
 	});
 });

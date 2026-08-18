@@ -1,6 +1,6 @@
 /**
- * Quoted transcript context. Selecting text immediately stages one passage
- * and keeps it highlighted while the person types; the next message goes out
+ * Quoted transcript context. A person explicitly attaches one selected
+ * passage, which stays highlighted while they type; the next message goes out
  * with that passage quoted above it, so both the model and the transcript show
  * exactly what was being talked about.
  */
@@ -12,6 +12,12 @@ export interface Quote {
 
 export function newQuote(text: string): Quote {
 	return { id: crypto.randomUUID(), text: text.trim() };
+}
+
+/** A compact, single-line preview for the composer's selected-text tooltip. */
+export function quotePreview(text: string): string {
+	const compact = text.trim().replace(/\s+/g, " ");
+	return compact.length > 20 ? `${compact.slice(0, 20).trimEnd()}...` : compact;
 }
 
 /**

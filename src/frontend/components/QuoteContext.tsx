@@ -1,5 +1,5 @@
 import React from "react";
-import type { Quote } from "../lib/quotes";
+import { quotePreview, type Quote } from "../lib/quotes";
 import { ComposerContextChip } from "./ComposerContextChip";
 import { IconCursor } from "./icons";
 
@@ -16,7 +16,7 @@ export function QuoteContext({ quote, onRemove, disabled }: Props) {
 		<ComposerContextChip
 			icon={<IconCursor size={15} />}
 			label="Selected text"
-			title={quote.text}
+			title={quotePreview(quote.text)}
 			onRemove={onRemove}
 			removeLabel="Remove selected text"
 			disabled={disabled}

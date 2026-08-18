@@ -13,10 +13,9 @@ import {
 	type OfferRect,
 	type OfferPlacement,
 } from "../lib/quote-offer";
-import { FLOATING_PILL_BUTTON } from "../lib/session-viewer-classes";
-import { cn } from "../ui/cn";
+import { Button } from "../ui/button";
 import { duration, ease } from "../ui/motion";
-import { IconCursor } from "./icons";
+import { IconBrowserTab, IconCursor } from "./icons";
 
 interface Props {
 	/** The region whose text can be quoted: the transcript scroller. */
@@ -25,6 +24,8 @@ interface Props {
 	quote: Quote | null;
 	/** Attaches a passage as context: only ever from the pill. */
 	onQuote: (quote: Quote) => void;
+	/** Opens a sibling chat with the passage already quoted. */
+	onStartNewChat: (quote: Quote) => void;
 	/** Clears the current context and native selection. */
 	onClear: () => void;
 	/** Focuses the composer: after a passage is added, and when typing or
@@ -70,13 +71,14 @@ export function QuoteSelection({
 	containerRef,
 	quote,
 	onQuote,
+	onStartNewChat,
 	onClear,
 	onInputIntent,
 	disabled,
 }: Props) {
 	const stagedRef = useRef<Range | null>(null);
 	const offerRangeRef = useRef<Range | null>(null);
-	const pillRef = useRef<HTMLButtonElement>(null);
+	const actionsRef = useRef<HTMLDivElement>(null);
 	const [offer, setOffer] = useState<Offer | null>(null);
 	const [placement, setPlacement] = useState<OfferPlacement | null>(null);
 
@@ -122,6 +124,13 @@ export function QuoteSelection({
 		onInputIntent?.();
 	}, [offer, onQuote, onInputIntent]);
 
+	const startNewChat = useCallback(() => {
+		if (!offer) return;
+		window.getSelection()?.removeAllRanges();
+		setOffer(null);
+		onStartNewChat(newQuote(offer.text));
+	}, [offer, onStartNewChat]);
+
 	useEffect(() => {
 		if (disabled) return;
 		let timer: ReturnType<typeof setTimeout> | undefined;
@@ -154,8 +163,8 @@ export function QuoteSelection({
 	// passage that ends near the right edge, and its own label is what sets
 	// that width. A layout effect lands the position before the browser paints.
 	useLayoutEffect(() => {
-		const pill = pillRef.current;
-		if (!offer || !pill) {
+		const actions = actionsRef.current;
+		if (!offer || !actions) {
 			setPlacement(null);
 			return;
 		}
@@ -163,7 +172,7 @@ export function QuoteSelection({
 			placeQuoteOffer(
 				offer.first,
 				offer.last,
-				{ width: pill.offsetWidth, height: pill.offsetHeight },
+				{ width: actions.offsetWidth, height: actions.offsetHeight },
 				{ width: window.innerWidth, height: window.innerHeight },
 			),
 		);
@@ -200,7 +209,7 @@ export function QuoteSelection({
 		if (!offered) return;
 		const onDown = (event: MouseEvent) => {
 			const target = event.target;
-			if (target instanceof Node && pillRef.current?.contains(target)) return;
+			if (target instanceof Node && actionsRef.current?.contains(target)) return;
 			setOffer(null);
 		};
 		const onKeyDown = (event: KeyboardEvent) => {
@@ -319,13 +328,14 @@ export function QuoteSelection({
 	if (!offer) return null;
 
 	return createPortal(
-		<motion.button
-			ref={pillRef}
-			type="button"
+		<motion.div
+			ref={actionsRef}
+			role="group"
+			aria-label="Selected text actions"
 			initial={{ opacity: 0, scale: 0.96 }}
 			animate={{ opacity: 1, scale: 1 }}
 			transition={{ type: "tween", duration: duration.micro, ease }}
-			className={cn(FLOATING_PILL_BUTTON, "fixed z-1000 whitespace-nowrap")}
+			className="fixed z-1000 inline-flex min-h-8 items-stretch overflow-hidden whitespace-nowrap rounded-[999px] bg-popup text-label font-semibold text-fg [--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm"
 			style={{
 				left: placement?.left ?? 0,
 				top: placement?.top ?? 0,
@@ -336,11 +346,26 @@ export function QuoteSelection({
 			// The press must not collapse the selection it is about to attach:
 			// the passage stays visibly selected right up to the click.
 			onMouseDown={(event) => event.preventDefault()}
-			onClick={add}
 		>
-			<IconCursor size={13} className="text-dim" aria-hidden />
-			Add to chat
-		</motion.button>,
+			<Button
+				variant="ghost"
+				size="md"
+				icon={<IconCursor size={20} />}
+				onClick={add}
+				className="rounded-none text-fg hover:text-fg focus-visible:z-[1]"
+			>
+				Add to chat
+			</Button>
+			<Button
+				variant="ghost"
+				size="md"
+				icon={<IconBrowserTab size={20} />}
+				onClick={startNewChat}
+				className="rounded-none border-l-line-strong text-fg hover:text-fg focus-visible:z-[1]"
+			>
+				Start new chat
+			</Button>
+		</motion.div>,
 		document.body,
 	);
 }

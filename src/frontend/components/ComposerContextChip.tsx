@@ -2,6 +2,7 @@ import React from "react";
 import { motion } from "motion/react";
 import { cn } from "../ui/cn";
 import { duration, ease } from "../ui/motion";
+import { Tooltip } from "../ui/tooltip";
 import { IconX } from "./icons";
 
 /** Per-tone colour, spelled out in full: Tailwind scans source as text, so a
@@ -59,7 +60,7 @@ export function ComposerContextChip({
 	label: string;
 	/** Optional compact detail shown after the label, e.g. "+20 lines". */
 	meta?: string;
-	/** Hover text — the long version of whatever `label` compresses. */
+	/** Text shown in the shared tooltip instead of a native `title` popup. */
 	title?: string;
 	/** `note` and `ask` tint the pill, because each sits on a surface that is
 	 *  already tinted in its own ink: a neutral chip on the yellow or green
@@ -72,6 +73,46 @@ export function ComposerContextChip({
 	disabled?: boolean;
 }) {
 	const colours = CHIP_TONE[tone];
+	const chip = (
+		<div
+			className={cn(
+				"inline-flex h-7 max-w-full items-center gap-1 rounded-full border px-2 text-label font-medium",
+				colours.box,
+			)}
+		>
+			<span
+				className={cn(
+					"inline-flex shrink-0 translate-y-px items-center",
+					colours.icon,
+				)}
+			>
+				{icon}
+			</span>
+			<span className="truncate">{label}</span>
+			{meta && (
+				<span className="shrink-0 font-normal text-faint">{meta}</span>
+			)}
+			{onRemove && (
+				<button
+					type="button"
+					onClick={onRemove}
+					disabled={disabled}
+					aria-label={removeLabel}
+					className={cn(
+						// `before:-inset-2` grows the hit area past the 20px box without
+						// growing the pill around it.
+						"relative -mr-1 flex size-5 shrink-0 cursor-pointer items-center justify-center before:absolute before:-inset-2 enabled:active:scale-[0.96] enabled:transition-[color,transform] disabled:cursor-default disabled:opacity-50",
+						colours.remove,
+					)}
+				>
+					<IconX
+						size={20}
+						className="translate-y-px scale-[0.8] [&_path]:stroke-2"
+					/>
+				</button>
+			)}
+		</div>
+	);
 	return (
 		// Two boxes, because the chip is what changes the composer's height and
 		// the composer no longer animates its own size (see the note on the box
@@ -93,45 +134,7 @@ export function ComposerContextChip({
 				transition={{ type: "tween", duration: duration.micro, ease }}
 				className="mb-1 flex origin-left"
 			>
-				<div
-					title={title}
-					className={cn(
-						"inline-flex h-7 max-w-full items-center gap-1 rounded-full border px-2 text-label font-medium",
-						colours.box,
-					)}
-				>
-					<span
-						className={cn(
-							"inline-flex shrink-0 translate-y-px items-center",
-							colours.icon,
-						)}
-					>
-						{icon}
-					</span>
-					<span className="truncate">{label}</span>
-					{meta && (
-						<span className="shrink-0 font-normal text-faint">{meta}</span>
-					)}
-					{onRemove && (
-						<button
-							type="button"
-							onClick={onRemove}
-							disabled={disabled}
-							aria-label={removeLabel}
-							className={cn(
-								// `before:-inset-2` grows the hit area past the 20px box without
-								// growing the pill around it.
-								"relative -mr-1 flex size-5 shrink-0 cursor-pointer items-center justify-center before:absolute before:-inset-2 enabled:active:scale-[0.96] enabled:transition-[color,transform] disabled:cursor-default disabled:opacity-50",
-								colours.remove,
-							)}
-						>
-							<IconX
-								size={20}
-								className="translate-y-px scale-[0.8] [&_path]:stroke-2"
-							/>
-						</button>
-					)}
-				</div>
+				{title ? <Tooltip label={title}>{chip}</Tooltip> : chip}
 			</motion.div>
 		</motion.div>
 	);

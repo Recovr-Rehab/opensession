@@ -405,6 +405,8 @@ interface Props {
 	/** Start a new session in this workspace — surfaced in the ⋯ menu so it's
 	    reachable on a phone, where the tab strip's + button is hidden. */
 	onNewSession?: (mode: "share" | "stack" | "ask") => void;
+	/** Open a sibling session with selected transcript text in its composer. */
+	onStartNewChat: (prompt: string) => void;
 	/** True when the tab strip is on screen (2+ sessions, an open view tab, or a
 	    split). The strip carries its own "+", so the header one stands down
 	    rather than showing a second plus a few pixels above it. */
@@ -794,6 +796,7 @@ export function SessionViewer({
 	onSetStatus,
 	allSessions,
 	onNewSession,
+	onStartNewChat,
 	tabStripVisible,
 	archivedSessions,
 	onRestoreSession,
@@ -3302,8 +3305,8 @@ export function SessionViewer({
 	// digest of each. One-shot: cleared once a send consumes them.
 	const [contextSessions, setContextSessions] = useState<string[]>([]);
 
-	// The transcript selection that rides along with the next message. A new
-	// selection replaces it immediately and stays highlighted while you type.
+	// The transcript passage explicitly attached to the next message. It stays
+	// highlighted until the message sends or the person removes it.
 	const [quote, setQuote] = useState<Quote | null>(null);
 	const clearQuote = useCallback(() => setQuote(null), []);
 	// Whether a draft is in the way of reopening a message in the composer, read
@@ -5930,13 +5933,16 @@ export function SessionViewer({
 					) : (
 					<>
 					<div className={VIEWER_MESSAGES_REGION}>
-						{/* Selecting transcript text immediately makes it context for the
-						    next message and keeps the passage visibly highlighted. */}
+						{/* Selecting transcript text offers actions without changing either
+						    composer until the person chooses where to use it. */}
 						<QuoteSelection
 							containerRef={messagesRef}
 							disabled={noEngine}
 							quote={quote}
 							onQuote={setQuote}
+							onStartNewChat={(selection) =>
+								onStartNewChat(withQuotes([selection], ""))
+							}
 							onClear={clearQuote}
 							onInputIntent={focusComposerForQuote}
 						/>
