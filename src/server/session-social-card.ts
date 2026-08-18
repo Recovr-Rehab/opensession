@@ -27,7 +27,10 @@ import { getUiPrefs } from "./ui-prefs";
 
 export const SESSION_CARD_WIDTH = 1200;
 export const SESSION_CARD_HEIGHT = 630;
-const SESSION_CARD_VERSION = 2;
+const SESSION_CARD_VERSION = 3;
+const TITLE_MAX_WIDTH = 1088;
+const TITLE_FONT = "Inter SemiBold 56";
+const TITLE_LETTER_SPACING = -2 * 1024;
 
 export interface SessionSocialCardData {
 	title: string;
@@ -108,15 +111,33 @@ function initials(name: string): string {
 		.toUpperCase();
 }
 
-/** The card uses one fixed-size title line, so long names end before the artwork. */
-export function socialCardTitleLines(title: string): string[] {
+async function titleWidth(title: string): Promise<number> {
+	const metadata = await sharp({
+		text: {
+			text: `<span letter_spacing="${TITLE_LETTER_SPACING}">${xml(title)}</span>`,
+			font: TITLE_FONT,
+			rgba: true,
+			dpi: 72,
+		},
+	}).metadata();
+	return metadata.width ?? 0;
+}
+
+/** Fit one 56 px Inter Semi Bold line inside the card's 1088 px measure. */
+export async function fitSocialCardTitle(title: string): Promise<string> {
 	const value = clean(title) || productName();
-	if (value.length <= 25) return [value];
-	const rawCandidate = value.slice(0, 24);
-	const candidate = rawCandidate.trimEnd();
-	if (/\s$/.test(rawCandidate)) return [`${candidate}…`];
-	const boundary = candidate.lastIndexOf(" ");
-	return [`${candidate.slice(0, boundary > 14 ? boundary : candidate.length)}…`];
+	if ((await titleWidth(value)) <= TITLE_MAX_WIDTH) return value;
+
+	const characters = Array.from(value);
+	let low = 1;
+	let high = characters.length - 1;
+	while (low < high) {
+		const middle = Math.ceil((low + high) / 2);
+		const candidate = `${characters.slice(0, middle).join("").trimEnd()}...`;
+		if ((await titleWidth(candidate)) <= TITLE_MAX_WIDTH) low = middle;
+		else high = middle - 1;
+	}
+	return `${characters.slice(0, low).join("").trimEnd()}...`;
 }
 
 const avatarCache = new Map<string, string>();
@@ -177,8 +198,8 @@ export function sessionSocialCardSvg(
 	data: SessionSocialCardData,
 	avatar = "",
 	jetBrainsMono = "",
+	displayTitle = clean(data.title) || productName(),
 ): string {
-	const title = socialCardTitleLines(data.title)[0];
 	const repo = footerLabel(clean(data.repo));
 	const model = footerLabel(clean(data.model));
 	const avatarMarkup = avatar
@@ -193,7 +214,7 @@ export function sessionSocialCardSvg(
   ${fontFace}
   <linearGradient id="artGradient" x1="199.5" y1="0" x2="199.5" y2="630" gradientUnits="userSpaceOnUse">
     <stop stop-color="#000000" stop-opacity="0.01"/>
-    <stop offset="1" stop-color="#000000" stop-opacity="0.05"/>
+    <stop offset="1" stop-color="#000000" stop-opacity="0.08"/>
   </linearGradient>
   <clipPath id="avatarClip"><rect x="56" y="123" width="48" height="48" rx="8"/></clipPath>
 </defs>
@@ -202,7 +223,7 @@ export function sessionSocialCardSvg(
 <g transform="translate(801 0)">
   <path d="M68.8375 226.509C-37.3322 147.543 -7.34262 36.0198 68.8375 0H399V630H84.0041C208.443 571.121 289.104 390.338 68.8375 226.509Z" fill="url(#artGradient)"/>
 </g>
-<text x="56" y="40" dominant-baseline="hanging" fill="#000000" font-size="56" font-weight="600" letter-spacing="-2">${xml(title)}</text>
+<text x="56" y="40" dominant-baseline="hanging" fill="#000000" font-size="56" font-weight="600" letter-spacing="-2">${xml(displayTitle)}</text>
 ${avatarMarkup}
 <rect x="56.5" y="123.5" width="47" height="47" rx="7.5" fill="none" stroke="#000000" stroke-opacity="0.25"/>
 <text x="120" y="147" dominant-baseline="middle" fill="#000000" font-size="36" font-weight="500">${xml(data.owner)}</text>
@@ -225,11 +246,14 @@ async function socialCardMonoFont(): Promise<string> {
 export async function renderSessionSocialCard(
 	data: SessionSocialCardData,
 ): Promise<Buffer> {
-	const [avatar, monoFont] = await Promise.all([
+	const [avatar, monoFont, title] = await Promise.all([
 		avatarDataUrl(data.person),
 		socialCardMonoFont(),
+		fitSocialCardTitle(data.title),
 	]);
-	return sharp(Buffer.from(sessionSocialCardSvg(data, avatar, monoFont))).png().toBuffer();
+	return sharp(Buffer.from(sessionSocialCardSvg(data, avatar, monoFont, title)))
+		.png()
+		.toBuffer();
 }
 
 function publicBase(): string {

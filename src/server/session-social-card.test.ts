@@ -22,7 +22,7 @@ const {
 	sessionSocialCardPublicRoutes,
 	sessionSocialCardSvg,
 	sessionSocialCardUrl,
-	socialCardTitleLines,
+	fitSocialCardTitle,
 	socialSessionIdFromPath,
 } = await import("./session-social-card");
 const { invalidateSessionsCache } = await import("./session-cache");
@@ -98,12 +98,12 @@ describe("session social card", () => {
 		).toBe("opus-fable");
 	});
 
-	test("truncates long titles to one fixed-size line", () => {
-		const lines = socialCardTitleLines(
-			"Make Open Session links feel alive on every surface",
-		);
-		expect(lines).toHaveLength(1);
-		expect(lines[0]).toBe("Make Open Session links…");
+	test("uses the full 1088px title measure before truncating", async () => {
+		const fitting = "Make Open Session links feel alive";
+		expect(await fitSocialCardTitle(fitting)).toBe(fitting);
+		const truncated = await fitSocialCardTitle("W".repeat(80));
+		expect(truncated.endsWith("...")).toBe(true);
+		expect(truncated.length).toBeLessThan(80);
 	});
 
 	test("matches the card geometry and escapes dynamic text", () => {
@@ -118,7 +118,7 @@ describe("session social card", () => {
 		expect(svg).toContain('x="56" y="40"');
 		expect(svg).toContain('x="56" y="542"');
 		expect(svg).toContain('x="1144" y="542"');
-		expect(svg).toContain('stop-opacity="0.05"');
+		expect(svg).toContain('stop-opacity="0.08"');
 		expect(svg).toContain("M68.8375 226.509C-37.3322 147.543");
 		expect(svg).toContain("Fix &lt;cards&gt; &amp; links");
 		expect(svg).not.toContain("Fix <cards>");
@@ -150,7 +150,7 @@ describe("session social card", () => {
 		expect(output).toContain("<title>Ship dynamic social cards · Open Session</title>");
 		expect(output).toContain('content="summary_large_image"');
 		expect(output).toMatch(
-			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=2"/,
+			/content="https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=3"/,
 		);
 		expect(output).toContain(
 			'property="og:url" content="https://os.example.test/session/sess-social-1"',
@@ -164,13 +164,13 @@ describe("session social card", () => {
 		).toBe("sess-social-1");
 		expect(socialSessionIdFromPath("/settings")).toBeNull();
 		expect(sessionSocialCardUrl("sess-social-1")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=2$/,
+			/^https:\/\/media\.example\.test\/session-card\/sess-social-1\/[A-Za-z0-9_-]{32}\.png\?v=3$/,
 		);
 	});
 
 	test("signs ids containing Slack timestamp dots", () => {
 		expect(sessionSocialCardUrl("slack-C123-1719860000.000000")).toMatch(
-			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=2$/,
+			/^https:\/\/media\.example\.test\/session-card\/slack-C123-1719860000\.000000\/[A-Za-z0-9_-]{32}\.png\?v=3$/,
 		);
 	});
 

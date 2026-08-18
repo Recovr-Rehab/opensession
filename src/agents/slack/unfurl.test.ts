@@ -40,7 +40,7 @@ describe("unfurlForSession", () => {
 		expect(unfurl.blocks).toContainEqual({
 			type: "image",
 			image_url: expect.stringMatching(
-				/^https:\/\/media\.example\.test\/session-card\/sess-card\/[A-Za-z0-9_-]{32}\.png\?v=2$/,
+				/^https:\/\/media\.example\.test\/session-card\/sess-card\/[A-Za-z0-9_-]{32}\.png\?v=3$/,
 			),
 			alt_text: "Ship the card, an Open Session by Kent",
 		});
