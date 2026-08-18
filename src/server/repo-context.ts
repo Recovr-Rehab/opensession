@@ -39,8 +39,25 @@ const MAX_DIRS = 60;
 /** Characters of the doc opening. Enough for a stack list and a layout tree;
  *  past this a README is into contribution guidelines, which route nothing. */
 const MAX_DOC = 1200;
-/** Docs are read in file order, first hit wins. */
-const DOC_FILES = ["AGENTS.md", "README.md", "CLAUDE.md"];
+/**
+ * Docs read per repo, in order, each capped at a share of MAX_DOC.
+ *
+ * README leads because of who each file is written for. A README opens by
+ * telling a newcomer what the project IS, which is the routing question. An
+ * AGENTS.md is written for an agent already in the checkout and opens with how
+ * to work there — for opensession that is Bun, operator secrets and publishing
+ * policy, 1200 characters that describe no repository in particular. Reading
+ * only that (first-hit-wins, AGENTS first) is why "the repository picker
+ * should remember what I picked" used to route anywhere but here.
+ *
+ * Both are still read: tella-fusion's AGENTS.md names its stack outright
+ * (ReScript, Rust, Next.js, DynamoDB, Temporal) where its README says
+ * "a Rust monorepo", and between them they identify it better than either
+ * alone. Only 3 of 9 repos have an AGENTS.md, so most are unaffected either
+ * way, and prompt size is very nearly free here — 24x the tokens measured
+ * about 1s.
+ */
+const DOC_FILES = ["README.md", "AGENTS.md", "CLAUDE.md"];
 /** The checkout is on disk and cheap to re-read, but this runs on every
  *  keystroke pause in the palette, so hold it briefly. */
 const CACHE_TTL_MS = 10 * 60_000;
@@ -85,28 +102,36 @@ function cleanDoc(raw: string): string {
 }
 
 /** Cut to the budget on a line boundary, so the tail is never half a path. */
-function clampDoc(text: string): string {
-	if (text.length <= MAX_DOC) return text;
-	const cut = text.slice(0, MAX_DOC);
+function clampDoc(text: string, budget: number = MAX_DOC): string {
+	if (text.length <= budget) return text;
+	const cut = text.slice(0, budget);
 	const lastBreak = cut.lastIndexOf("\n");
-	return (lastBreak > MAX_DOC / 2 ? cut.slice(0, lastBreak) : cut).trim();
+	return (lastBreak > budget / 2 ? cut.slice(0, lastBreak) : cut).trim();
 }
 
 function readDoc(repoPath: string): string {
+	const found: { name: string; text: string }[] = [];
 	for (const name of DOC_FILES) {
 		const path = join(repoPath, name);
 		if (!existsSync(path)) continue;
 		try {
 			// Read a bounded prefix: AGENTS.md runs to 32 KB in this very repo,
 			// and everything that names the stack is at the top.
-			const raw = readFileSync(path, "utf-8").slice(0, MAX_DOC * 6);
-			const cleaned = clampDoc(cleanDoc(raw));
-			if (cleaned) return cleaned;
+			const cleaned = cleanDoc(readFileSync(path, "utf-8").slice(0, MAX_DOC * 6));
+			// A CLAUDE.md that only points at AGENTS.md (the convention in
+			// several of these repos) describes nothing.
+			if (cleaned && cleaned.length > 40) found.push({ name, text: cleaned });
 		} catch {
 			// Unreadable doc is not a reason to drop the repo from the catalog.
 		}
 	}
-	return "";
+	// CLAUDE.md is the last resort, not a third helping: it is nearly always a
+	// pointer to, or a copy of, one of the other two.
+	const docs = found.filter((d) => d.name !== "CLAUDE.md").length ? found.filter((d) => d.name !== "CLAUDE.md") : found;
+	// One doc gets the whole budget; two split it, so adding an AGENTS.md never
+	// costs a repo the README opening that says what it is.
+	const share = Math.floor(MAX_DOC / docs.length);
+	return docs.map((d) => `${d.name}:\n${clampDoc(d.text, share)}`).join("\n\n");
 }
 
 /** `git -C <dir>`, empty string on any failure. Async because the catalog is
@@ -188,7 +213,7 @@ export function renderRepoCatalog(cards: RepoCard[]): string {
 			if (card.ghRepo) lines.push(`GitHub: ${card.ghRepo}`);
 			if (card.description) lines.push(card.description);
 			if (card.layout.length) lines.push(`Directories: ${card.layout.join(", ")}`);
-			if (card.doc) lines.push(`From its ${DOC_FILES[0]}/README:\n${card.doc}`);
+			if (card.doc) lines.push(`From its own docs —\n${card.doc}`);
 			return lines.join("\n");
 		})
 		.join("\n\n");

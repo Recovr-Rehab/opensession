@@ -84,9 +84,6 @@ export interface CreateSessionMessage {
 	accountId?: string;
 	mcpServers?: unknown;
 	repo?: unknown;
-	/** `repo` is Auto's answer rather than a person's pick — the palette
-	 *  resolves Auto itself and sends the concrete id (types.ts, repoAuto). */
-	repoAuto?: unknown;
 	/** Repos to work in beside `repo` (the palette's multi-select picker). */
 	attachRepos?: unknown;
 	sandbox?: unknown;
@@ -201,10 +198,6 @@ export interface ResolvedCreate {
 	branch: string;
 	/** Repo recorded on the session file; undefined for repo-less scratch. */
 	repoId?: string;
-	/** The repo was Auto's choice rather than a person's. Recorded because
-	 *  suggest-repos.ts learns from where past sessions were filed, and must
-	 *  not learn from its own output — see historyExamples. */
-	repoAuto?: boolean;
 	/** Repos whose memory notes ride the opening prompt. */
 	memoryRepoIds: string[];
 	/**
@@ -392,7 +385,6 @@ export async function openCreatedSession(
 				// Repo-less sessions resolve no repoId, and record the absence as
 				// a decision so clients don't have to guess (types.ts, repoLess).
 				...(spec.repoId ? { repo: spec.repoId } : { repoLess: true }),
-				...(spec.repoAuto ? { repoAuto: true } : {}),
 				...(spec.workspaceId ? { workspaceId: spec.workspaceId } : {}),
 				...(spec.parentSessionId
 					? { parentSessionId: spec.parentSessionId }
@@ -972,12 +964,7 @@ export async function handleCreateSessionMessage(
 	// landed without Auto.
 	let requestedRepo = typeof msg.repo === "string" ? msg.repo : undefined;
 	let autoAttachRepos: string[] = [];
-	// Whether a person or Auto picked this repo. The palette normally resolves
-	// Auto itself and sends the concrete id, so it says so with `repoAuto`;
-	// the sentinel path below is Auto by definition.
-	let repoChosenByAuto = msg.repoAuto === true;
 	if (!forkSource && requestedRepo === AUTO_REPO) {
-		repoChosenByAuto = true;
 		const suggestion = await suggestRepos(prompt, {
 			mode: isAsk ? "ask" : "code",
 			forCreate: true,
@@ -1454,7 +1441,6 @@ export async function handleCreateSessionMessage(
 				: selectedRunner
 					? repo.id
 					: repoForPathOrNull(wtPath)?.id,
-			...(repoChosenByAuto ? { repoAuto: true } : {}),
 			memoryRepoIds: [repo.id],
 			...(attachRepoIds.length
 				? { attachRepos: { repos: attachRepoIds, branch: attachBranch } }

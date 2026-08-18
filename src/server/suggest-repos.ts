@@ -2,7 +2,7 @@
  * Pick the repository (or repositories) a task belongs in, from the task text
  * alone — what the New-session picker's "Auto" mode resolves against.
  *
- * Three passes, cheapest first:
+ * Two passes, cheapest first:
  *
  *  1. An unambiguous NAME in the prompt — a github.com/<owner>/<name> URL, a
  *     registered repo id, or its `owner/name`. When exactly one repo is named
@@ -13,10 +13,17 @@
  *     catalog: each repo's description, its top two directory levels and the
  *     opening of its agent doc. The layout is what makes the hard calls
  *     possible — descriptions never say which repo the render engine is in.
- *  3. Recent session titles per repo as examples, because where the team has
- *     actually filed this kind of work is better evidence than any prose. Of
- *     three infrastructure repos, only history says which one receives "add a
- *     logs bucket".
+ *
+ * There was a third pass: recent session titles per repo, on the theory that
+ * where the team has filed this kind of work beats any prose. Measured, it was
+ * the worst thing in the prompt. Over five cases run twice, no history scored
+ * 9/10 and titles 6/10, because a title is a lexical hook and some of them are
+ * wrong: a session titled "Add auto repository picker mode" happens to be
+ * filed under tella-fusion, and every routing of a repository-picker task then
+ * went to tella-fusion — 0/4 — citing that title as the reason. Wrong, and
+ * confidently wrong. Per-repo VOLUME instead of titles (8/10) fixed the
+ * citing but not the pull. The tie-break it was kept for — which of three
+ * infra repos receives "add a logs bucket" — did not reproduce.
  *
  * Fail-soft everywhere: any failure returns null and the caller falls back to
  * the configured default, exactly like suggest-branch.
@@ -25,8 +32,6 @@
 import { opencodeOneShot } from "./opencode-oneshot";
 import { configuredRepos } from "./config";
 import { repoRoutingCatalog, renderRepoCatalog, type RepoCard } from "./repo-context";
-import { getCachedSessions } from "./session-cache";
-import type { UnifiedSession } from "./types";
 
 const SUGGEST_MODEL = process.env.SUGGEST_REPOS_MODEL || "claude-haiku-4-5";
 /**
@@ -53,11 +58,6 @@ const PREVIEW_BUDGET_MS = 25_000;
 /** A create has already been committed to and its whole destination hangs on
  *  the answer, so it is worth waiting longer for than a preview. */
 const CREATE_BUDGET_MS = 30_000;
-/** Examples per repo. Enough to show a pattern, few enough that the busiest
- *  repo doesn't drown the rest — sampled PER repo for that reason. */
-const EXAMPLES_PER_REPO = 6;
-/** Titles shorter than this ("can you look into this?") teach nothing. */
-const MIN_EXAMPLE_LEN = 15;
 /**
  * At most one extra repo. Attaching a repo costs a worktree checkout and
  * permanent context the agent carries all session; NOT attaching one costs
@@ -77,53 +77,13 @@ export interface RepoSuggestion {
 	source: "named" | "model";
 }
 
-/** Recent session titles per repo, as evidence of where work like this goes. */
-export function historyExamples(
-	ids: Set<string>,
-	sessions: Pick<UnifiedSession, "repo" | "title" | "repoAuto">[] = getCachedSessions(),
-): string {
-	const byRepo = new Map<string, string[]>();
-	// Sessions arrive newest-first; take the first few per repo and stop.
-	for (const session of sessions) {
-		const repo = session.repo;
-		if (!repo || !ids.has(repo)) continue;
-		// Auto's own past answers. Learning from them would be learning from
-		// this classifier, and since we sample the NEWEST titles per repo they
-		// would be the entire corpus within weeks of Auto becoming the default
-		// — a mistake it made once would then be evidence for making it again.
-		if (session.repoAuto) continue;
-		const title = (session.title || "").trim();
-		if (title.length < MIN_EXAMPLE_LEN) continue;
-		// Automation runs are named "<Automation> — <date>"; they say where a
-		// SCHEDULE points, not where a person's task belongs.
-		if (/\s—\s\d{4}-\d{2}-\d{2}/.test(title)) continue;
-		// "Review · PR #123 …" is a session spawned to read a diff. It names
-		// the repo the PR was already in, so it teaches nothing about routing
-		// and, in a repo with steady review traffic, crowds out everything
-		// that does.
-		if (/^Review\s·\sPR\s#/.test(title)) continue;
-		// Degenerate titles from agent handshakes ("Acknowledge readiness and
-		// stop"). They pass the length test while saying nothing about the
-		// repo, and a quiet repo can end up described entirely by them.
-		if (/^(acknowledge|output|reply|respond|confirm)\b/i.test(title)) continue;
-		const list = byRepo.get(repo) ?? [];
-		if (list.length >= EXAMPLES_PER_REPO) continue;
-		list.push(title.slice(0, 100));
-		byRepo.set(repo, list);
-	}
-	const blocks = [...byRepo]
-		.filter(([, titles]) => titles.length)
-		.map(([repo, titles]) => `${repo}:\n${titles.map((t) => `  - ${t}`).join("\n")}`);
-	return blocks.join("\n");
-}
-
-export function buildSystemPrompt(cards: RepoCard[], examples: string, mode: "ask" | "code"): string {
+export function buildSystemPrompt(cards: RepoCard[], mode: "ask" | "code"): string {
 	const attachable = cards.filter((c) => !c.sharedCheckout).map((c) => c.id);
 	return `You route engineering tasks to the right repository. You are given a task description and a catalog of the registered repositories, and you pick the one the work belongs in.
 
 # Repositories
 ${renderRepoCatalog(cards)}
-${examples ? `\n# Where work like this has recently been filed\nRecent session titles per repository. Treat this as WEAK, corroborating evidence only — use it to break a tie the layout and docs left open, never to override them. These labels are the picker's own past output, including its mistakes, so a title that contradicts where the code plainly lives is a misfiling and not a fact.\n\n${examples}\n` : ""}
+
 # How to choose
 - Match the task against what each repository CONTAINS — its directories and its own documentation — not just its one-line description. A monorepo whose description lists many things is not automatically the answer.
 - A path, package, service or file name in the task is the strongest signal: find the repository whose directory listing contains it.
@@ -198,7 +158,7 @@ export async function suggestRepos(
 		// clock instead, so giving up costs the account nothing.
 		const resultText = await Promise.race([
 			opencodeOneShot(`Route this task:\n\n${text.slice(0, 2000)}`, {
-				system: buildSystemPrompt(cards, historyExamples(ids), mode),
+				system: buildSystemPrompt(cards, mode),
 				model: SUGGEST_MODEL,
 				label: "suggest-repos",
 			}),

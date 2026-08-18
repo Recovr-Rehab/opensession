@@ -1053,10 +1053,6 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
       type: "create_session",
       mode: createMode,
       repo: createRepo,
-      // Say who chose, not just what was chosen: suggest-repos learns from
-      // where past sessions were filed, and has to be able to leave its own
-      // answers out (types.ts, repoAuto).
-      ...(repo === AUTO_REPO ? { repoAuto: true } : {}),
       // Repos to work in beside `repo`. The server cuts each an isolated
       // worktree on this session's branch before the first turn runs, so the
       // agent is told about them in the same breath as its own checkout.
