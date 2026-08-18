@@ -77,8 +77,79 @@ describe("LiveTurnStore", () => {
 		await Bun.sleep(25);
 		store.land([{ content: "first block" }]);
 		store.append("second block");
-		await Bun.sleep(25);
+		// The reveal types the text out over a few frames rather than one.
+		await Bun.sleep(150);
 		expect(store.getSnapshot().text).toBe("second block");
+		store.clear();
+	});
+
+	test("types a chunk out at word boundaries instead of pasting it", async () => {
+		const full = "Streaming should feel typed, not pasted. ";
+		const store = new LiveTurnStore();
+		const seen: string[] = [];
+		const unsubscribe = store.subscribe(() =>
+			seen.push(store.getSnapshot().text),
+		);
+		store.start(undefined, "run-6");
+		store.append(full);
+		await Bun.sleep(30);
+		const mid = store.getSnapshot().text;
+		expect(mid.length).toBeGreaterThan(0);
+		expect(mid.length).toBeLessThan(full.length);
+		expect(mid.endsWith(" ")).toBe(true);
+		await Bun.sleep(300);
+		expect(store.getSnapshot().text).toBe(full);
+		// Every published frame is a prefix of the final text: the bubble only
+		// ever grows, it never shows something the reply will take back.
+		for (const frame of seen) expect(full.startsWith(frame)).toBe(true);
+		unsubscribe();
+		store.clear();
+	});
+
+	test("never publishes a frame with an open inline construct", async () => {
+		const full = "Check run `a b c` then **bold words** end. ";
+		const store = new LiveTurnStore();
+		const seen: string[] = [];
+		const unsubscribe = store.subscribe(() =>
+			seen.push(store.getSnapshot().text),
+		);
+		store.start(undefined, "run-7");
+		store.append(full);
+		await Bun.sleep(300);
+		expect(store.getSnapshot().text).toBe(full);
+		for (const frame of seen) {
+			expect((frame.match(/`/g) ?? []).length % 2).toBe(0);
+			expect((frame.match(/\*\*/g) ?? []).length % 2).toBe(0);
+		}
+		unsubscribe();
+		store.clear();
+	});
+
+	test("reveals a fence opener only together with its first code line", async () => {
+		const full = "```ts\nconst a = 1;\nconst b = 2;\n```\n";
+		const store = new LiveTurnStore();
+		const seen: string[] = [];
+		const unsubscribe = store.subscribe(() => {
+			const text = store.getSnapshot().text;
+			if (text) seen.push(text);
+		});
+		store.start(undefined, "run-8");
+		store.append(full);
+		await Bun.sleep(300);
+		expect(seen[0]).toBe("```ts\nconst a = 1;\n");
+		expect(store.getSnapshot().text).toBe(full);
+		unsubscribe();
+		store.clear();
+	});
+
+	test("finish snaps the tail so nothing keeps typing after the turn", () => {
+		const full = "A long sentence that would otherwise type out slowly. ";
+		const store = new LiveTurnStore();
+		store.start(undefined, "run-9");
+		store.append(full);
+		store.finish();
+		expect(store.getSnapshot().text).toBe(full);
+		expect(store.getSnapshot().live).toBe(false);
 		store.clear();
 	});
 });

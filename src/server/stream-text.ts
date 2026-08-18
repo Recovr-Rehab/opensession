@@ -12,9 +12,10 @@
  * and markdown mid-write does not render as itself: a paragraph stops
  * mid-word, a code fence has no closing fence, a backtick has no partner. So
  * deltas are held to the next boundary where the text stands on its own — the
- * end of a sentence, a line, or a block (`safeFlushLength`) — and a viewer
- * only ever holds something it can render. It also cuts a fast turn from
- * hundreds of frames to a handful.
+ * end of a sentence, a line, or a block (`safeFlushLength`, which lives in
+ * `@tellahq/opensession-protocol/stream-cuts` beside the viewers' word-level
+ * reveal) — and a viewer only ever holds something it can render. It also
+ * cuts a fast turn from hundreds of frames to a handful.
  *
  * Delivery is unconditional, which is what makes the engines agree: the
  * codex-direct adapter has always streamed its `item/agentMessage/delta` feed,
@@ -23,6 +24,10 @@
  * old whole-part behaviour back without waiting for a deploy.
  */
 
+import { safeFlushLength } from "@tellahq/opensession-protocol/stream-cuts";
+
+export { safeFlushLength };
+
 /**
  * Whether the opencode runner forwards partial assistant text. On unless the
  * kill switch is set. Read per call, never pinned at module load, so flipping
@@ -30,118 +35,6 @@
  */
 export function streamPartialTextEnabled(): boolean {
   return process.env.OPENSESSION_OC_STREAM_TEXT !== "0";
-}
-
-/** A fence opener/closer, indented up to three spaces like CommonMark allows. */
-const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})/;
-
-/**
- * The end of the last sentence in `line`, or 0 when it holds none. A sentence
- * ends at `.`, `!`, `?` or `:` followed by a space — the cut lands after the
- * space, so the next frame starts a word rather than continuing one.
- */
-function lastSentenceEnd(line: string): number {
-  for (let i = line.length - 1; i >= 1; i--) {
-    if (line[i] !== " ") continue;
-    const punctuation = line[i - 1];
-    if (punctuation !== "." && punctuation !== "!" && punctuation !== "?" && punctuation !== ":") {
-      continue;
-    }
-    // "e.g. " and friends are not the end of anything worth cutting at.
-    if (punctuation === "." && /\b[a-z]$/i.test(line.slice(0, i - 1))) continue;
-    return i + 1;
-  }
-  return 0;
-}
-
-/**
- * Whether the inline markdown in `text` is closed: every code span, link and
- * bold run finished. An open one is exactly what makes a half-written reply
- * render wrong — a lone backtick shows as a backtick, `[` swallows the words
- * after it — so text with one open is held back rather than sent.
- *
- * Underscores are not counted: `snake_case` is not emphasis in CommonMark,
- * and treating it as an open run would hold most code-flavoured prose back to
- * its paragraph end.
- */
-function inlineClosed(text: string): boolean {
-  const body = text.replace(/\\./g, "");
-  const backticks = body.match(/`+/g);
-  if (backticks && backticks.length % 2 !== 0) return false;
-  let brackets = 0;
-  for (const ch of body) {
-    if (ch === "[") brackets++;
-    else if (ch === "]") brackets--;
-    if (brackets < 0) brackets = 0;
-  }
-  if (brackets > 0) return false;
-  // An inline link's destination, opened and not yet closed.
-  const lastOpen = body.lastIndexOf("](");
-  if (lastOpen !== -1 && body.indexOf(")", lastOpen) === -1) return false;
-  const bold = body.match(/\*\*/g);
-  if (bold && bold.length % 2 !== 0) return false;
-  const stars = body.replace(/\*\*/g, "").replace(/^ {0,3}\* /gm, "").match(/\*/g);
-  if (stars && stars.length % 2 !== 0) return false;
-  return true;
-}
-
-/**
- * How much of a block being written can be shown now.
- *
- * Streaming raw deltas types the reply out a token at a time, which is what
- * every viewer then has to render: a paragraph mid-word, a code fence with no
- * closing fence, a backtick with no partner. Markdown that is still being
- * written does not render as itself, so the bubble flickered between raw
- * source and formatted text for the length of the turn.
- *
- * So a frame is cut at a boundary where what has been sent stands on its own:
- * the end of a completed line (or of a code line inside a fence), or the end
- * of a sentence when the paragraph's inline constructs are all closed. Text
- * after the last such boundary is held until the next delta, and a block's
- * completion flushes whatever is left (see `TextPartStream.tail`).
- */
-export function safeFlushLength(text: string): number {
-  let cut = 0;
-  let inFence = false;
-  let fence = "";
-  let paragraphStart = 0;
-  let i = 0;
-  while (i < text.length) {
-    const newline = text.indexOf("\n", i);
-    const end = newline === -1 ? text.length : newline + 1;
-    const line = text.slice(i, end);
-    if (newline === -1) {
-      // The trailing partial line: a sentence inside it is still a boundary.
-      if (!inFence) {
-        const sentence = lastSentenceEnd(line);
-        if (sentence > 0 && inlineClosed(text.slice(paragraphStart, i + sentence))) {
-          cut = Math.max(cut, i + sentence);
-        }
-      }
-      break;
-    }
-    const fenceMark = line.match(FENCE_LINE);
-    if (inFence) {
-      // Inside a fence every complete line is safe, and the closing fence
-      // ends the block.
-      if (fenceMark && line.trimStart().startsWith(fence)) {
-        inFence = false;
-        paragraphStart = end;
-      }
-      cut = end;
-    } else if (fenceMark) {
-      // Hold the opening fence: on its own it renders as an empty code block.
-      inFence = true;
-      fence = fenceMark[1];
-    } else if (line.trim() === "") {
-      cut = end;
-      paragraphStart = end;
-    } else if (inlineClosed(text.slice(paragraphStart, end))) {
-      cut = end;
-    }
-    i = end;
-  }
-  return cut;
 }
 
 /**

@@ -9,6 +9,7 @@
     ".": "./src/index.ts",
     "./events": "./src/events.ts",
     "./live-text": "./src/live-text.ts",
+    "./stream-cuts": "./src/stream-cuts.ts",
     "./runner": "./src/runner.ts",
     "./session": "./src/session.ts",
     "./notices": "./src/notices.ts",
