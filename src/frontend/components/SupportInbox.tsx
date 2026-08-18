@@ -31,8 +31,8 @@ import { IconMail } from "./icons";
  * the bottom of the sidebar rather than replacing it — the two are being tried
  * against each other. The band opens a ticket's workspace, so the answer
  * arrives with a session, a tab strip and a transcript around it; this opens
- * the ticket itself, and the only way into a session from here is the pane's
- * own "Triage this ticket".
+ * the ticket itself, and a session is something you go to from it — the pane's
+ * own "Triage this ticket", or, once a run exists, the pill that replaces it.
  *
  * The list is the sidebar's grammar at a column's width: the same priority
  * lanes, the same 22px rail, the same hover and selected washes, with a second
@@ -255,6 +255,7 @@ export function SupportInbox({
 							key={threadId}
 							threadId={threadId}
 							onOpenSession={onOpenSession}
+							session={sessionByThread.get(threadId) || null}
 							headerInBar
 						/>
 					) : (

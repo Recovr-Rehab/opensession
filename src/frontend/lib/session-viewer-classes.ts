@@ -361,10 +361,12 @@ export const SESSION_DELETE_LABEL = "text-label text-dim";
 
 /* ── Floating transcript pills ──────────────────────────────────────────────
  *
- * "Load all" at the top of the transcript, "Scroll to bottom" at its foot, and
- * the loading state each of them swaps to. They float over live content, so
- * they are glass rather than a panel, and they stay small: this is chrome the
- * eye should pass over, not a primary action.
+ * "Load all" at the top of the transcript, "Scroll to bottom" at its foot, the
+ * support thread's own agent rail, and the loading state each of them swaps
+ * to. They float over live content, so they are a floating surface rather than
+ * a panel, and they stay small: this is chrome the eye should pass over, not a
+ * primary action. Glass over a transcript, an opaque lid over prose that runs
+ * the full column — see PILL_LID for which is which and why.
  *
  * The padding is asymmetric on purpose. Every one of these carries a leading
  * icon, and an icon brings its own whitespace to the edge, so matching the
@@ -373,16 +375,37 @@ export const SESSION_DELETE_LABEL = "text-label text-dim";
  * its icon+label buttons.
  */
 
-/** Everything but the gap, which is the one value the two states disagree on.
- *  Written this way rather than as an override on top: two `gap-*` utilities on
- *  one element resolve by Tailwind's output order, not by the order they are
+/** Everything but the fill and the gap — the two values these pills disagree
+ *  on. Both are composed in rather than overridden on top: two utilities for
+ *  one property resolve by Tailwind's output order, not by the order they are
  *  written in. */
-const PILL_BASE =
-	"inline-flex min-h-8 items-center rounded-[999px] bg-popup-glass pr-3.5 pl-2.5 " +
-	"text-label font-semibold text-fg [backdrop-filter:var(--popup-blur)] " +
+const PILL_SHAPE =
+	"inline-flex min-h-8 items-center rounded-[999px] pr-3.5 pl-2.5 " +
+	"text-label font-semibold text-fg " +
 	"[--smooth-ring-color:var(--popup-ring)] smooth-shadow-ring-sm";
 
+const PILL_BASE = `${PILL_SHAPE} bg-popup-glass [backdrop-filter:var(--popup-blur)]`;
+
+/**
+ * The same pill, opaque — a lid rather than glass.
+ *
+ * Glass works over a transcript because a turn is a narrow column with margins
+ * either side, so the pill mostly hangs over the page rather than over words.
+ * Where the text under it runs the full width of the reading column — the
+ * support thread, whose customer messages take no surface at all — the words
+ * read straight through it and the pill looks broken. A control that floats on
+ * content is a lid: the surface reaches its colour, it does not pass through
+ * its alpha.
+ *
+ * The fill is part of the base rather than an override on top of it, for the
+ * same reason the gap is: two `bg-*` utilities on one element resolve by
+ * Tailwind's output order, and `bg-popup` is emitted BEFORE `bg-popup-glass`,
+ * so writing it after would silently lose.
+ */
+const PILL_LID = `${PILL_SHAPE} bg-popup`;
+
 export const TRANSCRIPT_PILL = `${PILL_BASE} gap-1.5`;
+export const FLOATING_PILL = `${PILL_LID} gap-1.5`;
 
 /**
  * The button form. The hover wash paints on a pseudo-element so it layers over
@@ -397,17 +420,21 @@ export const TRANSCRIPT_PILL = `${PILL_BASE} gap-1.5`;
  * small pill is still easy to hit; it must not paint anything, or it would
  * square off the corners it extends past.
  */
-export const TRANSCRIPT_PILL_BUTTON =
-	`group relative cursor-pointer ${TRANSCRIPT_PILL} transition-[scale] ` +
+const PILL_PRESSABLE =
+	"group relative cursor-pointer transition-[scale] " +
 	"before:pointer-events-none before:absolute before:inset-0 before:rounded-[inherit] " +
 	"before:[corner-shape:inherit] before:bg-transparent before:transition-colors before:content-[''] " +
 	"after:absolute after:-inset-1 after:content-[''] hover:before:bg-hover " +
 	"focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg active:scale-[0.96]";
 
+export const TRANSCRIPT_PILL_BUTTON = `${TRANSCRIPT_PILL} ${PILL_PRESSABLE}`;
+export const FLOATING_PILL_BUTTON = `${FLOATING_PILL} ${PILL_PRESSABLE}`;
+
 /** The loading state's leading spinner, and the wider gap it asks for: an arrow
  *  glyph carries side bearing of its own, a bare 12px ring carries none, so at
  *  the label's own spacing the two sit on top of each other. */
 export const TRANSCRIPT_PILL_LOADING = `${PILL_BASE} gap-2`;
+export const FLOATING_PILL_LOADING = `${PILL_LID} gap-2`;
 export const TRANSCRIPT_PILL_SPINNER =
 	"size-3 shrink-0 animate-spin rounded-full border border-current/25 border-t-current text-dim";
 

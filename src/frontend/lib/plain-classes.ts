@@ -11,21 +11,28 @@
  * gives a team note (lib/tinted-surface.ts), and the actions are the Button
  * primitive at its quiet weight.
  *
- * Both sides of the thread take the SAME plate. Who spoke is the name on the
- * message and the edge it hugs, the way the transcript tells your own turn
- * from an answer; a second fill for our own replies would say it a third time,
- * in colour, across the half of the thread that is mostly autoresponder.
+ * The two sides are deliberately not symmetrical, and a thread is read the way
+ * a session transcript is. What you came here to read carries no surface at
+ * all; your own half of the conversation is a bubble hugging the right edge.
+ * Plating both sides put two facing walls of grey down the page and said who
+ * spoke three times over — in the name, in the edge the message hugs, and
+ * again in colour.
  */
 
-/** Shared shape. The corner is the note bubble's (`rounded-2xl` at this
- *  padding), because a support message is that block, not a chat tail. */
-const ENTRY = "flex max-w-[86%] flex-col gap-1 rounded-2xl bg-panel px-4 py-3";
+/** A message: the head, then the message under it. Full width on both sides —
+ *  which edge a message hugs is decided by the block inside, not by this row. */
+export const plainEntryRow = "flex flex-col gap-1";
 
-/** A message from the customer. */
-export const plainEntryIn = `${ENTRY} self-start`;
+/** A message from the customer. No surface: this is the page's content, not a
+ *  card on it. */
+export const plainEntryIn = "flex flex-col gap-1";
 
-/** A message from our side: a teammate's reply, the autoresponder, an agent. */
-export const plainEntryOut = `${ENTRY} self-end`;
+/** A message from our side: a teammate's reply, the autoresponder, an agent.
+ *  The transcript's own reply bubble, at the same cap, corner and padding
+ *  (`msgBubbleUser`, lib/msg-classes.ts). */
+export const plainEntryOut =
+	"flex max-w-[min(600px,90%)] flex-col gap-1 self-end rounded-lg bg-panel " +
+	"px-3.5 py-2.5";
 
 /** An internal note. Full width and washed rather than plated, so it reads as
  *  an aside on the thread instead of another message in it. The wash itself is

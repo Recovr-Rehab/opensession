@@ -8,12 +8,14 @@ import { mineStatus } from "../lib/sidebar-lanes";
 import { MINE_STATUS_META } from "../lib/sidebar-types";
 import { SUPPORT_COLUMN_BAR, SUPPORT_TOP_RAIL } from "../lib/support-classes";
 // The transcript's floating pills. This is the same job — chrome that hangs
-// over live content the reader is scrolling — so it takes the same glass
-// rather than a second one invented here.
+// over live content the reader is scrolling — so it takes the same shape
+// rather than a second one invented here, in its opaque form: a support
+// message runs the full width of the column, so glass would show the words
+// through the pill.
 import {
-	TRANSCRIPT_PILL,
-	TRANSCRIPT_PILL_BUTTON,
-	TRANSCRIPT_PILL_LOADING,
+	FLOATING_PILL,
+	FLOATING_PILL_BUTTON,
+	FLOATING_PILL_LOADING,
 	TRANSCRIPT_PILL_SPINNER,
 } from "../lib/session-viewer-classes";
 import { PlainStatusBadge } from "./PlainStatusBadge";
@@ -170,9 +172,23 @@ export function ConversationPane({
 	// rail is what the thread's top padding clears, so this must not change
 	// when the ticket lands.
 	const rail = session ? "session" : hideTriage ? null : "triage";
-	const sessionDot = session
+	const sessionState = session
 		? MINE_STATUS_META.find((m) => m.key === mineStatus(session))
 		: null;
+	// What the pill says. Never the session's own title: a support session is
+	// named after the ticket, so the title would repeat the subject sitting in
+	// the bar directly above it and the pill would read as a second heading
+	// rather than as the way through to the run.
+	//
+	// It names its destination, except in the two states that are a reason to
+	// go there now — a run still working, or one stopped on a question. The
+	// rest of the lane vocabulary is about pull requests ("Ready to merge",
+	// "Done"), which says nothing on a ticket; that state stays in the dot,
+	// where the sidebar keeps it too.
+	const sessionLabel =
+		sessionState?.key === "needsinput" || sessionState?.key === "inprogress"
+			? sessionState.label
+			: "Open session";
 
 	return (
 		<div
@@ -339,30 +355,27 @@ export function ConversationPane({
 					<div className={SUPPORT_TOP_RAIL}>
 						{rail === "session" && session ? (
 							<Tooltip
-								label={`Open the session on this ticket · ${
-									sessionDot?.label || "Session"
+								label={`Open the session on this ticket${
+									session.title ? ` · ${session.title}` : ""
 								}`}
 							>
 								<button
 									type="button"
-									className={cn(TRANSCRIPT_PILL_BUTTON, "pointer-events-auto")}
+									className={cn(FLOATING_PILL_BUTTON, "pointer-events-auto")}
 									onClick={() => onOpenSession(session.id)}
 								>
 									<span
 										className="size-[7px] shrink-0 rounded-full"
 										style={{
-											backgroundColor:
-												sessionDot?.dotColor || "var(--text-faint)",
+											backgroundColor: sessionState?.dotColor || "var(--text-faint)",
 										}}
 										aria-hidden
 									/>
-									<span className="min-w-0 truncate">
-										{session.title || "Open session"}
-									</span>
+									<span className="min-w-0 truncate">{sessionLabel}</span>
 								</button>
 							</Tooltip>
 						) : triaging ? (
-							<div className={TRANSCRIPT_PILL_LOADING}>
+							<div className={FLOATING_PILL_LOADING}>
 								<span className={TRANSCRIPT_PILL_SPINNER} aria-hidden />
 								<span>Starting triage…</span>
 							</div>
@@ -370,7 +383,7 @@ export function ConversationPane({
 							<Tooltip label="Investigates, posts an internal note, and can open a PR for review.">
 								<button
 									type="button"
-									className={cn(TRANSCRIPT_PILL_BUTTON, "pointer-events-auto")}
+									className={cn(FLOATING_PILL_BUTTON, "pointer-events-auto")}
 									onClick={handleTriage}
 								>
 									<IconSparkle size={14} className="text-dim" aria-hidden />
@@ -381,7 +394,7 @@ export function ConversationPane({
 						{triageError && (
 							<div
 								className={cn(
-									TRANSCRIPT_PILL,
+									FLOATING_PILL,
 									"pointer-events-auto min-w-0 font-normal text-red",
 								)}
 								role="alert"

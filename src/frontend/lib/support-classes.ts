@@ -16,3 +16,23 @@
 export const SUPPORT_COLUMN_BAR =
 	"wco-chrome flex h-[var(--desktop-header-h)] shrink-0 items-center gap-2 " +
 	"border-b border-divider px-4";
+
+/**
+ * Where the ticket's agent affordance floats: the offer to triage it, or the
+ * session already working on it.
+ *
+ * It is a sibling of the scroll area, not a row in it, so the thread runs on
+ * underneath — the same shape the transcript gives "Load all", which is why
+ * the pills in it are that pill (in its opaque form: a support message runs
+ * the full width of the column, so glass would show the words through). As a
+ * block in the flow it was a full-width plate wedged between the last message
+ * and the composer, which is a lot of furniture for one button and cut the
+ * conversation off short of the box you answer it in.
+ *
+ * `pointer-events-none` so the thread under it stays selectable; each pill
+ * turns them back on for itself. The thread pays for the space it occupies in
+ * its own top padding, so nothing sits under the pill at rest.
+ */
+export const SUPPORT_TOP_RAIL =
+	"pointer-events-none absolute top-3 left-1/2 z-[5] flex max-w-[calc(100%-32px)] " +
+	"-translate-x-1/2 flex-col items-center gap-1.5";
