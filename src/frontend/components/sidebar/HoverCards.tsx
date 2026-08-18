@@ -1,8 +1,7 @@
 import type { WorkspaceOverview } from "../../lib/api";
-import { CAP_LABEL } from "../../lib/cap-label";
 import { providerFromUrl } from "../../lib/provider";
 import { sessionPrMerged } from "../../lib/session-prs";
-import { MAX_HOVERCARD_MEDIA, TONE_TEXT, WS_ACTION, compactNum, hoverState, prTone, prettyReview, useSessionOverview, useWsOverview, wsPrInfo, type WsCardRow } from "../../lib/sidebar-hover";
+import { MAX_HOVERCARD_MEDIA, TONE_TEXT, compactNum, hoverState, prTone, prettyReview, useSessionOverview, useWsOverview, wsPrInfo, type WsCardRow } from "../../lib/sidebar-hover";
 import { SIDEBAR_STATUS_DOT, SIDEBAR_WS_SNOOZE, SIDEBAR_WS_TICKER } from "../../lib/sidebar-classes";
 import { frontingPrSession, mineStatus, pinnedLane, runNeedsAttention } from "../../lib/sidebar-lanes";
 import { MINE_STATUS_META, type LaneChoice, type MineStatus } from "../../lib/sidebar-types";
@@ -15,7 +14,7 @@ import { BottomSheet, SheetBody, SheetItem, SheetSeparator } from "../../ui/shee
 import { openLightbox } from "../MediaLightbox";
 import { sessionPrTone } from "../../lib/pr-refs";
 import { CardFooter, CardPrChip, checksLabel, osReviewLabel } from "../SidebarRowCards";
-import { IconArrowUpRight, IconGitMerge, IconInbox, IconLink, IconMail, IconMoon, IconPencil, IconPin, IconPullRequest } from "../icons";
+import { IconArchive, IconArrowUpRight, IconGitMerge, IconInbox, IconLink, IconMail, IconMoon, IconPencil, IconPin, IconPullRequest } from "../icons";
 import React, { useEffect, useState } from "react";
 
 // The session card, in the shape the workspace card already proved: what the
@@ -490,8 +489,9 @@ export function WsCardBody({
 				    answer the blocked question (accent), merge the ready PR (green),
 				    review the not-ready PR (neutral), or archive merged work (purple). */}
 				{row.status === "needsinput" && row.sessions.length > 0 ? (
-					<button
-						className={`${WS_ACTION} bg-accent text-on-accent hover:opacity-90`}
+					<Button
+						size="sm"
+						variant="primary"
 						onClick={() =>
 							onOpen(
 								row.sessions.find((c) => c.waitingForInput) ||
@@ -500,43 +500,38 @@ export function WsCardBody({
 							)
 						}
 					>
-						<span className={CAP_LABEL}>
-							{row.sessions.some((c) => c.waitingForInput) ? "Answer" : "Open"}
-						</span>
-					</button>
+						{row.sessions.some((c) => c.waitingForInput) ? "Answer" : "Open"}
+					</Button>
 				) : row.status === "merged" ? (
-					<button
-						className={`${WS_ACTION} bg-purple text-white hover:opacity-90`}
+					// Purple is the merged tone across every PR surface, and this is
+					// the action that closes merged work, so it takes the solid
+					// plate's shape with that fill. It is a className rather than a
+					// variant because the variants are semantic (danger, success)
+					// and "merged" is a fact about a PR, not about a button.
+					<Button
+						size="sm"
+						variant="primary"
+						className="bg-purple text-white hover:bg-purple/90"
+						icon={<IconArchive size={20} />}
 						onClick={onArchive}
 					>
-						<svg
-							width="15"
-							height="15"
-							viewBox="0 0 16 16"
-							fill="none"
-							stroke="currentColor"
-							strokeWidth="1.4"
-						>
-							<rect x="2.25" y="2.75" width="11.5" height="3" rx="0.6" />
-							<path d="M3.25 5.75v6.5a1 1 0 0 0 1 1h7.5a1 1 0 0 0 1-1v-6.5" />
-							<path d="M6.5 8.5h3" strokeLinecap="round" />
-						</svg>
-						<span className={CAP_LABEL}>Archive</span>
-					</button>
+						Archive
+					</Button>
 				) : row.status === "review" && prSession?.prUrl ? (
-					<a
-						href={prSession.prUrl}
-						target="_blank"
-						rel="noopener noreferrer"
-						className={
-							prReady
-								? `${WS_ACTION} bg-green text-white hover:opacity-90`
-								: `${WS_ACTION} border border-line bg-surface text-dim hover:bg-hover hover:text-fg`
+					<Button
+						size="sm"
+						variant={prReady ? "success-strong" : "soft"}
+						trailing={<IconArrowUpRight size={15} className="opacity-80" />}
+						render={
+							<a
+								href={prSession.prUrl}
+								target="_blank"
+								rel="noopener noreferrer"
+							/>
 						}
 					>
-						<span className={CAP_LABEL}>{prReady ? "Merge" : "Review"}</span>
-						<IconArrowUpRight size={15} className="opacity-80" />
-					</a>
+						{prReady ? "Merge" : "Review"}
+					</Button>
 				) : null}
 				{prSession?.prUrl && (
 					<CardPrChip

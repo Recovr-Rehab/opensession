@@ -233,11 +233,44 @@ export type ButtonProps = React.ComponentPropsWithoutRef<"button"> & {
 	 * button's own color at low strength: a fixed grey caret reads as a dead
 	 * spot next to a red or green label. */
 	caret?: boolean;
+	/**
+	 * A trailing glyph that is not a chevron, on the same terms as `caret`:
+	 * same gap, same padding pull, sized by the caller. The one this exists
+	 * for is the outbound arrow on a button that leaves the app.
+	 *
+	 * It is a slot rather than "put it in children" because the cap-band trim
+	 * below only reaches a plain string. A caller who passes
+	 * `<>{"Merge"}<IconArrowUpRight /></>` gets an element child, silently
+	 * loses the trim, and lands the word a pixel high, which is the exact bug
+	 * this primitive exists to make impossible.
+	 */
+	trailing?: React.ReactNode;
+	/**
+	 * Render these optics on another element, for a control that is not a
+	 * `<button>`. Base UI's convention, and the one the app already uses for
+	 * menu and dialog triggers, so `render={<a href={url} />}` reads the same
+	 * here as it does there.
+	 *
+	 * It exists because an action that NAVIGATES has to be an anchor: middle
+	 * click, cmd-click and the context menu's copy-link all come from the
+	 * element, not from an onClick. Without this the choice was a `<button>`
+	 * that swallows those, or a hand-rolled plate outside the primitive, and
+	 * the app has ten of the latter. The hand-rolled ones are also how a
+	 * control quietly misses what this component does for a label: the whole
+	 * hover card footer sat a pixel high because it was a class string rather
+	 * than a Button.
+	 *
+	 * The element's own className wins over the variant's, so a caller can
+	 * restyle one edge without forking the component. `disabled` is a
+	 * `<button>` attribute and does nothing on an anchor: an anchor that
+	 * should not be followed has no href.
+	 */
+	render?: React.ReactElement;
 };
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 	function Button(
-		{ variant = "default", size = "md", icon, caret, className, children, ...rest },
+		{ variant = "default", size = "md", icon, caret, trailing, render, className, children, ...rest },
 		ref,
 	) {
 		const hasLabel = children != null && children !== false && children !== "";
@@ -257,33 +290,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 			) : (
 				children
 			);
-		return (
-			<button
-				type="button"
-				ref={ref}
-				className={cn(
-					"inline-flex items-center justify-center border whitespace-nowrap select-none",
-					icon != null && hasLabel ? LEAD_GAP : PLAIN_GAP,
-					// Text utilities carry different stock line heights even though this
-					// button scale pins its own heights. A single tight line box gives
-					// labels the same optical centre as fixed-size icons and chevrons.
-					"leading-none",
-					"font-medium transition-[color,background-color,border-color,filter,scale] active:scale-[0.96]",
-					// One keyboard focus treatment for every variant. Without it a
-					// Button falls back to the browser's default outline, which
-					// differs per engine and sits tight against the corner; the
-					// shared utility also carries the forced-colors fallback.
-					"focus-ring",
-					"disabled:pointer-events-none disabled:opacity-40",
-					sizes[size],
-					variants[variant],
-					icon != null && hasLabel && iconLeadPad[size],
-					caret && hasLabel && caretTrailPad[size],
-					iconOnly && iconOnlyPad[size],
-					className,
-				)}
-				{...rest}
-			>
+		const content = (
+			<>
 				{icon != null && (
 					<span
 						className={cn(
@@ -295,12 +303,58 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 					</span>
 				)}
 				{label}
+				{trailing != null && (
+					<span className="inline-flex shrink-0 items-center">{trailing}</span>
+				)}
 				{caret && (
 					<IconChevronDown
 						className="shrink-0 opacity-55"
 						size={caretSize[size]}
 					/>
 				)}
+			</>
+		);
+		const optics = cn(
+			// `no-underline` is inert on a <button> and load-bearing under
+			// `render`: an <a> underlines its text by default, so without it a
+			// button that navigates arrives looking like body copy.
+			"inline-flex items-center justify-center border whitespace-nowrap select-none no-underline",
+			icon != null && hasLabel ? LEAD_GAP : PLAIN_GAP,
+			// Text utilities carry different stock line heights even though this
+			// button scale pins its own heights. A single tight line box gives
+			// labels the same optical centre as fixed-size icons and chevrons.
+			"leading-none",
+			"font-medium transition-[color,background-color,border-color,filter,scale] active:scale-[0.96]",
+			// One keyboard focus treatment for every variant. Without it a
+			// Button falls back to the browser's default outline, which
+			// differs per engine and sits tight against the corner; the
+			// shared utility also carries the forced-colors fallback.
+			"focus-ring",
+			"disabled:pointer-events-none disabled:opacity-40",
+			sizes[size],
+			variants[variant],
+			icon != null && hasLabel && iconLeadPad[size],
+			(caret || trailing != null) && hasLabel && caretTrailPad[size],
+			iconOnly && iconOnlyPad[size],
+			className,
+		);
+
+		if (render) {
+			// The caller's element is the more specific of the two, so its own
+			// className lands last and wins the merge. `type="button"` is not
+			// forced on: it means nothing on an anchor.
+			const own = render.props as { className?: string };
+			return React.cloneElement(render as React.ReactElement<Record<string, unknown>>, {
+				...rest,
+				ref,
+				className: cn(optics, own.className),
+				children: content,
+			});
+		}
+
+		return (
+			<button type="button" ref={ref} className={optics} {...rest}>
+				{content}
 			</button>
 		);
 	},

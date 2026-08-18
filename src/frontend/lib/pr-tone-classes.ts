@@ -250,10 +250,10 @@ const CHIP_SIZE: Record<ChipSize, string> = {
 	sib: "min-h-[32px] cursor-pointer rounded-control px-[11px] text-label",
 	// Inert markup inside the row button — the whole row is the target.
 	row: "min-h-[22px] cursor-[inherit] rounded-md px-[7px] text-label",
-	// A hover card's footer. Sized to the action button that can sit beside it
-	// (WS_ACTION's 26px) so the pair reads level, and rounded to match: a
-	// control corner on a 26px box, not the 32px chrome the header wears.
-	card: "min-h-[26px] shrink-0 cursor-pointer rounded-md px-2 text-label",
+	// A hover card's footer. Sized and rounded to the action that can sit
+	// beside it, which is a <Button size="sm">: 26px, and `rounded-control`
+	// like every size in that scale, which goes pill on a box this short.
+	card: "min-h-[26px] shrink-0 cursor-pointer rounded-control px-2 text-label",
 };
 
 /** Toned chips take a soft tinted fill rather than the neutral control
