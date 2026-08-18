@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import markUrl from "../os1-mac/build/icon-512.png";
+import posterUrl from "./demo-poster.webp";
+import posterDarkUrl from "./demo-poster-dark.webp";
 
 /* The width the app is laid out at before it is scaled to fit the window. It
    is what decides how large the product reads: a wider layout means smaller
@@ -38,23 +39,17 @@ export function ProductDemo() {
 
 	return (
 		<figure ref={previewRef} className="preview-wrap" data-ready={ready}>
-			<div
-				className="product-demo-loading"
-				role="status"
-				aria-live="polite"
-				aria-hidden={ready}
-			>
-				<div className="product-demo-loading-sidebar" aria-hidden="true">
-					<span />
-					<span />
-					<span />
-					<span />
-				</div>
-				<div className="product-demo-loading-status">
-					<img src={markUrl} alt="" />
-					<span>Loading live workspace</span>
-				</div>
-			</div>
+			{/* Two files, because the preview follows the visitor's system theme.
+			    Regenerate both with `bun scripts/capture-demo-poster.ts`. */}
+			<picture>
+				<source srcSet={posterDarkUrl} media="(prefers-color-scheme: dark)" />
+				<img
+					className="product-demo-poster"
+					src={posterUrl}
+					alt="The Open Session workspace: a list of sessions beside a live transcript."
+					aria-hidden={ready}
+				/>
+			</picture>
 			<iframe
 				ref={frameRef}
 				className="product-demo-frame"

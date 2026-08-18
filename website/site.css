@@ -279,68 +279,23 @@ summary:focus-visible {
 	box-shadow: 0 22px 54px var(--window-shadow);
 }
 
-.product-demo-loading {
+/* The product, painted from a file so it is on screen at first paint. The
+   iframe underneath carries the whole app bundle and takes a second or two to
+   have anything to show, which used to be a skeleton and a "Loading" label:
+   a picture of the loading of a product rather than the product. The poster is
+   a photograph of this very preview at the width it lays the app out at, so
+   the live app fades in over the same pixels. Narrower windows crop it from
+   the top left, which is the corner that is nailed down. */
+.product-demo-poster {
 	position: absolute;
 	inset: 0;
-	display: grid;
-	grid-template-columns: min(22%, 210px) 1fr;
-	background:
-		radial-gradient(circle at 72% 42%, rgba(119, 161, 147, 0.09), transparent 34%),
-		var(--window);
-	color: rgba(var(--ink-rgb), 0.54);
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	object-position: top left;
 	opacity: 1;
-	transition: opacity 180ms ease;
-}
-
-.product-demo-loading::after {
-	position: absolute;
-	top: 50px;
-	right: 0;
-	left: min(22%, 210px);
-	height: 1px;
-	background: rgba(var(--ink-rgb), 0.08);
-	content: "";
-}
-
-.product-demo-loading-sidebar {
-	display: flex;
-	padding: 76px 22px;
-	border-right: 1px solid rgba(var(--ink-rgb), 0.08);
-	background: rgba(255, 255, 255, 0.42);
-	flex-direction: column;
-	gap: 16px;
-}
-
-.product-demo-loading-sidebar span {
-	width: 72%;
-	height: 8px;
-	border-radius: 999px;
-	background: rgba(var(--ink-rgb), 0.08);
-}
-
-.product-demo-loading-sidebar span:nth-child(2) {
-	width: 88%;
-}
-
-.product-demo-loading-sidebar span:nth-child(3) {
-	width: 60%;
-}
-
-.product-demo-loading-status {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	flex-direction: column;
-	gap: 14px;
-	font-size: 12px;
-	font-weight: 600;
-	letter-spacing: -0.01em;
-}
-
-.product-demo-loading-status img {
-	width: 42px;
-	height: 42px;
-	filter: saturate(0.78);
+	transition: opacity 220ms ease;
 }
 
 .product-demo-frame {
@@ -356,9 +311,8 @@ summary:focus-visible {
 	transition: opacity 180ms ease;
 }
 
-.preview-wrap[data-ready="true"] .product-demo-loading {
+.preview-wrap[data-ready="true"] .product-demo-poster {
 	opacity: 0;
-	pointer-events: none;
 }
 
 .preview-wrap[data-ready="true"] .product-demo-frame {
@@ -817,7 +771,7 @@ summary:focus-visible {
 		display: none;
 	}
 
-	.product-demo-loading,
+	.product-demo-poster,
 	.product-demo-frame {
 		transition: none;
 	}
