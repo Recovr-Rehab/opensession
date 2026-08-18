@@ -4772,26 +4772,6 @@ export function SessionViewer({
 								</span>
 							</Menu.Item>
 						)}
-						{/* Claim this workspace into your own sidebar lanes: the twin of
-						    the sidebar row's right-click action, for when you're already
-						    reading the session (an automation run, a teammate's workspace)
-						    and want it in your own list. Per-user: it moves nothing for
-						    anyone else. Offered only while it is NOT in your sidebar, so
-						    the row states a fact you can act on rather than toggling
-						    under the same name. Dropping one again stays on the sidebar
-						    row itself, next to the list it would leave. */}
-						{onSetStatus && !canAddToSidebar && !claimed && (
-							<Menu.Item
-								onClick={() => {
-									setOverflowOpen(false);
-									onSetStatus(claimSessions, "mine");
-								}}
-								title="Keep this workspace in your own sidebar lanes"
-							>
-								<IconInbox size={20} className={MENU_ICON} />
-								<span className="grow">Add to my sidebar</span>
-							</Menu.Item>
-						)}
 					</>
 				);
 				// Fork: a new session carrying this one's history up to its last
