@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import {
+	acknowledgePromptDispatch,
+	beginPromptDispatch,
+	promptDispatches,
 	promptQueues,
 	takeQueuedPrompt,
 } from "./queue-state";
@@ -8,6 +11,7 @@ const SESSION = "os-queue-state-update-test";
 const PNG = "data:image/png;base64,iVBORw0KGgo=";
 describe("takeQueuedPrompt", () => {
 	beforeEach(() => {
+		promptDispatches.clear();
 		promptQueues.set(SESSION, [
 			{
 				id: "q1",
@@ -18,6 +22,25 @@ describe("takeQueuedPrompt", () => {
 			},
 			{ id: "q2", content: "second", user: "Michiel" },
 		]);
+	});
+
+	test("keeps a selected prompt durable until the runner acknowledges it", () => {
+		const promptEntryId = beginPromptDispatch(
+			SESSION,
+			[{ id: "q1", content: "first", user: "Kent" }],
+			"entry-1",
+			false,
+		);
+		expect(promptEntryId).toBe("entry-1");
+		expect(promptDispatches.get(SESSION)).toEqual({
+			promptEntryId: "entry-1",
+			items: [{ id: "q1", content: "first", user: "Kent" }],
+		});
+
+		acknowledgePromptDispatch(SESSION, "other-entry", false);
+		expect(promptDispatches.has(SESSION)).toBe(true);
+		acknowledgePromptDispatch(SESSION, "entry-1", false);
+		expect(promptDispatches.has(SESSION)).toBe(false);
 	});
 
 	test("atomically removes and returns the complete payload", () => {

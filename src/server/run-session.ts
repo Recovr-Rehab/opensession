@@ -56,7 +56,11 @@ import {
 import { cacheMissNotice } from "@tellahq/opensession-protocol/notices";
 import { wrapContext, stripContext, isContextOnly } from "./prompt-context";
 import { takeVoiceHandoff } from "./desk-voice";
-import { activeRunRecords, type ActiveRunRecord } from "./run-journal";
+import {
+	activeRunRecords,
+	setJournalSetListener,
+	type ActiveRunRecord,
+} from "./run-journal";
 import { registerRunToken, unregisterRunToken } from "./run-rpc";
 import { createSlackPostScanner, linkThreadInIndex } from "./slack-links";
 import { STRIPE_CONFIRM_TOOLS, looksLikeFabricatedToolTranscript } from "./runner-shared";
@@ -111,10 +115,13 @@ import { markRecapPendingIfUnwatched } from "./recap";
 import { broadcastToSession, sessionWatchers } from "./ws-hub";
 import {
 	broadcastQueue,
+	beginPromptDispatch,
+	acknowledgePromptDispatch,
 	clearSteerReceipts,
 	isGitHubQueueItem,
 	persistQueues,
 	promptQueues,
+	promptDispatches,
 	queuedPromptIndex,
 	queueItem,
 	QUEUE_STORE,
@@ -133,6 +140,13 @@ import {
 import { buildSessionNote } from "./session-repos";
 import { interactiveMcpServers } from "./interactive-mcp";
 import { makeAskHandler } from "./asks";
+
+// The runner writes its active-run journal before it can call an engine. Once
+// that journal names this prompt entry, normal boot recovery owns it and the
+// queue's pre-dispatch record is no longer needed.
+setJournalSetListener((record) =>
+	acknowledgePromptDispatch(record.osSessionId, record.promptEntryId),
+);
 import { audit } from "./audit";
 import {
 	announcesNextAction,
@@ -409,6 +423,7 @@ export function restorePromptQueues(): void {
 	let data: {
 		queued?: Record<string, QueueItem[]>;
 		steered?: Record<string, QueueItem[]>;
+		dispatching?: Record<string, { promptEntryId: string; items: QueueItem[] }>;
 	};
 	try {
 		data = JSON.parse(readFileSync(QUEUE_STORE, "utf-8"));
@@ -431,6 +446,24 @@ export function restorePromptQueues(): void {
 	for (const [id, items] of Object.entries(data.queued || {})) {
 		if (items?.length) merged.set(id, [...items]);
 	}
+	// A prompt removed from the queue but not yet acknowledged by the runner is
+	// the precise restart boundary that used to leave a visible, unanswered user
+	// line. If an active-run journal has the same prompt UUID, that journal will
+	// reattach or re-run it. Otherwise put the original batch back at the front
+	// of the queue. Its UUID survives into the retry so the transcript upserts
+	// the existing line instead of duplicating it.
+	for (const [id, dispatch] of Object.entries(data.dispatching || {})) {
+		if (!dispatch?.items?.length || !dispatch.promptEntryId) continue;
+		const journalOwnsPrompt = activeRunRecords().some(
+			(run) =>
+				run.osSessionId === id && run.promptEntryId === dispatch.promptEntryId,
+		);
+		if (journalOwnsPrompt) continue;
+		const items = dispatch.items.map((item, index) =>
+			index === 0 ? { ...item, promptEntryId: dispatch.promptEntryId } : item,
+		);
+		merged.set(id, [...items, ...(merged.get(id) || [])]);
+	}
 	for (const [id, items] of Object.entries(data.steered || {})) {
 		if (!items?.length) continue;
 		// A persisted steer receipt whose message already sits in the engine
@@ -446,6 +479,7 @@ export function restorePromptQueues(): void {
 		merged.set(id, [...(merged.get(id) || []), ...undelivered]);
 	}
 	steeredReceipts.clear();
+	promptDispatches.clear();
 	let restored = 0;
 	for (const [id, items] of merged) {
 		if (!findSession(id)) continue; // session no longer exists — drop
@@ -802,7 +836,10 @@ async function drainQueueInner(sessionId: string): Promise<void> {
 		const batch = plan.batch;
 		if (plan.rest.length > 0) promptQueues.set(sessionId, plan.rest);
 		else promptQueues.delete(sessionId);
-		persistQueues();
+		// Persist the delivery intent before starting work. If the process dies
+		// after this point but before the runner journals its run, boot restores
+		// this batch to the front of the queue.
+		const promptEntryId = beginPromptDispatch(sessionId, batch);
 		broadcastQueue(sessionId);
 		let combined = batch
 			.map((m) =>
@@ -837,10 +874,12 @@ async function drainQueueInner(sessionId: string): Promise<void> {
 				combinedFiles.length ? combinedFiles : undefined,
 				contextSessions.length ? contextSessions : undefined,
 				slackReplyTo,
+				promptEntryId,
 			);
 		} catch (e) {
 			// The batch was already spliced out and persisted away — put it back at
 			// the front of the queue so a throw doesn't lose the messages.
+			acknowledgePromptDispatch(sessionId, promptEntryId, false);
 			const current = promptQueues.get(sessionId) || [];
 			promptQueues.set(sessionId, [...batch, ...current]);
 			persistQueues();
@@ -1483,6 +1522,7 @@ export async function runSessionPrompt(
 	rawFiles?: unknown,
 	contextSessions?: string[],
 	slackReplyTo?: { channel: string; threadTs: string },
+	promptEntryId?: string,
 ): Promise<void> {
 	// Any explicit new run lifts a user stop — the queue may drain again.
 	stoppedSessions.delete(sessionId);
@@ -1501,7 +1541,11 @@ export async function runSessionPrompt(
 			contextSessions,
 			slackReplyTo,
 			startToken,
+			promptEntryId,
 		);
+		// Sandboxes and non-standard runners may not create an active-run journal.
+		// A completed turn is nevertheless a safe acknowledgement of its dispatch.
+		acknowledgePromptDispatch(sessionId, promptEntryId);
 	} catch (e) {
 		// A throw before the run registered (workspace revive, session-note
 		// build, …) would strand the FSM in "starting" forever — the wedge the
@@ -1512,6 +1556,9 @@ export async function runSessionPrompt(
 				source: "prompt_throw",
 				error: String(e),
 			});
+		// A normal start failure is not a crash-recovery case. Keep the visible
+		// transcript line and its error, but do not replay it on a later restart.
+		acknowledgePromptDispatch(sessionId, promptEntryId);
 		throw e;
 	} finally {
 		unmarkSessionStarting(sessionId, startToken);
@@ -1527,6 +1574,7 @@ async function runSessionPromptInner(
 	contextSessions?: string[],
 	slackReplyTo?: { channel: string; threadTs: string },
 	startToken?: string,
+	promptEntryId?: string,
 ): Promise<void> {
 	const session = findSession(sessionId);
 	if (!session) return;
@@ -1584,11 +1632,11 @@ async function runSessionPromptInner(
 	// write upserts this same row (with any context decoration) instead of
 	// duplicating the bubble. Sandbox runs keep their own transcript mirror
 	// with its own ids — skip those to avoid a doubled user line.
-	const promptEntryId = crypto.randomUUID();
+	const durablePromptEntryId = promptEntryId || crypto.randomUUID();
 	if (!session.sandbox && content?.trim()) {
 		storeAppendUserLineEarly(
 			sessionId,
-			transcriptLineUser(content, promptEntryId, undefined, images),
+			transcriptLineUser(content, durablePromptEntryId, undefined, images),
 			isOpencodeSessionId(engineSessionId) ? engineSessionId : undefined,
 		);
 	}
@@ -1638,7 +1686,7 @@ async function runSessionPromptInner(
 						lastProvider,
 					)
 				: []
-		).filter((e) => e.id !== promptEntryId);
+		).filter((e) => e.id !== durablePromptEntryId);
 		if (prevEntries.length) {
 			switchHandoffEntries = prevEntries;
 			// Claude coming back to a thread it already ran (engineSessionId set)
@@ -1896,7 +1944,7 @@ async function runSessionPromptInner(
 	});
 	const sandboxRun = runnerRun ? null : await maybeLaunchSandboxedRun(session, {
 		prompt,
-		promptEntryId,
+		promptEntryId: durablePromptEntryId,
 		engineSessionId: engineSessionId || undefined,
 		cwd,
 		user,
@@ -1947,7 +1995,7 @@ async function runSessionPromptInner(
 
 	for await (const event of runnerRun ?? sandboxRun ?? runAgent({
 		prompt,
-		promptEntryId,
+		promptEntryId: durablePromptEntryId,
 		sessionId: engineSessionId || undefined,
 		cwd,
 		mode: session.mode,

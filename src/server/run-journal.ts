@@ -19,6 +19,15 @@ let ACTIVE_RUNS_PATH =
   `${OPENSESSION_SESSIONS_DIR}/active-runs.json`;
 let activeRunAliases = new Set<string>();
 let activeRunAliasesInitialized = false;
+let onJournalSet: ((record: ActiveRunRecord) => void) | undefined;
+
+/** Register the in-process acknowledgement for a prompt intake record. Kept as
+ * a callback so this low-level journal stays independent of queue state. */
+export function setJournalSetListener(
+	listener: ((record: ActiveRunRecord) => void) | undefined,
+): void {
+	onJournalSet = listener;
+}
 
 function syncActiveRunAliases(journal: Record<string, ActiveRunRecord>): void {
   activeRunAliases = new Set(
@@ -208,6 +217,11 @@ export function journalSet(record: ActiveRunRecord): void {
     lastResumeAt: record.lastResumeAt ?? prior?.lastResumeAt,
   };
   writeRunJournal(journal);
+  try {
+    onJournalSet?.(journal[record.runKey] || record);
+  } catch (e) {
+    console.error("[runner] Failed to acknowledge prompt dispatch:", e);
+  }
   // A fallback hop re-journals the same runKey mid-run — that's the running
   // self-edge, not a new registration, so keep the event but tag it.
   if (record.osSessionId)

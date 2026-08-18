@@ -928,14 +928,17 @@ export const websocketHandlers: WebSocketHandler<WSClientData> = {
 					break;
 				}
 
-				await runSessionPromptAndDrain(
-					sessionId,
+				// Every accepted prompt enters the durable queue first. drainQueue moves
+				// it into a dispatch record that survives a restart until the engine has
+				// written its own active-run journal.
+				enqueuePrompt(sessionId, {
 					content,
 					user,
-					images,
-					msg.files,
+					images: imageUrls,
+					files: msg.files,
 					contextSessions,
-				);
+				});
+				await drainQueue(sessionId);
 				break;
 			}
 

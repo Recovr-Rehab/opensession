@@ -26,6 +26,10 @@ const g = globalThis as any;
 
 export type QueueItem = {
 	id?: string;
+	/** Stable transcript UUID for a prompt that was accepted before a restart.
+	 * Reusing it lets a recovery upsert the existing visible user line instead
+	 * of rendering the message twice. */
+	promptEntryId?: string;
 	content: string;
 	user?: string;
 	images?: string[];
@@ -45,6 +49,17 @@ export type QueueItem = {
 	reviewHandoff?: boolean;
 };
 export const promptQueues: Map<string, QueueItem[]> = (g.__promptQueues ??=
+	new Map());
+
+/** A batch removed from the queue and handed to the runner. It remains durable
+ * until the runner has written its own active-run journal. This closes the
+ * crash window between showing a user's message in the transcript and making
+ * it recoverable on boot. */
+export type PromptDispatch = {
+	promptEntryId: string;
+	items: QueueItem[];
+};
+export const promptDispatches: Map<string, PromptDispatch> = (g.__promptDispatches ??=
 	new Map());
 
 export function isGitHubQueueItem(item?: QueueItem): boolean {
@@ -140,11 +155,48 @@ export function persistQueues(): void {
 			{
 				queued: entries(promptQueues),
 				steered: entries(steeredReceipts),
+				dispatching: Object.fromEntries(promptDispatches),
 			},
 			false,
 		);
 	} catch (e) {
 		console.error("[queue] Failed to persist prompt queues:", e);
+	}
+}
+
+/** Move a selected queue batch into durable dispatching state before starting
+ * runner work. The caller has already removed the batch from promptQueues, so
+ * this single persistence point records either the old queued copy (if we die
+ * before it) or the dispatching copy (if we die after it). */
+export function beginPromptDispatch(
+	sessionId: string,
+	items: QueueItem[],
+	promptEntryId = items.length === 1 ? items[0]?.promptEntryId : undefined,
+	effects = true,
+): string {
+	const id = promptEntryId || crypto.randomUUID();
+	promptDispatches.set(sessionId, {
+		promptEntryId: id,
+		items: items.map((item) => ({ ...item })),
+	});
+	if (effects) persistQueues();
+	return id;
+}
+
+/** The engine's active-run journal is now durable, so it owns recovery and the
+ * intake dispatch record can be removed. */
+export function acknowledgePromptDispatch(
+	sessionId: string | undefined,
+	promptEntryId: string | undefined,
+	effects = true,
+): void {
+	if (!sessionId || !promptEntryId) return;
+	const dispatch = promptDispatches.get(sessionId);
+	if (!dispatch || dispatch.promptEntryId !== promptEntryId) return;
+	promptDispatches.delete(sessionId);
+	if (effects) {
+		persistQueues();
+		broadcastQueue(sessionId);
 	}
 }
 
