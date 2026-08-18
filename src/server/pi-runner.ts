@@ -2068,6 +2068,9 @@ async function* runPiAttempt(
       settingsManager,
     });
     session = created.session;
+    // OpenCode appends every pending noReply steer before its next LLM step.
+    // Match that behavior instead of Pi's one-message-per-step default.
+    session.setSteeringMode("all");
     piSessionId = session.sessionId;
 
     // Map pi→unified BEFORE any engine-keyed append (the W1 import-first gate
