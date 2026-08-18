@@ -257,7 +257,6 @@ import { ownedBy } from "../lib/sidebar-lanes";
 import { useSessionScroll } from "../hooks/useSessionScroll";
 import { useShortcutKeys, useShortcutLabel } from "../hooks/useShortcutBindings";
 import { useSidePanel } from "../hooks/useSidePanel";
-import { useWorkspaceSummaryOpen } from "../hooks/useWorkspaceSummary";
 import { sessionHasWorkspace } from "../lib/session-workspace";
 import { matchesShortcut } from "../lib/shortcuts";
 import { PulseDot } from "../ui/status";
@@ -4096,7 +4095,10 @@ export function SessionViewer({
 	const headerRef = useRef<HTMLDivElement>(null);
 	const headerActionsRef = useRef<HTMLDivElement>(null);
 	const [headerW, setHeaderW] = useState(0);
-	const [summaryOpen, setSummaryOpen] = useWorkspaceSummaryOpen();
+	// Whether the header's workspace-summary card is up. The transcript and
+	// composer shift out from under it while it is, so this lives here rather
+	// than inside the card.
+	const [summaryOpen, setSummaryOpen] = useState(false);
 	useLayoutEffect(() => {
 		const el = headerRef.current;
 		if (!el) return;
@@ -4461,7 +4463,13 @@ export function SessionViewer({
 	// also renew the authenticated Caddy routes for remote sandbox services.
 	useEffect(() => {
 		if (
-			(!showPreviewTab && !showPortal && !panelOpen && !infoPageOpen) ||
+			(!showPreviewTab &&
+				!showPortal &&
+				!panelOpen &&
+				!infoPageOpen &&
+				// The summary card reports the same live-portal count on its own
+				// Portals row, so it needs status warm for as long as it is up.
+				!summaryOpen) ||
 			!session.worktreeDir
 		)
 			return;
@@ -4483,6 +4491,7 @@ export function SessionViewer({
 		showPortal,
 		panelOpen,
 		infoPageOpen,
+		summaryOpen,
 		session.id,
 		session.worktreeDir,
 	]);
@@ -5298,32 +5307,53 @@ export function SessionViewer({
 						/>
 					)}
 					{/* …and the rest of what a one-line strip can't say: changes,
-					    branch, conflicts, sources. This toggles the standing column
-					    that carries them (see WorkspaceSummary's module doc); it hides
-					    itself at the width where that column has nowhere to stand, the
-					    same 920px the column itself steps out at. */}
+					    branch, conflicts, sources, and the panel's own places. One
+					    floating card, so the panel can stay shut without going blind
+					    (see WorkspaceSummary's module doc). */}
 					{!isPhone && hasRepoWork && !panelOpen && (
-						<Tooltip
-							label={summaryOpen ? "Hide workspace summary" : "Show workspace summary"}
-						>
-							<Button
-								variant="ghost"
-								size="md"
-								className={cn(
-									"rounded-control text-dim hover:bg-hover hover:text-fg max-[920px]:hidden",
-									// Open reads as pressed rather than hovered, so the button
-									// and the column it holds open stay visibly one object.
-									summaryOpen && "bg-pressed text-fg",
-								)}
-								aria-pressed={summaryOpen}
-								// Not "Workspace summary": that is the column's own name, and
-								// two elements answering to it makes the button and the region
-								// indistinguishable to anything reading by name.
-								aria-label="Toggle workspace summary"
-								onClick={() => setSummaryOpen(!summaryOpen)}
-								icon={<IconListCircles size={20} />}
-							/>
-						</Tooltip>
+						<WorkspaceSummary
+							session={session}
+							anchor={headerActionsRef}
+							// The Changes row opens the panel already on its Changes
+							// page; its other rows land on the overview.
+							onOpenPanelTab={(tab) => {
+								setPanelPage(tab === "changes" ? "changes" : null);
+								setPanelOpen(true);
+							}}
+							onOpenPr={() => focusPrInReview()}
+							onOpenChecks={() => focusPrInReview(undefined, "checks")}
+							onOpenAssets={onOpenAssets}
+							// The panel's bottom bar, reached from here: Portals and
+							// Agents are pages of the panel, Terminal is the full-width
+							// view tab beside it.
+							onOpenPortals={
+								hasWorkspace
+									? () => {
+											setPanelPage("portals");
+											setPanelOpen(true);
+										}
+									: undefined
+							}
+							onOpenAgents={
+								hasWorkspace
+									? () => {
+											setPanelPage("agents");
+											setPanelOpen(true);
+										}
+									: undefined
+							}
+							onOpenTerminal={
+								hasWorkspace && onOpenTerminal
+									? () => onOpenTerminal()
+									: undefined
+							}
+							livePortals={livePortals}
+							runningAgents={runningAgents}
+							send={connected ? send : undefined}
+							refreshTick={gitRefreshTick}
+							onOpenChange={setSummaryOpen}
+							tabStripVisible={tabStripVisible}
+						/>
 					)}
 					{!isPhone && panelAvailable && (
 						<Tooltip
@@ -5943,7 +5973,16 @@ export function SessionViewer({
 							onInputIntent={focusComposerForQuote}
 						/>
 						<div
-							className={VIEWER_MESSAGES}
+							className={cn(
+								VIEWER_MESSAGES,
+								// The summary card floats over this column's right gutter.
+								// Wide enough and the reading column steps aside rather than
+								// being covered; narrower than that there is nowhere to step,
+								// so the card overlaps and the transcript stays put.
+								summaryOpen &&
+									headerW >= 1120 &&
+									"desktop:[&>*]:-translate-x-[160px]",
+							)}
 							ref={messagesRef}
 							onScroll={handleMessagesScroll}
 							onClick={handleMessagesClick}
@@ -6258,7 +6297,14 @@ export function SessionViewer({
 								)}
 							</div>
 
-							<div className={VIEWER_INPUT}>
+							<div
+								className={cn(
+									VIEWER_INPUT,
+									summaryOpen &&
+										headerW >= 1120 &&
+										"desktop:[&>*]:-translate-x-[160px]",
+								)}
+							>
 								{noEngine ? (
 									<div className="mx-auto max-w-[var(--session-col)] text-label text-faint">
 										No engine session to resume
@@ -6480,25 +6526,6 @@ export function SessionViewer({
 				{(() => {
 				const rightRegion = (
 					<>
-				{/* The same column at its resting size. The panel is an expansion of
-				    it rather than a separate place, so opening the panel replaces the
-				    summary and closing it hands the column back. */}
-				{!isPhone && hasRepoWork && !panelOpen && summaryOpen && (
-					<WorkspaceSummary
-						session={session}
-						// The Changes row opens the panel already on its Changes page;
-						// every other row lands on the overview.
-						onOpenPanelTab={(tab) => {
-							setPanelPage(tab === "changes" ? "changes" : null);
-							setPanelOpen(true);
-						}}
-						onOpenPr={() => focusPrInReview()}
-						onOpenChecks={() => focusPrInReview(undefined, "checks")}
-						onOpenAssets={onOpenAssets}
-						send={connected ? send : undefined}
-						refreshTick={gitRefreshTick}
-					/>
-				)}
 				{!isPhone && panelAvailable && panelOpen && (
 					<div className={PANEL_OVERLAY} onClick={() => setPanelOpen(false)} />
 				)}
