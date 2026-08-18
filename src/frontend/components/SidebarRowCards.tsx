@@ -149,11 +149,11 @@ export function CardLink({
 	);
 }
 
-/** The strip every card ends on: where this row leads on the left, when it
- *  last changed on the right. No rule above it — the card is 300px wide and
- *  everything in it is already ranged left, so a full-width line splits a
- *  small card in two to separate things nothing was confusing; the gap does
- *  that on its own. */
+/** The strip every card ends on: where this row leads on the left, and for the
+ *  cards that still date themselves, when it last changed on the right. No rule
+ *  above it: the card is 300px wide and everything in it is already ranged
+ *  left, so a full-width line splits a small card in two to separate things
+ *  nothing was confusing, and the gap does that on its own. */
 export function CardFooter({
 	children,
 	time,
@@ -161,15 +161,26 @@ export function CardFooter({
 }: {
 	/** Leading content — the CardLink, and for the workspace card its action. */
 	children?: React.ReactNode;
-	time: string;
+	/** Omit it and the card ends on its actions; a card with neither ends on
+	 *  its content rather than on an empty strip's top margin. */
+	time?: string;
 	timeTitle?: string;
 }) {
+	// Not `!children`: a caller's children are a live array whose entries are
+	// all conditional, so a footer with nothing to show still arrives truthy.
+	// Children.toArray drops exactly the ones that render nothing.
+	if (React.Children.toArray(children).length === 0 && !time) return null;
 	return (
 		<div className="mt-3.5 flex min-w-0 items-center gap-2">
 			{children}
-			<span className="ml-auto shrink-0 text-meta text-faint" title={timeTitle}>
-				{time}
-			</span>
+			{time && (
+				<span
+					className="ml-auto shrink-0 text-meta text-faint"
+					title={timeTitle}
+				>
+					{time}
+				</span>
+			)}
 		</div>
 	);
 }

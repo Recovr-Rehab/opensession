@@ -1,5 +1,4 @@
-import { relativeTime, type WorkspaceOverview } from "../../lib/api";
-import { DEFAULT_REPO_ID } from "../../lib/brand";
+import type { WorkspaceOverview } from "../../lib/api";
 import { providerFromUrl } from "../../lib/provider";
 import { sessionPrMerged } from "../../lib/session-prs";
 import { MAX_HOVERCARD_MEDIA, TONE_TEXT, WS_ACTION, compactNum, hoverState, prTone, prettyReview, useSessionOverview, useWsOverview, wsPrInfo, type WsCardRow } from "../../lib/sidebar-hover";
@@ -13,7 +12,6 @@ import { Button } from "../../ui/button";
 import { cn } from "../../ui/cn";
 import { BottomSheet, SheetBody, SheetItem, SheetSeparator } from "../../ui/sheet";
 import { openLightbox } from "../MediaLightbox";
-import { repoLabel } from "../RepoTile";
 import { CardFooter, CardLink, checksLabel, osReviewLabel } from "../SidebarRowCards";
 import { IconArrowUpRight, IconGitMerge, IconInbox, IconLink, IconMail, IconMoon, IconPencil, IconPin, IconPullRequest } from "../icons";
 import React, { useEffect, useState } from "react";
@@ -51,25 +49,20 @@ export function SessionCardBody({ session: s }: { session: UnifiedSession }) {
 	const checks = checksLabel(s.prChecks);
 	if (checks) rows.push(["Checks", checks]);
 
-	const repoName = repoLabel(s.repo || DEFAULT_REPO_ID);
-	const extra = s.attachedRepos?.length || 0;
-
 	return (
 		<>
 			{/* Same head as the workspace card: what changed, not which branch it
-			    changed on. */}
+			    changed on. The repo used to stand in when there was no diff to
+			    show, which spent the card's first line naming the band the row
+			    was already filed under. */}
 			<div className="flex min-w-0 items-center gap-[7px]">
 				<span className={`size-2 shrink-0 rounded-full ${state.dotClass}`} />
 				<span className="min-w-0 flex-1 truncate text-meta">
-					{s.prAdditions != null && s.prDeletions != null ? (
+					{s.prAdditions != null && s.prDeletions != null && (
 						<>
 							<span className="text-green">+{compactNum(s.prAdditions)}</span>{" "}
 							<span className="text-red">-{compactNum(s.prDeletions)}</span>
 						</>
-					) : (
-						<span className="text-dim">
-							{extra ? `${repoName} +${extra} more` : repoName}
-						</span>
 					)}
 				</span>
 				{/* What the automated review made of this session's PR, in the same
@@ -117,10 +110,7 @@ export function SessionCardBody({ session: s }: { session: UnifiedSession }) {
 				</div>
 			)}
 
-			<CardFooter
-				time={`Updated ${relativeTime(s.lastActivity)}`}
-				timeTitle={new Date(s.lastActivity).toLocaleString()}
-			>
+			<CardFooter>
 				{s.prUrl && (
 					<CardLink
 						href={s.prUrl}
@@ -420,14 +410,15 @@ function WsOverviewInfo({
 			{/* The PR facts, on one strip above the title: what changed, what the
 			    automated review made of it, and where it stands. A generated branch
 			    name ("auto-plain-ticket-triage-202608121249") used to hold this
-			    line, truncating to answer nothing the title doesn't. The verdict
-			    reads better here than under the title, where it sat between the
-			    name and the description and pushed them apart. */}
+			    line, truncating to answer nothing the title doesn't; so did the
+			    repo, which only ever named the band the row is filed under. The
+			    verdict reads better here than under the title, where it sat between
+			    the name and the description and pushed them apart. */}
 			<div className="flex min-w-0 items-center gap-[7px]">
 				{/* The diff is two short numbers and never truncates; the verdict is
 				    the variable-length half, so it takes the slack and gives it back. */}
 				<span className="shrink-0 text-meta">
-					{prSession?.prAdditions != null && prSession?.prDeletions != null ? (
+					{prSession?.prAdditions != null && prSession?.prDeletions != null && (
 						<>
 							<span className="text-green">
 								+{compactNum(prSession.prAdditions)}
@@ -436,10 +427,6 @@ function WsOverviewInfo({
 								-{compactNum(prSession.prDeletions)}
 							</span>
 						</>
-					) : (
-						<span className="text-dim">
-							{repoLabel(row.sessions[0]?.repo || DEFAULT_REPO_ID)}
-						</span>
 					)}
 				</span>
 				{/* What os-review made of this PR — the question a Ready-to-merge row
@@ -499,10 +486,7 @@ export function WsCardBody({
 		<>
 			<WsOverviewInfo row={row} ov={ov} />
 
-			<CardFooter
-				time={`Updated ${relativeTime(row.lastActivity)}`}
-				timeTitle={new Date(row.lastActivity).toLocaleString()}
-			>
+			<CardFooter>
 				{/* The single main action, colored by what the workspace needs next:
 				    answer the blocked question (accent), merge the ready PR (green),
 				    review the not-ready PR (neutral), or archive merged work (purple). */}
@@ -655,7 +639,7 @@ export function WsMobileSheet({
 				<SheetBody>
 				<div className="px-2 pb-2.5 pt-1">
 					<WsOverviewInfo row={row} ov={ov} />
-					{(prStatusBits.length > 0 || row.lastActivity) && (
+					{prStatusBits.length > 0 && (
 						<div className="mt-2 flex min-w-0 items-center gap-2 text-meta text-faint">
 							{prSession?.prNumber != null && (
 								<span
@@ -664,16 +648,9 @@ export function WsMobileSheet({
 									#{prSession.prNumber}
 								</span>
 							)}
-							{prStatusBits.length > 0 && (
-								<span className="min-w-0 truncate">
-									{prStatusBits.join(" · ")}
-								</span>
-							)}
-							{row.lastActivity && (
-								<span className="ml-auto shrink-0">
-									{relativeTime(row.lastActivity)}
-								</span>
-							)}
+							<span className="min-w-0 truncate">
+								{prStatusBits.join(" · ")}
+							</span>
 						</div>
 					)}
 				</div>

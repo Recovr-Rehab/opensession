@@ -298,8 +298,9 @@ export function SidebarItem({
 	if (!mine && session.startedBy && !session.automation) {
 		metaParts.push(<span key="u">{session.startedBy}</span>);
 	}
-	// No idle "time since" here — times only appear while a run is live (the
-	// hovercard/details still carry last activity).
+	// No idle "time since" here: times only appear while a run is live. The
+	// hover card dropped its "Updated 8m ago" for the same reason, and the Info
+	// tab is where an exact last-activity stamp belongs.
 	if (session.linearIssue) {
 		metaParts.push(
 			<span key="lin" className="text-[#7b86e8]">
