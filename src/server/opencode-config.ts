@@ -597,7 +597,7 @@ export function opencodeProviderOptions(): Record<string, Record<string, unknown
             limit: { context: 131_072, output: 8_192 },
           },
           "zai-glm-4.7": {
-            name: "Z.ai GLM 4.7",
+            name: "Z.ai GLM-4.7",
             reasoning: true,
             interleaved: { field: "reasoning" },
             tool_call: true,

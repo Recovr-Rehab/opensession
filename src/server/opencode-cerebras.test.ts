@@ -64,7 +64,7 @@ describe("Cerebras provider", () => {
         },
         "gemma-4-31b": { name: "Gemma 4 31B", tool_call: true },
         "zai-glm-4.7": {
-          name: "Z.ai GLM 4.7",
+          name: "Z.ai GLM-4.7",
           tool_call: true,
           interleaved: { field: "reasoning" },
         },
