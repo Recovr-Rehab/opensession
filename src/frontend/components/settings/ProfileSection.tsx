@@ -8,10 +8,13 @@ import {
 } from "../../lib/api/profile";
 import { refreshPeople } from "../../lib/people";
 import { Button } from "../../ui/button";
+import { cn } from "../../ui/cn";
 import { Field, FieldGrid, Input } from "../../ui/input";
 import { SettingsForm, SettingsGroupLabel } from "../../ui/settings";
+import { Spinner } from "../../ui/spinner";
 import { EmptyState, InlineAlert, LoadingState } from "../../ui/state";
 import { toast } from "../../ui/toast";
+import { IconCamera } from "../icons";
 import { useCurrentUser } from "../UserPicker";
 import { UserAvatar } from "../UserAvatar";
 
@@ -66,6 +69,13 @@ export function ProfileSection() {
 /**
  * One card, one error slot. The picture saves on pick (choosing a file already
  * is the confirmation), the fields save on Save.
+ *
+ * The picture is the upload control rather than sitting beside one, and the
+ * fields run alongside it instead of underneath. Stacked, the first line of
+ * the form was a thumbnail and a button naming what the thumbnail already
+ * invited, and the three fields below it started a second column of reading
+ * that nothing joined. Side by side there is one block: who you are on the
+ * left, what you are called on the right.
  */
 function ProfileForm({
 	profile,
@@ -94,6 +104,10 @@ function ProfileForm({
 		name.trim() !== profile.name ||
 		email.trim() !== profile.email ||
 		timezone.trim() !== profile.timezone;
+	// The picture's accessible name. A camera glyph on a scrim says "picture"
+	// but not which way it goes, and someone with no picture yet is being
+	// offered a different thing than someone replacing one.
+	const pictureAction = profile.image ? "Change picture" : "Upload picture";
 
 	async function pickPicture(file: File | undefined) {
 		if (!file) return;
@@ -162,77 +176,107 @@ function ProfileForm({
 	return (
 		<SettingsForm>
 			<form className="flex flex-col gap-3.5" onSubmit={submit}>
-				<div className="flex items-center gap-4">
-					<UserAvatar
-						name={profile.name}
-						login={profile.github}
-						image={profile.image}
-						size={56}
-					/>
-					<input
-						ref={fileRef}
-						type="file"
-						accept="image/png,image/jpeg,image/gif,image/webp"
-						className="hidden"
-						onChange={(e) => void pickPicture(e.target.files?.[0])}
-					/>
-					<Button
-						size="sm"
-						disabled={busy !== null}
-						onClick={() => fileRef.current?.click()}
-					>
-						{busy === "picture"
-							? "Saving…"
-							: profile.image
-								? "Change picture"
-								: "Upload picture"}
-					</Button>
-					{profile.image && (
-						<Button
-							size="sm"
-							variant="ghost"
+				<div className="flex items-start gap-4 phone:flex-col">
+					<div className="flex w-16 shrink-0 flex-col gap-1.5">
+						<input
+							ref={fileRef}
+							type="file"
+							accept="image/png,image/jpeg,image/gif,image/webp"
+							className="hidden"
+							onChange={(e) => void pickPicture(e.target.files?.[0])}
+						/>
+						{/* The picture IS the button. A separate "Upload picture"
+						    plate beside it named an action the picture already
+						    invites, and it was the widest thing in the row — so the
+						    form's first line was mostly a label about the thumbnail
+						    next to it. */}
+						<button
+							type="button"
 							disabled={busy !== null}
-							onClick={() => void removePicture()}
+							onClick={() => fileRef.current?.click()}
+							aria-label={pictureAction}
+							title={pictureAction}
+							// `flex`, not the default inline box: an inline child sits on
+							// the text baseline, which left 4px of descender space under
+							// the picture and pushed Remove off the 6px gap.
+							className="focus-ring group relative flex rounded-avatar disabled:pointer-events-none"
 						>
-							Remove
-						</Button>
-					)}
+							<UserAvatar
+								name={profile.name}
+								login={profile.github}
+								image={profile.image}
+								size={64}
+							>
+								<span
+									className={cn(
+										// Scrim, not a tinted wash: the glyph has to read
+										// on whatever picture is underneath it, and a
+										// profile picture can be anything.
+										"absolute inset-0 grid place-items-center rounded-[inherit] [corner-shape:inherit] bg-black/50 text-white transition-opacity duration-150",
+										busy === "picture"
+											? "opacity-100"
+											: "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100",
+									)}
+								>
+									{busy === "picture" ? (
+										<Spinner size="md" />
+									) : (
+										<IconCamera size={20} />
+									)}
+								</span>
+							</UserAvatar>
+						</button>
+						{profile.image && (
+							<Button
+								size="sm"
+								variant="ghost"
+								className="w-full px-0"
+								disabled={busy !== null}
+								onClick={() => void removePicture()}
+							>
+								Remove
+							</Button>
+						)}
+					</div>
+					<div className="flex min-w-0 flex-1 flex-col gap-3.5">
+						<Field label="Name">
+							<Input
+								value={name}
+								onChange={(e) => setName(e.target.value)}
+								placeholder="Ada Lovelace"
+								spellCheck={false}
+							/>
+						</Field>
+						{shortNameChanging && (
+							<InlineAlert variant="warn">
+								This changes your short name from {profile.shortName} to{" "}
+								{nextShort}, which is what mentions and attribution use. Your
+								pins and preferences move with you, and {profile.shortName}{" "}
+								keeps resolving to you.
+							</InlineAlert>
+						)}
+						<FieldGrid>
+							<Field label="Email">
+								<Input
+									type="email"
+									value={email}
+									onChange={(e) => setEmail(e.target.value)}
+									placeholder="ada@example.com"
+									spellCheck={false}
+								/>
+							</Field>
+							<Field label="Timezone">
+								<Input
+									value={timezone}
+									onChange={(e) => setTimezone(e.target.value)}
+									placeholder="Europe/Amsterdam"
+									spellCheck={false}
+									autoCapitalize="none"
+								/>
+							</Field>
+						</FieldGrid>
+					</div>
 				</div>
-				<Field label="Name">
-					<Input
-						value={name}
-						onChange={(e) => setName(e.target.value)}
-						placeholder="Ada Lovelace"
-						spellCheck={false}
-					/>
-				</Field>
-				{shortNameChanging && (
-					<InlineAlert variant="warn">
-						This changes your short name from {profile.shortName} to {nextShort},
-						which is what mentions and attribution use. Your pins and preferences
-						move with you, and {profile.shortName} keeps resolving to you.
-					</InlineAlert>
-				)}
-				<FieldGrid>
-					<Field label="Email">
-						<Input
-							type="email"
-							value={email}
-							onChange={(e) => setEmail(e.target.value)}
-							placeholder="ada@example.com"
-							spellCheck={false}
-						/>
-					</Field>
-					<Field label="Timezone">
-						<Input
-							value={timezone}
-							onChange={(e) => setTimezone(e.target.value)}
-							placeholder="Europe/Amsterdam"
-							spellCheck={false}
-							autoCapitalize="none"
-						/>
-					</Field>
-				</FieldGrid>
 				{error && (
 					<InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>
 				)}
