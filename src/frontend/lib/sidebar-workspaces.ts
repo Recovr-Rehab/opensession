@@ -124,6 +124,20 @@ export function activeSubagentsForWorkspace(
 		);
 }
 
+/** The root session a workspace row should open, never one of its subagents. */
+export function workspaceMainSession(row: {
+	sessions: readonly UnifiedSession[];
+}): UnifiedSession | null {
+	if (row.sessions.length === 0) return null;
+	const rowSessionIds = new Set(row.sessions.map((session) => session.id));
+	return (
+		row.sessions.find(
+			(session) =>
+				!session.parentSessionId || !rowSessionIds.has(session.parentSessionId),
+		) ?? row.sessions[0]
+	);
+}
+
 /**
  * Which workspace row a selected session belongs to. Usually the row that
  * lists it, but a session the sidebar deliberately keeps out of the rows — an

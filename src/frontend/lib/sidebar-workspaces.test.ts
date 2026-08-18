@@ -4,6 +4,7 @@ import {
 	isAskWorkspace,
 	isScratchWorkspace,
 	spawnedSessionBelongsInSidebar,
+	workspaceMainSession,
 	workspaceRowOwnsSession,
 } from "./sidebar-workspaces";
 import type { UnifiedSession } from "./types";
@@ -167,6 +168,24 @@ describe("activeSubagentsForWorkspace", () => {
 			"ws-1",
 		);
 		expect(rows.map(({ session }) => session.id)).toEqual(["child"]);
+	});
+});
+
+describe("workspaceMainSession", () => {
+	test("opens the workspace root even when a subagent was opened last", () => {
+		const root = session("root", { workspaceId: "ws-1" });
+		const child = session("child", {
+			workspaceId: "ws-1",
+			parentSessionId: "root",
+		});
+		expect(workspaceMainSession({ sessions: [child, root] })?.id).toBe("root");
+	});
+
+	test("uses the oldest row session when no parent edge is available", () => {
+		const first = session("first", { workspaceId: "ws-1" });
+		const second = session("second", { workspaceId: "ws-1" });
+		expect(workspaceMainSession({ sessions: [first, second] })?.id).toBe("first");
+		expect(workspaceMainSession({ sessions: [] })).toBeNull();
 	});
 });
 

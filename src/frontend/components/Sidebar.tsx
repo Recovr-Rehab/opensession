@@ -77,6 +77,7 @@ import {
 	isAskWorkspace,
 	isScratchWorkspace,
 	spawnedSessionBelongsInSidebar,
+	workspaceMainSession,
 	workspaceRowOwnsSession,
 } from "../lib/sidebar-workspaces";
 import type { ReviewQueueItem } from "../lib/review-queue";
@@ -2286,6 +2287,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// place the same workspace appears (status lanes, Pinned, search) still
 	// opens the session.
 	function openWsRow(row: WsRow, review: boolean) {
+		const mainSession = workspaceMainSession(row);
 		// …as long as there's something to review: a PR (even one opened on a
 		// branch the session doesn't own), or its own branch/worktree to diff.
 		// Anything else falls through to the session rather than landing on an
@@ -2293,9 +2295,9 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		const reviewable =
 			row.workspace?.prNumber !== undefined ||
 			row.sessions.some((s) => sessionHasPr(s) || sessionHasWorkspace(s));
-		if (review && reviewable && row.sessions[0]) onOpenReview(row.sessions[0]);
+		if (review && reviewable && mainSession) onOpenReview(mainSession);
+		else if (mainSession) onSelect(mainSession);
 		else if (row.workspace) onOpenWorkspace(row.workspace.id);
-		else if (row.sessions[0]) onSelect(row.sessions[0]);
 	}
 	function wsRowTouchEnd(row: WsRow, e: React.TouchEvent, review = false) {
 		const hadOrigin = wsPressOrigin.current !== null;
