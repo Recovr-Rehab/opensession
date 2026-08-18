@@ -400,48 +400,6 @@ summary:focus-visible {
 	text-wrap: pretty;
 }
 
-/* ── Steps ───────────────────────────────────────────────────────────── */
-
-.steps {
-	margin: 24px 0 0;
-	padding: 0;
-	list-style: none;
-}
-
-.step {
-	display: grid;
-	padding: 16px 0;
-	border-top: 1px solid var(--line);
-	gap: 18px;
-	grid-template-columns: 26px minmax(0, 1fr);
-}
-
-.step:last-child {
-	padding-bottom: 0;
-}
-
-.step-n {
-	color: rgba(var(--ink-rgb), 0.32);
-	font-size: 14px;
-	font-variant-numeric: tabular-nums;
-	font-weight: 600;
-	line-height: 1.55;
-}
-
-.step p {
-	margin: 0;
-	max-width: 62ch;
-	color: var(--muted);
-	font-size: 15px;
-	line-height: 1.45;
-	text-wrap: pretty;
-}
-
-.step b {
-	color: var(--ink);
-	font-weight: 600;
-}
-
 /* ── Questions ───────────────────────────────────────────────────────── */
 
 .faq {

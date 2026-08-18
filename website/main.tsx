@@ -266,43 +266,6 @@ function LandingPage() {
 				</section>
 
 				<section className="card">
-					<h2>How a session goes</h2>
-					<p className="card-sub">
-						Four steps, and your team can join at any of them.
-					</p>
-					<ol className="steps">
-						<li className="step">
-							<span className="step-n">01</span>
-							<p>
-								<b>Start it.</b> Describe the work and pick a model. Open Session
-								cuts a branch and a worktree for it.
-							</p>
-						</li>
-						<li className="step">
-							<span className="step-n">02</span>
-							<p>
-								<b>Watch it.</b> The transcript streams live, and so does who
-								else is reading it. Nobody has to ask for a status update.
-							</p>
-						</li>
-						<li className="step">
-							<span className="step-n">03</span>
-							<p>
-								<b>Steer it.</b> Send a correction mid-run, answer a question the
-								agent asked, or take the keyboard yourself.
-							</p>
-						</li>
-						<li className="step">
-							<span className="step-n">04</span>
-							<p>
-								<b>Ship it.</b> Review the diff, open the pull request, and keep
-								the session that produced it attached to the change.
-							</p>
-						</li>
-					</ol>
-				</section>
-
-				<section className="card">
 					<h2>Common questions</h2>
 					<div className="faq">
 						<Question q="Is it really self-hosted?">
@@ -339,12 +302,6 @@ function LandingPage() {
 				</section>
 
 				<footer className="feed-foot">
-					<span>Open source</span>
-					<span aria-hidden="true">·</span>
-					<span>Self-hosted</span>
-					<span aria-hidden="true">·</span>
-					<span>Made by Tella</span>
-					<span aria-hidden="true">·</span>
 					<span>©2026</span>
 				</footer>
 			</main>
