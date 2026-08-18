@@ -1629,10 +1629,7 @@ function makeRemoteLauncher(
             trustProfile: spec.trustProfile,
           }),
           ...(process.env.OPENSESSION_MODEL
-            ? {
-                OPENSESSION_MODEL: process.env.OPENSESSION_MODEL!,
-                MICHAEL_MODEL: process.env.OPENSESSION_MODEL!,
-              }
+            ? { OPENSESSION_MODEL: process.env.OPENSESSION_MODEL! }
             : {}),
         };
         // BOUNDED await: provider SDK calls have stalled indefinitely here in

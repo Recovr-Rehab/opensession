@@ -984,16 +984,10 @@ function makeDockerLauncher(container: string, sessionId: string): HostLauncher 
         ...Object.entries(workloadIdentityEnv).flatMap(([key, value]) => env(`${key}=${value}`)),
         ...env("NODE_ENV=production"),
         ...(process.env.OPENSESSION_MODEL
-          ? [
-              ...env(`OPENSESSION_MODEL=${process.env.OPENSESSION_MODEL}`),
-              ...env(`MICHAEL_MODEL=${process.env.OPENSESSION_MODEL}`),
-            ]
+          ? env(`OPENSESSION_MODEL=${process.env.OPENSESSION_MODEL}`)
           : []),
         ...(process.env.OPENSESSION_UI_BASE
-          ? [
-              ...env(`OPENSESSION_UI_BASE=${process.env.OPENSESSION_UI_BASE}`),
-              ...env(`MICHAEL_UI_BASE=${process.env.OPENSESSION_UI_BASE}`),
-            ]
+          ? env(`OPENSESSION_UI_BASE=${process.env.OPENSESSION_UI_BASE}`)
           : []),
         ...wsEnv,
         container,

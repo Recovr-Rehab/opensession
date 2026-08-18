@@ -20,9 +20,7 @@ import {
 } from "../../server/session-social-card";
 
 const UI_BASE =
-  process.env.OPENSESSION_UI_BASE ||
-  process.env.MICHAEL_UI_BASE ||
-  configuredServer().publicBaseUrl;
+  process.env.OPENSESSION_UI_BASE || configuredServer().publicBaseUrl;
 
 function uiHost(): string {
   try {

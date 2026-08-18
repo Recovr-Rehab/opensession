@@ -345,19 +345,11 @@ async function launchHostUnit(hostId: string, dir: string): Promise<void> {
     ...env(`HOME=${homeDir()}`),
     ...env(`PATH=${process.env.PATH || "/usr/local/bin:/usr/bin:/bin"}`),
     ...env("NODE_ENV=production"),
-    // New env names primary; the deprecated old names ride along so an
-    // un-migrated runner-host build (or external script) keeps working.
     ...(process.env.OPENSESSION_MODEL
-      ? [
-          ...env(`OPENSESSION_MODEL=${process.env.OPENSESSION_MODEL}`),
-          ...env(`MICHAEL_MODEL=${process.env.OPENSESSION_MODEL}`),
-        ]
+      ? env(`OPENSESSION_MODEL=${process.env.OPENSESSION_MODEL}`)
       : []),
     ...(process.env.OPENSESSION_UI_BASE
-      ? [
-          ...env(`OPENSESSION_UI_BASE=${process.env.OPENSESSION_UI_BASE}`),
-          ...env(`MICHAEL_UI_BASE=${process.env.OPENSESSION_UI_BASE}`),
-        ]
+      ? env(`OPENSESSION_UI_BASE=${process.env.OPENSESSION_UI_BASE}`)
       : []),
     // Per-host journal: never read-modify-write the shared active-runs.json.
     ...env(`OPENSESSION_RUN_JOURNAL=${dir}/${HOST_JOURNAL_NAME}`),

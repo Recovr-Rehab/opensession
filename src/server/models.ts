@@ -655,8 +655,7 @@ const FALLBACK_DESTINATIONS = [
  * Persisted override for the global default model, set from the Connections UI
  * (PUT /api/models/default). Lets us switch what new sessions run on without a
  * code change or restart. Resolution order: this override → OPENSESSION_MODEL env
- * (MICHAEL_MODEL accepted as a deprecated alias) →
- * DEFAULT_CLAUDE_MODEL. Stored as { model: "<id>" | null } in this file.
+ * → DEFAULT_CLAUDE_MODEL. Stored as { model: "<id>" | null } in this file.
  */
 /** Stored as { model, interactiveModel? }: `model` is the GLOBAL default every
  *  consumer of getDefaultModel() sees (Slack/Linear/Plain loops, workflows);

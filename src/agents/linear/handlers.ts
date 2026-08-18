@@ -505,7 +505,7 @@ Help with whatever they're asking. You have a worktree ready at ${session.worktr
               } else {
                 if (s.phase === "planning") {
                   s.planningConversation.push({
-                    role: "michael",
+                    role: "agent",
                     content: result,
                     timestamp: new Date().toISOString(),
                   });

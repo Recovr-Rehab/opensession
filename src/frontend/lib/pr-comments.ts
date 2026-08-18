@@ -22,7 +22,8 @@ export function isBotAuthor(author?: string | null): boolean {
 
 /**
  * A comment a person wrote from the Review tab, which the server signs
- * `**Kent** via Michael:` (routes/pr.ts). Without a per-user GitHub token
+ * `**Kent** via OS:` (routes/pr.ts, which renders the configured persona
+ * name). Without a per-user GitHub token
  * those go out under the bot account, so the author says machine and only the
  * body says person.
  */

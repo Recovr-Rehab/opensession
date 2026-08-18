@@ -720,8 +720,8 @@ export function defaultRepo(): Repo {
 /**
  * The agent's name as rendered to users and models (system prompts, Slack
  * greetings, confirm cards, health payloads). NOT for protocol identifiers —
- * `opensession-*` MCP server ids, MICHAEL_* env vars, ===OPENSESSION-SUMMARY===
- * markers stay literal (renaming those breaks running sessions).
+ * `opensession-*` MCP server ids and ===OPENSESSION-SUMMARY=== markers stay
+ * literal (renaming those breaks running sessions).
  */
 export function personaName(): string {
   return getConfig().persona?.name || "Assistant";

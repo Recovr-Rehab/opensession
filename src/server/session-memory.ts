@@ -1,7 +1,7 @@
 /**
  * Session-scoped memory for Open Session runs — repo / user / team scopes,
  * generalizing the Slack channel memory (src/agents/slack/memory.ts) and
- * sharing its store (~/.michael-memory) so facts flow both ways:
+ * sharing its store (~/.opensession-memory) so facts flow both ways:
  *
  *   - team           -> the SAME `workspace` store that Slack public-channel
  *                       memory writes to: a fact taught in a public channel is

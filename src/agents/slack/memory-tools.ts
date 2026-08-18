@@ -12,8 +12,8 @@
  * persistent (plant a "fact" once, poison every future run). Automations get
  * read-only injection instead (runAutomation appends renderSessionMemoryNote).
  *
- * All in-process servers are opensession-* named (michael-* renamed
- * 2026-07-09; canonicalMcpServerId in rename-compat covers legacy ids).
+ * All in-process servers are opensession-* named; canonicalMcpServerId in
+ * rename-compat folds the pre-rename ids onto them for journaled runs.
  */
 
 import { createSdkMcpServer, tool } from "../../server/inprocess-mcp";

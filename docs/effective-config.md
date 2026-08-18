@@ -56,7 +56,7 @@ model fallback graph can still move a run.
 | `mcp` | The allowlist and where it came from, then every configured server with `included` and the gate that decided it. Plus the in-process `opensession-*` set. |
 | `tools` | The unattended policy flag, and every tool stripped from the model's list with the catalog it came from. |
 | `agents` | The oracle and orchestrator-worker subagents, resolved for this run's bridge. |
-| `memory` | The `~/.michael-memory` scopes injected into the system prompt, or why none are. |
+| `memory` | The `~/.opensession-memory` scopes injected into the system prompt, or why none are. |
 | `placement` | Shared always-warm engine server vs per-session, the reason, and the pool key. |
 | `identity` | The run user, the OAuth grant user, the GitHub login whose token rides along, the commit author. |
 | `instructions` | Which sources compose the system prompt. Contents are never returned: `AGENTS.local.md` is instance-private. |

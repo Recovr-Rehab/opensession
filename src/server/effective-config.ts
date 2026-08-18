@@ -586,7 +586,7 @@ export async function buildSessionEffectiveConfig(
     ),
     scopes: row(
       inputs.sessionNote ? memoryScopes.map((s) => ({ key: s.key, kind: s.kind, label: s.label })) : [],
-      "session-memory.ts sessionMemoryScopes (~/.michael-memory/<key>.json)",
+      "session-memory.ts sessionMemoryScopes (~/.opensession-memory/<key>.json)",
     ),
   };
 
