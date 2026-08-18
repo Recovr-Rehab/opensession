@@ -10,11 +10,12 @@ import { PRODUCT_NAME } from "../../lib/brand";
 import { Button } from "../../ui/button";
 import {
 	SettingCard,
+	SettingCardSkeleton,
 	SettingsHeader,
 	SettingsHint,
 	SettingsPanel,
 } from "../../ui/settings";
-import { EmptyState, InlineAlert, LoadingState } from "../../ui/state";
+import { EmptyState, InlineAlert } from "../../ui/state";
 import { SettingRow } from "./shared";
 
 // ── Deploys: internal web apps agents published with opensession-publish.
@@ -45,7 +46,11 @@ export function DeploysPanel() {
 		return (
 			<SettingsPanel>
 				{header}
-				{error ? <InlineAlert>{error}</InlineAlert> : <LoadingState>Loading deploys…</LoadingState>}
+				{error ? (
+					<InlineAlert>{error}</InlineAlert>
+				) : (
+					<SettingCardSkeleton rows={3} label="Loading deploys" />
+				)}
 			</SettingsPanel>
 		);
 

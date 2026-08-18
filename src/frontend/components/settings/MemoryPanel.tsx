@@ -11,12 +11,13 @@ import {
 import { Button } from "../../ui/button";
 import { Textarea } from "../../ui/input";
 import {
+	SettingCardSkeleton,
 	SettingsGroupLabel,
 	SettingsHeader,
 	SettingsPanel,
 	SettingsSection,
 } from "../../ui/settings";
-import { EmptyState, InlineAlert, LoadingState } from "../../ui/state";
+import { EmptyState, InlineAlert } from "../../ui/state";
 import { toast } from "../../ui/toast";
 import { IconPencil, IconPlus, IconTrash } from "../icons";
 import { getCurrentUser } from "../UserPicker";
@@ -268,7 +269,19 @@ export function MemoryPanel() {
 				{error ? (
 					<InlineAlert>{error}</InlineAlert>
 				) : (
-					<LoadingState>Loading memory…</LoadingState>
+					// Only the fixed groups: those always render, so their labels
+					// are known before the scopes are. People and Slack channels
+					// appear only if there are any, and a label standing in for a
+					// group that may not exist is a claim rather than a placeholder.
+					MEMORY_GROUPS.filter((g) => g.fixed).map((g) => (
+						<div key={g.kind}>
+							<SettingsGroupLabel>{g.title}</SettingsGroupLabel>
+							<SettingCardSkeleton
+								rows={2}
+								label={`Loading ${g.title.toLowerCase()} memory`}
+							/>
+						</div>
+					))
 				)}
 			</SettingsPanel>
 		);

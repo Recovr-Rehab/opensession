@@ -13,10 +13,11 @@ import { Field, Input } from "../../ui/input";
 import { Modal } from "../../ui/modal";
 import {
 	SettingCard,
+	SettingCardSkeleton,
 	SettingsGroupLabel,
 	SettingsHint,
 } from "../../ui/settings";
-import { EmptyState, InlineAlert, LoadingState } from "../../ui/state";
+import { EmptyState, InlineAlert } from "../../ui/state";
 import { SettingRow } from "./shared";
 
 // ── Keychain: per-person credentials sessions can BORROW with your approval
@@ -45,11 +46,35 @@ export function KeychainSection() {
 	}, []);
 	useEffect(reload, [reload]);
 
+	// The label, its action and the hint below the card are all static, so they
+	// stay while the credentials are in flight — only the list is unknown, and
+	// ghosting more than that is what makes the block change height when the
+	// answer lands.
+	const label = (
+		<SettingsGroupLabel
+			actions={
+				<Button size="sm" variant="ghost" disabled={!data} onClick={() => setAdding(true)}>
+					Add credential
+				</Button>
+			}
+		>
+			Keychain
+		</SettingsGroupLabel>
+	);
+	const hint = (
+		<SettingsHint>
+			A session can borrow a credential with your approval. The secret is injected
+			server-side, so the agent never sees it, and every grant is scoped to one session and
+			expires.
+		</SettingsHint>
+	);
+
 	if (!data)
 		return (
 			<>
-				<SettingsGroupLabel>Keychain</SettingsGroupLabel>
-				{error ? <InlineAlert>{error}</InlineAlert> : <LoadingState>Loading keychain…</LoadingState>}
+				{label}
+				{error ? <InlineAlert>{error}</InlineAlert> : <SettingCardSkeleton rows={2} label="Loading keychain" />}
+				{hint}
 			</>
 		);
 
@@ -61,15 +86,7 @@ export function KeychainSection() {
 		<>
 			{error && <InlineAlert onDismiss={() => setError(null)}>{error}</InlineAlert>}
 
-			<SettingsGroupLabel
-				actions={
-					<Button size="sm" variant="ghost" onClick={() => setAdding(true)}>
-						Add credential
-					</Button>
-				}
-			>
-				Keychain
-			</SettingsGroupLabel>
+			{label}
 
 			<Modal.Root open={adding} onOpenChange={setAdding}>
 				{/* The form is a child so Base UI's portal remounts it on every
@@ -127,11 +144,7 @@ export function KeychainSection() {
 					))}
 				</SettingCard>
 			)}
-			<SettingsHint>
-				A session can borrow a credential with your approval. The secret is injected
-				server-side, so the agent never sees it, and every grant is scoped to one session and
-				expires.
-			</SettingsHint>
+			{hint}
 
 			{pendingAsks.length > 0 && (
 				<>

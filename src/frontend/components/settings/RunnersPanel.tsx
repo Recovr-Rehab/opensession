@@ -6,7 +6,7 @@ import { Modal } from "../../ui/modal";
 import { OptionSelect } from "../../ui/select";
 import { Switch } from "../../ui/switch";
 import { toast } from "../../ui/toast";
-import { SettingCard, SettingsGroupLabel, SettingsHeader, SettingsHint, SettingsPanel, SettingRow } from "../../ui/settings";
+import { SettingCard, SettingCardSkeleton, SettingsGroupLabel, SettingsHeader, SettingsHint, SettingsPanel, SettingRow } from "../../ui/settings";
 
 const stateStyle: Record<RunnerInfo["state"], string> = {
 	online: "text-green",
@@ -138,14 +138,13 @@ export function RunnersPanel() {
 		</div>}
 
 		<SettingsGroupLabel actions={<Button size="sm" variant="ghost" onClick={() => void load()}>Refresh</Button>}>Workspace inventory</SettingsGroupLabel>
-		<SettingCard>
-			{loading && <div className="px-5 py-5 text-supporting text-dim">Loading Runners…</div>}
-			{!loading && !runners.length && <div className="px-5 py-5">
+		{loading ? <SettingCardSkeleton rows={3} label="Loading Runners" /> : <SettingCard>
+			{!runners.length && <div className="px-5 py-5">
 				<div className="text-item-title font-medium text-fg">No Runners connected</div>
 				<p className="mb-0 mt-1 text-supporting leading-relaxed text-dim">Choose a computer, connect it with a pairing command, then choose its permissions.</p>
 			</div>}
 			{runners.map((runner) => <RunnerRow key={runner.id} runner={runner} admin={admin} busy={busyId === runner.id} onChange={change} onRevoke={revoke} />)}
-		</SettingCard>
+		</SettingCard>}
 		<SettingsHint>SSH and Kubernetes bootstrap remain operator-managed migration paths. They never give agents direct SSH or kubectl access.</SettingsHint>
 	</SettingsPanel>;
 }

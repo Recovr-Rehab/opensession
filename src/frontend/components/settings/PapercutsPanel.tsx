@@ -8,11 +8,12 @@ import {
 import { warmAgo } from "../../lib/time";
 import {
 	SettingCard,
+	SettingCardSkeleton,
 	SettingsGroupLabel,
 	SettingsHeader,
 	SettingsPanel,
 } from "../../ui/settings";
-import { EmptyState, InlineAlert, LoadingState } from "../../ui/state";
+import { EmptyState, InlineAlert } from "../../ui/state";
 import { Switch } from "../../ui/switch";
 import { Select, SettingRow } from "./shared";
 
@@ -52,7 +53,10 @@ export function PapercutsPanel() {
 				{error ? (
 					<InlineAlert>{error}</InlineAlert>
 				) : (
-					<LoadingState>Loading papercuts…</LoadingState>
+					<>
+						<SettingsGroupLabel>Repos</SettingsGroupLabel>
+						<SettingCardSkeleton rows={3} label="Loading papercuts" />
+					</>
 				)}
 			</SettingsPanel>
 		);

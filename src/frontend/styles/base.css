@@ -2534,6 +2534,27 @@ html[data-theme="light"] span.commit-ref:hover {
 	50% { opacity: 0.35; }
 }
 
+/* A ghost holds its place before it shows itself. Referenced from the
+   longhand in ui/state's `Skeleton`, the frame every skeleton in the app
+   wears.
+
+   Most of the lists these stand in for arrive fast enough that a placeholder
+   would flash and go, which is more distracting than the gap it filled — so
+   the ghost is laid out at once but stays invisible for a beat, and only a
+   wait long enough to notice ever gets stood in for. `both` is what does the
+   holding: it keeps the 0% opacity through the delay, so the shape reserves
+   its height from the first paint and the real rows replace it in place
+   instead of dropping the page down when they land.
+
+   Under prefers-reduced-motion the block above zeroes the delay along with
+   the duration and the ghost simply appears. That is the right answer here:
+   the beat is a comfort, not information, and there is nothing to lose by
+   skipping it. */
+@keyframes ghost-in {
+	from { opacity: 0; }
+	to { opacity: 1; }
+}
+
 /* The page loader's wave (ui/page-loader), referenced from the longhand
    `[animation-name:page-loader-bar]` in lib/page-loader-classes.
 

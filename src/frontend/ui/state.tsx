@@ -29,6 +29,14 @@ import { Spinner } from "./spinner";
  *    empty sits one step up (dim, with an optional title/icon/action when
  *    there's something to *do* about it), and alerts are the only state that
  *    gets a surface and a hue.
+ *  - a mark is what waiting looks like when the shape ISN'T known. When it is,
+ *    prefer a ghost (`Skeleton` and the shapes built on it): a label with a
+ *    spinner says the app is busy, while rows in the shape of the rows that
+ *    are coming say what is arriving and land it without moving the page.
+ *
+ * So `LoadingState` is for a thing WORKING — a probe, a sign-in being
+ * prepared, a save — and a skeleton is for content ARRIVING. Reach for the
+ * mark only when there is no shape to stand in for.
  *
  * `ui/notice.tsx` (ErrorNotice + its own LoadingState) is the earlier, partial
  * take on this; prefer these.
@@ -117,6 +125,56 @@ export function LoadingState({
 }
 
 /**
+ * The frame every skeleton wears, so a ghost is one thing in this app rather
+ * than a shape each surface re-derives: it announces itself to a reader, it
+ * breathes, and it holds itself back a beat before it shows.
+ *
+ * The hold-back is the part worth stating. Most of what these stand in for
+ * arrives fast enough that a placeholder would flash and go, which is more
+ * distracting than the gap it filled, so only a wait long enough to notice
+ * gets stood in for. It is spelled as a delayed CSS fade (`ghost-in`, base.css)
+ * rather than a mounted-later component, which is what keeps the shape in
+ * layout from the first paint: the height is reserved while the ghost is still
+ * invisible, so real rows replace it in place instead of dropping the page
+ * down as they land.
+ *
+ * Two elements, and they cannot be collapsed into one: the fade and the breath
+ * both animate opacity, so the delay sits on the outside and the pulse on the
+ * inside. `className` styles the inner box — the one that IS the ghost.
+ */
+export function Skeleton({
+	label = "Loading",
+	className,
+	children,
+	...props
+}: React.ComponentPropsWithoutRef<"div"> & { label?: string }) {
+	return (
+		<div
+			role="status"
+			aria-live="polite"
+			aria-label={label}
+			className="[animation:ghost-in_var(--dur)_var(--ease)_180ms_both]"
+			{...props}
+		>
+			<div className={cn("animate-pulse", className)}>{children}</div>
+		</div>
+	);
+}
+
+/**
+ * One bar of ghost ink — a line of text that hasn't arrived. The height is a
+ * title's; pass `h-2.5` for the supporting line under it. Every skeleton draws
+ * with this so they share a weight and a corner, and so a change to what a
+ * placeholder is made of is one edit.
+ */
+export function SkeletonBar({
+	className,
+	...props
+}: React.ComponentPropsWithoutRef<"div">) {
+	return <div className={cn("h-3 rounded-sm bg-hover", className)} {...props} />;
+}
+
+/**
  * Ragged on purpose — a column of equal bars reads as a component, and a
  * component that never resolves reads as a bug. Uneven ones read as titles
  * about to arrive. Literal utilities rather than a built string or an inline
@@ -168,12 +226,10 @@ export function ListSkeleton({
 	const cards = variant === "cards";
 	const divided = variant === "rows";
 	return (
-		<div
-			role="status"
-			aria-live="polite"
-			aria-label={label}
+		<Skeleton
+			label={label}
 			className={cn(
-				"flex animate-pulse flex-col",
+				"flex flex-col",
 				cards
 					? "gap-1.5"
 					: divided
@@ -193,16 +249,11 @@ export function ListSkeleton({
 						rowClassName,
 					)}
 				>
-					<div
-						className={cn(
-							"h-3 rounded-sm bg-hover",
-							SKELETON_WIDTHS[i % SKELETON_WIDTHS.length],
-						)}
-					/>
-					{cards && <div className="mt-2 h-2.5 w-[26%] rounded-sm bg-hover" />}
+					<SkeletonBar className={SKELETON_WIDTHS[i % SKELETON_WIDTHS.length]} />
+					{cards && <SkeletonBar className="mt-2 h-2.5 w-[26%]" />}
 				</div>
 			))}
-		</div>
+		</Skeleton>
 	);
 }
 
@@ -237,26 +288,20 @@ export function TranscriptSkeleton({
 	...props
 }: React.ComponentPropsWithoutRef<"div"> & { label?: string }) {
 	return (
-		<div
-			role="status"
-			aria-live="polite"
-			aria-label={label}
-			className={cn("flex animate-pulse flex-col", className)}
-			{...props}
-		>
+		<Skeleton label={label} className={cn("flex flex-col", className)} {...props}>
 			{TRANSCRIPT_GHOST_TURNS.map((turn) => (
 				<React.Fragment key={turn.bubble}>
 					<div className="mx-auto mb-4.5 flex w-full max-w-[var(--session-col)] flex-col">
-						<div className={cn("self-end rounded-lg bg-hover", turn.bubble)} />
+						<SkeletonBar className={cn("self-end rounded-lg", turn.bubble)} />
 					</div>
 					<div className="mx-auto mb-4.5 flex w-full max-w-[var(--session-col)] flex-col gap-2.5">
 						{turn.lines.map((width) => (
-							<div key={width} className={cn("h-3 rounded-sm bg-hover", width)} />
+							<SkeletonBar key={width} className={width} />
 						))}
 					</div>
 				</React.Fragment>
 			))}
-		</div>
+		</Skeleton>
 	);
 }
 

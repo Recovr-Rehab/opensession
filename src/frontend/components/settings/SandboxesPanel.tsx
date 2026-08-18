@@ -24,6 +24,7 @@ import { Field, Input, Select } from "../../ui/input";
 import { Modal } from "../../ui/modal";
 import {
 	SettingCard,
+	SettingCardSkeleton,
 	SettingsGroupLabel,
 	SettingsHeader,
 	SettingsHint,
@@ -763,7 +764,9 @@ export function SandboxesPanel() {
 				</SettingsHint>
 			)}
 			<div className="grid gap-3 px-4">
-				{loading && <div className="py-8 text-center text-supporting text-faint">Loading sandbox connections…</div>}
+				{loading && (
+					<SettingCardSkeleton rows={3} icon={40} label="Loading sandbox connections" />
+				)}
 				{connections.map((connection) => (
 					<ConnectionCard
 						key={connection.provider}

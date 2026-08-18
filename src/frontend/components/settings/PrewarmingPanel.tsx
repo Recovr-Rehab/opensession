@@ -13,12 +13,13 @@ import { warmAgo } from "../../lib/time";
 import { Button } from "../../ui/button";
 import {
 	SettingCard,
+	SettingCardSkeleton,
 	SettingsGroupLabel,
 	SettingsHeader,
 	SettingsHint,
 	SettingsPanel,
 } from "../../ui/settings";
-import { InlineAlert, LoadingState } from "../../ui/state";
+import { InlineAlert } from "../../ui/state";
 import { Switch } from "../../ui/switch";
 import { Select, SettingRow } from "./shared";
 
@@ -77,7 +78,7 @@ function WarmPreviewsPanel() {
 				{error ? (
 					<InlineAlert>{error}</InlineAlert>
 				) : (
-					<LoadingState>Loading repos…</LoadingState>
+					<SettingCardSkeleton rows={3} label="Loading repos" />
 				)}
 			</>
 		);
@@ -218,7 +219,7 @@ function PreviewPoolPanel() {
 				{error ? (
 					<InlineAlert>{error}</InlineAlert>
 				) : (
-					<LoadingState>Loading repos…</LoadingState>
+					<SettingCardSkeleton rows={3} label="Loading repos" />
 				)}
 			</>
 		);

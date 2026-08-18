@@ -3,10 +3,11 @@ import { Button } from "../ui/button";
 import { Field, FieldGrid, Input } from "../ui/input";
 import { MENU_ICON, Menu } from "../ui/menu";
 import { Modal } from "../ui/modal";
-import { EmptyState, InlineAlert, LoadingState } from "../ui/state";
+import { EmptyState, InlineAlert } from "../ui/state";
 import {
 	rowMenuTriggerClasses,
 	SettingCard,
+	SettingCardSkeleton,
 	SettingRow,
 	SettingRowControl,
 	SettingRowDescription,
@@ -76,32 +77,36 @@ export function TeamSection({
 			>
 				{title ?? `Team members${members ? ` · ${members.length}` : ""}`}
 			</SettingsGroupLabel>
-			<SettingCard>
-				{!members ? (
-					loadFailed ? (
+			{!members && !loadFailed ? (
+				// The card itself is the ghost, so the roster lands in the block it
+				// was already occupying. Rendering the real card around a loading
+				// label instead gave the group a one-line height that trebled the
+				// moment the members arrived.
+				<SettingCardSkeleton rows={3} icon={28} label="Loading team" />
+			) : (
+				<SettingCard>
+					{!members ? (
 						<EmptyState placement="row">Couldn&rsquo;t load the team roster.</EmptyState>
+					) : members.length === 0 ? (
+						<EmptyState placement="row">
+							No teammates yet. Add everyone who uses this instance so commits and
+							sessions attribute to real people.
+						</EmptyState>
 					) : (
-						<LoadingState placement="row">Loading team…</LoadingState>
-					)
-				) : members.length === 0 ? (
-					<EmptyState placement="row">
-						No teammates yet. Add everyone who uses this instance so commits and
-						sessions attribute to real people.
-					</EmptyState>
-				) : (
-					members.map((m) => (
-						<MemberRow
-							key={m.name}
-							member={m}
-							onEdit={() => {
-								setEditing(m);
-								setDialogOpen(true);
-							}}
-							onRemoved={handleMutated}
-						/>
-					))
-				)}
-			</SettingCard>
+						members.map((m) => (
+							<MemberRow
+								key={m.name}
+								member={m}
+								onEdit={() => {
+									setEditing(m);
+									setDialogOpen(true);
+								}}
+								onRemoved={handleMutated}
+							/>
+						))
+					)}
+				</SettingCard>
+			)}
 			<SettingsHint>
 				Names, emails, GitHub logins and Slack ids all resolve through the same
 				identity table, so a session user given as any of them matches the member.

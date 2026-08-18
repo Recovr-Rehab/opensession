@@ -76,7 +76,7 @@ import {
 	SettingsPanel,
 	SettingsSection,
 } from "../../ui/settings";
-import { InlineAlert, LoadingState } from "../../ui/state";
+import { InlineAlert, Skeleton, SkeletonBar } from "../../ui/state";
 import { Switch } from "../../ui/switch";
 import { toast } from "../../ui/toast";
 import { getCurrentUser } from "../UserPicker";
@@ -260,7 +260,16 @@ function PersonalPromptPanel() {
 				{error ? (
 					<InlineAlert>{error}</InlineAlert>
 				) : (
-					<LoadingState>Loading your prompt…</LoadingState>
+					// The section it lands in, with the prose it holds — not a
+					// ten-row grey slab, which is the editor's box rather than its
+					// contents and reads as a field you have been locked out of.
+					<Skeleton label="Loading your prompt">
+						<SettingsSection className="flex flex-col gap-2.5">
+							<SkeletonBar className="h-2.5 w-[72%]" />
+							<SkeletonBar className="h-2.5 w-[88%]" />
+							<SkeletonBar className="h-2.5 w-[46%]" />
+						</SettingsSection>
+					</Skeleton>
 				)}
 			</>
 		);

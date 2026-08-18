@@ -1,8 +1,13 @@
 import { useEffect, useState } from "react";
 import { useSetupStatus } from "../../hooks/useSetupStatus";
-import { SettingCard, SettingsHeader, SettingsPanel } from "../../ui/settings";
+import {
+	SettingCard,
+	SettingCardSkeleton,
+	SettingsHeader,
+	SettingsPanel,
+} from "../../ui/settings";
 import { Select, SettingRow } from "./shared";
-import { LoadingState } from "../../ui/state";
+import { InlineAlert } from "../../ui/state";
 import { ReposSection } from "../SetupRepos";
 import {
 	configuredNewSessionRepo,
@@ -71,9 +76,20 @@ export function ReposPanel() {
 				description="Each session works in an isolated worktree of the repositories you register here."
 			/>
 			{!status ? (
-				<LoadingState>
-					{failed ? "Couldn't load the repositories." : "Loading…"}
-				</LoadingState>
+				// A failure is an alert, not a quiet label under a spinner: it used
+				// to render in the loading register, so the sentence saying the
+				// page had given up sat beside a mark saying it was still trying.
+				failed ? (
+					<InlineAlert>Couldn&rsquo;t load the repositories.</InlineAlert>
+				) : (
+					<>
+						<SettingCardSkeleton rows={1} label="Loading repositories" />
+						{/* mt-9 stands in for the group label above the list, which
+						    counts the repos and so cannot be drawn before they
+						    arrive. */}
+						<SettingCardSkeleton rows={3} icon={28} className="mt-9" />
+					</>
+				)
 			) : (
 				<>
 					<DefaultRepoRow />

@@ -46,7 +46,7 @@ import {
 import { Input } from "../../ui/input";
 import { Badge } from "../../ui/badge";
 import { Segmented, SegmentedOption } from "../../ui/segmented";
-import { EmptyState, InlineAlert, LoadingState } from "../../ui/state";
+import { EmptyState, InlineAlert, Skeleton, SkeletonBar } from "../../ui/state";
 import { Switch } from "../../ui/switch";
 
 // ── The library: one browsable catalog over the things this instance can be
@@ -234,6 +234,47 @@ function EntryControl({
  * and a 13px faint caption over 17 unfenced rows is not a division. It takes
  * the in-page heading the PR list and Setup already use.
  */
+/**
+ * The catalog on its way: a section under way, and the rows it will hold, in
+ * the two-up grid they land in.
+ *
+ * The mark is drawn at the size `EntryIcon` takes, because it is what sets
+ * where every title starts — leave it out and the whole column slides right
+ * as the entries arrive. The search field above is deliberately not ghosted:
+ * a control is not content, and a grey box where a field goes reads as a
+ * field you have been shut out of.
+ */
+function CatalogSkeleton() {
+	return (
+		<Skeleton label="Loading the library" className="mt-11 px-5">
+			<SkeletonBar className="mb-4 h-4 w-[22%] border-b border-divider pb-3" />
+			<div className="@container">
+				<div className="grid grid-cols-1 gap-x-12 @[560px]:grid-cols-2">
+					{CATALOG_GHOST_ROWS.map((row) => (
+						<div key={row.name} className="flex items-center gap-3.5 py-3.5">
+							<SkeletonBar className="size-9 shrink-0 rounded-control" />
+							<div className="min-w-0 flex-1">
+								<SkeletonBar className={row.name} />
+								<SkeletonBar className={`mt-2 h-2.5 ${row.description}`} />
+							</div>
+						</div>
+					))}
+				</div>
+			</div>
+		</Skeleton>
+	);
+}
+
+/** Ragged, and a name always shorter than the line under it — see ui/state. */
+const CATALOG_GHOST_ROWS = [
+	{ name: "w-[38%]", description: "w-[76%]" },
+	{ name: "w-[26%]", description: "w-[58%]" },
+	{ name: "w-[44%]", description: "w-[69%]" },
+	{ name: "w-[31%]", description: "w-[83%]" },
+	{ name: "w-[35%]", description: "w-[62%]" },
+	{ name: "w-[23%]", description: "w-[74%]" },
+];
+
 function SectionHeading({
 	children,
 	count,
@@ -386,7 +427,7 @@ export function LibraryPanel() {
 		return (
 			<SettingsPanel className="max-w-none">
 				{header}
-				<LoadingState>Loading the library…</LoadingState>
+				<CatalogSkeleton />
 			</SettingsPanel>
 		);
 

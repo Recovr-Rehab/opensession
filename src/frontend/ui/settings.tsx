@@ -2,6 +2,8 @@ import * as React from "react";
 import { Card, CardList } from "./card";
 import { cn } from "./cn";
 import { fieldClasses } from "./input";
+import { markTileClass } from "../lib/mark-tile";
+import { Skeleton, SkeletonBar } from "./state";
 
 export function SettingsPanel({
 	className,
@@ -111,6 +113,87 @@ export function SettingCard({
 }: React.ComponentPropsWithoutRef<"div">) {
 	return <CardList className={cn(settingsSurface, className)} {...props} />;
 }
+
+/**
+ * The rows of a settings group that hasn't arrived, standing in for the rows
+ * it will become.
+ *
+ * A settings page is a column of groups, and a group that answers with a
+ * centred spinner takes its whole block out of the page until it resolves —
+ * so a page with three of them is three holes that fill in at different
+ * moments, each one shoving what is under it. Ghost rows keep the block's
+ * shape, so the page arrives once.
+ *
+ * Built out of the real `SettingCard` and `SettingRow` rather than beside
+ * them: the seams come from CardList's own divider rule and the padding from
+ * the row itself, so a change to either is inherited here instead of being
+ * something to remember. That is what the hand-tuned `rowClassName` on the
+ * one call site that nested `ListSkeleton` inside a card was already drifting
+ * away from.
+ *
+ * No ghost control on the right. Every real row has one, but they are all the
+ * same right-aligned pill, and a column of identical grey pills reads as
+ * broken buttons where ragged text bars read as titles about to arrive — the
+ * argument `SKELETON_WIDTHS` makes in ui/state. Controls are `ml-auto`, so
+ * nothing on the left moves when they land.
+ *
+ * A leading tile is the opposite case and `icon` draws one: it sets where the
+ * text starts, so leaving it out on a list that has one means every bar slides
+ * right as the rows arrive — the one thing a placeholder exists to prevent.
+ * Pass the size the real `IconTile` takes; the corner comes from the tile's own
+ * rule, so the two can't drift.
+ */
+export function SettingCardSkeleton({
+	rows = 3,
+	icon,
+	label = "Loading",
+	className,
+	...props
+}: React.ComponentPropsWithoutRef<"div"> & {
+	rows?: number;
+	/** Tile size in px, matching the `IconTile` these rows carry. */
+	icon?: number;
+	label?: string;
+}) {
+	return (
+		<Skeleton label={label} className={className} {...props}>
+			<SettingCard>
+				{GHOST_ROWS.slice(0, rows).map((row) => (
+					<SettingRow key={row.title} className={cn(icon !== undefined && "gap-3")}>
+						{icon !== undefined && (
+							// Inline size, like IconTile's own: the tile scale is a
+							// number a caller passes, not a step in the class scale.
+							<SkeletonBar
+								className={markTileClass(icon)}
+								style={{ width: icon, height: icon }}
+							/>
+						)}
+						<SettingRowText>
+							<SkeletonBar className={row.title} />
+							<SkeletonBar className={cn("mt-2 h-2.5", row.description)} />
+						</SettingRowText>
+					</SettingRow>
+				))}
+			</SettingCard>
+		</Skeleton>
+	);
+}
+
+/**
+ * A short name over a long sentence, which is the proportion a real settings
+ * row has — the title is a repo or a tool, the description is a line of prose
+ * about it. Ragged for the reason ui/state gives, and paired rather than drawn
+ * from one pool so a title never comes out longer than the sentence under it.
+ * Literal utilities: Tailwind only compiles class names it can find.
+ */
+const GHOST_ROWS = [
+	{ title: "w-[34%]", description: "w-[78%]" },
+	{ title: "w-[22%]", description: "w-[54%]" },
+	{ title: "w-[41%]", description: "w-[67%]" },
+	{ title: "w-[27%]", description: "w-[85%]" },
+	{ title: "w-[36%]", description: "w-[61%]" },
+	{ title: "w-[24%]", description: "w-[73%]" },
+];
 
 /** A section for content that isn't a list of rows — an editor, a picker, a
  * filter bar. Same surface SettingCard gives rows, so a page of prose sits in

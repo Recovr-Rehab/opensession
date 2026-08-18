@@ -12,7 +12,7 @@ import { cn } from "../../ui/cn";
 import { Field, FieldGrid, Input } from "../../ui/input";
 import { SettingsForm, SettingsGroupLabel } from "../../ui/settings";
 import { Spinner } from "../../ui/spinner";
-import { EmptyState, InlineAlert, LoadingState } from "../../ui/state";
+import { EmptyState, InlineAlert, Skeleton, SkeletonBar } from "../../ui/state";
 import { toast } from "../../ui/toast";
 import { IconCamera } from "../icons";
 import { useCurrentUser } from "../UserPicker";
@@ -53,7 +53,7 @@ export function ProfileSection() {
 			{loadError ? (
 				<InlineAlert>{loadError}</InlineAlert>
 			) : !profile ? (
-				<LoadingState>Loading your profile…</LoadingState>
+				<ProfileSkeleton />
 			) : !profile.editable ? (
 				<EmptyState placement="card">
 					You ({profile.user}) are not on this instance&rsquo;s roster yet. An
@@ -63,6 +63,35 @@ export function ProfileSection() {
 				<ProfileForm profile={profile} onChange={setProfile} />
 			)}
 		</>
+	);
+}
+
+/**
+ * The form on its way: the card it lands in, the picture at the size it lands
+ * at, and the cadence of the fields under it.
+ *
+ * The fields are bars rather than input-height rectangles on purpose. A grey
+ * box the size of a text field reads as a disabled field — a thing you are not
+ * allowed to use — where a thin bar reads as a line about to be written. The
+ * picture is the one exception, because it really is a 64px squircle and
+ * drawing it smaller would move the whole form when the real one arrives.
+ */
+function ProfileSkeleton() {
+	return (
+		<Skeleton label="Loading your profile">
+			<SettingsForm>
+				<div className="flex items-start gap-4 phone:flex-col">
+					<SkeletonBar className="size-16 shrink-0 rounded-avatar" />
+					<div className="flex min-w-0 flex-1 flex-col gap-3.5">
+						<SkeletonBar className="h-2.5 w-[15%]" />
+						<FieldGrid>
+							<SkeletonBar className="h-2.5 w-[48%]" />
+							<SkeletonBar className="h-2.5 w-[62%]" />
+						</FieldGrid>
+					</div>
+				</div>
+			</SettingsForm>
+		</Skeleton>
 	);
 }
 

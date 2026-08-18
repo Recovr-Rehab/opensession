@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Button } from "../ui/button";
-import { EmptyState, InlineAlert, ListSkeleton } from "../ui/state";
+import { EmptyState, InlineAlert } from "../ui/state";
 import {
 	disconnectTool,
 	fetchToolAccounts,
@@ -10,6 +10,7 @@ import {
 } from "../lib/api/settings";
 import {
 	SettingCard,
+	SettingCardSkeleton,
 	SettingRow,
 	SettingRowControl,
 	SettingRowDescription,
@@ -130,14 +131,7 @@ export function MyAccountsPanel() {
 			{tools === null || (oauthServers.length === 0 && checking) ? (
 				// Ghost rows, not "no tools yet": an empty state is a confident
 				// claim, and the list is merely in flight.
-				<SettingCard>
-					<ListSkeleton
-						variant="rows"
-						rows={4}
-						rowClassName="px-5 py-6"
-						label="Loading tools"
-					/>
-				</SettingCard>
+				<SettingCardSkeleton rows={4} icon={30} label="Loading tools" />
 			) : oauthServers.length === 0 ? (
 				<EmptyState placement="card">
 					No tools with personal sign-in are configured yet. Add one on the
