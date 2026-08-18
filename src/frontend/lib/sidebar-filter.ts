@@ -82,7 +82,7 @@ export function readExpanded(): Set<string> {
 }
 
 // ── Grouping / filtering controls (the filter popover) ─────────────────────
-// How the list is built is two questions, not one. "Lanes" says what the
+// How the list is built is two questions, not one. "Sections" says what the
 // groups inside it are: an inbox's activity bands (Needs action / Recent /
 // Yesterday / …, on two-line rows), the status lanes (Needs input / In
 // progress / …), or none at all — one plain list where each row's own mark
@@ -91,13 +91,13 @@ export function readExpanded(): Set<string> {
 //
 // This replaced a single menu whose five entries were the two answers written
 // as one ("Status", "Project", "Project and status", "Project and inbox",
-// "Inbox"), where changing the project banding meant re-picking the lanes
+// "Inbox"), where changing the project banding meant re-picking the sections
 // along with it.
 //
 // The list is narrowed to a single repo ("Repo") or a single person
 // ("Person"), and ordered by recency of activity or creation ("Sort by"). The
 // choices persist together per browser.
-export type Lanes = "inbox" | "status" | "none";
+export type Sections = "inbox" | "status" | "none";
 export type GroupBy = "none" | "repo";
 export type SortBy = "updated" | "created";
 // Session-less PR rows folded into the project lanes: the default shows your
@@ -124,24 +124,24 @@ export const FILTER_KEY = "opensession-sidebar-filter";
 // blob carrying the default of its day keeps its repo/person/sort but takes
 // the new default. Anything written at the current version says what it
 // means: since v3, "auto" is what an unpicked axis stores. v4 split the one
-// grouping into the `lanes` / `groupBy` pair.
+// grouping into the `sections` / `groupBy` pair.
 export const FILTER_VERSION = 4;
 
-const LANES: Lanes[] = ["inbox", "status", "none"];
+const SECTIONS: Sections[] = ["inbox", "status", "none"];
 const GROUP_BYS: GroupBy[] = ["none", "repo"];
 
 /**
- * The lanes to use when nobody picked any. A list of work you have not read
+ * The sections to use when nobody picked any. A list of work you have not read
  * yet is an inbox; the status lanes are the deliberate choice, so they are
  * the one you ask for.
  */
-export function defaultLanes(): Lanes {
+export function defaultSections(): Sections {
 	return "inbox";
 }
 
 /**
  * Whether to band by project when nobody said. A single project has nothing
- * to group by, so its lanes stand on their own; several get one band each. It
+ * to group by, so its sections stand on their own; several get one band each. It
  * re-decides as projects are added, since the choice is stored as "auto"
  * rather than as its answer.
  *
@@ -155,7 +155,7 @@ export function defaultGroupBy(): GroupBy {
 }
 
 export interface FilterState {
-	lanes: Lanes;
+	sections: Sections;
 	groupBy: GroupBy;
 	repo: string; // a repo id, or "all"
 	// "me" (your workspaces — the default), "everyone" (literally all
@@ -169,18 +169,18 @@ export interface FilterState {
 }
 
 /** What either axis can be on disk: a pick, or "auto" for nobody's pick. */
-export type StoredLanes = Lanes | "auto";
+export type StoredSections = Sections | "auto";
 export type StoredGroupBy = GroupBy | "auto";
 
 export interface StoredFilterState
-	extends Omit<FilterState, "lanes" | "groupBy"> {
-	lanes: StoredLanes;
+	extends Omit<FilterState, "sections" | "groupBy"> {
+	sections: StoredSections;
 	groupBy: StoredGroupBy;
 }
 
 /**
  * The person lens is shared, not the sidebar's private business: the People
- * page, the facepiles and the sidebar's lanes read and write this one value,
+ * page, the facepiles and the sidebar's sections read and write this one value,
  * so the person you pick is the sidebar you land in. Everything else in
  * `FilterState` still only has one reader (the sidebar's own popover), but it
  * rides along here because the whole state persists as one blob.
@@ -197,7 +197,7 @@ export function getFilter(): FilterState {
 		stored ||= readStoredFilter();
 		current = {
 			...stored,
-			lanes: stored.lanes === "auto" ? defaultLanes() : stored.lanes,
+			sections: stored.sections === "auto" ? defaultSections() : stored.sections,
 			groupBy: stored.groupBy === "auto" ? defaultGroupBy() : stored.groupBy,
 		};
 	}
@@ -287,23 +287,23 @@ export function personLensFilter(picked: string, currentUser: string): string {
 
 /** The single grouping v3 and earlier stored, as the pair it always meant.
  *  "recently" is absent on purpose: it was never in the menu, and the sidebar
- *  drew it as the plain status lanes, so it reads as unset like any other
+ *  drew it as the plain status sections, so it reads as unset like any other
  *  value nobody recognises. */
 const LEGACY_GROUPINGS: Record<string, StoredGrouping> = {
-	status: { lanes: "status", groupBy: "none" },
-	repo: { lanes: "none", groupBy: "repo" },
-	"repo-status": { lanes: "status", groupBy: "repo" },
-	"repo-inbox": { lanes: "inbox", groupBy: "repo" },
-	inbox: { lanes: "inbox", groupBy: "none" },
+	status: { sections: "status", groupBy: "none" },
+	repo: { sections: "none", groupBy: "repo" },
+	"repo-status": { sections: "status", groupBy: "repo" },
+	"repo-inbox": { sections: "inbox", groupBy: "repo" },
+	inbox: { sections: "inbox", groupBy: "none" },
 };
 
 interface StoredGrouping {
-	lanes: StoredLanes;
+	sections: StoredSections;
 	groupBy: StoredGroupBy;
 }
 
 /**
- * Which lanes and project banding a stored blob is actually asking for.
+ * Which sections and project banding a stored blob is actually asking for.
  * "auto" on an axis means nobody chose it, so the default decides and keeps
  * deciding.
  *
@@ -315,12 +315,17 @@ interface StoredGrouping {
  * so whatever it names is a real choice.
  */
 function storedGrouping(v: any): StoredGrouping {
-	const unset: StoredGrouping = { lanes: "auto", groupBy: "auto" };
-	if (v?.v === FILTER_VERSION)
+	const unset: StoredGrouping = { sections: "auto", groupBy: "auto" };
+	if (v?.v === FILTER_VERSION) {
+		// The axis shipped as `lanes` before the control was renamed, within
+		// the same version. Same values, so read either key rather than
+		// resetting the pick of anyone who set one in between.
+		const picked = v.sections ?? v.lanes;
 		return {
-			lanes: LANES.includes(v.lanes) ? v.lanes : "auto",
+			sections: SECTIONS.includes(picked) ? picked : "auto",
 			groupBy: GROUP_BYS.includes(v.groupBy) ? v.groupBy : "auto",
 		};
+	}
 	const legacy = LEGACY_GROUPINGS[v?.groupBy];
 	if (!legacy) return unset;
 	if (v.v === 3) return legacy;
@@ -348,7 +353,7 @@ export function readStoredFilter(): StoredFilterState {
 		};
 	} catch {
 		return {
-			lanes: "auto",
+			sections: "auto",
 			groupBy: "auto",
 			repo: "all",
 			person: "me",

@@ -3,7 +3,7 @@ import type {
 	EmptyProjectsFilter,
 	FilterState,
 	GroupBy,
-	Lanes,
+	Sections,
 	PrsFilter,
 	SortBy,
 } from "../../lib/sidebar-filter";
@@ -262,16 +262,16 @@ export function FilterPopover({
 				    groups inside it are, and whether those sit under one band per
 				    project. One menu of five used to answer both at once
 				    ("Project and status", "Project and inbox", …), so changing
-				    the banding meant re-picking the lanes along with it. */}
+				    the banding meant re-picking the sections along with it. */}
 				<FilterRow
-					label="Lanes"
-					value={filter.lanes}
+					label="Sections"
+					value={filter.sections}
 					options={[
 						{ value: "inbox", label: "Inbox" },
 						{ value: "status", label: "Status" },
 						{ value: "none", label: "None" },
 					]}
-					onSelect={(v) => onChange({ lanes: v as Lanes })}
+					onSelect={(v) => onChange({ sections: v as Sections })}
 				/>
 				<FilterRow
 					label="Group by"
@@ -294,15 +294,6 @@ export function FilterPopover({
 					options={personOptions}
 					onSelect={(v) => onChange({ person: v })}
 				/>
-				<FilterRow
-					label="Sort by"
-					value={filter.sort}
-					options={[
-						{ value: "updated", label: "Updated" },
-						{ value: "created", label: "Created" },
-					]}
-					onSelect={(v) => onChange({ sort: v as SortBy })}
-				/>
 				{/* The settings you set once and forget, one level in: what the
 				    list is made of and who it is for stays on the panel, and the
 				    rest is here.
@@ -310,8 +301,9 @@ export function FilterPopover({
 				    It says how many of them are off their default, because a
 				    setting that hides rows is exactly the one you want to find
 				    again when the list looks short, and a closed menu cannot
-				    show you that it is the reason. Density is a look, not a
-				    filter, so it is not part of that count. */}
+				    show you that it is the reason. Sort and density change how
+				    the list reads rather than what is in it, so neither is part
+				    of that count. */}
 				<Menu.Root>
 					<Menu.Trigger className={cn(FILTER_ROW, "mt-1")}>
 						<span className="shrink-0 text-dim">Advanced</span>
@@ -328,7 +320,16 @@ export function FilterPopover({
 						</span>
 					</Menu.Trigger>
 					<Menu.Popup align="end" sideOffset={6}>
-						{/* Session-less PR rows in the project lanes (the dissolved
+						<FilterSubmenu
+							label="Sort by"
+							value={filter.sort}
+							options={[
+								{ value: "updated", label: "Updated" },
+								{ value: "created", label: "Created" },
+							]}
+							onSelect={(v) => onChange({ sort: v as SortBy })}
+						/>
+						{/* Session-less PR rows in the project sections (the dissolved
 						    PR band): whose PRs surface. */}
 						<FilterSubmenu
 							label="Pull requests"
@@ -341,7 +342,7 @@ export function FilterPopover({
 							onSelect={(v) => onChange({ prs: v as PrsFilter })}
 						/>
 						{/* Workspaces an agent started for itself. They sit in the
-						    ordinary lanes wearing a robot, so this is how you get a
+						    ordinary sections wearing a robot, so this is how you get a
 						    day's worth of them out of the way. A row you have open,
 						    one you pinned, and one asking for your review stay
 						    whatever this says. */}

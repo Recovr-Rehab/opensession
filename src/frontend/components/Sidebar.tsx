@@ -2738,7 +2738,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		const snoozeIso = activeSnoozeKeys.has(row.key)
 			? (snoozes[row.key] ?? null)
 			: null;
-		const noLaneHeading = filter.lanes === "none" || rowIsScratch(row);
+		const noSectionHeading = filter.sections === "none" || rowIsScratch(row);
 		const subagents =
 			includeSubagents && row.workspace?.id === selectedWorkspaceId
 				? activeWorkspaceSubagents
@@ -2927,7 +2927,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						<span
 							className={`size-2 shrink-0 rounded-full ${SIDEBAR_STATUS_DOT.waiting}`}
 						/>
-					) : noLaneHeading ? (
+					) : noSectionHeading ? (
 						<WsStatusMark row={row} size={18} />
 					) : row.running ? (
 						<span
@@ -3066,7 +3066,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					// which day, the stamp says when within it. (Inbox lanes under a
 					// project band render compact rows, so they ask for the time
 					// here rather than on the row's own second line.)
-					(inbox || filter.lanes === "inbox" || !row.workspace) &&
+					(inbox || filter.sections === "inbox" || !row.workspace) &&
 					!snoozeIso &&
 					wsTimePref !== "off" &&
 					row.lastActivity && (
@@ -3621,12 +3621,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 		return nodes;
 	}
 
-	// ── No lanes: one plain list ──────────────────────────────────────────
-	// "Lanes: None" with nothing to group by. There is no heading anywhere to
+	// ── No sections: one plain list ──────────────────────────────────────────
+	// "Sections: None" with nothing to group by. There is no heading anywhere to
 	// read a row's status or project off, so every row carries both itself:
-	// its own status mark (see noLaneHeading in renderWsRowImpl) and the repo
+	// its own status mark (see noSectionHeading in renderWsRowImpl) and the repo
 	// tile the Inbox variant puts in front of the title. Ordered the way the
-	// same lanes-less list is inside a project band — needs input first, then
+	// same section-less list is inside a project band — needs input first, then
 	// the lane order — so a question never sinks below idle work, and the
 	// sort is stable, so activity order holds within each bucket.
 	function renderFlatList(rows: WsRow[], prItems: ReviewQueueItem[] = []) {
@@ -5502,7 +5502,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					    every Backlog, and "Everyone" shows all workspaces.
 
 					    "Group by: Project" gives one band per repo and nests
-					    whatever "Lanes" asks for inside each: the status lanes, the
+					    whatever "Sections" asks for inside each: the status lanes, the
 					    inbox's activity bands, or nothing (a flat Conductor-style
 					    row list). Ungrouped, those same lanes run down the whole
 					    list. Empty lanes and bands are hidden — only groups with
@@ -5525,19 +5525,19 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					{groupsByRepo ? (
 						<>
 							{renderRepoGroups(
-								filter.lanes === "none" ? "flat" : filter.lanes,
+								filter.sections === "none" ? "flat" : filter.sections,
 							)}
-							{filter.lanes === "none" &&
+							{filter.sections === "none" &&
 								renderStatusLanes(
 									[],
 									"",
 									snoozedWsRows.filter((row) => !rowIsScratch(row)),
 								)}
 							{visibleFeeds.map((d) =>
-								renderFeedBand(d, filter.lanes !== "none"),
+								renderFeedBand(d, filter.sections !== "none"),
 							)}
 						</>
-					) : filter.lanes === "status" ? (
+					) : filter.sections === "status" ? (
 						[
 							...renderStatusLanes(
 								focusWsRows,
@@ -5556,7 +5556,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 						]
 					) : (
 						[
-							...(filter.lanes === "inbox"
+							...(filter.sections === "inbox"
 								? renderInboxBands(focusWsRows)
 								: renderFlatList(focusWsRows, lanePrItems)),
 							...renderStatusLanes([], "", snoozedWsRows),
