@@ -101,6 +101,7 @@ import {
   turnKeyFor,
 } from "./turn-outcome";
 import { readEngineTranscriptAsync } from "./sessions";
+import { ensureSessionScratch } from "./session-scratch";
 import type { GitIdentity } from "./shared/user-mappings";
 import type { TranscriptEntry } from "./types";
 import { audit } from "./audit";
@@ -113,6 +114,12 @@ export interface RunAgentOpts {
   sessionId?: string;
   cwd: string;
   mode?: "ask" | "code" | "scratch";
+  /** Session-scoped scratch dir (session-scratch.ts). runAgent ensures it for
+   *  any run with an osSessionId; engines export it (pi sets TMPDIR +
+   *  OPENSESSION_SCRATCH in the bash env) and the run instructions name it,
+   *  so temporary files follow the session's lifecycle instead of piling up
+   *  in shared /tmp. */
+  scratchDir?: string;
   /** MCP OAuth identity override: the session CREATOR — shared sessions run
    *  MCP calls as their creator so teammates see the same objects (their own
    *  grant is the fallback, then the workspace grant). TODO(sandbox): the
@@ -453,6 +460,8 @@ export async function* runAgent(opts: RunAgentOpts): AsyncGenerator<StreamEvent>
     crypto.randomUUID();
   const effectiveOpts: RunAgentOpts = {
     ...opts,
+    scratchDir:
+      opts.scratchDir ?? (osSessionId ? ensureSessionScratch(osSessionId) : undefined),
     journal: opts.journal
       ? {
           ...opts.journal,

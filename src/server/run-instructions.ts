@@ -40,6 +40,10 @@ export function buildRunInstructions(input: {
    *  `?directory=`. Without this correction models hedge against the wrong cwd
    *  and prefix every bash call with a redundant `cd <worktree> &&`. */
   cwd?: string;
+  /** Session-scoped scratch dir (session-scratch.ts) — named in the run so
+   *  temporary files land in a directory whose lifecycle follows the session
+   *  instead of accumulating in shared /tmp. */
+  scratchDir?: string;
   inProcessMcp?: Record<string, unknown>;
   osSessionId?: string;
   /** Requester attribution for PRs: the turn's raw user label and the resolved
@@ -191,6 +195,18 @@ export function buildRunInstructions(input: {
       "CDP work use `bun scripts/cdp-browser.ts start` and stop the returned systemd unit " +
       "in a `finally`/trap. Never reuse another session's CDP port or browser profile."
   );
+  // Session-scoped scratch (session-scratch.ts): the path is per-session and
+  // deleted with the session, so temp files stop accumulating in shared /tmp.
+  if (input.scratchDir) {
+    parts.push(
+      "## Session scratch directory\nThis session owns a scratch directory for temporary " +
+        `files: \`${input.scratchDir}\`. Use it instead of shared /tmp for downloads, build ` +
+        "output, logs, generated media, and other throwaway work ($OPENSESSION_SCRATCH " +
+        "points at it when exported, and TMPDIR follows it where the engine sets one). It " +
+        "is deleted when this session is cleaned up, so nothing left there outlives the " +
+        "session: keep anything that matters in session assets, the worktree, or a PR."
+    );
+  }
   // Capability note, not a mandate: the UI renders ```mermaid fences as
   // diagrams (MarkdownBody.tsx), but a model that doesn't know that will
   // never emit one — and one told too forcefully draws flowcharts for

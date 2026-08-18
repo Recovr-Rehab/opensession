@@ -4234,6 +4234,7 @@ async function* runOpencodeAttempt(
       isRepoLess: !cwdRepo,
       reposNote: opts.reposNote,
       prReviewer: opts.prReviewer,
+      scratchDir: opts.scratchDir,
       // Host-aware PR-flow instructions: code.storage repos have no PRs, so
       // the agent is told to push its branch instead of `gh pr create`.
       // Repo-less cwds keep the GitHub default.

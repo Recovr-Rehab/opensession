@@ -1672,6 +1672,11 @@ export async function* runPi(
       ...(process.env.PATH ? { PATH: process.env.PATH } : {}),
       ...(process.env.HOME ? { HOME: process.env.HOME } : {}),
       ...(process.env.LANG ? { LANG: process.env.LANG } : {}),
+      // Session-scoped scratch (session-scratch.ts): temp files follow the
+      // session's lifecycle instead of accumulating in shared /tmp.
+      ...(opts.scratchDir
+        ? { TMPDIR: opts.scratchDir, OPENSESSION_SCRATCH: opts.scratchDir }
+        : {}),
       ...gitIdentityEnv(author),
       ...(githubUserLogin ? githubAuthEnv(user || author?.name) : {}),
       ...awsEnv,
@@ -1790,6 +1795,7 @@ export async function* runPi(
       isRepoLess: !cwdRepo,
       reposNote: opts.reposNote,
       prReviewer: opts.prReviewer,
+      scratchDir: opts.scratchDir,
       // Same host-awareness as the opencode runner: code.storage repos get
       // push-the-branch instructions instead of `gh pr create`.
       repoHost: isScratch ? undefined : cwdRepo?.host,

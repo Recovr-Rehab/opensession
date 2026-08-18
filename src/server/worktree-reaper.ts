@@ -7,6 +7,8 @@
  * cron, generalized over every registered repo. The worktree-hygiene family:
  *  - sweepArchivedWorktrees (worktree.ts): session-driven — archived 14d+.
  *  - disk-gc.ts: reclaims rust target/ caches from worktrees we KEEP.
+ *  - session-scratch.ts: per-session temp dirs (the shared-/tmp replacement),
+ *    swept on this module's ticker with the same session snapshot.
  *  - this module: git/session-driven — done work is reaped; idle clean
  *    checkouts are parked while their branch + session remain revivable.
  *
@@ -65,6 +67,7 @@ import type { Repo } from "./config";
 import { configuredPaths, configuredServer } from "./config";
 import { stateDir } from "./paths";
 import { stopPreview } from "./preview";
+import { type ScratchSweepSession, sweepSessionScratch } from "./session-scratch";
 import type { UnifiedSession } from "./types";
 import { canonicalPath, repoFromGitPointer } from "./worktree";
 
@@ -687,7 +690,8 @@ let sweepTimer: ReturnType<typeof setInterval> | null = null;
 
 /** Start the hourly reap. Call once from the __opensessionBooted block. */
 export function startWorktreeReaper(
-	getSessions: () => readonly WorktreeActivitySession[] = () => [],
+	getSessions: () => readonly (WorktreeActivitySession &
+		Partial<ScratchSweepSession>)[] = () => [],
 ): void {
 	if (sweepTimer) return;
 	if (process.env.OPENSESSION_WORKTREE_REAPER === "0") {
@@ -695,7 +699,8 @@ export function startWorktreeReaper(
 		return;
 	}
 	const run = () => {
-		let sessions: readonly WorktreeActivitySession[];
+		let sessions: readonly (WorktreeActivitySession &
+			Partial<ScratchSweepSession>)[];
 		try {
 			sessions = getSessions();
 		} catch (e) {
@@ -705,6 +710,21 @@ export function startWorktreeReaper(
 		void sweepWorktreeReaper({ sessions }).catch((e) =>
 			console.error("[worktree-reaper] sweep failed:", e),
 		);
+		// Session scratch dirs (session-scratch.ts) ride the same cadence and
+		// session snapshot; scratch outlives its session only up to the same
+		// horizons the worktrees do.
+		const scratchSessions = sessions.filter(
+			(s): s is WorktreeActivitySession & ScratchSweepSession =>
+				typeof s.id === "string",
+		);
+		void sweepSessionScratch(scratchSessions)
+			.then((removed) => {
+				if (removed.length)
+					console.log(
+						`[session-scratch] swept ${removed.length} idle scratch dir(s)`,
+					);
+			})
+			.catch((e) => console.error("[session-scratch] sweep failed:", e));
 	};
 	setTimeout(run, FIRST_SWEEP_DELAY_MS);
 	sweepTimer = setInterval(run, SWEEP_INTERVAL_MS);

@@ -5,6 +5,7 @@ import { existsSync } from "fs";
 import { slackIdToFirstName } from "./shared/user-mappings";
 import { isArchivedId, getArchiveReason } from "./archive";
 import { purgeDraftsForSessions } from "./drafts";
+import { removeSessionScratch } from "./session-scratch";
 import { getTitleOverride } from "./title-overrides";
 import { getStatusOverride } from "./status-overrides";
 import { getReviewRequest } from "./review-requests";
@@ -1329,4 +1330,8 @@ export function deleteSession(session: UnifiedSession): void {
   }
   // Nobody's unsent draft should outlive the session it was typed into.
   purgeDraftsForSessions([session.id, ...(session.aliasIds || [])]);
+  // Neither should its scratch dir (session-scratch.ts). Best-effort and
+  // async: a scratch hiccup must never block deletion.
+  for (const id of [session.id, ...(session.aliasIds || [])])
+    void removeSessionScratch(id);
 }
