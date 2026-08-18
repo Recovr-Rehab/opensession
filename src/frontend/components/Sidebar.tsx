@@ -239,6 +239,7 @@ import {
 	SWIPE_OPEN_THRESHOLD,
 	SWIPE_REVEAL_PX,
 	clampSwipe,
+	editableOwnsCaretChord,
 	editableSwallowsArchiveChord,
 	fullSwipeThreshold,
 	swipeCommitOffset,
@@ -2075,11 +2076,12 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 	// next row), wrapping at the ends. Reading the DOM here is intentional: each
 	// section owns its filtering and collapsed state, so rendered buttons are the
 	// single source of truth for what keyboard navigation can reach.
-	// Deliberately fires while the composer is focused (unlike the archive
-	// chords): jumping workspaces without leaving the keyboard is the point,
-	// and that costs the textarea its ⌘-arrow caret-to-start/end moves. Alt is
-	// excluded so ⌘⌥ arrows stay free for the reasoning-effort chord
-	// (SessionViewer); Shift so ⌘⇧-arrow text selection keeps working.
+	// Declines inside a text field, the composer included: there ⌘↑/⌘↓ are the
+	// caret's own moves to the start and end of the draft, and taking them for
+	// workspace cycling costs more than it gives. An empty composer is the one
+	// exception, and editableOwnsCaretChord carries the reason. Alt is excluded
+	// so ⌘⌥ arrows stay free for the reasoning-effort chord (SessionViewer);
+	// Shift so ⌘⇧-arrow text selection keeps working.
 	useEffect(() => {
 		function onKeyDown(e: KeyboardEvent) {
 			if (e.defaultPrevented) return;
@@ -2089,6 +2091,7 @@ export const Sidebar = React.forwardRef<SidebarHandle, Props>(function Sidebar({
 					? -1
 					: 0;
 			if (dir === 0) return;
+			if (editableOwnsCaretChord(e.target)) return;
 			if (
 				document.querySelector(
 					".palette-backdrop, .composer-schedule-modal-backdrop, .session-delete-overlay",

@@ -1,19 +1,41 @@
-// The archive chords themselves live in lib/shortcuts, which is where every
+// The sidebar's chords themselves live in lib/shortcuts, which is where every
 // rebindable command is declared and where the keycaps to advertise come from
 // (shortcutKeys / useShortcutKeys). What stays here is the touch behaviour of
-// a sidebar row, plus the focus rule the archive chords share with a swipe.
+// a sidebar row, plus the focus rules those chords apply: whether a focused
+// text field keeps the key for itself is per chord, not one blanket rule.
+
+const EDITABLE = "input, textarea, select, [contenteditable='true'], [contenteditable='']";
+
+function editableAncestor(target: EventTarget | null): HTMLElement | null {
+	return (target as HTMLElement | null)?.closest<HTMLElement>(EDITABLE) ?? null;
+}
 
 /** True when an editable element owns focus and should keep the archive
  * chords for itself. The main composer textarea is exempt: it autofocuses on
- * every session open (and ⌘↑/⌘↓ workspace cycling re-focuses it), which left
- * the advertised ⌘E dead almost all the time — and the chord types nothing,
- * so firing there only costs the browser's niche find-selection default.
- * Rename fields, search boxes, etc. keep the guard. */
+ * every session open, which left the advertised ⌘E dead almost all the time,
+ * and the chord types nothing, so firing there only costs the browser's niche
+ * find-selection default. Rename fields, search boxes, etc. keep the guard. */
 export function editableSwallowsArchiveChord(target: EventTarget | null): boolean {
-	const editable = (target as HTMLElement | null)?.closest(
-		"input, textarea, select, [contenteditable='true'], [contenteditable='']",
-	);
+	const editable = editableAncestor(target);
 	return !!editable && !editable.classList.contains("composer-textarea");
+}
+
+/** True when an editable element owns focus and the chord is one the field
+ * itself answers: ⌘↑/⌘↓ put the caret at the start and end of the text. A
+ * draft is exactly where those moves are worth keeping, so every field claims
+ * them, with one carve-out: an EMPTY composer, where the caret has nowhere to
+ * go and the keypress does nothing either way.
+ *
+ * That carve-out is what keeps workspace cycling reachable. The composer is
+ * where focus tends to sit (opening a workspace aims it there, ⌃R puts it
+ * there, a new session in the workspace takes it), so claiming the chord
+ * unconditionally would leave ⌘↑/⌘↓ dead in the place people press it from.
+ * The moment there is text to move through, the caret wins. */
+export function editableOwnsCaretChord(target: EventTarget | null): boolean {
+	const editable = editableAncestor(target);
+	if (!editable) return false;
+	if (!editable.classList.contains("composer-textarea")) return true;
+	return ((editable as HTMLTextAreaElement).value ?? "").length > 0;
 }
 
 // Long-press (touch) tuning for the mobile action sheet.
