@@ -112,8 +112,10 @@ Pure SwiftUI with SwiftStreamingMarkdown for CommonMark/GFM rendering, iOS 26+
    streaming via `stream_text`, plus a horizontally scrollable session tab
    strip when a workspace/worktree contains multiple sessions. Its history menu
    queries only that workspace's closed siblings and restores one directly into
-   the strip. On macOS, where the sidebar is the live-session switcher, the same
-   scoped history lives in the selected session's toolbar instead. On iOS the
+   the strip. A workspace down to one session draws no strip, so that history
+   moves to the Closed sessions section of its info sheet, which reopens a row
+   the same way. On macOS, where the sidebar is the live-session switcher, the
+   same scoped history lives in the selected session's toolbar instead. On iOS the
    trailing nav-bar control is a native overflow menu carrying this worktree's
    actions — new session, worktree details, its pull request panel, rename,
    share link, hide/restore, and archive (which pops back to the list) — the same

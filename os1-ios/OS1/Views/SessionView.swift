@@ -24,6 +24,10 @@ struct SessionView: View {
     /// The selected session's toolbar still offers the workspace's closed
     /// siblings, and hands restoration back to that sidebar's owner.
     private let onRestoreArchivedSession: ((Session) async -> Void)?
+    /// The workspace's closed sessions, when the info sheet is the surface
+    /// carrying them. Nil while the tab strip has them, which is what keeps
+    /// one list from appearing in two places at once.
+    private let workspaceHistory: WorkspaceSessionHistory?
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -209,7 +213,8 @@ struct SessionView: View {
         onNewSession: (() -> Void)? = nil,
         onRenameWorkspace: ((String) -> Void)? = nil,
         onArchiveWorkspace: (() -> Void)? = nil,
-        onRestoreArchivedSession: ((Session) async -> Void)? = nil
+        onRestoreArchivedSession: ((Session) async -> Void)? = nil,
+        workspaceHistory: WorkspaceSessionHistory? = nil
     ) {
         _viewModel = State(initialValue: SessionViewModel(
             session: session,
@@ -224,6 +229,7 @@ struct SessionView: View {
         self.onRenameWorkspace = onRenameWorkspace
         self.onArchiveWorkspace = onArchiveWorkspace
         self.onRestoreArchivedSession = onRestoreArchivedSession
+        self.workspaceHistory = workspaceHistory
     }
 
     init(
@@ -234,7 +240,8 @@ struct SessionView: View {
         onNewSession: (() -> Void)? = nil,
         onRenameWorkspace: ((String) -> Void)? = nil,
         onArchiveWorkspace: (() -> Void)? = nil,
-        onRestoreArchivedSession: ((Session) async -> Void)? = nil
+        onRestoreArchivedSession: ((Session) async -> Void)? = nil,
+        workspaceHistory: WorkspaceSessionHistory? = nil
     ) {
         _viewModel = State(initialValue: viewModel)
         self.tabs = tabs
@@ -245,6 +252,7 @@ struct SessionView: View {
         self.onRenameWorkspace = onRenameWorkspace
         self.onArchiveWorkspace = onArchiveWorkspace
         self.onRestoreArchivedSession = onRestoreArchivedSession
+        self.workspaceHistory = workspaceHistory
     }
 
     var body: some View {
@@ -658,7 +666,8 @@ struct SessionView: View {
             WorktreeInfoView(
                 viewModel: viewModel,
                 sessions: tabs,
-                catalog: catalog
+                catalog: catalog,
+                history: workspaceHistory
             )
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
@@ -1815,6 +1824,25 @@ struct SessionTabsView: View {
         return workspaceId
     }
 
+    /// Which of this workspace's two surfaces is carrying its closed sessions.
+    private var historyPlacement: SessionHistoryPlacement {
+        SessionsListViewModel.historyPlacement(
+            liveTabs: visibleTabs.count, archived: archivedTabs.count
+        )
+    }
+
+    /// The closed sessions, for the info sheet, and only while there is no
+    /// strip to hold them. Restoring from there lands the workspace back on
+    /// two tabs, so the strip returns and takes the list with it.
+    private var infoSheetHistory: WorkspaceSessionHistory? {
+        guard historyPlacement == .infoSheet else { return nil }
+        return WorkspaceSessionHistory(
+            sessions: archivedTabs,
+            restoringIds: restoringTabIds,
+            restore: { restore($0.id) }
+        )
+    }
+
     private var historyRequestKey: String {
         "\(historyWorkspaceId ?? "none"):\(archiveRevision)"
     }
@@ -1846,7 +1874,8 @@ struct SessionTabsView: View {
                         onArchiveWorkspace: {
                             onArchiveWorkspace()
                             dismiss()
-                        }
+                        },
+                        workspaceHistory: infoSheetHistory
                     )
                     // What the transcript's asset chips and the overflow menu
                     // reach for. Installed here rather than passed down: the
@@ -1906,14 +1935,19 @@ struct SessionTabsView: View {
         // content travels behind the strip, which is what makes the tabs float
         // over the transcript and draws the soft scroll edge effect there. With
         // a plain inset the transcript simply started below an opaque band.
+        // A strip is drawn for siblings to switch between. One tab needs no
+        // switcher, and a bar holding a single pill only repeats the name the
+        // header already carries, so this workspace's closed sessions travel
+        // to the info sheet instead (see `infoSheetHistory`) rather than
+        // keeping a whole bar alive for the history control.
         .safeAreaBar(edge: .top, spacing: 0) {
-            if visibleTabs.count > 1 || !archivedTabs.isEmpty {
+            if visibleTabs.count > 1 {
                 SessionTabBar(
                     tabs: visibleTabs.map(TabPill.init),
                     activeId: activeId,
                     onSelect: select,
                     onClose: close,
-                    archived: archivedTabs,
+                    archived: historyPlacement == .tabStrip ? archivedTabs : [],
                     restoringIds: restoringTabIds,
                     onRestore: restore
                 )
@@ -2319,6 +2353,17 @@ private struct SessionTabBar: View {
     }
 }
 #endif
+
+/// A workspace's closed sessions, handed to whichever surface is carrying
+/// them: the tab strip while there is one, the info sheet when the workspace
+/// is down to a single conversation and draws none. `SessionTabsView` owns
+/// the rows, so the two surfaces share one fetch and one restore.
+struct WorkspaceSessionHistory {
+    let sessions: [Session]
+    /// Rows whose restore is in flight, so a second tap can't ask twice.
+    let restoringIds: Set<String>
+    let restore: (Session) -> Void
+}
 
 /// The closed sessions of one workspace. Selecting a row restores it rather
 /// than merely opening a read-only archived conversation, matching the web tab

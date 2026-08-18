@@ -141,6 +141,30 @@ final class ArchivedSliceTests: XCTestCase {
         )
     }
 
+    /// One conversation draws no tab strip, so its closed siblings would have
+    /// nowhere to be offered from. They move to the workspace info sheet, and
+    /// only ever to one of the two surfaces at a time.
+    func testHistoryMovesToTheInfoSheetWhenAWorkspaceIsDownToOneTab() {
+        XCTAssertEqual(
+            SessionsListViewModel.historyPlacement(liveTabs: 1, archived: 3),
+            .infoSheet
+        )
+        XCTAssertEqual(
+            SessionsListViewModel.historyPlacement(liveTabs: 2, archived: 3),
+            .tabStrip
+        )
+        // Nothing closed, nothing to place: a lone session's sheet says
+        // nothing about history rather than showing an empty section.
+        XCTAssertEqual(
+            SessionsListViewModel.historyPlacement(liveTabs: 1, archived: 0),
+            SessionHistoryPlacement.none
+        )
+        XCTAssertEqual(
+            SessionsListViewModel.historyPlacement(liveTabs: 4, archived: 0),
+            SessionHistoryPlacement.none
+        )
+    }
+
     /// A restore made here is newer than the scoped response. Its live row must
     /// suppress the stale archived summary or the menu immediately resurrects
     /// the item that was just removed.

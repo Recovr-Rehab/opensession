@@ -11,6 +11,10 @@ struct WorktreeInfoView: View {
     @Bindable var viewModel: SessionViewModel
     let sessions: [Session]
     let catalog: ModelCatalog?
+    /// This workspace's closed sessions, when the sheet is the surface
+    /// carrying them. Nil while the tab strip has them, so the list is offered
+    /// in one place at a time. See `SessionsListViewModel.historyPlacement`.
+    var history: WorkspaceSessionHistory? = nil
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
@@ -55,6 +59,11 @@ struct WorktreeInfoView: View {
                 LazyVStack(alignment: .leading, spacing: 22) {
                     hero
                     overviewSection
+                    // Above the media this workspace produced: with one
+                    // conversation left there is no tab strip, so this is the
+                    // only way back to its closed siblings and it has to be
+                    // found without hunting for it.
+                    historySection
                     conversationSection
                     reviewSection
                     pullRequestSection
@@ -929,6 +938,77 @@ struct WorktreeInfoView: View {
             parts.append(date.formatted(date: .abbreviated, time: .shortened))
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    /// The workspace's closed sessions, on the sheet that stands in for the
+    /// tab strip while a workspace is down to one conversation. A row reopens
+    /// its session rather than showing it read-only, which is what the strip's
+    /// own history menu does, and the sheet closes behind it so you land in
+    /// the conversation you asked for.
+    @ViewBuilder
+    private var historySection: some View {
+        if let history, !history.sessions.isEmpty {
+            InfoSection(
+                title: "Closed sessions",
+                trailing: AnyView(
+                    Text(verbatim: "\(history.sessions.count)")
+                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                )
+            ) {
+                ForEach(history.sessions) { session in
+                    closedSessionRow(session, history: history)
+                    if session.id != history.sessions.last?.id { Divider() }
+                }
+            }
+        }
+    }
+
+    private func closedSessionRow(
+        _ session: Session, history: WorkspaceSessionHistory
+    ) -> some View {
+        let restoring = history.restoringIds.contains(session.id)
+        return Button {
+            dismiss()
+            history.restore(session)
+        } label: {
+            HStack(spacing: 10) {
+                // A machine owns this conversation. Same glyph and same slot
+                // as the session header's, so the runs read apart from the
+                // conversations people had at a glance.
+                if session.isAutomation {
+                    WebIcon(kind: .robot, size: 15, color: OS1VisualStyle.textFaint)
+                        .frame(width: 20)
+                } else {
+                    Image(systemName: "bubble.left.and.bubble.right")
+                        .font(.system(size: 13))
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                        .frame(width: 20)
+                }
+                Text(session.displayTitle)
+                    .font(.subheadline)
+                    .foregroundStyle(OS1VisualStyle.text)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                if restoring {
+                    ProgressView().controlSize(.small)
+                } else if let last = session.lastActivityDate {
+                    Text(Self.ago(Date().timeIntervalSince(last)))
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(OS1VisualStyle.textDim)
+                }
+                Image(systemName: "arrow.uturn.backward")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(OS1VisualStyle.textFaint)
+            }
+            .padding(.horizontal, 12)
+            .frame(minHeight: 46)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(restoring)
+        .accessibilityLabel(session.displayTitle)
+        .accessibilityHint("Reopens this session in the workspace")
     }
 
     private var runSettingsSection: some View {

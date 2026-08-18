@@ -317,6 +317,21 @@ final class SessionsListViewModel {
         return byRecency(rows)
     }
 
+    /// Which surface carries a workspace's closed sessions.
+    ///
+    /// The tab strip carries them while it is on screen. A workspace down to
+    /// one conversation draws no strip, since a bar holding a single tab only
+    /// repeats what the header already says, so its history moves to the
+    /// workspace info sheet rather than keeping that bar alive for one
+    /// control. Exactly one surface holds the list, so the two can never both
+    /// offer it.
+    nonisolated static func historyPlacement(
+        liveTabs: Int, archived: Int
+    ) -> SessionHistoryPlacement {
+        guard archived > 0 else { return .none }
+        return liveTabs > 1 ? .tabStrip : .infoSheet
+    }
+
     /// The session that takes over the strip when `closed` is closed from it: the
     /// tab to its right, or the one to its left when it was the rightmost. Nil
     /// when it was the workspace's last session and there is nothing left to show.
@@ -1067,6 +1082,12 @@ final class SessionsListViewModel {
         }
         return (active, archived, Array(resurfaced))
     }
+}
+
+/// Which surface offers a workspace's closed sessions. See
+/// `SessionsListViewModel.historyPlacement`.
+enum SessionHistoryPlacement: Equatable {
+    case none, tabStrip, infoSheet
 }
 
 /// The web sidebar's Inbox bands: an email-style split of the rows by when
