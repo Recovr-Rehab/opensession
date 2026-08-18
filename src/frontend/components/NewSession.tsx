@@ -6,7 +6,7 @@ import { loadDraft, clearDraft } from "../lib/drafts";
 import { getDefaultModelPref } from "../lib/default-model-pref";
 import { baseModelId, modelEngine } from "./ModelEffortSelect";
 import { getSendKeyPref, onSendKeyChanged } from "../lib/send-key-pref";
-import { MOD_ENTER_GLYPH } from "../lib/send-key";
+import { effectiveSendKey, MOD_ENTER_GLYPH } from "../lib/send-key";
 import { isApple } from "../lib/platform";
 import { NO_REPO } from "../lib/session-repo";
 import { repoSelectionHint, toggleRepoSelection } from "../lib/repo-selection";
@@ -529,8 +529,13 @@ export function NewSession({ onBack, inline, focusSeq, send, addHandler, connect
   // "Send messages with" (Settings → Preferences). The session composer honors it,
   // so this field has to as well — otherwise Enter silently does nothing here
   // while the Create button advertises ↩.
-  const [sendKey, setSendKey] = useState(getSendKeyPref);
-  useEffect(() => onSendKeyChanged(() => setSendKey(getSendKeyPref())), []);
+  // Resolved per client: a soft keyboard keeps ↩ for newlines (effectiveSendKey).
+  const [storedSendKey, setStoredSendKey] = useState(getSendKeyPref);
+  useEffect(
+    () => onSendKeyChanged(() => setStoredSendKey(getSendKeyPref())),
+    [],
+  );
+  const sendKey = effectiveSendKey(storedSendKey);
 
   // Sandbox provider picker: the complete model engine + workspace run in the
   // selected environment; native Codex is the sole host-only family.

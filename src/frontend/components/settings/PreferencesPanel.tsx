@@ -404,7 +404,11 @@ export function PreferencesPanel() {
 				<PersonalSandboxDefaultRow />
 				<SettingRow
 					title="Send messages with"
-					desc={`${sendKey === "mod-enter" ? "↵" : "⇧↵"} makes a new line.`}
+					desc={
+						sendKey === "mod-enter"
+							? "↵ makes a new line."
+							: "⇧↵ makes a new line. On a phone ↵ always makes one, so send with the button."
+					}
 					control={
 						<Select
 							label="Send messages with"

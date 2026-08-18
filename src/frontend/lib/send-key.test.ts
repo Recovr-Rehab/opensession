@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { insideOpenFence, isSendCombo } from "./send-key";
+import { effectiveSendKey, insideOpenFence, isSendCombo } from "./send-key";
 
 const key = (overrides: Partial<Parameters<typeof isSendCombo>[0]> = {}) => ({
 	key: "Enter",
@@ -24,6 +24,25 @@ describe("isSendCombo", () => {
 		expect(isSendCombo(key(), "mod-enter")).toBe(false);
 		expect(isSendCombo(key({ metaKey: true }), "mod-enter")).toBe(true);
 		expect(isSendCombo(key({ ctrlKey: true }), "mod-enter")).toBe(true);
+	});
+});
+
+describe("effectiveSendKey", () => {
+	test("keeps the preference where there is a real keyboard", () => {
+		expect(effectiveSendKey("enter", false)).toBe("enter");
+		expect(effectiveSendKey("mod-enter", false)).toBe("mod-enter");
+	});
+
+	test("leaves the return key to newlines on a soft keyboard", () => {
+		expect(effectiveSendKey("enter", true)).toBe("mod-enter");
+		expect(effectiveSendKey("mod-enter", true)).toBe("mod-enter");
+	});
+
+	test("a touch client never sends on a bare Enter, but still on ⌘/Ctrl", () => {
+		const touch = effectiveSendKey("enter", true);
+		expect(isSendCombo(key(), touch)).toBe(false);
+		expect(isSendCombo(key({ shiftKey: true }), touch)).toBe(false);
+		expect(isSendCombo(key({ metaKey: true }), touch)).toBe(true);
 	});
 });
 

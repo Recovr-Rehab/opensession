@@ -81,6 +81,7 @@ import { ContextMenu, MenuShortcut } from "../ui/menu";
 import { Button } from "../ui/button";
 import { Modal } from "../ui/modal";
 import {
+  effectiveSendKey,
   insideOpenFence,
   isSendCombo,
   MOD_ENTER_GLYPH,
@@ -472,8 +473,14 @@ export function Composer({
   const effortUpLabel = useShortcutLabel("effort-up");
   const effortDownLabel = useShortcutLabel("effort-down");
   // "Send messages with" preference (Settings → Preferences): Enter or ⌘/Ctrl+Enter.
-  const [sendKey, setSendKey] = useState(getSendKeyPref);
-  useEffect(() => onSendKeyChanged(() => setSendKey(getSendKeyPref())), []);
+  // The stored answer is for real keyboards; a touch client resolves to
+  // ⌘/Ctrl+Enter so its return key stays a newline (see effectiveSendKey).
+  const [storedSendKey, setStoredSendKey] = useState(getSendKeyPref);
+  useEffect(
+    () => onSendKeyChanged(() => setStoredSendKey(getSendKeyPref())),
+    [],
+  );
+  const sendKey = effectiveSendKey(storedSendKey);
   // Follow-up behavior preferences (Settings → Preferences): what each send
   // gesture — plain Enter/the send button vs ⌘/Ctrl+Enter — does while the
   // run is busy. Both configurable; defaults queue/steer.
