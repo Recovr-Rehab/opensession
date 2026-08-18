@@ -1,5 +1,11 @@
 import { FileTree, useFileTree } from "@pierre/trees/react";
-import { useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
+
+const WIDTH_KEY = "opensession-pr-file-tree-width";
+const DEFAULT_WIDTH = 300;
+const MIN_WIDTH = 180;
+const MAX_WIDTH = 480;
+const MIN_DIFF_WIDTH = 180;
 
 function allDirectories(paths: string[]): string[] {
   const directories = new Set<string>();
@@ -12,16 +18,24 @@ function allDirectories(paths: string[]): string[] {
   return [...directories];
 }
 
+function initialWidth(): number {
+  if (typeof localStorage === "undefined") return DEFAULT_WIDTH;
+  const stored = Number(localStorage.getItem(WIDTH_KEY));
+  return Number.isFinite(stored) ? Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, stored)) : DEFAULT_WIDTH;
+}
+
 export function PrFileTree({
   paths,
   onOpenFile,
-  compact = false,
 }: {
   paths: string[];
   onOpenFile: (path: string) => void;
-  compact?: boolean;
 }) {
+  const [width, setWidth] = useState(initialWidth);
+  const [availableWidth, setAvailableWidth] = useState(MAX_WIDTH + MIN_DIFF_WIDTH);
   const onOpenFileRef = useRef(onOpenFile);
+  const rootRef = useRef<HTMLElement | null>(null);
+  const stopResizeRef = useRef<(() => void) | null>(null);
   onOpenFileRef.current = onOpenFile;
   const { model } = useFileTree({
     paths,
@@ -32,15 +46,75 @@ export function PrFileTree({
     },
   });
 
+  useEffect(
+    () => () => {
+      stopResizeRef.current?.();
+      document.body.classList.remove("resizing-pr-file-tree");
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const parent = rootRef.current?.parentElement;
+    if (!parent || typeof ResizeObserver === "undefined") return;
+    const update = () => setAvailableWidth(parent.getBoundingClientRect().width);
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(parent);
+    return () => observer.disconnect();
+  }, []);
+
+  const maxWidth = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, availableWidth - MIN_DIFF_WIDTH));
+  const renderedWidth = Math.min(width, maxWidth);
+  const clampWidth = (next: number) => Math.min(maxWidth, Math.max(MIN_WIDTH, next));
+  const commitWidth = (next: number) => {
+    const clamped = clampWidth(next);
+    setWidth(clamped);
+    try {
+      localStorage.setItem(WIDTH_KEY, String(clamped));
+    } catch {}
+  };
+
+  function startResize(event: React.PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const root = rootRef.current;
+    if (!root) return;
+    stopResizeRef.current?.();
+    const startX = event.clientX;
+    const startWidth = root.getBoundingClientRect().width;
+    document.body.classList.add("resizing-pr-file-tree");
+    const move = (moveEvent: PointerEvent) => {
+      root.style.width = `${clampWidth(startWidth + moveEvent.clientX - startX)}px`;
+    };
+    const cleanup = () => {
+      document.body.classList.remove("resizing-pr-file-tree");
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      window.removeEventListener("pointercancel", cancel);
+      stopResizeRef.current = null;
+    };
+    const stop = () => {
+      commitWidth(root.getBoundingClientRect().width);
+      cleanup();
+    };
+    const cancel = () => {
+      root.style.width = `${renderedWidth}px`;
+      cleanup();
+    };
+    stopResizeRef.current = cancel;
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+    window.addEventListener("pointercancel", cancel);
+  }
+
   return (
     <aside
+      ref={rootRef}
       id="pr-file-tree"
       aria-label="Changed files"
-      className={
-        compact
-          ? "sticky top-11 z-[7] flex h-[320px] max-h-[42vh] flex-col bg-raised shadow-[inset_0_-1px_0_var(--divider)]"
-          : "flex min-h-0 w-[280px] shrink-0 flex-col bg-raised shadow-[inset_-1px_0_0_var(--divider)]"
-      }
+      className="relative flex min-h-0 shrink-0 flex-col bg-raised"
+      style={{ width: renderedWidth, maxWidth: `calc(100% - ${MIN_DIFF_WIDTH}px)` }}
     >
       <div className="flex h-10 shrink-0 items-center gap-2 px-3 text-label font-medium text-fg shadow-[inset_0_-1px_0_var(--divider)]">
         <span className="min-w-0 flex-1 truncate">Changed files</span>
@@ -52,6 +126,23 @@ export function PrFileTree({
           className="block h-full [color-scheme:dark] [--trees-accent-override:var(--accent)] [--trees-bg-override:transparent] [--trees-border-color-override:var(--divider)] [--trees-fg-muted-override:var(--text-faint)] [--trees-fg-override:var(--text-dim)] [--trees-focus-ring-color-override:var(--accent)] [--trees-selected-bg-override:var(--selected)] [--trees-selected-fg-override:var(--text)]"
         />
       </div>
+      <div
+        role="separator"
+        aria-label="Resize changed files"
+        aria-orientation="vertical"
+        aria-valuemin={MIN_WIDTH}
+        aria-valuemax={maxWidth}
+        aria-valuenow={Math.round(renderedWidth)}
+        tabIndex={0}
+        className="absolute inset-y-0 -right-1 z-10 w-[9px] cursor-col-resize touch-none after:absolute after:inset-y-0 after:left-1 after:w-px after:bg-line after:transition-[background-color] after:content-[''] hover:after:bg-accent focus-visible:outline-none focus-visible:after:bg-accent [body.resizing-pr-file-tree_&]:after:bg-accent"
+        onPointerDown={startResize}
+        onDoubleClick={() => commitWidth(DEFAULT_WIDTH)}
+        onKeyDown={(event) => {
+          if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+          event.preventDefault();
+          commitWidth(renderedWidth + (event.key === "ArrowRight" ? 16 : -16));
+        }}
+      />
     </aside>
   );
 }

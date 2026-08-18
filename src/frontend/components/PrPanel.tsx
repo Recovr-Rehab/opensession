@@ -1632,7 +1632,7 @@ export function PrPanel({
           </nav>
         )}
 
-        {!headerCompact && page === "files" && fileTreeOpen && fileTreePaths.length > 0 && (
+        {page === "files" && fileTreeOpen && fileTreePaths.length > 0 && (
           <PrFileTree paths={fileTreePaths} onOpenFile={scrollToFile} />
         )}
 
@@ -1784,10 +1784,6 @@ export function PrPanel({
                 </div>
               )}
             </div>
-          )}
-
-          {headerCompact && page === "files" && fileTreeOpen && fileTreePaths.length > 0 && (
-            <PrFileTree paths={fileTreePaths} onOpenFile={scrollToFile} compact />
           )}
 
           {page === "overview" ? (
