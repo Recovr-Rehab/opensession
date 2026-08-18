@@ -636,7 +636,7 @@ localStorage.setItem("opensession-last-session-user", "Alex");
 localStorage.setItem("opensession-panel-open", "false");
 localStorage.setItem("opensession-panel-tab", "workflows");
 localStorage.setItem("opensession-sidebar-collapsed", "0");
-localStorage.setItem("opensession-sidebar-w", "264");
+localStorage.setItem("opensession-sidebar-w", "300");
 // One repo, so the sidebar resolves its "auto" grouping to the plain inbox
 // straight away instead of painting repo bands until /api/repos answers.
 localStorage.setItem("opensession-repo-count", "1");
