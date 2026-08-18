@@ -320,6 +320,30 @@ summary:focus-visible {
 	pointer-events: auto;
 }
 
+/* The phone, in front of the window at the corner it overlaps.
+   Everything here is in cqw, a percentage of the stage's own width, so the
+   pair keeps its composition at every size the stage takes. The proportions
+   are an iPhone's: a 393x852 screen, and a corner at about 12% of the width,
+   which is a superellipse on the device and gets the site's own squircle
+   treatment here. */
+.demo-phone {
+	position: absolute;
+	right: 2.5cqw;
+	bottom: 2.5cqw;
+	width: 17.5cqw;
+	height: 38cqw;
+	object-fit: cover;
+	object-position: top center;
+	border-radius: calc(1.55cqw * var(--rf));
+	corner-shape: var(--cs);
+	background: var(--window);
+	/* A hairline for the device's own edge, and a shadow deeper than the
+	   window's: this one is the nearer object. */
+	box-shadow:
+		0 0 0 1px rgba(0, 0, 0, 0.1),
+		0 16px 40px rgba(20, 22, 26, 0.3);
+}
+
 /* ── Capabilities ────────────────────────────────────────────────────── */
 
 .features {
@@ -691,6 +715,10 @@ summary:focus-visible {
 
 	.card h2 {
 		font-size: 22px;
+	}
+
+	.demo-phone {
+		display: none;
 	}
 
 	.stage {
