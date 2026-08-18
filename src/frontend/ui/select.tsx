@@ -9,6 +9,7 @@ import {
 	popupScrollClasses,
 	popupSurfaceClasses,
 } from "./popup-classes";
+import { restoreSelectFocusAfterClose } from "./select-focus";
 
 /**
  * Select on Base UI parts: a field-shaped trigger that opens the app's own
@@ -34,6 +35,44 @@ import {
  */
 
 type Size = "sm" | "md" | "lg";
+
+const SelectFocusContext = React.createContext<React.RefObject<boolean> | null>(null);
+
+function Root<Value, Multiple extends boolean | undefined = false>({
+	onOpenChange,
+	onOpenChangeComplete,
+	children,
+	...props
+}: BaseSelect.Root.Props<Value, Multiple>) {
+	const restoreFocusRef = React.useRef(true);
+	const dismissedElementRef = React.useRef<HTMLElement | null>(null);
+	return (
+		<SelectFocusContext.Provider value={restoreFocusRef}>
+			<BaseSelect.Root
+				{...props}
+				onOpenChange={(open, eventDetails) => {
+					if (!open) {
+						restoreFocusRef.current = restoreSelectFocusAfterClose(eventDetails.reason);
+						if (!restoreFocusRef.current && document.activeElement instanceof HTMLElement) {
+							dismissedElementRef.current = document.activeElement;
+							dismissedElementRef.current.blur();
+						}
+					}
+					onOpenChange?.(open, eventDetails);
+				}}
+				onOpenChangeComplete={(open) => {
+					if (!open && !restoreFocusRef.current) {
+						dismissedElementRef.current?.blur();
+						dismissedElementRef.current = null;
+					}
+					onOpenChangeComplete?.(open);
+				}}
+			>
+				{children}
+			</BaseSelect.Root>
+		</SelectFocusContext.Provider>
+	);
+}
 
 type TriggerProps = Omit<React.ComponentProps<typeof BaseSelect.Trigger>, "className"> & {
 	className?: string;
@@ -123,6 +162,7 @@ function Popup({
 	sideOffset?: number;
 	children: React.ReactNode;
 }) {
+	const restoreFocusRef = React.useContext(SelectFocusContext);
 	return (
 		<BaseSelect.Portal>
 			<BaseSelect.Positioner
@@ -139,6 +179,7 @@ function Popup({
 				className="z-[10001] outline-none"
 			>
 				<BaseSelect.Popup
+					finalFocus={() => restoreFocusRef?.current ?? true}
 					className={cn(POPUP_HOOK, popupSurfaceClasses, "min-w-[var(--anchor-width)]", className)}
 				>
 					<BaseSelect.List className={popupScrollClasses}>{children}</BaseSelect.List>
@@ -210,7 +251,7 @@ function Separator({ className }: { className?: string }) {
 }
 
 export const Select = {
-	Root: BaseSelect.Root,
+	Root,
 	Trigger,
 	Value: BaseSelect.Value,
 	Popup,
