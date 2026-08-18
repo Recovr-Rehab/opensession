@@ -286,6 +286,8 @@ type ModelMenuOption = {
 	description?: string;
 };
 
+const PICKER_ROW_GAP = "mb-0.5 last:mb-0";
+
 /**
  * Combined model + reasoning-effort pill (Claude-app-style): one trigger on the
  * composer's right edge opening a short menu of settings rows — Model, Engine,
@@ -574,7 +576,12 @@ export function ModelEffortSelect({
 							? `Not available on the ${engineLabel} engine`
 							: undefined
 				}
-				className={cn("justify-between gap-3", selected && "bg-hover", disabled && "opacity-55")}
+				className={cn(
+					PICKER_ROW_GAP,
+					"justify-between gap-3",
+					selected && "bg-hover",
+					disabled && "opacity-55",
+				)}
 			>
 				{option.description ? (
 					<span className="flex min-w-0 flex-1 flex-col">
@@ -735,6 +742,7 @@ export function ModelEffortSelect({
 												: undefined
 										}
 										className={cn(
+											PICKER_ROW_GAP,
 											"justify-between gap-3",
 											selected && "bg-hover",
 											unavailable && "opacity-55",
@@ -770,7 +778,11 @@ export function ModelEffortSelect({
 									<Menu.Item
 										key={e.id}
 										onClick={() => onEffortChange!(e.id)}
-										className={cn("justify-between gap-3", selected && "bg-hover")}
+										className={cn(
+											PICKER_ROW_GAP,
+											"justify-between gap-3",
+											selected && "bg-hover",
+										)}
 									>
 										<span className="min-w-0 truncate">{e.label}</span>
 										<Menu.Check on={selected} className="text-dim" />
@@ -828,7 +840,11 @@ export function ModelEffortSelect({
 						<Menu.Popup className="max-w-[min(360px,calc(100vw-1rem))]">
 							<Menu.Item
 								onClick={() => onAccountChange!("")}
-								className={cn("justify-between gap-3", !accountId && "bg-hover")}
+								className={cn(
+									PICKER_ROW_GAP,
+									"justify-between gap-3",
+									!accountId && "bg-hover",
+								)}
 							>
 								<span className="min-w-0 truncate">Auto</span>
 								<Menu.Check on={!accountId} className="text-dim" />
@@ -839,7 +855,11 @@ export function ModelEffortSelect({
 									<Menu.Item
 										key={a.id}
 										onClick={() => onAccountChange!(a.id)}
-										className={cn("justify-between gap-3", selected && "bg-hover")}
+										className={cn(
+											PICKER_ROW_GAP,
+											"justify-between gap-3",
+											selected && "bg-hover",
+										)}
 									>
 										<span className="min-w-0 truncate">
 											{a.name}
