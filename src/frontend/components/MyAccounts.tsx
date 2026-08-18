@@ -35,7 +35,7 @@ import { ProfileSection } from "./settings/ProfileSection";
 /**
  * Settings → Personal → Account: everything about you on this instance.
  *
- * Your profile (picture, name, the roster fields you own — ProfileSection),
+ * Your profile (picture, name, the roster fields you own: ProfileSection),
  * then every per-user sign-in: OAuth-capable MCP servers (connect as yourself;
  * your sessions then use YOUR account, falling back to the workspace grant —
  * src/server/mcp-oauth.ts), the per-user GitHub auth section (PRs as

@@ -71,8 +71,8 @@ export function ProfileSection() {
  * at, and the cadence of the fields under it.
  *
  * The fields are bars rather than input-height rectangles on purpose. A grey
- * box the size of a text field reads as a disabled field — a thing you are not
- * allowed to use — where a thin bar reads as a line about to be written. The
+ * box the size of a text field reads as a disabled field, a thing you are not
+ * allowed to use, where a thin bar reads as a line about to be written. The
  * picture is the one exception, because it really is a 64px squircle and
  * drawing it smaller would move the whole form when the real one arrives.
  */
@@ -216,7 +216,7 @@ function ProfileForm({
 						/>
 						{/* The picture IS the button. A separate "Upload picture"
 						    plate beside it named an action the picture already
-						    invites, and it was the widest thing in the row — so the
+						    invites, and it was the widest thing in the row, so the
 						    form's first line was mostly a label about the thumbnail
 						    next to it. */}
 						<button
