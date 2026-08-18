@@ -222,7 +222,7 @@ export const DETAIL_TOPBAR_TITLE =
  * its own padding in the row.
  */
 export const DETAIL_TOPBAR_ACTIONS =
-	"ml-auto flex shrink-0 items-center gap-2 pl-4 font-normal empty:hidden";
+	"ml-auto flex min-w-0 items-center gap-2 pl-4 font-normal empty:hidden";
 
 /**
  * The word inside that row, which is only there once the page's own heading has
@@ -239,7 +239,12 @@ export const DETAIL_TOPBAR_ACTIONS =
  * top of the window with it.
  */
 export const DETAIL_TOPBAR_TITLE_TEXT =
-	"translate-y-1 opacity-0 transition-[opacity,translate] " +
+	// It gives way first to whatever a page puts in the actions slot beside it,
+	// and gives way hard: at rest this word is invisible, so a narrow pane would
+	// otherwise be cutting a page's controls to hold room for a title nobody can
+	// see yet. Scrolled, it truncates, which is what a name in a bar does.
+	"min-w-0 shrink-[100] truncate translate-y-1 opacity-0 " +
+	"transition-[opacity,translate] " +
 	"data-[shown]:translate-y-0 data-[shown]:opacity-100";
 
 /**
